@@ -4,7 +4,9 @@ const STORAGE_KEYS = {
   TIME_ENTRIES: '@time_entries',
   SESSIONS: '@sessions',
   CHILDREN: '@children',
+  GROUPS: '@groups',
   SYNC_QUEUE: '@sync_queue',
+  SYNC_META: '@sync_meta',
   USER_PROFILE: '@user_profile',
 };
 
@@ -103,6 +105,60 @@ export const storage = {
     return false;
   },
 
+  // Groups
+  async getGroups() {
+    return await this.getItem(STORAGE_KEYS.GROUPS) || [];
+  },
+
+  async saveGroup(group) {
+    const groups = await this.getGroups();
+    groups.push(group);
+    return await this.setItem(STORAGE_KEYS.GROUPS, groups);
+  },
+
+  async updateGroup(id, updates) {
+    const groups = await this.getGroups();
+    const index = groups.findIndex(g => g.id === id);
+    if (index !== -1) {
+      groups[index] = { ...groups[index], ...updates };
+      return await this.setItem(STORAGE_KEYS.GROUPS, groups);
+    }
+    return false;
+  },
+
+  // Generic methods for sync operations
+  async getUnsyncedRecords(table) {
+    const key = STORAGE_KEYS[table.toUpperCase()];
+    if (!key) return [];
+    const records = await this.getItem(key) || [];
+    return records.filter(record => record.synced === false);
+  },
+
+  async markAsSynced(table, id) {
+    const key = STORAGE_KEYS[table.toUpperCase()];
+    if (!key) return false;
+
+    const records = await this.getItem(key) || [];
+    const index = records.findIndex(r => r.id === id);
+    if (index !== -1) {
+      records[index].synced = true;
+      return await this.setItem(key, records);
+    }
+    return false;
+  },
+
+  async getAllUnsyncedCount() {
+    const tables = ['TIME_ENTRIES', 'SESSIONS', 'CHILDREN', 'GROUPS'];
+    let totalCount = 0;
+
+    for (const table of tables) {
+      const unsynced = await this.getUnsyncedRecords(table);
+      totalCount += unsynced.length;
+    }
+
+    return totalCount;
+  },
+
   // Sync queue
   async getSyncQueue() {
     return await this.getItem(STORAGE_KEYS.SYNC_QUEUE) || [];
@@ -135,6 +191,41 @@ export const storage = {
 
   async clearUserProfile() {
     return await this.removeItem(STORAGE_KEYS.USER_PROFILE);
+  },
+
+  // Sync metadata (tracks retry attempts, last sync time, etc.)
+  async getSyncMeta() {
+    return await this.getItem(STORAGE_KEYS.SYNC_META) || {
+      lastSyncTime: null,
+      retryAttempts: {},
+      failedItems: [],
+    };
+  },
+
+  async updateSyncMeta(updates) {
+    const currentMeta = await this.getSyncMeta();
+    const newMeta = { ...currentMeta, ...updates };
+    return await this.setItem(STORAGE_KEYS.SYNC_META, newMeta);
+  },
+
+  async recordRetryAttempt(table, id) {
+    const meta = await this.getSyncMeta();
+    const key = `${table}_${id}`;
+    meta.retryAttempts[key] = (meta.retryAttempts[key] || 0) + 1;
+    return await this.setItem(STORAGE_KEYS.SYNC_META, meta);
+  },
+
+  async getRetryAttempts(table, id) {
+    const meta = await this.getSyncMeta();
+    const key = `${table}_${id}`;
+    return meta.retryAttempts[key] || 0;
+  },
+
+  async clearRetryAttempts(table, id) {
+    const meta = await this.getSyncMeta();
+    const key = `${table}_${id}`;
+    delete meta.retryAttempts[key];
+    return await this.setItem(STORAGE_KEYS.SYNC_META, meta);
   },
 };
 
