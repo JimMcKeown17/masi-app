@@ -1,0 +1,227 @@
+# Masi App - Development Progress
+
+## Current Status
+**Phase**: Phase 1 - Authentication & Foundation (In Progress)
+**Last Updated**: 2026-01-27
+
+---
+
+## Completed ✓
+
+### Phase 0: Project Setup
+
+#### Documentation & Planning
+- [x] Requirements gathering interview completed (comprehensive Q&A)
+- [x] PRD.md created with comprehensive requirements
+- [x] PROGRESS.md created for tracking
+- [x] **LEARNING.md created** - Educational narrative document for learning app architecture
+- [x] Claude.md updated with LEARNING.md reminder
+- [x] Project structure defined
+- [x] Technical decisions documented
+
+#### Project Foundation
+- [x] Expo React Native project initialized
+- [x] All core dependencies installed and verified:
+  - ✅ @react-native-async-storage/async-storage (^2.2.0)
+  - ✅ @react-navigation/bottom-tabs (^7.10.1)
+  - ✅ @react-navigation/native (^7.1.28)
+  - ✅ @react-navigation/native-stack (^7.10.1)
+  - ✅ @supabase/supabase-js (^2.91.0)
+  - ✅ expo (~54.0.31)
+  - ✅ expo-location (^19.0.8)
+  - ✅ react (19.1.0)
+  - ✅ react-hook-form (^7.71.1)
+  - ✅ react-native (0.81.5)
+  - ✅ react-native-paper (^5.14.5)
+
+#### Supabase Setup
+- [x] Supabase project created (masi-app)
+- [x] Base database schema created (users, children, time_entries, sessions)
+- [x] RLS policies configured
+- [x] **Schema migration SQL created for groups feature** (supabase-migrations/01_add_groups_feature.sql)
+
+#### Environment Configuration
+- [x] Environment variables configured (.env.local)
+- [x] .env.example created for repository
+- [x] supabaseClient.js updated to use EXPO_PUBLIC_ variables
+- [x] .env.local updated with EXPO_PUBLIC_ prefix ✅
+
+#### Code Foundation
+- [x] App.js configured with providers (PaperProvider, AuthProvider, SafeAreaProvider)
+- [x] AuthContext implemented
+- [x] AppNavigator created with auth routing
+- [x] LoginScreen implemented
+- [x] HomeScreen created with profile link and sign out
+- [x] Storage utilities (AsyncStorage wrapper) created
+- [x] Supabase client configured
+- [x] Theme constants defined (colors, jobTitles)
+
+#### Navigation Setup
+- [x] Bottom tab navigator implemented (4 tabs)
+- [x] TimeTrackingScreen placeholder created
+- [x] ChildrenListScreen placeholder created
+- [x] SessionsScreen placeholder created
+- [x] Tab icons configured with Ionicons
+
+#### Testing & Verification
+- [x] Groups migration SQL executed in Supabase ✅
+- [x] Expo dev server starts successfully ✅
+- [x] Environment variables load correctly ✅
+- [x] Navigation structure tested ✅
+
+#### Phase 1: Authentication & Foundation (Started 2026-01-27)
+- [x] Test login flow with Supabase (test user created: test@masinyusane.org)
+- [x] Login successfully tested with real authentication
+- [x] ProfileScreen created with editable name fields
+- [x] Profile updates sync to Supabase
+- [x] Password change functionality implemented
+- [x] ForgotPasswordScreen implemented
+- [x] Password reset email flow configured
+- [x] Profile navigation from HomeScreen working
+- [x] AuthContext includes refreshProfile function
+
+---
+
+## In Progress 🚧
+
+### Phase 1: Authentication & Foundation
+- Invitation system setup (Task #4)
+- OfflineContext for sync management (Task #5)
+
+---
+
+## Up Next 📋
+
+### Phase 1: Authentication & Foundation (Starting Now)
+
+1. Test login flow end-to-end
+2. Create ProfileScreen (accessible from Home)
+3. Implement password reset flow
+4. Set up invitation system
+5. Implement OfflineContext for sync management
+
+### Phase 1 Details: Authentication & Foundation
+- [x] Test login flow with Supabase (create test user) ✅
+- [x] Create ProfileScreen UI (name & password editable) ✅
+- [x] Implement ForgotPasswordScreen ✅
+- [x] Set up password reset flow ✅
+- [ ] Create invitation system (email links)
+- [ ] Implement OfflineContext for sync management
+- [x] Add profile navigation from HomeScreen ✅
+
+### Phase 2: Time Tracking (After Phase 1)
+- [ ] Location service setup (expo-location)
+- [ ] Time tracking screen UI
+- [ ] Sign in/out functionality
+- [ ] Geolocation capture with medium accuracy
+- [ ] Daily/weekly hours view
+
+---
+
+## Blockers 🚫
+None currently.
+
+---
+
+## Decisions Made
+
+### Architecture
+- **Sync Strategy**: Last-write-wins (staff changes always overwrite server)
+- **Sync Triggers**: App foreground/background
+- **Navigation**: Bottom tab navigation (4 tabs - Home with profile link, Time, Children, Sessions)
+- **Theme**: Light mode only (initially)
+- **Validation**: Basic client-side, comprehensive server-side
+
+### Features
+- **Groups**: Hybrid management (staff can create, admin can override)
+- **Child Selection**: Multi-step (search → add to list) + group-based selection
+- **Time Tracking**: Medium accuracy location (50-100m), static display with manual refresh
+- **Session History**: Last 30 days, newest first, read-only
+- **Profile Editing**: Name and password only (job details admin-only)
+
+### Development
+- **First Form**: Literacy Coach
+- **Build Approach**: One complete end-to-end workflow first
+- **Testing**: Android emulator + iOS simulator
+- **Documentation**: PRD.md + PROGRESS.md for tracking + LEARNING.md for educational narrative
+
+---
+
+## Questions & Notes
+
+### Open Questions
+1. Need detailed field requirements for Literacy Coach session form (Phase 4)
+2. Need field requirements for other session forms (Phase 5)
+3. Email provider for invitation system (to determine during Phase 1)
+
+### Important Notes
+- Staff may be offline for days - offline reliability is critical
+- Location permission must be granted for time tracking
+- Groups feature requires new database tables (groups, children_groups)
+- RLS policies start lenient, must tighten before production
+
+---
+
+## Metrics & Timeline
+
+### Current Progress
+- **Phases Completed**: 1 of 7 (Phase 0 ✅)
+- **Features Completed**: ~20% (foundation + navigation complete)
+- **Phase 1 Status**: Ready to begin
+
+---
+
+## Recent Activity Log
+
+### 2026-01-27 (Session 3: Phase 1 Authentication Progress)
+- **Created test user in Supabase** - email: test@masinyusane.org with profile data
+- **Verified login flow end-to-end** - successful authentication and profile loading
+- **Created ProfileScreen** - editable first name and last name fields
+- **Profile editing working** - updates sync to Supabase users table
+- **Password change functionality** - current password verification, new password update
+- **Note**: Keyboard covering password fields on iOS (minor UX issue, non-blocking)
+- **ForgotPasswordScreen implemented** - email input, success screen, error handling
+- **Password reset flow configured** - integrated with Supabase auth.resetPasswordForEmail
+- **Updated AuthContext** - added refreshProfile function for profile updates
+- **Navigation updated** - Profile and ForgotPassword routes added
+- **Phase 1 Status**: ~60% complete (3 of 5 core tasks done)
+
+### 2026-01-27 (Session 2: Phase 0 Completion)
+- **Added Project Documentation section to CLAUDE.md** - references PRD, PROGRESS, LEARNING, and DATABASE_SCHEMA_GUIDE
+- **Renamed Claude.md to CLAUDE.md** for consistency (all caps convention)
+- **Verified groups migration** - confirmed tables exist in Supabase
+- **Created placeholder screens**:
+  - TimeTrackingScreen.js
+  - ChildrenListScreen.js
+  - SessionsScreen.js
+- **Implemented bottom tab navigation** with 4 tabs (Home, Time, Children, Sessions)
+- **Updated AppNavigator** with MainTabNavigator using @react-navigation/bottom-tabs
+- **Added tab icons** using Ionicons (home, time, people, document-text)
+- **Redesigned HomeScreen** - simplified with profile link and sign-out button
+- **Started Expo dev server successfully** - verified environment variables load
+- **Phase 0 COMPLETE** ✅
+
+### 2026-01-20 (Session 1: Planning & Documentation)
+- Conducted comprehensive requirements interview via AskUserQuestion
+- Created PRD.md with full specifications
+- Created PROGRESS.md for tracking
+- **Created LEARNING.md** - Educational narrative for junior developers
+- Updated Claude.md with LEARNING.md reminder
+- Defined database schema with groups feature
+- Created schema migration SQL (supabase-migrations/01_add_groups_feature.sql)
+- Verified all packages are correctly installed
+- Identified and fixed environment variable naming (EXPO_PUBLIC_ prefix)
+- Updated supabaseClient.js to use correct env variables
+- Created .env.example for repository
+- Updated PRD.md to remove Profile from bottom tabs (4 tabs total)
+
+---
+
+## Next Session Goals
+1. Continue Phase 1: Invitation system setup (Task #4)
+2. Implement OfflineContext for sync management (Task #5)
+3. Or move to Phase 2: Time Tracking with location services
+
+---
+
+**Progress Summary**: ✅ **Phase 1: 60% Complete** - Login flow verified with test user. ProfileScreen implemented with editable name fields and password change. ForgotPasswordScreen complete with email reset flow. Navigation includes Profile and ForgotPassword routes. AuthContext enhanced with refreshProfile. Remaining: invitation system and OfflineContext for sync management.
