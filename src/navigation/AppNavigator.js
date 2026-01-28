@@ -5,6 +5,7 @@ import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { useAuth } from '../context/AuthContext';
 import { ActivityIndicator, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { colors } from '../constants/colors';
 
 // Auth screens
 import LoginScreen from '../screens/auth/LoginScreen';
@@ -56,8 +57,13 @@ function MainTabNavigator() {
 
           return <Ionicons name={iconName} size={size} color={color} />;
         },
-        tabBarActiveTintColor: '#6200ee',
-        tabBarInactiveTintColor: 'gray',
+        tabBarActiveTintColor: colors.tabActive,      // Brand blue
+        tabBarInactiveTintColor: colors.tabInactive,  // Gray
+        tabBarStyle: {
+          backgroundColor: colors.surface,            // White background
+          borderTopColor: colors.border,
+          borderTopWidth: 1,
+        },
       })}
     >
       <Tab.Screen

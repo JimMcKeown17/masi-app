@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { View, StyleSheet, ScrollView, KeyboardAvoidingView, Platform } from 'react-native';
 import { TextInput, Button, Text, Card, Divider, Snackbar } from 'react-native-paper';
 import { useAuth } from '../../context/AuthContext';
-import { colors, spacing } from '../../constants/colors';
+import { colors, spacing, borderRadius, shadows } from '../../constants/colors';
 import { supabase } from '../../services/supabaseClient';
 
 export default function ProfileScreen({ navigation }) {
@@ -283,7 +283,9 @@ const styles = StyleSheet.create({
   },
   card: {
     margin: spacing.md,
-    elevation: 2,
+    backgroundColor: colors.surface,
+    borderRadius: borderRadius.lg,
+    ...shadows.card,
   },
   sectionTitle: {
     marginBottom: spacing.md,
@@ -307,9 +309,9 @@ const styles = StyleSheet.create({
     fontStyle: 'italic',
   },
   successSnackbar: {
-    backgroundColor: '#4caf50',
+    backgroundColor: colors.success,  // Brand green
   },
   errorSnackbar: {
-    backgroundColor: '#f44336',
+    backgroundColor: colors.error,    // Brand red
   },
 });

@@ -1,14 +1,42 @@
 import React from 'react';
 import { StatusBar } from 'expo-status-bar';
-import { PaperProvider } from 'react-native-paper';
+import { PaperProvider, MD3LightTheme } from 'react-native-paper';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { AuthProvider } from './src/context/AuthContext';
 import AppNavigator from './src/navigation/AppNavigator';
+import { colors } from './src/constants/colors';
+
+// Custom theme using Masinyusane brand colors
+const theme = {
+  ...MD3LightTheme,
+  colors: {
+    ...MD3LightTheme.colors,
+    primary: colors.primary,           // Blue #294A99
+    primaryContainer: '#E3E9F5',       // Light blue container
+    secondary: colors.accent,          // Yellow #FFDD00
+    secondaryContainer: '#FFF9CC',     // Light yellow container
+    tertiary: colors.emphasis,         // Red #E72D4D
+    tertiaryContainer: '#FCEAED',      // Light red container
+    error: colors.error,               // Red #E72D4D
+    errorContainer: '#FCEAED',
+    background: colors.background,     // #F7F7F7
+    surface: colors.surface,           // #FFFFFF
+    surfaceVariant: colors.cardBackground, // #FAFAFA
+    onPrimary: '#FFFFFF',              // Text on primary (blue) backgrounds
+    onSecondary: '#111111',            // Text on secondary (yellow) backgrounds
+    onTertiary: '#FFFFFF',             // Text on tertiary (red) backgrounds
+    onBackground: colors.text,         // #111111
+    onSurface: colors.text,            // #111111
+    outline: colors.border,            // #E5E7EB
+    outlineVariant: colors.border,
+    success: colors.success,           // Green #3FA535 (custom)
+  },
+};
 
 export default function App() {
   return (
     <SafeAreaProvider>
-      <PaperProvider>
+      <PaperProvider theme={theme}>
         <AuthProvider>
           <AppNavigator />
           <StatusBar style="auto" />

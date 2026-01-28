@@ -2,7 +2,7 @@ import React from 'react';
 import { View, StyleSheet, ScrollView } from 'react-native';
 import { Card, Text, Button } from 'react-native-paper';
 import { useAuth } from '../../context/AuthContext';
-import { colors, spacing } from '../../constants/colors';
+import { colors, spacing, borderRadius, shadows } from '../../constants/colors';
 
 export default function HomeScreen({ navigation }) {
   const { profile, signOut } = useAuth();
@@ -71,19 +71,19 @@ const styles = StyleSheet.create({
   },
   header: {
     padding: spacing.lg,
-    backgroundColor: colors.primary,
+    backgroundColor: colors.primary,  // Brand blue
   },
   welcomeText: {
-    color: 'white',
+    color: '#FFFFFF',
     marginBottom: spacing.xs,
   },
   roleText: {
-    color: 'white',
-    opacity: 0.9,
+    color: '#FFFFFF',
+    opacity: 0.95,
   },
   schoolText: {
-    color: 'white',
-    opacity: 0.8,
+    color: '#FFFFFF',
+    opacity: 0.9,
     marginTop: spacing.xs,
   },
   content: {
@@ -91,7 +91,9 @@ const styles = StyleSheet.create({
   },
   card: {
     marginBottom: spacing.md,
-    elevation: 2,
+    backgroundColor: colors.surface,
+    borderRadius: borderRadius.lg,  // 16px rounded corners
+    ...shadows.card,                // Subtle shadow
   },
   description: {
     color: colors.textSecondary,
