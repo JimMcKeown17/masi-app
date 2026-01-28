@@ -101,7 +101,6 @@ A React Native mobile application for Masi, a nonprofit organization, to manage 
 
 ### 1. Authentication
 **Requirements:**
-- Invitation system with email links for user onboarding
 - Email/password login
 - Password reset functionality
 - Profile management (name and password editable by user)
@@ -110,7 +109,12 @@ A React Native mobile application for Masi, a nonprofit organization, to manage 
 **Technical Decisions:**
 - Start with lenient RLS policies during development
 - Tighten RLS before production deployment
-- Users created via invitation flow
+- **User Onboarding (MVP)**: Manual user creation via Supabase dashboard
+  - Admin creates user account in Supabase Auth
+  - Admin creates profile entry in public.users table
+  - Admin communicates credentials to staff
+  - Staff logs in and changes password immediately
+- **Future Enhancement**: Automated invitation system with email links (post-MVP)
 
 ### 2. Time Tracking
 **Requirements:**
@@ -248,34 +252,50 @@ User Action → Local AsyncStorage → UI Update → Sync Queue → Supabase →
 
 ## Development Phases
 
-### Phase 0: Project Setup ✓ (Starting Now)
+### Phase 0: Project Setup ✓ (Complete)
 - [x] Create PRD.md
 - [x] Create PROGRESS.md
-- [ ] Initialize Expo project
-- [ ] Install core dependencies
-- [ ] Set up Supabase project
-- [ ] Configure environment variables
-- [ ] Set up navigation structure (bottom tabs)
+- [x] Initialize Expo project
+- [x] Install core dependencies
+- [x] Set up Supabase project
+- [x] Configure environment variables
+- [x] Set up navigation structure (bottom tabs)
+- [x] Create placeholder screens (Home, Time, Children, Sessions)
+- [x] Establish brand colors and styling guidelines
 
-### Phase 1: Authentication & Foundation
-- [ ] Supabase client configuration
-- [ ] Auth context setup
-- [ ] Login screen
-- [ ] Password reset flow
-- [ ] Invitation system (email links)
-- [ ] Profile screen (name & password editable)
-- [ ] Basic navigation flow
-- [ ] Offline storage setup (AsyncStorage)
+### Phase 1: Authentication & Foundation ✓ (Complete)
+- [x] Supabase client configuration
+- [x] Auth context setup
+- [x] Login screen
+- [x] Password reset flow
+- [x] Profile screen (name & password editable)
+- [x] Basic navigation flow (4 bottom tabs)
+- [x] Offline storage setup (AsyncStorage)
+- [x] OfflineContext for sync management
+- [ ] Invitation system (email links) - **DEFERRED to post-MVP** (using manual Supabase creation)
 
 ### Phase 2: Time Tracking (First Complete Workflow)
-- [ ] Location service setup (expo-location)
-- [ ] Medium accuracy location configuration
-- [ ] Permission handling with persistent prompts
+- [ ] Location service setup (expo-location wrapper)
+- [ ] Location permission handling (request on mount, persistent prompts)
+- [ ] Configure medium accuracy (50-100m)
 - [ ] Time tracking screen UI
-- [ ] Sign in/out functionality
-- [ ] Local storage for time entries
-- [ ] Time entry sync service
-- [ ] Daily/weekly hours view
+  - [ ] Check for active time entry on load
+  - [ ] "Sign In" button (when not signed in)
+  - [ ] "Sign Out" button (when signed in)
+  - [ ] Display current sign-in time and elapsed duration
+  - [ ] Manual refresh button for elapsed time
+- [ ] Sign in functionality
+  - [ ] Block if location permission denied
+  - [ ] Capture GPS coordinates (medium accuracy)
+  - [ ] Save to AsyncStorage with `synced: false`
+  - [ ] Update UI immediately
+- [ ] Sign out functionality
+  - [ ] Capture GPS coordinates
+  - [ ] Calculate total hours worked
+  - [ ] Update time entry in AsyncStorage
+  - [ ] Trigger background sync
+- [ ] Time entries list view (daily/weekly grouping)
+- [ ] Test offline sync with time entries
 
 ### Phase 3: Children Management
 - [ ] Children list screen
