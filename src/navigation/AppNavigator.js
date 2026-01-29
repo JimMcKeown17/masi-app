@@ -6,6 +6,7 @@ import { useAuth } from '../context/AuthContext';
 import { ActivityIndicator, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { colors } from '../constants/colors';
+import SyncIndicator from '../components/common/SyncIndicator';
 
 // Auth screens
 import LoginScreen from '../screens/auth/LoginScreen';
@@ -14,6 +15,7 @@ import ForgotPasswordScreen from '../screens/auth/ForgotPasswordScreen';
 // Main tab screens
 import HomeScreen from '../screens/main/HomeScreen';
 import TimeTrackingScreen from '../screens/main/TimeTrackingScreen';
+import TimeEntriesListScreen from '../screens/main/TimeEntriesListScreen';
 import ChildrenListScreen from '../screens/main/ChildrenListScreen';
 import SessionsScreen from '../screens/main/SessionsScreen';
 import ProfileScreen from '../screens/main/ProfileScreen';
@@ -41,7 +43,7 @@ function AuthNavigator() {
 function MainTabNavigator() {
   return (
     <Tab.Navigator
-      screenOptions={({ route }) => ({
+      screenOptions={({ route, navigation }) => ({
         tabBarIcon: ({ focused, color, size }) => {
           let iconName;
 
@@ -57,6 +59,14 @@ function MainTabNavigator() {
 
           return <Ionicons name={iconName} size={size} color={color} />;
         },
+        headerRight: () => (
+          <View style={{ marginRight: 16 }}>
+            <SyncIndicator onPress={() => {
+              // Navigate to sync status screen (we'll create this later)
+              console.log('Sync indicator tapped');
+            }} />
+          </View>
+        ),
         tabBarActiveTintColor: colors.tabActive,      // Brand blue
         tabBarInactiveTintColor: colors.tabInactive,  // Gray
         tabBarStyle: {
@@ -103,6 +113,14 @@ function MainNavigator() {
         component={ProfileScreen}
         options={{
           title: 'My Profile',
+          headerBackTitle: 'Back',
+        }}
+      />
+      <Stack.Screen
+        name="TimeEntriesList"
+        component={TimeEntriesListScreen}
+        options={{
+          title: 'Work History',
           headerBackTitle: 'Back',
         }}
       />
