@@ -80,6 +80,27 @@
 - [x] Profile navigation from HomeScreen working
 - [x] AuthContext includes refreshProfile function
 
+#### Phase 1.5: Profile Improvements & Debug Tools (Completed 2026-01-29)
+- [x] Created logger utility (src/utils/logger.js)
+  - Rolling buffer of 1000 entries
+  - Captures console.log, console.error, console.warn
+  - Stores in AsyncStorage with timestamp and level
+- [x] Created debug export utilities (src/utils/debugExport.js)
+  - exportLogs function with Share API
+  - exportDatabase function with Share API
+- [x] Initialized logger in App.js
+- [x] Refactored ProfileScreen to 4-section layout:
+  1. Profile Information (read-only display)
+  2. Debug & Support (Share Logs, Share Database)
+  3. Change Password (existing functionality)
+  4. Legal (Terms & Conditions link)
+- [x] Removed editable name fields from ProfileScreen
+- [x] Added Share Logs functionality
+- [x] Added Share Database functionality (with confirmation dialog)
+- [x] Added Terms & Conditions section (opens external URL)
+- [x] Updated PRD.md with Debug & Support Features documentation
+- [x] Updated PROGRESS.md with completion tracking
+
 ---
 
 ## In Progress 🚧
@@ -172,6 +193,19 @@ None currently.
 ---
 
 ## Recent Activity Log
+
+### 2026-01-29 (Session 4: Profile Refactor & Debug Tools)
+- **Created logger utility** - Rolling 1000-entry buffer capturing console output
+- **Created debug export utilities** - Share logs and database via native Share API
+- **Refactored ProfileScreen** - Simplified to 4-section read-only layout
+- **Removed profile editing** - Name fields now display-only (admin-managed)
+- **Added Debug & Support section** - Share Logs and Share Database buttons
+- **Added Legal section** - Terms & Conditions link (opens masinyusane.org/terms)
+- **Implemented Share functionality** - Native OS share sheet for logs/database
+- **Added confirmation dialog** - Database export warns about sensitive data
+- **Updated PRD.md** - Documented Debug & Support Features section
+- **Updated PROGRESS.md** - Phase 1.5 completion tracked
+- **Phase 1.5 Status**: ✅ COMPLETE (all features implemented and documented)
 
 ### 2026-01-27 (Session 3: Phase 1 Authentication Progress)
 - **Created test user in Supabase** - email: test@masinyusane.org with profile data

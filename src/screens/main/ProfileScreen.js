@@ -1,17 +1,13 @@
 import React, { useState } from 'react';
-import { View, StyleSheet, ScrollView, KeyboardAvoidingView, Platform } from 'react-native';
+import { View, StyleSheet, ScrollView, KeyboardAvoidingView, Platform, Linking, Alert } from 'react-native';
 import { TextInput, Button, Text, Card, Divider, Snackbar } from 'react-native-paper';
 import { useAuth } from '../../context/AuthContext';
 import { colors, spacing, borderRadius, shadows } from '../../constants/colors';
 import { supabase } from '../../services/supabaseClient';
+import { exportDatabase, exportLogs } from '../../utils/debugExport';
 
 export default function ProfileScreen({ navigation }) {
-  const { user, profile, updatePassword, refreshProfile } = useAuth();
-
-  // Profile form state
-  const [firstName, setFirstName] = useState(profile?.first_name || '');
-  const [lastName, setLastName] = useState(profile?.last_name || '');
-  const [profileLoading, setProfileLoading] = useState(false);
+  const { user, profile, updatePassword } = useAuth();
 
   // Password form state
   const [currentPassword, setCurrentPassword] = useState('');
@@ -20,6 +16,9 @@ export default function ProfileScreen({ navigation }) {
   const [showPasswords, setShowPasswords] = useState(false);
   const [passwordLoading, setPasswordLoading] = useState(false);
 
+  // Debug export state
+  const [exportLoading, setExportLoading] = useState(false);
+
   // Feedback state
   const [snackbar, setSnackbar] = useState({ visible: false, message: '', type: 'success' });
 
@@ -27,34 +26,67 @@ export default function ProfileScreen({ navigation }) {
     setSnackbar({ visible: true, message, type });
   };
 
-  const handleUpdateProfile = async () => {
-    if (!firstName.trim() || !lastName.trim()) {
-      showMessage('First name and last name are required', 'error');
-      return;
-    }
-
-    setProfileLoading(true);
+  const handleShareLogs = async () => {
+    setExportLoading(true);
     try {
-      const { error } = await supabase
-        .from('users')
-        .update({
-          first_name: firstName.trim(),
-          last_name: lastName.trim(),
-          updated_at: new Date().toISOString(),
-        })
-        .eq('id', user.id);
-
-      if (error) throw error;
-
-      // Refresh profile data from server
-      await refreshProfile();
-
-      showMessage('Profile updated successfully');
+      const result = await exportLogs();
+      if (result.success) {
+        showMessage('Logs exported successfully');
+      } else {
+        showMessage(result.error || 'Failed to export logs', 'error');
+      }
     } catch (error) {
-      console.error('Profile update error:', error);
-      showMessage(error.message || 'Failed to update profile', 'error');
+      console.error('Share logs error:', error);
+      showMessage('Failed to export logs', 'error');
     } finally {
-      setProfileLoading(false);
+      setExportLoading(false);
+    }
+  };
+
+  const handleShareDatabase = async () => {
+    // Confirm action due to sensitive data
+    Alert.alert(
+      'Export Database',
+      'This will export all local data including sensitive information. Only share with Masi support staff.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Export',
+          style: 'destructive',
+          onPress: async () => {
+            setExportLoading(true);
+            try {
+              const result = await exportDatabase();
+              if (result.success) {
+                showMessage('Database exported successfully');
+              } else {
+                showMessage(result.error || 'Failed to export database', 'error');
+              }
+            } catch (error) {
+              console.error('Share database error:', error);
+              showMessage('Failed to export database', 'error');
+            } finally {
+              setExportLoading(false);
+            }
+          },
+        },
+      ]
+    );
+  };
+
+  const handleOpenTerms = async () => {
+    try {
+      const url = 'https://masinyusane.org/terms';
+      const supported = await Linking.canOpenURL(url);
+
+      if (supported) {
+        await Linking.openURL(url);
+      } else {
+        showMessage('Cannot open URL', 'error');
+      }
+    } catch (error) {
+      console.error('Open terms error:', error);
+      showMessage('Failed to open Terms & Conditions', 'error');
     }
   };
 
@@ -106,10 +138,6 @@ export default function ProfileScreen({ navigation }) {
     }
   };
 
-  const hasProfileChanges =
-    firstName.trim() !== profile?.first_name ||
-    lastName.trim() !== profile?.last_name;
-
   return (
     <KeyboardAvoidingView
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
@@ -128,65 +156,80 @@ export default function ProfileScreen({ navigation }) {
               Profile Information
             </Text>
 
-            <TextInput
-              label="First Name"
-              value={firstName}
-              onChangeText={setFirstName}
-              mode="outlined"
-              style={styles.input}
-              disabled={profileLoading}
-            />
+            <View style={styles.infoRow}>
+              <Text variant="bodySmall" style={styles.infoLabel}>Name</Text>
+              <Text variant="bodyLarge" style={styles.infoValue}>
+                {profile?.first_name} {profile?.last_name}
+              </Text>
+            </View>
 
-            <TextInput
-              label="Last Name"
-              value={lastName}
-              onChangeText={setLastName}
-              mode="outlined"
-              style={styles.input}
-              disabled={profileLoading}
-            />
+            <Divider style={styles.divider} />
 
-            <TextInput
-              label="Email"
-              value={user?.email || ''}
-              mode="outlined"
-              style={styles.input}
-              disabled
-              right={<TextInput.Icon icon="lock" />}
-            />
+            <View style={styles.infoRow}>
+              <Text variant="bodySmall" style={styles.infoLabel}>Email</Text>
+              <Text variant="bodyLarge" style={styles.infoValue}>
+                {user?.email}
+              </Text>
+            </View>
 
-            <TextInput
-              label="Job Title"
-              value={profile?.job_title || ''}
-              mode="outlined"
-              style={styles.input}
-              disabled
-              right={<TextInput.Icon icon="lock" />}
-            />
+            <Divider style={styles.divider} />
+
+            <View style={styles.infoRow}>
+              <Text variant="bodySmall" style={styles.infoLabel}>Job Title</Text>
+              <Text variant="bodyLarge" style={styles.infoValue}>
+                {profile?.job_title}
+              </Text>
+            </View>
 
             {profile?.assigned_school && (
-              <TextInput
-                label="Assigned School"
-                value={profile.assigned_school}
-                mode="outlined"
-                style={styles.input}
-                disabled
-                right={<TextInput.Icon icon="lock" />}
-              />
+              <>
+                <Divider style={styles.divider} />
+                <View style={styles.infoRow}>
+                  <Text variant="bodySmall" style={styles.infoLabel}>Assigned School</Text>
+                  <Text variant="bodyLarge" style={styles.infoValue}>
+                    {profile.assigned_school}
+                  </Text>
+                </View>
+              </>
             )}
 
             <Text variant="bodySmall" style={styles.helperText}>
-              Email, job title, and school are managed by administrators
+              Profile information is managed by administrators
+            </Text>
+          </Card.Content>
+        </Card>
+
+        {/* Debug Options Section */}
+        <Card style={styles.card}>
+          <Card.Content>
+            <Text variant="titleLarge" style={styles.sectionTitle}>
+              Debug & Support
+            </Text>
+
+            <Text variant="bodySmall" style={styles.helperText}>
+              Export logs or database when reporting issues to support
             </Text>
 
             <Button
-              mode="contained"
-              onPress={handleUpdateProfile}
-              loading={profileLoading}
-              disabled={profileLoading || !hasProfileChanges}
+              mode="outlined"
+              onPress={handleShareLogs}
+              loading={exportLoading}
+              disabled={exportLoading}
               style={styles.button}
+              icon="file-document-outline"
             >
-              Save Profile Changes
+              Share Logs
+            </Button>
+
+            <Button
+              mode="outlined"
+              onPress={handleShareDatabase}
+              loading={exportLoading}
+              disabled={exportLoading}
+              style={styles.button}
+              icon="database-export"
+            >
+              Share Database (Contains Sensitive Data)
             </Button>
           </Card.Content>
         </Card>
@@ -251,6 +294,24 @@ export default function ProfileScreen({ navigation }) {
             </Button>
           </Card.Content>
         </Card>
+
+        {/* Terms & Conditions Section */}
+        <Card style={styles.card}>
+          <Card.Content>
+            <Text variant="titleLarge" style={styles.sectionTitle}>
+              Legal
+            </Text>
+
+            <Button
+              mode="outlined"
+              onPress={handleOpenTerms}
+              style={styles.button}
+              icon="file-document"
+            >
+              Terms & Conditions
+            </Button>
+          </Card.Content>
+        </Card>
       </ScrollView>
 
       <Snackbar
@@ -290,6 +351,24 @@ const styles = StyleSheet.create({
   sectionTitle: {
     marginBottom: spacing.md,
     color: colors.primary,
+  },
+  infoRow: {
+    marginBottom: spacing.sm,
+  },
+  infoLabel: {
+    color: colors.textSecondary,
+    marginBottom: spacing.xs,
+    textTransform: 'uppercase',
+    fontSize: 11,
+    letterSpacing: 0.5,
+  },
+  infoValue: {
+    color: colors.text,
+    fontWeight: '500',
+  },
+  divider: {
+    marginVertical: spacing.md,
+    backgroundColor: colors.border,
   },
   input: {
     marginBottom: spacing.md,

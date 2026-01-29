@@ -432,6 +432,73 @@ SUPABASE_SERVICE_ROLE_KEY=your_service_role_key (dev only, remove before product
 
 ---
 
+## Debug & Support Features (Implemented)
+
+### Overview
+Field staff often work in remote areas with limited connectivity. When issues occur, support teams need detailed diagnostic information to help troubleshoot problems.
+
+### Requirements
+- Export app logs for debugging
+- Export local database for support team analysis
+- Terms & Conditions access
+- Privacy-conscious user data handling
+
+### Technical Decisions
+
+**Log Capture**: Rolling buffer of last 1000 entries
+- Intercepts console.log, console.error, console.warn
+- Stores in AsyncStorage with timestamp and severity level
+- Automatically rotates to prevent excessive storage use
+- Captures all app activity including sync operations, errors, and user actions
+
+**Export Method**: React Native Share API (native share sheet)
+- Uses native OS sharing capabilities (WhatsApp, Email, etc.)
+- No external dependencies or file system complexity
+- Works on both iOS and Android
+- User controls where data is sent
+
+**Database Export**: Full AsyncStorage dump with metadata
+- Exports all local data in JSON format
+- Includes export timestamp, app version, and device info
+- Contains sensitive data warning (confirmation dialog required)
+- Useful for debugging sync issues and data recovery
+
+**Terms & Conditions**: External URL link
+- Configurable URL (no app update needed to change terms)
+- Opens in default browser
+- App store compliant
+- Current URL: https://masinyusane.org/terms
+
+### Use Cases
+1. **Field staff reports issue**: Share logs via WhatsApp to support team
+2. **Sync debugging**: Export database to analyze unsynced records
+3. **Data recovery**: Database export helps recover lost data if sync fails
+4. **App store compliance**: Terms link required for Apple/Google app stores
+5. **Performance issues**: Logs show timing and error patterns
+
+### Profile Screen Structure
+1. **Profile Information** (read-only display)
+   - Name, Email, Job Title, Assigned School
+   - Removed editable fields to simplify UI
+
+2. **Debug & Support**
+   - Share Logs button
+   - Share Database button (with sensitive data warning)
+
+3. **Change Password**
+   - Existing password change functionality
+
+4. **Legal**
+   - Terms & Conditions link
+
+### Privacy & Security
+- Database export requires confirmation (contains sensitive data)
+- No automatic uploads - user explicitly shares via native OS
+- Logs stored locally only (not sent to external services)
+- Clear labeling of sensitive data warnings
+
+---
+
 ## Future Enhancements (Post-MVP)
 - Dark mode
 - Streaks and awards system
@@ -442,6 +509,8 @@ SUPABASE_SERVICE_ROLE_KEY=your_service_role_key (dev only, remove before product
 - Multi-language support
 - Curriculum progress tracking integration
 - Offline map caching for location context
+- Clear Logs button in debug section
+- App version/build info in debug section
 
 ---
 

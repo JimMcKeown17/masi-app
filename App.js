@@ -6,6 +6,10 @@ import { AuthProvider } from './src/context/AuthContext';
 import { OfflineProvider } from './src/context/OfflineContext';
 import AppNavigator from './src/navigation/AppNavigator';
 import { colors } from './src/constants/colors';
+import { logger } from './src/utils/logger';
+
+// Initialize logger to capture console output
+logger.init();
 
 // Custom theme using Masinyusane brand colors
 const theme = {
