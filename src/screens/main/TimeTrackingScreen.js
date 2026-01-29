@@ -7,7 +7,7 @@ import { colors, spacing, borderRadius, shadows } from '../../constants/colors';
 import { storage } from '../../utils/storage';
 import { getCurrentPosition, formatCoordinates } from '../../services/locationService';
 
-export default function TimeTrackingScreen() {
+export default function TimeTrackingScreen({ navigation }) {
   const { user, profile } = useAuth();
   const { refreshSyncStatus } = useOffline();
 
@@ -369,6 +369,21 @@ export default function TimeTrackingScreen() {
             </Text>
           </Card.Content>
         </Card>
+
+        {/* View History Button */}
+        <Card style={styles.card}>
+          <Card.Content>
+            <Button
+              mode="outlined"
+              onPress={() => navigation.navigate('TimeEntriesList')}
+              style={styles.historyButton}
+              contentStyle={styles.buttonContent}
+              icon="history"
+            >
+              View Work History
+            </Button>
+          </Card.Content>
+        </Card>
       </View>
     </ScrollView>
   );
@@ -442,6 +457,9 @@ const styles = StyleSheet.create({
     color: colors.textSecondary,
     fontStyle: 'italic',
     textAlign: 'center',
+  },
+  historyButton: {
+    borderColor: colors.primary,
   },
   infoTitle: {
     marginBottom: spacing.sm,

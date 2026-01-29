@@ -14,6 +14,7 @@ import ForgotPasswordScreen from '../screens/auth/ForgotPasswordScreen';
 // Main tab screens
 import HomeScreen from '../screens/main/HomeScreen';
 import TimeTrackingScreen from '../screens/main/TimeTrackingScreen';
+import TimeEntriesListScreen from '../screens/main/TimeEntriesListScreen';
 import ChildrenListScreen from '../screens/main/ChildrenListScreen';
 import SessionsScreen from '../screens/main/SessionsScreen';
 import ProfileScreen from '../screens/main/ProfileScreen';
@@ -103,6 +104,14 @@ function MainNavigator() {
         component={ProfileScreen}
         options={{
           title: 'My Profile',
+          headerBackTitle: 'Back',
+        }}
+      />
+      <Stack.Screen
+        name="TimeEntriesList"
+        component={TimeEntriesListScreen}
+        options={{
+          title: 'Work History',
           headerBackTitle: 'Back',
         }}
       />
