@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { View, StyleSheet, ScrollView, RefreshControl } from 'react-native';
+import { View, StyleSheet, ScrollView, RefreshControl, Alert } from 'react-native';
 import { Card, Text, Divider, Chip } from 'react-native-paper';
 import { useAuth } from '../../context/AuthContext';
 import { useOffline } from '../../context/OfflineContext';
@@ -9,7 +9,7 @@ import { formatCoordinates } from '../../services/locationService';
 
 export default function TimeEntriesListScreen() {
   const { user } = useAuth();
-  const { refreshSyncStatus } = useOffline();
+  const { syncNow, refreshSyncStatus } = useOffline();
 
   const [timeEntries, setTimeEntries] = useState([]);
   const [groupedEntries, setGroupedEntries] = useState({});
@@ -65,10 +65,37 @@ export default function TimeEntriesListScreen() {
    */
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
-    await refreshSyncStatus();
-    await loadTimeEntries();
+
+    // Trigger sync
+    try {
+      const syncResult = await syncNow();
+
+      if (syncResult) {
+        console.log('Sync result:', syncResult);
+
+        if (syncResult.totalSynced > 0) {
+          Alert.alert(
+            'Synced Successfully',
+            `${syncResult.totalSynced} time ${syncResult.totalSynced === 1 ? 'entry' : 'entries'} synced to server`
+          );
+        }
+
+        if (syncResult.totalFailed > 0) {
+          Alert.alert(
+            'Sync Issues',
+            `${syncResult.totalFailed} ${syncResult.totalFailed === 1 ? 'entry' : 'entries'} failed to sync. Will retry automatically.`
+          );
+        }
+      }
+
+      await loadTimeEntries();
+    } catch (error) {
+      console.error('Refresh error:', error);
+      Alert.alert('Sync Error', error.message || 'Failed to sync');
+    }
+
     setRefreshing(false);
-  }, []);
+  }, [syncNow]);
 
   /**
    * Format date as "Monday, Jan 27, 2026"
