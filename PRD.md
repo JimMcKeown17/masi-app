@@ -274,28 +274,28 @@ User Action → Local AsyncStorage → UI Update → Sync Queue → Supabase →
 - [x] OfflineContext for sync management
 - [ ] Invitation system (email links) - **DEFERRED to post-MVP** (using manual Supabase creation)
 
-### Phase 2: Time Tracking (First Complete Workflow)
-- [ ] Location service setup (expo-location wrapper)
-- [ ] Location permission handling (request on mount, persistent prompts)
-- [ ] Configure medium accuracy (50-100m)
-- [ ] Time tracking screen UI
-  - [ ] Check for active time entry on load
-  - [ ] "Sign In" button (when not signed in)
-  - [ ] "Sign Out" button (when signed in)
-  - [ ] Display current sign-in time and elapsed duration
-  - [ ] Manual refresh button for elapsed time
-- [ ] Sign in functionality
-  - [ ] Block if location permission denied
-  - [ ] Capture GPS coordinates (medium accuracy)
-  - [ ] Save to AsyncStorage with `synced: false`
-  - [ ] Update UI immediately
-- [ ] Sign out functionality
-  - [ ] Capture GPS coordinates
-  - [ ] Calculate total hours worked
-  - [ ] Update time entry in AsyncStorage
-  - [ ] Trigger background sync
-- [ ] Time entries list view (daily/weekly grouping)
-- [ ] Test offline sync with time entries
+### Phase 2: Time Tracking (First Complete Workflow) ✓ (Ready for Testing)
+- [x] Location service setup (expo-location wrapper)
+- [x] Location permission handling (request on mount, persistent prompts)
+- [x] Configure medium accuracy (50-100m)
+- [x] Time tracking screen UI
+  - [x] Check for active time entry on load
+  - [x] "Sign In" button (when not signed in)
+  - [x] "Sign Out" button (when signed in)
+  - [x] Display current sign-in time and elapsed duration
+  - [x] Real-time elapsed timer (updates every second)
+- [x] Sign in functionality
+  - [x] Block if location permission denied
+  - [x] Capture GPS coordinates (medium accuracy)
+  - [x] Save to AsyncStorage with `synced: false`
+  - [x] Update UI immediately
+- [x] Sign out functionality
+  - [x] Capture GPS coordinates
+  - [x] Calculate total hours worked
+  - [x] Update time entry in AsyncStorage
+  - [x] Trigger background sync
+- [x] Time entries list view (daily/weekly grouping)
+- [ ] Test offline sync with time entries (user testing required)
 
 ### Phase 3: Children Management
 - [ ] Children list screen
