@@ -42,11 +42,21 @@ A React Native mobile application for Masi, a nonprofit organization, to manage 
 - class (text)
 - age (integer)
 - school (text)
-- group_name (text, nullable) -- NEW: for grouping children (e.g., "Group 2")
-- assigned_staff_id (uuid, FK to users)
+- assigned_staff_id (uuid, FK to users) -- DEPRECATED: Use staff_children junction instead
 - created_at (timestamp)
 - updated_at (timestamp)
 ```
+
+### staff_children (many-to-many junction)
+```sql
+- id (uuid)
+- staff_id (uuid, FK to users)
+- child_id (uuid, FK to children)
+- assigned_at (timestamp)
+- synced (boolean, default false)
+- created_at (timestamp)
+```
+**Purpose**: Enables many-to-many relationships - one child can have multiple coaches (e.g., both literacy and numeracy coach).
 
 ### groups
 ```sql
@@ -297,16 +307,19 @@ User Action → Local AsyncStorage → UI Update → Sync Queue → Supabase →
 - [x] Time entries list view (daily/weekly grouping)
 - [ ] Test offline sync with time entries (user testing required)
 
-### Phase 3: Children Management
-- [ ] Children list screen
-- [ ] Add child form
-- [ ] Child detail view
-- [ ] Search and filter
-- [ ] Local storage for children
-- [ ] Children sync service
-- [ ] **Group creation UI**
-- [ ] **Group assignment to children**
-- [ ] **Group selection in lists**
+### Phase 3: Children Management ✓ (Complete)
+- [x] Children list screen with search and filter
+- [x] Add child form with validation
+- [x] Edit child screen with group memberships display
+- [x] Delete child functionality
+- [x] Local storage for children with offline sync
+- [x] Children sync service (with staff_children junction)
+- [x] **Group creation UI**
+- [x] **Group management screen (create/rename/delete)**
+- [x] **Group assignment to children (many-to-many)**
+- [x] **Add children to group screen**
+- [x] **Many-to-many staff-children relationships**
+- [x] **Pull-to-refresh and sync status indicators**
 
 ### Phase 4: Session Recording (Literacy Coach)
 - [ ] Literacy Coach session form design (get field requirements)

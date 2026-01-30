@@ -417,18 +417,50 @@ CREATE TABLE children (
 
 **Design Decisions**:
 
-**Why is `assigned_staff_id` a foreign key?**
+**UPDATE (2026-01-30): Migrated to Many-to-Many Relationship**
+
+**Original design** used `assigned_staff_id`:
 ```sql
-assigned_staff_id UUID REFERENCES users(id)
+assigned_staff_id UUID REFERENCES users(id)  -- One-to-many
 ```
 
-This creates a **one-to-many relationship**: one staff member has many assigned children.
+This created a **one-to-many relationship**: one staff member has many assigned children, but **each child could only have ONE coach**.
+
+**Problem discovered**: In real-world usage, children often need multiple coaches:
+- A child might work with both a **Literacy Coach** and a **Numeracy Coach**
+- A child might transition between coaches but historical records need to show who worked with them
+
+**New design** uses a **junction table** for **many-to-many**:
+```sql
+-- The staff_children junction table
+CREATE TABLE staff_children (
+  id UUID PRIMARY KEY,
+  staff_id UUID REFERENCES users(id) ON DELETE CASCADE,
+  child_id UUID REFERENCES children(id) ON DELETE CASCADE,
+  assigned_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  synced BOOLEAN DEFAULT FALSE,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  UNIQUE(staff_id, child_id)  -- Can't assign same child twice to same staff
+);
+```
+
+**Benefits of many-to-many approach**:
+1. **Flexibility**: One child can have multiple coaches (literacy + numeracy)
+2. **Historical accuracy**: When a coach leaves, sessions still show which children they worked with
+3. **Better queries**: "Show all coaches for this child" is now a simple join
+4. **Less data duplication**: One child record shared across multiple coaches
+
+**Migration strategy**:
+1. Created new `staff_children` table
+2. Migrated existing `assigned_staff_id` data to junction table
+3. Updated RLS policies to query via junction table
+4. **Did NOT delete** `assigned_staff_id` column yet (backward compatibility during transition)
 
 **What `REFERENCES` does**:
-1. **Referential integrity**: Can't assign a child to a non-existent user
-2. **Cascade options**: Can define what happens if user is deleted
-3. **Index**: Database creates an index for efficient lookups
-4. **Documentation**: Schema shows the relationship
+1. **Referential integrity**: Can't assign a child to a non-existent user or child
+2. **Cascade options**: `ON DELETE CASCADE` removes assignments when user/child deleted
+3. **Index**: Database creates indexes for efficient lookups
+4. **Documentation**: Schema shows the many-to-many relationship
 
 **Why are teacher, class, age, school nullable?**
 
