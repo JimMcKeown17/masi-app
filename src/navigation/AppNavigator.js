@@ -20,6 +20,12 @@ import ChildrenListScreen from '../screens/main/ChildrenListScreen';
 import SessionsScreen from '../screens/main/SessionsScreen';
 import ProfileScreen from '../screens/main/ProfileScreen';
 
+// Children screens
+import AddChildScreen from '../screens/children/AddChildScreen';
+import EditChildScreen from '../screens/children/EditChildScreen';
+import GroupManagementScreen from '../screens/children/GroupManagementScreen';
+import AddChildToGroupScreen from '../screens/children/AddChildToGroupScreen';
+
 const Stack = createNativeStackNavigator();
 const Tab = createBottomTabNavigator();
 
@@ -121,6 +127,38 @@ function MainNavigator() {
         component={TimeEntriesListScreen}
         options={{
           title: 'Work History',
+          headerBackTitle: 'Back',
+        }}
+      />
+      <Stack.Screen
+        name="AddChild"
+        component={AddChildScreen}
+        options={{
+          title: 'Add Child',
+          headerBackTitle: 'Back',
+        }}
+      />
+      <Stack.Screen
+        name="EditChild"
+        component={EditChildScreen}
+        options={{
+          title: 'Edit Child',
+          headerBackTitle: 'Back',
+        }}
+      />
+      <Stack.Screen
+        name="GroupManagement"
+        component={GroupManagementScreen}
+        options={{
+          title: 'Manage Groups',
+          headerBackTitle: 'Back',
+        }}
+      />
+      <Stack.Screen
+        name="AddChildToGroup"
+        component={AddChildToGroupScreen}
+        options={{
+          title: 'Add to Group',
           headerBackTitle: 'Back',
         }}
       />

@@ -4,7 +4,9 @@ const STORAGE_KEYS = {
   TIME_ENTRIES: '@time_entries',
   SESSIONS: '@sessions',
   CHILDREN: '@children',
+  STAFF_CHILDREN: '@staff_children',
   GROUPS: '@groups',
+  CHILDREN_GROUPS: '@children_groups',
   SYNC_QUEUE: '@sync_queue',
   SYNC_META: '@sync_meta',
   USER_PROFILE: '@user_profile',
@@ -105,6 +107,41 @@ export const storage = {
     return false;
   },
 
+  async deleteChild(id) {
+    const children = await this.getChildren();
+    const filtered = children.filter(c => c.id !== id);
+    return await this.setItem(STORAGE_KEYS.CHILDREN, filtered);
+  },
+
+  async getUnsyncedChildren() {
+    const children = await this.getChildren();
+    return children.filter(c => c.synced === false);
+  },
+
+  // Staff-children junction (many-to-many assignments)
+  async getStaffChildren() {
+    return await this.getItem(STORAGE_KEYS.STAFF_CHILDREN) || [];
+  },
+
+  async saveStaffChild(assignment) {
+    const assignments = await this.getStaffChildren();
+    assignments.push(assignment);
+    return await this.setItem(STORAGE_KEYS.STAFF_CHILDREN, assignments);
+  },
+
+  async deleteStaffChild(staffId, childId) {
+    const assignments = await this.getStaffChildren();
+    const filtered = assignments.filter(
+      a => !(a.staff_id === staffId && a.child_id === childId)
+    );
+    return await this.setItem(STORAGE_KEYS.STAFF_CHILDREN, filtered);
+  },
+
+  async getUnsyncedStaffChildren() {
+    const assignments = await this.getStaffChildren();
+    return assignments.filter(a => a.synced === false);
+  },
+
   // Groups
   async getGroups() {
     return await this.getItem(STORAGE_KEYS.GROUPS) || [];
@@ -124,6 +161,41 @@ export const storage = {
       return await this.setItem(STORAGE_KEYS.GROUPS, groups);
     }
     return false;
+  },
+
+  async deleteGroup(id) {
+    const groups = await this.getGroups();
+    const filtered = groups.filter(g => g.id !== id);
+    return await this.setItem(STORAGE_KEYS.GROUPS, filtered);
+  },
+
+  async getUnsyncedGroups() {
+    const groups = await this.getGroups();
+    return groups.filter(g => g.synced === false);
+  },
+
+  // Children-groups junction (many-to-many memberships)
+  async getChildrenGroups() {
+    return await this.getItem(STORAGE_KEYS.CHILDREN_GROUPS) || [];
+  },
+
+  async saveChildrenGroup(membership) {
+    const memberships = await this.getChildrenGroups();
+    memberships.push(membership);
+    return await this.setItem(STORAGE_KEYS.CHILDREN_GROUPS, memberships);
+  },
+
+  async deleteChildrenGroup(childId, groupId) {
+    const memberships = await this.getChildrenGroups();
+    const filtered = memberships.filter(
+      m => !(m.child_id === childId && m.group_id === groupId)
+    );
+    return await this.setItem(STORAGE_KEYS.CHILDREN_GROUPS, filtered);
+  },
+
+  async getUnsyncedChildrenGroups() {
+    const memberships = await this.getChildrenGroups();
+    return memberships.filter(m => m.synced === false);
   },
 
   // Generic methods for sync operations
@@ -148,7 +220,7 @@ export const storage = {
   },
 
   async getAllUnsyncedCount() {
-    const tables = ['TIME_ENTRIES', 'SESSIONS', 'CHILDREN', 'GROUPS'];
+    const tables = ['TIME_ENTRIES', 'SESSIONS', 'CHILDREN', 'STAFF_CHILDREN', 'GROUPS', 'CHILDREN_GROUPS'];
     let totalCount = 0;
 
     for (const table of tables) {

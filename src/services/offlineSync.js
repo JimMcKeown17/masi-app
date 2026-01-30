@@ -29,12 +29,22 @@ const SYNC_TABLES = {
   CHILDREN: {
     key: 'CHILDREN',
     table: 'children',
-    getRecords: () => storage.getUnsyncedRecords('CHILDREN'),
+    getRecords: () => storage.getUnsyncedChildren(),
+  },
+  STAFF_CHILDREN: {
+    key: 'STAFF_CHILDREN',
+    table: 'staff_children',
+    getRecords: () => storage.getUnsyncedStaffChildren(),
   },
   GROUPS: {
     key: 'GROUPS',
     table: 'groups',
-    getRecords: () => storage.getUnsyncedRecords('GROUPS'),
+    getRecords: () => storage.getUnsyncedGroups(),
+  },
+  CHILDREN_GROUPS: {
+    key: 'CHILDREN_GROUPS',
+    table: 'children_groups',
+    getRecords: () => storage.getUnsyncedChildrenGroups(),
   },
 };
 
