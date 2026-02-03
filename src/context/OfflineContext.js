@@ -21,6 +21,12 @@ export const OfflineProvider = ({ children }) => {
 
   const appState = useRef(AppState.currentState);
   const syncInProgress = useRef(false);
+  const isOnlineRef = useRef(isOnline);
+
+  // Keep ref in sync with state so event-listener closures always read current value
+  useEffect(() => {
+    isOnlineRef.current = isOnline;
+  }, [isOnline]);
 
   /**
    * Update sync status (unsynced count, last sync time, etc.)
@@ -30,6 +36,14 @@ export const OfflineProvider = ({ children }) => {
       const status = await getSyncStatus();
       setUnsyncedCount(status.unsyncedCount);
       setSyncStatus(status);
+
+      // If there are unsynced items and we're online, kick off sync.
+      // syncNow has its own lock (syncInProgress) so this is safe to call
+      // repeatedly. No loop risk: after sync completes it calls refreshSyncStatus
+      // again, but by then unsyncedCount is 0.
+      if (status.unsyncedCount > 0 && isOnlineRef.current && !syncInProgress.current) {
+        syncNow();
+      }
     } catch (error) {
       console.error('Error refreshing sync status:', error);
     }
@@ -47,7 +61,7 @@ export const OfflineProvider = ({ children }) => {
     }
 
     // Don't sync if offline
-    if (!isOnline) {
+    if (!isOnlineRef.current) {
       console.log('Cannot sync while offline');
       return null;
     }

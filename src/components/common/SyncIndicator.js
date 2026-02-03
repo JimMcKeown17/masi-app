@@ -15,7 +15,7 @@ import { colors, spacing } from '../../constants/colors';
  * - Badge count: Number of unsynced items
  */
 export default function SyncIndicator({ onPress }) {
-  const { isOnline, isSyncing, unsyncedCount } = useOffline();
+  const { isOnline, isSyncing, unsyncedCount, syncNow } = useOffline();
 
   // Determine icon and color based on state
   const getIconConfig = () => {

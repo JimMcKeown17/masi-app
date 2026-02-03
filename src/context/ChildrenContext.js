@@ -3,7 +3,6 @@ import { supabase } from '../services/supabaseClient';
 import { storage, STORAGE_KEYS } from '../utils/storage';
 import { useAuth } from './AuthContext';
 import { useOffline } from './OfflineContext';
-import 'react-native-get-random-values';
 import { v4 as uuidv4 } from 'uuid';
 
 const ChildrenContext = createContext({});

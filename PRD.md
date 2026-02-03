@@ -321,15 +321,17 @@ User Action → Local AsyncStorage → UI Update → Sync Queue → Supabase →
 - [x] **Many-to-many staff-children relationships**
 - [x] **Pull-to-refresh and sync status indicators**
 
-### Phase 4: Session Recording (Literacy Coach)
-- [ ] Literacy Coach session form design (get field requirements)
-- [ ] Session form screen with job title routing
-- [ ] Child selection component (search + add)
-- [ ] **Group-based child selection**
-- [ ] Session data capture
-- [ ] Local storage for sessions
-- [ ] Session sync service
-- [ ] Session history screen (last 30 days, newest first)
+### Phase 4: Session Recording (Literacy Coach) ✓ (Complete)
+- [x] Literacy Coach session form design (field requirements gathered from website + field team)
+- [x] Session form screen with job title routing
+- [x] Child selection component (search + add)
+- [x] **Group-based child selection**
+- [x] Session data capture (date, children, letters, reading levels, comments → activities JSONB)
+- [x] Local storage for sessions (offline-first, synced flag)
+- [x] Session sync service (already wired in offlineSync.js)
+- [x] Session history screen (last 30 days, newest first)
+- [x] **Fixed auto-sync**: refreshSyncStatus now triggers sync when unsynced items detected
+- [x] **Fixed uuid**: installed react-native-get-random-values polyfill in App.js entry point
 
 ### Phase 5: Additional Session Forms
 - [ ] Numeracy Coach form (get field requirements)
@@ -541,7 +543,38 @@ Field staff often work in remote areas with limited connectivity. When issues oc
 ## Session Form Requirements
 
 ### Literacy Coach Form
-**Fields to be defined** - will gather detailed requirements when ready to implement Phase 4.
+
+**Fields recorded per session:**
+1. **Session Date** — date picker, defaults to today
+2. **Children** — multi-select via search or group selection; stored as `children_ids` array + `group_ids` if selected via group
+3. **Letters Focused On** — tap-to-toggle grid displayed in curriculum teaching order (not alphabetical); stored as array in `activities.letters_focused`
+4. **Session Reading Level** — single dropdown for the session target (what level the coach focused on); stored in `activities.session_reading_level`
+5. **Child Reading Levels** — optional per-child dropdown; each selected child can have their current reading level recorded; stored as map in `activities.child_reading_levels` (keyed by child UUID)
+6. **Comments** — optional free-text notes; stored in `activities.comments`
+
+**Reading level options (in progression order):**
+- Cannot blend
+- 2 Letter Blends
+- 3 Letter Blends
+- 4 Letter Blends
+- Word Reading
+- Sentence Reading
+- Paragraph Reading
+
+**Letter order:** Matches the paper tracker — read vertically down each column, left to right across columns. Stored in `src/constants/literacyConstants.js`.
+- Column 1: a, e, i, o, u, m, l, n, s
+- Column 2: d, k, t, f, g, y, w, b, p
+- Column 3: c, x, j, h, v, z, q
+- Note: `r` is not on the paper tracker and is intentionally excluded.
+
+**Letter Tracker Feature (to be implemented after session form):**
+- A per-child mastery grid showing all letters in teaching order
+- Staff shade/check a box when a child has mastered each letter
+- Children move at their own pace — progress fills in left to right over days/weeks
+- Visually similar to the paper tracker sheets used in the field
+- Accessible from child detail screen
+- Mastery data stored locally with offline sync
+- This is a progress-tracking tool, separate from session recording (session form records "letters focused on today"; letter tracker records "has this child mastered this letter")
 
 ### Other Forms
 Requirements to be gathered as we progress through development phases.

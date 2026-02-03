@@ -26,6 +26,10 @@ import EditChildScreen from '../screens/children/EditChildScreen';
 import GroupManagementScreen from '../screens/children/GroupManagementScreen';
 import AddChildToGroupScreen from '../screens/children/AddChildToGroupScreen';
 
+// Session screens
+import SessionFormScreen from '../screens/sessions/SessionFormScreen';
+import SessionHistoryScreen from '../screens/sessions/SessionHistoryScreen';
+
 const Stack = createNativeStackNavigator();
 const Tab = createBottomTabNavigator();
 
@@ -159,6 +163,22 @@ function MainNavigator() {
         component={AddChildToGroupScreen}
         options={{
           title: 'Add to Group',
+          headerBackTitle: 'Back',
+        }}
+      />
+      <Stack.Screen
+        name="SessionForm"
+        component={SessionFormScreen}
+        options={{
+          title: 'New Session',
+          headerBackTitle: 'Back',
+        }}
+      />
+      <Stack.Screen
+        name="SessionHistory"
+        component={SessionHistoryScreen}
+        options={{
+          title: 'Session History',
           headerBackTitle: 'Back',
         }}
       />

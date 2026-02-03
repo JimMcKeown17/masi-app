@@ -6,6 +6,7 @@ import { useOffline } from '../../context/OfflineContext';
 import { colors, spacing, borderRadius, shadows } from '../../constants/colors';
 import { storage } from '../../utils/storage';
 import { getCurrentPosition, formatCoordinates } from '../../services/locationService';
+import { v4 as uuidv4 } from 'uuid';
 
 export default function TimeTrackingScreen({ navigation }) {
   const { user, profile } = useAuth();
@@ -142,7 +143,7 @@ export default function TimeTrackingScreen({ navigation }) {
 
       // Create time entry
       const timeEntry = {
-        id: generateUUID(),
+        id: uuidv4(),
         user_id: user.id,
         sign_in_time: new Date().toISOString(),
         sign_in_lat: latitude,
@@ -231,17 +232,6 @@ export default function TimeTrackingScreen({ navigation }) {
     } finally {
       setLoadingLocation(false);
     }
-  };
-
-  /**
-   * Generate a simple UUID for local time entries
-   */
-  const generateUUID = () => {
-    return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
-      const r = (Math.random() * 16) | 0;
-      const v = c === 'x' ? r : (r & 0x3) | 0x8;
-      return v.toString(16);
-    });
   };
 
   return (

@@ -126,13 +126,28 @@
 - [x] Many-to-many staff-children relationships
 - [x] Sync status indicators and banners
 
+#### Phase 4: Session Recording - Literacy Coach (Completed 2026-02-03)
+- [x] Literacy Coach session form fields defined (letters, reading levels, children, comments)
+- [x] literacyConstants.js — letter teaching order (25 letters + r) + 7 reading levels
+- [x] LetterGrid component — tap-to-toggle A–Z grid in curriculum order
+- [x] ChildSelector component — search + group-based multi-select with removable chips
+- [x] SessionFormScreen — job-title routing (Literacy Coach live, others placeholder)
+- [x] LiteracySessionForm — full form: inline calendar, child selector, letter grid, session + per-child reading levels, comments, submit
+- [x] SessionHistoryScreen — last 30 days, newest first, sync status badges
+- [x] Navigation routes wired (SessionForm, SessionHistory)
+- [x] uuid package installed + react-native-get-random-values polyfill in App.js
+- [x] Removed inline generateUUID from TimeTrackingScreen and LiteracySessionForm
+- [x] Fixed auto-sync bug — refreshSyncStatus now triggers syncNow when unsynced items detected while online
+- [x] Added isOnlineRef to OfflineContext to fix stale closure in sync triggers
+- [x] Letter tracker feature documented in PRD for future phase
+- [x] Dummy test data loaded into Supabase (8 children, 3 groups)
+
 ---
 
 ## In Progress 🚧
 
-### Phase 1: Authentication & Foundation
-- Invitation system setup (Task #4)
-- OfflineContext for sync management (Task #5)
+### Phase 5: Additional Session Forms
+- Numeracy Coach, ZZ Coach, Yeboneer forms (requirements TBD)
 
 ---
 
@@ -211,13 +226,29 @@ None currently.
 ## Metrics & Timeline
 
 ### Current Progress
-- **Phases Completed**: 3 of 7 (Phase 0 ✅, Phase 1 ✅, Phase 2 ✅, Phase 3 ✅)
-- **Features Completed**: ~60% (auth, time tracking, children & groups complete)
-- **Next Phase**: Phase 4 - Session Recording
+- **Phases Completed**: 4 of 7 (Phase 0 ✅, Phase 1 ✅, Phase 2 ✅, Phase 3 ✅, Phase 4 ✅)
+- **Features Completed**: ~75% (auth, time tracking, children & groups, Literacy Coach sessions complete)
+- **Next Phase**: Phase 5 - Additional Session Forms
 
 ---
 
 ## Recent Activity Log
+
+### 2026-02-03 (Session 7: Phase 4 Session Recording - Literacy Coach)
+- **Defined Literacy Coach session form fields** — letters focused, session reading level, per-child reading levels, comments
+- **Confirmed letter teaching order** from paper tracker — 26 letters in curriculum order stored in literacyConstants.js
+- **Confirmed reading levels** — 7 levels from Cannot blend through Paragraph Reading
+- **Created LetterGrid component** — 5-column tap-to-toggle grid in teaching order, brand blue highlights
+- **Created ChildSelector component** — search bar, group-based bulk select, selected children as removable chips
+- **Created SessionFormScreen** — routes to correct form by job_title; Literacy Coach live, others placeholder
+- **Created LiteracySessionForm** — inline calendar (no deps), child selector, letter grid, session + per-child reading level dropdowns, optional comments, submit with validation
+- **Created SessionHistoryScreen** — loads last 30 days of sessions, newest first, sync status badges per card
+- **Wired navigation** — SessionForm and SessionHistory routes added to MainNavigator
+- **Fixed uuid crash** — installed react-native-get-random-values, added polyfill as first import in App.js entry point; removed all inline generateUUID functions
+- **Fixed auto-sync bug** — writes while online+foreground were not triggering sync; refreshSyncStatus now calls syncNow when unsynced items detected; added isOnlineRef to fix stale closure in OfflineContext
+- **Loaded test data** — 8 children across 3 groups (Beginners, Intermediate, Advanced) in Supabase
+- **Documented letter tracker feature** in PRD for a future phase (per-child mastery grid matching paper tracker)
+- **Phase 4 Status**: ✅ COMPLETE
 
 ### 2026-01-30 (Session 6: Phase 3 Children & Groups Management)
 - **Created staff_children junction table** - Migration for many-to-many staff-child relationships
@@ -294,11 +325,11 @@ None currently.
 ---
 
 ## Next Session Goals
-1. **Phase 4: Session Recording** - Implement Literacy Coach session form
-2. Add session form with job-title routing
-3. Implement activities JSONB structure
-4. Add session history list screen
+1. **Phase 5: Additional Session Forms** — gather field requirements for Numeracy Coach, ZZ Coach, Yeboneer
+2. Build remaining 3 session forms using same patterns as Literacy Coach
+3. **Letter Tracker feature** — per-child mastery grid (documented in PRD, ready to spec)
+4. Phase 6: Offline sync refinement (sync status screen, retry UI)
 
 ---
 
-**Progress Summary**: ✅ **Phase 3: COMPLETE** - Children & groups management fully implemented with many-to-many relationships. Staff can now manage their assigned children, create groups, and assign children to groups. All features are offline-first with background sync. Database migration completed for staff_children junction table. Ready for Phase 4: Session Recording.
+**Progress Summary**: ✅ **Phase 4: COMPLETE** - Literacy Coach session recording fully implemented. Staff can select children (individually or by group), tap letters in curriculum teaching order, set session and per-child reading levels, add comments, and submit — all offline-first with automatic sync. Auto-sync bug fixed so sessions sync immediately when online. Ready for Phase 5: Additional Session Forms.
