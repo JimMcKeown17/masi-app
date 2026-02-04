@@ -6,6 +6,7 @@ import {
   List,
   Checkbox,
   Searchbar,
+  Snackbar,
 } from 'react-native-paper';
 import { colors, spacing } from '../../constants/colors';
 import { useChildren } from '../../context/ChildrenContext';
@@ -17,6 +18,13 @@ export default function AddChildToGroupScreen({ route, navigation }) {
   const [selectedChildren, setSelectedChildren] = useState([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [adding, setAdding] = useState(false);
+  const [snackbarMessage, setSnackbarMessage] = useState('');
+  const [snackbarVisible, setSnackbarVisible] = useState(false);
+
+  const showSnackbar = (message) => {
+    setSnackbarMessage(message);
+    setSnackbarVisible(true);
+  };
 
   // Filter out children already in this group
   const availableChildren = children.filter(child => {
@@ -56,6 +64,7 @@ export default function AddChildToGroupScreen({ route, navigation }) {
       navigation.goBack();
     } catch (error) {
       console.error('Error adding children to group:', error);
+      showSnackbar('Failed to add children. Please try again.');
     } finally {
       setAdding(false);
     }
@@ -122,6 +131,14 @@ export default function AddChildToGroupScreen({ route, navigation }) {
           {selectedChildren.length === 1 ? 'Child' : 'Children'}
         </Button>
       </View>
+
+      <Snackbar
+        visible={snackbarVisible}
+        onDismiss={() => setSnackbarVisible(false)}
+        duration={3000}
+      >
+        {snackbarMessage}
+      </Snackbar>
     </View>
   );
 }

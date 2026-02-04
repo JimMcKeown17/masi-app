@@ -730,6 +730,103 @@ To exercise the Failed Items card without waiting for real network failures: tem
 
 ---
 
+## Chapter 8: Polish — Feedback Standardisation & Validation Patterns
+
+### Why Standardise on Snackbar?
+
+React Native ships two built-in feedback mechanisms: `Alert.alert()` (modal dialog) and nothing else. React Native Paper gives us `<Snackbar>` — a non-blocking toast that auto-dismisses.
+
+The rule we landed on:
+
+| Mechanism | When to use |
+|---|---|
+| `<Snackbar>` | Status messages, recoverable errors, confirmations that don't require a decision |
+| `Alert.alert()` | **Destructive confirmations only** — "Delete group?", "Remove child?" |
+
+Why does this matter? Modal alerts steal focus. They block interaction. If you sign in and get an alert that says "Signed in at 8:42 AM", you have to tap OK before you can do anything else. That's friction for a message the user didn't need to act on. A snackbar delivers the same information in 3 seconds and disappears on its own.
+
+### The Snackbar Pattern (Copy This Everywhere)
+
+```jsx
+// State
+const [snackbarMessage, setSnackbarMessage] = useState('');
+const [snackbarVisible, setSnackbarVisible] = useState(false);
+
+const showSnackbar = (message) => {
+  setSnackbarMessage(message);
+  setSnackbarVisible(true);
+};
+
+// JSX — Snackbar must be a sibling of ScrollView, not a child,
+// because it renders at the bottom of the screen via absolute positioning.
+return (
+  <View style={{ flex: 1 }}>
+    <ScrollView style={styles.container}>
+      {/* ... screen content ... */}
+    </ScrollView>
+
+    <Snackbar
+      visible={snackbarVisible}
+      onDismiss={() => setSnackbarVisible(false)}
+      duration={3000}
+    >
+      {snackbarMessage}
+    </Snackbar>
+  </View>
+);
+```
+
+The outer `<View style={{ flex: 1 }}>` is load-bearing. Without it, ScrollView takes `flex: 1` from the screen and Snackbar has no room. With it, ScrollView and Snackbar share the vertical space — ScrollView grows, Snackbar sits at the bottom.
+
+### Inline Validation: Show Errors Where the Problem Is
+
+LiteracySessionForm had a pattern where the Submit button was simply disabled when the form was incomplete. That's fine for a power user who understands the form, but for field staff on a phone, "why won't this button work?" is a dead end.
+
+The new pattern:
+
+1. **Validate on submit, not on change.** Don't show errors while the user is still filling in the form — that's annoying. Show them when they tap Submit.
+2. **Clear errors as the user fixes them.** Once they select a child, the "Select at least one child" error disappears immediately.
+3. **Render errors inline, below the relevant card.** Not in a toast, not in a banner — right where the problem is.
+
+```jsx
+// In the setter callback — clear the specific error key:
+const handleChildrenChange = (newSelection) => {
+  setSelectedChildren(newSelection);
+  if (newSelection.length > 0) {
+    setValidationErrors((prev) => { const { children, ...rest } = prev; return rest; });
+  }
+};
+
+// In JSX — render conditionally after the card content:
+{validationErrors.children && (
+  <Text variant="bodySmall" style={styles.errorText}>{validationErrors.children}</Text>
+)}
+```
+
+Why destructure-and-spread to remove a key? Because `delete prev.children` would mutate state. React needs a new object reference to trigger a re-render. `{ children, ...rest } = prev; return rest;` is the idiomatic immutable delete.
+
+### RLS Tightening: The Trigger Trick
+
+The children table originally had `WITH CHECK (TRUE)` on INSERT — any authenticated user could insert any row. We needed to restrict it to "only the user who created the row", but there's a chicken-and-egg problem: at INSERT time, the row doesn't exist yet, so you can't check a column that isn't set.
+
+**Solution: BEFORE INSERT trigger.**
+
+```sql
+CREATE OR REPLACE FUNCTION set_children_created_by()
+RETURNS TRIGGER AS $$
+BEGIN
+  NEW.created_by = auth.uid();  -- overwrite whatever the client sent
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+```
+
+The trigger fires *before* the row hits the table, so it can rewrite fields. The policy then checks `created_by = auth.uid()` — which is guaranteed to be true because the trigger just set it.
+
+**Why this plays nicely with offline sync**: Our upsert sends all local fields. On INSERT (new record), the trigger fires and sets `created_by` correctly. On UPDATE (conflict on `id`), the trigger does *not* fire — it's `BEFORE INSERT`, not `BEFORE INSERT OR UPDATE`. And `created_by` isn't in the upsert payload, so the existing value persists. Both paths are correct without any special sync logic.
+
+---
+
 ## Key Takeaways for Developers
 
 1. **Offline-first is a mindset**: Write to local storage first, sync is secondary
@@ -740,6 +837,8 @@ To exercise the Failed Items card without waiting for real network failures: tem
 6. **Security in layers**: RLS + app logic + validation = defense in depth
 7. **UX drives architecture**: The group selection feature shaped our database design
 8. **Decouple persistence from triggers**: `retryFailedItem` clears state; the caller triggers sync. Keeps the dependency graph acyclic.
+9. **Feedback is UX, not an afterthought**: Snackbar vs Alert is not a style choice — it's a decision about how much friction you're adding to the user's workflow.
+10. **Validate where the error is, not where the button is**: Inline errors next to the broken field beat a generic "form is incomplete" toast.
 
 ---
 

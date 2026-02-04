@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { View, StyleSheet, FlatList } from 'react-native';
-import { Text, Card } from 'react-native-paper';
+import { Text, Card, ActivityIndicator, Snackbar } from 'react-native-paper';
 import { useAuth } from '../../context/AuthContext';
 import { colors, spacing, borderRadius, shadows } from '../../constants/colors';
 import { storage } from '../../utils/storage';
@@ -23,6 +23,13 @@ export default function SessionHistoryScreen() {
   const { user } = useAuth();
   const [sessions, setSessions] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [snackbarMessage, setSnackbarMessage] = useState('');
+  const [snackbarVisible, setSnackbarVisible] = useState(false);
+
+  const showSnackbar = (message) => {
+    setSnackbarMessage(message);
+    setSnackbarVisible(true);
+  };
 
   useEffect(() => {
     loadSessions();
@@ -51,6 +58,7 @@ export default function SessionHistoryScreen() {
       setSessions(filtered);
     } catch (error) {
       console.error('Error loading sessions:', error);
+      showSnackbar('Failed to load sessions');
     } finally {
       setLoading(false);
     }
@@ -110,7 +118,10 @@ export default function SessionHistoryScreen() {
   if (loading) {
     return (
       <View style={styles.container}>
-        <Text variant="bodyMedium" style={styles.emptyText}>Loading...</Text>
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color={colors.primary} />
+          <Text variant="bodyMedium" style={styles.emptyText}>Loading...</Text>
+        </View>
       </View>
     );
   }
@@ -130,6 +141,14 @@ export default function SessionHistoryScreen() {
           </View>
         }
       />
+
+      <Snackbar
+        visible={snackbarVisible}
+        onDismiss={() => setSnackbarVisible(false)}
+        duration={3000}
+      >
+        {snackbarMessage}
+      </Snackbar>
     </View>
   );
 }
@@ -195,6 +214,12 @@ const styles = StyleSheet.create({
   detailValue: {
     color: colors.text,
     flex: 1,
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingTop: spacing.xxl,
   },
   emptyContainer: {
     flex: 1,

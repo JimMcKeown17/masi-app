@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from 'react';
-import { View, StyleSheet, ScrollView, Alert, Pressable } from 'react-native';
+import { View, StyleSheet, ScrollView, Pressable } from 'react-native';
 import {
   Text,
   TextInput,
@@ -8,6 +8,7 @@ import {
   Menu,
   Divider,
   IconButton,
+  Snackbar,
 } from 'react-native-paper';
 import { useAuth } from '../../context/AuthContext';
 import { useOffline } from '../../context/OfflineContext';
@@ -189,15 +190,34 @@ export default function LiteracySessionForm({ navigation }) {
   const [openChildLevelMenu, setOpenChildLevelMenu] = useState(null);
   const [comments, setComments] = useState('');
   const [submitting, setSubmitting] = useState(false);
+  const [validationErrors, setValidationErrors] = useState({});
+  const [snackbarMessage, setSnackbarMessage] = useState('');
+  const [snackbarVisible, setSnackbarVisible] = useState(false);
+
+  const showSnackbar = (message) => {
+    setSnackbarMessage(message);
+    setSnackbarVisible(true);
+  };
 
   // Derive the group ids that were implicitly used (not tracked in this simple flow,
   // so we leave group_ids as an empty array — future enhancement).
   const selectedChildIds = useMemo(() => selectedChildren.map((c) => c.id), [selectedChildren]);
 
+  const handleChildrenChange = (newSelection) => {
+    setSelectedChildren(newSelection);
+    if (newSelection.length > 0) {
+      setValidationErrors((prev) => { const { children, ...rest } = prev; return rest; });
+    }
+  };
+
   const handleToggleLetter = (letter) => {
-    setSelectedLetters((prev) =>
-      prev.includes(letter) ? prev.filter((l) => l !== letter) : [...prev, letter]
-    );
+    setSelectedLetters((prev) => {
+      const next = prev.includes(letter) ? prev.filter((l) => l !== letter) : [...prev, letter];
+      if (next.length > 0) {
+        setValidationErrors((e) => { const { letters, ...rest } = e; return rest; });
+      }
+      return next;
+    });
   };
 
   const handleSetChildReadingLevel = (childId, level) => {
@@ -205,13 +225,16 @@ export default function LiteracySessionForm({ navigation }) {
     setOpenChildLevelMenu(null);
   };
 
-  const isFormValid =
-    selectedChildren.length > 0 &&
-    selectedLetters.length > 0 &&
-    sessionReadingLevel !== null;
-
   const handleSubmit = async () => {
-    if (!isFormValid) return;
+    const errors = {};
+    if (selectedChildren.length === 0) errors.children = 'Select at least one child';
+    if (selectedLetters.length === 0) errors.letters = 'Select at least one letter';
+    if (!sessionReadingLevel) errors.readingLevel = 'Select a reading level';
+    if (Object.keys(errors).length > 0) {
+      setValidationErrors(errors);
+      return;
+    }
+    setValidationErrors({});
     setSubmitting(true);
 
     try {
@@ -236,20 +259,18 @@ export default function LiteracySessionForm({ navigation }) {
 
       await storage.saveSession(session);
       await refreshSyncStatus();
-
-      Alert.alert('Session Saved', 'Your session has been recorded and will sync automatically.', [
-        { text: 'OK', onPress: () => navigation.goBack() },
-      ]);
+      navigation.goBack();
     } catch (error) {
       console.error('Error saving session:', error);
-      Alert.alert('Error', 'Failed to save session. Please try again.');
+      showSnackbar('Failed to save session. Please try again.');
     } finally {
       setSubmitting(false);
     }
   };
 
   return (
-    <ScrollView style={styles.container} contentContainerStyle={styles.scrollContent}>
+    <View style={styles.outerContainer}>
+      <ScrollView style={styles.container} contentContainerStyle={styles.scrollContent}>
       {/* ── Session Date ── */}
       <Card style={styles.card}>
         <Card.Content>
@@ -285,8 +306,11 @@ export default function LiteracySessionForm({ navigation }) {
           <Text variant="titleSmall" style={styles.sectionLabel}>Select Children</Text>
           <ChildSelector
             selectedChildren={selectedChildren}
-            onSelectionChange={setSelectedChildren}
+            onSelectionChange={handleChildrenChange}
           />
+          {validationErrors.children && (
+            <Text variant="bodySmall" style={styles.errorText}>{validationErrors.children}</Text>
+          )}
         </Card.Content>
       </Card>
 
@@ -299,6 +323,9 @@ export default function LiteracySessionForm({ navigation }) {
             selectedLetters={selectedLetters}
             onToggleLetter={handleToggleLetter}
           />
+          {validationErrors.letters && (
+            <Text variant="bodySmall" style={styles.errorText}>{validationErrors.letters}</Text>
+          )}
         </Card.Content>
       </Card>
 
@@ -329,10 +356,14 @@ export default function LiteracySessionForm({ navigation }) {
                 onPress={() => {
                   setSessionReadingLevel(level);
                   setReadingLevelMenuVisible(false);
+                  setValidationErrors((prev) => { const { readingLevel, ...rest } = prev; return rest; });
                 }}
               />
             ))}
           </Menu>
+          {validationErrors.readingLevel && (
+            <Text variant="bodySmall" style={styles.errorText}>{validationErrors.readingLevel}</Text>
+          )}
         </Card.Content>
       </Card>
 
@@ -396,14 +427,23 @@ export default function LiteracySessionForm({ navigation }) {
       <Button
         mode="contained"
         onPress={handleSubmit}
-        disabled={!isFormValid || submitting}
+        disabled={submitting}
         loading={submitting}
         style={styles.submitButton}
         contentStyle={styles.submitButtonContent}
       >
         Submit Session
       </Button>
-    </ScrollView>
+      </ScrollView>
+
+      <Snackbar
+        visible={snackbarVisible}
+        onDismiss={() => setSnackbarVisible(false)}
+        duration={3000}
+      >
+        {snackbarMessage}
+      </Snackbar>
+    </View>
   );
 }
 
@@ -411,6 +451,9 @@ export default function LiteracySessionForm({ navigation }) {
 // Styles
 // ---------------------------------------------------------------------------
 const styles = StyleSheet.create({
+  outerContainer: {
+    flex: 1,
+  },
   container: {
     flex: 1,
     backgroundColor: colors.background,
@@ -432,6 +475,10 @@ const styles = StyleSheet.create({
   helperText: {
     color: colors.textSecondary,
     marginBottom: spacing.sm,
+  },
+  errorText: {
+    color: colors.error,
+    marginTop: spacing.sm,
   },
   dateButton: {
     alignSelf: 'flex-start',

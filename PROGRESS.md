@@ -1,7 +1,7 @@
 # Masi App - Development Progress
 
 ## Current Status
-**Phase**: Phase 6 - Offline Sync Refinement (COMPLETE ✓)
+**Phase**: Phase 7 - Polish & Production Prep (COMPLETE ✓)
 **Last Updated**: 2026-02-04
 
 ---
@@ -150,6 +150,24 @@
 - [x] Navigator wired — `SyncIndicator` onPress navigates to `SyncStatus`; route added to `MainNavigator` stack
 - [x] LEARNING.md updated with Phase 6 chapter (idempotency rationale, decoupled persistence/trigger pattern, accessibility contrast, testing tip)
 
+#### Phase 7: Polish & Production Prep (Completed 2026-02-04)
+- [x] Feedback standardisation — Snackbar for all status/info messages; Alert reserved for destructive confirmations only
+  - TimeTrackingScreen: 6 Alert → Snackbar (sign in/out success, location errors, guard messages)
+  - LiteracySessionForm: success Alert removed (goBack IS the confirmation); error catch → Snackbar
+  - TimeEntriesListScreen: 3 sync-result Alerts + catch Alert → Snackbar; loadTimeEntries catch → Snackbar
+  - GroupManagementScreen: create/update error Alerts → Snackbar; delete/remove confirmation Alerts KEPT; inner error Alerts → Snackbar
+  - AddChildToGroupScreen: silent catch → Snackbar error
+  - SessionHistoryScreen: silent loadSessions catch → Snackbar error
+- [x] Loading states
+  - SessionHistoryScreen: replaced `<Text>Loading...</Text>` with centred `<ActivityIndicator size="large" />`
+  - GroupManagementScreen: Create Group button shows spinner while saving; Save button in rename Dialog shows spinner
+- [x] Form validation (inline error messages)
+  - LiteracySessionForm: red inline errors below child selector, letter grid, reading-level menu; errors clear on field change; validation runs before submit
+- [x] LoginScreen email validation — basic regex check before network call; error shown in existing Snackbar
+- [x] RLS policy tightening — `supabase-migrations/03_tighten_children_rls.sql`
+  - Adds `created_by` column, backfills from `staff_children`, BEFORE INSERT trigger auto-sets `created_by = auth.uid()`, replaces `WITH CHECK (TRUE)` policy
+- [x] `.env.example` updated — keys now match what the app actually reads (`EXPO_PUBLIC_SUPABASE_URL`, `EXPO_PUBLIC_SUPABASE_ANON_KEY`)
+
 ---
 
 ## In Progress 🚧
@@ -234,13 +252,22 @@ None currently.
 ## Metrics & Timeline
 
 ### Current Progress
-- **Phases Completed**: 5 of 7 (Phase 0 ✅, Phase 1 ✅, Phase 2 ✅, Phase 3 ✅, Phase 4 ✅, Phase 6 ✅)
-- **Features Completed**: ~85% (auth, time tracking, children & groups, Literacy Coach sessions, full offline sync with failed-item retry UI)
+- **Phases Completed**: 6 of 7 (Phase 0 ✅, Phase 1 ✅, Phase 2 ✅, Phase 3 ✅, Phase 4 ✅, Phase 6 ✅, Phase 7 ✅)
+- **Features Completed**: ~95% (auth, time tracking, children & groups, Literacy Coach sessions, full offline sync with failed-item retry UI, polish & production prep)
 - **Next Phase**: Phase 5 - Additional Session Forms (Numeracy, ZZ Coach, Yeboneer)
 
 ---
 
 ## Recent Activity Log
+
+### 2026-02-04 (Session 9: Phase 7 Polish & Production Prep)
+- **Feedback standardisation** — migrated all status/info Alert.alert() calls to react-native-paper Snackbar across 6 screens; Alert retained only for destructive confirmations (delete group, remove child from group). Pattern: outer `<View style={{ flex: 1 }}>` wrapping ScrollView/FlatList, `<Snackbar>` as sibling. Matches SyncStatusScreen convention.
+- **Loading states** — SessionHistoryScreen loading block upgraded from plain Text to centred ActivityIndicator + label. GroupManagementScreen Create and Save buttons show `loading={true}` spinner and `disabled={true}` during async calls.
+- **Inline validation** — LiteracySessionForm validates children / letters / readingLevel before submit; red error Text rendered below each card; errors auto-clear when the field becomes valid. Removed the `isFormValid` derived variable; button disable now only checks `submitting`.
+- **LoginScreen email guard** — simple regex `/^[^\s@]+@[^\s@]+\.[^\s@]+$/` runs before the network call; error shown in existing Snackbar. Supabase remains the authoritative check.
+- **RLS migration** — `03_tighten_children_rls.sql` adds `created_by` column, backfills from `staff_children`, installs BEFORE INSERT trigger that sets `created_by = auth.uid()`, replaces the lenient `WITH CHECK (TRUE)` policy. Trigger-based approach is compatible with offline upsert because the trigger only fires on INSERT, not on the UPDATE (conflict) path.
+- **`.env.example` fixed** — keys renamed to `EXPO_PUBLIC_SUPABASE_URL` / `EXPO_PUBLIC_SUPABASE_ANON_KEY` to match actual app usage.
+- **Phase 7 Status**: ✅ COMPLETE
 
 ### 2026-02-04 (Session 8: Phase 6 Offline Sync Refinement)
 - **Persisted failed items** — `storage.addFailedItem` called inside the `MAX_RETRY_ATTEMPTS` guard in `syncTable`; idempotent write prevents duplicates across repeated sync cycles
@@ -355,4 +382,4 @@ None currently.
 
 ---
 
-**Progress Summary**: ✅ **Phase 6: COMPLETE** - Offline sync loop fully closed. Failed items are now persisted to `syncMeta.failedItems` when max retries are exceeded, and a dedicated `SyncStatusScreen` (reachable from the header sync icon on every tab) shows network state, last-synced time, per-table unsynced breakdown, and failed items with individual Retry buttons. Retry flow clears both the failed-list entry and the retry counter atomically so the record re-queues on the next sync pass. Ready for Phase 5: Additional Session Forms and Phase 7: Polish & Production Prep.
+**Progress Summary**: ✅ **Phase 7: COMPLETE** - Polish & production prep is done. Feedback is standardised on Snackbar (Alert only for destructive confirmations). Loading spinners added to SessionHistory and GroupManagement buttons. LiteracySessionForm has inline validation error messages. LoginScreen has a client-side email regex guard. RLS migration `03_tighten_children_rls.sql` is ready to apply — tightens children INSERT via a BEFORE INSERT trigger + `created_by` column. `.env.example` keys corrected. Only remaining phase is Phase 5: Additional Session Forms.

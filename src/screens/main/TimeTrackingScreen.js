@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { View, StyleSheet, ScrollView, Alert } from 'react-native';
-import { Card, Text, Button, ActivityIndicator, Divider } from 'react-native-paper';
+import { View, StyleSheet, ScrollView } from 'react-native';
+import { Card, Text, Button, ActivityIndicator, Divider, Snackbar } from 'react-native-paper';
 import { useAuth } from '../../context/AuthContext';
 import { useOffline } from '../../context/OfflineContext';
 import { colors, spacing, borderRadius, shadows } from '../../constants/colors';
@@ -16,8 +16,15 @@ export default function TimeTrackingScreen({ navigation }) {
   const [activeEntry, setActiveEntry] = useState(null);
   const [loadingLocation, setLoadingLocation] = useState(false);
   const [elapsedTime, setElapsedTime] = useState(0);
+  const [snackbarMessage, setSnackbarMessage] = useState('');
+  const [snackbarVisible, setSnackbarVisible] = useState(false);
 
   const elapsedInterval = useRef(null);
+
+  const showSnackbar = (message) => {
+    setSnackbarMessage(message);
+    setSnackbarVisible(true);
+  };
 
   /**
    * Load active time entry on mount
@@ -123,7 +130,7 @@ export default function TimeTrackingScreen({ navigation }) {
   const handleSignIn = async () => {
     // Check if already signed in
     if (isSignedIn) {
-      Alert.alert('Already Signed In', 'You are already signed in. Please sign out first.');
+      showSnackbar('Already signed in. Please sign out first.');
       return;
     }
 
@@ -134,7 +141,7 @@ export default function TimeTrackingScreen({ navigation }) {
       const locationResult = await getCurrentPosition();
 
       if (locationResult.error) {
-        Alert.alert('Location Error', locationResult.error);
+        showSnackbar(`Location error: ${locationResult.error}`);
         setLoadingLocation(false);
         return;
       }
@@ -164,10 +171,10 @@ export default function TimeTrackingScreen({ navigation }) {
       // Refresh sync status
       await refreshSyncStatus();
 
-      Alert.alert('Signed In', `Successfully signed in at ${formatTime(timeEntry.sign_in_time)}`);
+      showSnackbar(`Signed in at ${formatTime(timeEntry.sign_in_time)}`);
     } catch (error) {
       console.error('Error signing in:', error);
-      Alert.alert('Error', 'Failed to sign in. Please try again.');
+      showSnackbar('Failed to sign in. Please try again.');
     } finally {
       setLoadingLocation(false);
     }
@@ -178,7 +185,7 @@ export default function TimeTrackingScreen({ navigation }) {
    */
   const handleSignOut = async () => {
     if (!isSignedIn || !activeEntry) {
-      Alert.alert('Not Signed In', 'You must sign in first before signing out.');
+      showSnackbar('You must sign in first before signing out.');
       return;
     }
 
@@ -189,7 +196,7 @@ export default function TimeTrackingScreen({ navigation }) {
       const locationResult = await getCurrentPosition();
 
       if (locationResult.error) {
-        Alert.alert('Location Error', locationResult.error);
+        showSnackbar(`Location error: ${locationResult.error}`);
         setLoadingLocation(false);
         return;
       }
@@ -222,21 +229,19 @@ export default function TimeTrackingScreen({ navigation }) {
       // Refresh sync status (triggers background sync if online)
       await refreshSyncStatus();
 
-      Alert.alert(
-        'Signed Out',
-        `Successfully signed out at ${formatTime(signOutTime)}.\n\nHours worked: ${hoursWorked}`
-      );
+      showSnackbar(`Signed out. ${hoursWorked} hours worked.`);
     } catch (error) {
       console.error('Error signing out:', error);
-      Alert.alert('Error', 'Failed to sign out. Please try again.');
+      showSnackbar('Failed to sign out. Please try again.');
     } finally {
       setLoadingLocation(false);
     }
   };
 
   return (
-    <ScrollView style={styles.container}>
-      <View style={styles.content}>
+    <View style={styles.outerContainer}>
+      <ScrollView style={styles.container}>
+        <View style={styles.content}>
         {/* Status Card */}
         <Card style={styles.card}>
           <Card.Content>
@@ -374,12 +379,24 @@ export default function TimeTrackingScreen({ navigation }) {
             </Button>
           </Card.Content>
         </Card>
-      </View>
-    </ScrollView>
+        </View>
+      </ScrollView>
+
+      <Snackbar
+        visible={snackbarVisible}
+        onDismiss={() => setSnackbarVisible(false)}
+        duration={3000}
+      >
+        {snackbarMessage}
+      </Snackbar>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
+  outerContainer: {
+    flex: 1,
+  },
   container: {
     flex: 1,
     backgroundColor: colors.background,

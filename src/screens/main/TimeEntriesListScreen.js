@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { View, StyleSheet, ScrollView, RefreshControl, Alert } from 'react-native';
-import { Card, Text, Divider, Chip } from 'react-native-paper';
+import { View, StyleSheet, ScrollView, RefreshControl } from 'react-native';
+import { Card, Text, Divider, Chip, Snackbar } from 'react-native-paper';
 import { useAuth } from '../../context/AuthContext';
 import { useOffline } from '../../context/OfflineContext';
 import { colors, spacing, borderRadius, shadows } from '../../constants/colors';
@@ -15,6 +15,13 @@ export default function TimeEntriesListScreen() {
   const [groupedEntries, setGroupedEntries] = useState({});
   const [refreshing, setRefreshing] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [snackbarMessage, setSnackbarMessage] = useState('');
+  const [snackbarVisible, setSnackbarVisible] = useState(false);
+
+  const showSnackbar = (message) => {
+    setSnackbarMessage(message);
+    setSnackbarVisible(true);
+  };
 
   /**
    * Load time entries on mount
@@ -39,6 +46,7 @@ export default function TimeEntriesListScreen() {
       groupEntriesByDate(userEntries);
     } catch (error) {
       console.error('Error loading time entries:', error);
+      showSnackbar('Failed to load entries');
     } finally {
       setLoading(false);
     }
@@ -74,24 +82,18 @@ export default function TimeEntriesListScreen() {
         console.log('Sync result:', syncResult);
 
         if (syncResult.totalSynced > 0) {
-          Alert.alert(
-            'Synced Successfully',
-            `${syncResult.totalSynced} time ${syncResult.totalSynced === 1 ? 'entry' : 'entries'} synced to server`
-          );
+          showSnackbar(`${syncResult.totalSynced} ${syncResult.totalSynced === 1 ? 'entry' : 'entries'} synced`);
         }
 
         if (syncResult.totalFailed > 0) {
-          Alert.alert(
-            'Sync Issues',
-            `${syncResult.totalFailed} ${syncResult.totalFailed === 1 ? 'entry' : 'entries'} failed to sync. Will retry automatically.`
-          );
+          showSnackbar(`${syncResult.totalFailed} ${syncResult.totalFailed === 1 ? 'entry' : 'entries'} failed — will retry`);
         }
       }
 
       await loadTimeEntries();
     } catch (error) {
       console.error('Refresh error:', error);
-      Alert.alert('Sync Error', error.message || 'Failed to sync');
+      showSnackbar('Sync failed');
     }
 
     setRefreshing(false);
@@ -147,31 +149,42 @@ export default function TimeEntriesListScreen() {
    */
   if (!loading && timeEntries.length === 0) {
     return (
-      <ScrollView
-        style={styles.container}
-        contentContainerStyle={styles.emptyContainer}
-        refreshControl={
-          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
-        }
-      >
-        <Text variant="titleMedium" style={styles.emptyTitle}>
-          No Time Entries Yet
-        </Text>
-        <Text variant="bodyMedium" style={styles.emptyText}>
-          Your completed work sessions will appear here after you sign in and sign out.
-        </Text>
-      </ScrollView>
+      <View style={styles.outerContainer}>
+        <ScrollView
+          style={styles.container}
+          contentContainerStyle={styles.emptyContainer}
+          refreshControl={
+            <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
+          }
+        >
+          <Text variant="titleMedium" style={styles.emptyTitle}>
+            No Time Entries Yet
+          </Text>
+          <Text variant="bodyMedium" style={styles.emptyText}>
+            Your completed work sessions will appear here after you sign in and sign out.
+          </Text>
+        </ScrollView>
+
+        <Snackbar
+          visible={snackbarVisible}
+          onDismiss={() => setSnackbarVisible(false)}
+          duration={3000}
+        >
+          {snackbarMessage}
+        </Snackbar>
+      </View>
     );
   }
 
   return (
-    <ScrollView
-      style={styles.container}
-      refreshControl={
-        <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
-      }
-    >
-      <View style={styles.content}>
+    <View style={styles.outerContainer}>
+      <ScrollView
+        style={styles.container}
+        refreshControl={
+          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
+        }
+      >
+        <View style={styles.content}>
         <Text variant="titleLarge" style={styles.pageTitle}>
           Work History
         </Text>
@@ -262,12 +275,24 @@ export default function TimeEntriesListScreen() {
             Pull down to refresh and sync with server
           </Text>
         </View>
-      </View>
-    </ScrollView>
+        </View>
+      </ScrollView>
+
+      <Snackbar
+        visible={snackbarVisible}
+        onDismiss={() => setSnackbarVisible(false)}
+        duration={3000}
+      >
+        {snackbarMessage}
+      </Snackbar>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
+  outerContainer: {
+    flex: 1,
+  },
   container: {
     flex: 1,
     backgroundColor: colors.background,

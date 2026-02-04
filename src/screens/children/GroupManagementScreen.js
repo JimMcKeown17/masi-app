@@ -9,6 +9,7 @@ import {
   IconButton,
   Dialog,
   Portal,
+  Snackbar,
 } from 'react-native-paper';
 import { colors, spacing } from '../../constants/colors';
 import { useChildren } from '../../context/ChildrenContext';
@@ -27,18 +28,29 @@ export default function GroupManagementScreen({ navigation }) {
   const [editingGroup, setEditingGroup] = useState(null);
   const [editGroupName, setEditGroupName] = useState('');
   const [expandedGroups, setExpandedGroups] = useState({});
+  const [creatingGroup, setCreatingGroup] = useState(false);
+  const [savingEdit, setSavingEdit] = useState(false);
+  const [snackbarMessage, setSnackbarMessage] = useState('');
+  const [snackbarVisible, setSnackbarVisible] = useState(false);
+
+  const showSnackbar = (message) => {
+    setSnackbarMessage(message);
+    setSnackbarVisible(true);
+  };
 
   const handleCreateGroup = async () => {
     if (!newGroupName.trim()) {
       return;
     }
 
+    setCreatingGroup(true);
     const result = await addGroup({ name: newGroupName.trim() });
+    setCreatingGroup(false);
 
     if (result.success) {
       setNewGroupName('');
     } else {
-      Alert.alert('Error', 'Failed to create group');
+      showSnackbar('Failed to create group');
     }
   };
 
@@ -52,15 +64,17 @@ export default function GroupManagementScreen({ navigation }) {
       return;
     }
 
+    setSavingEdit(true);
     const result = await updateGroup(editingGroup.id, {
       name: editGroupName.trim(),
     });
+    setSavingEdit(false);
 
     if (result.success) {
       setEditingGroup(null);
       setEditGroupName('');
     } else {
-      Alert.alert('Error', 'Failed to update group');
+      showSnackbar('Failed to update group');
     }
   };
 
@@ -76,7 +90,7 @@ export default function GroupManagementScreen({ navigation }) {
           onPress: async () => {
             const result = await deleteGroup(groupId);
             if (!result.success) {
-              Alert.alert('Error', 'Failed to delete group');
+              showSnackbar('Failed to delete group');
             }
           },
         },
@@ -96,7 +110,7 @@ export default function GroupManagementScreen({ navigation }) {
           onPress: async () => {
             const result = await removeChildFromGroup(childId, groupId);
             if (!result.success) {
-              Alert.alert('Error', 'Failed to remove child from group');
+              showSnackbar('Failed to remove child from group');
             }
           },
         },
@@ -112,7 +126,8 @@ export default function GroupManagementScreen({ navigation }) {
   };
 
   return (
-    <ScrollView style={styles.container} contentContainerStyle={styles.content}>
+    <View style={styles.outerContainer}>
+      <ScrollView style={styles.container} contentContainerStyle={styles.content}>
       {/* Create group section */}
       <Card style={styles.card}>
         <Card.Content>
@@ -129,7 +144,8 @@ export default function GroupManagementScreen({ navigation }) {
           <Button
             mode="contained"
             onPress={handleCreateGroup}
-            disabled={!newGroupName.trim()}
+            disabled={!newGroupName.trim() || creatingGroup}
+            loading={creatingGroup}
           >
             Create Group
           </Button>
@@ -232,6 +248,8 @@ export default function GroupManagementScreen({ navigation }) {
         </Card.Content>
       </Card>
 
+      </ScrollView>
+
       {/* Edit group dialog */}
       <Portal>
         <Dialog
@@ -248,16 +266,27 @@ export default function GroupManagementScreen({ navigation }) {
             />
           </Dialog.Content>
           <Dialog.Actions>
-            <Button onPress={() => setEditingGroup(null)}>Cancel</Button>
-            <Button onPress={handleSaveEdit}>Save</Button>
+            <Button onPress={() => setEditingGroup(null)} disabled={savingEdit}>Cancel</Button>
+            <Button onPress={handleSaveEdit} disabled={savingEdit} loading={savingEdit}>Save</Button>
           </Dialog.Actions>
         </Dialog>
       </Portal>
-    </ScrollView>
+
+      <Snackbar
+        visible={snackbarVisible}
+        onDismiss={() => setSnackbarVisible(false)}
+        duration={3000}
+      >
+        {snackbarMessage}
+      </Snackbar>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
+  outerContainer: {
+    flex: 1,
+  },
   container: {
     flex: 1,
     backgroundColor: colors.background,

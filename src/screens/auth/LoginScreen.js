@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
-import { View, StyleSheet, KeyboardAvoidingView, Platform, ScrollView } from 'react-native';
-import { TextInput, Button, Text, Snackbar } from 'react-native-paper';
+import { View, StyleSheet, KeyboardAvoidingView, Platform, ScrollView, Image, Pressable } from 'react-native';
+import { TextInput, Button, Text, Snackbar, ActivityIndicator } from 'react-native-paper';
+import { LinearGradient } from 'expo-linear-gradient';
 import { useAuth } from '../../context/AuthContext';
 import { colors, spacing } from '../../constants/colors';
 
@@ -16,6 +17,12 @@ export default function LoginScreen({ navigation }) {
   const handleLogin = async () => {
     if (!email || !password) {
       setError('Please enter both email and password');
+      return;
+    }
+
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(email)) {
+      setError('Please enter a valid email address');
       return;
     }
 
@@ -37,9 +44,10 @@ export default function LoginScreen({ navigation }) {
     >
       <ScrollView contentContainerStyle={styles.scrollContent}>
         <View style={styles.content}>
-          <Text variant="headlineLarge" style={styles.title}>
-            Field Staff App
-          </Text>
+          <Image
+            source={require('../../../assets/masi-mobile-icon.png')}
+            style={styles.logo}
+          />
           <Text variant="bodyLarge" style={styles.subtitle}>
             Sign in to continue
           </Text>
@@ -71,15 +79,24 @@ export default function LoginScreen({ navigation }) {
             }
           />
 
-          <Button
-            mode="contained"
+          <Pressable
             onPress={handleLogin}
-            loading={loading}
             disabled={loading}
-            style={styles.button}
+            style={[styles.button, loading && styles.buttonDisabled]}
           >
-            Sign In
-          </Button>
+            <LinearGradient
+              colors={['#0984E3', '#E72D4D']}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 0 }}
+              style={styles.buttonGradient}
+            >
+              {loading ? (
+                <ActivityIndicator size="small" color="#FFFFFF" />
+              ) : (
+                <Text style={styles.buttonText}>Sign In</Text>
+              )}
+            </LinearGradient>
+          </Pressable>
 
           <Button
             mode="text"
@@ -119,11 +136,11 @@ const styles = StyleSheet.create({
   content: {
     padding: spacing.lg,
   },
-  title: {
-    textAlign: 'center',
+  logo: {
+    width: 120,
+    height: 120,
+    alignSelf: 'center',
     marginBottom: spacing.sm,
-    color: colors.primary,
-    fontWeight: 'bold',
   },
   subtitle: {
     textAlign: 'center',
@@ -135,7 +152,23 @@ const styles = StyleSheet.create({
   },
   button: {
     marginTop: spacing.md,
-    paddingVertical: spacing.sm,
+    borderRadius: 8,
+    overflow: 'hidden',
+  },
+  buttonDisabled: {
+    opacity: 0.6,
+  },
+  buttonGradient: {
+    paddingVertical: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+    minHeight: 48,
+  },
+  buttonText: {
+    color: '#FFFFFF',
+    fontSize: 16,
+    fontWeight: '600',
+    letterSpacing: 0.5,
   },
   forgotButton: {
     marginTop: spacing.sm,
