@@ -1,8 +1,8 @@
 # Masi App - Development Progress
 
 ## Current Status
-**Phase**: Phase 3 - Children & Groups Management (COMPLETE ✓)
-**Last Updated**: 2026-01-30
+**Phase**: Phase 6 - Offline Sync Refinement (COMPLETE ✓)
+**Last Updated**: 2026-02-04
 
 ---
 
@@ -142,6 +142,14 @@
 - [x] Letter tracker feature documented in PRD for future phase
 - [x] Dummy test data loaded into Supabase (8 children, 3 groups)
 
+#### Phase 6: Offline Sync Refinement (Completed 2026-02-04)
+- [x] Failed items persistence — `storage.addFailedItem` writes to `syncMeta.failedItems` when `MAX_RETRY_ATTEMPTS` is hit; idempotent (update-or-append by table+id)
+- [x] `storage.removeFailedItem` — atomically clears both the failed-list entry and the retry counter so the record re-queues cleanly
+- [x] `offlineSync.retryFailedItem` export — thin wrapper; intentionally does not trigger sync (caller's job, avoids circular dep with OfflineContext)
+- [x] `SyncStatusScreen` created — network badge (green online / amber offline), last-synced timestamp, per-table unsynced breakdown, Sync Now button (disabled when offline/syncing), failed-items card with per-item Retry buttons + Snackbar feedback
+- [x] Navigator wired — `SyncIndicator` onPress navigates to `SyncStatus`; route added to `MainNavigator` stack
+- [x] LEARNING.md updated with Phase 6 chapter (idempotency rationale, decoupled persistence/trigger pattern, accessibility contrast, testing tip)
+
 ---
 
 ## In Progress 🚧
@@ -226,13 +234,22 @@ None currently.
 ## Metrics & Timeline
 
 ### Current Progress
-- **Phases Completed**: 4 of 7 (Phase 0 ✅, Phase 1 ✅, Phase 2 ✅, Phase 3 ✅, Phase 4 ✅)
-- **Features Completed**: ~75% (auth, time tracking, children & groups, Literacy Coach sessions complete)
-- **Next Phase**: Phase 5 - Additional Session Forms
+- **Phases Completed**: 5 of 7 (Phase 0 ✅, Phase 1 ✅, Phase 2 ✅, Phase 3 ✅, Phase 4 ✅, Phase 6 ✅)
+- **Features Completed**: ~85% (auth, time tracking, children & groups, Literacy Coach sessions, full offline sync with failed-item retry UI)
+- **Next Phase**: Phase 5 - Additional Session Forms (Numeracy, ZZ Coach, Yeboneer)
 
 ---
 
 ## Recent Activity Log
+
+### 2026-02-04 (Session 8: Phase 6 Offline Sync Refinement)
+- **Persisted failed items** — `storage.addFailedItem` called inside the `MAX_RETRY_ATTEMPTS` guard in `syncTable`; idempotent write prevents duplicates across repeated sync cycles
+- **Added `storage.removeFailedItem`** — single write that clears both `failedItems` entry and `retryAttempts` counter; coupling is intentional to prevent immediate re-failure on next sync pass
+- **Added `retryFailedItem` export** to `offlineSync.js` — does not trigger sync itself to avoid circular dependency with OfflineContext; SyncStatusScreen calls `syncNow()` after retry
+- **Created `SyncStatusScreen`** — 5-section scrollable screen: network badge (green/amber with WCAG-accessible contrast), last-synced timestamp (today-aware formatting), per-table unsynced breakdown (zero-count rows hidden), Sync Now button (disabled offline / shows spinner), failed-items card (conditionally rendered, per-item Retry with Snackbar feedback)
+- **Wired navigator** — replaced `console.log` no-op in `SyncIndicator` onPress with `navigation.navigate('SyncStatus')`; added `SyncStatus` route to `MainNavigator` stack after `SessionHistory`
+- **Updated LEARNING.md** — new chapter covering idempotency rationale, decoupled persistence/trigger pattern, navigator subtlety, accessibility contrast choice, and testing tip
+- **Phase 6 Status**: ✅ COMPLETE
 
 ### 2026-02-03 (Session 7: Phase 4 Session Recording - Literacy Coach)
 - **Defined Literacy Coach session form fields** — letters focused, session reading level, per-child reading levels, comments
@@ -328,7 +345,7 @@ None currently.
 1. **Phase 5: Additional Session Forms** — gather field requirements for Numeracy Coach, ZZ Coach, Yeboneer
 2. Build remaining 3 session forms using same patterns as Literacy Coach
 3. **Letter Tracker feature** — per-child mastery grid (documented in PRD, ready to spec)
-4. Phase 6: Offline sync refinement (sync status screen, retry UI)
+4. **Phase 7: Polish & Production Prep** — error handling, loading states, RLS tightening, device testing
 
 ### Post-MVP: Coach Alerts
 - **Not started. Scheduled after MVP testing is complete.**
@@ -338,4 +355,4 @@ None currently.
 
 ---
 
-**Progress Summary**: ✅ **Phase 4: COMPLETE** - Literacy Coach session recording fully implemented. Staff can select children (individually or by group), tap letters in curriculum teaching order, set session and per-child reading levels, add comments, and submit — all offline-first with automatic sync. Auto-sync bug fixed so sessions sync immediately when online. Ready for Phase 5: Additional Session Forms.
+**Progress Summary**: ✅ **Phase 6: COMPLETE** - Offline sync loop fully closed. Failed items are now persisted to `syncMeta.failedItems` when max retries are exceeded, and a dedicated `SyncStatusScreen` (reachable from the header sync icon on every tab) shows network state, last-synced time, per-table unsynced breakdown, and failed items with individual Retry buttons. Retry flow clears both the failed-list entry and the retry counter atomically so the record re-queues on the next sync pass. Ready for Phase 5: Additional Session Forms and Phase 7: Polish & Production Prep.

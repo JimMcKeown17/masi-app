@@ -694,6 +694,42 @@ src/
 
 ---
 
+## Chapter: Phase 6 — Closing the Offline Sync Loop
+
+### The Problem We Were Solving
+
+By the end of Phase 5, the sync engine was solid: records flowed from AsyncStorage → Supabase with exponential-backoff retries and last-write-wins conflict resolution. But there was a silent cliff edge: once a record hit `MAX_RETRY_ATTEMPTS` (5), it was simply skipped on every subsequent sync cycle with a `console.warn`. The user had no way to know something was stuck, and no way to unstick it.
+
+Two related gaps:
+1. **Failed items vanished into the void** — `syncMeta.failedItems` was declared in the schema but never written to.
+2. **The sync indicator was a dead end** — tapping it logged to the console. Users had no visibility into sync state beyond a badge count.
+
+### Decision: Two-Layer Approach
+
+We split the work into a persistence layer and a UI layer, deliberately keeping them decoupled.
+
+**Persistence layer** (`storage.js` + one line in `offlineSync.js`):
+- `addFailedItem(table, id, reason)` — idempotent write. If the same record fails again on a later sync cycle, we update the existing entry (refreshing `failedAt`) rather than duplicating it. This matters because the sync loop runs on every foreground event; without idempotency we'd accumulate duplicate entries.
+- `removeFailedItem(table, id)` — this one does two things atomically: removes the item from `failedItems` AND clears its `retryAttempts` counter. The coupling is intentional — removing from the failed list without resetting the counter would cause the record to immediately hit `MAX_RETRY_ATTEMPTS` again on the next sync pass and re-enter the failed list. Think of it as "reopening the gate."
+
+**UI layer** (`SyncStatusScreen.js`):
+- A dedicated screen showing network state, last sync time, per-table unsynced breakdown, and failed items with per-item retry buttons.
+- The retry flow is: clear the failed state → refresh context → trigger sync. The `retryFailedItem` function in `offlineSync.js` deliberately does NOT call `syncNow` itself. If it did, it would need to import from `OfflineContext`, creating a circular dependency (OfflineContext already imports from offlineSync). Instead, the screen — which already has access to `useOffline()` — calls `syncNow()` after the retry completes.
+
+### Why the Navigator Wiring Is Simple
+
+`SyncStatus` lives in the `MainNavigator` stack (not inside any tab). The tab navigator's `screenOptions` already receives `({ route, navigation })` — `navigation` is scoped to the parent stack, so `navigation.navigate('SyncStatus')` works from any tab's header without any special setup. This is a React Navigation subtlety worth remembering: tab `screenOptions` callbacks have access to the parent stack's navigation prop.
+
+### Accessibility Note on the Offline Badge
+
+The offline badge uses `#FEF3C7` background with `#B45309` text rather than the brand yellow (`#FFDD00`). Brand yellow on white fails WCAG AA contrast for normal text. Amber (`#B45309`) on the light yellow background achieves ~4.6:1 contrast — just above the 4.5:1 threshold for normal text.
+
+### Testing Tip
+
+To exercise the Failed Items card without waiting for real network failures: temporarily set `MAX_RETRY_ATTEMPTS = 1` in `offlineSync.js` and create a record that will fail to sync (e.g., a time entry with an invalid foreign key). Trigger a sync, observe the Failed Items card appear, tap Retry, and watch it disappear. Restore `MAX_RETRY_ATTEMPTS = 5` before shipping.
+
+---
+
 ## Key Takeaways for Developers
 
 1. **Offline-first is a mindset**: Write to local storage first, sync is secondary
@@ -703,8 +739,9 @@ src/
 5. **Battery matters**: Balance accuracy needs with power consumption
 6. **Security in layers**: RLS + app logic + validation = defense in depth
 7. **UX drives architecture**: The group selection feature shaped our database design
+8. **Decouple persistence from triggers**: `retryFailedItem` clears state; the caller triggers sync. Keeps the dependency graph acyclic.
 
 ---
 
-**Last Updated**: 2026-01-20
+**Last Updated**: 2026-02-04
 **Document Status**: Living document - updated as we build

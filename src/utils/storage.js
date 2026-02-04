@@ -299,6 +299,32 @@ export const storage = {
     delete meta.retryAttempts[key];
     return await this.setItem(STORAGE_KEYS.SYNC_META, meta);
   },
+
+  // Failed items persistence
+  async addFailedItem(table, id, reason) {
+    const meta = await this.getSyncMeta();
+    const existingIndex = meta.failedItems.findIndex(
+      item => item.table === table && item.id === id
+    );
+    const entry = { table, id, reason, failedAt: new Date().toISOString() };
+
+    if (existingIndex !== -1) {
+      meta.failedItems[existingIndex] = entry;
+    } else {
+      meta.failedItems.push(entry);
+    }
+
+    return await this.setItem(STORAGE_KEYS.SYNC_META, meta);
+  },
+
+  async removeFailedItem(table, id) {
+    const meta = await this.getSyncMeta();
+    meta.failedItems = meta.failedItems.filter(
+      item => !(item.table === table && item.id === id)
+    );
+    delete meta.retryAttempts[`${table}_${id}`];
+    return await this.setItem(STORAGE_KEYS.SYNC_META, meta);
+  },
 };
 
 export { STORAGE_KEYS };

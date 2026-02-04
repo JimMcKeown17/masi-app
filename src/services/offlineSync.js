@@ -120,6 +120,7 @@ const syncTable = async (tableConfig) => {
       // Check if we've exceeded max retries
       if (attemptCount >= MAX_RETRY_ATTEMPTS) {
         console.warn(`Record ${record.id} exceeded max retry attempts`);
+        await storage.addFailedItem(key, record.id, 'Max retry attempts exceeded');
         results.failed++;
         results.failedRecords.push({
           id: record.id,
@@ -263,4 +264,13 @@ export const resetSyncMeta = async () => {
     retryAttempts: {},
     failedItems: [],
   });
+};
+
+/**
+ * Retry a previously failed item by clearing its failed state.
+ * Does NOT trigger a sync — the caller is responsible for that
+ * to avoid circular dependencies with OfflineContext.
+ */
+export const retryFailedItem = async (table, id) => {
+  await storage.removeFailedItem(table, id);
 };

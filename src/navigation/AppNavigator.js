@@ -30,6 +30,9 @@ import AddChildToGroupScreen from '../screens/children/AddChildToGroupScreen';
 import SessionFormScreen from '../screens/sessions/SessionFormScreen';
 import SessionHistoryScreen from '../screens/sessions/SessionHistoryScreen';
 
+// Sync screen
+import SyncStatusScreen from '../screens/main/SyncStatusScreen';
+
 const Stack = createNativeStackNavigator();
 const Tab = createBottomTabNavigator();
 
@@ -71,10 +74,7 @@ function MainTabNavigator() {
         },
         headerRight: () => (
           <View style={{ marginRight: 16 }}>
-            <SyncIndicator onPress={() => {
-              // Navigate to sync status screen (we'll create this later)
-              console.log('Sync indicator tapped');
-            }} />
+            <SyncIndicator onPress={() => navigation.navigate('SyncStatus')} />
           </View>
         ),
         tabBarActiveTintColor: colors.tabActive,      // Brand blue
@@ -179,6 +179,14 @@ function MainNavigator() {
         component={SessionHistoryScreen}
         options={{
           title: 'Session History',
+          headerBackTitle: 'Back',
+        }}
+      />
+      <Stack.Screen
+        name="SyncStatus"
+        component={SyncStatusScreen}
+        options={{
+          title: 'Sync Status',
           headerBackTitle: 'Back',
         }}
       />

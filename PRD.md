@@ -339,15 +339,15 @@ User Action → Local AsyncStorage → UI Update → Sync Queue → Supabase →
 - [ ] Yeboneer form (get field requirements)
 - [ ] Test all form types
 
-### Phase 6: Offline Sync Refinement
-- [ ] Queue-based sync system
-- [ ] Retry logic with exponential backoff
-- [ ] Last-write-wins implementation
-- [ ] Sync on app foreground/background
-- [ ] Persistent header sync indicator
-- [ ] Dedicated sync status screen
-- [ ] Manual review marking for failed syncs
-- [ ] Network state detection
+### Phase 6: Offline Sync Refinement ✓ (Complete)
+- [x] Queue-based sync system
+- [x] Retry logic with exponential backoff
+- [x] Last-write-wins implementation
+- [x] Sync on app foreground/background
+- [x] Persistent header sync indicator
+- [x] Dedicated sync status screen (`SyncStatusScreen.js` — network badge, last synced, per-table breakdown, failed items with per-item retry)
+- [x] Manual review marking for failed syncs (failed items persisted to `syncMeta.failedItems`; retry clears counter + re-queues)
+- [x] Network state detection
 
 ### Phase 7: Polish & Production Prep
 - [ ] Error handling across all screens
