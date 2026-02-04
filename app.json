@@ -1,11 +1,11 @@
 {
   "expo": {
-    "name": "nonprofit-field-app",
-    "slug": "nonprofit-field-app",
+    "name": "masi-mobile-app",
+    "slug": "masi-mobile-app",
     "version": "1.0.0",
     "orientation": "portrait",
     "scheme": "masi-app",
-    "icon": "./assets/icon.png",
+    "icon": "./assets/masi-mobile-icon.png",
     "userInterfaceStyle": "light",
     "newArchEnabled": true,
     "splash": {
