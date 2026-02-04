@@ -527,6 +527,29 @@ Field staff often work in remote areas with limited connectivity. When issues oc
 - Clear Logs button in debug section
 - App version/build info in debug section
 
+### Coach Alerts (Post-MVP)
+A lightweight flagging system that surfaces important messages to coaches without requiring a dedicated notification infrastructure.
+
+**How it works:**
+1. Backend Python scripts (run by Masi staff or scheduled jobs) analyse session data and write flag records to a `coach_alerts` Supabase table.
+2. The app pulls new alerts from `coach_alerts` through the existing offline sync loop — no new network layer or WebSocket connection is needed.
+3. Alerts are surfaced to the user as in-app messages (e.g. a banner or card on the Home screen) and dismissed once read.
+
+**`coach_alerts` table (indicative schema):**
+```sql
+- id (uuid)
+- user_id (uuid, FK to users)       -- which coach the alert is for
+- message (text)                     -- human-readable alert text
+- alert_type (text)                  -- category/severity (e.g. 'info', 'warning')
+- created_at (timestamp)
+- read_at (timestamp, nullable)      -- null until the coach dismisses the alert
+```
+
+**Design rationale:**
+- Reuses the existing sync queue so no additional background service is required in the app.
+- Python scripts decouple alert generation from the mobile app; Masi's data team can add or change alert logic without an app release.
+- Read state (`read_at`) is stored on the server so alerts don't reappear if the app is reinstalled or the cache is cleared.
+
 ---
 
 ## Notes & Constraints

@@ -330,6 +330,12 @@ None currently.
 3. **Letter Tracker feature** — per-child mastery grid (documented in PRD, ready to spec)
 4. Phase 6: Offline sync refinement (sync status screen, retry UI)
 
+### Post-MVP: Coach Alerts
+- **Not started. Scheduled after MVP testing is complete.**
+- Python scripts write flag records to a `coach_alerts` Supabase table; the app surfaces them as in-app messages via the existing sync loop.
+- No new network layer or background service required in the app.
+- See the "Coach Alerts" section under Future Enhancements in PRD.md for full design and indicative schema.
+
 ---
 
 **Progress Summary**: ✅ **Phase 4: COMPLETE** - Literacy Coach session recording fully implemented. Staff can select children (individually or by group), tap letters in curriculum teaching order, set session and per-child reading levels, add comments, and submit — all offline-first with automatic sync. Auto-sync bug fixed so sessions sync immediately when online. Ready for Phase 5: Additional Session Forms.
