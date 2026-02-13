@@ -1,13 +1,16 @@
 import React, { useState, useCallback } from 'react';
-import { View, StyleSheet, ScrollView, TouchableOpacity } from 'react-native';
+import { View, StyleSheet, ScrollView, TouchableOpacity, Pressable } from 'react-native';
 import { Card, Text, Button, ActivityIndicator, Snackbar } from 'react-native-paper';
 import { Ionicons } from '@expo/vector-icons';
+import { LinearGradient } from 'expo-linear-gradient';
 import { useFocusEffect } from '@react-navigation/native';
 import { useAuth } from '../../context/AuthContext';
 import { useOffline } from '../../context/OfflineContext';
 import { useTimeTracking } from '../../hooks/useTimeTracking';
 import { storage } from '../../utils/storage';
 import { colors, spacing, borderRadius, shadows } from '../../constants/colors';
+
+const GRADIENT = ['#0984E3', '#E72D4D'];
 
 export default function HomeScreen({ navigation }) {
   const { profile } = useAuth();
@@ -76,14 +79,19 @@ export default function HomeScreen({ navigation }) {
     <View style={styles.outerContainer}>
       <ScrollView style={styles.container}>
         {/* Identity Header */}
-        <View style={styles.header}>
+        <LinearGradient
+          colors={GRADIENT}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 0 }}
+          style={styles.header}
+        >
           <Text variant="titleLarge" style={styles.welcomeText}>
             Welcome, {profile?.first_name || 'User'}!
           </Text>
           <Text variant="bodyMedium" style={styles.roleText}>
             {[profile?.job_title, profile?.assigned_school].filter(Boolean).join(' • ')}
           </Text>
-        </View>
+        </LinearGradient>
 
         <View style={styles.content}>
           {/* Sync Banner */}
@@ -120,15 +128,19 @@ export default function HomeScreen({ navigation }) {
                       <Text variant="bodyMedium" style={styles.statusText}>
                         Not signed in
                       </Text>
-                      <Button
-                        mode="contained"
+                      <Pressable
                         onPress={handleSignIn}
-                        style={styles.primaryButton}
-                        contentStyle={styles.primaryButtonContent}
-                        icon="login"
+                        style={styles.gradientButton}
                       >
-                        Sign In
-                      </Button>
+                        <LinearGradient
+                          colors={GRADIENT}
+                          start={{ x: 0, y: 0 }}
+                          end={{ x: 1, y: 0 }}
+                          style={styles.gradientButtonInner}
+                        >
+                          <Text style={styles.gradientButtonText}>Sign In</Text>
+                        </LinearGradient>
+                      </Pressable>
                     </>
                   ) : (
                     <>
@@ -176,16 +188,22 @@ export default function HomeScreen({ navigation }) {
                   </Text>
                 </View>
               </View>
-              <Button
-                mode="outlined"
+              <Pressable
                 onPress={() => navigation.navigate('SessionForm')}
-                style={styles.sessionButton}
-                contentStyle={styles.primaryButtonContent}
-                icon="plus-circle-outline"
-                textColor={colors.primary}
+                style={styles.gradientOutlineButton}
               >
-                Record a Session
-              </Button>
+                <LinearGradient
+                  colors={GRADIENT}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 0 }}
+                  style={styles.gradientOutlineBorder}
+                >
+                  <View style={styles.gradientOutlineInner}>
+                    <Ionicons name="add-circle-outline" size={18} color="#0984E3" style={styles.sessionButtonIcon} />
+                    <Text style={styles.gradientOutlineText}>Record a Session</Text>
+                  </View>
+                </LinearGradient>
+              </Pressable>
             </Card.Content>
           </Card>
         </View>
@@ -212,7 +230,6 @@ const styles = StyleSheet.create({
   },
   header: {
     padding: spacing.lg,
-    backgroundColor: colors.primary,
   },
   welcomeText: {
     color: '#FFFFFF',
@@ -280,6 +297,49 @@ const styles = StyleSheet.create({
   primaryButtonContent: {
     paddingVertical: spacing.sm,
   },
+  gradientButton: {
+    marginBottom: spacing.sm,
+    borderRadius: borderRadius.sm,
+    overflow: 'hidden',
+  },
+  gradientButtonInner: {
+    paddingVertical: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+    minHeight: 48,
+  },
+  gradientButtonText: {
+    color: '#FFFFFF',
+    fontSize: 16,
+    fontWeight: '600',
+    letterSpacing: 0.5,
+  },
+  gradientOutlineButton: {
+    borderRadius: borderRadius.sm,
+    overflow: 'hidden',
+  },
+  gradientOutlineBorder: {
+    padding: 2,
+    borderRadius: borderRadius.sm,
+  },
+  gradientOutlineInner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.surface,
+    borderRadius: borderRadius.sm - 2,
+    paddingVertical: 12,
+    minHeight: 48,
+  },
+  sessionButtonIcon: {
+    marginRight: spacing.xs,
+  },
+  gradientOutlineText: {
+    color: '#0984E3',
+    fontSize: 14,
+    fontWeight: '600',
+    letterSpacing: 0.3,
+  },
   historyButton: {
     marginTop: spacing.xs,
     alignSelf: 'flex-start',
@@ -301,8 +361,5 @@ const styles = StyleSheet.create({
   },
   sessionCountText: {
     color: colors.textSecondary,
-  },
-  sessionButton: {
-    borderColor: colors.primary,
   },
 });
