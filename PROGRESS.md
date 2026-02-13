@@ -1,7 +1,7 @@
 # Masi App - Development Progress
 
 ## Current Status
-**Phase**: Home Redesign & Navigation Restructure (COMPLETE ✓)
+**Phase**: Phase 7 - Polish & Production Prep (Partially Complete — see below)
 **Last Updated**: 2026-02-13
 
 ---
@@ -150,7 +150,8 @@
 - [x] Navigator wired — `SyncIndicator` onPress navigates to `SyncStatus`; route added to `MainNavigator` stack
 - [x] LEARNING.md updated with Phase 6 chapter (idempotency rationale, decoupled persistence/trigger pattern, accessibility contrast, testing tip)
 
-#### Phase 7: Polish & Production Prep (Completed 2026-02-04)
+#### Phase 7: Polish & Production Prep (Partially Complete — 2026-02-04)
+**Remaining**: security review, Android/iOS device testing, performance optimisation, production deployment
 - [x] Feedback standardisation — Snackbar for all status/info messages; Alert reserved for destructive confirmations only
   - TimeTrackingScreen: 6 Alert → Snackbar (sign in/out success, location errors, guard messages)
   - LiteracySessionForm: success Alert removed (goBack IS the confirmation); error catch → Snackbar
@@ -252,8 +253,9 @@ None currently.
 ## Metrics & Timeline
 
 ### Current Progress
-- **Phases Completed**: 6 of 7 (Phase 0 ✅, Phase 1 ✅, Phase 2 ✅, Phase 3 ✅, Phase 4 ✅, Phase 6 ✅, Phase 7 ✅)
-- **Features Completed**: ~95% (auth, time tracking, children & groups, Literacy Coach sessions, full offline sync with failed-item retry UI, polish & production prep)
+- **Phases Completed**: Phase 0 ✅, Phase 1 ✅, Phase 2 ✅, Phase 3 ✅, Phase 4 ✅, Phase 6 ✅, Phase 7 (partial) 🔄
+- **Features Completed**: ~90% (auth, time tracking, children & groups, Literacy Coach sessions, full offline sync, polish/feedback/validation/RLS)
+- **Phase 7 remaining**: security review, Android/iOS device testing, performance optimisation, production deployment
 - **Next Phase**: Phase 5 - Additional Session Forms (Numeracy, ZZ Coach, Yeboneer)
 
 ---
@@ -396,4 +398,4 @@ None currently.
 
 ---
 
-**Progress Summary**: ✅ **Phase 7: COMPLETE** - Polish & production prep is done. Feedback is standardised on Snackbar (Alert only for destructive confirmations). Loading spinners added to SessionHistory and GroupManagement buttons. LiteracySessionForm has inline validation error messages. LoginScreen has a client-side email regex guard. RLS migration `03_tighten_children_rls.sql` is ready to apply — tightens children INSERT via a BEFORE INSERT trigger + `created_by` column. `.env.example` keys corrected. Only remaining phase is Phase 5: Additional Session Forms.
+**Progress Summary**: 🔄 **Phase 7: Partially Complete** — feedback standardised on Snackbar, loading states added, inline form validation implemented, RLS migration `03_tighten_children_rls.sql` written. Remaining Phase 7 items: security review, Android/iOS device testing, performance optimisation, production deployment. Home screen redesigned (sign in/out on Home, Assessments tab replacing Time tab). Next up: Phase 5 (additional session forms) and completing Phase 7 pre-production items.

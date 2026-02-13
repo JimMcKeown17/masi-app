@@ -375,12 +375,12 @@ User Action → Local AsyncStorage → UI Update → Sync Queue → Supabase →
 - [x] Manual review marking for failed syncs (failed items persisted to `syncMeta.failedItems`; retry clears counter + re-queues)
 - [x] Network state detection
 
-### Phase 7: Polish & Production Prep
-- [ ] Error handling across all screens
-- [ ] Loading states
-- [ ] Form validation (basic client-side)
-- [ ] User feedback (toasts, alerts)
-- [ ] RLS policy tightening
+### Phase 7: Polish & Production Prep (Partially Complete)
+- [x] Error handling across all screens — Snackbar standardised across 6 screens; Alert reserved for destructive confirmations only
+- [x] Loading states — ActivityIndicator on SessionHistoryScreen; Create/Save button spinners on GroupManagementScreen
+- [x] Form validation (basic client-side) — inline red errors on LiteracySessionForm; email regex guard on LoginScreen
+- [x] User feedback (toasts, alerts) — Snackbar pattern applied consistently
+- [x] RLS policy tightening — `supabase-migrations/03_tighten_children_rls.sql` (adds `created_by` column, BEFORE INSERT trigger, replaces `WITH CHECK (TRUE)` policy)
 - [ ] Security review
 - [ ] Testing on Android emulator
 - [ ] Testing on iOS simulator
