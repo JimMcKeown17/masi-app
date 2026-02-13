@@ -3,7 +3,7 @@ import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { useAuth } from '../context/AuthContext';
-import { ActivityIndicator, View } from 'react-native';
+import { ActivityIndicator, View, TouchableOpacity } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { colors } from '../constants/colors';
 import SyncIndicator from '../components/common/SyncIndicator';
@@ -89,7 +89,17 @@ function MainTabNavigator() {
       <Tab.Screen
         name="Home"
         component={HomeScreen}
-        options={{ title: 'Home' }}
+        options={({ navigation }) => ({
+          title: 'Home',
+          headerRight: () => (
+            <View style={{ flexDirection: 'row', alignItems: 'center', marginRight: 16, gap: 8 }}>
+              <SyncIndicator onPress={() => navigation.navigate('SyncStatus')} />
+              <TouchableOpacity onPress={() => navigation.navigate('Profile')}>
+                <Ionicons name="settings-outline" size={24} color={colors.textSecondary} />
+              </TouchableOpacity>
+            </View>
+          ),
+        })}
       />
       <Tab.Screen
         name="Time"
