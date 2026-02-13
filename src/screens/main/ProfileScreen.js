@@ -7,7 +7,7 @@ import { supabase } from '../../services/supabaseClient';
 import { exportDatabase, exportLogs } from '../../utils/debugExport';
 
 export default function ProfileScreen({ navigation }) {
-  const { user, profile, updatePassword } = useAuth();
+  const { user, profile, updatePassword, signOut } = useAuth();
 
   // Password form state
   const [currentPassword, setCurrentPassword] = useState('');
@@ -312,6 +312,17 @@ export default function ProfileScreen({ navigation }) {
             </Button>
           </Card.Content>
         </Card>
+
+        {/* Sign Out */}
+        <Button
+          mode="outlined"
+          onPress={signOut}
+          style={styles.signOutButton}
+          textColor={colors.emphasis}
+          icon="logout"
+        >
+          Sign Out
+        </Button>
       </ScrollView>
 
       <Snackbar
@@ -381,6 +392,11 @@ const styles = StyleSheet.create({
     alignSelf: 'flex-start',
     marginTop: -spacing.xs,
     marginBottom: spacing.xs,
+  },
+  signOutButton: {
+    margin: spacing.md,
+    marginTop: 0,
+    borderColor: colors.emphasis,
   },
   helperText: {
     color: colors.textSecondary,
