@@ -21,7 +21,10 @@ Core tables: `users`, `children`, `groups`, `children_groups`, `time_entries`, `
 See DATABASE_SCHEMA_GUIDE.md for complete schema with explanations.
 
 ### Navigation
-Bottom tabs: Home (with profile link) → Time → Children → Sessions
+Bottom tabs: Home → My Children → Sessions → Assessments
+- Profile accessed via gear icon (⚙️) in Home tab header
+- Sign In / Sign Out lives on Home screen (not a dedicated tab)
+- Time tab removed; Assessments tab added as placeholder for future phase
 See PRD.md for complete app structure.
 
 ## Key Implementation Patterns

@@ -126,6 +126,27 @@ A React Native mobile application for Masi, a nonprofit organization, to manage 
   - Staff logs in and changes password immediately
 - **Future Enhancement**: Automated invitation system with email links (post-MVP)
 
+### 1b. Home Screen (Redesigned)
+The Home screen is the primary daily-use screen for field coaches.
+
+**Layout (top to bottom):**
+1. **Identity header** — blue→red brand gradient, Welcome + role • school
+2. **Conditional sync banner** — only shown when needed:
+   - Failed items (red): `{n} items failed to sync — needs attention`
+   - Offline (gray): `Offline — data will sync when connected`
+   - Unsynced (yellow): `{n} items waiting to sync`
+   - Taps to SyncStatusScreen
+3. **Today card** — Work Status:
+   - State A: "Not signed in" + gradient Sign In button
+   - State B: "Signed in at {time}", live elapsed timer, red Sign Out button
+   - GPS location captured on both sign in and sign out
+   - "🕒 View Work History ›" text link → TimeEntriesListScreen
+4. **Sessions card** — Record a Session:
+   - Shows count of sessions recorded today (`{n} today` badge)
+   - Gradient-outline "Record a Session" button → SessionFormScreen
+
+**Shared hook**: `src/hooks/useTimeTracking.js` — encapsulates all sign in/out state, GPS, AsyncStorage, and elapsed timer logic. Used by both HomeScreen and TimeTrackingScreen.
+
 ### 2. Time Tracking
 **Requirements:**
 - Sign in/out with geolocation capture
@@ -235,12 +256,17 @@ User Action → Local AsyncStorage → UI Update → Sync Queue → Supabase →
 
 ### Navigation Structure
 - **Bottom Tab Navigation** with 4 tabs:
-  1. Home (includes link to Profile)
-  2. Time Tracking
-  3. Children
-  4. Sessions
+  1. Home
+  2. My Children
+  3. Sessions
+  4. Assessments (placeholder — "Coming soon")
 
-**Note**: Profile is accessible via a link/button on the Home screen rather than occupying a dedicated tab. Profile is used less frequently than core features (time tracking, children management, session recording), so keeping it off the main tab bar reduces clutter while maintaining easy access.
+**Tab changes from original design:**
+- Time Tracking tab removed — sign in/out promoted to Home screen as the primary daily action
+- Assessments tab added as placeholder for the next major feature phase
+- Tabs reordered: Home → My Children → Sessions → Assessments
+
+**Profile access**: gear icon (⚙️) in Home tab header → ProfileScreen (stack navigation). Sign Out button lives at the bottom of ProfileScreen. Profile is not a tab — used infrequently, keeping the tab bar clean.
 
 ### Theme
 - **Light mode only** (for now)

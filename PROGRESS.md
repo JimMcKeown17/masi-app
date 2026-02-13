@@ -1,8 +1,8 @@
 # Masi App - Development Progress
 
 ## Current Status
-**Phase**: Phase 7 - Polish & Production Prep (COMPLETE ✓)
-**Last Updated**: 2026-02-04
+**Phase**: Home Redesign & Navigation Restructure (COMPLETE ✓)
+**Last Updated**: 2026-02-13
 
 ---
 
@@ -215,7 +215,7 @@ None currently.
 ### Architecture
 - **Sync Strategy**: Last-write-wins (staff changes always overwrite server)
 - **Sync Triggers**: App foreground/background
-- **Navigation**: Bottom tab navigation (4 tabs - Home with profile link, Time, Children, Sessions)
+- **Navigation**: Bottom tab navigation — Home → My Children → Sessions → Assessments (Time tab replaced)
 - **Theme**: Light mode only (initially)
 - **Validation**: Basic client-side, comprehensive server-side
 
@@ -259,6 +259,20 @@ None currently.
 ---
 
 ## Recent Activity Log
+
+### 2026-02-13 (Session 10: Home Redesign & Navigation Restructure)
+- **Extracted `useTimeTracking` hook** — `src/hooks/useTimeTracking.js` encapsulates all sign in/out state (GPS, AsyncStorage, elapsed timer, snackbar). Used by both HomeScreen and TimeTrackingScreen; eliminates duplicated async logic.
+- **Redesigned HomeScreen** — replaced placeholder with a field-focused daily-use layout:
+  - Blue→red brand gradient identity header (Welcome + role • school)
+  - Conditional sync banner (3 variants: failed/offline/unsynced) — only shown when needed, taps to SyncStatusScreen
+  - "Today" Work Status card with gradient Sign In button, live elapsed timer, red Sign Out button, and "🕒 View Work History ›" link
+  - "Sessions" card with today's session count badge and gradient-outline "Record a Session" button
+  - `useFocusEffect` refreshes today's session count on every screen focus (updates after recording a session)
+- **Brand gradient applied** — `LinearGradient(['#0984E3', '#E72D4D'])` used on header, Sign In button (matches LoginScreen), and Record a Session outlined border. Gradient constant defined once at module level.
+- **Navigation restructured** — Time tab removed; Assessments placeholder tab added; tabs reordered to: Home → My Children → Sessions → Assessments
+- **Gear icon added** to Home tab header (alongside SyncIndicator) → navigates to ProfileScreen
+- **Sign Out button added** to bottom of ProfileScreen (red outlined, below Legal card); `signOut` pulled from `useAuth`
+- **Branches**: `redesign/home-tab` and `redesign/assessments-tab` merged to `main`
 
 ### 2026-02-04 (Session 9: Phase 7 Polish & Production Prep)
 - **Feedback standardisation** — migrated all status/info Alert.alert() calls to react-native-paper Snackbar across 6 screens; Alert retained only for destructive confirmations (delete group, remove child from group). Pattern: outer `<View style={{ flex: 1 }}>` wrapping ScrollView/FlatList, `<Snackbar>` as sibling. Matches SyncStatusScreen convention.
@@ -372,7 +386,7 @@ None currently.
 1. **Phase 5: Additional Session Forms** — gather field requirements for Numeracy Coach, ZZ Coach, Yeboneer
 2. Build remaining 3 session forms using same patterns as Literacy Coach
 3. **Letter Tracker feature** — per-child mastery grid (documented in PRD, ready to spec)
-4. **Phase 7: Polish & Production Prep** — error handling, loading states, RLS tightening, device testing
+4. **Assessments tab** — define requirements and build out when ready (currently "Coming soon" placeholder)
 
 ### Post-MVP: Coach Alerts
 - **Not started. Scheduled after MVP testing is complete.**
