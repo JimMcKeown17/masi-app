@@ -14,7 +14,6 @@ import ForgotPasswordScreen from '../screens/auth/ForgotPasswordScreen';
 
 // Main tab screens
 import HomeScreen from '../screens/main/HomeScreen';
-import TimeTrackingScreen from '../screens/main/TimeTrackingScreen';
 import TimeEntriesListScreen from '../screens/main/TimeEntriesListScreen';
 import AssessmentsScreen from '../screens/main/AssessmentsScreen';
 import ChildrenListScreen from '../screens/main/ChildrenListScreen';
