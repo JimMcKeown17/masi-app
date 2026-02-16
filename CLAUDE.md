@@ -71,6 +71,33 @@ const SessionFormScreen = () => {
 4. If signed in: Show "Sign Out" button + elapsed time
 5. On sign out: Capture coordinates → Update entry → Calculate hours
 
+## Known Issues & Testing Watchlist
+
+### Offline Sync — RLS Fields Must Be Set in the App
+**Problem found in field testing (Feb 2026):** Child records were failing to sync with Postgres error `42501` ("new row violates row-level security policy").
+
+**Root cause:** The RLS INSERT policy on `children` requires `created_by = auth.uid()`. When the sync sends a record without `created_by` set, Supabase rejects it — even though a trigger exists to auto-set the field. The trigger fires *after* the RLS check, so it never gets the chance to help.
+
+**Fix:** Always set `created_by: user.id` in `ChildrenContext.js` when building the child object locally (line ~76).
+
+**Watch for this pattern** whenever a new RLS policy references a field: ensure the app sets that field explicitly before saving to AsyncStorage, not relying on triggers to fill it in at sync time.
+
+**Cascade effect:** When a `children` record fails to sync, the `staff_children` assignment also fails with error `23503` (FK violation) because the parent row doesn't exist yet. One root cause = two error messages.
+
+### EAS Builds — Environment Variables Not in `.env.local`
+`process.env.EXPO_PUBLIC_*` variables from `.env.local` are NOT available in EAS cloud builds. Public values (Supabase URL, anon key) must also be set in `app.json → extra` with a fallback in the client:
+```javascript
+const url = process.env.EXPO_PUBLIC_SUPABASE_URL
+  || Constants.expoConfig?.extra?.supabaseUrl || '';
+```
+
+### Debugging Tools Available
+- **Profile → Export Logs**: captures all `console.log/error/warn` output to a shareable text file
+- **Profile → Export Database**: exports full AsyncStorage as JSON (includes sync queue, retry counts, failed items)
+- Ask testers to share logs via WhatsApp/email when reporting sync issues
+
+---
+
 ## Documentation Guidelines
 
 ### IMPORTANT: Update LEARNING.md as You Build
