@@ -27,6 +27,12 @@
     },
     "web": {
       "favicon": "./assets/favicon.png"
-    }
+    },
+    "extra": {
+      "eas": {
+        "projectId": "6a430b63-345e-4313-90ea-e332700295e9"
+      }
+    },
+    "owner": "jimmckeown"
   }
 }
