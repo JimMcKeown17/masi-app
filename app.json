@@ -1,6 +1,6 @@
 {
   "expo": {
-    "name": "masi-mobile-app",
+    "name": "Masi",
     "slug": "masi-mobile-app",
     "version": "1.0.0",
     "orientation": "portrait",
@@ -18,7 +18,7 @@
     },
     "android": {
       "adaptiveIcon": {
-        "foregroundImage": "./assets/adaptive-icon.png",
+        "foregroundImage": "./assets/masi-mobile-icon.png",
         "backgroundColor": "#ffffff"
       },
       "edgeToEdgeEnabled": true,
