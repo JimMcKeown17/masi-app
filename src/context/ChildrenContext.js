@@ -75,6 +75,7 @@ export const ChildrenProvider = ({ children }) => {
       const child = {
         id: childId,
         ...childData,
+        created_by: user.id,
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
         synced: false,
