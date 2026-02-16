@@ -1,9 +1,12 @@
 import { createClient } from '@supabase/supabase-js';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import Constants from 'expo-constants';
 
-// Expo requires EXPO_PUBLIC_ prefix for environment variables used in client code
-const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL || '';
-const supabaseAnonKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY || '';
+// Local dev uses .env.local; EAS builds fall back to app.json extra
+const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL
+  || Constants.expoConfig?.extra?.supabaseUrl || '';
+const supabaseAnonKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY
+  || Constants.expoConfig?.extra?.supabaseAnonKey || '';
 
 if (!supabaseUrl || !supabaseAnonKey) {
   console.warn('Supabase credentials not found. Please check your .env.local file.');

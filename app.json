@@ -29,6 +29,8 @@
       "favicon": "./assets/favicon.png"
     },
     "extra": {
+      "supabaseUrl": "https://jcqrlwetutnpuchjoyyd.supabase.co",
+      "supabaseAnonKey": "sb_publishable_Fg3Papwm3y4H3_L5c9RrWg_WwDk8Rs0",
       "eas": {
         "projectId": "6a430b63-345e-4313-90ea-e332700295e9"
       }
