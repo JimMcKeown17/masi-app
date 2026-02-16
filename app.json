@@ -21,7 +21,9 @@
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#ffffff"
       },
-      "edgeToEdgeEnabled": true
+      "edgeToEdgeEnabled": true,
+      "package": "org.masinyusane.masi",
+      "versionCode": 1
     },
     "web": {
       "favicon": "./assets/favicon.png"
