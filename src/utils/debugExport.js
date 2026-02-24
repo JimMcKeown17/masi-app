@@ -1,27 +1,44 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { Share, Platform } from 'react-native';
+import { Platform } from 'react-native';
+import { File, Paths } from 'expo-file-system/next';
+import * as Sharing from 'expo-sharing';
 import { logger } from './logger';
 
 /**
- * Export all AsyncStorage as JSON file via native Share
+ * Write content to a temp file and share it via the native share sheet.
+ * Users will see a file attachment they can send via WhatsApp, email, etc.
+ */
+const shareFile = async (filename, content, mimeType) => {
+  const file = new File(Paths.cache, filename);
+  if (file.exists) {
+    file.delete();
+  }
+  file.create();
+  file.write(content);
+
+  await Sharing.shareAsync(file.uri, {
+    mimeType,
+    dialogTitle: filename,
+  });
+};
+
+/**
+ * Export all AsyncStorage as a .json file via native Share
  */
 export const exportDatabase = async () => {
   try {
-    // Get all keys and values
     const keys = await AsyncStorage.getAllKeys();
     const items = await AsyncStorage.multiGet(keys);
 
-    // Format as object
     const database = items.reduce((acc, [key, value]) => {
       try {
         acc[key] = JSON.parse(value);
       } catch {
-        acc[key] = value; // Keep as string if not JSON
+        acc[key] = value;
       }
       return acc;
     }, {});
 
-    // Add metadata
     const exportData = {
       exported_at: new Date().toISOString(),
       app_version: '1.0.0',
@@ -33,12 +50,8 @@ export const exportDatabase = async () => {
     };
 
     const jsonString = JSON.stringify(exportData, null, 2);
-
-    // Share as text (iOS/Android will handle saving)
-    await Share.share({
-      message: jsonString,
-      title: 'Masi App Database Export',
-    });
+    const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+    await shareFile(`masi-database-${timestamp}.json`, jsonString, 'application/json');
 
     return { success: true };
   } catch (error) {
@@ -48,7 +61,7 @@ export const exportDatabase = async () => {
 };
 
 /**
- * Export logs as text via native Share
+ * Export logs as a .txt file via native Share
  */
 export const exportLogs = async () => {
   try {
@@ -58,10 +71,8 @@ export const exportLogs = async () => {
       return { success: false, error: 'No logs to export' };
     }
 
-    await Share.share({
-      message: logs,
-      title: 'Masi App Logs Export',
-    });
+    const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+    await shareFile(`masi-logs-${timestamp}.txt`, logs, 'text/plain');
 
     return { success: true };
   } catch (error) {

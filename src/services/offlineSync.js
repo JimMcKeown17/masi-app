@@ -119,13 +119,15 @@ const syncTable = async (tableConfig) => {
 
       // Check if we've exceeded max retries
       if (attemptCount >= MAX_RETRY_ATTEMPTS) {
-        console.warn(`Record ${record.id} exceeded max retry attempts`);
-        await storage.addFailedItem(key, record.id, 'Max retry attempts exceeded');
+        const lastError = await storage.getLastSyncError(key, record.id);
+        const reason = lastError || 'Max retry attempts exceeded';
+        console.warn(`Record ${record.id} exceeded max retry attempts. Last error: ${reason}`);
+        await storage.addFailedItem(key, record.id, reason);
         results.failed++;
         results.failedRecords.push({
           id: record.id,
           table: key,
-          reason: 'Max retry attempts exceeded',
+          reason,
         });
         continue;
       }
@@ -144,19 +146,22 @@ const syncTable = async (tableConfig) => {
         // Mark as synced in local storage
         await storage.markAsSynced(key, record.id);
         await storage.clearRetryAttempts(key, record.id);
+        await storage.clearLastSyncError(key, record.id);
         results.synced++;
         console.log(`✓ Synced ${key} record ${record.id}`);
       } else {
-        // Record the retry attempt
+        // Record the retry attempt and store the actual error
+        const errorMsg = result.error?.message || result.error?.code || 'Unknown error';
         await storage.recordRetryAttempt(key, record.id);
+        await storage.setLastSyncError(key, record.id, errorMsg);
         results.failed++;
         results.failedRecords.push({
           id: record.id,
           table: key,
-          error: result.error?.message || 'Unknown error',
+          error: errorMsg,
           attemptCount: attemptCount + 1,
         });
-        console.error(`✗ Failed to sync ${key} record ${record.id}`);
+        console.error(`✗ Failed to sync ${key} record ${record.id}: ${errorMsg}`);
       }
     }
 
@@ -273,4 +278,5 @@ export const resetSyncMeta = async () => {
  */
 export const retryFailedItem = async (table, id) => {
   await storage.removeFailedItem(table, id);
+  await storage.clearLastSyncError(table, id);
 };

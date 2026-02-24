@@ -27,7 +27,8 @@ export const ChildrenProvider = ({ children }) => {
 
   /**
    * Load children assigned to current user
-   * Cache-first pattern: show cached data immediately, then fetch from server
+   * Cache-first pattern: show cached data immediately, then merge from server.
+   * Unsynced local records are preserved so they aren't lost before sync.
    */
   const loadChildren = async () => {
     try {
@@ -51,9 +52,24 @@ export const ChildrenProvider = ({ children }) => {
         if (error) {
           console.error('Error loading children from server:', error);
         } else if (data) {
-          // Save to cache and update state
-          await storage.setItem(STORAGE_KEYS.CHILDREN, data);
-          setChildrenList(data);
+          // Strip nested join data (staff_children) — it's not a column
+          // and would break sync if the record is later updated
+          const serverChildren = data.map(({ staff_children, ...child }) => ({
+            ...child,
+            synced: true,
+          }));
+
+          // Merge: keep unsynced local records, update everything else from server
+          const localUnsynced = cached.filter(c => c.synced === false);
+          const serverIds = new Set(serverChildren.map(c => c.id));
+
+          // Keep local unsynced records that aren't yet on the server
+          const unsyncedToKeep = localUnsynced.filter(c => !serverIds.has(c.id));
+
+          const merged = [...serverChildren, ...unsyncedToKeep];
+
+          await storage.setItem(STORAGE_KEYS.CHILDREN, merged);
+          setChildrenList(merged);
         }
       }
     } catch (error) {
@@ -171,8 +187,13 @@ export const ChildrenProvider = ({ children }) => {
         if (error) {
           console.error('Error loading groups from server:', error);
         } else if (data) {
-          await storage.setItem(STORAGE_KEYS.GROUPS, data);
-          setGroups(data);
+          const serverGroups = data.map(g => ({ ...g, synced: true }));
+          const localUnsynced = cached.filter(g => g.synced === false);
+          const serverIds = new Set(serverGroups.map(g => g.id));
+          const unsyncedToKeep = localUnsynced.filter(g => !serverIds.has(g.id));
+          const merged = [...serverGroups, ...unsyncedToKeep];
+          await storage.setItem(STORAGE_KEYS.GROUPS, merged);
+          setGroups(merged);
         }
       }
     } catch (error) {
@@ -283,8 +304,13 @@ export const ChildrenProvider = ({ children }) => {
           if (error) {
             console.error('Error loading children_groups from server:', error);
           } else if (data) {
-            await storage.setItem(STORAGE_KEYS.CHILDREN_GROUPS, data);
-            setChildrenGroups(data);
+            const serverMemberships = data.map(m => ({ ...m, synced: true }));
+            const localUnsynced = cached.filter(m => m.synced === false);
+            const serverIds = new Set(serverMemberships.map(m => m.id));
+            const unsyncedToKeep = localUnsynced.filter(m => !serverIds.has(m.id));
+            const merged = [...serverMemberships, ...unsyncedToKeep];
+            await storage.setItem(STORAGE_KEYS.CHILDREN_GROUPS, merged);
+            setChildrenGroups(merged);
           }
         }
       }

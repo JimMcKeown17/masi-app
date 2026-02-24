@@ -300,6 +300,28 @@ export const storage = {
     return await this.setItem(STORAGE_KEYS.SYNC_META, meta);
   },
 
+  // Last sync error tracking (stores the actual Supabase error per record)
+  async setLastSyncError(table, id, errorMsg) {
+    const meta = await this.getSyncMeta();
+    if (!meta.lastErrors) meta.lastErrors = {};
+    meta.lastErrors[`${table}_${id}`] = errorMsg;
+    return await this.setItem(STORAGE_KEYS.SYNC_META, meta);
+  },
+
+  async getLastSyncError(table, id) {
+    const meta = await this.getSyncMeta();
+    return meta.lastErrors?.[`${table}_${id}`] || null;
+  },
+
+  async clearLastSyncError(table, id) {
+    const meta = await this.getSyncMeta();
+    if (meta.lastErrors) {
+      delete meta.lastErrors[`${table}_${id}`];
+      return await this.setItem(STORAGE_KEYS.SYNC_META, meta);
+    }
+    return true;
+  },
+
   // Failed items persistence
   async addFailedItem(table, id, reason) {
     const meta = await this.getSyncMeta();
