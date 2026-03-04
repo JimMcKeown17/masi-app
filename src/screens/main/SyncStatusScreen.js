@@ -49,6 +49,7 @@ export default function SyncStatusScreen() {
   const breakdown = syncStatus.breakdown || {};
   const failedItems = syncStatus.failedItems || [];
   const lastSyncTime = syncStatus.lastSyncTime || null;
+  const lastSuccessfulSyncTime = syncStatus.lastSuccessfulSyncTime || null;
 
   const showSnackbar = (message) => {
     setSnackbarMessage(message);
@@ -89,8 +90,13 @@ export default function SyncStatusScreen() {
           <Card.Content>
             <Text variant="titleMedium" style={styles.sectionTitle}>Last Synced</Text>
             <Text variant="bodyMedium" style={styles.syncTimeText}>
-              {formatSyncTime(lastSyncTime)}
+              {formatSyncTime(lastSuccessfulSyncTime)}
             </Text>
+            {lastSyncTime && lastSyncTime !== lastSuccessfulSyncTime && (
+              <Text variant="bodySmall" style={styles.lastAttemptText}>
+                Last attempt: {formatSyncTime(lastSyncTime)}
+              </Text>
+            )}
           </Card.Content>
         </Card>
 
@@ -231,6 +237,11 @@ const styles = StyleSheet.create({
   // Last synced
   syncTimeText: {
     color: colors.textSecondary,
+  },
+  lastAttemptText: {
+    color: colors.textSecondary,
+    marginTop: spacing.xs,
+    fontStyle: 'italic',
   },
 
   // Unsynced list

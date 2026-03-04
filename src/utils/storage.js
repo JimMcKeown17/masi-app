@@ -252,6 +252,27 @@ export const storage = {
     return await this.setItem(STORAGE_KEYS.SYNC_QUEUE, []);
   },
 
+  // Clear all domain data (everything except user profile)
+  async clearDomainData() {
+    try {
+      const domainKeys = [
+        STORAGE_KEYS.TIME_ENTRIES,
+        STORAGE_KEYS.SESSIONS,
+        STORAGE_KEYS.CHILDREN,
+        STORAGE_KEYS.STAFF_CHILDREN,
+        STORAGE_KEYS.GROUPS,
+        STORAGE_KEYS.CHILDREN_GROUPS,
+        STORAGE_KEYS.SYNC_QUEUE,
+        STORAGE_KEYS.SYNC_META,
+      ];
+      await AsyncStorage.multiRemove(domainKeys);
+      return true;
+    } catch (error) {
+      console.error('Error clearing domain data:', error);
+      return false;
+    }
+  },
+
   // User profile
   async getUserProfile() {
     return await this.getItem(STORAGE_KEYS.USER_PROFILE);

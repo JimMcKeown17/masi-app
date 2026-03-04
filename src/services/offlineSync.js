@@ -176,7 +176,7 @@ const syncTable = async (tableConfig) => {
     return {
       success: false,
       synced: 0,
-      failed: unsyncedRecords?.length || 0,
+      failed: -1,
       failedRecords: [],
       error,
     };
@@ -214,9 +214,12 @@ export const syncAll = async () => {
   }
 
   // Update sync metadata
-  await storage.updateSyncMeta({
-    lastSyncTime: new Date().toISOString(),
-  });
+  const now = new Date().toISOString();
+  const metaUpdate = { lastSyncTime: now };
+  if (results.success) {
+    metaUpdate.lastSuccessfulSyncTime = now;
+  }
+  await storage.updateSyncMeta(metaUpdate);
 
   const duration = Date.now() - startTime;
   console.log(`Sync complete in ${duration}ms: ${results.totalSynced} synced, ${results.totalFailed} failed`);
@@ -254,6 +257,7 @@ export const getSyncStatus = async () => {
   return {
     unsyncedCount,
     lastSyncTime: syncMeta.lastSyncTime,
+    lastSuccessfulSyncTime: syncMeta.lastSuccessfulSyncTime || null,
     breakdown,
     retryAttempts: syncMeta.retryAttempts,
     failedItems: syncMeta.failedItems || [],
@@ -266,6 +270,7 @@ export const getSyncStatus = async () => {
 export const resetSyncMeta = async () => {
   await storage.updateSyncMeta({
     lastSyncTime: null,
+    lastSuccessfulSyncTime: null,
     retryAttempts: {},
     failedItems: [],
   });

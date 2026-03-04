@@ -48,7 +48,7 @@ export function useTimeTracking() {
   const loadActiveEntry = async () => {
     try {
       const entries = await storage.getTimeEntries();
-      const active = entries.find(entry => entry.sign_out_time === null);
+      const active = entries.find(entry => entry.sign_out_time === null && entry.user_id === user?.id);
       if (active) {
         setActiveEntry(active);
         setIsSignedIn(true);
