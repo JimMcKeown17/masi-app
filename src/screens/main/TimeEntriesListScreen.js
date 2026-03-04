@@ -4,12 +4,13 @@ import { Card, Text, Divider, Chip, Snackbar } from 'react-native-paper';
 import { useAuth } from '../../context/AuthContext';
 import { useOffline } from '../../context/OfflineContext';
 import { colors, spacing, borderRadius, shadows } from '../../constants/colors';
-import { storage } from '../../utils/storage';
+import { storage, STORAGE_KEYS } from '../../utils/storage';
+import { supabase } from '../../services/supabaseClient';
 import { formatCoordinates } from '../../services/locationService';
 
 export default function TimeEntriesListScreen() {
   const { user } = useAuth();
-  const { syncNow, refreshSyncStatus } = useOffline();
+  const { isOnline, syncNow, refreshSyncStatus } = useOffline();
 
   const [timeEntries, setTimeEntries] = useState([]);
   const [groupedEntries, setGroupedEntries] = useState({});
@@ -31,19 +32,47 @@ export default function TimeEntriesListScreen() {
   }, []);
 
   /**
-   * Load all time entries from AsyncStorage
+   * Load time entries: cache-first, then fetch from Supabase when online.
+   * Merges server data with unsynced local records to prevent data loss.
    */
   const loadTimeEntries = async () => {
     try {
-      const entries = await storage.getTimeEntries();
-
-      // Filter to current user and completed entries (has sign_out_time)
-      const userEntries = entries
+      // 1. Show cached data immediately
+      const cached = await storage.getTimeEntries();
+      const cachedUserEntries = cached
         .filter(entry => entry.user_id === user.id && entry.sign_out_time !== null)
-        .sort((a, b) => new Date(b.sign_in_time) - new Date(a.sign_in_time)); // Newest first
+        .sort((a, b) => new Date(b.sign_in_time) - new Date(a.sign_in_time));
+      setTimeEntries(cachedUserEntries);
+      groupEntriesByDate(cachedUserEntries);
 
-      setTimeEntries(userEntries);
-      groupEntriesByDate(userEntries);
+      // 2. If online, fetch from server and merge
+      if (isOnline && user?.id) {
+        const { data, error } = await supabase
+          .from('time_entries')
+          .select('*')
+          .eq('user_id', user.id)
+          .order('sign_in_time', { ascending: false });
+
+        if (error) {
+          console.error('Error fetching time entries from server:', error);
+        } else if (data) {
+          const serverEntries = data.map(entry => ({ ...entry, synced: true }));
+          const serverIds = new Set(serverEntries.map(e => e.id));
+
+          // Preserve local unsynced records not yet on server
+          const localUnsynced = cached.filter(e => e.synced === false && !serverIds.has(e.id));
+          const merged = [...serverEntries, ...localUnsynced];
+
+          await storage.setItem(STORAGE_KEYS.TIME_ENTRIES, merged);
+
+          // Re-filter for display
+          const displayEntries = merged
+            .filter(entry => entry.user_id === user.id && entry.sign_out_time !== null)
+            .sort((a, b) => new Date(b.sign_in_time) - new Date(a.sign_in_time));
+          setTimeEntries(displayEntries);
+          groupEntriesByDate(displayEntries);
+        }
+      }
     } catch (error) {
       console.error('Error loading time entries:', error);
       showSnackbar('Failed to load entries');

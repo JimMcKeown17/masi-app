@@ -2,8 +2,10 @@ import React, { useState, useEffect } from 'react';
 import { View, StyleSheet, FlatList } from 'react-native';
 import { Text, Card, ActivityIndicator, Snackbar } from 'react-native-paper';
 import { useAuth } from '../../context/AuthContext';
+import { useOffline } from '../../context/OfflineContext';
 import { colors, spacing, borderRadius, shadows } from '../../constants/colors';
-import { storage } from '../../utils/storage';
+import { storage, STORAGE_KEYS } from '../../utils/storage';
+import { supabase } from '../../services/supabaseClient';
 
 const THIRTY_DAYS_MS = 30 * 24 * 60 * 60 * 1000;
 
@@ -21,6 +23,7 @@ function formatSessionDate(dateString) {
 
 export default function SessionHistoryScreen() {
   const { user } = useAuth();
+  const { isOnline } = useOffline();
   const [sessions, setSessions] = useState([]);
   const [loading, setLoading] = useState(true);
   const [snackbarMessage, setSnackbarMessage] = useState('');
@@ -35,27 +38,55 @@ export default function SessionHistoryScreen() {
     loadSessions();
   }, []);
 
+  const filterAndSort = (allSessions) => {
+    const now = Date.now();
+    const cutoff = now - THIRTY_DAYS_MS;
+
+    return allSessions
+      .filter((s) => {
+        if (s.user_id !== user.id) return false;
+        const [y, m, d] = s.session_date.split('-').map(Number);
+        const sessionTime = new Date(y, m - 1, d).getTime();
+        return sessionTime >= cutoff;
+      })
+      .sort((a, b) => {
+        if (a.session_date !== b.session_date) return a.session_date > b.session_date ? -1 : 1;
+        return new Date(b.created_at) - new Date(a.created_at);
+      });
+  };
+
+  /**
+   * Load sessions: cache-first, then fetch from Supabase when online.
+   * Merges server data with unsynced local records to prevent data loss.
+   */
   const loadSessions = async () => {
     try {
-      const allSessions = await storage.getSessions();
-      const now = Date.now();
-      const cutoff = now - THIRTY_DAYS_MS;
+      // 1. Show cached data immediately
+      const cached = await storage.getSessions();
+      setSessions(filterAndSort(cached));
 
-      const filtered = allSessions
-        .filter((s) => {
-          if (s.user_id !== user.id) return false;
-          // session_date is "YYYY-MM-DD"; parse as local midnight
-          const [y, m, d] = s.session_date.split('-').map(Number);
-          const sessionTime = new Date(y, m - 1, d).getTime();
-          return sessionTime >= cutoff;
-        })
-        .sort((a, b) => {
-          // Newest first by session_date, then by created_at as tiebreaker
-          if (a.session_date !== b.session_date) return a.session_date > b.session_date ? -1 : 1;
-          return new Date(b.created_at) - new Date(a.created_at);
-        });
+      // 2. If online, fetch from server and merge
+      if (isOnline && user?.id) {
+        const { data, error } = await supabase
+          .from('sessions')
+          .select('*')
+          .eq('user_id', user.id)
+          .order('session_date', { ascending: false });
 
-      setSessions(filtered);
+        if (error) {
+          console.error('Error fetching sessions from server:', error);
+        } else if (data) {
+          const serverSessions = data.map(s => ({ ...s, synced: true }));
+          const serverIds = new Set(serverSessions.map(s => s.id));
+
+          // Preserve local unsynced records not yet on server
+          const localUnsynced = cached.filter(s => s.synced === false && !serverIds.has(s.id));
+          const merged = [...serverSessions, ...localUnsynced];
+
+          await storage.setItem(STORAGE_KEYS.SESSIONS, merged);
+          setSessions(filterAndSort(merged));
+        }
+      }
     } catch (error) {
       console.error('Error loading sessions:', error);
       showSnackbar('Failed to load sessions');

@@ -1,5 +1,4 @@
 import React, { createContext, useState, useEffect, useContext } from 'react';
-import { Alert } from 'react-native';
 import { supabase } from '../services/supabaseClient';
 import { storage } from '../utils/storage';
 
@@ -84,31 +83,9 @@ export const AuthProvider = ({ children }) => {
 
   const signOut = async () => {
     try {
-      // Check for unsynced data before clearing
-      const unsyncedCount = await storage.getAllUnsyncedCount();
-
-      if (unsyncedCount > 0) {
-        // Wrap in a promise so we can await the user's decision
-        const userConfirmed = await new Promise((resolve) => {
-          Alert.alert(
-            'Unsynced Data',
-            `You have ${unsyncedCount} unsynced change${unsyncedCount === 1 ? '' : 's'} that will be removed from this device. Continue signing out?`,
-            [
-              { text: 'Cancel', style: 'cancel', onPress: () => resolve(false) },
-              { text: 'Sign Out', style: 'destructive', onPress: () => resolve(true) },
-            ],
-          );
-        });
-
-        if (!userConfirmed) {
-          return { error: null, cancelled: true };
-        }
-      }
-
+      await storage.clearUserProfile();
       const { error } = await supabase.auth.signOut();
       if (error) throw error;
-      await storage.clearDomainData();
-      await storage.clearUserProfile();
       setProfile(null);
       return { error: null };
     } catch (error) {
