@@ -1,4 +1,4 @@
-import React, { createContext, useState, useEffect, useContext } from 'react';
+import React, { createContext, useState, useEffect, useContext, useRef } from 'react';
 import { supabase } from '../services/supabaseClient';
 import { storage, STORAGE_KEYS } from '../utils/storage';
 import { useAuth } from './AuthContext';
@@ -9,7 +9,7 @@ const ChildrenContext = createContext({});
 
 export const ChildrenProvider = ({ children }) => {
   const { user } = useAuth();
-  const { isOnline, refreshSyncStatus } = useOffline();
+  const { isOnline, refreshSyncStatus, isSyncing } = useOffline();
 
   const [childrenList, setChildrenList] = useState([]);
   const [groups, setGroups] = useState([]);
@@ -24,6 +24,17 @@ export const ChildrenProvider = ({ children }) => {
       loadChildrenGroups();
     }
   }, [user?.id]);
+
+  // Reload from storage after sync completes to pick up updated synced flags
+  const prevSyncingRef = useRef(isSyncing);
+  useEffect(() => {
+    if (prevSyncingRef.current && !isSyncing && user?.id) {
+      loadChildren();
+      loadGroups();
+      loadChildrenGroups();
+    }
+    prevSyncingRef.current = isSyncing;
+  }, [isSyncing]);
 
   /**
    * Load children assigned to current user
