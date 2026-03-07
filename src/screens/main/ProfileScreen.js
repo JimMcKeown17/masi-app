@@ -90,6 +90,22 @@ export default function ProfileScreen({ navigation }) {
     }
   };
 
+  const handleOpenPrivacyPolicy = async () => {
+    try {
+      const url = 'https://www.masinyusane.org/privacy';
+      const supported = await Linking.canOpenURL(url);
+
+      if (supported) {
+        await Linking.openURL(url);
+      } else {
+        showMessage('Cannot open URL', 'error');
+      }
+    } catch (error) {
+      console.error('Open privacy policy error:', error);
+      showMessage('Failed to open Privacy Policy', 'error');
+    }
+  };
+
   const handleChangePassword = async () => {
     // Validation
     if (!currentPassword || !newPassword || !confirmPassword) {
@@ -309,6 +325,15 @@ export default function ProfileScreen({ navigation }) {
               icon="file-document"
             >
               Terms & Conditions
+            </Button>
+
+            <Button
+              mode="outlined"
+              onPress={handleOpenPrivacyPolicy}
+              style={styles.button}
+              icon="shield-lock-outline"
+            >
+              Privacy Policy
             </Button>
           </Card.Content>
         </Card>

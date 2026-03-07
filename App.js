@@ -1,5 +1,6 @@
 import 'react-native-get-random-values';
 import React from 'react';
+import { View, Text, TouchableOpacity, StyleSheet as RNStyleSheet } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { PaperProvider, MD3LightTheme } from 'react-native-paper';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
@@ -9,6 +10,80 @@ import { ChildrenProvider } from './src/context/ChildrenContext';
 import AppNavigator from './src/navigation/AppNavigator';
 import { colors } from './src/constants/colors';
 import { logger } from './src/utils/logger';
+
+class ErrorBoundary extends React.Component {
+  state = { hasError: false };
+
+  static getDerivedStateFromError() {
+    return { hasError: true };
+  }
+
+  componentDidCatch(error, errorInfo) {
+    console.error('App crashed:', error, errorInfo?.componentStack);
+  }
+
+  render() {
+    if (this.state.hasError) {
+      return (
+        <View style={errorStyles.container}>
+          <Text style={errorStyles.emoji}>!</Text>
+          <Text style={errorStyles.title}>Something went wrong</Text>
+          <Text style={errorStyles.message}>
+            The app ran into an unexpected error. Please try again.
+          </Text>
+          <TouchableOpacity
+            style={errorStyles.button}
+            onPress={() => this.setState({ hasError: false })}
+          >
+            <Text style={errorStyles.buttonText}>Try Again</Text>
+          </TouchableOpacity>
+        </View>
+      );
+    }
+    return this.props.children;
+  }
+}
+
+const errorStyles = RNStyleSheet.create({
+  container: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: '#F7F7F7',
+    padding: 32,
+  },
+  emoji: {
+    fontSize: 48,
+    fontWeight: 'bold',
+    color: '#E72D4D',
+    marginBottom: 16,
+  },
+  title: {
+    fontSize: 22,
+    fontWeight: '700',
+    color: '#294A99',
+    marginBottom: 12,
+    textAlign: 'center',
+  },
+  message: {
+    fontSize: 16,
+    color: '#666',
+    textAlign: 'center',
+    marginBottom: 24,
+    lineHeight: 22,
+  },
+  button: {
+    backgroundColor: '#294A99',
+    paddingHorizontal: 32,
+    paddingVertical: 14,
+    borderRadius: 8,
+  },
+  buttonText: {
+    color: '#FFFFFF',
+    fontSize: 16,
+    fontWeight: '600',
+  },
+});
 
 // Initialize logger to capture console output
 logger.init();
@@ -42,17 +117,19 @@ const theme = {
 
 export default function App() {
   return (
-    <SafeAreaProvider>
-      <PaperProvider theme={theme}>
-        <OfflineProvider>
-          <AuthProvider>
-            <ChildrenProvider>
-              <AppNavigator />
-              <StatusBar style="auto" />
-            </ChildrenProvider>
-          </AuthProvider>
-        </OfflineProvider>
-      </PaperProvider>
-    </SafeAreaProvider>
+    <ErrorBoundary>
+      <SafeAreaProvider>
+        <PaperProvider theme={theme}>
+          <OfflineProvider>
+            <AuthProvider>
+              <ChildrenProvider>
+                <AppNavigator />
+                <StatusBar style="auto" />
+              </ChildrenProvider>
+            </AuthProvider>
+          </OfflineProvider>
+        </PaperProvider>
+      </SafeAreaProvider>
+    </ErrorBoundary>
   );
 }

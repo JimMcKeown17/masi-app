@@ -15,7 +15,6 @@ import ForgotPasswordScreen from '../screens/auth/ForgotPasswordScreen';
 // Main tab screens
 import HomeScreen from '../screens/main/HomeScreen';
 import TimeEntriesListScreen from '../screens/main/TimeEntriesListScreen';
-import AssessmentsScreen from '../screens/main/AssessmentsScreen';
 import ChildrenListScreen from '../screens/main/ChildrenListScreen';
 import SessionsScreen from '../screens/main/SessionsScreen';
 import ProfileScreen from '../screens/main/ProfileScreen';
@@ -66,8 +65,6 @@ function MainTabNavigator() {
             iconName = focused ? 'people' : 'people-outline';
           } else if (route.name === 'Sessions') {
             iconName = focused ? 'document-text' : 'document-text-outline';
-          } else if (route.name === 'Assessments') {
-            iconName = focused ? 'clipboard' : 'clipboard-outline';
           }
 
           return <Ionicons name={iconName} size={size} color={color} />;
@@ -110,11 +107,6 @@ function MainTabNavigator() {
         name="Sessions"
         component={SessionsScreen}
         options={{ title: 'Sessions' }}
-      />
-      <Tab.Screen
-        name="Assessments"
-        component={AssessmentsScreen}
-        options={{ title: 'Assessments' }}
       />
     </Tab.Navigator>
   );

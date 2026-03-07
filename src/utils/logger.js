@@ -36,17 +36,17 @@ class Logger {
 
     console.log = (...args) => {
       this.addLog('LOG', args);
-      originalLog(...args);
+      if (__DEV__) originalLog(...args);
     };
 
     console.error = (...args) => {
       this.addLog('ERROR', args);
-      originalError(...args);
+      if (__DEV__) originalError(...args);
     };
 
     console.warn = (...args) => {
       this.addLog('WARN', args);
-      originalWarn(...args);
+      if (__DEV__) originalWarn(...args);
     };
 
     // Flush periodically

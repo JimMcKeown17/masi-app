@@ -14,7 +14,13 @@
       "backgroundColor": "#ffffff"
     },
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": false,
+      "bundleIdentifier": "org.masinyusane.masi",
+      "buildNumber": "1",
+      "infoPlist": {
+  "NSLocationWhenInUseUsageDescription": "Masi needs your location to verify you are at the school when signing in and out for time tracking.",
+  "ITSAppUsesNonExemptEncryption": false
+}
     },
     "android": {
       "adaptiveIcon": {
@@ -23,8 +29,20 @@
       },
       "edgeToEdgeEnabled": true,
       "package": "org.masinyusane.masi",
-      "versionCode": 1
+      "versionCode": 1,
+      "permissions": [
+        "ACCESS_FINE_LOCATION",
+        "ACCESS_COARSE_LOCATION"
+      ]
     },
+    "plugins": [
+      [
+        "expo-location",
+        {
+          "locationWhenInUsePermission": "Masi needs your location to verify you are at the school when signing in and out for time tracking."
+        }
+      ]
+    ],
     "web": {
       "favicon": "./assets/favicon.png"
     },
