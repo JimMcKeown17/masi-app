@@ -541,6 +541,7 @@ Field staff often work in remote areas with limited connectivity. When issues oc
 ---
 
 ## Future Enhancements (Post-MVP)
+- **OTA Updates (expo-updates)**: Install `expo-updates` and configure `runtimeVersion` in `app.json` to enable over-the-air JS bundle updates without full store submissions. Critical for pushing bug fixes quickly to field staff.
 - Dark mode
 - Streaks and awards system
 - Admin portal for user management
@@ -551,7 +552,7 @@ Field staff often work in remote areas with limited connectivity. When issues oc
 - Curriculum progress tracking integration
 - Offline map caching for location context
 - Clear Logs button in debug section
-- App version/build info in debug section
+- ~~App version/build info in debug section~~ (Done - shown on Profile screen)
 
 ### Coach Alerts (Post-MVP)
 A lightweight flagging system that surfaces important messages to coaches without requiring a dedicated notification infrastructure.

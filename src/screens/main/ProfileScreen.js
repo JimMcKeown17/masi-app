@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { View, StyleSheet, ScrollView, KeyboardAvoidingView, Platform, Linking, Alert } from 'react-native';
 import { TextInput, Button, Text, Card, Divider, Snackbar } from 'react-native-paper';
+import Constants from 'expo-constants';
 import { useAuth } from '../../context/AuthContext';
 import { colors, spacing, borderRadius, shadows } from '../../constants/colors';
 import { supabase } from '../../services/supabaseClient';
@@ -338,6 +339,14 @@ export default function ProfileScreen({ navigation }) {
           </Card.Content>
         </Card>
 
+        {/* App Version */}
+        <Text variant="bodySmall" style={styles.versionText}>
+          Version {Constants.expoConfig?.version || '?'}
+          {' '}(Build {Platform.OS === 'ios'
+            ? Constants.expoConfig?.ios?.buildNumber
+            : Constants.expoConfig?.android?.versionCode || '?'})
+        </Text>
+
         {/* Sign Out */}
         <Button
           mode="outlined"
@@ -417,6 +426,11 @@ const styles = StyleSheet.create({
     alignSelf: 'flex-start',
     marginTop: -spacing.xs,
     marginBottom: spacing.xs,
+  },
+  versionText: {
+    textAlign: 'center',
+    color: colors.textSecondary,
+    marginVertical: spacing.md,
   },
   signOutButton: {
     margin: spacing.md,
