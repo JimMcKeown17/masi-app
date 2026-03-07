@@ -17,6 +17,7 @@ import HomeScreen from '../screens/main/HomeScreen';
 import TimeEntriesListScreen from '../screens/main/TimeEntriesListScreen';
 import ChildrenListScreen from '../screens/main/ChildrenListScreen';
 import SessionsScreen from '../screens/main/SessionsScreen';
+import AssessmentsScreen from '../screens/main/AssessmentsScreen';
 import ProfileScreen from '../screens/main/ProfileScreen';
 
 // Children screens
@@ -31,6 +32,12 @@ import ClassDetailScreen from '../screens/children/ClassDetailScreen';
 // Session screens
 import SessionFormScreen from '../screens/sessions/SessionFormScreen';
 import SessionHistoryScreen from '../screens/sessions/SessionHistoryScreen';
+
+// Assessment screens
+import AssessmentChildSelectScreen from '../screens/assessments/AssessmentChildSelectScreen';
+import LetterAssessmentScreen from '../screens/assessments/LetterAssessmentScreen';
+import AssessmentResultsScreen from '../screens/assessments/AssessmentResultsScreen';
+import AssessmentHistoryScreen from '../screens/assessments/AssessmentHistoryScreen';
 
 // Sync screen
 import SyncStatusScreen from '../screens/main/SyncStatusScreen';
@@ -68,6 +75,8 @@ function MainTabNavigator() {
             iconName = focused ? 'people' : 'people-outline';
           } else if (route.name === 'Sessions') {
             iconName = focused ? 'document-text' : 'document-text-outline';
+          } else if (route.name === 'Assessments') {
+            iconName = focused ? 'clipboard' : 'clipboard-outline';
           }
 
           return <Ionicons name={iconName} size={size} color={color} />;
@@ -110,6 +119,11 @@ function MainTabNavigator() {
         name="Sessions"
         component={SessionsScreen}
         options={{ title: 'Sessions' }}
+      />
+      <Tab.Screen
+        name="Assessments"
+        component={AssessmentsScreen}
+        options={{ title: 'Assessments' }}
       />
     </Tab.Navigator>
   );
@@ -208,6 +222,32 @@ function MainNavigator() {
         component={SessionHistoryScreen}
         options={{
           title: 'Session History',
+          headerBackTitle: 'Back',
+        }}
+      />
+      <Stack.Screen
+        name="AssessmentChildSelect"
+        component={AssessmentChildSelectScreen}
+        options={{
+          title: 'Select Child',
+          headerBackTitle: 'Back',
+        }}
+      />
+      <Stack.Screen
+        name="LetterAssessment"
+        component={LetterAssessmentScreen}
+        options={{ headerShown: false }}
+      />
+      <Stack.Screen
+        name="AssessmentResults"
+        component={AssessmentResultsScreen}
+        options={{ headerShown: false }}
+      />
+      <Stack.Screen
+        name="AssessmentHistory"
+        component={AssessmentHistoryScreen}
+        options={{
+          title: 'Assessment History',
           headerBackTitle: 'Back',
         }}
       />

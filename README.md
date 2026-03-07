@@ -254,6 +254,12 @@ src/
 
 See `Claude.md` for detailed project specifications and development guidelines.
 
+## Other Notes
+
+Using https://hotpot.ai/ and Canva to help create images for App Stores
+There are multiple versions of the logos saved in the assets folder.
+I didn't use it, but https://easyappicon.com/ seems like a helpful site.
+
 ## License
 
 Proprietary - Nonprofit Organization

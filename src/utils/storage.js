@@ -9,6 +9,7 @@ const STORAGE_KEYS = {
   CHILDREN_GROUPS: '@children_groups',
   SCHOOLS: '@schools',
   CLASSES: '@classes',
+  ASSESSMENTS: '@assessments',
   SYNC_QUEUE: '@sync_queue',
   SYNC_META: '@sync_meta',
   USER_PROFILE: '@user_profile',
@@ -241,6 +242,22 @@ export const storage = {
     return classes.filter(c => c.synced === false);
   },
 
+  // Assessments
+  async getAssessments() {
+    return await this.getItem(STORAGE_KEYS.ASSESSMENTS) || [];
+  },
+
+  async saveAssessment(assessment) {
+    const assessments = await this.getAssessments();
+    assessments.push(assessment);
+    return await this.setItem(STORAGE_KEYS.ASSESSMENTS, assessments);
+  },
+
+  async getUnsyncedAssessments() {
+    const assessments = await this.getAssessments();
+    return assessments.filter(a => a.synced === false);
+  },
+
   // Generic methods for sync operations
   async getUnsyncedRecords(table) {
     const key = STORAGE_KEYS[table.toUpperCase()];
@@ -263,7 +280,7 @@ export const storage = {
   },
 
   async getAllUnsyncedCount() {
-    const tables = ['TIME_ENTRIES', 'SESSIONS', 'CLASSES', 'CHILDREN', 'STAFF_CHILDREN', 'GROUPS', 'CHILDREN_GROUPS'];
+    const tables = ['TIME_ENTRIES', 'SESSIONS', 'CLASSES', 'CHILDREN', 'STAFF_CHILDREN', 'GROUPS', 'CHILDREN_GROUPS', 'ASSESSMENTS'];
     let totalCount = 0;
 
     for (const table of tables) {
@@ -307,6 +324,7 @@ export const storage = {
         STORAGE_KEYS.CHILDREN_GROUPS,
         STORAGE_KEYS.SCHOOLS,
         STORAGE_KEYS.CLASSES,
+        STORAGE_KEYS.ASSESSMENTS,
         STORAGE_KEYS.SYNC_QUEUE,
         STORAGE_KEYS.SYNC_META,
       ];

@@ -51,6 +51,11 @@ const SYNC_TABLES = {
     table: 'children_groups',
     getRecords: () => storage.getUnsyncedChildrenGroups(),
   },
+  ASSESSMENTS: {
+    key: 'ASSESSMENTS',
+    table: 'assessments',
+    getRecords: () => storage.getUnsyncedRecords('ASSESSMENTS'),
+  },
 };
 
 /**
