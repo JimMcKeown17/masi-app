@@ -6,6 +6,9 @@ import {
   Button,
   Card,
   Menu,
+  Portal,
+  Dialog,
+  RadioButton,
   Divider,
   IconButton,
   Snackbar,
@@ -336,31 +339,13 @@ export default function LiteracySessionForm({ navigation }) {
           <Text variant="bodySmall" style={styles.helperText}>
             What level did you focus on today?
           </Text>
-          <Menu
-            visible={readingLevelMenuVisible}
-            onDismiss={() => setReadingLevelMenuVisible(false)}
-            anchor={
-              <Button
-                mode="outlined"
-                onPress={() => setReadingLevelMenuVisible(true)}
-                style={styles.dropdownButton}
-              >
-                {sessionReadingLevel || 'Select a level'}
-              </Button>
-            }
+          <Button
+            mode="outlined"
+            onPress={() => setReadingLevelMenuVisible(true)}
+            style={styles.dropdownButton}
           >
-            {READING_LEVELS.map((level) => (
-              <Menu.Item
-                key={level}
-                title={level}
-                onPress={() => {
-                  setSessionReadingLevel(level);
-                  setReadingLevelMenuVisible(false);
-                  setValidationErrors((prev) => { const { readingLevel, ...rest } = prev; return rest; });
-                }}
-              />
-            ))}
-          </Menu>
+            {sessionReadingLevel || 'Select a level'}
+          </Button>
           {validationErrors.readingLevel && (
             <Text variant="bodySmall" style={styles.errorText}>{validationErrors.readingLevel}</Text>
           )}
@@ -380,27 +365,13 @@ export default function LiteracySessionForm({ navigation }) {
                 <Text variant="bodyMedium" style={styles.childLevelName}>
                   {child.first_name} {child.last_name}
                 </Text>
-                <Menu
-                  visible={openChildLevelMenu === child.id}
-                  onDismiss={() => setOpenChildLevelMenu(null)}
-                  anchor={
-                    <Button
-                      mode="outlined"
-                      onPress={() => setOpenChildLevelMenu(child.id)}
-                      style={styles.childLevelButton}
-                    >
-                      {childReadingLevels[child.id] || 'Not set'}
-                    </Button>
-                  }
+                <Button
+                  mode="outlined"
+                  onPress={() => setOpenChildLevelMenu(child.id)}
+                  style={styles.childLevelButton}
                 >
-                  {READING_LEVELS.map((level) => (
-                    <Menu.Item
-                      key={level}
-                      title={level}
-                      onPress={() => handleSetChildReadingLevel(child.id, level)}
-                    />
-                  ))}
-                </Menu>
+                  {childReadingLevels[child.id] || 'Not set'}
+                </Button>
               </View>
             ))}
           </Card.Content>
@@ -435,6 +406,47 @@ export default function LiteracySessionForm({ navigation }) {
         Submit Session
       </Button>
       </ScrollView>
+
+      {/* ── Session Reading Level Dialog ── */}
+      <Portal>
+        <Dialog visible={readingLevelMenuVisible} onDismiss={() => setReadingLevelMenuVisible(false)}>
+          <Dialog.Title>Session Reading Level</Dialog.Title>
+          <Dialog.Content>
+            <RadioButton.Group
+              onValueChange={(value) => {
+                setSessionReadingLevel(value);
+                setReadingLevelMenuVisible(false);
+                setValidationErrors((prev) => { const { readingLevel, ...rest } = prev; return rest; });
+              }}
+              value={sessionReadingLevel || ''}
+            >
+              {READING_LEVELS.map((level) => (
+                <RadioButton.Item key={level} label={level} value={level} />
+              ))}
+            </RadioButton.Group>
+          </Dialog.Content>
+        </Dialog>
+      </Portal>
+
+      {/* ── Child Reading Level Dialog ── */}
+      <Portal>
+        <Dialog visible={openChildLevelMenu !== null} onDismiss={() => setOpenChildLevelMenu(null)}>
+          <Dialog.Title>Reading Level</Dialog.Title>
+          <Dialog.Content>
+            <RadioButton.Group
+              onValueChange={(value) => handleSetChildReadingLevel(openChildLevelMenu, value)}
+              value={openChildLevelMenu ? (childReadingLevels[openChildLevelMenu] || '') : ''}
+            >
+              {READING_LEVELS.map((level) => (
+                <RadioButton.Item key={level} label={level} value={level} />
+              ))}
+            </RadioButton.Group>
+          </Dialog.Content>
+          <Dialog.Actions>
+            <Button onPress={() => setOpenChildLevelMenu(null)}>Cancel</Button>
+          </Dialog.Actions>
+        </Dialog>
+      </Portal>
 
       <Snackbar
         visible={snackbarVisible}
