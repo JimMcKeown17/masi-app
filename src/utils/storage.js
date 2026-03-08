@@ -7,6 +7,8 @@ const STORAGE_KEYS = {
   STAFF_CHILDREN: '@staff_children',
   GROUPS: '@groups',
   CHILDREN_GROUPS: '@children_groups',
+  SCHOOLS: '@schools',
+  CLASSES: '@classes',
   SYNC_QUEUE: '@sync_queue',
   SYNC_META: '@sync_meta',
   USER_PROFILE: '@user_profile',
@@ -198,6 +200,47 @@ export const storage = {
     return memberships.filter(m => m.synced === false);
   },
 
+  // Schools (read-only cache — admin-managed, not synced by workers)
+  async getSchools() {
+    return await this.getItem(STORAGE_KEYS.SCHOOLS) || [];
+  },
+
+  async setSchools(list) {
+    return await this.setItem(STORAGE_KEYS.SCHOOLS, list);
+  },
+
+  // Classes (offline-first CRUD by workers)
+  async getClasses() {
+    return await this.getItem(STORAGE_KEYS.CLASSES) || [];
+  },
+
+  async saveClass(classData) {
+    const classes = await this.getClasses();
+    classes.push(classData);
+    return await this.setItem(STORAGE_KEYS.CLASSES, classes);
+  },
+
+  async updateClass(id, updates) {
+    const classes = await this.getClasses();
+    const index = classes.findIndex(c => c.id === id);
+    if (index !== -1) {
+      classes[index] = { ...classes[index], ...updates };
+      return await this.setItem(STORAGE_KEYS.CLASSES, classes);
+    }
+    return false;
+  },
+
+  async deleteClass(id) {
+    const classes = await this.getClasses();
+    const filtered = classes.filter(c => c.id !== id);
+    return await this.setItem(STORAGE_KEYS.CLASSES, filtered);
+  },
+
+  async getUnsyncedClasses() {
+    const classes = await this.getClasses();
+    return classes.filter(c => c.synced === false);
+  },
+
   // Generic methods for sync operations
   async getUnsyncedRecords(table) {
     const key = STORAGE_KEYS[table.toUpperCase()];
@@ -220,7 +263,7 @@ export const storage = {
   },
 
   async getAllUnsyncedCount() {
-    const tables = ['TIME_ENTRIES', 'SESSIONS', 'CHILDREN', 'STAFF_CHILDREN', 'GROUPS', 'CHILDREN_GROUPS'];
+    const tables = ['TIME_ENTRIES', 'SESSIONS', 'CLASSES', 'CHILDREN', 'STAFF_CHILDREN', 'GROUPS', 'CHILDREN_GROUPS'];
     let totalCount = 0;
 
     for (const table of tables) {
@@ -262,6 +305,8 @@ export const storage = {
         STORAGE_KEYS.STAFF_CHILDREN,
         STORAGE_KEYS.GROUPS,
         STORAGE_KEYS.CHILDREN_GROUPS,
+        STORAGE_KEYS.SCHOOLS,
+        STORAGE_KEYS.CLASSES,
         STORAGE_KEYS.SYNC_QUEUE,
         STORAGE_KEYS.SYNC_META,
       ];

@@ -7,6 +7,7 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { AuthProvider } from './src/context/AuthContext';
 import { OfflineProvider } from './src/context/OfflineContext';
 import { ChildrenProvider } from './src/context/ChildrenContext';
+import { ClassesProvider } from './src/context/ClassesContext';
 import AppNavigator from './src/navigation/AppNavigator';
 import { colors } from './src/constants/colors';
 import { logger } from './src/utils/logger';
@@ -123,8 +124,10 @@ export default function App() {
           <OfflineProvider>
             <AuthProvider>
               <ChildrenProvider>
-                <AppNavigator />
-                <StatusBar style="auto" />
+                <ClassesProvider>
+                  <AppNavigator />
+                  <StatusBar style="auto" />
+                </ClassesProvider>
               </ChildrenProvider>
             </AuthProvider>
           </OfflineProvider>
