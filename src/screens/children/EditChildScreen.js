@@ -8,23 +8,30 @@ import {
   HelperText,
   Snackbar,
   Chip,
+  Portal,
+  Dialog,
+  RadioButton,
 } from 'react-native-paper';
 import { colors, spacing } from '../../constants/colors';
 import { useChildren } from '../../context/ChildrenContext';
+import { useClasses } from '../../context/ClassesContext';
+import { GENDERS } from '../../constants/options';
 
 export default function EditChildScreen({ route, navigation }) {
   const { childId } = route.params;
   const { children, updateChild, deleteChild, getGroupsForChild } = useChildren();
+  const { classes, schools } = useClasses();
 
   const child = children.find(c => c.id === childId);
   const childGroups = getGroupsForChild(childId);
+  const childClass = classes.find(c => c.id === child?.class_id);
+  const childSchool = schools.find(s => s.id === childClass?.school_id);
 
   const [firstName, setFirstName] = useState('');
   const [lastName, setLastName] = useState('');
-  const [teacher, setTeacher] = useState('');
-  const [className, setClassName] = useState('');
   const [age, setAge] = useState('');
-  const [school, setSchool] = useState('');
+  const [gender, setGender] = useState('');
+  const [genderDialogVisible, setGenderDialogVisible] = useState(false);
 
   const [errors, setErrors] = useState({});
   const [loading, setLoading] = useState(false);
@@ -35,10 +42,8 @@ export default function EditChildScreen({ route, navigation }) {
     if (child) {
       setFirstName(child.first_name || '');
       setLastName(child.last_name || '');
-      setTeacher(child.teacher || '');
-      setClassName(child.class || '');
       setAge(child.age ? child.age.toString() : '');
-      setSchool(child.school || '');
+      setGender(child.gender || '');
     } else {
       setSnackbar({ visible: true, message: 'Child not found' });
       setTimeout(() => navigation.goBack(), 1500);
@@ -74,10 +79,8 @@ export default function EditChildScreen({ route, navigation }) {
       const result = await updateChild(childId, {
         first_name: firstName.trim(),
         last_name: lastName.trim(),
-        teacher: teacher.trim() || null,
-        class: className.trim() || null,
         age: age ? parseInt(age) : null,
-        school: school.trim() || null,
+        gender: gender || null,
       });
 
       if (result.success) {
@@ -128,6 +131,19 @@ export default function EditChildScreen({ route, navigation }) {
       keyboardVerticalOffset={90}
     >
       <ScrollView contentContainerStyle={styles.scrollContent}>
+        {/* Class info (read-only) */}
+        {childClass && (
+          <Card style={styles.classInfoCard}>
+            <Card.Content>
+              <Text variant="labelSmall" style={styles.classLabel}>Class</Text>
+              <Text variant="titleMedium">{childClass.name}</Text>
+              <Text variant="bodySmall" style={styles.classDetail}>
+                {childSchool?.name || 'Unknown school'} • {childClass.grade} • {childClass.teacher}
+              </Text>
+            </Card.Content>
+          </Card>
+        )}
+
         <Card style={styles.card}>
           <Card.Content>
             <Text variant="titleLarge" style={styles.title}>
@@ -160,24 +176,6 @@ export default function EditChildScreen({ route, navigation }) {
               <HelperText type="error">{errors.lastName}</HelperText>
             )}
 
-            {/* Teacher */}
-            <TextInput
-              label="Teacher"
-              value={teacher}
-              onChangeText={setTeacher}
-              mode="outlined"
-              style={styles.input}
-            />
-
-            {/* Class */}
-            <TextInput
-              label="Class"
-              value={className}
-              onChangeText={setClassName}
-              mode="outlined"
-              style={styles.input}
-            />
-
             {/* Age */}
             <TextInput
               label="Age"
@@ -192,13 +190,15 @@ export default function EditChildScreen({ route, navigation }) {
               <HelperText type="error">{errors.age}</HelperText>
             )}
 
-            {/* School */}
+            {/* Gender picker */}
             <TextInput
-              label="School"
-              value={school}
-              onChangeText={setSchool}
+              label="Gender"
+              value={gender}
               mode="outlined"
               style={styles.input}
+              editable={false}
+              right={<TextInput.Icon icon="chevron-down" onPress={() => setGenderDialogVisible(true)} />}
+              onPressIn={() => setGenderDialogVisible(true)}
             />
 
             {/* Submit Button */}
@@ -256,6 +256,26 @@ export default function EditChildScreen({ route, navigation }) {
         </Button>
       </ScrollView>
 
+      {/* Gender Dialog */}
+      <Portal>
+        <Dialog visible={genderDialogVisible} onDismiss={() => setGenderDialogVisible(false)}>
+          <Dialog.Title>Select Gender</Dialog.Title>
+          <Dialog.Content>
+            <RadioButton.Group
+              onValueChange={(value) => {
+                setGender(value);
+                setGenderDialogVisible(false);
+              }}
+              value={gender}
+            >
+              {GENDERS.map(g => (
+                <RadioButton.Item key={g} label={g} value={g} />
+              ))}
+            </RadioButton.Group>
+          </Dialog.Content>
+        </Dialog>
+      </Portal>
+
       <Snackbar
         visible={snackbar.visible}
         onDismiss={() => setSnackbar({ ...snackbar, visible: false })}
@@ -274,6 +294,19 @@ const styles = StyleSheet.create({
   },
   scrollContent: {
     padding: spacing.md,
+  },
+  classInfoCard: {
+    backgroundColor: '#EEF2FF',
+    marginBottom: spacing.md,
+  },
+  classLabel: {
+    color: colors.primary,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
+  classDetail: {
+    color: colors.textSecondary,
+    marginTop: 2,
   },
   card: {
     backgroundColor: colors.surface,

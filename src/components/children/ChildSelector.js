@@ -10,9 +10,11 @@ import {
 } from 'react-native-paper';
 import { colors, spacing, borderRadius } from '../../constants/colors';
 import { useChildren } from '../../context/ChildrenContext';
+import { useClasses } from '../../context/ClassesContext';
 
 export default function ChildSelector({ selectedChildren, onSelectionChange }) {
   const { children, groups, getChildrenInGroup } = useChildren();
+  const { classes } = useClasses();
   const [searchTerm, setSearchTerm] = useState('');
   const [groupMenuVisible, setGroupMenuVisible] = useState(false);
 
@@ -100,7 +102,7 @@ export default function ChildSelector({ selectedChildren, onSelectionChange }) {
           return (
             <List.Item
               title={`${item.first_name} ${item.last_name}`}
-              description={item.class || item.teacher || undefined}
+              description={classes.find(c => c.id === item.class_id)?.name || 'No class'}
               onPress={() => handleToggleChild(item)}
               right={(props) =>
                 isSelected ? (

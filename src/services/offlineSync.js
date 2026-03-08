@@ -26,6 +26,11 @@ const SYNC_TABLES = {
     table: 'sessions',
     getRecords: () => storage.getUnsyncedRecords('SESSIONS'),
   },
+  CLASSES: {
+    key: 'CLASSES',
+    table: 'classes',
+    getRecords: () => storage.getUnsyncedClasses(),
+  },
   CHILDREN: {
     key: 'CHILDREN',
     table: 'children',
@@ -284,4 +289,20 @@ export const resetSyncMeta = async () => {
 export const retryFailedItem = async (table, id) => {
   await storage.removeFailedItem(table, id);
   await storage.clearLastSyncError(table, id);
+};
+
+/**
+ * Fetch schools from Supabase and cache locally.
+ * Schools are admin-managed (read-only for workers), so this is NOT
+ * part of SYNC_TABLES — it's a one-way fetch, not an upsert.
+ */
+export const fetchAndCacheSchools = async () => {
+  const { data, error } = await supabase
+    .from('schools')
+    .select('*')
+    .order('name');
+
+  if (error) throw error;
+  await storage.setSchools(data || []);
+  return data || [];
 };

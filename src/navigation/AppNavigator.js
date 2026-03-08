@@ -24,6 +24,9 @@ import AddChildScreen from '../screens/children/AddChildScreen';
 import EditChildScreen from '../screens/children/EditChildScreen';
 import GroupManagementScreen from '../screens/children/GroupManagementScreen';
 import AddChildToGroupScreen from '../screens/children/AddChildToGroupScreen';
+import CreateClassScreen from '../screens/children/CreateClassScreen';
+import EditClassScreen from '../screens/children/EditClassScreen';
+import ClassDetailScreen from '../screens/children/ClassDetailScreen';
 
 // Session screens
 import SessionFormScreen from '../screens/sessions/SessionFormScreen';
@@ -133,6 +136,30 @@ function MainNavigator() {
         component={TimeEntriesListScreen}
         options={{
           title: 'Work History',
+          headerBackTitle: 'Back',
+        }}
+      />
+      <Stack.Screen
+        name="CreateClass"
+        component={CreateClassScreen}
+        options={{
+          title: 'Create Class',
+          headerBackTitle: 'Back',
+        }}
+      />
+      <Stack.Screen
+        name="EditClass"
+        component={EditClassScreen}
+        options={{
+          title: 'Edit Class',
+          headerBackTitle: 'Back',
+        }}
+      />
+      <Stack.Screen
+        name="ClassDetail"
+        component={ClassDetailScreen}
+        options={{
+          title: 'Class Details',
           headerBackTitle: 'Back',
         }}
       />
