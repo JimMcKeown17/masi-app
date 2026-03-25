@@ -40,7 +40,7 @@ const styles = StyleSheet.create({
   },
   barBackground: {
     flex: 1,
-    height: 10,
+    height: 14,
     backgroundColor: colors.border,
     borderRadius: borderRadius.sm,
     overflow: 'hidden',

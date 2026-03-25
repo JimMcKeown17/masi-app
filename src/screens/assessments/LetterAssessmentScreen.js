@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { View, StyleSheet, Alert, ScrollView } from 'react-native';
-import { Text, Button, Portal, Dialog } from 'react-native-paper';
+import { View, StyleSheet, Alert, useWindowDimensions } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { Text, Button } from 'react-native-paper';
 import { useAuth } from '../../context/AuthContext';
 import { useOffline } from '../../context/OfflineContext';
 import { storage } from '../../utils/storage';
@@ -63,6 +64,34 @@ export default function LetterAssessmentScreen({ navigation, route }) {
   letterStatesRef.current = letterStates;
   lastTappedIndexRef.current = lastTappedIndex;
   timeRemainingRef.current = timeRemaining;
+
+  const { width: screenWidth, height: screenHeight } = useWindowDimensions();
+  const insets = useSafeAreaInsets();
+
+  // Compute tile size to fill available viewport
+  const COLUMNS = 5;
+  const ROWS = 4;
+  const GAP = spacing.sm; // 8px
+
+  const timerRowHeight = spacing.md * 2 + 14; // paddingVertical + bar height
+  const pageInfoHeight = 20 + spacing.xs + 8 + spacing.sm; // text + gap + dot + marginBottom
+  const navRowHeight = 48 + spacing.md + spacing.md; // button height + padding top + padding bottom
+  const gridVerticalPadding = spacing.sm * 2;
+
+  const availableHeight = screenHeight
+    - insets.top
+    - timerRowHeight
+    - pageInfoHeight
+    - navRowHeight
+    - Math.max(insets.bottom, spacing.md)
+    - gridVerticalPadding;
+
+  const gridHorizontalPadding = spacing.md * 2;
+  const availableWidth = screenWidth - gridHorizontalPadding;
+
+  const tileWidthFromColumns = (availableWidth - GAP * (COLUMNS - 1)) / COLUMNS;
+  const tileHeightFromRows = (availableHeight - GAP * (ROWS - 1)) / ROWS;
+  const tileSize = Math.max(44, Math.floor(Math.min(tileWidthFromColumns, tileHeightFromRows)));
 
   const totalLetters = letterSet.letters.length;
   const totalPages = Math.ceil(totalLetters / letterSet.lettersPerPage);
@@ -193,7 +222,7 @@ export default function LetterAssessmentScreen({ navigation, route }) {
   // --- Instructions Phase ---
   if (phase === 'instructions') {
     return (
-      <View style={styles.container}>
+      <View style={[styles.container, { paddingTop: insets.top }]}>
         <View style={styles.instructionsContainer}>
           <Text variant="headlineSmall" style={styles.instructionsTitle}>
             Letter Sound Assessment
@@ -245,7 +274,7 @@ export default function LetterAssessmentScreen({ navigation, route }) {
 
   // --- Active / Finished Phase ---
   return (
-    <View style={styles.container}>
+    <View style={[styles.container, { paddingTop: insets.top }]}>
       <View style={styles.timerRow}>
         <AssessmentTimer timeRemaining={timeRemaining} isPaused={isPaused} />
       </View>
@@ -264,17 +293,19 @@ export default function LetterAssessmentScreen({ navigation, route }) {
         </View>
       </View>
 
-      <ScrollView contentContainerStyle={styles.gridContainer}>
+      <View style={styles.gridContainer}>
         <EgraLetterGrid
           letters={pageLetters}
           pageOffset={startPage}
           letterStates={letterStates}
           onToggle={handleToggle}
           disabled={phase === 'finished'}
+          tileSize={tileSize}
+          gap={GAP}
         />
-      </ScrollView>
+      </View>
 
-      <View style={styles.navRow}>
+      <View style={[styles.navRow, { paddingBottom: Math.max(insets.bottom, spacing.md) }]}>
         <Button
           mode="outlined"
           onPress={() => setCurrentPage((p) => p - 1)}
@@ -318,7 +349,6 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: colors.background,
-    paddingTop: 60,
   },
   // Instructions
   instructionsContainer: {
@@ -385,7 +415,9 @@ const styles = StyleSheet.create({
     backgroundColor: colors.primary,
   },
   gridContainer: {
-    flexGrow: 1,
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.sm,
   },
@@ -394,7 +426,6 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
     padding: spacing.md,
-    paddingBottom: spacing.xl,
     backgroundColor: colors.surface,
     borderTopWidth: 1,
     borderTopColor: colors.border,

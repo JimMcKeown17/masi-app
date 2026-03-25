@@ -3,9 +3,12 @@ import { View, StyleSheet, Pressable } from 'react-native';
 import { Text } from 'react-native-paper';
 import { colors, spacing, borderRadius } from '../../constants/colors';
 
-export default function EgraLetterGrid({ letters, pageOffset, letterStates, onToggle, disabled }) {
+export default function EgraLetterGrid({ letters, pageOffset, letterStates, onToggle, disabled, tileSize, gap }) {
+  const baseFontSize = Math.max(14, Math.floor(tileSize * 0.35));
+  const digraphFontSize = Math.max(12, Math.floor(tileSize * 0.28));
+
   return (
-    <View style={styles.grid}>
+    <View style={[styles.grid, { gap }]}>
       {letters.map((letter, i) => {
         const globalIndex = pageOffset + i;
         const isCorrect = letterStates[globalIndex] === true;
@@ -15,6 +18,7 @@ export default function EgraLetterGrid({ letters, pageOffset, letterStates, onTo
             onPress={() => !disabled && onToggle(globalIndex)}
             style={({ pressed }) => [
               styles.tile,
+              { width: tileSize, height: tileSize },
               isCorrect && styles.tileCorrect,
               pressed && !disabled && styles.tilePressed,
               disabled && styles.tileDisabled,
@@ -25,8 +29,9 @@ export default function EgraLetterGrid({ letters, pageOffset, letterStates, onTo
             <Text
               style={[
                 styles.tileText,
+                { fontSize: baseFontSize },
                 isCorrect && styles.tileTextCorrect,
-                letter.length > 1 && styles.tileTextDigraph,
+                letter.length > 1 && { fontSize: digraphFontSize },
               ]}
             >
               {letter}
@@ -42,12 +47,9 @@ const styles = StyleSheet.create({
   grid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: spacing.sm,
     justifyContent: 'center',
   },
   tile: {
-    width: '18%',
-    aspectRatio: 1,
     justifyContent: 'center',
     alignItems: 'center',
     backgroundColor: colors.surface,
@@ -60,20 +62,17 @@ const styles = StyleSheet.create({
     borderColor: colors.success,
   },
   tilePressed: {
-    opacity: 0.7,
+    transform: [{ scale: 0.95 }],
+    opacity: 0.85,
   },
   tileDisabled: {
     opacity: 0.6,
   },
   tileText: {
     color: colors.text,
-    fontSize: 20,
     fontWeight: '600',
   },
   tileTextCorrect: {
     color: '#FFFFFF',
-  },
-  tileTextDigraph: {
-    fontSize: 16,
   },
 });
