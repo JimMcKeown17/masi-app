@@ -27,6 +27,19 @@ Bottom tabs: Home → My Children → Sessions → Assessments
 - Time tab removed; Assessments tab added as placeholder for future phase
 See PRD.md for complete app structure.
 
+## Deployment Status — Multiple App Versions in the Wild
+
+The app launched in early March 2026 and is in its **first two weeks of field testing**. Multiple versions are simultaneously deployed across iOS and Android devices. Users do not update immediately.
+
+**Rule: prefer backwards-compatible changes wherever possible.**
+
+For database schema changes specifically:
+- **Safe:** Adding nullable columns, adding new tables, relaxing constraints
+- **Risky:** Dropping or renaming columns, tightening constraints, changing column types
+- **Pattern:** Add the new column first → deploy the app → drop the old column only after all users have updated
+
+When dropping a column that an older app version still writes, sync will fail with `PGRST204` for every affected record, cascading into FK failures on dependent tables. See migration 07 for an example of the compatibility fix this required.
+
 ## Key Implementation Patterns
 
 ### Offline Sync Strategy

@@ -540,6 +540,22 @@ Field staff often work in remote areas with limited connectivity. When issues oc
 
 ---
 
+## Improvements Backlog (Field Testing Feedback)
+
+Items discovered during the first weeks of field testing (March 2026). Prioritise these ahead of post-MVP features since they affect active testers.
+
+### Sync UX: "Retry All Failed" Button
+**Problem**: When multiple records hit `MAX_RETRY_ATTEMPTS` (5), each one is moved to the Failed Items list and must be retried individually. During the March 2026 schema incident, one tester had 9 permanently-failed records (children, staff_children, children_groups) — each requiring a separate tap. The "Unsynced Items" section shows them as "pending" with no visual distinction from records that are still actively retrying, so the user keeps tapping "Sync Now" expecting progress.
+
+**Proposed fix:**
+1. Add a **"Retry All"** button at the top of the Failed Items section that clears retry counters for all failed records and triggers a sync in one tap.
+2. Visually distinguish "waiting to sync" items from "permanently failed" items in the Unsynced Items section — e.g., show failed items in red/orange with an error icon instead of the upload icon.
+3. Consider surfacing the Failed Items section more prominently (above the Sync Now button, or as a warning banner) so users don't miss it.
+
+**Affected files:** `SyncStatusScreen.js`, `offlineSync.js` (add `retryAllFailed` export)
+
+---
+
 ## Future Enhancements (Post-MVP)
 - **OTA Updates (expo-updates)**: Install `expo-updates` and configure `runtimeVersion` in `app.json` to enable over-the-air JS bundle updates without full store submissions. Critical for pushing bug fixes quickly to field staff.
 - Dark mode
