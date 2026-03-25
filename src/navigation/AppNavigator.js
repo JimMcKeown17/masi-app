@@ -23,8 +23,6 @@ import ProfileScreen from '../screens/main/ProfileScreen';
 // Children screens
 import AddChildScreen from '../screens/children/AddChildScreen';
 import EditChildScreen from '../screens/children/EditChildScreen';
-import GroupManagementScreen from '../screens/children/GroupManagementScreen';
-import AddChildToGroupScreen from '../screens/children/AddChildToGroupScreen';
 import CreateClassScreen from '../screens/children/CreateClassScreen';
 import EditClassScreen from '../screens/children/EditClassScreen';
 import ClassDetailScreen from '../screens/children/ClassDetailScreen';
@@ -190,22 +188,6 @@ function MainNavigator() {
         component={EditChildScreen}
         options={{
           title: 'Edit Child',
-          headerBackTitle: 'Back',
-        }}
-      />
-      <Stack.Screen
-        name="GroupManagement"
-        component={GroupManagementScreen}
-        options={{
-          title: 'Manage Groups',
-          headerBackTitle: 'Back',
-        }}
-      />
-      <Stack.Screen
-        name="AddChildToGroup"
-        component={AddChildToGroupScreen}
-        options={{
-          title: 'Add to Group',
           headerBackTitle: 'Back',
         }}
       />

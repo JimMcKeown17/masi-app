@@ -1,23 +1,56 @@
-import React from 'react';
-import { View, StyleSheet, FlatList } from 'react-native';
+import React, { useState, useCallback } from 'react';
+import { View, StyleSheet, FlatList, TouchableOpacity } from 'react-native';
 import {
   Text,
   Card,
   FAB,
   List,
   IconButton,
-  Button,
 } from 'react-native-paper';
-import { colors, spacing } from '../../constants/colors';
+import { colors, spacing, borderRadius } from '../../constants/colors';
 import { useClasses } from '../../context/ClassesContext';
+import { useChildren } from '../../context/ChildrenContext';
+import GroupPickerBottomSheet, { getGroupColor } from '../../components/children/GroupPickerBottomSheet';
 
 export default function ClassDetailScreen({ route, navigation }) {
   const { classId } = route.params;
   const { classes, schools, getChildrenInClass } = useClasses();
+  const { groups, childrenGroups } = useChildren();
 
   const classItem = classes.find(c => c.id === classId);
   const childrenInClass = getChildrenInClass(classId);
   const school = schools.find(s => s.id === classItem?.school_id);
+
+  // Bottom sheet state
+  const [pickerVisible, setPickerVisible] = useState(false);
+  const [selectedChild, setSelectedChild] = useState(null);
+
+  // Force re-render when groups change (after assignment)
+  const [, setRefreshKey] = useState(0);
+  const handleGroupChanged = useCallback(() => {
+    setRefreshKey(k => k + 1);
+  }, []);
+
+  /**
+   * Get the current group for a child (for this user's groups only).
+   * Returns { group, groupIndex } or { group: null, groupIndex: -1 }
+   */
+  const getChildGroup = (childId) => {
+    const groupIds = new Set(groups.map(g => g.id));
+    const membership = childrenGroups.find(
+      cg => cg.child_id === childId && groupIds.has(cg.group_id)
+    );
+    if (!membership) return { group: null, groupIndex: -1 };
+
+    const sortedGroups = [...groups].sort((a, b) => a.name.localeCompare(b.name));
+    const groupIndex = sortedGroups.findIndex(g => g.id === membership.group_id);
+    return { group: sortedGroups[groupIndex], groupIndex };
+  };
+
+  const openGroupPicker = (child) => {
+    setSelectedChild(child);
+    setPickerVisible(true);
+  };
 
   if (!classItem) {
     return (
@@ -26,6 +59,62 @@ export default function ClassDetailScreen({ route, navigation }) {
       </View>
     );
   }
+
+  const renderChildItem = ({ item }) => {
+    const { group, groupIndex } = getChildGroup(item.id);
+    const colorScheme = group ? getGroupColor(groupIndex) : null;
+
+    return (
+      <TouchableOpacity
+        style={styles.childCard}
+        onPress={() => navigation.navigate('EditChild', { childId: item.id })}
+        activeOpacity={0.7}
+      >
+        <View style={styles.childInfo}>
+          <Text variant="bodyLarge" style={styles.childName}>
+            {item.first_name} {item.last_name}
+          </Text>
+          <Text variant="bodySmall" style={styles.childDetail}>
+            {item.age ? `Age ${item.age}` : ''}
+            {item.age && item.gender ? ' • ' : ''}
+            {item.gender || ''}
+          </Text>
+        </View>
+
+        <View style={styles.chipArea}>
+          {/* Unsynced indicator */}
+          {!item.synced && (
+            <List.Icon
+              icon="cloud-upload-outline"
+              color={colors.accent}
+              style={styles.syncIcon}
+            />
+          )}
+
+          {/* Group chip */}
+          {group ? (
+            <TouchableOpacity
+              style={[styles.groupChip, { backgroundColor: colorScheme.bg }]}
+              onPress={() => openGroupPicker(item)}
+              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+            >
+              <Text style={[styles.groupChipText, { color: colorScheme.text }]}>
+                {group.name} ▾
+              </Text>
+            </TouchableOpacity>
+          ) : (
+            <TouchableOpacity
+              style={styles.assignChip}
+              onPress={() => openGroupPicker(item)}
+              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+            >
+              <Text style={styles.assignChipText}>+ Assign Group</Text>
+            </TouchableOpacity>
+          )}
+        </View>
+      </TouchableOpacity>
+    );
+  };
 
   return (
     <View style={styles.container}>
@@ -62,24 +151,7 @@ export default function ClassDetailScreen({ route, navigation }) {
       <FlatList
         data={childrenInClass}
         keyExtractor={(item) => item.id}
-        renderItem={({ item }) => (
-          <List.Item
-            title={`${item.first_name} ${item.last_name}`}
-            description={`Age ${item.age || 'N/A'}${item.gender ? ` • ${item.gender}` : ''}`}
-            left={props => <List.Icon {...props} icon="account" />}
-            right={props =>
-              !item.synced && (
-                <List.Icon
-                  {...props}
-                  icon="cloud-upload-outline"
-                  color={colors.accent}
-                />
-              )
-            }
-            onPress={() => navigation.navigate('EditChild', { childId: item.id })}
-            style={styles.listItem}
-          />
-        )}
+        renderItem={renderChildItem}
         ListEmptyComponent={
           <View style={styles.emptyState}>
             <Text variant="bodyMedium" style={styles.emptyText}>
@@ -95,24 +167,27 @@ export default function ClassDetailScreen({ route, navigation }) {
         }
       />
 
-      {/* Manage Groups button */}
-      {childrenInClass.length > 0 && (
-        <Button
-          mode="outlined"
-          onPress={() => navigation.navigate('GroupManagement')}
-          style={styles.groupButton}
-          icon="folder-multiple"
-        >
-          Manage Groups
-        </Button>
-      )}
-
       {/* FAB to add child */}
       <FAB
         icon="plus"
         style={styles.fab}
         onPress={() => navigation.navigate('AddChild', { classId })}
       />
+
+      {/* Group Picker Bottom Sheet */}
+      {selectedChild && (
+        <GroupPickerBottomSheet
+          visible={pickerVisible}
+          onDismiss={() => {
+            setPickerVisible(false);
+            setSelectedChild(null);
+          }}
+          childId={selectedChild.id}
+          childName={`${selectedChild.first_name} ${selectedChild.last_name}`}
+          currentGroupId={getChildGroup(selectedChild.id).group?.id || null}
+          onGroupChanged={handleGroupChanged}
+        />
+      )}
     </View>
   );
 }
@@ -142,12 +217,62 @@ const styles = StyleSheet.create({
     marginHorizontal: spacing.md,
     marginBottom: spacing.sm,
   },
-  listItem: {
+  childCard: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
     backgroundColor: colors.surface,
     marginHorizontal: spacing.md,
     marginVertical: spacing.xs,
-    borderRadius: 8,
+    borderRadius: borderRadius.sm,
+    padding: spacing.md,
     elevation: 1,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 2,
+  },
+  childInfo: {
+    flex: 1,
+    marginRight: spacing.sm,
+  },
+  childName: {
+    fontWeight: '600',
+  },
+  childDetail: {
+    color: colors.textSecondary,
+    marginTop: 2,
+  },
+  chipArea: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  syncIcon: {
+    margin: 0,
+    marginRight: spacing.xs,
+  },
+  groupChip: {
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 12,
+  },
+  groupChipText: {
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  assignChip: {
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 12,
+    borderWidth: 1.5,
+    borderStyle: 'dashed',
+    borderColor: '#F9A825',
+    backgroundColor: '#FFF8E1',
+  },
+  assignChipText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#F57F17',
   },
   emptyContainer: {
     flex: 1,
@@ -161,10 +286,6 @@ const styles = StyleSheet.create({
   emptyText: {
     color: colors.textSecondary,
     textAlign: 'center',
-  },
-  groupButton: {
-    margin: spacing.md,
-    marginTop: spacing.sm,
   },
   fab: {
     position: 'absolute',

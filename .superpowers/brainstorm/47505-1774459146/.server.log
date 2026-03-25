@@ -1,0 +1,5 @@
+{"type":"server-started","port":64837,"host":"127.0.0.1","url_host":"localhost","url":"http://localhost:64837","screen_dir":"/Users/jimmckeown/Development/masi-app/.superpowers/brainstorm/47505-1774459146"}
+{"type":"screen-added","file":"/Users/jimmckeown/Development/masi-app/.superpowers/brainstorm/47505-1774459146/class-detail-redesign.html"}
+{"type":"screen-added","file":"/Users/jimmckeown/Development/masi-app/.superpowers/brainstorm/47505-1774459146/edit-child-and-create-class.html"}
+{"type":"screen-added","file":"/Users/jimmckeown/Development/masi-app/.superpowers/brainstorm/47505-1774459146/waiting.html"}
+{"type":"server-stopped","reason":"idle timeout"}

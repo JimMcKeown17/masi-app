@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from 'react';
-import { View, StyleSheet, FlatList, RefreshControl } from 'react-native';
+import { View, StyleSheet, FlatList, RefreshControl, TouchableOpacity } from 'react-native';
 import {
   Text,
   Searchbar,
@@ -13,7 +13,7 @@ import { useClasses } from '../../context/ClassesContext';
 import { useOffline } from '../../context/OfflineContext';
 
 export default function ChildrenListScreen({ navigation }) {
-  const { children, loading, loadChildren } = useChildren();
+  const { children, groups, childrenGroups, loading, loadChildren } = useChildren();
   const { classes, schools, loading: classesLoading, loadClasses, getChildrenInClass } = useClasses();
   const { refreshSyncStatus } = useOffline();
 
@@ -39,6 +39,22 @@ export default function ChildrenListScreen({ navigation }) {
     });
   }, [classes, schools, searchTerm]);
 
+  /**
+   * Count unique groups that have at least one child in this class.
+   */
+  const getGroupCountForClass = (classId) => {
+    const classChildIds = new Set(
+      getChildrenInClass(classId).map(c => c.id)
+    );
+    const groupIdsInClass = new Set();
+    childrenGroups.forEach(cg => {
+      if (classChildIds.has(cg.child_id)) {
+        groupIdsInClass.add(cg.group_id);
+      }
+    });
+    return groupIdsInClass.size;
+  };
+
   const onRefresh = async () => {
     setRefreshing(true);
     await loadChildren();
@@ -47,9 +63,12 @@ export default function ChildrenListScreen({ navigation }) {
     setRefreshing(false);
   };
 
+  const hasClasses = classes.length > 0;
+
   const renderClassCard = ({ item: cls }) => {
     const school = schools.find(s => s.id === cls.school_id);
     const childCount = getChildrenInClass(cls.id).length;
+    const groupCount = getGroupCountForClass(cls.id);
 
     return (
       <Card
@@ -73,11 +92,44 @@ export default function ChildrenListScreen({ navigation }) {
           </Text>
           <Text variant="bodySmall" style={styles.childCount}>
             {childCount} {childCount === 1 ? 'child' : 'children'}
+            {groupCount > 0 && ` · ${groupCount} ${groupCount === 1 ? 'group' : 'groups'}`}
           </Text>
         </Card.Content>
       </Card>
     );
   };
+
+  const renderFooter = () => {
+    if (!hasClasses) return null;
+    return (
+      <TouchableOpacity
+        style={styles.addClassLink}
+        onPress={() => navigation.navigate('CreateClass')}
+      >
+        <Text style={styles.addClassLinkText}>+ Add another class</Text>
+      </TouchableOpacity>
+    );
+  };
+
+  const renderEmptyState = () => (
+    <View style={styles.emptyState}>
+      <Text style={styles.emptyIcon}>📚</Text>
+      <Text variant="headlineSmall" style={styles.emptyTitle}>
+        No classes yet
+      </Text>
+      <Text variant="bodyMedium" style={styles.emptyText}>
+        Create your first class to start adding children
+      </Text>
+      <Button
+        mode="contained"
+        onPress={() => navigation.navigate('CreateClass')}
+        style={styles.emptyCreateButton}
+        icon="plus"
+      >
+        Create Class
+      </Button>
+    </View>
+  );
 
   return (
     <View style={styles.container}>
@@ -106,16 +158,6 @@ export default function ChildrenListScreen({ navigation }) {
         </Banner>
       )}
 
-      {/* Create Class button */}
-      <Button
-        mode="contained"
-        onPress={() => navigation.navigate('CreateClass')}
-        style={styles.createButton}
-        icon="plus"
-      >
-        Create Class
-      </Button>
-
       {/* Classes list */}
       <FlatList
         data={filteredClasses}
@@ -124,21 +166,12 @@ export default function ChildrenListScreen({ navigation }) {
         refreshControl={
           <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
         }
-        ListEmptyComponent={
-          <View style={styles.emptyState}>
-            <Text variant="headlineSmall" style={styles.emptyTitle}>
-              No classes yet
-            </Text>
-            <Text variant="bodyMedium" style={styles.emptyText}>
-              Create your first class to get started.
-            </Text>
-          </View>
-        }
+        ListEmptyComponent={renderEmptyState}
+        ListFooterComponent={renderFooter}
         contentContainerStyle={
           filteredClasses.length === 0 ? styles.emptyContainer : null
         }
       />
-
     </View>
   );
 }
@@ -157,10 +190,6 @@ const styles = StyleSheet.create({
     backgroundColor: colors.accent,
     marginHorizontal: spacing.md,
     marginBottom: spacing.sm,
-  },
-  createButton: {
-    marginHorizontal: spacing.md,
-    marginBottom: spacing.md,
   },
   classCard: {
     backgroundColor: colors.surface,
@@ -191,6 +220,15 @@ const styles = StyleSheet.create({
     borderRadius: 4,
     overflow: 'hidden',
   },
+  addClassLink: {
+    alignItems: 'center',
+    paddingVertical: spacing.lg,
+    marginBottom: spacing.md,
+  },
+  addClassLinkText: {
+    color: colors.primary,
+    fontSize: 14,
+  },
   emptyContainer: {
     flex: 1,
   },
@@ -199,6 +237,10 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     padding: spacing.xl,
+  },
+  emptyIcon: {
+    fontSize: 48,
+    marginBottom: spacing.md,
   },
   emptyTitle: {
     marginBottom: spacing.sm,
@@ -209,8 +251,7 @@ const styles = StyleSheet.create({
     color: colors.textSecondary,
     textAlign: 'center',
   },
-  groupButton: {
-    margin: spacing.md,
-    marginTop: spacing.sm,
+  emptyCreateButton: {
+    paddingHorizontal: spacing.lg,
   },
 });

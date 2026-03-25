@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { View, StyleSheet, ScrollView, KeyboardAvoidingView, Platform, Alert } from 'react-native';
+import React, { useState, useEffect, useCallback } from 'react';
+import { View, StyleSheet, ScrollView, KeyboardAvoidingView, Platform, Alert, TouchableOpacity } from 'react-native';
 import {
   Text,
   TextInput,
@@ -7,23 +7,22 @@ import {
   Card,
   HelperText,
   Snackbar,
-  Chip,
   Portal,
   Dialog,
   RadioButton,
 } from 'react-native-paper';
-import { colors, spacing } from '../../constants/colors';
+import { colors, spacing, borderRadius } from '../../constants/colors';
 import { useChildren } from '../../context/ChildrenContext';
 import { useClasses } from '../../context/ClassesContext';
 import { GENDERS } from '../../constants/options';
+import GroupPickerBottomSheet, { getGroupColor } from '../../components/children/GroupPickerBottomSheet';
 
 export default function EditChildScreen({ route, navigation }) {
   const { childId } = route.params;
-  const { children, updateChild, deleteChild, getGroupsForChild } = useChildren();
+  const { children, groups, childrenGroups, updateChild, deleteChild } = useChildren();
   const { classes, schools } = useClasses();
 
   const child = children.find(c => c.id === childId);
-  const childGroups = getGroupsForChild(childId);
   const childClass = classes.find(c => c.id === child?.class_id);
   const childSchool = schools.find(s => s.id === childClass?.school_id);
 
@@ -32,10 +31,30 @@ export default function EditChildScreen({ route, navigation }) {
   const [age, setAge] = useState('');
   const [gender, setGender] = useState('');
   const [genderDialogVisible, setGenderDialogVisible] = useState(false);
+  const [groupPickerVisible, setGroupPickerVisible] = useState(false);
 
   const [errors, setErrors] = useState({});
   const [loading, setLoading] = useState(false);
   const [snackbar, setSnackbar] = useState({ visible: false, message: '' });
+  const [, setRefreshKey] = useState(0);
+
+  /**
+   * Get the current group for this child (filtered to this user's groups).
+   */
+  const getChildGroup = useCallback(() => {
+    const groupIds = new Set(groups.map(g => g.id));
+    const membership = childrenGroups.find(
+      cg => cg.child_id === childId && groupIds.has(cg.group_id)
+    );
+    if (!membership) return { group: null, groupIndex: -1 };
+
+    const sortedGroups = [...groups].sort((a, b) => a.name.localeCompare(b.name));
+    const groupIndex = sortedGroups.findIndex(g => g.id === membership.group_id);
+    return { group: sortedGroups[groupIndex], groupIndex };
+  }, [childId, groups, childrenGroups]);
+
+  const { group: currentGroup, groupIndex } = getChildGroup();
+  const colorScheme = currentGroup ? getGroupColor(groupIndex) : null;
 
   // Load child data on mount
   useEffect(() => {
@@ -201,6 +220,33 @@ export default function EditChildScreen({ route, navigation }) {
               onPressIn={() => setGenderDialogVisible(true)}
             />
 
+            {/* Group picker field */}
+            <View style={styles.groupField}>
+              <Text variant="labelSmall" style={styles.groupFieldLabel}>Group</Text>
+              <TouchableOpacity
+                style={[
+                  styles.groupFieldInput,
+                  currentGroup && { borderColor: colorScheme.text },
+                ]}
+                onPress={() => setGroupPickerVisible(true)}
+              >
+                {currentGroup ? (
+                  <View style={styles.groupFieldValue}>
+                    <View style={[styles.groupDot, { backgroundColor: colorScheme.text }]} />
+                    <Text style={[styles.groupFieldText, { color: colorScheme.text, fontWeight: '600' }]}>
+                      {currentGroup.name}
+                    </Text>
+                  </View>
+                ) : (
+                  <Text style={styles.groupFieldPlaceholder}>No group assigned</Text>
+                )}
+                <Text style={styles.groupFieldChevron}>▾</Text>
+              </TouchableOpacity>
+              <Text variant="bodySmall" style={styles.groupFieldHelper}>
+                Tap to change group or create a new one
+              </Text>
+            </View>
+
             {/* Submit Button */}
             <Button
               mode="contained"
@@ -210,36 +256,6 @@ export default function EditChildScreen({ route, navigation }) {
               style={styles.button}
             >
               Save Changes
-            </Button>
-          </Card.Content>
-        </Card>
-
-        {/* Group Memberships */}
-        <Card style={styles.card}>
-          <Card.Content>
-            <Text variant="titleMedium" style={styles.sectionTitle}>
-              Group Memberships
-            </Text>
-            {childGroups.length > 0 ? (
-              <View style={styles.chipContainer}>
-                {childGroups.map(group => (
-                  <Chip key={group.id} style={styles.chip}>
-                    {group.name}
-                  </Chip>
-                ))}
-              </View>
-            ) : (
-              <Text variant="bodySmall" style={styles.emptyText}>
-                Not in any groups
-              </Text>
-            )}
-            <Button
-              mode="outlined"
-              onPress={() => navigation.navigate('GroupManagement')}
-              style={styles.groupButton}
-              icon="folder-multiple"
-            >
-              Manage Groups
             </Button>
           </Card.Content>
         </Card>
@@ -275,6 +291,16 @@ export default function EditChildScreen({ route, navigation }) {
           </Dialog.Content>
         </Dialog>
       </Portal>
+
+      {/* Group Picker Bottom Sheet */}
+      <GroupPickerBottomSheet
+        visible={groupPickerVisible}
+        onDismiss={() => setGroupPickerVisible(false)}
+        childId={childId}
+        childName={`${child.first_name} ${child.last_name}`}
+        currentGroupId={currentGroup?.id || null}
+        onGroupChanged={() => setRefreshKey(k => k + 1)}
+      />
 
       <Snackbar
         visible={snackbar.visible}
@@ -315,31 +341,61 @@ const styles = StyleSheet.create({
   title: {
     marginBottom: spacing.md,
   },
-  sectionTitle: {
-    marginBottom: spacing.md,
-  },
   input: {
     marginBottom: spacing.sm,
     backgroundColor: colors.surface,
   },
+  groupField: {
+    marginBottom: spacing.sm,
+    padding: spacing.md,
+    backgroundColor: '#F0F7FF',
+    borderRadius: borderRadius.sm,
+    borderWidth: 1.5,
+    borderColor: '#BBDEFB',
+  },
+  groupFieldLabel: {
+    color: colors.primary,
+    fontWeight: '700',
+    marginBottom: spacing.xs,
+  },
+  groupFieldInput: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    borderWidth: 1.5,
+    borderColor: colors.primary,
+    borderRadius: 6,
+    paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.md,
+    backgroundColor: colors.surface,
+  },
+  groupFieldValue: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  groupDot: {
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+    marginRight: spacing.sm,
+  },
+  groupFieldText: {
+    fontSize: 14,
+  },
+  groupFieldPlaceholder: {
+    fontSize: 14,
+    color: colors.textSecondary,
+  },
+  groupFieldChevron: {
+    color: colors.primary,
+    fontSize: 14,
+  },
+  groupFieldHelper: {
+    color: colors.textSecondary,
+    marginTop: spacing.xs,
+  },
   button: {
     marginTop: spacing.lg,
-  },
-  chipContainer: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    marginBottom: spacing.md,
-  },
-  chip: {
-    marginRight: spacing.sm,
-    marginBottom: spacing.sm,
-  },
-  emptyText: {
-    color: colors.textSecondary,
-    marginBottom: spacing.md,
-  },
-  groupButton: {
-    marginTop: spacing.sm,
   },
   deleteButton: {
     marginBottom: spacing.lg,
