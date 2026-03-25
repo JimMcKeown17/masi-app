@@ -3,6 +3,7 @@ import { View, StyleSheet, FlatList } from 'react-native';
 import { Text, Card, ActivityIndicator, Snackbar } from 'react-native-paper';
 import { useAuth } from '../../context/AuthContext';
 import { useOffline } from '../../context/OfflineContext';
+import { useChildren } from '../../context/ChildrenContext';
 import { colors, spacing, borderRadius, shadows } from '../../constants/colors';
 import { storage, STORAGE_KEYS } from '../../utils/storage';
 import { supabase } from '../../services/supabaseClient';
@@ -23,6 +24,7 @@ function formatDate(dateString) {
 export default function AssessmentHistoryScreen() {
   const { user } = useAuth();
   const { isOnline } = useOffline();
+  const { children } = useChildren();
   const [assessments, setAssessments] = useState([]);
   const [loading, setLoading] = useState(true);
   const [snackbarMessage, setSnackbarMessage] = useState('');
@@ -79,12 +81,21 @@ export default function AssessmentHistoryScreen() {
     }
   };
 
+  const childNameMap = React.useMemo(() => {
+    const map = {};
+    for (const c of children) {
+      map[c.id] = `${c.first_name} ${c.last_name}`;
+    }
+    return map;
+  }, [children]);
+
   const renderItem = ({ item }) => {
     const accuracyColor = item.accuracy >= 75
       ? colors.success
       : item.accuracy >= 50
         ? colors.primary
         : colors.emphasis;
+    const childName = childNameMap[item.child_id] || 'Unknown child';
 
     return (
       <Card style={styles.card}>
@@ -99,6 +110,10 @@ export default function AssessmentHistoryScreen() {
               </Text>
             </View>
           </View>
+
+          <Text variant="bodyMedium" style={styles.childName}>
+            {childName}
+          </Text>
 
           <Text variant="bodyMedium" style={styles.language}>
             {item.letter_language} - Attempt #{item.attempt_number}
@@ -201,6 +216,11 @@ const styles = StyleSheet.create({
   },
   syncTextPending: {
     color: colors.textSecondary,
+  },
+  childName: {
+    color: colors.text,
+    fontWeight: '600',
+    marginBottom: 2,
   },
   language: {
     color: colors.primary,
