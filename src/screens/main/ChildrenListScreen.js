@@ -143,25 +143,38 @@ export default function ChildrenListScreen({ navigation }) {
     );
   };
 
-  const renderEmptyState = () => (
-    <View style={styles.emptyState}>
-      <Text style={styles.emptyIcon}>📚</Text>
-      <Text variant="headlineSmall" style={styles.emptyTitle}>
-        No classes yet
-      </Text>
-      <Text variant="bodyMedium" style={styles.emptyText}>
-        Create your first class to start adding children
-      </Text>
-      <Button
-        mode="contained"
-        onPress={() => navigation.navigate('CreateClass')}
-        style={styles.emptyCreateButton}
-        icon="plus"
-      >
-        Create Class
-      </Button>
-    </View>
-  );
+  const renderEmptyState = () => {
+    // Distinguish "no classes exist" from "search returned nothing"
+    if (searchTerm && classes.length > 0) {
+      return (
+        <View style={styles.emptyState}>
+          <Text variant="bodyMedium" style={styles.emptyText}>
+            No matching classes for "{searchTerm}"
+          </Text>
+        </View>
+      );
+    }
+
+    return (
+      <View style={styles.emptyState}>
+        <Text style={styles.emptyIcon}>📚</Text>
+        <Text variant="headlineSmall" style={styles.emptyTitle}>
+          No classes yet
+        </Text>
+        <Text variant="bodyMedium" style={styles.emptyText}>
+          Create your first class to start adding children
+        </Text>
+        <Button
+          mode="contained"
+          onPress={() => navigation.navigate('CreateClass')}
+          style={styles.emptyCreateButton}
+          icon="plus"
+        >
+          Create Class
+        </Button>
+      </View>
+    );
+  };
 
   return (
     <View style={styles.container}>

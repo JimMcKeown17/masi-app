@@ -111,10 +111,18 @@ export default function GroupPickerBottomSheet({
     try {
       // Remove from current group first (one-group-per-user enforcement)
       if (currentGroupId) {
-        await removeChildFromGroup(childId, currentGroupId);
+        const removeResult = await removeChildFromGroup(childId, currentGroupId);
+        if (!removeResult.success) {
+          Alert.alert('Error', 'Failed to remove from current group.');
+          return;
+        }
       }
       // Add to new group
-      await addChildToGroup(childId, groupId);
+      const addResult = await addChildToGroup(childId, groupId);
+      if (!addResult.success) {
+        Alert.alert('Error', 'Failed to assign group.');
+        return;
+      }
       onGroupChanged?.();
       handleDismiss();
     } catch (error) {
@@ -129,7 +137,11 @@ export default function GroupPickerBottomSheet({
 
     setLoading(true);
     try {
-      await removeChildFromGroup(childId, currentGroupId);
+      const result = await removeChildFromGroup(childId, currentGroupId);
+      if (!result.success) {
+        Alert.alert('Error', 'Failed to remove from group.');
+        return;
+      }
       onGroupChanged?.();
       handleDismiss();
     } catch (error) {
@@ -152,15 +164,21 @@ export default function GroupPickerBottomSheet({
     setLoading(true);
     try {
       const result = await addGroup({ name: trimmed });
-      if (result.success) {
-        // Auto-assign the new group to this child
-        if (currentGroupId) {
-          await removeChildFromGroup(childId, currentGroupId);
-        }
-        await addChildToGroup(childId, result.group.id);
-        onGroupChanged?.();
-        handleDismiss();
+      if (!result.success) {
+        Alert.alert('Error', 'Failed to create group.');
+        return;
       }
+      // Auto-assign the new group to this child
+      if (currentGroupId) {
+        await removeChildFromGroup(childId, currentGroupId);
+      }
+      const assignResult = await addChildToGroup(childId, result.group.id);
+      if (!assignResult.success) {
+        Alert.alert('Error', 'Group created but failed to assign child.');
+        return;
+      }
+      onGroupChanged?.();
+      handleDismiss();
     } catch (error) {
       console.error('Error creating group:', error);
     } finally {

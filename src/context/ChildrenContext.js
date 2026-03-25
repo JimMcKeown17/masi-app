@@ -274,10 +274,11 @@ export const ChildrenProvider = ({ children }) => {
       await storage.deleteGroup(groupId);
       setGroups(groups.filter(g => g.id !== groupId));
 
-      // Remove all memberships for this group
+      // Remove all memberships for this group (state + storage)
       const updatedMemberships = childrenGroups.filter(
         cg => cg.group_id !== groupId
       );
+      await storage.setItem(STORAGE_KEYS.CHILDREN_GROUPS, updatedMemberships);
       setChildrenGroups(updatedMemberships);
 
       return { success: true };

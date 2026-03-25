@@ -131,7 +131,7 @@ export default function EditChildScreen({ route, navigation }) {
   const handleDelete = () => {
     Alert.alert(
       'Delete Child',
-      'Are you sure? This will remove the child from all groups and sessions.',
+      'Are you sure you want to remove this child?',
       [
         { text: 'Cancel', style: 'cancel' },
         {
