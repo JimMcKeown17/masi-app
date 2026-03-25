@@ -6,6 +6,7 @@ import {
   Button,
   Card,
   Banner,
+  List,
 } from 'react-native-paper';
 import { colors, spacing } from '../../constants/colors';
 import { useChildren } from '../../context/ChildrenContext';
@@ -65,6 +66,11 @@ export default function ChildrenListScreen({ navigation }) {
 
   const hasClasses = classes.length > 0;
 
+  // Children with no class_id (orphaned from pre-load or class deletion)
+  const unassignedChildren = useMemo(() => {
+    return children.filter(c => !c.class_id);
+  }, [children]);
+
   const renderClassCard = ({ item: cls }) => {
     const school = schools.find(s => s.id === cls.school_id);
     const childCount = getChildrenInClass(cls.id).length;
@@ -100,14 +106,40 @@ export default function ChildrenListScreen({ navigation }) {
   };
 
   const renderFooter = () => {
-    if (!hasClasses) return null;
     return (
-      <TouchableOpacity
-        style={styles.addClassLink}
-        onPress={() => navigation.navigate('CreateClass')}
-      >
-        <Text style={styles.addClassLinkText}>+ Add another class</Text>
-      </TouchableOpacity>
+      <View>
+        {/* Unassigned children section */}
+        {unassignedChildren.length > 0 && (
+          <View style={styles.unassignedSection}>
+            <Text variant="titleSmall" style={styles.unassignedTitle}>
+              Unassigned Children ({unassignedChildren.length})
+            </Text>
+            <Text variant="bodySmall" style={styles.unassignedHint}>
+              These children are not in a class yet. Tap to edit and assign them.
+            </Text>
+            {unassignedChildren.map(child => (
+              <List.Item
+                key={child.id}
+                title={`${child.first_name} ${child.last_name}`}
+                description={`${child.age ? `Age ${child.age}` : ''}${child.age && child.gender ? ' • ' : ''}${child.gender || ''}`}
+                left={props => <List.Icon {...props} icon="account-alert-outline" color={colors.textSecondary} />}
+                onPress={() => navigation.navigate('EditChild', { childId: child.id })}
+                style={styles.unassignedItem}
+              />
+            ))}
+          </View>
+        )}
+
+        {/* Add class link */}
+        {hasClasses && (
+          <TouchableOpacity
+            style={styles.addClassLink}
+            onPress={() => navigation.navigate('CreateClass')}
+          >
+            <Text style={styles.addClassLinkText}>+ Add another class</Text>
+          </TouchableOpacity>
+        )}
+      </View>
     );
   };
 
@@ -219,6 +251,27 @@ const styles = StyleSheet.create({
     paddingVertical: 2,
     borderRadius: 4,
     overflow: 'hidden',
+  },
+  unassignedSection: {
+    marginTop: spacing.lg,
+    marginHorizontal: spacing.md,
+    paddingTop: spacing.md,
+    borderTopWidth: 1,
+    borderTopColor: colors.border,
+  },
+  unassignedTitle: {
+    color: colors.textSecondary,
+    marginBottom: spacing.xs,
+  },
+  unassignedHint: {
+    color: colors.textSecondary,
+    marginBottom: spacing.sm,
+  },
+  unassignedItem: {
+    backgroundColor: colors.surface,
+    marginVertical: spacing.xs,
+    borderRadius: 8,
+    elevation: 1,
   },
   addClassLink: {
     alignItems: 'center',

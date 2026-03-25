@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { View, StyleSheet, ScrollView, KeyboardAvoidingView, Platform, Alert, TouchableOpacity } from 'react-native';
+import { View, StyleSheet, ScrollView, KeyboardAvoidingView, Platform, Alert, TouchableOpacity, TouchableWithoutFeedback, Modal } from 'react-native';
 import {
   Text,
   TextInput,
@@ -11,6 +11,7 @@ import {
   Dialog,
   RadioButton,
 } from 'react-native-paper';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { colors, spacing, borderRadius } from '../../constants/colors';
 import { useChildren } from '../../context/ChildrenContext';
 import { useClasses } from '../../context/ClassesContext';
@@ -19,6 +20,7 @@ import GroupPickerBottomSheet, { getGroupColor } from '../../components/children
 
 export default function EditChildScreen({ route, navigation }) {
   const { childId } = route.params;
+  const insets = useSafeAreaInsets();
   const { children, groups, childrenGroups, updateChild, deleteChild } = useChildren();
   const { classes, schools } = useClasses();
 
@@ -32,6 +34,7 @@ export default function EditChildScreen({ route, navigation }) {
   const [gender, setGender] = useState('');
   const [genderDialogVisible, setGenderDialogVisible] = useState(false);
   const [groupPickerVisible, setGroupPickerVisible] = useState(false);
+  const [classPickerVisible, setClassPickerVisible] = useState(false);
 
   const [errors, setErrors] = useState({});
   const [loading, setLoading] = useState(false);
@@ -116,6 +119,15 @@ export default function EditChildScreen({ route, navigation }) {
     }
   };
 
+  const handleClassSelect = async (classId) => {
+    setClassPickerVisible(false);
+    if (classId === child?.class_id) return;
+    const result = await updateChild(childId, { class_id: classId });
+    if (result.success) {
+      setSnackbar({ visible: true, message: 'Class updated' });
+    }
+  };
+
   const handleDelete = () => {
     Alert.alert(
       'Delete Child',
@@ -150,18 +162,31 @@ export default function EditChildScreen({ route, navigation }) {
       keyboardVerticalOffset={90}
     >
       <ScrollView contentContainerStyle={styles.scrollContent}>
-        {/* Class info (read-only) */}
-        {childClass && (
-          <Card style={styles.classInfoCard}>
+        {/* Class info (tappable to change) */}
+        <TouchableOpacity onPress={() => setClassPickerVisible(true)} activeOpacity={0.7}>
+          <Card style={childClass ? styles.classInfoCard : styles.classInfoCardEmpty}>
             <Card.Content>
-              <Text variant="labelSmall" style={styles.classLabel}>Class</Text>
-              <Text variant="titleMedium">{childClass.name}</Text>
-              <Text variant="bodySmall" style={styles.classDetail}>
-                {childSchool?.name || 'Unknown school'} • {childClass.grade} • {childClass.teacher}
-              </Text>
+              <View style={styles.classCardRow}>
+                <View style={{ flex: 1 }}>
+                  <Text variant="labelSmall" style={styles.classLabel}>Class</Text>
+                  {childClass ? (
+                    <>
+                      <Text variant="titleMedium">{childClass.name}</Text>
+                      <Text variant="bodySmall" style={styles.classDetail}>
+                        {childSchool?.name || 'Unknown school'} • {childClass.grade} • {childClass.teacher}
+                      </Text>
+                    </>
+                  ) : (
+                    <Text variant="bodyMedium" style={styles.classDetailEmpty}>
+                      No class assigned — tap to choose
+                    </Text>
+                  )}
+                </View>
+                <Text style={styles.classChevron}>▾</Text>
+              </View>
             </Card.Content>
           </Card>
-        )}
+        </TouchableOpacity>
 
         <Card style={styles.card}>
           <Card.Content>
@@ -302,6 +327,58 @@ export default function EditChildScreen({ route, navigation }) {
         onGroupChanged={() => setRefreshKey(k => k + 1)}
       />
 
+      {/* Class Picker Bottom Sheet */}
+      <Modal
+        visible={classPickerVisible}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setClassPickerVisible(false)}
+      >
+        <TouchableWithoutFeedback onPress={() => setClassPickerVisible(false)}>
+          <View style={styles.classPickerBackdrop} />
+        </TouchableWithoutFeedback>
+        <View style={[styles.classPickerSheet, { paddingBottom: Math.max(insets.bottom, spacing.lg) }]}>
+          <View style={styles.classPickerHandle} />
+          <Text variant="titleMedium" style={styles.classPickerTitle}>Choose Class</Text>
+          <Text variant="bodySmall" style={styles.classPickerSubtitle}>
+            {child.first_name} {child.last_name}
+          </Text>
+          <ScrollView bounces={false}>
+            {classes.map(cls => {
+              const school = schools.find(s => s.id === cls.school_id);
+              const isSelected = cls.id === child?.class_id;
+              return (
+                <TouchableOpacity
+                  key={cls.id}
+                  style={[styles.classPickerRow, isSelected && styles.classPickerRowSelected]}
+                  onPress={() => handleClassSelect(cls.id)}
+                >
+                  <View style={{ flex: 1 }}>
+                    <Text variant="bodyLarge" style={[
+                      styles.classPickerRowName,
+                      isSelected && { color: colors.primary, fontWeight: '700' },
+                    ]}>
+                      {cls.name}
+                    </Text>
+                    <Text variant="bodySmall" style={styles.classPickerRowDetail}>
+                      {school?.name || 'Unknown school'} • {cls.grade} • {cls.teacher}
+                    </Text>
+                  </View>
+                  {isSelected && (
+                    <Text style={styles.classPickerCheck}>✓</Text>
+                  )}
+                </TouchableOpacity>
+              );
+            })}
+            {classes.length === 0 && (
+              <Text variant="bodyMedium" style={styles.classPickerEmpty}>
+                No classes available. Create a class first.
+              </Text>
+            )}
+          </ScrollView>
+        </View>
+      </Modal>
+
       <Snackbar
         visible={snackbar.visible}
         onDismiss={() => setSnackbar({ ...snackbar, visible: false })}
@@ -325,6 +402,23 @@ const styles = StyleSheet.create({
     backgroundColor: '#EEF2FF',
     marginBottom: spacing.md,
   },
+  classInfoCardEmpty: {
+    backgroundColor: '#FFF8E1',
+    marginBottom: spacing.md,
+    borderWidth: 1.5,
+    borderStyle: 'dashed',
+    borderColor: '#F9A825',
+  },
+  classCardRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  classChevron: {
+    color: colors.primary,
+    fontSize: 16,
+    marginLeft: spacing.sm,
+  },
   classLabel: {
     color: colors.primary,
     textTransform: 'uppercase',
@@ -332,6 +426,10 @@ const styles = StyleSheet.create({
   },
   classDetail: {
     color: colors.textSecondary,
+    marginTop: 2,
+  },
+  classDetailEmpty: {
+    color: '#F57F17',
     marginTop: 2,
   },
   card: {
@@ -400,5 +498,71 @@ const styles = StyleSheet.create({
   deleteButton: {
     marginBottom: spacing.lg,
     borderColor: colors.error,
+  },
+  // Class picker bottom sheet
+  classPickerBackdrop: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+  },
+  classPickerSheet: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    backgroundColor: colors.surface,
+    borderTopLeftRadius: borderRadius.lg,
+    borderTopRightRadius: borderRadius.lg,
+    maxHeight: '60%',
+    paddingHorizontal: spacing.lg,
+  },
+  classPickerHandle: {
+    width: 36,
+    height: 4,
+    backgroundColor: colors.border,
+    borderRadius: 2,
+    alignSelf: 'center',
+    marginTop: spacing.sm,
+    marginBottom: spacing.xs,
+  },
+  classPickerTitle: {
+    fontWeight: '700',
+    marginTop: spacing.sm,
+  },
+  classPickerSubtitle: {
+    color: colors.textSecondary,
+    marginBottom: spacing.md,
+  },
+  classPickerRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: spacing.md,
+    paddingHorizontal: spacing.md,
+    backgroundColor: colors.cardBackground,
+    borderRadius: borderRadius.sm,
+    marginBottom: spacing.sm,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  classPickerRowSelected: {
+    borderColor: colors.primary,
+    borderWidth: 2,
+  },
+  classPickerRowName: {
+    fontWeight: '500',
+  },
+  classPickerRowDetail: {
+    color: colors.textSecondary,
+    marginTop: 2,
+  },
+  classPickerCheck: {
+    color: colors.primary,
+    fontSize: 18,
+    fontWeight: '700',
+  },
+  classPickerEmpty: {
+    color: colors.textSecondary,
+    textAlign: 'center',
+    padding: spacing.lg,
   },
 });
