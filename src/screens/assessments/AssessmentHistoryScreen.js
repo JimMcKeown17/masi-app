@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { View, StyleSheet, FlatList } from 'react-native';
-import { Text, Card, ActivityIndicator, Snackbar } from 'react-native-paper';
+import { Text, Card, ActivityIndicator, Snackbar, IconButton } from 'react-native-paper';
 import { useAuth } from '../../context/AuthContext';
 import { useOffline } from '../../context/OfflineContext';
 import { useChildren } from '../../context/ChildrenContext';
@@ -21,7 +21,7 @@ function formatDate(dateString) {
   });
 }
 
-export default function AssessmentHistoryScreen() {
+export default function AssessmentHistoryScreen({ navigation }) {
   const { user } = useAuth();
   const { isOnline } = useOffline();
   const { children } = useChildren();
@@ -98,16 +98,22 @@ export default function AssessmentHistoryScreen() {
     const childName = childNameMap[item.child_id] || 'Unknown child';
 
     return (
-      <Card style={styles.card}>
+      <Card
+        style={styles.card}
+        onPress={() => navigation.navigate('AssessmentDetail', { assessment: item, childName })}
+      >
         <Card.Content>
           <View style={styles.cardHeader}>
             <Text variant="titleSmall" style={styles.cardDate}>
               {formatDate(item.date_assessed)}
             </Text>
-            <View style={[styles.syncBadge, item.synced ? styles.syncBadgeSynced : styles.syncBadgePending]}>
-              <Text variant="bodySmall" style={[styles.syncBadgeText, item.synced ? styles.syncTextSynced : styles.syncTextPending]}>
-                {item.synced ? 'Synced' : 'Pending sync'}
-              </Text>
+            <View style={styles.cardHeaderRight}>
+              <View style={[styles.syncBadge, item.synced ? styles.syncBadgeSynced : styles.syncBadgePending]}>
+                <Text variant="bodySmall" style={[styles.syncBadgeText, item.synced ? styles.syncTextSynced : styles.syncTextPending]}>
+                  {item.synced ? 'Synced' : 'Pending sync'}
+                </Text>
+              </View>
+              <Text style={styles.chevron}>{'\u203A'}</Text>
             </View>
           </View>
 
@@ -195,6 +201,16 @@ const styles = StyleSheet.create({
   },
   cardDate: {
     color: colors.text,
+    fontWeight: '600',
+  },
+  cardHeaderRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+  },
+  chevron: {
+    fontSize: 22,
+    color: colors.textSecondary,
     fontWeight: '600',
   },
   syncBadge: {

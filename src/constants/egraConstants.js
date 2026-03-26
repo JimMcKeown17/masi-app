@@ -34,3 +34,7 @@ export const ISIXHOSA_LETTER_SET = {
 
 export const LETTER_SETS = { english: ENGLISH_LETTER_SET, isixhosa: ISIXHOSA_LETTER_SET };
 export const ASSESSMENT_DURATION = 60; // seconds
+
+export function getLetterSetById(id) {
+  return Object.values(LETTER_SETS).find((s) => s.id === id) || null;
+}

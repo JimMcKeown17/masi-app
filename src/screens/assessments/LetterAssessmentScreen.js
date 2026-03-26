@@ -9,6 +9,7 @@ import { v4 as uuidv4 } from 'uuid';
 import { ASSESSMENT_DURATION } from '../../constants/egraConstants';
 import EgraLetterGrid from '../../components/assessment/EgraLetterGrid';
 import AssessmentTimer from '../../components/assessment/AssessmentTimer';
+import LastAttemptedBottomSheet from '../../components/assessment/LastAttemptedBottomSheet';
 import { colors, spacing, borderRadius } from '../../constants/colors';
 
 function computeAssessmentResult(letterStates, lastTappedIndex, letters) {
@@ -53,6 +54,7 @@ export default function LetterAssessmentScreen({ navigation, route }) {
   const [timeRemaining, setTimeRemaining] = useState(ASSESSMENT_DURATION);
   const [isPaused, setIsPaused] = useState(false);
   const [lastTappedIndex, setLastTappedIndex] = useState(-1);
+  const [showLastAttempted, setShowLastAttempted] = useState(false);
 
   const timerRef = useRef(null);
   const hasFinishedRef = useRef(false);
@@ -157,14 +159,24 @@ export default function LetterAssessmentScreen({ navigation, route }) {
     hasFinishedRef.current = true;
     clearInterval(timerRef.current);
     setPhase('finished');
-    saveAssessment();
+    setShowLastAttempted(true);
   }, []);
 
-  const saveAssessment = async () => {
+  const handleLastAttemptedConfirm = (selectedIndex) => {
+    setShowLastAttempted(false);
+    saveAssessment(selectedIndex);
+  };
+
+  const handleLastAttemptedCancel = () => {
+    setShowLastAttempted(false);
+    saveAssessment(null);
+  };
+
+  const saveAssessment = async (overrideLastIndex = null) => {
     const elapsed = ASSESSMENT_DURATION - timeRemainingRef.current;
     const currentLetterStates = letterStatesRef.current;
-    const currentLastTapped = lastTappedIndexRef.current;
-    const result = computeAssessmentResult(currentLetterStates, currentLastTapped, letterSet.letters);
+    const finalLastIndex = overrideLastIndex !== null ? overrideLastIndex : lastTappedIndexRef.current;
+    const result = computeAssessmentResult(currentLetterStates, finalLastIndex, letterSet.letters);
 
     const now = new Date();
     const dateAssessed = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
@@ -183,8 +195,8 @@ export default function LetterAssessmentScreen({ navigation, route }) {
       accuracy: result.accuracy,
       correct_letters: result.correctLetters,
       incorrect_letters: result.incorrectLetters,
-      last_letter_attempted: currentLastTapped >= 0
-        ? { index: currentLastTapped, letter: letterSet.letters[currentLastTapped] }
+      last_letter_attempted: finalLastIndex >= 0
+        ? { index: finalLastIndex, letter: letterSet.letters[finalLastIndex] }
         : null,
       date_assessed: dateAssessed,
       device_info: {},
@@ -341,6 +353,15 @@ export default function LetterAssessmentScreen({ navigation, route }) {
           </Button>
         )}
       </View>
+
+      <LastAttemptedBottomSheet
+        visible={showLastAttempted}
+        letterSet={letterSet}
+        letterStates={letterStates}
+        defaultIndex={lastTappedIndex}
+        onConfirm={handleLastAttemptedConfirm}
+        onCancel={handleLastAttemptedCancel}
+      />
     </View>
   );
 }

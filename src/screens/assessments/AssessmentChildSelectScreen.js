@@ -3,6 +3,7 @@ import { View, StyleSheet, FlatList, Pressable } from 'react-native';
 import { Text, Searchbar, Portal, Dialog, Button, RadioButton } from 'react-native-paper';
 import { useFocusEffect } from '@react-navigation/native';
 import { useChildren } from '../../context/ChildrenContext';
+import { useClasses } from '../../context/ClassesContext';
 import { LETTER_SETS } from '../../constants/egraConstants';
 import { colors, spacing, borderRadius, shadows } from '../../constants/colors';
 import { storage } from '../../utils/storage';
@@ -15,6 +16,7 @@ function formatShortDate(dateStr) {
 
 export default function AssessmentChildSelectScreen({ navigation }) {
   const { children } = useChildren();
+  const { classes } = useClasses();
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedChild, setSelectedChild] = useState(null);
   const [languageDialogVisible, setLanguageDialogVisible] = useState(false);
@@ -60,19 +62,34 @@ export default function AssessmentChildSelectScreen({ navigation }) {
     return fullName.includes(query);
   });
 
+  const navigateToAssessment = (child, letterSet) => {
+    navigation.navigate('LetterAssessment', {
+      child,
+      letterSet,
+      attemptNumber: (assessmentMap[child.id]?.attemptCount || 0) + 1,
+    });
+  };
+
   const handleChildPress = (child) => {
+    // Auto-detect language from the child's class
+    if (child.class_id) {
+      const childClass = classes.find((c) => c.id === child.class_id);
+      if (childClass?.home_language) {
+        const key = childClass.home_language.toLowerCase();
+        if (LETTER_SETS[key]) {
+          navigateToAssessment(child, LETTER_SETS[key]);
+          return;
+        }
+      }
+    }
+    // Fallback: show language picker dialog
     setSelectedChild(child);
     setLanguageDialogVisible(true);
   };
 
   const handleLanguageConfirm = () => {
     setLanguageDialogVisible(false);
-    const letterSet = LETTER_SETS[selectedLanguage];
-    navigation.navigate('LetterAssessment', {
-      child: selectedChild,
-      letterSet,
-      attemptNumber: (assessmentMap[selectedChild.id]?.attemptCount || 0) + 1,
-    });
+    navigateToAssessment(selectedChild, LETTER_SETS[selectedLanguage]);
   };
 
   const renderChild = ({ item }) => {

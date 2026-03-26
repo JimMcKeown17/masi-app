@@ -7,9 +7,11 @@ import {
   List,
   IconButton,
 } from 'react-native-paper';
+import { useFocusEffect } from '@react-navigation/native';
 import { colors, spacing, borderRadius } from '../../constants/colors';
 import { useClasses } from '../../context/ClassesContext';
 import { useChildren } from '../../context/ChildrenContext';
+import { storage } from '../../utils/storage';
 import GroupPickerBottomSheet, { getGroupColor } from '../../components/children/GroupPickerBottomSheet';
 
 export default function ClassDetailScreen({ route, navigation }) {
@@ -20,6 +22,25 @@ export default function ClassDetailScreen({ route, navigation }) {
   const classItem = classes.find(c => c.id === classId);
   const childrenInClass = getChildrenInClass(classId);
   const school = schools.find(s => s.id === classItem?.school_id);
+
+  // Most recent assessment per child (keyed by child_id)
+  const [latestAssessments, setLatestAssessments] = useState({});
+  useFocusEffect(
+    useCallback(() => {
+      (async () => {
+        const all = await storage.getAssessments();
+        const map = {};
+        for (const a of all) {
+          const prev = map[a.child_id];
+          if (!prev || a.date_assessed > prev.date_assessed ||
+              (a.date_assessed === prev.date_assessed && a.created_at > prev.created_at)) {
+            map[a.child_id] = a;
+          }
+        }
+        setLatestAssessments(map);
+      })();
+    }, [])
+  );
 
   // Bottom sheet state
   const [pickerVisible, setPickerVisible] = useState(false);
@@ -63,6 +84,7 @@ export default function ClassDetailScreen({ route, navigation }) {
   const renderChildItem = ({ item }) => {
     const { group, groupIndex } = getChildGroup(item.id);
     const colorScheme = group ? getGroupColor(groupIndex) : null;
+    const latestAssessment = latestAssessments[item.id];
 
     return (
       <TouchableOpacity
@@ -82,6 +104,18 @@ export default function ClassDetailScreen({ route, navigation }) {
         </View>
 
         <View style={styles.chipArea}>
+          {latestAssessment && (
+            <IconButton
+              icon="clipboard-text-outline"
+              size={20}
+              iconColor={colors.primary}
+              style={styles.assessmentIcon}
+              onPress={() => navigation.navigate('AssessmentDetail', {
+                assessment: latestAssessment,
+                childName: `${item.first_name} ${item.last_name}`,
+              })}
+            />
+          )}
           {/* Unsynced indicator */}
           {!item.synced && (
             <List.Icon
@@ -246,6 +280,10 @@ const styles = StyleSheet.create({
   chipArea: {
     flexDirection: 'row',
     alignItems: 'center',
+  },
+  assessmentIcon: {
+    margin: 0,
+    marginRight: 0,
   },
   syncIcon: {
     margin: 0,

@@ -3,6 +3,7 @@ import { View, StyleSheet, ScrollView } from 'react-native';
 import { Text, Button } from 'react-native-paper';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { colors, spacing, borderRadius, shadows } from '../../constants/colors';
+import AssessmentDetailGrid from '../../components/assessment/AssessmentDetailGrid';
 
 function getFeedback(accuracy) {
   if (accuracy >= 90) return { message: 'Excellent work!', color: colors.success };
@@ -85,6 +86,10 @@ export default function AssessmentResultsScreen({ navigation, route }) {
             accentColor={colors.emphasis}
           />
         </View>
+
+        <View style={styles.gridSection}>
+          <AssessmentDetailGrid assessment={assessment} letterSet={letterSet} />
+        </View>
       </ScrollView>
 
       <View style={[styles.buttonRow, { paddingBottom: Math.max(insets.bottom, spacing.md) }]}>
@@ -157,6 +162,10 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     gap: spacing.sm,
     width: '100%',
+  },
+  gridSection: {
+    width: '100%',
+    marginTop: spacing.xl,
   },
   statCard: {
     flex: 1,
