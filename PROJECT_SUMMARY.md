@@ -1,270 +1,95 @@
-# Project Setup Complete! 🎉
+# Masi App — Project Summary
 
-## What's Been Created
+**Last Updated**: 2026-03-26
 
-### 📁 Project Structure
+## Overview
+
+A React Native (Expo) mobile app for Masi, a South African nonprofit. Field staff use it to manage their work with children, track time, record educational sessions, and assess literacy via EGRA letter assessments. Designed to work offline-first in low-connectivity environments.
+
+## Current Status
+
+**Launched**: Early March 2026, in field testing across iOS and Android devices.
+
+| Phase | Status |
+|-------|--------|
+| 0. Project Setup | Complete |
+| 1. Authentication & Foundation | Complete |
+| 2. Time Tracking with Geolocation | Complete |
+| 3. Children & Groups Management | Complete |
+| 4. Session Recording (Literacy Coach) | Complete |
+| 5. Additional Session Forms | In Progress (requirements TBD) |
+| 6. Offline Sync Refinement | Complete |
+| 7. Polish & Production Prep | Partially Complete |
+| 8. EGRA Letter Sound Assessment | Complete |
+
+## Tech Stack
+
+- **Framework**: React Native with Expo
+- **Language**: JavaScript (no TypeScript)
+- **UI Library**: React Native Paper (Material Design)
+- **Backend**: Supabase (Authentication + PostgreSQL)
+- **Offline Storage**: AsyncStorage
+- **Navigation**: React Navigation (Bottom Tabs + Stack)
+- **Location**: expo-location
+
+## App Structure
+
+**Bottom Tabs**: Home | My Children | Sessions | Assessments
+
+### Key Features
+
+1. **Home Screen** — Brand gradient header, sign in/out with GPS, session count, sync status banner
+2. **Children Management** — Add/edit children, groups (many-to-many), schools & classes
+3. **Session Recording** — Job-title-based forms (Literacy Coach complete; others TBD)
+4. **Time Tracking** — GPS-verified sign in/out with offline sync
+5. **EGRA Letter Assessment** — Timed 60s letter recognition assessment:
+   - English and isiXhosa letter sets (60 letters each)
+   - Tap-to-mark-correct grid, paginated 20/page
+   - Post-assessment "Last Letter Attempted" prompt for accurate counting
+   - Results screen with accuracy ring, stats, and color-coded letter grid
+   - Assessment history with tappable detail cards
+   - Auto-detects language from child's class assignment
+   - Assessment icon on Class Details for quick access
+6. **Offline Sync** — Queue-based with exponential backoff, last-write-wins, sync status screen
+
+### Project Structure
+
 ```
-nonprofit-field-app/
-├── App.js                    # Main app entry with providers
-├── package.json              # Dependencies
-├── .env.example             # Environment template
-├── README.md                # Full setup guide
-├── QUICKSTART.md            # Quick start guide
-├── Claude.md                # Detailed specifications
-│
-└── src/
-    ├── components/
-    │   ├── common/          # Reusable UI components (empty, ready for you)
-    │   ├── session-forms/   # Job-specific forms (empty, ready for you)
-    │   └── children/        # Child components (empty, ready for you)
-    │
-    ├── screens/
-    │   ├── auth/
-    │   │   └── LoginScreen.js          ✅ COMPLETE
-    │   └── main/
-    │       └── HomeScreen.js           ✅ COMPLETE
-    │
-    ├── services/
-    │   └── supabaseClient.js           ✅ COMPLETE
-    │
-    ├── context/
-    │   └── AuthContext.js              ✅ COMPLETE
-    │
-    ├── utils/
-    │   └── storage.js                  ✅ COMPLETE
-    │
-    ├── navigation/
-    │   └── AppNavigator.js             ✅ COMPLETE
-    │
-    └── constants/
-        ├── colors.js                   ✅ COMPLETE
-        └── jobTitles.js                ✅ COMPLETE
-```
-
-## ✅ What's Working Now
-
-1. **Authentication Flow**
-   - Login screen with email/password
-   - Session management with Supabase
-   - Automatic navigation between auth and main screens
-   - User profile loading and caching
-
-2. **Navigation Setup**
-   - Stack navigation configured
-   - Auth/Main navigator split
-   - Ready to add more screens
-
-3. **Offline Storage**
-   - AsyncStorage wrapper with helpers
-   - Methods for time entries, sessions, children
-   - Sync queue management structure
-
-4. **Theme & Constants**
-   - Color scheme defined
-   - Spacing constants
-   - Job titles enum
-
-5. **Home Screen**
-   - Menu cards for main features
-   - User greeting with profile info
-   - Navigation to future screens
-
-## 📦 Installed Dependencies
-
-- `@supabase/supabase-js` - Backend & auth
-- `@react-native-async-storage/async-storage` - Local storage
-- `react-native-paper` - UI components
-- `react-hook-form` - Form handling (ready to use)
-- `@react-navigation/native` - Navigation
-- `@react-navigation/native-stack` - Stack navigator
-- `expo-location` - Geolocation (ready to use)
-- `react-native-safe-area-context` - Safe area support
-- `react-native-screens` - Native screens
-
-## 🚀 Next Steps to Build
-
-### Priority 1: Time Tracking
-Create `src/screens/main/TimeTrackingScreen.js`:
-- Show current status (signed in/out)
-- Sign in button → get location → save entry
-- Sign out button → get location → update entry
-- Display elapsed time
-
-### Priority 2: Children Management
-Create `src/screens/main/ChildrenListScreen.js`:
-- Fetch and display assigned children
-- Search/filter functionality
-- Navigate to child details
-- Add new child button
-
-Create `src/screens/main/AddChildScreen.js`:
-- Form to add new child
-- Save to local storage
-- Add to sync queue
-
-### Priority 3: Session Recording
-Create `src/screens/main/SessionFormScreen.js`:
-- Dynamic form loading based on job_title
-- Child selector (multi-select)
-- Activity inputs
-- Notes field
-- Save offline, queue for sync
-
-Create individual form components:
-- `src/components/session-forms/LiteracySessionForm.js`
-- `src/components/session-forms/NumeracySessionForm.js`
-- `src/components/session-forms/ZZCoachSessionForm.js`
-- `src/components/session-forms/YeboneerSessionForm.js`
-
-### Priority 4: Offline Sync
-Create `src/services/offlineSync.js`:
-- Background sync service
-- Network state monitoring
-- Queue processing with retry logic
-- Conflict resolution
-
-Create `src/context/OfflineContext.js`:
-- Sync state management
-- Network status
-- Sync indicators for UI
-
-### Priority 5: Session History
-Create `src/screens/main/SessionHistoryScreen.js`:
-- List past sessions (read-only)
-- Filter by date range
-- View session details
-
-## 🔧 How to Start Development
-
-1. **Set up Supabase** (5 minutes)
-   - Create account and project
-   - Run SQL from README.md
-   - Get URL and anon key
-
-2. **Configure app** (2 minutes)
-   ```bash
-   cp .env.example .env
-   # Edit with your credentials
-   ```
-
-3. **Create test user** (2 minutes)
-   - Add user in Supabase Auth
-   - Insert profile in users table
-
-4. **Run the app** (1 minute)
-   ```bash
-   npm start
-   # Then 'i' for iOS or 'a' for Android
-   ```
-
-5. **Start building!**
-   - Begin with TimeTrackingScreen
-   - Test login with your test user
-   - Follow the patterns in existing screens
-
-## 📝 Code Patterns to Follow
-
-### Screen Template
-```javascript
-import React, { useState } from 'react';
-import { View, StyleSheet } from 'react-native';
-import { Text, Button } from 'react-native-paper';
-import { colors, spacing } from '../../constants/colors';
-
-export default function YourScreen({ navigation }) {
-  const [loading, setLoading] = useState(false);
-
-  return (
-    <View style={styles.container}>
-      <Text>Your content here</Text>
-    </View>
-  );
-}
-
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    padding: spacing.lg,
-    backgroundColor: colors.background,
-  },
-});
+src/
+  components/
+    common/           # SyncIndicator, LocationPermissionPrompt
+    session-forms/    # LiteracySessionForm (+ future forms)
+    children/         # GroupPickerBottomSheet, ChildSelector
+    assessment/       # EgraLetterGrid, AssessmentTimer, LastAttemptedBottomSheet, AssessmentDetailGrid
+  screens/
+    auth/             # Login, ForgotPassword
+    main/             # Home, TimeTracking, ChildrenList, SessionForm, SessionHistory, Profile, SyncStatus, Assessments
+    assessments/      # AssessmentChildSelect, LetterAssessment, AssessmentResults, AssessmentHistory, AssessmentDetail
+    children/         # ClassDetail, EditChild, CreateClass, EditClass
+  context/            # Auth, Offline, Children, Classes
+  services/           # supabaseClient, offlineSync, locationService
+  utils/              # storage, logger, debugExport
+  constants/          # colors, jobTitles, literacyConstants, egraConstants
+  navigation/         # AppNavigator (auth routing + main stack + bottom tabs)
 ```
 
-### Supabase Query Pattern
-```javascript
-import { supabase } from '../services/supabaseClient';
+### Database Tables (Supabase)
 
-const fetchData = async () => {
-  const { data, error } = await supabase
-    .from('table_name')
-    .select('*')
-    .eq('user_id', userId);
-    
-  if (error) {
-    console.error('Error:', error);
-    return;
-  }
-  
-  return data;
-};
-```
+`users`, `children`, `staff_children`, `groups`, `children_groups`, `time_entries`, `sessions`, `schools`, `classes`, `assessments`
 
-### Offline Save Pattern
-```javascript
-import { storage } from '../utils/storage';
-import { v4 as uuidv4 } from 'uuid'; // npm install uuid
+## Documentation
 
-const saveOffline = async (data) => {
-  const entry = {
-    id: uuidv4(),
-    ...data,
-    synced: false,
-    created_at: new Date().toISOString(),
-  };
-  
-  await storage.saveSession(entry);
-  await storage.addToSyncQueue({
-    id: entry.id,
-    type: 'session',
-    data: entry,
-  });
-};
-```
+| File | Purpose |
+|------|---------|
+| **PRD.md** | Full product requirements, tech stack, DB schema, feature specs, development phases |
+| **PROGRESS.md** | Development progress tracker with activity log |
+| **LEARNING.md** | Educational narrative of architectural decisions |
+| **DATABASE_SCHEMA_GUIDE.md** | Detailed schema reference |
+| **CLAUDE.md** | AI assistant context and coding conventions |
+| **This file** | High-level project overview |
 
-## 🎯 Key Design Principles
+## Remaining Work
 
-1. **Offline First** - Everything saves locally first
-2. **Simple & Clean** - Minimal UI, clear actions
-3. **Functional Components** - Use hooks, no classes
-4. **Mobile Optimized** - Large touch targets, clear text
-5. **User Feedback** - Loading states, success/error messages
-
-## 📚 Documentation
-
-- **README.md** - Complete setup guide with SQL
-- **QUICKSTART.md** - Get started in 5 minutes
-- **Claude.md** - Full project specification
-- **This file** - Overview and next steps
-
-## 💡 Pro Tips
-
-- Use React Native Paper components for consistency
-- Follow the existing file structure
-- Test offline mode frequently
-- Keep components small and focused
-- Use the storage utility instead of direct AsyncStorage
-- Add proper error handling and loading states
-- Test on both iOS and Android
-
-## 🐛 Common Issues & Solutions
-
-**Build errors**: Clear cache with `expo start -c`
-**Auth not working**: Check .env file, restart server
-**UI issues**: Check React Native Paper docs
-**Navigation errors**: Ensure screen is in navigator
-
-## 📞 Need Help?
-
-All the documentation is in place. Start with QUICKSTART.md, then dive into building screens following the patterns established in LoginScreen and HomeScreen.
-
-Good luck! 🚀
+- **Phase 5**: Numeracy Coach, ZZ Coach, Yeboneer session forms
+- **Phase 7 (remaining)**: Security review, Android/iOS device testing, performance optimisation, production deployment
+- **Future**: Letter tracker (per-child mastery grid), coach alerts, OTA updates, dark mode

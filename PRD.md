@@ -259,11 +259,11 @@ User Action → Local AsyncStorage → UI Update → Sync Queue → Supabase →
   1. Home
   2. My Children
   3. Sessions
-  4. Assessments (placeholder — "Coming soon")
+  4. Assessments (EGRA Letter Sound Assessment)
 
 **Tab changes from original design:**
 - Time Tracking tab removed — sign in/out promoted to Home screen as the primary daily action
-- Assessments tab added as placeholder for the next major feature phase
+- Assessments tab now contains EGRA Letter Sound Assessment feature (see Phase 8 below)
 - Tabs reordered: Home → My Children → Sessions → Assessments
 
 **Profile access**: gear icon (⚙️) in Home tab header → ProfileScreen (stack navigation). Sign Out button lives at the bottom of ProfileScreen. Profile is not a tab — used infrequently, keeping the tab bar clean.
@@ -387,6 +387,21 @@ User Action → Local AsyncStorage → UI Update → Sync Queue → Supabase →
 - [ ] Performance optimization
 - [ ] Production deployment
 
+### Phase 8: EGRA Letter Sound Assessment ✓ (Complete)
+- [x] Assessment child selection screen with search and sort (last assessed date, accuracy)
+- [x] EGRA letter grids — English (60 letters, mixed case) and isiXhosa (60 letters with digraphs)
+- [x] Timed 60-second assessment with color-coded countdown timer
+- [x] Paginated letter grid (20 per page, 5 columns × 4 rows) — tap to mark correct
+- [x] "Last Letter Attempted" bottom sheet — assessor confirms where child stopped after timer/manual finish
+- [x] Assessment results screen — accuracy ring, feedback message, stat cards (Attempted, Correct, Incorrect), letter-by-letter detail grid
+- [x] Assessment history screen — filterable list of past assessments (last 30 days), tappable cards
+- [x] Assessment detail screen — standalone view of past assessment with full stats and color-coded letter grid
+- [x] Auto-detect language from child's class — skips manual language selection dialog when `class.home_language` maps to an available letter set
+- [x] Assessment icon on Class Details child rows — quick access to most recent assessment
+- [x] Offline-first storage and sync for assessments (same pattern as other entities)
+- [x] Schools and classes data model — `schools`, `classes` tables with `home_language` field; children linked via `class_id`
+- [x] Supabase migration for assessments table with RLS policies
+
 ---
 
 ## App Structure
@@ -412,6 +427,12 @@ User Action → Local AsyncStorage → UI Update → Sync Queue → Supabase →
       - GroupSelector.js (NEW)
       - ChildForm.js
       - GroupForm.js (NEW)
+      - GroupPickerBottomSheet.js
+    /assessment
+      - EgraLetterGrid.js (paginated letter tile grid)
+      - AssessmentTimer.js (countdown bar)
+      - LastAttemptedBottomSheet.js (post-assessment prompt)
+      - AssessmentDetailGrid.js (color-coded results grid)
   /screens
     /auth
       - LoginScreen.js
@@ -428,6 +449,17 @@ User Action → Local AsyncStorage → UI Update → Sync Queue → Supabase →
       - SessionHistoryScreen.js
       - ProfileScreen.js
       - SyncStatusScreen.js (NEW)
+    /assessments
+      - AssessmentChildSelectScreen.js (child picker with auto-language)
+      - LetterAssessmentScreen.js (timed EGRA assessment)
+      - AssessmentResultsScreen.js (post-assessment results)
+      - AssessmentHistoryScreen.js (past assessments list)
+      - AssessmentDetailScreen.js (detailed view of past assessment)
+    /children
+      - ClassDetailScreen.js
+      - EditChildScreen.js
+      - CreateClassScreen.js
+      - EditClassScreen.js
   /services
     - supabaseClient.js
     - offlineSync.js
@@ -438,6 +470,7 @@ User Action → Local AsyncStorage → UI Update → Sync Queue → Supabase →
     - AuthContext.js
     - OfflineContext.js
     - ChildrenContext.js
+    - ClassesContext.js
     - GroupsContext.js (NEW)
   /utils
     - storage.js
@@ -450,6 +483,7 @@ User Action → Local AsyncStorage → UI Update → Sync Queue → Supabase →
   /constants
     - colors.js
     - jobTitles.js
+    - egraConstants.js (letter sets, duration, helpers)
 ```
 
 ---
@@ -647,6 +681,6 @@ Requirements to be gathered as we progress through development phases.
 
 ---
 
-**Document Version**: 1.0
-**Last Updated**: 2026-01-20
-**Status**: Ready to begin Phase 0
+**Document Version**: 1.1
+**Last Updated**: 2026-03-26
+**Status**: Phase 8 (EGRA Assessment) complete; Phase 5 (additional session forms) in progress

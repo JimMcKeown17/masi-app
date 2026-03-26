@@ -1,8 +1,8 @@
 # Masi App - Development Progress
 
 ## Current Status
-**Phase**: Phase 7 - Polish & Production Prep (Partially Complete — see below)
-**Last Updated**: 2026-02-13
+**Phase**: Phase 8 - EGRA Letter Sound Assessment ✅ Complete
+**Last Updated**: 2026-03-26
 
 ---
 
@@ -171,6 +171,24 @@
 
 ---
 
+#### Phase 8: EGRA Letter Sound Assessment (Completed 2026-03-26)
+- [x] Schools and classes data model — `schools`, `classes` tables with `home_language`; children linked via `class_id`
+- [x] Supabase migration for assessments table with RLS policies (`05_add_assessments_table.sql`)
+- [x] Assessment child selection screen with search/sort by last assessed date and accuracy
+- [x] EGRA letter grids — English (60 mixed-case) and isiXhosa (60 with digraphs) in `egraConstants.js`
+- [x] Timed 60-second assessment with color-coded countdown timer and pagination (20/page)
+- [x] Tap-to-mark-correct letter grid (`EgraLetterGrid.js`)
+- [x] "Last Letter Attempted" bottom sheet — assessor confirms where child stopped
+- [x] Assessment results screen — accuracy ring, feedback, stat cards, letter-by-letter detail grid
+- [x] Assessment history screen — last 30 days, tappable cards with sync status
+- [x] Assessment detail screen — standalone view with full stats and color-coded letter grid
+- [x] Auto-detect language from child's class (`home_language` → letter set lookup)
+- [x] Assessment icon on Class Details child rows — quick access to most recent assessment
+- [x] Offline-first storage and sync for assessments
+- [x] `AssessmentDetail` screen registered in navigation
+
+---
+
 ## In Progress 🚧
 
 ### Phase 5: Additional Session Forms
@@ -180,29 +198,10 @@
 
 ## Up Next 📋
 
-### Phase 1: Authentication & Foundation (Starting Now)
-
-1. Test login flow end-to-end
-2. Create ProfileScreen (accessible from Home)
-3. Implement password reset flow
-4. Set up invitation system
-5. Implement OfflineContext for sync management
-
-### Phase 1 Details: Authentication & Foundation
-- [x] Test login flow with Supabase (create test user) ✅
-- [x] Create ProfileScreen UI (name & password editable) ✅
-- [x] Implement ForgotPasswordScreen ✅
-- [x] Set up password reset flow ✅
-- [ ] Create invitation system (email links)
-- [ ] Implement OfflineContext for sync management
-- [x] Add profile navigation from HomeScreen ✅
-
-### Phase 2: Time Tracking (After Phase 1)
-- [ ] Location service setup (expo-location)
-- [ ] Time tracking screen UI
-- [ ] Sign in/out functionality
-- [ ] Geolocation capture with medium accuracy
-- [ ] Daily/weekly hours view
+### Remaining Work
+- Phase 5: Additional session forms (Numeracy, ZZ Coach, Yeboneer)
+- Phase 7 remaining: security review, Android/iOS device testing, performance optimisation, production deployment
+- Letter Tracker feature (per-child mastery grid — documented in PRD)
 
 ---
 
@@ -253,14 +252,23 @@ None currently.
 ## Metrics & Timeline
 
 ### Current Progress
-- **Phases Completed**: Phase 0 ✅, Phase 1 ✅, Phase 2 ✅, Phase 3 ✅, Phase 4 ✅, Phase 6 ✅, Phase 7 (partial) 🔄
-- **Features Completed**: ~90% (auth, time tracking, children & groups, Literacy Coach sessions, full offline sync, polish/feedback/validation/RLS)
+- **Phases Completed**: Phase 0 ✅, Phase 1 ✅, Phase 2 ✅, Phase 3 ✅, Phase 4 ✅, Phase 6 ✅, Phase 7 (partial) 🔄, Phase 8 ✅
+- **Features Completed**: ~95% (auth, time tracking, children & groups, Literacy Coach sessions, full offline sync, polish/feedback/validation/RLS, EGRA letter assessment with schools/classes)
 - **Phase 7 remaining**: security review, Android/iOS device testing, performance optimisation, production deployment
 - **Next Phase**: Phase 5 - Additional Session Forms (Numeracy, ZZ Coach, Yeboneer)
 
 ---
 
 ## Recent Activity Log
+
+### 2026-03-26 (Session 14: EGRA Assessment v2 — Last Attempted, Detail Grid, Auto-Language)
+- **"Last Letter Attempted" bottom sheet** — `LastAttemptedBottomSheet.js` component shows all 60 letters after assessment ends; assessor taps the last letter the child actually attempted. Fixes inaccurate attempted counts (previously, last tapped index was always a correct letter). `LetterAssessmentScreen.handleFinish` now shows the sheet instead of saving directly; `saveAssessment()` accepts an optional `overrideLastIndex`.
+- **Assessment detail grid** — `AssessmentDetailGrid.js` renders a color-coded 5-column grid (green = correct, red = incorrect, gray = not attempted) reusable across screens. Added to `AssessmentResultsScreen` (immediate post-assessment) and new `AssessmentDetailScreen` (standalone view for past assessments).
+- **History cards tappable** — `AssessmentHistoryScreen` cards now navigate to `AssessmentDetail` with a right-chevron affordance.
+- **Auto-detect language from class** — `AssessmentChildSelectScreen.handleChildPress` looks up `child.class_id` → `class.home_language` → `LETTER_SETS[key]`. Skips the manual language dialog when a matching letter set exists. Falls back to dialog for: no class, class not in cache, or Afrikaans (no letter set yet).
+- **Assessment icon on Class Details** — `ClassDetailScreen` child rows now show a clipboard icon if the child has a prior assessment; tapping navigates to `AssessmentDetail`.
+- **Helper function** — `getLetterSetById(id)` added to `egraConstants.js` for resolving letter sets from stored `letter_set_id`.
+- **Branch**: `feature/letter-assessment-v2` merged to `main`
 
 ### 2026-02-13 (Session 10: Home Redesign & Navigation Restructure)
 - **Extracted `useTimeTracking` hook** — `src/hooks/useTimeTracking.js` encapsulates all sign in/out state (GPS, AsyncStorage, elapsed timer, snackbar). Used by both HomeScreen and TimeTrackingScreen; eliminates duplicated async logic.
@@ -398,4 +406,4 @@ None currently.
 
 ---
 
-**Progress Summary**: 🔄 **Phase 7: Partially Complete** — feedback standardised on Snackbar, loading states added, inline form validation implemented, RLS migration `03_tighten_children_rls.sql` written. Remaining Phase 7 items: security review, Android/iOS device testing, performance optimisation, production deployment. Home screen redesigned (sign in/out on Home, Assessments tab replacing Time tab). Next up: Phase 5 (additional session forms) and completing Phase 7 pre-production items.
+**Progress Summary**: ✅ **Phase 8: EGRA Assessment Complete** — Full letter sound assessment with timed grid, last-attempted prompt, detail views, auto-language detection, and assessment history. Schools/classes data model added. Remaining: Phase 5 (additional session forms), Phase 7 pre-production items (security review, device testing, performance, deployment).

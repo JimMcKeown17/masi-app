@@ -17,14 +17,14 @@ React Native (Expo) + JavaScript + Supabase + React Native Paper + AsyncStorage
 See PRD.md for complete tech stack details.
 
 ### Database Schema
-Core tables: `users`, `children`, `groups`, `children_groups`, `time_entries`, `sessions`
+Core tables: `users`, `children`, `staff_children`, `groups`, `children_groups`, `time_entries`, `sessions`, `schools`, `classes`, `assessments`
 See DATABASE_SCHEMA_GUIDE.md for complete schema with explanations.
 
 ### Navigation
 Bottom tabs: Home → My Children → Sessions → Assessments
 - Profile accessed via gear icon (⚙️) in Home tab header
 - Sign In / Sign Out lives on Home screen (not a dedicated tab)
-- Time tab removed; Assessments tab added as placeholder for future phase
+- Time tab removed; Assessments tab contains EGRA Letter Sound Assessment feature
 See PRD.md for complete app structure.
 
 ## Deployment Status — Multiple App Versions in the Wild
@@ -114,6 +114,19 @@ const url = process.env.EXPO_PUBLIC_SUPABASE_URL
 ---
 
 ## Documentation Guidelines
+
+### IMPORTANT: Add Checklists to PROGRESS.md as You Work
+
+When starting a new feature or multi-step task, **add a checklist to PROGRESS.md immediately** under the appropriate phase section. Each subtask should be a `- [ ]` item. Mark items `- [x]` as you complete them so the user can follow progress in real time. Do not batch up completions — check off each item as soon as it is done.
+
+Example:
+```markdown
+#### Feature: Widget Redesign
+- [x] Create WidgetGrid component
+- [x] Add to WidgetScreen
+- [ ] Wire up navigation
+- [ ] Test offline sync
+```
 
 ### IMPORTANT: Update LEARNING.md as You Build
 
