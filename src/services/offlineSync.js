@@ -56,6 +56,11 @@ const SYNC_TABLES = {
     table: 'assessments',
     getRecords: () => storage.getUnsyncedRecords('ASSESSMENTS'),
   },
+  LETTER_MASTERY: {
+    key: 'LETTER_MASTERY',
+    table: 'letter_mastery',
+    getRecords: () => storage.getUnsyncedLetterMastery(),
+  },
 };
 
 /**
@@ -78,7 +83,7 @@ const getRetryDelay = (attemptNumber) => {
 const syncRecord = async (tableName, record) => {
   try {
     // Remove local-only fields before syncing
-    const { synced, ...recordData } = record;
+    const { synced, _deleted, ...recordData } = record;
 
     // Upsert: insert if new, update if exists (last-write-wins)
     const { error } = await supabase
@@ -147,6 +152,33 @@ const syncTable = async (tableConfig) => {
         const delay = getRetryDelay(attemptCount + 1);
         console.log(`Retry attempt ${attemptCount + 1} for ${record.id}, waiting ${delay}ms...`);
         await new Promise(resolve => setTimeout(resolve, delay));
+      }
+
+      // Handle soft-deleted records (e.g., letter_mastery un-teach)
+      if (record._deleted) {
+        try {
+          const { error } = await supabase.from(table).delete().eq('id', record.id);
+          if (error) throw error;
+          // Hard-remove from local storage after successful server delete
+          await storage.removeLetterMasteryRecord(record.id);
+          await storage.clearRetryAttempts(key, record.id);
+          await storage.clearLastSyncError(key, record.id);
+          results.synced++;
+          console.log(`✓ Deleted ${key} record ${record.id} from server`);
+        } catch (deleteError) {
+          const errorMsg = deleteError?.message || deleteError?.code || 'Delete failed';
+          await storage.recordRetryAttempt(key, record.id);
+          await storage.setLastSyncError(key, record.id, errorMsg);
+          results.failed++;
+          results.failedRecords.push({
+            id: record.id,
+            table: key,
+            error: errorMsg,
+            attemptCount: attemptCount + 1,
+          });
+          console.error(`✗ Failed to delete ${key} record ${record.id}: ${errorMsg}`);
+        }
+        continue;
       }
 
       // Attempt to sync the record

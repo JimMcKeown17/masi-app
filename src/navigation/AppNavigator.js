@@ -37,6 +37,7 @@ import LetterAssessmentScreen from '../screens/assessments/LetterAssessmentScree
 import AssessmentResultsScreen from '../screens/assessments/AssessmentResultsScreen';
 import AssessmentHistoryScreen from '../screens/assessments/AssessmentHistoryScreen';
 import AssessmentDetailScreen from '../screens/assessments/AssessmentDetailScreen';
+import LetterTrackerScreen from '../screens/assessments/LetterTrackerScreen';
 
 // Sync screen
 import SyncStatusScreen from '../screens/main/SyncStatusScreen';
@@ -231,6 +232,14 @@ function MainNavigator() {
         component={AssessmentHistoryScreen}
         options={{
           title: 'Assessment History',
+          headerBackTitle: 'Back',
+        }}
+      />
+      <Stack.Screen
+        name="LetterTracker"
+        component={LetterTrackerScreen}
+        options={{
+          title: 'Letter Tracker',
           headerBackTitle: 'Back',
         }}
       />

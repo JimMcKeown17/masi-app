@@ -20,6 +20,9 @@ import { storage } from '../../utils/storage';
 import { LETTER_ORDER, READING_LEVELS } from '../../constants/literacyConstants';
 import LetterGrid from '../../components/session/LetterGrid';
 import ChildSelector from '../../components/children/ChildSelector';
+import LetterTrackerBottomSheet from '../../components/session/LetterTrackerBottomSheet';
+import { normalizeLanguageKey } from '../../utils/letterMastery';
+import { useClasses } from '../../context/ClassesContext';
 import { v4 as uuidv4 } from 'uuid';
 
 // ---------------------------------------------------------------------------
@@ -181,6 +184,7 @@ function InlineCalendar({ selectedDate, onSelectDate }) {
 export default function LiteracySessionForm({ navigation }) {
   const { user } = useAuth();
   const { refreshSyncStatus } = useOffline();
+  const { classes } = useClasses();
 
   const [sessionDate, setSessionDate] = useState(new Date());
   const [dateMenuVisible, setDateMenuVisible] = useState(false);
@@ -191,6 +195,9 @@ export default function LiteracySessionForm({ navigation }) {
   const [childReadingLevels, setChildReadingLevels] = useState({});
   // Track which child's reading-level menu is open (by child id or null)
   const [openChildLevelMenu, setOpenChildLevelMenu] = useState(null);
+  // Letter tracker: { [childId]: { [letter]: true/false } } — pending changes per child
+  const [letterTrackerChanges, setLetterTrackerChanges] = useState({});
+  const [trackerBottomSheetChild, setTrackerBottomSheetChild] = useState(null);
   const [comments, setComments] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [validationErrors, setValidationErrors] = useState({});
@@ -228,6 +235,24 @@ export default function LiteracySessionForm({ navigation }) {
     setOpenChildLevelMenu(null);
   };
 
+  const handleTrackerChangesUpdate = (childId, changes) => {
+    setLetterTrackerChanges((prev) => ({ ...prev, [childId]: changes }));
+  };
+
+  // Determine language key for letter tracker from the first selected child's class
+  const trackerLanguageKey = useMemo(() => {
+    if (selectedChildren.length === 0) return 'english';
+    const firstChild = selectedChildren[0];
+    const childClass = classes.find(c => c.id === firstChild.class_id);
+    return normalizeLanguageKey(childClass?.home_language);
+  }, [selectedChildren, classes]);
+
+  // Count pending tracker changes for a child (for button label)
+  const getTrackerChangeCount = (childId) => {
+    const changes = letterTrackerChanges[childId] || {};
+    return Object.values(changes).filter(v => v === true).length;
+  };
+
   const handleSubmit = async () => {
     const errors = {};
     if (selectedChildren.length === 0) errors.children = 'Select at least one child';
@@ -241,6 +266,7 @@ export default function LiteracySessionForm({ navigation }) {
     setSubmitting(true);
 
     try {
+      // 1. Save session record
       const session = {
         id: uuidv4(),
         user_id: user.id,
@@ -261,6 +287,48 @@ export default function LiteracySessionForm({ navigation }) {
       };
 
       await storage.saveSession(session);
+
+      // 2. Save letter tracker changes (batch)
+      const { LETTER_SETS } = require('../../constants/egraConstants');
+      const letterSet = LETTER_SETS[trackerLanguageKey];
+      const now = new Date().toISOString();
+
+      for (const [childId, changes] of Object.entries(letterTrackerChanges)) {
+        for (const [letter, value] of Object.entries(changes)) {
+          if (value === true) {
+            // Add new taught letter
+            const record = {
+              id: uuidv4(),
+              user_id: user.id,
+              child_id: childId,
+              letter,
+              source: 'taught',
+              language: letterSet.language,
+              synced: false,
+              created_at: now,
+              updated_at: now,
+            };
+            await storage.saveLetterMasteryRecord(record);
+          } else if (value === false) {
+            // Soft-delete: find the existing record and mark it
+            const allMastery = await storage.getLetterMastery();
+            const existing = allMastery.find(
+              r => r.child_id === childId &&
+                   r.letter === letter &&
+                   r.language === letterSet.language &&
+                   !r._deleted
+            );
+            if (existing) {
+              await storage.updateLetterMasteryRecord(existing.id, {
+                _deleted: true,
+                synced: false,
+                updated_at: now,
+              });
+            }
+          }
+        }
+      }
+
       await refreshSyncStatus();
       navigation.goBack();
     } catch (error) {
@@ -352,32 +420,6 @@ export default function LiteracySessionForm({ navigation }) {
         </Card.Content>
       </Card>
 
-      {/* ── Child Reading Levels ── */}
-      {selectedChildren.length > 0 && (
-        <Card style={styles.card}>
-          <Card.Content>
-            <Text variant="titleSmall" style={styles.sectionLabel}>Child Reading Levels (Optional)</Text>
-            <Text variant="bodySmall" style={styles.helperText}>
-              Record each child's current level
-            </Text>
-            {selectedChildren.map((child) => (
-              <View key={child.id} style={styles.childLevelRow}>
-                <Text variant="bodyMedium" style={styles.childLevelName}>
-                  {child.first_name} {child.last_name}
-                </Text>
-                <Button
-                  mode="outlined"
-                  onPress={() => setOpenChildLevelMenu(child.id)}
-                  style={styles.childLevelButton}
-                >
-                  {childReadingLevels[child.id] || 'Not set'}
-                </Button>
-              </View>
-            ))}
-          </Card.Content>
-        </Card>
-      )}
-
       {/* ── Comments ── */}
       <Card style={styles.card}>
         <Card.Content>
@@ -394,6 +436,71 @@ export default function LiteracySessionForm({ navigation }) {
         </Card.Content>
       </Card>
 
+      {/* ── Per-Child Progress Updates ── */}
+      {selectedChildren.length > 0 && (
+        <>
+          <View style={styles.sectionDivider}>
+            <View style={styles.dividerLine} />
+            <Text variant="labelMedium" style={styles.dividerLabel}>
+              Update Child Progress (Optional)
+            </Text>
+            <View style={styles.dividerLine} />
+          </View>
+
+          {/* ── Child Reading Levels ── */}
+          <Card style={styles.card}>
+            <Card.Content>
+              <Text variant="titleSmall" style={styles.sectionLabel}>Reading Levels</Text>
+              <Text variant="bodySmall" style={styles.helperText}>
+                Record each child's current level
+              </Text>
+              {selectedChildren.map((child) => (
+                <View key={child.id} style={styles.childLevelRow}>
+                  <Text variant="bodyMedium" style={styles.childLevelName}>
+                    {child.first_name} {child.last_name}
+                  </Text>
+                  <Button
+                    mode="outlined"
+                    onPress={() => setOpenChildLevelMenu(child.id)}
+                    style={styles.childLevelButton}
+                  >
+                    {childReadingLevels[child.id] || 'Not set'}
+                  </Button>
+                </View>
+              ))}
+            </Card.Content>
+          </Card>
+
+          {/* ── Letter Tracker Updates ── */}
+          <Card style={styles.card}>
+            <Card.Content>
+              <Text variant="titleSmall" style={styles.sectionLabel}>Letter Tracker</Text>
+              <Text variant="bodySmall" style={styles.helperText}>
+                Update letters each child has mastered
+              </Text>
+              {selectedChildren.map((child) => {
+                const changeCount = getTrackerChangeCount(child.id);
+                return (
+                  <View key={child.id} style={styles.childLevelRow}>
+                    <Text variant="bodyMedium" style={styles.childLevelName}>
+                      {child.first_name} {child.last_name}
+                    </Text>
+                    <Button
+                      mode="outlined"
+                      onPress={() => setTrackerBottomSheetChild(child)}
+                      style={styles.childLevelButton}
+                      icon="alpha-a-box-outline"
+                    >
+                      {changeCount > 0 ? `+${changeCount} new` : 'Update'}
+                    </Button>
+                  </View>
+                );
+              })}
+            </Card.Content>
+          </Card>
+        </>
+      )}
+
       {/* ── Submit ── */}
       <Button
         mode="contained"
@@ -406,6 +513,20 @@ export default function LiteracySessionForm({ navigation }) {
         Submit Session
       </Button>
       </ScrollView>
+
+      {/* ── Letter Tracker Bottom Sheet ── */}
+      <LetterTrackerBottomSheet
+        visible={trackerBottomSheetChild !== null}
+        onDismiss={() => setTrackerBottomSheetChild(null)}
+        child={trackerBottomSheetChild}
+        languageKey={trackerLanguageKey}
+        pendingChanges={trackerBottomSheetChild ? (letterTrackerChanges[trackerBottomSheetChild.id] || {}) : {}}
+        onChangesUpdate={(changes) => {
+          if (trackerBottomSheetChild) {
+            handleTrackerChangesUpdate(trackerBottomSheetChild.id, changes);
+          }
+        }}
+      />
 
       {/* ── Session Reading Level Dialog ── */}
       <Portal>
@@ -510,6 +631,21 @@ const styles = StyleSheet.create({
   },
   childLevelButton: {
     minWidth: 140,
+  },
+  sectionDivider: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginVertical: spacing.md,
+    gap: spacing.sm,
+  },
+  dividerLine: {
+    flex: 1,
+    height: 1,
+    backgroundColor: colors.border,
+  },
+  dividerLabel: {
+    color: colors.textSecondary,
+    fontWeight: '600',
   },
   commentsInput: {
     backgroundColor: colors.surface,

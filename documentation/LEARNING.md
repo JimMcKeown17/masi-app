@@ -827,6 +827,49 @@ The trigger fires *before* the row hits the table, so it can rewrite fields. The
 
 ---
 
+## Letter Tracker: Computed vs. Stored Mastery
+
+### The Problem: Stale Assessment Data
+
+The PWA version of the letter tracker stored both assessment-mastered and coach-taught letters in the same record. When a child retook an assessment, the old "mastered" marks would become stale — the child might no longer demonstrate mastery, but the tracker still showed orange. Cleaning up stale records required complex reconciliation logic.
+
+### The Decision: Compute Assessment Mastery On-The-Fly
+
+Instead of persisting assessment mastery to the `letter_mastery` table, we compute it fresh each time the tracker screen loads by reading the child's most recent assessment record. Only coach-taught ("source: taught") records are stored in `letter_mastery`.
+
+**Why this works well:**
+- **Always current**: If a child retakes the assessment and does worse on a letter, the tracker immediately reflects it — no cleanup needed.
+- **Clean separation**: Assessment data stays in the `assessments` table untouched. Teaching data lives in `letter_mastery`. Neither mutates the other.
+- **Simpler sync**: Only "taught" records need offline sync. Assessment mastery is derived from assessment records that already sync independently.
+
+**Trade-off**: Each screen load requires iterating over the 60-letter EGRA set to find matching positions — but with 60 letters and 26 tracker positions, this computation is trivially fast (< 1ms).
+
+### The Mastery Calculation: "All Correct Among Attempted"
+
+The EGRA is a timed 60-second test. Most children don't reach all 60 letters. The letter "a" might appear at positions 1, 33, and 47. If the child only reached position 35:
+
+- Position 1: attempted, check if correct
+- Position 33: attempted, check if correct
+- Position 47: NOT attempted — **excluded from calculation**
+
+The letter is mastered only if ALL attempted instances were correct. Un-attempted instances are neither correct nor incorrect — they simply have no data. This respects the timed nature of the EGRA without penalizing children for running out of time.
+
+### Soft-Delete Pattern for Offline Sync
+
+The `letter_mastery` table is the first table in our app that needs server-side deletes. When a coach "un-teaches" a letter (taps green → gray), we can't simply delete the local record because it may have already synced to Supabase. The solution:
+
+1. Mark the record `_deleted: true, synced: false` in AsyncStorage
+2. During sync, if `_deleted === true`, perform a Supabase DELETE instead of upsert
+3. After successful server delete, hard-remove from AsyncStorage
+
+This keeps delete propagation within the existing sync pipeline — no new sync infrastructure needed.
+
+### One Row Per Letter vs. JSONB Document
+
+We chose one row per child per letter (in `letter_mastery`) over a single JSONB document per child. The key reason: **offline sync conflicts**. If two devices edit different letters on the same child simultaneously, individual rows sync independently (each gets its own upsert). A JSONB blob would create last-write-wins conflicts where one device's changes silently overwrite the other's.
+
+---
+
 ## Key Takeaways for Developers
 
 1. **Offline-first is a mindset**: Write to local storage first, sync is secondary

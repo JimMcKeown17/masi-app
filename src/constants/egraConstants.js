@@ -35,6 +35,25 @@ export const ISIXHOSA_LETTER_SET = {
 export const LETTER_SETS = { english: ENGLISH_LETTER_SET, isixhosa: ISIXHOSA_LETTER_SET };
 export const ASSESSMENT_DURATION = 60; // seconds
 
+// Pedagogical order for the 26-letter tracker grid (NOT the EGRA 60-letter assessment set).
+// These are the unique letters in teaching order, used by the Letter Tracker feature.
+export const ENGLISH_PEDAGOGICAL_ORDER = [
+  'a','m','s','t','n','i','p','c','f','d',
+  'h','o','r','b','l','k','e','g','w','v',
+  'u','j','y','z','q','x',
+];
+
+export const ISIXHOSA_PEDAGOGICAL_ORDER = [
+  'a','e','i','o','u','b','l','m','k','p',
+  's','h','z','n','d','y','f','w','v','x',
+  'g','t','q','r','c','j',
+];
+
+export const PEDAGOGICAL_ORDERS = {
+  english: ENGLISH_PEDAGOGICAL_ORDER,
+  isixhosa: ISIXHOSA_PEDAGOGICAL_ORDER,
+};
+
 export function getLetterSetById(id) {
   return Object.values(LETTER_SETS).find((s) => s.id === id) || null;
 }

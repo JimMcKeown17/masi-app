@@ -92,58 +92,77 @@ export default function ClassDetailScreen({ route, navigation }) {
         onPress={() => navigation.navigate('EditChild', { childId: item.id })}
         activeOpacity={0.7}
       >
+        {/* Left: name + details */}
         <View style={styles.childInfo}>
           <Text variant="bodyLarge" style={styles.childName}>
             {item.first_name} {item.last_name}
           </Text>
-          <Text variant="bodySmall" style={styles.childDetail}>
-            {item.age ? `Age ${item.age}` : ''}
-            {item.age && item.gender ? ' • ' : ''}
-            {item.gender || ''}
-          </Text>
+          <View style={styles.detailRow}>
+            {item.age ? (
+              <Text variant="bodySmall" style={styles.childDetail}>
+                Age {item.age}
+              </Text>
+            ) : null}
+            {group ? (
+              <View style={styles.groupRow}>
+                {item.age ? <Text variant="bodySmall" style={styles.childDetail}>  ·  </Text> : null}
+                <Text variant="bodySmall" style={styles.groupLabel}>Group:</Text>
+                <TouchableOpacity
+                  style={[styles.groupChip, { backgroundColor: colorScheme.bg }]}
+                  onPress={() => openGroupPicker(item)}
+                  hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                >
+                  <Text style={[styles.groupChipText, { color: colorScheme.text }]}>
+                    {group.name} ▾
+                  </Text>
+                </TouchableOpacity>
+              </View>
+            ) : (
+              <View style={styles.groupRow}>
+                {item.age ? <Text variant="bodySmall" style={styles.childDetail}>  ·  </Text> : null}
+                <TouchableOpacity
+                  style={styles.assignChip}
+                  onPress={() => openGroupPicker(item)}
+                  hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                >
+                  <Text style={styles.assignChipText}>+ Group</Text>
+                </TouchableOpacity>
+              </View>
+            )}
+          </View>
+          {/* Unsynced indicator inline */}
+          {!item.synced && (
+            <View style={styles.syncRow}>
+              <List.Icon
+                icon="cloud-upload-outline"
+                color={colors.accent}
+                style={styles.syncIcon}
+              />
+              <Text variant="labelSmall" style={styles.syncText}>Syncing…</Text>
+            </View>
+          )}
         </View>
 
-        <View style={styles.chipArea}>
+        {/* Right: action icons — large and tappable */}
+        <View style={styles.actionIcons}>
+          <IconButton
+            icon="alpha-a-box-outline"
+            size={30}
+            iconColor={colors.primary}
+            style={styles.actionIcon}
+            onPress={() => navigation.navigate('LetterTracker', { child: item, classItem })}
+          />
           {latestAssessment && (
             <IconButton
-              icon="clipboard-text-outline"
-              size={20}
+              icon="chart-box-outline"
+              size={30}
               iconColor={colors.primary}
-              style={styles.assessmentIcon}
+              style={styles.actionIcon}
               onPress={() => navigation.navigate('AssessmentDetail', {
                 assessment: latestAssessment,
                 childName: `${item.first_name} ${item.last_name}`,
               })}
             />
-          )}
-          {/* Unsynced indicator */}
-          {!item.synced && (
-            <List.Icon
-              icon="cloud-upload-outline"
-              color={colors.accent}
-              style={styles.syncIcon}
-            />
-          )}
-
-          {/* Group chip */}
-          {group ? (
-            <TouchableOpacity
-              style={[styles.groupChip, { backgroundColor: colorScheme.bg }]}
-              onPress={() => openGroupPicker(item)}
-              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-            >
-              <Text style={[styles.groupChipText, { color: colorScheme.text }]}>
-                {group.name} ▾
-              </Text>
-            </TouchableOpacity>
-          ) : (
-            <TouchableOpacity
-              style={styles.assignChip}
-              onPress={() => openGroupPicker(item)}
-              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-            >
-              <Text style={styles.assignChipText}>+ Assign Group</Text>
-            </TouchableOpacity>
           )}
         </View>
       </TouchableOpacity>
@@ -271,27 +290,52 @@ const styles = StyleSheet.create({
     marginRight: spacing.sm,
   },
   childName: {
-    fontWeight: '600',
+    fontWeight: '700',
+    fontSize: 16,
+  },
+  detailRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 4,
+    flexWrap: 'wrap',
   },
   childDetail: {
     color: colors.textSecondary,
-    marginTop: 2,
   },
-  chipArea: {
+  groupRow: {
     flexDirection: 'row',
     alignItems: 'center',
   },
-  assessmentIcon: {
-    margin: 0,
-    marginRight: 0,
+  groupLabel: {
+    color: colors.textSecondary,
+    fontSize: 12,
+    marginRight: 4,
+  },
+  syncRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 2,
   },
   syncIcon: {
     margin: 0,
-    marginRight: spacing.xs,
+    width: 18,
+    height: 18,
+  },
+  syncText: {
+    color: colors.accent,
+    fontSize: 11,
+  },
+  actionIcons: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 2,
+  },
+  actionIcon: {
+    margin: 0,
   },
   groupChip: {
     paddingHorizontal: 10,
-    paddingVertical: 4,
+    paddingVertical: 3,
     borderRadius: 12,
   },
   groupChipText: {
@@ -299,8 +343,8 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   assignChip: {
-    paddingHorizontal: 10,
-    paddingVertical: 4,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
     borderRadius: 12,
     borderWidth: 1.5,
     borderStyle: 'dashed',
@@ -308,7 +352,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#FFF8E1',
   },
   assignChipText: {
-    fontSize: 12,
+    fontSize: 11,
     fontWeight: '600',
     color: '#F57F17',
   },

@@ -10,6 +10,7 @@ const STORAGE_KEYS = {
   SCHOOLS: '@schools',
   CLASSES: '@classes',
   ASSESSMENTS: '@assessments',
+  LETTER_MASTERY: '@letter_mastery',
   SYNC_QUEUE: '@sync_queue',
   SYNC_META: '@sync_meta',
   USER_PROFILE: '@user_profile',
@@ -258,6 +259,38 @@ export const storage = {
     return assessments.filter(a => a.synced === false);
   },
 
+  // Letter mastery (coach-taught records; assessment mastery is computed on-the-fly)
+  async getLetterMastery() {
+    return await this.getItem(STORAGE_KEYS.LETTER_MASTERY) || [];
+  },
+
+  async saveLetterMasteryRecord(record) {
+    const records = await this.getLetterMastery();
+    records.push(record);
+    return await this.setItem(STORAGE_KEYS.LETTER_MASTERY, records);
+  },
+
+  async updateLetterMasteryRecord(id, updates) {
+    const records = await this.getLetterMastery();
+    const index = records.findIndex(r => r.id === id);
+    if (index !== -1) {
+      records[index] = { ...records[index], ...updates };
+      return await this.setItem(STORAGE_KEYS.LETTER_MASTERY, records);
+    }
+    return false;
+  },
+
+  async removeLetterMasteryRecord(id) {
+    const records = await this.getLetterMastery();
+    const filtered = records.filter(r => r.id !== id);
+    return await this.setItem(STORAGE_KEYS.LETTER_MASTERY, filtered);
+  },
+
+  async getUnsyncedLetterMastery() {
+    const records = await this.getLetterMastery();
+    return records.filter(r => r.synced === false);
+  },
+
   // Generic methods for sync operations
   async getUnsyncedRecords(table) {
     const key = STORAGE_KEYS[table.toUpperCase()];
@@ -280,7 +313,7 @@ export const storage = {
   },
 
   async getAllUnsyncedCount() {
-    const tables = ['TIME_ENTRIES', 'SESSIONS', 'CLASSES', 'CHILDREN', 'STAFF_CHILDREN', 'GROUPS', 'CHILDREN_GROUPS', 'ASSESSMENTS'];
+    const tables = ['TIME_ENTRIES', 'SESSIONS', 'CLASSES', 'CHILDREN', 'STAFF_CHILDREN', 'GROUPS', 'CHILDREN_GROUPS', 'ASSESSMENTS', 'LETTER_MASTERY'];
     let totalCount = 0;
 
     for (const table of tables) {
@@ -325,6 +358,7 @@ export const storage = {
         STORAGE_KEYS.SCHOOLS,
         STORAGE_KEYS.CLASSES,
         STORAGE_KEYS.ASSESSMENTS,
+        STORAGE_KEYS.LETTER_MASTERY,
         STORAGE_KEYS.SYNC_QUEUE,
         STORAGE_KEYS.SYNC_META,
       ];

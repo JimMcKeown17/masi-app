@@ -1,8 +1,25 @@
 # Masi App - Development Progress
 
 ## Current Status
-**Phase**: Phase 8 - EGRA Letter Sound Assessment ✅ Complete
+**Phase**: Phase 9 - Letter Tracker Feature
 **Last Updated**: 2026-03-26
+
+---
+
+## In Progress
+
+### Phase 9: Letter Tracker
+- [x] Supabase migration — `letter_mastery` table
+- [x] Pedagogical letter orders in egraConstants.js
+- [x] Mastery calculation utility (letterMastery.js)
+- [x] Storage CRUD methods for letter_mastery
+- [x] Sync integration with soft-delete support
+- [x] LetterTrackerScreen with grid UI
+- [x] Navigation route registration
+- [x] Entry point icon on ClassDetailScreen
+- [x] Documentation updates (egra_letter_sets.md, LEARNING.md)
+- [x] Session form integration — LetterTrackerBottomSheet + form restructure
+- [ ] End-to-end testing
 
 ---
 
