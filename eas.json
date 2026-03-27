@@ -35,7 +35,10 @@
         "serviceAccountKeyPath": "./google-play-service-account.json",
         "track": "internal"
       },
-      "ios": {}
+      "ios": {
+        "ascAppId": "6760048185",
+        "appleId": "mckeown.james@gmail.com"
+      }
     }
   }
 }

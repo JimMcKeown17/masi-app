@@ -16,7 +16,6 @@
     "ios": {
       "supportsTablet": false,
       "bundleIdentifier": "org.masinyusane.masi",
-      "buildNumber": "1",
       "infoPlist": {
   "NSLocationWhenInUseUsageDescription": "Masi needs your location to verify you are at the school when signing in and out for time tracking.",
   "ITSAppUsesNonExemptEncryption": false
@@ -29,7 +28,6 @@
       },
       "edgeToEdgeEnabled": true,
       "package": "org.masinyusane.masi",
-      "versionCode": 1,
       "permissions": [
         "ACCESS_FINE_LOCATION",
         "ACCESS_COARSE_LOCATION"
