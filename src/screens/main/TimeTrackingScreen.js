@@ -52,7 +52,7 @@ export default function TimeTrackingScreen({ navigation }) {
 
                 <View style={styles.statusRow}>
                   <Text variant="bodyMedium" style={styles.label}>
-                    Signed in at:
+                    Clocked in at:
                   </Text>
                   <Text variant="bodyMedium" style={styles.value}>
                     {formatTime(activeEntry?.sign_in_time)}
@@ -101,7 +101,7 @@ export default function TimeTrackingScreen({ navigation }) {
                     contentStyle={styles.buttonContent}
                     icon="login"
                   >
-                    Sign In
+                    Clock In
                   </Button>
                 ) : (
                   <Button
@@ -112,14 +112,14 @@ export default function TimeTrackingScreen({ navigation }) {
                     buttonColor={colors.emphasis}
                     icon="logout"
                   >
-                    Sign Out
+                    Clock Out
                   </Button>
                 )}
 
                 <Text variant="bodySmall" style={styles.helperText}>
                   {!isSignedIn
-                    ? 'Tap "Sign In" when you arrive at work. Your location will be recorded.'
-                    : 'Tap "Sign Out" when you leave work. Your hours will be calculated automatically.'}
+                    ? 'Tap "Clock In" when you arrive at work. Your location will be recorded.'
+                    : 'Tap "Clock Out" when you leave work. Your hours will be calculated automatically.'}
                 </Text>
               </>
             )}

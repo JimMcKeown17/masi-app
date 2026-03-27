@@ -5,6 +5,9 @@ import { storage } from '../utils/storage';
 import { getCurrentPosition } from '../services/locationService';
 import { v4 as uuidv4 } from 'uuid';
 
+const MAX_SHIFT_HOURS = 10;
+const MAX_SHIFT_MS = MAX_SHIFT_HOURS * 60 * 60 * 1000;
+
 /**
  * Shared hook for sign in/out time tracking logic.
  * Used by both HomeScreen and TimeTrackingScreen.
@@ -45,13 +48,39 @@ export function useTimeTracking() {
     return () => stopElapsedTimer();
   }, [isSignedIn, activeEntry]);
 
+  const autoClockOut = async (entry) => {
+    const signInMs = new Date(entry.sign_in_time).getTime();
+    const signOutTime = new Date(signInMs + MAX_SHIFT_MS).toISOString();
+
+    const updatedEntry = {
+      ...entry,
+      sign_out_time: signOutTime,
+      sign_out_lat: null,
+      sign_out_lon: null,
+      auto_clocked_out: true,
+      synced: false,
+    };
+
+    await storage.updateTimeEntry(entry.id, updatedEntry);
+    setActiveEntry(null);
+    setIsSignedIn(false);
+    setElapsedTime(0);
+    await refreshSyncStatus();
+    showSnackbar(`Auto clocked out after ${MAX_SHIFT_HOURS} hours.`);
+  };
+
   const loadActiveEntry = async () => {
     try {
       const entries = await storage.getTimeEntries();
       const active = entries.find(entry => entry.sign_out_time === null && entry.user_id === user?.id);
       if (active) {
-        setActiveEntry(active);
-        setIsSignedIn(true);
+        const elapsed = Date.now() - new Date(active.sign_in_time).getTime();
+        if (elapsed >= MAX_SHIFT_MS) {
+          await autoClockOut(active);
+        } else {
+          setActiveEntry(active);
+          setIsSignedIn(true);
+        }
       }
     } catch (error) {
       console.error('Error loading active entry:', error);
@@ -65,6 +94,10 @@ export function useTimeTracking() {
     const updateElapsed = () => {
       if (activeEntry?.sign_in_time) {
         const elapsed = Date.now() - new Date(activeEntry.sign_in_time).getTime();
+        if (elapsed >= MAX_SHIFT_MS) {
+          autoClockOut(activeEntry);
+          return;
+        }
         setElapsedTime(elapsed);
       }
     };
@@ -98,7 +131,7 @@ export function useTimeTracking() {
 
   const handleSignIn = async () => {
     if (isSignedIn) {
-      showSnackbar('Already signed in. Please sign out first.');
+      showSnackbar('Already clocked in. Please clock out first.');
       return;
     }
 
@@ -127,10 +160,10 @@ export function useTimeTracking() {
       setActiveEntry(timeEntry);
       setIsSignedIn(true);
       await refreshSyncStatus();
-      showSnackbar(`Signed in at ${formatTime(timeEntry.sign_in_time)}`);
+      showSnackbar(`Clocked in at ${formatTime(timeEntry.sign_in_time)}`);
     } catch (error) {
       console.error('Error signing in:', error);
-      showSnackbar('Failed to sign in. Please try again.');
+      showSnackbar('Failed to clock in. Please try again.');
     } finally {
       setLoadingLocation(false);
     }
@@ -138,7 +171,7 @@ export function useTimeTracking() {
 
   const handleSignOut = async () => {
     if (!isSignedIn || !activeEntry) {
-      showSnackbar('You must sign in first before signing out.');
+      showSnackbar('You must clock in first before clocking out.');
       return;
     }
 
@@ -169,10 +202,10 @@ export function useTimeTracking() {
       setIsSignedIn(false);
       setElapsedTime(0);
       await refreshSyncStatus();
-      showSnackbar(`Signed out. ${hoursWorked} hours worked.`);
+      showSnackbar(`Clocked out. ${hoursWorked} hours worked.`);
     } catch (error) {
       console.error('Error signing out:', error);
-      showSnackbar('Failed to sign out. Please try again.');
+      showSnackbar('Failed to clock out. Please try again.');
     } finally {
       setLoadingLocation(false);
     }

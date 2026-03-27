@@ -126,7 +126,7 @@ export default function HomeScreen({ navigation }) {
                   {!isSignedIn ? (
                     <>
                       <Text variant="bodyMedium" style={styles.statusText}>
-                        Not signed in
+                        Not clocked in
                       </Text>
                       <Pressable
                         onPress={handleSignIn}
@@ -138,14 +138,14 @@ export default function HomeScreen({ navigation }) {
                           end={{ x: 1, y: 0 }}
                           style={styles.gradientButtonInner}
                         >
-                          <Text style={styles.gradientButtonText}>Sign In</Text>
+                          <Text style={styles.gradientButtonText}>Clock In</Text>
                         </LinearGradient>
                       </Pressable>
                     </>
                   ) : (
                     <>
                       <Text variant="bodyMedium" style={styles.signedInText}>
-                        Signed in at {formatTime(activeEntry?.sign_in_time)}
+                        Clocked in at {formatTime(activeEntry?.sign_in_time)}
                       </Text>
                       <Text variant="headlineSmall" style={styles.elapsedText}>
                         {formatElapsedTime(elapsedTime)}
@@ -158,7 +158,7 @@ export default function HomeScreen({ navigation }) {
                         buttonColor={colors.emphasis}
                         icon="logout"
                       >
-                        Sign Out
+                        Clock Out
                       </Button>
                     </>
                   )}

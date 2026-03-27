@@ -270,7 +270,7 @@ export default function TimeEntriesListScreen() {
                   <View style={styles.detailsRow}>
                     <View style={styles.detailColumn}>
                       <Text variant="labelSmall" style={styles.detailLabel}>
-                        Sign In
+                        Clock In
                       </Text>
                       <Text variant="bodyMedium" style={styles.detailValue}>
                         {formatTime(entry.sign_in_time)}
@@ -282,7 +282,7 @@ export default function TimeEntriesListScreen() {
 
                     <View style={styles.detailColumn}>
                       <Text variant="labelSmall" style={styles.detailLabel}>
-                        Sign Out
+                        Clock Out
                       </Text>
                       <Text variant="bodyMedium" style={styles.detailValue}>
                         {formatTime(entry.sign_out_time)}
