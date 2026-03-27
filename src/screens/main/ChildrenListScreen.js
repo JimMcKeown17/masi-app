@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useCallback, useMemo } from 'react';
 import { View, StyleSheet, FlatList, RefreshControl, TouchableOpacity } from 'react-native';
 import {
   Text,
@@ -8,10 +8,14 @@ import {
   Banner,
   List,
 } from 'react-native-paper';
+import { useFocusEffect } from '@react-navigation/native';
 import { colors, spacing } from '../../constants/colors';
 import { useChildren } from '../../context/ChildrenContext';
 import { useClasses } from '../../context/ClassesContext';
 import { useOffline } from '../../context/OfflineContext';
+import { storage } from '../../utils/storage';
+import { getChildrenTabStats } from '../../utils/dashboardStats';
+import StatBar from '../../components/dashboard/StatBar';
 
 export default function ChildrenListScreen({ navigation }) {
   const { children, groups, childrenGroups, loading, loadChildren } = useChildren();
@@ -20,6 +24,17 @@ export default function ChildrenListScreen({ navigation }) {
 
   const [searchTerm, setSearchTerm] = useState('');
   const [refreshing, setRefreshing] = useState(false);
+  const [tabStats, setTabStats] = useState(null);
+
+  useFocusEffect(
+    useCallback(() => {
+      const loadStats = async () => {
+        const assessments = await storage.getAssessments();
+        setTabStats(getChildrenTabStats(children, classes, assessments));
+      };
+      loadStats();
+    }, [children, classes])
+  );
 
   // Count unsynced items across classes and children
   const unsyncedClassesCount = classes.filter(c => c.synced === false).length;
@@ -178,6 +193,17 @@ export default function ChildrenListScreen({ navigation }) {
 
   return (
     <View style={styles.container}>
+      {/* Tab Stats */}
+      {tabStats && (
+        <View style={styles.statBarWrapper}>
+          <StatBar items={[
+            { label: 'Children', value: tabStats.childrenCount },
+            { label: 'Classes', value: tabStats.classCount },
+            { label: 'Unassessed', value: tabStats.unassessedCount, color: tabStats.unassessedCount > 0 ? colors.emphasis : colors.primary },
+          ]} />
+        </View>
+      )}
+
       {/* Search bar */}
       <Searchbar
         placeholder="Search classes..."
@@ -225,6 +251,10 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: colors.background,
+  },
+  statBarWrapper: {
+    paddingHorizontal: spacing.md,
+    paddingTop: spacing.md,
   },
   searchBar: {
     margin: spacing.md,

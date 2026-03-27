@@ -41,4 +41,7 @@ yarn-error.*
 # generated native folders
 /ios
 /android
+
+# superpowers brainstorming
+.superpowers/
 google-play-service-account.json

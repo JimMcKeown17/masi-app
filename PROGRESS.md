@@ -1,12 +1,46 @@
 # Masi App - Development Progress
 
 ## Current Status
-**Phase**: Phase 9 - Letter Tracker Feature
-**Last Updated**: 2026-03-26
+**Phase**: Phase 10 - Dashboard Redesign
+**Last Updated**: 2026-03-27
 
 ---
 
 ## In Progress
+
+### Phase 10: Dashboard Redesign
+- [x] Branch setup (`feature/dashboard-redesign`)
+- [x] Create directories (`src/screens/insights/`, `src/components/dashboard/`)
+- [x] Add `.superpowers/` to `.gitignore`
+- [x] Utility layer — `src/utils/dashboardStats.js`
+  - [x] `getDaysWorkedThisMonth`, `getWeekSessionCounts`, `getSessionsThisMonth`
+  - [x] `getAssessmentCoverage`, `getLetterMasteryRanking`, `getAssessmentRanking`
+  - [x] `getSessionCountRanking`, tab stat functions
+- [x] Reusable components
+  - [x] `StatBar` — 3-pill stat row component
+  - [x] `RankedBarRow` — ranked horizontal bar row
+- [x] Home screen redesign
+  - [x] Gradient header with inline monthly stats
+  - [x] Compact clock card
+  - [x] Sessions This Week card (day squares)
+  - [x] Assessment Coverage progress bar
+  - [x] Performance Insight drill-down buttons
+- [x] Navigation & ranking screens
+  - [x] Register 3 new screens in AppNavigator
+  - [x] LetterMasteryRankingScreen
+  - [x] AssessmentRankingScreen
+  - [x] SessionCountRankingScreen
+- [x] Tab stat bars
+  - [x] Children tab: # children, # classes, # unassessed
+  - [x] Sessions tab: this week, this month, avg/child + not-seen callout
+  - [x] Assessments tab: % assessed, total, avg accuracy
+- [x] Polish & end-to-end verification
+  - [x] Fixed context property naming (`children` not `childrenList`) in all 6 new screens
+  - [x] Fixed UTC→local timezone bug in date helpers (critical for UTC+2 South African users)
+  - [x] Fixed `created_at` tie-breaker missing in `getAssessmentsTabStats`
+  - [x] Fixed `letter_language` comparison to use `normalizeLanguageKey`
+  - [x] Fixed null accuracy handling in `getAssessmentRanking`
+  - [x] Expo dev server starts cleanly, zero IDE diagnostics
 
 ### Phase 9: Letter Tracker
 - [x] Supabase migration — `letter_mastery` table

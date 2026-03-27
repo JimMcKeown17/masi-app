@@ -39,6 +39,11 @@ import AssessmentHistoryScreen from '../screens/assessments/AssessmentHistoryScr
 import AssessmentDetailScreen from '../screens/assessments/AssessmentDetailScreen';
 import LetterTrackerScreen from '../screens/assessments/LetterTrackerScreen';
 
+// Insight screens
+import LetterMasteryRankingScreen from '../screens/insights/LetterMasteryRankingScreen';
+import AssessmentRankingScreen from '../screens/insights/AssessmentRankingScreen';
+import SessionCountRankingScreen from '../screens/insights/SessionCountRankingScreen';
+
 // Sync screen
 import SyncStatusScreen from '../screens/main/SyncStatusScreen';
 
@@ -248,6 +253,30 @@ function MainNavigator() {
         component={AssessmentDetailScreen}
         options={{
           title: 'Assessment Detail',
+          headerBackTitle: 'Back',
+        }}
+      />
+      <Stack.Screen
+        name="LetterMasteryRanking"
+        component={LetterMasteryRankingScreen}
+        options={{
+          title: 'Letter Mastery',
+          headerBackTitle: 'Back',
+        }}
+      />
+      <Stack.Screen
+        name="AssessmentRanking"
+        component={AssessmentRankingScreen}
+        options={{
+          title: 'Assessment Scores',
+          headerBackTitle: 'Back',
+        }}
+      />
+      <Stack.Screen
+        name="SessionCountRanking"
+        component={SessionCountRankingScreen}
+        options={{
+          title: 'Session Count',
           headerBackTitle: 'Back',
         }}
       />
