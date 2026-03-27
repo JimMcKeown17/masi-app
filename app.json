@@ -53,6 +53,12 @@
         "projectId": "6a430b63-345e-4313-90ea-e332700295e9"
       }
     },
+    "runtimeVersion": {
+      "policy": "appVersion"
+    },
+    "updates": {
+      "url": "https://u.expo.dev/6a430b63-345e-4313-90ea-e332700295e9"
+    },
     "owner": "jimmckeown"
   }
 }
