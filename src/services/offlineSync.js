@@ -60,6 +60,7 @@ const SYNC_TABLES = {
     key: 'LETTER_MASTERY',
     table: 'letter_mastery',
     getRecords: () => storage.getUnsyncedLetterMastery(),
+    onConflict: 'user_id,child_id,letter,language',
   },
 };
 
@@ -79,8 +80,9 @@ const getRetryDelay = (attemptNumber) => {
 /**
  * Sync a single record to Supabase
  * Uses upsert for last-write-wins conflict resolution
+ * @param {string} conflictTarget - Column(s) for ON CONFLICT, defaults to 'id'
  */
-const syncRecord = async (tableName, record) => {
+const syncRecord = async (tableName, record, conflictTarget = 'id') => {
   try {
     // Remove local-only fields before syncing
     const { synced, _deleted, ...recordData } = record;
@@ -89,7 +91,7 @@ const syncRecord = async (tableName, record) => {
     const { error } = await supabase
       .from(tableName)
       .upsert(recordData, {
-        onConflict: 'id',
+        onConflict: conflictTarget,
         ignoreDuplicates: false,
       });
 
@@ -106,7 +108,7 @@ const syncRecord = async (tableName, record) => {
  * Sync all unsynced records for a given table
  */
 const syncTable = async (tableConfig) => {
-  const { key, table, getRecords } = tableConfig;
+  const { key, table, getRecords, onConflict } = tableConfig;
 
   try {
     const unsyncedRecords = await getRecords();
@@ -182,7 +184,7 @@ const syncTable = async (tableConfig) => {
       }
 
       // Attempt to sync the record
-      const result = await syncRecord(table, record);
+      const result = await syncRecord(table, record, onConflict);
 
       if (result.success) {
         // Mark as synced in local storage

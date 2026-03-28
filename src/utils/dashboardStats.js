@@ -216,18 +216,19 @@ export function getAssessmentRanking(children, assessments) {
         correct: (latest.correct_letters || []).length,
         attempted: latest.last_letter_attempted ? latest.last_letter_attempted.index + 1 : 0,
         date: latest.date_assessed,
+        assessment: latest,
       });
     } else {
-      rankings.push({ child, accuracy: null, correct: 0, attempted: 0, date: null });
+      rankings.push({ child, accuracy: null, correct: 0, attempted: 0, date: null, assessment: null });
     }
   }
 
-  // Assessed children sorted by accuracy desc, then unassessed at bottom
+  // Assessed children sorted by total correct letters desc, then unassessed at bottom
   return rankings.sort((a, b) => {
     if (a.accuracy === null && b.accuracy === null) return 0;
     if (a.accuracy === null) return 1;
     if (b.accuracy === null) return -1;
-    return b.accuracy - a.accuracy;
+    return b.correct - a.correct;
   });
 }
 

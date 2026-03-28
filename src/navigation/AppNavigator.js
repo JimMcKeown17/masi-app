@@ -3,8 +3,9 @@ import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { useAuth } from '../context/AuthContext';
-import { ActivityIndicator, View, TouchableOpacity } from 'react-native';
+import { ActivityIndicator, View, TouchableOpacity, Pressable, Platform } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { Text } from 'react-native-paper';
 import { colors } from '../constants/colors';
 import SyncIndicator from '../components/common/SyncIndicator';
 
@@ -136,7 +137,22 @@ function MainTabNavigator() {
 
 function MainNavigator() {
   return (
-    <Stack.Navigator>
+    <Stack.Navigator
+      screenOptions={({ navigation }) => ({
+        headerLeft: navigation.canGoBack()
+          ? () => (
+            <Pressable
+              onPress={() => navigation.goBack()}
+              hitSlop={8}
+              style={{ flexDirection: 'row', alignItems: 'center', marginLeft: Platform.OS === 'ios' ? -8 : 0 }}
+            >
+              <Ionicons name="chevron-back" size={28} color={colors.primary} />
+              <Text style={{ color: colors.primary, fontSize: 17 }}>Back</Text>
+            </Pressable>
+          )
+          : undefined,
+      })}
+    >
       <Stack.Screen
         name="MainTabs"
         component={MainTabNavigator}

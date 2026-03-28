@@ -10,7 +10,7 @@ import RankedBarRow, { getBarColor } from '../../components/dashboard/RankedBarR
 import StatBar from '../../components/dashboard/StatBar';
 import { colors, spacing, borderRadius } from '../../constants/colors';
 
-export default function LetterMasteryRankingScreen() {
+export default function LetterMasteryRankingScreen({ navigation }) {
   const { children: childrenList } = useChildren();
   const { classes } = useClasses();
   const [ranking, setRanking] = useState([]);
@@ -47,16 +47,23 @@ export default function LetterMasteryRankingScreen() {
   const above70 = ranking.filter(r => r.percent >= 70).length;
   const below40 = ranking.filter(r => r.percent < 40).length;
 
-  const renderItem = ({ item, index }) => (
-    <RankedBarRow
-      rank={index + 1}
-      name={`${item.child.first_name} ${(item.child.last_name || '').charAt(0)}.`}
-      value={item.masteredCount}
-      maxValue={item.total}
-      barColor={getBarColor(item.percent)}
-      label={`${item.masteredCount}/${item.total}`}
-    />
-  );
+  const renderItem = ({ item, index }) => {
+    const classItem = classes.find(c => c.id === item.child.class_id) || null;
+    return (
+      <RankedBarRow
+        rank={index + 1}
+        name={`${item.child.first_name} ${(item.child.last_name || '').charAt(0)}.`}
+        value={item.masteredCount}
+        maxValue={item.total}
+        barColor={getBarColor(item.percent)}
+        label={`${item.masteredCount}/${item.total}`}
+        onPress={classItem ? () => navigation.navigate('LetterTracker', {
+          child: item.child,
+          classItem,
+        }) : undefined}
+      />
+    );
+  };
 
   return (
     <View style={styles.container}>

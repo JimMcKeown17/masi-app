@@ -159,7 +159,15 @@ export default function LetterAssessmentScreen({ navigation, route }) {
     hasFinishedRef.current = true;
     clearInterval(timerRef.current);
     setPhase('finished');
-    setShowLastAttempted(true);
+
+    // If the last letter in the set was marked correct, the child finished the
+    // entire test — no need to ask which letter was last attempted.
+    const lastIndex = letterSet.letters.length - 1;
+    if (letterStatesRef.current[lastIndex] === true) {
+      saveAssessment(lastIndex);
+    } else {
+      setShowLastAttempted(true);
+    }
   }, []);
 
   const handleLastAttemptedConfirm = (selectedIndex) => {
@@ -359,6 +367,7 @@ export default function LetterAssessmentScreen({ navigation, route }) {
         letterSet={letterSet}
         letterStates={letterStates}
         defaultIndex={lastTappedIndex}
+        minIndex={Object.keys(letterStates).reduce((max, k) => letterStates[k] === true ? Math.max(max, Number(k)) : max, 0)}
         onConfirm={handleLastAttemptedConfirm}
         onCancel={handleLastAttemptedCancel}
       />

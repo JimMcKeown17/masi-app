@@ -1,12 +1,27 @@
 # Masi App - Development Progress
 
 ## Current Status
-**Phase**: Phase 10 - Dashboard Redesign
-**Last Updated**: 2026-03-27
+**Phase**: Field Testing Bug Fixes — Round 1
+**Last Updated**: 2026-03-28
 
 ---
 
 ## In Progress
+
+### Field Testing Bug Fixes — Round 1
+Branch: `bugfix/field-testing-round-1`
+
+- [x] Bug 1: Last Letter Attempted — prevent selecting before last correct letter (added `minIndex` to bottom sheet)
+- [x] Bug 2: Auto-default last letter when child finishes entire test (skip bottom sheet if last letter correct)
+- [x] Bug 3: Assessment ranking sorted by total correct count, not percent
+- [x] Bug 4: Back button not working — added React-rendered `headerLeft` to all Stack screens
+- [x] Feature 5: Tappable rows on ranking screens — AssessmentRanking → AssessmentDetail, LetterMastery → LetterTracker
+- [x] Feature 6: "Unassessed" stat pill on Children tab navigates to Assessments tab
+- [x] Feature 7: Light red background on Clock card when not clocked in
+- [x] Bug 8: Letter Tracker header double-counts mastered letters (Set union dedup)
+- [x] Bug 9: Letter mastery sync 23505 duplicate key — changed `onConflict` to composite key + local dedup
+- [ ] End-to-end verification on device
+- [ ] Merge to main
 
 ### Phase 10: Dashboard Redesign
 - [x] Branch setup (`feature/dashboard-redesign`)

@@ -99,20 +99,36 @@ export default function LetterTrackerScreen({ route }) {
         return next;
       });
     } else {
-      // Currently gray -> toggle ON (create new record)
-      const record = {
-        id: uuidv4(),
-        user_id: user.id,
-        child_id: child.id,
-        letter,
-        source: 'taught',
-        language: letterSet.language,
-        synced: false,
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString(),
-      };
-      await storage.saveLetterMasteryRecord(record);
-      setTaughtLetters(prev => ({ ...prev, [letter]: record.id }));
+      // Currently gray -> toggle ON
+      // Check for existing soft-deleted record to reuse (avoids duplicate key on sync)
+      const allMastery = await storage.getLetterMastery();
+      const existing = allMastery.find(
+        r => r.child_id === child.id && r.letter === letter && r.language === letterSet.language && r._deleted
+      );
+      if (existing) {
+        // Reactivate the soft-deleted record
+        await storage.updateLetterMasteryRecord(existing.id, {
+          _deleted: false,
+          synced: false,
+          updated_at: new Date().toISOString(),
+        });
+        setTaughtLetters(prev => ({ ...prev, [letter]: existing.id }));
+      } else {
+        // Create new record
+        const record = {
+          id: uuidv4(),
+          user_id: user.id,
+          child_id: child.id,
+          letter,
+          source: 'taught',
+          language: letterSet.language,
+          synced: false,
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+        };
+        await storage.saveLetterMasteryRecord(record);
+        setTaughtLetters(prev => ({ ...prev, [letter]: record.id }));
+      }
     }
   };
 
@@ -132,7 +148,8 @@ export default function LetterTrackerScreen({ route }) {
 
   const childName = `${child.first_name} ${child.last_name}`;
   const languageLabel = letterSet.language;
-  const masteredCount = assessmentMastered.size + Object.keys(taughtLetters).length;
+  const allMastered = new Set([...assessmentMastered, ...Object.keys(taughtLetters)]);
+  const masteredCount = allMastered.size;
 
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>

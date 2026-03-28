@@ -20,6 +20,7 @@ export default function LastAttemptedBottomSheet({
   letterSet,
   letterStates,
   defaultIndex,
+  minIndex = 0,
   onConfirm,
   onCancel,
 }) {
@@ -63,14 +64,16 @@ export default function LastAttemptedBottomSheet({
             {letters.map((letter, i) => {
               const isCorrect = letterStates[i] === true;
               const isSelected = i === selectedIndex;
+              const isDisabled = i < minIndex;
 
               return (
                 <Pressable
                   key={`${i}-${letter}`}
-                  onPress={() => setSelectedIndex(i)}
+                  onPress={() => !isDisabled && setSelectedIndex(i)}
                   style={[
                     styles.tile,
                     isCorrect && styles.tileCorrect,
+                    isDisabled && styles.tileDisabled,
                     isSelected && styles.tileSelected,
                   ]}
                 >
@@ -78,6 +81,7 @@ export default function LastAttemptedBottomSheet({
                     style={[
                       styles.tileText,
                       isCorrect && styles.tileTextCorrect,
+                      isDisabled && !isCorrect && styles.tileTextDisabled,
                       letter.length > 1 && styles.tileTextDigraph,
                     ]}
                   >
@@ -165,6 +169,14 @@ const styles = StyleSheet.create({
   tileCorrect: {
     backgroundColor: colors.success,
     borderColor: colors.success,
+  },
+  tileDisabled: {
+    backgroundColor: '#F0F0F0',
+    borderColor: '#E0E0E0',
+    opacity: 0.5,
+  },
+  tileTextDisabled: {
+    color: '#BDBDBD',
   },
   tileSelected: {
     borderWidth: 3,

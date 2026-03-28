@@ -152,7 +152,7 @@ export default function HomeScreen({ navigation }) {
           )}
 
           {/* ── Clock Card (Compact) ── */}
-          <View style={styles.clockCard}>
+          <View style={[styles.clockCard, !isSignedIn && !loadingLocation && styles.clockCardNotSignedIn]}>
             {loadingLocation ? (
               <View style={styles.clockLoading}>
                 <ActivityIndicator size="small" color={colors.primary} />
@@ -389,6 +389,9 @@ const styles = StyleSheet.create({
     padding: spacing.md,
     marginBottom: spacing.sm,
     ...shadows.card,
+  },
+  clockCardNotSignedIn: {
+    backgroundColor: 'rgba(231, 45, 77, 0.08)',
   },
   clockRow: {
     flexDirection: 'row',

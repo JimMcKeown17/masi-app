@@ -296,19 +296,31 @@ export default function LiteracySessionForm({ navigation }) {
       for (const [childId, changes] of Object.entries(letterTrackerChanges)) {
         for (const [letter, value] of Object.entries(changes)) {
           if (value === true) {
-            // Add new taught letter
-            const record = {
-              id: uuidv4(),
-              user_id: user.id,
-              child_id: childId,
-              letter,
-              source: 'taught',
-              language: letterSet.language,
-              synced: false,
-              created_at: now,
-              updated_at: now,
-            };
-            await storage.saveLetterMasteryRecord(record);
+            // Check for existing soft-deleted record to reuse (avoids duplicate key on sync)
+            const allMastery = await storage.getLetterMastery();
+            const existingDeleted = allMastery.find(
+              r => r.child_id === childId && r.letter === letter && r.language === letterSet.language && r._deleted
+            );
+            if (existingDeleted) {
+              await storage.updateLetterMasteryRecord(existingDeleted.id, {
+                _deleted: false,
+                synced: false,
+                updated_at: now,
+              });
+            } else {
+              const record = {
+                id: uuidv4(),
+                user_id: user.id,
+                child_id: childId,
+                letter,
+                source: 'taught',
+                language: letterSet.language,
+                synced: false,
+                created_at: now,
+                updated_at: now,
+              };
+              await storage.saveLetterMasteryRecord(record);
+            }
           } else if (value === false) {
             // Soft-delete: find the existing record and mark it
             const allMastery = await storage.getLetterMastery();

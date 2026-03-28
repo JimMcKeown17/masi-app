@@ -9,7 +9,7 @@ import RankedBarRow, { getBarColor } from '../../components/dashboard/RankedBarR
 import StatBar from '../../components/dashboard/StatBar';
 import { colors, spacing, borderRadius } from '../../constants/colors';
 
-export default function AssessmentRankingScreen() {
+export default function AssessmentRankingScreen({ navigation }) {
   const { children: childrenList } = useChildren();
   const [ranking, setRanking] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -38,10 +38,10 @@ export default function AssessmentRankingScreen() {
   const assessed = ranking.filter(r => r.accuracy !== null);
   const notAssessed = ranking.filter(r => r.accuracy === null);
 
-  const avgAccuracy = assessed.length > 0
-    ? Math.round(assessed.reduce((sum, r) => sum + r.accuracy, 0) / assessed.length)
+  const avgCorrect = assessed.length > 0
+    ? Math.round(assessed.reduce((sum, r) => sum + r.correct, 0) / assessed.length)
     : 0;
-  const highest = assessed.length > 0 ? assessed[0].accuracy : 0;
+  const highest = assessed.length > 0 ? assessed[0].correct : 0;
 
   const renderItem = ({ item, index }) => {
     if (item.accuracy === null) {
@@ -55,14 +55,19 @@ export default function AssessmentRankingScreen() {
       );
     }
 
+    const childName = `${item.child.first_name} ${(item.child.last_name || '').charAt(0)}.`;
     return (
       <RankedBarRow
         rank={index + 1}
-        name={`${item.child.first_name} ${(item.child.last_name || '').charAt(0)}.`}
-        value={item.accuracy}
-        maxValue={100}
-        barColor={getBarColor(item.accuracy)}
-        label={`${item.accuracy}%`}
+        name={childName}
+        value={item.correct}
+        maxValue={60}
+        barColor={getBarColor(Math.round((item.correct / Math.max(item.attempted, 1)) * 100))}
+        label={`${item.correct}`}
+        onPress={item.assessment ? () => navigation.navigate('AssessmentDetail', {
+          assessment: item.assessment,
+          childName,
+        }) : undefined}
       />
     );
   };
@@ -77,11 +82,11 @@ export default function AssessmentRankingScreen() {
         ListHeaderComponent={
           <View>
             <Text style={styles.subtitle}>
-              Children ranked by most recent EGRA assessment accuracy
+              Children ranked by total letters correct on most recent EGRA assessment
             </Text>
             <StatBar items={[
-              { label: 'Avg Accuracy', value: `${avgAccuracy}%` },
-              { label: 'Highest', value: `${highest}%`, color: colors.success },
+              { label: 'Avg Correct', value: avgCorrect },
+              { label: 'Highest', value: highest, color: colors.success },
               { label: 'Not Assessed', value: notAssessed.length, color: colors.emphasis },
             ]} />
           </View>
@@ -90,7 +95,7 @@ export default function AssessmentRankingScreen() {
           <View style={styles.colorKey}>
             <View style={styles.keyItem}>
               <View style={[styles.keySwatch, { backgroundColor: colors.success }]} />
-              <Text style={styles.keyLabel}>70%+</Text>
+              <Text style={styles.keyLabel}>70%+ accuracy</Text>
             </View>
             <View style={styles.keyItem}>
               <View style={[styles.keySwatch, { backgroundColor: '#FFBB00' }]} />

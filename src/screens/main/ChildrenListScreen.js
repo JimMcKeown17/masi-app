@@ -199,7 +199,7 @@ export default function ChildrenListScreen({ navigation }) {
           <StatBar items={[
             { label: 'Children', value: tabStats.childrenCount },
             { label: 'Classes', value: tabStats.classCount },
-            { label: 'Unassessed', value: tabStats.unassessedCount, color: tabStats.unassessedCount > 0 ? colors.emphasis : colors.primary },
+            { label: 'Unassessed', value: tabStats.unassessedCount, color: tabStats.unassessedCount > 0 ? colors.emphasis : colors.primary, onPress: tabStats.unassessedCount > 0 ? () => navigation.navigate('MainTabs', { screen: 'Assessments' }) : undefined },
           ]} />
         </View>
       )}

@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, StyleSheet } from 'react-native';
+import { View, StyleSheet, Pressable } from 'react-native';
 import { Text } from 'react-native-paper';
 import { colors, spacing, borderRadius } from '../../constants/colors';
 
@@ -23,10 +23,10 @@ export function getBarColor(percent) {
  * @param {string} barColor - Color of the filled bar
  * @param {string} label - Text label shown at end (e.g. "23/26" or "85%")
  */
-export default function RankedBarRow({ rank, name, value, maxValue, barColor, label }) {
+export default function RankedBarRow({ rank, name, value, maxValue, barColor, label, onPress }) {
   const widthPercent = maxValue > 0 ? Math.max(2, (value / maxValue) * 100) : 2;
 
-  return (
+  const content = (
     <View style={[styles.row, { borderLeftColor: barColor }]}>
       <Text style={styles.rank}>{rank}</Text>
       <Text style={styles.name} numberOfLines={1}>{name}</Text>
@@ -36,6 +36,11 @@ export default function RankedBarRow({ rank, name, value, maxValue, barColor, la
       <Text style={styles.label}>{label}</Text>
     </View>
   );
+
+  if (onPress) {
+    return <Pressable onPress={onPress}>{content}</Pressable>;
+  }
+  return content;
 }
 
 const styles = StyleSheet.create({
