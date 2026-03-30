@@ -70,14 +70,14 @@ export const ChildrenProvider = ({ children }) => {
             synced: true,
           }));
 
-          // Merge: keep unsynced local records, update everything else from server
-          const localUnsynced = cached.filter(c => c.synced === false);
+          // Merge: server records are authoritative for IDs they return.
+          // Keep ALL local records not in server response — this preserves
+          // both unsynced new records AND synced records whose junction
+          // table (staff_children) hasn't propagated yet.
           const serverIds = new Set(serverChildren.map(c => c.id));
+          const localToKeep = cached.filter(c => !serverIds.has(c.id));
 
-          // Keep local unsynced records that aren't yet on the server
-          const unsyncedToKeep = localUnsynced.filter(c => !serverIds.has(c.id));
-
-          const merged = [...serverChildren, ...unsyncedToKeep];
+          const merged = [...serverChildren, ...localToKeep];
 
           await storage.setItem(STORAGE_KEYS.CHILDREN, merged);
           setChildrenList(merged);
@@ -199,10 +199,9 @@ export const ChildrenProvider = ({ children }) => {
           console.error('Error loading groups from server:', error);
         } else if (data) {
           const serverGroups = data.map(g => ({ ...g, synced: true }));
-          const localUnsynced = cached.filter(g => g.synced === false);
           const serverIds = new Set(serverGroups.map(g => g.id));
-          const unsyncedToKeep = localUnsynced.filter(g => !serverIds.has(g.id));
-          const merged = [...serverGroups, ...unsyncedToKeep];
+          const localToKeep = cached.filter(g => !serverIds.has(g.id));
+          const merged = [...serverGroups, ...localToKeep];
           await storage.setItem(STORAGE_KEYS.GROUPS, merged);
           setGroups(merged);
         }
@@ -317,10 +316,9 @@ export const ChildrenProvider = ({ children }) => {
             console.error('Error loading children_groups from server:', error);
           } else if (data) {
             const serverMemberships = data.map(m => ({ ...m, synced: true }));
-            const localUnsynced = cached.filter(m => m.synced === false);
             const serverIds = new Set(serverMemberships.map(m => m.id));
-            const unsyncedToKeep = localUnsynced.filter(m => !serverIds.has(m.id));
-            const merged = [...serverMemberships, ...unsyncedToKeep];
+            const localToKeep = cached.filter(m => !serverIds.has(m.id));
+            const merged = [...serverMemberships, ...localToKeep];
             await storage.setItem(STORAGE_KEYS.CHILDREN_GROUPS, merged);
             setChildrenGroups(merged);
           }

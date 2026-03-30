@@ -59,9 +59,9 @@ export default function TimeEntriesListScreen() {
           const serverEntries = data.map(entry => ({ ...entry, synced: true }));
           const serverIds = new Set(serverEntries.map(e => e.id));
 
-          // Preserve local unsynced records not yet on server
-          const localUnsynced = cached.filter(e => e.synced === false && !serverIds.has(e.id));
-          const merged = [...serverEntries, ...localUnsynced];
+          // Preserve all local records not returned by server
+          const localToKeep = cached.filter(e => !serverIds.has(e.id));
+          const merged = [...serverEntries, ...localToKeep];
 
           await storage.setItem(STORAGE_KEYS.TIME_ENTRIES, merged);
 

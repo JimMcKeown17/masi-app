@@ -8,6 +8,20 @@
 
 ## In Progress
 
+### Sync Engine Bug Fixes — Ghost Children & Junction Errors
+Branch: `main` (direct fix — field-critical)
+
+Root cause: `loadChildren()` merge logic dropped locally synced children when their `staff_children` junction hadn't synced yet, causing cascading FK errors.
+
+- [x] Fix merge logic in `loadChildren()`, `loadChildrenGroups()`, `loadGroups()` — preserve all local records not in server response
+- [x] Apply same fix to `ClassesContext.js`, `TimeEntriesListScreen`, `SessionHistoryScreen`, `AssessmentHistoryScreen`
+- [x] Fix `onConflict` keys: `staff_children` → `staff_id,child_id`, `children_groups` → `child_id,group_id`, `classes` → `staff_id,name,school_id`
+- [x] Add terminal error classification (`classifyError`): 23505 → mark synced, 23503/42501 → quarantine immediately
+- [x] Enforce explicit sync order (`SYNC_ORDER` array) with dependency gating — skip junction tables when parent fails
+- [x] One-time orphan repair (`repairOrphanedJunctions`) — re-queues stuck children and junction records on upgrade
+- [ ] End-to-end device testing
+- [ ] Push update via EAS
+
 ### Field Testing Bug Fixes — Round 1
 Branch: `bugfix/field-testing-round-1`
 

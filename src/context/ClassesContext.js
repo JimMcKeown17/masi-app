@@ -88,10 +88,9 @@ export const ClassesProvider = ({ children: reactChildren }) => {
           console.error('Error loading classes from server:', error);
         } else if (data) {
           const serverClasses = data.map(c => ({ ...c, synced: true }));
-          const localUnsynced = cached.filter(c => c.synced === false);
           const serverIds = new Set(serverClasses.map(c => c.id));
-          const unsyncedToKeep = localUnsynced.filter(c => !serverIds.has(c.id));
-          const merged = [...serverClasses, ...unsyncedToKeep];
+          const localToKeep = cached.filter(c => !serverIds.has(c.id));
+          const merged = [...serverClasses, ...localToKeep];
           await storage.setItem(STORAGE_KEYS.CLASSES, merged);
           setClasses(merged);
         }

@@ -79,9 +79,9 @@ export default function SessionHistoryScreen() {
           const serverSessions = data.map(s => ({ ...s, synced: true }));
           const serverIds = new Set(serverSessions.map(s => s.id));
 
-          // Preserve local unsynced records not yet on server
-          const localUnsynced = cached.filter(s => s.synced === false && !serverIds.has(s.id));
-          const merged = [...serverSessions, ...localUnsynced];
+          // Preserve all local records not returned by server
+          const localToKeep = cached.filter(s => !serverIds.has(s.id));
+          const merged = [...serverSessions, ...localToKeep];
 
           await storage.setItem(STORAGE_KEYS.SESSIONS, merged);
           setSessions(filterAndSort(merged));

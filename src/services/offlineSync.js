@@ -30,6 +30,7 @@ const SYNC_TABLES = {
     key: 'CLASSES',
     table: 'classes',
     getRecords: () => storage.getUnsyncedClasses(),
+    onConflict: 'staff_id,name,school_id',
   },
   CHILDREN: {
     key: 'CHILDREN',
@@ -40,6 +41,7 @@ const SYNC_TABLES = {
     key: 'STAFF_CHILDREN',
     table: 'staff_children',
     getRecords: () => storage.getUnsyncedStaffChildren(),
+    onConflict: 'staff_id,child_id',
   },
   GROUPS: {
     key: 'GROUPS',
@@ -50,6 +52,7 @@ const SYNC_TABLES = {
     key: 'CHILDREN_GROUPS',
     table: 'children_groups',
     getRecords: () => storage.getUnsyncedChildrenGroups(),
+    onConflict: 'child_id,group_id',
   },
   ASSESSMENTS: {
     key: 'ASSESSMENTS',
@@ -75,6 +78,37 @@ const SYNC_TABLES = {
 const getRetryDelay = (attemptNumber) => {
   if (attemptNumber === 1) return 0;
   return BASE_RETRY_DELAY * Math.pow(3, attemptNumber - 2);
+};
+
+/**
+ * Classify whether a Supabase/Postgres error is terminal (will never succeed on retry).
+ * @returns {{ terminal: boolean, markAsSynced: boolean }}
+ *   - terminal: stop retrying immediately
+ *   - markAsSynced: the record effectively exists on server (treat as success)
+ */
+const classifyError = (error) => {
+  const code = error?.code;
+
+  // 23505: unique_violation — record already exists on server
+  // (e.g., same child_id+group_id with different UUID). This is a success case.
+  if (code === '23505') {
+    return { terminal: true, markAsSynced: true };
+  }
+
+  // 23503: foreign_key_violation — parent record doesn't exist on server.
+  // Retrying won't help unless parent syncs first.
+  if (code === '23503') {
+    return { terminal: true, markAsSynced: false };
+  }
+
+  // 42501: RLS violation — user doesn't have permission.
+  // Retrying with same auth won't help.
+  if (code === '42501') {
+    return { terminal: true, markAsSynced: false };
+  }
+
+  // Everything else (network errors, timeouts, etc.) is retriable
+  return { terminal: false, markAsSynced: false };
 };
 
 /**
@@ -194,18 +228,39 @@ const syncTable = async (tableConfig) => {
         results.synced++;
         console.log(`✓ Synced ${key} record ${record.id}`);
       } else {
-        // Record the retry attempt and store the actual error
         const errorMsg = result.error?.message || result.error?.code || 'Unknown error';
-        await storage.recordRetryAttempt(key, record.id);
-        await storage.setLastSyncError(key, record.id, errorMsg);
-        results.failed++;
-        results.failedRecords.push({
-          id: record.id,
-          table: key,
-          error: errorMsg,
-          attemptCount: attemptCount + 1,
-        });
-        console.error(`✗ Failed to sync ${key} record ${record.id}: ${errorMsg}`);
+        const classification = classifyError(result.error);
+
+        if (classification.terminal) {
+          if (classification.markAsSynced) {
+            // 23505: record already exists on server — treat as success
+            await storage.markAsSynced(key, record.id);
+            await storage.clearRetryAttempts(key, record.id);
+            await storage.clearLastSyncError(key, record.id);
+            results.synced++;
+            console.log(`✓ ${key} record ${record.id} already exists on server (${result.error?.code}), marking synced`);
+          } else {
+            // 23503/42501: terminal error — quarantine immediately, no retries
+            await storage.addFailedItem(key, record.id, `TERMINAL: ${errorMsg}`);
+            await storage.markAsSynced(key, record.id);
+            await storage.clearRetryAttempts(key, record.id);
+            results.failed++;
+            results.failedRecords.push({ id: record.id, table: key, reason: `TERMINAL: ${errorMsg}` });
+            console.warn(`✗ TERMINAL error for ${key} record ${record.id}: ${errorMsg}`);
+          }
+        } else {
+          // Retriable error — existing backoff logic
+          await storage.recordRetryAttempt(key, record.id);
+          await storage.setLastSyncError(key, record.id, errorMsg);
+          results.failed++;
+          results.failedRecords.push({
+            id: record.id,
+            table: key,
+            error: errorMsg,
+            attemptCount: attemptCount + 1,
+          });
+          console.error(`✗ Failed to sync ${key} record ${record.id}: ${errorMsg}`);
+        }
       }
     }
 
@@ -227,6 +282,27 @@ const syncTable = async (tableConfig) => {
   }
 };
 
+// Explicit sync order — parent tables before their junction tables.
+// Using an array instead of relying on object property iteration order.
+const SYNC_ORDER = [
+  'TIME_ENTRIES',
+  'SESSIONS',
+  'CLASSES',
+  'CHILDREN',
+  'GROUPS',
+  'STAFF_CHILDREN',      // depends on CHILDREN
+  'CHILDREN_GROUPS',     // depends on CHILDREN and GROUPS
+  'ASSESSMENTS',
+  'LETTER_MASTERY',
+];
+
+// Junction tables and the parent tables they depend on.
+// If a parent fails, its dependents are skipped in this sync cycle.
+const JUNCTION_DEPENDENCIES = {
+  STAFF_CHILDREN: ['CHILDREN'],
+  CHILDREN_GROUPS: ['CHILDREN', 'GROUPS'],
+};
+
 /**
  * Sync all tables
  * Returns aggregated results
@@ -243,8 +319,20 @@ export const syncAll = async () => {
     tableResults: {},
   };
 
-  // Sync each table
-  for (const [tableName, config] of Object.entries(SYNC_TABLES)) {
+  const tablesWithFailures = new Set();
+
+  for (const tableName of SYNC_ORDER) {
+    const config = SYNC_TABLES[tableName];
+    if (!config) continue;
+
+    // Skip junction tables whose parent table had failures this cycle
+    const deps = JUNCTION_DEPENDENCIES[tableName] || [];
+    if (deps.some(dep => tablesWithFailures.has(dep))) {
+      console.log(`⏭ Skipping ${tableName}: parent table(s) had failures this cycle`);
+      results.tableResults[tableName] = { success: false, synced: 0, failed: 0, skipped: true };
+      continue;
+    }
+
     const tableResult = await syncTable(config);
 
     results.tableResults[tableName] = tableResult;
@@ -254,6 +342,7 @@ export const syncAll = async () => {
 
     if (!tableResult.success) {
       results.success = false;
+      tablesWithFailures.add(tableName);
     }
   }
 
@@ -328,6 +417,100 @@ export const resetSyncMeta = async () => {
 export const retryFailedItem = async (table, id) => {
   await storage.removeFailedItem(table, id);
   await storage.clearLastSyncError(table, id);
+};
+
+/**
+ * One-time repair: find junction records (staff_children, children_groups)
+ * stuck with FK errors because their parent child record was dropped from
+ * local storage by the old loadChildren() merge bug.
+ *
+ * For each failed junction record referencing a child_id:
+ *   - If the child exists locally as synced:true, mark it synced:false to re-sync
+ *   - Clear retry/failed state on the junction records so they get a fresh attempt
+ *
+ * Runs once per device (gated by orphanRepairDone flag in sync metadata).
+ */
+export const repairOrphanedJunctions = async () => {
+  try {
+    const meta = await storage.getSyncMeta();
+    if (meta.orphanRepairDone) return;
+
+    const failedItems = meta.failedItems || [];
+    if (failedItems.length === 0) {
+      await storage.updateSyncMeta({ orphanRepairDone: true });
+      return;
+    }
+
+    const children = await storage.getChildren();
+    const staffChildren = await storage.getStaffChildren();
+    const childrenGroups = await storage.getChildrenGroups();
+
+    // Collect child_ids from failed junction records
+    const childIdsToRepair = new Set();
+    const junctionItemsToReset = [];
+
+    for (const item of failedItems) {
+      if (item.table === 'STAFF_CHILDREN' || item.table === 'CHILDREN_GROUPS') {
+        const records = item.table === 'STAFF_CHILDREN' ? staffChildren : childrenGroups;
+        const record = records.find(r => r.id === item.id);
+        if (record?.child_id) {
+          childIdsToRepair.add(record.child_id);
+          junctionItemsToReset.push(item);
+        }
+      }
+    }
+
+    if (childIdsToRepair.size === 0) {
+      await storage.updateSyncMeta({ orphanRepairDone: true });
+      return;
+    }
+
+    // Mark referenced children as unsynced so they re-sync to server.
+    // If the child was dropped from local storage by the old merge bug,
+    // try to recover it from the server (it may have synced before being dropped).
+    let repaired = 0;
+    for (const childId of childIdsToRepair) {
+      const child = children.find(c => c.id === childId);
+      if (child) {
+        // Child exists locally — mark unsynced so it re-syncs
+        if (child.synced !== false) {
+          await storage.markAsUnsynced('CHILDREN', childId);
+        }
+        repaired++;
+      } else {
+        // Child was dropped from local storage — try to recover from server
+        try {
+          const { data } = await supabase
+            .from('children')
+            .select('*')
+            .eq('id', childId)
+            .single();
+
+          if (data) {
+            // Re-add to local storage as synced (it's already on the server)
+            await storage.saveChild({ ...data, synced: true });
+            repaired++;
+            console.log(`Orphan repair: recovered child ${childId} from server`);
+          }
+        } catch (fetchErr) {
+          console.warn(`Orphan repair: could not recover child ${childId} from server:`, fetchErr);
+        }
+      }
+    }
+
+    // Reset failed/retry state on junction records so they retry after parent syncs
+    for (const item of junctionItemsToReset) {
+      await storage.removeFailedItem(item.table, item.id);
+      await storage.clearLastSyncError(item.table, item.id);
+      await storage.markAsUnsynced(item.table, item.id);
+    }
+
+    await storage.updateSyncMeta({ orphanRepairDone: true });
+    console.log(`Orphan repair: re-queued ${repaired} children and ${junctionItemsToReset.length} junction records`);
+  } catch (error) {
+    console.error('Error in repairOrphanedJunctions:', error);
+    // Don't block startup — repair will retry next launch
+  }
 };
 
 /**

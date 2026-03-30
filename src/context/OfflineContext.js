@@ -1,7 +1,7 @@
 import React, { createContext, useState, useEffect, useContext, useRef } from 'react';
 import NetInfo from '@react-native-community/netinfo';
 import { AppState } from 'react-native';
-import { syncAll, getSyncStatus } from '../services/offlineSync';
+import { syncAll, getSyncStatus, repairOrphanedJunctions } from '../services/offlineSync';
 
 const OfflineContext = createContext({
   isOnline: true,
@@ -163,6 +163,9 @@ export const OfflineProvider = ({ children }) => {
       // Check initial network state
       const netInfoState = await NetInfo.fetch();
       setIsOnline(netInfoState.isConnected && netInfoState.isInternetReachable);
+
+      // One-time repair for devices with stuck junction records (v2.x upgrade path)
+      await repairOrphanedJunctions();
 
       // Load sync status
       await refreshSyncStatus();

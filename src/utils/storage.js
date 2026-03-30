@@ -312,6 +312,19 @@ export const storage = {
     return false;
   },
 
+  async markAsUnsynced(table, id) {
+    const key = STORAGE_KEYS[table.toUpperCase()];
+    if (!key) return false;
+
+    const records = await this.getItem(key) || [];
+    const index = records.findIndex(r => r.id === id);
+    if (index !== -1) {
+      records[index].synced = false;
+      return await this.setItem(key, records);
+    }
+    return false;
+  },
+
   async getAllUnsyncedCount() {
     const tables = ['TIME_ENTRIES', 'SESSIONS', 'CLASSES', 'CHILDREN', 'STAFF_CHILDREN', 'GROUPS', 'CHILDREN_GROUPS', 'ASSESSMENTS', 'LETTER_MASTERY'];
     let totalCount = 0;

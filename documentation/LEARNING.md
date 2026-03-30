@@ -885,5 +885,79 @@ We chose one row per child per letter (in `letter_mastery`) over a single JSONB 
 
 ---
 
-**Last Updated**: 2026-02-04
+## 11. The Merge Logic Trap: When Your Data-Loading Query Has Different Visibility Than Your Sync Pipeline
+
+### The Problem
+
+In March 2026, field testers reported children "disappearing" from their devices and persistent sync errors (23503 FK violations) on junction tables. The root cause turned out to be a subtle bug in how we merged server data with local data.
+
+### The Setup
+
+Our `loadChildren()` function fetches children from Supabase using a JOIN:
+
+```javascript
+const { data } = await supabase
+  .from('children')
+  .select('*, staff_children!inner(staff_id)')
+  .eq('staff_children.staff_id', user.id);
+```
+
+The `!inner` keyword means "only return children that have a matching `staff_children` row." This is correct for normal operation — you only want to see children assigned to you.
+
+The merge logic then replaced local data with server data, preserving only local records marked `synced: false`:
+
+```javascript
+const localUnsynced = cached.filter(c => c.synced === false);  // BUG
+const unsyncedToKeep = localUnsynced.filter(c => !serverIds.has(c.id));
+const merged = [...serverChildren, ...unsyncedToKeep];
+```
+
+### The Bug
+
+When a user creates a child offline, two records are created: (1) the child record and (2) a `staff_children` junction record. Both start as `synced: false`.
+
+Here's the deadly sequence:
+1. App goes online. Sync starts.
+2. Child upsert succeeds → marked `synced: true` locally.
+3. `staff_children` upsert **fails** (network error mid-sync).
+4. After sync, `loadChildren()` runs and queries the server.
+5. Server query uses `staff_children!inner` — since `staff_children` hasn't synced, the child is **not returned**.
+6. The child is `synced: true` locally, so it's **not** in `localUnsynced`.
+7. The child is in **neither** `serverChildren` **nor** `unsyncedToKeep`.
+8. The child is **dropped from AsyncStorage**.
+
+Now `staff_children` and `children_groups` reference a ghost `child_id` that doesn't exist anywhere, producing permanent FK errors.
+
+### The Fix
+
+Replace the filter to keep ALL local records not returned by the server, regardless of sync status:
+
+```javascript
+const localToKeep = cached.filter(c => !serverIds.has(c.id));  // FIXED
+const merged = [...serverChildren, ...localToKeep];
+```
+
+### The Principle
+
+**Your data-loading query and your sync pipeline have different visibility windows.** The server query sees data through RLS and JOIN constraints. The sync pipeline sees raw records. When your merge logic assumes they have the same visibility, you get data loss.
+
+This is a general trap in offline-first architectures: any time you merge "what the server returned" with "what we have locally," you must ask: **is there a scenario where a valid local record is invisible to the server query?** If yes, your merge must preserve it.
+
+### Additional Fixes Made
+
+1. **Composite `onConflict` keys**: Junction tables (`staff_children`, `children_groups`) had unique constraints on composite keys (e.g., `child_id + group_id`), but upserts used `id` as the conflict target. If a record was recreated with a new UUID for the same logical pair, the upsert didn't match → 23505 unique constraint violation.
+
+2. **Terminal error classification**: Not all Supabase errors are worth retrying. FK violations (23503) mean a parent record is missing — retrying won't fix that. Unique violations (23505) mean the data already exists on the server — that's actually success. We added `classifyError()` to handle these immediately instead of burning through 5 retry cycles.
+
+3. **Sync order with dependency gating**: If CHILDREN fails to sync, attempting STAFF_CHILDREN in the same cycle is pointless (FK will fail). An explicit `SYNC_ORDER` array with `JUNCTION_DEPENDENCIES` map now skips dependent tables when their parent fails.
+
+### Key Takeaways
+
+11. **Merge logic must account for visibility gaps**: When server queries use JOINs or RLS, some valid local records may be invisible to the server. Don't drop them.
+12. **Not all sync errors are retriable**: FK violations (23503) and unique constraint violations (23505) have specific semantics. 23505 often means "already synced" — treat it as success. 23503 means "fix the parent first" — quarantine, don't retry.
+13. **Sync order matters for relational data**: Parent tables must sync before junction tables. If a parent fails, skip its dependents in that cycle.
+
+---
+
+**Last Updated**: 2026-03-30
 **Document Status**: Living document - updated as we build

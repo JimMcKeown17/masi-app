@@ -65,8 +65,8 @@ export default function AssessmentHistoryScreen({ navigation }) {
         } else if (data) {
           const serverRecords = data.map((a) => ({ ...a, synced: true }));
           const serverIds = new Set(serverRecords.map((a) => a.id));
-          const localUnsynced = cached.filter((a) => a.synced === false && !serverIds.has(a.id));
-          const merged = [...serverRecords, ...localUnsynced];
+          const localToKeep = cached.filter((a) => !serverIds.has(a.id));
+          const merged = [...serverRecords, ...localToKeep];
 
           await storage.setItem(STORAGE_KEYS.ASSESSMENTS, merged);
           setAssessments(filterAndSort(merged));
