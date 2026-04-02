@@ -155,9 +155,9 @@ export function getLetterMasteryRanking(children, assessments, letterMastery, cl
       continue;
     }
 
-    // Find most recent assessment for this child in this language
+    // Find most recent letter assessment for this child in this language
     const childAssessments = assessments
-      .filter(a => a.child_id === child.id && normalizeLanguageKey(a.letter_language) === langKey)
+      .filter(a => a.child_id === child.id && normalizeLanguageKey(a.letter_language) === langKey && (a.assessment_type || 'letter_egra') === 'letter_egra')
       .sort((a, b) => {
         const dateCmp = (b.date_assessed || '').localeCompare(a.date_assessed || '');
         if (dateCmp !== 0) return dateCmp;

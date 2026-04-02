@@ -11,8 +11,9 @@ import { Text, Button } from 'react-native-paper';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { colors, spacing, borderRadius } from '../../constants/colors';
 
-const COLUMNS = 5;
+const DEFAULT_COLUMNS = 5;
 const TILE_SIZE = 48;
+const WORD_TILE_WIDTH = 120;
 const GAP = 6;
 
 export default function LastAttemptedBottomSheet({
@@ -24,6 +25,9 @@ export default function LastAttemptedBottomSheet({
   onConfirm,
   onCancel,
 }) {
+  const isWord = letterSet.type === 'word';
+  const columns = letterSet.columns || DEFAULT_COLUMNS;
+  const tileWidth = isWord ? WORD_TILE_WIDTH : TILE_SIZE;
   const insets = useSafeAreaInsets();
   const [selectedIndex, setSelectedIndex] = useState(defaultIndex);
 
@@ -49,10 +53,10 @@ export default function LastAttemptedBottomSheet({
         <View style={styles.handle} />
 
         <Text variant="titleMedium" style={styles.title}>
-          Last Letter Attempted
+          Last {isWord ? 'Word' : 'Letter'} Attempted
         </Text>
         <Text variant="bodyMedium" style={styles.instruction}>
-          Tap the last letter the child attempted
+          Tap the last {isWord ? 'word' : 'letter'} the child attempted
         </Text>
 
         <ScrollView
@@ -60,7 +64,7 @@ export default function LastAttemptedBottomSheet({
           contentContainerStyle={styles.gridContainer}
           showsVerticalScrollIndicator={false}
         >
-          <View style={styles.grid}>
+          <View style={[styles.grid, { width: columns * tileWidth + (columns - 1) * GAP }]}>
             {letters.map((letter, i) => {
               const isCorrect = letterStates[i] === true;
               const isSelected = i === selectedIndex;
@@ -72,17 +76,22 @@ export default function LastAttemptedBottomSheet({
                   onPress={() => !isDisabled && setSelectedIndex(i)}
                   style={[
                     styles.tile,
+                    { width: tileWidth, height: TILE_SIZE },
                     isCorrect && styles.tileCorrect,
                     isDisabled && styles.tileDisabled,
                     isSelected && styles.tileSelected,
                   ]}
                 >
                   <Text
+                    numberOfLines={1}
+                    adjustsFontSizeToFit
+                    minimumFontScale={0.5}
                     style={[
                       styles.tileText,
                       isCorrect && styles.tileTextCorrect,
                       isDisabled && !isCorrect && styles.tileTextDisabled,
-                      letter.length > 1 && styles.tileTextDigraph,
+                      letter.length === 2 && styles.tileTextDigraph,
+                      letter.length > 2 && styles.tileTextWord,
                     ]}
                   >
                     {letter}
@@ -95,7 +104,7 @@ export default function LastAttemptedBottomSheet({
 
         <View style={styles.footer}>
           <Text variant="bodySmall" style={styles.selectedLabel}>
-            Selected: letter "{letters[selectedIndex]}" (#{selectedIndex + 1} of {letters.length})
+            Selected: {isWord ? 'word' : 'letter'} "{letters[selectedIndex]}" (#{selectedIndex + 1} of {letters.length})
           </Text>
           <Button
             mode="contained"
@@ -154,11 +163,8 @@ const styles = StyleSheet.create({
     flexWrap: 'wrap',
     justifyContent: 'center',
     gap: GAP,
-    width: COLUMNS * TILE_SIZE + (COLUMNS - 1) * GAP,
   },
   tile: {
-    width: TILE_SIZE,
-    height: TILE_SIZE,
     justifyContent: 'center',
     alignItems: 'center',
     backgroundColor: colors.surface,
@@ -192,6 +198,9 @@ const styles = StyleSheet.create({
   },
   tileTextDigraph: {
     fontSize: 13,
+  },
+  tileTextWord: {
+    fontSize: 11,
   },
   footer: {
     paddingTop: spacing.sm,

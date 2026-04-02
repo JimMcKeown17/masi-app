@@ -45,7 +45,7 @@ export default function LetterTrackerScreen({ route }) {
       // 1. Find the child's most recent assessment for this language
       const allAssessments = await storage.getAssessments();
       const childAssessments = allAssessments
-        .filter(a => a.child_id === child.id && a.letter_language === letterSet.language)
+        .filter(a => a.child_id === child.id && a.letter_language === letterSet.language && (a.assessment_type || 'letter_egra') === 'letter_egra')
         .sort((a, b) => {
           const dateCmp = b.date_assessed.localeCompare(a.date_assessed);
           if (dateCmp !== 0) return dateCmp;

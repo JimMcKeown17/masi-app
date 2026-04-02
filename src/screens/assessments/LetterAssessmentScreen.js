@@ -44,7 +44,8 @@ function computeAssessmentResult(letterStates, lastTappedIndex, letters) {
 }
 
 export default function LetterAssessmentScreen({ navigation, route }) {
-  const { child, letterSet, attemptNumber = 1 } = route.params;
+  const { child, letterSet, attemptNumber = 1, assessmentType = 'letter_egra' } = route.params;
+  const isWordAssessment = assessmentType === 'word_egra';
   const { user } = useAuth();
   const { refreshSyncStatus } = useOffline();
 
@@ -71,8 +72,8 @@ export default function LetterAssessmentScreen({ navigation, route }) {
   const insets = useSafeAreaInsets();
 
   // Compute tile size to fill available viewport
-  const COLUMNS = 5;
-  const ROWS = 4;
+  const COLUMNS = letterSet.columns || 5;
+  const ROWS = (letterSet.lettersPerPage || 20) / COLUMNS;
   const GAP = spacing.sm; // 8px
 
   const timerRowHeight = spacing.md * 2 + 14; // paddingVertical + bar height
@@ -93,7 +94,10 @@ export default function LetterAssessmentScreen({ navigation, route }) {
 
   const tileWidthFromColumns = (availableWidth - GAP * (COLUMNS - 1)) / COLUMNS;
   const tileHeightFromRows = (availableHeight - GAP * (ROWS - 1)) / ROWS;
-  const tileSize = Math.max(44, Math.floor(Math.min(tileWidthFromColumns, tileHeightFromRows)));
+  // For letters: square tiles (min of width/height). For words: rectangular (full width, capped height).
+  const tileWidth = Math.max(44, Math.floor(tileWidthFromColumns));
+  const tileHeight = Math.max(44, Math.floor(Math.min(tileHeightFromRows, isWordAssessment ? 64 : tileWidthFromColumns)));
+  const tileSize = Math.min(tileWidth, tileHeight); // used for square letter tiles
 
   const totalLetters = letterSet.letters.length;
   const totalPages = Math.ceil(totalLetters / letterSet.lettersPerPage);
@@ -193,7 +197,8 @@ export default function LetterAssessmentScreen({ navigation, route }) {
       id: uuidv4(),
       user_id: user.id,
       child_id: child.id,
-      assessment_type: 'letter_egra',
+      assessment_type: assessmentType,
+      items_tested: letterSet.letters,
       attempt_number: attemptNumber,
       letter_set_id: letterSet.id,
       letter_language: letterSet.language,
@@ -221,6 +226,7 @@ export default function LetterAssessmentScreen({ navigation, route }) {
       child,
       letterSet,
       attemptNumber,
+      assessmentType,
     });
   };
 
@@ -245,7 +251,7 @@ export default function LetterAssessmentScreen({ navigation, route }) {
       <View style={[styles.container, { paddingTop: insets.top }]}>
         <View style={styles.instructionsContainer}>
           <Text variant="headlineSmall" style={styles.instructionsTitle}>
-            Letter Sound Assessment
+            {isWordAssessment ? 'Word Reading Assessment' : 'Letter Sound Assessment'}
           </Text>
           <Text variant="bodyLarge" style={styles.instructionsChild}>
             {child.first_name} {child.last_name}
@@ -259,13 +265,13 @@ export default function LetterAssessmentScreen({ navigation, route }) {
               1. Tap "Start" to begin the 60-second timer
             </Text>
             <Text variant="bodyMedium" style={styles.instructionsText}>
-              2. Point to each letter and ask the child to say the sound
+              2. Point to each {isWordAssessment ? 'word' : 'letter'} and ask the child to {isWordAssessment ? 'read the word' : 'say the sound'}
             </Text>
             <Text variant="bodyMedium" style={styles.instructionsText}>
-              3. Tap letters the child gets CORRECT (they turn green)
+              3. Tap {isWordAssessment ? 'words' : 'letters'} the child gets CORRECT (they turn green)
             </Text>
             <Text variant="bodyMedium" style={styles.instructionsText}>
-              4. Skip incorrect letters (leave them unmarked)
+              4. Skip incorrect {isWordAssessment ? 'words' : 'letters'} (leave them unmarked)
             </Text>
             <Text variant="bodyMedium" style={styles.instructionsText}>
               5. Use Next/Prev to navigate pages
@@ -321,6 +327,8 @@ export default function LetterAssessmentScreen({ navigation, route }) {
           onToggle={handleToggle}
           disabled={phase === 'finished'}
           tileSize={tileSize}
+          tileWidth={isWordAssessment ? tileWidth : undefined}
+          tileHeight={isWordAssessment ? tileHeight : undefined}
           gap={GAP}
         />
       </View>

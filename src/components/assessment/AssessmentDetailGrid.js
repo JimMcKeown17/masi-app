@@ -3,12 +3,18 @@ import { View, StyleSheet } from 'react-native';
 import { Text } from 'react-native-paper';
 import { colors, spacing, borderRadius } from '../../constants/colors';
 
-const COLUMNS = 5;
-const TILE_SIZE = 44;
+const DEFAULT_COLUMNS = 5;
+const LETTER_TILE_SIZE = 44;
+const WORD_TILE_WIDTH = 100;
+const TILE_HEIGHT = 44;
 const GAP = 5;
 
 export default function AssessmentDetailGrid({ assessment, letterSet }) {
   if (!letterSet) return null;
+
+  const isWord = letterSet.type === 'word';
+  const columns = letterSet.columns || DEFAULT_COLUMNS;
+  const tileWidth = isWord ? WORD_TILE_WIDTH : LETTER_TILE_SIZE;
 
   const correctSet = new Set(
     (assessment.correct_letters || []).map((l) => l.index)
@@ -20,9 +26,9 @@ export default function AssessmentDetailGrid({ assessment, letterSet }) {
 
   return (
     <View style={styles.container}>
-      <Text variant="titleSmall" style={styles.title}>Letter Results</Text>
+      <Text variant="titleSmall" style={styles.title}>{isWord ? 'Word' : 'Letter'} Results</Text>
 
-      <View style={styles.grid}>
+      <View style={[styles.grid, { width: columns * tileWidth + (columns - 1) * GAP }]}>
         {letterSet.letters.map((letter, i) => {
           const notAttempted = i > lastIndex;
           const isCorrect = correctSet.has(i);
@@ -33,17 +39,22 @@ export default function AssessmentDetailGrid({ assessment, letterSet }) {
               key={`${i}-${letter}`}
               style={[
                 styles.tile,
+                { width: tileWidth, height: TILE_HEIGHT },
                 isCorrect && styles.tileCorrect,
                 isIncorrect && styles.tileIncorrect,
                 notAttempted && styles.tileNotAttempted,
               ]}
             >
               <Text
+                numberOfLines={1}
+                adjustsFontSizeToFit
+                minimumFontScale={0.5}
                 style={[
                   styles.tileText,
                   (isCorrect || isIncorrect) && styles.tileTextWhite,
                   notAttempted && styles.tileTextMuted,
-                  letter.length > 1 && styles.tileTextDigraph,
+                  letter.length === 2 && styles.tileTextDigraph,
+                  letter.length > 2 && styles.tileTextWord,
                 ]}
               >
                 {letter}
@@ -86,11 +97,8 @@ const styles = StyleSheet.create({
     flexWrap: 'wrap',
     justifyContent: 'center',
     gap: GAP,
-    width: COLUMNS * TILE_SIZE + (COLUMNS - 1) * GAP,
   },
   tile: {
-    width: TILE_SIZE,
-    height: TILE_SIZE,
     justifyContent: 'center',
     alignItems: 'center',
     borderRadius: borderRadius.sm,
@@ -124,6 +132,9 @@ const styles = StyleSheet.create({
   },
   tileTextDigraph: {
     fontSize: 12,
+  },
+  tileTextWord: {
+    fontSize: 10,
   },
   legend: {
     flexDirection: 'row',

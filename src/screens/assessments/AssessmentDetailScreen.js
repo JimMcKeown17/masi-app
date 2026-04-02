@@ -3,7 +3,7 @@ import { View, StyleSheet, ScrollView } from 'react-native';
 import { Text } from 'react-native-paper';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { colors, spacing, borderRadius, shadows } from '../../constants/colors';
-import { getLetterSetById } from '../../constants/egraConstants';
+import { getItemSetById } from '../../constants/egraConstants';
 import AssessmentDetailGrid from '../../components/assessment/AssessmentDetailGrid';
 
 function getFeedback(accuracy) {
@@ -37,7 +37,18 @@ function StatCard({ value, label, accentColor }) {
 export default function AssessmentDetailScreen({ route }) {
   const { assessment, childName } = route.params;
   const insets = useSafeAreaInsets();
-  const letterSet = getLetterSetById(assessment.letter_set_id);
+  const isWordAssessment = assessment.assessment_type === 'word_egra';
+
+  // Prefer items_tested (self-contained) → fall back to set lookup
+  const letterSet = assessment.items_tested
+    ? {
+        letters: assessment.items_tested,
+        columns: isWordAssessment ? 2 : 5,
+        type: isWordAssessment ? 'word' : 'letter',
+        language: assessment.letter_language,
+      }
+    : getItemSetById(assessment.letter_set_id);
+
   const incorrect = assessment.letters_attempted - assessment.correct_responses;
   const feedback = getFeedback(assessment.accuracy);
 

@@ -28,6 +28,11 @@ export function computeAssessmentMastery(assessment, egraLetterSet, pedagogicalO
     return mastered;
   }
 
+  // Only compute letter mastery from letter assessments, not word assessments
+  if (assessment.assessment_type && assessment.assessment_type !== 'letter_egra') {
+    return mastered;
+  }
+
   const attemptedUpTo = assessment.last_letter_attempted.index;
   const letters = egraLetterSet.letters;
 

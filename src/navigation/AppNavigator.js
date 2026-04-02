@@ -39,6 +39,7 @@ import AssessmentResultsScreen from '../screens/assessments/AssessmentResultsScr
 import AssessmentHistoryScreen from '../screens/assessments/AssessmentHistoryScreen';
 import AssessmentDetailScreen from '../screens/assessments/AssessmentDetailScreen';
 import LetterTrackerScreen from '../screens/assessments/LetterTrackerScreen';
+import ChildAssessmentSummaryScreen from '../screens/assessments/ChildAssessmentSummaryScreen';
 
 // Insight screens
 import LetterMasteryRankingScreen from '../screens/insights/LetterMasteryRankingScreen';
@@ -261,6 +262,14 @@ function MainNavigator() {
         component={LetterTrackerScreen}
         options={{
           title: 'Letter Tracker',
+          headerBackTitle: 'Back',
+        }}
+      />
+      <Stack.Screen
+        name="ChildAssessmentSummary"
+        component={ChildAssessmentSummaryScreen}
+        options={{
+          title: 'Assessment Summary',
           headerBackTitle: 'Back',
         }}
       />

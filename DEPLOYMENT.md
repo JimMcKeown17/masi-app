@@ -206,12 +206,10 @@ See CLAUDE.md "Deployment Status" section for full details on backwards-compatib
 
 | Platform | Last Build | Version | OTA Enabled | Distribution |
 |---|---|---|---|---|
-| iOS | March 7, 2026 | 1.0.0 | No (needs rebuild) | TestFlight (internal) |
-| Android | March 8, 2026 | 1.1.0 | No (needs rebuild) | Play Store (internal track) |
+| iOS | March 28, 2026 | 1.1.0 | Yes | TestFlight (internal) |
+| Android | March 28, 2026 | 1.1.0 | Yes | Play Store (internal track) |
 
-**Note:** Both platforms need a full native rebuild to enable OTA updates. The `expo-updates` package and config are in place, but the update client is not baked into the current builds. After rebuilding, OTA will be enabled and you can use `eas update` for JS-only changes.
-
-**iOS is also behind** — it was last built at v1.0.0 while Android is at v1.1.0. The next iOS build will pick up all changes since March 7.
+OTA updates are live. JS-only changes can be pushed with `eas update` — no rebuild needed.
 
 ---
 

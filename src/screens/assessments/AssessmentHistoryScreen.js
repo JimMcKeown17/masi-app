@@ -121,9 +121,16 @@ export default function AssessmentHistoryScreen({ navigation }) {
             {childName}
           </Text>
 
-          <Text variant="bodyMedium" style={styles.language}>
-            {item.letter_language} - Attempt #{item.attempt_number}
-          </Text>
+          <View style={styles.typeRow}>
+            <View style={[styles.typeBadge, item.assessment_type === 'word_egra' ? styles.typeBadgeWord : styles.typeBadgeLetter]}>
+              <Text variant="labelSmall" style={styles.typeBadgeText}>
+                {item.assessment_type === 'word_egra' ? 'Words' : 'Letters'}
+              </Text>
+            </View>
+            <Text variant="bodyMedium" style={styles.language}>
+              {item.letter_language} - Attempt #{item.attempt_number}
+            </Text>
+          </View>
 
           <View style={styles.statsRow}>
             <Text variant="bodySmall" style={styles.stat}>
@@ -238,10 +245,31 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     marginBottom: 2,
   },
+  typeRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    marginBottom: spacing.sm,
+  },
+  typeBadge: {
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 2,
+    borderRadius: 10,
+  },
+  typeBadgeLetter: {
+    backgroundColor: '#DBEAFE',
+  },
+  typeBadgeWord: {
+    backgroundColor: '#FEF3C7',
+  },
+  typeBadgeText: {
+    fontWeight: '600',
+    fontSize: 11,
+    color: colors.text,
+  },
   language: {
     color: colors.primary,
     fontWeight: '500',
-    marginBottom: spacing.sm,
   },
   statsRow: {
     flexDirection: 'row',

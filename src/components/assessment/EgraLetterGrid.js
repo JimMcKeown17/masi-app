@@ -3,9 +3,12 @@ import { View, StyleSheet, Pressable } from 'react-native';
 import { Text } from 'react-native-paper';
 import { colors, spacing, borderRadius } from '../../constants/colors';
 
-export default function EgraLetterGrid({ letters, pageOffset, letterStates, onToggle, disabled, tileSize, gap }) {
+export default function EgraLetterGrid({ letters, pageOffset, letterStates, onToggle, disabled, tileSize, tileWidth, tileHeight, gap }) {
+  const effectiveWidth = tileWidth || tileSize;
+  const effectiveHeight = tileHeight || tileSize;
   const baseFontSize = Math.max(14, Math.floor(tileSize * 0.35));
   const digraphFontSize = Math.max(12, Math.floor(tileSize * 0.28));
+  const wordFontSize = Math.max(11, Math.floor(tileSize * 0.18));
 
   return (
     <View style={[styles.grid, { gap }]}>
@@ -18,7 +21,7 @@ export default function EgraLetterGrid({ letters, pageOffset, letterStates, onTo
             onPress={() => !disabled && onToggle(globalIndex)}
             style={({ pressed }) => [
               styles.tile,
-              { width: tileSize, height: tileSize },
+              { width: effectiveWidth, height: effectiveHeight },
               isCorrect && styles.tileCorrect,
               pressed && !disabled && styles.tilePressed,
               disabled && styles.tileDisabled,
@@ -27,11 +30,15 @@ export default function EgraLetterGrid({ letters, pageOffset, letterStates, onTo
             accessibilityLabel={`${letter}, ${isCorrect ? 'correct' : 'not marked'}`}
           >
             <Text
+              numberOfLines={1}
+              adjustsFontSizeToFit
+              minimumFontScale={0.5}
               style={[
                 styles.tileText,
                 { fontSize: baseFontSize },
                 isCorrect && styles.tileTextCorrect,
-                letter.length > 1 && { fontSize: digraphFontSize },
+                letter.length === 2 && { fontSize: digraphFontSize },
+                letter.length > 2 && { fontSize: wordFontSize },
               ]}
             >
               {letter}

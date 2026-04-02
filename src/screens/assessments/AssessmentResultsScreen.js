@@ -25,7 +25,7 @@ function StatCard({ value, label, accentColor }) {
 }
 
 export default function AssessmentResultsScreen({ navigation, route }) {
-  const { assessment, child, letterSet, attemptNumber } = route.params;
+  const { assessment, child, letterSet, attemptNumber, assessmentType = 'letter_egra' } = route.params;
   const incorrect = assessment.letters_attempted - assessment.correct_responses;
   const feedback = getFeedback(assessment.accuracy);
   const insets = useSafeAreaInsets();
@@ -35,6 +35,7 @@ export default function AssessmentResultsScreen({ navigation, route }) {
       child,
       letterSet,
       attemptNumber: attemptNumber + 1,
+      assessmentType,
     });
   };
 

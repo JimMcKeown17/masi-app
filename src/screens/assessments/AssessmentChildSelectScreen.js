@@ -4,7 +4,7 @@ import { Text, Searchbar, Portal, Dialog, Button, RadioButton } from 'react-nati
 import { useFocusEffect } from '@react-navigation/native';
 import { useChildren } from '../../context/ChildrenContext';
 import { useClasses } from '../../context/ClassesContext';
-import { LETTER_SETS } from '../../constants/egraConstants';
+import { LETTER_SETS, WORD_SETS } from '../../constants/egraConstants';
 import { colors, spacing, borderRadius, shadows } from '../../constants/colors';
 import { storage } from '../../utils/storage';
 
@@ -14,7 +14,10 @@ function formatShortDate(dateStr) {
   return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
 }
 
-export default function AssessmentChildSelectScreen({ navigation }) {
+export default function AssessmentChildSelectScreen({ navigation, route }) {
+  const assessmentType = route.params?.assessmentType || 'letter_egra';
+  const isWordAssessment = assessmentType === 'word_egra';
+  const itemSets = isWordAssessment ? WORD_SETS : LETTER_SETS;
   const { children } = useChildren();
   const { classes } = useClasses();
   const [searchQuery, setSearchQuery] = useState('');
@@ -26,16 +29,17 @@ export default function AssessmentChildSelectScreen({ navigation }) {
   useFocusEffect(
     useCallback(() => {
       (async () => {
-        const assessments = await storage.getAssessments();
+        const allAssessments = await storage.getAssessments();
+        const typeFiltered = allAssessments.filter(x => (x.assessment_type || 'letter_egra') === assessmentType);
         const map = {};
-        for (const a of assessments) {
+        for (const a of typeFiltered) {
           const existing = map[a.child_id];
           if (!existing || a.date_assessed > existing.date_assessed ||
               (a.date_assessed === existing.date_assessed && a.created_at > existing.created_at)) {
             map[a.child_id] = {
               date_assessed: a.date_assessed,
               accuracy: a.accuracy,
-              attemptCount: assessments.filter(x => x.child_id === a.child_id).length,
+              attemptCount: typeFiltered.filter(x => x.child_id === a.child_id).length,
             };
           }
         }
@@ -67,6 +71,7 @@ export default function AssessmentChildSelectScreen({ navigation }) {
       child,
       letterSet,
       attemptNumber: (assessmentMap[child.id]?.attemptCount || 0) + 1,
+      assessmentType,
     });
   };
 
@@ -76,8 +81,8 @@ export default function AssessmentChildSelectScreen({ navigation }) {
       const childClass = classes.find((c) => c.id === child.class_id);
       if (childClass?.home_language) {
         const key = childClass.home_language.toLowerCase();
-        if (LETTER_SETS[key]) {
-          navigateToAssessment(child, LETTER_SETS[key]);
+        if (itemSets[key]) {
+          navigateToAssessment(child, itemSets[key]);
           return;
         }
       }
@@ -89,7 +94,7 @@ export default function AssessmentChildSelectScreen({ navigation }) {
 
   const handleLanguageConfirm = () => {
     setLanguageDialogVisible(false);
-    navigateToAssessment(selectedChild, LETTER_SETS[selectedLanguage]);
+    navigateToAssessment(selectedChild, itemSets[selectedLanguage]);
   };
 
   const renderChild = ({ item }) => {

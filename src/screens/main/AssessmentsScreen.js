@@ -50,7 +50,26 @@ export default function AssessmentsScreen({ navigation }) {
         <Card.Actions style={styles.cardActions}>
           <Button
             mode="contained"
-            onPress={() => navigation.navigate('AssessmentChildSelect')}
+            onPress={() => navigation.navigate('AssessmentChildSelect', { assessmentType: 'letter_egra' })}
+          >
+            Start Assessment
+          </Button>
+        </Card.Actions>
+      </Card>
+
+      <Card style={styles.card}>
+        <Card.Content>
+          <Text variant="titleMedium" style={styles.cardTitle}>
+            Word Reading Assessment (EGRA)
+          </Text>
+          <Text variant="bodySmall" style={styles.cardDescription}>
+            60-second timed word reading fluency test
+          </Text>
+        </Card.Content>
+        <Card.Actions style={styles.cardActions}>
+          <Button
+            mode="contained"
+            onPress={() => navigation.navigate('AssessmentChildSelect', { assessmentType: 'word_egra' })}
           >
             Start Assessment
           </Button>
