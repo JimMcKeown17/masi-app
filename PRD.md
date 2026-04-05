@@ -681,6 +681,208 @@ Requirements to be gathered as we progress through development phases.
 
 ---
 
-**Document Version**: 1.1
-**Last Updated**: 2026-03-26
-**Status**: Phase 8 (EGRA Assessment) complete; Phase 5 (additional session forms) in progress
+**Document Version**: 1.2
+**Last Updated**: 2026-04-05
+**Status**: Field testing in progress; Phase 8 (EGRA Assessment) complete; Phase 5 (additional session forms) in progress
+
+---
+
+## Development Progress
+
+> Consolidated from PROGRESS.md on 2026-04-05.
+
+### Current Status
+**Phase**: Field Testing Bug Fixes — Round 1
+
+---
+
+### In Progress
+
+#### Sync Engine Bug Fixes — Ghost Children & Junction Errors
+Branch: `main` (direct fix — field-critical)
+
+Root cause: `loadChildren()` merge logic dropped locally synced children when their `staff_children` junction hadn't synced yet, causing cascading FK errors.
+
+- [x] Fix merge logic in `loadChildren()`, `loadChildrenGroups()`, `loadGroups()` — preserve all local records not in server response
+- [x] Apply same fix to `ClassesContext.js`, `TimeEntriesListScreen`, `SessionHistoryScreen`, `AssessmentHistoryScreen`
+- [x] Fix `onConflict` keys: `staff_children` → `staff_id,child_id`, `children_groups` → `child_id,group_id`, `classes` → `staff_id,name,school_id`
+- [x] Add terminal error classification (`classifyError`): 23505 → mark synced, 23503/42501 → quarantine immediately
+- [x] Enforce explicit sync order (`SYNC_ORDER` array) with dependency gating — skip junction tables when parent fails
+- [x] One-time orphan repair (`repairOrphanedJunctions`) — re-queues stuck children and junction records on upgrade
+- [ ] End-to-end device testing
+- [ ] Push update via EAS
+
+#### Field Testing Bug Fixes — Round 1
+Branch: `bugfix/field-testing-round-1`
+
+- [x] Bug 1: Last Letter Attempted — prevent selecting before last correct letter (added `minIndex` to bottom sheet)
+- [x] Bug 2: Auto-default last letter when child finishes entire test (skip bottom sheet if last letter correct)
+- [x] Bug 3: Assessment ranking sorted by total correct count, not percent
+- [x] Bug 4: Back button not working — added React-rendered `headerLeft` to all Stack screens
+- [x] Feature 5: Tappable rows on ranking screens — AssessmentRanking → AssessmentDetail, LetterMastery → LetterTracker
+- [x] Feature 6: "Unassessed" stat pill on Children tab navigates to Assessments tab
+- [x] Feature 7: Light red background on Clock card when not clocked in
+- [x] Bug 8: Letter Tracker header double-counts mastered letters (Set union dedup)
+- [x] Bug 9: Letter mastery sync 23505 duplicate key — changed `onConflict` to composite key + local dedup
+- [ ] End-to-end verification on device
+- [ ] Merge to main
+
+#### Phase 10: Dashboard Redesign
+- [x] Branch setup (`feature/dashboard-redesign`)
+- [x] Create directories (`src/screens/insights/`, `src/components/dashboard/`)
+- [x] Add `.superpowers/` to `.gitignore`
+- [x] Utility layer — `src/utils/dashboardStats.js`
+  - [x] `getDaysWorkedThisMonth`, `getWeekSessionCounts`, `getSessionsThisMonth`
+  - [x] `getAssessmentCoverage`, `getLetterMasteryRanking`, `getAssessmentRanking`
+  - [x] `getSessionCountRanking`, tab stat functions
+- [x] Reusable components
+  - [x] `StatBar` — 3-pill stat row component
+  - [x] `RankedBarRow` — ranked horizontal bar row
+- [x] Home screen redesign
+  - [x] Gradient header with inline monthly stats
+  - [x] Compact clock card
+  - [x] Sessions This Week card (day squares)
+  - [x] Assessment Coverage progress bar
+  - [x] Performance Insight drill-down buttons
+- [x] Navigation & ranking screens
+  - [x] Register 3 new screens in AppNavigator
+  - [x] LetterMasteryRankingScreen
+  - [x] AssessmentRankingScreen
+  - [x] SessionCountRankingScreen
+- [x] Tab stat bars
+  - [x] Children tab: # children, # classes, # unassessed
+  - [x] Sessions tab: this week, this month, avg/child + not-seen callout
+  - [x] Assessments tab: % assessed, total, avg accuracy
+- [x] Polish & end-to-end verification
+  - [x] Fixed context property naming (`children` not `childrenList`) in all 6 new screens
+  - [x] Fixed UTC→local timezone bug in date helpers (critical for UTC+2 South African users)
+  - [x] Fixed `created_at` tie-breaker missing in `getAssessmentsTabStats`
+  - [x] Fixed `letter_language` comparison to use `normalizeLanguageKey`
+  - [x] Fixed null accuracy handling in `getAssessmentRanking`
+  - [x] Expo dev server starts cleanly, zero IDE diagnostics
+
+#### Phase 9: Letter Tracker
+- [x] Supabase migration — `letter_mastery` table
+- [x] Pedagogical letter orders in egraConstants.js
+- [x] Mastery calculation utility (letterMastery.js)
+- [x] Storage CRUD methods for letter_mastery
+- [x] Sync integration with soft-delete support
+- [x] LetterTrackerScreen with grid UI
+- [x] Navigation route registration
+- [x] Entry point icon on ClassDetailScreen
+- [x] Documentation updates (egra_letter_sets.md, LEARNING.md)
+- [x] Session form integration — LetterTrackerBottomSheet + form restructure
+- [ ] End-to-end testing
+
+---
+
+### Completed Phases
+
+#### Phase 0: Project Setup ✓
+- Expo project initialized, all core dependencies installed
+- Supabase project created with base schema and RLS
+- Environment variables configured, navigation structure set up
+- Documentation created (PRD, PROGRESS, LEARNING, DATABASE_SCHEMA_GUIDE)
+
+#### Phase 1: Authentication & Foundation ✓
+- Supabase client config, AuthContext, LoginScreen, ForgotPasswordScreen
+- ProfileScreen with password change, profile refresh
+- Offline storage setup (AsyncStorage), OfflineContext
+
+#### Phase 1.5: Profile Improvements & Debug Tools ✓
+- Logger utility (rolling 1000-entry buffer), debug export via Share API
+- ProfileScreen refactored to 4-section layout (info, debug, password, legal)
+
+#### Phase 2: Time Tracking ✓
+- Sign in/out with geolocation (medium accuracy), time entries list
+- Daily hours calculation, offline sync with exponential backoff
+
+#### Phase 3: Children & Groups Management ✓
+- staff_children many-to-many junction, ChildrenContext with CRUD
+- Group management (create/rename/delete), children-groups assignment
+- Search, filter, pull-to-refresh, sync indicators
+
+#### Phase 4: Session Recording — Literacy Coach ✓
+- LiteracySessionForm (calendar, child selector, letter grid, reading levels)
+- SessionHistoryScreen (last 30 days), uuid polyfill fix, auto-sync fix
+
+#### Phase 6: Offline Sync Refinement ✓
+- Failed items persistence with retry, SyncStatusScreen
+- Per-table unsynced breakdown, manual retry per failed item
+
+#### Phase 7: Polish & Production Prep (Partial) ✓
+- Snackbar standardization, loading states, inline form validation
+- RLS tightening (created_by trigger), .env.example fix
+- **Remaining**: security review, device testing, performance, deployment
+
+#### Phase 8: EGRA Letter Sound Assessment ✓
+- Schools/classes data model, assessment table with RLS
+- Timed 60-second EGRA grid, last-letter-attempted bottom sheet
+- Results screen, history, detail view, auto-language detection
+- Assessment icon on class detail rows
+
+---
+
+### Decisions Made
+
+#### Architecture
+- **Sync Strategy**: Last-write-wins (staff changes always overwrite server)
+- **Sync Triggers**: App foreground/background
+- **Navigation**: Bottom tab navigation — Home → My Children → Sessions → Assessments
+- **Theme**: Light mode only (initially)
+- **Validation**: Basic client-side, comprehensive server-side
+
+#### Features
+- **Groups**: Hybrid management (staff can create, admin can override)
+- **Child Selection**: Multi-step (search → add to list) + group-based selection
+- **Time Tracking**: Medium accuracy location (50-100m), static display with manual refresh
+- **Session History**: Last 30 days, newest first, read-only
+- **Profile Editing**: Name and password only (job details admin-only)
+
+---
+
+### Recent Activity Log
+
+#### 2026-03-26 (EGRA Assessment v2 — Last Attempted, Detail Grid, Auto-Language)
+- "Last Letter Attempted" bottom sheet, assessment detail grid, history cards tappable
+- Auto-detect language from class, assessment icon on Class Details
+- Branch: `feature/letter-assessment-v2` merged to main
+
+#### 2026-02-13 (Home Redesign & Navigation Restructure)
+- Extracted `useTimeTracking` hook, redesigned HomeScreen with gradient header
+- Time tab removed, Assessments tab added, gear icon for profile access
+- Branches: `redesign/home-tab` and `redesign/assessments-tab` merged to main
+
+#### 2026-02-04 (Phase 7 Polish & Phase 6 Sync Refinement)
+- Feedback standardization (Alert → Snackbar), loading states, inline validation
+- RLS migration, SyncStatusScreen, failed items persistence
+- Phases 6 & 7 (partial) complete
+
+#### 2026-02-03 (Session Recording — Literacy Coach)
+- LiteracySessionForm, LetterGrid, ChildSelector, SessionHistoryScreen
+- uuid polyfill fix, auto-sync bug fix, test data loaded
+
+#### 2026-01-30 (Children & Groups Management)
+- staff_children junction, ChildrenContext, GroupManagementScreen
+- Full CRUD with offline-first architecture, Phase 3 complete
+
+---
+
+### Remaining Work
+- Phase 5: Additional session forms (Numeracy, ZZ Coach, Yeboneer)
+- Phase 7 remaining: security review, Android/iOS device testing, performance, deployment
+- Field testing bug fixes: end-to-end verification and merge
+
+---
+
+## Planned Admin Scripts
+
+These scripts are planned but not yet implemented. See the linked plan documents for full details.
+
+### 1. Seed Test Data Script
+**Purpose**: Quickly populate a test user account with fake but realistic data (class, children, groups, sessions, assessments, time entries) for testing the app.
+**Plan**: [`documentation/seed_data_plan.md`](documentation/seed_data_plan.md)
+
+### 2. Bulk Import Children & Groups
+**Purpose**: Import real class lists (children + group assignments) for new users from existing spreadsheets. Most new users already have their children grouped — this script wires up all the relationships (school, class, children, staff_children, groups, children_groups) in one run.
+**Plan**: [`documentation/bulk_import_children_plan.md`](documentation/bulk_import_children_plan.md)

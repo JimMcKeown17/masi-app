@@ -5,8 +5,7 @@ A React Native mobile application for Masi, a nonprofit, to manage their field s
 
 ## Documentation Structure
 Always consult these key documentation files:
-- **PRD.md**: Complete product requirements, tech stack, database schema, and feature specifications
-- **PROGRESS.md**: Development progress tracker and phase completion status
+- **PRD.md**: Complete product requirements, tech stack, database schema, feature specifications, and development progress
 - **LEARNING.md**: Educational documentation of architectural decisions (**update regularly as you build**)
 - **DATABASE_SCHEMA_GUIDE.md**: Detailed database schema reference and design rationale
 
@@ -59,6 +58,6 @@ const url = process.env.EXPO_PUBLIC_SUPABASE_URL
 
 ### IMPORTANT: Track Progress and Document Decisions
 
-- **PROGRESS.md**: Add a `- [ ]` checklist when starting multi-step work. Check off items as you go.
+- **PRD.md → Development Progress**: Add a `- [ ]` checklist when starting multi-step work. Check off items as you go.
 - **LEARNING.md** (`documentation/`): After significant architectural decisions or tricky bug fixes, add a narrative section explaining the "why" — written like teaching a junior developer.
 - **Always branch** off to a new git branch for features or bug fixes.
