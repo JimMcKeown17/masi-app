@@ -886,3 +886,20 @@ These scripts are planned but not yet implemented. See the linked plan documents
 ### 2. Bulk Import Children & Groups
 **Purpose**: Import real class lists (children + group assignments) for new users from existing spreadsheets. Most new users already have their children grouped — this script wires up all the relationships (school, class, children, staff_children, groups, children_groups) in one run.
 **Plan**: [`documentation/bulk_import_children_plan.md`](documentation/bulk_import_children_plan.md)
+
+### 3. Staff User Creation Automation
+**Purpose**: Replace the manual multi-step workflow (Supabase Auth sign-up → copy UUID → Table Editor → insert `public.users` row with first_name/last_name/job_title/assigned_school) with a single command or form. Extend naturally to CSV bulk creation and pre-linking staff to their assigned children.
+
+**Problem today**: Creating one staff member requires ~8 clicks across two Supabase surfaces (Authentication + Table Editor) and manual UUID copy-paste. As the staff roster grows, this becomes the rate-limiter on onboarding.
+
+**Options considered (no plan doc yet):**
+1. **Postgres trigger** (`handle_new_user`) on `auth.users` that auto-creates the matching `public.users` row from `raw_user_meta_data` passed at sign-up. Canonical Supabase pattern; one-time setup; benefits every creation path thereafter.
+2. **Local Node script** using the service-role key to call `auth.admin.createUser({ email, password, user_metadata })` and insert the profile row (and eventually `staff_children`) in one command. Fast to build; extends linearly to CSV bulk.
+3. **Supabase Edge Function + small admin UI** so non-technical admins can create users without touching code. Higher setup cost; right answer when delegation is needed.
+4. **Dashboard CSV import** for profile rows only — limited value since it can't create auth records.
+
+**Leaning**: combine **#1 + #2** — add the trigger now (permanent good citizen, works regardless of creation path), plus a Node script for single-command staff creation that scales to CSV bulk and child pre-linking. Promote to **#3** if user creation ever needs to be delegated off Jim's laptop.
+
+**Related**: Should compose with [`documentation/bulk_import_children_plan.md`](documentation/bulk_import_children_plan.md) — the child pre-linking step of this script is exactly the relationship wiring that plan already describes. Consider whether staff creation runs as "step 0" of the bulk import, or as a separate script that the import reuses.
+
+**Security note**: service-role key must remain local/server-side only — never bundled into the mobile app.
