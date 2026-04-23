@@ -1,3 +1,10 @@
+// Mock ChildrenContext to prevent the supabaseClient -> expo-constants
+// import chain from evaluating during module load. The helpers under test
+// are pure module-scope functions and don't use the context.
+jest.mock('../src/context/ChildrenContext', () => ({
+  useChildren: () => ({}),
+}));
+
 import {
   nextGroupNumber,
   compareGroups,
