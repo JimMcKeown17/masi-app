@@ -18,9 +18,11 @@
 |------|--------|---------------|
 | `src/components/children/GroupPickerBottomSheet.js` | Modify | Add helpers + export; remove rename and free-text create; add virtual rows and "+ Add Group N" button |
 | `src/screens/children/ClassDetailScreen.js` | Modify | Use imported `compareGroups` in place of `localeCompare` (line 45) |
+| `src/screens/children/EditChildScreen.js` | Modify | Use imported `compareGroups` in place of `localeCompare` (line 54) — same pattern as ClassDetailScreen; missing this file produces inconsistent color assignment between screens |
 | `__tests__/groupHelpers.test.js` | Create | Unit tests for `nextGroupNumber` and `compareGroups` |
+| `__tests__/GroupPickerBottomSheet.test.js` | Create | Minimal render test guarding the zero-group-virtuals and existing-groups-button branches |
 
-No new production source files are created. Helpers co-locate with the picker (matching the existing pattern where `getGroupColor` is exported from the same file and consumed by `ClassDetailScreen.js:13`).
+No new production source files are created. Helpers co-locate with the picker (matching the existing pattern where `getGroupColor` is exported from the same file and consumed by `ClassDetailScreen.js:13` and `EditChildScreen.js:19`).
 
 ---
 
@@ -130,6 +132,8 @@ git add __tests__/groupHelpers.test.js
 git commit -m "test: failing unit tests for nextGroupNumber and compareGroups helpers"
 ```
 
+> **Note on CI:** this repo currently has no CI workflow (verified: no `.github/workflows/` directory, no `*.yml` at the repo root). If CI is added in the future and gates every pushed commit green, squash Tasks 1 and 2 into a single commit (`feat: add helpers with unit tests`) before pushing — TDD discipline is preserved as long as the test was written first within the branch, not as long as each commit is individually red.
+
 ---
 
 ## Task 2: Implement the helper functions
@@ -217,11 +221,14 @@ numbering ignores legacy free-text names."
 
 ---
 
-## Task 3: Swap `localeCompare` sort for `compareGroups` in both call sites
+## Task 3: Swap `localeCompare` sort for `compareGroups` in all three call sites
 
 **Files:**
 - Modify: `src/components/children/GroupPickerBottomSheet.js:83-85` (inside the component body)
 - Modify: `src/screens/children/ClassDetailScreen.js:13` (import) and `src/screens/children/ClassDetailScreen.js:45` (usage)
+- Modify: `src/screens/children/EditChildScreen.js:19` (import) and `src/screens/children/EditChildScreen.js:54` (usage)
+
+**Why three files:** both `ClassDetailScreen` and `EditChildScreen` sort groups identically and feed the resulting index into `getGroupColor`. If only one is updated, a user would see different group colors for the same child between the class-detail card view and the edit-child form. Codex flagged this during pre-execution review — the miss was ours, not the spec's.
 
 - [ ] **Step 3.1: Update the picker's internal sort**
 
@@ -241,7 +248,7 @@ Replace with:
 
 (The `compareGroups` reference resolves to the function defined at module scope — no import needed inside the same file.)
 
-- [ ] **Step 3.2: Update the ClassDetailScreen import and sort**
+- [ ] **Step 3.2: Update ClassDetailScreen — import and sort**
 
 In `src/screens/children/ClassDetailScreen.js`, update the existing import on line 13. The current line is:
 
@@ -267,21 +274,56 @@ Replace with:
     const sortedGroups = [...groups].sort(compareGroups);
 ```
 
-- [ ] **Step 3.3: Run full test suite**
+- [ ] **Step 3.3: Update EditChildScreen — import and sort**
+
+In `src/screens/children/EditChildScreen.js`, verify the current import on line 19. Expected existing line:
+
+```javascript
+import GroupPickerBottomSheet, { getGroupColor } from '../../components/children/GroupPickerBottomSheet';
+```
+
+Change it to:
+
+```javascript
+import GroupPickerBottomSheet, { getGroupColor, compareGroups } from '../../components/children/GroupPickerBottomSheet';
+```
+
+Then find the existing line 54:
+
+```javascript
+    const sortedGroups = [...groups].sort((a, b) => a.name.localeCompare(b.name));
+```
+
+Replace with:
+
+```javascript
+    const sortedGroups = [...groups].sort(compareGroups);
+```
+
+Quick sanity check:
+
+Run: `grep -n "localeCompare" src/screens/children/*.js src/components/children/*.js`
+
+Expected: no output. If any matches remain, re-read the file and locate them — the edit above was incomplete.
+
+- [ ] **Step 3.4: Run full test suite**
 
 Run: `npx jest`
 
 Expected: All tests pass, including the new helper tests.
 
-- [ ] **Step 3.4: Commit**
+- [ ] **Step 3.5: Commit**
 
 ```bash
-git add src/components/children/GroupPickerBottomSheet.js src/screens/children/ClassDetailScreen.js
-git commit -m "feat: use compareGroups for numeric-aware sort of Group N names
+git add src/components/children/GroupPickerBottomSheet.js src/screens/children/ClassDetailScreen.js src/screens/children/EditChildScreen.js
+git commit -m "feat: use compareGroups for numeric-aware sort in all group-consuming screens
 
-Replaces localeCompare in both the picker and the child card
-color-assignment logic. Numbered groups now sort numerically
-(Group 2 before Group 10) and appear before legacy names."
+Replaces localeCompare in the picker, ClassDetailScreen, and
+EditChildScreen. All three sort the same list for the same
+color-index purpose; leaving any one on localeCompare would
+produce inconsistent colors between screens. Numbered groups
+now sort numerically (Group 2 before Group 10) and appear
+before legacy names."
 ```
 
 ---
@@ -718,18 +760,24 @@ Inside the component body, immediately after `handleRemoveFromGroup` (around lin
 
 ```javascript
   /**
-   * Tap handler for a virtual preset row.
+   * Tap handler for a virtual preset row AND the "+ Add Group N" button.
    * Creates the group as a real record, then assigns the current child to it.
-   * One-group-per-user rule is preserved by removing from the existing group first.
+   * One-group-per-user rule is preserved by removing from the existing group first,
+   * with a success check to prevent orphaned multi-group state if the remove fails
+   * (e.g., local storage error while offline).
    */
   const handleSelectVirtual = async (n) => {
     const name = `Group ${n}`;
 
-    // Guard against a race where a real "Group N" already exists
-    // (shouldn't happen since virtuals only render when groups.length === 0,
-    // but belt-and-suspenders for double-taps).
-    if (groups.some((g) => g.name === name)) {
-      Alert.alert('Error', `${name} already exists.`);
+    // Case-insensitive + whitespace-normalised duplicate guard.
+    // Matches the existing handleSelectGroup / handleCreateGroup behavior
+    // and prevents near-miss collisions such as a legacy "group 1" (lowercase)
+    // coexisting with a new "Group 1". Only plausible on the "+ Add Group N"
+    // path when a conforming-but-case-mismatched legacy group exists; virtuals
+    // only render when groups.length === 0 so no collisions are possible there.
+    const normalized = name.trim().toLowerCase();
+    if (groups.some((g) => g.name.trim().toLowerCase() === normalized)) {
+      Alert.alert('Duplicate Name', `${name} already exists (or a case variant does).`);
       return;
     }
 
@@ -740,8 +788,14 @@ Inside the component body, immediately after `handleRemoveFromGroup` (around lin
         Alert.alert('Error', 'Failed to create group.');
         return;
       }
+      // Mirror handleSelectGroup: if the remove fails, abort before assigning
+      // to avoid putting the child in two groups simultaneously.
       if (currentGroupId) {
-        await removeChildFromGroup(childId, currentGroupId);
+        const removeResult = await removeChildFromGroup(childId, currentGroupId);
+        if (!removeResult.success) {
+          Alert.alert('Error', 'Failed to remove from current group.');
+          return;
+        }
       }
       const assignResult = await addChildToGroup(childId, createResult.group.id);
       if (!assignResult.success) {
@@ -912,18 +966,136 @@ presets are showing. Completes the preset numbered groups feature."
 
 ---
 
-## Task 8: Update PRD progress and release notes
+## Task 8: Add minimal render test for the picker's two core branches
+
+**Files:**
+- Create: `__tests__/GroupPickerBottomSheet.test.js`
+
+**Scope:** guards the `groups.length === 0` conditional that toggles between virtual preset rows and the "+ Add Group N" button. Two tests — one per branch — cover the new behavior introduced in Tasks 6 and 7. Other picker scenarios (delete confirmation, one-group-per-user rule, etc.) are inherited from pre-existing code and are exercised by the manual checklist in Task 7 Step 7.3. This is intentional minimal coverage, not exhaustive UI testing.
+
+- [ ] **Step 8.1: Create the render test file**
+
+Create `__tests__/GroupPickerBottomSheet.test.js`:
+
+```javascript
+import React from 'react';
+import { render } from '@testing-library/react-native';
+import { PaperProvider } from 'react-native-paper';
+import GroupPickerBottomSheet from '../src/components/children/GroupPickerBottomSheet';
+
+// GroupPickerBottomSheet uses useSafeAreaInsets(). Provide a stable mock
+// so tests don't depend on a SafeAreaProvider wrapper.
+jest.mock('react-native-safe-area-context', () => ({
+  useSafeAreaInsets: () => ({ top: 0, bottom: 0, left: 0, right: 0 }),
+}));
+
+const mockUseChildren = jest.fn();
+jest.mock('../src/context/ChildrenContext', () => ({
+  useChildren: () => mockUseChildren(),
+}));
+
+const contextDefaults = {
+  addGroup: jest.fn(),
+  deleteGroup: jest.fn(),
+  addChildToGroup: jest.fn(),
+  removeChildFromGroup: jest.fn(),
+  getChildrenInGroup: () => [],
+};
+
+const renderPicker = () =>
+  render(
+    <PaperProvider>
+      <GroupPickerBottomSheet
+        visible={true}
+        onDismiss={() => {}}
+        childId="child-1"
+        childName="Test Child"
+        currentGroupId={null}
+      />
+    </PaperProvider>
+  );
+
+beforeEach(() => {
+  jest.clearAllMocks();
+});
+
+describe('GroupPickerBottomSheet', () => {
+  test('zero-group user: renders four virtual rows and no "+ Add" button', () => {
+    mockUseChildren.mockReturnValue({ ...contextDefaults, groups: [] });
+
+    const { getByText, queryByText } = renderPicker();
+
+    expect(getByText('Group 1')).toBeTruthy();
+    expect(getByText('Group 2')).toBeTruthy();
+    expect(getByText('Group 3')).toBeTruthy();
+    expect(getByText('Group 4')).toBeTruthy();
+    // "+ Add Group N" button must be hidden while virtuals are showing
+    expect(queryByText(/Add Group/)).toBeNull();
+  });
+
+  test('user with two groups: renders groups + "+ Add Group 3", no virtuals', () => {
+    mockUseChildren.mockReturnValue({
+      ...contextDefaults,
+      groups: [
+        { id: 'g1', name: 'Group 1' },
+        { id: 'g2', name: 'Group 2' },
+      ],
+    });
+
+    const { getByText, queryByText } = renderPicker();
+
+    expect(getByText('Group 1')).toBeTruthy();
+    expect(getByText('Group 2')).toBeTruthy();
+    // No virtual Group 3 or Group 4 rows (note the anchors — rule out partial
+    // matches inside the "+ Add Group 3" button label)
+    expect(queryByText(/^Group 3$/)).toBeNull();
+    expect(queryByText(/^Group 4$/)).toBeNull();
+    // "+ Add Group 3" button visible — allow one-or-more whitespace between + and Add
+    expect(getByText(/\+\s+Add Group 3/)).toBeTruthy();
+  });
+});
+```
+
+- [ ] **Step 8.2: Run the new test file**
+
+Run: `npx jest __tests__/GroupPickerBottomSheet.test.js`
+
+Expected: Both tests pass. Output ends with `Tests: 2 passed, 2 total`.
+
+**If either test fails with "Unable to find an element with text"**: the most likely cause is that React Native `Modal` isn't rendering children into the testing tree. Debug with `screen.debug()` inside the failing test to inspect the rendered output. If modal portaling is confirmed as the culprit, the fix is in the *test file* (e.g., mocking `Modal` to render children inline) — do **not** change the production component to accommodate the test.
+
+- [ ] **Step 8.3: Run the full test suite**
+
+Run: `npx jest`
+
+Expected: 11 tests pass — the 9 helper tests from Task 1/2 plus the 2 new render tests. No regressions in the existing `CreateClassScreen`, `AddChildScreen`, `ClassesContext`, or `storage-classes` suites.
+
+- [ ] **Step 8.4: Commit**
+
+```bash
+git add __tests__/GroupPickerBottomSheet.test.js
+git commit -m "test: render test for picker zero-group vs existing-group branches
+
+Guards the core conditional (groups.length === 0) that toggles
+between virtual preset rows and the '+ Add Group N' button.
+Minimal coverage by intent — other picker flows remain covered
+by manual verification per the spec."
+```
+
+---
+
+## Task 9: Update PRD progress and release notes
 
 **Files:**
 - Modify: `PRD.md` (Development Progress section — append completion checkbox)
 
-- [ ] **Step 8.1: Locate the Development Progress section in PRD.md**
+- [ ] **Step 9.1: Locate the Development Progress section in PRD.md**
 
 Run: `grep -n "Development Progress\|- \[ \]" PRD.md | head -20`
 
 Find the most appropriate section to add a completed checkbox under (likely a "Recent work" or similar subsection).
 
-- [ ] **Step 8.2: Append a completion entry**
+- [ ] **Step 9.2: Append a completion entry**
 
 Add a new line to the Development Progress section:
 
@@ -931,25 +1103,27 @@ Add a new line to the Development Progress section:
 - [x] Preset numbered groups — virtual Group 1..4 for new users, one-tap "+ Add Group N" for growth, rename removed, existing free-text groups preserved. Spec: `docs/superpowers/specs/2026-04-23-preset-numbered-groups-design.md`, Plan: `docs/superpowers/plans/2026-04-23-preset-numbered-groups.md`.
 ```
 
-- [ ] **Step 8.3: Commit**
+- [ ] **Step 9.3: Commit**
 
 ```bash
 git add PRD.md
 git commit -m "docs: record preset numbered groups completion in PRD progress log"
 ```
 
-- [ ] **Step 8.4: Summarize what's ready**
+- [ ] **Step 9.4: Summarize what's ready**
 
 The branch `feature/preset-numbered-groups` now contains:
-1. Design spec (`bd1b6eb`)
-2. Failing helper tests
-3. Helper implementation (tests passing)
-4. Sort comparator in both call sites
-5. Rename removed
-6. Free-text create removed
-7. Virtual preset rows
-8. "+ Add Group N" button
-9. PRD progress entry
+1. Design spec
+2. Implementation plan
+3. Failing helper tests
+4. Helper implementation (tests passing)
+5. Sort comparator in all three call sites (picker, ClassDetailScreen, EditChildScreen)
+6. Rename removed
+7. Free-text create removed
+8. Virtual preset rows
+9. "+ Add Group N" button
+10. Picker render test for the two core branches
+11. PRD progress entry
 
 Push the branch and open a pull request when ready:
 

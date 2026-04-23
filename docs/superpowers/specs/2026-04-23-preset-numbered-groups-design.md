@@ -14,7 +14,7 @@ We want to preserve existing users' data (they chose their names deliberately) w
 
 - Users with zero groups can assign a child to "Group 1", "Group 2", "Group 3", or "Group 4" in a single tap — no typing, no decision-making.
 - Creating a 5th+ group is a single tap with no text input; the name is computed as "Group N" where N = max existing + 1.
-- The format "Group N" becomes physically impossible to deviate from in the new UI paths.
+- The format "Group N" is enforced in the updated client UI — no text input paths remain for free-text names or renames. (Older deployed versions continue to allow free-text names until users update; see §Rollout Notes below.)
 - Existing users with free-text group names keep those names unchanged. No migration, no silent rename.
 
 ## Non-Goals
@@ -27,11 +27,27 @@ We want to preserve existing users' data (they chose their names deliberately) w
 
 ---
 
+## Rollout Notes
+
+Per `CLAUDE.md`, multiple app versions are simultaneously deployed across iOS and Android. Users update on their own schedule, not ours. This has two implications for this feature:
+
+1. **Format drift will persist temporarily.** Users on older app versions still have access to free-text create and rename flows until they update. Any group names they create during that window remain free-text and are preserved (per §8 "leave alone" policy). The "format impossible to deviate from" property is a guarantee about the *updated client*, not the deployment as a whole.
+
+2. **Sort order stabilises per-user as they update.** A user running the updated client sees numbered groups sorted numerically; a user on the old client continues to see alphabetic sort. Groups are per-staff (RLS enforces `staff_id = auth.uid()`), so users do not see each other's groups and the per-user inconsistency never surfaces cross-user confusion.
+
+No server-side gating or coordinated release is needed. Release notes should encourage testers to update at their convenience.
+
+---
+
 ## Design Decisions
 
 ### 1. Format: "Group N"
 
 Group names follow the literal pattern `Group ` + integer starting at 1 (e.g., "Group 1", "Group 2", … "Group 12"). Plain numerals ("1", "2") were considered but rejected as visually ambiguous on chips that sit next to a child's age.
+
+**The regex `^Group (\d+)$` is strictly case-sensitive and whitespace-exact.** Near-miss names — `"group 3"` (lowercase), `"Group  3"` (double space), `"Group 3 "` (trailing space) — are treated as legacy free-text and do **not** participate in numeric sorting or next-number computation. This is deliberate: the whole point of the feature is to prevent near-miss drift from polluting the clean numbered system.
+
+Duplicate-name guards in the create paths remain case-insensitive and whitespace-normalised (matching the current `handleSelectGroup` behavior), so a user cannot end up with both "Group 3" and "group 3" — if a near-miss legacy name exists, the numbered create aborts with an "already exists" alert. This is a narrow edge case (limited to testers who entered lowercase/mis-spaced variants before the update) but it prevents silent duplicate creation.
 
 ### 2. Virtual placeholders for users with zero groups
 
@@ -152,9 +168,14 @@ function nextGroupNumber(groups) {
 - Color assignment by sorted index (behaviourally improved, no code change).
 - One-group-per-user enforcement (automatic removal from previous group when selecting a new one).
 
-### Sort update (`src/screens/children/ClassDetailScreen.js`)
+### Sort updates (consumer screens)
 
-Line 45 currently uses `.sort((a, b) => a.name.localeCompare(b.name))` inside `getChildGroup`. Replace with the new `compareGroups` comparator. The `groupIndex` calculation that feeds `getGroupColor` continues to work unchanged.
+Two screens sort groups with `localeCompare` to compute `groupIndex` for `getGroupColor`. Both must be updated to use the exported `compareGroups` so color assignment stays consistent across the app:
+
+- `src/screens/children/ClassDetailScreen.js:45` — inside `getChildGroup`, replace `.sort((a, b) => a.name.localeCompare(b.name))` with `.sort(compareGroups)` and add `compareGroups` to the import on line 13.
+- `src/screens/children/EditChildScreen.js:54` — same edit, same pattern, same import shape (the import lives on line 19 here).
+
+The `groupIndex` calculation that feeds `getGroupColor` continues to work unchanged in both files. **Missing either one** produces inconsistent group color assignment between the class-detail view and the edit-child view — the exact bug Codex flagged in its pre-execution review of this plan.
 
 ### Context, storage, sync
 
@@ -164,12 +185,22 @@ No changes. `ChildrenContext.addGroup`, `addChildToGroup`, `deleteGroup`, and th
 
 ## Files to Modify
 
+### Production source
+
 | File | Change |
 |------|--------|
 | `src/components/children/GroupPickerBottomSheet.js` | Primary change: remove rename + free-text create, add virtual rows, add "+ Add Group N" button, new helpers. ~60 lines removed, ~40 lines added. |
-| `src/screens/children/ClassDetailScreen.js` | Replace sort comparator on line 45 with `compareGroups`. ~3 line change. |
+| `src/screens/children/ClassDetailScreen.js` | Replace sort comparator on line 45 with `compareGroups`; add import on line 13. |
+| `src/screens/children/EditChildScreen.js` | Replace sort comparator on line 54 with `compareGroups`; add import on line 19. Same pattern as ClassDetailScreen. |
 
-No new files. No files deleted. No migrations. No context changes.
+### Tests (new files in `__tests__/`)
+
+| File | Purpose |
+|------|---------|
+| `__tests__/groupHelpers.test.js` | Unit tests for `nextGroupNumber` and `compareGroups` (including monotonic-after-delete, double-digit sort, legacy ignored). |
+| `__tests__/GroupPickerBottomSheet.test.js` | Minimal render test covering the two core conditional branches: `groups.length === 0` shows 4 virtual rows and hides the "+ Add" button; non-empty `groups` hides virtuals and shows "+ Add Group N" with the correct number. |
+
+No files deleted. No migrations. No context or storage changes.
 
 ---
 
