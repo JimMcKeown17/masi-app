@@ -1,40 +1,103 @@
-import React, { createContext, useState, useEffect, useContext } from 'react';
+import React, { createContext, useState, useEffect, useContext, useRef } from 'react';
 import { supabase } from '../services/supabaseClient';
 import { storage } from '../utils/storage';
 
 const AuthContext = createContext({});
+const AUTH_SIGN_OUT_GRACE_PERIOD_MS = 15000;
 
 export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
   const [profile, setProfile] = useState(null);
   const [loading, setLoading] = useState(true);
   const [session, setSession] = useState(null);
+  const manualSignOutInProgressRef = useRef(false);
+  const pendingSignOutTimeoutRef = useRef(null);
+  const currentUserIdRef = useRef(null);
+
+  const clearPendingSignOutTimeout = () => {
+    if (pendingSignOutTimeoutRef.current) {
+      clearTimeout(pendingSignOutTimeoutRef.current);
+      pendingSignOutTimeoutRef.current = null;
+    }
+  };
+
+  const commitSignedOutState = (reason) => {
+    clearPendingSignOutTimeout();
+    currentUserIdRef.current = null;
+    setSession(null);
+    setUser(null);
+    setProfile(null);
+    setLoading(false);
+    console.warn(`[Auth] Cleared local auth state (${reason})`);
+  };
 
   useEffect(() => {
-    // Check for existing session
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setSession(session);
-      setUser(session?.user ?? null);
-      if (session?.user) {
-        loadUserProfile(session.user.id);
-      } else {
-        setLoading(false);
+    const initializeAuthState = async () => {
+      try {
+        const { data: { session: initialSession }, error } = await supabase.auth.getSession();
+        if (error) {
+          console.error('[Auth] Initial session load failed:', error);
+        }
+
+        console.log(`[Auth] INITIAL_SESSION hasSession=${Boolean(initialSession)}`);
+
+        if (initialSession?.user) {
+          clearPendingSignOutTimeout();
+          currentUserIdRef.current = initialSession.user.id;
+          setSession(initialSession);
+          setUser(initialSession.user);
+          loadUserProfile(initialSession.user.id);
+          return;
+        }
+
+        commitSignedOutState('initial-session-null');
+      } catch (error) {
+        console.error('[Auth] Unexpected initial session error:', error);
+        commitSignedOutState('initial-session-error');
       }
-    });
+    };
+
+    initializeAuthState();
 
     // Listen for auth changes
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-      setSession(session);
-      setUser(session?.user ?? null);
-      if (session?.user) {
-        loadUserProfile(session.user.id);
-      } else {
-        setProfile(null);
-        setLoading(false);
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, nextSession) => {
+      console.log(`[Auth] Event=${event} hasSession=${Boolean(nextSession)}`);
+
+      if (nextSession?.user) {
+        clearPendingSignOutTimeout();
+        currentUserIdRef.current = nextSession.user.id;
+        setSession(nextSession);
+        setUser(nextSession.user);
+        loadUserProfile(nextSession.user.id);
+        return;
       }
+
+      if (event === 'SIGNED_OUT' && manualSignOutInProgressRef.current) {
+        manualSignOutInProgressRef.current = false;
+        commitSignedOutState('manual-sign-out');
+        return;
+      }
+
+      // Be forgiving of transient auth drops; only sign out after a short grace period.
+      if (currentUserIdRef.current && !pendingSignOutTimeoutRef.current) {
+        console.warn(
+          `[Auth] ${event} with empty session, waiting ${AUTH_SIGN_OUT_GRACE_PERIOD_MS}ms before logout`
+        );
+        pendingSignOutTimeoutRef.current = setTimeout(() => {
+          pendingSignOutTimeoutRef.current = null;
+          commitSignedOutState(`${event}-grace-timeout`);
+        }, AUTH_SIGN_OUT_GRACE_PERIOD_MS);
+        setLoading(false);
+        return;
+      }
+
+      commitSignedOutState(`${event}-no-active-user`);
     });
 
-    return () => subscription.unsubscribe();
+    return () => {
+      clearPendingSignOutTimeout();
+      subscription.unsubscribe();
+    };
   }, []);
 
   const loadUserProfile = async (userId) => {
@@ -83,12 +146,15 @@ export const AuthProvider = ({ children }) => {
 
   const signOut = async () => {
     try {
+      manualSignOutInProgressRef.current = true;
+      clearPendingSignOutTimeout();
       await storage.clearUserProfile();
       const { error } = await supabase.auth.signOut();
       if (error) throw error;
       setProfile(null);
       return { error: null };
     } catch (error) {
+      manualSignOutInProgressRef.current = false;
       console.error('Sign out error:', error);
       return { error };
     }

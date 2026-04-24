@@ -1,6 +1,8 @@
 import { createClient } from '@supabase/supabase-js';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import Constants from 'expo-constants';
+import { AppState, Platform } from 'react-native';
+import { processLock } from '@supabase/supabase-js';
 
 // Local dev uses .env.local; EAS builds fall back to app.json extra
 const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL
@@ -19,5 +21,21 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
     autoRefreshToken: true,
     persistSession: true,
     detectSessionInUrl: false,
+    lock: processLock,
   },
 });
+
+// React Native apps should explicitly signal foreground/background for auth refresh.
+if (Platform.OS !== 'web') {
+  if (AppState.currentState === 'active') {
+    supabase.auth.startAutoRefresh();
+  }
+
+  AppState.addEventListener('change', (appState) => {
+    if (appState === 'active') {
+      supabase.auth.startAutoRefresh();
+    } else {
+      supabase.auth.stopAutoRefresh();
+    }
+  });
+}
