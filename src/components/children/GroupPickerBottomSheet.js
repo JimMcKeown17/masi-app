@@ -102,7 +102,6 @@ export default function GroupPickerBottomSheet({
   const {
     groups,
     addGroup,
-    updateGroup,
     deleteGroup,
     addChildToGroup,
     removeChildFromGroup,
@@ -111,8 +110,6 @@ export default function GroupPickerBottomSheet({
 
   const [creating, setCreating] = useState(false);
   const [newGroupName, setNewGroupName] = useState('');
-  const [renamingGroupId, setRenamingGroupId] = useState(null);
-  const [renameValue, setRenameValue] = useState('');
   const [loading, setLoading] = useState(false);
 
   const sortedGroups = [...groups].sort(compareGroups);
@@ -120,8 +117,6 @@ export default function GroupPickerBottomSheet({
   const resetState = () => {
     setCreating(false);
     setNewGroupName('');
-    setRenamingGroupId(null);
-    setRenameValue('');
     setLoading(false);
   };
 
@@ -219,28 +214,6 @@ export default function GroupPickerBottomSheet({
     }
   };
 
-  const handleRenameGroup = async (groupId) => {
-    const trimmed = renameValue.trim();
-    if (!trimmed) return;
-
-    // Check for duplicate name (excluding current group)
-    if (groups.some(g => g.id !== groupId && g.name.toLowerCase() === trimmed.toLowerCase())) {
-      Alert.alert('Duplicate Name', 'A group with this name already exists.');
-      return;
-    }
-
-    setLoading(true);
-    try {
-      await updateGroup(groupId, { name: trimmed });
-      setRenamingGroupId(null);
-      setRenameValue('');
-    } catch (error) {
-      console.error('Error renaming group:', error);
-    } finally {
-      setLoading(false);
-    }
-  };
-
   const handleDeleteGroup = (group) => {
     const childCount = getChildrenInGroup(group.id).length;
     const message = childCount > 0
@@ -291,37 +264,6 @@ export default function GroupPickerBottomSheet({
                 const colorScheme = getGroupColor(index);
                 const childCount = getChildrenInGroup(group.id).length;
 
-                // Rename mode for this group
-                if (renamingGroupId === group.id) {
-                  return (
-                    <View key={group.id} style={styles.renameRow}>
-                      <TextInput
-                        value={renameValue}
-                        onChangeText={setRenameValue}
-                        mode="outlined"
-                        dense
-                        autoFocus
-                        style={styles.renameInput}
-                        placeholder="Group name"
-                      />
-                      <IconButton
-                        icon="check"
-                        size={20}
-                        onPress={() => handleRenameGroup(group.id)}
-                        disabled={loading || !renameValue.trim()}
-                      />
-                      <IconButton
-                        icon="close"
-                        size={20}
-                        onPress={() => {
-                          setRenamingGroupId(null);
-                          setRenameValue('');
-                        }}
-                      />
-                    </View>
-                  );
-                }
-
                 return (
                   <TouchableOpacity
                     key={group.id}
@@ -350,16 +292,6 @@ export default function GroupPickerBottomSheet({
                       {isSelected && (
                         <Text style={[styles.checkmark, { color: colorScheme.text }]}>✓</Text>
                       )}
-                      <IconButton
-                        icon="pencil-outline"
-                        size={18}
-                        iconColor={colors.textSecondary}
-                        onPress={() => {
-                          setRenamingGroupId(group.id);
-                          setRenameValue(group.name);
-                        }}
-                        style={styles.actionIcon}
-                      />
                       <IconButton
                         icon="delete-outline"
                         size={18}
@@ -513,15 +445,6 @@ const styles = StyleSheet.create({
   },
   actionIcon: {
     margin: 0,
-  },
-  renameRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: spacing.sm,
-  },
-  renameInput: {
-    flex: 1,
-    backgroundColor: colors.surface,
   },
   removeRow: {
     paddingVertical: spacing.md,
