@@ -12,8 +12,6 @@ import {
 } from 'react-native';
 import {
   Text,
-  TextInput,
-  Button,
   IconButton,
   Divider,
 } from 'react-native-paper';
@@ -108,15 +106,11 @@ export default function GroupPickerBottomSheet({
     getChildrenInGroup,
   } = useChildren();
 
-  const [creating, setCreating] = useState(false);
-  const [newGroupName, setNewGroupName] = useState('');
   const [loading, setLoading] = useState(false);
 
   const sortedGroups = [...groups].sort(compareGroups);
 
   const resetState = () => {
-    setCreating(false);
-    setNewGroupName('');
     setLoading(false);
   };
 
@@ -174,41 +168,6 @@ export default function GroupPickerBottomSheet({
       handleDismiss();
     } catch (error) {
       console.error('Error removing from group:', error);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleCreateGroup = async () => {
-    const trimmed = newGroupName.trim();
-    if (!trimmed) return;
-
-    // Check for duplicate name
-    if (groups.some(g => g.name.toLowerCase() === trimmed.toLowerCase())) {
-      Alert.alert('Duplicate Name', 'A group with this name already exists.');
-      return;
-    }
-
-    setLoading(true);
-    try {
-      const result = await addGroup({ name: trimmed });
-      if (!result.success) {
-        Alert.alert('Error', 'Failed to create group.');
-        return;
-      }
-      // Auto-assign the new group to this child
-      if (currentGroupId) {
-        await removeChildFromGroup(childId, currentGroupId);
-      }
-      const assignResult = await addChildToGroup(childId, result.group.id);
-      if (!assignResult.success) {
-        Alert.alert('Error', 'Group created but failed to assign child.');
-        return;
-      }
-      onGroupChanged?.();
-      handleDismiss();
-    } catch (error) {
-      console.error('Error creating group:', error);
     } finally {
       setLoading(false);
     }
@@ -318,45 +277,6 @@ export default function GroupPickerBottomSheet({
               )}
 
               <Divider style={styles.divider} />
-
-              {/* Create new group */}
-              {creating ? (
-                <View style={styles.createInputRow}>
-                  <TextInput
-                    value={newGroupName}
-                    onChangeText={setNewGroupName}
-                    mode="outlined"
-                    dense
-                    autoFocus
-                    placeholder="New group name"
-                    style={styles.createInput}
-                  />
-                  <Button
-                    mode="contained"
-                    compact
-                    onPress={handleCreateGroup}
-                    disabled={loading || !newGroupName.trim()}
-                    style={styles.createBtn}
-                  >
-                    Create
-                  </Button>
-                  <IconButton
-                    icon="close"
-                    size={20}
-                    onPress={() => {
-                      setCreating(false);
-                      setNewGroupName('');
-                    }}
-                  />
-                </View>
-              ) : (
-                <TouchableOpacity
-                  style={styles.createRow}
-                  onPress={() => setCreating(true)}
-                >
-                  <Text style={styles.createText}>+  Create New Group</Text>
-                </TouchableOpacity>
-              )}
             </ScrollView>
           </View>
         </KeyboardAvoidingView>
@@ -473,16 +393,5 @@ const styles = StyleSheet.create({
     color: colors.primary,
     fontWeight: '600',
     fontSize: 14,
-  },
-  createInputRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  createInput: {
-    flex: 1,
-    backgroundColor: colors.surface,
-  },
-  createBtn: {
-    marginLeft: spacing.sm,
   },
 });
