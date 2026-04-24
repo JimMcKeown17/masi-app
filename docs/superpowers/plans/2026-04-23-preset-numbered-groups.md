@@ -36,6 +36,15 @@ No new production source files are created. Helpers co-locate with the picker (m
 Create `__tests__/groupHelpers.test.js`:
 
 ```javascript
+// Mock ChildrenContext to prevent the supabaseClient -> expo-constants
+// import chain from evaluating during module load. The helpers under test
+// are pure module-scope functions and don't use the context.
+// (expo-constants is installed transitively via the Expo SDK and isn't
+// declared in package.json, so Jest cannot resolve it directly.)
+jest.mock('../src/context/ChildrenContext', () => ({
+  useChildren: () => ({}),
+}));
+
 import {
   nextGroupNumber,
   compareGroups,
@@ -123,7 +132,9 @@ describe('compareGroups', () => {
 
 Run: `npx jest __tests__/groupHelpers.test.js`
 
-Expected: Test suite fails to even load because `nextGroupNumber` and `compareGroups` are not exported from `GroupPickerBottomSheet.js`. Error will resemble: `TypeError: (0 , _GroupPickerBottomSheet.nextGroupNumber) is not a function` or `undefined is not an object` on the import.
+Expected: all 9 tests fail because `nextGroupNumber` and `compareGroups` are not yet exported from `GroupPickerBottomSheet.js`. The error on each test will be `TypeError: (0 , _GroupPickerBottomSheet.nextGroupNumber) is not a function` or the equivalent for `compareGroups`.
+
+If you instead see a module-resolution error about `expo-constants`, the `jest.mock` block at the top of the file was omitted or misplaced — re-read Step 1.1 and ensure the mock appears **above** the `import` statement.
 
 - [ ] **Step 1.3: Commit the failing test**
 
@@ -983,11 +994,27 @@ import { render } from '@testing-library/react-native';
 import { PaperProvider } from 'react-native-paper';
 import GroupPickerBottomSheet from '../src/components/children/GroupPickerBottomSheet';
 
-// GroupPickerBottomSheet uses useSafeAreaInsets(). Provide a stable mock
-// so tests don't depend on a SafeAreaProvider wrapper.
-jest.mock('react-native-safe-area-context', () => ({
-  useSafeAreaInsets: () => ({ top: 0, bottom: 0, left: 0, right: 0 }),
-}));
+// GroupPickerBottomSheet uses useSafeAreaInsets() and PaperProvider internally
+// uses SafeAreaInsetsContext.Consumer. Provide the full set of exports that
+// both the component and PaperProvider's SafeAreaProviderCompat need.
+// A partial mock (useSafeAreaInsets only) is NOT sufficient — PaperProvider
+// crashes with "Cannot read properties of undefined (reading 'Consumer')".
+jest.mock('react-native-safe-area-context', () => {
+  const React = require('react');
+  const insets = { top: 0, bottom: 0, left: 0, right: 0 };
+  const frame = { x: 0, y: 0, width: 320, height: 640 };
+  const SafeAreaInsetsContext = React.createContext(insets);
+  const SafeAreaFrameContext = React.createContext(frame);
+  return {
+    useSafeAreaInsets: () => insets,
+    useSafeAreaFrame: () => frame,
+    SafeAreaInsetsContext,
+    SafeAreaFrameContext,
+    SafeAreaProvider: ({ children }) => React.createElement(React.Fragment, null, children),
+    SafeAreaConsumer: SafeAreaInsetsContext.Consumer,
+    initialWindowMetrics: { insets, frame },
+  };
+});
 
 const mockUseChildren = jest.fn();
 jest.mock('../src/context/ChildrenContext', () => ({
