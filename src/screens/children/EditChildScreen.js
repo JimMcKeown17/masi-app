@@ -16,7 +16,7 @@ import { colors, spacing, borderRadius } from '../../constants/colors';
 import { useChildren } from '../../context/ChildrenContext';
 import { useClasses } from '../../context/ClassesContext';
 import { GENDERS } from '../../constants/options';
-import GroupPickerBottomSheet, { getGroupColor } from '../../components/children/GroupPickerBottomSheet';
+import GroupPickerBottomSheet, { getGroupColor, compareGroups } from '../../components/children/GroupPickerBottomSheet';
 
 export default function EditChildScreen({ route, navigation }) {
   const { childId } = route.params;
@@ -51,7 +51,7 @@ export default function EditChildScreen({ route, navigation }) {
     );
     if (!membership) return { group: null, groupIndex: -1 };
 
-    const sortedGroups = [...groups].sort((a, b) => a.name.localeCompare(b.name));
+    const sortedGroups = [...groups].sort(compareGroups);
     const groupIndex = sortedGroups.findIndex(g => g.id === membership.group_id);
     return { group: sortedGroups[groupIndex], groupIndex };
   }, [childId, groups, childrenGroups]);

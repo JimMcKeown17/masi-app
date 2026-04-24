@@ -843,6 +843,9 @@ Branch: `bugfix/field-testing-round-1`
 
 ### Recent Activity Log
 
+#### 2026-04-23 (Preset Numbered Groups)
+- [x] Preset numbered groups — virtual Group 1..4 for new users, one-tap "+ Add Group N" for growth, rename removed, existing free-text groups preserved. Spec: `docs/superpowers/specs/2026-04-23-preset-numbered-groups-design.md`, Plan: `docs/superpowers/plans/2026-04-23-preset-numbered-groups.md`.
+
 #### 2026-03-26 (EGRA Assessment v2 — Last Attempted, Detail Grid, Auto-Language)
 - "Last Letter Attempted" bottom sheet, assessment detail grid, history cards tappable
 - Auto-detect language from class, assessment icon on Class Details

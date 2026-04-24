@@ -41,6 +41,22 @@ All writes save locally first (`synced: false`) → background sync upserts to S
 ### Offline Sync — Upsert + RLS Gotcha
 PostgreSQL upserts require **SELECT visibility through RLS** to check the unique index — even when no conflict exists. Junction-table-based SELECT policies block upserts if the junction record hasn't synced yet. Fix: add a permissive SELECT policy on a direct column (e.g., `created_by = auth.uid()`). See migration `05_fix_children_select_rls_for_upsert.sql`.
 
+### Schema Drift — Migration Files ≠ Production
+**The `supabase-migrations/` directory has diverged from the live Supabase schema in multiple confirmed cases.** Treat migration files as *intent*, not *truth*. Known drifts (as of 2026-04-24):
+
+- `children.synced` — defined in `00_initial_schema.sql` but absent in prod. Likely dropped manually via Studio at some point; no migration captures the change. Dashboard reads that filter on it return `code=42703` ("column does not exist").
+- `time_entries.auto_clocked_out` — the app has been writing this field since the auto-clock-out feature landed, but the column was never created in prod until `10_add_auto_clocked_out_to_time_entries.sql`. Every auto-clocked-out record failed sync with `PGRST204` in the meantime.
+
+**Before any schema-facing work** (writing migrations, building a dashboard, reviewing sync failures):
+- Check the live schema via Supabase Studio → Table Editor OR a `supabase db pull`.
+- Do NOT assume `supabase-migrations/` is authoritative.
+
+**Symptoms to watch for**:
+- `PGRST204` in mobile sync logs = *client writes a column prod doesn't have* → either add the column with a new migration (`ADD COLUMN IF NOT EXISTS ... DEFAULT ...`) or strip the field client-side. Prefer the migration; stripping loses data.
+- `code=42703` in server reads = *prod is missing a column the migration file claims exists* → update the consumer code (dashboard, report, etc.) to not assume that column, and optionally add a migration to formally drop it from `supabase-migrations/` so history matches prod.
+
+**Fix pattern**: always prefer additive, idempotent SQL (`ADD COLUMN IF NOT EXISTS`, `CREATE TABLE IF NOT EXISTS`). Never rely on a clean migration history — it isn't clean.
+
 ### EAS Builds — Environment Variables Not in `.env.local`
 `process.env.EXPO_PUBLIC_*` variables from `.env.local` are NOT available in EAS cloud builds. Public values (Supabase URL, anon key) must also be set in `app.json → extra` with a fallback in the client:
 ```javascript

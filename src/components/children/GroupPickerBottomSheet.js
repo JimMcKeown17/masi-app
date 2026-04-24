@@ -12,8 +12,6 @@ import {
 } from 'react-native';
 import {
   Text,
-  TextInput,
-  Button,
   IconButton,
   Divider,
 } from 'react-native-paper';
@@ -37,10 +35,51 @@ const GROUP_COLORS = [
 ];
 
 /**
+ * Number of virtual preset rows to show when the user has zero groups.
+ * Each tap creates the corresponding real group and assigns the current child.
+ */
+const PRESET_VIRTUAL_COUNT = 4;
+
+/**
  * Get color for a group based on its index in the sorted groups array
  */
 export function getGroupColor(groupIndex) {
   return GROUP_COLORS[groupIndex % GROUP_COLORS.length];
+}
+
+/**
+ * Regex matching the preset "Group N" format (where N is a positive integer).
+ * Used for numeric sorting and next-number computation.
+ */
+const NUMBERED_GROUP = /^Group (\d+)$/;
+
+/**
+ * Compute the next group number for the "+ Add Group N" button.
+ * Returns max(existing numbered) + 1, or 1 if no numbered groups exist.
+ * Monotonic — does not fill gaps from deleted groups.
+ * Ignores legacy free-text names.
+ */
+export function nextGroupNumber(groups) {
+  const nums = groups
+    .map((g) => g.name.match(NUMBERED_GROUP))
+    .filter(Boolean)
+    .map((m) => parseInt(m[1], 10));
+  return nums.length ? Math.max(...nums) + 1 : 1;
+}
+
+/**
+ * Comparator for sorting groups:
+ *   1. Numbered groups ("Group N") first, sorted numerically.
+ *   2. Legacy free-text names after, sorted alphabetically.
+ * Solves the "Group 10 before Group 2" lexicographic gotcha.
+ */
+export function compareGroups(a, b) {
+  const ma = a.name.match(NUMBERED_GROUP);
+  const mb = b.name.match(NUMBERED_GROUP);
+  if (ma && mb) return parseInt(ma[1], 10) - parseInt(mb[1], 10);
+  if (ma) return -1;
+  if (mb) return 1;
+  return a.name.localeCompare(b.name);
 }
 
 /**
@@ -67,28 +106,17 @@ export default function GroupPickerBottomSheet({
   const {
     groups,
     addGroup,
-    updateGroup,
     deleteGroup,
     addChildToGroup,
     removeChildFromGroup,
     getChildrenInGroup,
   } = useChildren();
 
-  const [creating, setCreating] = useState(false);
-  const [newGroupName, setNewGroupName] = useState('');
-  const [renamingGroupId, setRenamingGroupId] = useState(null);
-  const [renameValue, setRenameValue] = useState('');
   const [loading, setLoading] = useState(false);
 
-  const sortedGroups = [...groups].sort((a, b) =>
-    a.name.localeCompare(b.name)
-  );
+  const sortedGroups = [...groups].sort(compareGroups);
 
   const resetState = () => {
-    setCreating(false);
-    setNewGroupName('');
-    setRenamingGroupId(null);
-    setRenameValue('');
     setLoading(false);
   };
 
@@ -151,61 +179,82 @@ export default function GroupPickerBottomSheet({
     }
   };
 
-  const handleCreateGroup = async () => {
-    const trimmed = newGroupName.trim();
-    if (!trimmed) return;
+  /**
+   * Tap handler for a virtual preset row AND the "+ Add Group N" button.
+   * Creates the group as a real record, then assigns the current child to it.
+   * One-group-per-user rule is preserved by removing from the existing group first,
+   * with a success check to prevent orphaned multi-group state if the remove fails
+   * (e.g., local storage error while offline).
+   */
+  const handleSelectVirtual = async (n) => {
+    const name = `Group ${n}`;
 
-    // Check for duplicate name
-    if (groups.some(g => g.name.toLowerCase() === trimmed.toLowerCase())) {
-      Alert.alert('Duplicate Name', 'A group with this name already exists.');
+    // Case-insensitive + whitespace-normalised duplicate guard.
+    // Matches the existing handleSelectGroup / handleCreateGroup behavior
+    // and prevents near-miss collisions such as a legacy "group 1" (lowercase)
+    // coexisting with a new "Group 1". Only plausible on the "+ Add Group N"
+    // path when a conforming-but-case-mismatched legacy group exists; virtuals
+    // only render when groups.length === 0 so no collisions are possible there.
+    const normalized = name.trim().toLowerCase();
+    if (groups.some((g) => g.name.trim().toLowerCase() === normalized)) {
+      Alert.alert('Duplicate Name', `${name} already exists (or a case variant does).`);
       return;
     }
 
     setLoading(true);
     try {
-      const result = await addGroup({ name: trimmed });
-      if (!result.success) {
+      const createResult = await addGroup({ name });
+      if (!createResult.success) {
         Alert.alert('Error', 'Failed to create group.');
         return;
       }
-      // Auto-assign the new group to this child
+      // Best-effort rollback for a downstream failure. If remove-from-old or
+      // assign-to-new fails after creation, the group exists with no child
+      // assigned — a phantom empty group would appear in the picker next time.
+      // Delete it; if the delete also fails the orphan persists, which is still
+      // better than always leaving one behind.
+      const rollbackCreate = async () => {
+        try {
+          await deleteGroup(createResult.group.id);
+        } catch {
+          // no-op; orphan will remain in this rare case
+        }
+      };
       if (currentGroupId) {
-        await removeChildFromGroup(childId, currentGroupId);
+        const removeResult = await removeChildFromGroup(childId, currentGroupId);
+        if (!removeResult.success) {
+          await rollbackCreate();
+          Alert.alert('Error', 'Failed to remove from current group.');
+          return;
+        }
       }
-      const assignResult = await addChildToGroup(childId, result.group.id);
+      const assignResult = await addChildToGroup(childId, createResult.group.id);
       if (!assignResult.success) {
+        await rollbackCreate();
         Alert.alert('Error', 'Group created but failed to assign child.');
         return;
       }
       onGroupChanged?.();
       handleDismiss();
     } catch (error) {
-      console.error('Error creating group:', error);
+      console.error('Error creating virtual group:', error);
     } finally {
       setLoading(false);
     }
   };
 
-  const handleRenameGroup = async (groupId) => {
-    const trimmed = renameValue.trim();
-    if (!trimmed) return;
+  // Computed once per render so the "+ Add Group N" label and the handler that
+  // uses it cannot disagree if a context update (e.g., a sync event delivering
+  // a new group) lands between render and tap.
+  const nextNumberedN = nextGroupNumber(groups);
 
-    // Check for duplicate name (excluding current group)
-    if (groups.some(g => g.id !== groupId && g.name.toLowerCase() === trimmed.toLowerCase())) {
-      Alert.alert('Duplicate Name', 'A group with this name already exists.');
-      return;
-    }
-
-    setLoading(true);
-    try {
-      await updateGroup(groupId, { name: trimmed });
-      setRenamingGroupId(null);
-      setRenameValue('');
-    } catch (error) {
-      console.error('Error renaming group:', error);
-    } finally {
-      setLoading(false);
-    }
+  /**
+   * Tap handler for the "+ Add Group N" button.
+   * Creates the next monotonic group number and assigns the current child.
+   */
+  const handleAddNextNumbered = async () => {
+    // Reuses handleSelectVirtual's logic — same effect, different trigger.
+    await handleSelectVirtual(nextNumberedN);
   };
 
   const handleDeleteGroup = (group) => {
@@ -252,42 +301,37 @@ export default function GroupPickerBottomSheet({
             <Text variant="bodySmall" style={styles.subtitle}>{childName}</Text>
 
             <ScrollView style={styles.scrollArea} bounces={false}>
+              {/* Virtual preset rows — shown only when user has no groups yet */}
+              {groups.length === 0 &&
+                Array.from({ length: PRESET_VIRTUAL_COUNT }, (_, i) => i + 1).map((n) => {
+                  const colorScheme = getGroupColor(n - 1);
+                  return (
+                    <TouchableOpacity
+                      key={`virtual-${n}`}
+                      style={styles.groupRow}
+                      onPress={() => handleSelectVirtual(n)}
+                      disabled={loading}
+                    >
+                      <View style={styles.groupInfo}>
+                        <View style={[styles.groupColorDot, { backgroundColor: colorScheme.text }]} />
+                        <View>
+                          <Text variant="bodyLarge" style={styles.groupName}>
+                            Group {n}
+                          </Text>
+                          <Text variant="bodySmall" style={styles.groupChildCount}>
+                            0 children
+                          </Text>
+                        </View>
+                      </View>
+                    </TouchableOpacity>
+                  );
+                })}
+
               {/* Group list */}
               {sortedGroups.map((group, index) => {
                 const isSelected = group.id === currentGroupId;
                 const colorScheme = getGroupColor(index);
                 const childCount = getChildrenInGroup(group.id).length;
-
-                // Rename mode for this group
-                if (renamingGroupId === group.id) {
-                  return (
-                    <View key={group.id} style={styles.renameRow}>
-                      <TextInput
-                        value={renameValue}
-                        onChangeText={setRenameValue}
-                        mode="outlined"
-                        dense
-                        autoFocus
-                        style={styles.renameInput}
-                        placeholder="Group name"
-                      />
-                      <IconButton
-                        icon="check"
-                        size={20}
-                        onPress={() => handleRenameGroup(group.id)}
-                        disabled={loading || !renameValue.trim()}
-                      />
-                      <IconButton
-                        icon="close"
-                        size={20}
-                        onPress={() => {
-                          setRenamingGroupId(null);
-                          setRenameValue('');
-                        }}
-                      />
-                    </View>
-                  );
-                }
 
                 return (
                   <TouchableOpacity
@@ -318,16 +362,6 @@ export default function GroupPickerBottomSheet({
                         <Text style={[styles.checkmark, { color: colorScheme.text }]}>✓</Text>
                       )}
                       <IconButton
-                        icon="pencil-outline"
-                        size={18}
-                        iconColor={colors.textSecondary}
-                        onPress={() => {
-                          setRenamingGroupId(group.id);
-                          setRenameValue(group.name);
-                        }}
-                        style={styles.actionIcon}
-                      />
-                      <IconButton
                         icon="delete-outline"
                         size={18}
                         iconColor={colors.error}
@@ -354,42 +388,16 @@ export default function GroupPickerBottomSheet({
 
               <Divider style={styles.divider} />
 
-              {/* Create new group */}
-              {creating ? (
-                <View style={styles.createInputRow}>
-                  <TextInput
-                    value={newGroupName}
-                    onChangeText={setNewGroupName}
-                    mode="outlined"
-                    dense
-                    autoFocus
-                    placeholder="New group name"
-                    style={styles.createInput}
-                  />
-                  <Button
-                    mode="contained"
-                    compact
-                    onPress={handleCreateGroup}
-                    disabled={loading || !newGroupName.trim()}
-                    style={styles.createBtn}
-                  >
-                    Create
-                  </Button>
-                  <IconButton
-                    icon="close"
-                    size={20}
-                    onPress={() => {
-                      setCreating(false);
-                      setNewGroupName('');
-                    }}
-                  />
-                </View>
-              ) : (
+              {/* "+ Add Group N" — hidden while virtual presets are showing */}
+              {groups.length > 0 && (
                 <TouchableOpacity
                   style={styles.createRow}
-                  onPress={() => setCreating(true)}
+                  onPress={handleAddNextNumbered}
+                  disabled={loading}
                 >
-                  <Text style={styles.createText}>+  Create New Group</Text>
+                  <Text style={styles.createText}>
+                    +  Add Group {nextNumberedN}
+                  </Text>
                 </TouchableOpacity>
               )}
             </ScrollView>
@@ -481,15 +489,6 @@ const styles = StyleSheet.create({
   actionIcon: {
     margin: 0,
   },
-  renameRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: spacing.sm,
-  },
-  renameInput: {
-    flex: 1,
-    backgroundColor: colors.surface,
-  },
   removeRow: {
     paddingVertical: spacing.md,
     paddingHorizontal: spacing.md,
@@ -517,16 +516,5 @@ const styles = StyleSheet.create({
     color: colors.primary,
     fontWeight: '600',
     fontSize: 14,
-  },
-  createInputRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  createInput: {
-    flex: 1,
-    backgroundColor: colors.surface,
-  },
-  createBtn: {
-    marginLeft: spacing.sm,
   },
 });
