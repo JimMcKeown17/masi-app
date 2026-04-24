@@ -115,9 +115,7 @@ export default function GroupPickerBottomSheet({
   const [renameValue, setRenameValue] = useState('');
   const [loading, setLoading] = useState(false);
 
-  const sortedGroups = [...groups].sort((a, b) =>
-    a.name.localeCompare(b.name)
-  );
+  const sortedGroups = [...groups].sort(compareGroups);
 
   const resetState = () => {
     setCreating(false);
