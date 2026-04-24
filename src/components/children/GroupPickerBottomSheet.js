@@ -231,6 +231,16 @@ export default function GroupPickerBottomSheet({
     }
   };
 
+  /**
+   * Tap handler for the "+ Add Group N" button.
+   * Creates the next monotonic group number and assigns the current child.
+   */
+  const handleAddNextNumbered = async () => {
+    const n = nextGroupNumber(groups);
+    // Reuses handleSelectVirtual's logic — same effect, different trigger.
+    await handleSelectVirtual(n);
+  };
+
   const handleDeleteGroup = (group) => {
     const childCount = getChildrenInGroup(group.id).length;
     const message = childCount > 0
@@ -361,6 +371,19 @@ export default function GroupPickerBottomSheet({
               )}
 
               <Divider style={styles.divider} />
+
+              {/* "+ Add Group N" — hidden while virtual presets are showing */}
+              {groups.length > 0 && (
+                <TouchableOpacity
+                  style={styles.createRow}
+                  onPress={handleAddNextNumbered}
+                  disabled={loading}
+                >
+                  <Text style={styles.createText}>
+                    +  Add Group {nextGroupNumber(groups)}
+                  </Text>
+                </TouchableOpacity>
+              )}
             </ScrollView>
           </View>
         </KeyboardAvoidingView>
