@@ -35,6 +35,12 @@ const GROUP_COLORS = [
 ];
 
 /**
+ * Number of virtual preset rows to show when the user has zero groups.
+ * Each tap creates the corresponding real group and assigns the current child.
+ */
+const PRESET_VIRTUAL_COUNT = 4;
+
+/**
  * Get color for a group based on its index in the sorted groups array
  */
 export function getGroupColor(groupIndex) {
@@ -173,6 +179,58 @@ export default function GroupPickerBottomSheet({
     }
   };
 
+  /**
+   * Tap handler for a virtual preset row AND the "+ Add Group N" button.
+   * Creates the group as a real record, then assigns the current child to it.
+   * One-group-per-user rule is preserved by removing from the existing group first,
+   * with a success check to prevent orphaned multi-group state if the remove fails
+   * (e.g., local storage error while offline).
+   */
+  const handleSelectVirtual = async (n) => {
+    const name = `Group ${n}`;
+
+    // Case-insensitive + whitespace-normalised duplicate guard.
+    // Matches the existing handleSelectGroup / handleCreateGroup behavior
+    // and prevents near-miss collisions such as a legacy "group 1" (lowercase)
+    // coexisting with a new "Group 1". Only plausible on the "+ Add Group N"
+    // path when a conforming-but-case-mismatched legacy group exists; virtuals
+    // only render when groups.length === 0 so no collisions are possible there.
+    const normalized = name.trim().toLowerCase();
+    if (groups.some((g) => g.name.trim().toLowerCase() === normalized)) {
+      Alert.alert('Duplicate Name', `${name} already exists (or a case variant does).`);
+      return;
+    }
+
+    setLoading(true);
+    try {
+      const createResult = await addGroup({ name });
+      if (!createResult.success) {
+        Alert.alert('Error', 'Failed to create group.');
+        return;
+      }
+      // Mirror handleSelectGroup: if the remove fails, abort before assigning
+      // to avoid putting the child in two groups simultaneously.
+      if (currentGroupId) {
+        const removeResult = await removeChildFromGroup(childId, currentGroupId);
+        if (!removeResult.success) {
+          Alert.alert('Error', 'Failed to remove from current group.');
+          return;
+        }
+      }
+      const assignResult = await addChildToGroup(childId, createResult.group.id);
+      if (!assignResult.success) {
+        Alert.alert('Error', 'Group created but failed to assign child.');
+        return;
+      }
+      onGroupChanged?.();
+      handleDismiss();
+    } catch (error) {
+      console.error('Error creating virtual group:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const handleDeleteGroup = (group) => {
     const childCount = getChildrenInGroup(group.id).length;
     const message = childCount > 0
@@ -217,6 +275,32 @@ export default function GroupPickerBottomSheet({
             <Text variant="bodySmall" style={styles.subtitle}>{childName}</Text>
 
             <ScrollView style={styles.scrollArea} bounces={false}>
+              {/* Virtual preset rows — shown only when user has no groups yet */}
+              {groups.length === 0 &&
+                Array.from({ length: PRESET_VIRTUAL_COUNT }, (_, i) => i + 1).map((n) => {
+                  const colorScheme = getGroupColor(n - 1);
+                  return (
+                    <TouchableOpacity
+                      key={`virtual-${n}`}
+                      style={styles.groupRow}
+                      onPress={() => handleSelectVirtual(n)}
+                      disabled={loading}
+                    >
+                      <View style={styles.groupInfo}>
+                        <View style={[styles.groupColorDot, { backgroundColor: colorScheme.text }]} />
+                        <View>
+                          <Text variant="bodyLarge" style={styles.groupName}>
+                            Group {n}
+                          </Text>
+                          <Text variant="bodySmall" style={styles.groupChildCount}>
+                            0 children
+                          </Text>
+                        </View>
+                      </View>
+                    </TouchableOpacity>
+                  );
+                })}
+
               {/* Group list */}
               {sortedGroups.map((group, index) => {
                 const isSelected = group.id === currentGroupId;
