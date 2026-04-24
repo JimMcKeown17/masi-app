@@ -208,17 +208,29 @@ export default function GroupPickerBottomSheet({
         Alert.alert('Error', 'Failed to create group.');
         return;
       }
-      // Mirror handleSelectGroup: if the remove fails, abort before assigning
-      // to avoid putting the child in two groups simultaneously.
+      // Best-effort rollback for a downstream failure. If remove-from-old or
+      // assign-to-new fails after creation, the group exists with no child
+      // assigned — a phantom empty group would appear in the picker next time.
+      // Delete it; if the delete also fails the orphan persists, which is still
+      // better than always leaving one behind.
+      const rollbackCreate = async () => {
+        try {
+          await deleteGroup(createResult.group.id);
+        } catch {
+          // no-op; orphan will remain in this rare case
+        }
+      };
       if (currentGroupId) {
         const removeResult = await removeChildFromGroup(childId, currentGroupId);
         if (!removeResult.success) {
+          await rollbackCreate();
           Alert.alert('Error', 'Failed to remove from current group.');
           return;
         }
       }
       const assignResult = await addChildToGroup(childId, createResult.group.id);
       if (!assignResult.success) {
+        await rollbackCreate();
         Alert.alert('Error', 'Group created but failed to assign child.');
         return;
       }
@@ -231,14 +243,18 @@ export default function GroupPickerBottomSheet({
     }
   };
 
+  // Computed once per render so the "+ Add Group N" label and the handler that
+  // uses it cannot disagree if a context update (e.g., a sync event delivering
+  // a new group) lands between render and tap.
+  const nextNumberedN = nextGroupNumber(groups);
+
   /**
    * Tap handler for the "+ Add Group N" button.
    * Creates the next monotonic group number and assigns the current child.
    */
   const handleAddNextNumbered = async () => {
-    const n = nextGroupNumber(groups);
     // Reuses handleSelectVirtual's logic — same effect, different trigger.
-    await handleSelectVirtual(n);
+    await handleSelectVirtual(nextNumberedN);
   };
 
   const handleDeleteGroup = (group) => {
@@ -380,7 +396,7 @@ export default function GroupPickerBottomSheet({
                   disabled={loading}
                 >
                   <Text style={styles.createText}>
-                    +  Add Group {nextGroupNumber(groups)}
+                    +  Add Group {nextNumberedN}
                   </Text>
                 </TouchableOpacity>
               )}
