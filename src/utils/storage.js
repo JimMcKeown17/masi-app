@@ -111,12 +111,6 @@ export const storage = {
     return false;
   },
 
-  async deleteChild(id) {
-    const children = await this.getChildren();
-    const filtered = children.filter(c => c.id !== id);
-    return await this.setItem(STORAGE_KEYS.CHILDREN, filtered);
-  },
-
   async getUnsyncedChildren() {
     const children = await this.getChildren();
     return children.filter(c => c.synced === false);

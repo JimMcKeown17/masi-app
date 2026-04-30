@@ -24,7 +24,10 @@ function formatDate(dateString) {
 export default function AssessmentHistoryScreen({ navigation }) {
   const { user } = useAuth();
   const { isOnline } = useOffline();
-  const { children } = useChildren();
+  // Use allChildren (includes hidden) so historical assessments still resolve
+  // child names. Hidden children render with a "(removed)" badge so users know
+  // why the child no longer appears in their active list.
+  const { allChildren } = useChildren();
   const [assessments, setAssessments] = useState([]);
   const [loading, setLoading] = useState(true);
   const [snackbarMessage, setSnackbarMessage] = useState('');
@@ -81,13 +84,16 @@ export default function AssessmentHistoryScreen({ navigation }) {
     }
   };
 
-  const childNameMap = React.useMemo(() => {
+  const childInfoMap = React.useMemo(() => {
     const map = {};
-    for (const c of children) {
-      map[c.id] = `${c.first_name} ${c.last_name}`;
+    for (const c of allChildren) {
+      map[c.id] = {
+        name: `${c.first_name} ${c.last_name}`,
+        hidden: !!c.hidden_at,
+      };
     }
     return map;
-  }, [children]);
+  }, [allChildren]);
 
   const renderItem = ({ item }) => {
     const accuracyColor = item.accuracy >= 75
@@ -95,7 +101,9 @@ export default function AssessmentHistoryScreen({ navigation }) {
       : item.accuracy >= 50
         ? colors.primary
         : colors.emphasis;
-    const childName = childNameMap[item.child_id] || 'Unknown child';
+    const info = childInfoMap[item.child_id];
+    const childName = info ? info.name : 'Unknown child';
+    const isHidden = info?.hidden;
 
     return (
       <Card
@@ -119,6 +127,9 @@ export default function AssessmentHistoryScreen({ navigation }) {
 
           <Text variant="bodyMedium" style={styles.childName}>
             {childName}
+            {isHidden && (
+              <Text variant="bodySmall" style={styles.removedBadge}> (removed)</Text>
+            )}
           </Text>
 
           <View style={styles.typeRow}>
@@ -244,6 +255,11 @@ const styles = StyleSheet.create({
     color: colors.text,
     fontWeight: '600',
     marginBottom: 2,
+  },
+  removedBadge: {
+    color: colors.textSecondary,
+    fontStyle: 'italic',
+    fontWeight: '400',
   },
   typeRow: {
     flexDirection: 'row',

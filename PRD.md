@@ -698,6 +698,26 @@ Requirements to be gathered as we progress through development phases.
 
 ### In Progress
 
+#### Soft-Delete via `hidden_at` — "Deleted Children Reappear" Fix
+Branch: `fix/hide-children-soft-delete`
+
+Field testers report that tapping "Delete Child" disappears the child until next sync, then it reappears. Root cause: `deleteChild` only removed the row from local AsyncStorage; server still had it, so the next merge resurrected it. Fix: soft-delete via new `children.hidden_at` column, with the context filtering at the consumer boundary (not at the server) to preserve cross-device sync correctness.
+
+- [x] Migration 12: `ADD COLUMN IF NOT EXISTS hidden_at TIMESTAMPTZ NULL` on `children`
+- [x] `ChildrenContext`: derive `visibleChildren` (filtered) and expose alongside `allChildren` (full); add `getChildById`
+- [x] `ChildrenContext.deleteChild`: soft-delete with validation, functional setState, sync trigger
+- [x] `ChildrenContext.getChildrenInGroup`: filter against `visibleChildren` so hidden children can't leak into pickers
+- [x] `AssessmentHistoryScreen`: switch to `allChildren` for name resolution, render "(removed)" badge
+- [x] `dashboardStats.getAssessmentsTabStats`: filter assessments by active child IDs
+- [x] Remove dead `storage.deleteChild`
+- [x] DEPLOYMENT.md: un-hide recovery recipe + one-time-cleanup note for the OTA
+- [x] LEARNING.md: narrative chapter on filter-at-consumer-not-server lesson
+- [x] Tests: `__tests__/ChildrenContext.hiddenChildren.test.js`, `__tests__/dashboardStats.hiddenChildren.test.js`
+- [x] Run jest suite — 49/49 green (16 new + 33 existing)
+- [x] Apply migration 12 — applied via Supabase MCP on 2026-04-30, version `add_children_hidden_at`
+- [x] RLS preflight — confirmed `Users can update assigned children` policy via `pg_policy` query
+- [x] OTA shipped — update group `363f8141-3784-4833-99fe-14b97af2169e`, message: `fix: soft-delete children via hidden_at — universal hide stops resurrection on sync`. Field-tester smoke test will happen as devices pick up the OTA over the next ~24h.
+
 #### Sync Engine Bug Fixes — Ghost Children & Junction Errors
 Branch: `main` (direct fix — field-critical)
 

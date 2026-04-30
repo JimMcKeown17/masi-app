@@ -202,6 +202,35 @@ See CLAUDE.md "Deployment Status" section for full details on backwards-compatib
 
 ---
 
+## Recovery Recipes
+
+### Un-hiding a soft-deleted child (`hidden_at`)
+
+Children "deleted" by field staff are soft-deleted via `children.hidden_at` — the row stays in Supabase with a timestamp set, and is filtered out of every staff member's list and stats. To restore one to the active list:
+
+1. Identify the child's id via Supabase Studio → Table Editor → `children`. (Or look it up by name from the audit query below.)
+2. Run:
+   ```sql
+   UPDATE children SET hidden_at = NULL WHERE id = '<child-id>';
+   ```
+3. The next time the affected staff member's app pulls (foreground, login, or pull-to-refresh), the child reappears in their list and stats. No app restart required.
+
+To list all currently hidden children for an audit:
+
+```sql
+SELECT c.id, c.first_name, c.last_name, c.hidden_at, sc.staff_id
+FROM children c
+LEFT JOIN staff_children sc ON sc.child_id = c.id
+WHERE c.hidden_at IS NOT NULL
+ORDER BY c.hidden_at DESC;
+```
+
+### One-time cleanup after the soft-delete OTA
+
+Any child a tester "deleted" on a pre-fix build still exists in Supabase with no tombstone. After the soft-delete OTA ships, those children reappear once on the affected device's next sync — they need to be re-hidden using the now-working flow. This is a one-time cleanup burden for affected staff members; communicate it in the OTA release notes.
+
+---
+
 ## Current State (as of March 2026)
 
 | Platform | Last Build | Version | OTA Enabled | Distribution |

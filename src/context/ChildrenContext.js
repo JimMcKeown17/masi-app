@@ -1,4 +1,4 @@
-import React, { createContext, useState, useEffect, useContext, useRef } from 'react';
+import React, { createContext, useState, useEffect, useContext, useRef, useMemo, useCallback } from 'react';
 import { supabase } from '../services/supabaseClient';
 import { storage, STORAGE_KEYS } from '../utils/storage';
 import { useAuth } from './AuthContext';
@@ -15,6 +15,21 @@ export const ChildrenProvider = ({ children }) => {
   const [groups, setGroups] = useState([]);
   const [childrenGroups, setChildrenGroups] = useState([]);
   const [loading, setLoading] = useState(false);
+
+  // Active children only — hidden_at IS NULL. This is what every list view,
+  // picker, and stats helper should consume. Hidden children stay in
+  // childrenList so allChildren can resolve their names in history views.
+  const visibleChildren = useMemo(
+    () => childrenList.filter(c => !c.hidden_at),
+    [childrenList]
+  );
+
+  // Lookup by id that returns hidden children too — for name resolution in
+  // historical contexts where dropping a name to "Unknown" would degrade UX.
+  const getChildById = useCallback(
+    (id) => childrenList.find(c => c.id === id) || null,
+    [childrenList]
+  );
 
   // Load data on mount when user is authenticated
   useEffect(() => {
@@ -163,17 +178,37 @@ export const ChildrenProvider = ({ children }) => {
   };
 
   /**
-   * Delete a child
-   * Note: This only removes from local storage. Server deletion handled by sync.
+   * Hide a child from the user's active list (soft-delete).
+   * Sets hidden_at on the child record and queues for sync. The row stays
+   * in Supabase for admin/reporting. loadChildren fetches all assigned
+   * children (active + hidden) so cross-device hide propagation works,
+   * and the derived `children` value in the context filters out records
+   * with hidden_at set.
    */
   const deleteChild = async (childId) => {
     try {
-      await storage.deleteChild(childId);
-      setChildrenList(childrenList.filter(c => c.id !== childId));
+      const updates = {
+        hidden_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+        synced: false,
+      };
+
+      const ok = await storage.updateChild(childId, updates);
+      if (!ok) {
+        return { success: false, error: 'Child not found in local cache' };
+      }
+
+      // Functional form avoids stale-state hazard if multiple updates land in
+      // quick succession. Pattern matches ClassesContext.
+      setChildrenList(prev =>
+        prev.map(c => (c.id === childId ? { ...c, ...updates } : c))
+      );
+
+      await refreshSyncStatus();
 
       return { success: true };
     } catch (error) {
-      console.error('Error deleting child:', error);
+      console.error('Error hiding child:', error);
       return { success: false, error };
     }
   };
@@ -383,14 +418,16 @@ export const ChildrenProvider = ({ children }) => {
   };
 
   /**
-   * Get all children in a specific group
+   * Get all children in a specific group.
+   * Filters against visibleChildren so hidden children can't leak into
+   * session selection (ChildSelector) or group counts (GroupPickerBottomSheet).
    */
   const getChildrenInGroup = (groupId) => {
     const membershipIds = childrenGroups
       .filter(cg => cg.group_id === groupId)
       .map(cg => cg.child_id);
 
-    return childrenList.filter(c => membershipIds.includes(c.id));
+    return visibleChildren.filter(c => membershipIds.includes(c.id));
   };
 
   /**
@@ -404,10 +441,16 @@ export const ChildrenProvider = ({ children }) => {
     return groups.filter(g => groupIds.includes(g.id));
   };
 
+  // `children` is the filtered active list — what every list view, picker, and
+  // stats helper should consume. `allChildren` exposes the unfiltered set
+  // including soft-deleted (hidden_at IS NOT NULL) records — only use it for
+  // historical name resolution where dropping a name to "Unknown" would degrade UX.
   return (
     <ChildrenContext.Provider
       value={{
-        children: childrenList,
+        children: visibleChildren,
+        allChildren: childrenList,
+        getChildById,
         groups,
         childrenGroups,
         loading,

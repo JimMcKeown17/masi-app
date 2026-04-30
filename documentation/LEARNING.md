@@ -959,5 +959,84 @@ This is a general trap in offline-first architectures: any time you merge "what 
 
 ---
 
-**Last Updated**: 2026-03-30
+## Chapter: Soft-Delete via `hidden_at` — Filter at Consumer, Not at Server
+
+### The Bug Field Testers Reported
+
+In the first two weeks of the field test, multiple staff reported the same frustrating behavior: they would tap "Delete Child" on a child they'd accidentally created (or who had left their school), the child would disappear from the list, and then later — after a sync, or after closing and reopening the app — the same child would reappear.
+
+Reproducing the bug in code took about ten minutes. `ChildrenContext.deleteChild` only removed the child from local AsyncStorage and React state. The server still had the row. The next pull-down sync re-fetched it and merged it back in. Classic missing-tombstone bug in an offline-first system.
+
+### The Obvious Fix (and Why It Was Wrong)
+
+The first design instinct was: add a `hidden_at TIMESTAMPTZ NULL` column to `children`, set it locally on delete, sync the update to Supabase, and filter out hidden children from the server query in `loadChildren`:
+
+```javascript
+// Looks correct, is broken
+.is('hidden_at', null)
+```
+
+A pre-execution code review caught this before it shipped. The bug it would have introduced is subtle and instructive.
+
+`ChildrenContext.loadChildren()` uses cache-first paint plus server merge: load from AsyncStorage, then if online fetch from Supabase, then merge. The merge keeps every cached child whose id is **not** in the server response — a property we *need*, because RLS and JOIN visibility gaps (Chapter on Children Resurrection) mean some valid local records can be missing from the server query for benign reasons.
+
+If we add a server-side filter that says "don't return hidden children," the merge can no longer distinguish two cases:
+1. Server doesn't know about this record (legitimate visibility gap — keep the local copy).
+2. Server is intentionally hiding this record (the local stale copy should be dropped).
+
+So if Device A hides Child X (server now has `hidden_at` set), and Device B has a stale cached copy of Child X with `hidden_at = null`, Device B's next sync would:
+- Receive a server response that doesn't include Child X (filtered out).
+- Treat Device B's stale copy as "valid local record server doesn't know about."
+- Keep it in the merged list with `hidden_at = null` indefinitely.
+
+Universal hide breaks. Cross-device propagation silently fails.
+
+### The Correct Architecture
+
+Fetch *all* assigned children — including hidden ones — from the server. Filter only at the consumer boundary inside the React context:
+
+```javascript
+const visibleChildren = useMemo(
+  () => childrenList.filter(c => !c.hidden_at),
+  [childrenList]
+);
+
+// Provider exposes both shapes:
+//   children: visibleChildren    (active list — for screens, pickers, stats)
+//   allChildren: childrenList    (full set — for history name resolution)
+```
+
+Now the merge naturally propagates hidden state across devices. Server returns Child X with `hidden_at` set, the local stale copy is overwritten in `localToKeep` (because `serverIds.has(c.id)` is true), and the merged record carries the fresh `hidden_at` value. Universal hide works.
+
+There's a bonus: `allChildren` becomes truly complete, so `AssessmentHistoryScreen` can resolve names for hidden children even on fresh installs (where the local cache has no historical record). With server-side filtering, hidden children would have appeared as "Unknown child" in history — a regression we wouldn't have noticed until a tester complained.
+
+### The Principle
+
+**In offline-first systems, filter at the consumer, not at the producer — when the filter represents *intent* rather than *truth*.**
+
+- *Truth* (e.g., "this row was deleted, here's its tombstone") propagates correctly through any sync mechanism, because both sides agree on what exists.
+- *Intent* (e.g., "don't show this to me right now") should be applied at the consumer, because applying it at the producer creates a divergence between "doesn't exist" and "exists but suppressed" that the merge logic can't recover.
+
+Server-side filtering of soft-deleted records is an optimization (smaller responses), not a correctness mechanism. In a system with multiple devices and a merge-based reconciliation, that optimization can break the system's invariants.
+
+### Companion Decision: Two Context Shapes for Two Consumer Needs
+
+The same fix surfaced an architectural decision worth keeping in mind. `useChildren().children` had been one canonical collection used for:
+- Active list views (My Children tab, pickers, group selectors).
+- Stats and ranking calculations (coverage, denominators).
+- Historical name resolution (assessment history).
+
+The first two want hidden children excluded; the third needs them included. By exposing both `children` (filtered) and `allChildren` (full) from the context, each consumer opts into the semantic it needs. Most consumers continue using `children` and inherit the new filtering for free; one consumer (`AssessmentHistoryScreen`) explicitly switches to `allChildren` and renders a small "(removed)" badge so users understand why a child no longer appears in their active list.
+
+The lesson generalizes: when one collection serves semantically different consumers, narrow APIs at each call site are clearer than wide APIs everyone subtly reuses for different purposes.
+
+### Key Takeaways
+
+14. **Server-side filtering of soft-deletes breaks cross-device propagation.** The merge can't tell "doesn't exist" from "intentionally suppressed." Filter at the consumer.
+15. **Truth propagates, intent doesn't.** Tombstones (a column the server fills in) are truth. Display preferences ("hide this from me") are intent. Treat them differently in distributed state.
+16. **One canonical collection often serves multiple semantic consumers.** When use cases diverge, expose multiple targeted views from the producer rather than forcing a single filter shape on everyone.
+
+---
+
+**Last Updated**: 2026-04-30
 **Document Status**: Living document - updated as we build

@@ -323,13 +323,20 @@ export function getSessionsTabStats(sessions, children) {
 
 /**
  * Assessments tab summary stats.
+ * Hidden children's assessments are excluded — pass the filtered `children`
+ * array (the default exposed via useChildren().children) and this function
+ * scopes the assessment math to only those children. `totalAssessments` here
+ * means "assessments for currently-active children", not historical totals.
  */
 export function getAssessmentsTabStats(children, assessments) {
-  const coverage = getAssessmentCoverage(children, assessments);
+  const activeChildIds = new Set(children.map(c => c.id));
+  const activeAssessments = assessments.filter(a => activeChildIds.has(a.child_id));
 
-  // Average accuracy across most recent assessment per child
+  const coverage = getAssessmentCoverage(children, activeAssessments);
+
+  // Average accuracy across most recent assessment per active child
   const latestByChild = {};
-  for (const a of assessments) {
+  for (const a of activeAssessments) {
     if (!a.child_id) continue;
     const existing = latestByChild[a.child_id];
     const isBetter = !existing
@@ -351,7 +358,7 @@ export function getAssessmentsTabStats(children, assessments) {
 
   return {
     percentAssessed: coverage.percent,
-    totalAssessments: assessments.length,
+    totalAssessments: activeAssessments.length,
     avgAccuracy,
   };
 }
