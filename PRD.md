@@ -590,6 +590,43 @@ Items discovered during the first weeks of field testing (March 2026). Prioritis
 
 ---
 
+## Security Advisor Backlog
+
+Captured from the Supabase security advisor on 2026-04-30 after applying migration 12. **None of these were introduced by the soft-delete work** — they all pre-existed in the project. Listed here so they don't get lost.
+
+### 1–5: Functions with mutable `search_path` (5 lints)
+
+Postgres functions without `SET search_path = ...` are theoretically vulnerable to search-path injection if a hostile schema is added to the database. Low severity for these specific functions (they're trigger/utility functions touching fully-qualified `public.*` tables only), but worth fixing for hygiene and to keep the advisor clean.
+
+- `public.set_children_created_by`
+- `public.set_class_created_by`
+- `public.update_class_timestamp`
+- `public.get_children_in_group`
+- `public.update_groups_updated_at`
+
+**Resolution**: in a follow-up migration, redefine each function with `SET search_path = public, pg_temp` (or `= ''` and fully qualify every reference). Mass-fixable in one migration.
+
+[Reference](https://supabase.com/docs/guides/database/database-linter?lint=0011_function_search_path_mutable)
+
+### 6–9: `SECURITY DEFINER` functions exposed as RPC (4 lints, 2 functions)
+
+Both functions are callable as RPC by `anon` and `authenticated` roles, bypassing RLS because `SECURITY DEFINER` runs with the function-owner's privileges (typically `postgres`).
+
+- **`public.set_class_created_by()`** — trigger function; should never be exposed as an RPC endpoint. **Resolution**: `REVOKE EXECUTE ON FUNCTION public.set_class_created_by() FROM anon, authenticated;` (and consider moving trigger functions to a non-public schema).
+- **`public.get_children_in_group(group_uuid uuid)`** — likely intended as a helper, but `SECURITY DEFINER` here is a **privacy risk**: any signed-in user can query *any* group's children regardless of who owns the group. **Resolution**: switch to `SECURITY INVOKER` so the existing RLS on `staff_children` / `children_groups` applies, OR keep `SECURITY DEFINER` and add an explicit `EXISTS (... groups WHERE id = group_uuid AND staff_id = auth.uid())` guard inside the function body.
+
+[Reference: anon](https://supabase.com/docs/guides/database/database-linter?lint=0028_anon_security_definer_function_executable) · [Reference: authenticated](https://supabase.com/docs/guides/database/database-linter?lint=0029_authenticated_security_definer_function_executable)
+
+### 10: Auth — leaked-password protection disabled
+
+Supabase Auth can check submitted passwords against HaveIBeenPwned.org so users can't pick passwords known to be in public breach corpuses. Currently off.
+
+**Resolution**: Supabase Dashboard → Authentication → Policies (or "Password Settings") → enable "Leaked Password Protection". No code or migration change required.
+
+[Reference](https://supabase.com/docs/guides/auth/password-security#password-strength-and-leaked-password-protection)
+
+---
+
 ## Future Enhancements (Post-MVP)
 - **OTA Updates (expo-updates)**: Install `expo-updates` and configure `runtimeVersion` in `app.json` to enable over-the-air JS bundle updates without full store submissions. Critical for pushing bug fixes quickly to field staff.
 - Dark mode
