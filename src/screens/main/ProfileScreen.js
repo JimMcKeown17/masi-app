@@ -194,17 +194,17 @@ export default function ProfileScreen({ navigation }) {
             <View style={styles.infoRow}>
               <Text variant="bodySmall" style={styles.infoLabel}>Job Title</Text>
               <Text variant="bodyLarge" style={styles.infoValue}>
-                {profile?.job_title}
+                {profile?.jobTitleName}
               </Text>
             </View>
 
-            {profile?.assigned_school && (
+            {profile?.schoolName && (
               <>
                 <Divider style={styles.divider} />
                 <View style={styles.infoRow}>
                   <Text variant="bodySmall" style={styles.infoLabel}>Assigned School</Text>
                   <Text variant="bodyLarge" style={styles.infoValue}>
-                    {profile.assigned_school}
+                    {profile.schoolName}
                   </Text>
                 </View>
               </>

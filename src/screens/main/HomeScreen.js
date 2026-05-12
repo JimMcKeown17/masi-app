@@ -117,7 +117,7 @@ export default function HomeScreen({ navigation }) {
             Welcome, {profile?.first_name || 'User'}!
           </Text>
           <Text variant="bodyMedium" style={styles.roleText}>
-            {[profile?.job_title, profile?.assigned_school].filter(Boolean).join(' · ')}
+            {[profile?.jobTitleName, profile?.schoolName].filter(Boolean).join(' · ')}
           </Text>
           <View style={styles.headerStats}>
             <View style={styles.headerStat}>

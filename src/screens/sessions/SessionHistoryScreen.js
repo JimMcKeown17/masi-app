@@ -6,6 +6,7 @@ import { useOffline } from '../../context/OfflineContext';
 import { colors, spacing, borderRadius, shadows } from '../../constants/colors';
 import { storage, STORAGE_KEYS } from '../../utils/storage';
 import { supabase } from '../../services/supabaseClient';
+import { useLookupsContext } from '../../context/LookupsContext';
 
 const THIRTY_DAYS_MS = 30 * 24 * 60 * 60 * 1000;
 
@@ -24,6 +25,7 @@ function formatSessionDate(dateString) {
 export default function SessionHistoryScreen() {
   const { user } = useAuth();
   const { isOnline } = useOffline();
+  const { jobTitles } = useLookupsContext();
   const [sessions, setSessions] = useState([]);
   const [loading, setLoading] = useState(true);
   const [snackbarMessage, setSnackbarMessage] = useState('');
@@ -69,7 +71,7 @@ export default function SessionHistoryScreen() {
       if (isOnline && user?.id) {
         const { data, error } = await supabase
           .from('sessions')
-          .select('*')
+          .select('*, session_type_lookup:job_titles(id,name,code)')
           .eq('user_id', user.id)
           .order('session_date', { ascending: false });
 
@@ -101,6 +103,12 @@ export default function SessionHistoryScreen() {
         ? item.activities.letters_focused.map((l) => l.toUpperCase()).join(', ')
         : 'None';
 
+    const sessionLabel =
+      item.session_type_lookup?.name ||
+      item.session_type ||
+      jobTitles.find(j => j.id === item.session_type_id)?.name ||
+      'Session';
+
     return (
       <Card style={styles.card}>
         <Card.Content>
@@ -116,7 +124,7 @@ export default function SessionHistoryScreen() {
           </View>
 
           <Text variant="bodyMedium" style={styles.sessionType}>
-            {item.session_type}
+            {sessionLabel}
           </Text>
 
           <View style={styles.detailRow}>

@@ -1,0 +1,4 @@
+email,password,first_name,last_name,job_title_code,school_uid
+tester1@example.com,Masi2026!,Nomvula,Dlamini,literacy_coach,EC-TEST-001
+tester2@example.com,Masi2026!,Sipho,Khumalo,numeracy_coach,EC-TEST-002
+tester3@example.com,Masi2026!,Lerato,Mokoena,one_thousand_stories,EC-TEST-003

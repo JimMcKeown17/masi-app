@@ -3,13 +3,13 @@ import { View, StyleSheet } from 'react-native';
 import { Text } from 'react-native-paper';
 import { useAuth } from '../../context/AuthContext';
 import { colors, spacing } from '../../constants/colors';
-import { JOB_TITLES } from '../../constants/jobTitles';
+import { JOB_TITLE_CODES } from '../../constants/jobTitles';
 import LiteracySessionForm from './LiteracySessionForm';
 
 export default function SessionFormScreen({ navigation }) {
   const { profile } = useAuth();
 
-  if (profile?.job_title === JOB_TITLES.LITERACY_COACH) {
+  if (profile?.jobTitleCode === JOB_TITLE_CODES.LITERACY_COACH) {
     return <LiteracySessionForm navigation={navigation} />;
   }
 
@@ -17,7 +17,7 @@ export default function SessionFormScreen({ navigation }) {
     <View style={styles.container}>
       <Text variant="titleLarge" style={styles.title}>New Session</Text>
       <Text variant="bodyMedium" style={styles.message}>
-        Session forms for {profile?.job_title || 'your role'} are coming soon.
+        Session forms for {profile?.jobTitleName || 'your role'} are coming soon.
       </Text>
     </View>
   );

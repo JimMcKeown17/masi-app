@@ -23,6 +23,8 @@ import ChildSelector from '../../components/children/ChildSelector';
 import LetterTrackerBottomSheet from '../../components/session/LetterTrackerBottomSheet';
 import { normalizeLanguageKey } from '../../utils/letterMastery';
 import { useClasses } from '../../context/ClassesContext';
+import { useLookupsContext } from '../../context/LookupsContext';
+import { buildSessionTypeFields } from '../../utils/sessionTypeResolver';
 import { v4 as uuidv4 } from 'uuid';
 
 // ---------------------------------------------------------------------------
@@ -182,9 +184,10 @@ function InlineCalendar({ selectedDate, onSelectDate }) {
 // Main form
 // ---------------------------------------------------------------------------
 export default function LiteracySessionForm({ navigation }) {
-  const { user } = useAuth();
+  const { user, profile } = useAuth();
   const { refreshSyncStatus } = useOffline();
   const { classes } = useClasses();
+  const { jobTitles } = useLookupsContext();
 
   const [sessionDate, setSessionDate] = useState(new Date());
   const [dateMenuVisible, setDateMenuVisible] = useState(false);
@@ -270,7 +273,7 @@ export default function LiteracySessionForm({ navigation }) {
       const session = {
         id: uuidv4(),
         user_id: user.id,
-        session_type: 'Literacy Coach',
+        ...buildSessionTypeFields({ profile, jobTitlesCache: jobTitles }),
         session_date: formatDateForStorage(sessionDate),
         children_ids: selectedChildIds,
         group_ids: [],

@@ -1,6 +1,7 @@
 import React, { createContext, useState, useEffect, useContext, useRef } from 'react';
 import { supabase } from '../services/supabaseClient';
 import { storage } from '../utils/storage';
+import { normalizeProfile } from '../utils/profileNormalizer';
 
 const AuthContext = createContext({});
 const AUTH_SIGN_OUT_GRACE_PERIOD_MS = 15000;
@@ -105,22 +106,24 @@ export const AuthProvider = ({ children }) => {
       // Try to load from local storage first
       const localProfile = await storage.getUserProfile();
       if (localProfile) {
-        setProfile(localProfile);
+        const normalizedLocalProfile = normalizeProfile(localProfile);
+        setProfile(normalizedLocalProfile);
         setLoading(false);
       }
 
       // Then fetch from Supabase
       const { data, error } = await supabase
         .from('users')
-        .select('*')
+        .select('*, school_lookup:schools(id,name), job_title_lookup:job_titles(id,name,code)')
         .eq('id', userId)
         .single();
 
       if (error) {
         console.error('Error loading profile:', error);
       } else if (data) {
-        setProfile(data);
-        await storage.saveUserProfile(data);
+        const normalizedProfile = normalizeProfile(data);
+        setProfile(normalizedProfile);
+        await storage.saveUserProfile(normalizedProfile);
       }
     } catch (error) {
       console.error('Error in loadUserProfile:', error);

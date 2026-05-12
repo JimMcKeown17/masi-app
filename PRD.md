@@ -27,10 +27,21 @@ A React Native mobile application for Masi, a nonprofit organization, to manage 
 - id (uuid, FK to auth.users)
 - first_name (text)
 - last_name (text)
-- job_title (enum: 'Literacy Coach', 'Numeracy Coach', 'ZZ Coach', 'Yeboneer')
-- assigned_school (text)
+- school_id (uuid, FK to schools)
+- job_title_id (uuid, FK to job_titles)
+- job_title (text, transitional legacy column until schema hardening Phase 6)
+- assigned_school (text, transitional legacy column until schema hardening Phase 6)
 - created_at (timestamp)
 - updated_at (timestamp)
+```
+
+### job_titles
+```sql
+- id (uuid)
+- code (text, unique: literacy_coach, numeracy_coach, zz_coach, yeboneer, one_thousand_stories)
+- name (text, unique display name)
+- sort_order (integer)
+- is_active (boolean)
 ```
 
 ### children
@@ -38,10 +49,10 @@ A React Native mobile application for Masi, a nonprofit organization, to manage 
 - id (uuid)
 - first_name (text)
 - last_name (text)
-- teacher (text)
-- class (text)
-- age (integer)
-- school (text)
+- class_id (uuid, FK to classes)
+- age (integer, nullable)
+- gender (text, CHECK Male/Female when present)
+- teacher/class/school (transitional legacy text columns until schema hardening Phase 6)
 - assigned_staff_id (uuid, FK to users) -- DEPRECATED: Use staff_children junction instead
 - created_at (timestamp)
 - updated_at (timestamp)
@@ -94,7 +105,8 @@ A React Native mobile application for Masi, a nonprofit organization, to manage 
 ```sql
 - id (uuid)
 - user_id (uuid, FK to users)
-- session_type (text, matches job_title)
+- session_type_id (uuid, FK to job_titles)
+- session_type (text, transitional legacy text column through Build A)
 - session_date (date)
 - children_ids (uuid[], array of child IDs)
 - group_ids (uuid[], array of group IDs used, nullable)
@@ -615,6 +627,8 @@ Both functions are callable as RPC by `anon` and `authenticated` roles, bypassin
 - **`public.set_class_created_by()`** — trigger function; should never be exposed as an RPC endpoint. **Resolution**: `REVOKE EXECUTE ON FUNCTION public.set_class_created_by() FROM anon, authenticated;` (and consider moving trigger functions to a non-public schema).
 - **`public.get_children_in_group(group_uuid uuid)`** — likely intended as a helper, but `SECURITY DEFINER` here is a **privacy risk**: any signed-in user can query *any* group's children regardless of who owns the group. **Resolution**: switch to `SECURITY INVOKER` so the existing RLS on `staff_children` / `children_groups` applies, OR keep `SECURITY DEFINER` and add an explicit `EXISTS (... groups WHERE id = group_uuid AND staff_id = auth.uid())` guard inside the function body.
 
+Schema hardening migration 17 drops `public.get_children_in_group(uuid)` after confirming app code has no callers, resolving this specific exposed helper. The mutable `search_path` function findings and `public.set_class_created_by()` RPC exposure remain out of scope.
+
 [Reference: anon](https://supabase.com/docs/guides/database/database-linter?lint=0028_anon_security_definer_function_executable) · [Reference: authenticated](https://supabase.com/docs/guides/database/database-linter?lint=0029_authenticated_security_definer_function_executable)
 
 ### 10: Auth — leaked-password protection disabled
@@ -734,6 +748,25 @@ Requirements to be gathered as we progress through development phases.
 ---
 
 ### In Progress
+
+#### Schema Hardening — Lookups, Build A Compatibility, and Destructive-Drop Gates
+Branch: `schema-hardening-build-a`
+
+Rev 10 plan implementation for canonical schools/job titles and safe removal of legacy text columns. Build A is the compatibility release: it reads both legacy and lookup shapes, writes both `sessions.session_type` and `sessions.session_type_id` when resolvable, caches `job_titles`, and sanitizes old unsynced AsyncStorage records. Build B and migration 17 remain gated on tester export evidence.
+
+- [x] Create migration 13 to capture `users.job_title` enum drift and nullable `children.age` drift
+- [x] Create migration 14 for `job_titles`, school metadata columns, FK columns, and user self-update RLS lockdown
+- [x] Create migration 15 for FK backfills and CHECK constraints
+- [x] Create future migration 16 for relaxing `sessions.session_type` before Build B
+- [x] Create future migration 17 for dropping legacy columns and `get_children_in_group`
+- [x] Add robust CSV parsing, school seed script, and FK-based tester import script
+- [x] Add `LookupsContext`, profile normalization, Build A session dual-write, sanitizer bootstrap, and export metadata
+- [x] Add Jest coverage for profile normalization, sync stripping, pending session enrichment, sanitizer idempotency, and session type resolution
+- [ ] Apply migrations 13-15 in Supabase after running preflight queries
+- [ ] Run `scripts/seedSchools.js --dry-run`, then seed schools with service-role credentials
+- [ ] Ship Build A and collect tester export JSON before Build B
+- [ ] Apply migration 16, ship Build B, collect Build B export JSON from every active install
+- [ ] Apply migration 17 only after the full destructive-drop gate and `pg_dump` snapshot
 
 #### Soft-Delete via `hidden_at` — "Deleted Children Reappear" Fix
 Branch: `fix/hide-children-soft-delete`

@@ -8,6 +8,7 @@ const STORAGE_KEYS = {
   GROUPS: '@groups',
   CHILDREN_GROUPS: '@children_groups',
   SCHOOLS: '@schools',
+  JOB_TITLES: '@job_titles',
   CLASSES: '@classes',
   ASSESSMENTS: '@assessments',
   LETTER_MASTERY: '@letter_mastery',
@@ -88,6 +89,19 @@ export const storage = {
     const sessions = await this.getSessions();
     sessions.push(session);
     return await this.setItem(STORAGE_KEYS.SESSIONS, sessions);
+  },
+
+  async updateSession(id, updates, keysToRemove = []) {
+    const sessions = await this.getSessions();
+    const index = sessions.findIndex(s => s.id === id);
+    if (index !== -1) {
+      sessions[index] = { ...sessions[index], ...updates };
+      keysToRemove.forEach(key => {
+        delete sessions[index][key];
+      });
+      return await this.setItem(STORAGE_KEYS.SESSIONS, sessions);
+    }
+    return false;
   },
 
   // Children
@@ -203,6 +217,25 @@ export const storage = {
 
   async setSchools(list) {
     return await this.setItem(STORAGE_KEYS.SCHOOLS, list);
+  },
+
+  // Job titles (read-only lookup cache)
+  async getJobTitles() {
+    return await this.getItem(STORAGE_KEYS.JOB_TITLES) || [];
+  },
+
+  async saveJobTitles(list) {
+    return await this.setItem(STORAGE_KEYS.JOB_TITLES, list);
+  },
+
+  async getSanitizerState(userId) {
+    if (!userId) return {};
+    return await this.getItem(`@sanitizer_state:${userId}`) || {};
+  },
+
+  async saveSanitizerState(userId, state) {
+    if (!userId) return false;
+    return await this.setItem(`@sanitizer_state:${userId}`, state);
   },
 
   // Classes (offline-first CRUD by workers)
@@ -363,6 +396,7 @@ export const storage = {
         STORAGE_KEYS.GROUPS,
         STORAGE_KEYS.CHILDREN_GROUPS,
         STORAGE_KEYS.SCHOOLS,
+        STORAGE_KEYS.JOB_TITLES,
         STORAGE_KEYS.CLASSES,
         STORAGE_KEYS.ASSESSMENTS,
         STORAGE_KEYS.LETTER_MASTERY,

@@ -47,3 +47,8 @@ yarn-error.*
 # superpowers brainstorming
 .superpowers/
 google-play-service-account.json
+
+# real tester CSVs contain passwords — only the example is checked in
+scripts/testers.csv
+scripts/testers.*.csv
+!scripts/testers.example.csv

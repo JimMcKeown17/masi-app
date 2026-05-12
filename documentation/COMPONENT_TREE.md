@@ -487,3 +487,4 @@ const styles = StyleSheet.create({
 
 **Last Updated**: 2026-02-10
 **Version**: Phase 7 Complete
+# HISTORICAL - predates 2026-05 schema hardening. Field names and schema assumptions may be stale.

@@ -6,6 +6,8 @@ import { PaperProvider, MD3LightTheme } from 'react-native-paper';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { AuthProvider } from './src/context/AuthContext';
 import { OfflineProvider } from './src/context/OfflineContext';
+import { LookupsProvider } from './src/context/LookupsContext';
+import { SchemaHardeningBootstrap } from './src/context/SchemaHardeningBootstrap';
 import { ChildrenProvider } from './src/context/ChildrenContext';
 import { ClassesProvider } from './src/context/ClassesContext';
 import AppNavigator from './src/navigation/AppNavigator';
@@ -123,12 +125,16 @@ export default function App() {
         <PaperProvider theme={theme}>
           <OfflineProvider>
             <AuthProvider>
-              <ChildrenProvider>
-                <ClassesProvider>
-                  <AppNavigator />
-                  <StatusBar style="auto" />
-                </ClassesProvider>
-              </ChildrenProvider>
+              <LookupsProvider>
+                <SchemaHardeningBootstrap>
+                  <ChildrenProvider>
+                    <ClassesProvider>
+                      <AppNavigator />
+                      <StatusBar style="auto" />
+                    </ClassesProvider>
+                  </ChildrenProvider>
+                </SchemaHardeningBootstrap>
+              </LookupsProvider>
             </AuthProvider>
           </OfflineProvider>
         </PaperProvider>

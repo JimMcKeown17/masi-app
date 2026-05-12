@@ -1038,5 +1038,28 @@ The lesson generalizes: when one collection serves semantically different consum
 
 ---
 
-**Last Updated**: 2026-04-30
+## Chapter 18: Schema Hardening Without Breaking Field Devices
+
+The schema hardening work fixed a different class of field-testing risk: drift between flexible text fields in the mobile app and the canonical data the organization actually needs. Schools were stored as free text on `users.assigned_school`, job titles were free text on `users.job_title`, and sessions copied that same role name into `sessions.session_type`.
+
+The tempting fix would have been to drop the text columns and replace them with foreign keys immediately. That would be clean on paper and dangerous in the field. The app has multiple installed versions and AsyncStorage can hold old unsynced records for days. If a device posts a key for a column that no longer exists, Supabase returns `PGRST204`; dependent rows then fail behind it.
+
+The safe pattern is two builds:
+
+1. Build A is compatible with both worlds. It reads lookup joins when present, falls back to legacy strings when needed, writes `session_type` plus `session_type_id`, and runs a startup sanitizer that cleans old unsynced records.
+2. Build B ships only after a buffer and export-database verification. It stops writing the legacy session column after the database has relaxed the `NOT NULL` constraint.
+
+Only after every active install proves it is on Build B should the destructive migration drop the old columns.
+
+This work also captures schema drift in migration history. `users.job_title` was originally an enum in the first migration, but production already had it as text. `children.age` was originally stricter than production. Migration 13 records those facts so future agents do not treat an old file as truth.
+
+CHECK constraints are preferred over Postgres enums here because the role and option vocabularies are still evolving. A CHECK can be dropped and recreated in one migration; an enum is harder to change safely. Lookup tables are used where the value is an operational identity (`job_titles`, `schools`), while CHECK constraints are used for small validation sets already owned by app constants (`gender`, `grade`, `home_language`, `assessment_type`).
+
+Key takeaways:
+
+17. **A clean schema is not worth stranding field data.** Add the new shape first, ship compatibility, verify device state, then drop.
+18. **Export Database can be a release gate.** The Build A/Build B markers make tester devices prove their state instead of relying on chat confirmations.
+19. **Migration files are history, not live truth.** When drift is discovered, capture it with an idempotent migration and document how it happened.
+
+**Last Updated**: 2026-05-12
 **Document Status**: Living document - updated as we build

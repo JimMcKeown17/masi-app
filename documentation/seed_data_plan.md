@@ -92,3 +92,4 @@ Delete all seed data for a user UUID in correct FK order:
 2. Verify: `SELECT count(*) FROM children WHERE created_by = '<UUID>'` (expect 6)
 3. Verify: `SELECT count(*) FROM sessions WHERE user_id = '<UUID>'` (expect 4+)
 4. Open the app as that user and confirm children, sessions, and assessments appear
+# HISTORICAL - predates 2026-05 schema hardening. Field names and schema assumptions may be stale.

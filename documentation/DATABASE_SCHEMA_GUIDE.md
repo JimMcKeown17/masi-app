@@ -7,6 +7,8 @@
 
 This guide teaches you fundamental database design principles by walking through a real-world schema. Whether you're new to databases or want to understand why we make certain design decisions, you'll learn the **why** behind database architecture, not just the **what**.
 
+> 2026-05 schema hardening note: the app is moving from free-text school/job/session fields to lookup-backed foreign keys. During the Build A compatibility window, both legacy text columns and new FK columns exist. After the Build B gate and migration 17, `users.assigned_school`, `users.job_title`, `children.class`, `children.school`, `children.teacher`, and `sessions.session_type` are dropped.
+
 By the end, you'll understand:
 - How relational databases organize data
 - When to use different relationship types
@@ -343,8 +345,10 @@ CREATE TABLE users (
   id UUID REFERENCES auth.users PRIMARY KEY,
   first_name TEXT NOT NULL,
   last_name TEXT NOT NULL,
-  job_title TEXT NOT NULL CHECK (job_title IN ('Literacy Coach', 'Numeracy Coach', 'ZZ Coach', 'Yeboneer')),
-  assigned_school TEXT,
+  school_id UUID REFERENCES schools(id),
+  job_title_id UUID REFERENCES job_titles(id),
+  job_title TEXT,        -- transitional legacy column through Build B
+  assigned_school TEXT,  -- transitional legacy column through Build B
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
   updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
@@ -380,15 +384,20 @@ id UUID PRIMARY KEY  -- Random: "550e8400-e29b-41d4-a716-446655440000"
 
 **For offline-first apps like ours, UUIDs are the right choice.**
 
-**Why CHECK constraint on job_title?**
+**Why move job_title into a lookup table?**
 ```sql
-CHECK (job_title IN ('Literacy Coach', 'Numeracy Coach', 'ZZ Coach', 'Yeboneer'))
+CREATE TABLE job_titles (
+  id UUID PRIMARY KEY,
+  code TEXT UNIQUE NOT NULL,
+  name TEXT UNIQUE NOT NULL,
+  sort_order INTEGER NOT NULL,
+  is_active BOOLEAN NOT NULL
+);
 ```
 
-This is **database-level validation**. Even if our app has a bug, the database prevents invalid data:
-- Can't insert `job_title = 'Hacker'`
-- Ensures session forms always have valid types
-- Self-documenting: shows allowed values in schema
+Job titles now drive routing and session typing, so they are operational identities rather than display strings. A stable `code` lets CSV imports and app logic survive display-name changes, and the FK prevents variants like `literacy coach` or `LitCoach`.
+
+During Build A, the app still reads legacy `job_title`/`assigned_school` fields as fallbacks and writes `sessions.session_type` for compatibility. After the Build B verification gate, migration 17 removes those text columns.
 
 **Why timestamps (created_at, updated_at)?**
 - **Auditing**: When was this user created?
@@ -405,9 +414,9 @@ CREATE TABLE children (
   id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
   first_name TEXT NOT NULL,
   last_name TEXT NOT NULL,
-  teacher TEXT,
-  class TEXT,
+  class_id UUID REFERENCES classes(id),
   age INTEGER,
+  gender TEXT CHECK (gender IS NULL OR gender IN ('Male','Female')),
   school TEXT,
   assigned_staff_id UUID REFERENCES users(id),
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),

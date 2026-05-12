@@ -96,3 +96,4 @@ Or more practically, as a series of INSERT statements generated from the spreads
 
 ## Related
 - See `documentation/seed_data_plan.md` for the fake/test data seed script (similar approach, different purpose)
+# HISTORICAL - predates 2026-05 schema hardening. Field names and schema assumptions may be stale.

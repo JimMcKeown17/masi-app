@@ -14,6 +14,20 @@ import { storage } from '../utils/storage';
 const MAX_RETRY_ATTEMPTS = 5;
 const BASE_RETRY_DELAY = 5000; // 5 seconds
 
+const LOCAL_ONLY_KEYS_TO_STRIP = [
+  'synced',
+  '_deleted',
+  '_pendingJobTitleResolve',
+  'pendingSessionTypeCode',
+  'pendingSessionTypeName',
+];
+
+const LEGACY_KEYS_TO_STRIP = {
+  children: ['class', 'school', 'teacher'],
+  users: ['assigned_school', 'job_title'],
+  // Build A keeps sessions.session_type. Build B will add sessions: ['session_type'].
+};
+
 // Table configuration for sync
 const SYNC_TABLES = {
   TIME_ENTRIES: {
@@ -111,6 +125,83 @@ const classifyError = (error) => {
   return { terminal: false, markAsSynced: false };
 };
 
+const buildSyncPayload = (tableName, record) => {
+  const tableLegacyKeys = LEGACY_KEYS_TO_STRIP[tableName] || [];
+  const keysToStrip = new Set([...LOCAL_ONLY_KEYS_TO_STRIP, ...tableLegacyKeys]);
+
+  return Object.fromEntries(
+    Object.entries(record).filter(([key]) => !keysToStrip.has(key))
+  );
+};
+
+const findJobTitleByCode = (jobTitles, code) => (
+  jobTitles.find(title => title.code === code)
+);
+
+const findJobTitleByName = (jobTitles, name) => {
+  if (!name) return null;
+  const normalizedName = name.trim().toLowerCase();
+  return jobTitles.find(title => title.name?.trim().toLowerCase() === normalizedName) || null;
+};
+
+const resolveSessionTypeId = async (record) => {
+  const profile = await storage.getUserProfile();
+  if (profile?.jobTitleId) {
+    return profile.jobTitleId;
+  }
+
+  const jobTitles = await storage.getJobTitles();
+  if (jobTitles.length === 0) {
+    return null;
+  }
+
+  const byCode = record.pendingSessionTypeCode
+    ? findJobTitleByCode(jobTitles, record.pendingSessionTypeCode)
+    : null;
+  if (byCode?.id) return byCode.id;
+
+  const byName = findJobTitleByName(
+    jobTitles,
+    record.pendingSessionTypeName || record.session_type
+  );
+  return byName?.id || null;
+};
+
+const prepareRecordForSync = async (tableName, record) => {
+  if (tableName !== 'sessions' || record.session_type_id) {
+    return { record };
+  }
+
+  const sessionTypeId = await resolveSessionTypeId(record);
+  if (!sessionTypeId) {
+    return {
+      skipped: true,
+      reason: 'Missing session_type_id; waiting for cached profile or job_titles lookup',
+    };
+  }
+
+  const markerKeys = [
+    '_pendingJobTitleResolve',
+    'pendingSessionTypeCode',
+    'pendingSessionTypeName',
+  ];
+  const preparedRecord = {
+    ...record,
+    session_type_id: sessionTypeId,
+  };
+  markerKeys.forEach(key => {
+    delete preparedRecord[key];
+  });
+
+  await storage.updateSession(
+    record.id,
+    { session_type_id: sessionTypeId },
+    markerKeys
+  );
+
+  return { record: preparedRecord };
+};
+
 /**
  * Sync a single record to Supabase
  * Uses upsert for last-write-wins conflict resolution
@@ -118,8 +209,12 @@ const classifyError = (error) => {
  */
 const syncRecord = async (tableName, record, conflictTarget = 'id') => {
   try {
-    // Remove local-only fields before syncing
-    const { synced, _deleted, ...recordData } = record;
+    const prepared = await prepareRecordForSync(tableName, record);
+    if (prepared.skipped) {
+      return { success: false, skipped: true, error: { message: prepared.reason } };
+    }
+
+    const recordData = buildSyncPayload(tableName, prepared.record);
 
     // Upsert: insert if new, update if exists (last-write-wins)
     const { error } = await supabase
@@ -137,6 +232,9 @@ const syncRecord = async (tableName, record, conflictTarget = 'id') => {
     return { success: false, error };
   }
 };
+
+// @public test helper: locks down table-scoped stripping without hitting Supabase.
+export const _testBuildSyncPayload = buildSyncPayload;
 
 /**
  * Sync all unsynced records for a given table
@@ -227,6 +325,16 @@ const syncTable = async (tableConfig) => {
         await storage.clearLastSyncError(key, record.id);
         results.synced++;
         console.log(`✓ Synced ${key} record ${record.id}`);
+      } else if (result.skipped) {
+        const reason = result.error?.message || 'Skipped until local data can be resolved';
+        await storage.setLastSyncError(key, record.id, reason);
+        results.failed++;
+        results.failedRecords.push({
+          id: record.id,
+          table: key,
+          reason,
+        });
+        console.warn(`⏭ Skipped ${key} record ${record.id}: ${reason}`);
       } else {
         const errorMsg = result.error?.message || result.error?.code || 'Unknown error';
         const classification = classifyError(result.error);

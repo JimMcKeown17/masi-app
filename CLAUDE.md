@@ -24,6 +24,8 @@ The app launched in early March 2026 and is in its **first two weeks of field te
 
 **Rule: prefer backwards-compatible changes wherever possible.**
 
+During the current field-testing window, force-update is operationally acceptable when a migration requires it, but still prefer a compatibility build and verification gate before destructive drops.
+
 For database schema changes specifically:
 - **Safe:** Adding nullable columns, adding new tables, relaxing constraints
 - **Risky:** Dropping or renaming columns, tightening constraints, changing column types
@@ -46,6 +48,8 @@ PostgreSQL upserts require **SELECT visibility through RLS** to check the unique
 
 - `children.synced` — defined in `00_initial_schema.sql` but absent in prod. Likely dropped manually via Studio at some point; no migration captures the change. Dashboard reads that filter on it return `code=42703` ("column does not exist").
 - `time_entries.auto_clocked_out` — the app has been writing this field since the auto-clock-out feature landed, but the column was never created in prod until `10_add_auto_clocked_out_to_time_entries.sql`. Every auto-clocked-out record failed sync with `PGRST204` in the meantime.
+- `users.job_title` — originally an enum in `00_initial_schema.sql`; prod has it as text and the enum type no longer exists. Migration 13 captures this drift.
+- `children.age` — originally NOT NULL with a narrow CHECK; prod allows NULL and has no age CHECK. Migration 13 captures this drift.
 
 **Before any schema-facing work** (writing migrations, building a dashboard, reviewing sync failures):
 - Check the live schema via Supabase Studio → Table Editor OR a `supabase db pull`.
@@ -56,6 +60,8 @@ PostgreSQL upserts require **SELECT visibility through RLS** to check the unique
 - `code=42703` in server reads = *prod is missing a column the migration file claims exists* → update the consumer code (dashboard, report, etc.) to not assume that column, and optionally add a migration to formally drop it from `supabase-migrations/` so history matches prod.
 
 **Fix pattern**: always prefer additive, idempotent SQL (`ADD COLUMN IF NOT EXISTS`, `CREATE TABLE IF NOT EXISTS`). Never rely on a clean migration history — it isn't clean.
+
+**DDL rule**: all schema changes must go through migration files. Use Supabase `apply_migration` or `supabase migration new` for `ALTER TABLE`, `DROP TYPE`, `CREATE TABLE`, policy changes, and destructive drops. Do not run production DDL through ad-hoc `execute_sql`; use `execute_sql` for read-only preflights and verification queries.
 
 ### EAS Builds — Environment Variables Not in `.env.local`
 `process.env.EXPO_PUBLIC_*` variables from `.env.local` are NOT available in EAS cloud builds. Public values (Supabase URL, anon key) must also be set in `app.json → extra` with a fallback in the client:
