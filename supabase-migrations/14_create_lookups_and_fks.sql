@@ -105,7 +105,3 @@ END $$;
 CREATE INDEX IF NOT EXISTS idx_sessions_session_type_id ON public.sessions (session_type_id);
 
 DROP POLICY IF EXISTS "Users can update own profile" ON public.users;
-CREATE POLICY "Users can update own profile" ON public.users
-  FOR UPDATE
-  USING (id = auth.uid())
-  WITH CHECK (id = auth.uid());
