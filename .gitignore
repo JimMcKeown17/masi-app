@@ -46,6 +46,7 @@ yarn-error.*
 
 # superpowers brainstorming
 .superpowers/
+supabase/.temp/
 google-play-service-account.json
 
 # real tester CSVs contain passwords — only the example is checked in
