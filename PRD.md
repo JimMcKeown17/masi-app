@@ -106,7 +106,7 @@ A React Native mobile application for Masi, a nonprofit organization, to manage 
 - id (uuid)
 - user_id (uuid, FK to users)
 - session_type_id (uuid, FK to job_titles)
-- session_type (text, transitional legacy text column through Build A)
+- session_type (text, transitional legacy text column retained until Phase 6; Build B no longer writes it)
 - session_date (date)
 - children_ids (uuid[], array of child IDs)
 - group_ids (uuid[], array of group IDs used, nullable)
@@ -749,10 +749,10 @@ Requirements to be gathered as we progress through development phases.
 
 ### In Progress
 
-#### Schema Hardening — Lookups, Build A Compatibility, and Destructive-Drop Gates
-Branch: `schema-hardening-build-a`
+#### Schema Hardening — Lookups, Build B, and Destructive-Drop Gates
+Branches: `schema-hardening-build-a`, `schema-hardening-build-b`
 
-Rev 10 plan implementation for canonical schools/job titles and safe removal of legacy text columns. Build A is the compatibility release: it reads both legacy and lookup shapes, writes both `sessions.session_type` and `sessions.session_type_id` when resolvable, caches `job_titles`, and sanitizes old unsynced AsyncStorage records. Build B and migration 17 remain gated on tester export evidence.
+Rev 10 plan implementation for canonical schools/job titles and safe removal of legacy text columns. Build A is the compatibility release: it reads both legacy and lookup shapes, writes both `sessions.session_type` and `sessions.session_type_id` when resolvable, caches `job_titles`, and sanitizes old unsynced AsyncStorage records. Build B is the final-safe release: after `sessions.session_type` is nullable, it writes only `session_type_id`, strips leftover local `session_type`, and marks exports as `build-b`. Migration 17 remains gated on tester export evidence.
 
 - [x] Create migration 13 to capture `users.job_title` enum drift and nullable `children.age` drift
 - [x] Create migration 14 for `job_titles`, school metadata columns, FK columns, and user self-update RLS lockdown
@@ -762,10 +762,14 @@ Rev 10 plan implementation for canonical schools/job titles and safe removal of 
 - [x] Add robust CSV parsing, school seed script, and FK-based tester import script
 - [x] Add `LookupsContext`, profile normalization, Build A session dual-write, sanitizer bootstrap, and export metadata
 - [x] Add Jest coverage for profile normalization, sync stripping, pending session enrichment, sanitizer idempotency, and session type resolution
-- [ ] Apply migrations 13-15 in Supabase after running preflight queries
+- [x] Apply migrations 13 and 14 in Supabase for Build A compatibility
+- [x] Ship Build A OTA on `production` runtime `1.1.0`
+- [x] Apply migration 16 to relax `sessions.session_type` before Build B
+- [x] Implement Build B app code: no legacy `session_type` writes, Build B sanitizer cleanup, export marker, and `app.json` `1.2.0`
+- [ ] Apply migration 15 after school seed/backfill preflight queries
 - [ ] Run `scripts/seedSchools.js --dry-run`, then seed schools with service-role credentials
-- [ ] Ship Build A and collect tester export JSON before Build B
-- [ ] Apply migration 16, ship Build B, collect Build B export JSON from every active install
+- [ ] Build and distribute Build B `1.2.0` native installs to every active tester
+- [ ] Collect Build B export JSON from every active install
 - [ ] Apply migration 17 only after the full destructive-drop gate and `pg_dump` snapshot
 
 #### Soft-Delete via `hidden_at` — "Deleted Children Reappear" Fix

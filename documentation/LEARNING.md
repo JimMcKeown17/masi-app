@@ -1047,9 +1047,9 @@ The tempting fix would have been to drop the text columns and replace them with 
 The safe pattern is two builds:
 
 1. Build A is compatible with both worlds. It reads lookup joins when present, falls back to legacy strings when needed, writes `session_type` plus `session_type_id`, and runs a startup sanitizer that cleans old unsynced records.
-2. Build B ships only after a buffer and export-database verification. It stops writing the legacy session column after the database has relaxed the `NOT NULL` constraint.
+2. Build B stops writing the legacy session column after the database has relaxed the `NOT NULL` constraint. It also reruns the session sanitizer at a higher task version so devices that already completed Build A cleanup still strip leftover local `session_type` keys.
 
-Only after every active install proves it is on Build B should the destructive migration drop the old columns.
+Build B bumps `expo.version` because exported database snapshots use that value as part of the release gate. Since this app uses `runtimeVersion.policy = "appVersion"`, that version bump means Build B needs a full native install; a `1.2.0` OTA would not reach existing `1.1.0` runtime builds. Only after every active install proves it is on Build B should the destructive migration drop the old columns.
 
 This work also captures schema drift in migration history. `users.job_title` was originally an enum in the first migration, but production already had it as text. `children.age` was originally stricter than production. Migration 13 records those facts so future agents do not treat an old file as truth.
 

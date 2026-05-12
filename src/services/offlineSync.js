@@ -25,7 +25,7 @@ const LOCAL_ONLY_KEYS_TO_STRIP = [
 const LEGACY_KEYS_TO_STRIP = {
   children: ['class', 'school', 'teacher'],
   users: ['assigned_school', 'job_title'],
-  // Build A keeps sessions.session_type. Build B will add sessions: ['session_type'].
+  sessions: ['session_type'],
 };
 
 // Table configuration for sync

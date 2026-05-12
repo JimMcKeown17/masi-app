@@ -48,7 +48,7 @@ describe('offline sync payload stripping', () => {
     });
   });
 
-  test('strips local pending-session markers while keeping Build A session_type', () => {
+  test('strips local pending-session markers and legacy Build B session_type', () => {
     const { _testBuildSyncPayload } = require('../src/services/offlineSync');
 
     const payload = _testBuildSyncPayload('sessions', {
@@ -63,7 +63,6 @@ describe('offline sync payload stripping', () => {
 
     expect(payload).toEqual({
       id: 'session-1',
-      session_type: 'Literacy Coach',
       session_type_id: 'job-1',
     });
   });

@@ -1,7 +1,7 @@
 const loadResolver = () => require('../src/utils/sessionTypeResolver');
 
 describe('sessionTypeResolver', () => {
-  test('uses normalized profile jobTitleId first for Build A session writes', () => {
+  test('uses normalized profile jobTitleId first for Build B session writes', () => {
     expect(loadResolver).not.toThrow();
     const { buildSessionTypeFields } = loadResolver();
 
@@ -13,7 +13,6 @@ describe('sessionTypeResolver', () => {
       },
       jobTitlesCache: [],
     })).toEqual({
-      session_type: 'Literacy Coach',
       session_type_id: 'job-profile',
     });
   });
@@ -31,12 +30,11 @@ describe('sessionTypeResolver', () => {
         { id: 'job-code', code: 'literacy_coach', name: 'Literacy Coach' },
       ],
     })).toEqual({
-      session_type: 'Literacy Coach',
       session_type_id: 'job-code',
     });
   });
 
-  test('marks the local session pending when no ID can be resolved', () => {
+  test('marks the local session pending without writing legacy session_type when no ID can be resolved', () => {
     const { buildSessionTypeFields } = loadResolver();
 
     expect(buildSessionTypeFields({
@@ -46,7 +44,6 @@ describe('sessionTypeResolver', () => {
       },
       jobTitlesCache: [],
     })).toEqual({
-      session_type: 'Literacy Coach',
       _pendingJobTitleResolve: true,
       pendingSessionTypeCode: 'literacy_coach',
       pendingSessionTypeName: 'Literacy Coach',

@@ -7,7 +7,7 @@
 
 This guide teaches you fundamental database design principles by walking through a real-world schema. Whether you're new to databases or want to understand why we make certain design decisions, you'll learn the **why** behind database architecture, not just the **what**.
 
-> 2026-05 schema hardening note: the app is moving from free-text school/job/session fields to lookup-backed foreign keys. During the Build A compatibility window, both legacy text columns and new FK columns exist. After the Build B gate and migration 17, `users.assigned_school`, `users.job_title`, `children.class`, `children.school`, `children.teacher`, and `sessions.session_type` are dropped.
+> 2026-05 schema hardening note: the app is moving from free-text school/job/session fields to lookup-backed foreign keys. During the Build A/Build B transition, both legacy text columns and new FK columns exist. Build B no longer writes `sessions.session_type`; after the Build B export gate and migration 17, `users.assigned_school`, `users.job_title`, `children.class`, `children.school`, `children.teacher`, and `sessions.session_type` are dropped.
 
 By the end, you'll understand:
 - How relational databases organize data
@@ -347,8 +347,8 @@ CREATE TABLE users (
   last_name TEXT NOT NULL,
   school_id UUID REFERENCES schools(id),
   job_title_id UUID REFERENCES job_titles(id),
-  job_title TEXT,        -- transitional legacy column through Build B
-  assigned_school TEXT,  -- transitional legacy column through Build B
+  job_title TEXT,        -- transitional legacy column until Phase 6
+  assigned_school TEXT,  -- transitional legacy column until Phase 6
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
   updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
@@ -397,7 +397,7 @@ CREATE TABLE job_titles (
 
 Job titles now drive routing and session typing, so they are operational identities rather than display strings. A stable `code` lets CSV imports and app logic survive display-name changes, and the FK prevents variants like `literacy coach` or `LitCoach`.
 
-During Build A, the app still reads legacy `job_title`/`assigned_school` fields as fallbacks and writes `sessions.session_type` for compatibility. After the Build B verification gate, migration 17 removes those text columns.
+During Build A, the app still reads legacy `job_title`/`assigned_school` fields as fallbacks and writes `sessions.session_type` for compatibility. Build B still reads legacy profile fallbacks but writes sessions using `session_type_id` only. After the Build B verification gate, migration 17 removes those text columns.
 
 **Why timestamps (created_at, updated_at)?**
 - **Auditing**: When was this user created?

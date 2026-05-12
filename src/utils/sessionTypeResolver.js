@@ -30,19 +30,13 @@ export const buildSessionTypeFields = ({
     findByName(jobTitlesCache, sessionTypeName)?.id ||
     null;
 
-  const baseFields = {
-    session_type: sessionTypeName,
-  };
-
   if (resolvedId) {
     return {
-      ...baseFields,
       session_type_id: resolvedId,
     };
   }
 
   return {
-    ...baseFields,
     _pendingJobTitleResolve: true,
     pendingSessionTypeCode: sessionTypeCode,
     pendingSessionTypeName: sessionTypeName,

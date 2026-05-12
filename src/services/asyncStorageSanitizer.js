@@ -2,7 +2,7 @@ import { storage, STORAGE_KEYS } from '../utils/storage';
 
 const TASK_VERSIONS = {
   childrenLegacyKeysStripped: 1,
-  sessionsEnriched: 1,
+  sessionsEnriched: 2,
 };
 
 const CHILD_LEGACY_KEYS = ['class', 'school', 'teacher'];
@@ -11,15 +11,15 @@ const shouldRunTask = (taskState, taskName) => (
   !taskState?.done || taskState.taskVersion < TASK_VERSIONS[taskName]
 );
 
-const completeTaskState = () => ({
+const completeTaskState = (taskName) => ({
   done: true,
-  taskVersion: 1,
+  taskVersion: TASK_VERSIONS[taskName],
   completedAt: new Date().toISOString(),
 });
 
-const attemptedTaskState = () => ({
+const attemptedTaskState = (taskName) => ({
   done: false,
-  taskVersion: 1,
+  taskVersion: TASK_VERSIONS[taskName],
   lastAttemptAt: new Date().toISOString(),
 });
 
@@ -78,29 +78,49 @@ const stripChildrenLegacyKeys = async (userId) => {
 };
 
 const findJobTitleForSession = (jobTitles, session) => {
-  const name = session.session_type?.trim().toLowerCase();
+  const name = (session.pendingSessionTypeName || session.session_type)?.trim().toLowerCase();
   if (!name) return null;
   return jobTitles.find(title => title.name?.trim().toLowerCase() === name) || null;
 };
 
 const enrichSessions = async (jobTitlesCache) => {
-  if (!jobTitlesCache || jobTitlesCache.length === 0) {
-    return { mutated: 0, done: false, lastAttemptAt: new Date().toISOString() };
-  }
-
   const sessions = await storage.getSessions();
   let mutated = 0;
+  let unresolvedUnsynced = false;
+
   const enriched = sessions.map(session => {
-    if (session.synced !== false || session.session_type_id) return session;
+    if (session.synced !== false) return session;
 
+    const hadLegacySessionType = Object.prototype.hasOwnProperty.call(session, 'session_type');
     const jobTitle = findJobTitleForSession(jobTitlesCache, session);
-    if (!jobTitle?.id) return session;
+    const next = { ...session };
 
-    mutated++;
-    return {
-      ...session,
-      session_type_id: jobTitle.id,
-    };
+    if (!next.session_type_id && jobTitle?.id) {
+      next.session_type_id = jobTitle.id;
+    }
+
+    if (hadLegacySessionType) {
+      if (!next.session_type_id && !next.pendingSessionTypeName && session.session_type) {
+        next._pendingJobTitleResolve = true;
+        next.pendingSessionTypeName = session.session_type;
+      }
+      delete next.session_type;
+    }
+
+    if (!next.session_type_id) {
+      unresolvedUnsynced = true;
+    }
+
+    if (
+      next.session_type_id !== session.session_type_id ||
+      hadLegacySessionType ||
+      next._pendingJobTitleResolve !== session._pendingJobTitleResolve ||
+      next.pendingSessionTypeName !== session.pendingSessionTypeName
+    ) {
+      mutated++;
+    }
+
+    return next;
   });
 
   if (mutated > 0) {
@@ -114,7 +134,11 @@ const enrichSessions = async (jobTitlesCache) => {
     }
   }
 
-  return { mutated, done: true };
+  return {
+    mutated,
+    done: !unresolvedUnsynced,
+    ...(unresolvedUnsynced ? { lastAttemptAt: new Date().toISOString() } : {}),
+  };
 };
 
 export const runSanitizer = async ({ userId, jobTitlesCache = [] }) => {
@@ -124,7 +148,7 @@ export const runSanitizer = async ({ userId, jobTitlesCache = [] }) => {
 
   if (shouldRunTask(state.childrenLegacyKeysStripped, 'childrenLegacyKeysStripped')) {
     result.childrenLegacyKeysStripped = await stripChildrenLegacyKeys(userId);
-    nextState.childrenLegacyKeysStripped = completeTaskState();
+    nextState.childrenLegacyKeysStripped = completeTaskState('childrenLegacyKeysStripped');
   } else {
     result.childrenLegacyKeysStripped = { skipped: true };
   }
@@ -132,8 +156,8 @@ export const runSanitizer = async ({ userId, jobTitlesCache = [] }) => {
   if (shouldRunTask(state.sessionsEnriched, 'sessionsEnriched')) {
     result.sessionsEnriched = await enrichSessions(jobTitlesCache);
     nextState.sessionsEnriched = result.sessionsEnriched.done
-      ? completeTaskState()
-      : attemptedTaskState();
+      ? completeTaskState('sessionsEnriched')
+      : attemptedTaskState('sessionsEnriched');
   } else {
     result.sessionsEnriched = { skipped: true };
   }

@@ -55,7 +55,7 @@ describe('asyncStorageSanitizer', () => {
     }));
 
     const [session] = await storage.getSessions();
-    expect(session.session_type).toBe('Literacy Coach');
+    expect(session).not.toHaveProperty('session_type');
     expect(session.session_type_id).toBe('job-1');
     expect(session.synced).toBe(false);
 
@@ -69,7 +69,7 @@ describe('asyncStorageSanitizer', () => {
     expect(state.childrenLegacyKeysStripped.taskVersion).toBe(1);
     expect(state.childrenLegacyKeysStripped.completedAt).toBeTruthy();
     expect(state.sessionsEnriched.done).toBe(true);
-    expect(state.sessionsEnriched.taskVersion).toBe(1);
+    expect(state.sessionsEnriched.taskVersion).toBe(2);
     expect(state.sessionsEnriched.completedAt).toBeTruthy();
 
     const snapshot = {
@@ -104,11 +104,44 @@ describe('asyncStorageSanitizer', () => {
     expect(result.sessionsEnriched.lastAttemptAt).toBeTruthy();
 
     const [session] = await storage.getSessions();
+    expect(session).not.toHaveProperty('session_type');
     expect(session.session_type_id).toBeUndefined();
+    expect(session._pendingJobTitleResolve).toBe(true);
+    expect(session.pendingSessionTypeName).toBe('Literacy Coach');
 
     const state = await storage.getSanitizerState('user-1');
     expect(state.sessionsEnriched.done).toBe(false);
-    expect(state.sessionsEnriched.taskVersion).toBe(1);
+    expect(state.sessionsEnriched.taskVersion).toBe(2);
     expect(state.sessionsEnriched.lastAttemptAt).toBeTruthy();
+  });
+
+  test('reruns Build B session cleanup when Build A sanitizer state is already complete', async () => {
+    const { runSanitizer } = loadSanitizer();
+    await storage.saveSanitizerState('user-1', {
+      childrenLegacyKeysStripped: { done: true, taskVersion: 1 },
+      sessionsEnriched: { done: true, taskVersion: 1 },
+    });
+    await storage.saveSession({
+      id: 'session-1',
+      session_type: 'Literacy Coach',
+      session_type_id: 'job-1',
+      synced: false,
+    });
+
+    const result = await runSanitizer({
+      userId: 'user-1',
+      jobTitlesCache: [{ id: 'job-1', code: 'literacy_coach', name: 'Literacy Coach' }],
+    });
+
+    expect(result.childrenLegacyKeysStripped.skipped).toBe(true);
+    expect(result.sessionsEnriched.mutated).toBe(1);
+
+    const [session] = await storage.getSessions();
+    expect(session).not.toHaveProperty('session_type');
+    expect(session.session_type_id).toBe('job-1');
+
+    const state = await storage.getSanitizerState('user-1');
+    expect(state.sessionsEnriched.done).toBe(true);
+    expect(state.sessionsEnriched.taskVersion).toBe(2);
   });
 });

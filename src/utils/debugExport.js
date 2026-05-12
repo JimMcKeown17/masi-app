@@ -43,7 +43,7 @@ export const exportDatabase = async () => {
     const exportData = {
       exported_at: new Date().toISOString(),
       app_version: Constants.expoConfig?.version ?? 'unknown',
-      schema_hardening_build: 'build-a',
+      schema_hardening_build: 'build-b',
       ios_build_number: Constants.expoConfig?.ios?.buildNumber ?? null,
       android_version_code: Constants.expoConfig?.android?.versionCode ?? null,
       runtime_version: Constants.expoConfig?.runtimeVersion ?? null,
