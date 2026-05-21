@@ -3,17 +3,13 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import Constants from 'expo-constants';
 import { AppState, Platform } from 'react-native';
 import { processLock } from '@supabase/supabase-js';
+import { resolveSupabaseProjectConfig } from '../../config/supabaseProjectConfig';
 
-// Local dev uses .env.local; EAS builds fall back to app.json extra
-const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL
-  || Constants.expoConfig?.extra?.supabaseUrl || '';
-const supabaseAnonKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY
-  || Constants.expoConfig?.extra?.supabaseAnonKey || '';
-
-if (!supabaseUrl || !supabaseAnonKey) {
-  console.warn('Supabase credentials not found. Please check your .env.local file.');
-  console.warn('Required: EXPO_PUBLIC_SUPABASE_URL and EXPO_PUBLIC_SUPABASE_ANON_KEY');
-}
+// Local dev uses public env vars; EAS builds fall back to Expo config extra.
+const { supabaseUrl, supabaseAnonKey } = resolveSupabaseProjectConfig({
+  env: process.env,
+  expoExtra: Constants.expoConfig?.extra || {},
+});
 
 export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
   auth: {

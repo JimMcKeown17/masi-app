@@ -25,6 +25,7 @@ The new objective is to build the correct offline-first model from day one:
 - No different-user pending-outbox recovery flow for old local data. Fresh installs start with a clean local SQLite database.
 - No package-manager migration during this storage refactor.
 - No full group-first session UX until the SQLite repository and outbox layers are in place.
+- No `education_assistants`, `child_school_enrollments`, `staff_identity_links`, external ID bridge tables, `teacher_school_assignments`, or `class_teacher_assignments` in this pass. Masi's `users` table, class membership history, and middle-path `teachers` table cover the current need without importing all of Zazi's roster surface.
 
 ## Package Manager Decision
 
@@ -49,9 +50,15 @@ Locked model:
 - `staff_programme_assignments` links users to programmes and schools.
 - `child_programme_enrollments` links children to programmes.
 - `child_ea_assignments` links a staff user/EA to the children they are actively responsible for.
+- `class_ea_assignments` and `group_ea_assignments` allow EAs to earn child access through class-level or group-level responsibility.
+- `child_class_memberships` is the reportable source of child class history for an academic year; `children.class_id` remains only as the current fast-path pointer.
+- `academic_years` is the longitudinal year dimension for classes, memberships, grouping versions, and assessment windows.
+- `assessment_windows` defines official baseline, midline, and endline campaigns. Assessments without a window are ad-hoc progress checks.
+- `teachers` is a first-class identity table for current teacher metadata. Teacher assignment history is deferred until reporting needs it.
 - Child programme membership is direct through `child_programme_enrollments`; staff assignment controls who can work with the child, not which programme the child belongs to.
 - `classes` are school/year/grade containers and are not inherently programme-specific.
 - `groups` are programme-specific and may optionally be class-specific.
+- `grouping_versions` and `class_grouping_state` preserve regrouping history instead of rewriting old group memberships in place.
 - `sessions.programme_id` is stored at creation time. It is not inferred later from the user's current job title.
 - `assessments.programme_id` is stored at creation time.
 - `assessment_tools.programme_id` identifies which programme owns a tool.
@@ -65,7 +72,8 @@ When an EA creates a child, the repository auto-enrolls that child in the EA's c
 1. Insert the `children` row.
 2. Insert a `child_ea_assignments` row for `(current_user_id, child.id)` with `assigned_at = now()`.
 3. Insert a `child_programme_enrollments` row for `(child.id, current_user_programme_id)` derived from the EA's active `staff_programme_assignments`.
-4. Enqueue one `sync_outbox` row per inserted record.
+4. If the child has a `class_id`, insert a `child_class_memberships` row using the active `academic_years` row.
+5. Enqueue `sync_outbox` rows inside the same transaction for every domain write in that save operation. Plan 3 tests must lock the exact outbox count before implementation; the current Zazi-alignment contract expects the class membership write to be included when `class_id` is known.
 
 Children may have multiple concurrent `child_programme_enrollments` rows. When two EAs in different programmes work with the same child, each EA sees only their programme's slice: their own sessions, their own assessments, and their own letter mastery records. Sessions and assessments store one `programme_id` at creation, derived from the actor's active `staff_programme_assignments`. The child's enrollment list is the union of all programmes any EA has worked with them in; it is not used to filter individual session or assessment writes.
 
@@ -105,6 +113,8 @@ Repository rules:
 - Any domain write that should sync enqueues or updates `sync_outbox` in the same transaction as the domain row.
 - Marking a row synced and deleting the outbox row happens in the same transaction.
 - Delete/archive operations are explicit outbox operations, never inferred from local absence.
+- Child hard delete is allowed only through `delete_child_if_no_history(child_id)` and only for children with no sessions, assessments, letter mastery, group membership, or ended assignment/enrollment/class-membership history. Otherwise the app archives the child or ends the relevant assignment.
+- Archive operations end active assignment/enrollment rows in the same transaction as the archive marker so archived records do not remain active in working lists.
 
 ## Local SQLite Tables
 
@@ -122,6 +132,9 @@ Reference:
 - `programmes`
 - `staff_programme_assignments`
 - `assessment_tools`
+- `academic_years`
+- `assessment_windows`
+- `teachers`
 
 Domain:
 
@@ -129,6 +142,11 @@ Domain:
 - `children`
 - `child_ea_assignments`
 - `child_programme_enrollments`
+- `class_ea_assignments`
+- `group_ea_assignments`
+- `grouping_versions`
+- `class_grouping_state`
+- `child_class_memberships`
 - `groups`
 - `child_group_memberships`
 - `time_entries`
@@ -171,16 +189,20 @@ Server rules:
 - Do not rewrite policy SQL by string replacement against `pg_policies`.
 - Use explicit `CREATE POLICY`, `DROP POLICY`, or `ALTER POLICY` statements.
 - UPDATE/upsert paths must have matching SELECT visibility.
+- The initial backend must include active `2026` academic-year seed data, a `2026 Baseline` assessment window, and the school list from `scripts/masi-schools-db-apr26.csv`; fresh sign-in with empty reference data is a Plan 1 failure.
+- Active academic year is a hard-fail invariant. Future year rollover must deactivate the old active year and insert or activate the new year in one admin migration transaction, rather than relying on automatic switching.
 
 ## RLS Policy Strategy
 
 Read visibility: all mobile-created tables such as `children`, `classes`, and `groups` have two SELECT policies for `authenticated`: one through the relevant assignment or membership join, and a fallback `created_by = auth.uid()` policy to preserve upsert visibility for newly inserted rows that have not yet synced their assignment.
 
-Handover model for writes: writes to `sessions`, `session_attendees`, `assessments`, `assessment_items`, and `letter_mastery` require an active `child_ea_assignments` row for the actor at the time of write. Reads remain available for any historical assignment. After handover, when `unassigned_at` is set, the old EA cannot insert or update child-specific event rows for that child.
+Handover model for writes: writes to `sessions`, `session_attendees`, `assessments`, `assessment_items`, and `letter_mastery` require active write access to the child at the time of write. Active write access can come from direct `child_ea_assignments`, `class_ea_assignments` plus active `child_class_memberships`, or `group_ea_assignments` plus active `child_group_memberships`. Reads remain available for historical direct child assignments. After handover, when the relevant assignment or membership row is ended, the old EA cannot insert or update child-specific event rows for that child.
+
+The multi-path child write helper must check both sides of each indirect path: class/group assignment must still be active, and the child's class/group membership must still be active. Omitting either active filter is a security regression because it permits writes through stale relationships.
 
 Self-scoped tables: `time_entries` rows are visible and writeable only to the EA whose `user_id` matches `auth.uid()`. No assignment join is needed.
 
-Class creation: `classes` are EA-created with `created_by = auth.uid()`. Admin-preloaded classes use service role and never the mobile path.
+Class creation: `classes` can be EA-created with `created_by = auth.uid()` or admin-preloaded by service role. EAs may self-assign to admin-preloaded classes only when the class is visible through their active school/programme assignment; service-role workflows may also create `class_ea_assignments` directly.
 
 Cross-programme reads for the same child are permitted at the RLS layer. The app enforces programme-scoped display by filtering at the repository/query layer; RLS does not enforce programme isolation on reads. Writes remain programme-scoped because `sessions.programme_id` and `assessments.programme_id` are set from the actor's active `staff_programme_assignments` at creation.
 
@@ -212,13 +234,18 @@ Push order:
 3. `children`
 4. `child_ea_assignments`
 5. `child_programme_enrollments`
-6. `groups`
-7. `child_group_memberships`
-8. `sessions`
-9. `session_attendees`
-10. `assessments`
-11. `assessment_items`
-12. `letter_mastery`
+6. `child_class_memberships`
+7. `class_ea_assignments`
+8. `grouping_versions`
+9. `class_grouping_state`
+10. `groups`
+11. `group_ea_assignments`
+12. `child_group_memberships`
+13. `sessions`
+14. `session_attendees`
+15. `assessments`
+16. `assessment_items`
+17. `letter_mastery`
 
 Failure rules:
 

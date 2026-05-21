@@ -67,6 +67,7 @@ Required tests:
 - `42501` terminal failure remains failed
 - network error schedules retry without sleeping the whole sync loop
 - successful finalization marks domain row synced and deletes outbox row in one transaction
+- child `hard_delete` operations call `delete_child_if_no_history(childId)` instead of direct table delete; `false` responses become terminal archive-needed failures rather than silently deleting history
 
 - [ ] **Step 2: Implement outbox processing**
 
@@ -77,13 +78,20 @@ Push order:
 3. `CHILDREN`
 4. `CHILD_EA_ASSIGNMENTS`
 5. `CHILD_PROGRAMME_ENROLLMENTS`
-6. `GROUPS`
-7. `CHILD_GROUP_MEMBERSHIPS`
-8. `SESSIONS`
-9. `SESSION_ATTENDEES`
-10. `ASSESSMENTS`
-11. `ASSESSMENT_ITEMS`
-12. `LETTER_MASTERY`
+6. `CHILD_CLASS_MEMBERSHIPS`
+7. `CLASS_EA_ASSIGNMENTS`
+8. `GROUPING_VERSIONS`
+9. `CLASS_GROUPING_STATE`
+10. `GROUPS`
+11. `GROUP_EA_ASSIGNMENTS`
+12. `CHILD_GROUP_MEMBERSHIPS`
+13. `SESSIONS`
+14. `SESSION_ATTENDEES`
+15. `ASSESSMENTS`
+16. `ASSESSMENT_ITEMS`
+17. `LETTER_MASTERY`
+
+Pull order also includes reference caches for `academic_years`, `assessment_windows`, and `teachers` on first sign-in before classes, children, sessions, or assessments hydrate.
 
 ### Task 3: Offline Context API
 

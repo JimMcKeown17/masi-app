@@ -89,6 +89,7 @@ Tests must prove:
 - transaction rollback works
 - `sync_outbox` exists
 - all clean-slate domain tables exist
+- the local mirror includes the Zazi-alignment schema added in Plan 1: 25 server-backed tables total before local-only foundation tables
 
 - [ ] **Step 2: Implement migrations**
 
@@ -103,10 +104,18 @@ Local tables:
 - `programmes`
 - `staff_programme_assignments`
 - `assessment_tools`
+- `academic_years`
+- `assessment_windows`
+- `teachers`
 - `classes`
 - `children`
 - `child_ea_assignments`
 - `child_programme_enrollments`
+- `class_ea_assignments`
+- `group_ea_assignments`
+- `grouping_versions`
+- `class_grouping_state`
+- `child_class_memberships`
 - `groups`
 - `child_group_memberships`
 - `time_entries`
@@ -121,6 +130,16 @@ Migration rule:
 - migration SQL runs in a transaction
 - migration history insert runs in that transaction
 - `PRAGMA user_version = n` runs after commit
+
+Mirror these server-column additions locally:
+
+- `classes.academic_year_id`, `classes.teacher_id`, and archive metadata
+- `children.archived_at`, `children.archived_by_user_id`, `children.archive_reason`; keep `hidden_at` only as a transition column
+- `groups.grouping_version_id`, `groups.display_number`, and archive metadata
+- `child_group_memberships.grouping_version_id`
+- `assessments.assessment_window_id`, `assessment_purpose`, `grade_snapshot`, `teacher_name_snapshot`
+- `session_attendees.grade_snapshot`
+- `letter_mastery.deleted_at` with partial active uniqueness
 
 ### Task 4: Add Debug Dump Foundation
 

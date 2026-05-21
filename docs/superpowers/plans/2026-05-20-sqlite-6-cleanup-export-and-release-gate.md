@@ -59,6 +59,14 @@ Expected allowed paths:
 - `src/utils/logger.js`
 - possibly `src/utils/debugExport.js` for logs metadata only
 
+- [ ] **Step 3: Remove transition columns only after repository reads have moved**
+
+Backend cleanup candidates after the SQLite app is verified:
+
+- drop `classes.academic_year` only after all reads use `classes.academic_year_id`
+- drop `children.hidden_at` only after repositories and screens use `children.archived_at`
+- keep `classes.teacher` until teacher backfill is complete and screens read `classes.teacher_id`
+
 ### Task 3: Documentation Updates
 
 **Files:**
@@ -76,6 +84,7 @@ Document:
 - SQLite repository layer
 - sync outbox
 - programme model
+- academic years, assessment windows, child class memberships, teachers, assignment levels, and grouping versions
 - support export
 - backend promotion status
 

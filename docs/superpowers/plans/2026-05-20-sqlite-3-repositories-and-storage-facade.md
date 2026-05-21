@@ -17,8 +17,13 @@
 - Delete/archive enqueue plus local mutation happen in one transaction.
 - Repository methods accept an optional transaction object for nested writes.
 - Repository outputs should be screen-ready, but local storage remains normalized.
-- `childrenRepository.save(child)` inserts the child, active EA assignment, programme enrollment, and three outbox rows in one transaction.
-- `childrenRepository.getMyChildren(userId)` returns only children assigned to the user and enrolled in the user's active programme.
+- `childrenRepository.save(child)` inserts the child, active EA assignment, programme enrollment, active child-class membership when `class_id` is known, and all corresponding outbox rows in one transaction.
+- If `class_id` is not known at child creation, the `child_class_memberships` write is deferred until class assignment, and that membership write happens in the same transaction as the `children.class_id` update.
+- `childrenRepository.getMyChildren(userId)` returns only children assigned to the user, enrolled in the user's active programme, and joined through the child's active `child_class_memberships` row for current class context.
+- `childrenRepository.deleteIfNoHistory(childId)` may hard-delete only no-history children and must route synced remote hard deletes through `delete_child_if_no_history(childId)`.
+- `childrenRepository.archiveChild(childId)` sets `children.archived_at` and ends active `child_ea_assignments`, `child_programme_enrollments`, and `child_class_memberships` in one transaction with matching outbox rows.
+- `classesRepository.archiveClass(classId)` ends active `class_ea_assignments` and updates related class/grouping state in the same transaction.
+- `groupsRepository.archiveGroup(groupId)` sets `groups.archived_at` and ends active `group_ea_assignments` and `child_group_memberships` in one transaction.
 
 ## Tasks
 
@@ -80,6 +85,12 @@ Keep current time tracking surface:
 - `updateTimeEntry`
 - `getUnsyncedRecords('TIME_ENTRIES')`
 
+Reference repositories must include:
+
+- `academicYearsRepository` as pull-only reference data
+- `assessmentWindowsRepository` as pull-only reference data
+- `teachersRepository` as pull-only current teacher metadata
+
 ### Task 3: Domain Repositories
 
 **Files:**
@@ -96,11 +107,17 @@ Keep current time tracking surface:
 Required tests:
 
 - class save/update/archive
+- class archive ends active class EA assignments in the same transaction
 - child save plus active EA/programme assignment in one transaction
-- child save while the user has an active assignment to Programme A produces exactly one `children` row, one `child_ea_assignments` row, one `child_programme_enrollments` row pointing to Programme A, and three `sync_outbox` rows after `withTransaction` resolves
-- child save rollback leaves no `children`, `child_ea_assignments`, `child_programme_enrollments`, or `sync_outbox` rows
+- child save while the user has an active assignment to Programme A and the child has Class C produces exactly one `children` row, one `child_ea_assignments` row, one `child_programme_enrollments` row pointing to Programme A, one `child_class_memberships` row pointing to Class C and the active academic year, and the expected `sync_outbox` rows after `withTransaction` resolves
+- child save rollback leaves no `children`, `child_ea_assignments`, `child_programme_enrollments`, `child_class_memberships`, or `sync_outbox` rows
+- child archive ends active EA, programme, and class memberships in the same transaction
+- child delete with no history removes only the child and active relationship rows; child delete with session/assessment/mastery/group or ended assignment history returns false and leaves rows intact
 - `getMyChildren(User-1)` excludes a child enrolled only in Programme A when User-1's active `staff_programme_assignments` row points to Programme B
+- class-level and group-level assignment repositories preserve `assigned_at`/`unassigned_at` history
+- grouping version save enforces one active grouping version per class/year
 - group save plus membership operations
+- group archive ends active group EA assignments and child group memberships in the same transaction
 - session save plus session attendees in one transaction
 - assessment save plus assessment items in one transaction
 - mastery unique natural key behavior
@@ -110,6 +127,11 @@ Required tests:
 Use clean table names:
 
 - `child_ea_assignments`
+- `class_ea_assignments`
+- `group_ea_assignments`
+- `grouping_versions`
+- `class_grouping_state`
+- `child_class_memberships`
 - `child_group_memberships`
 - `session_attendees`
 - `assessment_items`
@@ -130,7 +152,18 @@ join child_programme_enrollments cpe
   on cpe.child_id = children.id
  and cpe.programme_id = spa.programme_id
  and cpe.ended_at is null
+join child_class_memberships ccm
+  on ccm.child_id = children.id
+ and ccm.exited_at is null
 ```
+
+Add repositories for:
+
+- `classEaAssignmentsRepository`
+- `groupEaAssignmentsRepository`
+- `groupingVersionsRepository`
+- `classGroupingStateRepository`
+- `childClassMembershipsRepository`
 
 ### Task 4: Route Storage Facade
 

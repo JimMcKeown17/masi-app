@@ -48,6 +48,11 @@ Contracts:
 - partial server pull failure does not replace cached children/groups/classes with empty arrays
 - group delete removes memberships through per-row adapter
 - class delete does not double-write child updates
+- child/class/group archive screens call repository archive methods, not hard delete, when there is any history
+- archive flows remove records from active working lists by ending assignments/enrollments in the same local transaction
+- My Children derives current class through active `child_class_memberships`, not only `children.class_id`
+- Create Class automatically uses the active `academic_years` row for `classes.academic_year_id`
+- class roster screens respect `class_grouping_state.class_list_status`
 
 - [ ] **Step 2: Wire contexts**
 
@@ -81,6 +86,7 @@ Contracts:
 - session queries default to the actor's active programme
 - assessment save writes items
 - assessment and letter-mastery queries default to the actor's active programme
+- official-window assessments require an `assessment_window_id`; ad-hoc progress checks leave it null
 - navigation after local save does not wait for network sync
 - rankings use normalized session/assessment data correctly
 
@@ -89,6 +95,8 @@ Contracts:
 Remove dependence on `sessions.children_ids` and assessment arrays as storage source of truth. UI can still render derived summaries.
 
 Default user-facing session, assessment, letter-mastery, dashboard, and ranking reads are programme-scoped through repository queries. Cross-programme history can be added later as an explicit view/toggle; it is not the default display path.
+
+Create Group must read or create the active `grouping_versions` row for the class/year before writing `groups.grouping_version_id` or `child_group_memberships.grouping_version_id`.
 
 ### Task 4: Remove Generic Storage Calls
 
