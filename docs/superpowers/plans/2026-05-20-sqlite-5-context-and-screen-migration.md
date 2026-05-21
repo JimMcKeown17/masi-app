@@ -20,7 +20,7 @@
 - Test: `__tests__/AuthContext.test.js`
 - Test: `__tests__/supabaseRequestQueue.test.js`
 
-- [ ] **Step 1: Add tests**
+- [x] **Step 1: Add tests**
 
 Contracts:
 
@@ -28,7 +28,7 @@ Contracts:
 - stale profile fetch cannot update state after sign-out
 - queued Supabase preload operations execute one at a time
 
-- [ ] **Step 2: Implement deferred auth reads and request queue**
+- [x] **Step 2: Implement deferred auth reads and request queue**
 
 Keep Supabase Auth session storage in AsyncStorage.
 
@@ -54,9 +54,13 @@ Contracts:
 - Create Class automatically uses the active `academic_years` row for `classes.academic_year_id`
 - class roster screens respect `class_grouping_state.class_list_status`
 
+- [x] Initial slice: added tests for one bundled child-data preload, partial preload cache preservation, active academic year on class create, and no double-write child updates on class archive/delete.
+
 - [ ] **Step 2: Wire contexts**
 
 Use cache-first repository reads. Use `triggerBackgroundSync()` after local writes.
+
+- [x] Initial slice: AuthContext defers profile reads through a request queue; ChildrenContext uses bundled cache-first preload; ClassesContext uses active academic year and delegates class archive side effects to storage/repositories.
 
 ### Task 3: Sessions, Assessments, Time, And Rankings Screens
 
@@ -68,7 +72,7 @@ Use cache-first repository reads. Use `triggerBackgroundSync()` after local writ
 - Modify: `src/utils/dashboardStats.js`
 - Test: matching screen/helper tests
 
-- [ ] **Step 0: Enumerate every screen-level storage caller**
+- [x] **Step 0: Enumerate every screen-level storage caller**
 
 Run:
 

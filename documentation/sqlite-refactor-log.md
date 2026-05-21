@@ -65,6 +65,10 @@ This log is the durable record for the clean-slate AsyncStorage-to-SQLite refact
 | 2026-05-21 | Plan 4 keeps `pullReferenceData` as an exported full-replace helper; production wiring is deferred to Plan 5. | Plan 4 built and tested the cache refresh primitive, but context hydration belongs with the Plan 5 screen/context migration. | First authenticated SQLite sign-in needs reference caches before Plan 5 starts. |
 | 2026-05-21 | Domain outbox enqueue resets retry metadata whenever a user write refreshes the payload. | A user correction should retry immediately and should not inherit an old `next_retry_at` or stale error from the payload it replaced. | The sync engine moves retry state to immutable attempt rows instead of the active outbox row. |
 | 2026-05-21 | Unknown sync tables terminalize the outbox row without updating a domain table. | Malformed or future-table rows should be visible failed items, not stuck pending rows or crashes from updating a table that does not exist locally. | Dynamic table registration is added to the sync engine. |
+| 2026-05-21 | Auth profile/preload reads are deferred out of `onAuthStateChange` and serialized through a Supabase request queue. | Supabase warns against awaiting database calls inside auth callbacks; serial preload requests also reduce cold-start request races. | Supabase client behavior changes or a dedicated backend bootstrap RPC replaces client-side profile reads. |
+| 2026-05-21 | ChildrenContext hydrates children, groups, and child-group memberships through one cache-first preload path. | Zazi hit duplicate pull races when providers performed separate server pulls; one bundle distributes results to all setters and preserves cache on partial errors. | Plan 5 introduces a richer domain pull engine that owns children/classes/groups hydration. |
+| 2026-05-21 | Class creation uses the active `academic_years` row automatically. | Classes are year-specific in the SQLite schema; relying on screens to pass the year would create inconsistent class rows. | Masi allows users to create future-year classes from a picker. |
+| 2026-05-21 | Class archive/delete contexts delegate child side effects to repository/storage transactions. | Context-level child nulling double-wrote child rows and could fight repository archive semantics. | Repository archive semantics are removed and class deletion becomes a purely visual filter. |
 
 ## Bug And Gap Register
 
@@ -106,6 +110,60 @@ This log is the durable record for the clean-slate AsyncStorage-to-SQLite refact
 | 2026-05-21 | Plan 4 review found null outbox payloads could be converted to `{ id }` and sent as empty upserts. | Non-delete records with missing payload now fail terminal locally with no Supabase call. | Outbox producers should treat payload absence as a data integrity bug, not as an implicit minimal payload. |
 | 2026-05-21 | Plan 4 review agent found unknown-table rows could never terminalize after CAS finalization was added. | Added an outbox-only terminal finalizer and regression test so unknown tables become visible failed items without touching a domain table. | When finalization logic grows CAS predicates, malformed-row paths that never enter `in_flight` need separate coverage. |
 | 2026-05-21 | Plan 4 review agent found user writes could inherit stale retry backoff metadata. | `insertOutboxRecord` now resets `retry_count`, `last_error`, and `next_retry_at` on enqueue conflict; time-entry update coverage proves fresh user edits retry immediately. | Any durable retry metadata colocated with the active outbox row must be cleared when the payload changes. |
+| 2026-05-21 | Plan 5 auth review found profile fetches could complete after sign-out and repopulate stale state. | Added profile-load versioning and sign-out invalidation so stale local/server profile results are ignored. | Any context starts async work that can outlive the current authenticated user. |
+| 2026-05-21 | Plan 5 context review found ChildrenContext still had separate mount pulls for children, groups, and memberships. | Added a one-call preloaded child data service and cache-preserving bundle hydration in ChildrenContext. | Any provider hydrates related domains through independent server calls. |
+
+## Plan 5 Screen-Level Storage Caller Enumeration
+
+Source command:
+
+```bash
+rg "storage\\." src/screens src/hooks src/components
+```
+
+Output captured before Task 3 screen edits:
+
+```text
+src/screens/insights/SessionCountRankingScreen.js:        const sessions = await storage.getSessions();
+src/screens/insights/LetterMasteryRankingScreen.js:          storage.getAssessments(),
+src/screens/insights/LetterMasteryRankingScreen.js:          storage.getLetterMastery(),
+src/hooks/useTimeTracking.js:    await storage.updateTimeEntry(entry.id, updatedEntry);
+src/hooks/useTimeTracking.js:      const entries = await storage.getTimeEntries();
+src/hooks/useTimeTracking.js:      await storage.saveTimeEntry(timeEntry);
+src/hooks/useTimeTracking.js:      await storage.updateTimeEntry(activeEntry.id, updatedEntry);
+src/components/session/LetterTrackerBottomSheet.js:        const allAssessments = await storage.getAssessments();
+src/components/session/LetterTrackerBottomSheet.js:        const allMastery = await storage.getLetterMastery();
+src/components/session/LetterTrackerBottomSheet.js:  const allAssessments = await storage.getAssessments();
+src/components/session/LetterTrackerBottomSheet.js:  const allMastery = await storage.getLetterMastery();
+src/screens/main/ChildrenListScreen.js:        const assessments = await storage.getAssessments();
+src/screens/assessments/ChildAssessmentSummaryScreen.js:        const all = await storage.getAssessments();
+src/screens/assessments/AssessmentChildSelectScreen.js:        const allAssessments = await storage.getAssessments();
+src/screens/insights/AssessmentRankingScreen.js:        const assessments = await storage.getAssessments();
+src/screens/assessments/AssessmentHistoryScreen.js:      const cached = await storage.getAssessments();
+src/screens/assessments/AssessmentHistoryScreen.js:          await storage.setItem(STORAGE_KEYS.ASSESSMENTS, merged);
+src/screens/main/AssessmentsScreen.js:        const assessments = await storage.getAssessments();
+src/screens/assessments/LetterAssessmentScreen.js:    await storage.saveAssessment(assessment);
+src/screens/main/TimeEntriesListScreen.js:      const cached = await storage.getTimeEntries();
+src/screens/main/TimeEntriesListScreen.js:          await storage.setItem(STORAGE_KEYS.TIME_ENTRIES, merged);
+src/screens/main/SessionsScreen.js:        const sessions = await storage.getSessions();
+src/screens/assessments/LetterTrackerScreen.js:      const allAssessments = await storage.getAssessments();
+src/screens/assessments/LetterTrackerScreen.js:      const allMastery = await storage.getLetterMastery();
+src/screens/assessments/LetterTrackerScreen.js:      await storage.updateLetterMasteryRecord(recordId, {
+src/screens/assessments/LetterTrackerScreen.js:      const allMastery = await storage.getLetterMastery();
+src/screens/assessments/LetterTrackerScreen.js:        await storage.updateLetterMasteryRecord(existing.id, {
+src/screens/assessments/LetterTrackerScreen.js:        await storage.saveLetterMasteryRecord(record);
+src/screens/sessions/SessionHistoryScreen.js:      const cached = await storage.getSessions();
+src/screens/sessions/SessionHistoryScreen.js:          await storage.setItem(STORAGE_KEYS.SESSIONS, merged);
+src/screens/main/HomeScreen.js:          storage.getTimeEntries(),
+src/screens/main/HomeScreen.js:          storage.getSessions(),
+src/screens/main/HomeScreen.js:          storage.getAssessments(),
+src/screens/sessions/LiteracySessionForm.js:      await storage.saveSession(session);
+src/screens/sessions/LiteracySessionForm.js:            const allMastery = await storage.getLetterMastery();
+src/screens/sessions/LiteracySessionForm.js:              await storage.updateLetterMasteryRecord(existingDeleted.id, {
+src/screens/sessions/LiteracySessionForm.js:              await storage.saveLetterMasteryRecord(record);
+src/screens/sessions/LiteracySessionForm.js:            const allMastery = await storage.getLetterMastery();
+src/screens/sessions/LiteracySessionForm.js:              await storage.updateLetterMasteryRecord(existing.id, {
+```
 
 ## Verification Register
 
@@ -258,3 +316,9 @@ This log is the durable record for the clean-slate AsyncStorage-to-SQLite refact
 | 2026-05-21 | `rg -n "retry_count|last_error|next_retry_at|finalizeOutboxOnlyTerminalFailure|Unknown sync table|resetInFlight|MISSING_OUTBOX_PAYLOAD" src/db/repositories/sqliteRepositoryUtils.js src/services/offlineSync.js __tests__/timeEntriesRepository.test.js __tests__/offlineSyncOutbox.test.js` | Passed | Confirmed retry metadata reset fields, unknown-table outbox-only terminalization, in-flight reset, missing-payload classification, and corresponding regression tests are present. |
 | 2026-05-21 | `git diff --check` | Passed | No whitespace errors after follow-up Plan 4 review-agent fixes. |
 | 2026-05-21 | Follow-up Plan 4 correctness review pass | Passed | Reviewer confirmed no blockers after unknown-table terminalization and retry metadata reset fixes; original critical flows remained intact. |
+| 2026-05-21 | `npm test -- --runInBand __tests__/supabaseRequestQueue.test.js __tests__/AuthContext.test.js` | Failed as expected, then passed | Red tests reproduced missing Supabase request queue and stale post-signout profile update; green covers serialized queue execution, deferred auth profile reads, and stale-result suppression. |
+| 2026-05-21 | `npm test -- --runInBand __tests__/ChildrenContext.test.js` | Failed as expected, then passed | Red failed on missing bundled preload service; green covers one preloaded child-data pull and cache preservation on partial pull errors. |
+| 2026-05-21 | `npm test -- --runInBand __tests__/ClassesContext.plan5.test.js` | Failed as expected, then passed | Red caught missing active academic year on class creation and class delete double-writing children; green covers both Plan 5 contracts. |
+| 2026-05-21 | `npm test -- --runInBand __tests__/AuthContext.test.js __tests__/supabaseRequestQueue.test.js __tests__/ChildrenContext.test.js __tests__/ClassesContext.plan5.test.js __tests__/ClassesContext.test.js` | Passed | Plan 5 auth/context targeted set passed 5 suites / 12 tests. Existing AuthContext console logs remain expected test noise. |
+| 2026-05-21 | `rg "storage\\." src/screens src/hooks src/components` | Passed with migration callers | Captured the screen/hook/component storage caller list in this log before Task 3 edits, per Plan 5 Step 0. |
+| 2026-05-21 | `npm test -- --runInBand` | Passed | Full Jest suite passed 37 suites / 174 tests after initial Plan 5 auth and context migration slices. Existing React Native Paper icon warnings, AuthContext logs, and OfflineContext logs remain non-blocking test noise. |

@@ -1,5 +1,6 @@
 import React, { createContext, useState, useEffect, useContext, useRef } from 'react';
 import { supabase } from '../services/supabaseClient';
+import { enqueueSupabaseRequest } from '../services/supabaseRequestQueue';
 import { storage } from '../utils/storage';
 import { normalizeProfile } from '../utils/profileNormalizer';
 
@@ -14,6 +15,7 @@ export const AuthProvider = ({ children }) => {
   const manualSignOutInProgressRef = useRef(false);
   const pendingSignOutTimeoutRef = useRef(null);
   const currentUserIdRef = useRef(null);
+  const profileLoadVersionRef = useRef(0);
 
   const clearPendingSignOutTimeout = () => {
     if (pendingSignOutTimeoutRef.current) {
@@ -25,6 +27,7 @@ export const AuthProvider = ({ children }) => {
   const commitSignedOutState = (reason) => {
     clearPendingSignOutTimeout();
     currentUserIdRef.current = null;
+    profileLoadVersionRef.current += 1;
     setSession(null);
     setUser(null);
     setProfile(null);
@@ -47,7 +50,7 @@ export const AuthProvider = ({ children }) => {
           currentUserIdRef.current = initialSession.user.id;
           setSession(initialSession);
           setUser(initialSession.user);
-          loadUserProfile(initialSession.user.id);
+          scheduleUserProfileLoad(initialSession.user.id);
           return;
         }
 
@@ -69,7 +72,7 @@ export const AuthProvider = ({ children }) => {
         currentUserIdRef.current = nextSession.user.id;
         setSession(nextSession);
         setUser(nextSession.user);
-        loadUserProfile(nextSession.user.id);
+        scheduleUserProfileLoad(nextSession.user.id);
         return;
       }
 
@@ -101,10 +104,31 @@ export const AuthProvider = ({ children }) => {
     };
   }, []);
 
-  const loadUserProfile = async (userId) => {
+  const isCurrentProfileLoad = (userId, version) => (
+    currentUserIdRef.current === userId && profileLoadVersionRef.current === version
+  );
+
+  const scheduleUserProfileLoad = (userId) => {
+    profileLoadVersionRef.current += 1;
+    const version = profileLoadVersionRef.current;
+    setTimeout(() => {
+      loadUserProfile(userId, version);
+    }, 0);
+  };
+
+  const loadUserProfile = async (userId, version = null) => {
+    const profileLoadVersion = version || profileLoadVersionRef.current + 1;
+    if (!version) {
+      profileLoadVersionRef.current = profileLoadVersion;
+    }
+
     try {
       // Try to load from local storage first
       const localProfile = await storage.getUserProfile();
+      if (!isCurrentProfileLoad(userId, profileLoadVersion)) {
+        return;
+      }
+
       if (localProfile) {
         const normalizedLocalProfile = normalizeProfile(localProfile);
         setProfile(normalizedLocalProfile);
@@ -112,11 +136,17 @@ export const AuthProvider = ({ children }) => {
       }
 
       // Then fetch from Supabase
-      const { data, error } = await supabase
-        .from('users')
-        .select('*, school_lookup:schools(id,name), job_title_lookup:job_titles(id,name,code)')
-        .eq('id', userId)
-        .single();
+      const { data, error } = await enqueueSupabaseRequest(() => (
+        supabase
+          .from('users')
+          .select('*, school_lookup:schools(id,name), job_title_lookup:job_titles(id,name,code)')
+          .eq('id', userId)
+          .single()
+      ));
+
+      if (!isCurrentProfileLoad(userId, profileLoadVersion)) {
+        return;
+      }
 
       if (error) {
         console.error('Error loading profile:', error);
@@ -128,7 +158,9 @@ export const AuthProvider = ({ children }) => {
     } catch (error) {
       console.error('Error in loadUserProfile:', error);
     } finally {
-      setLoading(false);
+      if (isCurrentProfileLoad(userId, profileLoadVersion)) {
+        setLoading(false);
+      }
     }
   };
 

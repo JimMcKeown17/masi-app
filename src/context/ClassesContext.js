@@ -2,6 +2,7 @@ import React, { createContext, useState, useEffect, useContext, useRef } from 'r
 import { supabase } from '../services/supabaseClient';
 import { storage, STORAGE_KEYS } from '../utils/storage';
 import { fetchAndCacheSchools } from '../services/offlineSync';
+import { academicYearsRepository } from '../db/repositories/referenceDataRepository';
 import { useAuth } from './AuthContext';
 import { useOffline } from './OfflineContext';
 import { useChildren } from './ChildrenContext';
@@ -12,7 +13,7 @@ const ClassesContext = createContext({});
 export const ClassesProvider = ({ children: reactChildren }) => {
   const { user } = useAuth();
   const { isOnline, refreshSyncStatus, isSyncing } = useOffline();
-  const { children: childrenList, updateChild } = useChildren();
+  const { children: childrenList } = useChildren();
 
   const [schools, setSchools] = useState([]);
   const [classes, setClasses] = useState([]);
@@ -107,9 +108,18 @@ export const ClassesProvider = ({ children: reactChildren }) => {
    */
   const addClass = async (classData) => {
     try {
+      const activeAcademicYear = classData.academic_year_id
+        ? null
+        : await academicYearsRepository.getActive();
+      const academicYearId = classData.academic_year_id || activeAcademicYear?.id;
+      if (!academicYearId) {
+        throw new Error('No active academic year found for class creation');
+      }
+
       const newClass = {
         id: uuidv4(),
         ...classData,
+        academic_year_id: academicYearId,
         staff_id: user.id,
         created_by: user.id,
         created_at: new Date().toISOString(),
@@ -153,31 +163,15 @@ export const ClassesProvider = ({ children: reactChildren }) => {
   };
 
   /**
-   * Delete a class
-   * Also nulls out class_id on affected children in storage.
+   * Archive a class through the storage facade.
+   * Child membership/assignment side effects belong in the repository transaction,
+   * so the context should not double-write child rows here.
    */
   const deleteClass = async (classId) => {
     try {
       await storage.deleteClass(classId);
       setClasses(prev => prev.filter(c => c.id !== classId));
-
-      // Null out class_id on affected children
-      const allChildren = await storage.getChildren();
-      const affected = allChildren.filter(c => c.class_id === classId);
-      for (const child of affected) {
-        await storage.updateChild(child.id, {
-          class_id: null,
-          updated_at: new Date().toISOString(),
-          synced: false,
-        });
-      }
-      // Update children state via context if any were affected
-      if (affected.length > 0) {
-        // Trigger a re-render by updating each affected child in state
-        for (const child of affected) {
-          await updateChild(child.id, { class_id: null });
-        }
-      }
+      await refreshSyncStatus();
 
       return { success: true };
     } catch (error) {

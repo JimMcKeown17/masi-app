@@ -1,11 +1,22 @@
 import React, { createContext, useState, useEffect, useContext, useRef, useMemo, useCallback } from 'react';
 import { supabase } from '../services/supabaseClient';
 import { storage, STORAGE_KEYS } from '../utils/storage';
+import { pullPreloadedChildData } from '../services/preloadedChildData';
 import { useAuth } from './AuthContext';
 import { useOffline } from './OfflineContext';
 import { v4 as uuidv4 } from 'uuid';
 
 const ChildrenContext = createContext({});
+
+const mergeServerRows = (cached, serverRows) => {
+  const serverIds = new Set(serverRows.map(row => row.id));
+  const localToKeep = cached.filter(row => !serverIds.has(row.id));
+  return [...serverRows, ...localToKeep];
+};
+
+const shouldApplyPulledRows = (rows, errors) => (
+  Array.isArray(rows) && (rows.length > 0 || errors.length === 0)
+);
 
 export const ChildrenProvider = ({ children }) => {
   const { user } = useAuth();
@@ -34,9 +45,7 @@ export const ChildrenProvider = ({ children }) => {
   // Load data on mount when user is authenticated
   useEffect(() => {
     if (user?.id) {
-      loadChildren();
-      loadGroups();
-      loadChildrenGroups();
+      loadPreloadedChildData();
     }
   }, [user?.id]);
 
@@ -44,12 +53,52 @@ export const ChildrenProvider = ({ children }) => {
   const prevSyncingRef = useRef(isSyncing);
   useEffect(() => {
     if (prevSyncingRef.current && !isSyncing && user?.id) {
-      loadChildren();
-      loadGroups();
-      loadChildrenGroups();
+      loadPreloadedChildData();
     }
     prevSyncingRef.current = isSyncing;
   }, [isSyncing]);
+
+  const loadPreloadedChildData = async () => {
+    try {
+      setLoading(true);
+
+      const [cachedChildren, cachedGroups, cachedMemberships] = await Promise.all([
+        storage.getChildren(),
+        storage.getGroups(),
+        storage.getChildrenGroups(),
+      ]);
+      setChildrenList(cachedChildren);
+      setGroups(cachedGroups);
+      setChildrenGroups(cachedMemberships);
+
+      if (isOnline && user?.id) {
+        const pulled = await pullPreloadedChildData({ userId: user.id });
+        const errors = pulled.errors || [];
+
+        if (shouldApplyPulledRows(pulled.children, errors)) {
+          const merged = mergeServerRows(cachedChildren, pulled.children);
+          await storage.setItem(STORAGE_KEYS.CHILDREN, merged);
+          setChildrenList(merged);
+        }
+
+        if (shouldApplyPulledRows(pulled.groups, errors)) {
+          const merged = mergeServerRows(cachedGroups, pulled.groups);
+          await storage.setItem(STORAGE_KEYS.GROUPS, merged);
+          setGroups(merged);
+        }
+
+        if (shouldApplyPulledRows(pulled.childrenGroups, errors)) {
+          const merged = mergeServerRows(cachedMemberships, pulled.childrenGroups);
+          await storage.setItem(STORAGE_KEYS.CHILDREN_GROUPS, merged);
+          setChildrenGroups(merged);
+        }
+      }
+    } catch (error) {
+      console.error('Error in loadPreloadedChildData:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   /**
    * Load children assigned to current user
