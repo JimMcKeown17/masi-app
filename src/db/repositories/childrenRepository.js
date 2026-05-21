@@ -1,3 +1,4 @@
+import { v4 as uuidv4 } from 'uuid';
 import { resolveDatabase, runRepositoryTransaction } from './repositoryRuntime';
 import {
   enqueueDomainOutbox,
@@ -5,8 +6,10 @@ import {
   mapDomainRow,
   normalizeSyncFields,
   resolveProgrammeId,
+  shouldEnqueueOutbox,
   upsertDomainRecord,
 } from './domainRepositoryUtils';
+import { syncStatusFromSynced } from './sqliteRepositoryUtils';
 
 const CHILD_COLUMNS = [
   'id',
@@ -106,33 +109,51 @@ export const createChildrenRepository = ({ database } = {}) => {
       }, childRecord);
       await enqueueDomainOutbox(txn, 'children', child.id, 'insert', childRecord);
 
-      const assignment = normalizeSyncFields({
-        id: `${child.id}:${actorUserId}`,
-        user_id: actorUserId,
-        child_id: child.id,
-        assigned_at: now,
-        created_by: actorUserId,
-        sync_status: 'pending',
-      });
-      await upsertDomainRecord(txn, {
-        tableName: 'child_ea_assignments',
-        columns: RELATIONSHIP_COLUMNS.childEa,
-      }, assignment);
-      await enqueueDomainOutbox(txn, 'child_ea_assignments', assignment.id, 'insert', assignment);
+      const activeAssignment = await txn.getFirstAsync(`
+        select id
+        from child_ea_assignments
+        where user_id = ?
+          and child_id = ?
+          and unassigned_at is null
+      `, actorUserId, child.id);
+      if (!activeAssignment) {
+        const assignment = normalizeSyncFields({
+          id: uuidv4(),
+          user_id: actorUserId,
+          child_id: child.id,
+          assigned_at: now,
+          created_by: actorUserId,
+          sync_status: 'pending',
+        });
+        await upsertDomainRecord(txn, {
+          tableName: 'child_ea_assignments',
+          columns: RELATIONSHIP_COLUMNS.childEa,
+        }, assignment);
+        await enqueueDomainOutbox(txn, 'child_ea_assignments', assignment.id, 'insert', assignment);
+      }
 
-      const enrollment = normalizeSyncFields({
-        id: `${child.id}:${programmeId}`,
-        child_id: child.id,
-        programme_id: programmeId,
-        enrolled_at: now,
-        created_by: actorUserId,
-        sync_status: 'pending',
-      });
-      await upsertDomainRecord(txn, {
-        tableName: 'child_programme_enrollments',
-        columns: RELATIONSHIP_COLUMNS.programmeEnrollment,
-      }, enrollment);
-      await enqueueDomainOutbox(txn, 'child_programme_enrollments', enrollment.id, 'insert', enrollment);
+      const activeEnrollment = await txn.getFirstAsync(`
+        select id
+        from child_programme_enrollments
+        where child_id = ?
+          and programme_id = ?
+          and ended_at is null
+      `, child.id, programmeId);
+      if (!activeEnrollment) {
+        const enrollment = normalizeSyncFields({
+          id: uuidv4(),
+          child_id: child.id,
+          programme_id: programmeId,
+          enrolled_at: now,
+          created_by: actorUserId,
+          sync_status: 'pending',
+        });
+        await upsertDomainRecord(txn, {
+          tableName: 'child_programme_enrollments',
+          columns: RELATIONSHIP_COLUMNS.programmeEnrollment,
+        }, enrollment);
+        await enqueueDomainOutbox(txn, 'child_programme_enrollments', enrollment.id, 'insert', enrollment);
+      }
 
       if (child.class_id) {
         const activeYear = await getActiveAcademicYear(txn);
@@ -140,20 +161,32 @@ export const createChildrenRepository = ({ database } = {}) => {
           throw new Error('Cannot create child class membership without an active academic year');
         }
 
-        const membership = normalizeSyncFields({
-          id: `${child.id}:${child.class_id}:${activeYear.id}`,
-          child_id: child.id,
-          class_id: child.class_id,
-          academic_year_id: activeYear.id,
-          enrolled_at: now,
-          created_by: actorUserId,
-          sync_status: 'pending',
-        });
-        await upsertDomainRecord(txn, {
-          tableName: 'child_class_memberships',
-          columns: RELATIONSHIP_COLUMNS.classMembership,
-        }, membership);
-        await enqueueDomainOutbox(txn, 'child_class_memberships', membership.id, 'insert', membership);
+        const activeClassMembership = await txn.getFirstAsync(`
+          select id, class_id
+          from child_class_memberships
+          where child_id = ?
+            and academic_year_id = ?
+            and exited_at is null
+        `, child.id, activeYear.id);
+        if (activeClassMembership && activeClassMembership.class_id !== child.class_id) {
+          throw new Error('Child already has an active class membership for the active academic year');
+        }
+        if (!activeClassMembership) {
+          const membership = normalizeSyncFields({
+            id: uuidv4(),
+            child_id: child.id,
+            class_id: child.class_id,
+            academic_year_id: activeYear.id,
+            enrolled_at: now,
+            created_by: actorUserId,
+            sync_status: 'pending',
+          });
+          await upsertDomainRecord(txn, {
+            tableName: 'child_class_memberships',
+            columns: RELATIONSHIP_COLUMNS.classMembership,
+          }, membership);
+          await enqueueDomainOutbox(txn, 'child_class_memberships', membership.id, 'insert', membership);
+        }
       }
 
       return true;
@@ -169,27 +202,31 @@ export const createChildrenRepository = ({ database } = {}) => {
       ...updates,
       id,
       updated_at: updates.updated_at || new Date().toISOString(),
-      sync_status: updates.sync_status || (updates.synced === true ? 'synced' : 'pending'),
+      sync_status: updates.sync_status || syncStatusFromSynced(updates.synced),
     });
 
     await upsertDomainRecord(txn, {
       tableName: 'children',
       columns: CHILD_COLUMNS,
     }, next);
-    await enqueueDomainOutbox(txn, 'children', id, 'update', next);
+    if (shouldEnqueueOutbox(next)) {
+      await enqueueDomainOutbox(txn, 'children', id, 'update', next);
+    }
     return true;
   });
 
   const saveChildRecord = async (child, { transaction } = {}) => runWrite(transaction, async (txn) => {
     const record = normalizeSyncFields({
       ...child,
-      sync_status: child.sync_status || (child.synced === true ? 'synced' : 'pending'),
+      sync_status: child.sync_status || syncStatusFromSynced(child.synced),
     });
     await upsertDomainRecord(txn, {
       tableName: 'children',
       columns: CHILD_COLUMNS,
     }, record);
-    await enqueueDomainOutbox(txn, 'children', child.id, 'insert', record);
+    if (shouldEnqueueOutbox(record)) {
+      await enqueueDomainOutbox(txn, 'children', child.id, 'insert', record);
+    }
     return true;
   });
 
@@ -216,13 +253,15 @@ export const createChildrenRepository = ({ database } = {}) => {
       assigned_at: assignment.assigned_at || assignment.created_at || new Date().toISOString(),
       unassigned_at: assignment.unassigned_at || null,
       created_by: assignment.created_by || assignment.staff_id || assignment.user_id,
-      sync_status: assignment.sync_status || (assignment.synced === true ? 'synced' : 'pending'),
+      sync_status: assignment.sync_status || syncStatusFromSynced(assignment.synced),
     });
     await upsertDomainRecord(txn, {
       tableName: 'child_ea_assignments',
       columns: RELATIONSHIP_COLUMNS.childEa,
     }, record);
-    await enqueueDomainOutbox(txn, 'child_ea_assignments', record.id, record.unassigned_at ? 'archive' : 'insert', record);
+    if (shouldEnqueueOutbox(record)) {
+      await enqueueDomainOutbox(txn, 'child_ea_assignments', record.id, record.unassigned_at ? 'archive' : 'insert', record);
+    }
     return true;
   });
 
@@ -278,6 +317,9 @@ export const createChildrenRepository = ({ database } = {}) => {
       join child_class_memberships ccm
         on ccm.child_id = children.id
        and ccm.exited_at is null
+      join classes
+        on classes.id = ccm.class_id
+       and classes.archived_at is null
       where children.archived_at is null
       order by children.first_name, children.last_name
     `, userId, userId);
@@ -306,6 +348,7 @@ export const createChildrenRepository = ({ database } = {}) => {
       ['child_ea_assignments', 'unassigned_at', 'child_id'],
       ['child_programme_enrollments', 'ended_at', 'child_id'],
       ['child_class_memberships', 'exited_at', 'child_id'],
+      ['child_group_memberships', 'removed_at', 'child_id'],
     ];
 
     for (const [tableName, endColumn, childColumn] of relationshipUpdates) {

@@ -4,8 +4,10 @@ import {
   mapDomainRow,
   normalizeSyncFields,
   resolveProgrammeId,
+  shouldEnqueueOutbox,
   upsertDomainRecord,
 } from './domainRepositoryUtils';
+import { syncStatusFromSynced } from './sqliteRepositoryUtils';
 
 const MASTERY_COLUMNS = [
   'id',
@@ -70,14 +72,16 @@ export const createMasteryRepository = ({ database } = {}) => {
       programme_id: programmeId,
       source: record.source || 'taught',
       deleted_at: record._deleted ? (record.deleted_at || record.updated_at || new Date().toISOString()) : record.deleted_at || null,
-      sync_status: record.sync_status || (record.synced === true ? 'synced' : 'pending'),
+      sync_status: record.sync_status || syncStatusFromSynced(record.synced),
     });
 
     await upsertDomainRecord(txn, {
       tableName: 'letter_mastery',
       columns: MASTERY_COLUMNS,
     }, masteryRecord);
-    await enqueueDomainOutbox(txn, 'letter_mastery', id, masteryRecord.deleted_at ? 'archive' : 'insert', masteryRecord);
+    if (shouldEnqueueOutbox(masteryRecord)) {
+      await enqueueDomainOutbox(txn, 'letter_mastery', id, masteryRecord.deleted_at ? 'archive' : 'insert', masteryRecord);
+    }
     return true;
   });
 
@@ -92,13 +96,15 @@ export const createMasteryRepository = ({ database } = {}) => {
       ...updates,
       id,
       deleted_at: deletedAt,
-      sync_status: updates.sync_status || (updates.synced === true ? 'synced' : 'pending'),
+      sync_status: updates.sync_status || syncStatusFromSynced(updates.synced),
     });
     await upsertDomainRecord(txn, {
       tableName: 'letter_mastery',
       columns: MASTERY_COLUMNS,
     }, masteryRecord);
-    await enqueueDomainOutbox(txn, 'letter_mastery', id, deletedAt ? 'archive' : 'update', masteryRecord);
+    if (shouldEnqueueOutbox(masteryRecord)) {
+      await enqueueDomainOutbox(txn, 'letter_mastery', id, deletedAt ? 'archive' : 'update', masteryRecord);
+    }
     return true;
   });
 

@@ -1,5 +1,12 @@
 import { resolveDatabase, runRepositoryTransaction } from './repositoryRuntime';
-import { enqueueDomainOutbox, mapDomainRow, normalizeSyncFields, upsertDomainRecord } from './domainRepositoryUtils';
+import {
+  enqueueDomainOutbox,
+  mapDomainRow,
+  normalizeSyncFields,
+  shouldEnqueueOutbox,
+  upsertDomainRecord,
+} from './domainRepositoryUtils';
+import { syncStatusFromSynced } from './sqliteRepositoryUtils';
 
 const CLASS_COLUMNS = [
   'id',
@@ -29,20 +36,22 @@ export const createClassesRepository = ({ database } = {}) => {
 
   const getClasses = async () => {
     const db = await resolveDatabase(database);
-    const rows = await db.getAllAsync('select * from classes order by name');
+    const rows = await db.getAllAsync('select * from classes where archived_at is null order by name');
     return rows.map(mapDomainRow);
   };
 
   const saveClass = async (classData, { transaction } = {}) => runWrite(transaction, async (txn) => {
     const record = normalizeSyncFields({
       ...classData,
-      sync_status: classData.sync_status || (classData.synced === true ? 'synced' : 'pending'),
+      sync_status: classData.sync_status || syncStatusFromSynced(classData.synced),
     });
     await upsertDomainRecord(txn, {
       tableName: 'classes',
       columns: CLASS_COLUMNS,
     }, record);
-    await enqueueDomainOutbox(txn, 'classes', classData.id, 'insert', record);
+    if (shouldEnqueueOutbox(record)) {
+      await enqueueDomainOutbox(txn, 'classes', classData.id, 'insert', record);
+    }
     return true;
   });
 
@@ -53,18 +62,15 @@ export const createClassesRepository = ({ database } = {}) => {
       ...mapDomainRow(existing),
       ...updates,
       id,
-      sync_status: updates.sync_status || (updates.synced === true ? 'synced' : 'pending'),
+      sync_status: updates.sync_status || syncStatusFromSynced(updates.synced),
     });
     await upsertDomainRecord(txn, {
       tableName: 'classes',
       columns: CLASS_COLUMNS,
     }, record);
-    await enqueueDomainOutbox(txn, 'classes', id, 'update', record);
-    return true;
-  });
-
-  const deleteClass = async (id, { transaction } = {}) => runWrite(transaction, async (txn) => {
-    await txn.runAsync('delete from classes where id = ?', id);
+    if (shouldEnqueueOutbox(record)) {
+      await enqueueDomainOutbox(txn, 'classes', id, 'update', record);
+    }
     return true;
   });
 
@@ -113,6 +119,8 @@ export const createClassesRepository = ({ database } = {}) => {
 
     return true;
   });
+
+  const deleteClass = async (id, options = {}) => archiveClass(id, options);
 
   return {
     getClasses,

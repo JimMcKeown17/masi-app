@@ -21,9 +21,11 @@
 - If `class_id` is not known at child creation, the `child_class_memberships` write is deferred until class assignment, and that membership write happens in the same transaction as the `children.class_id` update.
 - `childrenRepository.getMyChildren(userId)` returns only children assigned to the user, enrolled in the user's active programme, and joined through the child's active `child_class_memberships` row for current class context.
 - `childrenRepository.deleteIfNoHistory(childId)` may hard-delete only no-history children and must route synced remote hard deletes through `delete_child_if_no_history(childId)`.
-- `childrenRepository.archiveChild(childId)` sets `children.archived_at` and ends active `child_ea_assignments`, `child_programme_enrollments`, and `child_class_memberships` in one transaction with matching outbox rows.
+- `childrenRepository.archiveChild(childId)` sets `children.archived_at` and ends active `child_ea_assignments`, `child_programme_enrollments`, `child_class_memberships`, and `child_group_memberships` in one transaction with matching outbox rows.
 - `classesRepository.archiveClass(classId)` ends active `class_ea_assignments` and updates related class/grouping state in the same transaction.
+- `classesRepository.deleteClass(classId)` is a storage-facade compatibility alias for archive, not a local hard delete.
 - `groupsRepository.archiveGroup(groupId)` sets `groups.archived_at` and ends active `group_ea_assignments` and `child_group_memberships` in one transaction.
+- `groupsRepository.deleteGroup(groupId)` is a storage-facade compatibility alias for archive, not a local hard delete.
 
 ## Tasks
 

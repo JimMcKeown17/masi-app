@@ -4,8 +4,10 @@ import {
   mapDomainRow,
   normalizeSyncFields,
   resolveProgrammeId,
+  shouldEnqueueOutbox,
   upsertDomainRecord,
 } from './domainRepositoryUtils';
+import { syncStatusFromSynced } from './sqliteRepositoryUtils';
 
 const SESSION_COLUMNS = [
   'id',
@@ -49,6 +51,16 @@ const buildActivitiesPayload = (session) => ({
     pendingSessionTypeName: session.pendingSessionTypeName,
   },
 });
+
+const stripLegacySessionPayload = (record) => {
+  const activities = { ...(record.activities || {}) };
+  delete activities.__legacySession;
+
+  return {
+    ...record,
+    activities,
+  };
+};
 
 const mapSession = async (db, row) => {
   if (!row) return null;
@@ -107,7 +119,7 @@ export const createSessionsRepository = ({ database } = {}) => {
       ...session,
       programme_id: programmeId,
       activities: buildActivitiesPayload(session),
-      sync_status: session.sync_status || (session.synced === true ? 'synced' : 'pending'),
+      sync_status: session.sync_status || syncStatusFromSynced(session.synced),
     });
 
     await upsertDomainRecord(txn, {
@@ -115,7 +127,9 @@ export const createSessionsRepository = ({ database } = {}) => {
       columns: SESSION_COLUMNS,
       jsonColumns: ['activities'],
     }, record);
-    await enqueueDomainOutbox(txn, 'sessions', session.id, 'insert', record);
+    if (shouldEnqueueOutbox(record)) {
+      await enqueueDomainOutbox(txn, 'sessions', session.id, 'insert', stripLegacySessionPayload(record));
+    }
 
     const childIds = session.children_ids || [];
     for (const childId of childIds) {
@@ -125,13 +139,15 @@ export const createSessionsRepository = ({ database } = {}) => {
         child_id: childId,
         group_id: (session.group_ids || [])[0] || null,
         attendance_status: 'present',
-        sync_status: session.sync_status || (session.synced === true ? 'synced' : 'pending'),
+        sync_status: session.sync_status || syncStatusFromSynced(session.synced),
       });
       await upsertDomainRecord(txn, {
         tableName: 'session_attendees',
         columns: ATTENDEE_COLUMNS,
       }, attendee);
-      await enqueueDomainOutbox(txn, 'session_attendees', attendee.id, 'insert', attendee);
+      if (shouldEnqueueOutbox(attendee)) {
+        await enqueueDomainOutbox(txn, 'session_attendees', attendee.id, 'insert', attendee);
+      }
     }
 
     return true;

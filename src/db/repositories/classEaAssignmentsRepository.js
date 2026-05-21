@@ -1,5 +1,11 @@
 import { resolveDatabase, runRepositoryTransaction } from './repositoryRuntime';
-import { enqueueDomainOutbox, mapDomainRow, upsertDomainRecord } from './domainRepositoryUtils';
+import {
+  enqueueDomainOutbox,
+  mapDomainRow,
+  normalizeSyncFields,
+  shouldEnqueueOutbox,
+  upsertDomainRecord,
+} from './domainRepositoryUtils';
 
 const COLUMNS = [
   'id',
@@ -20,11 +26,14 @@ const COLUMNS = [
 export const createClassEaAssignmentsRepository = ({ database } = {}) => {
   const save = async (assignment, { transaction } = {}) => {
     const write = async (txn) => {
+      const record = normalizeSyncFields(assignment);
       await upsertDomainRecord(txn, {
         tableName: 'class_ea_assignments',
         columns: COLUMNS,
-      }, assignment);
-      await enqueueDomainOutbox(txn, 'class_ea_assignments', assignment.id, assignment.unassigned_at ? 'archive' : 'insert', assignment);
+      }, record);
+      if (shouldEnqueueOutbox(record)) {
+        await enqueueDomainOutbox(txn, 'class_ea_assignments', record.id, record.unassigned_at ? 'archive' : 'insert', record);
+      }
       return true;
     };
 

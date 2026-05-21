@@ -4,9 +4,10 @@ import {
   mapDomainRow,
   normalizeSyncFields,
   resolveProgrammeId,
+  shouldEnqueueOutbox,
   upsertDomainRecord,
 } from './domainRepositoryUtils';
-import { decodeJson } from './sqliteRepositoryUtils';
+import { decodeJson, syncStatusFromSynced } from './sqliteRepositoryUtils';
 
 const ASSESSMENT_COLUMNS = [
   'id',
@@ -111,7 +112,7 @@ export const createAssessmentsRepository = ({ database } = {}) => {
       total_items: assessment.total_items ?? assessment.letters_attempted ?? null,
       assessment_purpose: assessment.assessment_purpose || 'progress_check',
       items_tested: assessment.items_tested || [],
-      sync_status: assessment.sync_status || (assessment.synced === true ? 'synced' : 'pending'),
+      sync_status: assessment.sync_status || syncStatusFromSynced(assessment.synced),
     });
 
     await upsertDomainRecord(txn, {
@@ -119,7 +120,9 @@ export const createAssessmentsRepository = ({ database } = {}) => {
       columns: ASSESSMENT_COLUMNS,
       jsonColumns: ['items_tested'],
     }, record);
-    await enqueueDomainOutbox(txn, 'assessments', assessment.id, 'insert', record);
+    if (shouldEnqueueOutbox(record)) {
+      await enqueueDomainOutbox(txn, 'assessments', assessment.id, 'insert', record);
+    }
 
     const itemRows = [
       {
@@ -151,7 +154,7 @@ export const createAssessmentsRepository = ({ database } = {}) => {
     for (const item of itemRows) {
       const itemRecord = normalizeSyncFields({
         ...item,
-        sync_status: assessment.sync_status || (assessment.synced === true ? 'synced' : 'pending'),
+        sync_status: assessment.sync_status || syncStatusFromSynced(assessment.synced),
       });
       await upsertDomainRecord(txn, {
         tableName: 'assessment_items',
@@ -159,7 +162,9 @@ export const createAssessmentsRepository = ({ database } = {}) => {
         booleanColumns: ['is_correct'],
         jsonColumns: ['metadata'],
       }, itemRecord);
-      await enqueueDomainOutbox(txn, 'assessment_items', item.id, 'insert', itemRecord);
+      if (shouldEnqueueOutbox(itemRecord)) {
+        await enqueueDomainOutbox(txn, 'assessment_items', item.id, 'insert', itemRecord);
+      }
     }
 
     return true;

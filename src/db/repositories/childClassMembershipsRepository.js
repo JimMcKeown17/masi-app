@@ -1,5 +1,11 @@
 import { resolveDatabase, runRepositoryTransaction } from './repositoryRuntime';
-import { enqueueDomainOutbox, mapDomainRow, upsertDomainRecord } from './domainRepositoryUtils';
+import {
+  enqueueDomainOutbox,
+  mapDomainRow,
+  normalizeSyncFields,
+  shouldEnqueueOutbox,
+  upsertDomainRecord,
+} from './domainRepositoryUtils';
 
 const COLUMNS = [
   'id',
@@ -19,11 +25,14 @@ const COLUMNS = [
 export const createChildClassMembershipsRepository = ({ database } = {}) => {
   const save = async (membership, { transaction } = {}) => {
     const write = async (txn) => {
+      const record = normalizeSyncFields(membership);
       await upsertDomainRecord(txn, {
         tableName: 'child_class_memberships',
         columns: COLUMNS,
-      }, membership);
-      await enqueueDomainOutbox(txn, 'child_class_memberships', membership.id, membership.exited_at ? 'archive' : 'insert', membership);
+      }, record);
+      if (shouldEnqueueOutbox(record)) {
+        await enqueueDomainOutbox(txn, 'child_class_memberships', record.id, record.exited_at ? 'archive' : 'insert', record);
+      }
       return true;
     };
 

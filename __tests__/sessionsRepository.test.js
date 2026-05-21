@@ -54,4 +54,62 @@ describe('sessionsRepository', () => {
       await db.closeAsync();
     }
   });
+
+  test('session outbox payload strips local-only legacy fields while the local row can still restore them', async () => {
+    const db = await createMigratedDatabase(runMigrations);
+
+    try {
+      await seedCoreData(db);
+      const repository = createSessionsRepository({ database: db });
+
+      await repository.saveSession({
+        id: 'session-legacy',
+        user_id: 'user-1',
+        programme_id: 'programme-a',
+        session_date: '2026-05-21',
+        children_ids: [],
+        activities: { letters_focused: ['a'] },
+        session_type_id: 'job-title-1',
+        pendingSessionTypeCode: 'literacy',
+        synced: false,
+      });
+
+      const row = await db.getFirstAsync('select activities from sessions where id = ?', 'session-legacy');
+      expect(JSON.parse(row.activities).__legacySession).toEqual(expect.objectContaining({
+        session_type_id: 'job-title-1',
+        pendingSessionTypeCode: 'literacy',
+      }));
+
+      const outbox = await db.getFirstAsync(`
+        select payload
+        from sync_outbox
+        where table_name = 'sessions'
+          and record_id = 'session-legacy'
+      `);
+      expect(JSON.parse(outbox.payload).activities).toEqual({ letters_focused: ['a'] });
+    } finally {
+      await db.closeAsync();
+    }
+  });
+
+  test('legacy programme fallback is local terminal state, not a pushable reference row', async () => {
+    const db = await createMigratedDatabase(runMigrations);
+
+    try {
+      const repository = createSessionsRepository({ database: db });
+
+      await repository.saveSession({
+        id: 'session-local',
+        user_id: 'user-without-programme',
+        session_date: '2026-05-21',
+        children_ids: [],
+        synced: false,
+      });
+
+      expect(await db.getFirstAsync('select id, sync_status from programmes where id = ?', 'local-legacy-programme'))
+        .toEqual({ id: 'local-legacy-programme', sync_status: 'terminal' });
+    } finally {
+      await db.closeAsync();
+    }
+  });
 });

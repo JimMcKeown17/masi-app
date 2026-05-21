@@ -4,8 +4,10 @@ import {
   mapDomainRow,
   normalizeSyncFields,
   resolveProgrammeId,
+  shouldEnqueueOutbox,
   upsertDomainRecord,
 } from './domainRepositoryUtils';
+import { syncStatusFromSynced } from './sqliteRepositoryUtils';
 
 const GROUP_COLUMNS = [
   'id',
@@ -47,7 +49,7 @@ export const createGroupsRepository = ({ database } = {}) => {
 
   const getGroups = async () => {
     const db = await resolveDatabase(database);
-    const rows = await db.getAllAsync('select * from groups order by name');
+    const rows = await db.getAllAsync('select * from groups where archived_at is null order by name');
     return rows.map(mapDomainRow);
   };
 
@@ -66,13 +68,15 @@ export const createGroupsRepository = ({ database } = {}) => {
     const record = normalizeSyncFields({
       ...group,
       programme_id: programmeId,
-      sync_status: group.sync_status || (group.synced === true ? 'synced' : 'pending'),
+      sync_status: group.sync_status || syncStatusFromSynced(group.synced),
     });
     await upsertDomainRecord(txn, {
       tableName: 'groups',
       columns: GROUP_COLUMNS,
     }, record);
-    await enqueueDomainOutbox(txn, 'groups', group.id, 'insert', record);
+    if (shouldEnqueueOutbox(record)) {
+      await enqueueDomainOutbox(txn, 'groups', group.id, 'insert', record);
+    }
     return true;
   });
 
@@ -83,18 +87,15 @@ export const createGroupsRepository = ({ database } = {}) => {
       ...mapDomainRow(existing),
       ...updates,
       id,
-      sync_status: updates.sync_status || (updates.synced === true ? 'synced' : 'pending'),
+      sync_status: updates.sync_status || syncStatusFromSynced(updates.synced),
     });
     await upsertDomainRecord(txn, {
       tableName: 'groups',
       columns: GROUP_COLUMNS,
     }, record);
-    await enqueueDomainOutbox(txn, 'groups', id, 'update', record);
-    return true;
-  });
-
-  const deleteGroup = async (id, { transaction } = {}) => runWrite(transaction, async (txn) => {
-    await txn.runAsync('delete from groups where id = ?', id);
+    if (shouldEnqueueOutbox(record)) {
+      await enqueueDomainOutbox(txn, 'groups', id, 'update', record);
+    }
     return true;
   });
 
@@ -103,13 +104,15 @@ export const createGroupsRepository = ({ database } = {}) => {
       id: membership.id || `${membership.child_id}:${membership.group_id}`,
       joined_at: membership.joined_at || membership.created_at || new Date().toISOString(),
       ...membership,
-      sync_status: membership.sync_status || (membership.synced === true ? 'synced' : 'pending'),
+      sync_status: membership.sync_status || syncStatusFromSynced(membership.synced),
     });
     await upsertDomainRecord(txn, {
       tableName: 'child_group_memberships',
       columns: MEMBERSHIP_COLUMNS,
     }, record);
-    await enqueueDomainOutbox(txn, 'child_group_memberships', record.id, 'insert', record);
+    if (shouldEnqueueOutbox(record)) {
+      await enqueueDomainOutbox(txn, 'child_group_memberships', record.id, 'insert', record);
+    }
     return true;
   });
 
@@ -202,6 +205,8 @@ export const createGroupsRepository = ({ database } = {}) => {
 
     return true;
   });
+
+  const deleteGroup = async (id, options = {}) => archiveGroup(id, options);
 
   return {
     getGroups,

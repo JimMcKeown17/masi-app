@@ -30,6 +30,8 @@ export const enqueueDomainOutbox = async (db, tableName, recordId, operation, pa
   })
 );
 
+export const shouldEnqueueOutbox = (record = {}) => !['synced', 'terminal'].includes(record.sync_status);
+
 export const getActiveProgrammeAssignment = async (db, userId) => db.getFirstAsync(`
   select *
   from staff_programme_assignments
@@ -46,9 +48,11 @@ export const getActiveProgrammeId = async (db, userId) => {
 
 export const ensureLegacyProgramme = async (db) => {
   await db.runAsync(`
-    insert into programmes (id, code, name, is_active)
-    values (?, ?, ?, 1)
-    on conflict(id) do nothing
+    insert into programmes (id, code, name, is_active, sync_status)
+    values (?, ?, ?, 1, 'terminal')
+    on conflict(id) do update set
+      sync_status = 'terminal',
+      updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
   `, LEGACY_PROGRAMME_ID, 'legacy-local', 'Legacy Local Programme');
   return LEGACY_PROGRAMME_ID;
 };

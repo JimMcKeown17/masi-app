@@ -8,6 +8,7 @@ import {
   replaceAllRecords,
   setRecordLastSyncError,
   setRecordSyncStatus,
+  syncStatusFromSynced,
   timestamp,
   toBoolean,
   toSyncedFlag,
@@ -23,6 +24,9 @@ describe('SQLite repository utilities', () => {
     expect(toSyncedFlag('synced')).toBe(true);
     expect(toSyncedFlag('pending')).toBe(false);
     expect(toSyncedFlag(undefined)).toBe(false);
+    expect(syncStatusFromSynced(true)).toBe('synced');
+    expect(syncStatusFromSynced(false)).toBe('pending');
+    expect(syncStatusFromSynced(undefined)).toBe('pending');
 
     expect(decodeJson(encodeJson({ letters: ['a', 'm'] }))).toEqual({ letters: ['a', 'm'] });
     expect(decodeJson(null, [])).toEqual([]);

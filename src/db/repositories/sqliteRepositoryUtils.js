@@ -17,7 +17,7 @@ export const toBoolean = (value) => {
 
 export const toSyncedFlag = (syncStatus) => syncStatus === 'synced';
 
-export const syncStatusFromSynced = (synced) => (synced === false ? 'pending' : 'synced');
+export const syncStatusFromSynced = (synced) => (synced === true ? 'synced' : 'pending');
 
 export const encodeJson = (value, fallback = null) => {
   if (value === undefined) return fallback == null ? null : JSON.stringify(fallback);

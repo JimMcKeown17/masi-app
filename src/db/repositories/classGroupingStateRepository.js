@@ -1,5 +1,11 @@
 import { resolveDatabase, runRepositoryTransaction } from './repositoryRuntime';
-import { enqueueDomainOutbox, mapDomainRow, upsertDomainRecord } from './domainRepositoryUtils';
+import {
+  enqueueDomainOutbox,
+  mapDomainRow,
+  normalizeSyncFields,
+  shouldEnqueueOutbox,
+  upsertDomainRecord,
+} from './domainRepositoryUtils';
 
 const COLUMNS = [
   'id',
@@ -21,11 +27,14 @@ const COLUMNS = [
 export const createClassGroupingStateRepository = ({ database } = {}) => {
   const save = async (state, { transaction } = {}) => {
     const write = async (txn) => {
+      const record = normalizeSyncFields(state);
       await upsertDomainRecord(txn, {
         tableName: 'class_grouping_state',
         columns: COLUMNS,
-      }, state);
-      await enqueueDomainOutbox(txn, 'class_grouping_state', state.id, 'update', state);
+      }, record);
+      if (shouldEnqueueOutbox(record)) {
+        await enqueueDomainOutbox(txn, 'class_grouping_state', record.id, 'update', record);
+      }
       return true;
     };
 

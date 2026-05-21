@@ -1,5 +1,11 @@
 import { resolveDatabase, runRepositoryTransaction } from './repositoryRuntime';
-import { enqueueDomainOutbox, mapDomainRow, upsertDomainRecord } from './domainRepositoryUtils';
+import {
+  enqueueDomainOutbox,
+  mapDomainRow,
+  normalizeSyncFields,
+  shouldEnqueueOutbox,
+  upsertDomainRecord,
+} from './domainRepositoryUtils';
 
 const COLUMNS = [
   'id',
@@ -39,11 +45,14 @@ export const createGroupingVersionsRepository = ({ database } = {}) => {
         }
       }
 
+      const record = normalizeSyncFields(groupingVersion);
       await upsertDomainRecord(txn, {
         tableName: 'grouping_versions',
         columns: COLUMNS,
-      }, groupingVersion);
-      await enqueueDomainOutbox(txn, 'grouping_versions', groupingVersion.id, groupingVersion.status === 'archived' ? 'archive' : 'insert', groupingVersion);
+      }, record);
+      if (shouldEnqueueOutbox(record)) {
+        await enqueueDomainOutbox(txn, 'grouping_versions', record.id, record.status === 'archived' ? 'archive' : 'insert', record);
+      }
       return true;
     };
 

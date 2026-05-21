@@ -93,4 +93,72 @@ describe('groupsRepository', () => {
       await db.closeAsync();
     }
   });
+
+  test('deleteGroup archives synced groups with dependents instead of creating a sync orphan', async () => {
+    const db = await createMigratedDatabase(runMigrations);
+
+    try {
+      await seedCoreData(db);
+      await createChildrenRepository({ database: db }).save({
+        id: 'child-1',
+        first_name: 'Amahle',
+        last_name: 'Dlamini',
+        class_id: 'class-1',
+        created_by: 'user-1',
+        synced: false,
+      }, { actorUserId: 'user-1' });
+      const groupsRepository = createGroupsRepository({ database: db });
+      const assignmentsRepository = createGroupEaAssignmentsRepository({ database: db });
+
+      await groupsRepository.saveGroup({
+        id: 'group-1',
+        name: 'Group 1',
+        programme_id: 'programme-a',
+        class_id: 'class-1',
+        created_by: 'user-1',
+        synced: false,
+      });
+      await groupsRepository.addChildToGroup({
+        id: 'membership-1',
+        child_id: 'child-1',
+        group_id: 'group-1',
+        synced: false,
+      });
+      await assignmentsRepository.save({
+        id: 'group-assignment-1',
+        group_id: 'group-1',
+        ea_user_id: 'user-1',
+        programme_id: 'programme-a',
+        assigned_at: '2026-05-21T08:00:00.000Z',
+        created_by: 'user-1',
+        synced: false,
+      });
+      await db.runAsync("update groups set sync_status = 'synced' where id = 'group-1'");
+      await db.runAsync('delete from sync_outbox');
+
+      await groupsRepository.deleteGroup('group-1', {
+        actorUserId: 'user-1',
+        archivedAt: '2026-05-26T00:00:00.000Z',
+      });
+
+      expect(await db.getFirstAsync('select id, archived_at from groups where id = ?', 'group-1'))
+        .toEqual({ id: 'group-1', archived_at: '2026-05-26T00:00:00.000Z' });
+      expect(await db.getFirstAsync('select unassigned_at from group_ea_assignments where id = ?', 'group-assignment-1'))
+        .toEqual({ unassigned_at: '2026-05-26T00:00:00.000Z' });
+      expect(await db.getFirstAsync('select removed_at from child_group_memberships where id = ?', 'membership-1'))
+        .toEqual({ removed_at: '2026-05-26T00:00:00.000Z' });
+      expect(await db.getFirstAsync(`
+        select table_name, record_id, operation
+        from sync_outbox
+        where table_name = 'groups'
+          and record_id = 'group-1'
+      `)).toEqual({
+        table_name: 'groups',
+        record_id: 'group-1',
+        operation: 'archive',
+      });
+    } finally {
+      await db.closeAsync();
+    }
+  });
 });

@@ -71,4 +71,48 @@ describe('classesRepository', () => {
       await db.closeAsync();
     }
   });
+
+  test('deleteClass archives synced classes with dependents instead of creating a sync orphan', async () => {
+    const db = await createMigratedDatabase(runMigrations);
+
+    try {
+      await seedCoreData(db);
+      const classesRepository = createClassesRepository({ database: db });
+      const assignmentsRepository = createClassEaAssignmentsRepository({ database: db });
+
+      await assignmentsRepository.save({
+        id: 'class-assignment-1',
+        class_id: 'class-1',
+        ea_user_id: 'user-1',
+        programme_id: 'programme-a',
+        assigned_at: '2026-05-21T08:00:00.000Z',
+        created_by: 'user-1',
+        synced: false,
+      });
+      await db.runAsync("update classes set sync_status = 'synced' where id = 'class-1'");
+      await db.runAsync('delete from sync_outbox');
+
+      await classesRepository.deleteClass('class-1', {
+        actorUserId: 'user-1',
+        archivedAt: '2026-05-26T00:00:00.000Z',
+      });
+
+      expect(await db.getFirstAsync('select id, archived_at from classes where id = ?', 'class-1'))
+        .toEqual({ id: 'class-1', archived_at: '2026-05-26T00:00:00.000Z' });
+      expect(await db.getFirstAsync('select unassigned_at from class_ea_assignments where id = ?', 'class-assignment-1'))
+        .toEqual({ unassigned_at: '2026-05-26T00:00:00.000Z' });
+      expect(await db.getFirstAsync(`
+        select table_name, record_id, operation
+        from sync_outbox
+        where table_name = 'classes'
+          and record_id = 'class-1'
+      `)).toEqual({
+        table_name: 'classes',
+        record_id: 'class-1',
+        operation: 'archive',
+      });
+    } finally {
+      await db.closeAsync();
+    }
+  });
 });
