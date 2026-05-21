@@ -40,6 +40,7 @@ module.exports = () => {
         ],
       },
       plugins: [
+        'expo-sqlite',
         [
           'expo-location',
           {

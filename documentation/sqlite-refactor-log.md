@@ -4,8 +4,8 @@ This log is the durable record for the clean-slate AsyncStorage-to-SQLite refact
 
 ## Current Phase Checklist
 
-- [ ] Spec signoff
-- [ ] Plan 1 - Backend and config guardrails
+- [x] Spec signoff
+- [x] Plan 1 - Backend and config guardrails
 - [ ] Plan 2 - Foundation and schema
 - [ ] Plan 3 - Repositories and storage facade
 - [ ] Plan 4 - Sync engine and outbox
@@ -67,6 +67,11 @@ This log is the durable record for the clean-slate AsyncStorage-to-SQLite refact
 | 2026-05-21 | Initial Masi clean-slate schema was leaner than Zazi by eight tables. | Add a Zazi-alignment migration with academic years, assessment windows, teachers, child-class history, class/group EA assignments, grouping versions, class grouping state, column additions, and an updated RLS helper. | Compare new clean-slate schemas against the most-similar existing app before treating a spec as final. |
 | 2026-05-21 | Seed migration did not include schools, an active academic year, or a baseline assessment window. | Extend Plan 1 with Zazi-alignment seed data: active 2026 year, 2026 baseline window, and 325 schools from `scripts/masi-schools-db-apr26.csv`. | Treat "first sign-in shows useful reference data" as a Plan 1 acceptance criterion. |
 | 2026-05-21 | Review found direct child hard delete would cascade and erase child history. | Add a child delete guard migration that drops the child delete policy, revokes direct delete, and exposes only `delete_child_if_no_history(child_id)` for no-history deletes. | Any new table references `children(id)` with `on delete cascade`; update the RPC's history check before using hard delete. |
+| 2026-05-21 | `npx expo install expo-sqlite` cannot automatically update dynamic `app.config.js`. | Manually added the `expo-sqlite` config plugin entry after dependency install. | Any future Expo install expects automatic config mutation after the Plan 1 static-to-dynamic config migration. |
+| 2026-05-21 | The first Plan 2 transaction serialization test used bare promise flushing, which made the assertion sensitive to JavaScript scheduling rather than behavior. | Replaced the flush with an explicit deferred signal from the mocked native transaction boundary. | Async ordering tests assert on a concrete observable signal. |
+| 2026-05-21 | Plan 2 Android staging launch could not complete in the current environment. | Sandbox run failed before Metro with `ERR_SOCKET_BAD_PORT`; rerun outside the sandbox started Metro but exited because no Android device/emulator was available. | An Android emulator or real device is available for the Plan 2 pre-repository launch gate. |
+| 2026-05-21 | Plan 2 review found local schema drift from the backend and sync contract. | Added active unique indexes for `child_ea_assignments` and `child_programme_enrollments`, changed row `sync_status` to `pending/synced/failed/terminal`, changed outbox operations to `insert/update/archive/hard_delete/restore`, and allowed terminal outbox rows. | Any Plan 4 sync-engine contract changes the outbox operation/status vocabulary. |
+| 2026-05-21 | Plan 2 review found concurrent `runMigrations()` calls bypassed the app-level write queue. | Added a migration-level promise queue so a second migration run re-reads `PRAGMA user_version` only after the first run commits and updates the pragma. | Migration runner is moved into a single boot-time call site that is already serialized and tests prove that invariant. |
 
 ## Verification Register
 
@@ -172,3 +177,15 @@ This log is the durable record for the clean-slate AsyncStorage-to-SQLite refact
 | 2026-05-21 | `npm run sqlite:staging:dry-run` | Passed | Remote database is up to date after applying the child delete guard migration. |
 | 2026-05-21 | `git diff --check` | Passed | No whitespace errors after child delete guard, archive-contract, admin-class, and active-year docs updates. |
 | 2026-05-21 | `npm test -- --runInBand` | Passed | Full Jest suite passed 19 suites / 97 tests. Existing React Native Paper icon warnings remain non-blocking test noise. |
+| 2026-05-21 | `npx expo install expo-sqlite` | Passed with manual config follow-up | Installed `expo-sqlite@~16.0.10`; Expo CLI reported it could not write to dynamic `app.config.js`, so the plugin entry was added manually. Initial sandboxed attempt failed DNS resolution and was rerun with network approval. |
+| 2026-05-21 | `npm install --save-dev better-sqlite3 dotenv` | Passed | Added `better-sqlite3@^12.10.0` for real-SQLite integration tests and `dotenv@^17.4.2` for env-file parsing in local test/support scripts. Initial sandboxed attempt failed DNS resolution and was rerun with network approval. |
+| 2026-05-21 | `npm test -- --runInBand` | Passed | Plan 2 dependency baseline stayed green: full Jest suite passed 19 suites / 97 tests after SQLite packages and config plugin were added. Existing React Native Paper icon warnings remain non-blocking test noise. |
+| 2026-05-21 | `npm test -- --runInBand __tests__/sqliteFoundation.test.js` | Failed as expected, then passed | Red failed on missing `src/db/client.js`; after adding the SQLite client and Expo SQLite mock boundary, the transaction serialization test passed. |
+| 2026-05-21 | `npm test -- --runInBand __tests__/sqliteFoundation.test.js` | Passed | Plan 2 foundation suite passed 8 tests covering transaction serialization, real-SQLite migrations, `PRAGMA user_version`, 25 server-backed tables, local sync metadata, Zazi-alignment columns/invariants, rollback, and debug dump output. |
+| 2026-05-21 | `git diff --check` | Passed | No whitespace errors in the Plan 2 diff. |
+| 2026-05-21 | `npm test -- --runInBand` | Passed | Full Jest suite passed 20 suites / 105 tests. Existing React Native Paper icon warnings remain non-blocking test noise. |
+| 2026-05-21 | `npm run sqlite:staging:android` | Blocked | Sandbox run failed with `ERR_SOCKET_BAD_PORT` before Metro. Rerun outside sandbox started Metro, then failed with `No Android connected device found, and no emulators could be started automatically.` Expo also printed package-version compatibility warnings for existing Expo packages. |
+| 2026-05-21 | Plan 2 parallel review checkpoint | Failed, then fixed | Review found missing local active uniqueness, sync enum drift, async `debugDump` catch bug, and unqueued concurrent migrations. Added tests and fixes for each issue. |
+| 2026-05-21 | `npm test -- --runInBand __tests__/sqliteFoundation.test.js` | Passed | Plan 2 foundation suite now passes 12 tests after review fixes, including active uniqueness, sync/outbox enum alignment, concurrent migration serialization, and a more sensitive foreign-key PRAGMA test. |
+| 2026-05-21 | `git diff --check` | Passed | No whitespace errors after Plan 2 review fixes. |
+| 2026-05-21 | `npm test -- --runInBand` | Passed | Full Jest suite passed 20 suites / 109 tests after Plan 2 review fixes. Existing React Native Paper icon warnings remain non-blocking test noise. |

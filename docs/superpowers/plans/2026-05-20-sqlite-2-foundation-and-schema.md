@@ -18,7 +18,7 @@
 - Modify: `package.json`
 - Modify: `package-lock.json`
 
-- [ ] **Step 1: Install packages**
+- [x] **Step 1: Install packages**
 
 Use npm for this refactor:
 
@@ -27,7 +27,7 @@ npx expo install expo-sqlite
 npm install --save-dev better-sqlite3 dotenv
 ```
 
-- [ ] **Step 2: Verify package diff**
+- [x] **Step 2: Verify package diff**
 
 Run:
 
@@ -45,7 +45,7 @@ Expected: tests still pass before SQLite is used.
 - Create: `__tests__/sqliteFoundation.test.js`
 - Create: `test-support/expoSQLiteMock.js`
 
-- [ ] **Step 1: Write failing transaction serialization test**
+- [x] **Step 1: Write failing transaction serialization test**
 
 Test contract:
 
@@ -61,7 +61,7 @@ npm test -- --runInBand __tests__/sqliteFoundation.test.js
 
 Expected: fails because `src/db/client.js` does not exist.
 
-- [ ] **Step 2: Implement client**
+- [x] **Step 2: Implement client**
 
 `src/db/client.js` exports:
 
@@ -79,7 +79,7 @@ Expected: fails because `src/db/client.js` does not exist.
 - Create: `src/db/migrations.js`
 - Update: `__tests__/sqliteFoundation.test.js`
 
-- [ ] **Step 1: Write migration tests**
+- [x] **Step 1: Write migration tests**
 
 Tests must prove:
 
@@ -91,7 +91,7 @@ Tests must prove:
 - all clean-slate domain tables exist
 - the local mirror includes the Zazi-alignment schema added in Plan 1: 25 server-backed tables total before local-only foundation tables
 
-- [ ] **Step 2: Implement migrations**
+- [x] **Step 2: Implement migrations**
 
 Local tables:
 
@@ -147,7 +147,7 @@ Mirror these server-column additions locally:
 - Create: `src/db/debugDump.js`
 - Update: `__tests__/sqliteFoundation.test.js`
 
-- [ ] **Step 1: Implement schema/table-count dump**
+- [x] **Step 1: Implement schema/table-count dump**
 
 `debugDump` returns:
 
@@ -163,7 +163,7 @@ Mirror these server-column additions locally:
 
 ### Review Gate
 
-- [ ] Run:
+- [x] Run:
 
 ```bash
 npm test -- --runInBand __tests__/sqliteFoundation.test.js
@@ -179,6 +179,10 @@ npm run sqlite:staging:android
 
 Expected: app still launches and no SQLite initialization redbox appears.
 
-- [ ] Update `documentation/sqlite-refactor-log.md`.
-- [ ] Request a parallel code-review pass focused on SQLite transaction semantics, real-SQLite PRAGMA behavior, and migration behavior.
+Attempted on 2026-05-21. Sandbox run failed before Metro with `ERR_SOCKET_BAD_PORT`;
+rerun outside the sandbox started Metro but exited because no Android device/emulator
+was available. This gate remains open for a local emulator or real-device pass.
+
+- [x] Update `documentation/sqlite-refactor-log.md`.
+- [x] Request a parallel code-review pass focused on SQLite transaction semantics, real-SQLite PRAGMA behavior, and migration behavior.
 - [ ] Get user signoff before Plan 3.
