@@ -1,4 +1,5 @@
 const {
+  buildAndroidSdkEnv,
   buildCommandPlan,
   parseEnvContent,
   validateSqliteEnv,
@@ -56,7 +57,7 @@ SUPABASE_PUBLISHABLE_KEY_SQLITE=sb_publishable_test
     });
 
     expect(plan.command).toBe('npx');
-    expect(plan.args).toEqual(['expo', 'start']);
+    expect(plan.args).toEqual(['expo', 'start', '--port', '8082']);
     expect(plan.env).toMatchObject({
       SUPABASE_DB_PASSWORD: 'secret-password',
       EXPO_PUBLIC_SUPABASE_TARGET: 'sqlite-staging',
@@ -66,6 +67,37 @@ SUPABASE_PUBLISHABLE_KEY_SQLITE=sb_publishable_test
     });
     expect(plan.safeSummary.join('\n')).not.toContain('secret-password');
     expect(plan.safeSummary.join('\n')).not.toContain('sb_publishable_test');
+  });
+
+  test('adds Android SDK tools to command env when the SDK is available', () => {
+    const sdkRoot = '/Users/tester/Library/Android/sdk';
+    const androidEnv = buildAndroidSdkEnv({
+      env: { PATH: '/usr/bin' },
+      homeDir: '/Users/tester',
+      existsSync: (candidate) => candidate.startsWith(sdkRoot),
+    });
+
+    expect(androidEnv).toMatchObject({
+      ANDROID_HOME: sdkRoot,
+      ANDROID_SDK_ROOT: sdkRoot,
+    });
+    expect(androidEnv.PATH.split(':')).toEqual([
+      `${sdkRoot}/emulator`,
+      `${sdkRoot}/platform-tools`,
+      '/usr/bin',
+    ]);
+  });
+
+  test('android launcher uses the fixed sqlite staging Metro port', () => {
+    const plan = buildCommandPlan('android', {
+      SUPABASE_PROJECT_ID_SQLITE: 'segygjzpujphwvrubusm',
+      SUPABASE_PROJECT_URL_SQLITE: 'https://segygjzpujphwvrubusm.supabase.co',
+      SUPABASE_DB_PASSWORD_SQLITE: 'secret-password',
+      SUPABASE_PUBLISHABLE_KEY_SQLITE: 'sb_publishable_test',
+    });
+
+    expect(plan.command).toBe('npx');
+    expect(plan.args).toEqual(['expo', 'start', '--android', '--port', '8082']);
   });
 
   test('push command is non-interactive', () => {

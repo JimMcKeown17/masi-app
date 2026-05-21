@@ -1,11 +1,13 @@
 #!/usr/bin/env node
 
 const fs = require('fs');
+const os = require('os');
 const path = require('path');
 const { spawnSync } = require('child_process');
 const { KNOWN_SUPABASE_PROJECTS } = require('../config/supabaseProjectConfig');
 
 const SQLITE_PROJECT_ID = KNOWN_SUPABASE_PROJECTS['sqlite-staging'];
+const SQLITE_STAGING_METRO_PORT = '8082';
 
 const REQUIRED_ENV = [
   'SUPABASE_PROJECT_ID_SQLITE',
@@ -85,12 +87,46 @@ const validateSqliteEnv = (env) => {
   return env;
 };
 
+const unique = (values) => [...new Set(values.filter(Boolean))];
+
+const buildAndroidSdkEnv = ({
+  env = process.env,
+  homeDir = os.homedir(),
+  existsSync = fs.existsSync,
+} = {}) => {
+  const candidateRoots = unique([
+    env.ANDROID_HOME,
+    env.ANDROID_SDK_ROOT,
+    path.join(homeDir, 'Library', 'Android', 'sdk'),
+  ]);
+  const sdkRoot = candidateRoots.find((candidate) => (
+    existsSync(path.join(candidate, 'emulator', 'emulator')) &&
+    existsSync(path.join(candidate, 'platform-tools', 'adb'))
+  ));
+
+  if (!sdkRoot) {
+    return {};
+  }
+
+  const toolPaths = [
+    path.join(sdkRoot, 'emulator'),
+    path.join(sdkRoot, 'platform-tools'),
+  ];
+
+  return {
+    ANDROID_HOME: env.ANDROID_HOME || sdkRoot,
+    ANDROID_SDK_ROOT: env.ANDROID_SDK_ROOT || sdkRoot,
+    PATH: unique([...toolPaths, env.PATH]).join(path.delimiter),
+  };
+};
+
 const buildCommandEnv = (env) => ({
   SUPABASE_DB_PASSWORD: env.SUPABASE_DB_PASSWORD_SQLITE,
   EXPO_PUBLIC_SUPABASE_TARGET: 'sqlite-staging',
   EXPO_PUBLIC_SUPABASE_PROJECT_ID: env.SUPABASE_PROJECT_ID_SQLITE,
   EXPO_PUBLIC_SUPABASE_URL: env.SUPABASE_PROJECT_URL_SQLITE,
   EXPO_PUBLIC_SUPABASE_ANON_KEY: env.SUPABASE_PUBLISHABLE_KEY_SQLITE,
+  ...buildAndroidSdkEnv(),
 });
 
 const buildCommandPlan = (action, env) => {
@@ -148,21 +184,21 @@ const buildCommandPlan = (action, env) => {
     case 'start':
       return {
         command: 'npx',
-        args: ['expo', 'start'],
+        args: ['expo', 'start', '--port', SQLITE_STAGING_METRO_PORT],
         env: commandEnv,
         safeSummary,
       };
     case 'ios':
       return {
         command: 'npx',
-        args: ['expo', 'start', '--ios'],
+        args: ['expo', 'start', '--ios', '--port', SQLITE_STAGING_METRO_PORT],
         env: commandEnv,
         safeSummary,
       };
     case 'android':
       return {
         command: 'npx',
-        args: ['expo', 'start', '--android'],
+        args: ['expo', 'start', '--android', '--port', SQLITE_STAGING_METRO_PORT],
         env: commandEnv,
         safeSummary,
       };
@@ -218,6 +254,7 @@ if (require.main === module) {
 }
 
 module.exports = {
+  buildAndroidSdkEnv,
   buildCommandPlan,
   loadEnvFiles,
   parseEnvContent,

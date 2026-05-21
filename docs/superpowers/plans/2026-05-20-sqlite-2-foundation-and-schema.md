@@ -171,7 +171,7 @@ npm test -- --runInBand
 git diff --check
 ```
 
-- [ ] Run one emulator launch against SQLite staging before repositories are added:
+- [x] Run one device launch against SQLite staging before repositories are added:
 
 ```bash
 npm run sqlite:staging:android
@@ -179,9 +179,13 @@ npm run sqlite:staging:android
 
 Expected: app still launches and no SQLite initialization redbox appears.
 
-Attempted on 2026-05-21. Sandbox run failed before Metro with `ERR_SOCKET_BAD_PORT`;
-rerun outside the sandbox started Metro but exited because no Android device/emulator
-was available. This gate remains open for a local emulator or real-device pass.
+Attempted on 2026-05-21. Early runs failed because the Android SDK tools were not
+on the shell `PATH`, port 8081 was already occupied by another Metro instance, and
+the emulator's Expo Go install was behind the Expo SDK recommendation. The staging
+launcher now injects the local Android SDK paths and uses a fixed SQLite staging
+Metro port. `npm run sqlite:staging:android` then launched on
+`Medium_Phone_API_35`, installed the recommended Expo Go, bundled the app, and
+reached the unauthenticated app state with no SQLite initialization redbox.
 
 - [x] Update `documentation/sqlite-refactor-log.md`.
 - [x] Request a parallel code-review pass focused on SQLite transaction semantics, real-SQLite PRAGMA behavior, and migration behavior.
