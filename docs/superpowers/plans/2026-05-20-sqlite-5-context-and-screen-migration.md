@@ -103,6 +103,7 @@ Default user-facing session, assessment, letter-mastery, dashboard, and ranking 
 Create Group must read or create the active `grouping_versions` row for the class/year before writing `groups.grouping_version_id` or `child_group_memberships.grouping_version_id`.
 
 - [x] Initial time-tracking slice: `useTimeTracking` now writes through `timeEntriesRepository` and triggers background sync after local writes; `TimeEntriesListScreen` reads completed work history from SQLite and no longer performs screen-owned Supabase/storage merges.
+- [x] Initial session slice: `SessionHistoryScreen` now reads from `sessionsRepository`; `LiteracySessionForm` saves session + tracker changes through a transaction-backed persistence helper; `LetterTrackerBottomSheet` reads assessments/mastery from repositories.
 
 ### Task 4: Remove Generic Storage Calls
 

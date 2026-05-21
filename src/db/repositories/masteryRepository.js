@@ -40,8 +40,8 @@ export const createMasteryRepository = ({ database } = {}) => {
     transaction ? task(transaction) : runRepositoryTransaction(database, task)
   );
 
-  const getLetterMastery = async () => {
-    const db = await resolveDatabase(database);
+  const getLetterMastery = async ({ transaction } = {}) => {
+    const db = transaction || await resolveDatabase(database);
     const rows = await db.getAllAsync('select * from letter_mastery order by created_at, id');
     return rows.map(mapMastery);
   };

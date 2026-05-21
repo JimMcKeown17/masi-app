@@ -2,10 +2,8 @@ import React, { useState, useEffect } from 'react';
 import { View, StyleSheet, FlatList } from 'react-native';
 import { Text, Card, ActivityIndicator, Snackbar } from 'react-native-paper';
 import { useAuth } from '../../context/AuthContext';
-import { useOffline } from '../../context/OfflineContext';
 import { colors, spacing, borderRadius, shadows } from '../../constants/colors';
-import { storage, STORAGE_KEYS } from '../../utils/storage';
-import { supabase } from '../../services/supabaseClient';
+import { sessionsRepository } from '../../db/repositories/sessionsRepository';
 import { useLookupsContext } from '../../context/LookupsContext';
 
 const THIRTY_DAYS_MS = 30 * 24 * 60 * 60 * 1000;
@@ -24,7 +22,6 @@ function formatSessionDate(dateString) {
 
 export default function SessionHistoryScreen() {
   const { user } = useAuth();
-  const { isOnline } = useOffline();
   const { jobTitles } = useLookupsContext();
   const [sessions, setSessions] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -38,7 +35,7 @@ export default function SessionHistoryScreen() {
 
   useEffect(() => {
     loadSessions();
-  }, []);
+  }, [user?.id]);
 
   const filterAndSort = (allSessions) => {
     const now = Date.now();
@@ -58,37 +55,13 @@ export default function SessionHistoryScreen() {
   };
 
   /**
-   * Load sessions: cache-first, then fetch from Supabase when online.
-   * Merges server data with unsynced local records to prevent data loss.
+   * Load recent session history from local SQLite. Network sync runs through
+   * the outbox engine; this screen only renders the local cache.
    */
   const loadSessions = async () => {
     try {
-      // 1. Show cached data immediately
-      const cached = await storage.getSessions();
+      const cached = await sessionsRepository.getSessions();
       setSessions(filterAndSort(cached));
-
-      // 2. If online, fetch from server and merge
-      if (isOnline && user?.id) {
-        const { data, error } = await supabase
-          .from('sessions')
-          .select('*, session_type_lookup:job_titles(id,name,code)')
-          .eq('user_id', user.id)
-          .order('session_date', { ascending: false });
-
-        if (error) {
-          console.error('Error fetching sessions from server:', error);
-        } else if (data) {
-          const serverSessions = data.map(s => ({ ...s, synced: true }));
-          const serverIds = new Set(serverSessions.map(s => s.id));
-
-          // Preserve all local records not returned by server
-          const localToKeep = cached.filter(s => !serverIds.has(s.id));
-          const merged = [...serverSessions, ...localToKeep];
-
-          await storage.setItem(STORAGE_KEYS.SESSIONS, merged);
-          setSessions(filterAndSort(merged));
-        }
-      }
     } catch (error) {
       console.error('Error loading sessions:', error);
       showSnackbar('Failed to load sessions');

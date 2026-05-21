@@ -12,7 +12,8 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { colors, spacing, borderRadius } from '../../constants/colors';
 import { LETTER_SETS, PEDAGOGICAL_ORDERS } from '../../constants/egraConstants';
 import { computeAssessmentMastery, normalizeLanguageKey } from '../../utils/letterMastery';
-import { storage } from '../../utils/storage';
+import { assessmentsRepository } from '../../db/repositories/assessmentsRepository';
+import { masteryRepository } from '../../db/repositories/masteryRepository';
 
 const GRID_COLUMNS = 5;
 const GRID_GAP = spacing.sm;
@@ -64,7 +65,7 @@ export default function LetterTrackerBottomSheet({
       setLoading(true);
       try {
         // 1. Compute assessment mastery from latest assessment
-        const allAssessments = await storage.getAssessments();
+        const allAssessments = await assessmentsRepository.getAssessments();
         const childAssessments = allAssessments
           .filter(a => a.child_id === child.id && a.letter_language === letterSet.language)
           .sort((a, b) => {
@@ -77,7 +78,7 @@ export default function LetterTrackerBottomSheet({
         setAssessmentMastered(masteredSet);
 
         // 2. Load existing taught letters from storage
-        const allMastery = await storage.getLetterMastery();
+        const allMastery = await masteryRepository.getLetterMastery();
         const childTaught = allMastery.filter(
           r => r.child_id === child.id &&
                r.language === letterSet.language &&
@@ -233,7 +234,7 @@ export async function getTrackerCount(childId, languageKey, pendingChanges = {})
   if (!letterSet || !pedagogicalOrder) return 0;
 
   // Assessment mastery
-  const allAssessments = await storage.getAssessments();
+  const allAssessments = await assessmentsRepository.getAssessments();
   const childAssessments = allAssessments
     .filter(a => a.child_id === childId && a.letter_language === letterSet.language)
     .sort((a, b) => {
@@ -244,7 +245,7 @@ export async function getTrackerCount(childId, languageKey, pendingChanges = {})
   const masteredSet = computeAssessmentMastery(childAssessments[0] || null, letterSet, pedagogicalOrder);
 
   // Existing taught
-  const allMastery = await storage.getLetterMastery();
+  const allMastery = await masteryRepository.getLetterMastery();
   const existingTaught = new Set(
     allMastery
       .filter(r => r.child_id === childId && r.language === letterSet.language && !r._deleted)

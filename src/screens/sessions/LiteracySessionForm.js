@@ -16,7 +16,6 @@ import {
 import { useAuth } from '../../context/AuthContext';
 import { useOffline } from '../../context/OfflineContext';
 import { colors, spacing, borderRadius, shadows } from '../../constants/colors';
-import { storage } from '../../utils/storage';
 import { LETTER_ORDER, READING_LEVELS } from '../../constants/literacyConstants';
 import LetterGrid from '../../components/session/LetterGrid';
 import ChildSelector from '../../components/children/ChildSelector';
@@ -25,6 +24,7 @@ import { normalizeLanguageKey } from '../../utils/letterMastery';
 import { useClasses } from '../../context/ClassesContext';
 import { useLookupsContext } from '../../context/LookupsContext';
 import { buildSessionTypeFields } from '../../utils/sessionTypeResolver';
+import { persistLiteracySession } from '../../services/literacySessionPersistence';
 import { v4 as uuidv4 } from 'uuid';
 
 // ---------------------------------------------------------------------------
@@ -185,7 +185,7 @@ function InlineCalendar({ selectedDate, onSelectDate }) {
 // ---------------------------------------------------------------------------
 export default function LiteracySessionForm({ navigation }) {
   const { user, profile } = useAuth();
-  const { refreshSyncStatus } = useOffline();
+  const { refreshSyncStatus, triggerBackgroundSync } = useOffline();
   const { classes } = useClasses();
   const { jobTitles } = useLookupsContext();
 
@@ -269,7 +269,7 @@ export default function LiteracySessionForm({ navigation }) {
     setSubmitting(true);
 
     try {
-      // 1. Save session record
+      const now = new Date().toISOString();
       const session = {
         id: uuidv4(),
         user_id: user.id,
@@ -285,66 +285,20 @@ export default function LiteracySessionForm({ navigation }) {
         },
         notes: comments.trim() || null,
         synced: false,
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString(),
+        created_at: now,
+        updated_at: now,
       };
 
-      await storage.saveSession(session);
-
-      // 2. Save letter tracker changes (batch)
-      const { LETTER_SETS } = require('../../constants/egraConstants');
-      const letterSet = LETTER_SETS[trackerLanguageKey];
-      const now = new Date().toISOString();
-
-      for (const [childId, changes] of Object.entries(letterTrackerChanges)) {
-        for (const [letter, value] of Object.entries(changes)) {
-          if (value === true) {
-            // Check for existing soft-deleted record to reuse (avoids duplicate key on sync)
-            const allMastery = await storage.getLetterMastery();
-            const existingDeleted = allMastery.find(
-              r => r.child_id === childId && r.letter === letter && r.language === letterSet.language && r._deleted
-            );
-            if (existingDeleted) {
-              await storage.updateLetterMasteryRecord(existingDeleted.id, {
-                _deleted: false,
-                synced: false,
-                updated_at: now,
-              });
-            } else {
-              const record = {
-                id: uuidv4(),
-                user_id: user.id,
-                child_id: childId,
-                letter,
-                source: 'taught',
-                language: letterSet.language,
-                synced: false,
-                created_at: now,
-                updated_at: now,
-              };
-              await storage.saveLetterMasteryRecord(record);
-            }
-          } else if (value === false) {
-            // Soft-delete: find the existing record and mark it
-            const allMastery = await storage.getLetterMastery();
-            const existing = allMastery.find(
-              r => r.child_id === childId &&
-                   r.letter === letter &&
-                   r.language === letterSet.language &&
-                   !r._deleted
-            );
-            if (existing) {
-              await storage.updateLetterMasteryRecord(existing.id, {
-                _deleted: true,
-                synced: false,
-                updated_at: now,
-              });
-            }
-          }
-        }
-      }
+      await persistLiteracySession({
+        session,
+        trackerLanguageKey,
+        letterTrackerChanges,
+        nowIso: now,
+        idFactory: uuidv4,
+      });
 
       await refreshSyncStatus();
+      triggerBackgroundSync?.();
       navigation.goBack();
     } catch (error) {
       console.error('Error saving session:', error);
