@@ -9,7 +9,8 @@ const LOCAL_SYNC_COLUMNS = `
   server_updated_at text
 `;
 
-let migrationQueue = Promise.resolve();
+let appMigrationQueue = Promise.resolve();
+const explicitDatabaseMigrationQueues = new WeakMap();
 
 const MIGRATIONS = [
   {
@@ -588,11 +589,22 @@ async function runMigrationsNow(database) {
 }
 
 export async function runMigrations(database) {
-  const queuedMigration = migrationQueue.then(
-    () => runMigrationsNow(database),
-    () => runMigrationsNow(database)
+  if (database) {
+    const currentQueue = explicitDatabaseMigrationQueues.get(database) || Promise.resolve();
+    const queuedMigration = currentQueue.then(
+      () => runMigrationsNow(database),
+      () => runMigrationsNow(database)
+    );
+    explicitDatabaseMigrationQueues.set(database, queuedMigration.catch(() => {}));
+
+    return queuedMigration;
+  }
+
+  const queuedMigration = appMigrationQueue.then(
+    () => runMigrationsNow(),
+    () => runMigrationsNow()
   );
-  migrationQueue = queuedMigration.catch(() => {});
+  appMigrationQueue = queuedMigration.catch(() => {});
 
   return queuedMigration;
 }

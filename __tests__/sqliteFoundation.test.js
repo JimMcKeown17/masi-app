@@ -128,8 +128,16 @@ const SERVER_BACKED_TABLES = [
   'letter_mastery',
 ];
 
-const expectSqliteConstraintFailure = async (promise) => {
-  await expect(promise).rejects.toThrow(/constraint|unique/i);
+const expectSqliteConstraintFailure = async (operation) => {
+  let thrownError = null;
+
+  try {
+    await (typeof operation === 'function' ? operation() : operation);
+  } catch (error) {
+    thrownError = error;
+  }
+
+  expect(thrownError?.message || '').toMatch(/constraint|unique/i);
 };
 
 describe('SQLite migration runner', () => {

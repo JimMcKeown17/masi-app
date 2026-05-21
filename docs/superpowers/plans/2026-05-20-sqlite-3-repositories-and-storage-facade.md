@@ -33,7 +33,7 @@
 - Create: `src/db/repositories/sqliteRepositoryUtils.js`
 - Test: `__tests__/sqliteRepositoryUtils.test.js`
 
-- [ ] **Step 1: Add utility tests**
+- [x] **Step 1: Add utility tests**
 
 Cover:
 
@@ -43,7 +43,7 @@ Cover:
 - column allowlist filtering
 - upsert by primary key
 
-- [ ] **Step 2: Implement utilities**
+- [x] **Step 2: Implement utilities**
 
 Export:
 
@@ -56,6 +56,7 @@ Export:
 - `replaceAllRecords`
 - `setRecordSyncStatus`
 - `setRecordLastSyncError`
+- `insertOutboxRecord`
 
 ### Task 2: Reference And Time Repositories
 
@@ -67,7 +68,7 @@ Export:
 - Test: `__tests__/referenceDataRepository.test.js`
 - Test: `__tests__/timeEntriesRepository.test.js`
 
-- [ ] **Step 1: Write tests first**
+- [x] **Step 1: Write tests first**
 
 Contracts:
 
@@ -76,7 +77,7 @@ Contracts:
 - active time entry survives repository reload
 - time-entry update changes one row and preserves sync metadata
 
-- [ ] **Step 2: Implement repositories**
+- [x] **Step 2: Implement repositories**
 
 Keep current time tracking surface:
 
@@ -102,7 +103,7 @@ Reference repositories must include:
 - Create: `src/db/repositories/masteryRepository.js`
 - Tests: matching repository tests under `__tests__/`
 
-- [ ] **Step 1: Write repository tests**
+- [x] **Step 1: Write repository tests**
 
 Required tests:
 
@@ -122,7 +123,7 @@ Required tests:
 - assessment save plus assessment items in one transaction
 - mastery unique natural key behavior
 
-- [ ] **Step 2: Implement repositories**
+- [x] **Step 2: Implement repositories**
 
 Use clean table names:
 
@@ -171,11 +172,11 @@ Add repositories for:
 - Modify: `src/utils/storage.js`
 - Test: existing storage/context tests
 
-- [ ] **Step 1: Replace internals with repository calls**
+- [x] **Step 1: Replace internals with repository calls**
 
 Keep named methods used by current contexts/screens. Do not preserve generic key-value domain writes.
 
-- [ ] **Step 2: Verify no new generic storage callers**
+- [x] **Step 2: Verify no new generic storage callers**
 
 Run:
 
@@ -183,11 +184,11 @@ Run:
 rg "storage\\.(getItem|setItem|removeItem)|STORAGE_KEYS" src __tests__ --glob '!src/utils/storage.js'
 ```
 
-Expected: no results, or only results already scheduled for Plan 5 screen migration.
+Result: existing context/screen/sanitizer callers remain and are logged for Plan 5 migration. No new generic domain storage callsites should be added.
 
 ### Review Gate
 
-- [ ] Run:
+- [x] Run:
 
 ```bash
 npm test -- --runInBand __tests__/localStateRepository.test.js __tests__/referenceDataRepository.test.js __tests__/timeEntriesRepository.test.js
@@ -197,6 +198,6 @@ npm test -- --runInBand
 git diff --check
 ```
 
-- [ ] Update `documentation/sqlite-refactor-log.md`.
+- [x] Update `documentation/sqlite-refactor-log.md`.
 - [ ] Request a parallel code-review pass focused on transaction boundaries and normalized table contracts.
 - [ ] Get user signoff before Plan 4.

@@ -35,8 +35,9 @@ function createBetterSqliteTestDatabase(filename = ':memory:') {
     withExclusiveTransactionAsync: async (task) => {
       database.exec('BEGIN');
       try {
-        await task(adapter);
+        const result = await task(adapter);
         database.exec('COMMIT');
+        return result;
       } catch (error) {
         database.exec('ROLLBACK');
         throw error;

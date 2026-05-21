@@ -1,4 +1,22 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { classesRepository } from '../db/repositories/classesRepository';
+import { childrenRepository } from '../db/repositories/childrenRepository';
+import { groupsRepository } from '../db/repositories/groupsRepository';
+import { sessionsRepository } from '../db/repositories/sessionsRepository';
+import { assessmentsRepository } from '../db/repositories/assessmentsRepository';
+import { masteryRepository } from '../db/repositories/masteryRepository';
+import { timeEntriesRepository } from '../db/repositories/timeEntriesRepository';
+import {
+  jobTitlesRepository,
+  schoolsRepository,
+} from '../db/repositories/referenceDataRepository';
+import { localStateRepository } from '../db/repositories/localStateRepository';
+import { resolveDatabase } from '../db/repositories/repositoryRuntime';
+import {
+  setRecordLastSyncError,
+  setRecordSyncStatus,
+  upsertRecord,
+} from '../db/repositories/sqliteRepositoryUtils';
 
 const STORAGE_KEYS = {
   TIME_ENTRIES: '@time_entries',
@@ -17,12 +35,230 @@ const STORAGE_KEYS = {
   USER_PROFILE: '@user_profile',
 };
 
+const DEFAULT_SYNC_META = {
+  lastSyncTime: null,
+  retryAttempts: {},
+  failedItems: [],
+  lastErrors: {},
+};
+
+const TABLE_BY_SYNC_KEY = {
+  TIME_ENTRIES: 'time_entries',
+  SESSIONS: 'sessions',
+  CLASSES: 'classes',
+  CHILDREN: 'children',
+  STAFF_CHILDREN: 'child_ea_assignments',
+  GROUPS: 'groups',
+  CHILDREN_GROUPS: 'child_group_memberships',
+  ASSESSMENTS: 'assessments',
+  LETTER_MASTERY: 'letter_mastery',
+};
+
+const clone = (value) => JSON.parse(JSON.stringify(value));
+
+const readAsyncStorageJson = async (key, fallback = null) => {
+  const value = await AsyncStorage.getItem(key);
+  return value ? JSON.parse(value) : fallback;
+};
+
+const writeAsyncStorageJson = async (key, value) => {
+  await AsyncStorage.setItem(key, JSON.stringify(value));
+  return true;
+};
+
+const ensureSchoolExists = async (schoolId = 'local-school') => {
+  const db = await resolveDatabase();
+  await upsertRecord(db, {
+    tableName: 'schools',
+    columns: ['id', 'name', 'is_active', 'sync_status'],
+    record: {
+      id: schoolId,
+      name: schoolId === 'local-school' ? 'Local School' : `School ${schoolId}`,
+      is_active: 1,
+      sync_status: 'synced',
+    },
+  });
+  return schoolId;
+};
+
+const ensureClassExists = async (classId) => {
+  if (!classId) return null;
+  const db = await resolveDatabase();
+  const existing = await db.getFirstAsync('select id from classes where id = ?', classId);
+  if (existing) return classId;
+
+  const schoolId = await ensureSchoolExists();
+  await upsertRecord(db, {
+    tableName: 'classes',
+    columns: ['id', 'school_id', 'name', 'grade', 'sync_status'],
+    record: {
+      id: classId,
+      school_id: schoolId,
+      name: `Class ${classId}`,
+      grade: 'Unknown',
+      sync_status: 'synced',
+    },
+  });
+  return classId;
+};
+
+const normalizeClassForLegacyFacade = async (classData) => {
+  const schoolId = await ensureSchoolExists(classData.school_id || 'local-school');
+  return {
+    ...classData,
+    school_id: schoolId,
+    grade: classData.grade || 'Unknown',
+  };
+};
+
+const normalizeChildForLegacyFacade = async (child) => {
+  if (child.class_id) {
+    await ensureClassExists(child.class_id);
+  }
+  return child;
+};
+
+const ensureChildExists = async (childId) => {
+  if (!childId) return null;
+  const db = await resolveDatabase();
+  const existing = await db.getFirstAsync('select id from children where id = ?', childId);
+  if (existing) return childId;
+
+  await childrenRepository.saveChildRecord({
+    id: childId,
+    first_name: 'Unknown',
+    last_name: 'Child',
+    synced: true,
+  });
+  return childId;
+};
+
+const getDomainValue = async (key) => {
+  switch (key) {
+    case STORAGE_KEYS.TIME_ENTRIES:
+      return timeEntriesRepository.getTimeEntries();
+    case STORAGE_KEYS.SESSIONS:
+      return sessionsRepository.getSessions();
+    case STORAGE_KEYS.CHILDREN:
+      return childrenRepository.getChildren();
+    case STORAGE_KEYS.STAFF_CHILDREN:
+      return childrenRepository.getStaffChildren();
+    case STORAGE_KEYS.GROUPS:
+      return groupsRepository.getGroups();
+    case STORAGE_KEYS.CHILDREN_GROUPS:
+      return groupsRepository.getChildrenGroups();
+    case STORAGE_KEYS.SCHOOLS:
+      return schoolsRepository.getAll();
+    case STORAGE_KEYS.JOB_TITLES:
+      return jobTitlesRepository.getAll();
+    case STORAGE_KEYS.CLASSES:
+      return classesRepository.getClasses();
+    case STORAGE_KEYS.ASSESSMENTS:
+      return assessmentsRepository.getAssessments();
+    case STORAGE_KEYS.LETTER_MASTERY:
+      return masteryRepository.getLetterMastery();
+    default:
+      return undefined;
+  }
+};
+
+const setDomainValue = async (key, value) => {
+  if (!Array.isArray(value)) return undefined;
+
+  switch (key) {
+    case STORAGE_KEYS.SCHOOLS:
+      return schoolsRepository.replaceFromServer(value);
+    case STORAGE_KEYS.JOB_TITLES:
+      return jobTitlesRepository.replaceFromServer(value);
+    case STORAGE_KEYS.CLASSES:
+      for (const item of value) {
+        await storage.saveClass(item);
+      }
+      return true;
+    case STORAGE_KEYS.CHILDREN:
+      for (const item of value) {
+        await storage.saveChild(item);
+      }
+      return true;
+    case STORAGE_KEYS.SESSIONS:
+      for (const item of value) {
+        await storage.saveSession(item);
+      }
+      return true;
+    case STORAGE_KEYS.GROUPS:
+      for (const item of value) {
+        await groupsRepository.saveGroup(item);
+      }
+      return true;
+    case STORAGE_KEYS.CHILDREN_GROUPS:
+      for (const item of value) {
+        await groupsRepository.saveChildrenGroup(item);
+      }
+      return true;
+    case STORAGE_KEYS.ASSESSMENTS:
+      for (const item of value) {
+        await storage.saveAssessment(item);
+      }
+      return true;
+    case STORAGE_KEYS.LETTER_MASTERY:
+      for (const item of value) {
+        await storage.saveLetterMasteryRecord(item);
+      }
+      return true;
+    default:
+      return undefined;
+  }
+};
+
+const getSyncMetaKey = (table, id) => `${table}_${id}`;
+const payloadKey = (scope, id = 'list') => `storage_payload:${scope}:${id}`;
+
+const savePayload = async (scope, id, payload) => {
+  if (!id) return;
+  await localStateRepository.set(payloadKey(scope, id), payload);
+};
+
+const getPayload = async (scope, id) => (
+  id ? localStateRepository.get(payloadKey(scope, id), null) : null
+);
+
+const cleanRepositoryRecord = (record) => {
+  const cleaned = {};
+  for (const [key, value] of Object.entries(record || {})) {
+    if (['sync_status', 'last_sync_error', 'server_updated_at'].includes(key)) continue;
+    if (value === null || value === undefined) continue;
+    cleaned[key] = value;
+  }
+  return cleaned;
+};
+
+const mergeFacadeRecord = async (scope, record) => {
+  const payload = await getPayload(scope, record?.id);
+  const cleaned = cleanRepositoryRecord(record);
+  if (!payload) {
+    return cleaned;
+  }
+
+  return {
+    ...payload,
+    synced: cleaned.synced,
+  };
+};
+
+const mergeFacadeList = async (scope, records) => {
+  const merged = [];
+  for (const record of records) {
+    merged.push(await mergeFacadeRecord(scope, record));
+  }
+  return merged;
+};
+
 export const storage = {
-  // Generic get/set
   async getItem(key) {
     try {
-      const value = await AsyncStorage.getItem(key);
-      return value ? JSON.parse(value) : null;
+      const domainValue = await getDomainValue(key);
+      if (domainValue !== undefined) return domainValue;
+      return await readAsyncStorageJson(key);
     } catch (error) {
       console.error(`Error getting ${key}:`, error);
       return null;
@@ -31,8 +267,9 @@ export const storage = {
 
   async setItem(key, value) {
     try {
-      await AsyncStorage.setItem(key, JSON.stringify(value));
-      return true;
+      const domainResult = await setDomainValue(key, value);
+      if (domainResult !== undefined) return domainResult;
+      return await writeAsyncStorageJson(key, value);
     } catch (error) {
       console.error(`Error setting ${key}:`, error);
       return false;
@@ -52,6 +289,7 @@ export const storage = {
   async clear() {
     try {
       await AsyncStorage.clear();
+      await this.clearDomainData();
       return true;
     } catch (error) {
       console.error('Error clearing storage:', error);
@@ -59,297 +297,289 @@ export const storage = {
     }
   },
 
-  // Time entries
   async getTimeEntries() {
-    return await this.getItem(STORAGE_KEYS.TIME_ENTRIES) || [];
+    return await mergeFacadeList('time_entries', await timeEntriesRepository.getTimeEntries());
   },
 
   async saveTimeEntry(entry) {
-    const entries = await this.getTimeEntries();
-    entries.push(entry);
-    return await this.setItem(STORAGE_KEYS.TIME_ENTRIES, entries);
+    await savePayload('time_entries', entry.id, entry);
+    return await timeEntriesRepository.saveTimeEntry(entry);
   },
 
   async updateTimeEntry(id, updates) {
-    const entries = await this.getTimeEntries();
-    const index = entries.findIndex(e => e.id === id);
-    if (index !== -1) {
-      entries[index] = { ...entries[index], ...updates };
-      return await this.setItem(STORAGE_KEYS.TIME_ENTRIES, entries);
+    const existing = await getPayload('time_entries', id);
+    if (existing) {
+      await savePayload('time_entries', id, { ...existing, ...updates });
     }
-    return false;
+    return await timeEntriesRepository.updateTimeEntry(id, updates);
   },
 
-  // Sessions
   async getSessions() {
-    return await this.getItem(STORAGE_KEYS.SESSIONS) || [];
+    return await mergeFacadeList('sessions', await sessionsRepository.getSessions());
   },
 
   async saveSession(session) {
-    const sessions = await this.getSessions();
-    sessions.push(session);
-    return await this.setItem(STORAGE_KEYS.SESSIONS, sessions);
+    const normalized = {
+      user_id: session.user_id || 'local-user',
+      session_date: session.session_date || session.date_assessed || new Date().toISOString().slice(0, 10),
+      ...session,
+    };
+    await savePayload('sessions', normalized.id, normalized);
+    return await sessionsRepository.saveSession(normalized);
   },
 
   async updateSession(id, updates, keysToRemove = []) {
-    const sessions = await this.getSessions();
-    const index = sessions.findIndex(s => s.id === id);
-    if (index !== -1) {
-      sessions[index] = { ...sessions[index], ...updates };
-      keysToRemove.forEach(key => {
-        delete sessions[index][key];
+    const existing = await getPayload('sessions', id);
+    if (existing) {
+      const next = { ...existing, ...updates };
+      keysToRemove.forEach((key) => {
+        delete next[key];
       });
-      return await this.setItem(STORAGE_KEYS.SESSIONS, sessions);
+      await savePayload('sessions', id, next);
     }
-    return false;
+    return await sessionsRepository.updateSession(id, updates, keysToRemove);
   },
 
-  // Children
   async getChildren() {
-    return await this.getItem(STORAGE_KEYS.CHILDREN) || [];
+    return await mergeFacadeList('children', await childrenRepository.getChildren());
   },
 
   async saveChild(child) {
-    const children = await this.getChildren();
-    children.push(child);
-    return await this.setItem(STORAGE_KEYS.CHILDREN, children);
+    const normalized = {
+      last_name: child.last_name || '',
+      ...child,
+    };
+    await savePayload('children', normalized.id, normalized);
+    return await childrenRepository.saveChildRecord(await normalizeChildForLegacyFacade(normalized));
   },
 
   async updateChild(id, updates) {
-    const children = await this.getChildren();
-    const index = children.findIndex(c => c.id === id);
-    if (index !== -1) {
-      children[index] = { ...children[index], ...updates };
-      return await this.setItem(STORAGE_KEYS.CHILDREN, children);
+    const existing = await getPayload('children', id);
+    if (existing) {
+      await savePayload('children', id, { ...existing, ...updates });
     }
-    return false;
+    return await childrenRepository.updateChild(id, updates);
   },
 
   async getUnsyncedChildren() {
-    const children = await this.getChildren();
-    return children.filter(c => c.synced === false);
+    return await childrenRepository.getUnsyncedChildren();
   },
 
-  // Staff-children junction (many-to-many assignments)
   async getStaffChildren() {
-    return await this.getItem(STORAGE_KEYS.STAFF_CHILDREN) || [];
+    return await mergeFacadeList('staff_children', await childrenRepository.getStaffChildren());
   },
 
   async saveStaffChild(assignment) {
-    const assignments = await this.getStaffChildren();
-    assignments.push(assignment);
-    return await this.setItem(STORAGE_KEYS.STAFF_CHILDREN, assignments);
+    await savePayload('staff_children', assignment.id, assignment);
+    return await childrenRepository.saveStaffChild(assignment);
   },
 
   async deleteStaffChild(staffId, childId) {
-    const assignments = await this.getStaffChildren();
-    const filtered = assignments.filter(
-      a => !(a.staff_id === staffId && a.child_id === childId)
-    );
-    return await this.setItem(STORAGE_KEYS.STAFF_CHILDREN, filtered);
+    return await childrenRepository.deleteStaffChild(staffId, childId);
   },
 
   async getUnsyncedStaffChildren() {
-    const assignments = await this.getStaffChildren();
-    return assignments.filter(a => a.synced === false);
+    return await childrenRepository.getUnsyncedStaffChildren();
   },
 
-  // Groups
   async getGroups() {
-    return await this.getItem(STORAGE_KEYS.GROUPS) || [];
+    return await mergeFacadeList('groups', await groupsRepository.getGroups());
   },
 
   async saveGroup(group) {
-    const groups = await this.getGroups();
-    groups.push(group);
-    return await this.setItem(STORAGE_KEYS.GROUPS, groups);
+    await savePayload('groups', group.id, group);
+    return await groupsRepository.saveGroup(group);
   },
 
   async updateGroup(id, updates) {
-    const groups = await this.getGroups();
-    const index = groups.findIndex(g => g.id === id);
-    if (index !== -1) {
-      groups[index] = { ...groups[index], ...updates };
-      return await this.setItem(STORAGE_KEYS.GROUPS, groups);
+    const existing = await getPayload('groups', id);
+    if (existing) {
+      await savePayload('groups', id, { ...existing, ...updates });
     }
-    return false;
+    return await groupsRepository.updateGroup(id, updates);
   },
 
   async deleteGroup(id) {
-    const groups = await this.getGroups();
-    const filtered = groups.filter(g => g.id !== id);
-    return await this.setItem(STORAGE_KEYS.GROUPS, filtered);
+    return await groupsRepository.deleteGroup(id);
   },
 
   async getUnsyncedGroups() {
-    const groups = await this.getGroups();
-    return groups.filter(g => g.synced === false);
+    return await groupsRepository.getUnsyncedGroups();
   },
 
-  // Children-groups junction (many-to-many memberships)
   async getChildrenGroups() {
-    return await this.getItem(STORAGE_KEYS.CHILDREN_GROUPS) || [];
+    return await mergeFacadeList('children_groups', await groupsRepository.getChildrenGroups());
   },
 
   async saveChildrenGroup(membership) {
-    const memberships = await this.getChildrenGroups();
-    memberships.push(membership);
-    return await this.setItem(STORAGE_KEYS.CHILDREN_GROUPS, memberships);
+    await savePayload('children_groups', membership.id, membership);
+    return await groupsRepository.saveChildrenGroup(membership);
   },
 
   async deleteChildrenGroup(childId, groupId) {
-    const memberships = await this.getChildrenGroups();
-    const filtered = memberships.filter(
-      m => !(m.child_id === childId && m.group_id === groupId)
-    );
-    return await this.setItem(STORAGE_KEYS.CHILDREN_GROUPS, filtered);
+    return await groupsRepository.deleteChildrenGroup(childId, groupId);
   },
 
   async getUnsyncedChildrenGroups() {
-    const memberships = await this.getChildrenGroups();
-    return memberships.filter(m => m.synced === false);
+    return await groupsRepository.getUnsyncedChildrenGroups();
   },
 
-  // Schools (read-only cache — admin-managed, not synced by workers)
   async getSchools() {
-    return await this.getItem(STORAGE_KEYS.SCHOOLS) || [];
+    const exactList = await localStateRepository.get(payloadKey('schools'), null);
+    if (exactList) return exactList;
+    return await schoolsRepository.getAll();
   },
 
   async setSchools(list) {
-    return await this.setItem(STORAGE_KEYS.SCHOOLS, list);
+    await localStateRepository.set(payloadKey('schools'), list);
+    return await schoolsRepository.replaceFromServer(list);
   },
 
-  // Job titles (read-only lookup cache)
   async getJobTitles() {
-    return await this.getItem(STORAGE_KEYS.JOB_TITLES) || [];
+    return await jobTitlesRepository.getAll();
   },
 
   async saveJobTitles(list) {
-    return await this.setItem(STORAGE_KEYS.JOB_TITLES, list);
+    return await jobTitlesRepository.replaceFromServer(list);
   },
 
   async getSanitizerState(userId) {
     if (!userId) return {};
-    return await this.getItem(`@sanitizer_state:${userId}`) || {};
+    return await readAsyncStorageJson(`@sanitizer_state:${userId}`, {});
   },
 
   async saveSanitizerState(userId, state) {
     if (!userId) return false;
-    return await this.setItem(`@sanitizer_state:${userId}`, state);
+    return await writeAsyncStorageJson(`@sanitizer_state:${userId}`, state);
   },
 
-  // Classes (offline-first CRUD by workers)
   async getClasses() {
-    return await this.getItem(STORAGE_KEYS.CLASSES) || [];
+    const records = await classesRepository.getClasses();
+    const merged = await mergeFacadeList('classes', records);
+    return merged.map((record) => ({
+      ...(record.created_by && !record.staff_id ? { staff_id: record.created_by } : {}),
+      ...record,
+    }));
   },
 
   async saveClass(classData) {
-    const classes = await this.getClasses();
-    classes.push(classData);
-    return await this.setItem(STORAGE_KEYS.CLASSES, classes);
+    await savePayload('classes', classData.id, classData);
+    return await classesRepository.saveClass(await normalizeClassForLegacyFacade(classData));
   },
 
   async updateClass(id, updates) {
-    const classes = await this.getClasses();
-    const index = classes.findIndex(c => c.id === id);
-    if (index !== -1) {
-      classes[index] = { ...classes[index], ...updates };
-      return await this.setItem(STORAGE_KEYS.CLASSES, classes);
+    const existing = await getPayload('classes', id);
+    if (existing) {
+      await savePayload('classes', id, { ...existing, ...updates });
     }
-    return false;
+    return await classesRepository.updateClass(id, updates);
   },
 
   async deleteClass(id) {
-    const classes = await this.getClasses();
-    const filtered = classes.filter(c => c.id !== id);
-    return await this.setItem(STORAGE_KEYS.CLASSES, filtered);
+    return await classesRepository.deleteClass(id);
   },
 
   async getUnsyncedClasses() {
-    const classes = await this.getClasses();
-    return classes.filter(c => c.synced === false);
+    return await classesRepository.getUnsyncedClasses();
   },
 
-  // Assessments
   async getAssessments() {
-    return await this.getItem(STORAGE_KEYS.ASSESSMENTS) || [];
+    return await mergeFacadeList('assessments', await assessmentsRepository.getAssessments());
   },
 
   async saveAssessment(assessment) {
-    const assessments = await this.getAssessments();
-    assessments.push(assessment);
-    return await this.setItem(STORAGE_KEYS.ASSESSMENTS, assessments);
+    if (assessment.child_id) {
+      await ensureChildExists(assessment.child_id);
+    }
+    const normalized = {
+      user_id: assessment.user_id || 'local-user',
+      assessment_type: assessment.assessment_type || 'letter_egra',
+      date_assessed: assessment.date_assessed || assessment.assessment_date || new Date().toISOString().slice(0, 10),
+      ...assessment,
+    };
+    await savePayload('assessments', normalized.id, normalized);
+    return await assessmentsRepository.saveAssessment(normalized);
   },
 
   async getUnsyncedAssessments() {
-    const assessments = await this.getAssessments();
-    return assessments.filter(a => a.synced === false);
+    return await assessmentsRepository.getUnsyncedRecords();
   },
 
-  // Letter mastery (coach-taught records; assessment mastery is computed on-the-fly)
   async getLetterMastery() {
-    return await this.getItem(STORAGE_KEYS.LETTER_MASTERY) || [];
+    return await mergeFacadeList('letter_mastery', await masteryRepository.getLetterMastery());
   },
 
   async saveLetterMasteryRecord(record) {
-    const records = await this.getLetterMastery();
-    records.push(record);
-    return await this.setItem(STORAGE_KEYS.LETTER_MASTERY, records);
+    if (record.child_id) {
+      await ensureChildExists(record.child_id);
+    }
+    const normalized = {
+      user_id: record.user_id || 'local-user',
+      ...record,
+    };
+    await savePayload('letter_mastery', normalized.id, normalized);
+    return await masteryRepository.saveLetterMasteryRecord(normalized);
   },
 
   async updateLetterMasteryRecord(id, updates) {
-    const records = await this.getLetterMastery();
-    const index = records.findIndex(r => r.id === id);
-    if (index !== -1) {
-      records[index] = { ...records[index], ...updates };
-      return await this.setItem(STORAGE_KEYS.LETTER_MASTERY, records);
+    const existing = await getPayload('letter_mastery', id);
+    if (existing) {
+      await savePayload('letter_mastery', id, { ...existing, ...updates });
     }
-    return false;
+    return await masteryRepository.updateLetterMasteryRecord(id, updates);
   },
 
   async removeLetterMasteryRecord(id) {
-    const records = await this.getLetterMastery();
-    const filtered = records.filter(r => r.id !== id);
-    return await this.setItem(STORAGE_KEYS.LETTER_MASTERY, filtered);
+    return await masteryRepository.removeLetterMasteryRecord(id);
   },
 
   async getUnsyncedLetterMastery() {
-    const records = await this.getLetterMastery();
-    return records.filter(r => r.synced === false);
+    return await masteryRepository.getUnsyncedRecords();
   },
 
-  // Generic methods for sync operations
   async getUnsyncedRecords(table) {
-    const key = STORAGE_KEYS[table.toUpperCase()];
-    if (!key) return [];
-    const records = await this.getItem(key) || [];
-    return records.filter(record => record.synced === false);
+    switch (table.toUpperCase()) {
+      case 'TIME_ENTRIES':
+        return timeEntriesRepository.getUnsyncedRecords();
+      case 'SESSIONS':
+        return sessionsRepository.getUnsyncedRecords();
+      case 'ASSESSMENTS':
+        return assessmentsRepository.getUnsyncedRecords();
+      case 'LETTER_MASTERY':
+        return masteryRepository.getUnsyncedRecords();
+      default: {
+        const records = await this.getItem(STORAGE_KEYS[table.toUpperCase()]);
+        return (records || []).filter(record => record.synced === false);
+      }
+    }
   },
 
   async markAsSynced(table, id) {
-    const key = STORAGE_KEYS[table.toUpperCase()];
-    if (!key) return false;
-
-    const records = await this.getItem(key) || [];
-    const index = records.findIndex(r => r.id === id);
-    if (index !== -1) {
-      records[index].synced = true;
-      return await this.setItem(key, records);
+    const tableName = TABLE_BY_SYNC_KEY[table.toUpperCase()];
+    if (!tableName) return false;
+    const db = await resolveDatabase();
+    await setRecordSyncStatus(db, tableName, id, 'synced');
+    for (const scope of ['time_entries', 'sessions', 'classes', 'children', 'staff_children', 'groups', 'children_groups', 'assessments', 'letter_mastery']) {
+      const payload = await getPayload(scope, id);
+      if (payload) {
+        await savePayload(scope, id, { ...payload, synced: true });
+      }
     }
-    return false;
+    return true;
   },
 
   async markAsUnsynced(table, id) {
-    const key = STORAGE_KEYS[table.toUpperCase()];
-    if (!key) return false;
-
-    const records = await this.getItem(key) || [];
-    const index = records.findIndex(r => r.id === id);
-    if (index !== -1) {
-      records[index].synced = false;
-      return await this.setItem(key, records);
+    const tableName = TABLE_BY_SYNC_KEY[table.toUpperCase()];
+    if (!tableName) return false;
+    const db = await resolveDatabase();
+    await setRecordSyncStatus(db, tableName, id, 'pending');
+    for (const scope of ['time_entries', 'sessions', 'classes', 'children', 'staff_children', 'groups', 'children_groups', 'assessments', 'letter_mastery']) {
+      const payload = await getPayload(scope, id);
+      if (payload) {
+        await savePayload(scope, id, { ...payload, synced: false });
+      }
     }
-    return false;
+    return true;
   },
 
   async getAllUnsyncedCount() {
@@ -364,46 +594,48 @@ export const storage = {
     return totalCount;
   },
 
-  // Sync queue
   async getSyncQueue() {
-    return await this.getItem(STORAGE_KEYS.SYNC_QUEUE) || [];
+    return await localStateRepository.get('sync_queue', []);
   },
 
   async addToSyncQueue(item) {
     const queue = await this.getSyncQueue();
     queue.push(item);
-    return await this.setItem(STORAGE_KEYS.SYNC_QUEUE, queue);
+    return await localStateRepository.set('sync_queue', queue);
   },
 
   async removeFromSyncQueue(id) {
     const queue = await this.getSyncQueue();
-    const filtered = queue.filter(item => item.id !== id);
-    return await this.setItem(STORAGE_KEYS.SYNC_QUEUE, filtered);
+    return await localStateRepository.set('sync_queue', queue.filter(item => item.id !== id));
   },
 
   async clearSyncQueue() {
-    return await this.setItem(STORAGE_KEYS.SYNC_QUEUE, []);
+    return await localStateRepository.set('sync_queue', []);
   },
 
-  // Clear all domain data (everything except user profile)
   async clearDomainData() {
     try {
-      const domainKeys = [
-        STORAGE_KEYS.TIME_ENTRIES,
-        STORAGE_KEYS.SESSIONS,
-        STORAGE_KEYS.CHILDREN,
-        STORAGE_KEYS.STAFF_CHILDREN,
-        STORAGE_KEYS.GROUPS,
-        STORAGE_KEYS.CHILDREN_GROUPS,
-        STORAGE_KEYS.SCHOOLS,
-        STORAGE_KEYS.JOB_TITLES,
-        STORAGE_KEYS.CLASSES,
-        STORAGE_KEYS.ASSESSMENTS,
-        STORAGE_KEYS.LETTER_MASTERY,
-        STORAGE_KEYS.SYNC_QUEUE,
-        STORAGE_KEYS.SYNC_META,
-      ];
-      await AsyncStorage.multiRemove(domainKeys);
+      const db = await resolveDatabase();
+      await db.runAsync('delete from assessment_items');
+      await db.runAsync('delete from assessments');
+      await db.runAsync('delete from session_attendees');
+      await db.runAsync('delete from sessions');
+      await db.runAsync('delete from letter_mastery');
+      await db.runAsync('delete from child_group_memberships');
+      await db.runAsync('delete from group_ea_assignments');
+      await db.runAsync('delete from groups');
+      await db.runAsync('delete from child_class_memberships');
+      await db.runAsync('delete from class_grouping_state');
+      await db.runAsync('delete from grouping_versions');
+      await db.runAsync('delete from class_ea_assignments');
+      await db.runAsync('delete from child_programme_enrollments');
+      await db.runAsync('delete from child_ea_assignments');
+      await db.runAsync('delete from children');
+      await db.runAsync('delete from classes');
+      await db.runAsync('delete from time_entries');
+      await db.runAsync('delete from sync_outbox');
+      await localStateRepository.remove('sync_meta');
+      await localStateRepository.remove('sync_queue');
       return true;
     } catch (error) {
       console.error('Error clearing domain data:', error);
@@ -411,77 +643,73 @@ export const storage = {
     }
   },
 
-  // User profile
   async getUserProfile() {
-    return await this.getItem(STORAGE_KEYS.USER_PROFILE);
+    return await readAsyncStorageJson(STORAGE_KEYS.USER_PROFILE);
   },
 
   async saveUserProfile(profile) {
-    return await this.setItem(STORAGE_KEYS.USER_PROFILE, profile);
+    return await writeAsyncStorageJson(STORAGE_KEYS.USER_PROFILE, profile);
   },
 
   async clearUserProfile() {
     return await this.removeItem(STORAGE_KEYS.USER_PROFILE);
   },
 
-  // Sync metadata (tracks retry attempts, last sync time, etc.)
   async getSyncMeta() {
-    return await this.getItem(STORAGE_KEYS.SYNC_META) || {
-      lastSyncTime: null,
-      retryAttempts: {},
-      failedItems: [],
+    return {
+      ...clone(DEFAULT_SYNC_META),
+      ...await localStateRepository.get('sync_meta', clone(DEFAULT_SYNC_META)),
     };
   },
 
   async updateSyncMeta(updates) {
     const currentMeta = await this.getSyncMeta();
-    const newMeta = { ...currentMeta, ...updates };
-    return await this.setItem(STORAGE_KEYS.SYNC_META, newMeta);
+    return await localStateRepository.set('sync_meta', { ...currentMeta, ...updates });
   },
 
   async recordRetryAttempt(table, id) {
     const meta = await this.getSyncMeta();
-    const key = `${table}_${id}`;
+    const key = getSyncMetaKey(table, id);
     meta.retryAttempts[key] = (meta.retryAttempts[key] || 0) + 1;
-    return await this.setItem(STORAGE_KEYS.SYNC_META, meta);
+    return await localStateRepository.set('sync_meta', meta);
   },
 
   async getRetryAttempts(table, id) {
     const meta = await this.getSyncMeta();
-    const key = `${table}_${id}`;
-    return meta.retryAttempts[key] || 0;
+    return meta.retryAttempts[getSyncMetaKey(table, id)] || 0;
   },
 
   async clearRetryAttempts(table, id) {
     const meta = await this.getSyncMeta();
-    const key = `${table}_${id}`;
-    delete meta.retryAttempts[key];
-    return await this.setItem(STORAGE_KEYS.SYNC_META, meta);
+    delete meta.retryAttempts[getSyncMetaKey(table, id)];
+    return await localStateRepository.set('sync_meta', meta);
   },
 
-  // Last sync error tracking (stores the actual Supabase error per record)
   async setLastSyncError(table, id, errorMsg) {
     const meta = await this.getSyncMeta();
     if (!meta.lastErrors) meta.lastErrors = {};
-    meta.lastErrors[`${table}_${id}`] = errorMsg;
-    return await this.setItem(STORAGE_KEYS.SYNC_META, meta);
+    meta.lastErrors[getSyncMetaKey(table, id)] = errorMsg;
+    const tableName = TABLE_BY_SYNC_KEY[table.toUpperCase()];
+    if (tableName) {
+      const db = await resolveDatabase();
+      await setRecordLastSyncError(db, tableName, id, errorMsg);
+    }
+    return await localStateRepository.set('sync_meta', meta);
   },
 
   async getLastSyncError(table, id) {
     const meta = await this.getSyncMeta();
-    return meta.lastErrors?.[`${table}_${id}`] || null;
+    return meta.lastErrors?.[getSyncMetaKey(table, id)] || null;
   },
 
   async clearLastSyncError(table, id) {
     const meta = await this.getSyncMeta();
     if (meta.lastErrors) {
-      delete meta.lastErrors[`${table}_${id}`];
-      return await this.setItem(STORAGE_KEYS.SYNC_META, meta);
+      delete meta.lastErrors[getSyncMetaKey(table, id)];
     }
-    return true;
+    return await localStateRepository.set('sync_meta', meta);
   },
 
-  // Failed items persistence
   async addFailedItem(table, id, reason) {
     const meta = await this.getSyncMeta();
     const existingIndex = meta.failedItems.findIndex(
@@ -495,7 +723,7 @@ export const storage = {
       meta.failedItems.push(entry);
     }
 
-    return await this.setItem(STORAGE_KEYS.SYNC_META, meta);
+    return await localStateRepository.set('sync_meta', meta);
   },
 
   async removeFailedItem(table, id) {
@@ -503,8 +731,8 @@ export const storage = {
     meta.failedItems = meta.failedItems.filter(
       item => !(item.table === table && item.id === id)
     );
-    delete meta.retryAttempts[`${table}_${id}`];
-    return await this.setItem(STORAGE_KEYS.SYNC_META, meta);
+    delete meta.retryAttempts[getSyncMetaKey(table, id)];
+    return await localStateRepository.set('sync_meta', meta);
   },
 };
 
