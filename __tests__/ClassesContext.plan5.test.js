@@ -11,7 +11,9 @@ jest.mock('../src/services/supabaseClient', () => ({
     from: jest.fn(() => ({
       select: jest.fn(() => ({
         eq: jest.fn(() => ({
-          order: jest.fn(async () => ({ data: [], error: null })),
+          is: jest.fn(() => ({
+            order: jest.fn(async () => ({ data: [], error: null })),
+          })),
         })),
       })),
     })),
@@ -48,15 +50,11 @@ jest.mock('../src/utils/storage', () => ({
   storage: {
     getSchools: jest.fn(),
     getClasses: jest.fn(),
-    setItem: jest.fn(),
     saveClass: jest.fn(),
     updateClass: jest.fn(),
     deleteClass: jest.fn(),
     getChildren: jest.fn(),
     updateChild: jest.fn(),
-  },
-  STORAGE_KEYS: {
-    CLASSES: '@classes',
   },
 }));
 
@@ -74,7 +72,6 @@ describe('ClassesContext Plan 5 behavior', () => {
     });
     storage.getSchools.mockResolvedValue([]);
     storage.getClasses.mockResolvedValue([]);
-    storage.setItem.mockResolvedValue(true);
     storage.saveClass.mockResolvedValue(true);
     storage.updateClass.mockResolvedValue(true);
     storage.deleteClass.mockResolvedValue(true);

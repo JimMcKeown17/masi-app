@@ -61,6 +61,7 @@ Contracts:
 Use cache-first repository reads. Use `triggerBackgroundSync()` after local writes.
 
 - [x] Initial slice: AuthContext defers profile reads through a request queue; ChildrenContext uses bundled cache-first preload; ClassesContext uses active academic year and delegates class archive side effects to storage/repositories.
+- [x] Cleanup slice: ChildrenContext and ClassesContext no longer call generic `storage.setItem`/`STORAGE_KEYS` cache writes; server pull rows are saved through typed repository-backed storage methods.
 
 ### Task 3: Sessions, Assessments, Time, And Rankings Screens
 
@@ -114,7 +115,7 @@ Create Group must read or create the active `grouping_versions` row for the clas
 - Modify: `src/utils/storage.js`
 - Modify: direct callers found by search
 
-- [ ] **Step 1: Search**
+- [x] **Step 1: Search**
 
 Run:
 
@@ -123,6 +124,8 @@ rg "storage\\.(getItem|setItem|removeItem)|STORAGE_KEYS" src __tests__ --glob '!
 ```
 
 Expected: no results.
+
+- [x] Verified no results outside `src/utils/storage.js`.
 
 - [ ] **Step 2: Search AsyncStorage**
 
@@ -133,6 +136,8 @@ rg "AsyncStorage" src --glob '!src/services/supabaseClient.js' --glob '!src/util
 ```
 
 Expected: only Auth, logger, and debug export paths remain.
+
+Result: direct `AsyncStorage` is now centralized in `src/utils/storage.js` plus the Supabase auth storage boundary, logger, and debug export. Removing the remaining storage facade/profile fallback is deferred to Plan 6 so Plan 5 does not destabilize auth/session startup while screens and contexts are being migrated.
 
 ### Review Gate
 

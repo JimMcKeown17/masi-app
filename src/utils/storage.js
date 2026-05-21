@@ -443,16 +443,6 @@ export const storage = {
     return await jobTitlesRepository.replaceFromServer(list);
   },
 
-  async getSanitizerState(userId) {
-    if (!userId) return {};
-    return await readAsyncStorageJson(`@sanitizer_state:${userId}`, {});
-  },
-
-  async saveSanitizerState(userId, state) {
-    if (!userId) return false;
-    return await writeAsyncStorageJson(`@sanitizer_state:${userId}`, state);
-  },
-
   async getClasses() {
     const records = await classesRepository.getClasses();
     const merged = await mergeFacadeList('classes', records);

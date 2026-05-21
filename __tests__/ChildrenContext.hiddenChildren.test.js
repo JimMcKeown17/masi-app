@@ -1,5 +1,5 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { storage, STORAGE_KEYS } from '../src/utils/storage';
+import { storage } from '../src/utils/storage';
 
 // Following the convention in ClassesContext.test.js: full provider mounting
 // requires Auth/Offline/Children stacked together, so we test the storage-level

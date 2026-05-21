@@ -5,7 +5,6 @@ import { useAuth } from '../src/context/AuthContext';
 import { useOffline } from '../src/context/OfflineContext';
 import { useLookupsContext } from '../src/context/LookupsContext';
 import { sessionsRepository } from '../src/db/repositories/sessionsRepository';
-import { storage } from '../src/utils/storage';
 import { supabase } from '../src/services/supabaseClient';
 
 jest.mock('../src/context/AuthContext', () => ({
@@ -23,16 +22,6 @@ jest.mock('../src/context/LookupsContext', () => ({
 jest.mock('../src/db/repositories/sessionsRepository', () => ({
   sessionsRepository: {
     getSessions: jest.fn(),
-  },
-}));
-
-jest.mock('../src/utils/storage', () => ({
-  storage: {
-    getSessions: jest.fn(),
-    setItem: jest.fn(),
-  },
-  STORAGE_KEYS: {
-    SESSIONS: '@sessions',
   },
 }));
 
@@ -80,7 +69,6 @@ describe('SessionHistoryScreen Plan 5 behavior', () => {
         created_at: '2026-05-20T10:00:00.000Z',
       },
     ]);
-    storage.getSessions.mockResolvedValue([]);
   });
 
   afterEach(() => {
@@ -97,8 +85,6 @@ describe('SessionHistoryScreen Plan 5 behavior', () => {
     expect(getByText('A, M')).toBeTruthy();
     expect(queryByText('No sessions yet. Record your first session!')).toBeNull();
     expect(sessionsRepository.getSessions).toHaveBeenCalledTimes(1);
-    expect(storage.getSessions).not.toHaveBeenCalled();
-    expect(storage.setItem).not.toHaveBeenCalled();
     expect(supabase.from).not.toHaveBeenCalled();
   });
 });

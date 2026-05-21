@@ -1,6 +1,6 @@
 import React, { createContext, useState, useEffect, useContext, useRef } from 'react';
 import { supabase } from '../services/supabaseClient';
-import { storage, STORAGE_KEYS } from '../utils/storage';
+import { storage } from '../utils/storage';
 import { fetchAndCacheSchools } from '../services/offlineSync';
 import { academicYearsRepository } from '../db/repositories/referenceDataRepository';
 import { useAuth } from './AuthContext';
@@ -9,6 +9,12 @@ import { useChildren } from './ChildrenContext';
 import { v4 as uuidv4 } from 'uuid';
 
 const ClassesContext = createContext({});
+
+const saveRows = async (rows, saveRow) => {
+  for (const row of rows || []) {
+    await saveRow(row);
+  }
+};
 
 export const ClassesProvider = ({ children: reactChildren }) => {
   const { user } = useAuth();
@@ -81,18 +87,26 @@ export const ClassesProvider = ({ children: reactChildren }) => {
       if (isOnline && user?.id) {
         const { data, error } = await supabase
           .from('classes')
-          .select('*')
-          .eq('staff_id', user.id)
+          .select(`
+            *,
+            class_ea_assignments!inner(ea_user_id,unassigned_at)
+          `)
+          .eq('class_ea_assignments.ea_user_id', user.id)
+          .is('class_ea_assignments.unassigned_at', null)
           .order('name', { ascending: true });
 
         if (error) {
           console.error('Error loading classes from server:', error);
         } else if (data) {
-          const serverClasses = data.map(c => ({ ...c, synced: true }));
+          const serverClasses = data.map(({ class_ea_assignments, ...classItem }) => ({
+            ...classItem,
+            synced: true,
+            sync_status: classItem.sync_status || 'synced',
+          }));
           const serverIds = new Set(serverClasses.map(c => c.id));
           const localToKeep = cached.filter(c => !serverIds.has(c.id));
           const merged = [...serverClasses, ...localToKeep];
-          await storage.setItem(STORAGE_KEYS.CLASSES, merged);
+          await saveRows(serverClasses, storage.saveClass);
           setClasses(merged);
         }
       }

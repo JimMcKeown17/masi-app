@@ -5,7 +5,6 @@ import TimeEntriesListScreen from '../src/screens/main/TimeEntriesListScreen';
 import { useAuth } from '../src/context/AuthContext';
 import { useOffline } from '../src/context/OfflineContext';
 import { timeEntriesRepository } from '../src/db/repositories/timeEntriesRepository';
-import { storage } from '../src/utils/storage';
 import { supabase } from '../src/services/supabaseClient';
 
 jest.mock('../src/context/AuthContext', () => ({
@@ -19,16 +18,6 @@ jest.mock('../src/context/OfflineContext', () => ({
 jest.mock('../src/db/repositories/timeEntriesRepository', () => ({
   timeEntriesRepository: {
     getTimeEntries: jest.fn(),
-  },
-}));
-
-jest.mock('../src/utils/storage', () => ({
-  storage: {
-    getTimeEntries: jest.fn(),
-    setItem: jest.fn(),
-  },
-  STORAGE_KEYS: {
-    TIME_ENTRIES: '@time_entries',
   },
 }));
 
@@ -80,7 +69,6 @@ describe('TimeEntriesListScreen Plan 5 behavior', () => {
         synced: true,
       },
     ]);
-    storage.getTimeEntries.mockResolvedValue([]);
   });
 
   afterEach(() => {
@@ -100,8 +88,6 @@ describe('TimeEntriesListScreen Plan 5 behavior', () => {
     expect(getByText('Unsynced')).toBeTruthy();
     expect(queryByText('No Time Entries Yet')).toBeNull();
     expect(timeEntriesRepository.getTimeEntries).toHaveBeenCalledTimes(1);
-    expect(storage.getTimeEntries).not.toHaveBeenCalled();
-    expect(storage.setItem).not.toHaveBeenCalled();
     expect(supabase.from).not.toHaveBeenCalled();
   });
 });

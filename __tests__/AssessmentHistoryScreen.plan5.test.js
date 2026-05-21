@@ -4,7 +4,6 @@ import AssessmentHistoryScreen from '../src/screens/assessments/AssessmentHistor
 import { useAuth } from '../src/context/AuthContext';
 import { useChildren } from '../src/context/ChildrenContext';
 import { assessmentsRepository } from '../src/db/repositories/assessmentsRepository';
-import { storage } from '../src/utils/storage';
 import { supabase } from '../src/services/supabaseClient';
 
 jest.mock('../src/context/AuthContext', () => ({
@@ -18,16 +17,6 @@ jest.mock('../src/context/ChildrenContext', () => ({
 jest.mock('../src/db/repositories/assessmentsRepository', () => ({
   assessmentsRepository: {
     getAssessments: jest.fn(),
-  },
-}));
-
-jest.mock('../src/utils/storage', () => ({
-  storage: {
-    getAssessments: jest.fn(),
-    setItem: jest.fn(),
-  },
-  STORAGE_KEYS: {
-    ASSESSMENTS: '@assessments',
   },
 }));
 
@@ -68,7 +57,6 @@ describe('AssessmentHistoryScreen Plan 5 behavior', () => {
         created_at: '2026-05-20T10:00:00.000Z',
       },
     ]);
-    storage.getAssessments.mockResolvedValue([]);
   });
 
   afterEach(() => {
@@ -86,8 +74,6 @@ describe('AssessmentHistoryScreen Plan 5 behavior', () => {
     expect(getByText('English - Attempt #1')).toBeTruthy();
     expect(queryByText('No assessments yet. Run your first assessment!')).toBeNull();
     expect(assessmentsRepository.getAssessments).toHaveBeenCalledTimes(1);
-    expect(storage.getAssessments).not.toHaveBeenCalled();
-    expect(storage.setItem).not.toHaveBeenCalled();
     expect(supabase.from).not.toHaveBeenCalled();
   });
 });

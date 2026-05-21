@@ -1,6 +1,5 @@
 import React, { createContext, useState, useEffect, useContext, useRef, useMemo, useCallback } from 'react';
-import { supabase } from '../services/supabaseClient';
-import { storage, STORAGE_KEYS } from '../utils/storage';
+import { storage } from '../utils/storage';
 import { pullPreloadedChildData } from '../services/preloadedChildData';
 import { useAuth } from './AuthContext';
 import { useOffline } from './OfflineContext';
@@ -17,6 +16,12 @@ const mergeServerRows = (cached, serverRows) => {
 const shouldApplyPulledRows = (rows, errors) => (
   Array.isArray(rows) && (rows.length > 0 || errors.length === 0)
 );
+
+const saveRows = async (rows, saveRow) => {
+  for (const row of rows || []) {
+    await saveRow(row);
+  }
+};
 
 export const ChildrenProvider = ({ children }) => {
   const { user } = useAuth();
@@ -77,19 +82,19 @@ export const ChildrenProvider = ({ children }) => {
 
         if (shouldApplyPulledRows(pulled.children, errors)) {
           const merged = mergeServerRows(cachedChildren, pulled.children);
-          await storage.setItem(STORAGE_KEYS.CHILDREN, merged);
+          await saveRows(pulled.children, storage.saveChild);
           setChildrenList(merged);
         }
 
         if (shouldApplyPulledRows(pulled.groups, errors)) {
           const merged = mergeServerRows(cachedGroups, pulled.groups);
-          await storage.setItem(STORAGE_KEYS.GROUPS, merged);
+          await saveRows(pulled.groups, storage.saveGroup);
           setGroups(merged);
         }
 
         if (shouldApplyPulledRows(pulled.childrenGroups, errors)) {
           const merged = mergeServerRows(cachedMemberships, pulled.childrenGroups);
-          await storage.setItem(STORAGE_KEYS.CHILDREN_GROUPS, merged);
+          await saveRows(pulled.childrenGroups, storage.saveChildrenGroup);
           setChildrenGroups(merged);
         }
       }
@@ -109,44 +114,7 @@ export const ChildrenProvider = ({ children }) => {
     try {
       setLoading(true);
 
-      // 1. Load from AsyncStorage (show immediately)
-      const cached = await storage.getChildren();
-      setChildrenList(cached);
-
-      // 2. If online, fetch from server via junction table
-      if (isOnline && user?.id) {
-        const { data, error } = await supabase
-          .from('children')
-          .select(`
-            *,
-            staff_children!inner(staff_id)
-          `)
-          .eq('staff_children.staff_id', user.id)
-          .order('first_name', { ascending: true });
-
-        if (error) {
-          console.error('Error loading children from server:', error);
-        } else if (data) {
-          // Strip nested join data (staff_children) — it's not a column
-          // and would break sync if the record is later updated
-          const serverChildren = data.map(({ staff_children, ...child }) => ({
-            ...child,
-            synced: true,
-          }));
-
-          // Merge: server records are authoritative for IDs they return.
-          // Keep ALL local records not in server response — this preserves
-          // both unsynced new records AND synced records whose junction
-          // table (staff_children) hasn't propagated yet.
-          const serverIds = new Set(serverChildren.map(c => c.id));
-          const localToKeep = cached.filter(c => !serverIds.has(c.id));
-
-          const merged = [...serverChildren, ...localToKeep];
-
-          await storage.setItem(STORAGE_KEYS.CHILDREN, merged);
-          setChildrenList(merged);
-        }
-      }
+      await loadPreloadedChildData();
     } catch (error) {
       console.error('Error in loadChildren:', error);
     } finally {
@@ -267,29 +235,7 @@ export const ChildrenProvider = ({ children }) => {
    */
   const loadGroups = async () => {
     try {
-      // 1. Load from cache
-      const cached = await storage.getGroups();
-      setGroups(cached);
-
-      // 2. Fetch from server if online
-      if (isOnline && user?.id) {
-        const { data, error } = await supabase
-          .from('groups')
-          .select('*')
-          .eq('staff_id', user.id)
-          .order('name', { ascending: true });
-
-        if (error) {
-          console.error('Error loading groups from server:', error);
-        } else if (data) {
-          const serverGroups = data.map(g => ({ ...g, synced: true }));
-          const serverIds = new Set(serverGroups.map(g => g.id));
-          const localToKeep = cached.filter(g => !serverIds.has(g.id));
-          const merged = [...serverGroups, ...localToKeep];
-          await storage.setItem(STORAGE_KEYS.GROUPS, merged);
-          setGroups(merged);
-        }
-      }
+      await loadPreloadedChildData();
     } catch (error) {
       console.error('Error in loadGroups:', error);
     }
@@ -357,11 +303,11 @@ export const ChildrenProvider = ({ children }) => {
       await storage.deleteGroup(groupId);
       setGroups(groups.filter(g => g.id !== groupId));
 
-      // Remove all memberships for this group (state + storage)
+      // Remove all memberships for this group from active state. Repository
+      // archive/delete handles local persistence and outbox rows.
       const updatedMemberships = childrenGroups.filter(
         cg => cg.group_id !== groupId
       );
-      await storage.setItem(STORAGE_KEYS.CHILDREN_GROUPS, updatedMemberships);
       setChildrenGroups(updatedMemberships);
 
       return { success: true };
@@ -376,38 +322,7 @@ export const ChildrenProvider = ({ children }) => {
    */
   const loadChildrenGroups = async () => {
     try {
-      // 1. Load from cache
-      const cached = await storage.getChildrenGroups();
-      setChildrenGroups(cached);
-
-      // 2. Fetch from server if online
-      if (isOnline && user?.id) {
-        // Fetch all children_groups for groups owned by this user
-        const { data: userGroups } = await supabase
-          .from('groups')
-          .select('id')
-          .eq('staff_id', user.id);
-
-        if (userGroups && userGroups.length > 0) {
-          const groupIds = userGroups.map(g => g.id);
-
-          const { data, error } = await supabase
-            .from('children_groups')
-            .select('*')
-            .in('group_id', groupIds);
-
-          if (error) {
-            console.error('Error loading children_groups from server:', error);
-          } else if (data) {
-            const serverMemberships = data.map(m => ({ ...m, synced: true }));
-            const serverIds = new Set(serverMemberships.map(m => m.id));
-            const localToKeep = cached.filter(m => !serverIds.has(m.id));
-            const merged = [...serverMemberships, ...localToKeep];
-            await storage.setItem(STORAGE_KEYS.CHILDREN_GROUPS, merged);
-            setChildrenGroups(merged);
-          }
-        }
-      }
+      await loadPreloadedChildData();
     } catch (error) {
       console.error('Error in loadChildrenGroups:', error);
     }

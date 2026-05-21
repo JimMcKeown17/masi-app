@@ -1,5 +1,5 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { storage, STORAGE_KEYS } from '../src/utils/storage';
+import { storage } from '../src/utils/storage';
 
 // AsyncStorage is auto-mocked in jest-expo
 
