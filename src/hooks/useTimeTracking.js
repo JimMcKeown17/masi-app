@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useOffline } from '../context/OfflineContext';
-import { storage } from '../utils/storage';
+import { timeEntriesRepository } from '../db/repositories/timeEntriesRepository';
 import { getCurrentPosition } from '../services/locationService';
 import { v4 as uuidv4 } from 'uuid';
 
@@ -14,7 +14,7 @@ const MAX_SHIFT_MS = MAX_SHIFT_HOURS * 60 * 60 * 1000;
  */
 export function useTimeTracking() {
   const { user } = useAuth();
-  const { refreshSyncStatus } = useOffline();
+  const { refreshSyncStatus, triggerBackgroundSync } = useOffline();
 
   const [isSignedIn, setIsSignedIn] = useState(false);
   const [activeEntry, setActiveEntry] = useState(null);
@@ -37,7 +37,7 @@ export function useTimeTracking() {
         clearInterval(elapsedInterval.current);
       }
     };
-  }, []);
+  }, [user?.id]);
 
   useEffect(() => {
     if (isSignedIn && activeEntry) {
@@ -61,18 +61,25 @@ export function useTimeTracking() {
       synced: false,
     };
 
-    await storage.updateTimeEntry(entry.id, updatedEntry);
+    await timeEntriesRepository.updateTimeEntry(entry.id, updatedEntry);
     setActiveEntry(null);
     setIsSignedIn(false);
     setElapsedTime(0);
     await refreshSyncStatus();
+    triggerBackgroundSync?.();
     showSnackbar(`Auto clocked out after ${MAX_SHIFT_HOURS} hours.`);
   };
 
   const loadActiveEntry = async () => {
     try {
-      const entries = await storage.getTimeEntries();
-      const active = entries.find(entry => entry.sign_out_time === null && entry.user_id === user?.id);
+      if (!user?.id) {
+        setActiveEntry(null);
+        setIsSignedIn(false);
+        setElapsedTime(0);
+        return;
+      }
+
+      const active = await timeEntriesRepository.getActiveTimeEntry(user.id);
       if (active) {
         const elapsed = Date.now() - new Date(active.sign_in_time).getTime();
         if (elapsed >= MAX_SHIFT_MS) {
@@ -156,10 +163,11 @@ export function useTimeTracking() {
         synced: false,
       };
 
-      await storage.saveTimeEntry(timeEntry);
+      await timeEntriesRepository.saveTimeEntry(timeEntry);
       setActiveEntry(timeEntry);
       setIsSignedIn(true);
       await refreshSyncStatus();
+      triggerBackgroundSync?.();
       showSnackbar(`Clocked in at ${formatTime(timeEntry.sign_in_time)}`);
     } catch (error) {
       console.error('Error signing in:', error);
@@ -197,11 +205,12 @@ export function useTimeTracking() {
         synced: false,
       };
 
-      await storage.updateTimeEntry(activeEntry.id, updatedEntry);
+      await timeEntriesRepository.updateTimeEntry(activeEntry.id, updatedEntry);
       setActiveEntry(null);
       setIsSignedIn(false);
       setElapsedTime(0);
       await refreshSyncStatus();
+      triggerBackgroundSync?.();
       showSnackbar(`Clocked out. ${hoursWorked} hours worked.`);
     } catch (error) {
       console.error('Error signing out:', error);
