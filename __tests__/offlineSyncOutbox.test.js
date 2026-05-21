@@ -7,6 +7,7 @@ import { createBetterSqliteTestDatabase } from '../test-support/betterSqliteAdap
 import { runMigrations } from '../src/db/migrations';
 import { createOutboxSyncEngine, pullReferenceData } from '../src/services/offlineSync';
 import { createSyncOutboxRepository } from '../src/db/repositories/syncOutboxRepository';
+import { createTimeEntriesRepository } from '../src/db/repositories/timeEntriesRepository';
 
 const createSupabaseMock = ({ upsertResults = {}, rpcResults = {} } = {}) => {
   const calls = [];
@@ -14,7 +15,11 @@ const createSupabaseMock = ({ upsertResults = {}, rpcResults = {} } = {}) => {
     from: jest.fn((tableName) => ({
       upsert: jest.fn(async (payload, options) => {
         calls.push({ type: 'upsert', tableName, payload, options });
-        return upsertResults[`${tableName}:${payload.id}`] || upsertResults[tableName] || { error: null };
+        const result = upsertResults[`${tableName}:${payload.id}`] || upsertResults[tableName];
+        if (typeof result === 'function') {
+          return result({ tableName, payload, options, calls });
+        }
+        return result || { error: null };
       }),
       delete: jest.fn(() => ({
         eq: jest.fn(async (column, value) => {
@@ -90,6 +95,239 @@ describe('SQLite outbox offline sync', () => {
       .toEqual({ sync_status: 'synced', last_sync_error: null });
     expect(await db.getFirstAsync('select sync_status, last_sync_error from child_ea_assignments where id = ?', 'assignment-1'))
       .toEqual({ sync_status: 'synced', last_sync_error: null });
+    expect(await db.getFirstAsync('select count(*) as count from sync_outbox')).toEqual({ count: 0 });
+  });
+
+  test('time entry repository writes are consumed by the sync engine', async () => {
+    const repository = createTimeEntriesRepository({ database: db });
+    await repository.saveTimeEntry({
+      id: 'time-1',
+      user_id: 'user-1',
+      sign_in_time: '2026-05-21T08:00:00.000Z',
+      sign_in_lat: -34.1,
+      sign_in_lon: 18.4,
+      synced: false,
+      created_at: '2026-05-21T08:00:00.000Z',
+      updated_at: '2026-05-21T08:00:00.000Z',
+    });
+
+    const { supabaseClient, calls } = createSupabaseMock();
+    const engine = createOutboxSyncEngine({ database: db, supabaseClient });
+
+    const result = await engine.syncAll();
+
+    expect(result.success).toBe(true);
+    expect(calls).toEqual([
+      expect.objectContaining({
+        type: 'upsert',
+        tableName: 'time_entries',
+        payload: expect.objectContaining({
+          id: 'time-1',
+          user_id: 'user-1',
+          sign_in_time: '2026-05-21T08:00:00.000Z',
+        }),
+      }),
+    ]);
+    expect(await db.getFirstAsync('select sync_status, last_sync_error from time_entries where id = ?', 'time-1'))
+      .toEqual({ sync_status: 'synced', last_sync_error: null });
+    expect(await db.getFirstAsync('select count(*) as count from sync_outbox')).toEqual({ count: 0 });
+  });
+
+  test('syncAll recovers in-flight rows left by an interrupted process', async () => {
+    await db.runAsync(`
+      insert into classes (id, school_id, name, grade, sync_status)
+      values ('class-1', 'school-1', 'Grade 1A', '1', 'pending')
+    `);
+    await enqueue(db, 'classes', 'class-1', 'insert', {
+      id: 'class-1',
+      school_id: 'school-1',
+      name: 'Grade 1A',
+      grade: '1',
+    });
+    await createSyncOutboxRepository({ database: db }).markInFlight(['classes:class-1:insert']);
+
+    const { supabaseClient, calls } = createSupabaseMock();
+    const engine = createOutboxSyncEngine({ database: db, supabaseClient });
+
+    const result = await engine.syncAll();
+
+    expect(result.success).toBe(true);
+    expect(calls.map(call => `${call.type}:${call.tableName}`)).toEqual(['upsert:classes']);
+    expect(await db.getFirstAsync('select sync_status, last_sync_error from classes where id = ?', 'class-1'))
+      .toEqual({ sync_status: 'synced', last_sync_error: null });
+    expect(await db.getFirstAsync('select id from sync_outbox where id = ?', 'classes:class-1:insert'))
+      .toBeNull();
+  });
+
+  test('successful sync finalization does not delete a newer local write made while the row was in flight', async () => {
+    await db.runAsync(`
+      insert into children (id, first_name, last_name, sync_status)
+      values ('child-1', 'Old', 'Dlamini', 'pending')
+    `);
+    await enqueue(db, 'children', 'child-1', 'insert', {
+      id: 'child-1',
+      first_name: 'Old',
+      last_name: 'Dlamini',
+    });
+
+    const { supabaseClient, calls } = createSupabaseMock({
+      upsertResults: {
+        children: async () => {
+          await db.runAsync(`
+            update children
+            set first_name = 'New',
+                sync_status = 'pending',
+                updated_at = '2026-05-21T10:00:00.000Z'
+            where id = 'child-1'
+          `);
+          await enqueue(db, 'children', 'child-1', 'insert', {
+            id: 'child-1',
+            first_name: 'New',
+            last_name: 'Dlamini',
+          });
+          return { error: null };
+        },
+      },
+    });
+    const engine = createOutboxSyncEngine({ database: db, supabaseClient });
+
+    const result = await engine.syncAll();
+
+    expect(result.success).toBe(true);
+    expect(calls).toEqual([
+      expect.objectContaining({
+        type: 'upsert',
+        tableName: 'children',
+        payload: expect.objectContaining({
+          id: 'child-1',
+          first_name: 'Old',
+        }),
+      }),
+    ]);
+    expect(await db.getFirstAsync('select first_name, sync_status, last_sync_error from children where id = ?', 'child-1'))
+      .toEqual({ first_name: 'New', sync_status: 'pending', last_sync_error: null });
+    const outboxRow = await db.getFirstAsync(
+      'select status, payload from sync_outbox where id = ?',
+      'children:child-1:insert'
+    );
+    expect(outboxRow).toEqual(expect.objectContaining({ status: 'pending' }));
+    expect(JSON.parse(outboxRow.payload)).toEqual(expect.objectContaining({
+      id: 'child-1',
+      first_name: 'New',
+    }));
+  });
+
+  test('non-delete outbox records with missing payload fail terminal without sending an empty upsert', async () => {
+    await db.runAsync(`
+      insert into classes (id, school_id, name, grade, sync_status)
+      values ('class-1', 'school-1', 'Grade 1A', '1', 'pending')
+    `);
+    await createSyncOutboxRepository({ database: db }).enqueue({
+      tableName: 'classes',
+      recordId: 'class-1',
+      operation: 'insert',
+    });
+
+    const { supabaseClient, calls } = createSupabaseMock();
+    const engine = createOutboxSyncEngine({ database: db, supabaseClient });
+
+    const result = await engine.syncAll();
+
+    expect(result.success).toBe(false);
+    expect(calls).toEqual([]);
+    expect(await db.getFirstAsync('select sync_status, last_sync_error from classes where id = ?', 'class-1'))
+      .toEqual({
+        sync_status: 'terminal',
+        last_sync_error: 'Missing outbox payload for classes:class-1 insert',
+      });
+    expect(await db.getFirstAsync('select status, last_error from sync_outbox where id = ?', 'classes:class-1:insert'))
+      .toEqual({
+        status: 'terminal',
+        last_error: 'Missing outbox payload for classes:class-1 insert',
+      });
+  });
+
+  test('unknown outbox tables become visible terminal failures without touching a domain table', async () => {
+    await createSyncOutboxRepository({ database: db }).enqueue({
+      tableName: 'future_table',
+      recordId: 'future-1',
+      operation: 'insert',
+      payload: { id: 'future-1' },
+    });
+
+    const { supabaseClient, calls } = createSupabaseMock();
+    const engine = createOutboxSyncEngine({ database: db, supabaseClient });
+
+    const result = await engine.syncAll();
+
+    expect(result.success).toBe(false);
+    expect(calls).toEqual([]);
+    expect(result.failedRecords).toEqual([
+      {
+        id: 'future-1',
+        table: 'future_table',
+        operation: 'insert',
+        reason: 'Unknown sync table: future_table',
+      },
+    ]);
+    expect(await db.getFirstAsync('select status, last_error from sync_outbox where id = ?', 'future_table:future-1:insert'))
+      .toEqual({
+        status: 'terminal',
+        last_error: 'Unknown sync table: future_table',
+      });
+  });
+
+  test('archive and restore operations upsert their normalized payloads', async () => {
+    await db.runAsync(`
+      insert into classes (id, school_id, name, grade, archived_at, sync_status)
+      values ('class-1', 'school-1', 'Grade 1A', '1', '2026-05-21T09:00:00.000Z', 'pending')
+    `);
+    await db.runAsync(`
+      insert into children (id, first_name, last_name, archived_at, sync_status)
+      values ('child-1', 'Amahle', 'Dlamini', null, 'pending')
+    `);
+    await enqueue(db, 'classes', 'class-1', 'archive', {
+      id: 'class-1',
+      school_id: 'school-1',
+      name: 'Grade 1A',
+      grade: '1',
+      archived_at: '2026-05-21T09:00:00.000Z',
+    });
+    await enqueue(db, 'children', 'child-1', 'restore', {
+      id: 'child-1',
+      first_name: 'Amahle',
+      last_name: 'Dlamini',
+      archived_at: null,
+    });
+
+    const { supabaseClient, calls } = createSupabaseMock();
+    const engine = createOutboxSyncEngine({ database: db, supabaseClient });
+
+    const result = await engine.syncAll();
+
+    expect(result.success).toBe(true);
+    expect(calls).toEqual([
+      expect.objectContaining({
+        type: 'upsert',
+        tableName: 'classes',
+        payload: expect.objectContaining({
+          id: 'class-1',
+          archived_at: '2026-05-21T09:00:00.000Z',
+        }),
+      }),
+      expect.objectContaining({
+        type: 'upsert',
+        tableName: 'children',
+        payload: expect.objectContaining({
+          id: 'child-1',
+          archived_at: null,
+        }),
+      }),
+    ]);
+    expect(await db.getFirstAsync('select sync_status from classes where id = ?', 'class-1'))
+      .toEqual({ sync_status: 'synced' });
+    expect(await db.getFirstAsync('select sync_status from children where id = ?', 'child-1'))
+      .toEqual({ sync_status: 'synced' });
     expect(await db.getFirstAsync('select count(*) as count from sync_outbox')).toEqual({ count: 0 });
   });
 

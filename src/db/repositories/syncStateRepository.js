@@ -33,6 +33,7 @@ export const createSyncStateRepository = ({ database } = {}) => {
     lastPulledAt = null,
     cursor = null,
   } = {}, { transaction } = {}) => runWrite(transaction, async (txn) => {
+    // Plan 4 reference pulls are full replacements; Plan 5 domain pulls will use this for cursors.
     await txn.runAsync(`
       insert into sync_state (scope, last_pulled_at, cursor, updated_at)
       values (?, ?, ?, ?)

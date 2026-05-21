@@ -136,5 +136,10 @@ git diff --check
 
 - [ ] Run emulator smoke test with one forced offline write and restart. Current implementation is unit/integration verified; manual authenticated device write/restart remains a follow-up gate.
 - [x] Update `documentation/sqlite-refactor-log.md`.
-- [ ] Request a parallel code-review pass focused on failure semantics and atomic finalization.
-- [ ] Get user signoff before Plan 5.
+- [x] Address corrective review brief `docs/plan-reviews/2026-05-21-plan-4-review-brief.md`:
+  - [x] Time entries enqueue outbox rows from repository writes.
+  - [x] `syncAll()` resets stale `in_flight` rows at cycle start.
+  - [x] Success/retry/terminal finalizers use CAS so stale payloads cannot delete newer writes.
+  - [x] Non-delete outbox rows with null payloads fail terminal without empty upserts.
+- [x] Request a parallel code-review pass focused on failure semantics and atomic finalization.
+- [x] Get user signoff before Plan 5.

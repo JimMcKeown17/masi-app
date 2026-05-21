@@ -1,4 +1,8 @@
-import { resolveDatabase } from './repositoryRuntime';
+import { resolveDatabase, runRepositoryTransaction } from './repositoryRuntime';
+import {
+  enqueueDomainOutbox,
+  shouldEnqueueOutbox,
+} from './domainRepositoryUtils';
 import {
   mapRowFromSqlite,
   syncStatusFromSynced,
@@ -40,6 +44,24 @@ const mapTimeEntry = (row) => mapRowFromSqlite({
 });
 
 export const createTimeEntriesRepository = ({ database } = {}) => {
+  const runWrite = (transaction, task) => (
+    transaction ? task(transaction) : runRepositoryTransaction(database, task)
+  );
+
+  const enqueueTimeEntryOutbox = async (txn, record) => {
+    if (!shouldEnqueueOutbox(record)) return;
+
+    const existingInsert = await txn.getFirstAsync(`
+      select id
+      from sync_outbox
+      where table_name = 'time_entries'
+        and record_id = ?
+        and operation = 'insert'
+      limit 1
+    `, record.id);
+    await enqueueDomainOutbox(txn, 'time_entries', record.id, existingInsert ? 'insert' : 'update', record);
+  };
+
   const getTimeEntries = async () => {
     const db = await resolveDatabase(database);
     const rows = await db.getAllAsync(`
@@ -50,20 +72,22 @@ export const createTimeEntriesRepository = ({ database } = {}) => {
     return rows.map(mapTimeEntry);
   };
 
-  const saveTimeEntry = async (entry, { transaction } = {}) => {
-    const db = transaction || await resolveDatabase(database);
-    await upsertRecord(db, {
+  const saveTimeEntry = async (entry, { transaction } = {}) => runWrite(transaction, async (txn) => {
+    const record = normalizeForWrite(entry);
+    await upsertRecord(txn, {
       tableName: 'time_entries',
       columns: TIME_ENTRY_COLUMNS,
       booleanColumns: ['auto_clocked_out'],
-      record: normalizeForWrite(entry),
+      record,
     });
+    if (shouldEnqueueOutbox(record)) {
+      await enqueueDomainOutbox(txn, 'time_entries', entry.id, 'insert', record);
+    }
     return true;
-  };
+  });
 
-  const updateTimeEntry = async (id, updates, { transaction } = {}) => {
-    const db = transaction || await resolveDatabase(database);
-    const existing = await db.getFirstAsync('select * from time_entries where id = ?', id);
+  const updateTimeEntry = async (id, updates, { transaction } = {}) => runWrite(transaction, async (txn) => {
+    const existing = await txn.getFirstAsync('select * from time_entries where id = ?', id);
     if (!existing) {
       return false;
     }
@@ -73,22 +97,19 @@ export const createTimeEntriesRepository = ({ database } = {}) => {
       ...updates,
       id,
       updated_at: updates.updated_at || timestamp(),
-      sync_status: updates.sync_status || existing.sync_status,
+      sync_status: updates.sync_status || syncStatusFromSynced(updates.synced),
       synced: updates.synced === undefined ? undefined : updates.synced,
     });
 
-    if (updates.synced === undefined) {
-      next.sync_status = existing.sync_status;
-    }
-
-    await upsertRecord(db, {
+    await upsertRecord(txn, {
       tableName: 'time_entries',
       columns: TIME_ENTRY_COLUMNS,
       booleanColumns: ['auto_clocked_out'],
       record: next,
     });
+    await enqueueTimeEntryOutbox(txn, next);
     return true;
-  };
+  });
 
   const getActiveTimeEntry = async (userId) => {
     const db = await resolveDatabase(database);

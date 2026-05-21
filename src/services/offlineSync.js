@@ -202,7 +202,13 @@ const classifyError = (error, { duplicateIsSuccess = false } = {}) => {
     return { terminal: true, markAsSynced: duplicateIsSuccess };
   }
 
-  if (code === '23503' || code === '42501' || code === 'ARCHIVE_REQUIRED' || code === 'LOCAL_ONLY_REFERENCE') {
+  if (
+    code === '23503'
+    || code === '42501'
+    || code === 'ARCHIVE_REQUIRED'
+    || code === 'LOCAL_ONLY_REFERENCE'
+    || code === 'MISSING_OUTBOX_PAYLOAD'
+  ) {
     return { terminal: true, markAsSynced: false };
   }
 
@@ -235,7 +241,20 @@ const makeFailedRecord = (outboxRecord, reason) => ({
 });
 
 const runServerOperation = async (supabaseClient, config, outboxRecord) => {
-  const payload = buildSyncPayload(config.tableName, outboxRecord.payload || { id: outboxRecord.record_id });
+  if (outboxRecord.operation !== 'hard_delete' && outboxRecord.payload == null) {
+    return {
+      success: false,
+      error: {
+        code: 'MISSING_OUTBOX_PAYLOAD',
+        message: `Missing outbox payload for ${config.tableName}:${outboxRecord.record_id} ${outboxRecord.operation}`,
+      },
+    };
+  }
+
+  const payloadSource = outboxRecord.operation === 'hard_delete'
+    ? (outboxRecord.payload || { id: outboxRecord.record_id })
+    : outboxRecord.payload;
+  const payload = buildSyncPayload(config.tableName, payloadSource);
 
   if (payload.programme_id === LEGACY_PROGRAMME_ID) {
     return {
@@ -295,52 +314,131 @@ const setDomainSyncResult = async (txn, tableName, recordId, {
   `, syncStatus, lastSyncError, timestamp(), recordId);
 };
 
+const restorePendingAfterStaleFinalize = async (txn, outboxRecord, tableName) => {
+  const existing = await txn.getFirstAsync('select id from sync_outbox where id = ?', outboxRecord.id);
+  if (!existing) return false;
+
+  await txn.runAsync(`
+    update sync_outbox
+    set status = 'pending',
+        next_retry_at = null,
+        updated_at = ?
+    where id = ?
+  `, timestamp(), outboxRecord.id);
+
+  if (outboxRecord.operation !== 'hard_delete') {
+    await setDomainSyncResult(txn, tableName, outboxRecord.record_id, {
+      syncStatus: 'pending',
+      lastSyncError: null,
+    });
+  }
+
+  return true;
+};
+
 const finalizeSuccess = async ({
   database,
   outboxRecord,
   tableName,
-  outboxRepository,
 }) => runRepositoryTransaction(database, async (txn) => {
+  const deleteResult = await txn.runAsync(`
+    delete from sync_outbox
+    where id = ?
+      and updated_at = ?
+      and status = 'in_flight'
+  `, outboxRecord.id, outboxRecord.updated_at);
+
+  if ((deleteResult?.changes || 0) === 0) {
+    return restorePendingAfterStaleFinalize(txn, outboxRecord, tableName);
+  }
+
   if (outboxRecord.operation !== 'hard_delete') {
+    const hasRemainingOutbox = await txn.getFirstAsync(`
+      select id
+      from sync_outbox
+      where table_name = ?
+        and record_id = ?
+      limit 1
+    `, tableName, outboxRecord.record_id);
     await setDomainSyncResult(txn, tableName, outboxRecord.record_id, {
-      syncStatus: 'synced',
+      syncStatus: hasRemainingOutbox ? 'pending' : 'synced',
       lastSyncError: null,
     });
   }
-  await outboxRepository.deleteRecord(outboxRecord.id, { transaction: txn });
+  return true;
 });
 
 const finalizeRetriableFailure = async ({
   database,
   outboxRecord,
   tableName,
-  outboxRepository,
   reason,
 }) => runRepositoryTransaction(database, async (txn) => {
+  const failureResult = await txn.runAsync(`
+    update sync_outbox
+    set status = 'failed',
+        retry_count = retry_count + 1,
+        last_error = ?,
+        next_retry_at = ?,
+        updated_at = ?
+    where id = ?
+      and updated_at = ?
+      and status = 'in_flight'
+  `, reason, nextRetryTimestamp(outboxRecord.retry_count || 0), timestamp(), outboxRecord.id, outboxRecord.updated_at);
+
+  if ((failureResult?.changes || 0) === 0) {
+    return restorePendingAfterStaleFinalize(txn, outboxRecord, tableName);
+  }
+
   await setDomainSyncResult(txn, tableName, outboxRecord.record_id, {
     syncStatus: 'failed',
     lastSyncError: reason,
   });
-  await outboxRepository.markRetriableFailure(outboxRecord.id, {
-    errorMessage: reason,
-    nextRetryAt: nextRetryTimestamp(outboxRecord.retry_count || 0),
-  }, { transaction: txn });
+  return true;
 });
 
 const finalizeTerminalFailure = async ({
   database,
   outboxRecord,
   tableName,
-  outboxRepository,
   reason,
 }) => runRepositoryTransaction(database, async (txn) => {
+  const failureResult = await txn.runAsync(`
+    update sync_outbox
+    set status = 'terminal',
+        last_error = ?,
+        next_retry_at = null,
+        updated_at = ?
+    where id = ?
+      and updated_at = ?
+      and status = 'in_flight'
+  `, reason, timestamp(), outboxRecord.id, outboxRecord.updated_at);
+
+  if ((failureResult?.changes || 0) === 0) {
+    return restorePendingAfterStaleFinalize(txn, outboxRecord, tableName);
+  }
+
   await setDomainSyncResult(txn, tableName, outboxRecord.record_id, {
     syncStatus: 'terminal',
     lastSyncError: reason,
   });
-  await outboxRepository.markTerminalFailure(outboxRecord.id, {
-    errorMessage: reason,
-  }, { transaction: txn });
+  return true;
+});
+
+const finalizeOutboxOnlyTerminalFailure = async ({
+  database,
+  outboxRecord,
+  reason,
+}) => runRepositoryTransaction(database, async (txn) => {
+  await txn.runAsync(`
+    update sync_outbox
+    set status = 'terminal',
+        last_error = ?,
+        next_retry_at = null,
+        updated_at = ?
+    where id = ?
+  `, reason, timestamp(), outboxRecord.id);
+  return true;
 });
 
 const sortByPushOrder = (records) => records
@@ -375,23 +473,27 @@ export const createOutboxSyncEngine = ({
     const config = getConfig(outboxRecord.table_name);
     if (!config) {
       const reason = `Unknown sync table: ${outboxRecord.table_name}`;
-      await finalizeTerminalFailure({
+      await finalizeOutboxOnlyTerminalFailure({
         database,
         outboxRecord,
-        tableName: outboxRecord.table_name,
-        outboxRepository,
         reason,
       });
       return { success: false, terminal: true, failedRecord: makeFailedRecord(outboxRecord, reason) };
     }
 
     await outboxRepository.markInFlight([outboxRecord.id]);
-    const serverResult = await runServerOperation(supabaseClient, config, outboxRecord);
+    const inFlightRecord = await outboxRepository.getById(outboxRecord.id);
+    if (!inFlightRecord) {
+      const reason = `Outbox record disappeared before sync: ${outboxRecord.id}`;
+      return { success: false, terminal: false, failedRecord: makeFailedRecord(outboxRecord, reason) };
+    }
+
+    const serverResult = await runServerOperation(supabaseClient, config, inFlightRecord);
 
     if (serverResult.success) {
       await finalizeSuccess({
         database,
-        outboxRecord,
+        outboxRecord: inFlightRecord,
         tableName: config.tableName,
         outboxRepository,
       });
@@ -404,7 +506,7 @@ export const createOutboxSyncEngine = ({
     if (classification.markAsSynced) {
       await finalizeSuccess({
         database,
-        outboxRecord,
+        outboxRecord: inFlightRecord,
         tableName: config.tableName,
         outboxRepository,
       });
@@ -414,7 +516,7 @@ export const createOutboxSyncEngine = ({
     if (classification.terminal) {
       await finalizeTerminalFailure({
         database,
-        outboxRecord,
+        outboxRecord: inFlightRecord,
         tableName: config.tableName,
         outboxRepository,
         reason,
@@ -424,7 +526,7 @@ export const createOutboxSyncEngine = ({
 
     await finalizeRetriableFailure({
       database,
-      outboxRecord,
+      outboxRecord: inFlightRecord,
       tableName: config.tableName,
       outboxRepository,
       reason,
@@ -434,7 +536,10 @@ export const createOutboxSyncEngine = ({
 
   const syncAll = async ({ tableName = null } = {}) => {
     const startedAt = Date.now();
-    const db = await resolveDatabase(database);
+    await resolveDatabase(database);
+    if (typeof outboxRepository.resetInFlight === 'function') {
+      await outboxRepository.resetInFlight();
+    }
     const readyRecords = sortByPushOrder(await outboxRepository.getReadyRecords({ limit: 1000 }));
     const filteredRecords = tableName
       ? readyRecords.filter((record) => record.table_name === normalizeTableName(tableName))
@@ -495,8 +600,6 @@ export const createOutboxSyncEngine = ({
       ...(result.success ? { lastSuccessfulSyncTime: now } : {}),
     });
 
-    // Ensure migrations have run for injected test databases even if no rows were ready.
-    void db;
     return result;
   };
 
@@ -547,6 +650,8 @@ export const createOutboxSyncEngine = ({
 };
 
 const defaultEngine = createOutboxSyncEngine({
+  // Production keeps duplicate-key failures terminal. With upsert on id,
+  // 23505 usually means a different unique constraint needs review.
   outboxRepository: syncOutboxRepository,
   stateRepository: syncStateRepository,
 });

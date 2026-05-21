@@ -95,6 +95,16 @@ export const createSyncOutboxRepository = ({ database } = {}) => {
     });
   };
 
+  const resetInFlight = async ({ transaction } = {}) => runWrite(transaction, async (txn) => {
+    await txn.runAsync(`
+      update sync_outbox
+      set status = 'pending',
+          updated_at = ?
+      where status = 'in_flight'
+    `, timestamp());
+    return true;
+  });
+
   const markReady = async (id, { transaction } = {}) => runWrite(transaction, async (txn) => {
     await txn.runAsync(`
       update sync_outbox
@@ -199,6 +209,7 @@ export const createSyncOutboxRepository = ({ database } = {}) => {
     getById,
     getReadyRecords,
     markInFlight,
+    resetInFlight,
     markReady,
     markRetriableFailure,
     markTerminalFailure,
