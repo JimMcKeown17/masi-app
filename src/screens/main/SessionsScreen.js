@@ -5,7 +5,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect } from '@react-navigation/native';
 import { colors, spacing, borderRadius } from '../../constants/colors';
 import { useChildren } from '../../context/ChildrenContext';
-import { storage } from '../../utils/storage';
+import { sessionsRepository } from '../../db/repositories/sessionsRepository';
 import { getSessionsTabStats } from '../../utils/dashboardStats';
 import StatBar from '../../components/dashboard/StatBar';
 
@@ -16,7 +16,7 @@ export default function SessionsScreen({ navigation }) {
   useFocusEffect(
     useCallback(() => {
       const loadStats = async () => {
-        const sessions = await storage.getSessions();
+        const sessions = await sessionsRepository.getSessions();
         setStats(getSessionsTabStats(sessions, childrenList));
       };
       loadStats();

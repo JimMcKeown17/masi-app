@@ -3,7 +3,7 @@ import { View, StyleSheet, FlatList } from 'react-native';
 import { Text, ActivityIndicator } from 'react-native-paper';
 import { useFocusEffect } from '@react-navigation/native';
 import { useChildren } from '../../context/ChildrenContext';
-import { storage } from '../../utils/storage';
+import { assessmentsRepository } from '../../db/repositories/assessmentsRepository';
 import { getAssessmentRanking } from '../../utils/dashboardStats';
 import RankedBarRow, { getBarColor } from '../../components/dashboard/RankedBarRow';
 import StatBar from '../../components/dashboard/StatBar';
@@ -18,7 +18,7 @@ export default function AssessmentRankingScreen({ navigation }) {
     useCallback(() => {
       const load = async () => {
         setLoading(true);
-        const assessments = await storage.getAssessments();
+        const assessments = await assessmentsRepository.getAssessments();
         const ranked = getAssessmentRanking(childrenList, assessments);
         setRanking(ranked);
         setLoading(false);

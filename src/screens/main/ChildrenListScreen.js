@@ -13,7 +13,7 @@ import { colors, spacing } from '../../constants/colors';
 import { useChildren } from '../../context/ChildrenContext';
 import { useClasses } from '../../context/ClassesContext';
 import { useOffline } from '../../context/OfflineContext';
-import { storage } from '../../utils/storage';
+import { assessmentsRepository } from '../../db/repositories/assessmentsRepository';
 import { getChildrenTabStats } from '../../utils/dashboardStats';
 import StatBar from '../../components/dashboard/StatBar';
 
@@ -29,7 +29,7 @@ export default function ChildrenListScreen({ navigation }) {
   useFocusEffect(
     useCallback(() => {
       const loadStats = async () => {
-        const assessments = await storage.getAssessments();
+        const assessments = await assessmentsRepository.getAssessments();
         setTabStats(getChildrenTabStats(children, classes, assessments));
       };
       loadStats();

@@ -6,7 +6,7 @@ import { useChildren } from '../../context/ChildrenContext';
 import { useClasses } from '../../context/ClassesContext';
 import { LETTER_SETS, WORD_SETS } from '../../constants/egraConstants';
 import { colors, spacing, borderRadius, shadows } from '../../constants/colors';
-import { storage } from '../../utils/storage';
+import { assessmentsRepository } from '../../db/repositories/assessmentsRepository';
 
 function formatShortDate(dateStr) {
   const [y, m, d] = dateStr.split('-').map(Number);
@@ -29,7 +29,7 @@ export default function AssessmentChildSelectScreen({ navigation, route }) {
   useFocusEffect(
     useCallback(() => {
       (async () => {
-        const allAssessments = await storage.getAssessments();
+        const allAssessments = await assessmentsRepository.getAssessments();
         const typeFiltered = allAssessments.filter(x => (x.assessment_type || 'letter_egra') === assessmentType);
         const map = {};
         for (const a of typeFiltered) {

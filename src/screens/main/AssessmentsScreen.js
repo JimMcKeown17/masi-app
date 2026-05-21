@@ -4,7 +4,7 @@ import { Text, Button, Card } from 'react-native-paper';
 import { useFocusEffect } from '@react-navigation/native';
 import { colors, spacing, borderRadius, shadows } from '../../constants/colors';
 import { useChildren } from '../../context/ChildrenContext';
-import { storage } from '../../utils/storage';
+import { assessmentsRepository } from '../../db/repositories/assessmentsRepository';
 import { getAssessmentsTabStats } from '../../utils/dashboardStats';
 import StatBar from '../../components/dashboard/StatBar';
 
@@ -15,7 +15,7 @@ export default function AssessmentsScreen({ navigation }) {
   useFocusEffect(
     useCallback(() => {
       const loadStats = async () => {
-        const assessments = await storage.getAssessments();
+        const assessments = await assessmentsRepository.getAssessments();
         setStats(getAssessmentsTabStats(childrenList, assessments));
       };
       loadStats();

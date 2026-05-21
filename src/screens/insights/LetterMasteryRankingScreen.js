@@ -4,7 +4,8 @@ import { Text, ActivityIndicator } from 'react-native-paper';
 import { useFocusEffect } from '@react-navigation/native';
 import { useChildren } from '../../context/ChildrenContext';
 import { useClasses } from '../../context/ClassesContext';
-import { storage } from '../../utils/storage';
+import { assessmentsRepository } from '../../db/repositories/assessmentsRepository';
+import { masteryRepository } from '../../db/repositories/masteryRepository';
 import { getLetterMasteryRanking } from '../../utils/dashboardStats';
 import RankedBarRow, { getBarColor } from '../../components/dashboard/RankedBarRow';
 import StatBar from '../../components/dashboard/StatBar';
@@ -21,8 +22,8 @@ export default function LetterMasteryRankingScreen({ navigation }) {
       const load = async () => {
         setLoading(true);
         const [assessments, letterMastery] = await Promise.all([
-          storage.getAssessments(),
-          storage.getLetterMastery(),
+          assessmentsRepository.getAssessments(),
+          masteryRepository.getLetterMastery(),
         ]);
         const ranked = getLetterMasteryRanking(childrenList, assessments, letterMastery, classes);
         setRanking(ranked);

@@ -6,8 +6,10 @@ import { v4 as uuidv4 } from 'uuid';
 import { colors, spacing, borderRadius } from '../../constants/colors';
 import { LETTER_SETS, PEDAGOGICAL_ORDERS } from '../../constants/egraConstants';
 import { computeAssessmentMastery, normalizeLanguageKey } from '../../utils/letterMastery';
-import { storage } from '../../utils/storage';
+import { assessmentsRepository } from '../../db/repositories/assessmentsRepository';
+import { masteryRepository } from '../../db/repositories/masteryRepository';
 import { useAuth } from '../../context/AuthContext';
+import { useOffline } from '../../context/OfflineContext';
 
 const GRID_COLUMNS = 5;
 const GRID_GAP = spacing.sm;
@@ -22,6 +24,7 @@ const CELL_COLORS = {
 export default function LetterTrackerScreen({ route }) {
   const { child, classItem } = route.params;
   const { user } = useAuth();
+  const { refreshSyncStatus, triggerBackgroundSync } = useOffline();
   const { width: screenWidth } = useWindowDimensions();
 
   const [assessmentMastered, setAssessmentMastered] = useState(new Set());
@@ -43,7 +46,7 @@ export default function LetterTrackerScreen({ route }) {
       setLoading(true);
 
       // 1. Find the child's most recent assessment for this language
-      const allAssessments = await storage.getAssessments();
+      const allAssessments = await assessmentsRepository.getAssessments();
       const childAssessments = allAssessments
         .filter(a => a.child_id === child.id && a.letter_language === letterSet.language && (a.assessment_type || 'letter_egra') === 'letter_egra')
         .sort((a, b) => {
@@ -59,7 +62,7 @@ export default function LetterTrackerScreen({ route }) {
       setAssessmentMastered(masteredSet);
 
       // 3. Load coach-taught letters
-      const allMastery = await storage.getLetterMastery();
+      const allMastery = await masteryRepository.getLetterMastery();
       const childTaught = allMastery.filter(
         r => r.child_id === child.id &&
              r.language === letterSet.language &&
@@ -88,11 +91,13 @@ export default function LetterTrackerScreen({ route }) {
     if (taughtLetters[letter]) {
       // Currently green -> toggle OFF (soft-delete)
       const recordId = taughtLetters[letter];
-      await storage.updateLetterMasteryRecord(recordId, {
+      await masteryRepository.updateLetterMasteryRecord(recordId, {
         _deleted: true,
         synced: false,
         updated_at: new Date().toISOString(),
       });
+      await refreshSyncStatus();
+      triggerBackgroundSync?.();
       setTaughtLetters(prev => {
         const next = { ...prev };
         delete next[letter];
@@ -101,17 +106,20 @@ export default function LetterTrackerScreen({ route }) {
     } else {
       // Currently gray -> toggle ON
       // Check for existing soft-deleted record to reuse (avoids duplicate key on sync)
-      const allMastery = await storage.getLetterMastery();
+      const allMastery = await masteryRepository.getLetterMastery();
       const existing = allMastery.find(
         r => r.child_id === child.id && r.letter === letter && r.language === letterSet.language && r._deleted
       );
       if (existing) {
         // Reactivate the soft-deleted record
-        await storage.updateLetterMasteryRecord(existing.id, {
+        await masteryRepository.updateLetterMasteryRecord(existing.id, {
           _deleted: false,
+          deleted_at: null,
           synced: false,
           updated_at: new Date().toISOString(),
         });
+        await refreshSyncStatus();
+        triggerBackgroundSync?.();
         setTaughtLetters(prev => ({ ...prev, [letter]: existing.id }));
       } else {
         // Create new record
@@ -126,7 +134,9 @@ export default function LetterTrackerScreen({ route }) {
           created_at: new Date().toISOString(),
           updated_at: new Date().toISOString(),
         };
-        await storage.saveLetterMasteryRecord(record);
+        await masteryRepository.saveLetterMasteryRecord(record);
+        await refreshSyncStatus();
+        triggerBackgroundSync?.();
         setTaughtLetters(prev => ({ ...prev, [letter]: record.id }));
       }
     }

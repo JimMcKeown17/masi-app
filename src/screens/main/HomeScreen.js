@@ -8,7 +8,9 @@ import { useAuth } from '../../context/AuthContext';
 import { useOffline } from '../../context/OfflineContext';
 import { useChildren } from '../../context/ChildrenContext';
 import { useTimeTracking } from '../../hooks/useTimeTracking';
-import { storage } from '../../utils/storage';
+import { timeEntriesRepository } from '../../db/repositories/timeEntriesRepository';
+import { sessionsRepository } from '../../db/repositories/sessionsRepository';
+import { assessmentsRepository } from '../../db/repositories/assessmentsRepository';
 import {
   getDaysWorkedThisMonth,
   getWeekSessionCounts,
@@ -48,9 +50,9 @@ export default function HomeScreen({ navigation }) {
     useCallback(() => {
       const loadStats = async () => {
         const [timeEntries, sessions, assessments] = await Promise.all([
-          storage.getTimeEntries(),
-          storage.getSessions(),
-          storage.getAssessments(),
+          timeEntriesRepository.getTimeEntries(),
+          sessionsRepository.getSessions(),
+          assessmentsRepository.getAssessments(),
         ]);
 
         setDaysWorked(getDaysWorkedThisMonth(timeEntries));

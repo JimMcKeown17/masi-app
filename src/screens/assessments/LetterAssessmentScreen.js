@@ -4,7 +4,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Text, Button } from 'react-native-paper';
 import { useAuth } from '../../context/AuthContext';
 import { useOffline } from '../../context/OfflineContext';
-import { storage } from '../../utils/storage';
+import { assessmentsRepository } from '../../db/repositories/assessmentsRepository';
 import { v4 as uuidv4 } from 'uuid';
 import { ASSESSMENT_DURATION } from '../../constants/egraConstants';
 import EgraLetterGrid from '../../components/assessment/EgraLetterGrid';
@@ -47,7 +47,7 @@ export default function LetterAssessmentScreen({ navigation, route }) {
   const { child, letterSet, attemptNumber = 1, assessmentType = 'letter_egra' } = route.params;
   const isWordAssessment = assessmentType === 'word_egra';
   const { user } = useAuth();
-  const { refreshSyncStatus } = useOffline();
+  const { refreshSyncStatus, triggerBackgroundSync } = useOffline();
 
   const [phase, setPhase] = useState('instructions');
   const [currentPage, setCurrentPage] = useState(0);
@@ -218,8 +218,9 @@ export default function LetterAssessmentScreen({ navigation, route }) {
       updated_at: now.toISOString(),
     };
 
-    await storage.saveAssessment(assessment);
+    await assessmentsRepository.saveAssessment(assessment);
     await refreshSyncStatus();
+    triggerBackgroundSync?.();
 
     navigation.navigate('AssessmentResults', {
       assessment,

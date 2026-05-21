@@ -2,11 +2,9 @@ import React, { useState, useEffect } from 'react';
 import { View, StyleSheet, FlatList } from 'react-native';
 import { Text, Card, ActivityIndicator, Snackbar, IconButton } from 'react-native-paper';
 import { useAuth } from '../../context/AuthContext';
-import { useOffline } from '../../context/OfflineContext';
 import { useChildren } from '../../context/ChildrenContext';
 import { colors, spacing, borderRadius, shadows } from '../../constants/colors';
-import { storage, STORAGE_KEYS } from '../../utils/storage';
-import { supabase } from '../../services/supabaseClient';
+import { assessmentsRepository } from '../../db/repositories/assessmentsRepository';
 
 const THIRTY_DAYS_MS = 30 * 24 * 60 * 60 * 1000;
 
@@ -23,7 +21,6 @@ function formatDate(dateString) {
 
 export default function AssessmentHistoryScreen({ navigation }) {
   const { user } = useAuth();
-  const { isOnline } = useOffline();
   // Use allChildren (includes hidden) so historical assessments still resolve
   // child names. Hidden children render with a "(removed)" badge so users know
   // why the child no longer appears in their active list.
@@ -35,7 +32,7 @@ export default function AssessmentHistoryScreen({ navigation }) {
 
   useEffect(() => {
     loadAssessments();
-  }, []);
+  }, [user?.id]);
 
   const filterAndSort = (all) => {
     const cutoff = Date.now() - THIRTY_DAYS_MS;
@@ -53,28 +50,8 @@ export default function AssessmentHistoryScreen({ navigation }) {
 
   const loadAssessments = async () => {
     try {
-      const cached = await storage.getAssessments();
+      const cached = await assessmentsRepository.getAssessments();
       setAssessments(filterAndSort(cached));
-
-      if (isOnline && user?.id) {
-        const { data, error } = await supabase
-          .from('assessments')
-          .select('*')
-          .eq('user_id', user.id)
-          .order('date_assessed', { ascending: false });
-
-        if (error) {
-          console.error('Error fetching assessments from server:', error);
-        } else if (data) {
-          const serverRecords = data.map((a) => ({ ...a, synced: true }));
-          const serverIds = new Set(serverRecords.map((a) => a.id));
-          const localToKeep = cached.filter((a) => !serverIds.has(a.id));
-          const merged = [...serverRecords, ...localToKeep];
-
-          await storage.setItem(STORAGE_KEYS.ASSESSMENTS, merged);
-          setAssessments(filterAndSort(merged));
-        }
-      }
     } catch (error) {
       console.error('Error loading assessments:', error);
       setSnackbarMessage('Failed to load assessments');

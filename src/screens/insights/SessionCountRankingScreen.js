@@ -3,7 +3,7 @@ import { View, StyleSheet, FlatList } from 'react-native';
 import { Text, ActivityIndicator } from 'react-native-paper';
 import { useFocusEffect } from '@react-navigation/native';
 import { useChildren } from '../../context/ChildrenContext';
-import { storage } from '../../utils/storage';
+import { sessionsRepository } from '../../db/repositories/sessionsRepository';
 import { getSessionCountRanking } from '../../utils/dashboardStats';
 import RankedBarRow from '../../components/dashboard/RankedBarRow';
 import StatBar from '../../components/dashboard/StatBar';
@@ -18,7 +18,7 @@ export default function SessionCountRankingScreen() {
     useCallback(() => {
       const load = async () => {
         setLoading(true);
-        const sessions = await storage.getSessions();
+        const sessions = await sessionsRepository.getSessions();
         const ranked = getSessionCountRanking(childrenList, sessions);
         setRanking(ranked);
         setLoading(false);

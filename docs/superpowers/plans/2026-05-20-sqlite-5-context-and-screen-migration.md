@@ -94,6 +94,8 @@ Contracts:
 - navigation after local save does not wait for network sync
 - rankings use normalized session/assessment data correctly
 
+- [x] Initial assessment slice: added tests for assessment history and assessment save repository paths.
+
 - [ ] **Step 2: Wire screens**
 
 Remove dependence on `sessions.children_ids` and assessment arrays as storage source of truth. UI can still render derived summaries.
@@ -104,6 +106,7 @@ Create Group must read or create the active `grouping_versions` row for the clas
 
 - [x] Initial time-tracking slice: `useTimeTracking` now writes through `timeEntriesRepository` and triggers background sync after local writes; `TimeEntriesListScreen` reads completed work history from SQLite and no longer performs screen-owned Supabase/storage merges.
 - [x] Initial session slice: `SessionHistoryScreen` now reads from `sessionsRepository`; `LiteracySessionForm` saves session + tracker changes through a transaction-backed persistence helper; `LetterTrackerBottomSheet` reads assessments/mastery from repositories.
+- [x] Initial assessment/dashboard/ranking slice: assessment history/save, assessment child selection, child summary, letter tracker, tab stats, home stats, and ranking screens now call repositories directly; screen/hook/component `storage.` grep is clean.
 
 ### Task 4: Remove Generic Storage Calls
 

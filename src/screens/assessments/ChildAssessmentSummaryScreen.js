@@ -3,7 +3,7 @@ import { View, StyleSheet, ScrollView } from 'react-native';
 import { Text, Card, Button } from 'react-native-paper';
 import { useFocusEffect } from '@react-navigation/native';
 import { colors, spacing, borderRadius, shadows } from '../../constants/colors';
-import { storage } from '../../utils/storage';
+import { assessmentsRepository } from '../../db/repositories/assessmentsRepository';
 import { LETTER_SETS, WORD_SETS } from '../../constants/egraConstants';
 import { normalizeLanguageKey } from '../../utils/letterMastery';
 
@@ -35,7 +35,7 @@ export default function ChildAssessmentSummaryScreen({ navigation, route }) {
   useFocusEffect(
     useCallback(() => {
       (async () => {
-        const all = await storage.getAssessments();
+        const all = await assessmentsRepository.getAssessments();
         const byType = {};
         const counts = {};
         for (const a of all) {
