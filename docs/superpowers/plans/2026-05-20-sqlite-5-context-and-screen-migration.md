@@ -157,6 +157,8 @@ npm run sqlite:staging:android
 
 Exercise sign-in, class load, child load, group save, session save, assessment save, app kill/reopen.
 
+Partial result: Android staging launches on `Medium_Phone_API_28` after `adb reverse tcp:8082 tcp:8082` and manual reload; unauthenticated sign-in screen renders against `masi-app-sqlite`. Full signed-in create/session/assessment flow is blocked until a staging test user is available.
+
 - [ ] Update `documentation/sqlite-refactor-log.md`.
 - [ ] Request a parallel code-review pass focused on context concurrency, cache preservation, and local-first UX.
 - [ ] Get user signoff before Plan 6.
