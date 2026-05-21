@@ -48,13 +48,16 @@ describe('offline sync payload stripping', () => {
     });
   });
 
-  test('strips local pending-session markers and legacy Build B session_type', () => {
+  test('strips local pending-session markers, legacy Build B session_type, and view-model arrays', () => {
     const { _testBuildSyncPayload } = require('../src/services/offlineSync');
 
     const payload = _testBuildSyncPayload('sessions', {
       id: 'session-1',
       session_type: 'Literacy Coach',
       session_type_id: 'job-1',
+      programme_id: 'programme-1',
+      children_ids: ['child-1'],
+      group_ids: ['group-1'],
       _pendingJobTitleResolve: true,
       pendingSessionTypeCode: 'literacy_coach',
       pendingSessionTypeName: 'Literacy Coach',
@@ -63,7 +66,35 @@ describe('offline sync payload stripping', () => {
 
     expect(payload).toEqual({
       id: 'session-1',
-      session_type_id: 'job-1',
+      programme_id: 'programme-1',
+    });
+  });
+
+  test('allows only normalized assessment columns through the sync payload', () => {
+    const { _testBuildSyncPayload } = require('../src/services/offlineSync');
+
+    const payload = _testBuildSyncPayload('assessments', {
+      id: 'assessment-1',
+      child_id: 'child-1',
+      user_id: 'user-1',
+      programme_id: 'programme-1',
+      assessment_type: 'letter_egra',
+      assessment_date: '2026-05-21',
+      score: 8,
+      correct_letters: [{ letter: 'a' }],
+      incorrect_letters: [{ letter: 'm' }],
+      attempt_number: 1,
+      synced: false,
+    });
+
+    expect(payload).toEqual({
+      id: 'assessment-1',
+      child_id: 'child-1',
+      user_id: 'user-1',
+      programme_id: 'programme-1',
+      assessment_type: 'letter_egra',
+      assessment_date: '2026-05-21',
+      score: 8,
     });
   });
 });

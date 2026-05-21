@@ -1,13 +1,15 @@
-import React, { createContext, useState, useEffect, useContext, useRef } from 'react';
+import React, { createContext, useState, useEffect, useContext, useRef, useCallback } from 'react';
 import NetInfo from '@react-native-community/netinfo';
 import { AppState } from 'react-native';
-import { syncAll, getSyncStatus, repairOrphanedJunctions } from '../services/offlineSync';
+import { syncAll, getSyncStatus } from '../services/offlineSync';
 
 const OfflineContext = createContext({
   isOnline: true,
   isSyncing: false,
   unsyncedCount: 0,
   syncStatus: {},
+  lastSyncResult: null,
+  triggerBackgroundSync: () => {},
   syncNow: async () => {},
   refreshSyncStatus: async () => {},
 });
@@ -20,8 +22,10 @@ export const OfflineProvider = ({ children }) => {
   const [lastSyncResult, setLastSyncResult] = useState(null);
 
   const appState = useRef(AppState.currentState);
-  const syncInProgress = useRef(false);
+  const activeSyncPromise = useRef(null);
+  const backgroundSyncTimer = useRef(null);
   const isOnlineRef = useRef(isOnline);
+  const triggerBackgroundSyncRef = useRef(() => {});
 
   // Keep ref in sync with state so event-listener closures always read current value
   useEffect(() => {
@@ -31,71 +35,83 @@ export const OfflineProvider = ({ children }) => {
   /**
    * Update sync status (unsynced count, last sync time, etc.)
    */
-  const refreshSyncStatus = async () => {
+  const refreshSyncStatus = useCallback(async ({ autoTrigger = true } = {}) => {
     try {
       const status = await getSyncStatus();
       setUnsyncedCount(status.unsyncedCount);
       setSyncStatus(status);
 
-      // If there are unsynced items and we're online, kick off sync.
-      // syncNow has its own lock (syncInProgress) so this is safe to call
-      // repeatedly. No loop risk: after sync completes it calls refreshSyncStatus
-      // again, but by then unsyncedCount is 0.
-      if (status.unsyncedCount > 0 && isOnlineRef.current && !syncInProgress.current) {
-        syncNow();
+      if (autoTrigger && status.unsyncedCount > 0 && isOnlineRef.current) {
+        triggerBackgroundSyncRef.current();
       }
+
+      return status;
     } catch (error) {
       console.error('Error refreshing sync status:', error);
+      return null;
     }
-  };
+  }, []);
 
   /**
    * Perform a full sync
-   * Includes lock to prevent multiple simultaneous syncs
+   * Includes lock to make concurrent callers share the same work
    */
-  const syncNow = async () => {
-    // Prevent multiple syncs running at once
-    if (syncInProgress.current) {
-      console.log('Sync already in progress, skipping...');
-      return lastSyncResult;
+  const syncNow = useCallback(() => {
+    if (activeSyncPromise.current) {
+      return activeSyncPromise.current;
     }
 
-    // Don't sync if offline
     if (!isOnlineRef.current) {
       console.log('Cannot sync while offline');
-      return null;
+      return Promise.resolve(null);
     }
 
-    try {
-      syncInProgress.current = true;
+    const syncPromise = (async () => {
       setIsSyncing(true);
 
-      console.log('Starting sync...');
-      const result = await syncAll();
+      try {
+        console.log('Starting sync...');
+        const result = await syncAll();
 
-      setLastSyncResult(result);
-      await refreshSyncStatus();
+        setLastSyncResult(result);
+        await refreshSyncStatus({ autoTrigger: false });
 
-      console.log('Sync completed:', result);
-      return result;
-    } catch (error) {
-      console.error('Sync failed:', error);
-      return { success: false, error };
-    } finally {
-      syncInProgress.current = false;
-      setIsSyncing(false);
-    }
-  };
+        console.log('Sync completed:', result);
+        return result;
+      } catch (error) {
+        console.error('Sync failed:', error);
+        return { success: false, error };
+      } finally {
+        activeSyncPromise.current = null;
+        setIsSyncing(false);
+      }
+    })();
+
+    activeSyncPromise.current = syncPromise;
+    return syncPromise;
+  }, [refreshSyncStatus]);
 
   /**
-   * Auto-sync when conditions are met
+   * Debounced, non-blocking background sync trigger for write paths and listeners.
    */
-  const autoSync = async () => {
-    if (isOnline && unsyncedCount > 0 && !syncInProgress.current) {
-      console.log('Auto-syncing...');
-      await syncNow();
+  const triggerBackgroundSync = useCallback(() => {
+    if (!isOnlineRef.current) return undefined;
+
+    if (backgroundSyncTimer.current) {
+      clearTimeout(backgroundSyncTimer.current);
     }
-  };
+
+    backgroundSyncTimer.current = setTimeout(() => {
+      backgroundSyncTimer.current = null;
+      syncNow();
+    }, 300);
+
+    return undefined;
+  }, [syncNow]);
+
+  useEffect(() => {
+    triggerBackgroundSyncRef.current = triggerBackgroundSync;
+  }, [triggerBackgroundSync]);
 
   /**
    * Network state listener
@@ -116,7 +132,7 @@ export const OfflineProvider = ({ children }) => {
       // If we just came online and have unsynced data, sync
       if (online && wasOffline && unsyncedCount > 0) {
         console.log('Connection restored, triggering sync...');
-        setTimeout(() => autoSync(), 1000); // Small delay to let network stabilize
+        triggerBackgroundSync();
       }
     });
 
@@ -136,7 +152,7 @@ export const OfflineProvider = ({ children }) => {
 
         // Auto-sync if online and have unsynced data
         if (isOnline && unsyncedCount > 0) {
-          setTimeout(() => autoSync(), 500);
+          triggerBackgroundSync();
         }
       }
 
@@ -145,7 +161,7 @@ export const OfflineProvider = ({ children }) => {
         console.log('App going to background');
         // Try to sync before backgrounding
         if (isOnline && unsyncedCount > 0) {
-          autoSync();
+          triggerBackgroundSync();
         }
       }
 
@@ -153,7 +169,7 @@ export const OfflineProvider = ({ children }) => {
     });
 
     return () => subscription.remove();
-  }, [isOnline, unsyncedCount]);
+  }, [isOnline, unsyncedCount, triggerBackgroundSync, refreshSyncStatus]);
 
   /**
    * Initial load: check network state and sync status
@@ -164,20 +180,13 @@ export const OfflineProvider = ({ children }) => {
       const netInfoState = await NetInfo.fetch();
       setIsOnline(netInfoState.isConnected && netInfoState.isInternetReachable);
 
-      // One-time repair for devices with stuck junction records (v2.x upgrade path)
-      await repairOrphanedJunctions();
-
-      // Load sync status
+      // Load sync status. refreshSyncStatus schedules a background sync when
+      // unsynced work exists, but does not block startup on upload.
       await refreshSyncStatus();
-
-      // Auto-sync if online and have unsynced data
-      if (netInfoState.isConnected && netInfoState.isInternetReachable) {
-        setTimeout(() => autoSync(), 2000); // Give app time to initialize
-      }
     };
 
     initialize();
-  }, []);
+  }, [refreshSyncStatus, triggerBackgroundSync]);
 
   /**
    * Periodically refresh sync status while app is active
@@ -190,7 +199,7 @@ export const OfflineProvider = ({ children }) => {
     }, 30000); // Every 30 seconds
 
     return () => clearInterval(interval);
-  }, []);
+  }, [refreshSyncStatus]);
 
   const value = {
     isOnline,
@@ -198,6 +207,7 @@ export const OfflineProvider = ({ children }) => {
     unsyncedCount,
     syncStatus,
     lastSyncResult,
+    triggerBackgroundSync,
     syncNow,
     refreshSyncStatus,
   };

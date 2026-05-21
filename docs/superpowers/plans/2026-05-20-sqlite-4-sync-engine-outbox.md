@@ -19,7 +19,7 @@
 - Create: `src/db/repositories/syncOutboxRepository.js`
 - Test: `__tests__/syncOutboxRepository.test.js`
 
-- [ ] **Step 1: Write outbox tests**
+- [x] **Step 1: Write outbox tests**
 
 Contracts:
 
@@ -29,7 +29,7 @@ Contracts:
 - failed and terminal rows appear in failed item output
 - `in_flight` rows do not inflate visible unsynced counts by themselves
 
-- [ ] **Step 2: Implement repositories**
+- [x] **Step 2: Implement repositories**
 
 Operations:
 
@@ -52,11 +52,11 @@ Statuses:
 - Modify: `src/services/offlineSync.js`
 - Test: `__tests__/offlineSyncOutbox.test.js`
 
-- [ ] **Step 0: Delete obsolete orphan repair**
+- [x] **Step 0: Delete obsolete orphan repair**
 
 Delete `repairOrphanedJunctions` from `src/services/offlineSync.js`. It was a one-time repair path for historical AsyncStorage/junction bugs and is not applicable to the clean-slate SQLite backend.
 
-- [ ] **Step 1: Write sync behavior tests**
+- [x] **Step 1: Write sync behavior tests**
 
 Required tests:
 
@@ -69,7 +69,7 @@ Required tests:
 - successful finalization marks domain row synced and deletes outbox row in one transaction
 - child `hard_delete` operations call `delete_child_if_no_history(childId)` instead of direct table delete; `false` responses become terminal archive-needed failures rather than silently deleting history
 
-- [ ] **Step 2: Implement outbox processing**
+- [x] **Step 2: Implement outbox processing**
 
 Push order:
 
@@ -99,7 +99,7 @@ Pull order also includes reference caches for `academic_years`, `assessment_wind
 - Modify: `src/context/OfflineContext.js`
 - Test: `__tests__/OfflineContext.test.js`
 
-- [ ] **Step 1: Add tests**
+- [x] **Step 1: Add tests**
 
 Contracts:
 
@@ -108,7 +108,7 @@ Contracts:
 - concurrent manual sync calls share one in-flight promise
 - write paths can refresh local status without waiting for network upload
 
-- [ ] **Step 2: Implement API**
+- [x] **Step 2: Implement API**
 
 Expose:
 
@@ -121,15 +121,20 @@ Expose:
 
 ### Review Gate
 
-- [ ] Run:
+- [x] Run:
 
 ```bash
 npm test -- --runInBand __tests__/syncOutboxRepository.test.js __tests__/offlineSyncOutbox.test.js __tests__/OfflineContext.test.js
+```
+
+- [x] Run full suite:
+
+```bash
 npm test -- --runInBand
 git diff --check
 ```
 
-- [ ] Run emulator smoke test with one forced offline write and restart.
-- [ ] Update `documentation/sqlite-refactor-log.md`.
+- [ ] Run emulator smoke test with one forced offline write and restart. Current implementation is unit/integration verified; manual authenticated device write/restart remains a follow-up gate.
+- [x] Update `documentation/sqlite-refactor-log.md`.
 - [ ] Request a parallel code-review pass focused on failure semantics and atomic finalization.
 - [ ] Get user signoff before Plan 5.

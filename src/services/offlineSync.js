@@ -1,18 +1,26 @@
 import { supabase } from './supabaseClient';
 import { storage } from '../utils/storage';
+import { resolveDatabase, runRepositoryTransaction } from '../db/repositories/repositoryRuntime';
+import {
+  quoteIdentifier,
+  timestamp,
+} from '../db/repositories/sqliteRepositoryUtils';
+import {
+  createSyncOutboxRepository,
+  syncOutboxRepository,
+} from '../db/repositories/syncOutboxRepository';
+import {
+  createSyncStateRepository,
+  syncStateRepository,
+} from '../db/repositories/syncStateRepository';
+import {
+  academicYearsRepository,
+  assessmentWindowsRepository,
+  teachersRepository,
+} from '../db/repositories/referenceDataRepository';
+import { LEGACY_PROGRAMME_ID } from '../db/repositories/domainRepositoryUtils';
 
-/**
- * Offline Sync Service
- *
- * Handles syncing local data to Supabase with:
- * - Exponential backoff retry logic
- * - Last-write-wins conflict resolution
- * - Batch processing
- * - Error tracking
- */
-
-const MAX_RETRY_ATTEMPTS = 5;
-const BASE_RETRY_DELAY = 5000; // 5 seconds
+const BASE_RETRY_DELAY = 5000;
 
 const LOCAL_ONLY_KEYS_TO_STRIP = [
   'synced',
@@ -20,6 +28,11 @@ const LOCAL_ONLY_KEYS_TO_STRIP = [
   '_pendingJobTitleResolve',
   'pendingSessionTypeCode',
   'pendingSessionTypeName',
+  'sync_status',
+  'last_sync_error',
+  'server_updated_at',
+  'tableName',
+  'recordId',
 ];
 
 const LEGACY_KEYS_TO_STRIP = {
@@ -28,603 +41,547 @@ const LEGACY_KEYS_TO_STRIP = {
   sessions: ['session_type'],
 };
 
-// Table configuration for sync
-const SYNC_TABLES = {
-  TIME_ENTRIES: {
-    key: 'TIME_ENTRIES',
-    table: 'time_entries',
-    getRecords: () => storage.getUnsyncedRecords('TIME_ENTRIES'),
-  },
-  SESSIONS: {
-    key: 'SESSIONS',
-    table: 'sessions',
-    getRecords: () => storage.getUnsyncedRecords('SESSIONS'),
-  },
-  CLASSES: {
-    key: 'CLASSES',
-    table: 'classes',
-    getRecords: () => storage.getUnsyncedClasses(),
-    onConflict: 'staff_id,name,school_id',
-  },
-  CHILDREN: {
-    key: 'CHILDREN',
-    table: 'children',
-    getRecords: () => storage.getUnsyncedChildren(),
-  },
-  STAFF_CHILDREN: {
-    key: 'STAFF_CHILDREN',
-    table: 'staff_children',
-    getRecords: () => storage.getUnsyncedStaffChildren(),
-    onConflict: 'staff_id,child_id',
-  },
-  GROUPS: {
-    key: 'GROUPS',
-    table: 'groups',
-    getRecords: () => storage.getUnsyncedGroups(),
-  },
-  CHILDREN_GROUPS: {
-    key: 'CHILDREN_GROUPS',
-    table: 'children_groups',
-    getRecords: () => storage.getUnsyncedChildrenGroups(),
-    onConflict: 'child_id,group_id',
-  },
-  ASSESSMENTS: {
-    key: 'ASSESSMENTS',
-    table: 'assessments',
-    getRecords: () => storage.getUnsyncedRecords('ASSESSMENTS'),
-  },
-  LETTER_MASTERY: {
-    key: 'LETTER_MASTERY',
-    table: 'letter_mastery',
-    getRecords: () => storage.getUnsyncedLetterMastery(),
-    onConflict: 'user_id,child_id,letter,language',
-  },
+const SERVER_COLUMNS = {
+  time_entries: [
+    'id', 'user_id', 'sign_in_time', 'sign_in_lat', 'sign_in_lon', 'sign_out_time',
+    'sign_out_lat', 'sign_out_lon', 'auto_clocked_out', 'created_at', 'updated_at',
+  ],
+  classes: [
+    'id', 'school_id', 'name', 'grade', 'teacher', 'teacher_id', 'home_language',
+    'academic_year', 'academic_year_id', 'archived_at', 'archived_by_user_id',
+    'archive_reason', 'created_by', 'created_at', 'updated_at',
+  ],
+  children: [
+    'id', 'first_name', 'last_name', 'preferred_name', 'date_of_birth', 'age',
+    'gender', 'class_id', 'hidden_at', 'archived_at', 'archived_by_user_id',
+    'archive_reason', 'created_by', 'created_at', 'updated_at',
+  ],
+  child_ea_assignments: [
+    'id', 'user_id', 'child_id', 'assigned_at', 'unassigned_at', 'created_by',
+    'created_at', 'updated_at',
+  ],
+  child_programme_enrollments: [
+    'id', 'child_id', 'programme_id', 'enrolled_at', 'ended_at', 'created_by',
+    'created_at', 'updated_at',
+  ],
+  child_class_memberships: [
+    'id', 'child_id', 'class_id', 'academic_year_id', 'enrolled_at', 'exited_at',
+    'created_by', 'created_at', 'updated_at',
+  ],
+  class_ea_assignments: [
+    'id', 'class_id', 'ea_user_id', 'programme_id', 'assigned_at', 'unassigned_at',
+    'handover_reason', 'created_by', 'created_at', 'updated_at',
+  ],
+  grouping_versions: [
+    'id', 'class_id', 'academic_year_id', 'version_number', 'status',
+    'accepted_at', 'accepted_by_user_id', 'archived_at', 'archived_by_user_id',
+    'archive_reason', 'created_by', 'created_at', 'updated_at',
+  ],
+  class_grouping_state: [
+    'id', 'class_id', 'academic_year_id', 'class_list_status',
+    'class_list_completed_at', 'class_list_completed_by_user_id',
+    'class_list_reopened_at', 'class_list_reopened_by_user_id',
+    'active_grouping_version_id', 'created_at', 'updated_at',
+  ],
+  groups: [
+    'id', 'name', 'programme_id', 'class_id', 'grouping_version_id',
+    'display_number', 'archived_at', 'archived_by_user_id', 'archive_reason',
+    'created_by', 'created_at', 'updated_at',
+  ],
+  group_ea_assignments: [
+    'id', 'group_id', 'ea_user_id', 'programme_id', 'assigned_at', 'unassigned_at',
+    'handover_reason', 'created_by', 'created_at', 'updated_at',
+  ],
+  child_group_memberships: [
+    'id', 'child_id', 'group_id', 'grouping_version_id', 'joined_at', 'removed_at',
+    'created_by', 'created_at', 'updated_at',
+  ],
+  sessions: [
+    'id', 'user_id', 'programme_id', 'class_id', 'session_date', 'started_at',
+    'ended_at', 'activities', 'notes', 'created_at', 'updated_at',
+  ],
+  session_attendees: [
+    'id', 'session_id', 'child_id', 'group_id', 'attendance_status',
+    'grade_snapshot', 'notes', 'created_at', 'updated_at',
+  ],
+  assessments: [
+    'id', 'user_id', 'child_id', 'programme_id', 'assessment_tool_id',
+    'assessment_window_id', 'assessment_purpose', 'grade_snapshot',
+    'teacher_name_snapshot', 'assessment_type', 'assessment_date', 'score',
+    'total_items', 'items_tested', 'notes', 'created_at', 'updated_at',
+  ],
+  assessment_items: [
+    'id', 'assessment_id', 'item_key', 'prompt', 'response', 'is_correct',
+    'position', 'metadata', 'created_at', 'updated_at',
+  ],
+  letter_mastery: [
+    'id', 'user_id', 'child_id', 'programme_id', 'letter', 'language', 'source',
+    'mastered_at', 'deleted_at', 'created_at', 'updated_at',
+  ],
 };
 
-/**
- * Calculate exponential backoff delay
- * Attempt 1: 0ms (immediate)
- * Attempt 2: 5s
- * Attempt 3: 15s (3x previous)
- * Attempt 4: 45s
- * Attempt 5: 135s (~2 minutes)
- */
-const getRetryDelay = (attemptNumber) => {
-  if (attemptNumber === 1) return 0;
-  return BASE_RETRY_DELAY * Math.pow(3, attemptNumber - 2);
+export const PUSH_ORDER = [
+  'time_entries',
+  'classes',
+  'children',
+  'child_ea_assignments',
+  'child_programme_enrollments',
+  'child_class_memberships',
+  'class_ea_assignments',
+  'grouping_versions',
+  'class_grouping_state',
+  'groups',
+  'group_ea_assignments',
+  'child_group_memberships',
+  'sessions',
+  'session_attendees',
+  'assessments',
+  'assessment_items',
+  'letter_mastery',
+];
+
+const TABLE_DEPENDENCIES = {
+  children: ['classes'],
+  child_ea_assignments: ['children'],
+  child_programme_enrollments: ['children'],
+  child_class_memberships: ['children', 'classes'],
+  class_ea_assignments: ['classes'],
+  grouping_versions: ['classes'],
+  class_grouping_state: ['classes', 'grouping_versions'],
+  groups: ['classes'],
+  group_ea_assignments: ['groups'],
+  child_group_memberships: ['children', 'groups'],
+  sessions: ['classes'],
+  session_attendees: ['sessions', 'children', 'groups'],
+  assessments: ['children'],
+  assessment_items: ['assessments'],
+  letter_mastery: ['children'],
 };
 
-/**
- * Classify whether a Supabase/Postgres error is terminal (will never succeed on retry).
- * @returns {{ terminal: boolean, markAsSynced: boolean }}
- *   - terminal: stop retrying immediately
- *   - markAsSynced: the record effectively exists on server (treat as success)
- */
-const classifyError = (error) => {
+const dependenciesForRecord = (outboxRecord) => {
+  const dependencies = [...(TABLE_DEPENDENCIES[outboxRecord.table_name] || [])];
+  const payload = outboxRecord.payload || {};
+
+  if (outboxRecord.table_name === 'children' && !payload.class_id) {
+    return dependencies.filter((dependency) => dependency !== 'classes');
+  }
+  if ((outboxRecord.table_name === 'groups' || outboxRecord.table_name === 'sessions') && !payload.class_id) {
+    return dependencies.filter((dependency) => dependency !== 'classes');
+  }
+  if (outboxRecord.table_name === 'session_attendees' && !payload.group_id) {
+    return dependencies.filter((dependency) => dependency !== 'groups');
+  }
+
+  return dependencies;
+};
+
+const TABLE_CONFIGS = Object.fromEntries(PUSH_ORDER.map((tableName, index) => [
+  tableName,
+  {
+    tableName,
+    order: index,
+    onConflict: 'id',
+    duplicateIsSuccess: false,
+  },
+]));
+
+const normalizeTableName = (tableName) => tableName?.toLowerCase();
+
+const getRetryDelay = (retryCountBeforeFailure) => (
+  BASE_RETRY_DELAY * Math.pow(3, Math.max(0, retryCountBeforeFailure))
+);
+
+const nextRetryTimestamp = (retryCountBeforeFailure) => (
+  new Date(Date.now() + getRetryDelay(retryCountBeforeFailure)).toISOString()
+);
+
+const classifyError = (error, { duplicateIsSuccess = false } = {}) => {
   const code = error?.code;
 
-  // 23505: unique_violation — record already exists on server
-  // (e.g., same child_id+group_id with different UUID). This is a success case.
   if (code === '23505') {
-    return { terminal: true, markAsSynced: true };
+    return { terminal: true, markAsSynced: duplicateIsSuccess };
   }
 
-  // 23503: foreign_key_violation — parent record doesn't exist on server.
-  // Retrying won't help unless parent syncs first.
-  if (code === '23503') {
+  if (code === '23503' || code === '42501' || code === 'ARCHIVE_REQUIRED' || code === 'LOCAL_ONLY_REFERENCE') {
     return { terminal: true, markAsSynced: false };
   }
 
-  // 42501: RLS violation — user doesn't have permission.
-  // Retrying with same auth won't help.
-  if (code === '42501') {
-    return { terminal: true, markAsSynced: false };
-  }
-
-  // Everything else (network errors, timeouts, etc.) is retriable
   return { terminal: false, markAsSynced: false };
 };
 
 const buildSyncPayload = (tableName, record) => {
   const tableLegacyKeys = LEGACY_KEYS_TO_STRIP[tableName] || [];
   const keysToStrip = new Set([...LOCAL_ONLY_KEYS_TO_STRIP, ...tableLegacyKeys]);
+  const allowlist = SERVER_COLUMNS[tableName] ? new Set(SERVER_COLUMNS[tableName]) : null;
 
-  return Object.fromEntries(
-    Object.entries(record).filter(([key]) => !keysToStrip.has(key))
-  );
+  const payload = {};
+  for (const [key, value] of Object.entries(record || {})) {
+    if (keysToStrip.has(key) || value === undefined) continue;
+    if (allowlist && !allowlist.has(key)) continue;
+    payload[key] = value;
+  }
+  return payload;
 };
 
-const findJobTitleByCode = (jobTitles, code) => (
-  jobTitles.find(title => title.code === code)
+const errorMessage = (error) => (
+  error?.message || error?.code || String(error || 'Unknown sync error')
 );
 
-const findJobTitleByName = (jobTitles, name) => {
-  if (!name) return null;
-  const normalizedName = name.trim().toLowerCase();
-  return jobTitles.find(title => title.name?.trim().toLowerCase() === normalizedName) || null;
-};
+const makeFailedRecord = (outboxRecord, reason) => ({
+  id: outboxRecord.record_id,
+  table: outboxRecord.table_name,
+  operation: outboxRecord.operation,
+  reason,
+});
 
-const resolveSessionTypeId = async (record) => {
-  const profile = await storage.getUserProfile();
-  if (profile?.jobTitleId) {
-    return profile.jobTitleId;
-  }
+const runServerOperation = async (supabaseClient, config, outboxRecord) => {
+  const payload = buildSyncPayload(config.tableName, outboxRecord.payload || { id: outboxRecord.record_id });
 
-  const jobTitles = await storage.getJobTitles();
-  if (jobTitles.length === 0) {
-    return null;
-  }
-
-  const byCode = record.pendingSessionTypeCode
-    ? findJobTitleByCode(jobTitles, record.pendingSessionTypeCode)
-    : null;
-  if (byCode?.id) return byCode.id;
-
-  const byName = findJobTitleByName(
-    jobTitles,
-    record.pendingSessionTypeName || record.session_type
-  );
-  return byName?.id || null;
-};
-
-const prepareRecordForSync = async (tableName, record) => {
-  if (tableName !== 'sessions' || record.session_type_id) {
-    return { record };
-  }
-
-  const sessionTypeId = await resolveSessionTypeId(record);
-  if (!sessionTypeId) {
-    return {
-      skipped: true,
-      reason: 'Missing session_type_id; waiting for cached profile or job_titles lookup',
-    };
-  }
-
-  const markerKeys = [
-    '_pendingJobTitleResolve',
-    'pendingSessionTypeCode',
-    'pendingSessionTypeName',
-  ];
-  const preparedRecord = {
-    ...record,
-    session_type_id: sessionTypeId,
-  };
-  markerKeys.forEach(key => {
-    delete preparedRecord[key];
-  });
-
-  await storage.updateSession(
-    record.id,
-    { session_type_id: sessionTypeId },
-    markerKeys
-  );
-
-  return { record: preparedRecord };
-};
-
-/**
- * Sync a single record to Supabase
- * Uses upsert for last-write-wins conflict resolution
- * @param {string} conflictTarget - Column(s) for ON CONFLICT, defaults to 'id'
- */
-const syncRecord = async (tableName, record, conflictTarget = 'id') => {
-  try {
-    const prepared = await prepareRecordForSync(tableName, record);
-    if (prepared.skipped) {
-      return { success: false, skipped: true, error: { message: prepared.reason } };
-    }
-
-    const recordData = buildSyncPayload(tableName, prepared.record);
-
-    // Upsert: insert if new, update if exists (last-write-wins)
-    const { error } = await supabase
-      .from(tableName)
-      .upsert(recordData, {
-        onConflict: conflictTarget,
-        ignoreDuplicates: false,
-      });
-
-    if (error) throw error;
-
-    return { success: true, error: null };
-  } catch (error) {
-    console.error(`Error syncing ${tableName} record:`, error);
-    return { success: false, error };
-  }
-};
-
-// @public test helper: locks down table-scoped stripping without hitting Supabase.
-export const _testBuildSyncPayload = buildSyncPayload;
-
-/**
- * Sync all unsynced records for a given table
- */
-const syncTable = async (tableConfig) => {
-  const { key, table, getRecords, onConflict } = tableConfig;
-
-  try {
-    const unsyncedRecords = await getRecords();
-
-    if (unsyncedRecords.length === 0) {
-      return {
-        success: true,
-        synced: 0,
-        failed: 0,
-        failedRecords: [],
-      };
-    }
-
-    console.log(`Syncing ${unsyncedRecords.length} unsynced ${key} records...`);
-
-    const results = {
-      synced: 0,
-      failed: 0,
-      failedRecords: [],
-    };
-
-    // Process records one by one
-    for (const record of unsyncedRecords) {
-      const attemptCount = await storage.getRetryAttempts(key, record.id);
-
-      // Check if we've exceeded max retries
-      if (attemptCount >= MAX_RETRY_ATTEMPTS) {
-        const lastError = await storage.getLastSyncError(key, record.id);
-        const reason = lastError || 'Max retry attempts exceeded';
-        console.warn(`Record ${record.id} exceeded max retry attempts. Last error: ${reason}`);
-        await storage.addFailedItem(key, record.id, reason);
-        results.failed++;
-        results.failedRecords.push({
-          id: record.id,
-          table: key,
-          reason,
-        });
-        continue;
-      }
-
-      // Apply exponential backoff delay if this is a retry
-      if (attemptCount > 0) {
-        const delay = getRetryDelay(attemptCount + 1);
-        console.log(`Retry attempt ${attemptCount + 1} for ${record.id}, waiting ${delay}ms...`);
-        await new Promise(resolve => setTimeout(resolve, delay));
-      }
-
-      // Handle soft-deleted records (e.g., letter_mastery un-teach)
-      if (record._deleted) {
-        try {
-          const { error } = await supabase.from(table).delete().eq('id', record.id);
-          if (error) throw error;
-          // Hard-remove from local storage after successful server delete
-          await storage.removeLetterMasteryRecord(record.id);
-          await storage.clearRetryAttempts(key, record.id);
-          await storage.clearLastSyncError(key, record.id);
-          results.synced++;
-          console.log(`✓ Deleted ${key} record ${record.id} from server`);
-        } catch (deleteError) {
-          const errorMsg = deleteError?.message || deleteError?.code || 'Delete failed';
-          await storage.recordRetryAttempt(key, record.id);
-          await storage.setLastSyncError(key, record.id, errorMsg);
-          results.failed++;
-          results.failedRecords.push({
-            id: record.id,
-            table: key,
-            error: errorMsg,
-            attemptCount: attemptCount + 1,
-          });
-          console.error(`✗ Failed to delete ${key} record ${record.id}: ${errorMsg}`);
-        }
-        continue;
-      }
-
-      // Attempt to sync the record
-      const result = await syncRecord(table, record, onConflict);
-
-      if (result.success) {
-        // Mark as synced in local storage
-        await storage.markAsSynced(key, record.id);
-        await storage.clearRetryAttempts(key, record.id);
-        await storage.clearLastSyncError(key, record.id);
-        results.synced++;
-        console.log(`✓ Synced ${key} record ${record.id}`);
-      } else if (result.skipped) {
-        const reason = result.error?.message || 'Skipped until local data can be resolved';
-        await storage.setLastSyncError(key, record.id, reason);
-        results.failed++;
-        results.failedRecords.push({
-          id: record.id,
-          table: key,
-          reason,
-        });
-        console.warn(`⏭ Skipped ${key} record ${record.id}: ${reason}`);
-      } else {
-        const errorMsg = result.error?.message || result.error?.code || 'Unknown error';
-        const classification = classifyError(result.error);
-
-        if (classification.terminal) {
-          if (classification.markAsSynced) {
-            // 23505: record already exists on server — treat as success
-            await storage.markAsSynced(key, record.id);
-            await storage.clearRetryAttempts(key, record.id);
-            await storage.clearLastSyncError(key, record.id);
-            results.synced++;
-            console.log(`✓ ${key} record ${record.id} already exists on server (${result.error?.code}), marking synced`);
-          } else {
-            // 23503/42501: terminal error — quarantine immediately, no retries
-            await storage.addFailedItem(key, record.id, `TERMINAL: ${errorMsg}`);
-            await storage.markAsSynced(key, record.id);
-            await storage.clearRetryAttempts(key, record.id);
-            results.failed++;
-            results.failedRecords.push({ id: record.id, table: key, reason: `TERMINAL: ${errorMsg}` });
-            console.warn(`✗ TERMINAL error for ${key} record ${record.id}: ${errorMsg}`);
-          }
-        } else {
-          // Retriable error — existing backoff logic
-          await storage.recordRetryAttempt(key, record.id);
-          await storage.setLastSyncError(key, record.id, errorMsg);
-          results.failed++;
-          results.failedRecords.push({
-            id: record.id,
-            table: key,
-            error: errorMsg,
-            attemptCount: attemptCount + 1,
-          });
-          console.error(`✗ Failed to sync ${key} record ${record.id}: ${errorMsg}`);
-        }
-      }
-    }
-
-    return {
-      success: results.failed === 0,
-      synced: results.synced,
-      failed: results.failed,
-      failedRecords: results.failedRecords,
-    };
-  } catch (error) {
-    console.error(`Error syncing table ${key}:`, error);
+  if (payload.programme_id === LEGACY_PROGRAMME_ID) {
     return {
       success: false,
-      synced: 0,
-      failed: -1,
-      failedRecords: [],
-      error,
+      error: {
+        code: 'LOCAL_ONLY_REFERENCE',
+        message: 'Record is missing an active programme assignment and cannot be synced',
+      },
     };
   }
+
+  if (outboxRecord.operation === 'hard_delete') {
+    if (config.tableName === 'children') {
+      const { data, error } = await supabaseClient.rpc('delete_child_if_no_history', {
+        p_child_id: outboxRecord.record_id,
+      });
+      if (error) return { success: false, error };
+      if (data !== true) {
+        return {
+          success: false,
+          error: {
+            code: 'ARCHIVE_REQUIRED',
+            message: 'Child has history and must be archived instead of hard-deleted',
+          },
+        };
+      }
+      return { success: true };
+    }
+
+    const { error } = await supabaseClient
+      .from(config.tableName)
+      .delete()
+      .eq('id', outboxRecord.record_id);
+    return error ? { success: false, error } : { success: true };
+  }
+
+  const { error } = await supabaseClient
+    .from(config.tableName)
+    .upsert(payload, {
+      onConflict: config.onConflict || 'id',
+      ignoreDuplicates: false,
+    });
+
+  return error ? { success: false, error } : { success: true };
 };
 
-// Explicit sync order — parent tables before their junction tables.
-// Using an array instead of relying on object property iteration order.
-const SYNC_ORDER = [
-  'TIME_ENTRIES',
-  'SESSIONS',
-  'CLASSES',
-  'CHILDREN',
-  'GROUPS',
-  'STAFF_CHILDREN',      // depends on CHILDREN
-  'CHILDREN_GROUPS',     // depends on CHILDREN and GROUPS
-  'ASSESSMENTS',
-  'LETTER_MASTERY',
-];
-
-// Junction tables and the parent tables they depend on.
-// If a parent fails, its dependents are skipped in this sync cycle.
-const JUNCTION_DEPENDENCIES = {
-  STAFF_CHILDREN: ['CHILDREN'],
-  CHILDREN_GROUPS: ['CHILDREN', 'GROUPS'],
+const setDomainSyncResult = async (txn, tableName, recordId, {
+  syncStatus,
+  lastSyncError = null,
+}) => {
+  await txn.runAsync(`
+    update ${quoteIdentifier(tableName)}
+    set sync_status = ?,
+        last_sync_error = ?,
+        updated_at = ?
+    where id = ?
+  `, syncStatus, lastSyncError, timestamp(), recordId);
 };
 
-/**
- * Sync all tables
- * Returns aggregated results
- */
-export const syncAll = async () => {
-  console.log('Starting full sync...');
+const finalizeSuccess = async ({
+  database,
+  outboxRecord,
+  tableName,
+  outboxRepository,
+}) => runRepositoryTransaction(database, async (txn) => {
+  if (outboxRecord.operation !== 'hard_delete') {
+    await setDomainSyncResult(txn, tableName, outboxRecord.record_id, {
+      syncStatus: 'synced',
+      lastSyncError: null,
+    });
+  }
+  await outboxRepository.deleteRecord(outboxRecord.id, { transaction: txn });
+});
 
-  const startTime = Date.now();
-  const results = {
-    success: true,
-    totalSynced: 0,
-    totalFailed: 0,
-    failedRecords: [],
-    tableResults: {},
+const finalizeRetriableFailure = async ({
+  database,
+  outboxRecord,
+  tableName,
+  outboxRepository,
+  reason,
+}) => runRepositoryTransaction(database, async (txn) => {
+  await setDomainSyncResult(txn, tableName, outboxRecord.record_id, {
+    syncStatus: 'failed',
+    lastSyncError: reason,
+  });
+  await outboxRepository.markRetriableFailure(outboxRecord.id, {
+    errorMessage: reason,
+    nextRetryAt: nextRetryTimestamp(outboxRecord.retry_count || 0),
+  }, { transaction: txn });
+});
+
+const finalizeTerminalFailure = async ({
+  database,
+  outboxRecord,
+  tableName,
+  outboxRepository,
+  reason,
+}) => runRepositoryTransaction(database, async (txn) => {
+  await setDomainSyncResult(txn, tableName, outboxRecord.record_id, {
+    syncStatus: 'terminal',
+    lastSyncError: reason,
+  });
+  await outboxRepository.markTerminalFailure(outboxRecord.id, {
+    errorMessage: reason,
+  }, { transaction: txn });
+});
+
+const sortByPushOrder = (records) => records
+  .slice()
+  .sort((a, b) => {
+    const left = TABLE_CONFIGS[a.table_name]?.order ?? Number.MAX_SAFE_INTEGER;
+    const right = TABLE_CONFIGS[b.table_name]?.order ?? Number.MAX_SAFE_INTEGER;
+    if (left !== right) return left - right;
+    return a.created_at.localeCompare(b.created_at) || a.id.localeCompare(b.id);
+  });
+
+export const createOutboxSyncEngine = ({
+  database,
+  supabaseClient = supabase,
+  outboxRepository = createSyncOutboxRepository({ database }),
+  stateRepository = createSyncStateRepository({ database }),
+  tableConfigs = TABLE_CONFIGS,
+  safeDuplicateSuccessTables = [],
+} = {}) => {
+  const safeDuplicateTables = new Set(safeDuplicateSuccessTables.map(normalizeTableName));
+  const getConfig = (tableName) => {
+    const normalized = normalizeTableName(tableName);
+    const baseConfig = tableConfigs[normalized];
+    if (!baseConfig) return null;
+    return {
+      ...baseConfig,
+      duplicateIsSuccess: baseConfig.duplicateIsSuccess || safeDuplicateTables.has(normalized),
+    };
   };
 
-  const tablesWithFailures = new Set();
-
-  for (const tableName of SYNC_ORDER) {
-    const config = SYNC_TABLES[tableName];
-    if (!config) continue;
-
-    // Skip junction tables whose parent table had failures this cycle
-    const deps = JUNCTION_DEPENDENCIES[tableName] || [];
-    if (deps.some(dep => tablesWithFailures.has(dep))) {
-      console.log(`⏭ Skipping ${tableName}: parent table(s) had failures this cycle`);
-      results.tableResults[tableName] = { success: false, synced: 0, failed: 0, skipped: true };
-      continue;
+  const processRecord = async (outboxRecord) => {
+    const config = getConfig(outboxRecord.table_name);
+    if (!config) {
+      const reason = `Unknown sync table: ${outboxRecord.table_name}`;
+      await finalizeTerminalFailure({
+        database,
+        outboxRecord,
+        tableName: outboxRecord.table_name,
+        outboxRepository,
+        reason,
+      });
+      return { success: false, terminal: true, failedRecord: makeFailedRecord(outboxRecord, reason) };
     }
 
-    const tableResult = await syncTable(config);
+    await outboxRepository.markInFlight([outboxRecord.id]);
+    const serverResult = await runServerOperation(supabaseClient, config, outboxRecord);
 
-    results.tableResults[tableName] = tableResult;
-    results.totalSynced += tableResult.synced;
-    results.totalFailed += tableResult.failed;
-    results.failedRecords.push(...tableResult.failedRecords);
-
-    if (!tableResult.success) {
-      results.success = false;
-      tablesWithFailures.add(tableName);
+    if (serverResult.success) {
+      await finalizeSuccess({
+        database,
+        outboxRecord,
+        tableName: config.tableName,
+        outboxRepository,
+      });
+      return { success: true };
     }
+
+    const classification = classifyError(serverResult.error, config);
+    const reason = errorMessage(serverResult.error);
+
+    if (classification.markAsSynced) {
+      await finalizeSuccess({
+        database,
+        outboxRecord,
+        tableName: config.tableName,
+        outboxRepository,
+      });
+      return { success: true };
+    }
+
+    if (classification.terminal) {
+      await finalizeTerminalFailure({
+        database,
+        outboxRecord,
+        tableName: config.tableName,
+        outboxRepository,
+        reason,
+      });
+      return { success: false, terminal: true, failedRecord: makeFailedRecord(outboxRecord, reason) };
+    }
+
+    await finalizeRetriableFailure({
+      database,
+      outboxRecord,
+      tableName: config.tableName,
+      outboxRepository,
+      reason,
+    });
+    return { success: false, terminal: false, failedRecord: makeFailedRecord(outboxRecord, reason) };
+  };
+
+  const syncAll = async ({ tableName = null } = {}) => {
+    const startedAt = Date.now();
+    const db = await resolveDatabase(database);
+    const readyRecords = sortByPushOrder(await outboxRepository.getReadyRecords({ limit: 1000 }));
+    const filteredRecords = tableName
+      ? readyRecords.filter((record) => record.table_name === normalizeTableName(tableName))
+      : readyRecords;
+
+    const result = {
+      success: true,
+      totalSynced: 0,
+      totalFailed: 0,
+      failedRecords: [],
+      tableResults: {},
+      durationMs: 0,
+    };
+    const failedTables = new Set();
+
+    for (const outboxRecord of filteredRecords) {
+      const config = getConfig(outboxRecord.table_name);
+      const dependencies = dependenciesForRecord(outboxRecord);
+      const skippedDependency = dependencies.find((dependency) => failedTables.has(dependency));
+      if (skippedDependency) {
+        const tableResult = result.tableResults[outboxRecord.table_name] || {
+          success: false,
+          synced: 0,
+          failed: 0,
+          skipped: true,
+          skippedDependency,
+        };
+        tableResult.skipped = true;
+        tableResult.skippedDependency = skippedDependency;
+        result.tableResults[outboxRecord.table_name] = tableResult;
+        result.success = false;
+        continue;
+      }
+
+      const tableKey = config?.tableName || outboxRecord.table_name;
+      if (!result.tableResults[tableKey]) {
+        result.tableResults[tableKey] = { success: true, synced: 0, failed: 0 };
+      }
+
+      const recordResult = await processRecord(outboxRecord);
+      if (recordResult.success) {
+        result.totalSynced += 1;
+        result.tableResults[tableKey].synced += 1;
+      } else {
+        result.success = false;
+        result.totalFailed += 1;
+        result.tableResults[tableKey].success = false;
+        result.tableResults[tableKey].failed += 1;
+        result.failedRecords.push(recordResult.failedRecord);
+        failedTables.add(tableKey);
+      }
+    }
+
+    result.durationMs = Date.now() - startedAt;
+    const now = new Date().toISOString();
+    await stateRepository.updateSyncMeta({
+      lastSyncTime: now,
+      ...(result.success ? { lastSuccessfulSyncTime: now } : {}),
+    });
+
+    // Ensure migrations have run for injected test databases even if no rows were ready.
+    void db;
+    return result;
+  };
+
+  const syncTableByName = async (name) => syncAll({ tableName: name });
+
+  const getSyncStatus = async () => {
+    const [status, meta] = await Promise.all([
+      outboxRepository.getSyncStatus(),
+      stateRepository.getSyncMeta(),
+    ]);
+    return {
+      ...status,
+      lastSyncTime: meta.lastSyncTime,
+      lastSuccessfulSyncTime: meta.lastSuccessfulSyncTime || null,
+    };
+  };
+
+  const retryFailedItem = async (table, id) => {
+    const db = await resolveDatabase(database);
+    const tableName = normalizeTableName(table);
+    await runRepositoryTransaction(db, async (txn) => {
+      await txn.runAsync(`
+        update sync_outbox
+        set status = 'pending',
+            next_retry_at = null,
+            last_error = null,
+            updated_at = ?
+        where lower(table_name) = ?
+          and record_id = ?
+          and status in ('failed', 'terminal')
+      `, timestamp(), tableName, id);
+      const config = getConfig(tableName);
+      if (config) {
+        await setDomainSyncResult(txn, config.tableName, id, {
+          syncStatus: 'pending',
+          lastSyncError: null,
+        });
+      }
+    });
+  };
+
+  return {
+    syncAll,
+    syncTableByName,
+    getSyncStatus,
+    retryFailedItem,
+  };
+};
+
+const defaultEngine = createOutboxSyncEngine({
+  outboxRepository: syncOutboxRepository,
+  stateRepository: syncStateRepository,
+});
+
+export const syncAll = (options) => defaultEngine.syncAll(options);
+export const syncTableByName = (tableName) => defaultEngine.syncTableByName(tableName);
+export const getSyncStatus = () => defaultEngine.getSyncStatus();
+export const retryFailedItem = (table, id) => defaultEngine.retryFailedItem(table, id);
+
+export const _testBuildSyncPayload = buildSyncPayload;
+export const _testClassifyError = classifyError;
+
+export const pullReferenceData = async ({
+  supabaseClient = supabase,
+  repositories = {
+    academic_years: academicYearsRepository,
+    assessment_windows: assessmentWindowsRepository,
+    teachers: teachersRepository,
+  },
+} = {}) => {
+  const results = {};
+  for (const tableName of ['academic_years', 'assessment_windows', 'teachers']) {
+    const { data, error } = await supabaseClient
+      .from(tableName)
+      .select('*');
+    if (error) throw error;
+    await repositories[tableName].replaceFromServer(data || []);
+    results[tableName] = (data || []).length;
   }
-
-  // Update sync metadata
-  const now = new Date().toISOString();
-  const metaUpdate = { lastSyncTime: now };
-  if (results.success) {
-    metaUpdate.lastSuccessfulSyncTime = now;
-  }
-  await storage.updateSyncMeta(metaUpdate);
-
-  const duration = Date.now() - startTime;
-  console.log(`Sync complete in ${duration}ms: ${results.totalSynced} synced, ${results.totalFailed} failed`);
-
   return results;
 };
 
 /**
- * Sync a specific table
- */
-export const syncTableByName = async (tableName) => {
-  const tableConfig = SYNC_TABLES[tableName.toUpperCase()];
-
-  if (!tableConfig) {
-    throw new Error(`Unknown table: ${tableName}`);
-  }
-
-  return await syncTable(tableConfig);
-};
-
-/**
- * Get sync status (unsynced count, last sync time, etc.)
- */
-export const getSyncStatus = async () => {
-  const unsyncedCount = await storage.getAllUnsyncedCount();
-  const syncMeta = await storage.getSyncMeta();
-
-  // Get breakdown by table
-  const breakdown = {};
-  for (const [tableName, config] of Object.entries(SYNC_TABLES)) {
-    const unsynced = await config.getRecords();
-    breakdown[tableName] = unsynced.length;
-  }
-
-  return {
-    unsyncedCount,
-    lastSyncTime: syncMeta.lastSyncTime,
-    lastSuccessfulSyncTime: syncMeta.lastSuccessfulSyncTime || null,
-    breakdown,
-    retryAttempts: syncMeta.retryAttempts,
-    failedItems: syncMeta.failedItems || [],
-  };
-};
-
-/**
- * Clear all sync metadata (useful for debugging)
- */
-export const resetSyncMeta = async () => {
-  await storage.updateSyncMeta({
-    lastSyncTime: null,
-    lastSuccessfulSyncTime: null,
-    retryAttempts: {},
-    failedItems: [],
-  });
-};
-
-/**
- * Retry a previously failed item by clearing its failed state.
- * Does NOT trigger a sync — the caller is responsible for that
- * to avoid circular dependencies with OfflineContext.
- */
-export const retryFailedItem = async (table, id) => {
-  await storage.removeFailedItem(table, id);
-  await storage.clearLastSyncError(table, id);
-};
-
-/**
- * One-time repair: find junction records (staff_children, children_groups)
- * stuck with FK errors because their parent child record was dropped from
- * local storage by the old loadChildren() merge bug.
- *
- * For each failed junction record referencing a child_id:
- *   - If the child exists locally as synced:true, mark it synced:false to re-sync
- *   - Clear retry/failed state on the junction records so they get a fresh attempt
- *
- * Runs once per device (gated by orphanRepairDone flag in sync metadata).
- */
-export const repairOrphanedJunctions = async () => {
-  try {
-    const meta = await storage.getSyncMeta();
-    if (meta.orphanRepairDone) return;
-
-    const failedItems = meta.failedItems || [];
-    if (failedItems.length === 0) {
-      await storage.updateSyncMeta({ orphanRepairDone: true });
-      return;
-    }
-
-    const children = await storage.getChildren();
-    const staffChildren = await storage.getStaffChildren();
-    const childrenGroups = await storage.getChildrenGroups();
-
-    // Collect child_ids from failed junction records
-    const childIdsToRepair = new Set();
-    const junctionItemsToReset = [];
-
-    for (const item of failedItems) {
-      if (item.table === 'STAFF_CHILDREN' || item.table === 'CHILDREN_GROUPS') {
-        const records = item.table === 'STAFF_CHILDREN' ? staffChildren : childrenGroups;
-        const record = records.find(r => r.id === item.id);
-        if (record?.child_id) {
-          childIdsToRepair.add(record.child_id);
-          junctionItemsToReset.push(item);
-        }
-      }
-    }
-
-    if (childIdsToRepair.size === 0) {
-      await storage.updateSyncMeta({ orphanRepairDone: true });
-      return;
-    }
-
-    // Mark referenced children as unsynced so they re-sync to server.
-    // If the child was dropped from local storage by the old merge bug,
-    // try to recover it from the server (it may have synced before being dropped).
-    let repaired = 0;
-    for (const childId of childIdsToRepair) {
-      const child = children.find(c => c.id === childId);
-      if (child) {
-        // Child exists locally — mark unsynced so it re-syncs
-        if (child.synced !== false) {
-          await storage.markAsUnsynced('CHILDREN', childId);
-        }
-        repaired++;
-      } else {
-        // Child was dropped from local storage — try to recover from server
-        try {
-          const { data } = await supabase
-            .from('children')
-            .select('*')
-            .eq('id', childId)
-            .single();
-
-          if (data) {
-            // Re-add to local storage as synced (it's already on the server)
-            await storage.saveChild({ ...data, synced: true });
-            repaired++;
-            console.log(`Orphan repair: recovered child ${childId} from server`);
-          }
-        } catch (fetchErr) {
-          console.warn(`Orphan repair: could not recover child ${childId} from server:`, fetchErr);
-        }
-      }
-    }
-
-    // Reset failed/retry state on junction records so they retry after parent syncs
-    for (const item of junctionItemsToReset) {
-      await storage.removeFailedItem(item.table, item.id);
-      await storage.clearLastSyncError(item.table, item.id);
-      await storage.markAsUnsynced(item.table, item.id);
-    }
-
-    await storage.updateSyncMeta({ orphanRepairDone: true });
-    console.log(`Orphan repair: re-queued ${repaired} children and ${junctionItemsToReset.length} junction records`);
-  } catch (error) {
-    console.error('Error in repairOrphanedJunctions:', error);
-    // Don't block startup — repair will retry next launch
-  }
-};
-
-/**
  * Fetch schools from Supabase and cache locally.
- * Schools are admin-managed (read-only for workers), so this is NOT
- * part of SYNC_TABLES — it's a one-way fetch, not an upsert.
+ * Schools are admin-managed reference data, not an outbox push table.
  */
 export const fetchAndCacheSchools = async () => {
   const { data, error } = await supabase
