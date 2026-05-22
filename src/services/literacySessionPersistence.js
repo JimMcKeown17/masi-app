@@ -2,9 +2,11 @@ import { LETTER_SETS } from '../constants/egraConstants';
 import { createSessionsRepository } from '../db/repositories/sessionsRepository';
 import { createMasteryRepository } from '../db/repositories/masteryRepository';
 import { runRepositoryTransaction } from '../db/repositories/repositoryRuntime';
+import { resolveProgrammeId } from '../db/repositories/domainRepositoryUtils';
 
-const findMasteryRecord = (records, { childId, letter, language, deleted }) => records.find(
+const findMasteryRecord = (records, { childId, letter, language, programmeId, deleted }) => records.find(
   (record) => record.child_id === childId &&
+    record.programme_id === programmeId &&
     record.letter === letter &&
     record.language === language &&
     (deleted ? record._deleted : !record._deleted) &&
@@ -24,13 +26,26 @@ export async function persistLiteracySession({
   const letterSet = LETTER_SETS[trackerLanguageKey];
 
   await runRepositoryTransaction(database, async (transaction) => {
-    await sessionsRepository.saveSession(session, { transaction });
+    const programmeId = await resolveProgrammeId(transaction, {
+      programmeId: session.programme_id,
+      userId: session.user_id,
+    });
+    const programmeScopedSession = {
+      ...session,
+      programme_id: programmeId,
+    };
+
+    await sessionsRepository.saveSession(programmeScopedSession, { transaction });
 
     if (!letterSet || Object.keys(letterTrackerChanges).length === 0) {
       return;
     }
 
-    const allMastery = await masteryRepository.getLetterMastery({ transaction });
+    const allMastery = await masteryRepository.getLetterMastery({
+      transaction,
+      userId: programmeScopedSession.user_id,
+      programmeId,
+    });
 
     for (const [childId, changes] of Object.entries(letterTrackerChanges)) {
       for (const [letter, value] of Object.entries(changes)) {
@@ -39,6 +54,7 @@ export async function persistLiteracySession({
             childId,
             letter,
             language: letterSet.language,
+            programmeId,
             deleted: true,
           });
 
@@ -54,9 +70,9 @@ export async function persistLiteracySession({
           } else {
             const record = {
               id: idFactory(),
-              user_id: session.user_id,
+              user_id: programmeScopedSession.user_id,
               child_id: childId,
-              programme_id: session.programme_id,
+              programme_id: programmeId,
               letter,
               source: 'taught',
               language: letterSet.language,
@@ -72,6 +88,7 @@ export async function persistLiteracySession({
             childId,
             letter,
             language: letterSet.language,
+            programmeId,
             deleted: false,
           });
 

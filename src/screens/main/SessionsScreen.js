@@ -3,6 +3,7 @@ import { View, StyleSheet, TouchableOpacity } from 'react-native';
 import { Text, Button } from 'react-native-paper';
 import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect } from '@react-navigation/native';
+import { useAuth } from '../../context/AuthContext';
 import { colors, spacing, borderRadius } from '../../constants/colors';
 import { useChildren } from '../../context/ChildrenContext';
 import { sessionsRepository } from '../../db/repositories/sessionsRepository';
@@ -10,17 +11,18 @@ import { getSessionsTabStats } from '../../utils/dashboardStats';
 import StatBar from '../../components/dashboard/StatBar';
 
 export default function SessionsScreen({ navigation }) {
+  const { user } = useAuth();
   const { children: childrenList } = useChildren();
   const [stats, setStats] = useState(null);
 
   useFocusEffect(
     useCallback(() => {
       const loadStats = async () => {
-        const sessions = await sessionsRepository.getSessions();
+        const sessions = await sessionsRepository.getSessions({ userId: user.id });
         setStats(getSessionsTabStats(sessions, childrenList));
       };
       loadStats();
-    }, [childrenList])
+    }, [childrenList, user.id])
   );
 
   return (

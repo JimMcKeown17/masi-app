@@ -161,4 +161,108 @@ describe('groupsRepository', () => {
       await db.closeAsync();
     }
   });
+
+  test('getChildrenGroups excludes removed memberships by default', async () => {
+    const db = await createMigratedDatabase(runMigrations);
+
+    try {
+      await seedCoreData(db);
+      await createChildrenRepository({ database: db }).save({
+        id: 'child-1',
+        first_name: 'Amahle',
+        last_name: 'Dlamini',
+        class_id: 'class-1',
+        created_by: 'user-1',
+        synced: false,
+      }, { actorUserId: 'user-1' });
+      const groupsRepository = createGroupsRepository({ database: db });
+
+      await groupsRepository.saveGroup({
+        id: 'group-1',
+        name: 'Group 1',
+        programme_id: 'programme-a',
+        class_id: 'class-1',
+        created_by: 'user-1',
+        synced: false,
+      });
+      await groupsRepository.addChildToGroup({
+        id: 'membership-1',
+        child_id: 'child-1',
+        group_id: 'group-1',
+        synced: false,
+      });
+
+      expect(await groupsRepository.getChildrenGroups()).toEqual([
+        expect.objectContaining({ id: 'membership-1' }),
+      ]);
+
+      await groupsRepository.removeChildFromGroup('child-1', 'group-1', {
+        removedAt: '2026-05-27T00:00:00.000Z',
+      });
+
+      expect(await groupsRepository.getChildrenGroups()).toEqual([]);
+      expect(await groupsRepository.getChildrenGroups({ includeRemoved: true })).toEqual([
+        expect.objectContaining({ id: 'membership-1', removed_at: '2026-05-27T00:00:00.000Z' }),
+      ]);
+    } finally {
+      await db.closeAsync();
+    }
+  });
+
+  test('group saves require an active programme assignment when programme_id is omitted', async () => {
+    const db = await createMigratedDatabase(runMigrations);
+
+    try {
+      await seedCoreData(db);
+      await db.runAsync("update staff_programme_assignments set ended_at = '2026-05-21T00:00:00.000Z'");
+      const repository = createGroupsRepository({ database: db });
+
+      await expect(repository.saveGroup({
+        id: 'group-without-programme',
+        name: 'Group Without Programme',
+        class_id: 'class-1',
+        created_by: 'user-1',
+        synced: false,
+      })).rejects.toThrow(/No active programme assignment/i);
+
+      expect(await db.getFirstAsync('select count(*) as count from groups')).toEqual({ count: 0 });
+      expect(await db.getFirstAsync('select count(*) as count from sync_outbox')).toEqual({ count: 0 });
+    } finally {
+      await db.closeAsync();
+    }
+  });
+
+  test('user-scoped group reads only return groups in the active programme', async () => {
+    const db = await createMigratedDatabase(runMigrations);
+
+    try {
+      await seedCoreData(db);
+      const repository = createGroupsRepository({ database: db });
+
+      await repository.saveGroup({
+        id: 'group-literacy',
+        name: 'Literacy Group',
+        programme_id: 'programme-a',
+        class_id: 'class-1',
+        created_by: 'user-1',
+        synced: false,
+      });
+      await repository.saveGroup({
+        id: 'group-numeracy',
+        name: 'Numeracy Group',
+        programme_id: 'programme-b',
+        class_id: 'class-1',
+        created_by: 'user-1',
+        synced: false,
+      });
+
+      expect((await repository.getGroups()).map(group => group.id))
+        .toEqual(['group-literacy', 'group-numeracy']);
+      expect(await repository.getGroups({ userId: 'user-1' })).toEqual([
+        expect.objectContaining({ id: 'group-literacy', programme_id: 'programme-a' }),
+      ]);
+    } finally {
+      await db.closeAsync();
+    }
+  });
 });

@@ -131,4 +131,64 @@ describe('AuthContext Plan 5 startup discipline', () => {
     expect(result.current.profile).toBeNull();
     expect(storage.saveUserProfile).not.toHaveBeenCalledWith(expect.objectContaining({ id: 'user-1' }));
   });
+
+  test('manual sign-out invalidates in-flight profile loads before Supabase emits SIGNED_OUT', async () => {
+    const profileFetch = deferred();
+    const signOutRequest = deferred();
+    mockProfileQuery(profileFetch.promise);
+    supabase.auth.signOut.mockReturnValue(signOutRequest.promise);
+
+    const { result } = renderHook(() => useAuth(), { wrapper });
+    await waitFor(() => expect(authCallback).toEqual(expect.any(Function)));
+
+    act(() => {
+      authCallback('SIGNED_IN', { user: { id: 'user-1', email: 'ea@example.org' } });
+    });
+    await act(async () => {
+      jest.runOnlyPendingTimers();
+      await Promise.resolve();
+    });
+    await waitFor(() => expect(supabase.from).toHaveBeenCalledWith('users'));
+
+    let signOutPromise;
+    await act(async () => {
+      signOutPromise = result.current.signOut();
+      await Promise.resolve();
+    });
+
+    await act(async () => {
+      profileFetch.resolve({ data: profileRow, error: null });
+      await profileFetch.promise;
+      await Promise.resolve();
+    });
+
+    expect(result.current.profile).toBeNull();
+    expect(storage.saveUserProfile).not.toHaveBeenCalledWith(expect.objectContaining({ id: 'user-1' }));
+
+    await act(async () => {
+      signOutRequest.resolve({ error: null });
+      await signOutPromise;
+    });
+  });
+
+  test('local cached profile is ignored when it belongs to another user', async () => {
+    storage.getUserProfile.mockResolvedValueOnce({
+      ...profileRow,
+      id: 'other-user',
+      first_name: 'Stale',
+    });
+
+    const { result } = renderHook(() => useAuth(), { wrapper });
+    await waitFor(() => expect(authCallback).toEqual(expect.any(Function)));
+
+    act(() => {
+      authCallback('SIGNED_IN', { user: { id: 'user-1', email: 'ea@example.org' } });
+    });
+    await act(async () => {
+      jest.runOnlyPendingTimers();
+      await Promise.resolve();
+    });
+
+    expect(result.current.profile).not.toEqual(expect.objectContaining({ id: 'other-user' }));
+  });
 });

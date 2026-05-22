@@ -2,6 +2,7 @@ import React, { useState, useCallback } from 'react';
 import { View, StyleSheet, FlatList } from 'react-native';
 import { Text, ActivityIndicator } from 'react-native-paper';
 import { useFocusEffect } from '@react-navigation/native';
+import { useAuth } from '../../context/AuthContext';
 import { useChildren } from '../../context/ChildrenContext';
 import { sessionsRepository } from '../../db/repositories/sessionsRepository';
 import { getSessionCountRanking } from '../../utils/dashboardStats';
@@ -10,6 +11,7 @@ import StatBar from '../../components/dashboard/StatBar';
 import { colors, spacing } from '../../constants/colors';
 
 export default function SessionCountRankingScreen() {
+  const { user } = useAuth();
   const { children: childrenList } = useChildren();
   const [ranking, setRanking] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -18,13 +20,13 @@ export default function SessionCountRankingScreen() {
     useCallback(() => {
       const load = async () => {
         setLoading(true);
-        const sessions = await sessionsRepository.getSessions();
+        const sessions = await sessionsRepository.getSessions({ userId: user.id });
         const ranked = getSessionCountRanking(childrenList, sessions);
         setRanking(ranked);
         setLoading(false);
       };
       load();
-    }, [childrenList])
+    }, [childrenList, user.id])
   );
 
   if (loading) {

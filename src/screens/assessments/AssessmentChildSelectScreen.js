@@ -2,6 +2,7 @@ import React, { useState, useCallback } from 'react';
 import { View, StyleSheet, FlatList, Pressable } from 'react-native';
 import { Text, Searchbar, Portal, Dialog, Button, RadioButton } from 'react-native-paper';
 import { useFocusEffect } from '@react-navigation/native';
+import { useAuth } from '../../context/AuthContext';
 import { useChildren } from '../../context/ChildrenContext';
 import { useClasses } from '../../context/ClassesContext';
 import { LETTER_SETS, WORD_SETS } from '../../constants/egraConstants';
@@ -15,6 +16,7 @@ function formatShortDate(dateStr) {
 }
 
 export default function AssessmentChildSelectScreen({ navigation, route }) {
+  const { user } = useAuth();
   const assessmentType = route.params?.assessmentType || 'letter_egra';
   const isWordAssessment = assessmentType === 'word_egra';
   const itemSets = isWordAssessment ? WORD_SETS : LETTER_SETS;
@@ -29,7 +31,7 @@ export default function AssessmentChildSelectScreen({ navigation, route }) {
   useFocusEffect(
     useCallback(() => {
       (async () => {
-        const allAssessments = await assessmentsRepository.getAssessments();
+        const allAssessments = await assessmentsRepository.getAssessments({ userId: user.id });
         const typeFiltered = allAssessments.filter(x => (x.assessment_type || 'letter_egra') === assessmentType);
         const map = {};
         for (const a of typeFiltered) {
@@ -45,7 +47,7 @@ export default function AssessmentChildSelectScreen({ navigation, route }) {
         }
         setAssessmentMap(map);
       })();
-    }, [])
+    }, [assessmentType, user.id])
   );
 
   const sortedChildren = [...children].sort((a, b) => {

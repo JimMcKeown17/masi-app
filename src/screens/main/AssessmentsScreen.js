@@ -2,6 +2,7 @@ import React, { useState, useCallback } from 'react';
 import { View, StyleSheet } from 'react-native';
 import { Text, Button, Card } from 'react-native-paper';
 import { useFocusEffect } from '@react-navigation/native';
+import { useAuth } from '../../context/AuthContext';
 import { colors, spacing, borderRadius, shadows } from '../../constants/colors';
 import { useChildren } from '../../context/ChildrenContext';
 import { assessmentsRepository } from '../../db/repositories/assessmentsRepository';
@@ -9,17 +10,18 @@ import { getAssessmentsTabStats } from '../../utils/dashboardStats';
 import StatBar from '../../components/dashboard/StatBar';
 
 export default function AssessmentsScreen({ navigation }) {
+  const { user } = useAuth();
   const { children: childrenList } = useChildren();
   const [stats, setStats] = useState(null);
 
   useFocusEffect(
     useCallback(() => {
       const loadStats = async () => {
-        const assessments = await assessmentsRepository.getAssessments();
+        const assessments = await assessmentsRepository.getAssessments({ userId: user.id });
         setStats(getAssessmentsTabStats(childrenList, assessments));
       };
       loadStats();
-    }, [childrenList])
+    }, [childrenList, user.id])
   );
 
   return (

@@ -1,6 +1,7 @@
 import { resolveDatabase, runRepositoryTransaction } from './repositoryRuntime';
 import {
   enqueueDomainOutbox,
+  getActiveProgrammeId,
   mapDomainRow,
   normalizeSyncFields,
   resolveProgrammeId,
@@ -40,9 +41,34 @@ export const createMasteryRepository = ({ database } = {}) => {
     transaction ? task(transaction) : runRepositoryTransaction(database, task)
   );
 
-  const getLetterMastery = async ({ transaction } = {}) => {
+  const getLetterMastery = async ({
+    transaction,
+    userId,
+    childId,
+    programmeId,
+  } = {}) => {
     const db = transaction || await resolveDatabase(database);
-    const rows = await db.getAllAsync('select * from letter_mastery order by created_at, id');
+    const activeProgrammeId = programmeId || (userId ? await getActiveProgrammeId(db, userId) : null);
+    if (userId && !activeProgrammeId) return [];
+    const clauses = [];
+    const params = [];
+    if (activeProgrammeId) {
+      clauses.push('programme_id = ?');
+      params.push(activeProgrammeId);
+    }
+    if (userId) {
+      clauses.push('user_id = ?');
+      params.push(userId);
+    }
+    if (childId) {
+      clauses.push('child_id = ?');
+      params.push(childId);
+    }
+    const where = clauses.length ? `where ${clauses.join(' and ')}` : '';
+    const rows = await db.getAllAsync(
+      `select * from letter_mastery ${where} order by created_at, id`,
+      ...params
+    );
     return rows.map(mapMastery);
   };
 
@@ -50,7 +76,6 @@ export const createMasteryRepository = ({ database } = {}) => {
     const programmeId = await resolveProgrammeId(txn, {
       programmeId: record.programme_id,
       userId: record.user_id,
-      allowLegacyFallback: true,
     });
     const existing = await txn.getFirstAsync(`
       select *

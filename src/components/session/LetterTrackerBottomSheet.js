@@ -39,6 +39,7 @@ export default function LetterTrackerBottomSheet({
   visible,
   onDismiss,
   child,
+  userId,
   languageKey,
   pendingChanges,
   onChangesUpdate,
@@ -65,7 +66,10 @@ export default function LetterTrackerBottomSheet({
       setLoading(true);
       try {
         // 1. Compute assessment mastery from latest assessment
-        const allAssessments = await assessmentsRepository.getAssessments();
+        const allAssessments = await assessmentsRepository.getAssessments({
+          userId,
+          childId: child.id,
+        });
         const childAssessments = allAssessments
           .filter(a => a.child_id === child.id && a.letter_language === letterSet.language)
           .sort((a, b) => {
@@ -78,7 +82,10 @@ export default function LetterTrackerBottomSheet({
         setAssessmentMastered(masteredSet);
 
         // 2. Load existing taught letters from storage
-        const allMastery = await masteryRepository.getLetterMastery();
+        const allMastery = await masteryRepository.getLetterMastery({
+          userId,
+          childId: child.id,
+        });
         const childTaught = allMastery.filter(
           r => r.child_id === child.id &&
                r.language === letterSet.language &&
@@ -228,13 +235,16 @@ export default function LetterTrackerBottomSheet({
  * Compute the display count for the button label (total mastered letters).
  * Exported so the parent form can call this without opening the bottom sheet.
  */
-export async function getTrackerCount(childId, languageKey, pendingChanges = {}) {
+export async function getTrackerCount(childId, languageKey, pendingChanges = {}, { userId } = {}) {
   const letterSet = LETTER_SETS[languageKey];
   const pedagogicalOrder = PEDAGOGICAL_ORDERS[languageKey];
   if (!letterSet || !pedagogicalOrder) return 0;
 
   // Assessment mastery
-  const allAssessments = await assessmentsRepository.getAssessments();
+  const allAssessments = await assessmentsRepository.getAssessments({
+    userId,
+    childId,
+  });
   const childAssessments = allAssessments
     .filter(a => a.child_id === childId && a.letter_language === letterSet.language)
     .sort((a, b) => {
@@ -245,7 +255,10 @@ export async function getTrackerCount(childId, languageKey, pendingChanges = {})
   const masteredSet = computeAssessmentMastery(childAssessments[0] || null, letterSet, pedagogicalOrder);
 
   // Existing taught
-  const allMastery = await masteryRepository.getLetterMastery();
+  const allMastery = await masteryRepository.getLetterMastery({
+    userId,
+    childId,
+  });
   const existingTaught = new Set(
     allMastery
       .filter(r => r.child_id === childId && r.language === letterSet.language && !r._deleted)

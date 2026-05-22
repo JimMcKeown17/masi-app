@@ -31,12 +31,13 @@ export const ChildrenProvider = ({ children }) => {
   const [groups, setGroups] = useState([]);
   const [childrenGroups, setChildrenGroups] = useState([]);
   const [loading, setLoading] = useState(false);
+  const activeUserIdRef = useRef(null);
 
   // Active children only — hidden_at IS NULL. This is what every list view,
   // picker, and stats helper should consume. Hidden children stay in
   // childrenList so allChildren can resolve their names in history views.
   const visibleChildren = useMemo(
-    () => childrenList.filter(c => !c.hidden_at),
+    () => childrenList.filter(c => !c.hidden_at && !c.archived_at),
     [childrenList]
   );
 
@@ -49,9 +50,15 @@ export const ChildrenProvider = ({ children }) => {
 
   // Load data on mount when user is authenticated
   useEffect(() => {
+    activeUserIdRef.current = user?.id || null;
     if (user?.id) {
       loadPreloadedChildData();
+      return;
     }
+    setChildrenList([]);
+    setGroups([]);
+    setChildrenGroups([]);
+    setLoading(false);
   }, [user?.id]);
 
   // Reload from storage after sync completes to pick up updated synced flags
@@ -64,21 +71,32 @@ export const ChildrenProvider = ({ children }) => {
   }, [isSyncing]);
 
   const loadPreloadedChildData = async () => {
+    const activeUserId = user?.id;
+    if (!activeUserId) {
+      setChildrenList([]);
+      setGroups([]);
+      setChildrenGroups([]);
+      setLoading(false);
+      return;
+    }
+
     try {
       setLoading(true);
 
       const [cachedChildren, cachedGroups, cachedMemberships] = await Promise.all([
-        storage.getChildren(),
-        storage.getGroups(),
+        storage.getMyChildren(activeUserId),
+        storage.getGroups({ userId: activeUserId }),
         storage.getChildrenGroups(),
       ]);
+      if (activeUserIdRef.current !== activeUserId) return;
       setChildrenList(cachedChildren);
       setGroups(cachedGroups);
       setChildrenGroups(cachedMemberships);
 
-      if (isOnline && user?.id) {
-        const pulled = await pullPreloadedChildData({ userId: user.id });
+      if (isOnline && activeUserIdRef.current === activeUserId) {
+        const pulled = await pullPreloadedChildData({ userId: activeUserId });
         const errors = pulled.errors || [];
+        if (activeUserIdRef.current !== activeUserId) return;
 
         if (shouldApplyPulledRows(pulled.children, errors)) {
           const merged = mergeServerRows(cachedChildren, pulled.children);
@@ -140,21 +158,12 @@ export const ChildrenProvider = ({ children }) => {
         synced: false,
       };
 
-      // Create staff-child assignment
-      const assignment = {
-        id: uuidv4(),
-        staff_id: user.id,
-        child_id: childId,
-        assigned_at: new Date().toISOString(),
-        synced: false,
-      };
-
-      // Save both locally
-      await storage.saveChild(child);
-      await storage.saveStaffChild(assignment);
+      await storage.createChild(child, {
+        actorUserId: user.id,
+      });
 
       // Update state
-      setChildrenList([...childrenList, child]);
+      setChildrenList(prev => [...prev, child]);
 
       // Trigger background sync
       await refreshSyncStatus();
@@ -204,22 +213,15 @@ export const ChildrenProvider = ({ children }) => {
    */
   const deleteChild = async (childId) => {
     try {
-      const updates = {
-        hidden_at: new Date().toISOString(),
-        updated_at: new Date().toISOString(),
-        synced: false,
-      };
-
-      const ok = await storage.updateChild(childId, updates);
+      const ok = await storage.deleteChild(childId, {
+        actorUserId: user.id,
+      });
       if (!ok) {
         return { success: false, error: 'Child not found in local cache' };
       }
 
-      // Functional form avoids stale-state hazard if multiple updates land in
-      // quick succession. Pattern matches ClassesContext.
-      setChildrenList(prev =>
-        prev.map(c => (c.id === childId ? { ...c, ...updates } : c))
-      );
+      setChildrenList(prev => prev.filter(c => c.id !== childId));
+      setChildrenGroups(prev => prev.filter(cg => cg.child_id !== childId));
 
       await refreshSyncStatus();
 
@@ -335,7 +337,7 @@ export const ChildrenProvider = ({ children }) => {
     try {
       // Check if already exists
       const exists = childrenGroups.some(
-        cg => cg.child_id === childId && cg.group_id === groupId
+        cg => cg.child_id === childId && cg.group_id === groupId && !cg.removed_at
       );
 
       if (exists) {
@@ -388,7 +390,7 @@ export const ChildrenProvider = ({ children }) => {
    */
   const getChildrenInGroup = (groupId) => {
     const membershipIds = childrenGroups
-      .filter(cg => cg.group_id === groupId)
+      .filter(cg => cg.group_id === groupId && !cg.removed_at)
       .map(cg => cg.child_id);
 
     return visibleChildren.filter(c => membershipIds.includes(c.id));
@@ -399,7 +401,7 @@ export const ChildrenProvider = ({ children }) => {
    */
   const getGroupsForChild = (childId) => {
     const groupIds = childrenGroups
-      .filter(cg => cg.child_id === childId)
+      .filter(cg => cg.child_id === childId && !cg.removed_at)
       .map(cg => cg.group_id);
 
     return groups.filter(g => groupIds.includes(g.id));

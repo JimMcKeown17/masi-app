@@ -35,6 +35,11 @@ export const AuthProvider = ({ children }) => {
     console.warn(`[Auth] Cleared local auth state (${reason})`);
   };
 
+  const invalidateProfileLoads = () => {
+    currentUserIdRef.current = null;
+    profileLoadVersionRef.current += 1;
+  };
+
   useEffect(() => {
     const initializeAuthState = async () => {
       try {
@@ -130,9 +135,13 @@ export const AuthProvider = ({ children }) => {
       }
 
       if (localProfile) {
-        const normalizedLocalProfile = normalizeProfile(localProfile);
-        setProfile(normalizedLocalProfile);
-        setLoading(false);
+        if (localProfile.id === userId) {
+          const normalizedLocalProfile = normalizeProfile(localProfile);
+          setProfile(normalizedLocalProfile);
+          setLoading(false);
+        } else {
+          await storage.clearUserProfile();
+        }
       }
 
       // Then fetch from Supabase
@@ -183,10 +192,14 @@ export const AuthProvider = ({ children }) => {
     try {
       manualSignOutInProgressRef.current = true;
       clearPendingSignOutTimeout();
+      invalidateProfileLoads();
+      setSession(null);
+      setUser(null);
+      setProfile(null);
+      setLoading(false);
       await storage.clearUserProfile();
       const { error } = await supabase.auth.signOut();
       if (error) throw error;
-      setProfile(null);
       return { error: null };
     } catch (error) {
       manualSignOutInProgressRef.current = false;

@@ -50,7 +50,7 @@ export default function AssessmentHistoryScreen({ navigation }) {
 
   const loadAssessments = async () => {
     try {
-      const cached = await assessmentsRepository.getAssessments();
+      const cached = await assessmentsRepository.getAssessments({ userId: user.id });
       setAssessments(filterAndSort(cached));
     } catch (error) {
       console.error('Error loading assessments:', error);

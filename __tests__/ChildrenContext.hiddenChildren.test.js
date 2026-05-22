@@ -1,4 +1,5 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { resolveDatabase } from '../src/db/repositories/repositoryRuntime';
 import { storage } from '../src/utils/storage';
 
 // Following the convention in ClassesContext.test.js: full provider mounting
@@ -67,6 +68,44 @@ describe('hidden children — storage-level soft-delete', () => {
     expect(all).toHaveLength(1);
     expect(all[0].id).toBe('child-1');
     expect(all[0].hidden_at).toBeTruthy();
+  });
+
+  test('storage.deleteChild hard-deletes no-history children and archives children with history', async () => {
+    await storage.saveChild({ id: 'child-no-history', first_name: 'A', last_name: 'M', synced: true });
+    await storage.saveChild({ id: 'child-with-history', first_name: 'B', last_name: 'K', synced: true });
+
+    const db = await resolveDatabase();
+    await db.runAsync("insert into programmes (id, code, name) values ('programme-a', 'literacy', 'Literacy')");
+    await db.runAsync(`
+      insert into assessments (
+        id,
+        user_id,
+        child_id,
+        programme_id,
+        assessment_type,
+        assessment_date
+      )
+      values (
+        'assessment-1',
+        'user-1',
+        'child-with-history',
+        'programme-a',
+        'letter_egra',
+        '2026-05-21'
+      )
+    `);
+
+    expect(await storage.deleteChild('child-no-history', { actorUserId: 'user-1' }))
+      .toEqual({ deleted: true, archived: false });
+    expect(await storage.deleteChild('child-with-history', { actorUserId: 'user-1' }))
+      .toEqual({ deleted: false, archived: true });
+
+    const all = await storage.getChildren();
+    expect(all.find(c => c.id === 'child-no-history')).toBeUndefined();
+    expect(all.find(c => c.id === 'child-with-history')).toEqual(expect.objectContaining({
+      id: 'child-with-history',
+      archived_at: expect.any(String),
+    }));
   });
 });
 

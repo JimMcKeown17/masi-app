@@ -1,8 +1,9 @@
 import React from 'react';
-import { renderHook, waitFor } from '@testing-library/react-native';
+import { act, renderHook, waitFor } from '@testing-library/react-native';
 import { ChildrenProvider, useChildren } from '../src/context/ChildrenContext';
 import { storage } from '../src/utils/storage';
 import { pullPreloadedChildData } from '../src/services/preloadedChildData';
+import { useAuth } from '../src/context/AuthContext';
 
 jest.mock('../src/services/supabaseClient', () => ({
   supabase: {},
@@ -23,11 +24,14 @@ jest.mock('../src/context/OfflineContext', () => ({
 jest.mock('../src/utils/storage', () => ({
   storage: {
     getChildren: jest.fn(),
+    getMyChildren: jest.fn(),
     getGroups: jest.fn(),
     getChildrenGroups: jest.fn(),
     saveChild: jest.fn(),
+    createChild: jest.fn(),
     saveStaffChild: jest.fn(),
     updateChild: jest.fn(),
+    deleteChild: jest.fn(),
     saveGroup: jest.fn(),
     updateGroup: jest.fn(),
     deleteGroup: jest.fn(),
@@ -49,6 +53,9 @@ describe('ChildrenContext Plan 5 hydration', () => {
     storage.getChildren.mockResolvedValue([
       { id: 'cached-child', first_name: 'Cached', last_name: 'Child', synced: false },
     ]);
+    storage.getMyChildren.mockResolvedValue([
+      { id: 'cached-child', first_name: 'Cached', last_name: 'Child', synced: false },
+    ]);
     storage.getGroups.mockResolvedValue([
       { id: 'cached-group', name: 'Cached Group', synced: false },
     ]);
@@ -56,8 +63,10 @@ describe('ChildrenContext Plan 5 hydration', () => {
       { id: 'cached-membership', child_id: 'cached-child', group_id: 'cached-group', synced: false },
     ]);
     storage.saveChild.mockResolvedValue(true);
+    storage.createChild.mockResolvedValue(true);
     storage.saveGroup.mockResolvedValue(true);
     storage.saveChildrenGroup.mockResolvedValue(true);
+    storage.deleteChild.mockResolvedValue({ deleted: false, archived: true });
     pullPreloadedChildData.mockResolvedValue({
       children: [{ id: 'server-child', first_name: 'Server', last_name: 'Child', synced: true }],
       groups: [{ id: 'server-group', name: 'Server Group', synced: true }],
@@ -78,6 +87,8 @@ describe('ChildrenContext Plan 5 hydration', () => {
     expect(pullPreloadedChildData).toHaveBeenCalledWith(expect.objectContaining({
       userId: 'user-1',
     }));
+    expect(storage.getMyChildren).toHaveBeenCalledWith('user-1');
+    expect(storage.getGroups).toHaveBeenCalledWith(expect.objectContaining({ userId: 'user-1' }));
     await waitFor(() => expect(result.current.children.map(child => child.id)).toContain('server-child'));
     expect(result.current.groups.map(group => group.id)).toContain('server-group');
     expect(result.current.childrenGroups.map(membership => membership.id)).toContain('server-membership');
@@ -110,5 +121,79 @@ describe('ChildrenContext Plan 5 hydration', () => {
     expect(storage.saveChild).not.toHaveBeenCalled();
     expect(storage.saveGroup).not.toHaveBeenCalled();
     expect(storage.saveChildrenGroup).not.toHaveBeenCalled();
+  });
+
+  test('deleteChild uses repository-backed delete/archive instead of hidden_at update', async () => {
+    const { result } = renderHook(() => useChildren(), { wrapper });
+    await waitFor(() => expect(result.current.children.map(child => child.id)).toContain('cached-child'));
+
+    await act(async () => {
+      await result.current.deleteChild('cached-child');
+    });
+
+    expect(storage.deleteChild).toHaveBeenCalledWith('cached-child', expect.objectContaining({
+      actorUserId: 'user-1',
+    }));
+    expect(storage.updateChild).not.toHaveBeenCalled();
+    expect(result.current.children.map(child => child.id)).not.toContain('cached-child');
+  });
+
+  test('addChild uses the atomic clean-slate child creation path', async () => {
+    const { result } = renderHook(() => useChildren(), { wrapper });
+    await waitFor(() => expect(pullPreloadedChildData).toHaveBeenCalledTimes(1));
+
+    await act(async () => {
+      await result.current.addChild({
+        first_name: 'New',
+        last_name: 'Child',
+        class_id: 'class-1',
+      });
+    });
+
+    expect(storage.createChild).toHaveBeenCalledWith(expect.objectContaining({
+      first_name: 'New',
+      last_name: 'Child',
+      class_id: 'class-1',
+      created_by: 'user-1',
+    }), expect.objectContaining({
+      actorUserId: 'user-1',
+    }));
+    expect(storage.saveStaffChild).not.toHaveBeenCalled();
+  });
+
+  test('getChildrenInGroup ignores removed memberships', async () => {
+    storage.getChildrenGroups.mockResolvedValueOnce([
+      {
+        id: 'removed-membership',
+        child_id: 'cached-child',
+        group_id: 'cached-group',
+        removed_at: '2026-05-21T00:00:00.000Z',
+      },
+    ]);
+    pullPreloadedChildData.mockResolvedValueOnce({
+      children: [],
+      groups: [],
+      childrenGroups: [],
+      errors: [],
+    });
+
+    const { result } = renderHook(() => useChildren(), { wrapper });
+    await waitFor(() => expect(result.current.children.map(child => child.id)).toContain('cached-child'));
+
+    expect(result.current.getChildrenInGroup('cached-group')).toEqual([]);
+  });
+
+  test('clears child state when the authenticated user disappears', async () => {
+    const { rerender, result } = renderHook(() => useChildren(), { wrapper });
+    await waitFor(() => expect(result.current.children.map(child => child.id)).toContain('cached-child'));
+
+    useAuth.mockReturnValueOnce({ user: null });
+    rerender();
+
+    await waitFor(() => {
+      expect(result.current.children).toEqual([]);
+      expect(result.current.groups).toEqual([]);
+      expect(result.current.childrenGroups).toEqual([]);
+    });
   });
 });

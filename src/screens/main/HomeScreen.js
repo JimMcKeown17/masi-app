@@ -22,7 +22,7 @@ import { colors, spacing, borderRadius, shadows } from '../../constants/colors';
 const GRADIENT = ['#0984E3', '#E72D4D'];
 
 export default function HomeScreen({ navigation }) {
-  const { profile } = useAuth();
+  const { user, profile } = useAuth();
   const { isOnline, unsyncedCount, syncStatus } = useOffline();
   const { children: childrenList } = useChildren();
   const {
@@ -51,8 +51,8 @@ export default function HomeScreen({ navigation }) {
       const loadStats = async () => {
         const [timeEntries, sessions, assessments] = await Promise.all([
           timeEntriesRepository.getTimeEntries(),
-          sessionsRepository.getSessions(),
-          assessmentsRepository.getAssessments(),
+          sessionsRepository.getSessions({ userId: user.id }),
+          assessmentsRepository.getAssessments({ userId: user.id }),
         ]);
 
         setDaysWorked(getDaysWorkedThisMonth(timeEntries));
@@ -67,7 +67,7 @@ export default function HomeScreen({ navigation }) {
         setCoverage(getAssessmentCoverage(childrenList, assessments));
       };
       loadStats();
-    }, [childrenList])
+    }, [childrenList, user.id])
   );
 
   // Sync banner config (unchanged from original)

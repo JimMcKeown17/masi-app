@@ -9,6 +9,7 @@ import {
   List,
 } from 'react-native-paper';
 import { useFocusEffect } from '@react-navigation/native';
+import { useAuth } from '../../context/AuthContext';
 import { colors, spacing } from '../../constants/colors';
 import { useChildren } from '../../context/ChildrenContext';
 import { useClasses } from '../../context/ClassesContext';
@@ -18,6 +19,7 @@ import { getChildrenTabStats } from '../../utils/dashboardStats';
 import StatBar from '../../components/dashboard/StatBar';
 
 export default function ChildrenListScreen({ navigation }) {
+  const { user } = useAuth();
   const { children, groups, childrenGroups, loading, loadChildren } = useChildren();
   const { classes, schools, loading: classesLoading, loadClasses, getChildrenInClass } = useClasses();
   const { refreshSyncStatus } = useOffline();
@@ -29,11 +31,11 @@ export default function ChildrenListScreen({ navigation }) {
   useFocusEffect(
     useCallback(() => {
       const loadStats = async () => {
-        const assessments = await assessmentsRepository.getAssessments();
+        const assessments = await assessmentsRepository.getAssessments({ userId: user.id });
         setTabStats(getChildrenTabStats(children, classes, assessments));
       };
       loadStats();
-    }, [children, classes])
+    }, [children, classes, user.id])
   );
 
   // Count unsynced items across classes and children

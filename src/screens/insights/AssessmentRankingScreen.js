@@ -2,6 +2,7 @@ import React, { useState, useCallback } from 'react';
 import { View, StyleSheet, FlatList } from 'react-native';
 import { Text, ActivityIndicator } from 'react-native-paper';
 import { useFocusEffect } from '@react-navigation/native';
+import { useAuth } from '../../context/AuthContext';
 import { useChildren } from '../../context/ChildrenContext';
 import { assessmentsRepository } from '../../db/repositories/assessmentsRepository';
 import { getAssessmentRanking } from '../../utils/dashboardStats';
@@ -10,6 +11,7 @@ import StatBar from '../../components/dashboard/StatBar';
 import { colors, spacing, borderRadius } from '../../constants/colors';
 
 export default function AssessmentRankingScreen({ navigation }) {
+  const { user } = useAuth();
   const { children: childrenList } = useChildren();
   const [ranking, setRanking] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -18,13 +20,13 @@ export default function AssessmentRankingScreen({ navigation }) {
     useCallback(() => {
       const load = async () => {
         setLoading(true);
-        const assessments = await assessmentsRepository.getAssessments();
+        const assessments = await assessmentsRepository.getAssessments({ userId: user.id });
         const ranked = getAssessmentRanking(childrenList, assessments);
         setRanking(ranked);
         setLoading(false);
       };
       load();
-    }, [childrenList])
+    }, [childrenList, user.id])
   );
 
   if (loading) {

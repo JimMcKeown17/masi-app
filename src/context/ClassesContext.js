@@ -2,6 +2,7 @@ import React, { createContext, useState, useEffect, useContext, useRef } from 'r
 import { supabase } from '../services/supabaseClient';
 import { storage } from '../utils/storage';
 import { fetchAndCacheSchools } from '../services/offlineSync';
+import { enqueueSupabaseRequest } from '../services/supabaseRequestQueue';
 import { academicYearsRepository } from '../db/repositories/referenceDataRepository';
 import { useAuth } from './AuthContext';
 import { useOffline } from './OfflineContext';
@@ -24,13 +25,19 @@ export const ClassesProvider = ({ children: reactChildren }) => {
   const [schools, setSchools] = useState([]);
   const [classes, setClasses] = useState([]);
   const [loading, setLoading] = useState(false);
+  const activeUserIdRef = useRef(null);
 
   // Load data on mount when user is authenticated
   useEffect(() => {
+    activeUserIdRef.current = user?.id || null;
     if (user?.id) {
       loadSchools();
       loadClasses();
+      return;
     }
+    setSchools([]);
+    setClasses([]);
+    setLoading(false);
   }, [user?.id]);
 
   // Re-fetch schools when connectivity is restored (they may have failed on mount)
@@ -58,11 +65,14 @@ export const ClassesProvider = ({ children: reactChildren }) => {
    */
   const loadSchools = async () => {
     try {
+      const activeUserId = user?.id;
       const cached = await storage.getSchools();
+      if (activeUserIdRef.current !== activeUserId) return;
       setSchools(cached);
 
       try {
         const serverSchools = await fetchAndCacheSchools();
+        if (activeUserIdRef.current !== activeUserId) return;
         setSchools(serverSchools);
       } catch (error) {
         console.log('Could not fetch schools from server (likely offline):', error.message);
@@ -80,24 +90,48 @@ export const ClassesProvider = ({ children: reactChildren }) => {
   const loadClasses = async () => {
     try {
       setLoading(true);
+      const activeUserId = user?.id;
+      if (!activeUserId) {
+        setClasses([]);
+        return;
+      }
 
-      const cached = await storage.getClasses();
+      const cached = await storage.getClasses({ userId: activeUserId });
+      if (activeUserIdRef.current !== activeUserId) return;
       setClasses(cached);
 
-      if (isOnline && user?.id) {
-        const { data, error } = await supabase
-          .from('classes')
-          .select(`
-            *,
-            class_ea_assignments!inner(ea_user_id,unassigned_at)
-          `)
-          .eq('class_ea_assignments.ea_user_id', user.id)
-          .is('class_ea_assignments.unassigned_at', null)
-          .order('name', { ascending: true });
+      if (isOnline && activeUserIdRef.current === activeUserId) {
+        const { data, error } = await enqueueSupabaseRequest(async () => {
+          const { data: assignments, error: assignmentError } = await supabase
+            .from('staff_programme_assignments')
+            .select('programme_id')
+            .eq('user_id', activeUserId)
+            .is('ended_at', null)
+            .order('assigned_at', { ascending: false })
+            .limit(1);
+
+          if (assignmentError || !assignments?.[0]?.programme_id) {
+            return {
+              data: [],
+              error: assignmentError || null,
+            };
+          }
+
+          return supabase
+            .from('classes')
+            .select(`
+              *,
+              class_ea_assignments!inner(ea_user_id,programme_id,unassigned_at)
+            `)
+            .eq('class_ea_assignments.ea_user_id', activeUserId)
+            .eq('class_ea_assignments.programme_id', assignments[0].programme_id)
+            .is('class_ea_assignments.unassigned_at', null)
+            .order('name', { ascending: true });
+        });
 
         if (error) {
           console.error('Error loading classes from server:', error);
-        } else if (data) {
+        } else if (data && activeUserIdRef.current === activeUserId) {
           const serverClasses = data.map(({ class_ea_assignments, ...classItem }) => ({
             ...classItem,
             synced: true,

@@ -314,8 +314,8 @@ export const storage = {
     return await timeEntriesRepository.updateTimeEntry(id, updates);
   },
 
-  async getSessions() {
-    return await mergeFacadeList('sessions', await sessionsRepository.getSessions());
+  async getSessions(options = {}) {
+    return await mergeFacadeList('sessions', await sessionsRepository.getSessions(options));
   },
 
   async saveSession(session) {
@@ -344,6 +344,10 @@ export const storage = {
     return await mergeFacadeList('children', await childrenRepository.getChildren());
   },
 
+  async getMyChildren(userId) {
+    return await mergeFacadeList('children', await childrenRepository.getMyChildren(userId));
+  },
+
   async saveChild(child) {
     const normalized = {
       last_name: child.last_name || '',
@@ -353,12 +357,42 @@ export const storage = {
     return await childrenRepository.saveChildRecord(await normalizeChildForLegacyFacade(normalized));
   },
 
+  async createChild(child, options = {}) {
+    const normalized = {
+      last_name: child.last_name || '',
+      ...child,
+    };
+    await savePayload('children', normalized.id, normalized);
+    return await childrenRepository.save(await normalizeChildForLegacyFacade(normalized), options);
+  },
+
   async updateChild(id, updates) {
     const existing = await getPayload('children', id);
     if (existing) {
       await savePayload('children', id, { ...existing, ...updates });
     }
     return await childrenRepository.updateChild(id, updates);
+  },
+
+  async archiveChild(id, options = {}) {
+    const existing = (await childrenRepository.getChildren()).find(child => child.id === id);
+    if (!existing) return false;
+    await localStateRepository.remove(payloadKey('children', id));
+    return await childrenRepository.archiveChild(id, options);
+  },
+
+  async deleteChild(id, options = {}) {
+    const existing = (await childrenRepository.getChildren()).find(child => child.id === id);
+    if (!existing) return false;
+
+    const deleted = await childrenRepository.deleteIfNoHistory(id, options);
+    await localStateRepository.remove(payloadKey('children', id));
+    if (deleted) {
+      return { deleted: true, archived: false };
+    }
+
+    await childrenRepository.archiveChild(id, options);
+    return { deleted: false, archived: true };
   },
 
   async getUnsyncedChildren() {
@@ -382,8 +416,8 @@ export const storage = {
     return await childrenRepository.getUnsyncedStaffChildren();
   },
 
-  async getGroups() {
-    return await mergeFacadeList('groups', await groupsRepository.getGroups());
+  async getGroups(options = {}) {
+    return await mergeFacadeList('groups', await groupsRepository.getGroups(options));
   },
 
   async saveGroup(group) {
@@ -443,8 +477,8 @@ export const storage = {
     return await jobTitlesRepository.replaceFromServer(list);
   },
 
-  async getClasses() {
-    const records = await classesRepository.getClasses();
+  async getClasses(options = {}) {
+    const records = await classesRepository.getClasses(options);
     const merged = await mergeFacadeList('classes', records);
     return merged.map((record) => ({
       ...(record.created_by && !record.staff_id ? { staff_id: record.created_by } : {}),
@@ -473,8 +507,8 @@ export const storage = {
     return await classesRepository.getUnsyncedClasses();
   },
 
-  async getAssessments() {
-    return await mergeFacadeList('assessments', await assessmentsRepository.getAssessments());
+  async getAssessments(options = {}) {
+    return await mergeFacadeList('assessments', await assessmentsRepository.getAssessments(options));
   },
 
   async saveAssessment(assessment) {
@@ -495,8 +529,8 @@ export const storage = {
     return await assessmentsRepository.getUnsyncedRecords();
   },
 
-  async getLetterMastery() {
-    return await mergeFacadeList('letter_mastery', await masteryRepository.getLetterMastery());
+  async getLetterMastery(options = {}) {
+    return await mergeFacadeList('letter_mastery', await masteryRepository.getLetterMastery(options));
   },
 
   async saveLetterMasteryRecord(record) {

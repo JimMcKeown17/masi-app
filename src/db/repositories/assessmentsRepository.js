@@ -1,6 +1,7 @@
 import { resolveDatabase, runRepositoryTransaction } from './repositoryRuntime';
 import {
   enqueueDomainOutbox,
+  getActiveProgrammeId,
   mapDomainRow,
   normalizeSyncFields,
   resolveProgrammeId,
@@ -87,9 +88,25 @@ export const createAssessmentsRepository = ({ database } = {}) => {
     transaction ? task(transaction) : runRepositoryTransaction(database, task)
   );
 
-  const getAssessments = async () => {
+  const getAssessments = async ({ userId, programmeId, childId } = {}) => {
     const db = await resolveDatabase(database);
-    const rows = await db.getAllAsync('select * from assessments order by assessment_date, created_at');
+    const activeProgrammeId = programmeId || (userId ? await getActiveProgrammeId(db, userId) : null);
+    if (userId && !activeProgrammeId) return [];
+    const clauses = [];
+    const params = [];
+    if (activeProgrammeId) {
+      clauses.push('programme_id = ?');
+      params.push(activeProgrammeId);
+    }
+    if (childId) {
+      clauses.push('child_id = ?');
+      params.push(childId);
+    }
+    const where = clauses.length ? `where ${clauses.join(' and ')}` : '';
+    const rows = await db.getAllAsync(
+      `select * from assessments ${where} order by assessment_date, created_at`,
+      ...params
+    );
     const mapped = [];
     for (const row of rows) {
       mapped.push(await mapAssessment(db, row));
@@ -101,7 +118,6 @@ export const createAssessmentsRepository = ({ database } = {}) => {
     const programmeId = await resolveProgrammeId(txn, {
       programmeId: assessment.programme_id,
       userId: assessment.user_id,
-      allowLegacyFallback: true,
     });
     const summary = buildSummary(assessment);
     const record = normalizeSyncFields({

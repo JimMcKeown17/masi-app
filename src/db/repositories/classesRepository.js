@@ -1,6 +1,7 @@
 import { resolveDatabase, runRepositoryTransaction } from './repositoryRuntime';
 import {
   enqueueDomainOutbox,
+  getActiveProgrammeId,
   mapDomainRow,
   normalizeSyncFields,
   shouldEnqueueOutbox,
@@ -34,9 +35,23 @@ export const createClassesRepository = ({ database } = {}) => {
     transaction ? task(transaction) : runRepositoryTransaction(database, task)
   );
 
-  const getClasses = async () => {
+  const getClasses = async ({ userId, programmeId } = {}) => {
     const db = await resolveDatabase(database);
-    const rows = await db.getAllAsync('select * from classes where archived_at is null order by name');
+    const activeProgrammeId = programmeId || (userId ? await getActiveProgrammeId(db, userId) : null);
+    if (userId && !activeProgrammeId) return [];
+    const rows = userId
+      ? await db.getAllAsync(`
+        select distinct classes.*
+        from classes
+        join class_ea_assignments cea
+          on cea.class_id = classes.id
+         and cea.ea_user_id = ?
+         and cea.programme_id = ?
+         and cea.unassigned_at is null
+        where classes.archived_at is null
+        order by classes.name
+      `, userId, activeProgrammeId)
+      : await db.getAllAsync('select * from classes where archived_at is null order by name');
     return rows.map(mapDomainRow);
   };
 
@@ -114,6 +129,45 @@ export const createClassesRepository = ({ database } = {}) => {
       await enqueueDomainOutbox(txn, 'class_ea_assignments', assignment.id, 'archive', {
         id: assignment.id,
         unassigned_at: archivedAt,
+      });
+    }
+
+    const childClassRows = await txn.getAllAsync(
+      'select id from child_class_memberships where class_id = ? and exited_at is null',
+      classId
+    );
+    await txn.runAsync(`
+      update child_class_memberships
+      set exited_at = ?,
+          sync_status = 'pending',
+          updated_at = ?
+      where class_id = ?
+        and exited_at is null
+    `, archivedAt, archivedAt, classId);
+    for (const membership of childClassRows) {
+      await enqueueDomainOutbox(txn, 'child_class_memberships', membership.id, 'archive', {
+        id: membership.id,
+        exited_at: archivedAt,
+      });
+    }
+
+    const childRows = await txn.getAllAsync(
+      'select id from children where class_id = ? and archived_at is null',
+      classId
+    );
+    await txn.runAsync(`
+      update children
+      set class_id = null,
+          sync_status = 'pending',
+          updated_at = ?
+      where class_id = ?
+        and archived_at is null
+    `, archivedAt, classId);
+    for (const child of childRows) {
+      await enqueueDomainOutbox(txn, 'children', child.id, 'update', {
+        id: child.id,
+        class_id: null,
+        updated_at: archivedAt,
       });
     }
 

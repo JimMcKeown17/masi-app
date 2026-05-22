@@ -55,13 +55,15 @@ Contracts:
 - class roster screens respect `class_grouping_state.class_list_status`
 
 - [x] Initial slice: added tests for one bundled child-data preload, partial preload cache preservation, active academic year on class create, and no double-write child updates on class archive/delete.
+- [x] Corrective slice: added tests for stale sign-out profile loads, repository-backed child delete/archive, removed group memberships, sign-out state clearing, and atomic clean-slate child creation.
 
-- [ ] **Step 2: Wire contexts**
+- [x] **Step 2: Wire contexts**
 
 Use cache-first repository reads. Use `triggerBackgroundSync()` after local writes.
 
 - [x] Initial slice: AuthContext defers profile reads through a request queue; ChildrenContext uses bundled cache-first preload; ClassesContext uses active academic year and delegates class archive side effects to storage/repositories.
 - [x] Cleanup slice: ChildrenContext and ClassesContext no longer call generic `storage.setItem`/`STORAGE_KEYS` cache writes; server pull rows are saved through typed repository-backed storage methods.
+- [x] Corrective slice: ChildrenContext uses programme-scoped `getMyChildren`, clears on sign-out, filters removed memberships, and calls atomic `createChild`; ClassesContext scopes class reads/pulls by active programme and clears state on sign-out.
 
 ### Task 3: Sessions, Assessments, Time, And Rankings Screens
 
@@ -83,7 +85,7 @@ rg "storage\\." src/screens src/hooks src/components
 
 Save the output to `documentation/sqlite-refactor-log.md` before editing screens. Add every caller to the migration list. Do not infer from filenames; the grep output is the source of truth for this task.
 
-- [ ] **Step 1: Add behavior tests**
+- [x] **Step 1: Add behavior tests**
 
 Contracts:
 
@@ -96,8 +98,9 @@ Contracts:
 - rankings use normalized session/assessment data correctly
 
 - [x] Initial assessment slice: added tests for assessment history and assessment save repository paths.
+- [x] Corrective slice: added tests for active-programme repository scoping, no active-programme write rejection, class programme scoping, tracker programme scoping, and stale legacy fallback removal.
 
-- [ ] **Step 2: Wire screens**
+- [x] **Step 2: Wire screens**
 
 Remove dependence on `sessions.children_ids` and assessment arrays as storage source of truth. UI can still render derived summaries.
 
@@ -108,6 +111,7 @@ Create Group must read or create the active `grouping_versions` row for the clas
 - [x] Initial time-tracking slice: `useTimeTracking` now writes through `timeEntriesRepository` and triggers background sync after local writes; `TimeEntriesListScreen` reads completed work history from SQLite and no longer performs screen-owned Supabase/storage merges.
 - [x] Initial session slice: `SessionHistoryScreen` now reads from `sessionsRepository`; `LiteracySessionForm` saves session + tracker changes through a transaction-backed persistence helper; `LetterTrackerBottomSheet` reads assessments/mastery from repositories.
 - [x] Initial assessment/dashboard/ranking slice: assessment history/save, assessment child selection, child summary, letter tracker, tab stats, home stats, and ranking screens now call repositories directly; screen/hook/component `storage.` grep is clean.
+- [x] Corrective slice: default user-facing session, assessment, mastery, group, class, dashboard, ranking, and tracker reads now pass the current user so repository results are active-programme-scoped.
 
 ### Task 4: Remove Generic Storage Calls
 
@@ -159,6 +163,11 @@ Exercise sign-in, class load, child load, group save, session save, assessment s
 
 Partial result: Android staging launches on `Medium_Phone_API_28` after `adb reverse tcp:8082 tcp:8082` and manual reload; unauthenticated sign-in screen renders against `masi-app-sqlite`. Full signed-in create/session/assessment flow is blocked until a staging test user is available.
 
-- [ ] Update `documentation/sqlite-refactor-log.md`.
+Corrective review verification:
+
+- `npm test -- --runInBand` passed 44 suites / 197 tests after the programme scoping, delete/archive, stale-auth, removed-membership, class archive, and child-create fixes.
+- `git diff --check` passed.
+
+- [x] Update `documentation/sqlite-refactor-log.md`.
 - [ ] Request a parallel code-review pass focused on context concurrency, cache preservation, and local-first UX.
 - [ ] Get user signoff before Plan 6.

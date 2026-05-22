@@ -3,6 +3,7 @@ jest.mock('expo-sqlite', () => require('../test-support/expoSQLiteMock'));
 import { runMigrations } from '../src/db/migrations';
 import { createClassesRepository } from '../src/db/repositories/classesRepository';
 import { createClassEaAssignmentsRepository } from '../src/db/repositories/classEaAssignmentsRepository';
+import { createChildrenRepository } from '../src/db/repositories/childrenRepository';
 import {
   createMigratedDatabase,
   seedCoreData,
@@ -47,6 +48,14 @@ describe('classesRepository', () => {
       await seedCoreData(db);
       const classesRepository = createClassesRepository({ database: db });
       const assignmentsRepository = createClassEaAssignmentsRepository({ database: db });
+      await createChildrenRepository({ database: db }).save({
+        id: 'child-1',
+        first_name: 'Amahle',
+        last_name: 'Dlamini',
+        class_id: 'class-1',
+        created_by: 'user-1',
+        synced: false,
+      }, { actorUserId: 'user-1' });
 
       await assignmentsRepository.save({
         id: 'class-assignment-1',
@@ -67,6 +76,19 @@ describe('classesRepository', () => {
         .toEqual({ archived_at: '2026-05-24T00:00:00.000Z' });
       expect(await db.getFirstAsync('select unassigned_at from class_ea_assignments where id = ?', 'class-assignment-1'))
         .toEqual({ unassigned_at: '2026-05-24T00:00:00.000Z' });
+      expect(await db.getFirstAsync('select class_id from children where id = ?', 'child-1'))
+        .toEqual({ class_id: null });
+      expect(await db.getFirstAsync('select exited_at from child_class_memberships where child_id = ?', 'child-1'))
+        .toEqual({ exited_at: '2026-05-24T00:00:00.000Z' });
+      expect(await db.getFirstAsync(`
+        select table_name, operation
+        from sync_outbox
+        where table_name = 'child_class_memberships'
+          and operation = 'archive'
+      `)).toEqual({
+        table_name: 'child_class_memberships',
+        operation: 'archive',
+      });
     } finally {
       await db.closeAsync();
     }
@@ -111,6 +133,52 @@ describe('classesRepository', () => {
         record_id: 'class-1',
         operation: 'archive',
       });
+    } finally {
+      await db.closeAsync();
+    }
+  });
+
+  test('user-scoped class reads return active assignments in the active programme', async () => {
+    const db = await createMigratedDatabase(runMigrations);
+
+    try {
+      await seedCoreData(db);
+      const classesRepository = createClassesRepository({ database: db });
+      const assignmentsRepository = createClassEaAssignmentsRepository({ database: db });
+
+      await classesRepository.saveClass({
+        id: 'class-2',
+        school_id: 'school-1',
+        name: 'Grade 2B',
+        grade: '2',
+        academic_year_id: 'year-2026',
+        created_by: 'admin-user',
+        synced: true,
+      });
+      await assignmentsRepository.save({
+        id: 'assignment-literacy',
+        class_id: 'class-1',
+        ea_user_id: 'user-1',
+        programme_id: 'programme-a',
+        assigned_at: '2026-05-21T08:00:00.000Z',
+        created_by: 'admin-user',
+        synced: false,
+      });
+      await assignmentsRepository.save({
+        id: 'assignment-numeracy',
+        class_id: 'class-2',
+        ea_user_id: 'user-1',
+        programme_id: 'programme-b',
+        assigned_at: '2026-05-21T08:00:00.000Z',
+        created_by: 'admin-user',
+        synced: false,
+      });
+
+      expect((await classesRepository.getClasses()).map(classItem => classItem.id))
+        .toEqual(['class-1', 'class-2']);
+      expect(await classesRepository.getClasses({ userId: 'user-1' })).toEqual([
+        expect.objectContaining({ id: 'class-1' }),
+      ]);
     } finally {
       await db.closeAsync();
     }

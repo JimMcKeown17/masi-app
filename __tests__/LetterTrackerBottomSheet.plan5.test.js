@@ -55,10 +55,16 @@ describe('LetterTrackerBottomSheet Plan 5 behavior', () => {
     await expect(getTrackerCount('child-1', 'english', {
       m: true,
       s: false,
-    })).resolves.toBe(2);
+    }, { userId: 'user-1' })).resolves.toBe(2);
 
-    expect(assessmentsRepository.getAssessments).toHaveBeenCalledTimes(1);
-    expect(masteryRepository.getLetterMastery).toHaveBeenCalledTimes(1);
+    expect(assessmentsRepository.getAssessments).toHaveBeenCalledWith(expect.objectContaining({
+      userId: 'user-1',
+      childId: 'child-1',
+    }));
+    expect(masteryRepository.getLetterMastery).toHaveBeenCalledWith(expect.objectContaining({
+      userId: 'user-1',
+      childId: 'child-1',
+    }));
     expect(storage.getAssessments).not.toHaveBeenCalled();
     expect(storage.getLetterMastery).not.toHaveBeenCalled();
   });

@@ -60,7 +60,7 @@ export default function SessionHistoryScreen() {
    */
   const loadSessions = async () => {
     try {
-      const cached = await sessionsRepository.getSessions();
+      const cached = await sessionsRepository.getSessions({ userId: user.id });
       setSessions(filterAndSort(cached));
     } catch (error) {
       console.error('Error loading sessions:', error);

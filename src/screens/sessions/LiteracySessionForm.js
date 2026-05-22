@@ -488,6 +488,7 @@ export default function LiteracySessionForm({ navigation }) {
         visible={trackerBottomSheetChild !== null}
         onDismiss={() => setTrackerBottomSheetChild(null)}
         child={trackerBottomSheetChild}
+        userId={user.id}
         languageKey={trackerLanguageKey}
         pendingChanges={trackerBottomSheetChild ? (letterTrackerChanges[trackerBottomSheetChild.id] || {}) : {}}
         onChangesUpdate={(changes) => {

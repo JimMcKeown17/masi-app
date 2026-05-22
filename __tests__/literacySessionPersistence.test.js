@@ -142,4 +142,72 @@ describe('literacySessionPersistence', () => {
       await db.closeAsync();
     }
   });
+
+  test('tracker persistence never reuses mastery rows from another programme', async () => {
+    const db = await createMigratedDatabase(runMigrations);
+
+    try {
+      await seedCoreData(db);
+      await createChildrenRepository({ database: db }).save({
+        id: 'child-1',
+        first_name: 'Amahle',
+        last_name: 'Dlamini',
+        class_id: 'class-1',
+        created_by: 'user-1',
+        synced: false,
+      }, { actorUserId: 'user-1' });
+
+      const masteryRepository = createMasteryRepository({ database: db });
+      await masteryRepository.saveLetterMasteryRecord({
+        id: 'mastery-numeracy-deleted',
+        user_id: 'user-1',
+        child_id: 'child-1',
+        programme_id: 'programme-b',
+        letter: 'z',
+        language: 'English',
+        source: 'taught',
+        _deleted: true,
+        synced: false,
+      });
+
+      await persistLiteracySession({
+        database: db,
+        session: {
+          id: 'session-programme-scoped',
+          user_id: 'user-1',
+          class_id: 'class-1',
+          session_date: '2026-05-21',
+          children_ids: ['child-1'],
+          group_ids: [],
+          activities: { letters_focused: ['z'] },
+          synced: false,
+        },
+        trackerLanguageKey: 'english',
+        letterTrackerChanges: {
+          'child-1': {
+            z: true,
+          },
+        },
+        nowIso: '2026-05-21T09:30:00.000Z',
+        idFactory: () => 'mastery-literacy-z',
+      });
+
+      expect(await db.getFirstAsync(
+        'select programme_id, deleted_at from letter_mastery where id = ?',
+        'mastery-numeracy-deleted'
+      )).toEqual({
+        programme_id: 'programme-b',
+        deleted_at: expect.any(String),
+      });
+      expect(await db.getFirstAsync(
+        'select programme_id, deleted_at from letter_mastery where id = ?',
+        'mastery-literacy-z'
+      )).toEqual({
+        programme_id: 'programme-a',
+        deleted_at: null,
+      });
+    } finally {
+      await db.closeAsync();
+    }
+  });
 });

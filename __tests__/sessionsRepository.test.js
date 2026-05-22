@@ -98,16 +98,52 @@ describe('sessionsRepository', () => {
     try {
       const repository = createSessionsRepository({ database: db });
 
-      await repository.saveSession({
+      await expect(repository.saveSession({
         id: 'session-local',
         user_id: 'user-without-programme',
         session_date: '2026-05-21',
         children_ids: [],
         synced: false,
+      })).rejects.toThrow(/No active programme assignment/i);
+
+      expect(await db.getFirstAsync('select count(*) as count from sessions')).toEqual({ count: 0 });
+      expect(await db.getFirstAsync('select count(*) as count from sync_outbox')).toEqual({ count: 0 });
+      expect(await db.getFirstAsync('select id from programmes where id = ?', 'local-legacy-programme'))
+        .toBeNull();
+    } finally {
+      await db.closeAsync();
+    }
+  });
+
+  test('user-scoped session reads only return sessions in the active programme', async () => {
+    const db = await createMigratedDatabase(runMigrations);
+
+    try {
+      await seedCoreData(db);
+      const repository = createSessionsRepository({ database: db });
+
+      await repository.saveSession({
+        id: 'session-literacy',
+        user_id: 'user-1',
+        programme_id: 'programme-a',
+        session_date: '2026-05-21',
+        children_ids: [],
+        synced: false,
+      });
+      await repository.saveSession({
+        id: 'session-numeracy',
+        user_id: 'user-1',
+        programme_id: 'programme-b',
+        session_date: '2026-05-22',
+        children_ids: [],
+        synced: false,
       });
 
-      expect(await db.getFirstAsync('select id, sync_status from programmes where id = ?', 'local-legacy-programme'))
-        .toEqual({ id: 'local-legacy-programme', sync_status: 'terminal' });
+      expect((await repository.getSessions()).map(session => session.id))
+        .toEqual(['session-literacy', 'session-numeracy']);
+      expect(await repository.getSessions({ userId: 'user-1' })).toEqual([
+        expect.objectContaining({ id: 'session-literacy', programme_id: 'programme-a' }),
+      ]);
     } finally {
       await db.closeAsync();
     }

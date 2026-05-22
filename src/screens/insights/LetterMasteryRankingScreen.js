@@ -2,6 +2,7 @@ import React, { useState, useCallback } from 'react';
 import { View, StyleSheet, FlatList } from 'react-native';
 import { Text, ActivityIndicator } from 'react-native-paper';
 import { useFocusEffect } from '@react-navigation/native';
+import { useAuth } from '../../context/AuthContext';
 import { useChildren } from '../../context/ChildrenContext';
 import { useClasses } from '../../context/ClassesContext';
 import { assessmentsRepository } from '../../db/repositories/assessmentsRepository';
@@ -12,6 +13,7 @@ import StatBar from '../../components/dashboard/StatBar';
 import { colors, spacing, borderRadius } from '../../constants/colors';
 
 export default function LetterMasteryRankingScreen({ navigation }) {
+  const { user } = useAuth();
   const { children: childrenList } = useChildren();
   const { classes } = useClasses();
   const [ranking, setRanking] = useState([]);
@@ -22,15 +24,15 @@ export default function LetterMasteryRankingScreen({ navigation }) {
       const load = async () => {
         setLoading(true);
         const [assessments, letterMastery] = await Promise.all([
-          assessmentsRepository.getAssessments(),
-          masteryRepository.getLetterMastery(),
+          assessmentsRepository.getAssessments({ userId: user.id }),
+          masteryRepository.getLetterMastery({ userId: user.id }),
         ]);
         const ranked = getLetterMasteryRanking(childrenList, assessments, letterMastery, classes);
         setRanking(ranked);
         setLoading(false);
       };
       load();
-    }, [childrenList, classes])
+    }, [childrenList, classes, user.id])
   );
 
   if (loading) {

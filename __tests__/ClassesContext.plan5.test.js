@@ -12,7 +12,9 @@ jest.mock('../src/services/supabaseClient', () => ({
       select: jest.fn(() => ({
         eq: jest.fn(() => ({
           is: jest.fn(() => ({
-            order: jest.fn(async () => ({ data: [], error: null })),
+            order: jest.fn(() => ({
+              limit: jest.fn(async () => ({ data: [], error: null })),
+            })),
           })),
         })),
       })),

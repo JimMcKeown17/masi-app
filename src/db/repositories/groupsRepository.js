@@ -1,6 +1,7 @@
 import { resolveDatabase, runRepositoryTransaction } from './repositoryRuntime';
 import {
   enqueueDomainOutbox,
+  getActiveProgrammeId,
   mapDomainRow,
   normalizeSyncFields,
   resolveProgrammeId,
@@ -47,15 +48,27 @@ export const createGroupsRepository = ({ database } = {}) => {
     transaction ? task(transaction) : runRepositoryTransaction(database, task)
   );
 
-  const getGroups = async () => {
+  const getGroups = async ({ userId, programmeId } = {}) => {
     const db = await resolveDatabase(database);
-    const rows = await db.getAllAsync('select * from groups where archived_at is null order by name');
+    const activeProgrammeId = programmeId || (userId ? await getActiveProgrammeId(db, userId) : null);
+    if (userId && !activeProgrammeId) return [];
+    const rows = activeProgrammeId
+      ? await db.getAllAsync(
+        'select * from groups where archived_at is null and programme_id = ? order by name',
+        activeProgrammeId
+      )
+      : await db.getAllAsync('select * from groups where archived_at is null order by name');
     return rows.map(mapDomainRow);
   };
 
-  const getChildrenGroups = async () => {
+  const getChildrenGroups = async ({ includeRemoved = false } = {}) => {
     const db = await resolveDatabase(database);
-    const rows = await db.getAllAsync('select * from child_group_memberships order by joined_at');
+    const rows = await db.getAllAsync(`
+      select *
+      from child_group_memberships
+      ${includeRemoved ? '' : 'where removed_at is null'}
+      order by joined_at
+    `);
     return rows.map(mapDomainRow);
   };
 
@@ -63,7 +76,6 @@ export const createGroupsRepository = ({ database } = {}) => {
     const programmeId = await resolveProgrammeId(txn, {
       programmeId: group.programme_id,
       userId: group.staff_id || group.created_by,
-      allowLegacyFallback: true,
     });
     const record = normalizeSyncFields({
       ...group,

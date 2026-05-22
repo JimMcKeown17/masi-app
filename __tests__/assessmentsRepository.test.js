@@ -62,4 +62,72 @@ describe('assessmentsRepository', () => {
       await db.closeAsync();
     }
   });
+
+  test('assessment saves require an active programme assignment when programme_id is omitted', async () => {
+    const db = await createMigratedDatabase(runMigrations);
+
+    try {
+      await seedCoreData(db);
+      await db.runAsync("update staff_programme_assignments set ended_at = '2026-05-21T00:00:00.000Z'");
+      const repository = createAssessmentsRepository({ database: db });
+
+      await expect(repository.saveAssessment({
+        id: 'assessment-without-programme',
+        user_id: 'user-1',
+        child_id: 'child-1',
+        assessment_type: 'letter_egra',
+        date_assessed: '2026-05-21',
+        synced: false,
+      })).rejects.toThrow(/No active programme assignment/i);
+
+      expect(await db.getFirstAsync('select count(*) as count from assessments')).toEqual({ count: 0 });
+      expect(await db.getFirstAsync('select count(*) as count from sync_outbox')).toEqual({ count: 0 });
+    } finally {
+      await db.closeAsync();
+    }
+  });
+
+  test('user-scoped assessment reads only return assessments in the active programme', async () => {
+    const db = await createMigratedDatabase(runMigrations);
+
+    try {
+      await seedCoreData(db);
+      await createChildrenRepository({ database: db }).save({
+        id: 'child-1',
+        first_name: 'Amahle',
+        last_name: 'Dlamini',
+        class_id: 'class-1',
+        created_by: 'user-1',
+        synced: false,
+      }, { actorUserId: 'user-1' });
+      const repository = createAssessmentsRepository({ database: db });
+
+      await repository.saveAssessment({
+        id: 'assessment-literacy',
+        user_id: 'user-1',
+        child_id: 'child-1',
+        programme_id: 'programme-a',
+        assessment_type: 'letter_egra',
+        date_assessed: '2026-05-21',
+        synced: false,
+      });
+      await repository.saveAssessment({
+        id: 'assessment-numeracy',
+        user_id: 'user-1',
+        child_id: 'child-1',
+        programme_id: 'programme-b',
+        assessment_type: 'letter_egra',
+        date_assessed: '2026-05-22',
+        synced: false,
+      });
+
+      expect((await repository.getAssessments()).map(assessment => assessment.id))
+        .toEqual(['assessment-literacy', 'assessment-numeracy']);
+      expect(await repository.getAssessments({ userId: 'user-1' })).toEqual([
+        expect.objectContaining({ id: 'assessment-literacy', programme_id: 'programme-a' }),
+      ]);
+    } finally {
+      await db.closeAsync();
+    }
+  });
 });

@@ -46,7 +46,10 @@ export default function LetterTrackerScreen({ route }) {
       setLoading(true);
 
       // 1. Find the child's most recent assessment for this language
-      const allAssessments = await assessmentsRepository.getAssessments();
+      const allAssessments = await assessmentsRepository.getAssessments({
+        userId: user.id,
+        childId: child.id,
+      });
       const childAssessments = allAssessments
         .filter(a => a.child_id === child.id && a.letter_language === letterSet.language && (a.assessment_type || 'letter_egra') === 'letter_egra')
         .sort((a, b) => {
@@ -62,7 +65,10 @@ export default function LetterTrackerScreen({ route }) {
       setAssessmentMastered(masteredSet);
 
       // 3. Load coach-taught letters
-      const allMastery = await masteryRepository.getLetterMastery();
+      const allMastery = await masteryRepository.getLetterMastery({
+        userId: user.id,
+        childId: child.id,
+      });
       const childTaught = allMastery.filter(
         r => r.child_id === child.id &&
              r.language === letterSet.language &&
@@ -76,7 +82,7 @@ export default function LetterTrackerScreen({ route }) {
     } finally {
       setLoading(false);
     }
-  }, [child.id, letterSet.language, pedagogicalOrder]);
+  }, [child.id, letterSet.language, pedagogicalOrder, user.id]);
 
   useFocusEffect(
     useCallback(() => {
@@ -106,7 +112,10 @@ export default function LetterTrackerScreen({ route }) {
     } else {
       // Currently gray -> toggle ON
       // Check for existing soft-deleted record to reuse (avoids duplicate key on sync)
-      const allMastery = await masteryRepository.getLetterMastery();
+      const allMastery = await masteryRepository.getLetterMastery({
+        userId: user.id,
+        childId: child.id,
+      });
       const existing = allMastery.find(
         r => r.child_id === child.id && r.letter === letter && r.language === letterSet.language && r._deleted
       );

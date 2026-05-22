@@ -1,6 +1,7 @@
 import { resolveDatabase, runRepositoryTransaction } from './repositoryRuntime';
 import {
   enqueueDomainOutbox,
+  getActiveProgrammeId,
   mapDomainRow,
   normalizeSyncFields,
   resolveProgrammeId,
@@ -99,9 +100,16 @@ export const createSessionsRepository = ({ database } = {}) => {
     transaction ? task(transaction) : runRepositoryTransaction(database, task)
   );
 
-  const getSessions = async () => {
+  const getSessions = async ({ userId, programmeId } = {}) => {
     const db = await resolveDatabase(database);
-    const rows = await db.getAllAsync('select * from sessions order by session_date, created_at');
+    const activeProgrammeId = programmeId || (userId ? await getActiveProgrammeId(db, userId) : null);
+    if (userId && !activeProgrammeId) return [];
+    const rows = activeProgrammeId
+      ? await db.getAllAsync(
+        'select * from sessions where programme_id = ? order by session_date, created_at',
+        activeProgrammeId
+      )
+      : await db.getAllAsync('select * from sessions order by session_date, created_at');
     const mapped = [];
     for (const row of rows) {
       mapped.push(await mapSession(db, row));
@@ -113,7 +121,6 @@ export const createSessionsRepository = ({ database } = {}) => {
     const programmeId = await resolveProgrammeId(txn, {
       programmeId: session.programme_id,
       userId: session.user_id,
-      allowLegacyFallback: true,
     });
     const record = normalizeSyncFields({
       ...session,

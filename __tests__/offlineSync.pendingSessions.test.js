@@ -34,24 +34,18 @@ beforeEach(async () => {
   supabase.from.mockClear();
 });
 
-describe('legacy pending session outbox handling', () => {
-  test('does not post sessions that only have the local legacy programme fallback', async () => {
-    await storage.saveSession(makePendingSession());
+describe('pending session outbox handling', () => {
+  test('refuses to create sessions when the user has no active programme assignment', async () => {
+    await expect(storage.saveSession(makePendingSession()))
+      .rejects.toThrow(/No active programme assignment/i);
 
-    const result = await syncTableByName('sessions');
     const status = await getSyncStatus();
+    const db = await resolveDatabase();
 
     expect(supabase.from).not.toHaveBeenCalled();
-    expect(result.success).toBe(false);
-    expect(result.totalFailed).toBe(1);
-    expect(status.failedItems).toEqual([
-      expect.objectContaining({
-        table: 'sessions',
-        id: 'session-1',
-        terminal: true,
-        reason: 'Record is missing an active programme assignment and cannot be synced',
-      }),
-    ]);
+    expect(await db.getFirstAsync('select count(*) as count from sessions')).toEqual({ count: 0 });
+    expect(await db.getFirstAsync('select count(*) as count from sync_outbox')).toEqual({ count: 0 });
+    expect(status.failedItems).toEqual([]);
   });
 
   test('posts real-programme sessions while stripping local pending markers and view-model arrays', async () => {

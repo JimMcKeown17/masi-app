@@ -33,15 +33,38 @@ export const pullPreloadedChildData = async ({
 } = {}) => enqueueSupabaseRequest(async () => {
   const errors = [];
 
+  const programmeRows = await collectResult('programmeAssignment', () => (
+    supabaseClient
+      .from('staff_programme_assignments')
+      .select('programme_id')
+      .eq('user_id', userId)
+      .is('ended_at', null)
+      .order('assigned_at', { ascending: false })
+      .limit(1)
+  ), errors);
+  const activeProgrammeId = programmeRows?.[0]?.programme_id;
+
+  if (!activeProgrammeId) {
+    return {
+      children: [],
+      groups: [],
+      childrenGroups: [],
+      errors,
+    };
+  }
+
   const childRows = await collectResult('children', () => (
     supabaseClient
       .from('children')
       .select(`
         *,
-        child_ea_assignments!inner(user_id,unassigned_at)
+        child_ea_assignments!inner(user_id,unassigned_at),
+        child_programme_enrollments!inner(programme_id,ended_at)
       `)
       .eq('child_ea_assignments.user_id', userId)
       .is('child_ea_assignments.unassigned_at', null)
+      .eq('child_programme_enrollments.programme_id', activeProgrammeId)
+      .is('child_programme_enrollments.ended_at', null)
       .order('first_name', { ascending: true })
   ), errors);
 
@@ -54,6 +77,7 @@ export const pullPreloadedChildData = async ({
       `)
       .eq('group_ea_assignments.ea_user_id', userId)
       .is('group_ea_assignments.unassigned_at', null)
+      .eq('programme_id', activeProgrammeId)
       .order('name', { ascending: true })
   ), errors);
 
@@ -71,7 +95,7 @@ export const pullPreloadedChildData = async ({
 
   return {
     children: Array.isArray(childRows)
-      ? childRows.map(row => stripJoins(row, ['child_ea_assignments']))
+      ? childRows.map(row => stripJoins(row, ['child_ea_assignments', 'child_programme_enrollments']))
       : null,
     groups: Array.isArray(groupRows)
       ? groupRows.map(row => stripJoins(row, ['group_ea_assignments']))
