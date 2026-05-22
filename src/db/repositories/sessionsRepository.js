@@ -5,6 +5,7 @@ import {
   mapDomainRow,
   normalizeSyncFields,
   resolveProgrammeId,
+  sessionAttendeeDomainId,
   shouldEnqueueOutbox,
   upsertDomainRecord,
 } from './domainRepositoryUtils';
@@ -140,8 +141,9 @@ export const createSessionsRepository = ({ database } = {}) => {
 
     const childIds = session.children_ids || [];
     for (const childId of childIds) {
+      const attendeeId = sessionAttendeeDomainId(session.id, childId);
       const attendee = normalizeSyncFields({
-        id: `${session.id}:${childId}`,
+        id: attendeeId,
         session_id: session.id,
         child_id: childId,
         group_id: (session.group_ids || [])[0] || null,

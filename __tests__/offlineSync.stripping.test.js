@@ -5,6 +5,8 @@ jest.mock('../src/services/supabaseClient', () => ({
 }));
 
 describe('offline sync payload stripping', () => {
+  const { validate: uuidValidate } = require('uuid');
+
   test('keeps required class teacher while removing local-only fields', () => {
     const { _testBuildSyncPayload } = require('../src/services/offlineSync');
 
@@ -96,5 +98,50 @@ describe('offline sync payload stripping', () => {
       assessment_date: '2026-05-21',
       score: 8,
     });
+  });
+
+  test('converts legacy composite session attendee ids before pushing to UUID server columns', () => {
+    const { _testBuildSyncPayload } = require('../src/services/offlineSync');
+
+    const payload = _testBuildSyncPayload('session_attendees', {
+      id: 'session-1:child-1',
+      session_id: 'session-1',
+      child_id: 'child-1',
+      attendance_status: 'present',
+      synced: false,
+    });
+
+    expect(uuidValidate(payload.id)).toBe(true);
+    expect(payload.id).not.toBe('session-1:child-1');
+    expect(payload).toEqual(expect.objectContaining({
+      session_id: 'session-1',
+      child_id: 'child-1',
+      attendance_status: 'present',
+    }));
+  });
+
+  test('converts legacy composite assessment item ids before pushing to UUID server columns', () => {
+    const { _testBuildSyncPayload } = require('../src/services/offlineSync');
+    const { assessmentItemDomainId } = require('../src/db/repositories/domainRepositoryUtils');
+
+    const payload = _testBuildSyncPayload('assessment_items', {
+      id: 'assessment-1:__summary__',
+      assessment_id: 'assessment-1',
+      item_key: '__summary__',
+      metadata: { letters_attempted: 4 },
+      synced: false,
+    });
+
+    expect(uuidValidate(payload.id)).toBe(true);
+    expect(payload.id).toBe(assessmentItemDomainId({
+      assessmentId: 'assessment-1',
+      itemKey: '__summary__',
+    }));
+    expect(payload.id).not.toBe('assessment-1:__summary__');
+    expect(payload).toEqual(expect.objectContaining({
+      assessment_id: 'assessment-1',
+      item_key: '__summary__',
+      metadata: { letters_attempted: 4 },
+    }));
   });
 });

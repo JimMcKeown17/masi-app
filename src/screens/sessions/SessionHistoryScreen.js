@@ -1,6 +1,7 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useCallback } from 'react';
 import { View, StyleSheet, FlatList } from 'react-native';
 import { Text, Card, ActivityIndicator, Snackbar } from 'react-native-paper';
+import { useFocusEffect } from '@react-navigation/native';
 import { useAuth } from '../../context/AuthContext';
 import { colors, spacing, borderRadius, shadows } from '../../constants/colors';
 import { sessionsRepository } from '../../db/repositories/sessionsRepository';
@@ -33,17 +34,13 @@ export default function SessionHistoryScreen() {
     setSnackbarVisible(true);
   };
 
-  useEffect(() => {
-    loadSessions();
-  }, [user?.id]);
-
-  const filterAndSort = (allSessions) => {
+  const filterAndSort = useCallback((allSessions) => {
     const now = Date.now();
     const cutoff = now - THIRTY_DAYS_MS;
 
     return allSessions
       .filter((s) => {
-        if (s.user_id !== user.id) return false;
+        if (s.user_id !== user?.id) return false;
         const [y, m, d] = s.session_date.split('-').map(Number);
         const sessionTime = new Date(y, m - 1, d).getTime();
         return sessionTime >= cutoff;
@@ -52,23 +49,47 @@ export default function SessionHistoryScreen() {
         if (a.session_date !== b.session_date) return a.session_date > b.session_date ? -1 : 1;
         return new Date(b.created_at) - new Date(a.created_at);
       });
-  };
+  }, [user?.id]);
 
   /**
    * Load recent session history from local SQLite. Network sync runs through
    * the outbox engine; this screen only renders the local cache.
    */
-  const loadSessions = async () => {
-    try {
-      const cached = await sessionsRepository.getSessions({ userId: user.id });
-      setSessions(filterAndSort(cached));
-    } catch (error) {
-      console.error('Error loading sessions:', error);
-      showSnackbar('Failed to load sessions');
-    } finally {
-      setLoading(false);
-    }
-  };
+  useFocusEffect(
+    useCallback(() => {
+      let active = true;
+
+      const loadSessions = async () => {
+        if (!user?.id) {
+          setSessions([]);
+          setLoading(false);
+          return;
+        }
+
+        try {
+          setLoading(true);
+          const cached = await sessionsRepository.getSessions({ userId: user.id });
+          if (active) {
+            setSessions(filterAndSort(cached));
+          }
+        } catch (error) {
+          console.error('Error loading sessions:', error);
+          if (active) {
+            showSnackbar('Failed to load sessions');
+          }
+        } finally {
+          if (active) {
+            setLoading(false);
+          }
+        }
+      };
+
+      loadSessions();
+      return () => {
+        active = false;
+      };
+    }, [filterAndSort, user?.id])
+  );
 
   const renderItem = ({ item }) => {
     const lettersDisplay =

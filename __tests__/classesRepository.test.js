@@ -41,6 +41,93 @@ describe('classesRepository', () => {
     }
   });
 
+  test('mobile-created classes create an active EA assignment in the same transaction', async () => {
+    const db = await createMigratedDatabase(runMigrations);
+
+    try {
+      await seedCoreData(db);
+      const repository = createClassesRepository({ database: db });
+
+      await repository.saveClass({
+        id: 'class-created-on-device',
+        school_id: 'school-1',
+        name: 'Plan5A',
+        grade: 'Grade 1',
+        teacher: 'Teacher Plan5',
+        academic_year_id: 'year-2026',
+        created_by: 'user-1',
+        synced: false,
+      });
+
+      expect(await repository.getClasses({ userId: 'user-1' })).toEqual([
+        expect.objectContaining({
+          id: 'class-created-on-device',
+        }),
+      ]);
+      expect(await db.getFirstAsync(`
+        select class_id, ea_user_id, programme_id, unassigned_at
+        from class_ea_assignments
+        where class_id = ?
+      `, 'class-created-on-device')).toEqual({
+        class_id: 'class-created-on-device',
+        ea_user_id: 'user-1',
+        programme_id: 'programme-a',
+        unassigned_at: null,
+      });
+      expect(await db.getFirstAsync(`
+        select count(*) as count
+        from sync_outbox
+        where table_name in ('classes', 'class_ea_assignments')
+          and record_id in (
+            'class-created-on-device',
+            (select id from class_ea_assignments where class_id = 'class-created-on-device')
+          )
+      `)).toEqual({ count: 2 });
+    } finally {
+      await db.closeAsync();
+    }
+  });
+
+  test('synced server-pulled class assignments make admin classes visible offline without outbox rows', async () => {
+    const db = await createMigratedDatabase(runMigrations);
+
+    try {
+      await seedCoreData(db);
+      const classesRepository = createClassesRepository({ database: db });
+      const assignmentsRepository = createClassEaAssignmentsRepository({ database: db });
+
+      await classesRepository.saveClass({
+        id: 'admin-class',
+        school_id: 'school-1',
+        name: 'Admin Assigned',
+        grade: '1',
+        academic_year_id: 'year-2026',
+        created_by: 'admin-user',
+        sync_status: 'synced',
+      });
+      await assignmentsRepository.save({
+        id: 'server-class-assignment',
+        class_id: 'admin-class',
+        ea_user_id: 'user-1',
+        programme_id: 'programme-a',
+        assigned_at: '2026-05-22T08:00:00.000Z',
+        created_by: 'admin-user',
+        sync_status: 'synced',
+      });
+
+      expect(await classesRepository.getClasses({ userId: 'user-1' })).toEqual([
+        expect.objectContaining({ id: 'admin-class' }),
+      ]);
+      expect(await db.getFirstAsync(`
+        select count(*) as count
+        from sync_outbox
+        where record_id in ('admin-class', 'server-class-assignment')
+      `)).toEqual({ count: 0 });
+    } finally {
+      await db.closeAsync();
+    }
+  });
+
   test('archiveClass ends active class EA assignments in the same transaction', async () => {
     const db = await createMigratedDatabase(runMigrations);
 
@@ -89,6 +176,19 @@ describe('classesRepository', () => {
         table_name: 'child_class_memberships',
         operation: 'archive',
       });
+      const childOutbox = await db.getFirstAsync(`
+        select payload
+        from sync_outbox
+        where table_name = 'children'
+          and record_id = 'child-1'
+          and operation = 'update'
+      `);
+      expect(JSON.parse(childOutbox.payload)).toEqual(expect.objectContaining({
+        id: 'child-1',
+        first_name: 'Amahle',
+        last_name: 'Dlamini',
+        class_id: null,
+      }));
     } finally {
       await db.closeAsync();
     }

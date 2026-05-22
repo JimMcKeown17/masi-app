@@ -1,16 +1,34 @@
 import { supabase } from './supabaseClient';
 import { enqueueSupabaseRequest } from './supabaseRequestQueue';
 
+const markSynced = (row) => ({
+  ...row,
+  synced: true,
+  sync_status: row.sync_status || 'synced',
+});
+
 const stripJoins = (row, joinKeys) => {
   const next = { ...row };
   for (const key of joinKeys) {
     delete next[key];
   }
-  return {
-    ...next,
-    synced: true,
-    sync_status: next.sync_status || 'synced',
-  };
+  return markSynced(next);
+};
+
+const collectJoinRows = (rows, joinKey) => (
+  (rows || []).flatMap((row) => {
+    const joined = row?.[joinKey];
+    if (!joined) return [];
+    return (Array.isArray(joined) ? joined : [joined]).map(markSynced);
+  })
+);
+
+const uniqueById = (rows) => {
+  const byId = new Map();
+  for (const row of rows || []) {
+    if (row?.id) byId.set(row.id, row);
+  }
+  return [...byId.values()];
 };
 
 const collectResult = async (scope, task, errors) => {
@@ -58,8 +76,8 @@ export const pullPreloadedChildData = async ({
       .from('children')
       .select(`
         *,
-        child_ea_assignments!inner(user_id,unassigned_at),
-        child_programme_enrollments!inner(programme_id,ended_at)
+        child_ea_assignments!inner(*),
+        child_programme_enrollments!inner(*)
       `)
       .eq('child_ea_assignments.user_id', userId)
       .is('child_ea_assignments.unassigned_at', null)
@@ -67,6 +85,18 @@ export const pullPreloadedChildData = async ({
       .is('child_programme_enrollments.ended_at', null)
       .order('first_name', { ascending: true })
   ), errors);
+
+  let classMembershipRows = [];
+  if (Array.isArray(childRows) && childRows.length > 0) {
+    const childIds = childRows.map(child => child.id);
+    classMembershipRows = await collectResult('childClassMemberships', () => (
+      supabaseClient
+        .from('child_class_memberships')
+        .select('*, classes(*)')
+        .in('child_id', childIds)
+        .is('exited_at', null)
+    ), errors);
+  }
 
   const groupRows = await collectResult('groups', () => (
     supabaseClient
@@ -97,11 +127,23 @@ export const pullPreloadedChildData = async ({
     children: Array.isArray(childRows)
       ? childRows.map(row => stripJoins(row, ['child_ea_assignments', 'child_programme_enrollments']))
       : null,
+    classes: Array.isArray(classMembershipRows)
+      ? uniqueById(classMembershipRows.map(row => row.classes).filter(Boolean).map(markSynced))
+      : null,
+    childEaAssignments: Array.isArray(childRows)
+      ? collectJoinRows(childRows, 'child_ea_assignments')
+      : null,
+    childProgrammeEnrollments: Array.isArray(childRows)
+      ? collectJoinRows(childRows, 'child_programme_enrollments')
+      : null,
+    childClassMemberships: Array.isArray(classMembershipRows)
+      ? classMembershipRows.map(row => stripJoins(row, ['classes']))
+      : null,
     groups: Array.isArray(groupRows)
       ? groupRows.map(row => stripJoins(row, ['group_ea_assignments']))
       : null,
     childrenGroups: Array.isArray(membershipRows)
-      ? membershipRows.map(row => ({ ...row, synced: true, sync_status: row.sync_status || 'synced' }))
+      ? membershipRows.map(markSynced)
       : null,
     errors,
   };

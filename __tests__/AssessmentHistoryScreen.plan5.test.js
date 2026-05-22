@@ -6,6 +6,13 @@ import { useChildren } from '../src/context/ChildrenContext';
 import { assessmentsRepository } from '../src/db/repositories/assessmentsRepository';
 import { supabase } from '../src/services/supabaseClient';
 
+jest.mock('@react-navigation/native', () => ({
+  useFocusEffect: (callback) => {
+    const React = require('react');
+    React.useEffect(() => callback(), [callback]);
+  },
+}));
+
 jest.mock('../src/context/AuthContext', () => ({
   useAuth: jest.fn(),
 }));

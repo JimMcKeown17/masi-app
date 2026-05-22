@@ -265,6 +265,38 @@ export const createChildrenRepository = ({ database } = {}) => {
     return true;
   });
 
+  const saveChildProgrammeEnrollment = async (enrollment, { transaction } = {}) => runWrite(transaction, async (txn) => {
+    const record = normalizeSyncFields({
+      enrolled_at: enrollment.enrolled_at || enrollment.created_at || new Date().toISOString(),
+      ...enrollment,
+      sync_status: enrollment.sync_status || syncStatusFromSynced(enrollment.synced),
+    });
+    await upsertDomainRecord(txn, {
+      tableName: 'child_programme_enrollments',
+      columns: RELATIONSHIP_COLUMNS.programmeEnrollment,
+    }, record);
+    if (shouldEnqueueOutbox(record)) {
+      await enqueueDomainOutbox(txn, 'child_programme_enrollments', record.id, record.ended_at ? 'archive' : 'insert', record);
+    }
+    return true;
+  });
+
+  const saveChildClassMembership = async (membership, { transaction } = {}) => runWrite(transaction, async (txn) => {
+    const record = normalizeSyncFields({
+      enrolled_at: membership.enrolled_at || membership.created_at || new Date().toISOString(),
+      ...membership,
+      sync_status: membership.sync_status || syncStatusFromSynced(membership.synced),
+    });
+    await upsertDomainRecord(txn, {
+      tableName: 'child_class_memberships',
+      columns: RELATIONSHIP_COLUMNS.classMembership,
+    }, record);
+    if (shouldEnqueueOutbox(record)) {
+      await enqueueDomainOutbox(txn, 'child_class_memberships', record.id, record.exited_at ? 'archive' : 'insert', record);
+    }
+    return true;
+  });
+
   const deleteStaffChild = async (staffId, childId, { transaction } = {}) => runWrite(transaction, async (txn) => {
     const endedAt = new Date().toISOString();
     const rows = await txn.getAllAsync(`
@@ -415,6 +447,8 @@ export const createChildrenRepository = ({ database } = {}) => {
     getUnsyncedChildren,
     getStaffChildren,
     saveStaffChild,
+    saveChildProgrammeEnrollment,
+    saveChildClassMembership,
     deleteStaffChild,
     getUnsyncedStaffChildren,
     archiveChild,

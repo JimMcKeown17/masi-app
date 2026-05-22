@@ -6,6 +6,16 @@ jest.mock('../src/services/supabaseClient', () => ({
 import { createBetterSqliteTestDatabase } from '../test-support/betterSqliteAdapter';
 import { runMigrations } from '../src/db/migrations';
 import { createOutboxSyncEngine, pullReferenceData } from '../src/services/offlineSync';
+import { getActiveProgrammeId } from '../src/db/repositories/domainRepositoryUtils';
+import {
+  createMigratedDatabase,
+  seedCoreData,
+} from '../test-support/sqliteRepositoryTestUtils';
+import {
+  createSchoolsRepository,
+  createReferenceDataRepository,
+} from '../src/db/repositories/referenceDataRepository';
+import { createSessionsRepository } from '../src/db/repositories/sessionsRepository';
 import { createSyncOutboxRepository } from '../src/db/repositories/syncOutboxRepository';
 import { createTimeEntriesRepository } from '../src/db/repositories/timeEntriesRepository';
 
@@ -592,24 +602,255 @@ describe('SQLite outbox offline sync', () => {
       })),
     };
     const repositories = {
+      schools: { replaceFromServer: jest.fn() },
+      job_titles: { replaceFromServer: jest.fn() },
+      programmes: { replaceFromServer: jest.fn() },
       academic_years: { replaceFromServer: jest.fn() },
       assessment_windows: { replaceFromServer: jest.fn() },
       teachers: { replaceFromServer: jest.fn() },
+      staff_programme_assignments: { replaceFromServer: jest.fn() },
     };
 
     const result = await pullReferenceData({ supabaseClient, repositories });
 
-    expect(calls).toEqual(['academic_years', 'assessment_windows', 'teachers']);
+    expect(calls).toEqual([
+      'schools',
+      'job_titles',
+      'programmes',
+      'academic_years',
+      'assessment_windows',
+      'teachers',
+      'staff_programme_assignments',
+    ]);
+    expect(repositories.schools.replaceFromServer)
+      .toHaveBeenCalledWith([{ id: 'schools-1' }], {});
+    expect(repositories.job_titles.replaceFromServer)
+      .toHaveBeenCalledWith([{ id: 'job_titles-1' }], {});
+    expect(repositories.programmes.replaceFromServer)
+      .toHaveBeenCalledWith([{ id: 'programmes-1' }], {});
     expect(repositories.academic_years.replaceFromServer)
-      .toHaveBeenCalledWith([{ id: 'academic_years-1' }]);
+      .toHaveBeenCalledWith([{ id: 'academic_years-1' }], {});
     expect(repositories.assessment_windows.replaceFromServer)
-      .toHaveBeenCalledWith([{ id: 'assessment_windows-1' }]);
+      .toHaveBeenCalledWith([{ id: 'assessment_windows-1' }], {});
     expect(repositories.teachers.replaceFromServer)
-      .toHaveBeenCalledWith([{ id: 'teachers-1' }]);
+      .toHaveBeenCalledWith([{ id: 'teachers-1' }], {});
+    expect(repositories.staff_programme_assignments.replaceFromServer)
+      .toHaveBeenCalledWith([{ id: 'staff_programme_assignments-1' }], {});
     expect(result).toEqual({
+      schools: 1,
+      job_titles: 1,
+      programmes: 1,
       academic_years: 1,
       assessment_windows: 1,
       teachers: 1,
+      staff_programme_assignments: 1,
     });
+  });
+
+  test('pullReferenceData seeds the local active programme assignment used by offline writes', async () => {
+    const db = await createMigratedDatabase(runMigrations);
+
+    const rowsByTable = {
+      schools: [{
+        id: 'school-server',
+        name: 'Server Primary',
+      }],
+      job_titles: [{
+        id: 'job-title-1',
+        code: 'ea',
+        name: 'Education Assistant',
+        sort_order: 1,
+        is_active: true,
+      }],
+      programmes: [{
+        id: 'programme-server',
+        code: 'literacy',
+        name: 'Literacy',
+        sort_order: 1,
+        is_active: true,
+      }],
+      academic_years: [{
+        id: 'year-server',
+        label: '2026',
+        starts_on: '2026-01-15',
+        ends_on: '2026-12-15',
+        is_active: true,
+      }],
+      assessment_windows: [{
+        id: 'window-server',
+        academic_year_id: 'year-server',
+        label: '2026 Baseline',
+        window_type: 'baseline',
+        starts_on: '2026-01-15',
+        ends_on: '2026-03-15',
+        is_required: true,
+      }],
+      teachers: [{
+        id: 'teacher-server',
+        first_name: 'Nandi',
+        last_name: 'Teacher',
+        display_name: 'Nandi Teacher',
+        school_id: 'school-server',
+      }],
+      staff_programme_assignments: [{
+        id: 'spa-server',
+        user_id: 'user-1',
+        programme_id: 'programme-server',
+        school_id: 'school-server',
+        assigned_at: '2026-01-15T00:00:00.000Z',
+        ended_at: null,
+      }, {
+        id: 'spa-other-user',
+        user_id: 'user-2',
+        programme_id: 'programme-server',
+        school_id: 'school-server',
+        assigned_at: '2026-01-15T00:00:00.000Z',
+        ended_at: null,
+      }],
+    };
+    const eqCalls = [];
+    const supabaseClient = {
+      from: jest.fn((tableName) => {
+        const builder = {
+          select: jest.fn(() => builder),
+          eq: jest.fn((column, value) => {
+            eqCalls.push({ tableName, column, value });
+            builder.filterColumn = column;
+            builder.filterValue = value;
+            return builder;
+          }),
+          then: (resolve) => {
+            const rows = rowsByTable[tableName] || [];
+            const filteredRows = builder.filterColumn
+              ? rows.filter(row => row[builder.filterColumn] === builder.filterValue)
+              : rows;
+            return Promise.resolve({ data: filteredRows, error: null }).then(resolve);
+          },
+        };
+        return builder;
+      }),
+    };
+
+    try {
+      const repositories = {
+        schools: createSchoolsRepository({ database: db }),
+        job_titles: createReferenceDataRepository({ database: db, tableName: 'job_titles' }),
+        programmes: createReferenceDataRepository({ database: db, tableName: 'programmes' }),
+        academic_years: createReferenceDataRepository({ database: db, tableName: 'academic_years' }),
+        assessment_windows: createReferenceDataRepository({ database: db, tableName: 'assessment_windows' }),
+        teachers: createReferenceDataRepository({ database: db, tableName: 'teachers' }),
+        staff_programme_assignments: createReferenceDataRepository({
+          database: db,
+          tableName: 'staff_programme_assignments',
+        }),
+      };
+
+      await pullReferenceData({ supabaseClient, repositories, userId: 'user-1' });
+
+      expect(eqCalls).toContainEqual({
+        tableName: 'staff_programme_assignments',
+        column: 'user_id',
+        value: 'user-1',
+      });
+      await expect(getActiveProgrammeId(db, 'user-1')).resolves.toBe('programme-server');
+      expect(await db.getFirstAsync(
+        'select count(*) as count from staff_programme_assignments'
+      )).toEqual({ count: 1 });
+    } finally {
+      await db.closeAsync();
+    }
+  });
+
+  test('session save fails before the startup assignment pull and succeeds after it', async () => {
+    const db = await createMigratedDatabase(runMigrations);
+
+    try {
+      await seedCoreData(db, { includeStaffProgrammeAssignment: false });
+      const repository = createSessionsRepository({ database: db });
+
+      const session = {
+        id: 'session-after-pull',
+        user_id: 'user-1',
+        session_date: '2026-05-21',
+        children_ids: [],
+        activities: { letters_focused: ['a'] },
+        synced: false,
+      };
+
+      await expect(repository.saveSession(session)).rejects.toThrow(/No active programme assignment/i);
+
+      const rowsByTable = {
+        schools: [{ id: 'school-1', name: 'Masi Primary' }],
+        job_titles: [],
+        programmes: [{ id: 'programme-a', code: 'literacy', name: 'Literacy' }],
+        academic_years: [{
+          id: 'year-2026',
+          label: '2026',
+          starts_on: '2026-01-15',
+          ends_on: '2026-12-15',
+          is_active: true,
+        }],
+        assessment_windows: [],
+        teachers: [],
+        staff_programme_assignments: [{
+          id: 'spa-after-pull',
+          user_id: 'user-1',
+          programme_id: 'programme-a',
+          school_id: 'school-1',
+          assigned_at: '2026-01-15T00:00:00.000Z',
+          ended_at: null,
+        }],
+      };
+      const supabaseClient = {
+        from: jest.fn((tableName) => {
+          const builder = {
+            select: jest.fn(() => builder),
+            eq: jest.fn((column, value) => {
+              builder.filterColumn = column;
+              builder.filterValue = value;
+              return builder;
+            }),
+            then: (resolve) => {
+              const rows = rowsByTable[tableName] || [];
+              const filteredRows = builder.filterColumn
+                ? rows.filter(row => row[builder.filterColumn] === builder.filterValue)
+                : rows;
+              return Promise.resolve({ data: filteredRows, error: null }).then(resolve);
+            },
+          };
+          return builder;
+        }),
+      };
+      const repositories = {
+        schools: createSchoolsRepository({ database: db }),
+        job_titles: createReferenceDataRepository({ database: db, tableName: 'job_titles' }),
+        programmes: createReferenceDataRepository({ database: db, tableName: 'programmes' }),
+        academic_years: createReferenceDataRepository({ database: db, tableName: 'academic_years' }),
+        assessment_windows: createReferenceDataRepository({ database: db, tableName: 'assessment_windows' }),
+        teachers: createReferenceDataRepository({ database: db, tableName: 'teachers' }),
+        staff_programme_assignments: createReferenceDataRepository({
+          database: db,
+          tableName: 'staff_programme_assignments',
+        }),
+      };
+
+      await pullReferenceData({ supabaseClient, repositories, userId: 'user-1' });
+
+      await repository.saveSession(session);
+
+      expect(await db.getFirstAsync(
+        'select id, programme_id from sessions where id = ?',
+        'session-after-pull'
+      )).toEqual({
+        id: 'session-after-pull',
+        programme_id: 'programme-a',
+      });
+      expect(await db.getFirstAsync(
+        "select count(*) as count from sync_outbox where table_name = 'sessions' and record_id = ?",
+        'session-after-pull'
+      )).toEqual({ count: 1 });
+    } finally {
+      await db.closeAsync();
+    }
   });
 });

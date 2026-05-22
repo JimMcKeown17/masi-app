@@ -72,6 +72,17 @@ describe('Plan 1 SQLite Supabase migrations', () => {
       .not.toMatch(/from public\.sessions/i);
   });
 
+  test('session upsert visibility keeps direct owner SELECT fallback', () => {
+    const fix = latestMigrationMatching(/session_upsert_visibility/);
+
+    expect(fix).toBeDefined();
+    expect(fix.sql).toMatch(/drop policy if exists sessions_select_own_or_assigned_child_history on public\.sessions/i);
+    expect(policyBlock(fix.sql, 'sessions_select_own_or_assigned_child_history'))
+      .toMatch(/user_id = \(select auth\.uid\(\)\)[\s\S]+private\.can_read_session\(id\)/i);
+    expect(policyBlock(fix.sql, 'sessions_select_own_or_assigned_child_history'))
+      .not.toMatch(/from public\.session_attendees/i);
+  });
+
   test('RLS review fixes enforce handover-sensitive writes', () => {
     const fix = latestMigrationMatching(/rls_review_fixes/);
 

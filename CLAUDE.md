@@ -105,6 +105,17 @@ PostgreSQL upserts require **SELECT visibility through RLS** to check the unique
 
 For the new SQLite backend, use canonical Supabase CLI migrations under `supabase/migrations/`. Treat `supabase-migrations/` as historical reference only.
 
+### TEMPORARY: Two Supabase backends — keep the CLI off the wrong one
+*(Clean-slate refactor only. Remove once the SQLite cutover is complete.)*
+
+Two Supabase projects exist:
+- `masi-app` — current production, ref `jcqrlwetutnpuchjoyyd`
+- `masi-app-sqlite` — clean-slate refactor backend, ref `segygjzpujphwvrubusm` (the repo is `supabase link`ed to this one)
+
+`.env.local` carries the **old `masi-app`** connection (`MASI_SUPABASE_URL` / `EXPO_PUBLIC_SUPABASE_URL` resolve to `jcqrlwetutnpuchjoyyd`). That is correct for the current production app — the clean-slate build selects `masi-app-sqlite` via `config/supabaseProjectConfig.js`.
+
+**Trap:** running the `supabase` CLI with `.env.local` injected into its environment (e.g. wrapped in a `dotenv` loader) makes the CLI pick up the old-project connection and silently query **old production** — even when you pass `--linked`. Run `supabase db query --linked` plainly instead; `--linked` resolves `masi-app-sqlite` via the CLI's own auth. Do not inject `.env.local` into `supabase` CLI commands.
+
 ### EAS Builds — Environment Variables Not in `.env.local`
 `process.env.EXPO_PUBLIC_*` variables from `.env.local` are NOT available in EAS cloud builds. Public values (Supabase URL, anon key) must also be available through Expo config `extra` with a fallback in the client. The current app used `app.json`; Plan 1 of the SQLite refactor migrates this to `app.config.js` with explicit Supabase target guardrails.
 ```javascript

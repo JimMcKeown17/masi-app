@@ -3,22 +3,27 @@ import { act, renderHook, waitFor } from '@testing-library/react-native';
 import { ClassesProvider, useClasses } from '../src/context/ClassesContext';
 import { storage } from '../src/utils/storage';
 import { academicYearsRepository } from '../src/db/repositories/referenceDataRepository';
+import { getActiveProgrammeId } from '../src/db/repositories/domainRepositoryUtils';
+import { resolveDatabase } from '../src/db/repositories/repositoryRuntime';
 import { fetchAndCacheSchools } from '../src/services/offlineSync';
 import { useChildren } from '../src/context/ChildrenContext';
 
+const mockSupabaseFrom = jest.fn();
+const queryResult = (result) => {
+  const builder = {
+    select: jest.fn(() => builder),
+    eq: jest.fn(() => builder),
+    is: jest.fn(() => builder),
+    order: jest.fn(() => builder),
+    limit: jest.fn(async () => result),
+    then: (resolve) => Promise.resolve(result).then(resolve),
+  };
+  return builder;
+};
+
 jest.mock('../src/services/supabaseClient', () => ({
   supabase: {
-    from: jest.fn(() => ({
-      select: jest.fn(() => ({
-        eq: jest.fn(() => ({
-          is: jest.fn(() => ({
-            order: jest.fn(() => ({
-              limit: jest.fn(async () => ({ data: [], error: null })),
-            })),
-          })),
-        })),
-      })),
-    })),
+    from: (...args) => mockSupabaseFrom(...args),
   },
 }));
 
@@ -48,11 +53,20 @@ jest.mock('../src/db/repositories/referenceDataRepository', () => ({
   },
 }));
 
+jest.mock('../src/db/repositories/domainRepositoryUtils', () => ({
+  getActiveProgrammeId: jest.fn(),
+}));
+
+jest.mock('../src/db/repositories/repositoryRuntime', () => ({
+  resolveDatabase: jest.fn(),
+}));
+
 jest.mock('../src/utils/storage', () => ({
   storage: {
     getSchools: jest.fn(),
     getClasses: jest.fn(),
     saveClass: jest.fn(),
+    saveClassEaAssignment: jest.fn(),
     updateClass: jest.fn(),
     deleteClass: jest.fn(),
     getChildren: jest.fn(),
@@ -75,12 +89,21 @@ describe('ClassesContext Plan 5 behavior', () => {
     storage.getSchools.mockResolvedValue([]);
     storage.getClasses.mockResolvedValue([]);
     storage.saveClass.mockResolvedValue(true);
+    storage.saveClassEaAssignment.mockResolvedValue(true);
     storage.updateClass.mockResolvedValue(true);
     storage.deleteClass.mockResolvedValue(true);
     storage.getChildren.mockResolvedValue([]);
     storage.updateChild.mockResolvedValue(true);
     fetchAndCacheSchools.mockResolvedValue([]);
     academicYearsRepository.getActive.mockResolvedValue({ id: 'year-2026', label: '2026' });
+    resolveDatabase.mockResolvedValue({});
+    getActiveProgrammeId.mockResolvedValue('programme-a');
+    mockSupabaseFrom.mockImplementation((tableName) => {
+      if (tableName === 'staff_programme_assignments') {
+        return queryResult({ data: [], error: null });
+      }
+      return queryResult({ data: [], error: null });
+    });
   });
 
   afterEach(() => {
@@ -119,5 +142,48 @@ describe('ClassesContext Plan 5 behavior', () => {
     expect(storage.getChildren).not.toHaveBeenCalled();
     expect(storage.updateChild).not.toHaveBeenCalled();
     expect(updateChild).not.toHaveBeenCalled();
+  });
+
+  test('successful class pull drops synced local classes absent from the server but keeps dirty local classes', async () => {
+    storage.getClasses.mockResolvedValueOnce([
+      { id: 'synced-stale-class', name: 'Stale', synced: true, sync_status: 'synced' },
+      { id: 'pending-class', name: 'Pending', synced: false, sync_status: 'pending' },
+      { id: 'terminal-class', name: 'Terminal', synced: false, sync_status: 'terminal' },
+    ]);
+    mockSupabaseFrom.mockImplementation((tableName) => {
+      if (tableName === 'staff_programme_assignments') {
+        return queryResult({
+          data: [{ programme_id: 'programme-a' }],
+          error: null,
+        });
+      }
+      if (tableName === 'classes') {
+        return queryResult({
+          data: [{
+            id: 'server-class',
+            name: 'Server',
+            class_ea_assignments: [{ id: 'class-assignment-1', class_id: 'server-class', ea_user_id: 'user-1' }],
+            sync_status: 'synced',
+          }],
+          error: null,
+        });
+      }
+      return queryResult({ data: [], error: null });
+    });
+
+    const { result } = renderHook(() => useClasses(), { wrapper });
+
+    await waitFor(() => expect(result.current.classes.map(classItem => classItem.id)).toContain('server-class'));
+
+    expect(result.current.classes.map(classItem => classItem.id).sort()).toEqual([
+      'pending-class',
+      'server-class',
+      'terminal-class',
+    ]);
+    expect(storage.saveClassEaAssignment).toHaveBeenCalledWith(expect.objectContaining({
+      id: 'class-assignment-1',
+      class_id: 'server-class',
+      sync_status: 'synced',
+    }));
   });
 });

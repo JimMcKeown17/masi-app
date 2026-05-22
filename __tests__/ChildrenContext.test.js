@@ -30,6 +30,9 @@ jest.mock('../src/utils/storage', () => ({
     saveChild: jest.fn(),
     createChild: jest.fn(),
     saveStaffChild: jest.fn(),
+    saveChildProgrammeEnrollment: jest.fn(),
+    saveChildClassMembership: jest.fn(),
+    saveClass: jest.fn(),
     updateChild: jest.fn(),
     deleteChild: jest.fn(),
     saveGroup: jest.fn(),
@@ -64,11 +67,19 @@ describe('ChildrenContext Plan 5 hydration', () => {
     ]);
     storage.saveChild.mockResolvedValue(true);
     storage.createChild.mockResolvedValue(true);
+    storage.saveStaffChild.mockResolvedValue(true);
+    storage.saveChildProgrammeEnrollment.mockResolvedValue(true);
+    storage.saveChildClassMembership.mockResolvedValue(true);
+    storage.saveClass.mockResolvedValue(true);
     storage.saveGroup.mockResolvedValue(true);
     storage.saveChildrenGroup.mockResolvedValue(true);
     storage.deleteChild.mockResolvedValue({ deleted: false, archived: true });
     pullPreloadedChildData.mockResolvedValue({
       children: [{ id: 'server-child', first_name: 'Server', last_name: 'Child', synced: true }],
+      classes: [{ id: 'server-class', name: 'Server Class', synced: true }],
+      childEaAssignments: [{ id: 'cea-1', child_id: 'server-child', user_id: 'user-1', synced: true }],
+      childProgrammeEnrollments: [{ id: 'cpe-1', child_id: 'server-child', programme_id: 'programme-a', synced: true }],
+      childClassMemberships: [{ id: 'ccm-1', child_id: 'server-child', class_id: 'server-class', synced: true }],
       groups: [{ id: 'server-group', name: 'Server Group', synced: true }],
       childrenGroups: [{ id: 'server-membership', child_id: 'server-child', group_id: 'server-group', synced: true }],
       errors: [],
@@ -93,6 +104,10 @@ describe('ChildrenContext Plan 5 hydration', () => {
     expect(result.current.groups.map(group => group.id)).toContain('server-group');
     expect(result.current.childrenGroups.map(membership => membership.id)).toContain('server-membership');
     expect(storage.saveChild).toHaveBeenCalledWith(expect.objectContaining({ id: 'server-child' }));
+    expect(storage.saveClass).toHaveBeenCalledWith(expect.objectContaining({ id: 'server-class' }));
+    expect(storage.saveStaffChild).toHaveBeenCalledWith(expect.objectContaining({ id: 'cea-1' }));
+    expect(storage.saveChildProgrammeEnrollment).toHaveBeenCalledWith(expect.objectContaining({ id: 'cpe-1' }));
+    expect(storage.saveChildClassMembership).toHaveBeenCalledWith(expect.objectContaining({ id: 'ccm-1' }));
     expect(storage.saveGroup).toHaveBeenCalledWith(expect.objectContaining({ id: 'server-group' }));
     expect(storage.saveChildrenGroup).toHaveBeenCalledWith(expect.objectContaining({ id: 'server-membership' }));
   });
@@ -123,6 +138,52 @@ describe('ChildrenContext Plan 5 hydration', () => {
     expect(storage.saveChildrenGroup).not.toHaveBeenCalled();
   });
 
+  test('successful preload drops synced local rows that disappeared from the server but keeps dirty local rows', async () => {
+    storage.getMyChildren.mockResolvedValueOnce([
+      { id: 'synced-stale-child', first_name: 'Stale', synced: true, sync_status: 'synced' },
+      { id: 'pending-child', first_name: 'Pending', synced: false, sync_status: 'pending' },
+      { id: 'failed-child', first_name: 'Failed', synced: false, sync_status: 'failed' },
+      { id: 'terminal-child', first_name: 'Terminal', synced: false, sync_status: 'terminal' },
+    ]);
+    storage.getGroups.mockResolvedValueOnce([
+      { id: 'synced-stale-group', name: 'Stale Group', synced: true, sync_status: 'synced' },
+      { id: 'pending-group', name: 'Pending Group', synced: false, sync_status: 'pending' },
+    ]);
+    storage.getChildrenGroups.mockResolvedValueOnce([
+      { id: 'synced-stale-membership', child_id: 'synced-stale-child', group_id: 'synced-stale-group', synced: true, sync_status: 'synced' },
+      { id: 'pending-membership', child_id: 'pending-child', group_id: 'pending-group', synced: false, sync_status: 'pending' },
+    ]);
+    pullPreloadedChildData.mockResolvedValueOnce({
+      children: [{ id: 'server-child', first_name: 'Server', synced: true, sync_status: 'synced' }],
+      classes: [],
+      childEaAssignments: [],
+      childProgrammeEnrollments: [],
+      childClassMemberships: [],
+      groups: [{ id: 'server-group', name: 'Server Group', synced: true, sync_status: 'synced' }],
+      childrenGroups: [{ id: 'server-membership', child_id: 'server-child', group_id: 'server-group', synced: true, sync_status: 'synced' }],
+      errors: [],
+    });
+
+    const { result } = renderHook(() => useChildren(), { wrapper });
+
+    await waitFor(() => expect(result.current.children.map(child => child.id)).toContain('server-child'));
+
+    expect(result.current.children.map(child => child.id).sort()).toEqual([
+      'failed-child',
+      'pending-child',
+      'server-child',
+      'terminal-child',
+    ]);
+    expect(result.current.groups.map(group => group.id).sort()).toEqual([
+      'pending-group',
+      'server-group',
+    ]);
+    expect(result.current.childrenGroups.map(membership => membership.id).sort()).toEqual([
+      'pending-membership',
+      'server-membership',
+    ]);
+  });
+
   test('deleteChild uses repository-backed delete/archive instead of hidden_at update', async () => {
     const { result } = renderHook(() => useChildren(), { wrapper });
     await waitFor(() => expect(result.current.children.map(child => child.id)).toContain('cached-child'));
@@ -141,6 +202,7 @@ describe('ChildrenContext Plan 5 hydration', () => {
   test('addChild uses the atomic clean-slate child creation path', async () => {
     const { result } = renderHook(() => useChildren(), { wrapper });
     await waitFor(() => expect(pullPreloadedChildData).toHaveBeenCalledTimes(1));
+    storage.saveStaffChild.mockClear();
 
     await act(async () => {
       await result.current.addChild({

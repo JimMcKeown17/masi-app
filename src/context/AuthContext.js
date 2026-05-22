@@ -1,6 +1,7 @@
 import React, { createContext, useState, useEffect, useContext, useRef } from 'react';
 import { supabase } from '../services/supabaseClient';
 import { enqueueSupabaseRequest } from '../services/supabaseRequestQueue';
+import { pullReferenceData } from '../services/offlineSync';
 import { storage } from '../utils/storage';
 import { normalizeProfile } from '../utils/profileNormalizer';
 
@@ -49,10 +50,13 @@ export const AuthProvider = ({ children }) => {
 
       if (nextSession?.user) {
         clearPendingSignOutTimeout();
-        currentUserIdRef.current = nextSession.user.id;
         setSession(nextSession);
-        setUser(nextSession.user);
-        scheduleUserProfileLoad(nextSession.user.id);
+        if (event === 'TOKEN_REFRESHED' && currentUserIdRef.current === nextSession.user.id) {
+          return;
+        }
+        currentUserIdRef.current = nextSession.user.id;
+        setLoading(true);
+        scheduleAuthenticatedStartup(nextSession.user);
         return;
       }
 
@@ -88,15 +92,36 @@ export const AuthProvider = ({ children }) => {
     currentUserIdRef.current === userId && profileLoadVersionRef.current === version
   );
 
-  const scheduleUserProfileLoad = (userId) => {
+  const scheduleAuthenticatedStartup = (authUser) => {
     profileLoadVersionRef.current += 1;
     const version = profileLoadVersionRef.current;
     setTimeout(() => {
-      loadUserProfile(userId, version);
+      hydrateAuthenticatedUser(authUser, version);
     }, 0);
   };
 
-  const loadUserProfile = async (userId, version = null) => {
+  const hydrateAuthenticatedUser = async (authUser, version) => {
+    try {
+      try {
+        await pullReferenceData({ userId: authUser.id });
+      } catch (error) {
+        console.error('Error pulling startup reference data:', error);
+      }
+
+      if (!isCurrentProfileLoad(authUser.id, version)) {
+        return;
+      }
+
+      await loadUserProfile(authUser.id, version, { setLoadingOnComplete: false });
+    } finally {
+      if (isCurrentProfileLoad(authUser.id, version)) {
+        setUser(authUser);
+        setLoading(false);
+      }
+    }
+  };
+
+  const loadUserProfile = async (userId, version = null, { setLoadingOnComplete = true } = {}) => {
     const profileLoadVersion = version || profileLoadVersionRef.current + 1;
     if (!version) {
       profileLoadVersionRef.current = profileLoadVersion;
@@ -113,7 +138,9 @@ export const AuthProvider = ({ children }) => {
         if (localProfile.id === userId) {
           const normalizedLocalProfile = normalizeProfile(localProfile);
           setProfile(normalizedLocalProfile);
-          setLoading(false);
+          if (setLoadingOnComplete) {
+            setLoading(false);
+          }
         } else {
           await storage.clearUserProfile();
         }
@@ -142,7 +169,7 @@ export const AuthProvider = ({ children }) => {
     } catch (error) {
       console.error('Error in loadUserProfile:', error);
     } finally {
-      if (isCurrentProfileLoad(userId, profileLoadVersion)) {
+      if (setLoadingOnComplete && isCurrentProfileLoad(userId, profileLoadVersion)) {
         setLoading(false);
       }
     }

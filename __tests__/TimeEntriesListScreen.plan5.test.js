@@ -7,6 +7,13 @@ import { useOffline } from '../src/context/OfflineContext';
 import { timeEntriesRepository } from '../src/db/repositories/timeEntriesRepository';
 import { supabase } from '../src/services/supabaseClient';
 
+jest.mock('@react-navigation/native', () => ({
+  useFocusEffect: (callback) => {
+    const React = require('react');
+    React.useEffect(() => callback(), [callback]);
+  },
+}));
+
 jest.mock('../src/context/AuthContext', () => ({
   useAuth: jest.fn(),
 }));

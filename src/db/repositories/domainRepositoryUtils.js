@@ -1,3 +1,4 @@
+import { v5 as uuidv5, validate as uuidValidate } from 'uuid';
 import {
   insertOutboxRecord,
   mapRowFromSqlite,
@@ -7,6 +8,40 @@ import {
 } from './sqliteRepositoryUtils';
 
 export const LEGACY_PROGRAMME_ID = 'local-legacy-programme';
+const MASI_DOMAIN_ID_NAMESPACE = '09dcf4b2-6c53-4c46-917f-33bc7f2df4d2';
+
+export const deterministicDomainId = (...parts) => uuidv5(
+  parts.map((part) => String(part ?? '')).join('\u001f'),
+  MASI_DOMAIN_ID_NAMESPACE
+);
+
+export const sessionAttendeeDomainId = (sessionId, childId) => (
+  deterministicDomainId('session_attendees', sessionId, childId)
+);
+
+export const assessmentItemDomainId = ({
+  assessmentId,
+  itemKey,
+  position,
+  isCorrect,
+}) => {
+  const key = position ?? itemKey;
+  if (isCorrect === true) {
+    return deterministicDomainId('assessment_items', assessmentId, key, 'correct');
+  }
+  if (isCorrect === false) {
+    return deterministicDomainId('assessment_items', assessmentId, key, 'incorrect');
+  }
+  return deterministicDomainId('assessment_items', assessmentId, key);
+};
+
+export const ensureServerUuid = (id, ...fallbackParts) => {
+  if (uuidValidate(id)) return id;
+  if (fallbackParts.length === 1 && uuidValidate(fallbackParts[0])) {
+    return fallbackParts[0];
+  }
+  return deterministicDomainId(...fallbackParts);
+};
 
 export const outboxId = (tableName, recordId, operation) => `${tableName}:${recordId}:${operation}`;
 

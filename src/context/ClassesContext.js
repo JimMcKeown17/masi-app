@@ -4,6 +4,8 @@ import { storage } from '../utils/storage';
 import { fetchAndCacheSchools } from '../services/offlineSync';
 import { enqueueSupabaseRequest } from '../services/supabaseRequestQueue';
 import { academicYearsRepository } from '../db/repositories/referenceDataRepository';
+import { getActiveProgrammeId } from '../db/repositories/domainRepositoryUtils';
+import { resolveDatabase } from '../db/repositories/repositoryRuntime';
 import { useAuth } from './AuthContext';
 import { useOffline } from './OfflineContext';
 import { useChildren } from './ChildrenContext';
@@ -15,6 +17,18 @@ const saveRows = async (rows, saveRow) => {
   for (const row of rows || []) {
     await saveRow(row);
   }
+};
+
+const mergeServerRows = (cached, serverRows) => {
+  const serverIds = new Set(serverRows.map(row => row.id));
+  const localToKeep = cached.filter(row => (
+    !serverIds.has(row.id)
+    && (
+      row.synced === false
+      || (row.sync_status && row.sync_status !== 'synced')
+    )
+  ));
+  return [...serverRows, ...localToKeep];
 };
 
 export const ClassesProvider = ({ children: reactChildren }) => {
@@ -100,7 +114,7 @@ export const ClassesProvider = ({ children: reactChildren }) => {
       if (activeUserIdRef.current !== activeUserId) return;
       setClasses(cached);
 
-      if (isOnline && activeUserIdRef.current === activeUserId) {
+      if (activeUserIdRef.current === activeUserId) {
         const { data, error } = await enqueueSupabaseRequest(async () => {
           const { data: assignments, error: assignmentError } = await supabase
             .from('staff_programme_assignments')
@@ -121,7 +135,7 @@ export const ClassesProvider = ({ children: reactChildren }) => {
             .from('classes')
             .select(`
               *,
-              class_ea_assignments!inner(ea_user_id,programme_id,unassigned_at)
+              class_ea_assignments!inner(*)
             `)
             .eq('class_ea_assignments.ea_user_id', activeUserId)
             .eq('class_ea_assignments.programme_id', assignments[0].programme_id)
@@ -132,22 +146,30 @@ export const ClassesProvider = ({ children: reactChildren }) => {
         if (error) {
           console.error('Error loading classes from server:', error);
         } else if (data && activeUserIdRef.current === activeUserId) {
+          const serverAssignments = data.flatMap(({ class_ea_assignments }) => (
+            (class_ea_assignments || []).map(assignment => ({
+              ...assignment,
+              synced: true,
+              sync_status: assignment.sync_status || 'synced',
+            }))
+          ));
           const serverClasses = data.map(({ class_ea_assignments, ...classItem }) => ({
             ...classItem,
             synced: true,
             sync_status: classItem.sync_status || 'synced',
           }));
-          const serverIds = new Set(serverClasses.map(c => c.id));
-          const localToKeep = cached.filter(c => !serverIds.has(c.id));
-          const merged = [...serverClasses, ...localToKeep];
+          const merged = mergeServerRows(cached, serverClasses);
           await saveRows(serverClasses, storage.saveClass);
+          await saveRows(serverAssignments, storage.saveClassEaAssignment);
           setClasses(merged);
         }
       }
     } catch (error) {
       console.error('Error in loadClasses:', error);
     } finally {
-      setLoading(false);
+      if (activeUserIdRef.current === user?.id) {
+        setLoading(false);
+      }
     }
   };
 
@@ -163,11 +185,17 @@ export const ClassesProvider = ({ children: reactChildren }) => {
       if (!academicYearId) {
         throw new Error('No active academic year found for class creation');
       }
+      const db = await resolveDatabase();
+      const activeProgrammeId = await getActiveProgrammeId(db, user.id);
+      if (!activeProgrammeId) {
+        throw new Error('No active programme assignment found for class creation');
+      }
 
       const newClass = {
         id: uuidv4(),
         ...classData,
         academic_year_id: academicYearId,
+        programme_id: activeProgrammeId,
         staff_id: user.id,
         created_by: user.id,
         created_at: new Date().toISOString(),

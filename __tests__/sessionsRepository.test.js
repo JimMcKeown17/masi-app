@@ -3,6 +3,7 @@ jest.mock('expo-sqlite', () => require('../test-support/expoSQLiteMock'));
 import { runMigrations } from '../src/db/migrations';
 import { createChildrenRepository } from '../src/db/repositories/childrenRepository';
 import { createSessionsRepository } from '../src/db/repositories/sessionsRepository';
+import { validate as uuidValidate } from 'uuid';
 import {
   createMigratedDatabase,
   seedCoreData,
@@ -41,6 +42,16 @@ describe('sessionsRepository', () => {
         .toEqual({ id: 'session-1', programme_id: 'programme-a' });
       expect(await db.getFirstAsync('select session_id, child_id from session_attendees'))
         .toEqual({ session_id: 'session-1', child_id: 'child-1' });
+      const attendee = await db.getFirstAsync('select id from session_attendees');
+      expect(uuidValidate(attendee.id)).toBe(true);
+      expect(attendee.id).not.toContain(':');
+      const attendeeOutbox = await db.getFirstAsync(`
+        select record_id, payload
+        from sync_outbox
+        where table_name = 'session_attendees'
+      `);
+      expect(uuidValidate(attendeeOutbox.record_id)).toBe(true);
+      expect(uuidValidate(JSON.parse(attendeeOutbox.payload).id)).toBe(true);
       expect(await repository.getSessions()).toEqual([
         expect.objectContaining({
           id: 'session-1',

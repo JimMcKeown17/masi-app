@@ -106,4 +106,32 @@ describe('LetterAssessmentScreen Plan 5 behavior', () => {
       assessmentType: 'letter_egra',
     }));
   });
+
+  test('failed assessment save shows an error and lets the user retry without navigating away', async () => {
+    assessmentsRepository.saveAssessment.mockRejectedValueOnce(new Error('SQLite write failed'));
+    const { getByText, getByLabelText, queryByText } = render(
+      <LetterAssessmentScreen navigation={navigation} route={route} />
+    );
+
+    fireEvent.press(getByText('Start Assessment'));
+    fireEvent.press(getByLabelText('a, not marked'));
+    fireEvent.press(getByText('Finish'));
+
+    await waitFor(() => expect(queryByText(/Assessment was not saved/i)).toBeTruthy());
+    expect(navigation.navigate).not.toHaveBeenCalled();
+    expect(refreshSyncStatus).not.toHaveBeenCalled();
+    expect(triggerBackgroundSync).not.toHaveBeenCalled();
+
+    assessmentsRepository.saveAssessment.mockResolvedValueOnce(true);
+    fireEvent.press(getByText('Try Again'));
+
+    await waitFor(() => expect(navigation.navigate).toHaveBeenCalledWith(
+      'AssessmentResults',
+      expect.objectContaining({
+        child: route.params.child,
+        attemptNumber: 2,
+        assessmentType: 'letter_egra',
+      })
+    ));
+  });
 });

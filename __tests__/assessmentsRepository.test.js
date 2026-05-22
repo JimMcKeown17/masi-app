@@ -3,6 +3,7 @@ jest.mock('expo-sqlite', () => require('../test-support/expoSQLiteMock'));
 import { runMigrations } from '../src/db/migrations';
 import { createAssessmentsRepository } from '../src/db/repositories/assessmentsRepository';
 import { createChildrenRepository } from '../src/db/repositories/childrenRepository';
+import { validate as uuidValidate } from 'uuid';
 import {
   createMigratedDatabase,
   seedCoreData,
@@ -45,6 +46,23 @@ describe('assessmentsRepository', () => {
       expect(await db.getFirstAsync('select count(*) as count from assessments')).toEqual({ count: 1 });
       expect(await db.getFirstAsync("select count(*) as count from assessment_items where assessment_id = 'assessment-1'"))
         .toEqual({ count: 3 });
+      const items = await db.getAllAsync('select id from assessment_items order by item_key');
+      expect(items).toHaveLength(3);
+      for (const item of items) {
+        expect(uuidValidate(item.id)).toBe(true);
+        expect(item.id).not.toContain(':');
+      }
+      const outboxItems = await db.getAllAsync(`
+        select record_id, payload
+        from sync_outbox
+        where table_name = 'assessment_items'
+        order by record_id
+      `);
+      expect(outboxItems).toHaveLength(3);
+      for (const item of outboxItems) {
+        expect(uuidValidate(item.record_id)).toBe(true);
+        expect(uuidValidate(JSON.parse(item.payload).id)).toBe(true);
+      }
       expect(await repository.getAssessments()).toEqual([
         expect.objectContaining({
           id: 'assessment-1',

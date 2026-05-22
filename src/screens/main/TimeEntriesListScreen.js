@@ -1,6 +1,7 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useCallback } from 'react';
 import { View, StyleSheet, ScrollView, RefreshControl } from 'react-native';
 import { Card, Text, Divider, Chip, Snackbar } from 'react-native-paper';
+import { useFocusEffect } from '@react-navigation/native';
 import { useAuth } from '../../context/AuthContext';
 import { useOffline } from '../../context/OfflineContext';
 import { colors, spacing, borderRadius, shadows } from '../../constants/colors';
@@ -24,21 +25,20 @@ export default function TimeEntriesListScreen() {
   };
 
   /**
-   * Load time entries on mount
-   */
-  useEffect(() => {
-    loadTimeEntries();
-  }, [user?.id]);
-
-  /**
    * Load completed time entries from the local SQLite cache. Network sync runs
    * through the outbox engine; this screen only displays the local result.
    */
-  const loadTimeEntries = async () => {
+  const loadTimeEntries = useCallback(async () => {
     try {
-      const cached = await timeEntriesRepository.getTimeEntries();
+      if (!user?.id) {
+        setTimeEntries([]);
+        groupEntriesByDate([]);
+        return;
+      }
+      setLoading(true);
+      const cached = await timeEntriesRepository.getTimeEntries({ userId: user.id });
       const cachedUserEntries = cached
-        .filter(entry => entry.user_id === user?.id && entry.sign_out_time !== null)
+        .filter(entry => entry.sign_out_time !== null)
         .sort((a, b) => new Date(b.sign_in_time) - new Date(a.sign_in_time));
       setTimeEntries(cachedUserEntries);
       groupEntriesByDate(cachedUserEntries);
@@ -48,7 +48,13 @@ export default function TimeEntriesListScreen() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [user?.id]);
+
+  useFocusEffect(
+    useCallback(() => {
+      loadTimeEntries();
+    }, [loadTimeEntries])
+  );
 
   /**
    * Group time entries by date (YYYY-MM-DD)
@@ -95,7 +101,7 @@ export default function TimeEntriesListScreen() {
     }
 
     setRefreshing(false);
-  }, [syncNow]);
+  }, [loadTimeEntries, syncNow]);
 
   /**
    * Format date as "Monday, Jan 27, 2026"

@@ -7,6 +7,13 @@ import { useLookupsContext } from '../src/context/LookupsContext';
 import { sessionsRepository } from '../src/db/repositories/sessionsRepository';
 import { supabase } from '../src/services/supabaseClient';
 
+jest.mock('@react-navigation/native', () => ({
+  useFocusEffect: (callback) => {
+    const React = require('react');
+    React.useEffect(() => callback(), [callback]);
+  },
+}));
+
 jest.mock('../src/context/AuthContext', () => ({
   useAuth: jest.fn(),
 }));

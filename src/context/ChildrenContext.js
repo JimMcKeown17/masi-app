@@ -9,7 +9,13 @@ const ChildrenContext = createContext({});
 
 const mergeServerRows = (cached, serverRows) => {
   const serverIds = new Set(serverRows.map(row => row.id));
-  const localToKeep = cached.filter(row => !serverIds.has(row.id));
+  const localToKeep = cached.filter(row => (
+    !serverIds.has(row.id)
+    && (
+      row.synced === false
+      || (row.sync_status && row.sync_status !== 'synced')
+    )
+  ));
   return [...serverRows, ...localToKeep];
 };
 
@@ -25,7 +31,7 @@ const saveRows = async (rows, saveRow) => {
 
 export const ChildrenProvider = ({ children }) => {
   const { user } = useAuth();
-  const { isOnline, refreshSyncStatus, isSyncing } = useOffline();
+  const { refreshSyncStatus, isSyncing } = useOffline();
 
   const [childrenList, setChildrenList] = useState([]);
   const [groups, setGroups] = useState([]);
@@ -93,7 +99,7 @@ export const ChildrenProvider = ({ children }) => {
       setGroups(cachedGroups);
       setChildrenGroups(cachedMemberships);
 
-      if (isOnline && activeUserIdRef.current === activeUserId) {
+      if (activeUserIdRef.current === activeUserId) {
         const pulled = await pullPreloadedChildData({ userId: activeUserId });
         const errors = pulled.errors || [];
         if (activeUserIdRef.current !== activeUserId) return;
@@ -103,6 +109,11 @@ export const ChildrenProvider = ({ children }) => {
           await saveRows(pulled.children, storage.saveChild);
           setChildrenList(merged);
         }
+
+        await saveRows(pulled.classes, storage.saveClass);
+        await saveRows(pulled.childEaAssignments, storage.saveStaffChild);
+        await saveRows(pulled.childProgrammeEnrollments, storage.saveChildProgrammeEnrollment);
+        await saveRows(pulled.childClassMemberships, storage.saveChildClassMembership);
 
         if (shouldApplyPulledRows(pulled.groups, errors)) {
           const merged = mergeServerRows(cachedGroups, pulled.groups);
@@ -119,7 +130,9 @@ export const ChildrenProvider = ({ children }) => {
     } catch (error) {
       console.error('Error in loadPreloadedChildData:', error);
     } finally {
-      setLoading(false);
+      if (activeUserIdRef.current === activeUserId) {
+        setLoading(false);
+      }
     }
   };
 
@@ -311,6 +324,7 @@ export const ChildrenProvider = ({ children }) => {
         cg => cg.group_id !== groupId
       );
       setChildrenGroups(updatedMemberships);
+      await refreshSyncStatus();
 
       return { success: true };
     } catch (error) {
@@ -375,6 +389,7 @@ export const ChildrenProvider = ({ children }) => {
           cg => !(cg.child_id === childId && cg.group_id === groupId)
         )
       );
+      await refreshSyncStatus();
 
       return { success: true };
     } catch (error) {

@@ -108,6 +108,8 @@ export const upsertRecord = async (db, {
   columns,
   record,
   primaryKey = 'id',
+  conflictColumns = [primaryKey],
+  updatePrimaryKeyOnConflict = false,
   booleanColumns = [],
   jsonColumns = [],
 }) => {
@@ -131,7 +133,10 @@ export const upsertRecord = async (db, {
   const quotedColumns = insertColumns.map(quoteIdentifier);
   const placeholders = insertColumns.map(() => '?').join(', ');
   const values = insertColumns.map((column) => filtered[column]);
-  const updateColumns = insertColumns.filter((column) => column !== primaryKey);
+  const updateColumns = insertColumns.filter((column) => (
+    updatePrimaryKeyOnConflict || column !== primaryKey
+  ));
+  const conflictTarget = conflictColumns.map(quoteIdentifier).join(', ');
   const updateClause = updateColumns.length > 0
     ? `do update set ${updateColumns
       .map((column) => `${quoteIdentifier(column)} = excluded.${quoteIdentifier(column)}`)
@@ -141,7 +146,7 @@ export const upsertRecord = async (db, {
   return db.runAsync(
     `insert into ${quotedTable} (${quotedColumns.join(', ')})
      values (${placeholders})
-     on conflict(${quoteIdentifier(primaryKey)}) ${updateClause}`,
+     on conflict(${conflictTarget}) ${updateClause}`,
     values
   );
 };

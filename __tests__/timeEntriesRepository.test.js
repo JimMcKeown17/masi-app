@@ -73,6 +73,23 @@ describe('timeEntriesRepository', () => {
     }
   });
 
+  test('getTimeEntries can be scoped to the active user for dashboard stats', async () => {
+    const db = createBetterSqliteTestDatabase();
+
+    try {
+      await runMigrations(db);
+      const repository = createTimeEntriesRepository({ database: db });
+
+      await repository.saveTimeEntry(makeEntry({ id: 'user-1-time', user_id: 'user-1' }));
+      await repository.saveTimeEntry(makeEntry({ id: 'user-2-time', user_id: 'user-2' }));
+
+      expect((await repository.getTimeEntries({ userId: 'user-1' })).map(entry => entry.id))
+        .toEqual(['user-1-time']);
+    } finally {
+      await db.closeAsync();
+    }
+  });
+
   test('saveTimeEntry enqueues a sync outbox insert in the same repository write', async () => {
     const db = createBetterSqliteTestDatabase();
 

@@ -31,6 +31,8 @@ export default function LetterTrackerScreen({ route }) {
   const [taughtLetters, setTaughtLetters] = useState({}); // { letter: recordId }
   const [loading, setLoading] = useState(true);
   const [latestAssessmentDate, setLatestAssessmentDate] = useState(null);
+  const [mutationError, setMutationError] = useState(null);
+  const [updatingLetter, setUpdatingLetter] = useState(null);
 
   const languageKey = normalizeLanguageKey(classItem?.home_language);
   const letterSet = LETTER_SETS[languageKey];
@@ -93,61 +95,72 @@ export default function LetterTrackerScreen({ route }) {
   const handleCellTap = async (letter) => {
     // Assessment-mastered cells are locked
     if (assessmentMastered.has(letter)) return;
+    if (updatingLetter) return;
 
-    if (taughtLetters[letter]) {
-      // Currently green -> toggle OFF (soft-delete)
-      const recordId = taughtLetters[letter];
-      await masteryRepository.updateLetterMasteryRecord(recordId, {
-        _deleted: true,
-        synced: false,
-        updated_at: new Date().toISOString(),
-      });
-      await refreshSyncStatus();
-      triggerBackgroundSync?.();
-      setTaughtLetters(prev => {
-        const next = { ...prev };
-        delete next[letter];
-        return next;
-      });
-    } else {
-      // Currently gray -> toggle ON
-      // Check for existing soft-deleted record to reuse (avoids duplicate key on sync)
-      const allMastery = await masteryRepository.getLetterMastery({
-        userId: user.id,
-        childId: child.id,
-      });
-      const existing = allMastery.find(
-        r => r.child_id === child.id && r.letter === letter && r.language === letterSet.language && r._deleted
-      );
-      if (existing) {
-        // Reactivate the soft-deleted record
-        await masteryRepository.updateLetterMasteryRecord(existing.id, {
-          _deleted: false,
-          deleted_at: null,
+    setMutationError(null);
+    setUpdatingLetter(letter);
+
+    try {
+      if (taughtLetters[letter]) {
+        // Currently green -> toggle OFF (soft-delete)
+        const recordId = taughtLetters[letter];
+        await masteryRepository.updateLetterMasteryRecord(recordId, {
+          _deleted: true,
           synced: false,
           updated_at: new Date().toISOString(),
         });
         await refreshSyncStatus();
         triggerBackgroundSync?.();
-        setTaughtLetters(prev => ({ ...prev, [letter]: existing.id }));
+        setTaughtLetters(prev => {
+          const next = { ...prev };
+          delete next[letter];
+          return next;
+        });
       } else {
-        // Create new record
-        const record = {
-          id: uuidv4(),
-          user_id: user.id,
-          child_id: child.id,
-          letter,
-          source: 'taught',
-          language: letterSet.language,
-          synced: false,
-          created_at: new Date().toISOString(),
-          updated_at: new Date().toISOString(),
-        };
-        await masteryRepository.saveLetterMasteryRecord(record);
-        await refreshSyncStatus();
-        triggerBackgroundSync?.();
-        setTaughtLetters(prev => ({ ...prev, [letter]: record.id }));
+        // Currently gray -> toggle ON
+        // Check for existing soft-deleted record to reuse (avoids duplicate key on sync)
+        const allMastery = await masteryRepository.getLetterMastery({
+          userId: user.id,
+          childId: child.id,
+        });
+        const existing = allMastery.find(
+          r => r.child_id === child.id && r.letter === letter && r.language === letterSet.language && r._deleted
+        );
+        if (existing) {
+          // Reactivate the soft-deleted record
+          await masteryRepository.updateLetterMasteryRecord(existing.id, {
+            _deleted: false,
+            deleted_at: null,
+            synced: false,
+            updated_at: new Date().toISOString(),
+          });
+          await refreshSyncStatus();
+          triggerBackgroundSync?.();
+          setTaughtLetters(prev => ({ ...prev, [letter]: existing.id }));
+        } else {
+          // Create new record
+          const record = {
+            id: uuidv4(),
+            user_id: user.id,
+            child_id: child.id,
+            letter,
+            source: 'taught',
+            language: letterSet.language,
+            synced: false,
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString(),
+          };
+          await masteryRepository.saveLetterMasteryRecord(record);
+          await refreshSyncStatus();
+          triggerBackgroundSync?.();
+          setTaughtLetters(prev => ({ ...prev, [letter]: record.id }));
+        }
       }
+    } catch (error) {
+      console.error('Error saving letter mastery:', error);
+      setMutationError('Letter update was not saved. Please try again.');
+    } finally {
+      setUpdatingLetter(null);
     }
   };
 
@@ -188,6 +201,11 @@ export default function LetterTrackerScreen({ route }) {
             Last assessed: {latestAssessmentDate}
           </Text>
         )}
+        {mutationError && (
+          <Text variant="bodyMedium" style={styles.mutationErrorText}>
+            {mutationError}
+          </Text>
+        )}
       </View>
 
       {/* Legend */}
@@ -212,12 +230,13 @@ export default function LetterTrackerScreen({ route }) {
           const state = getCellState(letter);
           const cellColors = CELL_COLORS[state];
           const isLocked = state === 'assessment';
+          const isDisabled = isLocked || Boolean(updatingLetter);
 
           return (
             <Pressable
               key={letter}
               onPress={() => handleCellTap(letter)}
-              disabled={isLocked}
+              disabled={isDisabled}
               style={({ pressed }) => [
                 styles.cell,
                 {
@@ -226,7 +245,7 @@ export default function LetterTrackerScreen({ route }) {
                   backgroundColor: cellColors.bg,
                   borderColor: state === 'default' ? cellColors.border : cellColors.bg,
                 },
-                pressed && !isLocked && styles.cellPressed,
+                pressed && !isDisabled && styles.cellPressed,
                 isLocked && styles.cellLocked,
               ]}
               accessibilityRole="button"
@@ -289,6 +308,10 @@ const styles = StyleSheet.create({
   assessmentDateText: {
     color: colors.textSecondary,
     marginTop: spacing.xs,
+  },
+  mutationErrorText: {
+    color: colors.error,
+    marginTop: spacing.sm,
   },
   legend: {
     flexDirection: 'row',

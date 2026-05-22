@@ -1,4 +1,5 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { classEaAssignmentsRepository } from '../db/repositories/classEaAssignmentsRepository';
 import { classesRepository } from '../db/repositories/classesRepository';
 import { childrenRepository } from '../db/repositories/childrenRepository';
 import { groupsRepository } from '../db/repositories/groupsRepository';
@@ -408,6 +409,14 @@ export const storage = {
     return await childrenRepository.saveStaffChild(assignment);
   },
 
+  async saveChildProgrammeEnrollment(enrollment) {
+    return await childrenRepository.saveChildProgrammeEnrollment(enrollment);
+  },
+
+  async saveChildClassMembership(membership) {
+    return await childrenRepository.saveChildClassMembership(membership);
+  },
+
   async deleteStaffChild(staffId, childId) {
     return await childrenRepository.deleteStaffChild(staffId, childId);
   },
@@ -489,6 +498,10 @@ export const storage = {
   async saveClass(classData) {
     await savePayload('classes', classData.id, classData);
     return await classesRepository.saveClass(await normalizeClassForLegacyFacade(classData));
+  },
+
+  async saveClassEaAssignment(assignment) {
+    return await classEaAssignmentsRepository.save(assignment);
   },
 
   async updateClass(id, updates) {

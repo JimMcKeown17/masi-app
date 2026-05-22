@@ -2,6 +2,7 @@ import React from 'react';
 import { act, renderHook, waitFor } from '@testing-library/react-native';
 import { AuthProvider, useAuth } from '../src/context/AuthContext';
 import { supabase } from '../src/services/supabaseClient';
+import { pullReferenceData } from '../src/services/offlineSync';
 import { storage } from '../src/utils/storage';
 
 jest.mock('../src/services/supabaseClient', () => ({
@@ -24,6 +25,10 @@ jest.mock('../src/utils/storage', () => ({
     saveUserProfile: jest.fn(),
     clearUserProfile: jest.fn(),
   },
+}));
+
+jest.mock('../src/services/offlineSync', () => ({
+  pullReferenceData: jest.fn(),
 }));
 
 const wrapper = ({ children }) => (
@@ -74,6 +79,7 @@ describe('AuthContext Plan 5 startup discipline', () => {
     storage.getUserProfile.mockResolvedValue(null);
     storage.saveUserProfile.mockResolvedValue(true);
     storage.clearUserProfile.mockResolvedValue(true);
+    pullReferenceData.mockResolvedValue({});
     mockProfileQuery(Promise.resolve({ data: profileRow, error: null }));
   });
 
@@ -98,6 +104,37 @@ describe('AuthContext Plan 5 startup discipline', () => {
       await Promise.resolve();
     });
 
+    await waitFor(() => expect(pullReferenceData).toHaveBeenCalledWith({ userId: 'user-1' }));
+    await waitFor(() => expect(supabase.from).toHaveBeenCalledWith('users'));
+  });
+
+  test('authenticated startup pulls reference data before publishing user to child providers', async () => {
+    const referencePull = deferred();
+    pullReferenceData.mockReturnValue(referencePull.promise);
+
+    const { result } = renderHook(() => useAuth(), { wrapper });
+    await waitFor(() => expect(authCallback).toEqual(expect.any(Function)));
+
+    act(() => {
+      authCallback('SIGNED_IN', { user: { id: 'user-1', email: 'ea@example.org' } });
+    });
+
+    await act(async () => {
+      jest.runOnlyPendingTimers();
+      await Promise.resolve();
+    });
+
+    expect(pullReferenceData).toHaveBeenCalledWith({ userId: 'user-1' });
+    expect(result.current.user).toBeNull();
+    expect(supabase.from).not.toHaveBeenCalled();
+
+    await act(async () => {
+      referencePull.resolve({});
+      await referencePull.promise;
+      await Promise.resolve();
+    });
+
+    await waitFor(() => expect(result.current.user).toEqual(expect.objectContaining({ id: 'user-1' })));
     await waitFor(() => expect(supabase.from).toHaveBeenCalledWith('users'));
   });
 
@@ -116,7 +153,40 @@ describe('AuthContext Plan 5 startup discipline', () => {
       await Promise.resolve();
     });
 
+    await waitFor(() => expect(pullReferenceData).toHaveBeenCalledWith({ userId: 'user-1' }));
     await waitFor(() => expect(supabase.from).toHaveBeenCalledWith('users'));
+  });
+
+  test('token refresh for the current user does not re-run startup hydration', async () => {
+    const { result } = renderHook(() => useAuth(), { wrapper });
+    await waitFor(() => expect(authCallback).toEqual(expect.any(Function)));
+
+    act(() => {
+      authCallback('INITIAL_SESSION', { user: { id: 'user-1', email: 'ea@example.org' }, access_token: 'old-token' });
+    });
+    await act(async () => {
+      jest.runOnlyPendingTimers();
+      await Promise.resolve();
+    });
+    await waitFor(() => expect(result.current.user).toEqual(expect.objectContaining({ id: 'user-1' })));
+
+    pullReferenceData.mockClear();
+    storage.getUserProfile.mockClear();
+    supabase.from.mockClear();
+
+    act(() => {
+      authCallback('TOKEN_REFRESHED', { user: { id: 'user-1', email: 'ea@example.org' }, access_token: 'new-token' });
+    });
+
+    await act(async () => {
+      jest.runOnlyPendingTimers();
+      await Promise.resolve();
+    });
+
+    expect(result.current.session).toEqual(expect.objectContaining({ access_token: 'new-token' }));
+    expect(pullReferenceData).not.toHaveBeenCalled();
+    expect(storage.getUserProfile).not.toHaveBeenCalled();
+    expect(supabase.from).not.toHaveBeenCalled();
   });
 
   test('stale profile fetch cannot update state after sign-out', async () => {

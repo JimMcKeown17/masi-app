@@ -1,5 +1,6 @@
 import { resolveDatabase, runRepositoryTransaction } from './repositoryRuntime';
 import {
+  assessmentItemDomainId,
   enqueueDomainOutbox,
   getActiveProgrammeId,
   mapDomainRow,
@@ -142,13 +143,21 @@ export const createAssessmentsRepository = ({ database } = {}) => {
 
     const itemRows = [
       {
-        id: `${assessment.id}:${SUMMARY_ITEM_KEY}`,
+        id: assessmentItemDomainId({
+          assessmentId: assessment.id,
+          itemKey: SUMMARY_ITEM_KEY,
+        }),
         assessment_id: assessment.id,
         item_key: SUMMARY_ITEM_KEY,
         metadata: summary,
       },
       ...(assessment.correct_letters || []).map((item) => ({
-        id: `${assessment.id}:correct:${item.index ?? item.letter}`,
+        id: assessmentItemDomainId({
+          assessmentId: assessment.id,
+          itemKey: item.letter,
+          position: item.index,
+          isCorrect: true,
+        }),
         assessment_id: assessment.id,
         item_key: item.letter,
         prompt: item.letter,
@@ -157,7 +166,12 @@ export const createAssessmentsRepository = ({ database } = {}) => {
         metadata: item,
       })),
       ...(assessment.incorrect_letters || []).map((item) => ({
-        id: `${assessment.id}:incorrect:${item.index ?? item.letter}`,
+        id: assessmentItemDomainId({
+          assessmentId: assessment.id,
+          itemKey: item.letter,
+          position: item.index,
+          isCorrect: false,
+        }),
         assessment_id: assessment.id,
         item_key: item.letter,
         prompt: item.letter,

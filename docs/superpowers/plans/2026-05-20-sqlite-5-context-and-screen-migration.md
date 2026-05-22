@@ -56,6 +56,9 @@ Contracts:
 
 - [x] Initial slice: added tests for one bundled child-data preload, partial preload cache preservation, active academic year on class create, and no double-write child updates on class archive/delete.
 - [x] Corrective slice: added tests for stale sign-out profile loads, repository-backed child delete/archive, removed group memberships, sign-out state clearing, and atomic clean-slate child creation.
+- [x] Review-corrective slice: startup reference-data producer now runs before child providers can hydrate; successful pulls drop synced absent child/group/class rows while preserving dirty local work.
+- [ ] Deferred follow-up: make `getChildrenInClass` derive class membership from active `child_class_memberships` instead of the `children.class_id` fast pointer.
+- [ ] Deferred follow-up: implement `class_grouping_state.class_list_status` UI gating for roster/grouping screens.
 
 - [x] **Step 2: Wire contexts**
 
@@ -112,6 +115,7 @@ Create Group must read or create the active `grouping_versions` row for the clas
 - [x] Initial session slice: `SessionHistoryScreen` now reads from `sessionsRepository`; `LiteracySessionForm` saves session + tracker changes through a transaction-backed persistence helper; `LetterTrackerBottomSheet` reads assessments/mastery from repositories.
 - [x] Initial assessment/dashboard/ranking slice: assessment history/save, assessment child selection, child summary, letter tracker, tab stats, home stats, and ranking screens now call repositories directly; screen/hook/component `storage.` grep is clean.
 - [x] Corrective slice: default user-facing session, assessment, mastery, group, class, dashboard, ranking, and tracker reads now pass the current user so repository results are active-programme-scoped.
+- [x] Review-corrective slice: assessment and letter-tracker writes now surface local write failures and keep users on-screen with retry paths; history/work screens refresh on focus; Home days-worked reads user-scoped time entries.
 
 ### Task 4: Remove Generic Storage Calls
 
@@ -171,6 +175,33 @@ Corrective review verification:
 - Supabase auth lock warnings observed during Android validation were fixed by aligning `@supabase/supabase-js` to Zazi's `2.100.1`, using a singleton Supabase client/AppState listener, relying on `INITIAL_SESSION` instead of duplicate `getSession()` startup, and queueing startup reference-data reads.
 - Fresh Android logcat stayed quiet for 35 seconds after Metro restart: no Supabase auth lock warnings and no React Native errors.
 - Final full suite after the Android auth-lock fix passed 44 suites / 199 tests; `git diff --check` passed.
+- Review-corrective targeted suite passed 11 suites / 48 tests:
+
+```bash
+npm test -- --runInBand __tests__/offlineSyncOutbox.test.js __tests__/referenceDataRepository.test.js __tests__/AuthContext.test.js __tests__/ChildrenContext.test.js __tests__/ClassesContext.plan5.test.js __tests__/LetterAssessmentScreen.plan5.test.js __tests__/LetterTrackerScreen.plan5.test.js __tests__/timeEntriesRepository.test.js __tests__/SessionHistoryScreen.plan5.test.js __tests__/AssessmentHistoryScreen.plan5.test.js __tests__/TimeEntriesListScreen.plan5.test.js
+```
+
+- Android smoke found three device/server-contract gaps after the 11-suite review pass: mobile-created classes lacked a `class_ea_assignments` producer row, session/assessment child rows used composite local ids where Supabase requires UUIDs, and session parent upsert RLS needed direct owner SELECT visibility before attendees exist.
+- Class producer fix: `classesRepository.saveClass` now creates/enqueues the same-transaction `class_ea_assignments` row and `ClassesContext.addClass` resolves the active programme before save; `__tests__/classesRepository.test.js` covers the contract.
+- Sync contract fixes: `session_attendees` and `assessment_items` now use deterministic UUID ids, older composite payloads are sanitized before push, and `20260522103000_masi_session_upsert_visibility.sql` has been pushed to `masi-app-sqlite`.
+- Reference data queue fix: `ReferenceDataRepository` now writes through `runRepositoryTransaction`; the regression test reproduced the Android `database is locked` class before the fix.
+- Follow-up H1 fix: server-pulled child/class relationship rows are now persisted as synced local rows. `pullPreloadedChildData` returns child EA assignments, child programme enrollments, child class memberships, and referenced classes; `ClassesContext` persists pulled `class_ea_assignments`. These rows do not enqueue outbox work.
+- Follow-up M1/L1/L2/V1 fixes: `staff_programme_assignments` uses scoped replace on authenticated pulls, deterministic session-attendee/assessment-item ids use shared helpers, successful server merges preserve terminal rows, and class archive now enqueues full child update payloads.
+- Low-priority L3 test-quality cleanup from the follow-up brief is not broadened in this slice; the new coverage targets the actual producer/consumer and sync contracts rather than rewriting older mocked context tests.
+- Expanded corrective suite passed 16 suites / 83 tests:
+
+```bash
+npm test -- --runInBand __tests__/offlineSyncOutbox.test.js __tests__/referenceDataRepository.test.js __tests__/offlineSync.stripping.test.js __tests__/sessionsRepository.test.js __tests__/assessmentsRepository.test.js __tests__/sqlitePlan1Migrations.test.js __tests__/AuthContext.test.js __tests__/ChildrenContext.test.js __tests__/ClassesContext.plan5.test.js __tests__/LetterAssessmentScreen.plan5.test.js __tests__/LetterTrackerScreen.plan5.test.js __tests__/timeEntriesRepository.test.js __tests__/SessionHistoryScreen.plan5.test.js __tests__/AssessmentHistoryScreen.plan5.test.js __tests__/TimeEntriesListScreen.plan5.test.js __tests__/classesRepository.test.js
+```
+
+- Follow-up corrective suite passed 8 suites / 56 tests:
+
+```bash
+npm test -- --runInBand __tests__/preloadedChildData.test.js __tests__/ChildrenContext.test.js __tests__/ClassesContext.plan5.test.js __tests__/childrenRepository.test.js __tests__/classesRepository.test.js __tests__/referenceDataRepository.test.js __tests__/offlineSync.stripping.test.js __tests__/offlineSyncOutbox.test.js
+```
+
+- Final full suite after the follow-up fixes passed 46 suites / 219 tests; `git diff --check` passed.
+- Full signed-in Android create/session/assessment/kill-reopen smoke passed after the fixes: fresh post-fix session and assessment writes synced successfully, and app kill/reopen produced no `database is locked` or React Native errors. The emulator still has two failed sync items from pre-fix smoke rows, which are tracked as local residue rather than a fresh failure.
 
 - [x] Update `documentation/sqlite-refactor-log.md`.
 - [ ] Request a parallel code-review pass focused on context concurrency, cache preservation, and local-first UX.

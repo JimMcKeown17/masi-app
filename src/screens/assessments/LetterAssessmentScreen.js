@@ -56,12 +56,15 @@ export default function LetterAssessmentScreen({ navigation, route }) {
   const [isPaused, setIsPaused] = useState(false);
   const [lastTappedIndex, setLastTappedIndex] = useState(-1);
   const [showLastAttempted, setShowLastAttempted] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
+  const [saveError, setSaveError] = useState(null);
 
   const timerRef = useRef(null);
   const hasFinishedRef = useRef(false);
   const letterStatesRef = useRef(letterStates);
   const lastTappedIndexRef = useRef(lastTappedIndex);
   const timeRemainingRef = useRef(timeRemaining);
+  const retryLastIndexRef = useRef(null);
 
   // Keep refs in sync so timer callback reads current values
   letterStatesRef.current = letterStates;
@@ -185,6 +188,9 @@ export default function LetterAssessmentScreen({ navigation, route }) {
   };
 
   const saveAssessment = async (overrideLastIndex = null) => {
+    retryLastIndexRef.current = overrideLastIndex;
+    setSaveError(null);
+    setIsSaving(true);
     const elapsed = ASSESSMENT_DURATION - timeRemainingRef.current;
     const currentLetterStates = letterStatesRef.current;
     const finalLastIndex = overrideLastIndex !== null ? overrideLastIndex : lastTappedIndexRef.current;
@@ -218,9 +224,22 @@ export default function LetterAssessmentScreen({ navigation, route }) {
       updated_at: now.toISOString(),
     };
 
-    await assessmentsRepository.saveAssessment(assessment);
-    await refreshSyncStatus();
-    triggerBackgroundSync?.();
+    try {
+      await assessmentsRepository.saveAssessment(assessment);
+    } catch (error) {
+      console.error('Error saving assessment:', error);
+      setSaveError('Assessment was not saved. Please try again.');
+      return;
+    } finally {
+      setIsSaving(false);
+    }
+
+    try {
+      await refreshSyncStatus();
+      triggerBackgroundSync?.();
+    } catch (error) {
+      console.error('Assessment saved, but sync status refresh failed:', error);
+    }
 
     navigation.navigate('AssessmentResults', {
       assessment,
@@ -321,6 +340,21 @@ export default function LetterAssessmentScreen({ navigation, route }) {
       </View>
 
       <View style={styles.gridContainer}>
+        {saveError && (
+          <View style={styles.saveErrorContainer}>
+            <Text variant="bodyMedium" style={styles.saveErrorText}>
+              {saveError}
+            </Text>
+            <Button
+              mode="contained"
+              onPress={() => saveAssessment(retryLastIndexRef.current)}
+              disabled={isSaving}
+              compact
+            >
+              Try Again
+            </Button>
+          </View>
+        )}
         <EgraLetterGrid
           letters={pageLetters}
           pageOffset={startPage}
@@ -356,8 +390,8 @@ export default function LetterAssessmentScreen({ navigation, route }) {
         )}
 
         {isLastPage && phase === 'active' ? (
-          <Button mode="contained" onPress={handleFinish} compact>
-            Finish
+          <Button mode="contained" onPress={handleFinish} disabled={isSaving} compact>
+            {isSaving ? 'Saving' : 'Finish'}
           </Button>
         ) : (
           <Button
@@ -459,6 +493,17 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.sm,
+  },
+  saveErrorContainer: {
+    width: '100%',
+    paddingHorizontal: spacing.md,
+    marginBottom: spacing.sm,
+    gap: spacing.sm,
+    alignItems: 'center',
+  },
+  saveErrorText: {
+    color: colors.error,
+    textAlign: 'center',
   },
   navRow: {
     flexDirection: 'row',

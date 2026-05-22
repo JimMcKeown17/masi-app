@@ -1,8 +1,8 @@
-import { resolveDatabase } from './repositoryRuntime';
+import { resolveDatabase, runRepositoryTransaction } from './repositoryRuntime';
 import {
   mapRowFromSqlite,
   quoteIdentifier,
-  replaceAllRecords,
+  upsertRecord,
 } from './sqliteRepositoryUtils';
 
 const REFERENCE_TABLES = {
@@ -79,6 +79,7 @@ const REFERENCE_TABLES = {
     ],
     requiredColumns: ['id', 'user_id', 'programme_id'],
     orderBy: 'assigned_at',
+    replaceScopeColumn: 'user_id',
   },
   assessment_tools: {
     columns: [
@@ -136,6 +137,8 @@ const REFERENCE_TABLES = {
     ],
     booleanColumns: ['is_required'],
     requiredColumns: ['id', 'academic_year_id', 'label', 'window_type', 'starts_on', 'ends_on'],
+    conflictColumns: ['academic_year_id', 'window_type'],
+    updatePrimaryKeyOnConflict: true,
     orderBy: 'starts_on',
   },
   teachers: {
@@ -177,7 +180,10 @@ export const createReferenceDataRepository = ({
   booleanColumns = [],
   jsonColumns = [],
   requiredColumns,
+  conflictColumns,
+  updatePrimaryKeyOnConflict = false,
   orderBy = 'id',
+  replaceScopeColumn,
 }) => {
   const getConfig = () => {
     const tableConfig = REFERENCE_TABLES[tableName] || {};
@@ -186,7 +192,10 @@ export const createReferenceDataRepository = ({
       booleanColumns: booleanColumns.length > 0 ? booleanColumns : tableConfig.booleanColumns || [],
       jsonColumns: jsonColumns.length > 0 ? jsonColumns : tableConfig.jsonColumns || [],
       requiredColumns: requiredColumns || tableConfig.requiredColumns || ['id'],
+      conflictColumns: conflictColumns || tableConfig.conflictColumns || ['id'],
+      updatePrimaryKeyOnConflict: updatePrimaryKeyOnConflict || tableConfig.updatePrimaryKeyOnConflict || false,
       orderBy: orderBy || tableConfig.orderBy || 'id',
+      replaceScopeColumn: replaceScopeColumn || tableConfig.replaceScopeColumn || null,
     };
   };
 
@@ -218,8 +227,7 @@ export const createReferenceDataRepository = ({
     });
   };
 
-  const replaceAll = async (records) => {
-    const db = await resolveDatabase(database);
+  const replaceAll = async (records, { scope = {} } = {}) => {
     const config = getConfig();
     for (const record of records) {
       for (const column of config.requiredColumns) {
@@ -228,17 +236,34 @@ export const createReferenceDataRepository = ({
         }
       }
     }
-    await replaceAllRecords(db, {
-      tableName,
-      columns: config.columns,
-      records,
-      booleanColumns: config.booleanColumns,
-      jsonColumns: config.jsonColumns,
+    await runRepositoryTransaction(database, async (txn) => {
+      if (config.replaceScopeColumn) {
+        const scopeValues = scope[config.replaceScopeColumn] == null
+          ? [...new Set(records.map(record => record[config.replaceScopeColumn]).filter(value => value != null))]
+          : [scope[config.replaceScopeColumn]];
+        for (const scopeValue of scopeValues) {
+          await txn.runAsync(
+            `delete from ${quoteIdentifier(tableName)} where ${quoteIdentifier(config.replaceScopeColumn)} = ?`,
+            scopeValue
+          );
+        }
+      }
+      for (const record of records) {
+        await upsertRecord(txn, {
+          tableName,
+          columns: config.columns,
+          record,
+          conflictColumns: config.conflictColumns,
+          updatePrimaryKeyOnConflict: config.updatePrimaryKeyOnConflict,
+          booleanColumns: config.booleanColumns,
+          jsonColumns: config.jsonColumns,
+        });
+      }
     });
     return true;
   };
 
-  const replaceFromServer = async (records) => {
+  const replaceFromServer = async (records, options = {}) => {
     if (!Array.isArray(records)) {
       return false;
     }
@@ -246,7 +271,7 @@ export const createReferenceDataRepository = ({
     return replaceAll(records.map((record) => ({
       ...record,
       sync_status: 'synced',
-    })));
+    })), options);
   };
 
   return {

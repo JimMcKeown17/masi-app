@@ -1,6 +1,7 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useCallback } from 'react';
 import { View, StyleSheet, FlatList } from 'react-native';
 import { Text, Card, ActivityIndicator, Snackbar, IconButton } from 'react-native-paper';
+import { useFocusEffect } from '@react-navigation/native';
 import { useAuth } from '../../context/AuthContext';
 import { useChildren } from '../../context/ChildrenContext';
 import { colors, spacing, borderRadius, shadows } from '../../constants/colors';
@@ -30,15 +31,11 @@ export default function AssessmentHistoryScreen({ navigation }) {
   const [snackbarMessage, setSnackbarMessage] = useState('');
   const [snackbarVisible, setSnackbarVisible] = useState(false);
 
-  useEffect(() => {
-    loadAssessments();
-  }, [user?.id]);
-
-  const filterAndSort = (all) => {
+  const filterAndSort = useCallback((all) => {
     const cutoff = Date.now() - THIRTY_DAYS_MS;
     return all
       .filter((a) => {
-        if (a.user_id !== user.id) return false;
+        if (a.user_id !== user?.id) return false;
         const [y, m, d] = a.date_assessed.split('-').map(Number);
         return new Date(y, m - 1, d).getTime() >= cutoff;
       })
@@ -46,20 +43,44 @@ export default function AssessmentHistoryScreen({ navigation }) {
         if (a.date_assessed !== b.date_assessed) return a.date_assessed > b.date_assessed ? -1 : 1;
         return new Date(b.created_at) - new Date(a.created_at);
       });
-  };
+  }, [user?.id]);
 
-  const loadAssessments = async () => {
-    try {
-      const cached = await assessmentsRepository.getAssessments({ userId: user.id });
-      setAssessments(filterAndSort(cached));
-    } catch (error) {
-      console.error('Error loading assessments:', error);
-      setSnackbarMessage('Failed to load assessments');
-      setSnackbarVisible(true);
-    } finally {
-      setLoading(false);
-    }
-  };
+  useFocusEffect(
+    useCallback(() => {
+      let active = true;
+
+      const loadAssessments = async () => {
+        if (!user?.id) {
+          setAssessments([]);
+          setLoading(false);
+          return;
+        }
+
+        try {
+          setLoading(true);
+          const cached = await assessmentsRepository.getAssessments({ userId: user.id });
+          if (active) {
+            setAssessments(filterAndSort(cached));
+          }
+        } catch (error) {
+          console.error('Error loading assessments:', error);
+          if (active) {
+            setSnackbarMessage('Failed to load assessments');
+            setSnackbarVisible(true);
+          }
+        } finally {
+          if (active) {
+            setLoading(false);
+          }
+        }
+      };
+
+      loadAssessments();
+      return () => {
+        active = false;
+      };
+    }, [filterAndSort, user?.id])
+  );
 
   const childInfoMap = React.useMemo(() => {
     const map = {};

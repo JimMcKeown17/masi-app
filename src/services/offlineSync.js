@@ -17,9 +17,18 @@ import {
 import {
   academicYearsRepository,
   assessmentWindowsRepository,
+  jobTitlesRepository,
+  programmesRepository,
+  schoolsRepository,
+  staffProgrammeAssignmentsRepository,
   teachersRepository,
 } from '../db/repositories/referenceDataRepository';
-import { LEGACY_PROGRAMME_ID } from '../db/repositories/domainRepositoryUtils';
+import {
+  assessmentItemDomainId,
+  ensureServerUuid,
+  LEGACY_PROGRAMME_ID,
+  sessionAttendeeDomainId,
+} from '../db/repositories/domainRepositoryUtils';
 
 const BASE_RETRY_DELAY = 5000;
 
@@ -226,6 +235,20 @@ const buildSyncPayload = (tableName, record) => {
     if (keysToStrip.has(key) || value === undefined) continue;
     if (allowlist && !allowlist.has(key)) continue;
     payload[key] = value;
+  }
+  if (tableName === 'session_attendees' && payload.id) {
+    payload.id = ensureServerUuid(payload.id, sessionAttendeeDomainId(payload.session_id, payload.child_id));
+  }
+  if (tableName === 'assessment_items' && payload.id) {
+    payload.id = ensureServerUuid(
+      payload.id,
+      assessmentItemDomainId({
+        assessmentId: payload.assessment_id,
+        itemKey: payload.item_key,
+        position: payload.position,
+        isCorrect: payload.is_correct,
+      })
+    );
   }
   return payload;
 };
@@ -668,18 +691,41 @@ export const _testClassifyError = classifyError;
 export const pullReferenceData = async ({
   supabaseClient = supabase,
   repositories = {
+    schools: schoolsRepository,
+    job_titles: jobTitlesRepository,
+    programmes: programmesRepository,
     academic_years: academicYearsRepository,
     assessment_windows: assessmentWindowsRepository,
     teachers: teachersRepository,
+    staff_programme_assignments: staffProgrammeAssignmentsRepository,
   },
+  userId,
 } = {}) => {
+  const tableNames = [
+    'schools',
+    'job_titles',
+    'programmes',
+    'academic_years',
+    'assessment_windows',
+    'teachers',
+    'staff_programme_assignments',
+  ];
   const results = {};
-  for (const tableName of ['academic_years', 'assessment_windows', 'teachers']) {
-    const { data, error } = await supabaseClient
+  for (const tableName of tableNames) {
+    let query = supabaseClient
       .from(tableName)
       .select('*');
+    if (tableName === 'staff_programme_assignments' && userId) {
+      query = query.eq('user_id', userId);
+    }
+    const { data, error } = await query;
     if (error) throw error;
-    await repositories[tableName].replaceFromServer(data || []);
+    await repositories[tableName].replaceFromServer(
+      data || [],
+      tableName === 'staff_programme_assignments' && userId
+        ? { scope: { user_id: userId } }
+        : {}
+    );
     results[tableName] = (data || []).length;
   }
   return results;

@@ -12,8 +12,10 @@ export const LookupsProvider = ({ children }) => {
   const { isOnline } = useOffline();
   const [jobTitles, setJobTitles] = useState([]);
   const [loading, setLoading] = useState(false);
+  const activeUserIdRef = useRef(null);
 
   useEffect(() => {
+    activeUserIdRef.current = user?.id || null;
     if (user?.id) {
       loadJobTitles();
     } else {
@@ -30,9 +32,11 @@ export const LookupsProvider = ({ children }) => {
   }, [isOnline, user?.id]);
 
   const loadJobTitles = async () => {
+    const activeUserId = user?.id;
     try {
       setLoading(true);
       const cached = await storage.getJobTitles();
+      if (activeUserIdRef.current !== activeUserId) return;
       setJobTitles(cached);
 
       try {
@@ -46,6 +50,7 @@ export const LookupsProvider = ({ children }) => {
         if (error) throw error;
         const serverJobTitles = data || [];
         await storage.saveJobTitles(serverJobTitles);
+        if (activeUserIdRef.current !== activeUserId) return;
         setJobTitles(serverJobTitles);
       } catch (error) {
         console.log('Could not fetch job titles from server (likely offline):', error.message);
@@ -53,7 +58,9 @@ export const LookupsProvider = ({ children }) => {
     } catch (error) {
       console.error('Error in loadJobTitles:', error);
     } finally {
-      setLoading(false);
+      if (activeUserIdRef.current === activeUserId) {
+        setLoading(false);
+      }
     }
   };
 

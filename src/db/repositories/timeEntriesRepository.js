@@ -62,13 +62,20 @@ export const createTimeEntriesRepository = ({ database } = {}) => {
     await enqueueDomainOutbox(txn, 'time_entries', record.id, existingInsert ? 'insert' : 'update', record);
   };
 
-  const getTimeEntries = async () => {
+  const getTimeEntries = async ({ userId } = {}) => {
     const db = await resolveDatabase(database);
-    const rows = await db.getAllAsync(`
-      select *
-      from time_entries
-      order by sign_in_time, created_at
-    `);
+    const rows = userId
+      ? await db.getAllAsync(`
+        select *
+        from time_entries
+        where user_id = ?
+        order by sign_in_time, created_at
+      `, userId)
+      : await db.getAllAsync(`
+        select *
+        from time_entries
+        order by sign_in_time, created_at
+      `);
     return rows.map(mapTimeEntry);
   };
 

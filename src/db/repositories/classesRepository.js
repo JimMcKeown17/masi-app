@@ -1,3 +1,4 @@
+import { v4 as uuidv4 } from 'uuid';
 import { resolveDatabase, runRepositoryTransaction } from './repositoryRuntime';
 import {
   enqueueDomainOutbox,
@@ -22,6 +23,22 @@ const CLASS_COLUMNS = [
   'archived_at',
   'archived_by_user_id',
   'archive_reason',
+  'created_by',
+  'created_at',
+  'updated_at',
+  'sync_status',
+  'last_sync_error',
+  'server_updated_at',
+];
+
+const CLASS_EA_ASSIGNMENT_COLUMNS = [
+  'id',
+  'class_id',
+  'ea_user_id',
+  'programme_id',
+  'assigned_at',
+  'unassigned_at',
+  'handover_reason',
   'created_by',
   'created_at',
   'updated_at',
@@ -66,6 +83,36 @@ export const createClassesRepository = ({ database } = {}) => {
     }, record);
     if (shouldEnqueueOutbox(record)) {
       await enqueueDomainOutbox(txn, 'classes', classData.id, 'insert', record);
+    }
+
+    const actorUserId = classData.created_by || classData.staff_id || classData.user_id;
+    const programmeId = classData.programme_id || (actorUserId ? await getActiveProgrammeId(txn, actorUserId) : null);
+    if (shouldEnqueueOutbox(record) && actorUserId && programmeId && !record.archived_at) {
+      const activeAssignment = await txn.getFirstAsync(`
+        select id
+        from class_ea_assignments
+        where class_id = ?
+          and ea_user_id = ?
+          and programme_id = ?
+          and unassigned_at is null
+      `, classData.id, actorUserId, programmeId);
+
+      if (!activeAssignment) {
+        const assignment = normalizeSyncFields({
+          id: uuidv4(),
+          class_id: classData.id,
+          ea_user_id: actorUserId,
+          programme_id: programmeId,
+          assigned_at: record.created_at,
+          created_by: actorUserId,
+          sync_status: record.sync_status,
+        });
+        await upsertDomainRecord(txn, {
+          tableName: 'class_ea_assignments',
+          columns: CLASS_EA_ASSIGNMENT_COLUMNS,
+        }, assignment);
+        await enqueueDomainOutbox(txn, 'class_ea_assignments', assignment.id, 'insert', assignment);
+      }
     }
     return true;
   });
@@ -152,7 +199,7 @@ export const createClassesRepository = ({ database } = {}) => {
     }
 
     const childRows = await txn.getAllAsync(
-      'select id from children where class_id = ? and archived_at is null',
+      'select * from children where class_id = ? and archived_at is null',
       classId
     );
     await txn.runAsync(`
@@ -164,11 +211,13 @@ export const createClassesRepository = ({ database } = {}) => {
         and archived_at is null
     `, archivedAt, classId);
     for (const child of childRows) {
-      await enqueueDomainOutbox(txn, 'children', child.id, 'update', {
-        id: child.id,
+      const payload = normalizeSyncFields({
+        ...mapDomainRow(child),
         class_id: null,
         updated_at: archivedAt,
+        sync_status: 'pending',
       });
+      await enqueueDomainOutbox(txn, 'children', child.id, 'update', payload);
     }
 
     return true;

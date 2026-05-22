@@ -50,7 +50,7 @@ export default function HomeScreen({ navigation }) {
     useCallback(() => {
       const loadStats = async () => {
         const [timeEntries, sessions, assessments] = await Promise.all([
-          timeEntriesRepository.getTimeEntries(),
+          timeEntriesRepository.getTimeEntries({ userId: user.id }),
           sessionsRepository.getSessions({ userId: user.id }),
           assessmentsRepository.getAssessments({ userId: user.id }),
         ]);

@@ -182,6 +182,57 @@ describe('childrenRepository', () => {
     }
   });
 
+  test('synced server-pulled child junctions make a handover child visible offline without outbox rows', async () => {
+    const db = await createMigratedDatabase(runMigrations);
+
+    try {
+      await seedCoreData(db);
+      const repository = createChildrenRepository({ database: db });
+
+      await repository.saveChildRecord({
+        id: 'handover-child',
+        first_name: 'Handover',
+        last_name: 'Child',
+        class_id: 'class-1',
+        created_by: 'admin-user',
+        sync_status: 'synced',
+      });
+      await repository.saveStaffChild({
+        id: 'server-cea-1',
+        user_id: 'user-1',
+        child_id: 'handover-child',
+        assigned_at: '2026-05-22T08:00:00.000Z',
+        sync_status: 'synced',
+      });
+      await repository.saveChildProgrammeEnrollment({
+        id: 'server-cpe-1',
+        child_id: 'handover-child',
+        programme_id: 'programme-a',
+        enrolled_at: '2026-05-22T08:00:00.000Z',
+        sync_status: 'synced',
+      });
+      await repository.saveChildClassMembership({
+        id: 'server-ccm-1',
+        child_id: 'handover-child',
+        class_id: 'class-1',
+        academic_year_id: 'year-2026',
+        enrolled_at: '2026-05-22T08:00:00.000Z',
+        sync_status: 'synced',
+      });
+
+      expect(await repository.getMyChildren('user-1')).toEqual([
+        expect.objectContaining({ id: 'handover-child' }),
+      ]);
+      expect(await db.getFirstAsync(`
+        select count(*) as count
+        from sync_outbox
+        where record_id in ('handover-child', 'server-cea-1', 'server-cpe-1', 'server-ccm-1')
+      `)).toEqual({ count: 0 });
+    } finally {
+      await db.closeAsync();
+    }
+  });
+
   test('getMyChildren excludes children whose active class is archived', async () => {
     const db = await createMigratedDatabase(runMigrations);
 
