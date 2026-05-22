@@ -167,6 +167,10 @@ Corrective review verification:
 
 - `npm test -- --runInBand` passed 44 suites / 197 tests after the programme scoping, delete/archive, stale-auth, removed-membership, class archive, and child-create fixes.
 - `git diff --check` passed.
+- Android signed-in validation reached the Home screen against `masi-app-sqlite` after seeding a staging test profile and assignment.
+- Supabase auth lock warnings observed during Android validation were fixed by aligning `@supabase/supabase-js` to Zazi's `2.100.1`, using a singleton Supabase client/AppState listener, relying on `INITIAL_SESSION` instead of duplicate `getSession()` startup, and queueing startup reference-data reads.
+- Fresh Android logcat stayed quiet for 35 seconds after Metro restart: no Supabase auth lock warnings and no React Native errors.
+- Final full suite after the Android auth-lock fix passed 44 suites / 199 tests; `git diff --check` passed.
 
 - [x] Update `documentation/sqlite-refactor-log.md`.
 - [ ] Request a parallel code-review pass focused on context concurrency, cache preservation, and local-first UX.

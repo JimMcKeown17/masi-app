@@ -41,34 +41,9 @@ export const AuthProvider = ({ children }) => {
   };
 
   useEffect(() => {
-    const initializeAuthState = async () => {
-      try {
-        const { data: { session: initialSession }, error } = await supabase.auth.getSession();
-        if (error) {
-          console.error('[Auth] Initial session load failed:', error);
-        }
-
-        console.log(`[Auth] INITIAL_SESSION hasSession=${Boolean(initialSession)}`);
-
-        if (initialSession?.user) {
-          clearPendingSignOutTimeout();
-          currentUserIdRef.current = initialSession.user.id;
-          setSession(initialSession);
-          setUser(initialSession.user);
-          scheduleUserProfileLoad(initialSession.user.id);
-          return;
-        }
-
-        commitSignedOutState('initial-session-null');
-      } catch (error) {
-        console.error('[Auth] Unexpected initial session error:', error);
-        commitSignedOutState('initial-session-error');
-      }
-    };
-
-    initializeAuthState();
-
-    // Listen for auth changes
+    // Supabase emits INITIAL_SESSION through this subscription after its own
+    // storage recovery finishes; calling getSession here creates a second
+    // startup lock contender on Android.
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, nextSession) => {
       console.log(`[Auth] Event=${event} hasSession=${Boolean(nextSession)}`);
 

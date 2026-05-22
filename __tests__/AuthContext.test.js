@@ -101,6 +101,24 @@ describe('AuthContext Plan 5 startup discipline', () => {
     await waitFor(() => expect(supabase.from).toHaveBeenCalledWith('users'));
   });
 
+  test('auth startup relies on INITIAL_SESSION event instead of a duplicate getSession call', async () => {
+    renderHook(() => useAuth(), { wrapper });
+    await waitFor(() => expect(authCallback).toEqual(expect.any(Function)));
+
+    expect(supabase.auth.getSession).not.toHaveBeenCalled();
+
+    act(() => {
+      authCallback('INITIAL_SESSION', { user: { id: 'user-1', email: 'ea@example.org' } });
+    });
+
+    await act(async () => {
+      jest.runOnlyPendingTimers();
+      await Promise.resolve();
+    });
+
+    await waitFor(() => expect(supabase.from).toHaveBeenCalledWith('users'));
+  });
+
   test('stale profile fetch cannot update state after sign-out', async () => {
     const profileFetch = deferred();
     mockProfileQuery(profileFetch.promise);

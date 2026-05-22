@@ -1,5 +1,6 @@
 import React, { createContext, useState, useEffect, useContext, useRef } from 'react';
 import { supabase } from '../services/supabaseClient';
+import { enqueueSupabaseRequest } from '../services/supabaseRequestQueue';
 import { storage } from '../utils/storage';
 import { useAuth } from './AuthContext';
 import { useOffline } from './OfflineContext';
@@ -35,10 +36,12 @@ export const LookupsProvider = ({ children }) => {
       setJobTitles(cached);
 
       try {
-        const { data, error } = await supabase
-          .from('job_titles')
-          .select('*')
-          .order('sort_order', { ascending: true });
+        const { data, error } = await enqueueSupabaseRequest(() => (
+          supabase
+            .from('job_titles')
+            .select('*')
+            .order('sort_order', { ascending: true })
+        ));
 
         if (error) throw error;
         const serverJobTitles = data || [];

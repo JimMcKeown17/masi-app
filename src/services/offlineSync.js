@@ -1,4 +1,5 @@
 import { supabase } from './supabaseClient';
+import { enqueueSupabaseRequest } from './supabaseRequestQueue';
 import { storage } from '../utils/storage';
 import { resolveDatabase, runRepositoryTransaction } from '../db/repositories/repositoryRuntime';
 import {
@@ -689,10 +690,12 @@ export const pullReferenceData = async ({
  * Schools are admin-managed reference data, not an outbox push table.
  */
 export const fetchAndCacheSchools = async () => {
-  const { data, error } = await supabase
-    .from('schools')
-    .select('*')
-    .order('name');
+  const { data, error } = await enqueueSupabaseRequest(() => (
+    supabase
+      .from('schools')
+      .select('*')
+      .order('name')
+  ));
 
   if (error) throw error;
   await storage.setSchools(data || []);
