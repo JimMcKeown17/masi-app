@@ -12,13 +12,27 @@ A React Native mobile application for Masi, a nonprofit organization, to manage 
 - **Language**: JavaScript (no TypeScript)
 - **UI Library**: React Native Paper (Material Design)
 - **Backend**: Supabase (Authentication + PostgreSQL)
-- **Offline Storage**: @react-native-async-storage/async-storage
+- **Offline Storage**: expo-sqlite for domain data and sync state; AsyncStorage only for Supabase auth session storage and app logs
 - **Navigation**: React Navigation (Bottom Tabs)
 - **Forms**: React Hook Form
 - **Location**: expo-location
 - **State Management**: React Context API
 
 ---
+
+## Current SQLite Architecture (2026-05 Clean-Slate Refactor)
+
+The current refactor is a clean-slate move from AsyncStorage domain storage to normalized SQLite. Field users will install a fresh build pointed at the new `masi-app-sqlite` Supabase backend; legacy local AsyncStorage domain data is not migrated.
+
+Domain writes now flow through SQLite repositories. A write updates normalized local tables first, enqueues a durable `sync_outbox` row in the same transaction, updates the UI from local state, then syncs to Supabase in dependency order when online. `sync_state` stores pull cursors/state; `local_state` stores small local metadata such as the cached user profile and temporary screen-shaped sidecar payloads.
+
+Programme is a first-class operational model, separate from job title. EAs have active `staff_programme_assignments`; children may have multiple concurrent `child_programme_enrollments`; user-facing reads are programme-scoped by default. Sessions, assessments, letter mastery, groups, and class assignments carry `programme_id` so each EA sees their current programme slice.
+
+The clean schema also includes first-class `academic_years`, `assessment_windows`, `teachers`, `child_class_memberships`, `class_ea_assignments`, `group_ea_assignments`, `grouping_versions`, and `class_grouping_state`. These tables preserve year-over-year reporting, formal baseline/midline/endline windows, class-change history, multi-level assignment, and regrouping history.
+
+Support export now writes a SQLite diagnostic JSON: schema version, migration list, table counts, sync state, and failed/terminal outbox rows, plus app/build metadata. Log export still uses AsyncStorage-backed logger output.
+
+Validation status as of 2026-05-22: the SQLite implementation has passed the automated release gate and a deeper Android emulator pass covering fresh sign-in, offline cached restart, offline session and assessment writes, force-stop/reopen with pending outbox, reconnect-and-sync, and Supabase row verification. Before field distribution, physical-device validation and cutover communication remain required. The emulator did not complete clock-in/out because the Android location provider returned current-location unavailable; test that path on a real device.
 
 ## Database Schema
 
@@ -544,8 +558,9 @@ Field staff often work in remote areas with limited connectivity. When issues oc
 - Works on both iOS and Android
 - User controls where data is sent
 
-**Database Export**: Full AsyncStorage dump with metadata
-- Exports all local data in JSON format
+**Database Export**: SQLite diagnostic dump with schema version, table counts, sync state, failed/terminal outbox rows, and app/build metadata
+- Exports support diagnostics in JSON format rather than a full raw database dump
+- Failed/terminal outbox payloads may still include child/session/assessment PII because those rows are needed to debug stuck sync work
 - Includes export timestamp, app version, and device info
 - Contains sensitive data warning (confirmation dialog required)
 - Useful for debugging sync issues and data recovery

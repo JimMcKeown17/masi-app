@@ -9,6 +9,8 @@ This guide teaches you fundamental database design principles by walking through
 
 > 2026-05 schema hardening note: the app is moving from free-text school/job/session fields to lookup-backed foreign keys. During the Build A/Build B transition, both legacy text columns and new FK columns exist. Build B no longer writes `sessions.session_type`; after the Build B export gate and migration 17, `users.assigned_school`, `users.job_title`, `children.class`, `children.school`, `children.teacher`, and `sessions.session_type` are dropped.
 
+> 2026-05 SQLite refactor note: the clean-slate SQLite/Supabase schema supersedes the old AsyncStorage-era table names for domain work. New code should use `child_ea_assignments` instead of `staff_children`, `child_group_memberships` instead of `children_groups`, `session_attendees` instead of `sessions.children_ids`, and `assessment_items` instead of EGRA letter arrays on the assessment parent row. Programmes are first-class (`programmes`, `staff_programme_assignments`, `child_programme_enrollments`), and longitudinal reporting depends on `academic_years`, `assessment_windows`, `child_class_memberships`, `teachers`, `class_ea_assignments`, `group_ea_assignments`, `grouping_versions`, and `class_grouping_state`.
+
 By the end, you'll understand:
 - How relational databases organize data
 - When to use different relationship types

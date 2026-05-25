@@ -48,6 +48,7 @@ function createBetterSqliteTestDatabase(filename = ':memory:') {
       database.close();
     },
 
+    filename,
     raw: database,
   };
 

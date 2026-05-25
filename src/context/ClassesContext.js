@@ -21,14 +21,18 @@ const saveRows = async (rows, saveRow) => {
 
 const mergeServerRows = (cached, serverRows) => {
   const serverIds = new Set(serverRows.map(row => row.id));
-  const localToKeep = cached.filter(row => (
-    !serverIds.has(row.id)
-    && (
-      row.synced === false
-      || (row.sync_status && row.sync_status !== 'synced')
-    )
-  ));
-  return [...serverRows, ...localToKeep];
+  const isDirtyLocal = (row) => (
+    row.synced === false
+    || (row.sync_status && row.sync_status !== 'synced')
+  );
+  const dirtyLocalById = new Map(
+    cached
+      .filter(isDirtyLocal)
+      .map(row => [row.id, row])
+  );
+  const mergedServerRows = serverRows.map(row => dirtyLocalById.get(row.id) || row);
+  const localToKeep = cached.filter(row => !serverIds.has(row.id) && isDirtyLocal(row));
+  return [...mergedServerRows, ...localToKeep];
 };
 
 export const ClassesProvider = ({ children: reactChildren }) => {
@@ -159,7 +163,18 @@ export const ClassesProvider = ({ children: reactChildren }) => {
             sync_status: classItem.sync_status || 'synced',
           }));
           const merged = mergeServerRows(cached, serverClasses);
-          await saveRows(serverClasses, storage.saveClass);
+          const dirtyCachedIds = new Set(
+            cached
+              .filter(classItem => (
+                classItem.synced === false
+                || (classItem.sync_status && classItem.sync_status !== 'synced')
+              ))
+              .map(classItem => classItem.id)
+          );
+          await saveRows(
+            serverClasses.filter(classItem => !dirtyCachedIds.has(classItem.id)),
+            storage.saveClass
+          );
           await saveRows(serverAssignments, storage.saveClassEaAssignment);
           setClasses(merged);
         }

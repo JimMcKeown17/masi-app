@@ -528,6 +528,8 @@ describe('SQLite debug dump', () => {
         schemaVersion: 0,
         migrations: [],
         tableCounts: {},
+        syncState: [],
+        failedOutboxRows: [],
         generatedAt: expect.any(String),
       });
     } finally {
@@ -552,6 +554,8 @@ describe('SQLite debug dump', () => {
           schools: 1,
           sync_outbox: 0,
         }),
+        syncState: [],
+        failedOutboxRows: [],
         generatedAt: expect.any(String),
       });
       expect(new Date(dump.generatedAt).toString()).not.toBe('Invalid Date');

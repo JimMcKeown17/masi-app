@@ -57,7 +57,7 @@ describe('hidden children — storage-level soft-delete', () => {
     expect(ok).toBe(false);
   });
 
-  test('hidden child remains in @children AsyncStorage so allChildren can resolve names later', async () => {
+  test('hidden child remains in local children cache so allChildren can resolve names later', async () => {
     await storage.saveChild({ id: 'child-1', first_name: 'A', last_name: 'M', synced: true });
     await storage.updateChild('child-1', {
       hidden_at: '2026-04-30T10:15:00.000Z',

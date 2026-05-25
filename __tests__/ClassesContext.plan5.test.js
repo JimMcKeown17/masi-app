@@ -186,4 +186,51 @@ describe('ClassesContext Plan 5 behavior', () => {
       sync_status: 'synced',
     }));
   });
+
+  test('successful class pull keeps a pending local edit when the server returns the same class id', async () => {
+    storage.getClasses.mockResolvedValueOnce([
+      {
+        id: 'class-1',
+        name: 'Edited Local Class',
+        teacher: 'Edited Teacher',
+        synced: false,
+        sync_status: 'pending',
+      },
+    ]);
+    mockSupabaseFrom.mockImplementation((tableName) => {
+      if (tableName === 'staff_programme_assignments') {
+        return queryResult({
+          data: [{ programme_id: 'programme-a' }],
+          error: null,
+        });
+      }
+      if (tableName === 'classes') {
+        return queryResult({
+          data: [{
+            id: 'class-1',
+            name: 'Server Class',
+            teacher: 'Server Teacher',
+            class_ea_assignments: [{ id: 'class-assignment-1', class_id: 'class-1', ea_user_id: 'user-1' }],
+            sync_status: 'synced',
+          }],
+          error: null,
+        });
+      }
+      return queryResult({ data: [], error: null });
+    });
+
+    const { result } = renderHook(() => useClasses(), { wrapper });
+
+    await waitFor(() => expect(result.current.classes).toEqual([
+      expect.objectContaining({
+        id: 'class-1',
+        name: 'Edited Local Class',
+        teacher: 'Edited Teacher',
+      }),
+    ]));
+    expect(storage.saveClass).not.toHaveBeenCalledWith(expect.objectContaining({
+      id: 'class-1',
+      name: 'Server Class',
+    }));
+  });
 });

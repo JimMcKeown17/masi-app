@@ -1,9 +1,9 @@
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Platform } from 'react-native';
 import { File, Paths } from 'expo-file-system/next';
 import * as Sharing from 'expo-sharing';
 import Constants from 'expo-constants';
 import { logger } from './logger';
+import { debugDump } from '../db/debugDump';
 
 /**
  * Write content to a temp file and share it via the native share sheet.
@@ -24,26 +24,14 @@ const shareFile = async (filename, content, mimeType) => {
 };
 
 /**
- * Export all AsyncStorage as a .json file via native Share
+ * Export local SQLite support diagnostics as a .json file via native Share.
  */
 export const exportDatabase = async () => {
   try {
-    const keys = await AsyncStorage.getAllKeys();
-    const items = await AsyncStorage.multiGet(keys);
-
-    const database = items.reduce((acc, [key, value]) => {
-      try {
-        acc[key] = JSON.parse(value);
-      } catch {
-        acc[key] = value;
-      }
-      return acc;
-    }, {});
-
     const exportData = {
       exported_at: new Date().toISOString(),
       app_version: Constants.expoConfig?.version ?? 'unknown',
-      schema_hardening_build: 'build-b',
+      sqlite_refactor_build: 'plan-6',
       ios_build_number: Constants.expoConfig?.ios?.buildNumber ?? null,
       android_version_code: Constants.expoConfig?.android?.versionCode ?? null,
       runtime_version: Constants.expoConfig?.runtimeVersion ?? null,
@@ -51,7 +39,7 @@ export const exportDatabase = async () => {
         platform: Platform.OS,
         version: Platform.Version,
       },
-      database,
+      database: await debugDump(),
     };
 
     const jsonString = JSON.stringify(exportData, null, 2);

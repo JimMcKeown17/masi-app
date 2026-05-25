@@ -10,7 +10,18 @@ import {
   seedCoreData,
 } from '../test-support/sqliteRepositoryTestUtils';
 
+const FIXED_NOW = new Date('2026-05-21T08:00:00.000Z');
+
 describe('groupsRepository', () => {
+  beforeEach(() => {
+    jest.useFakeTimers();
+    jest.setSystemTime(FIXED_NOW);
+  });
+
+  afterEach(() => {
+    jest.useRealTimers();
+  });
+
   test('grouping version save enforces one active grouping version per class/year', async () => {
     const db = await createMigratedDatabase(runMigrations);
 

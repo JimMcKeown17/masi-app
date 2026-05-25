@@ -15,7 +15,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { colors, spacing, borderRadius } from '../../constants/colors';
 import { useChildren } from '../../context/ChildrenContext';
 import { useClasses } from '../../context/ClassesContext';
-import { GENDERS } from '../../constants/options';
+import { GENDERS, getGenderLabel } from '../../constants/options';
 import GroupPickerBottomSheet, { getGroupColor, compareGroups } from '../../components/children/GroupPickerBottomSheet';
 
 export default function EditChildScreen({ route, navigation }) {
@@ -237,7 +237,7 @@ export default function EditChildScreen({ route, navigation }) {
             {/* Gender picker */}
             <TextInput
               label="Gender"
-              value={gender}
+              value={getGenderLabel(gender)}
               mode="outlined"
               style={styles.input}
               editable={false}
@@ -310,7 +310,7 @@ export default function EditChildScreen({ route, navigation }) {
               value={gender}
             >
               {GENDERS.map(g => (
-                <RadioButton.Item key={g} label={g} value={g} />
+                <RadioButton.Item key={g.value} label={g.label} value={g.value} />
               ))}
             </RadioButton.Group>
           </Dialog.Content>

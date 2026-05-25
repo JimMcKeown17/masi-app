@@ -107,3 +107,23 @@ describe('getAllUnsyncedCount includes CLASSES', () => {
     expect(count).toBeGreaterThanOrEqual(1);
   });
 });
+
+describe('storage facade cleanup', () => {
+  test('user profile cache is stored in SQLite local state, not AsyncStorage domain keys', async () => {
+    await storage.saveUserProfile({ id: 'user-1', first_name: 'Nomsa' });
+
+    expect(await storage.getUserProfile()).toEqual({ id: 'user-1', first_name: 'Nomsa' });
+    expect(await AsyncStorage.getItem('@user_profile')).toBeNull();
+
+    await storage.clearUserProfile();
+
+    expect(await storage.getUserProfile()).toBeNull();
+  });
+
+  test('generic AsyncStorage facade methods and storage keys are no longer public API', () => {
+    expect(storage.getItem).toBeUndefined();
+    expect(storage.setItem).toBeUndefined();
+    expect(storage.removeItem).toBeUndefined();
+    expect(storage.STORAGE_KEYS).toBeUndefined();
+  });
+});

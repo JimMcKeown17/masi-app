@@ -10,6 +10,7 @@ import {
   upsertDomainRecord,
 } from './domainRepositoryUtils';
 import { syncStatusFromSynced } from './sqliteRepositoryUtils';
+import { normalizeGender } from '../../constants/options';
 
 const CHILD_COLUMNS = [
   'id',
@@ -77,6 +78,11 @@ const RELATIONSHIP_COLUMNS = {
 
 const mapChild = (row) => mapDomainRow(row);
 
+const normalizeChildRecord = (child) => ({
+  ...child,
+  gender: normalizeGender(child.gender),
+});
+
 export const createChildrenRepository = ({ database } = {}) => {
   const runWrite = (transaction, task) => (
     transaction ? task(transaction) : runRepositoryTransaction(database, task)
@@ -96,7 +102,7 @@ export const createChildrenRepository = ({ database } = {}) => {
       });
       const now = child.created_at || new Date().toISOString();
       const childRecord = normalizeSyncFields({
-        ...child,
+        ...normalizeChildRecord(child),
         created_by: child.created_by || actorUserId,
         created_at: now,
         updated_at: child.updated_at || now,
@@ -198,8 +204,10 @@ export const createChildrenRepository = ({ database } = {}) => {
     if (!existing) return false;
 
     const next = normalizeSyncFields({
-      ...mapChild(existing),
-      ...updates,
+      ...normalizeChildRecord({
+        ...mapChild(existing),
+        ...updates,
+      }),
       id,
       updated_at: updates.updated_at || new Date().toISOString(),
       sync_status: updates.sync_status || syncStatusFromSynced(updates.synced),
@@ -217,7 +225,7 @@ export const createChildrenRepository = ({ database } = {}) => {
 
   const saveChildRecord = async (child, { transaction } = {}) => runWrite(transaction, async (txn) => {
     const record = normalizeSyncFields({
-      ...child,
+      ...normalizeChildRecord(child),
       sync_status: child.sync_status || syncStatusFromSynced(child.synced),
     });
     await upsertDomainRecord(txn, {

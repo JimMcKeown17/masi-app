@@ -16,7 +16,9 @@
     "sqlite:staging:start": "node scripts/sqlite-staging.cjs start",
     "sqlite:staging:ios": "node scripts/sqlite-staging.cjs ios",
     "sqlite:staging:android": "node scripts/sqlite-staging.cjs android",
-    "test": "jest"
+    "test": "jest",
+    "test:integration": "jest --runInBand --config jest.integration.config.js",
+    "test:release": "npm test && npm run test:integration && npm run sqlite:staging:check"
   },
   "dependencies": {
     "@react-native-async-storage/async-storage": "^2.2.0",

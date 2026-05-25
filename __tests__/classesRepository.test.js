@@ -9,7 +9,18 @@ import {
   seedCoreData,
 } from '../test-support/sqliteRepositoryTestUtils';
 
+const FIXED_NOW = new Date('2026-05-21T08:00:00.000Z');
+
 describe('classesRepository', () => {
+  beforeEach(() => {
+    jest.useFakeTimers();
+    jest.setSystemTime(FIXED_NOW);
+  });
+
+  afterEach(() => {
+    jest.useRealTimers();
+  });
+
   test('saves and updates classes with sync metadata', async () => {
     const db = await createMigratedDatabase(runMigrations);
 

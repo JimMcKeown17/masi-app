@@ -9,6 +9,26 @@ This document chronicles the architectural decisions, engineering patterns, and 
 
 ---
 
+## 2026 SQLite Clean-Slate Update
+
+The early chapters describe the original AsyncStorage design. That was the right first version for a smaller field app, but Masi now needs relational local data: children belong to classes, groups, programmes, academic years, and assignment relationships, and those relationships must survive offline writes and mid-year changes. The app is therefore moving domain data and sync metadata to SQLite.
+
+The new rule is: domain writes go to SQLite first, then a `sync_outbox` row is enqueued in the same transaction. The outbox is the only push source. This matters because multi-step work such as "create child plus assignment plus programme enrollment plus class membership" either all lands locally or all rolls back. It also means retry metadata, terminal failures, and pending work are durable across app restarts.
+
+AsyncStorage is no longer the app database. It remains only where it is a good fit: Supabase auth session persistence and the small logger buffer used by Profile -> Export Logs. The cached user profile and support diagnostics now live in SQLite/local state.
+
+The schema is also more explicit than the first version:
+- `programmes` and `staff_programme_assignments` model what work an EA is currently doing.
+- `child_programme_enrollments` lets one child receive support in multiple programmes at once.
+- `academic_years`, `assessment_windows`, and `child_class_memberships` preserve reporting history over time.
+- `class_ea_assignments`, `group_ea_assignments`, `grouping_versions`, and `class_grouping_state` support admin-precreated classes, EA handover, and regrouping without destroying history.
+
+Support export changed with the storage model. "Export Database" now exports a SQLite diagnostic bundle: schema version, migrations, table counts, sync state, and failed or terminal outbox rows. That is more useful for field support than a raw key-value dump because it shows whether the app has pending work, which rows are stuck, and which local schema is installed. It is still sensitive: failed outbox payloads can include child names and session or assessment details, so the export warning remains mandatory.
+
+The Plan 6 emulator pass tested the refactor where SQLite bugs are most likely to hide: write while offline, kill the app, reopen with pending outbox rows, reconnect, and confirm the server has the rows. That pass created an offline assessment and session, reopened with six pending rows, then synced all six successfully. It did not prove every possible workflow. Location-based clock-in/out still needs a physical device because the emulator could not provide a current location, and final release still needs user device testing plus the cutover communication gate.
+
+---
+
 ## Chapter 1: Foundation - Understanding the Problem Space
 
 ### The Challenge
@@ -1061,5 +1081,35 @@ Key takeaways:
 18. **Export Database can be a release gate.** The Build A/Build B markers make tester devices prove their state instead of relying on chat confirmations.
 19. **Migration files are history, not live truth.** When drift is discovered, capture it with an idempotent migration and document how it happened.
 
-**Last Updated**: 2026-05-12
+---
+
+## Chapter 19: Reference Id Adoption Must Include the Outbox
+
+The SQLite refactor is clean-slate for field rollout, but Expo Go and tester devices can still carry older local SQLite databases while we iterate. That matters because server-owned reference rows, like schools, job titles, programmes, academic years, and assessment tools, have two identities:
+
+- A stable business key (`schools.name`, `job_titles.code`, `academic_years.label`, etc.).
+- A server UUID that domain rows reference.
+
+During testing, the app had local reference rows with the right business key but the wrong id. A later startup pull tried to insert the server row and hit local unique constraints such as `schools.name` and `job_titles.name`. The fix is not to make every tester wipe their device. Reference refresh should adopt the server id for the matching business key and retarget dependent local rows.
+
+The subtle part is the outbox. Updating `classes.school_id` from a stale local id to the server id is not enough if `sync_outbox.payload` still contains the old `school_id`. Retry would keep sending the stale payload, so the server would continue returning a foreign-key error even though the visible local class row looked repaired.
+
+The repository rule is now:
+
+1. When a server-owned reference row collides by business key, adopt the server id.
+2. Retarget local FK columns that point to the stale id.
+3. Retarget matching JSON payload fields in `sync_outbox`.
+4. Clear failed retry metadata for those repaired outbox rows so they are eligible to sync again.
+
+This is startup/reference-refresh work, not a hot path. It is the right kind of defensive code for offline-first apps because it heals a real class of tester-device state without adding ongoing screen-level overhead.
+
+The same physical-device round also caught a child gender enum mismatch. UI labels (`Male`, `Female`) must not be treated as database values. Child persistence now canonicalizes gender before writing SQLite or outbox payloads, and the picker stores canonical enum values while still showing human-readable labels.
+
+Key takeaways:
+
+20. **Reference-table business keys and UUIDs can drift during iterative testing.** Refresh code should heal drift by adopting the server id rather than requiring manual cache wipes.
+21. **Repair the queued payload, not only the row.** In offline-first systems, the outbox is part of the durable state.
+22. **UI labels are not schema values.** Persist canonical enum values and derive display labels at the edge.
+
+**Last Updated**: 2026-05-25
 **Document Status**: Living document - updated as we build

@@ -26,6 +26,12 @@ const REFERENCE_TABLES = {
     ],
     booleanColumns: ['is_active'],
     requiredColumns: ['id', 'name'],
+    retargetOnConflictColumns: ['school_uid', 'name'],
+    foreignKeyRetargets: [
+      { tableName: 'staff_programme_assignments', column: 'school_id' },
+      { tableName: 'teachers', column: 'school_id' },
+      { tableName: 'classes', column: 'school_id' },
+    ],
     orderBy: 'name',
   },
   job_titles: {
@@ -43,6 +49,7 @@ const REFERENCE_TABLES = {
     ],
     booleanColumns: ['is_active'],
     requiredColumns: ['id', 'code', 'name'],
+    retargetOnConflictColumns: ['code', 'name'],
     orderBy: 'sort_order, name',
   },
   programmes: {
@@ -60,6 +67,18 @@ const REFERENCE_TABLES = {
     ],
     booleanColumns: ['is_active'],
     requiredColumns: ['id', 'code', 'name'],
+    retargetOnConflictColumns: ['code', 'name'],
+    foreignKeyRetargets: [
+      { tableName: 'staff_programme_assignments', column: 'programme_id' },
+      { tableName: 'assessment_tools', column: 'programme_id' },
+      { tableName: 'child_programme_enrollments', column: 'programme_id' },
+      { tableName: 'class_ea_assignments', column: 'programme_id' },
+      { tableName: 'groups', column: 'programme_id' },
+      { tableName: 'group_ea_assignments', column: 'programme_id' },
+      { tableName: 'sessions', column: 'programme_id' },
+      { tableName: 'assessments', column: 'programme_id' },
+      { tableName: 'letter_mastery', column: 'programme_id' },
+    ],
     orderBy: 'sort_order, name',
   },
   staff_programme_assignments: {
@@ -101,6 +120,10 @@ const REFERENCE_TABLES = {
     booleanColumns: ['is_active'],
     jsonColumns: ['config'],
     requiredColumns: ['id', 'programme_id', 'code', 'name'],
+    retargetOnConflictColumns: ['code'],
+    foreignKeyRetargets: [
+      { tableName: 'assessments', column: 'assessment_tool_id' },
+    ],
     orderBy: 'name',
   },
   academic_years: {
@@ -118,6 +141,14 @@ const REFERENCE_TABLES = {
     ],
     booleanColumns: ['is_active'],
     requiredColumns: ['id', 'label', 'starts_on', 'ends_on'],
+    retargetOnConflictColumns: ['label'],
+    foreignKeyRetargets: [
+      { tableName: 'assessment_windows', column: 'academic_year_id' },
+      { tableName: 'classes', column: 'academic_year_id' },
+      { tableName: 'grouping_versions', column: 'academic_year_id' },
+      { tableName: 'class_grouping_state', column: 'academic_year_id' },
+      { tableName: 'child_class_memberships', column: 'academic_year_id' },
+    ],
     orderBy: 'starts_on',
   },
   assessment_windows: {
@@ -173,6 +204,16 @@ const safeOrderBy = (orderBy) => orderBy
   })
   .join(', ');
 
+const parseOutboxPayload = (payload) => {
+  if (!payload) return null;
+  try {
+    const parsed = JSON.parse(payload);
+    return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : null;
+  } catch {
+    return null;
+  }
+};
+
 export const createReferenceDataRepository = ({
   database,
   tableName,
@@ -184,6 +225,8 @@ export const createReferenceDataRepository = ({
   updatePrimaryKeyOnConflict = false,
   orderBy = 'id',
   replaceScopeColumn,
+  retargetOnConflictColumns = [],
+  foreignKeyRetargets = [],
 }) => {
   const getConfig = () => {
     const tableConfig = REFERENCE_TABLES[tableName] || {};
@@ -196,7 +239,114 @@ export const createReferenceDataRepository = ({
       updatePrimaryKeyOnConflict: updatePrimaryKeyOnConflict || tableConfig.updatePrimaryKeyOnConflict || false,
       orderBy: orderBy || tableConfig.orderBy || 'id',
       replaceScopeColumn: replaceScopeColumn || tableConfig.replaceScopeColumn || null,
+      retargetOnConflictColumns: retargetOnConflictColumns.length > 0
+        ? retargetOnConflictColumns
+        : tableConfig.retargetOnConflictColumns || [],
+      foreignKeyRetargets: foreignKeyRetargets.length > 0
+        ? foreignKeyRetargets
+        : tableConfig.foreignKeyRetargets || [],
     };
+  };
+
+  const retargetConflictingRows = async (txn, config, record) => {
+    if (!config.retargetOnConflictColumns.length || record.id == null) {
+      return;
+    }
+
+    let deferringForeignKeys = false;
+    for (const column of config.retargetOnConflictColumns) {
+      const value = record[column];
+      if (value == null) continue;
+
+      const conflicts = await txn.getAllAsync(
+        `select id from ${quoteIdentifier(tableName)}
+         where ${quoteIdentifier(column)} = ?
+           and id <> ?`,
+        value,
+        record.id
+      );
+
+      for (const conflict of conflicts) {
+        if (!deferringForeignKeys) {
+          await txn.runAsync('PRAGMA defer_foreign_keys = ON');
+          deferringForeignKeys = true;
+        }
+
+        const targetExists = await txn.getFirstAsync(
+          `select id from ${quoteIdentifier(tableName)} where id = ?`,
+          record.id
+        );
+
+        if (targetExists) {
+          for (const reference of config.foreignKeyRetargets) {
+            await txn.runAsync(
+              `update ${quoteIdentifier(reference.tableName)}
+               set ${quoteIdentifier(reference.column)} = ?
+               where ${quoteIdentifier(reference.column)} = ?`,
+              record.id,
+              conflict.id
+            );
+            await retargetOutboxPayloadReferences(txn, reference, conflict.id, record.id);
+          }
+          await txn.runAsync(
+            `delete from ${quoteIdentifier(tableName)} where id = ?`,
+            conflict.id
+          );
+        } else {
+          await txn.runAsync(
+            `update ${quoteIdentifier(tableName)}
+             set id = ?
+             where id = ?`,
+            record.id,
+            conflict.id
+          );
+          for (const reference of config.foreignKeyRetargets) {
+            await txn.runAsync(
+              `update ${quoteIdentifier(reference.tableName)}
+               set ${quoteIdentifier(reference.column)} = ?
+               where ${quoteIdentifier(reference.column)} = ?`,
+              record.id,
+              conflict.id
+            );
+            await retargetOutboxPayloadReferences(txn, reference, conflict.id, record.id);
+          }
+        }
+      }
+    }
+  };
+
+  const retargetOutboxPayloadReferences = async (txn, reference, fromId, toId) => {
+    const rows = await txn.getAllAsync(
+      `
+      select id, payload
+      from sync_outbox
+      where table_name = ?
+        and payload is not null
+    `,
+      reference.tableName
+    );
+
+    for (const row of rows) {
+      const payload = parseOutboxPayload(row.payload);
+      if (!payload || payload[reference.column] !== fromId) continue;
+
+      payload[reference.column] = toId;
+      await txn.runAsync(
+        `
+        update sync_outbox
+        set payload = ?,
+            status = 'pending',
+            retry_count = 0,
+            last_error = null,
+            next_retry_at = null,
+            updated_at = ?
+        where id = ?
+      `,
+        JSON.stringify(payload),
+        new Date().toISOString(),
+        row.id
+      );
+    }
   };
 
   const getAll = async () => {
@@ -249,6 +399,7 @@ export const createReferenceDataRepository = ({
         }
       }
       for (const record of records) {
+        await retargetConflictingRows(txn, config, record);
         await upsertRecord(txn, {
           tableName,
           columns: config.columns,

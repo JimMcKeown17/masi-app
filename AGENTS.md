@@ -28,7 +28,9 @@ npm has been compromised by hackers many times recently, so we need to take extr
 
 ## Current Major Work -- Clean-Slate SQLite Refactor
 
-We are beginning a clean-slate AsyncStorage-to-SQLite refactor. The active planning artifacts are:
+We are in Plan 6 release validation for the clean-slate AsyncStorage-to-SQLite refactor. The implementation work for Plans 1-6 is substantially complete, but field cutover is not complete until the remaining validation and communication gates are logged.
+
+The active planning artifacts are:
 
 - Spec: `docs/superpowers/specs/2026-05-20-sqlite-migration-design.md`
 - Plans: `docs/superpowers/plans/2026-05-20-sqlite-*.md`
@@ -46,6 +48,14 @@ Locked decisions for this refactor:
 - RLS behavior is defined in the spec: broad cross-programme reads for the same child are allowed for trusted field staff, while writes require active assignment.
 
 The older "prefer backwards-compatible changes" guidance below still applies to ordinary production maintenance on the current app/backend. For this SQLite refactor, follow the clean-slate spec and log decisions instead of adding compatibility layers unless the user explicitly changes the cutover decision.
+
+Current release gate status as of 2026-05-22:
+
+- `npm run test:release` has passed.
+- SQLite staging migrations and dry run have passed; advisors have only known/recorded warnings.
+- A deeper Android emulator pass has covered fresh sign-in, offline cached restart, offline session and assessment writes, force-stop/reopen with pending outbox, reconnect-and-sync, and Supabase row verification.
+- Still pending before field distribution: user physical-device testing, preferably at least one low-end Android device plus iPhone/Expo Go, and the user-owned cutover communication gate.
+- Emulator location did not complete the clock-in/out path because the Android emulator returned current-location unavailable. Test that on a physical device.
 
 ## Test Driven Development
 

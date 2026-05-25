@@ -20,7 +20,18 @@ const makeChild = (overrides = {}) => ({
   ...overrides,
 });
 
+const FIXED_NOW = new Date('2026-05-21T08:00:00.000Z');
+
 describe('childrenRepository', () => {
+  beforeEach(() => {
+    jest.useFakeTimers();
+    jest.setSystemTime(FIXED_NOW);
+  });
+
+  afterEach(() => {
+    jest.useRealTimers();
+  });
+
   test('saving a child creates child, EA assignment, programme enrollment, class membership, and outbox rows atomically', async () => {
     const db = await createMigratedDatabase(runMigrations);
 
@@ -46,6 +57,32 @@ describe('childrenRepository', () => {
         { table_name: 'child_programme_enrollments', record_id: expect.any(String), operation: 'insert' },
         { table_name: 'children', record_id: 'child-1', operation: 'insert' },
       ]);
+    } finally {
+      await db.closeAsync();
+    }
+  });
+
+  test('saving a child canonicalizes display gender labels before local persistence', async () => {
+    const db = await createMigratedDatabase(runMigrations);
+
+    try {
+      await seedCoreData(db);
+      const repository = createChildrenRepository({ database: db });
+
+      await repository.save(makeChild({ gender: 'Male' }), { actorUserId: 'user-1' });
+
+      expect(await db.getFirstAsync('select gender from children where id = ?', 'child-1'))
+        .toEqual({ gender: 'male' });
+      const outboxRow = await db.getFirstAsync(`
+        select payload
+        from sync_outbox
+        where table_name = 'children'
+          and record_id = 'child-1'
+          and operation = 'insert'
+      `);
+      expect(JSON.parse(outboxRow.payload)).toEqual(expect.objectContaining({
+        gender: 'male',
+      }));
     } finally {
       await db.closeAsync();
     }
