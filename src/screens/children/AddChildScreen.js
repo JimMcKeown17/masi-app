@@ -15,6 +15,7 @@ import { colors, spacing } from '../../constants/colors';
 import { useChildren } from '../../context/ChildrenContext';
 import { useClasses } from '../../context/ClassesContext';
 import { GENDERS, getGenderLabel } from '../../constants/options';
+import { NO_TEXT_SUGGESTIONS } from '../../constants/textInputProps';
 
 export default function AddChildScreen({ route, navigation }) {
   const { classId } = route.params;
@@ -113,6 +114,7 @@ export default function AddChildScreen({ route, navigation }) {
               label="First Name *"
               value={firstName}
               onChangeText={setFirstName}
+              {...NO_TEXT_SUGGESTIONS}
               error={!!errors.firstName}
               mode="outlined"
               style={styles.input}
@@ -126,6 +128,7 @@ export default function AddChildScreen({ route, navigation }) {
               label="Last Name *"
               value={lastName}
               onChangeText={setLastName}
+              {...NO_TEXT_SUGGESTIONS}
               error={!!errors.lastName}
               mode="outlined"
               style={styles.input}
@@ -139,6 +142,7 @@ export default function AddChildScreen({ route, navigation }) {
               label="Age"
               value={age}
               onChangeText={setAge}
+              {...NO_TEXT_SUGGESTIONS}
               error={!!errors.age}
               mode="outlined"
               keyboardType="numeric"
@@ -152,6 +156,7 @@ export default function AddChildScreen({ route, navigation }) {
             <TextInput
               label="Gender"
               value={getGenderLabel(gender)}
+              {...NO_TEXT_SUGGESTIONS}
               mode="outlined"
               style={styles.input}
               editable={false}

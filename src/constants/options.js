@@ -5,8 +5,6 @@ export const HOME_LANGUAGES = ['isiXhosa', 'English', 'Afrikaans'];
 export const GENDER_OPTIONS = [
   { label: 'Female', value: 'female' },
   { label: 'Male', value: 'male' },
-  { label: 'Non-binary', value: 'non_binary' },
-  { label: 'Unknown', value: 'unknown' },
 ];
 
 export const GENDERS = GENDER_OPTIONS;

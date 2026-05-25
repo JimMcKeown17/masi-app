@@ -3,7 +3,7 @@ import { openDatabaseAsync } from 'expo-sqlite';
 export const DATABASE_NAME = 'masi.db';
 
 let databasePromise = null;
-let transactionQueue = Promise.resolve();
+let databaseQueue = Promise.resolve();
 
 export async function initializeDatabase() {
   if (!databasePromise) {
@@ -20,24 +20,29 @@ export async function getDatabase() {
   return initializeDatabase();
 }
 
-export async function withTransaction(task) {
-  const runTransaction = async () => {
+export async function withDatabaseAccess(task) {
+  const runTask = async () => {
     const db = await initializeDatabase();
+    return task(db);
+  };
 
+  const queuedTask = databaseQueue.then(runTask, runTask);
+  databaseQueue = queuedTask.catch(() => {});
+
+  return queuedTask;
+}
+
+export async function withTransaction(task) {
+  return withDatabaseAccess(async (db) => {
     if (typeof db.withExclusiveTransactionAsync === 'function') {
       return db.withExclusiveTransactionAsync(task);
     }
 
     return db.withTransactionAsync(task);
-  };
-
-  const queuedTransaction = transactionQueue.then(runTransaction, runTransaction);
-  transactionQueue = queuedTransaction.catch(() => {});
-
-  return queuedTransaction;
+  });
 }
 
 export function resetDatabaseConnectionForTests() {
   databasePromise = null;
-  transactionQueue = Promise.resolve();
+  databaseQueue = Promise.resolve();
 }

@@ -25,6 +25,12 @@ const renderScreen = () =>
     </PaperProvider>
   );
 
+const collectNativeTextInputs = (node) => {
+  if (!node) return [];
+  const children = Array.isArray(node.children) ? node.children.flatMap(collectNativeTextInputs) : [];
+  return node.type === 'TextInput' ? [node, ...children] : children;
+};
+
 beforeEach(() => {
   jest.clearAllMocks();
 });
@@ -58,5 +64,18 @@ describe('CreateClassScreen', () => {
   test('renders Create Class submit button', () => {
     const { getByText } = renderScreen();
     expect(getByText('Create Class')).toBeTruthy();
+  });
+
+  test('disables autocorrect, spell check, and autocomplete for typed fields', () => {
+    const { toJSON } = renderScreen();
+    const editableInputs = collectNativeTextInputs(toJSON())
+      .filter(input => input.props.editable !== false);
+
+    expect(editableInputs.length).toBeGreaterThanOrEqual(2);
+    for (const input of editableInputs) {
+      expect(input.props.autoCorrect).toBe(false);
+      expect(input.props.spellCheck).toBe(false);
+      expect(input.props.autoComplete).toBe('off');
+    }
   });
 });

@@ -80,6 +80,49 @@ describe('SQLite foundation client', () => {
       'exit-txn-2',
     ]);
   });
+
+  test('app-level migrations wait behind an active queued write transaction', async () => {
+    const firstTransactionEntered = createDeferred();
+    const releaseFirstTransaction = createDeferred();
+    const events = [];
+    const db = {
+      execAsync: jest.fn(async (sql) => {
+        events.push(`exec:${sql}`);
+      }),
+      getFirstAsync: jest.fn(async () => ({ user_version: CURRENT_SCHEMA_VERSION })),
+      withExclusiveTransactionAsync: jest.fn(async (task) => {
+        events.push('enter-write');
+        firstTransactionEntered.resolve();
+        await task(db);
+        await releaseFirstTransaction.promise;
+        events.push('exit-write');
+      }),
+    };
+
+    __setDatabaseFactory(async () => db);
+
+    const write = withTransaction(async () => {
+      events.push('inside-write');
+    });
+    await firstTransactionEntered.promise;
+
+    const migrations = runMigrations();
+    await Promise.resolve();
+    await Promise.resolve();
+    await new Promise(resolve => setTimeout(resolve, 0));
+
+    expect(events).toEqual(['enter-write', 'inside-write']);
+
+    releaseFirstTransaction.resolve();
+    await Promise.all([write, migrations]);
+
+    expect(events).toEqual([
+      'enter-write',
+      'inside-write',
+      'exit-write',
+      'exec:PRAGMA foreign_keys = ON',
+    ]);
+  });
 });
 
 const getUserVersion = async (db) => {

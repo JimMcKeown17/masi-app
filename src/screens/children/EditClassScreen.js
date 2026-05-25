@@ -14,6 +14,7 @@ import {
 import { colors, spacing } from '../../constants/colors';
 import { useClasses } from '../../context/ClassesContext';
 import { GRADES, HOME_LANGUAGES } from '../../constants/options';
+import { NO_TEXT_SUGGESTIONS } from '../../constants/textInputProps';
 
 export default function EditClassScreen({ route, navigation }) {
   const { classId } = route.params;
@@ -133,6 +134,7 @@ export default function EditClassScreen({ route, navigation }) {
             <TextInput
               label="School *"
               value={schoolName}
+              {...NO_TEXT_SUGGESTIONS}
               mode="outlined"
               style={styles.input}
               editable={false}
@@ -146,6 +148,7 @@ export default function EditClassScreen({ route, navigation }) {
             <TextInput
               label="Grade *"
               value={grade}
+              {...NO_TEXT_SUGGESTIONS}
               mode="outlined"
               style={styles.input}
               editable={false}
@@ -160,6 +163,7 @@ export default function EditClassScreen({ route, navigation }) {
               label="Class Name *"
               value={className}
               onChangeText={setClassName}
+              {...NO_TEXT_SUGGESTIONS}
               placeholder='e.g. "1A", "2B"'
               error={!!errors.className}
               mode="outlined"
@@ -172,6 +176,7 @@ export default function EditClassScreen({ route, navigation }) {
               label="Teacher *"
               value={teacher}
               onChangeText={setTeacher}
+              {...NO_TEXT_SUGGESTIONS}
               error={!!errors.teacher}
               mode="outlined"
               style={styles.input}
@@ -182,6 +187,7 @@ export default function EditClassScreen({ route, navigation }) {
             <TextInput
               label="Home Language *"
               value={homeLanguage}
+              {...NO_TEXT_SUGGESTIONS}
               mode="outlined"
               style={styles.input}
               editable={false}

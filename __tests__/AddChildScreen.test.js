@@ -2,6 +2,7 @@ import React from 'react';
 import { render, fireEvent, waitFor } from '@testing-library/react-native';
 import { PaperProvider } from 'react-native-paper';
 import AddChildScreen from '../src/screens/children/AddChildScreen';
+import { GENDER_OPTIONS } from '../src/constants/options';
 
 // Mock the contexts
 const mockAddChild = jest.fn().mockResolvedValue({ success: true });
@@ -39,6 +40,12 @@ const renderScreen = () =>
     </PaperProvider>
   );
 
+const collectNativeTextInputs = (node) => {
+  if (!node) return [];
+  const children = Array.isArray(node.children) ? node.children.flatMap(collectNativeTextInputs) : [];
+  return node.type === 'TextInput' ? [node, ...children] : children;
+};
+
 beforeEach(() => {
   jest.clearAllMocks();
 });
@@ -51,6 +58,26 @@ describe('AddChildScreen', () => {
     expect(getAllByText('Last Name *').length).toBeGreaterThan(0);
     expect(getAllByText('Age').length).toBeGreaterThan(0);
     expect(getAllByText('Gender').length).toBeGreaterThan(0);
+  });
+
+  test('disables autocorrect, spell check, and autocomplete for typed fields', () => {
+    const { toJSON } = renderScreen();
+    const editableInputs = collectNativeTextInputs(toJSON())
+      .filter(input => input.props.editable !== false);
+
+    expect(editableInputs.length).toBeGreaterThanOrEqual(3);
+    for (const input of editableInputs) {
+      expect(input.props.autoCorrect).toBe(false);
+      expect(input.props.spellCheck).toBe(false);
+      expect(input.props.autoComplete).toBe('off');
+    }
+  });
+
+  test('gender options are only male and female', () => {
+    expect(GENDER_OPTIONS).toEqual([
+      { label: 'Female', value: 'female' },
+      { label: 'Male', value: 'male' },
+    ]);
   });
 
   test('does NOT render teacher or school input fields', () => {

@@ -1,4 +1,4 @@
-import { getDatabase } from './client';
+import { getDatabase, withDatabaseAccess } from './client';
 
 export const CURRENT_SCHEMA_VERSION = 1;
 
@@ -601,8 +601,8 @@ export async function runMigrations(database) {
   }
 
   const queuedMigration = appMigrationQueue.then(
-    () => runMigrationsNow(),
-    () => runMigrationsNow()
+    () => withDatabaseAccess((db) => runMigrationsNow(db)),
+    () => withDatabaseAccess((db) => runMigrationsNow(db))
   );
   appMigrationQueue = queuedMigration.catch(() => {});
 
