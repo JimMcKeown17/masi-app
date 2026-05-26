@@ -1,4 +1,4 @@
-import { getDatabase, withDatabaseAccess } from './client';
+import { configureDatabaseConnection, getDatabase, withDatabaseAccess } from './client';
 
 export const CURRENT_SCHEMA_VERSION = 1;
 
@@ -565,7 +565,7 @@ const runInTransaction = async (db, task) => {
 
 async function runMigrationsNow(database) {
   const db = database || await getDatabase();
-  await db.execAsync('PRAGMA foreign_keys = ON');
+  await configureDatabaseConnection(db);
 
   let userVersion = await getUserVersion(db);
 

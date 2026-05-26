@@ -1105,11 +1105,66 @@ This is startup/reference-refresh work, not a hot path. It is the right kind of 
 
 The same physical-device round also caught a child gender enum mismatch. UI labels (`Male`, `Female`) must not be treated as database values. Child persistence now canonicalizes gender before writing SQLite or outbox payloads, and the picker stores canonical enum values while still showing human-readable labels.
 
+The cutover hardening pass tightened that UX one step further: Add/Edit Child now use two explicit chips for `female` and `male` instead of a modal picker. Existing rows with historic values such as `non_binary`, `unknown`, or `NULL` are left untouched. Edit Child renders no selected chip for those rows, saving without a chip preserves the historic value, and choosing a chip intentionally overwrites it with `female` or `male`. That gives field staff the simpler UI the programme wants without a silent data rewrite.
+
 Key takeaways:
 
 20. **Reference-table business keys and UUIDs can drift during iterative testing.** Refresh code should heal drift by adopting the server id rather than requiring manual cache wipes.
 21. **Repair the queued payload, not only the row.** In offline-first systems, the outbox is part of the durable state.
 22. **UI labels are not schema values.** Persist canonical enum values and derive display labels at the edge.
+
+---
+
+## Chapter 20: RLS Failures Are Often Local Payload Bugs
+
+The group creation bug looked at first like a backend policy problem. Supabase returned `new row violates row-level security policy` for `groups` and `child_group_memberships`, which is easy to read as "the policy is too strict." In this case the policy was doing the right thing.
+
+The new clean-slate backend requires mobile-created group rows to identify the authenticated owner with `created_by = auth.uid()`. It also expects relationship rows that make the user's access path explicit: a mobile-created group needs a matching `group_ea_assignments` row, and child group memberships need both `created_by` and the active grouping version. The mobile producer was setting `staff_id`, but the server policy does not trust that as the ownership column. The durable outbox therefore kept retrying payloads that could never pass RLS.
+
+The fix has three layers:
+
+1. Producers write server-required ownership fields at creation time.
+2. Creating a group also creates and queues the matching active `group_ea_assignments` row.
+3. Sync startup repairs older failed `groups` and `child_group_memberships` outbox payloads so tester devices can retry without a manual database wipe.
+
+Weakening RLS would have made the immediate error disappear while preserving a worse data bug: mobile-created groups could sync without the relationship rows needed for later visibility. For every table protected by assignment-based RLS, the mobile write path must create the same relationship evidence that the read path depends on.
+
+The same testing round also showed a `database is locked` error while adding a child to a group. That is a separate SQLite concurrency symptom from the RLS payload failure. The current branch already serializes database work through the repository queue and configures WAL plus `busy_timeout`; do not conflate those lock protections with the ownership repair. If the lock reappears on a fresh build, debug it as a SQLite queue/reentrancy issue, not as a Supabase policy issue.
+
+Key takeaways:
+
+23. **RLS errors are useful diagnostics, not only backend problems.** First check whether the mobile payload includes the columns the policy intentionally requires.
+24. **Producer rows must match read-path relationships.** If a local read uses `group_ea_assignments`, group creation needs to produce that relationship too.
+25. **Repair stale outbox payloads during cutover testing.** A visible row can look fixed while the queued JSON still retries the old broken shape.
+
+---
+
+## Chapter 21: RLS Policies and Sync Ordering Are One Contract
+
+The follow-up RLS audit found a different problem from the group payload bug. Some policies were individually reasonable, but the combined system still had gaps:
+
+- The app archived `child_ea_assignments`, but the database had no UPDATE policy for that legitimate archive flow.
+- Assignment update policies could become dangerous if they ever allowed identity changes, so the database now has triggers that make `child_id`, `user_id`, `class_id`, `group_id`, `programme_id`, and creator/timestamp identity columns immutable after insert.
+- Class edit/delete UI works on assigned classes, so the class UPDATE/DELETE policies now use the same `current_user_can_write_for_class(id)` helper as the rest of the assignment model.
+- Assessment, assessment item, and letter mastery SELECT policies now use `current_user_can_read_child(...)`, which keeps read behavior aligned across direct child assignment, class assignment, group assignment, and created-by ownership.
+- Authenticated table grants now match intent more closely. RLS controls rows, but table grants still matter; `TRUNCATE` is not protected by RLS, so non-DML table privileges were revoked from app roles.
+
+The sync lesson is just as important. Insert order and archive order are not the same thing. On insert, parents and assignment rows often need to sync before relationship detail rows. On archive, access-granting assignment rows should usually sync last, because child/group/class relationship cleanup may still need that active assignment to pass RLS.
+
+The outbox now keeps the original insert order for normal writes, but archive rows use an operation-aware order:
+
+1. Archive the parent object.
+2. End dependent relationship rows.
+3. End the assignment row that grants the user access.
+
+It also treats skipped dependency tables as failed for the rest of the cycle, so an access-ending row does not run after a required cleanup table was skipped.
+
+Key takeaways:
+
+26. **A policy can be correct and still fail as part of a workflow.** Audit the whole mobile write sequence, not only each table in isolation.
+27. **RLS update policies need identity guards.** If a row represents access, allow lifecycle updates without allowing reassignment by UPDATE.
+28. **Archive ordering protects authority.** End membership/detail rows before ending the assignment that authorizes those updates.
+29. **Least privilege includes table grants.** RLS is row-level; it does not make broad table privileges clean by default.
 
 **Last Updated**: 2026-05-25
 **Document Status**: Living document - updated as we build

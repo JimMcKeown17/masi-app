@@ -8,6 +8,7 @@ import { useClasses } from '../../context/ClassesContext';
 import { LETTER_SETS, WORD_SETS } from '../../constants/egraConstants';
 import { colors, spacing, borderRadius, shadows } from '../../constants/colors';
 import { assessmentsRepository } from '../../db/repositories/assessmentsRepository';
+import { NO_TEXT_SUGGESTIONS } from '../../constants/textInputProps';
 
 function formatShortDate(dateStr) {
   const [y, m, d] = dateStr.split('-').map(Number);
@@ -130,6 +131,7 @@ export default function AssessmentChildSelectScreen({ navigation, route }) {
         value={searchQuery}
         onChangeText={setSearchQuery}
         style={styles.searchbar}
+        {...NO_TEXT_SUGGESTIONS}
       />
 
       <FlatList

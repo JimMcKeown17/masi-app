@@ -418,13 +418,15 @@ CREATE TABLE children (
   last_name TEXT NOT NULL,
   class_id UUID REFERENCES classes(id),
   age INTEGER,
-  gender TEXT CHECK (gender IS NULL OR gender IN ('Male','Female')),
+  gender TEXT CHECK (gender IS NULL OR gender IN ('female','male','non_binary','unknown')),
   school TEXT,
   assigned_staff_id UUID REFERENCES users(id),
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
   updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 ```
+
+The mobile UI now offers only `female` and `male`, stored as lowercase canonical values. The schema still tolerates older `non_binary` and `unknown` rows during the SQLite cutover so historic/test data is not silently coerced or lost.
 
 **Design Decisions**:
 

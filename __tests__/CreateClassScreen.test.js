@@ -33,7 +33,23 @@ const collectNativeTextInputs = (node) => {
 
 beforeEach(() => {
   jest.clearAllMocks();
+  mockAddClass.mockResolvedValue({ success: true });
 });
+
+const completeRequiredFields = ({ getAllByDisplayValue, getAllByTestId, getByText }) => {
+  fireEvent.press(getAllByTestId('right-icon-adornment')[0]);
+  fireEvent.press(getByText('Sunrise Primary'));
+
+  fireEvent.press(getAllByTestId('right-icon-adornment')[1]);
+  fireEvent.press(getByText('Grade 1'));
+
+  let blankInputs = getAllByDisplayValue('');
+  fireEvent.changeText(blankInputs[0], '1A');
+  fireEvent.changeText(blankInputs[1], 'Noluthando Mbeki');
+
+  fireEvent.press(getAllByTestId('right-icon-adornment')[2]);
+  fireEvent.press(getByText('isiXhosa'));
+};
 
 describe('CreateClassScreen', () => {
   test('renders all form fields', () => {
@@ -77,5 +93,32 @@ describe('CreateClassScreen', () => {
       expect(input.props.spellCheck).toBe(false);
       expect(input.props.autoComplete).toBe('off');
     }
+  });
+
+  test('navigates back immediately after a successful local class create', async () => {
+    const screen = renderScreen();
+    completeRequiredFields(screen);
+
+    fireEvent.press(screen.getByText('Create Class'));
+
+    await waitFor(() => expect(mockAddClass).toHaveBeenCalledWith(expect.objectContaining({
+      school_id: 'school-1',
+      grade: 'Grade 1',
+      name: '1A',
+      teacher: 'Noluthando Mbeki',
+      home_language: 'isiXhosa',
+    })));
+    expect(mockNavigationGoBack).toHaveBeenCalledTimes(1);
+  });
+
+  test('stays on the form when local class create fails', async () => {
+    mockAddClass.mockResolvedValueOnce({ success: false });
+    const screen = renderScreen();
+    completeRequiredFields(screen);
+
+    fireEvent.press(screen.getByText('Create Class'));
+
+    await waitFor(() => expect(mockAddClass).toHaveBeenCalled());
+    expect(mockNavigationGoBack).not.toHaveBeenCalled();
   });
 });

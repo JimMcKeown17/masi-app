@@ -14,6 +14,7 @@ import {
   createSyncStateRepository,
   syncStateRepository,
 } from '../db/repositories/syncStateRepository';
+import { repairGroupOwnershipForSync } from '../db/repositories/groupsRepository';
 import {
   academicYearsRepository,
   assessmentWindowsRepository,
@@ -168,21 +169,54 @@ const TABLE_DEPENDENCIES = {
   letter_mastery: ['children'],
 };
 
+const ARCHIVE_TABLE_DEPENDENCIES = {
+  child_ea_assignments: [
+    'child_programme_enrollments',
+    'child_class_memberships',
+    'child_group_memberships',
+  ],
+  class_ea_assignments: ['children', 'child_class_memberships'],
+  group_ea_assignments: ['child_group_memberships'],
+};
+
+const ARCHIVE_PUSH_ORDER = {
+  time_entries: 0,
+  classes: 1,
+  groups: 1,
+  children: 2,
+  child_programme_enrollments: 3,
+  child_class_memberships: 4,
+  child_group_memberships: 5,
+  class_ea_assignments: 6,
+  group_ea_assignments: 6,
+  child_ea_assignments: 7,
+};
+
+const BATCHABLE_UPSERT_TABLES = new Set(['assessment_items']);
+
 const dependenciesForRecord = (outboxRecord) => {
-  const dependencies = [...(TABLE_DEPENDENCIES[outboxRecord.table_name] || [])];
+  const dependencies = new Set(TABLE_DEPENDENCIES[outboxRecord.table_name] || []);
+  if (outboxRecord.operation === 'archive') {
+    for (const dependency of ARCHIVE_TABLE_DEPENDENCIES[outboxRecord.table_name] || []) {
+      dependencies.add(dependency);
+    }
+  }
   const payload = outboxRecord.payload || {};
 
   if (outboxRecord.table_name === 'children' && !payload.class_id) {
-    return dependencies.filter((dependency) => dependency !== 'classes');
+    dependencies.delete('classes');
+    return [...dependencies];
   }
   if ((outboxRecord.table_name === 'groups' || outboxRecord.table_name === 'sessions') && !payload.class_id) {
-    return dependencies.filter((dependency) => dependency !== 'classes');
+    dependencies.delete('classes');
+    return [...dependencies];
   }
   if (outboxRecord.table_name === 'session_attendees' && !payload.group_id) {
-    return dependencies.filter((dependency) => dependency !== 'groups');
+    dependencies.delete('groups');
+    return [...dependencies];
   }
 
-  return dependencies;
+  return [...dependencies];
 };
 
 const TABLE_CONFIGS = Object.fromEntries(PUSH_ORDER.map((tableName, index) => [
@@ -318,6 +352,21 @@ const runServerOperation = async (supabaseClient, config, outboxRecord) => {
   const { error } = await supabaseClient
     .from(config.tableName)
     .upsert(payload, {
+      onConflict: config.onConflict || 'id',
+      ignoreDuplicates: false,
+    });
+
+  return error ? { success: false, error } : { success: true };
+};
+
+const runBatchServerOperation = async (supabaseClient, config, outboxRecords) => {
+  const payloads = outboxRecords.map((outboxRecord) => (
+    buildSyncPayload(config.tableName, outboxRecord.payload)
+  ));
+
+  const { error } = await supabaseClient
+    .from(config.tableName)
+    .upsert(payloads, {
       onConflict: config.onConflict || 'id',
       ignoreDuplicates: false,
     });
@@ -465,14 +514,28 @@ const finalizeOutboxOnlyTerminalFailure = async ({
   return true;
 });
 
+const pushOrderForRecord = (record) => {
+  if (record.operation === 'archive' && ARCHIVE_PUSH_ORDER[record.table_name] != null) {
+    return ARCHIVE_PUSH_ORDER[record.table_name];
+  }
+  return TABLE_CONFIGS[record.table_name]?.order ?? Number.MAX_SAFE_INTEGER;
+};
+
 const sortByPushOrder = (records) => records
   .slice()
   .sort((a, b) => {
-    const left = TABLE_CONFIGS[a.table_name]?.order ?? Number.MAX_SAFE_INTEGER;
-    const right = TABLE_CONFIGS[b.table_name]?.order ?? Number.MAX_SAFE_INTEGER;
+    const left = pushOrderForRecord(a);
+    const right = pushOrderForRecord(b);
     if (left !== right) return left - right;
     return a.created_at.localeCompare(b.created_at) || a.id.localeCompare(b.id);
   });
+
+const canBatchRecord = (record, config) => (
+  Boolean(config)
+  && BATCHABLE_UPSERT_TABLES.has(config.tableName)
+  && (record.operation === 'insert' || record.operation === 'update')
+  && record.payload != null
+);
 
 export const createOutboxSyncEngine = ({
   database,
@@ -481,6 +544,7 @@ export const createOutboxSyncEngine = ({
   stateRepository = createSyncStateRepository({ database }),
   tableConfigs = TABLE_CONFIGS,
   safeDuplicateSuccessTables = [],
+  enqueueRequest = enqueueSupabaseRequest,
 } = {}) => {
   const safeDuplicateTables = new Set(safeDuplicateSuccessTables.map(normalizeTableName));
   const getConfig = (tableName) => {
@@ -512,7 +576,9 @@ export const createOutboxSyncEngine = ({
       return { success: false, terminal: false, failedRecord: makeFailedRecord(outboxRecord, reason) };
     }
 
-    const serverResult = await runServerOperation(supabaseClient, config, inFlightRecord);
+    const serverResult = await enqueueRequest(() => (
+      runServerOperation(supabaseClient, config, inFlightRecord)
+    ));
 
     if (serverResult.success) {
       await finalizeSuccess({
@@ -558,9 +624,41 @@ export const createOutboxSyncEngine = ({
     return { success: false, terminal: false, failedRecord: makeFailedRecord(outboxRecord, reason) };
   };
 
+  const processBatch = async (outboxRecords, config) => {
+    const ids = outboxRecords.map((record) => record.id);
+    await outboxRepository.markInFlight(ids);
+    const inFlightRecords = (await Promise.all(
+      ids.map((id) => outboxRepository.getById(id))
+    )).filter(Boolean);
+
+    if (inFlightRecords.length !== outboxRecords.length) {
+      return Promise.all(outboxRecords.map(processRecord));
+    }
+
+    const serverResult = await enqueueRequest(() => (
+      runBatchServerOperation(supabaseClient, config, inFlightRecords)
+    ));
+
+    if (!serverResult.success) {
+      return Promise.all(outboxRecords.map(processRecord));
+    }
+
+    await Promise.all(inFlightRecords.map((inFlightRecord) => (
+      finalizeSuccess({
+        database,
+        outboxRecord: inFlightRecord,
+        tableName: config.tableName,
+        outboxRepository,
+      })
+    )));
+
+    return outboxRecords.map(() => ({ success: true }));
+  };
+
   const syncAll = async ({ tableName = null } = {}) => {
     const startedAt = Date.now();
     await resolveDatabase(database);
+    await repairGroupOwnershipForSync({ database });
     if (typeof outboxRepository.resetInFlight === 'function') {
       await outboxRepository.resetInFlight();
     }
@@ -579,7 +677,27 @@ export const createOutboxSyncEngine = ({
     };
     const failedTables = new Set();
 
-    for (const outboxRecord of filteredRecords) {
+    const applyRecordResult = (outboxRecord, config, recordResult) => {
+      const tableKey = config?.tableName || outboxRecord.table_name;
+      if (!result.tableResults[tableKey]) {
+        result.tableResults[tableKey] = { success: true, synced: 0, failed: 0 };
+      }
+
+      if (recordResult.success) {
+        result.totalSynced += 1;
+        result.tableResults[tableKey].synced += 1;
+      } else {
+        result.success = false;
+        result.totalFailed += 1;
+        result.tableResults[tableKey].success = false;
+        result.tableResults[tableKey].failed += 1;
+        result.failedRecords.push(recordResult.failedRecord);
+        failedTables.add(tableKey);
+      }
+    };
+
+    for (let index = 0; index < filteredRecords.length; index += 1) {
+      const outboxRecord = filteredRecords[index];
       const config = getConfig(outboxRecord.table_name);
       const dependencies = dependenciesForRecord(outboxRecord);
       const skippedDependency = dependencies.find((dependency) => failedTables.has(dependency));
@@ -595,6 +713,7 @@ export const createOutboxSyncEngine = ({
         tableResult.skippedDependency = skippedDependency;
         result.tableResults[outboxRecord.table_name] = tableResult;
         result.success = false;
+        failedTables.add(outboxRecord.table_name);
         continue;
       }
 
@@ -603,18 +722,33 @@ export const createOutboxSyncEngine = ({
         result.tableResults[tableKey] = { success: true, synced: 0, failed: 0 };
       }
 
-      const recordResult = await processRecord(outboxRecord);
-      if (recordResult.success) {
-        result.totalSynced += 1;
-        result.tableResults[tableKey].synced += 1;
-      } else {
-        result.success = false;
-        result.totalFailed += 1;
-        result.tableResults[tableKey].success = false;
-        result.tableResults[tableKey].failed += 1;
-        result.failedRecords.push(recordResult.failedRecord);
-        failedTables.add(tableKey);
+      if (canBatchRecord(outboxRecord, config)) {
+        const batchRecords = [outboxRecord];
+        for (let batchIndex = index + 1; batchIndex < filteredRecords.length; batchIndex += 1) {
+          const candidate = filteredRecords[batchIndex];
+          const candidateConfig = getConfig(candidate.table_name);
+          if (!canBatchRecord(candidate, candidateConfig) || candidateConfig.tableName !== config.tableName) {
+            break;
+          }
+          const candidateDependencies = dependenciesForRecord(candidate);
+          if (candidateDependencies.some((dependency) => failedTables.has(dependency))) {
+            break;
+          }
+          batchRecords.push(candidate);
+        }
+
+        if (batchRecords.length > 1) {
+          const batchResults = await processBatch(batchRecords, config);
+          batchResults.forEach((batchResult, batchResultIndex) => {
+            applyRecordResult(batchRecords[batchResultIndex], config, batchResult);
+          });
+          index += batchRecords.length - 1;
+          continue;
+        }
       }
+
+      const recordResult = await processRecord(outboxRecord);
+      applyRecordResult(outboxRecord, config, recordResult);
     }
 
     result.durationMs = Date.now() - startedAt;
@@ -700,6 +834,7 @@ export const pullReferenceData = async ({
     staff_programme_assignments: staffProgrammeAssignmentsRepository,
   },
   userId,
+  enqueueRequest = enqueueSupabaseRequest,
 } = {}) => {
   const tableNames = [
     'schools',
@@ -712,13 +847,15 @@ export const pullReferenceData = async ({
   ];
   const results = {};
   for (const tableName of tableNames) {
-    let query = supabaseClient
-      .from(tableName)
-      .select('*');
-    if (tableName === 'staff_programme_assignments' && userId) {
-      query = query.eq('user_id', userId);
-    }
-    const { data, error } = await query;
+    const { data, error } = await enqueueRequest(() => {
+      let query = supabaseClient
+        .from(tableName)
+        .select('*');
+      if (tableName === 'staff_programme_assignments' && userId) {
+        query = query.eq('user_id', userId);
+      }
+      return query;
+    });
     if (error) throw error;
     await repositories[tableName].replaceFromServer(
       data || [],

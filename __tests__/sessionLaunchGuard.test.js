@@ -1,0 +1,146 @@
+import React from 'react';
+import { render, fireEvent, waitFor } from '@testing-library/react-native';
+import { PaperProvider } from 'react-native-paper';
+import HomeScreen from '../src/screens/main/HomeScreen';
+import SessionsScreen from '../src/screens/main/SessionsScreen';
+
+const mockNavigate = jest.fn();
+const mockGetActiveTimeEntry = jest.fn();
+const mockGetTimeEntries = jest.fn();
+const mockGetSessions = jest.fn();
+const mockGetAssessments = jest.fn();
+const mockUseTimeTracking = jest.fn();
+const mockUseAuth = jest.fn();
+const mockUseOffline = jest.fn();
+const mockUseChildren = jest.fn();
+
+jest.mock('@react-navigation/native', () => ({
+  useFocusEffect: (callback) => callback(),
+}));
+
+jest.mock('../src/context/AuthContext', () => ({
+  useAuth: () => mockUseAuth(),
+}));
+
+jest.mock('../src/context/OfflineContext', () => ({
+  useOffline: () => mockUseOffline(),
+}));
+
+jest.mock('../src/context/ChildrenContext', () => ({
+  useChildren: () => mockUseChildren(),
+}));
+
+jest.mock('../src/hooks/useTimeTracking', () => ({
+  useTimeTracking: () => mockUseTimeTracking(),
+}));
+
+jest.mock('../src/db/repositories/timeEntriesRepository', () => ({
+  timeEntriesRepository: {
+    getActiveTimeEntry: (...args) => mockGetActiveTimeEntry(...args),
+    getTimeEntries: (...args) => mockGetTimeEntries(...args),
+  },
+}));
+
+jest.mock('../src/db/repositories/sessionsRepository', () => ({
+  sessionsRepository: {
+    getSessions: (...args) => mockGetSessions(...args),
+  },
+}));
+
+jest.mock('../src/db/repositories/assessmentsRepository', () => ({
+  assessmentsRepository: {
+    getAssessments: (...args) => mockGetAssessments(...args),
+  },
+}));
+
+jest.mock('expo-linear-gradient', () => ({
+  LinearGradient: ({ children }) => <>{children}</>,
+}));
+
+jest.mock('@expo/vector-icons', () => ({
+  Ionicons: () => null,
+}), { virtual: true });
+
+const navigation = {
+  navigate: mockNavigate,
+};
+
+const renderWithPaper = (ui) => render(<PaperProvider>{ui}</PaperProvider>);
+
+const defaultTimeTracking = {
+  isSignedIn: false,
+  activeEntry: null,
+  loadingLocation: false,
+  elapsedTime: 0,
+  snackbarMessage: '',
+  snackbarVisible: false,
+  setSnackbarVisible: jest.fn(),
+  handleSignIn: jest.fn(),
+  handleSignOut: jest.fn(),
+  formatElapsedTime: jest.fn(() => '0h 0m 0s'),
+  formatTime: jest.fn(() => '8:00 AM'),
+};
+
+beforeEach(() => {
+  jest.clearAllMocks();
+  mockUseAuth.mockReturnValue({
+    user: { id: 'user-1', email: 'test@masinyusane.org' },
+    profile: {
+      first_name: 'Test',
+      jobTitleName: 'Education Assistant',
+      schoolName: 'Masi Primary',
+    },
+  });
+  mockUseOffline.mockReturnValue({
+    isOnline: true,
+    unsyncedCount: 0,
+    syncStatus: { failedItems: [] },
+  });
+  mockUseChildren.mockReturnValue({ children: [] });
+  mockUseTimeTracking.mockReturnValue(defaultTimeTracking);
+  mockGetActiveTimeEntry.mockResolvedValue(null);
+  mockGetTimeEntries.mockResolvedValue([]);
+  mockGetSessions.mockResolvedValue([]);
+  mockGetAssessments.mockResolvedValue([]);
+});
+
+describe('session launch clock-in warning', () => {
+  test('Home record session shows a soft warning when the user is not clocked in', async () => {
+    const screen = renderWithPaper(<HomeScreen navigation={navigation} />);
+
+    fireEvent.press(screen.getByText('Record Session'));
+
+    await waitFor(() => expect(screen.getByText("You're not clocked in. Clock in now or continue anyway?")).toBeTruthy());
+    expect(mockNavigate).not.toHaveBeenCalledWith('SessionForm');
+
+    fireEvent.press(screen.getByText('Continue Anyway'));
+
+    expect(mockNavigate).toHaveBeenCalledWith('SessionForm');
+  });
+
+  test('Sessions tab record button can send the user to clock in', async () => {
+    const screen = renderWithPaper(<SessionsScreen navigation={navigation} />);
+
+    fireEvent.press(screen.getByText('Record New Session'));
+
+    await waitFor(() => expect(screen.getByText("You're not clocked in. Clock in now or continue anyway?")).toBeTruthy());
+    fireEvent.press(screen.getByText('Clock In Now'));
+
+    expect(mockNavigate).toHaveBeenCalledWith('TimeTracking');
+  });
+
+  test('active time entries go straight to the session form without warning', async () => {
+    mockGetActiveTimeEntry.mockResolvedValueOnce({
+      id: 'time-entry-1',
+      user_id: 'user-1',
+      sign_out_time: null,
+    });
+
+    const screen = renderWithPaper(<SessionsScreen navigation={navigation} />);
+
+    fireEvent.press(screen.getByText('Record New Session'));
+
+    await waitFor(() => expect(mockNavigate).toHaveBeenCalledWith('SessionForm'));
+    expect(screen.queryByText("You're not clocked in. Clock in now or continue anyway?")).toBeNull();
+  });
+});

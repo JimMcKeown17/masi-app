@@ -249,6 +249,87 @@ describe('classesRepository', () => {
     }
   });
 
+  test('saveClass on a local write throws when no owner field is set (RLS contract guard)', async () => {
+    const db = await createMigratedDatabase(runMigrations);
+
+    try {
+      await seedCoreData(db);
+      const repository = createClassesRepository({ database: db });
+
+      await expect(repository.saveClass({
+        id: 'class-no-owner',
+        school_id: 'school-1',
+        name: 'Orphan',
+        grade: '1',
+        academic_year_id: 'year-2026',
+        synced: false,
+      })).rejects.toThrow(/classes\.created_by is required/i);
+
+      expect(await db.getFirstAsync('select count(*) as count from classes where id = ?', 'class-no-owner'))
+        .toEqual({ count: 0 });
+      expect(await db.getFirstAsync('select count(*) as count from sync_outbox')).toEqual({ count: 0 });
+    } finally {
+      await db.closeAsync();
+    }
+  });
+
+  test('saveClass defaults created_by from staff_id when only staff_id is provided', async () => {
+    const db = await createMigratedDatabase(runMigrations);
+
+    try {
+      await seedCoreData(db);
+      const repository = createClassesRepository({ database: db });
+
+      await repository.saveClass({
+        id: 'class-via-staff-id',
+        school_id: 'school-1',
+        name: 'StaffIdOnly',
+        grade: '1',
+        academic_year_id: 'year-2026',
+        staff_id: 'user-1',
+        programme_id: 'programme-a',
+        synced: false,
+      });
+
+      expect(await db.getFirstAsync('select id, created_by from classes where id = ?', 'class-via-staff-id'))
+        .toEqual({ id: 'class-via-staff-id', created_by: 'user-1' });
+      expect(await db.getFirstAsync(`
+        select count(*) as count
+        from class_ea_assignments
+        where class_id = ?
+          and ea_user_id = ?
+          and unassigned_at is null
+      `, 'class-via-staff-id', 'user-1')).toEqual({ count: 1 });
+    } finally {
+      await db.closeAsync();
+    }
+  });
+
+  test('saveClass on a local write throws when no programme can be resolved (RLS contract guard)', async () => {
+    const db = await createMigratedDatabase(runMigrations);
+
+    try {
+      await seedCoreData(db, { includeStaffProgrammeAssignment: false });
+      const repository = createClassesRepository({ database: db });
+
+      await expect(repository.saveClass({
+        id: 'class-no-programme',
+        school_id: 'school-1',
+        name: 'NoProgramme',
+        grade: '1',
+        academic_year_id: 'year-2026',
+        created_by: 'user-1',
+        synced: false,
+      })).rejects.toThrow(/classes.*programme.*required|active programme assignment/i);
+
+      expect(await db.getFirstAsync('select count(*) as count from classes where id = ?', 'class-no-programme'))
+        .toEqual({ count: 0 });
+      expect(await db.getFirstAsync('select count(*) as count from sync_outbox')).toEqual({ count: 0 });
+    } finally {
+      await db.closeAsync();
+    }
+  });
+
   test('user-scoped class reads return active assignments in the active programme', async () => {
     const db = await createMigratedDatabase(runMigrations);
 

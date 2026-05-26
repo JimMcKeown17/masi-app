@@ -1,0 +1,5 @@
+{
+  "releaseLabel": "sqlite-critical-hardening",
+  "buildMessage": "SQLite cutover hardening build",
+  "gitCommit": "unknown"
+}

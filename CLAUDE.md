@@ -42,11 +42,14 @@ Locked decisions for this refactor:
 
 The older "prefer backwards-compatible changes" guidance below still applies to ordinary production maintenance on the current app/backend. For this SQLite refactor, follow the clean-slate spec and log decisions instead of adding compatibility layers unless the user explicitly changes the cutover decision.
 
-Current release gate status as of 2026-05-22:
+Current release gate status as of 2026-05-25:
 
 - `npm run test:release` has passed.
 - SQLite staging migrations and dry run have passed; advisors have only known/recorded warnings.
 - A deeper Android emulator pass has covered fresh sign-in, offline cached restart, offline session and assessment writes, force-stop/reopen with pending outbox, reconnect-and-sync, and Supabase row verification.
+- A critical hardening pass has added SQLite WAL/busy-timeout pragmas, assessment-item sync batching/fallback, shared Supabase request queuing for sync uploads, 1000ms background-sync debounce, local-first screen completion without delayed navigation, domain input no-suggestion hardening, visible release/backend identity, and a soft clock-in warning before session capture.
+- Latest code gates passed on 2026-05-25: full Jest (`55` suites / `269` tests), file-backed SQLite integration (`13` suites / `100` tests), `npm run sqlite:staging:check`, and `git diff --check`.
+- `supabase db pull --linked --schema public` reached Supabase but was blocked because Docker was not running for the CLI shadow database. Fallback verification used plain `supabase db query --linked` against `masi-app-sqlite` to spot-check high-write public table columns.
 - Still pending before field distribution: user physical-device testing, preferably at least one low-end Android device plus iPhone/Expo Go, and the user-owned cutover communication gate.
 - Emulator location did not complete the clock-in/out path because the Android emulator returned current-location unavailable. Test that on a physical device.
 
@@ -135,7 +138,7 @@ const url = process.env.EXPO_PUBLIC_SUPABASE_URL
 
 ### Debugging Tools Available
 - **Profile → Export Logs**: captures all `console.log/error/warn` output to a shareable text file
-- **Profile → Export Database**: before the SQLite refactor, exports full AsyncStorage as JSON (includes sync queue, retry counts, failed items). Plan 6 changes this to a SQLite-aware support export.
+- **Profile → Export Database**: exports a SQLite-aware support package with schema version, table counts, sync status, failed outbox rows, release/backend identity, and support metadata.
 
 ---
 

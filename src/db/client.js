@@ -1,16 +1,31 @@
 import { openDatabaseAsync } from 'expo-sqlite';
 
 export const DATABASE_NAME = 'masi.db';
+export const CONNECTION_PRAGMAS = [
+  'PRAGMA foreign_keys = ON',
+  'PRAGMA journal_mode = WAL',
+  'PRAGMA busy_timeout = 5000',
+];
 
 let databasePromise = null;
 let databaseQueue = Promise.resolve();
 
+export async function configureDatabaseConnection(db) {
+  for (const pragma of CONNECTION_PRAGMAS) {
+    await db.execAsync(pragma);
+  }
+
+  return db;
+}
+
 export async function initializeDatabase() {
   if (!databasePromise) {
-    databasePromise = openDatabaseAsync(DATABASE_NAME).catch((error) => {
-      databasePromise = null;
-      throw error;
-    });
+    databasePromise = openDatabaseAsync(DATABASE_NAME)
+      .then(configureDatabaseConnection)
+      .catch((error) => {
+        databasePromise = null;
+        throw error;
+      });
   }
 
   return databasePromise;

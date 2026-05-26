@@ -1,5 +1,6 @@
 import { resolveDatabase, runRepositoryTransaction } from './repositoryRuntime';
 import {
+  assertRlsRequiredFields,
   assessmentItemDomainId,
   enqueueDomainOutbox,
   getActiveProgrammeId,
@@ -116,6 +117,7 @@ export const createAssessmentsRepository = ({ database } = {}) => {
   };
 
   const saveAssessment = async (assessment, { transaction } = {}) => runWrite(transaction, async (txn) => {
+    assertRlsRequiredFields('assessments', assessment, ['user_id']);
     const programmeId = await resolveProgrammeId(txn, {
       programmeId: assessment.programme_id,
       userId: assessment.user_id,

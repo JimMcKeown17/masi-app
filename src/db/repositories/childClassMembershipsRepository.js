@@ -1,5 +1,6 @@
 import { resolveDatabase, runRepositoryTransaction } from './repositoryRuntime';
 import {
+  assertRlsRequiredFields,
   enqueueDomainOutbox,
   mapDomainRow,
   normalizeSyncFields,
@@ -22,8 +23,11 @@ const COLUMNS = [
   'server_updated_at',
 ];
 
+const REQUIRED_RLS_FIELDS = ['child_id', 'class_id', 'created_by'];
+
 export const createChildClassMembershipsRepository = ({ database } = {}) => {
   const save = async (membership, { transaction } = {}) => {
+    assertRlsRequiredFields('child_class_memberships', membership, REQUIRED_RLS_FIELDS);
     const write = async (txn) => {
       const record = normalizeSyncFields(membership);
       await upsertDomainRecord(txn, {

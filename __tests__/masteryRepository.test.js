@@ -146,4 +146,28 @@ describe('masteryRepository', () => {
       await db.closeAsync();
     }
   });
+
+  test('saveLetterMasteryRecord throws when user_id is missing (RLS contract guard)', async () => {
+    const db = await createMigratedDatabase(runMigrations);
+
+    try {
+      await seedCoreData(db);
+      const repository = createMasteryRepository({ database: db });
+
+      await expect(repository.saveLetterMasteryRecord({
+        id: 'mastery-no-user',
+        child_id: 'child-1',
+        programme_id: 'programme-a',
+        letter: 'a',
+        language: 'isiXhosa',
+        source: 'taught',
+        synced: false,
+      })).rejects.toThrow(/letter_mastery\.user_id is required/i);
+
+      expect(await db.getFirstAsync('select count(*) as count from letter_mastery')).toEqual({ count: 0 });
+      expect(await db.getFirstAsync('select count(*) as count from sync_outbox')).toEqual({ count: 0 });
+    } finally {
+      await db.closeAsync();
+    }
+  });
 });

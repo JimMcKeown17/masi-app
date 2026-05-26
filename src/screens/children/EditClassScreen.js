@@ -37,8 +37,11 @@ export default function EditClassScreen({ route, navigation }) {
   const [errors, setErrors] = useState({});
   const [loading, setLoading] = useState(false);
   const [snackbar, setSnackbar] = useState({ visible: false, message: '' });
+  const [initialized, setInitialized] = useState(false);
 
   useEffect(() => {
+    if (initialized) return;
+
     if (classItem) {
       setSchoolId(classItem.school_id || '');
       const school = schools.find(s => s.id === classItem.school_id);
@@ -47,11 +50,13 @@ export default function EditClassScreen({ route, navigation }) {
       setClassName(classItem.name || '');
       setTeacher(classItem.teacher || '');
       setHomeLanguage(classItem.home_language || '');
+      setInitialized(true);
     } else {
       setSnackbar({ visible: true, message: 'Class not found' });
-      setTimeout(() => navigation.goBack(), 1500);
+      setInitialized(true);
+      navigation.goBack();
     }
-  }, [classItem]);
+  }, [classItem, initialized, navigation, schools]);
 
   const validate = () => {
     const newErrors = {};
@@ -78,8 +83,7 @@ export default function EditClassScreen({ route, navigation }) {
       });
 
       if (result.success) {
-        setSnackbar({ visible: true, message: 'Class updated successfully' });
-        setTimeout(() => navigation.goBack(), 1500);
+        navigation.goBack();
       } else {
         setSnackbar({ visible: true, message: 'Error updating class' });
       }
@@ -105,8 +109,7 @@ export default function EditClassScreen({ route, navigation }) {
         onPress: async () => {
           const result = await deleteClass(classId);
           if (result.success) {
-            setSnackbar({ visible: true, message: 'Class deleted' });
-            setTimeout(() => navigation.goBack(), 1000);
+            navigation.goBack();
           } else {
             setSnackbar({ visible: true, message: 'Error deleting class' });
           }

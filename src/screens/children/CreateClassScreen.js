@@ -59,8 +59,7 @@ export default function CreateClassScreen({ navigation }) {
       });
 
       if (result.success) {
-        setSnackbar({ visible: true, message: 'Class created successfully' });
-        setTimeout(() => navigation.goBack(), 1500);
+        navigation.goBack();
       } else {
         setSnackbar({ visible: true, message: 'Error creating class' });
       }

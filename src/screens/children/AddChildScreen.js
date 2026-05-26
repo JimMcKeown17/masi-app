@@ -7,15 +7,13 @@ import {
   Card,
   HelperText,
   Snackbar,
-  Portal,
-  Dialog,
-  RadioButton,
 } from 'react-native-paper';
 import { colors, spacing } from '../../constants/colors';
 import { useChildren } from '../../context/ChildrenContext';
 import { useClasses } from '../../context/ClassesContext';
-import { GENDERS, getGenderLabel } from '../../constants/options';
+import { GENDER_OPTIONS } from '../../constants/options';
 import { NO_TEXT_SUGGESTIONS } from '../../constants/textInputProps';
+import ChipSelector from '../../components/forms/ChipSelector';
 
 export default function AddChildScreen({ route, navigation }) {
   const { classId } = route.params;
@@ -29,7 +27,6 @@ export default function AddChildScreen({ route, navigation }) {
   const [lastName, setLastName] = useState('');
   const [age, setAge] = useState('');
   const [gender, setGender] = useState('');
-  const [genderDialogVisible, setGenderDialogVisible] = useState(false);
 
   const [errors, setErrors] = useState({});
   const [loading, setLoading] = useState(false);
@@ -70,8 +67,7 @@ export default function AddChildScreen({ route, navigation }) {
       });
 
       if (result.success) {
-        setSnackbar({ visible: true, message: 'Child added successfully' });
-        setTimeout(() => navigation.goBack(), 1500);
+        navigation.goBack();
       } else {
         setSnackbar({ visible: true, message: 'Error adding child' });
       }
@@ -152,16 +148,12 @@ export default function AddChildScreen({ route, navigation }) {
               <HelperText type="error">{errors.age}</HelperText>
             )}
 
-            {/* Gender picker */}
-            <TextInput
-              label="Gender"
-              value={getGenderLabel(gender)}
-              {...NO_TEXT_SUGGESTIONS}
-              mode="outlined"
-              style={styles.input}
-              editable={false}
-              right={<TextInput.Icon icon="chevron-down" onPress={() => setGenderDialogVisible(true)} />}
-              onPressIn={() => setGenderDialogVisible(true)}
+            <Text variant="labelLarge" style={styles.fieldLabel}>Gender</Text>
+            <ChipSelector
+              options={GENDER_OPTIONS}
+              value={gender}
+              onChange={setGender}
+              testID="add-child-gender"
             />
 
             {/* Submit Button */}
@@ -177,26 +169,6 @@ export default function AddChildScreen({ route, navigation }) {
           </Card.Content>
         </Card>
       </ScrollView>
-
-      {/* Gender Dialog */}
-      <Portal>
-        <Dialog visible={genderDialogVisible} onDismiss={() => setGenderDialogVisible(false)}>
-          <Dialog.Title>Select Gender</Dialog.Title>
-          <Dialog.Content>
-            <RadioButton.Group
-              onValueChange={(value) => {
-                setGender(value);
-                setGenderDialogVisible(false);
-              }}
-              value={gender}
-            >
-              {GENDERS.map(g => (
-                <RadioButton.Item key={g.value} label={g.label} value={g.value} />
-              ))}
-            </RadioButton.Group>
-          </Dialog.Content>
-        </Dialog>
-      </Portal>
 
       <Snackbar
         visible={snackbar.visible}
@@ -239,6 +211,10 @@ const styles = StyleSheet.create({
   input: {
     marginBottom: spacing.sm,
     backgroundColor: colors.surface,
+  },
+  fieldLabel: {
+    color: colors.textSecondary,
+    marginBottom: spacing.xs,
   },
   button: {
     marginTop: spacing.lg,

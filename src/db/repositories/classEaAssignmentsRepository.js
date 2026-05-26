@@ -1,5 +1,6 @@
 import { resolveDatabase, runRepositoryTransaction } from './repositoryRuntime';
 import {
+  assertRlsRequiredFields,
   enqueueDomainOutbox,
   mapDomainRow,
   normalizeSyncFields,
@@ -23,8 +24,11 @@ const COLUMNS = [
   'server_updated_at',
 ];
 
+const REQUIRED_RLS_FIELDS = ['class_id', 'ea_user_id', 'programme_id', 'created_by'];
+
 export const createClassEaAssignmentsRepository = ({ database } = {}) => {
   const save = async (assignment, { transaction } = {}) => {
+    assertRlsRequiredFields('class_ea_assignments', assignment, REQUIRED_RLS_FIELDS);
     const write = async (txn) => {
       const record = normalizeSyncFields(assignment);
       await upsertDomainRecord(txn, {

@@ -25,6 +25,7 @@ import { useClasses } from '../../context/ClassesContext';
 import { useLookupsContext } from '../../context/LookupsContext';
 import { buildSessionTypeFields } from '../../utils/sessionTypeResolver';
 import { persistLiteracySession } from '../../services/literacySessionPersistence';
+import { NO_TEXT_SUGGESTIONS } from '../../constants/textInputProps';
 import { v4 as uuidv4 } from 'uuid';
 
 // ---------------------------------------------------------------------------
@@ -399,6 +400,7 @@ export default function LiteracySessionForm({ navigation }) {
             placeholder="Add session notes..."
             value={comments}
             onChangeText={setComments}
+            {...NO_TEXT_SUGGESTIONS}
             mode="outlined"
             style={styles.commentsInput}
           />

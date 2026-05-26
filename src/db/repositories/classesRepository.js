@@ -73,9 +73,24 @@ export const createClassesRepository = ({ database } = {}) => {
   };
 
   const saveClass = async (classData, { transaction } = {}) => runWrite(transaction, async (txn) => {
+    const incomingSyncStatus = classData.sync_status || syncStatusFromSynced(classData.synced);
+    const isLocalWrite = !['synced', 'terminal'].includes(incomingSyncStatus);
+
+    const ownerUserId = classData.created_by || classData.staff_id || classData.user_id || null;
+    if (isLocalWrite && !ownerUserId) {
+      throw new Error('classes.created_by is required (RLS contract)');
+    }
+
+    const programmeId = classData.programme_id
+      || (ownerUserId ? await getActiveProgrammeId(txn, ownerUserId) : null);
+    if (isLocalWrite && !programmeId && !classData.archived_at) {
+      throw new Error('classes.programme_id is required (no active programme assignment for owner)');
+    }
+
     const record = normalizeSyncFields({
       ...classData,
-      sync_status: classData.sync_status || syncStatusFromSynced(classData.synced),
+      created_by: classData.created_by || ownerUserId,
+      sync_status: incomingSyncStatus,
     });
     await upsertDomainRecord(txn, {
       tableName: 'classes',
@@ -85,9 +100,7 @@ export const createClassesRepository = ({ database } = {}) => {
       await enqueueDomainOutbox(txn, 'classes', classData.id, 'insert', record);
     }
 
-    const actorUserId = classData.created_by || classData.staff_id || classData.user_id;
-    const programmeId = classData.programme_id || (actorUserId ? await getActiveProgrammeId(txn, actorUserId) : null);
-    if (shouldEnqueueOutbox(record) && actorUserId && programmeId && !record.archived_at) {
+    if (isLocalWrite && ownerUserId && programmeId && !record.archived_at) {
       const activeAssignment = await txn.getFirstAsync(`
         select id
         from class_ea_assignments
@@ -95,16 +108,16 @@ export const createClassesRepository = ({ database } = {}) => {
           and ea_user_id = ?
           and programme_id = ?
           and unassigned_at is null
-      `, classData.id, actorUserId, programmeId);
+      `, classData.id, ownerUserId, programmeId);
 
       if (!activeAssignment) {
         const assignment = normalizeSyncFields({
           id: uuidv4(),
           class_id: classData.id,
-          ea_user_id: actorUserId,
+          ea_user_id: ownerUserId,
           programme_id: programmeId,
           assigned_at: record.created_at,
-          created_by: actorUserId,
+          created_by: ownerUserId,
           sync_status: record.sync_status,
         });
         await upsertDomainRecord(txn, {

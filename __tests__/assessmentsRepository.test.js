@@ -148,4 +148,28 @@ describe('assessmentsRepository', () => {
       await db.closeAsync();
     }
   });
+
+  test('saveAssessment throws when user_id is missing (RLS contract guard)', async () => {
+    const db = await createMigratedDatabase(runMigrations);
+
+    try {
+      await seedCoreData(db);
+      const repository = createAssessmentsRepository({ database: db });
+
+      await expect(repository.saveAssessment({
+        id: 'assessment-no-user',
+        child_id: 'child-1',
+        programme_id: 'programme-a',
+        assessment_type: 'letter_egra',
+        date_assessed: '2026-05-21',
+        synced: false,
+      })).rejects.toThrow(/assessments\.user_id is required/i);
+
+      expect(await db.getFirstAsync('select count(*) as count from assessments')).toEqual({ count: 0 });
+      expect(await db.getFirstAsync('select count(*) as count from assessment_items')).toEqual({ count: 0 });
+      expect(await db.getFirstAsync('select count(*) as count from sync_outbox')).toEqual({ count: 0 });
+    } finally {
+      await db.closeAsync();
+    }
+  });
 });

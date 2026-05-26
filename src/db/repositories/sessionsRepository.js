@@ -1,5 +1,6 @@
 import { resolveDatabase, runRepositoryTransaction } from './repositoryRuntime';
 import {
+  assertRlsRequiredFields,
   enqueueDomainOutbox,
   getActiveProgrammeId,
   mapDomainRow,
@@ -119,6 +120,7 @@ export const createSessionsRepository = ({ database } = {}) => {
   };
 
   const saveSession = async (session, { transaction } = {}) => runWrite(transaction, async (txn) => {
+    assertRlsRequiredFields('sessions', session, ['user_id']);
     const programmeId = await resolveProgrammeId(txn, {
       programmeId: session.programme_id,
       userId: session.user_id,

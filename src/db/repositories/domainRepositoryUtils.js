@@ -45,6 +45,15 @@ export const ensureServerUuid = (id, ...fallbackParts) => {
 
 export const outboxId = (tableName, recordId, operation) => `${tableName}:${recordId}:${operation}`;
 
+export const assertRlsRequiredFields = (tableName, record, fields) => {
+  for (const field of fields) {
+    const value = record?.[field];
+    if (value === null || value === undefined || value === '') {
+      throw new Error(`${tableName}.${field} is required (RLS contract)`);
+    }
+  }
+};
+
 export const normalizeSyncFields = (record = {}) => {
   const now = timestamp();
   return {

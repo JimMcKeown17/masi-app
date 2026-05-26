@@ -1,14 +1,15 @@
 import React, { useState } from 'react';
 import { View, StyleSheet, ScrollView, KeyboardAvoidingView, Platform, Linking, Alert } from 'react-native';
 import { TextInput, Button, Text, Card, Divider, Snackbar } from 'react-native-paper';
-import Constants from 'expo-constants';
 import { useAuth } from '../../context/AuthContext';
 import { colors, spacing, borderRadius, shadows } from '../../constants/colors';
 import { supabase } from '../../services/supabaseClient';
 import { exportDatabase, exportLogs } from '../../utils/debugExport';
+import { getReleaseMetadata } from '../../utils/releaseMetadata';
 
 export default function ProfileScreen({ navigation }) {
   const { user, profile, updatePassword, signOut } = useAuth();
+  const releaseMetadata = getReleaseMetadata();
 
   // Password form state
   const [currentPassword, setCurrentPassword] = useState('');
@@ -341,10 +342,16 @@ export default function ProfileScreen({ navigation }) {
 
         {/* App Version */}
         <Text variant="bodySmall" style={styles.versionText}>
-          Version {Constants.expoConfig?.version || '?'}
+          Version {releaseMetadata.appVersion}
           {' '}(Build {Platform.OS === 'ios'
-            ? Constants.expoConfig?.ios?.buildNumber
-            : Constants.expoConfig?.android?.versionCode || '?'})
+            ? releaseMetadata.iosBuildNumber || '?'
+            : releaseMetadata.androidVersionCode || '?'})
+        </Text>
+        <Text variant="bodySmall" style={styles.versionText}>
+          Backend {releaseMetadata.supabaseTarget}
+        </Text>
+        <Text variant="bodySmall" style={styles.versionText}>
+          Project {releaseMetadata.supabaseProjectId}
         </Text>
 
         {/* Sign Out */}

@@ -126,6 +126,28 @@ describe('sessionsRepository', () => {
     }
   });
 
+  test('saveSession throws when user_id is missing (RLS contract guard)', async () => {
+    const db = await createMigratedDatabase(runMigrations);
+
+    try {
+      await seedCoreData(db);
+      const repository = createSessionsRepository({ database: db });
+
+      await expect(repository.saveSession({
+        id: 'session-no-user',
+        programme_id: 'programme-a',
+        session_date: '2026-05-21',
+        children_ids: [],
+        synced: false,
+      })).rejects.toThrow(/sessions\.user_id is required/i);
+
+      expect(await db.getFirstAsync('select count(*) as count from sessions')).toEqual({ count: 0 });
+      expect(await db.getFirstAsync('select count(*) as count from sync_outbox')).toEqual({ count: 0 });
+    } finally {
+      await db.closeAsync();
+    }
+  });
+
   test('user-scoped session reads only return sessions in the active programme', async () => {
     const db = await createMigratedDatabase(runMigrations);
 

@@ -1,10 +1,22 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { storage } from '../src/utils/storage';
+import { resolveDatabase } from '../src/db/repositories/repositoryRuntime';
 
 // AsyncStorage is auto-mocked in jest-expo
 
+const seedReferenceData = async () => {
+  const db = await resolveDatabase();
+  await db.runAsync(
+    "insert into programmes (id, code, name, is_active, sync_status) values ('programme-a', 'literacy', 'Literacy', 1, 'synced')"
+  );
+  await db.runAsync(
+    "insert into staff_programme_assignments (id, user_id, programme_id, assigned_at) values ('spa-user-1', 'user-1', 'programme-a', '2026-01-01T00:00:00.000Z')"
+  );
+};
+
 beforeEach(async () => {
   await AsyncStorage.clear();
+  await seedReferenceData();
 });
 
 describe('Schools storage (read-only cache)', () => {
@@ -101,7 +113,11 @@ describe('Classes storage (offline-first CRUD)', () => {
 describe('getAllUnsyncedCount includes CLASSES', () => {
   test('counts unsynced classes in the total', async () => {
     await storage.saveClass({
-      id: 'c1', name: '1A', synced: false,
+      id: 'c1',
+      name: '1A',
+      created_by: 'user-1',
+      programme_id: 'programme-a',
+      synced: false,
     });
     const count = await storage.getAllUnsyncedCount();
     expect(count).toBeGreaterThanOrEqual(1);

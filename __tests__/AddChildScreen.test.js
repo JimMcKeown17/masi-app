@@ -108,4 +108,34 @@ describe('AddChildScreen', () => {
 
     expect(mockAddChild).not.toHaveBeenCalled();
   });
+
+  test('navigates back immediately after a successful local child save', async () => {
+    mockAddChild.mockResolvedValueOnce({ success: true });
+    const { getAllByDisplayValue, getByText } = renderScreen();
+    const inputs = getAllByDisplayValue('');
+
+    fireEvent.changeText(inputs[0], 'Amahle');
+    fireEvent.changeText(inputs[1], 'Dlamini');
+    fireEvent.press(getByText('Add Child'));
+
+    await waitFor(() => expect(mockAddChild).toHaveBeenCalledWith(expect.objectContaining({
+      first_name: 'Amahle',
+      last_name: 'Dlamini',
+      class_id: 'class-1',
+    })));
+    expect(mockNavigationGoBack).toHaveBeenCalledTimes(1);
+  });
+
+  test('stays on the form when local child save fails', async () => {
+    mockAddChild.mockResolvedValueOnce({ success: false });
+    const { getAllByDisplayValue, getByText } = renderScreen();
+    const inputs = getAllByDisplayValue('');
+
+    fireEvent.changeText(inputs[0], 'Amahle');
+    fireEvent.changeText(inputs[1], 'Dlamini');
+    fireEvent.press(getByText('Add Child'));
+
+    await waitFor(() => expect(mockAddChild).toHaveBeenCalled());
+    expect(mockNavigationGoBack).not.toHaveBeenCalled();
+  });
 });

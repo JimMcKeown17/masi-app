@@ -11,6 +11,7 @@ import {
 import { colors, spacing, borderRadius } from '../../constants/colors';
 import { useChildren } from '../../context/ChildrenContext';
 import { useClasses } from '../../context/ClassesContext';
+import { NO_TEXT_SUGGESTIONS } from '../../constants/textInputProps';
 
 export default function ChildSelector({ selectedChildren, onSelectionChange }) {
   const { children, groups, getChildrenInGroup } = useChildren();
@@ -65,6 +66,7 @@ export default function ChildSelector({ selectedChildren, onSelectionChange }) {
         onChangeText={setSearchTerm}
         style={styles.searchBar}
         elevation={0}
+        {...NO_TEXT_SUGGESTIONS}
       />
 
       <Menu

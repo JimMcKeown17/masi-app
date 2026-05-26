@@ -25,7 +25,10 @@ const createSupabaseMock = ({ upsertResults = {}, rpcResults = {} } = {}) => {
     from: jest.fn((tableName) => ({
       upsert: jest.fn(async (payload, options) => {
         calls.push({ type: 'upsert', tableName, payload, options });
-        const result = upsertResults[`${tableName}:${payload.id}`] || upsertResults[tableName];
+        const resultKey = Array.isArray(payload)
+          ? `${tableName}:batch`
+          : `${tableName}:${payload.id}`;
+        const result = upsertResults[resultKey] || upsertResults[tableName];
         if (typeof result === 'function') {
           return result({ tableName, payload, options, calls });
         }
@@ -55,6 +58,142 @@ const seedReferences = async (db) => {
 const enqueue = async (db, tableName, recordId, operation, payload) => {
   const outbox = createSyncOutboxRepository({ database: db });
   await outbox.enqueue({ tableName, recordId, operation, payload });
+};
+
+const seedAssessmentItems = async (db, itemIds = [
+  '00000000-0000-0000-0000-000000000101',
+  '00000000-0000-0000-0000-000000000102',
+  '00000000-0000-0000-0000-000000000103',
+]) => {
+  await db.runAsync(`
+    insert into children (id, first_name, last_name, sync_status)
+    values ('child-assessment-1', 'Amahle', 'Dlamini', 'synced')
+  `);
+  await db.runAsync(`
+    insert into assessments (
+      id,
+      user_id,
+      child_id,
+      programme_id,
+      assessment_type,
+      assessment_date,
+      sync_status
+    )
+    values (
+      'assessment-batch-1',
+      'user-1',
+      'child-assessment-1',
+      'programme-1',
+      'letter_sounds',
+      '2026-05-25',
+      'synced'
+    )
+  `);
+
+  for (const [index, itemId] of itemIds.entries()) {
+    const item = {
+      id: itemId,
+      assessment_id: 'assessment-batch-1',
+      item_key: `letter-${index + 1}`,
+      prompt: String.fromCharCode(97 + index),
+      response: String.fromCharCode(97 + index),
+      is_correct: 1,
+      position: index,
+      metadata: '{}',
+    };
+    await db.runAsync(`
+      insert into assessment_items (
+        id,
+        assessment_id,
+        item_key,
+        prompt,
+        response,
+        is_correct,
+        position,
+        metadata,
+        sync_status
+      )
+      values (?, ?, ?, ?, ?, ?, ?, ?, 'pending')
+    `, item.id, item.assessment_id, item.item_key, item.prompt, item.response, item.is_correct, item.position, item.metadata);
+    await enqueue(db, 'assessment_items', item.id, 'insert', item);
+  }
+
+  return itemIds;
+};
+
+const seedChildArchiveGraph = async (db) => {
+  await db.runAsync(`
+    insert into academic_years (id, label, starts_on, ends_on, is_active, sync_status)
+    values ('year-2026', '2026', '2026-01-15', '2026-12-15', 1, 'synced')
+  `);
+  await db.runAsync(`
+    insert into classes (id, school_id, name, grade, academic_year_id, sync_status)
+    values ('class-archive', 'school-1', 'Grade 1A', '1', 'year-2026', 'synced')
+  `);
+  await db.runAsync(`
+    insert into children (id, first_name, last_name, class_id, created_by, sync_status)
+    values ('child-archive', 'Amahle', 'Dlamini', 'class-archive', 'user-1', 'synced')
+  `);
+  await db.runAsync(`
+    insert into child_ea_assignments (
+      id, user_id, child_id, assigned_at, created_by, sync_status
+    )
+    values (
+      'assignment-archive', 'user-1', 'child-archive',
+      '2026-05-01T00:00:00.000Z', 'user-1', 'pending'
+    )
+  `);
+  await db.runAsync(`
+    insert into child_programme_enrollments (
+      id, child_id, programme_id, enrolled_at, created_by, sync_status
+    )
+    values (
+      'enrollment-archive', 'child-archive', 'programme-1',
+      '2026-05-01T00:00:00.000Z', 'user-1', 'pending'
+    )
+  `);
+  await db.runAsync(`
+    insert into child_class_memberships (
+      id, child_id, class_id, academic_year_id, enrolled_at, created_by, sync_status
+    )
+    values (
+      'class-membership-archive', 'child-archive', 'class-archive', 'year-2026',
+      '2026-05-01T00:00:00.000Z', 'user-1', 'pending'
+    )
+  `);
+  await db.runAsync(`
+    insert into groups (id, name, programme_id, class_id, created_by, sync_status)
+    values ('group-archive', 'Group 1', 'programme-1', 'class-archive', 'user-1', 'synced')
+  `);
+  await db.runAsync(`
+    insert into group_ea_assignments (
+      id, group_id, ea_user_id, programme_id, assigned_at, created_by, sync_status
+    )
+    values (
+      'group-assignment-archive', 'group-archive', 'user-1', 'programme-1',
+      '2026-05-01T00:00:00.000Z', 'user-1', 'pending'
+    )
+  `);
+  await db.runAsync(`
+    insert into child_group_memberships (
+      id, child_id, group_id, joined_at, created_by, sync_status
+    )
+    values (
+      'group-membership-archive', 'child-archive', 'group-archive',
+      '2026-05-01T00:00:00.000Z', 'user-1', 'pending'
+    )
+  `);
+
+  return {
+    archivedAt: '2026-05-25T12:00:00.000Z',
+    childId: 'child-archive',
+    groupId: 'group-archive',
+    assignmentId: 'assignment-archive',
+    groupAssignmentId: 'group-assignment-archive',
+    enrollmentId: 'enrollment-archive',
+    classMembershipId: 'class-membership-archive',
+    groupMembershipId: 'group-membership-archive',
+  };
 };
 
 describe('SQLite outbox offline sync', () => {
@@ -108,6 +247,286 @@ describe('SQLite outbox offline sync', () => {
     expect(await db.getFirstAsync('select count(*) as count from sync_outbox')).toEqual({ count: 0 });
   });
 
+  test('repairs stale group ownership payloads before retrying failed sync', async () => {
+    await db.runAsync(`
+      insert into staff_programme_assignments (
+        id,
+        user_id,
+        programme_id,
+        school_id,
+        assigned_at,
+        sync_status
+      )
+      values (
+        'spa-user-1',
+        'user-1',
+        'programme-1',
+        'school-1',
+        '2026-05-21T08:00:00.000Z',
+        'synced'
+      )
+    `);
+    await db.runAsync(`
+      insert into children (
+        id,
+        first_name,
+        last_name,
+        created_by,
+        sync_status
+      )
+      values (
+        'child-stale-group',
+        'Amahle',
+        'Dlamini',
+        'user-1',
+        'synced'
+      )
+    `);
+    await db.runAsync(`
+      insert into child_ea_assignments (
+        id,
+        user_id,
+        child_id,
+        created_by,
+        sync_status
+      )
+      values (
+        'assignment-stale-group',
+        'user-1',
+        'child-stale-group',
+        'user-1',
+        'synced'
+      )
+    `);
+    await db.runAsync(`
+      insert into groups (
+        id,
+        name,
+        programme_id,
+        created_by,
+        created_at,
+        sync_status,
+        last_sync_error
+      )
+      values (
+        'group-stale-owner',
+        'Group 1',
+        'programme-1',
+        null,
+        '2026-05-25T18:39:00.000Z',
+        'failed',
+        'new row violates row-level security policy for table "groups"'
+      )
+    `);
+    await db.runAsync(`
+      insert into child_group_memberships (
+        id,
+        child_id,
+        group_id,
+        joined_at,
+        created_by,
+        sync_status,
+        last_sync_error
+      )
+      values (
+        'membership-stale-owner',
+        'child-stale-group',
+        'group-stale-owner',
+        '2026-05-25T18:39:00.000Z',
+        null,
+        'failed',
+        'new row violates row-level security policy for table "child_group_memberships"'
+      )
+    `);
+    await enqueue(db, 'groups', 'group-stale-owner', 'insert', {
+      id: 'group-stale-owner',
+      name: 'Group 1',
+      programme_id: 'programme-1',
+      staff_id: 'user-1',
+      created_at: '2026-05-25T18:39:00.000Z',
+    });
+    await enqueue(db, 'child_group_memberships', 'membership-stale-owner', 'insert', {
+      id: 'membership-stale-owner',
+      child_id: 'child-stale-group',
+      group_id: 'group-stale-owner',
+      joined_at: '2026-05-25T18:39:00.000Z',
+    });
+    await db.runAsync(`
+      update sync_outbox
+      set status = 'failed',
+          last_error = 'new row violates row-level security policy',
+          next_retry_at = null
+    `);
+
+    const { supabaseClient, calls } = createSupabaseMock({
+      upsertResults: {
+        groups: ({ payload }) => (
+          payload.created_by
+            ? { error: null }
+            : { error: { message: 'new row violates row-level security policy for table "groups"' } }
+        ),
+        child_group_memberships: ({ payload }) => (
+          payload.created_by
+            ? { error: null }
+            : { error: { message: 'new row violates row-level security policy for table "child_group_memberships"' } }
+        ),
+      },
+    });
+    const engine = createOutboxSyncEngine({ database: db, supabaseClient });
+
+    const result = await engine.syncAll();
+
+    expect(result.success).toBe(true);
+    expect(calls.map(call => call.tableName)).toEqual([
+      'groups',
+      'group_ea_assignments',
+      'child_group_memberships',
+    ]);
+    expect(calls.find(call => call.tableName === 'groups').payload)
+      .toEqual(expect.objectContaining({ created_by: 'user-1' }));
+    expect(calls.find(call => call.tableName === 'group_ea_assignments').payload)
+      .toEqual(expect.objectContaining({
+        group_id: 'group-stale-owner',
+        ea_user_id: 'user-1',
+        programme_id: 'programme-1',
+        created_by: 'user-1',
+      }));
+    expect(calls.find(call => call.tableName === 'child_group_memberships').payload)
+      .toEqual(expect.objectContaining({ created_by: 'user-1' }));
+    expect(await db.getFirstAsync('select created_by, sync_status, last_sync_error from groups where id = ?', 'group-stale-owner'))
+      .toEqual({ created_by: 'user-1', sync_status: 'synced', last_sync_error: null });
+    expect(await db.getFirstAsync('select created_by, sync_status, last_sync_error from child_group_memberships where id = ?', 'membership-stale-owner'))
+      .toEqual({ created_by: 'user-1', sync_status: 'synced', last_sync_error: null });
+    expect(await db.getFirstAsync('select count(*) as count from sync_outbox')).toEqual({ count: 0 });
+  });
+
+  test('repairs missing group assignment before retrying stale membership sync', async () => {
+    await db.runAsync(`
+      insert into staff_programme_assignments (
+        id,
+        user_id,
+        programme_id,
+        school_id,
+        assigned_at,
+        sync_status
+      )
+      values (
+        'spa-user-1',
+        'user-1',
+        'programme-1',
+        'school-1',
+        '2026-05-21T08:00:00.000Z',
+        'synced'
+      )
+    `);
+    await db.runAsync(`
+      insert into children (
+        id,
+        first_name,
+        last_name,
+        created_by,
+        sync_status
+      )
+      values (
+        'child-membership-only',
+        'Amahle',
+        'Dlamini',
+        'user-1',
+        'synced'
+      )
+    `);
+    await db.runAsync(`
+      insert into child_ea_assignments (
+        id,
+        user_id,
+        child_id,
+        created_by,
+        sync_status
+      )
+      values (
+        'assignment-membership-only',
+        'user-1',
+        'child-membership-only',
+        'user-1',
+        'synced'
+      )
+    `);
+    await db.runAsync(`
+      insert into groups (
+        id,
+        name,
+        programme_id,
+        created_by,
+        created_at,
+        sync_status
+      )
+      values (
+        'group-membership-only',
+        'Group 1',
+        'programme-1',
+        'user-1',
+        '2026-05-25T18:39:00.000Z',
+        'synced'
+      )
+    `);
+    await db.runAsync(`
+      insert into child_group_memberships (
+        id,
+        child_id,
+        group_id,
+        joined_at,
+        created_by,
+        sync_status,
+        last_sync_error
+      )
+      values (
+        'membership-only-stale-owner',
+        'child-membership-only',
+        'group-membership-only',
+        '2026-05-25T18:39:00.000Z',
+        null,
+        'failed',
+        'new row violates row-level security policy for table "child_group_memberships"'
+      )
+    `);
+    await enqueue(db, 'child_group_memberships', 'membership-only-stale-owner', 'insert', {
+      id: 'membership-only-stale-owner',
+      child_id: 'child-membership-only',
+      group_id: 'group-membership-only',
+      joined_at: '2026-05-25T18:39:00.000Z',
+    });
+    await db.runAsync(`
+      update sync_outbox
+      set status = 'failed',
+          last_error = 'new row violates row-level security policy',
+          next_retry_at = null
+    `);
+
+    const { supabaseClient, calls } = createSupabaseMock();
+    const engine = createOutboxSyncEngine({ database: db, supabaseClient });
+
+    const result = await engine.syncAll();
+
+    expect(result.success).toBe(true);
+    expect(calls.map(call => call.tableName)).toEqual([
+      'group_ea_assignments',
+      'child_group_memberships',
+    ]);
+    expect(calls.find(call => call.tableName === 'group_ea_assignments').payload)
+      .toEqual(expect.objectContaining({
+        group_id: 'group-membership-only',
+        ea_user_id: 'user-1',
+        programme_id: 'programme-1',
+        created_by: 'user-1',
+      }));
+    expect(await db.getFirstAsync(`
+      select created_by, sync_status, last_sync_error
+      from child_group_memberships
+      where id = 'membership-only-stale-owner'
+    `)).toEqual({ created_by: 'user-1', sync_status: 'synced', last_sync_error: null });
+    expect(await db.getFirstAsync('select count(*) as count from sync_outbox')).toEqual({ count: 0 });
+  });
+
   test('time entry repository writes are consumed by the sync engine', async () => {
     const repository = createTimeEntriesRepository({ database: db });
     await repository.saveTimeEntry({
@@ -141,6 +560,160 @@ describe('SQLite outbox offline sync', () => {
     expect(await db.getFirstAsync('select sync_status, last_sync_error from time_entries where id = ?', 'time-1'))
       .toEqual({ sync_status: 'synced', last_sync_error: null });
     expect(await db.getFirstAsync('select count(*) as count from sync_outbox')).toEqual({ count: 0 });
+  });
+
+  test('routes sync server writes through the Supabase request queue boundary', async () => {
+    await db.runAsync(`
+      insert into classes (id, school_id, name, grade, sync_status)
+      values ('class-queued', 'school-1', 'Grade 1Q', '1', 'pending')
+    `);
+    await enqueue(db, 'classes', 'class-queued', 'insert', {
+      id: 'class-queued',
+      school_id: 'school-1',
+      name: 'Grade 1Q',
+      grade: '1',
+    });
+    const events = [];
+    const supabaseClient = {
+      from: jest.fn((tableName) => ({
+        upsert: jest.fn(async () => {
+          events.push(`server:${tableName}`);
+          return { error: null };
+        }),
+      })),
+    };
+    const enqueueRequest = jest.fn(async (task) => {
+      events.push('queue:start');
+      const result = await task();
+      events.push('queue:end');
+      return result;
+    });
+    const engine = createOutboxSyncEngine({ database: db, supabaseClient, enqueueRequest });
+
+    const result = await engine.syncAll();
+
+    expect(result.success).toBe(true);
+    expect(enqueueRequest).toHaveBeenCalledTimes(1);
+    expect(events).toEqual(['queue:start', 'server:classes', 'queue:end']);
+  });
+
+  test('routes reference preload pulls through the Supabase request queue boundary', async () => {
+    const events = [];
+    const repositories = {
+      schools: { replaceFromServer: jest.fn() },
+      job_titles: { replaceFromServer: jest.fn() },
+      programmes: { replaceFromServer: jest.fn() },
+      academic_years: { replaceFromServer: jest.fn() },
+      assessment_windows: { replaceFromServer: jest.fn() },
+      teachers: { replaceFromServer: jest.fn() },
+      staff_programme_assignments: { replaceFromServer: jest.fn() },
+    };
+    const enqueueRequest = jest.fn(async (task) => {
+      events.push('queue:start');
+      const result = await task();
+      events.push('queue:end');
+      return result;
+    });
+    const supabaseClient = {
+      from: jest.fn((tableName) => ({
+        select: jest.fn(async () => {
+          events.push(`pull:${tableName}`);
+          return { data: [{ id: `${tableName}-1` }], error: null };
+        }),
+      })),
+    };
+
+    await pullReferenceData({ supabaseClient, repositories, enqueueRequest });
+
+    expect(enqueueRequest).toHaveBeenCalledTimes(7);
+    expect(events.slice(0, 6)).toEqual([
+      'queue:start',
+      'pull:schools',
+      'queue:end',
+      'queue:start',
+      'pull:job_titles',
+      'queue:end',
+    ]);
+  });
+
+  test('batches ready assessment item upserts and finalizes each local item', async () => {
+    const itemIds = await seedAssessmentItems(db);
+    const { supabaseClient, calls } = createSupabaseMock();
+    const engine = createOutboxSyncEngine({ database: db, supabaseClient });
+
+    const result = await engine.syncAll();
+
+    const assessmentItemCalls = calls.filter(call => call.tableName === 'assessment_items');
+    expect(assessmentItemCalls).toHaveLength(1);
+    expect(assessmentItemCalls[0]).toEqual(expect.objectContaining({
+      type: 'upsert',
+      tableName: 'assessment_items',
+      payload: expect.arrayContaining([
+        expect.objectContaining({ item_key: 'letter-1' }),
+        expect.objectContaining({ item_key: 'letter-2' }),
+        expect.objectContaining({ item_key: 'letter-3' }),
+      ]),
+      options: expect.objectContaining({ onConflict: 'id' }),
+    }));
+    expect(result).toEqual(expect.objectContaining({
+      success: true,
+      totalSynced: itemIds.length,
+      totalFailed: 0,
+    }));
+    expect(await db.getFirstAsync(`
+      select count(*) as count
+      from assessment_items
+      where sync_status = 'synced'
+    `)).toEqual({ count: itemIds.length });
+    expect(await db.getFirstAsync('select count(*) as count from sync_outbox')).toEqual({ count: 0 });
+  });
+
+  test('falls back to per-record assessment item sync when the batch upsert fails', async () => {
+    await seedAssessmentItems(db);
+    const { supabaseClient, calls } = createSupabaseMock({
+      upsertResults: {
+        'assessment_items:batch': {
+          error: { code: '500', message: 'Batch request failed' },
+        },
+        assessment_items: ({ payload }) => (
+          payload.item_key === 'letter-2'
+            ? { error: { code: '23503', message: 'Missing assessment parent' } }
+            : { error: null }
+        ),
+      },
+    });
+    const engine = createOutboxSyncEngine({ database: db, supabaseClient });
+
+    const result = await engine.syncAll();
+
+    const assessmentItemCalls = calls.filter(call => call.tableName === 'assessment_items');
+    expect(assessmentItemCalls).toHaveLength(4);
+    expect(Array.isArray(assessmentItemCalls[0].payload)).toBe(true);
+    expect(assessmentItemCalls.slice(1).map(call => call.payload.item_key)).toEqual([
+      'letter-1',
+      'letter-2',
+      'letter-3',
+    ]);
+    expect(result).toEqual(expect.objectContaining({
+      success: false,
+      totalSynced: 2,
+      totalFailed: 1,
+      failedRecords: [
+        expect.objectContaining({
+          table: 'assessment_items',
+          reason: 'Missing assessment parent',
+        }),
+      ],
+    }));
+    expect(await db.getFirstAsync(`
+      select sync_status, last_sync_error
+      from assessment_items
+      where item_key = 'letter-2'
+    `)).toEqual({
+      sync_status: 'terminal',
+      last_sync_error: 'Missing assessment parent',
+    });
+    expect(await db.getFirstAsync('select count(*) as count from sync_outbox')).toEqual({ count: 1 });
   });
 
   test('syncAll recovers in-flight rows left by an interrupted process', async () => {
@@ -339,6 +912,185 @@ describe('SQLite outbox offline sync', () => {
     expect(await db.getFirstAsync('select sync_status from children where id = ?', 'child-1'))
       .toEqual({ sync_status: 'synced' });
     expect(await db.getFirstAsync('select count(*) as count from sync_outbox')).toEqual({ count: 0 });
+  });
+
+  test('orders child archive relationship cleanup before ending EA access', async () => {
+    const ids = await seedChildArchiveGraph(db);
+    await enqueue(db, 'child_ea_assignments', ids.assignmentId, 'archive', {
+      id: ids.assignmentId,
+      unassigned_at: ids.archivedAt,
+    });
+    await enqueue(db, 'child_group_memberships', ids.groupMembershipId, 'archive', {
+      id: ids.groupMembershipId,
+      removed_at: ids.archivedAt,
+    });
+    await enqueue(db, 'child_class_memberships', ids.classMembershipId, 'archive', {
+      id: ids.classMembershipId,
+      exited_at: ids.archivedAt,
+    });
+    await enqueue(db, 'child_programme_enrollments', ids.enrollmentId, 'archive', {
+      id: ids.enrollmentId,
+      ended_at: ids.archivedAt,
+    });
+    await enqueue(db, 'children', ids.childId, 'archive', {
+      id: ids.childId,
+      archived_at: ids.archivedAt,
+    });
+
+    const { supabaseClient, calls } = createSupabaseMock();
+    const engine = createOutboxSyncEngine({ database: db, supabaseClient });
+
+    const result = await engine.syncAll();
+
+    expect(result.success).toBe(true);
+    expect(calls.map(call => `${call.type}:${call.tableName}`)).toEqual([
+      'upsert:children',
+      'upsert:child_programme_enrollments',
+      'upsert:child_class_memberships',
+      'upsert:child_group_memberships',
+      'upsert:child_ea_assignments',
+    ]);
+  });
+
+  test('keeps child EA archive pending when relationship cleanup fails', async () => {
+    const ids = await seedChildArchiveGraph(db);
+    await enqueue(db, 'children', ids.childId, 'archive', {
+      id: ids.childId,
+      archived_at: ids.archivedAt,
+    });
+    await enqueue(db, 'child_programme_enrollments', ids.enrollmentId, 'archive', {
+      id: ids.enrollmentId,
+      ended_at: ids.archivedAt,
+    });
+    await enqueue(db, 'child_class_memberships', ids.classMembershipId, 'archive', {
+      id: ids.classMembershipId,
+      exited_at: ids.archivedAt,
+    });
+    await enqueue(db, 'child_group_memberships', ids.groupMembershipId, 'archive', {
+      id: ids.groupMembershipId,
+      removed_at: ids.archivedAt,
+    });
+    await enqueue(db, 'child_ea_assignments', ids.assignmentId, 'archive', {
+      id: ids.assignmentId,
+      unassigned_at: ids.archivedAt,
+    });
+
+    const { supabaseClient, calls } = createSupabaseMock({
+      upsertResults: {
+        child_group_memberships: {
+          error: {
+            code: '42501',
+            message: 'RLS denied membership archive',
+          },
+        },
+      },
+    });
+    const engine = createOutboxSyncEngine({ database: db, supabaseClient });
+
+    const result = await engine.syncAll();
+
+    expect(result.success).toBe(false);
+    expect(calls.map(call => `${call.type}:${call.tableName}`)).toEqual([
+      'upsert:children',
+      'upsert:child_programme_enrollments',
+      'upsert:child_class_memberships',
+      'upsert:child_group_memberships',
+    ]);
+    expect(result.tableResults.child_ea_assignments).toEqual(expect.objectContaining({
+      skipped: true,
+      skippedDependency: 'child_group_memberships',
+    }));
+    expect(await db.getFirstAsync(
+      'select status from sync_outbox where table_name = ? and record_id = ?',
+      'child_ea_assignments',
+      ids.assignmentId
+    )).toEqual({ status: 'pending' });
+  });
+
+  test('pushes sessions before session_attendees so first-sync hits INSERT (not UPDATE) policy', async () => {
+    // Locks Finding E2 invariant: sessions_update_active_assignment_after_attendee
+    // requires the session to already have a writable attendee server-side. If
+    // PUSH_ORDER ever flips sessions after session_attendees, a fresh-sync session
+    // upsert would conflict on the attendee FK and the session UPDATE policy would
+    // fail RLS. The sessions INSERT policy has no attendee precondition, so we
+    // MUST push the session first.
+    await db.runAsync(`
+      insert into classes (id, school_id, name, grade, sync_status)
+      values ('class-session', 'school-1', 'Grade 1A', '1', 'synced')
+    `);
+    await db.runAsync(`
+      insert into children (id, first_name, last_name, class_id, created_by, sync_status)
+      values ('child-session', 'Amahle', 'Dlamini', 'class-session', 'user-1', 'synced')
+    `);
+    await db.runAsync(`
+      insert into sessions (
+        id, user_id, programme_id, session_date, sync_status
+      )
+      values (
+        'session-1', 'user-1', 'programme-1', '2026-05-25', 'pending'
+      )
+    `);
+    await db.runAsync(`
+      insert into session_attendees (
+        id, session_id, child_id, attendance_status, sync_status
+      )
+      values (
+        '00000000-0000-0000-0000-000000000a01',
+        'session-1', 'child-session', 'present', 'pending'
+      )
+    `);
+    await enqueue(db, 'session_attendees', '00000000-0000-0000-0000-000000000a01', 'insert', {
+      id: '00000000-0000-0000-0000-000000000a01',
+      session_id: 'session-1',
+      child_id: 'child-session',
+      attendance_status: 'present',
+    });
+    await enqueue(db, 'sessions', 'session-1', 'insert', {
+      id: 'session-1',
+      user_id: 'user-1',
+      programme_id: 'programme-1',
+      session_date: '2026-05-25',
+    });
+
+    const { supabaseClient, calls } = createSupabaseMock();
+    const engine = createOutboxSyncEngine({ database: db, supabaseClient });
+
+    const result = await engine.syncAll();
+
+    expect(result.success).toBe(true);
+    const sessionIndex = calls.findIndex(call => call.tableName === 'sessions');
+    const attendeeIndex = calls.findIndex(call => call.tableName === 'session_attendees');
+    expect(sessionIndex).toBeGreaterThanOrEqual(0);
+    expect(attendeeIndex).toBeGreaterThanOrEqual(0);
+    expect(sessionIndex).toBeLessThan(attendeeIndex);
+  });
+
+  test('orders group archive membership cleanup before ending group EA access', async () => {
+    const ids = await seedChildArchiveGraph(db);
+    await enqueue(db, 'group_ea_assignments', ids.groupAssignmentId, 'archive', {
+      id: ids.groupAssignmentId,
+      unassigned_at: ids.archivedAt,
+    });
+    await enqueue(db, 'child_group_memberships', ids.groupMembershipId, 'archive', {
+      id: ids.groupMembershipId,
+      removed_at: ids.archivedAt,
+    });
+    await enqueue(db, 'groups', ids.groupId, 'archive', {
+      id: ids.groupId,
+      archived_at: ids.archivedAt,
+    });
+
+    const { supabaseClient, calls } = createSupabaseMock();
+    const engine = createOutboxSyncEngine({ database: db, supabaseClient });
+
+    const result = await engine.syncAll();
+
+    expect(result.success).toBe(true);
+    expect(calls.map(call => `${call.type}:${call.tableName}`)).toEqual([
+      'upsert:groups',
+      'upsert:child_group_memberships',
+      'upsert:group_ea_assignments',
+    ]);
   });
 
   test('skips dependent rows when a parent table fails in the same sync cycle', async () => {

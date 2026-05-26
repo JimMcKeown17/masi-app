@@ -49,11 +49,14 @@ Locked decisions for this refactor:
 
 The older "prefer backwards-compatible changes" guidance below still applies to ordinary production maintenance on the current app/backend. For this SQLite refactor, follow the clean-slate spec and log decisions instead of adding compatibility layers unless the user explicitly changes the cutover decision.
 
-Current release gate status as of 2026-05-22:
+Current release gate status as of 2026-05-25:
 
 - `npm run test:release` has passed.
 - SQLite staging migrations and dry run have passed; advisors have only known/recorded warnings.
 - A deeper Android emulator pass has covered fresh sign-in, offline cached restart, offline session and assessment writes, force-stop/reopen with pending outbox, reconnect-and-sync, and Supabase row verification.
+- A critical hardening pass has added SQLite WAL/busy-timeout pragmas, assessment-item sync batching/fallback, shared Supabase request queuing for sync uploads, 1000ms background-sync debounce, local-first screen completion without delayed navigation, domain input no-suggestion hardening, visible release/backend identity, and a soft clock-in warning before session capture.
+- Latest code gates passed on 2026-05-25: full Jest (`55` suites / `269` tests), file-backed SQLite integration (`13` suites / `100` tests), `npm run sqlite:staging:check`, and `git diff --check`.
+- `supabase db pull --linked --schema public` reached Supabase but was blocked because Docker was not running for the CLI shadow database. Fallback verification used plain `supabase db query --linked` against `masi-app-sqlite` to spot-check high-write public table columns.
 - Still pending before field distribution: user physical-device testing, preferably at least one low-end Android device plus iPhone/Expo Go, and the user-owned cutover communication gate.
 - Emulator location did not complete the clock-in/out path because the Android emulator returned current-location unavailable. Test that on a physical device.
 
@@ -103,6 +106,17 @@ The current `supabase-migrations/` directory has drifted from the live Supabase 
 
 For the new SQLite backend, use canonical Supabase CLI migrations under `supabase/migrations/`. Treat `supabase-migrations/` as historical reference only.
 
+### TEMPORARY: Two Supabase Backends — Keep The CLI Off The Wrong One
+*(Clean-slate refactor only. Remove once the SQLite cutover is complete.)*
+
+Two Supabase projects exist:
+- `masi-app` — current production, ref `jcqrlwetutnpuchjoyyd`
+- `masi-app-sqlite` — clean-slate refactor backend, ref `segygjzpujphwvrubusm` (the repo is `supabase link`ed to this one)
+
+`.env.local` carries the old `masi-app` connection (`MASI_SUPABASE_URL` / `EXPO_PUBLIC_SUPABASE_URL` resolve to `jcqrlwetutnpuchjoyyd`). That is correct for the current production app; the clean-slate build selects `masi-app-sqlite` via `config/supabaseProjectConfig.js`.
+
+Trap: running the `supabase` CLI with `.env.local` injected into its environment, such as through a `dotenv` wrapper, makes the CLI pick up the old-project connection and silently query old production, even when `--linked` is passed. Run `supabase db query --linked` plainly instead; `--linked` resolves `masi-app-sqlite` through the CLI's own auth. Do not inject `.env.local` into `supabase` CLI commands.
+
 ### EAS Builds — Environment Variables Not in `.env.local`
 `process.env.EXPO_PUBLIC_*` variables from `.env.local` are NOT available in EAS cloud builds. Public values (Supabase URL, anon key) must also be available through Expo config `extra` with a fallback in the client. The current app used `app.json`; Plan 1 of the SQLite refactor migrates this to `app.config.js` with explicit Supabase target guardrails.
 ```javascript
@@ -112,7 +126,7 @@ const url = process.env.EXPO_PUBLIC_SUPABASE_URL
 
 ### Debugging Tools Available
 - **Profile → Export Logs**: captures all `console.log/error/warn` output to a shareable text file
-- **Profile → Export Database**: before the SQLite refactor, exports full AsyncStorage as JSON (includes sync queue, retry counts, failed items). Plan 6 changes this to a SQLite-aware support export.
+- **Profile → Export Database**: exports a SQLite-aware support package with schema version, table counts, sync status, failed outbox rows, release/backend identity, and support metadata.
 
 ---
 

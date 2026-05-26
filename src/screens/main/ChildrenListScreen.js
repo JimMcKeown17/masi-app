@@ -17,6 +17,7 @@ import { useOffline } from '../../context/OfflineContext';
 import { assessmentsRepository } from '../../db/repositories/assessmentsRepository';
 import { getChildrenTabStats } from '../../utils/dashboardStats';
 import StatBar from '../../components/dashboard/StatBar';
+import { NO_TEXT_SUGGESTIONS } from '../../constants/textInputProps';
 
 export default function ChildrenListScreen({ navigation }) {
   const { user } = useAuth();
@@ -212,6 +213,7 @@ export default function ChildrenListScreen({ navigation }) {
         value={searchTerm}
         onChangeText={setSearchTerm}
         style={styles.searchBar}
+        {...NO_TEXT_SUGGESTIONS}
       />
 
       {/* Sync status banner */}

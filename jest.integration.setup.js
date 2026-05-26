@@ -14,6 +14,20 @@ jest.mock('react-native-paper/src/components/MaterialCommunityIcon', () => {
   return ({ name, ...props }) => React.createElement(Text, props, name);
 });
 
+jest.mock('expo-constants', () => ({
+  expoConfig: {
+    version: 'test',
+    ios: { buildNumber: 'test-ios' },
+    android: { versionCode: 1 },
+    runtimeVersion: { policy: 'appVersion' },
+    updates: { url: 'https://u.expo.dev/test' },
+    extra: {
+      supabaseTarget: 'sqlite-staging',
+      supabaseProjectId: 'segygjzpujphwvrubusm',
+    },
+  },
+}), { virtual: true });
+
 const AsyncStorage = require('@react-native-async-storage/async-storage');
 const expoSQLiteMock = require('expo-sqlite');
 const { createBetterSqliteTestDatabase } = require('./test-support/betterSqliteAdapter');

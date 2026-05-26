@@ -288,4 +288,85 @@ describe('Plan 1 SQLite Supabase migrations', () => {
     expect(policy).toMatch(/private\.current_user_can_access_class\(class_id\)/i);
     expect(policy).not.toMatch(/c\.created_by = \(select auth\.uid\(\)\)/i);
   });
+
+  test('RLS contract cleanup closes assignment archive, class write, read-helper, and grant drift', () => {
+    const fix = latestMigrationMatching(/rls_contract_cleanup/);
+    const sql = compactSql(fix?.sql || '');
+
+    expect(fix).toBeDefined();
+
+    expect(sql).toMatch(/create or replace function private\.prevent_assignment_identity_change\(\)/i);
+    [
+      'child_ea_assignments',
+      'class_ea_assignments',
+      'group_ea_assignments',
+    ].forEach((tableName) => {
+      expect(sql).toMatch(
+        new RegExp(`create trigger ${tableName}_prevent_identity_change[\\s\\S]+before update on public\\.${tableName}`, 'i')
+      );
+      expect(sql).toMatch(
+        new RegExp(`drop policy if exists ${tableName}_delete`, 'i')
+      );
+      expect(sql).toMatch(
+        new RegExp(`revoke delete on public\\.${tableName} from authenticated`, 'i')
+      );
+    });
+
+    expect(policyBlock(fix.sql, 'child_ea_assignments_update_self_archive'))
+      .toMatch(/for update to authenticated[\s\S]+user_id = \(select auth\.uid\(\)\)[\s\S]+with check[\s\S]+user_id = \(select auth\.uid\(\)\)/i);
+    expect(policyBlock(fix.sql, 'class_ea_assignments_update_self'))
+      .toMatch(/for update to authenticated[\s\S]+ea_user_id = \(select auth\.uid\(\)\)[\s\S]+with check[\s\S]+ea_user_id = \(select auth\.uid\(\)\)/i);
+    expect(policyBlock(fix.sql, 'group_ea_assignments_update_self'))
+      .toMatch(/for update to authenticated[\s\S]+ea_user_id = \(select auth\.uid\(\)\)[\s\S]+with check[\s\S]+ea_user_id = \(select auth\.uid\(\)\)/i);
+
+    expect(policyBlock(fix.sql, 'classes_update_assigned_ea'))
+      .toMatch(/private\.current_user_can_write_for_class\(id\)/i);
+    expect(policyBlock(fix.sql, 'classes_delete_assigned_ea'))
+      .toMatch(/private\.current_user_can_write_for_class\(id\)/i);
+
+    expect(policyBlock(fix.sql, 'assessments_select_assigned_child_history'))
+      .toMatch(/private\.current_user_can_read_child\(child_id\)/i);
+    expect(policyBlock(fix.sql, 'assessment_items_select_visible_assessment'))
+      .toMatch(/private\.current_user_can_read_child\(a\.child_id\)/i);
+    expect(policyBlock(fix.sql, 'letter_mastery_select_assigned_child_history'))
+      .toMatch(/private\.current_user_can_read_child\(child_id\)/i);
+
+    expect(sql).toMatch(/drop policy if exists children_select_created_by on public\.children/i);
+    expect(sql).toMatch(/drop policy if exists classes_select_created_by on public\.classes/i);
+    expect(sql).toMatch(/drop policy if exists groups_select_created_by on public\.groups/i);
+
+    [
+      'schools',
+      'job_titles',
+      'programmes',
+      'academic_years',
+      'assessment_windows',
+      'assessment_tools',
+      'teachers',
+      'staff_programme_assignments',
+      'users',
+    ].forEach((tableName) => {
+      expect(sql).toMatch(
+        new RegExp(`revoke insert, update, delete on public\\.${tableName} from authenticated`, 'i')
+      );
+    });
+  });
+
+  test('RLS grant cleanup removes non-DML table privileges from app roles', () => {
+    const fix = latestMigrationMatching(/rls_grant_cleanup/);
+    const sql = compactSql(fix?.sql || '');
+
+    expect(fix).toBeDefined();
+    expect(sql).toMatch(
+      /revoke truncate, references, trigger on all tables in schema public from public, anon, authenticated/i
+    );
+    expect(sql).toMatch(
+      /revoke insert, update, delete, truncate, references, trigger on public\.schools from authenticated/i
+    );
+    expect(sql).toMatch(
+      /revoke insert, update, delete, truncate, references, trigger on public\.staff_programme_assignments from authenticated/i
+    );
+    expect(sql).toMatch(/grant select on public\.schools to authenticated/i);
+    expect(sql).toMatch(/grant select on public\.staff_programme_assignments to authenticated/i);
+  });
 });

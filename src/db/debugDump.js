@@ -1,4 +1,5 @@
 import { getDatabase } from './client';
+import { getReleaseMetadata } from '../utils/releaseMetadata';
 
 const quoteIdentifier = (identifier) => `"${String(identifier).replace(/"/g, '""')}"`;
 
@@ -124,6 +125,7 @@ export async function debugDump(database) {
 
   return {
     database: 'sqlite',
+    releaseMetadata: getReleaseMetadata(),
     schemaVersion: await getUserVersion(db),
     migrations: await getMigrations(db),
     tableCounts: await getTableCounts(db, tableNames),

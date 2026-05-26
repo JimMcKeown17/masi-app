@@ -2,6 +2,7 @@ jest.mock('expo-sqlite', () => require('../test-support/expoSQLiteMock'));
 
 import {
   DATABASE_NAME,
+  getDatabase,
   resetDatabaseConnectionForTests,
   withTransaction,
 } from '../src/db/client';
@@ -39,6 +40,7 @@ describe('SQLite foundation client', () => {
     const releaseFirstTransaction = createDeferred();
     const events = [];
     const db = {
+      execAsync: jest.fn(async () => {}),
       withExclusiveTransactionAsync: jest.fn(async (task) => {
         const transactionNumber = db.withExclusiveTransactionAsync.mock.calls.length;
         const txn = { id: `txn-${transactionNumber}` };
@@ -81,6 +83,28 @@ describe('SQLite foundation client', () => {
     ]);
   });
 
+  test('configures lock-related pragmas whenever a new database handle is opened', async () => {
+    const firstDb = {
+      execAsync: jest.fn(async () => {}),
+    };
+    const secondDb = {
+      execAsync: jest.fn(async () => {}),
+    };
+    __setDatabaseFactory(jest.fn()
+      .mockResolvedValueOnce(firstDb)
+      .mockResolvedValueOnce(secondDb));
+
+    await expect(getDatabase()).resolves.toBe(firstDb);
+    resetDatabaseConnectionForTests();
+    await expect(getDatabase()).resolves.toBe(secondDb);
+
+    for (const db of [firstDb, secondDb]) {
+      expect(db.execAsync).toHaveBeenCalledWith('PRAGMA foreign_keys = ON');
+      expect(db.execAsync).toHaveBeenCalledWith('PRAGMA journal_mode = WAL');
+      expect(db.execAsync).toHaveBeenCalledWith('PRAGMA busy_timeout = 5000');
+    }
+  });
+
   test('app-level migrations wait behind an active queued write transaction', async () => {
     const firstTransactionEntered = createDeferred();
     const releaseFirstTransaction = createDeferred();
@@ -111,16 +135,27 @@ describe('SQLite foundation client', () => {
     await Promise.resolve();
     await new Promise(resolve => setTimeout(resolve, 0));
 
-    expect(events).toEqual(['enter-write', 'inside-write']);
+    expect(events).toEqual([
+      'exec:PRAGMA foreign_keys = ON',
+      'exec:PRAGMA journal_mode = WAL',
+      'exec:PRAGMA busy_timeout = 5000',
+      'enter-write',
+      'inside-write',
+    ]);
 
     releaseFirstTransaction.resolve();
     await Promise.all([write, migrations]);
 
     expect(events).toEqual([
+      'exec:PRAGMA foreign_keys = ON',
+      'exec:PRAGMA journal_mode = WAL',
+      'exec:PRAGMA busy_timeout = 5000',
       'enter-write',
       'inside-write',
       'exit-write',
       'exec:PRAGMA foreign_keys = ON',
+      'exec:PRAGMA journal_mode = WAL',
+      'exec:PRAGMA busy_timeout = 5000',
     ]);
   });
 });
@@ -184,6 +219,45 @@ const expectSqliteConstraintFailure = async (operation) => {
 };
 
 describe('SQLite migration runner', () => {
+  test('configures connection pragmas before migration execution and outside the transaction', async () => {
+    const events = [];
+    const db = {
+      execAsync: jest.fn(async (sql) => {
+        events.push(`exec:${sql}`);
+      }),
+      getFirstAsync: jest.fn(async (sql) => {
+        events.push(`get:${sql}`);
+        return { user_version: 0 };
+      }),
+      withExclusiveTransactionAsync: jest.fn(async (task) => {
+        events.push('enter-migration-transaction');
+        await task({
+          execAsync: jest.fn(async () => {
+            events.push('txn:exec-migration-sql');
+          }),
+          runAsync: jest.fn(async () => {
+            events.push('txn:record-migration');
+          }),
+        });
+        events.push('exit-migration-transaction');
+      }),
+    };
+
+    await runMigrations(db);
+
+    expect(events).toEqual([
+      'exec:PRAGMA foreign_keys = ON',
+      'exec:PRAGMA journal_mode = WAL',
+      'exec:PRAGMA busy_timeout = 5000',
+      'get:PRAGMA user_version',
+      'enter-migration-transaction',
+      'txn:exec-migration-sql',
+      'txn:record-migration',
+      'exit-migration-transaction',
+      `exec:PRAGMA user_version = ${CURRENT_SCHEMA_VERSION}`,
+    ]);
+  });
+
   test('runs migrations idempotently and sets user_version in real SQLite', async () => {
     const db = createBetterSqliteTestDatabase();
 
@@ -568,6 +642,10 @@ describe('SQLite debug dump', () => {
 
       expect(dump).toEqual({
         database: 'sqlite',
+        releaseMetadata: expect.objectContaining({
+          supabaseTarget: 'sqlite-staging',
+          supabaseProjectId: 'segygjzpujphwvrubusm',
+        }),
         schemaVersion: 0,
         migrations: [],
         tableCounts: {},
@@ -591,6 +669,10 @@ describe('SQLite debug dump', () => {
 
       expect(dump).toEqual({
         database: 'sqlite',
+        releaseMetadata: expect.objectContaining({
+          supabaseTarget: 'sqlite-staging',
+          supabaseProjectId: 'segygjzpujphwvrubusm',
+        }),
         schemaVersion: CURRENT_SCHEMA_VERSION,
         migrations: [{ version: 1, name: 'initial_sqlite_foundation' }],
         tableCounts: expect.objectContaining({

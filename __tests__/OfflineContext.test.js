@@ -58,7 +58,14 @@ describe('OfflineContext Plan 4 sync API', () => {
     expect(syncAll).not.toHaveBeenCalled();
 
     await act(async () => {
-      jest.advanceTimersByTime(350);
+      jest.advanceTimersByTime(999);
+      await Promise.resolve();
+    });
+
+    expect(syncAll).not.toHaveBeenCalled();
+
+    await act(async () => {
+      jest.advanceTimersByTime(1);
       await Promise.resolve();
     });
 
@@ -110,7 +117,7 @@ describe('OfflineContext Plan 4 sync API', () => {
     expect(syncAll).not.toHaveBeenCalled();
 
     await act(async () => {
-      jest.advanceTimersByTime(350);
+      jest.advanceTimersByTime(1000);
       await Promise.resolve();
     });
 

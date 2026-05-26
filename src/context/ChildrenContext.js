@@ -265,6 +265,7 @@ export const ChildrenProvider = ({ children }) => {
         id: uuidv4(),
         ...groupData,
         staff_id: user.id,
+        created_by: user.id,
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
         synced: false,
@@ -362,6 +363,7 @@ export const ChildrenProvider = ({ children }) => {
         id: uuidv4(),
         child_id: childId,
         group_id: groupId,
+        created_by: user.id,
         created_at: new Date().toISOString(),
         synced: false,
       };

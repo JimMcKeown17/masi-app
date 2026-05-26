@@ -1,6 +1,8 @@
 import { resolveDatabase, runRepositoryTransaction } from './repositoryRuntime';
 import {
+  deterministicDomainId,
   enqueueDomainOutbox,
+  getActiveProgrammeAssignment,
   getActiveProgrammeId,
   mapDomainRow,
   normalizeSyncFields,
@@ -8,7 +10,7 @@ import {
   shouldEnqueueOutbox,
   upsertDomainRecord,
 } from './domainRepositoryUtils';
-import { syncStatusFromSynced } from './sqliteRepositoryUtils';
+import { decodeJson, syncStatusFromSynced, timestamp } from './sqliteRepositoryUtils';
 
 const GROUP_COLUMNS = [
   'id',
@@ -43,6 +45,72 @@ const MEMBERSHIP_COLUMNS = [
   'server_updated_at',
 ];
 
+const GROUP_EA_ASSIGNMENT_COLUMNS = [
+  'id',
+  'group_id',
+  'ea_user_id',
+  'programme_id',
+  'assigned_at',
+  'unassigned_at',
+  'handover_reason',
+  'created_by',
+  'created_at',
+  'updated_at',
+  'sync_status',
+  'last_sync_error',
+  'server_updated_at',
+];
+
+const writeOutboxPayload = async (txn, outboxIdValue, payload) => {
+  await txn.runAsync(`
+    update sync_outbox
+    set payload = ?,
+        status = 'pending',
+        last_error = null,
+        next_retry_at = null,
+        updated_at = ?
+    where id = ?
+  `, JSON.stringify(payload), timestamp(), outboxIdValue);
+};
+
+const createMissingGroupAssignment = async (txn, {
+  groupId,
+  ownerUserId,
+  programmeId,
+  assignedAt,
+  syncStatus = 'pending',
+}) => {
+  const activeProgrammeAssignment = ownerUserId
+    ? await getActiveProgrammeAssignment(txn, ownerUserId)
+    : null;
+  if (activeProgrammeAssignment?.programme_id !== programmeId) return null;
+
+  const existingAssignment = await txn.getFirstAsync(`
+    select *
+    from group_ea_assignments
+    where group_id = ?
+      and unassigned_at is null
+    limit 1
+  `, groupId);
+  if (existingAssignment) return mapDomainRow(existingAssignment);
+
+  const assignment = normalizeSyncFields({
+    id: deterministicDomainId('group_ea_assignments', groupId, ownerUserId, programmeId),
+    group_id: groupId,
+    ea_user_id: ownerUserId,
+    programme_id: programmeId,
+    assigned_at: assignedAt || new Date().toISOString(),
+    created_by: ownerUserId,
+    sync_status: syncStatus,
+  });
+  await upsertDomainRecord(txn, {
+    tableName: 'group_ea_assignments',
+    columns: GROUP_EA_ASSIGNMENT_COLUMNS,
+  }, assignment);
+  await enqueueDomainOutbox(txn, 'group_ea_assignments', assignment.id, 'insert', assignment);
+  return assignment;
+};
+
 export const createGroupsRepository = ({ database } = {}) => {
   const runWrite = (transaction, task) => (
     transaction ? task(transaction) : runRepositoryTransaction(database, task)
@@ -73,13 +141,16 @@ export const createGroupsRepository = ({ database } = {}) => {
   };
 
   const saveGroup = async (group, { transaction } = {}) => runWrite(transaction, async (txn) => {
+    const actorUserId = group.staff_id || group.user_id || group.created_by;
     const programmeId = await resolveProgrammeId(txn, {
       programmeId: group.programme_id,
-      userId: group.staff_id || group.created_by,
+      userId: actorUserId,
     });
+    const ownerUserId = group.created_by || actorUserId;
     const record = normalizeSyncFields({
       ...group,
       programme_id: programmeId,
+      created_by: ownerUserId,
       sync_status: group.sync_status || syncStatusFromSynced(group.synced),
     });
     await upsertDomainRecord(txn, {
@@ -88,6 +159,16 @@ export const createGroupsRepository = ({ database } = {}) => {
     }, record);
     if (shouldEnqueueOutbox(record)) {
       await enqueueDomainOutbox(txn, 'groups', group.id, 'insert', record);
+
+      if (ownerUserId) {
+        await createMissingGroupAssignment(txn, {
+          groupId: group.id,
+          ownerUserId,
+          programmeId,
+          assignedAt: record.created_at,
+          syncStatus: record.sync_status,
+        });
+      }
     }
     return true;
   });
@@ -112,10 +193,25 @@ export const createGroupsRepository = ({ database } = {}) => {
   });
 
   const addChildToGroup = async (membership, { transaction } = {}) => runWrite(transaction, async (txn) => {
+    const group = await txn.getFirstAsync('select * from groups where id = ?', membership.group_id);
+    const assignment = await txn.getFirstAsync(`
+      select *
+      from group_ea_assignments
+      where group_id = ?
+        and unassigned_at is null
+      limit 1
+    `, membership.group_id);
+    const ownerUserId = membership.created_by
+      || membership.staff_id
+      || membership.user_id
+      || assignment?.ea_user_id
+      || group?.created_by;
     const record = normalizeSyncFields({
       id: membership.id || `${membership.child_id}:${membership.group_id}`,
       joined_at: membership.joined_at || membership.created_at || new Date().toISOString(),
       ...membership,
+      grouping_version_id: membership.grouping_version_id || group?.grouping_version_id || null,
+      created_by: membership.created_by || ownerUserId,
       sync_status: membership.sync_status || syncStatusFromSynced(membership.synced),
     });
     await upsertDomainRecord(txn, {
@@ -237,3 +333,145 @@ export const createGroupsRepository = ({ database } = {}) => {
 };
 
 export const groupsRepository = createGroupsRepository();
+
+export const repairGroupOwnershipForSync = async ({ database } = {}) => (
+  runRepositoryTransaction(database, async (txn) => {
+    const groupOutboxRows = await txn.getAllAsync(`
+      select
+        g.id,
+        g.programme_id,
+        g.created_by,
+        g.created_at,
+        so.status as outbox_status,
+        so.id as outbox_id,
+        so.payload as outbox_payload
+      from groups g
+      join sync_outbox so
+        on so.table_name = 'groups'
+       and so.record_id = g.id
+       and so.operation = 'insert'
+      where so.status in ('pending', 'failed', 'terminal')
+    `);
+
+    for (const row of groupOutboxRows) {
+      const payload = decodeJson(row.outbox_payload, {});
+      const ownerUserId = row.created_by || payload.created_by || payload.staff_id || payload.user_id;
+      const programmeId = row.programme_id || payload.programme_id;
+      if (!ownerUserId || !programmeId) continue;
+
+      const rowNeedsRepair = row.created_by !== ownerUserId;
+      const payloadNeedsRepair = payload.created_by !== ownerUserId || payload.programme_id !== programmeId;
+      if (!rowNeedsRepair && !payloadNeedsRepair) continue;
+
+      if (rowNeedsRepair) {
+        await txn.runAsync(`
+          update groups
+          set created_by = ?,
+              sync_status = 'pending',
+              last_sync_error = null,
+              updated_at = ?
+          where id = ?
+        `, ownerUserId, timestamp(), row.id);
+      }
+
+      if (payloadNeedsRepair || row.outbox_status !== 'pending') {
+        await writeOutboxPayload(txn, row.outbox_id, {
+          ...payload,
+          id: row.id,
+          programme_id: programmeId,
+          created_by: ownerUserId,
+        });
+      }
+
+      await createMissingGroupAssignment(txn, {
+        groupId: row.id,
+        ownerUserId,
+        programmeId,
+        assignedAt: row.created_at || payload.created_at,
+      });
+    }
+
+    const membershipOutboxRows = await txn.getAllAsync(`
+      select
+        cgm.id,
+        cgm.child_id,
+        cgm.group_id,
+        cgm.grouping_version_id,
+        cgm.created_by,
+        g.programme_id as group_programme_id,
+        g.created_at as group_created_at,
+        g.grouping_version_id as group_grouping_version_id,
+        g.created_by as group_created_by,
+        gea.ea_user_id as group_ea_user_id,
+        so.status as outbox_status,
+        so.id as outbox_id,
+        so.payload as outbox_payload
+      from child_group_memberships cgm
+      join sync_outbox so
+        on so.table_name = 'child_group_memberships'
+       and so.record_id = cgm.id
+       and so.operation = 'insert'
+      left join groups g
+        on g.id = cgm.group_id
+      left join group_ea_assignments gea
+        on gea.group_id = cgm.group_id
+       and gea.unassigned_at is null
+      where so.status in ('pending', 'failed', 'terminal')
+    `);
+
+    for (const row of membershipOutboxRows) {
+      const payload = decodeJson(row.outbox_payload, {});
+      const ownerUserId = row.created_by
+        || payload.created_by
+        || row.group_ea_user_id
+        || row.group_created_by;
+      const groupProgrammeId = row.group_programme_id || payload.programme_id;
+      const groupingVersionId = row.grouping_version_id
+        || payload.grouping_version_id
+        || row.group_grouping_version_id
+        || null;
+      if (!ownerUserId) continue;
+
+      const repairedAssignment = row.group_ea_user_id
+        ? null
+        : await createMissingGroupAssignment(txn, {
+          groupId: row.group_id || payload.group_id,
+          ownerUserId,
+          programmeId: groupProgrammeId,
+          assignedAt: row.group_created_at || payload.joined_at,
+        });
+
+      const rowNeedsRepair = row.created_by !== ownerUserId
+        || row.grouping_version_id !== groupingVersionId;
+      const payloadNeedsRepair = payload.created_by !== ownerUserId
+        || (groupingVersionId && payload.grouping_version_id !== groupingVersionId);
+      const needsRetryReset = row.outbox_status !== 'pending' || Boolean(repairedAssignment);
+      if (!rowNeedsRepair && !payloadNeedsRepair && !needsRetryReset) continue;
+
+      if (rowNeedsRepair || needsRetryReset) {
+        await txn.runAsync(`
+          update child_group_memberships
+          set created_by = ?,
+              grouping_version_id = ?,
+              sync_status = 'pending',
+              last_sync_error = null,
+              updated_at = ?
+          where id = ?
+        `, ownerUserId, groupingVersionId, timestamp(), row.id);
+      }
+
+      if (payloadNeedsRepair || needsRetryReset) {
+        await writeOutboxPayload(txn, row.outbox_id, {
+          ...payload,
+          id: row.id,
+          child_id: row.child_id || payload.child_id,
+          group_id: row.group_id || payload.group_id,
+          ...(groupingVersionId ? { grouping_version_id: groupingVersionId } : {}),
+          created_by: ownerUserId,
+        });
+      }
+    }
+
+    return true;
+  })
+);

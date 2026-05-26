@@ -3,7 +3,6 @@ jest.mock('expo-sqlite', () => require('../test-support/expoSQLiteMock'));
 import { runMigrations } from '../src/db/migrations';
 import { createChildrenRepository } from '../src/db/repositories/childrenRepository';
 import { createGroupsRepository } from '../src/db/repositories/groupsRepository';
-import { createGroupEaAssignmentsRepository } from '../src/db/repositories/groupEaAssignmentsRepository';
 import { createGroupingVersionsRepository } from '../src/db/repositories/groupingVersionsRepository';
 import {
   createMigratedDatabase,
@@ -63,7 +62,6 @@ describe('groupsRepository', () => {
         synced: false,
       }, { actorUserId: 'user-1' });
       const groupsRepository = createGroupsRepository({ database: db });
-      const assignmentsRepository = createGroupEaAssignmentsRepository({ database: db });
 
       await groupsRepository.saveGroup({
         id: 'group-1',
@@ -79,15 +77,6 @@ describe('groupsRepository', () => {
         group_id: 'group-1',
         synced: false,
       });
-      await assignmentsRepository.save({
-        id: 'group-assignment-1',
-        group_id: 'group-1',
-        ea_user_id: 'user-1',
-        programme_id: 'programme-a',
-        assigned_at: '2026-05-21T08:00:00.000Z',
-        created_by: 'user-1',
-        synced: false,
-      });
 
       await groupsRepository.archiveGroup('group-1', {
         actorUserId: 'user-1',
@@ -96,10 +85,134 @@ describe('groupsRepository', () => {
 
       expect(await db.getFirstAsync('select archived_at from groups where id = ?', 'group-1'))
         .toEqual({ archived_at: '2026-05-25T00:00:00.000Z' });
-      expect(await db.getFirstAsync('select unassigned_at from group_ea_assignments where id = ?', 'group-assignment-1'))
+      expect(await db.getFirstAsync('select unassigned_at from group_ea_assignments where group_id = ?', 'group-1'))
         .toEqual({ unassigned_at: '2026-05-25T00:00:00.000Z' });
       expect(await db.getFirstAsync('select removed_at from child_group_memberships where id = ?', 'membership-1'))
         .toEqual({ removed_at: '2026-05-25T00:00:00.000Z' });
+    } finally {
+      await db.closeAsync();
+    }
+  });
+
+  test('mobile-created group saves owner and group EA assignment for sync', async () => {
+    const db = await createMigratedDatabase(runMigrations);
+
+    try {
+      await seedCoreData(db);
+      const groupsRepository = createGroupsRepository({ database: db });
+
+      await groupsRepository.saveGroup({
+        id: 'group-1',
+        name: 'Group 1',
+        staff_id: 'user-1',
+        synced: false,
+      });
+
+      expect(await db.getFirstAsync(`
+        select id, programme_id, created_by, sync_status
+        from groups
+        where id = 'group-1'
+      `)).toEqual({
+        id: 'group-1',
+        programme_id: 'programme-a',
+        created_by: 'user-1',
+        sync_status: 'pending',
+      });
+
+      const assignment = await db.getFirstAsync(`
+        select group_id, ea_user_id, programme_id, created_by, sync_status
+        from group_ea_assignments
+        where group_id = 'group-1'
+      `);
+      expect(assignment).toEqual({
+        group_id: 'group-1',
+        ea_user_id: 'user-1',
+        programme_id: 'programme-a',
+        created_by: 'user-1',
+        sync_status: 'pending',
+      });
+
+      const outboxTables = await db.getAllAsync(`
+        select table_name, operation
+        from sync_outbox
+        where record_id = 'group-1'
+           or table_name = 'group_ea_assignments'
+        order by table_name
+      `);
+      expect(outboxTables).toEqual([
+        { table_name: 'group_ea_assignments', operation: 'insert' },
+        { table_name: 'groups', operation: 'insert' },
+      ]);
+    } finally {
+      await db.closeAsync();
+    }
+  });
+
+  test('child group membership derives owner and grouping version from group', async () => {
+    const db = await createMigratedDatabase(runMigrations);
+
+    try {
+      await seedCoreData(db);
+      await createChildrenRepository({ database: db }).save({
+        id: 'child-1',
+        first_name: 'Amahle',
+        last_name: 'Dlamini',
+        class_id: 'class-1',
+        created_by: 'user-1',
+        synced: false,
+      }, { actorUserId: 'user-1' });
+      await createGroupingVersionsRepository({ database: db }).save({
+        id: 'grouping-1',
+        class_id: 'class-1',
+        academic_year_id: 'year-2026',
+        version_number: 1,
+        status: 'active',
+        created_by: 'user-1',
+        synced: false,
+      });
+
+      const groupsRepository = createGroupsRepository({ database: db });
+      await groupsRepository.saveGroup({
+        id: 'group-1',
+        name: 'Group 1',
+        programme_id: 'programme-a',
+        class_id: 'class-1',
+        grouping_version_id: 'grouping-1',
+        created_by: 'user-1',
+        synced: false,
+      });
+
+      await groupsRepository.addChildToGroup({
+        id: 'membership-1',
+        child_id: 'child-1',
+        group_id: 'group-1',
+        synced: false,
+      });
+
+      const membership = await db.getFirstAsync(`
+        select id, child_id, group_id, grouping_version_id, created_by, sync_status
+        from child_group_memberships
+        where id = 'membership-1'
+      `);
+      expect(membership).toEqual({
+        id: 'membership-1',
+        child_id: 'child-1',
+        group_id: 'group-1',
+        grouping_version_id: 'grouping-1',
+        created_by: 'user-1',
+        sync_status: 'pending',
+      });
+
+      const outbox = await db.getFirstAsync(`
+        select payload
+        from sync_outbox
+        where table_name = 'child_group_memberships'
+          and record_id = 'membership-1'
+      `);
+      expect(JSON.parse(outbox.payload)).toEqual(expect.objectContaining({
+        created_by: 'user-1',
+        grouping_version_id: 'grouping-1',
+      }));
     } finally {
       await db.closeAsync();
     }
@@ -119,7 +232,6 @@ describe('groupsRepository', () => {
         synced: false,
       }, { actorUserId: 'user-1' });
       const groupsRepository = createGroupsRepository({ database: db });
-      const assignmentsRepository = createGroupEaAssignmentsRepository({ database: db });
 
       await groupsRepository.saveGroup({
         id: 'group-1',
@@ -135,15 +247,6 @@ describe('groupsRepository', () => {
         group_id: 'group-1',
         synced: false,
       });
-      await assignmentsRepository.save({
-        id: 'group-assignment-1',
-        group_id: 'group-1',
-        ea_user_id: 'user-1',
-        programme_id: 'programme-a',
-        assigned_at: '2026-05-21T08:00:00.000Z',
-        created_by: 'user-1',
-        synced: false,
-      });
       await db.runAsync("update groups set sync_status = 'synced' where id = 'group-1'");
       await db.runAsync('delete from sync_outbox');
 
@@ -154,7 +257,7 @@ describe('groupsRepository', () => {
 
       expect(await db.getFirstAsync('select id, archived_at from groups where id = ?', 'group-1'))
         .toEqual({ id: 'group-1', archived_at: '2026-05-26T00:00:00.000Z' });
-      expect(await db.getFirstAsync('select unassigned_at from group_ea_assignments where id = ?', 'group-assignment-1'))
+      expect(await db.getFirstAsync('select unassigned_at from group_ea_assignments where group_id = ?', 'group-1'))
         .toEqual({ unassigned_at: '2026-05-26T00:00:00.000Z' });
       expect(await db.getFirstAsync('select removed_at from child_group_memberships where id = ?', 'membership-1'))
         .toEqual({ removed_at: '2026-05-26T00:00:00.000Z' });

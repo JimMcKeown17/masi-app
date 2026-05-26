@@ -23,6 +23,11 @@ jest.mock('expo-constants', () => ({
     runtimeVersion: { policy: 'appVersion' },
     ios: { buildNumber: '1' },
     android: { versionCode: 1 },
+    updates: { url: 'https://u.expo.dev/test-project' },
+    extra: {
+      supabaseTarget: 'sqlite-staging',
+      supabaseProjectId: 'segygjzpujphwvrubusm',
+    },
   },
 }), { virtual: true });
 
@@ -69,7 +74,16 @@ describe('debug database export metadata', () => {
     const exported = JSON.parse(mockWrittenContent);
     expect(exported.sqlite_refactor_build).toBe('plan-6');
     expect(exported.app_version).toBe('1.2.0');
+    expect(exported.releaseMetadata).toEqual(expect.objectContaining({
+      appVersion: '1.2.0',
+      supabaseTarget: 'sqlite-staging',
+      supabaseProjectId: 'segygjzpujphwvrubusm',
+    }));
     expect(exported.database.database).toBe('sqlite');
+    expect(exported.database.releaseMetadata).toEqual(expect.objectContaining({
+      supabaseTarget: 'sqlite-staging',
+      supabaseProjectId: 'segygjzpujphwvrubusm',
+    }));
     expect(exported.database.schemaVersion).toBe(CURRENT_SCHEMA_VERSION);
     expect(exported.database.tableCounts).toEqual(expect.objectContaining({
       sync_outbox: 2,

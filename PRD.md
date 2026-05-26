@@ -65,7 +65,7 @@ Validation status as of 2026-05-22: the SQLite implementation has passed the aut
 - last_name (text)
 - class_id (uuid, FK to classes)
 - age (integer, nullable)
-- gender (text, CHECK Male/Female when present)
+- gender (text, canonical lowercase values; UI offers `female`/`male`; SQLite/Supabase still tolerate historic `non_binary`/`unknown` values during cutover)
 - teacher/class/school (transitional legacy text columns until schema hardening Phase 6)
 - assigned_staff_id (uuid, FK to users) -- DEPRECATED: Use staff_children junction instead
 - created_at (timestamp)
@@ -763,6 +763,19 @@ Requirements to be gathered as we progress through development phases.
 ---
 
 ### In Progress
+
+#### SQLite RLS/App Contract Closeout
+Branch: current SQLite cutover worktree
+
+Clean-slate SQLite backend/app wiring audit after physical-device group failures. Goal: close RLS policy drift and sync-order risks without weakening backend security.
+
+- [x] Audit live `masi-app-sqlite` policies, grants, triggers, RLS enablement, views, and staging row health
+- [x] Add RLS contract migration for assignment archive policies, immutable assignment identity triggers, class assigned-EA writes, and helper-aligned assessment/mastery reads
+- [x] Add operation-aware archive ordering and dependency propagation in the sync outbox
+- [x] Tighten table grants so app roles do not keep non-DML privileges such as `TRUNCATE`
+- [x] Push cleanup migrations to `masi-app-sqlite`
+- [x] Verify with migration contract tests, outbox behavior tests, staging advisors, live catalog queries, and a rollback-only authenticated RLS smoke test
+- [ ] Physical-device validation remains the release gate before field distribution
 
 #### Schema Hardening — Lookups, Build B, and Destructive-Drop Gates
 Branches: `schema-hardening-build-a`, `schema-hardening-build-b`

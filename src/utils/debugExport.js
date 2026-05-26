@@ -1,9 +1,9 @@
 import { Platform } from 'react-native';
 import { File, Paths } from 'expo-file-system/next';
 import * as Sharing from 'expo-sharing';
-import Constants from 'expo-constants';
 import { logger } from './logger';
 import { debugDump } from '../db/debugDump';
+import { getReleaseMetadata } from './releaseMetadata';
 
 /**
  * Write content to a temp file and share it via the native share sheet.
@@ -28,13 +28,15 @@ const shareFile = async (filename, content, mimeType) => {
  */
 export const exportDatabase = async () => {
   try {
+    const releaseMetadata = getReleaseMetadata();
     const exportData = {
       exported_at: new Date().toISOString(),
-      app_version: Constants.expoConfig?.version ?? 'unknown',
+      app_version: releaseMetadata.appVersion,
       sqlite_refactor_build: 'plan-6',
-      ios_build_number: Constants.expoConfig?.ios?.buildNumber ?? null,
-      android_version_code: Constants.expoConfig?.android?.versionCode ?? null,
-      runtime_version: Constants.expoConfig?.runtimeVersion ?? null,
+      ios_build_number: releaseMetadata.iosBuildNumber,
+      android_version_code: releaseMetadata.androidVersionCode,
+      runtime_version: releaseMetadata.runtimeVersion,
+      releaseMetadata,
       device_info: {
         platform: Platform.OS,
         version: Platform.Version,

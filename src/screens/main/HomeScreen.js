@@ -8,9 +8,11 @@ import { useAuth } from '../../context/AuthContext';
 import { useOffline } from '../../context/OfflineContext';
 import { useChildren } from '../../context/ChildrenContext';
 import { useTimeTracking } from '../../hooks/useTimeTracking';
+import { useSessionLaunchGuard } from '../../hooks/useSessionLaunchGuard';
 import { timeEntriesRepository } from '../../db/repositories/timeEntriesRepository';
 import { sessionsRepository } from '../../db/repositories/sessionsRepository';
 import { assessmentsRepository } from '../../db/repositories/assessmentsRepository';
+import ClockInBeforeSessionDialog from '../../components/sessions/ClockInBeforeSessionDialog';
 import {
   getDaysWorkedThisMonth,
   getWeekSessionCounts,
@@ -38,6 +40,16 @@ export default function HomeScreen({ navigation }) {
     formatElapsedTime,
     formatTime,
   } = useTimeTracking();
+  const {
+    warningVisible,
+    requestSessionLaunch,
+    continueAnyway,
+    clockInNow,
+    dismissWarning,
+  } = useSessionLaunchGuard({
+    navigation,
+    userId: user?.id,
+  });
 
   // Dashboard stats
   const [daysWorked, setDaysWorked] = useState(0);
@@ -236,7 +248,7 @@ export default function HomeScreen({ navigation }) {
               ))}
             </View>
             <Pressable
-              onPress={() => navigation.navigate('SessionForm')}
+              onPress={() => requestSessionLaunch()}
               style={styles.recordSessionButton}
             >
               <LinearGradient
@@ -316,6 +328,12 @@ export default function HomeScreen({ navigation }) {
       >
         {snackbarMessage}
       </Snackbar>
+      <ClockInBeforeSessionDialog
+        visible={warningVisible}
+        onDismiss={dismissWarning}
+        onClockInNow={clockInNow}
+        onContinueAnyway={continueAnyway}
+      />
     </View>
   );
 }

@@ -7,16 +7,15 @@ import {
   Card,
   HelperText,
   Snackbar,
-  Portal,
-  Dialog,
-  RadioButton,
 } from 'react-native-paper';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { colors, spacing, borderRadius } from '../../constants/colors';
 import { useChildren } from '../../context/ChildrenContext';
 import { useClasses } from '../../context/ClassesContext';
-import { GENDERS, getGenderLabel } from '../../constants/options';
+import { GENDER_OPTIONS } from '../../constants/options';
 import GroupPickerBottomSheet, { getGroupColor, compareGroups } from '../../components/children/GroupPickerBottomSheet';
+import { NO_TEXT_SUGGESTIONS } from '../../constants/textInputProps';
+import ChipSelector from '../../components/forms/ChipSelector';
 
 export default function EditChildScreen({ route, navigation }) {
   const { childId } = route.params;
@@ -32,9 +31,9 @@ export default function EditChildScreen({ route, navigation }) {
   const [lastName, setLastName] = useState('');
   const [age, setAge] = useState('');
   const [gender, setGender] = useState('');
-  const [genderDialogVisible, setGenderDialogVisible] = useState(false);
   const [groupPickerVisible, setGroupPickerVisible] = useState(false);
   const [classPickerVisible, setClassPickerVisible] = useState(false);
+  const [initialized, setInitialized] = useState(false);
 
   const [errors, setErrors] = useState({});
   const [loading, setLoading] = useState(false);
@@ -61,16 +60,20 @@ export default function EditChildScreen({ route, navigation }) {
 
   // Load child data on mount
   useEffect(() => {
+    if (initialized) return;
+
     if (child) {
       setFirstName(child.first_name || '');
       setLastName(child.last_name || '');
       setAge(child.age ? child.age.toString() : '');
       setGender(child.gender || '');
+      setInitialized(true);
     } else {
       setSnackbar({ visible: true, message: 'Child not found' });
-      setTimeout(() => navigation.goBack(), 1500);
+      setInitialized(true);
+      navigation.goBack();
     }
-  }, [child]);
+  }, [child, initialized, navigation]);
 
   const validate = () => {
     const newErrors = {};
@@ -106,8 +109,7 @@ export default function EditChildScreen({ route, navigation }) {
       });
 
       if (result.success) {
-        setSnackbar({ visible: true, message: 'Child updated successfully' });
-        setTimeout(() => navigation.goBack(), 1500);
+        navigation.goBack();
       } else {
         setSnackbar({ visible: true, message: 'Error updating child' });
       }
@@ -140,8 +142,7 @@ export default function EditChildScreen({ route, navigation }) {
           onPress: async () => {
             const result = await deleteChild(childId);
             if (result.success) {
-              setSnackbar({ visible: true, message: 'Child deleted' });
-              setTimeout(() => navigation.goBack(), 1000);
+              navigation.goBack();
             } else {
               setSnackbar({ visible: true, message: 'Error deleting child' });
             }
@@ -199,6 +200,7 @@ export default function EditChildScreen({ route, navigation }) {
               label="First Name *"
               value={firstName}
               onChangeText={setFirstName}
+              {...NO_TEXT_SUGGESTIONS}
               error={!!errors.firstName}
               mode="outlined"
               style={styles.input}
@@ -212,6 +214,7 @@ export default function EditChildScreen({ route, navigation }) {
               label="Last Name *"
               value={lastName}
               onChangeText={setLastName}
+              {...NO_TEXT_SUGGESTIONS}
               error={!!errors.lastName}
               mode="outlined"
               style={styles.input}
@@ -225,6 +228,7 @@ export default function EditChildScreen({ route, navigation }) {
               label="Age"
               value={age}
               onChangeText={setAge}
+              {...NO_TEXT_SUGGESTIONS}
               error={!!errors.age}
               mode="outlined"
               keyboardType="numeric"
@@ -234,15 +238,12 @@ export default function EditChildScreen({ route, navigation }) {
               <HelperText type="error">{errors.age}</HelperText>
             )}
 
-            {/* Gender picker */}
-            <TextInput
-              label="Gender"
-              value={getGenderLabel(gender)}
-              mode="outlined"
-              style={styles.input}
-              editable={false}
-              right={<TextInput.Icon icon="chevron-down" onPress={() => setGenderDialogVisible(true)} />}
-              onPressIn={() => setGenderDialogVisible(true)}
+            <Text variant="labelLarge" style={styles.fieldLabel}>Gender</Text>
+            <ChipSelector
+              options={GENDER_OPTIONS}
+              value={gender}
+              onChange={setGender}
+              testID="edit-child-gender"
             />
 
             {/* Group picker field */}
@@ -296,26 +297,6 @@ export default function EditChildScreen({ route, navigation }) {
           Delete Child
         </Button>
       </ScrollView>
-
-      {/* Gender Dialog */}
-      <Portal>
-        <Dialog visible={genderDialogVisible} onDismiss={() => setGenderDialogVisible(false)}>
-          <Dialog.Title>Select Gender</Dialog.Title>
-          <Dialog.Content>
-            <RadioButton.Group
-              onValueChange={(value) => {
-                setGender(value);
-                setGenderDialogVisible(false);
-              }}
-              value={gender}
-            >
-              {GENDERS.map(g => (
-                <RadioButton.Item key={g.value} label={g.label} value={g.value} />
-              ))}
-            </RadioButton.Group>
-          </Dialog.Content>
-        </Dialog>
-      </Portal>
 
       {/* Group Picker Bottom Sheet */}
       <GroupPickerBottomSheet
@@ -442,6 +423,10 @@ const styles = StyleSheet.create({
   input: {
     marginBottom: spacing.sm,
     backgroundColor: colors.surface,
+  },
+  fieldLabel: {
+    color: colors.textSecondary,
+    marginBottom: spacing.xs,
   },
   groupField: {
     marginBottom: spacing.sm,

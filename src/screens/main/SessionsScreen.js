@@ -9,11 +9,23 @@ import { useChildren } from '../../context/ChildrenContext';
 import { sessionsRepository } from '../../db/repositories/sessionsRepository';
 import { getSessionsTabStats } from '../../utils/dashboardStats';
 import StatBar from '../../components/dashboard/StatBar';
+import { useSessionLaunchGuard } from '../../hooks/useSessionLaunchGuard';
+import ClockInBeforeSessionDialog from '../../components/sessions/ClockInBeforeSessionDialog';
 
 export default function SessionsScreen({ navigation }) {
   const { user } = useAuth();
   const { children: childrenList } = useChildren();
   const [stats, setStats] = useState(null);
+  const {
+    warningVisible,
+    requestSessionLaunch,
+    continueAnyway,
+    clockInNow,
+    dismissWarning,
+  } = useSessionLaunchGuard({
+    navigation,
+    userId: user?.id,
+  });
 
   useFocusEffect(
     useCallback(() => {
@@ -58,7 +70,7 @@ export default function SessionsScreen({ navigation }) {
       <View style={styles.buttonContainer}>
         <Button
           mode="contained"
-          onPress={() => navigation.navigate('SessionForm')}
+          onPress={() => requestSessionLaunch()}
           style={styles.button}
         >
           Record New Session
@@ -72,6 +84,12 @@ export default function SessionsScreen({ navigation }) {
           View History
         </Button>
       </View>
+      <ClockInBeforeSessionDialog
+        visible={warningVisible}
+        onDismiss={dismissWarning}
+        onClockInNow={clockInNow}
+        onContinueAnyway={continueAnyway}
+      />
     </View>
   );
 }

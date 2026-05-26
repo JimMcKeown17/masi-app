@@ -81,7 +81,8 @@ The SQLite backend has these migrations applied locally and remotely:
 
 `masi-app-sqlite` remains the clean-slate backend intended to become primary after Plan 6 validation. Do not repoint field users until:
 
-- `npm run test:release` passes. Status: passed on 2026-05-22.
+- `npm run test:release` passes. Status: passed on 2026-05-22. Latest focused hardening gates also passed on 2026-05-25: full Jest (`55` suites / `261` tests), file-backed SQLite integration (`13` suites / `98` tests), `npm run sqlite:staging:check`, and `git diff --check`.
 - `npm run sqlite:staging:migrations`, `dry-run`, and `advisors` show no unexpected issues. Status: migrations and dry run passed; advisors have only recorded known warnings.
+- Schema drift is checked before cutover. Status: `supabase db pull --linked --schema public` reached Supabase on 2026-05-25 but was blocked because Docker was not running for the CLI shadow database. Fallback `supabase db query --linked` spot-checked high-write public table columns on `masi-app-sqlite`.
 - Internal Android validation has covered offline writes, restart with pending outbox, sync, and support export. Status: emulator core path passed on 2026-05-22; corrected preview APK build `07d1c674-b06e-4d03-a611-4bf17c182a7b` launches to sign-in; physical-device sign-in/clock-in/offline-write validation remains pending.
 - The cutover communication gate is logged in `documentation/sqlite-refactor-log.md`. Status: pending, user-owned.
