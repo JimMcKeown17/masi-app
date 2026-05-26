@@ -193,6 +193,11 @@ const ARCHIVE_PUSH_ORDER = {
 };
 
 const BATCHABLE_UPSERT_TABLES = new Set(['assessment_items']);
+const IMMUTABLE_ASSIGNMENT_TABLES = new Set([
+  'child_ea_assignments',
+  'class_ea_assignments',
+  'group_ea_assignments',
+]);
 
 const dependenciesForRecord = (outboxRecord) => {
   const dependencies = new Set(TABLE_DEPENDENCIES[outboxRecord.table_name] || []);
@@ -353,7 +358,9 @@ const runServerOperation = async (supabaseClient, config, outboxRecord) => {
     .from(config.tableName)
     .upsert(payload, {
       onConflict: config.onConflict || 'id',
-      ignoreDuplicates: false,
+      ignoreDuplicates:
+        outboxRecord.operation === 'insert'
+        && IMMUTABLE_ASSIGNMENT_TABLES.has(config.tableName),
     });
 
   return error ? { success: false, error } : { success: true };

@@ -88,6 +88,28 @@ describe('childrenRepository', () => {
     }
   });
 
+  test('saving a child throws before enqueueing when no owner can satisfy RLS', async () => {
+    const db = await createMigratedDatabase(runMigrations);
+
+    try {
+      await seedCoreData(db);
+      const repository = createChildrenRepository({ database: db });
+
+      await expect(repository.save(
+        makeChild({
+          created_by: null,
+          programme_id: 'programme-a',
+        }),
+        { actorUserId: null }
+      )).rejects.toThrow(/children\.created_by is required/i);
+
+      expect(await db.getFirstAsync('select count(*) as count from children')).toEqual({ count: 0 });
+      expect(await db.getFirstAsync('select count(*) as count from sync_outbox')).toEqual({ count: 0 });
+    } finally {
+      await db.closeAsync();
+    }
+  });
+
   test('reassigning a child after ended relationships preserves historical rows', async () => {
     const db = await createMigratedDatabase(runMigrations);
 

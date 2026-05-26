@@ -527,6 +527,76 @@ describe('SQLite outbox offline sync', () => {
     expect(await db.getFirstAsync('select count(*) as count from sync_outbox')).toEqual({ count: 0 });
   });
 
+  test('assignment insert retries do not attempt identity-changing updates', async () => {
+    await db.runAsync(`
+      insert into groups (id, name, programme_id, created_by, sync_status)
+      values ('group-existing-assignment', 'Group 1', 'programme-1', 'user-1', 'synced')
+    `);
+    await db.runAsync(`
+      insert into group_ea_assignments (
+        id,
+        group_id,
+        ea_user_id,
+        programme_id,
+        assigned_at,
+        created_by,
+        sync_status
+      )
+      values (
+        'group-assignment-existing',
+        'group-existing-assignment',
+        'user-1',
+        'programme-1',
+        '2026-05-25T23:01:45.910Z',
+        'user-1',
+        'pending'
+      )
+    `);
+    await enqueue(db, 'group_ea_assignments', 'group-assignment-existing', 'insert', {
+      id: 'group-assignment-existing',
+      group_id: 'group-existing-assignment',
+      ea_user_id: 'user-1',
+      programme_id: 'programme-1',
+      assigned_at: '2026-05-26T15:01:30.000Z',
+      created_by: 'user-1',
+    });
+
+    const { supabaseClient, calls } = createSupabaseMock({
+      upsertResults: {
+        group_ea_assignments: ({ options }) => (
+          options.ignoreDuplicates === true
+            ? { error: null }
+            : {
+              error: {
+                code: '23514',
+                message: 'group_ea_assignments identity columns cannot be changed after insert',
+              },
+            }
+        ),
+      },
+    });
+    const engine = createOutboxSyncEngine({ database: db, supabaseClient });
+
+    const result = await engine.syncAll();
+
+    expect(result.success).toBe(true);
+    expect(calls).toEqual([
+      expect.objectContaining({
+        type: 'upsert',
+        tableName: 'group_ea_assignments',
+        options: expect.objectContaining({
+          onConflict: 'id',
+          ignoreDuplicates: true,
+        }),
+      }),
+    ]);
+    expect(await db.getFirstAsync(`
+      select sync_status, last_sync_error
+      from group_ea_assignments
+      where id = 'group-assignment-existing'
+    `)).toEqual({ sync_status: 'synced', last_sync_error: null });
+  });
+
   test('time entry repository writes are consumed by the sync engine', async () => {
     const repository = createTimeEntriesRepository({ database: db });
     await repository.saveTimeEntry({

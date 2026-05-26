@@ -352,6 +352,23 @@ describe('Plan 1 SQLite Supabase migrations', () => {
     });
   });
 
+  test('creator SELECT policies stay present for mobile upsert visibility', () => {
+    const fix = latestMigrationMatching(/creator_select_upsert_visibility/);
+
+    expect(fix).toBeDefined();
+    [
+      'children',
+      'classes',
+      'groups',
+    ].forEach((tableName) => {
+      expect(fix.sql).toMatch(
+        new RegExp(`drop policy if exists ${tableName}_select_created_by on public\\.${tableName}`, 'i')
+      );
+      expect(policyBlock(fix.sql, `${tableName}_select_created_by`))
+        .toMatch(/for select to authenticated[\s\S]+created_by = \(select auth\.uid\(\)\)/i);
+    });
+  });
+
   test('RLS grant cleanup removes non-DML table privileges from app roles', () => {
     const fix = latestMigrationMatching(/rls_grant_cleanup/);
     const sql = compactSql(fix?.sql || '');

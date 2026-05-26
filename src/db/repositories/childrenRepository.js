@@ -1,6 +1,7 @@
 import { v4 as uuidv4 } from 'uuid';
 import { resolveDatabase, runRepositoryTransaction } from './repositoryRuntime';
 import {
+  assertRlsRequiredFields,
   enqueueDomainOutbox,
   getActiveAcademicYear,
   mapDomainRow,
@@ -108,6 +109,7 @@ export const createChildrenRepository = ({ database } = {}) => {
         updated_at: child.updated_at || now,
         sync_status: child.sync_status || 'pending',
       });
+      assertRlsRequiredFields('children', childRecord, ['created_by']);
 
       await upsertDomainRecord(txn, {
         tableName: 'children',
@@ -131,6 +133,7 @@ export const createChildrenRepository = ({ database } = {}) => {
           created_by: actorUserId,
           sync_status: 'pending',
         });
+        assertRlsRequiredFields('child_ea_assignments', assignment, ['user_id', 'child_id', 'created_by']);
         await upsertDomainRecord(txn, {
           tableName: 'child_ea_assignments',
           columns: RELATIONSHIP_COLUMNS.childEa,
@@ -154,6 +157,7 @@ export const createChildrenRepository = ({ database } = {}) => {
           created_by: actorUserId,
           sync_status: 'pending',
         });
+        assertRlsRequiredFields('child_programme_enrollments', enrollment, ['child_id', 'programme_id', 'created_by']);
         await upsertDomainRecord(txn, {
           tableName: 'child_programme_enrollments',
           columns: RELATIONSHIP_COLUMNS.programmeEnrollment,
@@ -187,6 +191,7 @@ export const createChildrenRepository = ({ database } = {}) => {
             created_by: actorUserId,
             sync_status: 'pending',
           });
+          assertRlsRequiredFields('child_class_memberships', membership, ['child_id', 'class_id', 'academic_year_id', 'created_by']);
           await upsertDomainRecord(txn, {
             tableName: 'child_class_memberships',
             columns: RELATIONSHIP_COLUMNS.classMembership,
@@ -263,6 +268,9 @@ export const createChildrenRepository = ({ database } = {}) => {
       created_by: assignment.created_by || assignment.staff_id || assignment.user_id,
       sync_status: assignment.sync_status || syncStatusFromSynced(assignment.synced),
     });
+    if (shouldEnqueueOutbox(record)) {
+      assertRlsRequiredFields('child_ea_assignments', record, ['user_id', 'child_id', 'created_by']);
+    }
     await upsertDomainRecord(txn, {
       tableName: 'child_ea_assignments',
       columns: RELATIONSHIP_COLUMNS.childEa,
@@ -279,6 +287,9 @@ export const createChildrenRepository = ({ database } = {}) => {
       ...enrollment,
       sync_status: enrollment.sync_status || syncStatusFromSynced(enrollment.synced),
     });
+    if (shouldEnqueueOutbox(record)) {
+      assertRlsRequiredFields('child_programme_enrollments', record, ['child_id', 'programme_id', 'created_by']);
+    }
     await upsertDomainRecord(txn, {
       tableName: 'child_programme_enrollments',
       columns: RELATIONSHIP_COLUMNS.programmeEnrollment,
@@ -295,6 +306,9 @@ export const createChildrenRepository = ({ database } = {}) => {
       ...membership,
       sync_status: membership.sync_status || syncStatusFromSynced(membership.synced),
     });
+    if (shouldEnqueueOutbox(record)) {
+      assertRlsRequiredFields('child_class_memberships', record, ['child_id', 'class_id', 'created_by']);
+    }
     await upsertDomainRecord(txn, {
       tableName: 'child_class_memberships',
       columns: RELATIONSHIP_COLUMNS.classMembership,

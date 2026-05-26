@@ -1,13 +1,13 @@
 # SQLite Supabase Setup
 
-This file records the non-secret setup for the clean-slate SQLite Supabase backend.
+This file records the non-secret setup for the SQLite Supabase backend that is now the app's forward path.
 
 ## Projects
 
 | Purpose | Supabase Name | Project Ref | URL | Notes |
 | --- | --- | --- | --- | --- |
-| Current production backend | `masi-app` | `jcqrlwetutnpuchjoyyd` | `https://jcqrlwetutnpuchjoyyd.supabase.co` | Existing AsyncStorage-backed app target. Leave intact during the refactor. |
-| SQLite backend | `masi-app-sqlite` | `segygjzpujphwvrubusm` | `https://segygjzpujphwvrubusm.supabase.co` | Clean-slate backend intended to become primary after release validation. |
+| Current forward backend | `masi-app-sqlite` | `segygjzpujphwvrubusm` | `https://segygjzpujphwvrubusm.supabase.co` | SQLite backend for new app work and preview builds. |
+| Legacy pre-SQLite backend | `masi-app` | `jcqrlwetutnpuchjoyyd` | `https://jcqrlwetutnpuchjoyyd.supabase.co` | Existing AsyncStorage-backed app target. Leave intact for legacy reference unless the user explicitly asks for old-backend maintenance. |
 
 ## Local Environment
 
@@ -26,7 +26,7 @@ Do not shell-source `.env.local` in scripts. Generated database passwords can co
 
 ## CLI Link
 
-The local checkout is linked to the SQLite backend for Plan 1:
+The local checkout is linked to the SQLite backend:
 
 ```bash
 supabase link --project-ref segygjzpujphwvrubusm --password ...
@@ -71,18 +71,22 @@ The SQLite backend has these migrations applied locally and remotely:
 - `20260521144901_masi_zazi_alignment_schema.sql`
 - `20260521153217_masi_child_delete_guard.sql`
 - `20260522103000_masi_session_upsert_visibility.sql`
+- `20260525231506_masi_rls_contract_cleanup.sql`
+- `20260525232108_masi_rls_grant_cleanup.sql`
+- `20260526151352_creator_select_upsert_visibility.sql`
 
 `npm run sqlite:staging:advisors` is expected to report only:
 
 - `multiple_permissive_policies` warnings for `children`, `classes`, and `groups`. Those warnings are intentional: each table has one assignment/programme SELECT policy plus one `created_by = auth.uid()` fallback policy so mobile upserts remain visible before related join rows sync.
 - `auth_leaked_password_protection` until the hosted project plan/settings allow leaked-password protection to be enabled in Supabase Auth settings. Supabase documents leaked-password protection under Auth password security and notes that it is available on Pro Plan and above.
 
-## Promotion Status
+## Current Status
 
-`masi-app-sqlite` remains the clean-slate backend intended to become primary after Plan 6 validation. Do not repoint field users until:
+`masi-app-sqlite` is the backend going forward as of 2026-05-26.
 
-- `npm run test:release` passes. Status: passed on 2026-05-22. Latest focused hardening gates also passed on 2026-05-25: full Jest (`55` suites / `261` tests), file-backed SQLite integration (`13` suites / `98` tests), `npm run sqlite:staging:check`, and `git diff --check`.
+- `npm run test:release` passed on 2026-05-26 after the final RLS/sync fixes: 56 Jest suites / 296 tests, 13 file-backed SQLite integration suites / 113 tests, and SQLite staging guard for `sqlite-staging` / `segygjzpujphwvrubusm`.
 - `npm run sqlite:staging:migrations`, `dry-run`, and `advisors` show no unexpected issues. Status: migrations and dry run passed; advisors have only recorded known warnings.
 - Schema drift is checked before cutover. Status: `supabase db pull --linked --schema public` reached Supabase on 2026-05-25 but was blocked because Docker was not running for the CLI shadow database. Fallback `supabase db query --linked` spot-checked high-write public table columns on `masi-app-sqlite`.
-- Internal Android validation has covered offline writes, restart with pending outbox, sync, and support export. Status: emulator core path passed on 2026-05-22; corrected preview APK build `07d1c674-b06e-4d03-a611-4bf17c182a7b` launches to sign-in; physical-device sign-in/clock-in/offline-write validation remains pending.
-- The cutover communication gate is logged in `documentation/sqlite-refactor-log.md`. Status: pending, user-owned.
+- Internal Android validation has covered offline writes, restart with pending outbox, sync, and support export. Status: emulator core path passed on 2026-05-22; corrected preview APK build `07d1c674-b06e-4d03-a611-4bf17c182a7b` launches to sign-in.
+- User iPhone preview-build testing on 2026-05-26 reported the new build working correctly after the RLS/sync fixes.
+- Future feature and UI work should target this backend unless the user explicitly asks for legacy-backend maintenance.

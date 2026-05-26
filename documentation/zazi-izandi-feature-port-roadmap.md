@@ -1,6 +1,6 @@
 # Zazi iZandi -> Masi Feature Port Roadmap
 
-**Updated:** 2026-05-25
+**Updated:** 2026-05-26
 **Source audited:** `/Users/jimmckeown/Development/zazi-izandi-app`
 **Target audited:** `/Users/jimmckeown/Development/masi-app`
 **Target branch observed:** `plan-5/context-screen-migration`
@@ -26,15 +26,15 @@ Use valid Markdown checkboxes only:
 - `[x]` yes, shipped or selected
 - `[ ] 🟡 Modify` port the pattern, but adapt before implementation
 - `[ ] ❌ Skip` do not port
-- `[ ] ⏸ Defer` good idea, but not during the SQLite cutover window
+- `[ ] ⏸ Defer` good idea, but not during the current UI tranche
 
 ---
 
 ## Current Context
 
-Masi is still in Plan 6 release validation for the clean-slate SQLite refactor. Do not start large UX work that changes sessions, groups, assessments, sync, or storage until the field cutover gate is closed, unless the item is explicitly small, local, and low risk.
+The SQLite backend is now the forward path for Masi. The preview build passed user iPhone validation after the final RLS/sync fixes, and future UX work should branch from the merged SQLite baseline.
 
-The current checkout is dirty and includes many in-progress SQLite hardening changes. Treat this document as an audit of the observed checkout on 2026-05-25, not as proof that all items are committed on `main`.
+This document started as an audit of the observed checkout on 2026-05-25. After the SQLite merge, use it as the working UI backlog and update checkboxes as items are implemented.
 
 Items already shipped in the current checkout:
 
@@ -47,12 +47,11 @@ Items already shipped in the current checkout:
 - Domain text input no-suggestion hardening.
 - Edit Child/Edit Class form reinitialization race fix.
 
-Still pending before field distribution:
+Validation notes carried forward:
 
-- User physical-device testing, especially a low-end Android device.
-- iPhone/Expo Go sanity pass.
-- Clock-in/out GPS path on a real device, because emulator current location was unavailable.
-- User-owned cutover communication.
+- Keep testing future UI work on the SQLite backend.
+- Prefer at least one low-end Android smoke pass before broad field distribution.
+- Clock-in/out GPS should remain part of physical-device smoke because emulator current location was unavailable.
 
 ---
 
@@ -95,7 +94,7 @@ Still pending before field distribution:
 
 ## 1. Small UX Ports
 
-These are the best first post-cutover items because they are narrow, visible, and unlikely to disturb storage or sync.
+These are the best first UI items because they are narrow, visible, and unlikely to disturb storage or sync.
 
 ### 1.1 Assessment Complete Main Stat
 

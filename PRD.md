@@ -20,9 +20,9 @@ A React Native mobile application for Masi, a nonprofit organization, to manage 
 
 ---
 
-## Current SQLite Architecture (2026-05 Clean-Slate Refactor)
+## Current SQLite Architecture
 
-The current refactor is a clean-slate move from AsyncStorage domain storage to normalized SQLite. Field users will install a fresh build pointed at the new `masi-app-sqlite` Supabase backend; legacy local AsyncStorage domain data is not migrated.
+As of 2026-05-26, the app's forward architecture is normalized SQLite local storage plus the `masi-app-sqlite` Supabase backend (`segygjzpujphwvrubusm`). The migration was a clean-slate move from AsyncStorage domain storage; legacy local AsyncStorage domain data is not migrated.
 
 Domain writes now flow through SQLite repositories. A write updates normalized local tables first, enqueues a durable `sync_outbox` row in the same transaction, updates the UI from local state, then syncs to Supabase in dependency order when online. `sync_state` stores pull cursors/state; `local_state` stores small local metadata such as the cached user profile and temporary screen-shaped sidecar payloads.
 
@@ -32,9 +32,13 @@ The clean schema also includes first-class `academic_years`, `assessment_windows
 
 Support export now writes a SQLite diagnostic JSON: schema version, migration list, table counts, sync state, and failed/terminal outbox rows, plus app/build metadata. Log export still uses AsyncStorage-backed logger output.
 
-Validation status as of 2026-05-22: the SQLite implementation has passed the automated release gate and a deeper Android emulator pass covering fresh sign-in, offline cached restart, offline session and assessment writes, force-stop/reopen with pending outbox, reconnect-and-sync, and Supabase row verification. Before field distribution, physical-device validation and cutover communication remain required. The emulator did not complete clock-in/out because the Android location provider returned current-location unavailable; test that path on a real device.
+Validation status as of 2026-05-26: the SQLite implementation has passed the automated release gate, file-backed SQLite integration tests, staging backend checks, RLS/sync rollback probes, Android emulator offline/reconnect validation, and user iPhone preview-build testing after the final RLS/sync fixes. New feature and UX work should be built and tested against this SQLite backend.
 
 ## Database Schema
+
+The current clean-slate schema uses normalized relationship tables such as `child_ea_assignments`, `child_programme_enrollments`, `child_class_memberships`, `child_group_memberships`, `session_attendees`, and `assessment_items`. The detailed operational RLS/sync contract lives in `documentation/rls-sync-contract-map.md`, and the schema guide lives in `documentation/DATABASE_SCHEMA_GUIDE.md`.
+
+Some older sections below still document legacy table names used earlier in the product history, such as `staff_children` and `children_groups`. Treat those as historical context unless they are explicitly marked as part of the current SQLite schema.
 
 ### users
 ```sql
@@ -65,7 +69,7 @@ Validation status as of 2026-05-22: the SQLite implementation has passed the aut
 - last_name (text)
 - class_id (uuid, FK to classes)
 - age (integer, nullable)
-- gender (text, canonical lowercase values; UI offers `female`/`male`; SQLite/Supabase still tolerate historic `non_binary`/`unknown` values during cutover)
+- gender (text, canonical lowercase values; UI offers `female`/`male`; SQLite/Supabase still tolerate historic `non_binary`/`unknown` rows)
 - teacher/class/school (transitional legacy text columns until schema hardening Phase 6)
 - assigned_staff_id (uuid, FK to users) -- DEPRECATED: Use staff_children junction instead
 - created_at (timestamp)
@@ -748,8 +752,8 @@ Requirements to be gathered as we progress through development phases.
 ---
 
 **Document Version**: 1.2
-**Last Updated**: 2026-04-05
-**Status**: Field testing in progress; Phase 8 (EGRA Assessment) complete; Phase 5 (additional session forms) in progress
+**Last Updated**: 2026-05-26
+**Status**: SQLite backend adopted as forward architecture; field testing continues on the SQLite build
 
 ---
 
@@ -765,9 +769,9 @@ Requirements to be gathered as we progress through development phases.
 ### In Progress
 
 #### SQLite RLS/App Contract Closeout
-Branch: current SQLite cutover worktree
+Branch: `plan-5/context-screen-migration`
 
-Clean-slate SQLite backend/app wiring audit after physical-device group failures. Goal: close RLS policy drift and sync-order risks without weakening backend security.
+Clean-slate SQLite backend/app wiring audit after physical-device group failures. Goal: close RLS policy drift and sync-order risks without weakening backend security. As of 2026-05-26, the engineering gate is closed and SQLite is the backend going forward.
 
 - [x] Audit live `masi-app-sqlite` policies, grants, triggers, RLS enablement, views, and staging row health
 - [x] Add RLS contract migration for assignment archive policies, immutable assignment identity triggers, class assigned-EA writes, and helper-aligned assessment/mastery reads
@@ -775,7 +779,9 @@ Clean-slate SQLite backend/app wiring audit after physical-device group failures
 - [x] Tighten table grants so app roles do not keep non-DML privileges such as `TRUNCATE`
 - [x] Push cleanup migrations to `masi-app-sqlite`
 - [x] Verify with migration contract tests, outbox behavior tests, staging advisors, live catalog queries, and a rollback-only authenticated RLS smoke test
-- [ ] Physical-device validation remains the release gate before field distribution
+- [x] Restore creator SELECT upsert visibility and immutable assignment insert retry semantics after iPhone preview-build failures
+- [x] User iPhone preview-build validation reported the new build working correctly
+- [x] Adopt `masi-app-sqlite` as the forward backend for future documentation and feature work
 
 #### Schema Hardening — Lookups, Build B, and Destructive-Drop Gates
 Branches: `schema-hardening-build-a`, `schema-hardening-build-b`

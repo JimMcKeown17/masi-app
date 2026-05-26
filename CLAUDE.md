@@ -7,7 +7,8 @@ A React Native mobile application for Masi, a nonprofit, to manage their field s
 Always consult these key documentation files:
 - **PRD.md**: Complete product requirements, tech stack, database schema, feature specifications, and development progress
 - **LEARNING.md**: Educational documentation of architectural decisions (**update regularly as you build**)
-- **DATABASE_SCHEMA_GUIDE.md**: Detailed database schema reference and design rationale
+- **documentation/DATABASE_SCHEMA_GUIDE.md**: Detailed database schema reference and design rationale
+- **documentation/rls-sync-contract-map.md**: Table-by-table RLS/sync operation contract. Consult this before changing RLS policies, synced repositories, outbox ordering, Supabase migrations, or server payload columns.
 - **documentation/sqlite-refactor-log.md**: Durable running log for the clean-slate SQLite refactor decisions, bugs, assumptions, verification, and review findings
 
 ## Quick Reference
@@ -19,39 +20,38 @@ Bottom tabs: Home → My Children → Sessions → Assessments
 - Assessments tab contains EGRA Letter Sound Assessment feature
 See PRD.md for complete app structure.
 
-## Current Major Work -- Clean-Slate SQLite Refactor
+## Current Architecture -- SQLite Backend
 
-We are in Plan 6 release validation for the clean-slate AsyncStorage-to-SQLite refactor. The implementation work for Plans 1-6 is substantially complete, but field cutover is not complete until the remaining validation and communication gates are logged.
+As of 2026-05-26, the SQLite backend is the app's forward path. New work should assume normalized SQLite local storage, durable `sync_outbox`, and the `masi-app-sqlite` Supabase backend (`segygjzpujphwvrubusm`) unless the user explicitly asks to work on the old production backend.
 
-The active planning artifacts are:
+The SQLite refactor plans are historical implementation evidence; the active forward-looking artifacts are:
 
-- Spec: `docs/superpowers/specs/2026-05-20-sqlite-migration-design.md`
-- Plans: `docs/superpowers/plans/2026-05-20-sqlite-*.md`
+- Architecture/spec history: `docs/superpowers/specs/2026-05-20-sqlite-migration-design.md`
+- Implementation plan history: `docs/superpowers/plans/2026-05-20-sqlite-*.md`
+- RLS/sync contract map: `documentation/rls-sync-contract-map.md`
 - Shared log: `documentation/sqlite-refactor-log.md`
 
-Locked decisions for this refactor:
+Locked decisions from the cutover:
 
 - This is a clean-slate storage and backend rebuild, not a backwards-compatible migration of existing field-device AsyncStorage data.
-- Use a new Supabase backend and fresh auth users.
+- Use the `masi-app-sqlite` Supabase backend and fresh auth users.
 - No legacy AsyncStorage domain migration, no `legacyAsyncStorageMigration.js`, and no previous-user pending-outbox recovery flow.
-- Field staff may lose unsynced device data at cutover; the user will handle communication.
-- Domain and sync data move to SQLite. Supabase Auth session storage and app logs may remain in AsyncStorage.
+- Field staff may lose unsynced legacy-device data at cutover; the user owns any field communication.
+- Domain and sync data live in SQLite. Supabase Auth session storage and app logs may remain in AsyncStorage.
 - Use normalized tables from day one: `child_ea_assignments`, `child_group_memberships`, `child_programme_enrollments`, `session_attendees`, and `assessment_items`.
 - Programme behavior is defined in the spec: children can have multiple programme enrollments, My Children is active-programme-scoped, and sessions/assessments store `programme_id` at creation.
-- RLS behavior is defined in the spec: broad cross-programme reads for the same child are allowed for trusted field staff, while writes require active assignment.
+- RLS behavior is defined in the spec and the RLS/sync contract map: broad cross-programme reads for the same child are allowed for trusted field staff, while writes require active assignment. For implementation work, the contract map is the operative table-by-table source because it captures producer fields, exact sync operation shape, SELECT visibility, outbox ordering, and tests.
 
-The older "prefer backwards-compatible changes" guidance below still applies to ordinary production maintenance on the current app/backend. For this SQLite refactor, follow the clean-slate spec and log decisions instead of adding compatibility layers unless the user explicitly changes the cutover decision.
+The older "prefer backwards-compatible changes" guidance below applies to future production maintenance after the SQLite cutover. It does not require compatibility with the retired AsyncStorage domain store or old Supabase schema unless the user explicitly reopens that requirement.
 
-Current release gate status as of 2026-05-25:
+Current release gate status as of 2026-05-26:
 
-- `npm run test:release` has passed.
+- `npm run test:release` has passed after the physical-device RLS fixes: 56 Jest suites / 296 tests, 13 file-backed SQLite integration suites / 113 tests, and SQLite staging guard for `sqlite-staging` / `segygjzpujphwvrubusm`.
 - SQLite staging migrations and dry run have passed; advisors have only known/recorded warnings.
 - A deeper Android emulator pass has covered fresh sign-in, offline cached restart, offline session and assessment writes, force-stop/reopen with pending outbox, reconnect-and-sync, and Supabase row verification.
 - A critical hardening pass has added SQLite WAL/busy-timeout pragmas, assessment-item sync batching/fallback, shared Supabase request queuing for sync uploads, 1000ms background-sync debounce, local-first screen completion without delayed navigation, domain input no-suggestion hardening, visible release/backend identity, and a soft clock-in warning before session capture.
-- Latest code gates passed on 2026-05-25: full Jest (`55` suites / `269` tests), file-backed SQLite integration (`13` suites / `100` tests), `npm run sqlite:staging:check`, and `git diff --check`.
 - `supabase db pull --linked --schema public` reached Supabase but was blocked because Docker was not running for the CLI shadow database. Fallback verification used plain `supabase db query --linked` against `masi-app-sqlite` to spot-check high-write public table columns.
-- Still pending before field distribution: user physical-device testing, preferably at least one low-end Android device plus iPhone/Expo Go, and the user-owned cutover communication gate.
-- Emulator location did not complete the clock-in/out path because the Android emulator returned current-location unavailable. Test that on a physical device.
+- User preview-build testing on an iPhone reported the new build working correctly after the final RLS/sync fixes. Keep testing future UI work against the SQLite backend.
 
 ## Test Driven Development
 
@@ -73,7 +73,7 @@ The app launched in early March 2026 and is in its **first two weeks of field te
 
 **Rule: prefer backwards-compatible changes wherever possible.**
 
-Exception: the clean-slate SQLite refactor has a user-approved one-shot cutover and is not optimized for backwards compatibility with the current backend or current field-device AsyncStorage data.
+Exception: the completed clean-slate SQLite cutover is not optimized for backwards compatibility with the retired AsyncStorage domain store or old Supabase schema.
 
 During the current field-testing window, force-update is operationally acceptable when a migration requires it, but still prefer a compatibility build and verification gate before destructive drops.
 
@@ -89,12 +89,21 @@ When dropping a column that an older app version still writes, sync will fail wi
 ### Offline Sync Strategy
 All writes save locally first (`synced: false`) → background sync upserts to Supabase when online → last-write-wins conflict resolution. See PRD.md and `src/services/offlineSync.js` for full details.
 
-For the SQLite refactor, replace `synced: false` scanning with durable `sync_outbox` processing as specified in the SQLite migration spec and plans. Multi-step domain writes plus outbox enqueue must be atomic.
+For current SQLite work, use durable `sync_outbox` processing as specified in the SQLite migration spec and plans. Multi-step domain writes plus outbox enqueue must be atomic. Do not reintroduce `synced: false` table scanning for domain sync.
+
+For RLS-facing SQLite work, also update `documentation/rls-sync-contract-map.md`. Do not treat RLS policies, repository producers, Supabase payload columns, and outbox ordering as separate reviews; they are one contract.
 
 ## Known Issues & Testing Watchlist
 
 ### Offline Sync — Upsert + RLS Gotcha
-PostgreSQL upserts require **SELECT visibility through RLS** to check the unique index — even when no conflict exists. Junction-table-based SELECT policies block upserts if the junction record hasn't synced yet. Fix: add a permissive SELECT policy on a direct column (e.g., `created_by = auth.uid()`). See migration `05_fix_children_select_rls_for_upsert.sql`.
+PostgreSQL/Supabase upserts require **SELECT visibility through RLS** to check conflicts — even when the row is new from the app's point of view. Junction-table-based SELECT policies can block upserts if the junction record has not synced yet. The current contract is documented in `documentation/rls-sync-contract-map.md`.
+
+Canonical clean-slate migrations for this gotcha include `20260522103000_masi_session_upsert_visibility.sql` and `20260526151352_creator_select_upsert_visibility.sql`. Do not remove `children_select_created_by`, `classes_select_created_by`, or `groups_select_created_by` just to eliminate `multiple_permissive_policies` advisor warnings; those policies are intentional while the mobile client uses queued Supabase upserts.
+
+### Offline Sync — Immutable Assignment Inserts
+`child_ea_assignments`, `class_ea_assignments`, and `group_ea_assignments` have database triggers that prevent identity columns from changing after insert. The sync engine must retry `insert` operations for those tables as insert-or-ignore by `id`; archive/update operations may still use update-capable upsert for lifecycle columns like `unassigned_at` and `handover_reason`.
+
+Do not convert immutable assignment insert retries back to generic update-capable upserts. That recreates live-device failures such as `group_ea_assignments identity columns cannot be changed after insert`.
 
 ### Schema Drift — Migration Files ≠ Production
 **The `supabase-migrations/` directory has diverged from the live Supabase schema in multiple confirmed cases.** Treat migration files as *intent*, not *truth*. Known drifts (as of 2026-04-24):
@@ -116,21 +125,20 @@ PostgreSQL upserts require **SELECT visibility through RLS** to check the unique
 
 **DDL rule**: all schema changes must go through migration files. Use Supabase `apply_migration` or `supabase migration new` for `ALTER TABLE`, `DROP TYPE`, `CREATE TABLE`, policy changes, and destructive drops. Do not run production DDL through ad-hoc `execute_sql`; use `execute_sql` for read-only preflights and verification queries.
 
-For the new SQLite backend, use canonical Supabase CLI migrations under `supabase/migrations/`. Treat `supabase-migrations/` as historical reference only.
+For the SQLite backend, use canonical Supabase CLI migrations under `supabase/migrations/`. Treat `supabase-migrations/` as historical reference only.
 
-### TEMPORARY: Two Supabase backends — keep the CLI off the wrong one
-*(Clean-slate refactor only. Remove once the SQLite cutover is complete.)*
+### Supabase backends — keep the CLI on SQLite
 
 Two Supabase projects exist:
-- `masi-app` — current production, ref `jcqrlwetutnpuchjoyyd`
-- `masi-app-sqlite` — clean-slate refactor backend, ref `segygjzpujphwvrubusm` (the repo is `supabase link`ed to this one)
+- `masi-app-sqlite` — current forward backend, ref `segygjzpujphwvrubusm` (the repo is `supabase link`ed to this one)
+- `masi-app` — legacy pre-SQLite backend, ref `jcqrlwetutnpuchjoyyd`; do not use for new mobile work unless the user explicitly asks for legacy-backend maintenance
 
-`.env.local` carries the **old `masi-app`** connection (`MASI_SUPABASE_URL` / `EXPO_PUBLIC_SUPABASE_URL` resolve to `jcqrlwetutnpuchjoyyd`). That is correct for the current production app — the clean-slate build selects `masi-app-sqlite` via `config/supabaseProjectConfig.js`.
+`.env.local` may still carry the **old `masi-app`** connection (`MASI_SUPABASE_URL` / `EXPO_PUBLIC_SUPABASE_URL` resolve to `jcqrlwetutnpuchjoyyd`). The SQLite app selects `masi-app-sqlite` via `config/supabaseProjectConfig.js`.
 
-**Trap:** running the `supabase` CLI with `.env.local` injected into its environment (e.g. wrapped in a `dotenv` loader) makes the CLI pick up the old-project connection and silently query **old production** — even when you pass `--linked`. Run `supabase db query --linked` plainly instead; `--linked` resolves `masi-app-sqlite` via the CLI's own auth. Do not inject `.env.local` into `supabase` CLI commands.
+**Trap:** running the `supabase` CLI with `.env.local` injected into its environment (e.g. wrapped in a `dotenv` loader) can make the CLI pick up the legacy project connection and silently query the wrong backend — even when you pass `--linked`. Run `supabase db query --linked` plainly instead; `--linked` resolves `masi-app-sqlite` via the CLI's own auth. Do not inject `.env.local` into `supabase` CLI commands.
 
 ### EAS Builds — Environment Variables Not in `.env.local`
-`process.env.EXPO_PUBLIC_*` variables from `.env.local` are NOT available in EAS cloud builds. Public values (Supabase URL, anon key) must also be available through Expo config `extra` with a fallback in the client. The current app used `app.json`; Plan 1 of the SQLite refactor migrates this to `app.config.js` with explicit Supabase target guardrails.
+`process.env.EXPO_PUBLIC_*` variables from `.env.local` are NOT available in EAS cloud builds. Public values (Supabase URL, anon key) must also be available through Expo config `extra` with a fallback in the client. The SQLite app uses `app.config.js` with explicit Supabase target guardrails.
 ```javascript
 const url = process.env.EXPO_PUBLIC_SUPABASE_URL
   || Constants.expoConfig?.extra?.supabaseUrl || '';
@@ -148,5 +156,6 @@ const url = process.env.EXPO_PUBLIC_SUPABASE_URL
 
 - **PRD.md → Development Progress**: Add a `- [ ]` checklist when starting multi-step work. Check off items as you go.
 - **LEARNING.md** (`documentation/`): After significant architectural decisions or tricky bug fixes, add a narrative section explaining the "why" — written like teaching a junior developer.
-- **documentation/sqlite-refactor-log.md**: During the SQLite refactor, update this after every task or meaningful work session. Always log bugs/problems, important assumptions, design decisions, review findings, verification commands, device checks, and anything surprising.
+- **documentation/sqlite-refactor-log.md**: For SQLite/backend/sync work, update this after every task or meaningful work session. Always log bugs/problems, important assumptions, design decisions, review findings, verification commands, device checks, and anything surprising.
+- **documentation/rls-sync-contract-map.md**: Update this whenever a synced table, repository write path, RLS policy, migration, server payload allowlist, or outbox ordering changes.
 - **Always branch** off to a new git branch for features or bug fixes.

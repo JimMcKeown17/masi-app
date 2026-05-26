@@ -9,7 +9,7 @@ This document chronicles the architectural decisions, engineering patterns, and 
 
 ---
 
-## 2026 SQLite Clean-Slate Update
+## 2026 SQLite Clean-Slate Architecture
 
 The early chapters describe the original AsyncStorage design. That was the right first version for a smaller field app, but Masi now needs relational local data: children belong to classes, groups, programmes, academic years, and assignment relationships, and those relationships must survive offline writes and mid-year changes. The app is therefore moving domain data and sync metadata to SQLite.
 
@@ -25,7 +25,7 @@ The schema is also more explicit than the first version:
 
 Support export changed with the storage model. "Export Database" now exports a SQLite diagnostic bundle: schema version, migrations, table counts, sync state, and failed or terminal outbox rows. That is more useful for field support than a raw key-value dump because it shows whether the app has pending work, which rows are stuck, and which local schema is installed. It is still sensitive: failed outbox payloads can include child names and session or assessment details, so the export warning remains mandatory.
 
-The Plan 6 emulator pass tested the refactor where SQLite bugs are most likely to hide: write while offline, kill the app, reopen with pending outbox rows, reconnect, and confirm the server has the rows. That pass created an offline assessment and session, reopened with six pending rows, then synced all six successfully. It did not prove every possible workflow. Location-based clock-in/out still needs a physical device because the emulator could not provide a current location, and final release still needs user device testing plus the cutover communication gate.
+The Plan 6 emulator pass tested the refactor where SQLite bugs are most likely to hide: write while offline, kill the app, reopen with pending outbox rows, reconnect, and confirm the server has the rows. That pass created an offline assessment and session, reopened with six pending rows, then synced all six successfully. The final RLS/sync hardening pass then fixed physical-device preview failures around Supabase upsert visibility and immutable assignment retries. As of 2026-05-26, the SQLite backend is the forward path for new work. Future UI changes should be tested against this backend, and broad field rollout should still include practical device smoke checks such as low-end Android and GPS clock-in/out.
 
 ---
 
@@ -1166,5 +1166,27 @@ Key takeaways:
 28. **Archive ordering protects authority.** End membership/detail rows before ending the assignment that authorizes those updates.
 29. **Least privilege includes table grants.** RLS is row-level; it does not make broad table privileges clean by default.
 
-**Last Updated**: 2026-05-25
+---
+
+## Chapter 22: Upsert Visibility Is Part of the RLS Contract
+
+The iPhone preview build exposed a regression in the final RLS cleanup. A plain `INSERT` into `children` with `created_by = auth.uid()` was allowed, but the app does not send a plain insert. The offline sync engine uses Supabase/PostgREST upsert so retries are durable. PostgreSQL checks SELECT visibility during upsert, and the direct `children_select_created_by` policy had been removed.
+
+That made a first-time child insert fail with `new row violates row-level security policy`, even though the insert policy itself was correct. The assignment-based read helper could not prove visibility for a child row that did not exist yet, and the dependent `child_ea_assignments`, programme enrollment, class membership, and group membership rows then failed behind it.
+
+The clean fix is not to weaken write policy. Creator-owned parent rows that are upserted by mobile need direct SELECT fallback policies:
+
+- `children_select_created_by`
+- `classes_select_created_by`
+- `groups_select_created_by`
+
+The same preview found a second retry-contract issue. Assignment rows now have triggers that correctly block identity changes after insert. Retrying a `group_ea_assignments` insert through update-capable upsert can therefore fail if the row already exists and the retry payload differs in immutable timestamp or identity fields. For immutable assignment tables, an outbox `insert` retry should be insert-or-ignore by id, while archive/update operations remain real updates.
+
+Key takeaways:
+
+30. **Upsert requires read policy, not only write policy.** If mobile uses upsert, keep SELECT visibility for the row shape being written.
+31. **Creator SELECT on parent rows is a sync requirement.** It is not only a convenience read policy when parent rows sync before their junction rows.
+32. **Immutable identity rows need insert-or-ignore retry semantics.** Do not let an outbox `insert` retry turn into an identity-changing update.
+
+**Last Updated**: 2026-05-26
 **Document Status**: Living document - updated as we build

@@ -317,3 +317,14 @@ Observed results:
 The group bug was not an isolated accident. It exposed a real class of contract risk: mobile producers, outbox ordering, and RLS policies must be reviewed as one system.
 
 That contract has now been tightened in the database and in the sync engine. I would still keep physical-device testing as a release gate, but I no longer consider RLS/app wiring an open blocker for the SQLite cutover.
+
+## 2026-05-26 Addendum
+
+This document is now a historical audit snapshot. The living source of truth is `documentation/rls-sync-contract-map.md`.
+
+Physical-device preview testing after this audit found two more contract details that were not captured strongly enough here:
+
+- Mobile-created parent rows that sync with Supabase upsert still need direct SELECT visibility. `children_select_created_by`, `classes_select_created_by`, and `groups_select_created_by` were intentionally restored in `20260526151352_creator_select_upsert_visibility.sql`.
+- Immutable assignment-table insert retries must use insert-or-ignore semantics. Generic update-capable upsert can trigger the assignment identity guards added in `20260525231506_masi_rls_contract_cleanup.sql`.
+
+Therefore, the statement above that multiple permissive SELECT warnings were gone is stale. Those warnings are accepted for `children`, `classes`, and `groups` while the mobile client uses queued upserts from local rows.

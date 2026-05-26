@@ -11,12 +11,30 @@ This guide teaches you fundamental database design principles by walking through
 
 > 2026-05 SQLite refactor note: the clean-slate SQLite/Supabase schema supersedes the old AsyncStorage-era table names for domain work. New code should use `child_ea_assignments` instead of `staff_children`, `child_group_memberships` instead of `children_groups`, `session_attendees` instead of `sessions.children_ids`, and `assessment_items` instead of EGRA letter arrays on the assessment parent row. Programmes are first-class (`programmes`, `staff_programme_assignments`, `child_programme_enrollments`), and longitudinal reporting depends on `academic_years`, `assessment_windows`, `child_class_memberships`, `teachers`, `class_ea_assignments`, `group_ea_assignments`, `grouping_versions`, and `class_grouping_state`.
 
+> 2026-05 RLS/sync contract note: for the clean-slate SQLite backend, schema correctness is not just table shape. The mobile app writes local rows, queues `sync_outbox`, and pushes through Supabase RLS with operation-specific semantics. The current table-by-table contract lives in `documentation/rls-sync-contract-map.md`; consult it before changing RLS policies, repository producers, outbox ordering, Supabase migrations, or server payload columns.
+
 By the end, you'll understand:
 - How relational databases organize data
 - When to use different relationship types
 - Why we need "helper" tables (junction tables)
 - How to design for data integrity and performance
 - Real-world trade-offs in schema design
+
+---
+
+## Current SQLite Schema Contract
+
+This guide still contains older educational examples from the AsyncStorage-era app. Those examples are useful for learning relational concepts, but the current clean-slate SQLite/Supabase implementation uses the normalized table names listed above.
+
+For implementation decisions, use these current rules:
+
+- `sync_outbox` is the only mobile push source. Domain row writes and outbox enqueue must be atomic.
+- `created_by`, `user_id`, `programme_id`, and relationship IDs are RLS contract fields, not optional metadata.
+- Supabase upsert requires SELECT visibility through RLS. Parent rows such as `children`, `classes`, `groups`, and `sessions` therefore need direct owner visibility until their relationship rows sync.
+- `child_ea_assignments`, `class_ea_assignments`, and `group_ea_assignments` are access-granting rows. Their identity columns are immutable after insert, so insert retries use insert-or-ignore while archive/update operations update only lifecycle fields.
+- Insert and archive ordering are intentionally different. Archive flows must sync protected relationship cleanup before ending the assignment row that authorizes that cleanup.
+
+The durable operational map is `documentation/rls-sync-contract-map.md`. If this guide and that map appear to disagree about the clean-slate SQLite backend, treat the map as the implementation contract and update this guide or the map immediately.
 
 ---
 
@@ -426,7 +444,7 @@ CREATE TABLE children (
 );
 ```
 
-The mobile UI now offers only `female` and `male`, stored as lowercase canonical values. The schema still tolerates older `non_binary` and `unknown` rows during the SQLite cutover so historic/test data is not silently coerced or lost.
+The mobile UI now offers only `female` and `male`, stored as lowercase canonical values. The schema still tolerates older `non_binary` and `unknown` rows so historic/test data is not silently coerced or lost.
 
 **Design Decisions**:
 
