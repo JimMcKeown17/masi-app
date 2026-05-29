@@ -1,4 +1,4 @@
-import { getSessionGoal } from '../src/utils/sessionGoal';
+import { getSessionGoal, filterTodaysSessionsForProgramme } from '../src/utils/sessionGoal';
 
 describe('getSessionGoal', () => {
   test('below target: Core Literacy R-3 with 0 of 3 sessions today', () => {
@@ -49,5 +49,29 @@ describe('getSessionGoal', () => {
 
     const overTarget = getSessionGoal(programme, [{}, {}, {}, {}, {}, {}]);
     expect(overTarget.state).toBe('exceeded');
+  });
+});
+
+describe('filterTodaysSessionsForProgramme', () => {
+  // 2026-05-29 in LOCAL time (month is 0-indexed → 4 = May). Using a fixed
+  // injected `now` keeps the filter a pure function of its inputs.
+  const now = new Date(2026, 4, 29);
+  const PROG = 'prog-literacy';
+
+  test('keeps only today\'s sessions for the active programme', () => {
+    const sessions = [
+      { id: 'a', programme_id: PROG, session_date: '2026-05-29' },        // today + active → keep
+      { id: 'b', programme_id: 'prog-other', session_date: '2026-05-29' }, // today, other programme → drop
+      { id: 'c', programme_id: PROG, session_date: '2026-05-28' },         // active, but yesterday → drop
+    ];
+
+    const result = filterTodaysSessionsForProgramme(sessions, PROG, now);
+
+    expect(result.map((s) => s.id)).toEqual(['a']);
+  });
+
+  test('treats missing input as empty so the goal never crashes on a non-array', () => {
+    expect(filterTodaysSessionsForProgramme(undefined, PROG, now)).toEqual([]);
+    expect(filterTodaysSessionsForProgramme(null, PROG, now)).toEqual([]);
   });
 });

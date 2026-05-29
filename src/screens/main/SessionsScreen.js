@@ -9,6 +9,8 @@ import { useChildren } from '../../context/ChildrenContext';
 import { sessionsRepository } from '../../db/repositories/sessionsRepository';
 import { getSessionsTabStats } from '../../utils/dashboardStats';
 import StatBar from '../../components/dashboard/StatBar';
+import SessionsTodayRing from '../../components/sessions/SessionsTodayRing';
+import { getSessionsTodayGoal } from '../../services/sessionsTodayGoal';
 import { useSessionLaunchGuard } from '../../hooks/useSessionLaunchGuard';
 import ClockInBeforeSessionDialog from '../../components/sessions/ClockInBeforeSessionDialog';
 
@@ -16,6 +18,7 @@ export default function SessionsScreen({ navigation }) {
   const { user } = useAuth();
   const { children: childrenList } = useChildren();
   const [stats, setStats] = useState(null);
+  const [goal, setGoal] = useState(null);
   const {
     warningVisible,
     requestSessionLaunch,
@@ -32,6 +35,9 @@ export default function SessionsScreen({ navigation }) {
       const loadStats = async () => {
         const sessions = await sessionsRepository.getSessions({ userId: user.id });
         setStats(getSessionsTabStats(sessions, childrenList));
+        // Re-resolved on every focus, so the ring reflects a session the EA just
+        // recorded the moment they navigate back to this tab.
+        setGoal(await getSessionsTodayGoal({ userId: user.id }));
       };
       loadStats();
     }, [childrenList, user.id])
@@ -59,6 +65,13 @@ export default function SessionsScreen({ navigation }) {
               <Ionicons name="chevron-forward" size={14} color={colors.primary} />
             </TouchableOpacity>
           )}
+        </View>
+      )}
+
+      {goal && (
+        <View style={styles.ringSection}>
+          <SessionsTodayRing goal={goal} />
+          <Text style={styles.ringCaption}>Sessions today</Text>
         </View>
       )}
 
@@ -99,6 +112,17 @@ const styles = StyleSheet.create({
     flex: 1,
     padding: spacing.lg,
     backgroundColor: colors.background,
+  },
+  ringSection: {
+    alignItems: 'center',
+    marginVertical: spacing.lg,
+  },
+  ringCaption: {
+    marginTop: spacing.sm,
+    fontSize: 12,
+    color: colors.textSecondary,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
   },
   title: {
     marginBottom: spacing.sm,

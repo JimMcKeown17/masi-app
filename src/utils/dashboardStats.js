@@ -22,7 +22,7 @@ function toLocalDateString(d) {
   return `${y}-${m}-${day}`;
 }
 
-function toDateString(dateOrString) {
+export function toDateString(dateOrString) {
   if (!dateOrString) return null;
   if (typeof dateOrString === 'string') return dateOrString.slice(0, 10);
   return toLocalDateString(dateOrString);

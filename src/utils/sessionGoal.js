@@ -1,3 +1,5 @@
+import { toDateString } from './dashboardStats';
+
 /**
  * Pure session-goal logic for the Sessions Today ring.
  *
@@ -18,4 +20,21 @@ export function getSessionGoal(programme, todaysSessions) {
   else state = 'met';
 
   return { target, ceiling, count, state };
+}
+
+/**
+ * Narrow a full session list down to the array `getSessionGoal` expects:
+ * only sessions recorded *today* (local time) for the EA's *active* programme.
+ *
+ * This is the wiring-layer guard that keeps `getSessionGoal` pure — it never
+ * has to know about clocks or other programmes. `now` is injected so this stays
+ * a pure function of its inputs (testable without mocking the system clock).
+ */
+export function filterTodaysSessionsForProgramme(sessions, programmeId, now) {
+  const todayStr = toDateString(now);
+  return (sessions || []).filter(
+    (session) =>
+      session.programme_id === programmeId
+      && toDateString(session.session_date) === todayStr
+  );
 }
