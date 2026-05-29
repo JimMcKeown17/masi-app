@@ -28,11 +28,13 @@ export async function getSessionsTodayGoal({ userId, now = new Date() } = {}) {
   const programme = programmes.find((p) => p.id === programmeId);
   if (!programme) return null;
 
-  // Re-filter by programmeId here (not just today) so the result is correct even
-  // if getSessions ever stops scoping by programme — the ring must never count
-  // another programme's sessions.
+  // `getSessions` is programme-scoped, not user-scoped, and sign-out does not wipe
+  // the local SQLite domain tables. On a shared device another EA's synced sessions
+  // for this programme would otherwise inflate the count — so scope to the signed-in
+  // EA here. (filterTodaysSessionsForProgramme then re-narrows by programme + today.)
   const sessions = await sessionsRepository.getSessions({ userId, programmeId });
-  const todaysSessions = filterTodaysSessionsForProgramme(sessions, programmeId, now);
+  const mySessions = sessions.filter((session) => session.user_id === userId);
+  const todaysSessions = filterTodaysSessionsForProgramme(mySessions, programmeId, now);
 
   return getSessionGoal(programme, todaysSessions);
 }

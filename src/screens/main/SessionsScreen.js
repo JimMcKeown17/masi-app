@@ -1,5 +1,5 @@
 import React, { useState, useCallback } from 'react';
-import { View, StyleSheet, TouchableOpacity } from 'react-native';
+import { View, StyleSheet, TouchableOpacity, ScrollView } from 'react-native';
 import { Text, Button } from 'react-native-paper';
 import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect } from '@react-navigation/native';
@@ -45,6 +45,10 @@ export default function SessionsScreen({ navigation }) {
 
   return (
     <View style={styles.container}>
+      <ScrollView
+        contentContainerStyle={styles.scrollContent}
+        showsVerticalScrollIndicator={false}
+      >
       {/* Tab Stats */}
       {stats && (
         <View>
@@ -97,6 +101,7 @@ export default function SessionsScreen({ navigation }) {
           View History
         </Button>
       </View>
+      </ScrollView>
       <ClockInBeforeSessionDialog
         visible={warningVisible}
         onDismiss={dismissWarning}
@@ -110,8 +115,11 @@ export default function SessionsScreen({ navigation }) {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    padding: spacing.lg,
     backgroundColor: colors.background,
+  },
+  scrollContent: {
+    flexGrow: 1,
+    padding: spacing.lg,
   },
   ringSection: {
     alignItems: 'center',
