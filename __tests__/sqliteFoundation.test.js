@@ -232,8 +232,8 @@ describe('SQLite migration runner', () => {
       withExclusiveTransactionAsync: jest.fn(async (task) => {
         events.push('enter-migration-transaction');
         await task({
-          execAsync: jest.fn(async () => {
-            events.push('txn:exec-migration-sql');
+          execAsync: jest.fn(async (sql) => {
+            events.push(/user_version/i.test(sql) ? 'txn:set-user-version' : 'txn:exec-migration-sql');
           }),
           runAsync: jest.fn(async () => {
             events.push('txn:record-migration');
@@ -246,21 +246,23 @@ describe('SQLite migration runner', () => {
     await runMigrations(db);
 
     expect(events).toEqual([
+      // Connection pragmas are configured once, before any migration, outside the txn.
       'exec:PRAGMA foreign_keys = ON',
       'exec:PRAGMA journal_mode = WAL',
       'exec:PRAGMA busy_timeout = 5000',
       'get:PRAGMA user_version',
-      // One enter/exec/record/exit cycle + user_version bump per pending migration.
+      // Per pending migration: exec SQL, record it, and bump user_version — all
+      // INSIDE the transaction so the schema change and version marker are atomic.
       'enter-migration-transaction',
       'txn:exec-migration-sql',
       'txn:record-migration',
+      'txn:set-user-version',
       'exit-migration-transaction',
-      'exec:PRAGMA user_version = 1',
       'enter-migration-transaction',
       'txn:exec-migration-sql',
       'txn:record-migration',
+      'txn:set-user-version',
       'exit-migration-transaction',
-      'exec:PRAGMA user_version = 2',
     ]);
   });
 
@@ -600,21 +602,19 @@ describe('SQLite migration runner', () => {
     const second = runMigrations(db);
 
     await firstMigrationEntered.promise;
-    expect(events).toEqual(['enter-1']);
+    // While the first run holds its migration transaction, the second concurrent
+    // run is queued behind it on the app-level migration queue: no other
+    // transaction has been entered. (Asserting on transactionCount rather than the
+    // event order keeps this robust now that user_version is bumped mid-transaction.)
+    expect(transactionCount).toBe(1);
 
     releaseFirstMigration.resolve();
     await Promise.all([first, second]);
 
-    // The first run applies both pending migrations in order; the second
-    // concurrent run is serialized behind it and finds nothing left to do.
-    expect(events).toEqual([
-      'enter-1',
-      'exit-1',
-      'set-user-version-1',
-      'enter-2',
-      'exit-2',
-      'set-user-version-2',
-    ]);
+    // The first run applies both pending migrations (two transactions); the second
+    // run is serialized behind it, sees user_version already current, and does nothing.
+    expect(transactionCount).toBe(2);
+    expect(userVersion).toBe(2);
     expect(db.withExclusiveTransactionAsync).toHaveBeenCalledTimes(2);
   });
 

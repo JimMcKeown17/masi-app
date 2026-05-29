@@ -590,9 +590,16 @@ async function runMigrationsNow(database) {
         migration.version,
         migration.name
       );
+      // Bump user_version INSIDE the transaction so the schema change and the
+      // version marker commit (or roll back) atomically. Setting it afterwards
+      // left a crash window: a committed migration whose user_version had not
+      // yet been written would replay on next launch and a non-idempotent
+      // migration (e.g. ALTER TABLE ADD COLUMN) would fail with duplicate-column,
+      // bricking startup migrations on that device. SQLite treats user_version
+      // as transactional (verified: commits with the txn, reverts on rollback).
+      await txn.execAsync(`PRAGMA user_version = ${migration.version}`);
     });
 
-    await db.execAsync(`PRAGMA user_version = ${migration.version}`);
     userVersion = migration.version;
   }
 }
