@@ -72,6 +72,8 @@ Accepted advisor context: `multiple_permissive_policies` warnings on `children`,
 | `assessment_items` | `assessmentsRepository.saveAssessment` item producer | `assessment_id`, `item_key`, `position` / generated UUID `id` | Batched upsert with per-record fallback | Parent assessment visibility/write access | After `assessments` | `offlineSyncOutbox.test.js` batch and fallback coverage |
 | `letter_mastery` | `masteryRepository.saveLetterMasteryRecord` | `user_id`, `child_id`, `programme_id`, `letter`, `language`, `source` | Default upsert / lifecycle soft-delete fields | Direct owner plus `private.current_user_can_read_child`; writes require active child/programme access | After `children` | `masteryRepository.test.js`; `sqlitePlan1Migrations.test.js` |
 
+> **`sessions` forward-prep columns (not yet in the push payload).** SQLite migration v3 (`sessions_forward_prep_columns`) and Supabase migration `20260529214500_masi_sessions_forward_prep_columns` add `sessions.group_id` (nullable FK to `groups`) and `sessions.state` (NOT NULL DEFAULT `'completed'`, CHECK on `completed|in_progress|paused|discarded`). These are schema-only for go-live: `sessionsRepository.saveSession` does **not** write them and they are **not** in the session push allowlist (`SERVER_COLUMNS`), so the `sessions` producer fields, upsert shape, and outbox ordering above are unchanged. The later state-machine slice must add them to the producer set and the push allowlist — and only **after** the Supabase migration is applied to the backend, since writing a column the server lacks would `PGRST204`.
+
 ## Future RLS Audit Checklist
 
 Use this checklist instead of a static "does the table have policies" audit.

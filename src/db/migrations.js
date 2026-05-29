@@ -554,6 +554,15 @@ const MIGRATIONS = [
       alter table programmes add column daily_session_ceiling integer;
     `,
   },
+  {
+    version: 3,
+    name: 'sessions_forward_prep_columns',
+    sql: `
+      alter table sessions add column group_id text references groups(id) on delete set null;
+      alter table sessions add column state text not null default 'completed'
+        check (state in ('completed', 'in_progress', 'paused', 'discarded'));
+    `,
+  },
 ];
 
 // Derived from the migration list so it never drifts when a migration is added.

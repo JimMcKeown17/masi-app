@@ -263,6 +263,11 @@ describe('SQLite migration runner', () => {
       'txn:record-migration',
       'txn:set-user-version',
       'exit-migration-transaction',
+      'enter-migration-transaction',
+      'txn:exec-migration-sql',
+      'txn:record-migration',
+      'txn:set-user-version',
+      'exit-migration-transaction',
     ]);
   });
 
@@ -282,7 +287,7 @@ describe('SQLite migration runner', () => {
       ]));
 
       const migrations = await db.getAllAsync('select version from schema_migrations');
-      expect(migrations).toEqual([{ version: 1 }, { version: 2 }]);
+      expect(migrations).toEqual([{ version: 1 }, { version: 2 }, { version: 3 }]);
     } finally {
       await db.closeAsync();
     }
@@ -611,11 +616,11 @@ describe('SQLite migration runner', () => {
     releaseFirstMigration.resolve();
     await Promise.all([first, second]);
 
-    // The first run applies both pending migrations (two transactions); the second
+    // The first run applies all pending migrations (three transactions); the second
     // run is serialized behind it, sees user_version already current, and does nothing.
-    expect(transactionCount).toBe(2);
-    expect(userVersion).toBe(2);
-    expect(db.withExclusiveTransactionAsync).toHaveBeenCalledTimes(2);
+    expect(transactionCount).toBe(3);
+    expect(userVersion).toBe(3);
+    expect(db.withExclusiveTransactionAsync).toHaveBeenCalledTimes(3);
   });
 
   test('rolls back schema changes and leaves user_version untouched when migration history insert fails', async () => {
@@ -689,6 +694,7 @@ describe('SQLite debug dump', () => {
         migrations: [
           { version: 1, name: 'initial_sqlite_foundation' },
           { version: 2, name: 'programmes_daily_session_target' },
+          { version: 3, name: 'sessions_forward_prep_columns' },
         ],
         tableCounts: expect.objectContaining({
           schools: 1,
