@@ -1,15 +1,35 @@
-# Masi App - Codex Context
+# Masi App - Agent Context
+
+This file is the single source of truth for agent guidance in this repo. `CLAUDE.md` re-exports it via `@AGENTS.md`, so changes here flow to every agent automatically.
 
 ## Project Overview
 A React Native mobile application for Masi, a nonprofit, to manage their field staff's work with children, track time, record educational sessions, and children's assessments.
 
+## Agent skills
+
+### Issue tracker
+
+Issues and PRDs live as **GitHub issues** on `JimMcKeown17/masi-app` (use the `gh` CLI). See `docs/agents/issue-tracker.md`.
+
+### Triage labels
+
+Canonical five-role vocabulary (`needs-triage`, `needs-info`, `ready-for-agent`, `ready-for-human`, `wontfix`). See `docs/agents/triage-labels.md`.
+
+### Domain docs
+
+Single-context: one `CONTEXT.md` + `docs/adr/` at the repo root. See `docs/agents/domain.md`.
+
 ## Documentation Structure
 Always consult these key documentation files:
-- **PRD.md**: Complete product requirements, tech stack, database schema, feature specifications, and development progress
-- **LEARNING.md**: Educational documentation of architectural decisions (**update regularly as you build**)
-- **documentation/DATABASE_SCHEMA_GUIDE.md**: Detailed database schema reference and design rationale
+- **CONTEXT.md** (repo root): Domain glossary. The canonical definitions of programme, group, class, session, EA, field vs in-app assessment, and the head-office grouping workflow. Read this before any UX, schema, or naming discussion so terms stay grounded. The repo is single-context, so there is no `CONTEXT-MAP.md`; if Masi later splits into multiple bounded contexts, add one per the `grill-with-docs` skill convention.
+- **PRD.md**: Complete product requirements, tech stack, database schema, feature specifications, and development progress.
+- **LEARNING.md** (in `documentation/`): Educational documentation of architectural decisions (**update regularly as you build**).
+- **documentation/DATABASE_SCHEMA_GUIDE.md**: Detailed database schema reference and design rationale.
 - **documentation/rls-sync-contract-map.md**: Table-by-table RLS/sync operation contract. Consult this before changing RLS policies, synced repositories, outbox ordering, Supabase migrations, or server payload columns.
-- **documentation/sqlite-refactor-log.md**: Durable running log for the clean-slate SQLite refactor decisions, bugs, assumptions, verification, and review findings
+- **documentation/sqlite-refactor-log.md**: Durable running log for the clean-slate SQLite refactor decisions, bugs, assumptions, verification, and review findings.
+- **docs/adr/** (if present): Architectural Decision Records for hard-to-reverse decisions with real trade-offs. Created lazily by the `grill-with-docs` skill.
+- **docs/agent-context/** (if present): Progressive-disclosure briefings for specific in-flight workstreams. Read the relevant file *before* picking up any task in that workstream. Current entries:
+  - `wela-assessment-component-build.md` — the WelaPLUS Assessment Battery work (modular in-app battery, open-source Tool components). PRD at `documentation/wela-plus-battery-prd-2026.md` (~45% complete). Read this file before any work on assessments, batteries, runs, or tools.
 
 ## Quick Reference
 
@@ -26,6 +46,8 @@ Configure pnpm with minimumReleaseAge: 1440 so newly published package versions 
 npm has been compromised by hackers many times recently, so we need to take extra precaution.
 
 **Package-manager status:** this repository currently uses npm and `package-lock.json`. Stay on npm for ordinary app work; package-manager migration is a separate task.
+
+**Adding dependencies — make the case, don't reflexively avoid them.** The caution above is about supply-chain risk, not a blanket "never add packages" rule. When a high-quality, well-known, widely-adopted dependency would do the job better than hand-rolled code (e.g. `react-native-svg` for vector drawing), proactively make the case for installing it — state what it's for, why it beats reinventing it, and confirm it's mature/widely-used — rather than silently working around its absence with a worse implementation. The user decides; your job is to surface the option with a clear recommendation. Still respect the safety posture: prefer established packages over obscure ones, and remember newly published versions should age before install.
 
 ## Current Architecture -- SQLite Backend
 
@@ -110,8 +132,25 @@ Canonical clean-slate migrations for this gotcha include `20260522103000_masi_se
 
 Do not convert immutable assignment insert retries back to generic update-capable upserts. That recreates live-device failures such as `group_ea_assignments identity columns cannot be changed after insert`.
 
-### Schema Drift — Old Backend Migration Files Are Not Truth
-The current `supabase-migrations/` directory has drifted from the live Supabase schema in confirmed cases. For old-backend maintenance, verify live schema through Supabase Studio or `supabase db pull` before writing schema-facing code.
+### Schema Drift — Migration Files ≠ Production
+**The `supabase-migrations/` directory has diverged from the live Supabase schema in multiple confirmed cases.** Treat migration files as *intent*, not *truth*. Known drifts (as of 2026-04-24):
+
+- `children.synced` — defined in `00_initial_schema.sql` but absent in prod. Likely dropped manually via Studio at some point; no migration captures the change. Dashboard reads that filter on it return `code=42703` ("column does not exist").
+- `time_entries.auto_clocked_out` — the app has been writing this field since the auto-clock-out feature landed, but the column was never created in prod until `10_add_auto_clocked_out_to_time_entries.sql`. Every auto-clocked-out record failed sync with `PGRST204` in the meantime.
+- `users.job_title` — originally an enum in `00_initial_schema.sql`; prod has it as text and the enum type no longer exists. Migration 13 captures this drift.
+- `children.age` — originally NOT NULL with a narrow CHECK; prod allows NULL and has no age CHECK. Migration 13 captures this drift.
+
+**Before any schema-facing work** (writing migrations, building a dashboard, reviewing sync failures):
+- Check the live schema via Supabase Studio → Table Editor OR a `supabase db pull`.
+- Do NOT assume `supabase-migrations/` is authoritative.
+
+**Symptoms to watch for**:
+- `PGRST204` in mobile sync logs = *client writes a column prod doesn't have* → either add the column with a new migration (`ADD COLUMN IF NOT EXISTS ... DEFAULT ...`) or strip the field client-side. Prefer the migration; stripping loses data.
+- `code=42703` in server reads = *prod is missing a column the migration file claims exists* → update the consumer code (dashboard, report, etc.) to not assume that column, and optionally add a migration to formally drop it from `supabase-migrations/` so history matches prod.
+
+**Fix pattern**: always prefer additive, idempotent SQL (`ADD COLUMN IF NOT EXISTS`, `CREATE TABLE IF NOT EXISTS`). Never rely on a clean migration history — it isn't clean.
+
+**DDL rule**: all schema changes must go through migration files. Use Supabase `apply_migration` or `supabase migration new` for `ALTER TABLE`, `DROP TYPE`, `CREATE TABLE`, policy changes, and destructive drops. Do not run production DDL through ad-hoc `execute_sql`; use `execute_sql` for read-only preflights and verification queries.
 
 For the SQLite backend, use canonical Supabase CLI migrations under `supabase/migrations/`. Treat `supabase-migrations/` as historical reference only.
 
