@@ -1,7 +1,5 @@
 import { configureDatabaseConnection, getDatabase, withDatabaseAccess } from './client';
 
-export const CURRENT_SCHEMA_VERSION = 1;
-
 const LOCAL_SYNC_COLUMNS = `
   sync_status text not null default 'synced'
     check (sync_status in ('pending', 'synced', 'failed', 'terminal')),
@@ -548,7 +546,18 @@ const MIGRATIONS = [
         where deleted_at is null;
     `,
   },
+  {
+    version: 2,
+    name: 'programmes_daily_session_target',
+    sql: `
+      alter table programmes add column daily_session_target integer;
+      alter table programmes add column daily_session_ceiling integer;
+    `,
+  },
 ];
+
+// Derived from the migration list so it never drifts when a migration is added.
+export const CURRENT_SCHEMA_VERSION = MIGRATIONS[MIGRATIONS.length - 1].version;
 
 const getUserVersion = async (db) => {
   const row = await db.getFirstAsync('PRAGMA user_version');

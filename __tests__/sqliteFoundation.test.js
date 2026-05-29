@@ -250,11 +250,17 @@ describe('SQLite migration runner', () => {
       'exec:PRAGMA journal_mode = WAL',
       'exec:PRAGMA busy_timeout = 5000',
       'get:PRAGMA user_version',
+      // One enter/exec/record/exit cycle + user_version bump per pending migration.
       'enter-migration-transaction',
       'txn:exec-migration-sql',
       'txn:record-migration',
       'exit-migration-transaction',
-      `exec:PRAGMA user_version = ${CURRENT_SCHEMA_VERSION}`,
+      'exec:PRAGMA user_version = 1',
+      'enter-migration-transaction',
+      'txn:exec-migration-sql',
+      'txn:record-migration',
+      'exit-migration-transaction',
+      'exec:PRAGMA user_version = 2',
     ]);
   });
 
@@ -274,7 +280,7 @@ describe('SQLite migration runner', () => {
       ]));
 
       const migrations = await db.getAllAsync('select version from schema_migrations');
-      expect(migrations).toEqual([{ version: 1 }]);
+      expect(migrations).toEqual([{ version: 1 }, { version: 2 }]);
     } finally {
       await db.closeAsync();
     }
@@ -567,9 +573,10 @@ describe('SQLite migration runner', () => {
     let transactionCount = 0;
     const db = {
       execAsync: jest.fn(async (sql) => {
-        if (/PRAGMA user_version = 1/i.test(sql)) {
-          userVersion = 1;
-          events.push('set-user-version-1');
+        const match = /PRAGMA user_version = (\d+)/i.exec(sql);
+        if (match) {
+          userVersion = Number(match[1]);
+          events.push(`set-user-version-${match[1]}`);
         }
       }),
       getFirstAsync: jest.fn(async () => ({ user_version: userVersion })),
@@ -598,12 +605,17 @@ describe('SQLite migration runner', () => {
     releaseFirstMigration.resolve();
     await Promise.all([first, second]);
 
+    // The first run applies both pending migrations in order; the second
+    // concurrent run is serialized behind it and finds nothing left to do.
     expect(events).toEqual([
       'enter-1',
       'exit-1',
       'set-user-version-1',
+      'enter-2',
+      'exit-2',
+      'set-user-version-2',
     ]);
-    expect(db.withExclusiveTransactionAsync).toHaveBeenCalledTimes(1);
+    expect(db.withExclusiveTransactionAsync).toHaveBeenCalledTimes(2);
   });
 
   test('rolls back schema changes and leaves user_version untouched when migration history insert fails', async () => {
@@ -674,7 +686,10 @@ describe('SQLite debug dump', () => {
           supabaseProjectId: 'segygjzpujphwvrubusm',
         }),
         schemaVersion: CURRENT_SCHEMA_VERSION,
-        migrations: [{ version: 1, name: 'initial_sqlite_foundation' }],
+        migrations: [
+          { version: 1, name: 'initial_sqlite_foundation' },
+          { version: 2, name: 'programmes_daily_session_target' },
+        ],
         tableCounts: expect.objectContaining({
           schools: 1,
           sync_outbox: 0,

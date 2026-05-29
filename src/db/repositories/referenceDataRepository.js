@@ -59,6 +59,8 @@ const REFERENCE_TABLES = {
       'name',
       'sort_order',
       'is_active',
+      'daily_session_target',
+      'daily_session_ceiling',
       'created_at',
       'updated_at',
       'sync_status',
