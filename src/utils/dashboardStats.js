@@ -233,6 +233,30 @@ export function getAssessmentRanking(children, assessments) {
 }
 
 /**
+ * Rank children by their most recent EGRA *letter* assessment. Word assessments
+ * are excluded so the letters-correct ranking (and its grade-referenced colours)
+ * is never applied to a word-reading score. Legacy rows without an
+ * assessment_type are treated as letters, per the idiom used across the app.
+ */
+export function getLetterAssessmentRanking(children, assessments) {
+  const letterAssessments = (assessments || []).filter(
+    (a) => (a.assessment_type || 'letter_egra') === 'letter_egra'
+  );
+  return getAssessmentRanking(children, letterAssessments);
+}
+
+/**
+ * Rank children by their most recent EGRA *word* assessment. Only rows explicitly
+ * typed word_egra qualify (legacy untyped rows are letters, not words).
+ */
+export function getWordAssessmentRanking(children, assessments) {
+  const wordAssessments = (assessments || []).filter(
+    (a) => a.assessment_type === 'word_egra'
+  );
+  return getAssessmentRanking(children, wordAssessments);
+}
+
+/**
  * Rank children by total session count (all time).
  * Sessions store children_ids as an array, so one session can count for multiple children.
  */
