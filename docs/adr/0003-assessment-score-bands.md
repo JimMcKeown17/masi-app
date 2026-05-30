@@ -1,10 +1,23 @@
 ---
 status: accepted
 date: 2026-05-29
-updated: 2026-05-29
+updated: 2026-05-30
 ---
 
 # Assessment score colours band on raw score, keyed per (Question, grade, language)
+
+> **Refinement 2026-05-30 — four bands, numbers landed, implemented.** Pedagogy chose a
+> four-tier scale instead of three: `getScoreBand` returns
+> `great | good | okay | needs_work | unknown`, with two greens (a darker *great* at/above the
+> grade benchmark, a lighter *good* approaching it). Each row now carries three inclusive cuts
+> (`great_min` / `good_min` / `okay_min`); thresholds are null-guarded so a partly-configured row
+> degrades a below-`good` score to `unknown` rather than inventing a misleading colour. Go-live
+> EGRA Letter Sounds cuts are set (no longer TBD): foundation grades 1–3 = 40 / 30 / 20 LCPM,
+> Grade R and ECD = 20 / 15 / 10, all language `*`. Shipped in `src/utils/scoreBands.js` (band +
+> `getBandColor`) and consumed by `AssessmentRankingScreen`, which now also has a **Letters / Words**
+> toggle: Letters uses `letter_sounds`; Words passes `word_reading`, which has no rows yet and so
+> shows neutral "No benchmark" bars until cuts are added. Numbers and the toggle are documented in
+> `documentation/assessment-score-bands-config.md`.
 
 > **Refinement 2026-05-29 — the band key includes language, with a wildcard.** The key is
 > `(tool_code, grade, language)`, where `language` may be `*` ("applies to all languages") for
