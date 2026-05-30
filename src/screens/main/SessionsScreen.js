@@ -13,12 +13,15 @@ import SessionsTodayRing from '../../components/sessions/SessionsTodayRing';
 import { getSessionsTodayGoal } from '../../services/sessionsTodayGoal';
 import { useSessionLaunchGuard } from '../../hooks/useSessionLaunchGuard';
 import ClockInBeforeSessionDialog from '../../components/sessions/ClockInBeforeSessionDialog';
+import { getActiveProgrammeGate } from '../../services/activeProgrammeGate';
+import NoActiveProgrammeNotice from '../../components/common/NoActiveProgrammeNotice';
 
 export default function SessionsScreen({ navigation }) {
   const { user } = useAuth();
   const { children: childrenList } = useChildren();
   const [stats, setStats] = useState(null);
   const [goal, setGoal] = useState(null);
+  const [programmeGate, setProgrammeGate] = useState(null);
   const {
     warningVisible,
     requestSessionLaunch,
@@ -33,6 +36,7 @@ export default function SessionsScreen({ navigation }) {
   useFocusEffect(
     useCallback(() => {
       const loadStats = async () => {
+        setProgrammeGate(await getActiveProgrammeGate({ userId: user.id }));
         const sessions = await sessionsRepository.getSessions({ userId: user.id });
         setStats(getSessionsTabStats(sessions, childrenList));
         // Re-resolved on every focus, so the ring reflects a session the EA just
@@ -42,6 +46,17 @@ export default function SessionsScreen({ navigation }) {
       loadStats();
     }, [childrenList, user.id])
   );
+
+  // Gate programme-dependent capture: an EA with no active programme assignment
+  // sees an actionable empty-state instead of a Record-Session form that fails at
+  // save. Clock in/out, children, and profile live elsewhere and stay usable.
+  if (programmeGate && !programmeGate.hasActiveProgramme) {
+    return (
+      <View style={styles.container}>
+        <NoActiveProgrammeNotice action="record sessions" />
+      </View>
+    );
+  }
 
   return (
     <View style={styles.container}>

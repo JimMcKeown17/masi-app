@@ -53,6 +53,15 @@ jest.mock('../src/db/repositories/assessmentsRepository', () => ({
   },
 }));
 
+// This suite exercises the clock-in launch guard, not the programme gate, so the
+// EA has an active programme — the screen renders its normal capture UI.
+jest.mock('../src/services/activeProgrammeGate', () => ({
+  getActiveProgrammeGate: jest.fn(async () => ({
+    hasActiveProgramme: true,
+    programme: { id: 'prog-1', name: 'Core Literacy' },
+  })),
+}));
+
 jest.mock('expo-linear-gradient', () => ({
   LinearGradient: ({ children }) => <>{children}</>,
 }));

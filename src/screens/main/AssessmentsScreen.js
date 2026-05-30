@@ -8,21 +8,35 @@ import { useChildren } from '../../context/ChildrenContext';
 import { assessmentsRepository } from '../../db/repositories/assessmentsRepository';
 import { getAssessmentsTabStats } from '../../utils/dashboardStats';
 import StatBar from '../../components/dashboard/StatBar';
+import { getActiveProgrammeGate } from '../../services/activeProgrammeGate';
+import NoActiveProgrammeNotice from '../../components/common/NoActiveProgrammeNotice';
 
 export default function AssessmentsScreen({ navigation }) {
   const { user } = useAuth();
   const { children: childrenList } = useChildren();
   const [stats, setStats] = useState(null);
+  const [programmeGate, setProgrammeGate] = useState(null);
 
   useFocusEffect(
     useCallback(() => {
       const loadStats = async () => {
+        setProgrammeGate(await getActiveProgrammeGate({ userId: user.id }));
         const assessments = await assessmentsRepository.getAssessments({ userId: user.id });
         setStats(getAssessmentsTabStats(childrenList, assessments));
       };
       loadStats();
     }, [childrenList, user.id])
   );
+
+  // Gate programme-dependent capture: an unassigned EA sees an actionable
+  // empty-state instead of an assessment that fails at save.
+  if (programmeGate && !programmeGate.hasActiveProgramme) {
+    return (
+      <View style={styles.container}>
+        <NoActiveProgrammeNotice action="run assessments" />
+      </View>
+    );
+  }
 
   return (
     <View style={styles.container}>
