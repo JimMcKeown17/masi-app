@@ -4,15 +4,30 @@ import { Text, ActivityIndicator } from 'react-native-paper';
 import { useFocusEffect } from '@react-navigation/native';
 import { useAuth } from '../../context/AuthContext';
 import { useChildren } from '../../context/ChildrenContext';
+import { useClasses } from '../../context/ClassesContext';
 import { assessmentsRepository } from '../../db/repositories/assessmentsRepository';
 import { getAssessmentRanking } from '../../utils/dashboardStats';
-import RankedBarRow, { getBarColor } from '../../components/dashboard/RankedBarRow';
+import { getScoreBand, getBandColor } from '../../utils/scoreBands';
+import RankedBarRow from '../../components/dashboard/RankedBarRow';
 import StatBar from '../../components/dashboard/StatBar';
 import { colors, spacing, borderRadius } from '../../constants/colors';
+
+// EGRA Letter Sounds is the Question this ranking colours; raw score is LCPM.
+const LETTER_SOUNDS_TOOL_CODE = 'letter_sounds';
+
+// Legend entries mirror the bands getScoreBand returns, coloured via getBandColor.
+const BAND_LEGEND = [
+  { band: 'great', label: 'Great' },
+  { band: 'good', label: 'Good' },
+  { band: 'okay', label: 'Okay' },
+  { band: 'needs_work', label: 'Needs work' },
+  { band: 'unknown', label: 'No benchmark' },
+];
 
 export default function AssessmentRankingScreen({ navigation }) {
   const { user } = useAuth();
   const { children: childrenList } = useChildren();
+  const { classes } = useClasses();
   const [ranking, setRanking] = useState([]);
   const [loading, setLoading] = useState(true);
 
@@ -58,13 +73,23 @@ export default function AssessmentRankingScreen({ navigation }) {
     }
 
     const childName = `${item.child.first_name} ${(item.child.last_name || '').charAt(0)}.`;
+    // Colour by raw-score band (grade-referenced), never accuracy percent (ADR-0003).
+    // Grade/language come from the child's class; band degrades to neutral grey
+    // for grades without a configured benchmark.
+    const cls = classes.find((c) => c.id === item.child.class_id);
+    const band = getScoreBand({
+      toolCode: LETTER_SOUNDS_TOOL_CODE,
+      grade: cls?.grade,
+      language: cls?.home_language,
+      rawScore: item.correct,
+    });
     return (
       <RankedBarRow
         rank={index + 1}
         name={childName}
         value={item.correct}
         maxValue={60}
-        barColor={getBarColor(Math.round((item.correct / Math.max(item.attempted, 1)) * 100))}
+        barColor={getBandColor(band)}
         label={`${item.correct}`}
         onPress={item.assessment ? () => navigation.navigate('AssessmentDetail', {
           assessment: item.assessment,
@@ -94,18 +119,15 @@ export default function AssessmentRankingScreen({ navigation }) {
           </View>
         }
         ListFooterComponent={
-          <View style={styles.colorKey}>
-            <View style={styles.keyItem}>
-              <View style={[styles.keySwatch, { backgroundColor: colors.success }]} />
-              <Text style={styles.keyLabel}>70%+ accuracy</Text>
-            </View>
-            <View style={styles.keyItem}>
-              <View style={[styles.keySwatch, { backgroundColor: '#FFBB00' }]} />
-              <Text style={styles.keyLabel}>40–69%</Text>
-            </View>
-            <View style={styles.keyItem}>
-              <View style={[styles.keySwatch, { backgroundColor: colors.emphasis }]} />
-              <Text style={styles.keyLabel}>Under 40%</Text>
+          <View>
+            <Text style={styles.keyCaption}>Colour shows each child's level for their grade</Text>
+            <View style={styles.colorKey}>
+              {BAND_LEGEND.map(({ band, label }) => (
+                <View key={band} style={styles.keyItem}>
+                  <View style={[styles.keySwatch, { backgroundColor: getBandColor(band) }]} />
+                  <Text style={styles.keyLabel}>{label}</Text>
+                </View>
+              ))}
             </View>
           </View>
         }
@@ -163,11 +185,18 @@ const styles = StyleSheet.create({
     color: colors.disabled,
     fontStyle: 'italic',
   },
+  keyCaption: {
+    fontSize: 10,
+    color: colors.textSecondary,
+    textAlign: 'center',
+    marginTop: spacing.md,
+  },
   colorKey: {
     flexDirection: 'row',
+    flexWrap: 'wrap',
     justifyContent: 'center',
     gap: spacing.md,
-    marginTop: spacing.md,
+    marginTop: spacing.xs,
     padding: spacing.sm,
     backgroundColor: colors.surface,
     borderRadius: borderRadius.sm,
