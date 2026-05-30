@@ -17,3 +17,31 @@ alter table public.sessions
 alter table public.sessions
   add column if not exists state text not null default 'completed'
   check (state in ('completed', 'in_progress', 'paused', 'discarded'));
+
+-- Forward-prep write guard. The columns above are CHECK/FK-constrained but the
+-- existing permissive session policies (sessions_insert_active_programme,
+-- sessions_update_own) only validate user_id / active programme — they do NOT
+-- gate the new columns. Until the state-machine slice ships real per-state and
+-- per-group authorization, pin these columns to their defaults at the RLS
+-- boundary so a direct/raw client cannot set a non-default state or an
+-- unauthorized group on its own session.
+--
+-- RESTRICTIVE policies are ANDed with the permissive policies, so this tightens
+-- without replacing them. Submit-and-go inserts omit these columns, so the
+-- server fills state='completed' / group_id=NULL and the WITH CHECK passes;
+-- ordinary updates that don't touch these columns preserve those values.
+--
+-- The state-machine slice MUST drop both guard policies and add the real
+-- group/state authorization in the same migration that wires the client writes.
+drop policy if exists sessions_forward_prep_pin_defaults_insert on public.sessions;
+create policy sessions_forward_prep_pin_defaults_insert on public.sessions
+  as restrictive
+  for insert to authenticated
+  with check (state = 'completed' and group_id is null);
+
+drop policy if exists sessions_forward_prep_pin_defaults_update on public.sessions;
+create policy sessions_forward_prep_pin_defaults_update on public.sessions
+  as restrictive
+  for update to authenticated
+  using (true)
+  with check (state = 'completed' and group_id is null);

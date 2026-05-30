@@ -35,4 +35,14 @@ describe('sessions forward-prep Supabase migration', () => {
       /check \(state in \('completed', 'in_progress', 'paused', 'discarded'\)\)/i
     );
   });
+
+  test('pins the new columns to their defaults with a restrictive RLS guard', () => {
+    // Forward-prep: nothing should write non-default state/group_id until the
+    // state-machine slice ships. A RESTRICTIVE policy ANDs with the existing
+    // permissive session policies to enforce that at the write boundary.
+    expect(migration.sql).toMatch(/as restrictive/i);
+    expect(migration.sql).toMatch(/for insert/i);
+    expect(migration.sql).toMatch(/for update/i);
+    expect(migration.sql).toMatch(/with check \(state = 'completed' and group_id is null\)/i);
+  });
 });
