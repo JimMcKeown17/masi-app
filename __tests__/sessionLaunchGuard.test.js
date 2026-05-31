@@ -3,6 +3,7 @@ import { render, fireEvent, waitFor } from '@testing-library/react-native';
 import { PaperProvider } from 'react-native-paper';
 import HomeScreen from '../src/screens/main/HomeScreen';
 import SessionsScreen from '../src/screens/main/SessionsScreen';
+import { getActiveProgrammeGate } from '../src/services/activeProgrammeGate';
 
 const mockNavigate = jest.fn();
 const mockGetActiveTimeEntry = jest.fn();
@@ -137,6 +138,17 @@ describe('session launch clock-in warning', () => {
     fireEvent.press(screen.getByText('Clock In Now'));
 
     expect(mockNavigate).toHaveBeenCalledWith('TimeTracking');
+  });
+
+  test('gate-check error does not strand the tab on a spinner — capture UI still appears', async () => {
+    // If the programme lookup rejects on first focus, the screen must not stay
+    // stuck on the loading spinner; it falls back to the capture UI (the data
+    // layer still guards the write at save).
+    getActiveProgrammeGate.mockRejectedValueOnce(new Error('db read failed'));
+
+    const screen = renderWithPaper(<SessionsScreen navigation={navigation} />);
+
+    expect(await screen.findByText('Record New Session')).toBeTruthy();
   });
 
   test('active time entries go straight to the session form without warning', async () => {

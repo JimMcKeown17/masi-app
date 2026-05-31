@@ -36,7 +36,14 @@ export default function SessionsScreen({ navigation }) {
   useFocusEffect(
     useCallback(() => {
       const loadStats = async () => {
-        setProgrammeGate(await getActiveProgrammeGate({ userId: user.id }));
+        try {
+          setProgrammeGate(await getActiveProgrammeGate({ userId: user.id }));
+        } catch (error) {
+          console.error('Error resolving active programme gate:', error);
+          // Never strand the tab on the spinner; the data layer still guards the
+          // write at save, so fall back to the usable capture UI on a read error.
+          setProgrammeGate({ hasActiveProgramme: true, programme: null });
+        }
         const sessions = await sessionsRepository.getSessions({ userId: user.id });
         setStats(getSessionsTabStats(sessions, childrenList));
         // Re-resolved on every focus, so the ring reflects a session the EA just

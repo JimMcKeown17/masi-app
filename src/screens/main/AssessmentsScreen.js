@@ -20,7 +20,14 @@ export default function AssessmentsScreen({ navigation }) {
   useFocusEffect(
     useCallback(() => {
       const loadStats = async () => {
-        setProgrammeGate(await getActiveProgrammeGate({ userId: user.id }));
+        try {
+          setProgrammeGate(await getActiveProgrammeGate({ userId: user.id }));
+        } catch (error) {
+          console.error('Error resolving active programme gate:', error);
+          // Never strand the tab on the spinner; the data layer still guards the
+          // write at save, so fall back to the usable capture UI on a read error.
+          setProgrammeGate({ hasActiveProgramme: true, programme: null });
+        }
         const assessments = await assessmentsRepository.getAssessments({ userId: user.id });
         setStats(getAssessmentsTabStats(childrenList, assessments));
       };
