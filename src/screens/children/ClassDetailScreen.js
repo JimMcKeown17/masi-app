@@ -28,7 +28,9 @@ export default function ClassDetailScreen({ route, navigation }) {
   useLayoutEffect(() => {
     navigation.setOptions({
       headerRight: () => (
-        <Button compact onPress={() => navigation.navigate('Children')}>
+        // ClassDetail is a root-stack screen; the Children list is a tab nested
+        // in MainTabs, so it must be reached through the nested navigator.
+        <Button compact onPress={() => navigation.navigate('MainTabs', { screen: 'Children' })}>
           Manage classes
         </Button>
       ),
