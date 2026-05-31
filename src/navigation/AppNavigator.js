@@ -31,6 +31,7 @@ import ClassDetailScreen from '../screens/children/ClassDetailScreen';
 
 // Session screens
 import SessionFormScreen from '../screens/sessions/SessionFormScreen';
+import SessionCompleteScreen from '../screens/sessions/SessionCompleteScreen';
 import SessionHistoryScreen from '../screens/sessions/SessionHistoryScreen';
 
 // Assessment screens
@@ -230,6 +231,17 @@ function MainNavigator() {
         options={{
           title: 'New Session',
           headerBackTitle: 'Back',
+        }}
+      />
+      <Stack.Screen
+        name="SessionComplete"
+        component={SessionCompleteScreen}
+        options={{
+          title: 'Session saved',
+          // The form is replaced by this screen, so there's nothing to go "back"
+          // to but the launch context; "Done" is the single, clear way out.
+          headerLeft: () => null,
+          gestureEnabled: false,
         }}
       />
       <Stack.Screen
