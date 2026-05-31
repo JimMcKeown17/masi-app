@@ -28,9 +28,12 @@ export default function ClassDetailScreen({ route, navigation }) {
   useLayoutEffect(() => {
     navigation.setOptions({
       headerRight: () => (
-        // ClassDetail is a root-stack screen; the Children list is a tab nested
-        // in MainTabs, so it must be reached through the nested navigator.
-        <Button compact onPress={() => navigation.navigate('MainTabs', { screen: 'Children' })}>
+        // ClassDetail sits above MainTabs (the root stack's initial route). Pop
+        // back to the EXISTING MainTabs/Children instance rather than navigating
+        // forward — navigate() could remount the tab, resetting hasAutoRouted and
+        // bouncing a single-class EA straight back here. popToTop reuses the live
+        // ChildrenListScreen (ref intact → no re-route) and never grows the stack.
+        <Button compact onPress={() => navigation.popToTop()}>
           Manage classes
         </Button>
       ),
