@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useMemo } from 'react';
+import React, { useState, useCallback, useMemo, useRef } from 'react';
 import { View, StyleSheet, FlatList, RefreshControl, TouchableOpacity } from 'react-native';
 import {
   Text,
@@ -16,6 +16,7 @@ import { useClasses } from '../../context/ClassesContext';
 import { useOffline } from '../../context/OfflineContext';
 import { assessmentsRepository } from '../../db/repositories/assessmentsRepository';
 import { getChildrenTabStats } from '../../utils/dashboardStats';
+import { getChildrenLanding } from '../../utils/childrenLanding';
 import StatBar from '../../components/dashboard/StatBar';
 import { NO_TEXT_SUGGESTIONS } from '../../constants/textInputProps';
 
@@ -28,6 +29,10 @@ export default function ChildrenListScreen({ navigation }) {
   const [searchTerm, setSearchTerm] = useState('');
   const [refreshing, setRefreshing] = useState(false);
   const [tabStats, setTabStats] = useState(null);
+  // Auto-route at most once per mount: a single-class EA is sent straight into
+  // their class on entry, but once that has happened (or they've reached the list
+  // via Manage classes), the tab leaves them where they are.
+  const hasAutoRouted = useRef(false);
 
   useFocusEffect(
     useCallback(() => {
@@ -37,6 +42,21 @@ export default function ChildrenListScreen({ navigation }) {
       };
       loadStats();
     }, [children, classes, user.id])
+  );
+
+  // Count-aware landing: jump a single-class EA directly into that class. Keys off
+  // the classes the EA actually has children in, not their programme. Waits for
+  // classes to load and routes only once (see hasAutoRouted).
+  useFocusEffect(
+    useCallback(() => {
+      if (classesLoading || hasAutoRouted.current) return;
+      const classesWithChildren = classes.filter((c) => getChildrenInClass(c.id).length > 0);
+      const landing = getChildrenLanding(classesWithChildren);
+      if (landing.autoRoute) {
+        hasAutoRouted.current = true;
+        navigation.navigate('ClassDetail', { classId: landing.classId, autoRouted: true });
+      }
+    }, [classes, classesLoading, getChildrenInClass, navigation])
   );
 
   // Count unsynced items across classes and children

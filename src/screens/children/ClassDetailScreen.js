@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useLayoutEffect } from 'react';
 import { View, StyleSheet, FlatList, TouchableOpacity } from 'react-native';
 import {
   Text,
@@ -6,6 +6,7 @@ import {
   FAB,
   List,
   IconButton,
+  Button,
 } from 'react-native-paper';
 import { colors, spacing, borderRadius } from '../../constants/colors';
 import { useClasses } from '../../context/ClassesContext';
@@ -20,6 +21,19 @@ export default function ClassDetailScreen({ route, navigation }) {
   const classItem = classes.find(c => c.id === classId);
   const childrenInClass = getChildrenInClass(classId);
   const school = schools.find(s => s.id === classItem?.school_id);
+
+  // Persistent "Manage classes" affordance — always returns to the full class
+  // list, so an auto-routed single-class EA can still reach another class or
+  // add one. (ChildrenListScreen won't re-auto-route them on return.)
+  useLayoutEffect(() => {
+    navigation.setOptions({
+      headerRight: () => (
+        <Button compact onPress={() => navigation.navigate('Children')}>
+          Manage classes
+        </Button>
+      ),
+    });
+  }, [navigation]);
 
   // Bottom sheet state
   const [pickerVisible, setPickerVisible] = useState(false);
