@@ -130,7 +130,8 @@ describe('session launch clock-in warning', () => {
   test('Sessions tab record button can send the user to clock in', async () => {
     const screen = renderWithPaper(<SessionsScreen navigation={navigation} />);
 
-    fireEvent.press(screen.getByText('Record New Session'));
+    // findByText waits past the gate's loading spinner for the capture UI.
+    fireEvent.press(await screen.findByText('Record New Session'));
 
     await waitFor(() => expect(screen.getByText("You're not clocked in. Clock in now or continue anyway?")).toBeTruthy());
     fireEvent.press(screen.getByText('Clock In Now'));
@@ -147,7 +148,7 @@ describe('session launch clock-in warning', () => {
 
     const screen = renderWithPaper(<SessionsScreen navigation={navigation} />);
 
-    fireEvent.press(screen.getByText('Record New Session'));
+    fireEvent.press(await screen.findByText('Record New Session'));
 
     await waitFor(() => expect(mockNavigate).toHaveBeenCalledWith('SessionForm'));
     expect(screen.queryByText("You're not clocked in. Clock in now or continue anyway?")).toBeNull();

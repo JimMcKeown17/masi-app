@@ -1,8 +1,14 @@
 import { useCallback, useState } from 'react';
+import { Alert } from 'react-native';
 import { CLOCK_IN_STATUS, getClockInStatusForUser } from '../utils/timeEntryStatus';
+import { getActiveProgrammeGate } from '../services/activeProgrammeGate';
 
 export const SESSION_CLOCK_WARNING =
   "You're not clocked in. Clock in now or continue anyway?";
+
+export const SESSION_NO_PROGRAMME_TITLE = 'No active programme';
+export const SESSION_NO_PROGRAMME_MESSAGE =
+  "You don't have a programme assigned yet. Contact your supervisor to be assigned before recording sessions.";
 
 export const useSessionLaunchGuard = ({
   navigation,
@@ -22,6 +28,21 @@ export const useSessionLaunchGuard = ({
   }, [navigation, sessionRouteName]);
 
   const requestSessionLaunch = useCallback(async (params) => {
+    // Programme gate first — covers every launch entry point (Home CTA, Sessions
+    // tab) at the shared chokepoint, so an unassigned EA never opens a session
+    // form the data layer will reject at save.
+    try {
+      const { hasActiveProgramme } = await getActiveProgrammeGate({ userId });
+      if (!hasActiveProgramme) {
+        Alert.alert(SESSION_NO_PROGRAMME_TITLE, SESSION_NO_PROGRAMME_MESSAGE);
+        return;
+      }
+    } catch (error) {
+      console.error('Error checking active programme before session launch:', error);
+      // Fall through: the data layer still guards the write, so mirror the
+      // clock-in check's resilience rather than hard-blocking on a transient error.
+    }
+
     try {
       const status = await getClockInStatusForUser(userId);
       if (status === CLOCK_IN_STATUS.CLOCKED_IN) {

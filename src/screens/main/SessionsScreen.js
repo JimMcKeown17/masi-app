@@ -1,6 +1,6 @@
 import React, { useState, useCallback } from 'react';
 import { View, StyleSheet, TouchableOpacity, ScrollView } from 'react-native';
-import { Text, Button } from 'react-native-paper';
+import { Text, Button, ActivityIndicator } from 'react-native-paper';
 import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect } from '@react-navigation/native';
 import { useAuth } from '../../context/AuthContext';
@@ -47,10 +47,20 @@ export default function SessionsScreen({ navigation }) {
     }, [childrenList, user.id])
   );
 
+  // Hold the capture UI until the programme check resolves, so an unassigned EA
+  // can't tap through to a failing flow during the first (cold) gate resolve.
+  if (programmeGate === null) {
+    return (
+      <View style={styles.loadingContainer}>
+        <ActivityIndicator size="large" color={colors.primary} />
+      </View>
+    );
+  }
+
   // Gate programme-dependent capture: an EA with no active programme assignment
   // sees an actionable empty-state instead of a Record-Session form that fails at
   // save. Clock in/out, children, and profile live elsewhere and stay usable.
-  if (programmeGate && !programmeGate.hasActiveProgramme) {
+  if (!programmeGate.hasActiveProgramme) {
     return (
       <View style={styles.container}>
         <NoActiveProgrammeNotice action="record sessions" />
@@ -130,6 +140,12 @@ export default function SessionsScreen({ navigation }) {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+    backgroundColor: colors.background,
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
     backgroundColor: colors.background,
   },
   scrollContent: {
