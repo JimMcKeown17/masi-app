@@ -18,6 +18,7 @@ import {
   getWeekSessionCounts,
   getSessionsThisMonth,
   getAssessmentCoverage,
+  getMonthlyStatsFootnote,
 } from '../../utils/dashboardStats';
 import { colors, spacing, borderRadius, shadows } from '../../constants/colors';
 
@@ -147,6 +148,7 @@ export default function HomeScreen({ navigation }) {
               <Text style={styles.headerStatLabel}>children</Text>
             </View>
           </View>
+          <Text style={styles.statsFootnote}>{getMonthlyStatsFootnote()}</Text>
         </LinearGradient>
 
         <View style={styles.content}>
@@ -380,6 +382,12 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     fontSize: 10,
     opacity: 0.8,
+  },
+  statsFootnote: {
+    color: '#FFFFFF',
+    fontSize: 10,
+    opacity: 0.7,
+    marginTop: spacing.sm,
   },
 
   // ── Content ──

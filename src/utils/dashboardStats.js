@@ -134,6 +134,20 @@ export function getAssessmentCoverage(children, assessments) {
   };
 }
 
+const MONTH_NAMES = [
+  'January', 'February', 'March', 'April', 'May', 'June',
+  'July', 'August', 'September', 'October', 'November', 'December',
+];
+
+/**
+ * Footnote that gives context for the Home header's monthly figures — the
+ * days-worked and sessions counts reset each calendar month, so name which month
+ * they cover. (Locale-independent so it reads the same on every field device.)
+ */
+export function getMonthlyStatsFootnote(now = new Date()) {
+  return `Days worked and sessions are for ${MONTH_NAMES[now.getMonth()]} ${now.getFullYear()}.`;
+}
+
 // ─── Ranking Stats ──────────────────────────────────────────────────────
 
 /**
