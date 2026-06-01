@@ -218,7 +218,7 @@ const styles = StyleSheet.create({
     borderRadius: borderRadius.sm,
   },
   badgeOnline: {
-    backgroundColor: '#D1FAE5',
+    backgroundColor: colors.successBg,
   },
   badgeOffline: {
     backgroundColor: '#FEF3C7',

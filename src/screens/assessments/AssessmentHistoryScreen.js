@@ -235,7 +235,7 @@ const styles = StyleSheet.create({
     borderRadius: 12,
   },
   syncBadgeSynced: {
-    backgroundColor: '#D1FAE5',
+    backgroundColor: colors.successBg,
   },
   syncBadgePending: {
     backgroundColor: colors.border,
