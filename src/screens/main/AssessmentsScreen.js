@@ -10,6 +10,7 @@ import { getAssessmentsTabStats } from '../../utils/dashboardStats';
 import StatBar from '../../components/dashboard/StatBar';
 import { getActiveProgrammeGate } from '../../services/activeProgrammeGate';
 import NoActiveProgrammeNotice from '../../components/common/NoActiveProgrammeNotice';
+import SectionHeader from '../../components/common/SectionHeader';
 
 export default function AssessmentsScreen({ navigation }) {
   const { user } = useAuth();
@@ -66,10 +67,7 @@ export default function AssessmentsScreen({ navigation }) {
         ]} />
       )}
 
-      <Text variant="titleLarge" style={styles.title}>Assessments</Text>
-      <Text variant="bodyMedium" style={styles.description}>
-        Run timed assessments and view results.
-      </Text>
+      <SectionHeader title="Assessments" subtitle="Run timed assessments and view results." />
 
       <Card style={styles.card}>
         <Card.Content>
@@ -131,13 +129,6 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     backgroundColor: colors.background,
-  },
-  title: {
-    marginBottom: spacing.sm,
-  },
-  description: {
-    marginBottom: spacing.xl,
-    color: colors.textSecondary,
   },
   card: {
     backgroundColor: colors.surface,

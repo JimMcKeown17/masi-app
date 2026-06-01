@@ -15,6 +15,7 @@ import { useSessionLaunchGuard } from '../../hooks/useSessionLaunchGuard';
 import ClockInBeforeSessionDialog from '../../components/sessions/ClockInBeforeSessionDialog';
 import { getActiveProgrammeGate } from '../../services/activeProgrammeGate';
 import NoActiveProgrammeNotice from '../../components/common/NoActiveProgrammeNotice';
+import SectionHeader from '../../components/common/SectionHeader';
 
 export default function SessionsScreen({ navigation }) {
   const { user } = useAuth();
@@ -111,10 +112,7 @@ export default function SessionsScreen({ navigation }) {
         </View>
       )}
 
-      <Text variant="titleLarge" style={styles.title}>Sessions</Text>
-      <Text variant="bodyMedium" style={styles.description}>
-        Record new sessions and view session history.
-      </Text>
+      <SectionHeader title="Sessions" subtitle="Record new sessions and view session history." />
 
       <View style={styles.buttonContainer}>
         <Button
@@ -169,13 +167,6 @@ const styles = StyleSheet.create({
     color: colors.textSecondary,
     textTransform: 'uppercase',
     letterSpacing: 0.5,
-  },
-  title: {
-    marginBottom: spacing.sm,
-  },
-  description: {
-    marginBottom: spacing.xl,
-    color: colors.textSecondary,
   },
   buttonContainer: {
     gap: spacing.md,

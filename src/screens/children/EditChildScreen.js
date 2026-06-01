@@ -10,6 +10,7 @@ import {
 } from 'react-native-paper';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { colors, spacing, borderRadius } from '../../constants/colors';
+import SectionHeader from '../../components/common/SectionHeader';
 import { useChildren } from '../../context/ChildrenContext';
 import { useClasses } from '../../context/ClassesContext';
 import { GENDER_OPTIONS } from '../../constants/options';
@@ -191,9 +192,7 @@ export default function EditChildScreen({ route, navigation }) {
 
         <Card style={styles.card}>
           <Card.Content>
-            <Text variant="titleLarge" style={styles.title}>
-              Edit Child
-            </Text>
+            <SectionHeader title="Edit Child" />
 
             {/* First Name */}
             <TextInput
@@ -415,9 +414,6 @@ const styles = StyleSheet.create({
   },
   card: {
     backgroundColor: colors.surface,
-    marginBottom: spacing.md,
-  },
-  title: {
     marginBottom: spacing.md,
   },
   input: {
