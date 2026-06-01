@@ -46,7 +46,7 @@ export default function SessionsScreen({ navigation }) {
           setProgrammeGate({ hasActiveProgramme: true, programme: null });
         }
         const sessions = await sessionsRepository.getSessions({ userId: user.id });
-        setStats(getSessionsTabStats(sessions, childrenList));
+        setStats(getSessionsTabStats(sessions, childrenList, user.id));
         // Re-resolved on every focus, so the ring reflects a session the EA just
         // recorded the moment they navigate back to this tab.
         setGoal(await getSessionsTodayGoal({ userId: user.id }));
