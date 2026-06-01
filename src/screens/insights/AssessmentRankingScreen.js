@@ -1,32 +1,75 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useMemo } from 'react';
 import { View, StyleSheet, FlatList } from 'react-native';
-import { Text, ActivityIndicator } from 'react-native-paper';
+import { Text, ActivityIndicator, SegmentedButtons } from 'react-native-paper';
 import { useFocusEffect } from '@react-navigation/native';
 import { useAuth } from '../../context/AuthContext';
 import { useChildren } from '../../context/ChildrenContext';
+import { useClasses } from '../../context/ClassesContext';
 import { assessmentsRepository } from '../../db/repositories/assessmentsRepository';
-import { getAssessmentRanking } from '../../utils/dashboardStats';
-import RankedBarRow, { getBarColor } from '../../components/dashboard/RankedBarRow';
+import { getLetterAssessmentRanking, getWordAssessmentRanking } from '../../utils/dashboardStats';
+import { getScoreBand, getBandColor } from '../../utils/scoreBands';
+import RankedBarRow from '../../components/dashboard/RankedBarRow';
 import StatBar from '../../components/dashboard/StatBar';
 import { colors, spacing, borderRadius } from '../../constants/colors';
+
+// The screen toggles between two EGRA Questions. Each carries its own band
+// tool_code (for grade-referenced colours), bar scale, and copy. Word bands are
+// not seeded yet, so word_reading degrades to neutral grey via getScoreBand.
+const MODES = {
+  letters: {
+    value: 'letters',
+    label: 'Letters',
+    toolCode: 'letter_sounds',
+    maxValue: 60,
+    rank: getLetterAssessmentRanking,
+    subtitle: 'Ranked by letters correct on the most recent EGRA letter assessment',
+    benchmarked: true,
+  },
+  words: {
+    value: 'words',
+    label: 'Words',
+    toolCode: 'word_reading',
+    maxValue: 50,
+    rank: getWordAssessmentRanking,
+    subtitle: 'Ranked by words correct on the most recent EGRA word assessment',
+    benchmarked: false,
+  },
+};
+
+// Legend entries mirror the bands getScoreBand returns, coloured via getBandColor.
+const BAND_LEGEND = [
+  { band: 'great', label: 'Great' },
+  { band: 'good', label: 'Good' },
+  { band: 'okay', label: 'Okay' },
+  { band: 'needs_work', label: 'Needs work' },
+  { band: 'unknown', label: 'No benchmark' },
+];
 
 export default function AssessmentRankingScreen({ navigation }) {
   const { user } = useAuth();
   const { children: childrenList } = useChildren();
-  const [ranking, setRanking] = useState([]);
+  const { classes } = useClasses();
+  const [assessments, setAssessments] = useState([]);
+  const [mode, setMode] = useState('letters');
   const [loading, setLoading] = useState(true);
 
   useFocusEffect(
     useCallback(() => {
       const load = async () => {
         setLoading(true);
-        const assessments = await assessmentsRepository.getAssessments({ userId: user.id });
-        const ranked = getAssessmentRanking(childrenList, assessments);
-        setRanking(ranked);
+        const rows = await assessmentsRepository.getAssessments({ userId: user.id });
+        setAssessments(rows);
         setLoading(false);
       };
       load();
-    }, [childrenList, user.id])
+    }, [user.id])
+  );
+
+  const modeConfig = MODES[mode];
+  // Toggling re-ranks the already-fetched assessments — no refetch needed.
+  const ranking = useMemo(
+    () => modeConfig.rank(childrenList, assessments),
+    [modeConfig, childrenList, assessments]
   );
 
   if (loading) {
@@ -58,13 +101,23 @@ export default function AssessmentRankingScreen({ navigation }) {
     }
 
     const childName = `${item.child.first_name} ${(item.child.last_name || '').charAt(0)}.`;
+    // Colour by raw-score band (grade-referenced), never accuracy percent (ADR-0003).
+    // Grade/language come from the child's class; band degrades to neutral grey
+    // for tools/grades without a configured benchmark (e.g. word_reading today).
+    const cls = classes.find((c) => c.id === item.child.class_id);
+    const band = getScoreBand({
+      toolCode: modeConfig.toolCode,
+      grade: cls?.grade,
+      language: cls?.home_language,
+      rawScore: item.correct,
+    });
     return (
       <RankedBarRow
         rank={index + 1}
         name={childName}
         value={item.correct}
-        maxValue={60}
-        barColor={getBarColor(Math.round((item.correct / Math.max(item.attempted, 1)) * 100))}
+        maxValue={modeConfig.maxValue}
+        barColor={getBandColor(band)}
         label={`${item.correct}`}
         onPress={item.assessment ? () => navigation.navigate('AssessmentDetail', {
           assessment: item.assessment,
@@ -83,9 +136,17 @@ export default function AssessmentRankingScreen({ navigation }) {
         contentContainerStyle={styles.listContent}
         ListHeaderComponent={
           <View>
-            <Text style={styles.subtitle}>
-              Children ranked by total letters correct on most recent EGRA assessment
-            </Text>
+            <SegmentedButtons
+              value={mode}
+              onValueChange={setMode}
+              density="small"
+              style={styles.toggle}
+              buttons={[
+                { value: MODES.letters.value, label: MODES.letters.label, icon: 'alphabetical' },
+                { value: MODES.words.value, label: MODES.words.label, icon: 'text' },
+              ]}
+            />
+            <Text style={styles.subtitle}>{modeConfig.subtitle}</Text>
             <StatBar items={[
               { label: 'Avg Correct', value: avgCorrect },
               { label: 'Highest', value: highest, color: colors.success },
@@ -94,20 +155,23 @@ export default function AssessmentRankingScreen({ navigation }) {
           </View>
         }
         ListFooterComponent={
-          <View style={styles.colorKey}>
-            <View style={styles.keyItem}>
-              <View style={[styles.keySwatch, { backgroundColor: colors.success }]} />
-              <Text style={styles.keyLabel}>70%+ accuracy</Text>
+          modeConfig.benchmarked ? (
+            <View>
+              <Text style={styles.keyCaption}>Colour shows each child's level for their grade</Text>
+              <View style={styles.colorKey}>
+                {BAND_LEGEND.map(({ band, label }) => (
+                  <View key={band} style={styles.keyItem}>
+                    <View style={[styles.keySwatch, { backgroundColor: getBandColor(band) }]} />
+                    <Text style={styles.keyLabel}>{label}</Text>
+                  </View>
+                ))}
+              </View>
             </View>
-            <View style={styles.keyItem}>
-              <View style={[styles.keySwatch, { backgroundColor: '#FFBB00' }]} />
-              <Text style={styles.keyLabel}>40–69%</Text>
-            </View>
-            <View style={styles.keyItem}>
-              <View style={[styles.keySwatch, { backgroundColor: colors.emphasis }]} />
-              <Text style={styles.keyLabel}>Under 40%</Text>
-            </View>
-          </View>
+          ) : (
+            <Text style={styles.keyCaption}>
+              Word benchmarks aren't set yet — bars rank by words correct, without level colours.
+            </Text>
+          )
         }
         ListEmptyComponent={
           <Text style={styles.emptyText}>No children to display</Text>
@@ -131,6 +195,9 @@ const styles = StyleSheet.create({
   listContent: {
     padding: spacing.md,
     paddingBottom: spacing.xxl,
+  },
+  toggle: {
+    marginBottom: spacing.md,
   },
   subtitle: {
     fontSize: 12,
@@ -163,11 +230,18 @@ const styles = StyleSheet.create({
     color: colors.disabled,
     fontStyle: 'italic',
   },
+  keyCaption: {
+    fontSize: 10,
+    color: colors.textSecondary,
+    textAlign: 'center',
+    marginTop: spacing.md,
+  },
   colorKey: {
     flexDirection: 'row',
+    flexWrap: 'wrap',
     justifyContent: 'center',
     gap: spacing.md,
-    marginTop: spacing.md,
+    marginTop: spacing.xs,
     padding: spacing.sm,
     backgroundColor: colors.surface,
     borderRadius: borderRadius.sm,
