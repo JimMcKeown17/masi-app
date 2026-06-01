@@ -231,12 +231,12 @@ export const storage = {
     return await childrenRepository.save(await normalizeChildForLegacyFacade(normalized), options);
   },
 
-  async updateChild(id, updates) {
+  async updateChild(id, updates, options = {}) {
     const existing = await getPayload('children', id);
     if (existing) {
       await savePayload('children', id, { ...existing, ...updates });
     }
-    return await childrenRepository.updateChild(id, updates);
+    return await childrenRepository.updateChild(id, updates, options);
   },
 
   async archiveChild(id, options = {}) {

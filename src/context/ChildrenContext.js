@@ -199,7 +199,9 @@ export const ChildrenProvider = ({ children }) => {
         synced: false,
       };
 
-      await storage.updateChild(childId, updated);
+      // actorUserId lets the class-change membership reassignment stamp created_by
+      // with the acting user (matches saveChild) — see childrenRepository.updateChild (#35).
+      await storage.updateChild(childId, updated, { actorUserId: user.id });
 
       setChildrenList(
         childrenList.map(c =>
