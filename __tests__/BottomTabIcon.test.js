@@ -1,6 +1,18 @@
 jest.mock('@expo/vector-icons', () => ({ Ionicons: () => null }), { virtual: true });
 
-import { getTabIconName } from '../src/components/navigation/BottomTabIcon';
+import React from 'react';
+import { render } from '@testing-library/react-native';
+import BottomTabIcon, { getTabIconName } from '../src/components/navigation/BottomTabIcon';
+
+describe('BottomTabIcon — active indicator', () => {
+  test('shows the active indicator only when focused', () => {
+    const focused = render(<BottomTabIcon routeName="Home" focused color="#000" size={24} />);
+    expect(focused.queryByTestId('tab-active-indicator')).toBeTruthy();
+
+    const idle = render(<BottomTabIcon routeName="Home" focused={false} color="#000" size={24} />);
+    expect(idle.queryByTestId('tab-active-indicator')).toBeNull();
+  });
+});
 
 describe('getTabIconName — one place for the route→icon mapping', () => {
   test('Home: filled when focused, outline otherwise', () => {
