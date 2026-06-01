@@ -1,6 +1,6 @@
 import React, { useState, useCallback } from 'react';
 import { View, StyleSheet } from 'react-native';
-import { Text, Button, Card } from 'react-native-paper';
+import { Text, Button, Card, ActivityIndicator } from 'react-native-paper';
 import { useFocusEffect } from '@react-navigation/native';
 import { useAuth } from '../../context/AuthContext';
 import { colors, spacing, borderRadius, shadows } from '../../constants/colors';
@@ -8,21 +8,53 @@ import { useChildren } from '../../context/ChildrenContext';
 import { assessmentsRepository } from '../../db/repositories/assessmentsRepository';
 import { getAssessmentsTabStats } from '../../utils/dashboardStats';
 import StatBar from '../../components/dashboard/StatBar';
+import { getActiveProgrammeGate } from '../../services/activeProgrammeGate';
+import NoActiveProgrammeNotice from '../../components/common/NoActiveProgrammeNotice';
+import SectionHeader from '../../components/common/SectionHeader';
 
 export default function AssessmentsScreen({ navigation }) {
   const { user } = useAuth();
   const { children: childrenList } = useChildren();
   const [stats, setStats] = useState(null);
+  const [programmeGate, setProgrammeGate] = useState(null);
 
   useFocusEffect(
     useCallback(() => {
       const loadStats = async () => {
+        try {
+          setProgrammeGate(await getActiveProgrammeGate({ userId: user.id }));
+        } catch (error) {
+          console.error('Error resolving active programme gate:', error);
+          // Never strand the tab on the spinner; the data layer still guards the
+          // write at save, so fall back to the usable capture UI on a read error.
+          setProgrammeGate({ hasActiveProgramme: true, programme: null });
+        }
         const assessments = await assessmentsRepository.getAssessments({ userId: user.id });
         setStats(getAssessmentsTabStats(childrenList, assessments));
       };
       loadStats();
     }, [childrenList, user.id])
   );
+
+  // Hold the capture UI until the programme check resolves, so an unassigned EA
+  // can't tap through to a failing flow during the first (cold) gate resolve.
+  if (programmeGate === null) {
+    return (
+      <View style={styles.loadingContainer}>
+        <ActivityIndicator size="large" color={colors.primary} />
+      </View>
+    );
+  }
+
+  // Gate programme-dependent capture: an unassigned EA sees an actionable
+  // empty-state instead of an assessment that fails at save.
+  if (!programmeGate.hasActiveProgramme) {
+    return (
+      <View style={styles.container}>
+        <NoActiveProgrammeNotice action="run assessments" />
+      </View>
+    );
+  }
 
   return (
     <View style={styles.container}>
@@ -35,10 +67,7 @@ export default function AssessmentsScreen({ navigation }) {
         ]} />
       )}
 
-      <Text variant="titleLarge" style={styles.title}>Assessments</Text>
-      <Text variant="bodyMedium" style={styles.description}>
-        Run timed assessments and view results.
-      </Text>
+      <SectionHeader title="Assessments" subtitle="Run timed assessments and view results." />
 
       <Card style={styles.card}>
         <Card.Content>
@@ -95,12 +124,11 @@ const styles = StyleSheet.create({
     padding: spacing.lg,
     backgroundColor: colors.background,
   },
-  title: {
-    marginBottom: spacing.sm,
-  },
-  description: {
-    marginBottom: spacing.xl,
-    color: colors.textSecondary,
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: colors.background,
   },
   card: {
     backgroundColor: colors.surface,

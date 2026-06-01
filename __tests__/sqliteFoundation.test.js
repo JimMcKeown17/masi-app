@@ -232,8 +232,8 @@ describe('SQLite migration runner', () => {
       withExclusiveTransactionAsync: jest.fn(async (task) => {
         events.push('enter-migration-transaction');
         await task({
-          execAsync: jest.fn(async () => {
-            events.push('txn:exec-migration-sql');
+          execAsync: jest.fn(async (sql) => {
+            events.push(/user_version/i.test(sql) ? 'txn:set-user-version' : 'txn:exec-migration-sql');
           }),
           runAsync: jest.fn(async () => {
             events.push('txn:record-migration');
@@ -246,15 +246,28 @@ describe('SQLite migration runner', () => {
     await runMigrations(db);
 
     expect(events).toEqual([
+      // Connection pragmas are configured once, before any migration, outside the txn.
       'exec:PRAGMA foreign_keys = ON',
       'exec:PRAGMA journal_mode = WAL',
       'exec:PRAGMA busy_timeout = 5000',
       'get:PRAGMA user_version',
+      // Per pending migration: exec SQL, record it, and bump user_version — all
+      // INSIDE the transaction so the schema change and version marker are atomic.
       'enter-migration-transaction',
       'txn:exec-migration-sql',
       'txn:record-migration',
+      'txn:set-user-version',
       'exit-migration-transaction',
-      `exec:PRAGMA user_version = ${CURRENT_SCHEMA_VERSION}`,
+      'enter-migration-transaction',
+      'txn:exec-migration-sql',
+      'txn:record-migration',
+      'txn:set-user-version',
+      'exit-migration-transaction',
+      'enter-migration-transaction',
+      'txn:exec-migration-sql',
+      'txn:record-migration',
+      'txn:set-user-version',
+      'exit-migration-transaction',
     ]);
   });
 
@@ -274,7 +287,7 @@ describe('SQLite migration runner', () => {
       ]));
 
       const migrations = await db.getAllAsync('select version from schema_migrations');
-      expect(migrations).toEqual([{ version: 1 }]);
+      expect(migrations).toEqual([{ version: 1 }, { version: 2 }, { version: 3 }]);
     } finally {
       await db.closeAsync();
     }
@@ -567,9 +580,10 @@ describe('SQLite migration runner', () => {
     let transactionCount = 0;
     const db = {
       execAsync: jest.fn(async (sql) => {
-        if (/PRAGMA user_version = 1/i.test(sql)) {
-          userVersion = 1;
-          events.push('set-user-version-1');
+        const match = /PRAGMA user_version = (\d+)/i.exec(sql);
+        if (match) {
+          userVersion = Number(match[1]);
+          events.push(`set-user-version-${match[1]}`);
         }
       }),
       getFirstAsync: jest.fn(async () => ({ user_version: userVersion })),
@@ -593,17 +607,20 @@ describe('SQLite migration runner', () => {
     const second = runMigrations(db);
 
     await firstMigrationEntered.promise;
-    expect(events).toEqual(['enter-1']);
+    // While the first run holds its migration transaction, the second concurrent
+    // run is queued behind it on the app-level migration queue: no other
+    // transaction has been entered. (Asserting on transactionCount rather than the
+    // event order keeps this robust now that user_version is bumped mid-transaction.)
+    expect(transactionCount).toBe(1);
 
     releaseFirstMigration.resolve();
     await Promise.all([first, second]);
 
-    expect(events).toEqual([
-      'enter-1',
-      'exit-1',
-      'set-user-version-1',
-    ]);
-    expect(db.withExclusiveTransactionAsync).toHaveBeenCalledTimes(1);
+    // The first run applies all pending migrations (three transactions); the second
+    // run is serialized behind it, sees user_version already current, and does nothing.
+    expect(transactionCount).toBe(3);
+    expect(userVersion).toBe(3);
+    expect(db.withExclusiveTransactionAsync).toHaveBeenCalledTimes(3);
   });
 
   test('rolls back schema changes and leaves user_version untouched when migration history insert fails', async () => {
@@ -674,7 +691,11 @@ describe('SQLite debug dump', () => {
           supabaseProjectId: 'segygjzpujphwvrubusm',
         }),
         schemaVersion: CURRENT_SCHEMA_VERSION,
-        migrations: [{ version: 1, name: 'initial_sqlite_foundation' }],
+        migrations: [
+          { version: 1, name: 'initial_sqlite_foundation' },
+          { version: 2, name: 'programmes_daily_session_target' },
+          { version: 3, name: 'sessions_forward_prep_columns' },
+        ],
         tableCounts: expect.objectContaining({
           schools: 1,
           sync_outbox: 0,

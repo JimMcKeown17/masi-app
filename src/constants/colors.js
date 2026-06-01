@@ -24,6 +24,7 @@ export const colors = {
   error: '#E72D4D',          // Use brand red for errors
   warning: '#FFDD00',        // Use brand yellow for warnings
   info: '#294A99',           // Use brand blue for info
+  successBg: '#D1FAE5',      // Light green tint for success/synced/online badge backgrounds
 
   // Neutrals (for calm, professional feel)
   background: '#F7F7F7',     // Main background

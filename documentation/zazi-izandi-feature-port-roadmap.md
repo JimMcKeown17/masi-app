@@ -3,7 +3,8 @@
 **Updated:** 2026-05-26
 **Source audited:** `/Users/jimmckeown/Development/zazi-izandi-app`
 **Target audited:** `/Users/jimmckeown/Development/masi-app`
-**Target branch observed:** `plan-5/context-screen-migration`
+**Current baseline:** `main` / `origin/main` at `ca74383` (`Finalize SQLite backend cutover`)
+**UI work branch:** `ui/zazi-feature-polish`
 
 ---
 
@@ -52,6 +53,25 @@ Validation notes carried forward:
 - Keep testing future UI work on the SQLite backend.
 - Prefer at least one low-end Android smoke pass before broad field distribution.
 - Clock-in/out GPS should remain part of physical-device smoke because emulator current location was unavailable.
+
+## Fresh Session Handoff
+
+Start new UI work from `ui/zazi-feature-polish`, which was created from the merged SQLite baseline after `main` was pushed. Before coding, run `git status --short --branch`; the expected state is a clean `ui/zazi-feature-polish` branch.
+
+Recommended first TDD slice:
+
+1. Implement `1.1 Assessment Complete Main Stat`.
+2. Add or update a focused render test for `AssessmentResultsScreen`.
+3. Run the targeted test first, then run `npm run test:release` after the first small bundle.
+
+Suggested first bundle for the next session:
+
+1. `1.1 Assessment Complete Main Stat` - no product decision needed.
+2. `1.3 Home Monthly Stats Footnote` - no product decision needed.
+3. `2.3 Bottom Tab Active Indicator` - small visual extraction.
+4. `1.2 Grade-Aware Assessment Score Colors` only after confirming Masi thresholds.
+
+Avoid starting group/session lifecycle work in the first fresh session unless the user explicitly chooses it; those changes touch broader workflow and should get their own plan.
 
 ---
 
@@ -183,7 +203,7 @@ These need product decisions before code because they change common muscle memor
 | **Zazi sources** | `src/navigation/AppNavigator.js`, `src/screens/main/TodayScreen.js` |
 | **Masi current behavior** | Bottom tabs are `Home`, `Children`, `Sessions`, `Assessments`; `SessionsScreen` has stats, not-seen-this-week callout, Record New Session, View History. |
 | **Options** | Keep `Sessions` and selectively port the cleaner action layout; rename to `Today`; or create a richer Sessions screen without speculative AI placeholder copy. |
-| **Recommendation** | Keep `Sessions` for now. Port the actionable layout pieces only after cutover; avoid placeholder AI copy until Masi has an actual daily-plan backend. |
+| **Recommendation** | Keep `Sessions` for now. Port the actionable layout pieces in a later UI tranche; avoid placeholder AI copy until Masi has an actual daily-plan backend. |
 
 ### 2.2 Children Tab Auto-Route
 
@@ -224,7 +244,7 @@ This is a feature family, not a single polish pass. Do not bundle it with Sessio
 | **Masi current state** | `ClassDetailScreen` shows child cards with group chips, but no separate Groups view. |
 | **Masi change** | Add class-scoped switcher; `Children` stays current list; `Groups` routes to or renders group cards for that class. |
 | **Effort** | M |
-| **Dependency** | Needs stable group/query shape after SQLite cutover. |
+| **Dependency** | SQLite group/query shape is now the baseline; still verify read queries with real SQLite before broad group UI work. |
 
 ### 3.2 Group Cards With Useful Stats
 
@@ -298,7 +318,7 @@ These should be reviewed before adding the session completion celebration, becau
 | **What it does** | Group-selected -> running -> stopped -> submitted states; attendance; level snapshot; validation; tracker changes; submit result; no arbitrary save delay. |
 | **Masi current state** | `LiteracySessionForm` is a simpler long form with direct submit and `navigation.goBack()`. |
 | **Effort** | L |
-| **Risk** | High unless done after SQLite cutover and tested with real SQLite. |
+| **Risk** | High; must be tested with real SQLite and treated as a separate workflow slice. |
 
 ### 4.2 Persistent Resume Banner
 
@@ -504,7 +524,7 @@ Many assessment primitives are already in both apps, but these deserve explicit 
 
 ### 8.1 Push Notifications and Durable Inbox
 
-- [ ] ⏸ Defer until after SQLite cutover and backend authority decision.
+- [ ] ⏸ Defer until backend authority decision.
 
 | | |
 |---|---|
@@ -549,7 +569,7 @@ This section exists so future work does not rely on memory of "we checked Zazi."
 | Edit child | `src/screens/children/EditChildScreen.js` | `src/screens/children/EditChildScreen.js` | Gender chips/no-suggestion inputs shipped. Add defensive context-loading guard later. |
 | Create class | `src/screens/children/CreateClassScreen.js` | `src/screens/children/CreateClassScreen.js` | Verify offline/reference-data retry state. |
 | Edit class | `src/screens/children/EditClassScreen.js` | `src/screens/children/EditClassScreen.js` | Verify delete warnings and offline/reference-data behavior. |
-| Groups list | `src/screens/groups/GroupsScreen.js` | None | Port after cutover if group workflow is approved. |
+| Groups list | `src/screens/groups/GroupsScreen.js` | None | Port only if group workflow is approved. |
 | Group detail | `src/screens/groups/GroupDetailScreen.js` | None | Port after group list/cards. Modify programme-level badge semantics. |
 | Group picker | `src/screens/groups/GroupPickerScreen.js` | None | Do not port until session `group_ids` semantics are decided. |
 | Auto-group preview | `src/screens/groups/AutoGroupingPreviewScreen.js` | None | Defer as its own feature/spec. |
@@ -622,7 +642,7 @@ This section exists so future work does not rely on memory of "we checked Zazi."
 
 ## Suggested First Implementation Bundle
 
-After SQLite cutover validation is closed, the safest high-value bundle is:
+With the SQLite baseline merged, the safest high-value bundle is:
 
 1. Assessment Complete correct-count hero.
 2. Grade-aware assessment ranking colors.

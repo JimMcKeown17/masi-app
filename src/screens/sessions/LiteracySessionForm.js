@@ -300,7 +300,9 @@ export default function LiteracySessionForm({ navigation }) {
 
       await refreshSyncStatus();
       triggerBackgroundSync?.();
-      navigation.goBack();
+      // Replace (not push) so Back can't return to the just-submitted form; the
+      // completion screen confirms capture and shows updated daily progress.
+      navigation.replace('SessionComplete', { childCount: selectedChildIds.length });
     } catch (error) {
       console.error('Error saving session:', error);
       showSnackbar('Failed to save session. Please try again.');

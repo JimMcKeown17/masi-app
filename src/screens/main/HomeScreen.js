@@ -18,6 +18,7 @@ import {
   getWeekSessionCounts,
   getSessionsThisMonth,
   getAssessmentCoverage,
+  getMonthlyStatsFootnote,
 } from '../../utils/dashboardStats';
 import { colors, spacing, borderRadius, shadows } from '../../constants/colors';
 
@@ -54,6 +55,10 @@ export default function HomeScreen({ navigation }) {
   // Dashboard stats
   const [daysWorked, setDaysWorked] = useState(0);
   const [sessionsThisMonth, setSessionsThisMonth] = useState(0);
+  // Captured at load time so the footnote's month always matches the counts
+  // above, even if Home stays mounted across a month boundary (a re-render from
+  // the clock timer must not relabel last month's counts as this month).
+  const [statsFootnote, setStatsFootnote] = useState('');
   const [weekCounts, setWeekCounts] = useState([]);
   const [weekTotal, setWeekTotal] = useState(0);
   const [coverage, setCoverage] = useState({ assessed: 0, total: 0, percent: 0 });
@@ -71,6 +76,8 @@ export default function HomeScreen({ navigation }) {
 
         const monthCount = getSessionsThisMonth(sessions);
         setSessionsThisMonth(monthCount);
+        // Same load moment as the counts above — keeps the period label in sync.
+        setStatsFootnote(getMonthlyStatsFootnote());
 
         const week = getWeekSessionCounts(sessions);
         setWeekCounts(week);
@@ -147,6 +154,7 @@ export default function HomeScreen({ navigation }) {
               <Text style={styles.headerStatLabel}>children</Text>
             </View>
           </View>
+          {statsFootnote ? <Text style={styles.statsFootnote}>{statsFootnote}</Text> : null}
         </LinearGradient>
 
         <View style={styles.content}>
@@ -380,6 +388,12 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     fontSize: 10,
     opacity: 0.8,
+  },
+  statsFootnote: {
+    color: '#FFFFFF',
+    fontSize: 10,
+    opacity: 0.7,
+    marginTop: spacing.sm,
   },
 
   // ── Content ──

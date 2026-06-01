@@ -1,7 +1,5 @@
 import { configureDatabaseConnection, getDatabase, withDatabaseAccess } from './client';
 
-export const CURRENT_SCHEMA_VERSION = 1;
-
 const LOCAL_SYNC_COLUMNS = `
   sync_status text not null default 'synced'
     check (sync_status in ('pending', 'synced', 'failed', 'terminal')),
@@ -548,7 +546,27 @@ const MIGRATIONS = [
         where deleted_at is null;
     `,
   },
+  {
+    version: 2,
+    name: 'programmes_daily_session_target',
+    sql: `
+      alter table programmes add column daily_session_target integer;
+      alter table programmes add column daily_session_ceiling integer;
+    `,
+  },
+  {
+    version: 3,
+    name: 'sessions_forward_prep_columns',
+    sql: `
+      alter table sessions add column group_id text references groups(id) on delete set null;
+      alter table sessions add column state text not null default 'completed'
+        check (state in ('completed', 'in_progress', 'paused', 'discarded'));
+    `,
+  },
 ];
+
+// Derived from the migration list so it never drifts when a migration is added.
+export const CURRENT_SCHEMA_VERSION = MIGRATIONS[MIGRATIONS.length - 1].version;
 
 const getUserVersion = async (db) => {
   const row = await db.getFirstAsync('PRAGMA user_version');
@@ -581,9 +599,16 @@ async function runMigrationsNow(database) {
         migration.version,
         migration.name
       );
+      // Bump user_version INSIDE the transaction so the schema change and the
+      // version marker commit (or roll back) atomically. Setting it afterwards
+      // left a crash window: a committed migration whose user_version had not
+      // yet been written would replay on next launch and a non-idempotent
+      // migration (e.g. ALTER TABLE ADD COLUMN) would fail with duplicate-column,
+      // bricking startup migrations on that device. SQLite treats user_version
+      // as transactional (verified: commits with the txn, reverts on rollback).
+      await txn.execAsync(`PRAGMA user_version = ${migration.version}`);
     });
 
-    await db.execAsync(`PRAGMA user_version = ${migration.version}`);
     userVersion = migration.version;
   }
 }

@@ -12,6 +12,7 @@ import {
   RadioButton,
 } from 'react-native-paper';
 import { colors, spacing } from '../../constants/colors';
+import SectionHeader from '../../components/common/SectionHeader';
 import { useClasses } from '../../context/ClassesContext';
 import { GRADES, HOME_LANGUAGES } from '../../constants/options';
 import { NO_TEXT_SUGGESTIONS } from '../../constants/textInputProps';
@@ -129,9 +130,7 @@ export default function EditClassScreen({ route, navigation }) {
       <ScrollView contentContainerStyle={styles.scrollContent}>
         <Card style={styles.card}>
           <Card.Content>
-            <Text variant="titleLarge" style={styles.title}>
-              Edit Class
-            </Text>
+            <SectionHeader title="Edit Class" />
 
             {/* School picker */}
             <TextInput
@@ -313,9 +312,6 @@ const styles = StyleSheet.create({
   },
   card: {
     backgroundColor: colors.surface,
-    marginBottom: spacing.md,
-  },
-  title: {
     marginBottom: spacing.md,
   },
   input: {

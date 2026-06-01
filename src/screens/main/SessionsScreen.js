@@ -1,6 +1,6 @@
 import React, { useState, useCallback } from 'react';
-import { View, StyleSheet, TouchableOpacity } from 'react-native';
-import { Text, Button } from 'react-native-paper';
+import { View, StyleSheet, TouchableOpacity, ScrollView } from 'react-native';
+import { Text, Button, ActivityIndicator } from 'react-native-paper';
 import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect } from '@react-navigation/native';
 import { useAuth } from '../../context/AuthContext';
@@ -9,13 +9,20 @@ import { useChildren } from '../../context/ChildrenContext';
 import { sessionsRepository } from '../../db/repositories/sessionsRepository';
 import { getSessionsTabStats } from '../../utils/dashboardStats';
 import StatBar from '../../components/dashboard/StatBar';
+import SessionsTodayRing from '../../components/sessions/SessionsTodayRing';
+import { getSessionsTodayGoal } from '../../services/sessionsTodayGoal';
 import { useSessionLaunchGuard } from '../../hooks/useSessionLaunchGuard';
 import ClockInBeforeSessionDialog from '../../components/sessions/ClockInBeforeSessionDialog';
+import { getActiveProgrammeGate } from '../../services/activeProgrammeGate';
+import NoActiveProgrammeNotice from '../../components/common/NoActiveProgrammeNotice';
+import SectionHeader from '../../components/common/SectionHeader';
 
 export default function SessionsScreen({ navigation }) {
   const { user } = useAuth();
   const { children: childrenList } = useChildren();
   const [stats, setStats] = useState(null);
+  const [goal, setGoal] = useState(null);
+  const [programmeGate, setProgrammeGate] = useState(null);
   const {
     warningVisible,
     requestSessionLaunch,
@@ -30,15 +37,51 @@ export default function SessionsScreen({ navigation }) {
   useFocusEffect(
     useCallback(() => {
       const loadStats = async () => {
+        try {
+          setProgrammeGate(await getActiveProgrammeGate({ userId: user.id }));
+        } catch (error) {
+          console.error('Error resolving active programme gate:', error);
+          // Never strand the tab on the spinner; the data layer still guards the
+          // write at save, so fall back to the usable capture UI on a read error.
+          setProgrammeGate({ hasActiveProgramme: true, programme: null });
+        }
         const sessions = await sessionsRepository.getSessions({ userId: user.id });
         setStats(getSessionsTabStats(sessions, childrenList));
+        // Re-resolved on every focus, so the ring reflects a session the EA just
+        // recorded the moment they navigate back to this tab.
+        setGoal(await getSessionsTodayGoal({ userId: user.id }));
       };
       loadStats();
     }, [childrenList, user.id])
   );
 
+  // Hold the capture UI until the programme check resolves, so an unassigned EA
+  // can't tap through to a failing flow during the first (cold) gate resolve.
+  if (programmeGate === null) {
+    return (
+      <View style={styles.loadingContainer}>
+        <ActivityIndicator size="large" color={colors.primary} />
+      </View>
+    );
+  }
+
+  // Gate programme-dependent capture: an EA with no active programme assignment
+  // sees an actionable empty-state instead of a Record-Session form that fails at
+  // save. Clock in/out, children, and profile live elsewhere and stay usable.
+  if (!programmeGate.hasActiveProgramme) {
+    return (
+      <View style={styles.container}>
+        <NoActiveProgrammeNotice action="record sessions" />
+      </View>
+    );
+  }
+
   return (
     <View style={styles.container}>
+      <ScrollView
+        contentContainerStyle={styles.scrollContent}
+        showsVerticalScrollIndicator={false}
+      >
       {/* Tab Stats */}
       {stats && (
         <View>
@@ -62,10 +105,14 @@ export default function SessionsScreen({ navigation }) {
         </View>
       )}
 
-      <Text variant="titleLarge" style={styles.title}>Sessions</Text>
-      <Text variant="bodyMedium" style={styles.description}>
-        Record new sessions and view session history.
-      </Text>
+      {goal && (
+        <View style={styles.ringSection}>
+          <SessionsTodayRing goal={goal} />
+          <Text style={styles.ringCaption}>Sessions today</Text>
+        </View>
+      )}
+
+      <SectionHeader title="Sessions" subtitle="Record new sessions and view session history." />
 
       <View style={styles.buttonContainer}>
         <Button
@@ -84,6 +131,7 @@ export default function SessionsScreen({ navigation }) {
           View History
         </Button>
       </View>
+      </ScrollView>
       <ClockInBeforeSessionDialog
         visible={warningVisible}
         onDismiss={dismissWarning}
@@ -97,15 +145,28 @@ export default function SessionsScreen({ navigation }) {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    padding: spacing.lg,
     backgroundColor: colors.background,
   },
-  title: {
-    marginBottom: spacing.sm,
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: colors.background,
   },
-  description: {
-    marginBottom: spacing.xl,
+  scrollContent: {
+    flexGrow: 1,
+    padding: spacing.lg,
+  },
+  ringSection: {
+    alignItems: 'center',
+    marginVertical: spacing.lg,
+  },
+  ringCaption: {
+    marginTop: spacing.sm,
+    fontSize: 12,
     color: colors.textSecondary,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
   },
   buttonContainer: {
     gap: spacing.md,

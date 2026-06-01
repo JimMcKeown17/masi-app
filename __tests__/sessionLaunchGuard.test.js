@@ -3,6 +3,7 @@ import { render, fireEvent, waitFor } from '@testing-library/react-native';
 import { PaperProvider } from 'react-native-paper';
 import HomeScreen from '../src/screens/main/HomeScreen';
 import SessionsScreen from '../src/screens/main/SessionsScreen';
+import { getActiveProgrammeGate } from '../src/services/activeProgrammeGate';
 
 const mockNavigate = jest.fn();
 const mockGetActiveTimeEntry = jest.fn();
@@ -51,6 +52,15 @@ jest.mock('../src/db/repositories/assessmentsRepository', () => ({
   assessmentsRepository: {
     getAssessments: (...args) => mockGetAssessments(...args),
   },
+}));
+
+// This suite exercises the clock-in launch guard, not the programme gate, so the
+// EA has an active programme — the screen renders its normal capture UI.
+jest.mock('../src/services/activeProgrammeGate', () => ({
+  getActiveProgrammeGate: jest.fn(async () => ({
+    hasActiveProgramme: true,
+    programme: { id: 'prog-1', name: 'Core Literacy' },
+  })),
 }));
 
 jest.mock('expo-linear-gradient', () => ({
@@ -121,12 +131,24 @@ describe('session launch clock-in warning', () => {
   test('Sessions tab record button can send the user to clock in', async () => {
     const screen = renderWithPaper(<SessionsScreen navigation={navigation} />);
 
-    fireEvent.press(screen.getByText('Record New Session'));
+    // findByText waits past the gate's loading spinner for the capture UI.
+    fireEvent.press(await screen.findByText('Record New Session'));
 
     await waitFor(() => expect(screen.getByText("You're not clocked in. Clock in now or continue anyway?")).toBeTruthy());
     fireEvent.press(screen.getByText('Clock In Now'));
 
     expect(mockNavigate).toHaveBeenCalledWith('TimeTracking');
+  });
+
+  test('gate-check error does not strand the tab on a spinner — capture UI still appears', async () => {
+    // If the programme lookup rejects on first focus, the screen must not stay
+    // stuck on the loading spinner; it falls back to the capture UI (the data
+    // layer still guards the write at save).
+    getActiveProgrammeGate.mockRejectedValueOnce(new Error('db read failed'));
+
+    const screen = renderWithPaper(<SessionsScreen navigation={navigation} />);
+
+    expect(await screen.findByText('Record New Session')).toBeTruthy();
   });
 
   test('active time entries go straight to the session form without warning', async () => {
@@ -138,7 +160,7 @@ describe('session launch clock-in warning', () => {
 
     const screen = renderWithPaper(<SessionsScreen navigation={navigation} />);
 
-    fireEvent.press(screen.getByText('Record New Session'));
+    fireEvent.press(await screen.findByText('Record New Session'));
 
     await waitFor(() => expect(mockNavigate).toHaveBeenCalledWith('SessionForm'));
     expect(screen.queryByText("You're not clocked in. Clock in now or continue anyway?")).toBeNull();

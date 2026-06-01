@@ -9,6 +9,7 @@ import {
   Snackbar,
 } from 'react-native-paper';
 import { colors, spacing } from '../../constants/colors';
+import SectionHeader from '../../components/common/SectionHeader';
 import { useChildren } from '../../context/ChildrenContext';
 import { useClasses } from '../../context/ClassesContext';
 import { GENDER_OPTIONS } from '../../constants/options';
@@ -101,9 +102,7 @@ export default function AddChildScreen({ route, navigation }) {
 
         <Card style={styles.card}>
           <Card.Content>
-            <Text variant="titleLarge" style={styles.title}>
-              Add New Child
-            </Text>
+            <SectionHeader title="Add New Child" />
 
             {/* First Name */}
             <TextInput
@@ -204,9 +203,6 @@ const styles = StyleSheet.create({
   },
   card: {
     backgroundColor: colors.surface,
-  },
-  title: {
-    marginBottom: spacing.md,
   },
   input: {
     marginBottom: spacing.sm,
