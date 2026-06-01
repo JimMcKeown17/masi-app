@@ -5,6 +5,7 @@ import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { useAuth } from '../context/AuthContext';
 import { ActivityIndicator, View, TouchableOpacity, Pressable, Platform } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import BottomTabIcon from '../components/navigation/BottomTabIcon';
 import { Text } from 'react-native-paper';
 import { colors } from '../constants/colors';
 import SyncIndicator from '../components/common/SyncIndicator';
@@ -75,21 +76,9 @@ function MainTabNavigator() {
   return (
     <Tab.Navigator
       screenOptions={({ route, navigation }) => ({
-        tabBarIcon: ({ focused, color, size }) => {
-          let iconName;
-
-          if (route.name === 'Home') {
-            iconName = focused ? 'home' : 'home-outline';
-          } else if (route.name === 'Children') {
-            iconName = focused ? 'people' : 'people-outline';
-          } else if (route.name === 'Sessions') {
-            iconName = focused ? 'document-text' : 'document-text-outline';
-          } else if (route.name === 'Assessments') {
-            iconName = focused ? 'clipboard' : 'clipboard-outline';
-          }
-
-          return <Ionicons name={iconName} size={size} color={color} />;
-        },
+        tabBarIcon: ({ focused, color, size }) => (
+          <BottomTabIcon routeName={route.name} focused={focused} color={color} size={size} />
+        ),
         headerRight: () => (
           <View style={{ marginRight: 16 }}>
             <SyncIndicator onPress={() => navigation.navigate('SyncStatus')} />
