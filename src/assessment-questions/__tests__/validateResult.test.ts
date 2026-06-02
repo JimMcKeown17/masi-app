@@ -147,4 +147,16 @@ describe('validateResult', () => {
     expect(verdict.valid).toBe(false);
     expect(verdict.errors.some((e) => e.includes('language'))).toBe(true);
   });
+
+  test('accepts derived.capture_mode and derived.correction_count (reserved for 0.2.0 sequential mode)', () => {
+    const good: Result = {
+      ...minimalValid,
+      derived: {
+        ...minimalValid.derived,
+        capture_mode: 'sequential',
+        correction_count: 3,
+      },
+    };
+    expect(validateResult(good).valid).toBe(true);
+  });
 });
