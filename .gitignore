@@ -53,3 +53,6 @@ google-play-service-account.json
 scripts/testers.csv
 scripts/testers.*.csv
 !scripts/testers.example.csv
+
+# Local-only Claude linked worktrees (carry a .git gitlink; would break clones)
+.claude/worktrees/

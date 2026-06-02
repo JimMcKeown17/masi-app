@@ -204,7 +204,7 @@ export const createChildrenRepository = ({ database } = {}) => {
     })
   );
 
-  const updateChild = async (id, updates, { transaction } = {}) => runWrite(transaction, async (txn) => {
+  const updateChild = async (id, updates, { actorUserId, transaction } = {}) => runWrite(transaction, async (txn) => {
     const existing = await txn.getFirstAsync('select * from children where id = ?', id);
     if (!existing) return false;
 
@@ -225,6 +225,93 @@ export const createChildrenRepository = ({ database } = {}) => {
     if (shouldEnqueueOutbox(next)) {
       await enqueueDomainOutbox(txn, 'children', id, 'update', next);
     }
+
+    // Keep the active class membership in sync with children.class_id when the
+    // class changes, so getChildrenInClass and the roster query (which join
+    // child_class_memberships ON exited_at IS NULL) can never disagree (#35).
+    // Memberships are append/archive-only: archive the old active one and insert
+    // a new one rather than mutating identity columns.
+    if (updates.class_id !== undefined && updates.class_id !== existing.class_id) {
+      const now = next.updated_at;
+      const activeYear = await getActiveAcademicYear(txn);
+      if (!activeYear?.id) {
+        throw new Error('Cannot reassign child class membership without an active academic year');
+      }
+
+      const activeMemberships = await txn.getAllAsync(`
+        select id, class_id, child_id, academic_year_id, enrolled_at, created_by, created_at
+        from child_class_memberships
+        where child_id = ?
+          and academic_year_id = ?
+          and exited_at is null
+      `, id, activeYear.id);
+
+      let alreadyInTarget = false;
+      for (const membership of activeMemberships) {
+        if (membership.class_id === updates.class_id) {
+          alreadyInTarget = true;
+          continue;
+        }
+        await txn.runAsync(`
+          update child_class_memberships
+          set exited_at = ?, sync_status = 'pending', updated_at = ?
+          where id = ?
+        `, now, now, membership.id);
+
+        // If the old membership's insert is still queued, it never reached the server
+        // (a successful sync deletes the outbox row). Coalesce: rewrite that pending
+        // insert to carry exited_at so it syncs once, already-exited — instead of
+        // queuing a separate archive. A separate archive would fail remotely (nothing
+        // to archive) and, because archives sort before inserts for this table, the
+        // stale active insert would recreate the old membership active on sync (#35).
+        const pendingInsert = await txn.getFirstAsync(`
+          select id
+          from sync_outbox
+          where table_name = 'child_class_memberships'
+            and record_id = ?
+            and operation = 'insert'
+        `, membership.id);
+
+        if (pendingInsert) {
+          await enqueueDomainOutbox(txn, 'child_class_memberships', membership.id, 'insert', {
+            id: membership.id,
+            child_id: membership.child_id,
+            class_id: membership.class_id,
+            academic_year_id: membership.academic_year_id,
+            enrolled_at: membership.enrolled_at,
+            exited_at: now,
+            created_by: membership.created_by,
+            created_at: membership.created_at,
+            updated_at: now,
+          });
+        } else {
+          await enqueueDomainOutbox(txn, 'child_class_memberships', membership.id, 'archive', {
+            id: membership.id,
+            exited_at: now,
+          });
+        }
+      }
+
+      // A non-null new class gets a fresh active membership (null class_id = unassign).
+      if (updates.class_id && !alreadyInTarget) {
+        const membership = normalizeSyncFields({
+          id: uuidv4(),
+          child_id: id,
+          class_id: updates.class_id,
+          academic_year_id: activeYear.id,
+          enrolled_at: now,
+          created_by: actorUserId || existing.created_by,
+          sync_status: 'pending',
+        });
+        assertRlsRequiredFields('child_class_memberships', membership, ['child_id', 'class_id', 'academic_year_id', 'created_by']);
+        await upsertDomainRecord(txn, {
+          tableName: 'child_class_memberships',
+          columns: RELATIONSHIP_COLUMNS.classMembership,
+        }, membership);
+        await enqueueDomainOutbox(txn, 'child_class_memberships', membership.id, 'insert', membership);
+      }
+    }
+
     return true;
   });
 
