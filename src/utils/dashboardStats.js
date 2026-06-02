@@ -318,7 +318,11 @@ export function getChildrenTabStats(children, classes, assessments) {
 /**
  * Sessions tab summary stats.
  */
-export function getSessionsTabStats(sessions, children) {
+export function getSessionsTabStats(sessions, children, userId) {
+  // Shared/rotated devices keep another EA's same-programme sessions cached after
+  // sign-out (getSessions is programme-scoped, not user-scoped). Scope to the
+  // signed-in EA so the tab agrees with the Sessions Today ring (#10, #4).
+  const ownSessions = userId ? sessions.filter(s => s.user_id === userId) : sessions;
   const now = new Date();
   const monday = getMonday(now);
   const mondayStr = toDateString(monday);
@@ -330,7 +334,7 @@ export function getSessionsTabStats(sessions, children) {
   let thisMonth = 0;
   const seenThisWeek = new Set();
 
-  for (const session of sessions) {
+  for (const session of ownSessions) {
     const dateStr = toDateString(session.session_date);
     if (!dateStr) continue;
 
