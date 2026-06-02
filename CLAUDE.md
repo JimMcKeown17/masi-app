@@ -67,6 +67,24 @@ Follow the skill's red-green-refactor loop:
 
 Prefer behavior/integration-style tests through public repository, context, service, or screen interfaces. Do not over-mock internals. SQLite migration, outbox, transaction, and PRAGMA behavior must include real SQLite or `better-sqlite3` integration coverage where mocks would hide device-only bugs.
 
+## Adversarial Code Review with Codex
+
+When running `codex review --uncommitted` for adversarial pre-commit review, **give codex the architectural context it can't infer from the diff alone**. Codex doesn't see conversation history, prior decisions, or out-of-band rationale — if you just say "review", it will repeatedly surface the same disagreements about choices that have already been made.
+
+**Provide upfront for choices the diff appears to contradict:**
+
+- Architectural decisions ("this OSS package lives in-tree; extraction to a standalone repo is deferred until field-test — see `project_wela_oss_in_place_build.md`")
+- Off-by-design enforcement ("validator deliberately only enforces top-level shape; per-Question invariants live in Pattern contract tests")
+- Phase context ("this is the skeleton; Question components arrive in follow-up issues #16–#21")
+
+**Where to put it:**
+
+- A `Context:` block in the staged commit message — codex reads the staged diff and commit message
+- An ADR or memory file the diff references inline
+- CLAUDE.md if it's a recurring decision codex will keep flagging
+
+**Signal interpretation:** If codex surfaces the same finding across multiple rounds, you either (a) need to commit the rationale to a durable location (CLAUDE.md, memory, ADR) so the next round can see it, or (b) need to reconsider whether the repeated finding is actually a signal you've been dismissing. After 2 rounds without progress on the same finding, escalate to (a) or (b) — don't keep relitigating.
+
 ## Deployment Status — Multiple App Versions in the Wild
 
 The app launched in early March 2026 and is in its **first two weeks of field testing**. Multiple versions are simultaneously deployed across iOS and Android devices. Users do not update immediately.
