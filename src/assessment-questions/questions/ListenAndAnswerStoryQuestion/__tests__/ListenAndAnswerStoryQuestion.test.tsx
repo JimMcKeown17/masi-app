@@ -16,6 +16,40 @@ describe('ListenAndAnswerStoryQuestion — intro phase', () => {
     expect(getByText(/Once upon a time/)).toBeTruthy();
     expect(getByText(/I've finished reading/)).toBeTruthy();
   });
+
+  test('story is rendered inside a vertical scroll container so long scripts stay reachable', () => {
+    const { getByTestId } = render(
+      <ListenAndAnswerStoryQuestion
+        language="en"
+        instructions="."
+        onComplete={jest.fn()}
+      />,
+    );
+    const scroller = getByTestId('intro-story-scroll');
+    expect(scroller.props.horizontal).not.toBe(true);
+  });
+
+  test('"I\'ve finished reading" button still renders even when story is long', () => {
+    // Long story override — sanity-check the button doesn't get hidden by the
+    // story consuming all vertical space (i.e., must be outside the scroller).
+    const longOverride = {
+      item_set_id: 'custom@1.0.en',
+      question_version: '1.0',
+      story: Array.from({ length: 200 }, (_, i) => `Line ${i}.`).join(' '),
+      questions: [
+        { item_key: 'k', prompt: 'p', acceptable_answers: ['a'] },
+      ],
+    };
+    const { getByText } = render(
+      <ListenAndAnswerStoryQuestion
+        language="en"
+        instructions="."
+        itemSet={longOverride}
+        onComplete={jest.fn()}
+      />,
+    );
+    expect(getByText("I've finished reading")).toBeTruthy();
+  });
 });
 
 describe('ListenAndAnswerStoryQuestion — active phase', () => {
@@ -300,6 +334,55 @@ describe('ListenAndAnswerStoryQuestion — itemSet override validation', () => {
     expect(onComplete.mock.calls[0][0].item_set_id).toMatch(
       /^wela_plus_listen_and_answer_story@stub/,
     );
+  });
+
+  test('falls back when override has malformed inner question (acceptable_answers as string)', () => {
+    const onComplete = jest.fn();
+    const malformed = {
+      item_set_id: 'custom@1.0.en',
+      question_version: '1.0',
+      story: 'Looks fine at the top level.',
+      questions: [
+        // acceptable_answers is a string, not a string[] — would crash at .join()
+        { item_key: 'k', prompt: 'p', acceptable_answers: 'broken' },
+      ],
+    };
+    const { getByText } = render(
+      <ListenAndAnswerStoryQuestion
+        language="en"
+        instructions="."
+        itemSet={malformed}
+        onComplete={onComplete}
+      />,
+    );
+    // The bundled default's story must render, not the override's
+    expect(getByText(/Once upon a time/)).toBeTruthy();
+    fireEvent.press(getByText("I've finished reading"));
+    fireEvent.press(getByText('Finish'));
+    fireEvent.press(getByText('Yes, finish'));
+
+    expect(onComplete.mock.calls[0][0].item_set_id).toMatch(
+      /^wela_plus_listen_and_answer_story@stub/,
+    );
+  });
+
+  test('falls back when override question is missing item_key', () => {
+    const onComplete = jest.fn();
+    const malformed = {
+      item_set_id: 'custom@1.0.en',
+      question_version: '1.0',
+      story: 'Fine.',
+      questions: [{ prompt: 'p', acceptable_answers: ['a'] }],
+    };
+    const { getByText } = render(
+      <ListenAndAnswerStoryQuestion
+        language="en"
+        instructions="."
+        itemSet={malformed}
+        onComplete={onComplete}
+      />,
+    );
+    expect(getByText(/Once upon a time/)).toBeTruthy();
   });
 
   test('falls back when override has wrong shape (story not a string)', () => {

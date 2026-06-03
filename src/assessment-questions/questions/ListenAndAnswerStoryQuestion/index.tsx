@@ -43,15 +43,27 @@ type FullItemSet = ListenAndAnswerStoryItemSet & {
   question_version: string;
 };
 
+function isValidComprehensionQuestion(q: unknown): boolean {
+  if (!q || typeof q !== 'object') return false;
+  const item = q as Record<string, unknown>;
+  if (typeof item.item_key !== 'string') return false;
+  if (typeof item.prompt !== 'string') return false;
+  if (!Array.isArray(item.acceptable_answers)) return false;
+  return item.acceptable_answers.every((a) => typeof a === 'string');
+}
+
+// Note: itemset overrides are SINGLE-LANGUAGE by codebase convention,
+// matching wela_plus_listen_and_answer_story.{en,xh}.ts. The PRD's
+// bilingual story/prompt nesting is the abstract content model;
+// `resolveItemSet(language, override)` picks the per-language file.
 function isFullItemSet(value: unknown): value is FullItemSet {
   if (!value || typeof value !== 'object') return false;
   const o = value as Record<string, unknown>;
-  return (
-    typeof o.story === 'string' &&
-    Array.isArray(o.questions) &&
-    typeof o.item_set_id === 'string' &&
-    typeof o.question_version === 'string'
-  );
+  if (typeof o.story !== 'string') return false;
+  if (!Array.isArray(o.questions)) return false;
+  if (typeof o.item_set_id !== 'string') return false;
+  if (typeof o.question_version !== 'string') return false;
+  return o.questions.every(isValidComprehensionQuestion);
 }
 
 function resolveItemSet(language: string, override: unknown): FullItemSet {
@@ -174,11 +186,20 @@ export function ListenAndAnswerStoryQuestion(props: QuestionProps) {
 
   if (phase === 'intro') {
     return (
-      <View>
-        {instructions ? <Text>{instructions}</Text> : null}
-        <Text>{effectiveItemSet.story}</Text>
-        <Pressable onPress={() => setPhase('active')}>
-          <Text>I've finished reading</Text>
+      <View style={styles.introRoot}>
+        <ScrollView
+          testID="intro-story-scroll"
+          style={styles.introScroll}
+          contentContainerStyle={styles.introScrollContent}
+        >
+          {instructions ? <Text>{instructions}</Text> : null}
+          <Text style={styles.introStory}>{effectiveItemSet.story}</Text>
+        </ScrollView>
+        <Pressable
+          onPress={() => setPhase('active')}
+          style={styles.introStartButton}
+        >
+          <Text style={styles.introStartButtonText}>I've finished reading</Text>
         </Pressable>
       </View>
     );
@@ -340,4 +361,17 @@ const styles = StyleSheet.create({
     margin: 16,
   },
   modalCloseText: { color: '#ffffff', fontWeight: '600' },
+  introRoot: { flex: 1 },
+  introScroll: { flex: 1 },
+  introScrollContent: { padding: 16 },
+  introStory: { fontSize: 18, lineHeight: 26, marginTop: 8 },
+  introStartButton: {
+    alignSelf: 'center',
+    paddingHorizontal: 24,
+    paddingVertical: 12,
+    backgroundColor: '#1f3a5c',
+    borderRadius: 8,
+    margin: 16,
+  },
+  introStartButtonText: { color: '#ffffff', fontWeight: '600' },
 });
