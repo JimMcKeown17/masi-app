@@ -3,10 +3,8 @@
  *
  * Q4: EA reads each segmented prompt aloud (e.g., "s-u-n"); child says the
  * blended word; EA taps the prompt card if the child got it right. The
- * word gloss is always visible below each segmented form (per PRD default
- * A in Q8d) for the EA's reference. No timer. Single vertical column.
- * "Finish" prompts a confirmation when items are unmarked.
- * See PRD §"Pattern B — Oral response checklist".
+ * word gloss is always visible below each segmented form (PRD default A
+ * in Q8d). Pattern B is untimed by design.
  */
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { View, Text, Pressable, ScrollView, StyleSheet } from 'react-native';
@@ -23,21 +21,42 @@ const BASE_GLOSS_FONT_SIZE = 18;
 const MARKED_BG = '#2e7d32';
 const IDLE_BG = '#ffffff';
 
-type Phase = 'intro' | 'active' | 'confirm-finish' | 'finished';
+type Phase = 'intro' | 'active' | 'confirm-finish' | 'abandon-picker' | 'finished';
 
-function resolveItemSet(
-  language: string,
-  override: unknown,
-): ListenPhonemeBlendItemSet & {
+type SkipReason = Extract<StoppedReason, `skipped_${string}` | 'ea_ended'>;
+
+const SKIP_REASONS: { reason: SkipReason; label: string }[] = [
+  { reason: 'skipped_child_refused', label: 'Child refused' },
+  { reason: 'skipped_tired', label: 'Child tired' },
+  { reason: 'skipped_time', label: 'Out of time' },
+  { reason: 'skipped_age', label: 'Age inappropriate' },
+  { reason: 'skipped_prerequisite_unmet', label: 'Prerequisite unmet' },
+  { reason: 'skipped_other', label: 'Other' },
+];
+
+type FullItemSet = ListenPhonemeBlendItemSet & {
   item_set_id: string;
   question_version: string;
-} {
-  if (override && typeof override === 'object' && 'prompts' in override) {
-    return override as ListenPhonemeBlendItemSet & {
-      item_set_id: string;
-      question_version: string;
-    };
-  }
+};
+
+function isFullItemSet(value: unknown): value is FullItemSet {
+  if (!value || typeof value !== 'object') return false;
+  const o = value as Record<string, unknown>;
+  if (!Array.isArray(o.prompts)) return false;
+  if (typeof o.item_set_id !== 'string') return false;
+  if (typeof o.question_version !== 'string') return false;
+  // Defend against accidentally receiving a Q3-shaped itemset whose `prompts` lack
+  // segmented/word fields; the runtime guard prevents silent shape mixups.
+  return o.prompts.every(
+    (p) =>
+      p !== null &&
+      typeof p === 'object' &&
+      typeof (p as Record<string, unknown>).segmented === 'string',
+  );
+}
+
+function resolveItemSet(language: string, override: unknown): FullItemSet {
+  if (isFullItemSet(override)) return override;
   return language === 'xh'
     ? WELA_PLUS_PHONEME_BLEND_XH
     : WELA_PLUS_PHONEME_BLEND_EN;
@@ -48,9 +67,9 @@ export function ListenPhonemeBlendQuestion(props: QuestionProps) {
     language,
     itemSet,
     instructions,
-    durationSec,
     onComplete,
     onItemMarked,
+    onAbandon,
   } = props;
   const [phase, setPhase] = useState<Phase>('intro');
   const { isMarked, toggle } = useToggleMark();
@@ -60,7 +79,10 @@ export function ListenPhonemeBlendQuestion(props: QuestionProps) {
   const effectiveItemSet = resolveItemSet(language, itemSet);
 
   const isMarkedRef = useRef(isMarked);
-  isMarkedRef.current = isMarked;
+  useEffect(() => {
+    isMarkedRef.current = isMarked;
+  }, [isMarked]);
+
   const hasFinishedRef = useRef(false);
   const startTimeMsRef = useRef<number | null>(null);
 
@@ -87,6 +109,7 @@ export function ListenPhonemeBlendQuestion(props: QuestionProps) {
         item_key: p.item_key,
         prompt: p.segmented,
         is_correct: isMarkedRef.current(p.item_key),
+        metadata: { word: p.word },
       }));
       const totalCorrect = items.filter((i) => i.is_correct).length;
       const elapsedMs =
@@ -110,16 +133,16 @@ export function ListenPhonemeBlendQuestion(props: QuestionProps) {
               ? Math.round((totalCorrect / prompts.length) * 100)
               : 0,
           last_attempted_position: null,
-          was_timed: durationSec !== undefined,
+          was_timed: false,
         },
       };
       onComplete(result);
     },
-    [effectiveItemSet, language, prompts, durationSec, onComplete],
+    [effectiveItemSet, language, prompts, onComplete],
   );
 
   const handleToggle = useCallback(
-    (idx: number, item_key: string, segmented: string) => {
+    (idx: number, item_key: string, segmented: string, word: string) => {
       const willBeMarked = !isMarkedRef.current(item_key);
       toggle(item_key);
       if (onItemMarked) {
@@ -128,6 +151,7 @@ export function ListenPhonemeBlendQuestion(props: QuestionProps) {
           item_key,
           prompt: segmented,
           is_correct: willBeMarked,
+          metadata: { word },
         };
         onItemMarked(item);
       }
@@ -142,6 +166,14 @@ export function ListenPhonemeBlendQuestion(props: QuestionProps) {
       finish('completed');
     }
   }, [unmarkedCount, finish]);
+
+  const handleAbandonChosen = useCallback(
+    (reason: SkipReason) => {
+      if (onAbandon) onAbandon(reason);
+      finish(reason);
+    },
+    [onAbandon, finish],
+  );
 
   if (phase === 'intro') {
     return (
@@ -162,14 +194,29 @@ export function ListenPhonemeBlendQuestion(props: QuestionProps) {
     return (
       <View>
         <Text>{`${unmarkedCount} items unmarked — finish anyway?`}</Text>
-        <Pressable
-          onPress={() => {
-            setPhase('active');
-            finish('completed');
-          }}
-        >
+        <Pressable onPress={() => finish('completed')}>
           <Text>Yes, finish</Text>
         </Pressable>
+        <Pressable onPress={() => setPhase('active')}>
+          <Text>Cancel</Text>
+        </Pressable>
+      </View>
+    );
+  }
+
+  if (phase === 'abandon-picker') {
+    return (
+      <View>
+        <Text>Why are you abandoning?</Text>
+        {SKIP_REASONS.map(({ reason, label }) => (
+          <Pressable
+            key={reason}
+            accessibilityRole="button"
+            onPress={() => handleAbandonChosen(reason)}
+          >
+            <Text>{label}</Text>
+          </Pressable>
+        ))}
         <Pressable onPress={() => setPhase('active')}>
           <Text>Cancel</Text>
         </Pressable>
@@ -192,7 +239,7 @@ export function ListenPhonemeBlendQuestion(props: QuestionProps) {
               key={p.item_key}
               accessibilityRole="button"
               accessibilityLabel={`${p.segmented}, ${labelState}`}
-              onPress={() => handleToggle(idx, p.item_key, p.segmented)}
+              onPress={() => handleToggle(idx, p.item_key, p.segmented, p.word)}
               style={[
                 styles.card,
                 { backgroundColor: marked ? MARKED_BG : IDLE_BG },
@@ -226,6 +273,12 @@ export function ListenPhonemeBlendQuestion(props: QuestionProps) {
       </ScrollView>
       <Pressable accessibilityRole="button" onPress={handleFinish}>
         <Text>Finish</Text>
+      </Pressable>
+      <Pressable
+        accessibilityRole="button"
+        onPress={() => setPhase('abandon-picker')}
+      >
+        <Text>Abandon</Text>
       </Pressable>
     </View>
   );

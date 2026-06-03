@@ -2,9 +2,9 @@
  * ListenFirstSoundQuestion — WelaPLUS Pattern B (oral checklist).
  *
  * Q3: EA reads each word aloud; child says the first sound; EA taps the
- * prompt card if the child got it right. No timer. Single vertical
- * column layout. "Finish" prompts a confirmation when items are unmarked.
- * See PRD §"Pattern B — Oral response checklist".
+ * prompt card if the child got it right. Pattern B is untimed by design
+ * (PRD §"Pattern B — Timer: none"). Single vertical column layout.
+ * "Finish" prompts a confirmation when items are unmarked.
  */
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { View, Text, Pressable, ScrollView, StyleSheet } from 'react-native';
@@ -20,21 +20,36 @@ const BASE_PROMPT_FONT_SIZE = 28;
 const MARKED_BG = '#2e7d32';
 const IDLE_BG = '#ffffff';
 
-type Phase = 'intro' | 'active' | 'confirm-finish' | 'finished';
+type Phase = 'intro' | 'active' | 'confirm-finish' | 'abandon-picker' | 'finished';
 
-function resolveItemSet(
-  language: string,
-  override: unknown,
-): ListenFirstSoundItemSet & {
+type SkipReason = Extract<StoppedReason, `skipped_${string}` | 'ea_ended'>;
+
+const SKIP_REASONS: { reason: SkipReason; label: string }[] = [
+  { reason: 'skipped_child_refused', label: 'Child refused' },
+  { reason: 'skipped_tired', label: 'Child tired' },
+  { reason: 'skipped_time', label: 'Out of time' },
+  { reason: 'skipped_age', label: 'Age inappropriate' },
+  { reason: 'skipped_prerequisite_unmet', label: 'Prerequisite unmet' },
+  { reason: 'skipped_other', label: 'Other' },
+];
+
+type FullItemSet = ListenFirstSoundItemSet & {
   item_set_id: string;
   question_version: string;
-} {
-  if (override && typeof override === 'object' && 'prompts' in override) {
-    return override as ListenFirstSoundItemSet & {
-      item_set_id: string;
-      question_version: string;
-    };
-  }
+};
+
+function isFullItemSet(value: unknown): value is FullItemSet {
+  if (!value || typeof value !== 'object') return false;
+  const o = value as Record<string, unknown>;
+  return (
+    Array.isArray(o.prompts) &&
+    typeof o.item_set_id === 'string' &&
+    typeof o.question_version === 'string'
+  );
+}
+
+function resolveItemSet(language: string, override: unknown): FullItemSet {
+  if (isFullItemSet(override)) return override;
   return language === 'xh'
     ? WELA_PLUS_FIRST_SOUND_XH
     : WELA_PLUS_FIRST_SOUND_EN;
@@ -45,9 +60,9 @@ export function ListenFirstSoundQuestion(props: QuestionProps) {
     language,
     itemSet,
     instructions,
-    durationSec,
     onComplete,
     onItemMarked,
+    onAbandon,
   } = props;
   const [phase, setPhase] = useState<Phase>('intro');
   const { isMarked, toggle } = useToggleMark();
@@ -56,7 +71,10 @@ export function ListenFirstSoundQuestion(props: QuestionProps) {
   const effectiveItemSet = resolveItemSet(language, itemSet);
 
   const isMarkedRef = useRef(isMarked);
-  isMarkedRef.current = isMarked;
+  useEffect(() => {
+    isMarkedRef.current = isMarked;
+  }, [isMarked]);
+
   const hasFinishedRef = useRef(false);
   const startTimeMsRef = useRef<number | null>(null);
 
@@ -106,12 +124,12 @@ export function ListenFirstSoundQuestion(props: QuestionProps) {
               ? Math.round((totalCorrect / prompts.length) * 100)
               : 0,
           last_attempted_position: null,
-          was_timed: durationSec !== undefined,
+          was_timed: false,
         },
       };
       onComplete(result);
     },
-    [effectiveItemSet, language, prompts, durationSec, onComplete],
+    [effectiveItemSet, language, prompts, onComplete],
   );
 
   const handleToggle = useCallback(
@@ -139,6 +157,14 @@ export function ListenFirstSoundQuestion(props: QuestionProps) {
     }
   }, [unmarkedCount, finish]);
 
+  const handleAbandonChosen = useCallback(
+    (reason: SkipReason) => {
+      if (onAbandon) onAbandon(reason);
+      finish(reason);
+    },
+    [onAbandon, finish],
+  );
+
   if (phase === 'intro') {
     return (
       <View>
@@ -158,14 +184,29 @@ export function ListenFirstSoundQuestion(props: QuestionProps) {
     return (
       <View>
         <Text>{`${unmarkedCount} items unmarked — finish anyway?`}</Text>
-        <Pressable
-          onPress={() => {
-            setPhase('active');
-            finish('completed');
-          }}
-        >
+        <Pressable onPress={() => finish('completed')}>
           <Text>Yes, finish</Text>
         </Pressable>
+        <Pressable onPress={() => setPhase('active')}>
+          <Text>Cancel</Text>
+        </Pressable>
+      </View>
+    );
+  }
+
+  if (phase === 'abandon-picker') {
+    return (
+      <View>
+        <Text>Why are you abandoning?</Text>
+        {SKIP_REASONS.map(({ reason, label }) => (
+          <Pressable
+            key={reason}
+            accessibilityRole="button"
+            onPress={() => handleAbandonChosen(reason)}
+          >
+            <Text>{label}</Text>
+          </Pressable>
+        ))}
         <Pressable onPress={() => setPhase('active')}>
           <Text>Cancel</Text>
         </Pressable>
@@ -211,6 +252,12 @@ export function ListenFirstSoundQuestion(props: QuestionProps) {
       </ScrollView>
       <Pressable accessibilityRole="button" onPress={handleFinish}>
         <Text>Finish</Text>
+      </Pressable>
+      <Pressable
+        accessibilityRole="button"
+        onPress={() => setPhase('abandon-picker')}
+      >
+        <Text>Abandon</Text>
       </Pressable>
     </View>
   );

@@ -21,16 +21,28 @@ const IDLE_BG = '#ffffff';
 
 type Phase = 'intro' | 'active' | 'finished';
 
+type FullLetterSoundsItemSet = LetterSoundsItemSet & {
+  item_set_id: string;
+  question_version: string;
+};
+
+function isFullItemSet(value: unknown): value is FullLetterSoundsItemSet {
+  if (!value || typeof value !== 'object') return false;
+  const o = value as Record<string, unknown>;
+  return (
+    Array.isArray(o.letters) &&
+    typeof o.lettersPerPage === 'number' &&
+    typeof o.columns === 'number' &&
+    typeof o.item_set_id === 'string' &&
+    typeof o.question_version === 'string'
+  );
+}
+
 function resolveItemSet(
   language: string,
   override: unknown,
-): LetterSoundsItemSet & { item_set_id: string; question_version: string } {
-  if (override && typeof override === 'object' && 'letters' in override) {
-    return override as LetterSoundsItemSet & {
-      item_set_id: string;
-      question_version: string;
-    };
-  }
+): FullLetterSoundsItemSet {
+  if (isFullItemSet(override)) return override;
   return language === 'xh'
     ? WELA_PLUS_LETTER_SOUNDS_XH
     : WELA_PLUS_LETTER_SOUNDS_EN;
@@ -57,7 +69,9 @@ export function LetterSoundsQuestion(props: QuestionProps) {
   const effectiveItemSet = resolveItemSet(language, itemSet);
 
   const isMarkedRef = useRef(isMarked);
-  isMarkedRef.current = isMarked;
+  useEffect(() => {
+    isMarkedRef.current = isMarked;
+  }, [isMarked]);
   const highestPageVisitedRef = useRef(0);
   const hasFinishedRef = useRef(false);
   const startTimeMsRef = useRef<number | null>(null);

@@ -354,6 +354,54 @@ describe('LetterSoundsQuestion — visible mark + grid layout', () => {
   });
 });
 
+describe('LetterSoundsQuestion — itemSet override validation', () => {
+  test('falls back to bundled default when override lacks item_set_id', () => {
+    const onComplete = jest.fn();
+    const incomplete = { letters: ['z'], lettersPerPage: 1, columns: 1 };
+    const { getByText } = render(
+      <LetterSoundsQuestion
+        language="en"
+        instructions="."
+        durationSec={60}
+        itemSet={incomplete}
+        onComplete={onComplete}
+      />,
+    );
+    fireEvent.press(getByText('Start'));
+    expect(getByText('a')).toBeTruthy();
+    fireEvent.press(getByText('End'));
+
+    expect(onComplete.mock.calls[0][0].item_set_id).toMatch(
+      /^wela_plus_letter_sounds@stub/,
+    );
+  });
+
+  test('accepts a fully-formed override', () => {
+    const onComplete = jest.fn();
+    const goodOverride = {
+      item_set_id: 'custom@1.0.en',
+      question_version: '1.0',
+      letters: ['x', 'y'],
+      lettersPerPage: 20,
+      columns: 5,
+    };
+    const { getByText } = render(
+      <LetterSoundsQuestion
+        language="en"
+        instructions="."
+        durationSec={60}
+        itemSet={goodOverride}
+        onComplete={onComplete}
+      />,
+    );
+    fireEvent.press(getByText('Start'));
+    expect(getByText('x')).toBeTruthy();
+    fireEvent.press(getByText('End'));
+
+    expect(onComplete.mock.calls[0][0].item_set_id).toBe('custom@1.0.en');
+  });
+});
+
 describe('LetterSoundsQuestion — stub item set hygiene', () => {
   test('bundled stub item_set_id is clearly marked as stub (not the real WelaPLUS version)', () => {
     const onComplete = jest.fn();

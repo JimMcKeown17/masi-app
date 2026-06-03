@@ -106,6 +106,135 @@ describe('ListenPhonemeBlendQuestion — scrollable list', () => {
   });
 });
 
+describe('ListenPhonemeBlendQuestion — Abandon flow', () => {
+  test('Abandon → reason → onAbandon + Result with that stopped_reason', () => {
+    const onComplete = jest.fn();
+    const onAbandon = jest.fn();
+    const { getByText } = render(
+      <ListenPhonemeBlendQuestion
+        language="en"
+        instructions="."
+        onComplete={onComplete}
+        onAbandon={onAbandon}
+      />,
+    );
+    fireEvent.press(getByText('Start'));
+    fireEvent.press(getByText('Abandon'));
+    fireEvent.press(getByText('Child tired'));
+
+    expect(onAbandon).toHaveBeenCalledWith('skipped_tired');
+    expect(onComplete.mock.calls[0][0].stopped_reason).toBe('skipped_tired');
+  });
+});
+
+describe('ListenPhonemeBlendQuestion — itemSet override validation', () => {
+  test('falls back to bundled default when override lacks item_set_id', () => {
+    const onComplete = jest.fn();
+    const incomplete = {
+      prompts: [{ item_key: 'k', segmented: 'a-b', word: 'ab' }],
+    };
+    const { getByText } = render(
+      <ListenPhonemeBlendQuestion
+        language="en"
+        instructions="."
+        itemSet={incomplete}
+        onComplete={onComplete}
+      />,
+    );
+    fireEvent.press(getByText('Start'));
+    expect(getByText('s-u-n')).toBeTruthy();
+    fireEvent.press(getByText('Finish'));
+    fireEvent.press(getByText('Yes, finish'));
+
+    expect(onComplete.mock.calls[0][0].item_set_id).toMatch(
+      /^wela_plus_phoneme_blend@stub/,
+    );
+  });
+
+  test('falls back when an itemSet shaped like Q3 (no segmented field) is passed by mistake', () => {
+    const onComplete = jest.fn();
+    const q3Shape = {
+      item_set_id: 'wela_plus_first_sound@stub-2026-06-02.en',
+      question_version: 'stub-2026-06-02',
+      prompts: [{ item_key: 'k', prompt: 'apple' }],
+    };
+    const { getByText } = render(
+      <ListenPhonemeBlendQuestion
+        language="en"
+        instructions="."
+        itemSet={q3Shape}
+        onComplete={onComplete}
+      />,
+    );
+    fireEvent.press(getByText('Start'));
+    expect(getByText('s-u-n')).toBeTruthy();
+    fireEvent.press(getByText('Finish'));
+    fireEvent.press(getByText('Yes, finish'));
+
+    expect(onComplete.mock.calls[0][0].item_set_id).toMatch(
+      /^wela_plus_phoneme_blend@stub/,
+    );
+  });
+});
+
+describe('ListenPhonemeBlendQuestion — Pattern B is untimed', () => {
+  test('was_timed is false even when host passes durationSec', () => {
+    const onComplete = jest.fn();
+    const { getByText, getByLabelText } = render(
+      <ListenPhonemeBlendQuestion
+        language="en"
+        instructions="."
+        durationSec={60}
+        onComplete={onComplete}
+      />,
+    );
+    fireEvent.press(getByText('Start'));
+    fireEvent.press(getByLabelText('s-u-n, idle'));
+    fireEvent.press(getByText('Finish'));
+    fireEvent.press(getByText('Yes, finish'));
+
+    expect(onComplete.mock.calls[0][0].derived.was_timed).toBe(false);
+  });
+});
+
+describe('ListenPhonemeBlendQuestion — word gloss preserved in metadata', () => {
+  test('items[i].metadata.word matches the prompt word for analytics reconstruction', () => {
+    const onComplete = jest.fn();
+    const { getByText, getByLabelText } = render(
+      <ListenPhonemeBlendQuestion
+        language="en"
+        instructions="."
+        onComplete={onComplete}
+      />,
+    );
+    fireEvent.press(getByText('Start'));
+    fireEvent.press(getByLabelText('s-u-n, idle'));
+    fireEvent.press(getByLabelText('c-a-t, idle'));
+    fireEvent.press(getByText('Finish'));
+    fireEvent.press(getByText('Yes, finish'));
+
+    const items = onComplete.mock.calls[0][0].items;
+    expect(items[0].metadata).toEqual({ word: 'sun' });
+    expect(items[1].metadata).toEqual({ word: 'cat' });
+  });
+
+  test('onItemMarked also receives the word in metadata', () => {
+    const onItemMarked = jest.fn();
+    const { getByText, getByLabelText } = render(
+      <ListenPhonemeBlendQuestion
+        language="en"
+        instructions="."
+        onComplete={jest.fn()}
+        onItemMarked={onItemMarked}
+      />,
+    );
+    fireEvent.press(getByText('Start'));
+    fireEvent.press(getByLabelText('s-u-n, idle'));
+
+    expect(onItemMarked.mock.calls[0][0].metadata).toEqual({ word: 'sun' });
+  });
+});
+
 describe('ListenPhonemeBlendQuestion — onItemMarked', () => {
   test('fires per-tap with the segmented form as prompt and the stable item_key', () => {
     const onItemMarked = jest.fn();
