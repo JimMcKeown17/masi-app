@@ -197,7 +197,7 @@ describe('ReadWordsQuestion — markingPolarity', () => {
     expect(catItem.is_correct).toBe(true);
   });
 
-  test("'tap_wrong' inverts: tap = is_correct false; untapped = is_correct true", () => {
+  test("'tap_wrong' inverts within the reached boundary; positions past last_attempted_position are is_correct=false (not-reached)", () => {
     const onComplete = jest.fn();
     const { getByText, getByLabelText } = render(
       <ReadWordsQuestion
@@ -209,12 +209,49 @@ describe('ReadWordsQuestion — markingPolarity', () => {
       />,
     );
     fireEvent.press(getByText('Start'));
+    // tap_wrong mode: tap cat (position 0) means "child got it wrong";
+    // dog/sun/run (1, 2, 3) are untapped. Then tap sun (position 2) as
+    // wrong. last_attempted_position becomes 2 (max-tapped).
     fireEvent.press(getByLabelText('cat, idle'));
+    fireEvent.press(getByLabelText('sun, idle'));
     fireEvent.press(getByText('End'));
     const items = onComplete.mock.calls[0][0].items;
-    const catItem = items.find((i: { item_key: string }) => i.item_key === 'cat');
-    const dogItem = items.find((i: { item_key: string }) => i.item_key === 'dog');
-    expect(catItem.is_correct).toBe(false); // tapped → wrong
-    expect(dogItem.is_correct).toBe(true); // untapped → correct
+    const r = onComplete.mock.calls[0][0];
+    expect(r.derived.last_attempted_position).toBe(2);
+
+    const cat = items.find((i: { item_key: string }) => i.item_key === 'cat');
+    const dog = items.find((i: { item_key: string }) => i.item_key === 'dog');
+    const sun = items.find((i: { item_key: string }) => i.item_key === 'sun');
+    const run = items.find((i: { item_key: string }) => i.item_key === 'run');
+    expect(cat.is_correct).toBe(false); // pos 0, tapped (wrong)
+    expect(dog.is_correct).toBe(true); // pos 1, untapped within boundary (correct)
+    expect(sun.is_correct).toBe(false); // pos 2, tapped (wrong)
+    // pos 3 ('run') is PAST last_attempted_position=2 → NOT reached, must NOT be is_correct=true
+    expect(run.is_correct).toBe(false);
+  });
+
+  test("'tap_wrong' total_correct excludes not-reached words", () => {
+    const onComplete = jest.fn();
+    const { getByText, getByLabelText } = render(
+      <ReadWordsQuestion
+        language="en"
+        instructions="."
+        durationSec={60}
+        markingPolarity="tap_wrong"
+        onComplete={onComplete}
+      />,
+    );
+    fireEvent.press(getByText('Start'));
+    // Reach position 0 only (cat) and don't tap (so cat is "correct" in tap_wrong).
+    fireEvent.press(getByLabelText('cat, idle'));
+    fireEvent.press(getByLabelText('cat, correct')); // untap, leaving it idle
+    fireEvent.press(getByText('End'));
+    const r = onComplete.mock.calls[0][0];
+    // last_attempted_position should be 0 (we touched cat), total_attempted=1,
+    // total_correct=1 (cat is "correct" in tap_wrong because untapped).
+    // The other 19 words must NOT be counted as correct (codex finding #2 fix).
+    expect(r.derived.last_attempted_position).toBe(0);
+    expect(r.derived.total_attempted).toBe(1);
+    expect(r.derived.total_correct).toBe(1);
   });
 });

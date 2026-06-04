@@ -100,10 +100,36 @@ export function ReadWordsQuestion(
       hasFinishedRef.current = true;
       setPhase('finished');
 
+      // Timed Pattern C Questions MUST report a numeric last_attempted_position
+      // per the contract validator. -1 is the sentinel for "no items reached"
+      // when the EA abandons with zero taps; downstream consumers compute
+      // total_attempted = max(0, last_attempted_position + 1).
+      // Known limitation (codex review): in tap_correct mode the EA only taps
+      // CORRECT words, so this cursor underestimates "reached" — wrong-untapped
+      // words past max-tapped are conflated with not-reached. Resolving the
+      // ambiguity requires a separate progress cursor UI (deferred until
+      // pedagogy validates the limitation in the field).
+      const wasTimed = durationSec !== undefined;
+      const lastPosRaw = lastAttemptedPositionRef.current;
+      const lastPos = wasTimed
+        ? lastPosRaw === null
+          ? -1
+          : lastPosRaw
+        : lastPosRaw;
+
       const items = words.map((w, idx) => {
         const tapped = isMarkedRef.current(keyFor(idx, w.word));
-        const isCorrect =
-          markingPolarity === 'tap_wrong' ? !tapped : tapped;
+        // Items past the reached boundary in a timed Question are "not reached"
+        // — they must NOT count as correct, regardless of polarity. This guards
+        // tap_wrong from inflating WPM/percent by treating untapped trailing
+        // words as correct (codex review finding #2).
+        const notReached =
+          wasTimed && lastPos !== null && lastPos >= 0 && idx > lastPos;
+        const isCorrect = notReached
+          ? false
+          : markingPolarity === 'tap_wrong'
+          ? !tapped
+          : tapped;
         return {
           position: idx,
           item_key: w.item_key,
@@ -112,17 +138,6 @@ export function ReadWordsQuestion(
         };
       });
       const totalCorrect = items.filter((i) => i.is_correct).length;
-      // Timed Pattern C Questions MUST report a numeric last_attempted_position
-      // per the contract validator. -1 is the sentinel for "no items reached"
-      // when the EA abandons with zero taps; downstream consumers compute
-      // total_attempted = last_attempted_position + 1, so -1 → 0 attempted.
-      const wasTimed = durationSec !== undefined;
-      const lastPosRaw = lastAttemptedPositionRef.current;
-      const lastPos = wasTimed
-        ? lastPosRaw === null
-          ? -1
-          : lastPosRaw
-        : lastPosRaw;
       const totalAttempted = lastPos === null || lastPos < 0 ? 0 : lastPos + 1;
       const percent =
         totalAttempted > 0

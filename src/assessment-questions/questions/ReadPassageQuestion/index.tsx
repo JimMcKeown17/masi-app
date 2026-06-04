@@ -105,10 +105,25 @@ export function ReadPassageQuestion(
       hasFinishedRef.current = true;
       setPhase('finished');
 
+      const lastPosRaw = lastAttemptedPositionRef.current;
+      // Q8 is always timed → numeric last_attempted_position required;
+      // -1 sentinel for "no items reached".
+      const lastPos = lastPosRaw === null ? -1 : lastPosRaw;
+      const totalAttempted = lastPos < 0 ? 0 : lastPos + 1;
+
       const items = words.map((w, idx) => {
         const tapped = isMarkedRef.current(keyFor(idx, w.word));
-        const isCorrect =
-          markingPolarity === 'tap_wrong' ? !tapped : tapped;
+        // Items past the reached boundary are "not reached" — they must NOT
+        // count as correct, regardless of polarity. Otherwise tap_wrong would
+        // inflate WPM/percent by treating untapped trailing words as correct
+        // (codex review finding #2). tap_correct mode's "wrong vs not-reached"
+        // ambiguity is a known limitation pending a progress-cursor UI.
+        const notReached = lastPos >= 0 && idx > lastPos;
+        const isCorrect = notReached
+          ? false
+          : markingPolarity === 'tap_wrong'
+          ? !tapped
+          : tapped;
         return {
           position: idx,
           item_key: w.item_key,
@@ -117,11 +132,6 @@ export function ReadPassageQuestion(
         };
       });
       const totalCorrect = items.filter((i) => i.is_correct).length;
-      const lastPosRaw = lastAttemptedPositionRef.current;
-      // Q8 is always timed → numeric last_attempted_position required;
-      // -1 sentinel for "no items reached".
-      const lastPos = lastPosRaw === null ? -1 : lastPosRaw;
-      const totalAttempted = lastPos < 0 ? 0 : lastPos + 1;
       const percent =
         totalAttempted > 0
           ? Math.round((totalCorrect / totalAttempted) * 100)
