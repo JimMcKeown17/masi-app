@@ -116,6 +116,27 @@ describe('LetterWritingFromPicturesQuestion — Abandon flow', () => {
   });
 });
 
+describe('LetterWritingFromPicturesQuestion — stub alphabet integrity', () => {
+  test('every stub item_key maps to expected_letter at alphabet position', () => {
+    // Codex caught: a stub with two B-leading entries and zero X-leading
+    // entries would silently mis-score an X cell in any pre-#34 run.
+    const { getByText, getByTestId } = render(
+      <LetterWritingFromPicturesQuestion
+        language="en"
+        instructions="."
+        onComplete={jest.fn()}
+      />,
+    );
+    fireEvent.press(getByText('Start'));
+    // 26 items / 8 per page → 4 pages. item_24 is index 23 → page 2 (items 16-23).
+    fireEvent.press(getByText('Next')); // → page 1
+    fireEvent.press(getByText('Next')); // → page 2
+    expect(getByTestId('cell-q5.item_24').props.accessibilityLabel).toMatch(
+      /^xylophone → x,/,
+    );
+  });
+});
+
 describe('LetterWritingFromPicturesQuestion — itemSet override', () => {
   test('falls back to bundled default when override missing item_set_id', () => {
     const { getByText } = render(

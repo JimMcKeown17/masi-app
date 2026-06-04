@@ -28,7 +28,7 @@ const STUB_ALTS = [
   'umbrella',
   'van',
   'web',
-  'box',
+  'xylophone',
   'yarn',
   'zebra',
 ];
