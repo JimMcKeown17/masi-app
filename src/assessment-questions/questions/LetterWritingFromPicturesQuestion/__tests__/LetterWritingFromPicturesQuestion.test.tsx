@@ -114,6 +114,30 @@ describe('LetterWritingFromPicturesQuestion — Abandon flow', () => {
     expect(onAbandon).toHaveBeenCalledWith('skipped_child_refused');
     expect(onComplete.mock.calls[0][0].stopped_reason).toBe('skipped_child_refused');
   });
+
+  test('skipped_* abandon emits items=[] (no bogus failed rows for skip)', () => {
+    // Adversarial review finding: skipped Questions must not persist as if
+    // every item was answered wrong. Components emit no per-item data on
+    // skip; the host's persistence layer is responsible for translating
+    // items=[] + stopped_reason=skipped_* into NULL score / zero items.
+    const onComplete = jest.fn();
+    const { getByText } = render(
+      <LetterWritingFromPicturesQuestion
+        language="en"
+        instructions="."
+        onComplete={onComplete}
+      />,
+    );
+    fireEvent.press(getByText('Start'));
+    fireEvent.press(getByText('Abandon'));
+    fireEvent.press(getByText('Child tired'));
+    const r = onComplete.mock.calls[0][0];
+    expect(r.stopped_reason).toBe('skipped_tired');
+    expect(r.items).toEqual([]);
+    expect(r.derived.total_correct).toBe(0);
+    expect(r.derived.total_attempted).toBe(0);
+    expect(r.derived.percent).toBe(0);
+  });
 });
 
 describe('LetterWritingFromPicturesQuestion — stub alphabet integrity', () => {

@@ -108,13 +108,20 @@ export function WriteCvcsQuestion(props: QuestionProps) {
       hasFinishedRef.current = true;
       setPhase('finished');
 
-      const items = prompts.map((p, idx) => ({
-        position: idx,
-        item_key: p.item_key,
-        prompt: p.word,
-        is_correct: isMarkedRef.current(p.item_key),
-      }));
+      // Skip-emits-empty contract: see Q5 for the rationale. Components
+      // emit no per-item data when stopped_reason is a skip; host drops to
+      // NULL score / zero items at persistence time.
+      const isSkipped = stoppedReason.startsWith('skipped_');
+      const items = isSkipped
+        ? []
+        : prompts.map((p, idx) => ({
+            position: idx,
+            item_key: p.item_key,
+            prompt: p.word,
+            is_correct: isMarkedRef.current(p.item_key),
+          }));
       const totalCorrect = items.filter((i) => i.is_correct).length;
+      const totalAttempted = isSkipped ? 0 : prompts.length;
       const elapsedMs =
         startTimeMsRef.current === null
           ? 0
@@ -130,10 +137,10 @@ export function WriteCvcsQuestion(props: QuestionProps) {
         items,
         derived: {
           total_correct: totalCorrect,
-          total_attempted: prompts.length,
+          total_attempted: totalAttempted,
           percent:
-            prompts.length > 0
-              ? Math.round((totalCorrect / prompts.length) * 100)
+            totalAttempted > 0
+              ? Math.round((totalCorrect / totalAttempted) * 100)
               : 0,
           last_attempted_position: null,
           was_timed: false,

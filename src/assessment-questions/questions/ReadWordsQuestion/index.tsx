@@ -117,32 +117,36 @@ export function ReadWordsQuestion(
           : lastPosRaw
         : lastPosRaw;
 
-      const items = words.map((w, idx) => {
-        const tapped = isMarkedRef.current(keyFor(idx, w.word));
-        // Items past the reached boundary in a timed Question are "not reached"
-        // — they must NOT count as correct, regardless of polarity. This guards
-        // tap_wrong from inflating WPM/percent by treating untapped trailing
-        // words as correct (codex review finding #2).
-        // notReached is true when the EA didn't get the cursor to or past idx.
-        // For lastPos = -1 (no taps), every idx>=0 is past lastPos → all items
-        // not reached. This is the correct behavior for tap_wrong + zero-tap,
-        // which previously bypassed the guard.
-        const notReached =
-          wasTimed && lastPos !== null && idx > lastPos;
-        const isCorrect = notReached
-          ? false
-          : markingPolarity === 'tap_wrong'
-          ? !tapped
-          : tapped;
-        return {
-          position: idx,
-          item_key: w.item_key,
-          prompt: w.word,
-          is_correct: isCorrect,
-        };
-      });
+      // Skip-emits-empty contract: skipped_* never persists per-item rows.
+      const isSkipped = stoppedReason.startsWith('skipped_');
+      const items = isSkipped
+        ? []
+        : words.map((w, idx) => {
+            const tapped = isMarkedRef.current(keyFor(idx, w.word));
+            // Items past the reached boundary in a timed Question are "not
+            // reached" — they must NOT count as correct, regardless of
+            // polarity. For lastPos = -1 (no taps), every idx>=0 is past
+            // lastPos → all items not reached (tap_wrong + zero-tap fix).
+            const notReached =
+              wasTimed && lastPos !== null && idx > lastPos;
+            const isCorrect = notReached
+              ? false
+              : markingPolarity === 'tap_wrong'
+              ? !tapped
+              : tapped;
+            return {
+              position: idx,
+              item_key: w.item_key,
+              prompt: w.word,
+              is_correct: isCorrect,
+            };
+          });
       const totalCorrect = items.filter((i) => i.is_correct).length;
-      const totalAttempted = lastPos === null || lastPos < 0 ? 0 : lastPos + 1;
+      const totalAttempted = isSkipped
+        ? 0
+        : lastPos === null || lastPos < 0
+        ? 0
+        : lastPos + 1;
       const percent =
         totalAttempted > 0
           ? Math.round((totalCorrect / totalAttempted) * 100)

@@ -115,13 +115,18 @@ export function ListenAndAnswerStoryQuestion(props: QuestionProps) {
       hasFinishedRef.current = true;
       setPhase('finished');
 
-      const items = questions.map((q, idx) => ({
-        position: idx,
-        item_key: q.item_key,
-        prompt: q.prompt,
-        is_correct: isMarkedRef.current(q.item_key),
-      }));
+      // Skip-emits-empty contract.
+      const isSkipped = stoppedReason.startsWith('skipped_');
+      const items = isSkipped
+        ? []
+        : questions.map((q, idx) => ({
+            position: idx,
+            item_key: q.item_key,
+            prompt: q.prompt,
+            is_correct: isMarkedRef.current(q.item_key),
+          }));
       const totalCorrect = items.filter((i) => i.is_correct).length;
+      const totalAttempted = isSkipped ? 0 : questions.length;
       const elapsedMs =
         startTimeMsRef.current === null
           ? 0
@@ -137,10 +142,10 @@ export function ListenAndAnswerStoryQuestion(props: QuestionProps) {
         items,
         derived: {
           total_correct: totalCorrect,
-          total_attempted: questions.length,
+          total_attempted: totalAttempted,
           percent:
-            questions.length > 0
-              ? Math.round((totalCorrect / questions.length) * 100)
+            totalAttempted > 0
+              ? Math.round((totalCorrect / totalAttempted) * 100)
               : 0,
           last_attempted_position: null,
           was_timed: false,

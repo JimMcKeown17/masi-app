@@ -109,31 +109,33 @@ export function ReadPassageQuestion(
       // Q8 is always timed → numeric last_attempted_position required;
       // -1 sentinel for "no items reached".
       const lastPos = lastPosRaw === null ? -1 : lastPosRaw;
-      const totalAttempted = lastPos < 0 ? 0 : lastPos + 1;
+      const skippedEarly = stoppedReason.startsWith('skipped_');
+      const totalAttempted = skippedEarly || lastPos < 0 ? 0 : lastPos + 1;
 
-      const items = words.map((w, idx) => {
-        const tapped = isMarkedRef.current(keyFor(idx, w.word));
-        // Items past the reached boundary are "not reached" — they must NOT
-        // count as correct, regardless of polarity. Otherwise tap_wrong would
-        // inflate WPM/percent by treating untapped trailing words as correct.
-        // For lastPos = -1 (no taps), every idx >= 0 is "past" lastPos → every
-        // item is not-reached, the safe answer when the EA never touches the
-        // passage. tap_correct mode's "wrong vs not-reached" ambiguity (when
-        // the child reads errors past the last correct tap) is a known
-        // limitation pending a progress-cursor UI.
-        const notReached = idx > lastPos;
-        const isCorrect = notReached
-          ? false
-          : markingPolarity === 'tap_wrong'
-          ? !tapped
-          : tapped;
-        return {
-          position: idx,
-          item_key: w.item_key,
-          prompt: w.word,
-          is_correct: isCorrect,
-        };
-      });
+      // Skip-emits-empty contract: skipped_* never persists per-item rows.
+      const isSkipped = stoppedReason.startsWith('skipped_');
+      const items = isSkipped
+        ? []
+        : words.map((w, idx) => {
+            const tapped = isMarkedRef.current(keyFor(idx, w.word));
+            // Items past the reached boundary are "not reached" — they must
+            // NOT count as correct, regardless of polarity. Otherwise
+            // tap_wrong would inflate WPM/percent by treating untapped
+            // trailing words as correct. For lastPos = -1 (no taps), every
+            // idx >= 0 is "past" lastPos → every item is not-reached.
+            const notReached = idx > lastPos;
+            const isCorrect = notReached
+              ? false
+              : markingPolarity === 'tap_wrong'
+              ? !tapped
+              : tapped;
+            return {
+              position: idx,
+              item_key: w.item_key,
+              prompt: w.word,
+              is_correct: isCorrect,
+            };
+          });
       const totalCorrect = items.filter((i) => i.is_correct).length;
       const percent =
         totalAttempted > 0

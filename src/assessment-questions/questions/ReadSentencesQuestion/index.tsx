@@ -162,20 +162,26 @@ export function ReadSentencesQuestion(
       hasFinishedRef.current = true;
       setPhase('finished');
 
-      const items = flatWords.map((w) => {
-        const tapped = isMarkedRef.current(w.item_key);
-        const isCorrect =
-          markingPolarity === 'tap_wrong' ? !tapped : tapped;
-        return {
-          position: w.position,
-          item_key: w.item_key,
-          prompt: w.word,
-          is_correct: isCorrect,
-        };
-      });
-      const correctnessByPosition = items.map((i) => i.is_correct);
+      // Skip-emits-empty contract: skipped_* never persists per-item rows.
+      const isSkipped = stoppedReason.startsWith('skipped_');
+      const items = isSkipped
+        ? []
+        : flatWords.map((w) => {
+            const tapped = isMarkedRef.current(w.item_key);
+            const isCorrect =
+              markingPolarity === 'tap_wrong' ? !tapped : tapped;
+            return {
+              position: w.position,
+              item_key: w.item_key,
+              prompt: w.word,
+              is_correct: isCorrect,
+            };
+          });
+      const correctnessByPosition = isSkipped
+        ? []
+        : items.map((i) => i.is_correct);
       const totalCorrect = items.filter((i) => i.is_correct).length;
-      const totalAttempted = flatWords.length;
+      const totalAttempted = isSkipped ? 0 : flatWords.length;
       const percent =
         totalAttempted > 0
           ? Math.round((totalCorrect / totalAttempted) * 100)
@@ -184,7 +190,10 @@ export function ReadSentencesQuestion(
         startTimeMsRef.current === null
           ? 0
           : Date.now() - startTimeMsRef.current;
-      const perSentence = computePerSentencePercent(correctnessByPosition);
+      // For skipped runs per_sentence_percent is empty — no data to summarize.
+      const perSentence = isSkipped
+        ? []
+        : computePerSentencePercent(correctnessByPosition);
 
       const result: Result = {
         question_code: 'wela_plus_read_sentences',

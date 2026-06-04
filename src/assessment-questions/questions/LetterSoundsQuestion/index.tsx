@@ -94,14 +94,22 @@ export function LetterSoundsQuestion(props: QuestionProps) {
           totalLetters,
         ) - 1;
 
-      const items = effectiveItemSet.letters.map((letter, idx) => ({
-        position: idx,
-        item_key: letter,
-        prompt: letter,
-        is_correct: isMarkedRef.current(keyFor(idx, letter)),
-      }));
+      // Skip-emits-empty contract: a skipped_* stop must NOT persist as if
+      // every item was answered wrong. Host translates items=[] +
+      // stopped_reason=skipped_* into NULL score / zero items.
+      // (Pattern A v1 has no Abandon UI so skipped_* would only arrive via
+      // an external caller, but the guard is here for contract symmetry.)
+      const isSkipped = stoppedReason.startsWith('skipped_');
+      const items = isSkipped
+        ? []
+        : effectiveItemSet.letters.map((letter, idx) => ({
+            position: idx,
+            item_key: letter,
+            prompt: letter,
+            is_correct: isMarkedRef.current(keyFor(idx, letter)),
+          }));
       const totalCorrect = items.filter((i) => i.is_correct).length;
-      const totalAttempted = lastVisibleOnPage + 1;
+      const totalAttempted = isSkipped ? 0 : lastVisibleOnPage + 1;
       const percent =
         totalAttempted > 0
           ? Math.round((totalCorrect / totalAttempted) * 100)

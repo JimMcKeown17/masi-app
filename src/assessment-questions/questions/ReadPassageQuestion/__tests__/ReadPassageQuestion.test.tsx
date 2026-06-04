@@ -155,4 +155,28 @@ describe('ReadPassageQuestion — Abandon flow', () => {
     expect(onAbandon).toHaveBeenCalledWith('skipped_child_refused');
     expect(onComplete.mock.calls[0][0].stopped_reason).toBe('skipped_child_refused');
   });
+
+  test('Abandon emits items=[] yet last_attempted_position is still a number (timed contract)', () => {
+    // Q8 is timed → contract validator requires numeric last_attempted_position.
+    // The skip-emits-empty fix must NOT break that. items=[] + lastPos=-1 is
+    // the correct shape for "EA abandoned a timed Question with zero taps".
+    const onComplete = jest.fn();
+    const { getByText } = render(
+      <ReadPassageQuestion
+        language="en"
+        instructions="."
+        durationSec={60}
+        onComplete={onComplete}
+      />,
+    );
+    fireEvent.press(getByText('Start'));
+    fireEvent.press(getByText('Abandon'));
+    fireEvent.press(getByText('Out of time'));
+    const r = onComplete.mock.calls[0][0];
+    expect(r.items).toEqual([]);
+    expect(r.derived.total_correct).toBe(0);
+    expect(r.derived.total_attempted).toBe(0);
+    expect(r.derived.correct_words_per_minute).toBe(0);
+    expect(typeof r.derived.last_attempted_position).toBe('number'); // contract
+  });
 });

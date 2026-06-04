@@ -109,13 +109,18 @@ export function WriteSentencesFromDictationQuestion(props: QuestionProps) {
       hasFinishedRef.current = true;
       setPhase('finished');
 
-      const items = prompts.map((p, idx) => ({
-        position: idx,
-        item_key: p.item_key,
-        prompt: p.sentence,
-        is_correct: isMarkedRef.current(p.item_key),
-      }));
+      // Skip-emits-empty contract: see Q5 for the rationale.
+      const isSkipped = stoppedReason.startsWith('skipped_');
+      const items = isSkipped
+        ? []
+        : prompts.map((p, idx) => ({
+            position: idx,
+            item_key: p.item_key,
+            prompt: p.sentence,
+            is_correct: isMarkedRef.current(p.item_key),
+          }));
       const totalCorrect = items.filter((i) => i.is_correct).length;
+      const totalAttempted = isSkipped ? 0 : prompts.length;
       const elapsedMs =
         startTimeMsRef.current === null
           ? 0
@@ -131,10 +136,10 @@ export function WriteSentencesFromDictationQuestion(props: QuestionProps) {
         items,
         derived: {
           total_correct: totalCorrect,
-          total_attempted: prompts.length,
+          total_attempted: totalAttempted,
           percent:
-            prompts.length > 0
-              ? Math.round((totalCorrect / prompts.length) * 100)
+            totalAttempted > 0
+              ? Math.round((totalCorrect / totalAttempted) * 100)
               : 0,
           last_attempted_position: null,
           was_timed: false,

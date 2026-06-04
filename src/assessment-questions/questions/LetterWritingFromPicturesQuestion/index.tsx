@@ -124,13 +124,20 @@ export function LetterWritingFromPicturesQuestion(props: QuestionProps) {
       hasFinishedRef.current = true;
       setPhase('finished');
 
-      const items = prompts.map((p, idx) => ({
-        position: idx,
-        item_key: p.item_key,
-        prompt: `${p.picture.alt} → ${p.expected_letter}`,
-        is_correct: isMarkedRef.current(p.item_key),
-      }));
+      // Skip-emits-empty contract: a skipped_* stop must NOT persist as if
+      // every item was answered wrong. The host's storage layer translates
+      // items=[] + stopped_reason=skipped_* into NULL score / zero items.
+      const isSkipped = stoppedReason.startsWith('skipped_');
+      const items = isSkipped
+        ? []
+        : prompts.map((p, idx) => ({
+            position: idx,
+            item_key: p.item_key,
+            prompt: `${p.picture.alt} → ${p.expected_letter}`,
+            is_correct: isMarkedRef.current(p.item_key),
+          }));
       const totalCorrect = items.filter((i) => i.is_correct).length;
+      const totalAttempted = isSkipped ? 0 : totalItems;
       const elapsedMs =
         startTimeMsRef.current === null
           ? 0
@@ -146,10 +153,10 @@ export function LetterWritingFromPicturesQuestion(props: QuestionProps) {
         items,
         derived: {
           total_correct: totalCorrect,
-          total_attempted: totalItems,
+          total_attempted: totalAttempted,
           percent:
-            totalItems > 0
-              ? Math.round((totalCorrect / totalItems) * 100)
+            totalAttempted > 0
+              ? Math.round((totalCorrect / totalAttempted) * 100)
               : 0,
           last_attempted_position: null,
           was_timed: false,
