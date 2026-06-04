@@ -208,6 +208,49 @@ describe('StoryWritingRubricQuestion — Finish flow', () => {
   });
 });
 
+describe('StoryWritingRubricQuestion — onItemMarked', () => {
+  test('fires per-chip-tap with ea: prefix + score metadata (matches Question contract)', () => {
+    const onItemMarked = jest.fn();
+    const { getByText, getByTestId } = render(
+      <StoryWritingRubricQuestion
+        language="en"
+        instructions="."
+        onComplete={jest.fn()}
+        onItemMarked={onItemMarked}
+      />,
+    );
+    fireEvent.press(getByText('Start'));
+    fireEvent.press(getByTestId('chip-meaning_making-3'));
+    expect(onItemMarked).toHaveBeenCalledTimes(1);
+    const item = onItemMarked.mock.calls[0][0];
+    expect(item.item_key).toBe('ea:meaning_making');
+    expect(item.prompt).toBe('Meaning Making');
+    expect(item.is_correct).toBe(false);
+    expect(item.metadata).toMatchObject({
+      score: 3,
+      scorer: 'ea',
+      anchor_text: 'clear and developed',
+    });
+  });
+
+  test('re-scoring (different chip on same dimension) fires another onItemMarked', () => {
+    const onItemMarked = jest.fn();
+    const { getByText, getByTestId } = render(
+      <StoryWritingRubricQuestion
+        language="en"
+        instructions="."
+        onComplete={jest.fn()}
+        onItemMarked={onItemMarked}
+      />,
+    );
+    fireEvent.press(getByText('Start'));
+    fireEvent.press(getByTestId('chip-spelling-2'));
+    fireEvent.press(getByTestId('chip-spelling-4'));
+    expect(onItemMarked).toHaveBeenCalledTimes(2);
+    expect(onItemMarked.mock.calls[1][0].metadata.score).toBe(4);
+  });
+});
+
 describe('StoryWritingRubricQuestion — Abandon flow', () => {
   test('Abandon picker fires onAbandon and emits items=[] (skip-empty contract)', () => {
     const onComplete = jest.fn();

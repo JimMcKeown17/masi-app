@@ -103,7 +103,14 @@ function resolveItemSet(language: string, override: unknown): FullItemSet {
 }
 
 export function StoryWritingRubricQuestion(props: QuestionProps) {
-  const { language, itemSet, instructions, onComplete, onAbandon } = props;
+  const {
+    language,
+    itemSet,
+    instructions,
+    onComplete,
+    onItemMarked,
+    onAbandon,
+  } = props;
   const [phase, setPhase] = useState<Phase>('intro');
   // Per-dimension score state. null = unscored; 0..4 = chosen score.
   const [scores, setScores] = useState<Record<string, number | null>>({});
@@ -215,8 +222,26 @@ export function StoryWritingRubricQuestion(props: QuestionProps) {
   const handleChip = useCallback(
     (dimCode: string, score: number) => {
       setScores((prev) => ({ ...prev, [dimCode]: score }));
+      if (onItemMarked) {
+        const idx = dimensions.findIndex((d) => d.code === dimCode);
+        const dim = idx >= 0 ? dimensions[idx] : null;
+        const anchor = dim?.anchors.find((a) => a.score === score);
+        if (dim) {
+          onItemMarked({
+            position: idx,
+            item_key: `ea:${dim.code}`,
+            prompt: dim.label,
+            is_correct: false,
+            metadata: {
+              score,
+              scorer: 'ea',
+              anchor_text: anchor?.text ?? '',
+            },
+          });
+        }
+      }
     },
-    [],
+    [dimensions, onItemMarked],
   );
 
   const handleFinish = useCallback(() => {
