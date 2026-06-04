@@ -230,6 +230,33 @@ describe('ReadWordsQuestion — markingPolarity', () => {
     expect(run.is_correct).toBe(false);
   });
 
+  test("'tap_wrong' zero-tap (no taps at all) → all items not-reached, total_correct=0, total_attempted=0", () => {
+    // Adversarial review found: when no taps happen in tap_wrong mode,
+    // lastPos=-1 was bypassing the not-reached guard and every untapped word
+    // (i.e. all 20) was marked is_correct=true — inflating total_correct
+    // while total_attempted was still 0. This test pins the correct behavior.
+    const onComplete = jest.fn();
+    const { getByText } = render(
+      <ReadWordsQuestion
+        language="en"
+        instructions="."
+        durationSec={60}
+        markingPolarity="tap_wrong"
+        onComplete={onComplete}
+      />,
+    );
+    fireEvent.press(getByText('Start'));
+    fireEvent.press(getByText('End'));
+    const r = onComplete.mock.calls[0][0];
+    expect(r.derived.last_attempted_position).toBe(-1);
+    expect(r.derived.total_attempted).toBe(0);
+    expect(r.derived.total_correct).toBe(0);
+    // Every items[i].is_correct must be false (none reached, none correct)
+    r.items.forEach((item: { is_correct: boolean }) => {
+      expect(item.is_correct).toBe(false);
+    });
+  });
+
   test("'tap_wrong' total_correct excludes not-reached words", () => {
     const onComplete = jest.fn();
     const { getByText, getByLabelText } = render(

@@ -115,10 +115,13 @@ export function ReadPassageQuestion(
         const tapped = isMarkedRef.current(keyFor(idx, w.word));
         // Items past the reached boundary are "not reached" — they must NOT
         // count as correct, regardless of polarity. Otherwise tap_wrong would
-        // inflate WPM/percent by treating untapped trailing words as correct
-        // (codex review finding #2). tap_correct mode's "wrong vs not-reached"
-        // ambiguity is a known limitation pending a progress-cursor UI.
-        const notReached = lastPos >= 0 && idx > lastPos;
+        // inflate WPM/percent by treating untapped trailing words as correct.
+        // For lastPos = -1 (no taps), every idx >= 0 is "past" lastPos → every
+        // item is not-reached, the safe answer when the EA never touches the
+        // passage. tap_correct mode's "wrong vs not-reached" ambiguity (when
+        // the child reads errors past the last correct tap) is a known
+        // limitation pending a progress-cursor UI.
+        const notReached = idx > lastPos;
         const isCorrect = notReached
           ? false
           : markingPolarity === 'tap_wrong'

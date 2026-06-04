@@ -123,8 +123,12 @@ export function ReadWordsQuestion(
         // — they must NOT count as correct, regardless of polarity. This guards
         // tap_wrong from inflating WPM/percent by treating untapped trailing
         // words as correct (codex review finding #2).
+        // notReached is true when the EA didn't get the cursor to or past idx.
+        // For lastPos = -1 (no taps), every idx>=0 is past lastPos → all items
+        // not reached. This is the correct behavior for tap_wrong + zero-tap,
+        // which previously bypassed the guard.
         const notReached =
-          wasTimed && lastPos !== null && lastPos >= 0 && idx > lastPos;
+          wasTimed && lastPos !== null && idx > lastPos;
         const isCorrect = notReached
           ? false
           : markingPolarity === 'tap_wrong'
