@@ -187,7 +187,12 @@ describe('StoryWritingRubricQuestion — Finish flow', () => {
     expect(onComplete).not.toHaveBeenCalled();
   });
 
-  test('Yes from confirmation emits Result with unscored dimensions absent from items[]', () => {
+  test('Yes from confirmation with unscored dimensions emits stopped_reason=ea_ended (NOT completed)', () => {
+    // Adversarial review: a completed Q11 must mean ALL 4 dimensions are
+    // scored. A confirmed-but-incomplete finish must NOT pose as completed —
+    // otherwise downstream cannot distinguish a real 0 from a skipped
+    // dimension. ea_ended is the existing enum value for "EA stopped before
+    // the task was fully complete".
     const onComplete = jest.fn();
     const { getByText, getByTestId } = render(
       <StoryWritingRubricQuestion
@@ -201,10 +206,36 @@ describe('StoryWritingRubricQuestion — Finish flow', () => {
     fireEvent.press(getByText('Finish'));
     fireEvent.press(getByText('Yes, finish'));
     const r = onComplete.mock.calls[0][0];
-    // Only 1 dimension scored → 1 item
+    expect(r.stopped_reason).toBe('ea_ended');
     expect(r.items).toHaveLength(1);
     expect(r.items[0].item_key).toBe('ea:meaning_making');
     expect(r.derived.ea_rubric_total).toBe(3);
+  });
+
+  test('every completed Q11 result has one item per dimension (no partial completed)', () => {
+    const onComplete = jest.fn();
+    const { getByText, getByTestId } = render(
+      <StoryWritingRubricQuestion
+        language="en"
+        instructions="."
+        onComplete={onComplete}
+      />,
+    );
+    fireEvent.press(getByText('Start'));
+    // Score 0 on every dimension — 0 is valid, so this IS a complete run.
+    ['meaning_making', 'spelling', 'length', 'vocabulary'].forEach((d) => {
+      fireEvent.press(getByTestId(`chip-${d}-0`));
+    });
+    fireEvent.press(getByText('Finish'));
+    const r = onComplete.mock.calls[0][0];
+    expect(r.stopped_reason).toBe('completed');
+    expect(r.items).toHaveLength(4);
+    expect(Object.keys(r.derived.by_dimension)).toEqual([
+      'meaning_making',
+      'spelling',
+      'length',
+      'vocabulary',
+    ]);
   });
 });
 

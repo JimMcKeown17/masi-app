@@ -279,7 +279,13 @@ export function StoryWritingRubricQuestion(props: QuestionProps) {
     return (
       <View>
         <Text>{`${unscoredCount} dimensions unscored — finish anyway?`}</Text>
-        <Pressable onPress={() => finish('completed')}>
+        {/*
+          Codex adversarial review: 'completed' is reserved for runs where
+          every dimension is scored. A confirmed-but-incomplete finish
+          emits 'ea_ended' so downstream can distinguish a real 0 score
+          from a skipped dimension.
+        */}
+        <Pressable onPress={() => finish('ea_ended')}>
           <Text>Yes, finish</Text>
         </Pressable>
         <Pressable onPress={() => setPhase('active')}>
