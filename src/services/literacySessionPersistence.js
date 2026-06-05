@@ -80,8 +80,8 @@ export async function persistLiteracySession({
               created_at: nowIso,
               updated_at: nowIso,
             };
-            await masteryRepository.saveLetterMasteryRecord(record, { transaction });
-            allMastery.push(record);
+            const savedId = await masteryRepository.saveLetterMasteryRecord(record, { transaction });
+            allMastery.push({ ...record, id: savedId });
           }
         } else if (value === false) {
           const existing = findMasteryRecord(allMastery, {

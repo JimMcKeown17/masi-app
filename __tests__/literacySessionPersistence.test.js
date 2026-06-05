@@ -76,12 +76,13 @@ describe('literacySessionPersistence', () => {
         .toEqual({ id: 'session-1' });
       expect(await db.getFirstAsync('select session_id, child_id from session_attendees where session_id = ?', 'session-1'))
         .toEqual({ session_id: 'session-1', child_id: 'child-1' });
-      expect(await db.getFirstAsync('select deleted_at from letter_mastery where id = ?', 'mastery-deleted-a'))
-        .toEqual({ deleted_at: null });
-      expect(await db.getFirstAsync('select child_id, letter, deleted_at from letter_mastery where id = ?', 'mastery-new-m'))
-        .toEqual({ child_id: 'child-1', letter: 'm', deleted_at: null });
-      expect((await db.getFirstAsync('select deleted_at from letter_mastery where id = ?', 'mastery-active-s')).deleted_at)
-        .toBe('2026-05-21T09:30:00.000Z');
+      // Rows are keyed by their natural logical key now (deterministic ids), so assert by letter.
+      expect(await db.getFirstAsync("select deleted_at from letter_mastery where letter = 'a'"))
+        .toEqual({ deleted_at: null }); // previously soft-deleted 'a' re-taught → active again
+      expect(await db.getFirstAsync("select child_id, letter, deleted_at from letter_mastery where letter = 'm'"))
+        .toEqual({ child_id: 'child-1', letter: 'm', deleted_at: null }); // newly taught
+      expect((await db.getFirstAsync("select deleted_at from letter_mastery where letter = 's'")).deleted_at)
+        .toBe('2026-05-21T09:30:00.000Z'); // previously active 's' untaught → soft-deleted
       expect(await db.getAllAsync('select table_name from sync_outbox order by table_name, record_id'))
         .toEqual(expect.arrayContaining([
           { table_name: 'sessions' },
@@ -192,16 +193,16 @@ describe('literacySessionPersistence', () => {
         idFactory: () => 'mastery-literacy-z',
       });
 
+      // The numeracy (programme-b) deleted 'z' row is NOT reused for the literacy session;
+      // a separate active 'z' row is created under programme-a (distinct deterministic ids).
       expect(await db.getFirstAsync(
-        'select programme_id, deleted_at from letter_mastery where id = ?',
-        'mastery-numeracy-deleted'
+        "select programme_id, deleted_at from letter_mastery where letter = 'z' and programme_id = 'programme-b'"
       )).toEqual({
         programme_id: 'programme-b',
         deleted_at: expect.any(String),
       });
       expect(await db.getFirstAsync(
-        'select programme_id, deleted_at from letter_mastery where id = ?',
-        'mastery-literacy-z'
+        "select programme_id, deleted_at from letter_mastery where letter = 'z' and programme_id = 'programme-a'"
       )).toEqual({
         programme_id: 'programme-a',
         deleted_at: null,

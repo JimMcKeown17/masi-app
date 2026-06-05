@@ -35,6 +35,23 @@ export const assessmentItemDomainId = ({
   return deterministicDomainId('assessment_items', assessmentId, key);
 };
 
+export const letterMasteryDomainId = ({
+  userId,
+  childId,
+  programmeId,
+  letter,
+  language,
+  source = 'taught',
+}) => deterministicDomainId(
+  'letter_mastery',
+  userId,
+  childId,
+  programmeId,
+  letter,
+  language,
+  source || 'taught'
+);
+
 export const ensureServerUuid = (id, ...fallbackParts) => {
   if (uuidValidate(id)) return id;
   if (fallbackParts.length === 1 && uuidValidate(fallbackParts[0])) {

@@ -28,6 +28,7 @@ import {
   assessmentItemDomainId,
   ensureServerUuid,
   LEGACY_PROGRAMME_ID,
+  letterMasteryDomainId,
   sessionAttendeeDomainId,
 } from '../db/repositories/domainRepositoryUtils';
 
@@ -288,6 +289,20 @@ const buildSyncPayload = (tableName, record) => {
         isCorrect: payload.is_correct,
       })
     );
+  }
+  // letter_mastery's identity is its logical key. Force the deterministic id on every push so a
+  // pre-fix random local id (OTA-updated device) still lands on the canonical server row, and
+  // every device/install agrees on the id — making insert-by-id idempotent (no 23505 to repair).
+  // Unlike ensureServerUuid (which passes a valid random uuid through), this always derives it.
+  if (tableName === 'letter_mastery' && payload.id) {
+    payload.id = letterMasteryDomainId({
+      userId: payload.user_id,
+      childId: payload.child_id,
+      programmeId: payload.programme_id,
+      letter: payload.letter,
+      language: payload.language,
+      source: payload.source || 'taught',
+    });
   }
   return payload;
 };

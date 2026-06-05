@@ -102,15 +102,26 @@ export default function LetterTrackerScreen({ route }) {
 
     try {
       if (taughtLetters[letter]) {
-        // Currently green -> toggle OFF (soft-delete)
-        const recordId = taughtLetters[letter];
-        await masteryRepository.updateLetterMasteryRecord(recordId, {
-          _deleted: true,
-          synced: false,
-          updated_at: new Date().toISOString(),
+        // Currently green -> toggle OFF (soft-delete). Re-resolve the active row by its logical
+        // key rather than trusting the cached id: that id can drift under us (deterministic-id
+        // canonicalisation, or a background canonical-id adoption renaming the row), and a stale
+        // id would make the update a silent no-op, leaving the letter mastered.
+        const allMastery = await masteryRepository.getLetterMastery({
+          userId: user.id,
+          childId: child.id,
         });
-        await refreshSyncStatus();
-        triggerBackgroundSync?.();
+        const active = allMastery.find(
+          r => r.child_id === child.id && r.letter === letter && r.language === letterSet.language && !r._deleted
+        );
+        if (active) {
+          await masteryRepository.updateLetterMasteryRecord(active.id, {
+            _deleted: true,
+            synced: false,
+            updated_at: new Date().toISOString(),
+          });
+          await refreshSyncStatus();
+          triggerBackgroundSync?.();
+        }
         setTaughtLetters(prev => {
           const next = { ...prev };
           delete next[letter];
@@ -150,10 +161,12 @@ export default function LetterTrackerScreen({ route }) {
             created_at: new Date().toISOString(),
             updated_at: new Date().toISOString(),
           };
-          await masteryRepository.saveLetterMasteryRecord(record);
+          // saveLetterMasteryRecord canonicalises the id (deterministic logical-key id), so
+          // track the returned id — not the discarded local uuid — or toggle-off no-ops.
+          const savedId = await masteryRepository.saveLetterMasteryRecord(record);
           await refreshSyncStatus();
           triggerBackgroundSync?.();
-          setTaughtLetters(prev => ({ ...prev, [letter]: record.id }));
+          setTaughtLetters(prev => ({ ...prev, [letter]: savedId }));
         }
       }
     } catch (error) {
