@@ -25,14 +25,32 @@ export const assessmentItemDomainId = ({
   position,
   isCorrect,
 }) => {
-  const key = position ?? itemKey;
+  // Pre-ADR-0004 shape used `position ?? itemKey`, dropping itemKey
+  // whenever position was present. That collapsed EA/HQ Q11 rubric rows
+  // (same position, different item_key prefix) into the same ID, and
+  // also let two different letters at the same Pattern A position
+  // collide. The fix: include itemKey in the hash whenever position is
+  // present so the ea:/hq: prefix and letter content participate.
+  //
+  // Rows that have ONLY item_key (e.g. the SUMMARY_ITEM_KEY row with no
+  // position and no isCorrect) keep the legacy 3-arg shape so already
+  // persisted summary rows retain their stored IDs.
+  if (position == null) {
+    if (isCorrect === true) {
+      return deterministicDomainId('assessment_items', assessmentId, itemKey, 'correct');
+    }
+    if (isCorrect === false) {
+      return deterministicDomainId('assessment_items', assessmentId, itemKey, 'incorrect');
+    }
+    return deterministicDomainId('assessment_items', assessmentId, itemKey);
+  }
   if (isCorrect === true) {
-    return deterministicDomainId('assessment_items', assessmentId, key, 'correct');
+    return deterministicDomainId('assessment_items', assessmentId, position, itemKey, 'correct');
   }
   if (isCorrect === false) {
-    return deterministicDomainId('assessment_items', assessmentId, key, 'incorrect');
+    return deterministicDomainId('assessment_items', assessmentId, position, itemKey, 'incorrect');
   }
-  return deterministicDomainId('assessment_items', assessmentId, key);
+  return deterministicDomainId('assessment_items', assessmentId, position, itemKey);
 };
 
 export const ensureServerUuid = (id, ...fallbackParts) => {
