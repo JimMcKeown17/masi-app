@@ -3,12 +3,75 @@ jest.mock('expo-sqlite', () => require('../test-support/expoSQLiteMock'));
 import { runMigrations } from '../src/db/migrations';
 import { createChildrenRepository } from '../src/db/repositories/childrenRepository';
 import { createMasteryRepository } from '../src/db/repositories/masteryRepository';
+import { letterMasteryDomainId } from '../src/db/repositories/domainRepositoryUtils';
 import {
   createMigratedDatabase,
   seedCoreData,
 } from '../test-support/sqliteRepositoryTestUtils';
 
 describe('masteryRepository', () => {
+  test('new mastery rows get a deterministic id from the logical key (ignoring a caller-supplied random id)', async () => {
+    const db = await createMigratedDatabase(runMigrations);
+
+    try {
+      await seedCoreData(db);
+      await createChildrenRepository({ database: db }).save({
+        id: 'child-1', first_name: 'Amahle', last_name: 'Dlamini', class_id: 'class-1', created_by: 'user-1', synced: false,
+      }, { actorUserId: 'user-1' });
+
+      const repository = createMasteryRepository({ database: db });
+      await repository.saveLetterMasteryRecord({
+        id: 'caller-supplied-random-id',
+        user_id: 'user-1', child_id: 'child-1', programme_id: 'programme-a',
+        letter: 'a', language: 'isiXhosa', source: 'taught', synced: false,
+      });
+
+      const expectedId = letterMasteryDomainId({
+        userId: 'user-1', childId: 'child-1', programmeId: 'programme-a',
+        letter: 'a', language: 'isiXhosa', source: 'taught',
+      });
+      expect(await db.getFirstAsync('select id from letter_mastery where deleted_at is null'))
+        .toEqual({ id: expectedId });
+    } finally {
+      await db.closeAsync();
+    }
+  });
+
+  test('returns the canonical id so a later toggle-off targets the persisted row (not the discarded caller id)', async () => {
+    const db = await createMigratedDatabase(runMigrations);
+
+    try {
+      await seedCoreData(db);
+      await createChildrenRepository({ database: db }).save({
+        id: 'child-1', first_name: 'Amahle', last_name: 'Dlamini', class_id: 'class-1', created_by: 'user-1', synced: false,
+      }, { actorUserId: 'user-1' });
+
+      const repository = createMasteryRepository({ database: db });
+      const expectedId = letterMasteryDomainId({
+        userId: 'user-1', childId: 'child-1', programmeId: 'programme-a',
+        letter: 'a', language: 'isiXhosa', source: 'taught',
+      });
+
+      const savedId = await repository.saveLetterMasteryRecord({
+        id: 'caller-random-id', user_id: 'user-1', child_id: 'child-1', programme_id: 'programme-a',
+        letter: 'a', language: 'isiXhosa', source: 'taught', synced: false,
+      });
+      expect(savedId).toBe(expectedId);
+
+      // Toggle-off via the returned id soft-deletes the persisted row.
+      expect(await repository.updateLetterMasteryRecord(savedId, {
+        _deleted: true, synced: false, updated_at: '2026-05-22T00:00:00.000Z',
+      })).toBe(true);
+      expect((await db.getFirstAsync('select deleted_at from letter_mastery where id = ?', savedId)).deleted_at)
+        .toEqual(expect.any(String));
+
+      // The discarded caller id matches no row — a caller that kept it would silently no-op.
+      expect(await repository.updateLetterMasteryRecord('caller-random-id', { _deleted: true })).toBe(false);
+    } finally {
+      await db.closeAsync();
+    }
+  });
+
   test('letter mastery uses its natural active key and allows re-teach after soft delete', async () => {
     const db = await createMigratedDatabase(runMigrations);
 
@@ -24,6 +87,10 @@ describe('masteryRepository', () => {
       }, { actorUserId: 'user-1' });
 
       const repository = createMasteryRepository({ database: db });
+      const masteryId = letterMasteryDomainId({
+        userId: 'user-1', childId: 'child-1', programmeId: 'programme-a',
+        letter: 'a', language: 'isiXhosa', source: 'taught',
+      });
       await repository.saveLetterMasteryRecord({
         id: 'mastery-1',
         user_id: 'user-1',
@@ -46,12 +113,14 @@ describe('masteryRepository', () => {
         synced: false,
       });
 
+      // Dedup by natural key: one active row under the deterministic id, latest mastered_at.
       expect(await db.getFirstAsync('select count(*) as count from letter_mastery where deleted_at is null'))
         .toEqual({ count: 1 });
       expect(await db.getFirstAsync('select id, mastered_at from letter_mastery where deleted_at is null'))
-        .toEqual({ id: 'mastery-1', mastered_at: '2026-05-21T09:00:00.000Z' });
+        .toEqual({ id: masteryId, mastered_at: '2026-05-21T09:00:00.000Z' });
 
-      await repository.updateLetterMasteryRecord('mastery-1', {
+      // Soft-delete then re-teach: the canonical row is reused (un-deleted), not duplicated.
+      await repository.updateLetterMasteryRecord(masteryId, {
         _deleted: true,
         synced: false,
         updated_at: '2026-05-22T00:00:00.000Z',
@@ -67,10 +136,9 @@ describe('masteryRepository', () => {
         synced: false,
       });
 
-      expect(await repository.getLetterMastery()).toEqual(expect.arrayContaining([
-        expect.objectContaining({ id: 'mastery-1', _deleted: true }),
-        expect.objectContaining({ id: 'mastery-2', _deleted: false }),
-      ]));
+      expect(await repository.getLetterMastery()).toEqual([
+        expect.objectContaining({ id: masteryId, _deleted: false }),
+      ]);
     } finally {
       await db.closeAsync();
     }
@@ -137,10 +205,10 @@ describe('masteryRepository', () => {
         synced: false,
       });
 
-      expect((await repository.getLetterMastery()).map(record => record.id))
-        .toEqual(['mastery-literacy', 'mastery-numeracy']);
+      expect((await repository.getLetterMastery()).map(record => record.programme_id).sort())
+        .toEqual(['programme-a', 'programme-b']);
       expect(await repository.getLetterMastery({ userId: 'user-1' })).toEqual([
-        expect.objectContaining({ id: 'mastery-literacy', programme_id: 'programme-a' }),
+        expect.objectContaining({ programme_id: 'programme-a' }),
       ]);
     } finally {
       await db.closeAsync();
