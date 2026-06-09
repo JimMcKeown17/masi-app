@@ -157,12 +157,27 @@ For the SQLite backend, use canonical Supabase CLI migrations under `supabase/mi
 ### Supabase Backends — Keep The CLI On SQLite
 
 Two Supabase projects exist:
-- `masi-app-sqlite` — current forward backend, ref `segygjzpujphwvrubusm` (the repo is `supabase link`ed to this one)
-- `masi-app` — legacy pre-SQLite backend, ref `jcqrlwetutnpuchjoyyd`; do not use for new mobile work unless the user explicitly asks for legacy-backend maintenance
+- `masi-app-sqlite` — **current forward backend**, ref `segygjzpujphwvrubusm` (the repo is `supabase link`ed to this one). This is the dev/staging + future-production backend for the new SQLite build. **As of 2026-06-09 it has NO field users** — the deployed field app still runs on the legacy backend (below), so `masi-app-sqlite` data is dev/test data you can wipe freely without coordinating with field staff.
+- `masi-app` — **legacy pre-SQLite backend**, ref `jcqrlwetutnpuchjoyyd`. **This is what the deployed field app is still writing to.** Do not use for new mobile work unless the user explicitly asks for legacy-backend maintenance.
 
-`.env.local` may still carry the old `masi-app` connection (`MASI_SUPABASE_URL` / `EXPO_PUBLIC_SUPABASE_URL` resolve to `jcqrlwetutnpuchjoyyd`). The SQLite app selects `masi-app-sqlite` via `config/supabaseProjectConfig.js`.
+**Which backend is which — three places, three different defaults, so always check the ref (`segygjzpujphwvrubusm` = sqlite, `jcqrlwetutnpuchjoyyd` = legacy):**
+- **The repo `supabase link`** → `masi-app-sqlite` ✅. So `supabase ... --linked` (and the `npm run sqlite:staging:*` scripts) hit the SQLite backend.
+- **`.env.local`** → may carry the legacy connection (`MASI_SUPABASE_URL` / `EXPO_PUBLIC_SUPABASE_URL` resolve to `jcqrlwetutnpuchjoyyd`). The SQLite app instead selects `masi-app-sqlite` via `config/supabaseProjectConfig.js`.
+- **The Supabase MCP server** → pinned to the **LEGACY** ref in its URL (`https://mcp.supabase.com/mcp?project_ref=jcqrlwetutnpuchjoyyd`) ⚠️. **Do NOT use the Supabase MCP for `masi-app-sqlite` work** — `execute_sql`/`apply_migration` through it hit the *legacy* backend. Verify the ref before authenticating/using it.
 
-Trap: running the `supabase` CLI with `.env.local` injected into its environment, such as through a `dotenv` wrapper, can make the CLI pick up the legacy project connection and silently query the wrong backend, even when `--linked` is passed. Run `supabase db query --linked` plainly instead; `--linked` resolves `masi-app-sqlite` through the CLI's own auth. Do not inject `.env.local` into `supabase` CLI commands.
+**How to run ad-hoc SQL against `masi-app-sqlite` (read-only preflights, verification, disposable-data cleanup — NOT DDL; schema changes go through migrations):**
+```
+npm run sqlite:staging:query -- "select count(*) from letter_mastery;"
+# or:  node scripts/sqlite-staging.cjs query "delete from letter_mastery;"
+```
+The `query` action (in `scripts/sqlite-staging.cjs`) reads the DB password from `.env`/`.env.local` and builds a clean command env that only ever targets `masi-app-sqlite` via `--linked`. It needs the CLI to be logged in (`supabase login`).
+
+**Auth gotchas behind a `401 Unauthorized` from `db query`/`projects list` (it's the access token, not the DB password):**
+- A **stale `SUPABASE_ACCESS_TOKEN` env var** (often exported from a shell profile) **silently overrides `supabase login`** — the CLI trusts the env var first, so a fresh login "doesn't take." Fix: `unset SUPABASE_ACCESS_TOKEN` (or refresh it to a valid token), then re-run.
+- A **non-interactive shell** (e.g. an agent's Bash, CI without a token) often **can't reach the keychain** where `supabase login` stores the token, so it 401s even when your own terminal works. Run `db query`/cleanup in the **same interactive terminal where you logged in**.
+- Always verify the target before a write: the command summary prints `project_ref=` — confirm `segygjzpujphwvrubusm` (sqlite), not `jcqrlwetutnpuchjoyyd` (legacy).
+
+Trap: running the `supabase` CLI with `.env.local` injected into its environment (e.g. a `dotenv` wrapper) can make the CLI pick up the legacy connection and silently query the wrong backend even with `--linked`. Don't inject `.env.local` into `supabase` commands — use `--linked` (or the `sqlite:staging:query` helper, which does this correctly).
 
 ### EAS Builds — Environment Variables Not in `.env.local`
 `process.env.EXPO_PUBLIC_*` variables from `.env.local` are NOT available in EAS cloud builds. Public values (Supabase URL, anon key) must also be available through Expo config `extra` with a fallback in the client. The SQLite app uses `app.config.js` with explicit Supabase target guardrails.

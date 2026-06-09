@@ -23,6 +23,7 @@ const ACTIONS = new Set([
   'db-push-dry-run',
   'db-push',
   'advisors',
+  'query',
   'start',
   'ios',
   'android',
@@ -129,7 +130,7 @@ const buildCommandEnv = (env) => ({
   ...buildAndroidSdkEnv(),
 });
 
-const buildCommandPlan = (action, env) => {
+const buildCommandPlan = (action, env, options = {}) => {
   validateSqliteEnv(env);
   const commandEnv = buildCommandEnv(env);
   const safeSummary = [
@@ -181,6 +182,19 @@ const buildCommandPlan = (action, env) => {
         env: commandEnv,
         safeSummary,
       };
+    case 'query':
+      // Run an ad-hoc SQL statement against masi-app-sqlite ONLY (--linked resolves it; the
+      // clean command env never carries the legacy connection). For read-only preflights,
+      // verification, and disposable-data cleanup — NOT for DDL/schema changes (use migrations).
+      if (!options.sql) {
+        throw new Error('sqlite staging "query" requires a SQL string, e.g. `node scripts/sqlite-staging.cjs query "select 1"`');
+      }
+      return {
+        command: 'supabase',
+        args: ['db', 'query', '--linked', options.sql],
+        env: commandEnv,
+        safeSummary,
+      };
     case 'start':
       return {
         command: 'npx',
@@ -207,7 +221,7 @@ const buildCommandPlan = (action, env) => {
   }
 };
 
-const runAction = (action, { cwd = process.cwd() } = {}) => {
+const runAction = (action, { cwd = process.cwd(), sql } = {}) => {
   if (!ACTIONS.has(action)) {
     throw new Error(`Unknown sqlite staging action "${action}".`);
   }
@@ -224,7 +238,7 @@ const runAction = (action, { cwd = process.cwd() } = {}) => {
     return 0;
   }
 
-  const plan = buildCommandPlan(action, env);
+  const plan = buildCommandPlan(action, env, { sql });
   console.log(plan.safeSummary.join('\n'));
 
   const result = spawnSync(plan.command, plan.args, {
@@ -246,7 +260,7 @@ const runAction = (action, { cwd = process.cwd() } = {}) => {
 if (require.main === module) {
   try {
     const action = process.argv[2] || 'check';
-    process.exitCode = runAction(action);
+    process.exitCode = runAction(action, { sql: process.argv[3] });
   } catch (error) {
     console.error(error.message);
     process.exitCode = 1;

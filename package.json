@@ -13,6 +13,7 @@
     "sqlite:staging:dry-run": "node scripts/sqlite-staging.cjs db-push-dry-run",
     "sqlite:staging:push": "node scripts/sqlite-staging.cjs db-push",
     "sqlite:staging:advisors": "node scripts/sqlite-staging.cjs advisors",
+    "sqlite:staging:query": "node scripts/sqlite-staging.cjs query",
     "sqlite:staging:start": "node scripts/sqlite-staging.cjs start",
     "sqlite:staging:ios": "node scripts/sqlite-staging.cjs ios",
     "sqlite:staging:android": "node scripts/sqlite-staging.cjs android",
