@@ -77,7 +77,7 @@ withTransaction(task) → withDatabaseAccess(async () => {     // existing queue
 The two-connection model is only sound if **every** write goes through the writer. A Codex pass caught that the live code violates this today: `storage.ensureSchoolExists`/`ensureClassExists` (`storage.js:42-64`) call `upsertRecord(db, …)` on a `resolveDatabase()` (reader) handle, and `storage.clearDomainData` (`storage.js:527-547`) runs 18 autocommit `db.runAsync('delete …')` directly on the reader. `upsertRecord` executes a raw `INSERT…ON CONFLICT` on whatever connection it is handed (`sqliteRepositoryUtils.js`). Under a naïve split these keep writing on the reader — two connections contending for the WAL write lock (the storm reborn) and running with FK **off** (inconsistent enforcement). This is a **first-class requirement of the slice**, not an audited-away risk:
 
 - **Enforce read-only at the engine:** `PRAGMA query_only = ON` on the reader makes any stray write **throw immediately**, surfacing every offending path in dev/tests instead of silently writing on the wrong connection — and keeping future code honest.
-- **Exhaustive write-path audit:** ~15 `resolveDatabase()`/`getDatabase()` call sites across 5 files (`storage.js`, `ClassesContext.js`, `repositoryRuntime.js`, `sessionsTodayGoal.js`, `activeProgrammeGate.js`). Classify each as read (stays) or write (moves). Route every write through `withTransaction` (the writer).
+- **Exhaustive write-path audit — driven by "every write," not "the files I grepped."** Beyond the domain-write sites, this **must** include `localStateRepository.set/remove/clear` (`localStateRepository.js:15-39` — direct `db.runAsync` on a resolved handle, used by `storage` for user profile, cached payloads, and sync queue/meta) and `stateRepository.updateSyncMeta`. These run *during* sync and frequently; if the audit scopes to domain files only, they start throwing the moment the reader is `query_only` (Codex pass 3 — user-visible profile/cache/sync-state failures). Classify each `resolveDatabase()`/`getDatabase()` site as read (stays) or write (moves to `withTransaction`); the `query_only` reader is what guarantees the audit was exhaustive (any miss throws in tests).
 - **`clearDomainData` becomes one writer transaction** (atomic wipe) rather than 18 autocommit deletes; handle FK ordering with leaf-first deletes or `PRAGMA defer_foreign_keys=ON` inside the transaction.
 - **Guard test:** assert a write attempted on the reader handle throws (`query_only`), and a static/grep check that no write helper (`upsertRecord`, `runAsync` INSERT/UPDATE/DELETE) runs outside a writer transaction.
 
@@ -95,9 +95,11 @@ The production engine is created **without** an injected `database` (`offlineSyn
 
 ## Section B — The two sync behaviors
 
-### B1 · CAS-preserving bulk finalize (item 1)
+### B1 · CAS-preserving bulk finalize (item 1) — all outcomes, not just success
 
-Today `processBatch` finalizes with `Promise.all(inFlightRecords.map(finalizeSuccess))` — N transactions (`offlineSync.js:668-675`). New `finalizeManySuccess(records)` opens **one `withTransaction` per chunk of ≤200** and runs the *existing* per-row CAS delete + `setDomainSyncResult` + `restorePendingAfterStaleFinalize` fallback **inside** it. Same predicate (`WHERE id=? AND updated_at=? AND status='in_flight'`), same fallback — only the transaction boundary moves (per Codex's review: the win is one transaction/connection, **not** one SQL statement; do **not** copy the companion's plain `DELETE … WHERE id IN (…)`, which dropped the CAS).
+Today `processBatch` finalizes with `Promise.all(inFlightRecords.map(finalizeSuccess))` — N transactions (`offlineSync.js:668-675`). New chunked finalizers open **one `withTransaction` per chunk of ≤200** and run the *existing* per-row CAS predicate + `setDomainSyncResult` + `restorePendingAfterStaleFinalize` fallback **inside** it. Same predicate (`WHERE id=? AND updated_at=? AND status='in_flight'`), same fallback — only the transaction boundary moves (per Codex pass 1: the win is one transaction/connection, **not** one SQL statement; do **not** copy the companion's plain `DELETE … WHERE id IN (…)`, which dropped the CAS).
+
+**All three finalize outcomes get a chunked variant, not just success** (Codex pass 3): `finalizeManySuccess`, **`finalizeManyRetriableFailure(records, reason)`**, and `finalizeManyTerminalFailure(records, reason)`. The retriable variant is the load-bearing one: the batch *failure* path (B4) is exactly where a flaky network throws on a 200-row chunk, and finalizing those per-row would recreate the storm **on the degraded path where it's most likely**. Every bulk finalize path must be O(chunks) transactions, verified by a BEGIN-count regression test on *both* the success and thrown-failure paths.
 
 **Why both the writer *and* batching are needed — they fix different costs:**
 - The persistent writer collapses the **connection** storm (1 connection, ever).
@@ -113,14 +115,15 @@ Extend `BATCHABLE_UPSERT_TABLES` (currently only `assessment_items` — `offline
 
 **The sync-contract completeness guard (resolves the review's "data drops silently" concern — with a corrected premise).** A Codex pass flagged that `SERVER_COLUMNS.sessions` (`offlineSync.js:56-58`) omits `sessions.group_id` and `sessions.state`. Verified: this is **deliberate, not a leak** — `supabase/migrations/20260529214500_masi_sessions_forward_prep_columns.sql` adds RLS policies `WITH CHECK (state = 'completed' AND group_id IS NULL)` that *reject* any client write setting those columns, and its comment states the client must not push them until a future state-machine slice (which "MUST drop both guard policies"). Batching `sessions` therefore introduces no data loss — the same allowlist applies to batched and single upserts. **But** the exclusion is undocumented in code and unprotected against future drift. So this slice adds:
 
-- An `INTENTIONALLY_UNSYNCED` map (table → {column → reason}), seeded with `sessions.group_id` and `sessions.state`, each citing the forward-prep migration and the state-machine slice that will move them into `SERVER_COLUMNS`.
-- A **completeness test** (C3): for every table in `PUSH_ORDER`, every column in the local schema (parsed from `migrations.js`, reusing the pattern in `__tests__/sessionsForwardPrepSupabaseMigration.test.js:12`) must be in `SERVER_COLUMNS` **or** `INTENTIONALLY_UNSYNCED`. This converts a silent, tribal-knowledge exclusion into an explicit, test-enforced one, and is the right-scoped sliver of the top-10 item-8 schema-drift test. (Full server-side drift coverage stays out of scope.)
+- An `INTENTIONALLY_UNSYNCED` map (table → {column → reason}), seeded with `sessions.group_id` and `sessions.state`, each citing the forward-prep migration and the state-machine slice that will move them into `SERVER_COLUMNS`. **Reserved strictly for real server columns deliberately withheld from push** — not a dumping ground.
+- A `LOCAL_ONLY_COLUMNS` set seeded from the existing stripped bookkeeping keys (`LOCAL_ONLY_KEYS_TO_STRIP` — `offlineSync.js:37`: `sync_status`, `last_sync_error`, `server_updated_at`, …, intersected with actual schema columns), because local synced tables carry bookkeeping columns the engine strips before push (Codex pass 3 — without this the test is noisy or forces bookkeeping fields into `INTENTIONALLY_UNSYNCED`).
+- A **completeness test** (C3): for every table in `PUSH_ORDER`, every column in the local schema (parsed from `migrations.js`, reusing the pattern in `__tests__/sessionsForwardPrepSupabaseMigration.test.js:12`) must be in **`SERVER_COLUMNS` ∪ `INTENTIONALLY_UNSYNCED` ∪ `LOCAL_ONLY_COLUMNS`** — and a column may live in only one of the three. This converts a silent, tribal-knowledge exclusion into an explicit, test-enforced one, and is the right-scoped sliver of the top-10 item-8 schema-drift test. (Full server-side drift coverage stays out of scope.)
 
 ### B4 · Batch failure semantics (item 2, completes the per-record guard)
 
 `processBatch` marks **all** member ids in-flight (`offlineSync.js:651`) before the server call. The B3 per-record guard ("fail *that record*") is therefore insufficient for a batch: a thrown error (fetch/queue/payload, not a returned Supabase error) after `markInFlight` would otherwise leave *every* member stranded in-flight until the next pass's `resetInFlight`. Explicit semantics:
 
-- `processBatch` wraps the server call **and** finalize in its own `try/catch`. On any thrown error after `markInFlight`, it finalizes **every fetched in-flight member** as a retriable failure (`finalizeRetriableFailure` with `last_error`) and **returns one result per input record**, so `applyRecordResult` (`offlineSync.js:702-719`) stays correct.
+- `processBatch` wraps the server call **and** finalize in its own `try/catch`. On any thrown error after `markInFlight`, it finalizes **every fetched in-flight member** via the chunked **`finalizeManyRetriableFailure`** (B1) — O(chunks), *not* per-row — with `last_error`, and **returns one result per input record**, so `applyRecordResult` (`offlineSync.js:702-719`) stays correct. (Per-row finalize here would re-create the storm on the failure path.)
 - The syncAll-loop guard (B3) remains the outer net for `processRecord` and for any throw escaping `processBatch` itself.
 
 ### B3 · Convergence fixes (item 2)
@@ -170,7 +173,7 @@ Deliverable: a checklist of verified paths + tests (positive: correct order comm
 - **Re-entrancy guard:** nested `withTransaction` throws the clear error.
 - `resetDatabaseConnectionForTests` closes both connections.
 - **Pragma assertion:** `PRAGMA foreign_keys` / `busy_timeout` read inside a `withTransaction` callback return the writer's values — *this is the test that would have caught today's leak.*
-- **Reader is read-only:** a write attempted on the reader handle throws (`query_only=ON`); `clearDomainData` runs as a single writer transaction (assert one transaction, all tables empty after).
+- **Reader is read-only:** a write attempted on the reader handle throws (`query_only=ON`); `localStateRepository.set/remove/clear` and `updateSyncMeta` still succeed under `query_only` (proving they moved to the writer); `clearDomainData` runs as a single writer transaction (assert one transaction, all tables empty after).
 
 **Bulk finalize / storm regression:**
 - N outbox rows finalize in ⌈N/200⌉ transactions (spy on `withTransaction`/count `BEGIN`s) — proves the storm fix.
@@ -191,7 +194,7 @@ Deliverable: a checklist of verified paths + tests (positive: correct order comm
 
 1. Persistent writer connection: `foreign_keys=ON` (post-migration) + `busy_timeout=5000`, verified by a pragma-inside-transaction test.
 2. **No `withExclusiveTransactionAsync` remains in any app or migration write path**; migrations use manual `BEGIN/COMMIT` with FK off during migration, on after.
-3. Bulk finalize preserves the `(id, updated_at, status='in_flight')` CAS + restore-on-stale fallback; a sync pass of N records uses O(N/chunk) transactions (regression test).
+3. Bulk finalize preserves the `(id, updated_at, status='in_flight')` CAS + restore-on-stale fallback, for **all outcomes** (`finalizeManySuccess`/`finalizeManyRetriableFailure`/`finalizeManyTerminalFailure`); both a successful pass **and a thrown-batch-failure pass** of N records use O(N/chunk) transactions (BEGIN-count regression test on each).
 4. Batched upserts extended to `letter_mastery`/`session_attendees`/`sessions`/`time_entries`; `rls-sync-contract-map.md` updated.
 5. Backoff capped at 15 min; manual "Sync Now" bypasses backoff; `retryFailedItem` resets `retry_count`.
 6. Per-record error guard: a thrown error fails only that record, the pass continues, sync meta is always written.
@@ -199,9 +202,9 @@ Deliverable: a checklist of verified paths + tests (positive: correct order comm
 8. FK migration-order audit complete with positive + negative tests.
 9. Re-entrancy guard on `withTransaction` with a clear error + test.
 10. At least one device/emulator stress pass during heavy sync (large backlog) confirming no `database is locked` and that user writes (Finish Session) do not starve.
-11. `INTENTIONALLY_UNSYNCED` map added (seeded with `sessions.group_id`/`sessions.state` + reasons) and a completeness test asserting every `PUSH_ORDER` table's local columns are in `SERVER_COLUMNS` ∪ `INTENTIONALLY_UNSYNCED`.
-12. `processBatch` batch-failure semantics: a throw after `markInFlight` finalizes every member as retriable with `last_error` and returns one result per input record; covered by a mid-batch-throw test and a healthy-later-record test.
-13. **All writes go through the writer:** reader opened with `query_only=ON`; the ~15-site write-path audit complete with every write routed through `withTransaction`; `clearDomainData` runs as one writer transaction; guard test asserts a reader-handle write throws.
+11. `INTENTIONALLY_UNSYNCED` map (seeded `sessions.group_id`/`sessions.state` + reasons) **and** `LOCAL_ONLY_COLUMNS` (seeded from `LOCAL_ONLY_KEYS_TO_STRIP`); completeness test asserts every `PUSH_ORDER` table's local columns are in `SERVER_COLUMNS` ∪ `INTENTIONALLY_UNSYNCED` ∪ `LOCAL_ONLY_COLUMNS`, each column in exactly one set.
+12. `processBatch` batch-failure semantics: a throw after `markInFlight` finalizes every member via chunked `finalizeManyRetriableFailure` (O(chunks)) with `last_error` and returns one result per input record; covered by a mid-batch-throw test (incl. BEGIN count) and a healthy-later-record test.
+13. **All writes go through the writer:** reader opened with `query_only=ON`; the write-path audit covers domain writes **plus `localStateRepository.set/remove/clear` and `updateSyncMeta`**, all routed through `withTransaction`; `clearDomainData` runs as one writer transaction; tests assert a reader-handle write throws **and** that local-state writes still succeed under `query_only`.
 
 ### C5 · Risks & mitigations
 
