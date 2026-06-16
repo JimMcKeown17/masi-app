@@ -20,13 +20,13 @@ Masi's offline sync engine has a latent, field-breaking reliability bug and thre
 **The convergence traps (item 2).**
 1. Retry backoff is `5000·3ⁿ` uncapped (`offlineSync.js:240-242`): ~3.4 days after 10 failures. Manual "Sync Now" does not bypass `next_retry_at`, and `retryFailedItem` resets status but not `retry_count` (`offlineSync.js:~800-820`).
 2. `syncAll`'s loop has no per-record `try/catch` (`offlineSync.js:721-774`): a *thrown* error (vs a returned Supabase error) aborts the rest of the pass and can permanently poison the queue.
-3. Dependency skipping is table-level (`failedTables` — `offlineSync.js:700,724-740`): one child failing retriably blocks every dependent record for *all* children that pass.
+3. Dependency skipping is table-level (`failedTables` — `offlineSync.js:700,724-740`): one child failing retriably blocks every dependent record for *all* children that pass. *(Review found this is deeper than a latency issue and exposed a pre-existing cross-pass orphan→terminal bug — both descoped to a dedicated follow-up slice; see B3.)*
 
 ## Goals / Non-Goals
 
-**Goals:** eliminate the connection storm at the root; apply pragmas to every write; enforce FK locally (fail-fast on orphan rows); make sync converge (bounded backoff, no poisoning, record-scoped dependencies); preserve the existing `(id, updated_at, status='in_flight')` CAS finalize that protects against the edit-during-flight data-loss bug.
+**Goals:** eliminate the connection storm at the root; apply pragmas to every write; enforce FK locally (fail-fast on orphan rows); make sync converge (bounded backoff, no queue poisoning from thrown errors); preserve the existing `(id, updated_at, status='in_flight')` CAS finalize that protects against the edit-during-flight data-loss bug.
 
-**Non-goals (this slice):** top-10 items 3–10; porting the companion's device-faithful `expoSQLiteRealEngine` test engine (flagged as the enabling follow-up); wiring `sessions.group_id` / `sessions.state` into sync (server-guarded out by design — see B2; lands with the future state-machine slice). A **scoped** sync-contract completeness test (covering the tables this slice touches) **is** in scope — see B2/C3.
+**Non-goals (this slice):** top-10 items 3–10; porting the companion's device-faithful `expoSQLiteRealEngine` test engine (flagged as the enabling follow-up); wiring `sessions.group_id` / `sessions.state` into sync (server-guarded out by design — see B2; lands with the future state-machine slice); **the dependency-skip redesign and the cross-pass orphan→terminal correctness fix** (descoped after review to a dedicated `dependency-ordering-and-orphan-prevention` slice — see B3). A **scoped** sync-contract completeness test (covering the tables this slice touches) **is** in scope — see B2/C3.
 
 ---
 
@@ -134,15 +134,16 @@ Extend `BATCHABLE_UPSERT_TABLES` (currently only `assessment_items` — `offline
 | Manual retry resets count | `retryFailedItem` also sets `retry_count = 0` | Already writes that row |
 | "Sync Now" bypass | thread a `force` flag `syncNow → syncAll → getReadyRecords` to include backed-off (`failed`, `next_retry_at` in future) rows | A deliberate tap on Wi-Fi drains everything |
 | Per-record error guard | wrap the loop body (`processRecord`/`processBatch`) in `try/catch` → fail the affected record(s) via `finalizeRetriableFailure` + `continue`; top-level `finally` always writes sync meta. For batches, the fan-out is handled inside `processBatch` (B4) | One *thrown* error no longer poisons the whole pass |
-| Dependency skip scope | **record-scoped via a new key extractor** (see below) | Correct fix over the cheaper "terminal-only-blocks" interim |
+| Dependency skip scope | **Descoped from this slice** — table-level skip stays as-is; see note | Five adversarial passes showed this is its own design problem, not a table row |
 
-**Dependency skipping — corrected design.** The Codex review caught a false assumption in an earlier draft: `dependenciesForRecord` (`offlineSync.js:203-226`) returns dependency **table names** only — it inspects payload ids merely to *include/exclude a dependency table* (e.g. drop `'groups'` when `session_attendees.group_id` is null), never to identify *which* parent row. The concrete parent keys are **not** available today. So record-scoped skipping requires new code:
+**Dependency skipping — DESCOPED to a dedicated follow-up slice (decision after 5 review passes).** This was originally item 2c, framed as a *convergence-latency* optimization (record-scope the skip so one failing child doesn't block every dependent table-wide for a pass). The adversarial loop produced three successive findings on it — (1) `dependenciesForRecord` returns table names, not parent ids, so record-scoping needs a new extractor; (2) same-pass transitivity must be preserved; (3) **a pre-existing cross-pass bug**: a dependent skipped in pass N stays `pending` (the skip branch writes no status — `offlineSync.js:726-740`), while its parent backs off and is excluded from `getReadyRecords` (`syncOutboxRepository.js:69-78`) in pass N+1, so the dependent pushes against an absent parent → FK `23503` → **terminal** (`offlineSync.js:256-262`). **Verified present in `main` today** — this is a latent data-integrity bug (healthy child data driven terminal), not one this slice introduces.
 
-- Add `dependencyKeysForRecord(record)` → concrete `(parent_table, parent_id)` keys from the payload, e.g. `session_attendees → [sessions:session_id, children:child_id, groups:group_id?]`, `assessment_items → [assessments:assessment_id]`, `children → [classes:class_id?]`.
-- Track a **`blockedKeys`** Set of `"table:id"` strings. Skip a dependent only if one of *its* parent keys ∈ `blockedKeys`.
-- **Transitive propagation is mandatory** (Codex pass 4): whenever a record **fails *or* is skipped**, add **its own** `table:id` key to `blockedKeys` before continuing. The current table-level code already does this (`failedTables.add(outboxRecord.table_name)` on skip — `offlineSync.js:738`); the key-scoped version must preserve it at key granularity. Otherwise a skipped `assessment(A)` leaves no `assessments:A` block, so `assessment_items(A)` later attempts to sync, the server rejects the orphan with FK `23503`, and `classifyError` marks it **terminal** (`offlineSync.js:256-262`) — turning a retryable grandparent failure into irreversible grandchild damage.
-- **Documented fallback:** a record whose payload lacks a usable parent id (or a table with no key extractor entry) falls back to the existing table-level block. List which tables fall back so the behavior is explicit, not accidental.
-- Effort: this is **more than a config tweak** (new extractor + key tracking + tests), heavier than the other item-2 fixes.
+Why descope rather than patch a third time:
+- It is the lowest-value item-2 fix (latency) but has become the highest-churn (3 of ~9 findings).
+- The *correct* fix is not the in-pass tracking I was iterating but a **stateless rule**: block a dependent while any of its parents still has an unsynced `sync_outbox` row (cross-pass-correct and transitive by construction, since skipped parents retain their outbox rows). That is a materially different, larger design than a reliability-slice line item.
+- The cross-pass bug is pre-existing, so leaving table-level skip untouched is **status-quo, not a regression** — the slice stays a strict net win.
+
+**Carried into the follow-up slice** (`dependency-ordering-and-orphan-prevention`, to be specced separately): the recommended parent-outbox-status model above; the verified cross-pass orphan→terminal bug; and the multi-hop regression test. This slice leaves `dependenciesForRecord`/`failedTables` exactly as they are.
 
 ---
 
@@ -186,8 +187,9 @@ Deliverable: a checklist of verified paths + tests (positive: correct order comm
 - **Batch failure fan-out (B4):** a thrown error mid-batch (after `markInFlight`) finalizes **every** member as `failed` with `last_error` (none left in-flight), and returns one result per input record; plus a healthy record *after* a throwing batch still syncs in the same pass.
 - Backoff cap unit test; `retryFailedItem` resets `retry_count`; `force` flag includes backed-off rows.
 - Per-record guard: outbox `[throwing record, healthy record]` → healthy syncs, throwing ends `failed` with `last_error`, pass completes, sync meta updated.
-- Record-scoped dependency skip (corrected) — **multi-hop**: `[failing child A, assessment(A), assessment_item(A), healthy child B, assessment(B)]` → A's *entire subtree* (assessment + item) is **skipped, not terminal**, while B syncs; verifies `blockedKeys` transitive propagation. Plus: documented-fallback tables still table-block.
 - FK: positive + negative ordering tests (C2).
+
+*(Dependency-skip behavior is unchanged this slice — no new dependency tests here. The multi-hop / cross-pass orphan→terminal regression test moves to the dedicated follow-up slice with the fix.)*
 
 **Coverage boundary (stated honestly):** better-sqlite3 is single-connection and synchronous, so unit tests exercise *transaction semantics* but **not** the two-connection isolation (reader snapshot during a writer transaction; FK/busy_timeout living on a *separate* writer). That behavior is validated by the device/emulator stress pass (AC #10). Porting the companion's `expoSQLiteRealEngine` (top-10 testing finding #4) would let two-connection behavior be tested off-device and is the recommended follow-up.
 
@@ -196,10 +198,10 @@ Deliverable: a checklist of verified paths + tests (positive: correct order comm
 1. Persistent writer connection: `foreign_keys=ON` (post-migration) + `busy_timeout=5000`, verified by a pragma-inside-transaction test.
 2. **No `withExclusiveTransactionAsync` remains in any app or migration write path**; migrations use manual `BEGIN/COMMIT` with FK off during migration, on after.
 3. Bulk finalize preserves the `(id, updated_at, status='in_flight')` CAS + restore-on-stale fallback, for **all outcomes** (`finalizeManySuccess`/`finalizeManyRetriableFailure`/`finalizeManyTerminalFailure`); both a successful pass **and a thrown-batch-failure pass** of N records use O(N/chunk) transactions (BEGIN-count regression test on each).
-4. Batched upserts extended to `letter_mastery`/`session_attendees`/`sessions`/`time_entries`; `rls-sync-contract-map.md` updated.
+4. Batched upserts extended to `letter_mastery`/`session_attendees`/`time_entries` (and `sessions` only if trivially consistent — low-volume); `rls-sync-contract-map.md` updated.
 5. Backoff capped at 15 min; manual "Sync Now" bypasses backoff; `retryFailedItem` resets `retry_count`.
 6. Per-record error guard: a thrown error fails only that record, the pass continues, sync meta is always written.
-7. Record-scoped dependency skipping via a new `dependencyKeysForRecord` key extractor + **`blockedKeys` tracking with transitive propagation** (a failed *or skipped* record adds its own key, so whole subtrees are skipped, never orphaned-terminal); documented table-level fallbacks; multi-hop regression test.
+7. Dependency skipping is **left unchanged** this slice (table-level `failedTables`); the descope is documented and the pre-existing cross-pass orphan→terminal bug + recommended parent-outbox-status fix are captured for the dedicated follow-up slice (B3).
 8. FK migration-order audit complete with positive + negative tests.
 9. Re-entrancy guard on `withTransaction` with a clear error + test.
 10. At least one device/emulator stress pass during heavy sync (large backlog) confirming no `database is locked` and that user writes (Finish Session) do not starve.
@@ -222,7 +224,7 @@ Deliverable: a checklist of verified paths + tests (positive: correct order comm
 1. Connection model + writer lifecycle + re-entrancy guard + **reader `query_only` + write-path audit/refactor (all writes → writer, `clearDomainData` → one transaction)** + pragma/rollback/serialization/read-only tests (Section A). *Foundational; the split is unsafe without the write-path audit, so they land together first.*
 2. CAS-preserving bulk finalize + storm regression test (B1).
 3. FK migration-order audit + positive/negative tests (C2) — pairs with step 1 turning FK on.
-4. Convergence fixes — backoff cap + manual bypass + per-record guard (B3), then the record-scoped dependency key extractor (B3, heavier) — independent of the connection work.
+4. Convergence fixes — backoff cap + manual bypass + per-record guard (B3) — independent of the connection work. (Dependency-skip redesign descoped — see B3.)
 5. `INTENTIONALLY_UNSYNCED` map + completeness test (B2 guard) — lands *before* extending `BATCHABLE_UPSERT_TABLES`, so the allowlist is proven complete first.
 6. Batched upserts (B2) + `processBatch` failure semantics (B4) + contract-map update — after B1 (so larger batches don't worsen finalize) and after step 5.
 7. Device/emulator stress pass (AC #10) — gate before merge.
