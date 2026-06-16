@@ -182,7 +182,22 @@ All Jest/integration commands are prefixed with `PATH=$HOME/.nvm/versions/node/v
   · `66ccb19` (writer-bootstrap dispose, Codex convergence).
 
 ### Task 5 — FK migration-order audit (positive + negative)
-_status: pending_
+**Status:** ✅ done
+
+- **What changed:** new `__tests__/foreignKeyEnforcement.test.js` (test-only — the audit found no production
+  mis-orders). NEGATIVE: an orphan `session_attendees` insert throws `FOREIGN KEY constraint failed` (proves
+  enforcement is genuinely ON after `runMigrations`). POSITIVE: drives the **real** flows — `seedCoreData` →
+  `childrenRepository.save` → `persistLiteracySession` (sessions→session_attendees→letter_mastery) →
+  `assessmentsRepository.saveAssessment` (assessments→assessment_items) — and asserts they commit with FK on.
+- **Audit:** all 4 write paths (literacySessionPersistence, assessments/children/classes repos) already write
+  parent→child. No reorders, no `defer_foreign_keys` needed (consistent with the flows already passing FK-on in
+  their sibling tests pre-slice).
+- **Codex adversarial-review:** `[medium]` — the POSITIVE assertions were `length>0` (smoke test): `saveAssessment`
+  always writes a `__summary__` item, so dropped per-letter rows would still pass. **Verified real. Fixed:**
+  exact-count + linked-parent-ID assertions (1 session/attendee/assessment; both `letter_mastery` rows a,m under
+  child-1; 3 `assessment_items` incl `__summary__`) — verified against the migrated schema, matched first try.
+- **Tests:** `foreignKeyEnforcement` 2/2; integration 13 suites / 111 tests green.
+- **Commits:** `edff21fb` (FK tests + audit) · `f9f0911` (Codex: exact-count strengthening).
 
 ## Phase 2 — Bulk finalize & batch failure semantics
 
