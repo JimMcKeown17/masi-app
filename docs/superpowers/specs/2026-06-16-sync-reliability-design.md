@@ -38,7 +38,7 @@ The deep module is `src/db/client.js`. Its public interface stays tiny (`getData
 
 | Connection | Lifetime | Pragmas | Used for |
 |---|---|---|---|
-| **Reader** (existing `databasePromise`) | lazy, app-lifetime | `busy_timeout=5000` | all unqueued `getAllAsync`/`getFirstAsync` reads |
+| **Reader** (existing `databasePromise`) | lazy, app-lifetime | `busy_timeout=5000`, **`query_only=ON`** | all unqueued `getAllAsync`/`getFirstAsync` reads |
 | **Writer** (new `writerPromise`) | lazy, app-lifetime | `foreign_keys=ON` (post-migration), `busy_timeout=5000` | every `withTransaction`, serialized by `databaseQueue` |
 
 `journal_mode=WAL` is database-level (persists in the file), set once on first open. `foreign_keys` and `busy_timeout` are **per-connection**, which is why a *persistent* writer fixes the leak permanently. WAL's one-writer/many-readers model makes this safe: readers on the main connection always see the last *committed* snapshot, never a half-written transaction — isolation is free.
@@ -71,6 +71,17 @@ withTransaction(task) → withDatabaseAccess(async () => {     // existing queue
 - `BEGIN IMMEDIATE` acquires the write lock at the start, avoiding deferred-to-immediate upgrade deadlocks.
 - **Re-entrancy guard:** Masi threads an existing txn downward (`repositoryRuntime.js:18` — `withTransaction(txn => task(txn || db))`) rather than nesting; SQLite forbids nested `BEGIN`. The guard throws a *clear* error instead of SQLite's opaque one if a caller ever re-enters.
 - `resetDatabaseConnectionForTests` closes and nulls **both** connections.
+
+### All writes go through the writer (enforced, not just audited)
+
+The two-connection model is only sound if **every** write goes through the writer. A Codex pass caught that the live code violates this today: `storage.ensureSchoolExists`/`ensureClassExists` (`storage.js:42-64`) call `upsertRecord(db, …)` on a `resolveDatabase()` (reader) handle, and `storage.clearDomainData` (`storage.js:527-547`) runs 18 autocommit `db.runAsync('delete …')` directly on the reader. `upsertRecord` executes a raw `INSERT…ON CONFLICT` on whatever connection it is handed (`sqliteRepositoryUtils.js`). Under a naïve split these keep writing on the reader — two connections contending for the WAL write lock (the storm reborn) and running with FK **off** (inconsistent enforcement). This is a **first-class requirement of the slice**, not an audited-away risk:
+
+- **Enforce read-only at the engine:** `PRAGMA query_only = ON` on the reader makes any stray write **throw immediately**, surfacing every offending path in dev/tests instead of silently writing on the wrong connection — and keeping future code honest.
+- **Exhaustive write-path audit:** ~15 `resolveDatabase()`/`getDatabase()` call sites across 5 files (`storage.js`, `ClassesContext.js`, `repositoryRuntime.js`, `sessionsTodayGoal.js`, `activeProgrammeGate.js`). Classify each as read (stays) or write (moves). Route every write through `withTransaction` (the writer).
+- **`clearDomainData` becomes one writer transaction** (atomic wipe) rather than 18 autocommit deletes; handle FK ordering with leaf-first deletes or `PRAGMA defer_foreign_keys=ON` inside the transaction.
+- **Guard test:** assert a write attempted on the reader handle throws (`query_only`), and a static/grep check that no write helper (`upsertRecord`, `runAsync` INSERT/UPDATE/DELETE) runs outside a writer transaction.
+
+This work lands **with** the connection split (sequencing step 1), because the split is unsafe without it.
 
 ### Path scope (verified)
 
@@ -159,6 +170,7 @@ Deliverable: a checklist of verified paths + tests (positive: correct order comm
 - **Re-entrancy guard:** nested `withTransaction` throws the clear error.
 - `resetDatabaseConnectionForTests` closes both connections.
 - **Pragma assertion:** `PRAGMA foreign_keys` / `busy_timeout` read inside a `withTransaction` callback return the writer's values — *this is the test that would have caught today's leak.*
+- **Reader is read-only:** a write attempted on the reader handle throws (`query_only=ON`); `clearDomainData` runs as a single writer transaction (assert one transaction, all tables empty after).
 
 **Bulk finalize / storm regression:**
 - N outbox rows finalize in ⌈N/200⌉ transactions (spy on `withTransaction`/count `BEGIN`s) — proves the storm fix.
@@ -189,6 +201,7 @@ Deliverable: a checklist of verified paths + tests (positive: correct order comm
 10. At least one device/emulator stress pass during heavy sync (large backlog) confirming no `database is locked` and that user writes (Finish Session) do not starve.
 11. `INTENTIONALLY_UNSYNCED` map added (seeded with `sessions.group_id`/`sessions.state` + reasons) and a completeness test asserting every `PUSH_ORDER` table's local columns are in `SERVER_COLUMNS` ∪ `INTENTIONALLY_UNSYNCED`.
 12. `processBatch` batch-failure semantics: a throw after `markInFlight` finalizes every member as retriable with `last_error` and returns one result per input record; covered by a mid-batch-throw test and a healthy-later-record test.
+13. **All writes go through the writer:** reader opened with `query_only=ON`; the ~15-site write-path audit complete with every write routed through `withTransaction`; `clearDomainData` runs as one writer transaction; guard test asserts a reader-handle write throws.
 
 ### C5 · Risks & mitigations
 
@@ -196,13 +209,13 @@ Deliverable: a checklist of verified paths + tests (positive: correct order comm
 |---|---|
 | FK-on surfaces latent write-ordering bugs | Audit + positive/negative tests; staff off the SQLite build → no field impact; finding them now is the point |
 | Two-connection behavior under-tested in Jest (single-conn adapter) | Explicit device stress pass (AC #10); flag `expoSQLiteRealEngine` port as follow-up |
-| A read path that secretly writes would now contend with the writer | Audit confirms reader paths are read-only |
+| Existing writes on the reader handle (`ensureSchoolExists`, `clearDomainData`, …) bypass the writer + FK | **Enforced** via `query_only=ON` on the reader (stray writes throw) + exhaustive write-path audit routing all writes through `withTransaction` (Section A) — first-class slice requirement, not just an audit |
 | Larger batches re-process more rows on a failed batch | Per-record fallback already exists; bounded by chunk size (≤200) |
 | Migration step coupled to writer init could deadlock if it self-re-enters `withTransaction` | Migrations use manual `BEGIN/COMMIT` directly on the writer handle, not `withTransaction` |
 
 ### C6 · Suggested sequencing (independently shippable commits)
 
-1. Connection model + writer lifecycle + re-entrancy guard + pragma/rollback/serialization tests (Section A). *Foundational; lands first.*
+1. Connection model + writer lifecycle + re-entrancy guard + **reader `query_only` + write-path audit/refactor (all writes → writer, `clearDomainData` → one transaction)** + pragma/rollback/serialization/read-only tests (Section A). *Foundational; the split is unsafe without the write-path audit, so they land together first.*
 2. CAS-preserving bulk finalize + storm regression test (B1).
 3. FK migration-order audit + positive/negative tests (C2) — pairs with step 1 turning FK on.
 4. Convergence fixes — backoff cap + manual bypass + per-record guard (B3), then the record-scoped dependency key extractor (B3, heavier) — independent of the connection work.
