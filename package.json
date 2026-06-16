@@ -54,6 +54,15 @@
     ],
     "setupFiles": [
       "./jest.setup.js"
+    ],
+    "testPathIgnorePatterns": [
+      "/node_modules/",
+      "/.claude/worktrees/",
+      "/.codex/worktrees/"
+    ],
+    "modulePathIgnorePatterns": [
+      "/.claude/worktrees/",
+      "/.codex/worktrees/"
     ]
   },
   "private": true,
