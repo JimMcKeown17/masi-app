@@ -153,9 +153,11 @@ describe('SQLite foundation client', () => {
       'enter-write',
       'inside-write',
       'exit-write',
+      // runMigrationsNow sets FK off before the migration loop and restores it
+      // in finally. configureDatabaseConnection is no longer called here; WAL and
+      // busy_timeout are only set once by client.js initializeDatabase.
+      'exec:PRAGMA foreign_keys = OFF',
       'exec:PRAGMA foreign_keys = ON',
-      'exec:PRAGMA journal_mode = WAL',
-      'exec:PRAGMA busy_timeout = 5000',
     ]);
   });
 });
@@ -221,38 +223,45 @@ const expectSqliteConstraintFailure = async (operation) => {
 describe('SQLite migration runner', () => {
   test('configures connection pragmas before migration execution and outside the transaction', async () => {
     const events = [];
+    // runInTransaction uses manual BEGIN/COMMIT on the supplied db connection —
+    // withExclusiveTransactionAsync is no longer used for migrations.
+    // The db itself is passed as txn, so runAsync must exist on the mock.
     const db = {
       execAsync: jest.fn(async (sql) => {
-        events.push(`exec:${sql}`);
+        if (/BEGIN IMMEDIATE/i.test(sql)) {
+          events.push('enter-migration-transaction');
+        } else if (/^COMMIT$/i.test(sql)) {
+          events.push('exit-migration-transaction');
+        } else if (/^ROLLBACK$/i.test(sql)) {
+          events.push('rollback-migration-transaction');
+        } else if (/PRAGMA user_version\s*=/i.test(sql)) {
+          events.push('txn:set-user-version');
+        } else if (/PRAGMA foreign_keys/i.test(sql)) {
+          events.push(`exec:${sql}`);
+        } else {
+          // Large migration SQL blocks.
+          events.push('txn:exec-migration-sql');
+        }
       }),
       getFirstAsync: jest.fn(async (sql) => {
         events.push(`get:${sql}`);
         return { user_version: 0 };
       }),
-      withExclusiveTransactionAsync: jest.fn(async (task) => {
-        events.push('enter-migration-transaction');
-        await task({
-          execAsync: jest.fn(async (sql) => {
-            events.push(/user_version/i.test(sql) ? 'txn:set-user-version' : 'txn:exec-migration-sql');
-          }),
-          runAsync: jest.fn(async () => {
-            events.push('txn:record-migration');
-          }),
-        });
-        events.push('exit-migration-transaction');
+      runAsync: jest.fn(async () => {
+        events.push('txn:record-migration');
       }),
     };
 
     await runMigrations(db);
 
     expect(events).toEqual([
-      // Connection pragmas are configured once, before any migration, outside the txn.
-      'exec:PRAGMA foreign_keys = ON',
-      'exec:PRAGMA journal_mode = WAL',
-      'exec:PRAGMA busy_timeout = 5000',
+      // FK enforcement is turned OFF before the migration loop and restored in finally.
+      // configureDatabaseConnection (WAL, busy_timeout) is no longer called here —
+      // it runs once in client.js initializeDatabase when the connection is opened.
+      'exec:PRAGMA foreign_keys = OFF',
       'get:PRAGMA user_version',
-      // Per pending migration: exec SQL, record it, and bump user_version — all
-      // INSIDE the transaction so the schema change and version marker are atomic.
+      // Per pending migration: BEGIN IMMEDIATE, exec SQL, record it, bump user_version, COMMIT.
+      // The db connection itself is passed as txn, so txn.execAsync === db.execAsync.
       'enter-migration-transaction',
       'txn:exec-migration-sql',
       'txn:record-migration',
@@ -268,6 +277,8 @@ describe('SQLite migration runner', () => {
       'txn:record-migration',
       'txn:set-user-version',
       'exit-migration-transaction',
+      // FK enforcement restored unconditionally in finally.
+      'exec:PRAGMA foreign_keys = ON',
     ]);
   });
 
@@ -577,30 +588,33 @@ describe('SQLite migration runner', () => {
     const releaseFirstMigration = createDeferred();
     const events = [];
     let userVersion = 0;
-    let transactionCount = 0;
+    let beginCount = 0;
+    // runInTransaction uses manual BEGIN IMMEDIATE/COMMIT — no withExclusiveTransactionAsync.
     const db = {
       execAsync: jest.fn(async (sql) => {
-        const match = /PRAGMA user_version = (\d+)/i.exec(sql);
-        if (match) {
-          userVersion = Number(match[1]);
-          events.push(`set-user-version-${match[1]}`);
+        if (/BEGIN IMMEDIATE/i.test(sql)) {
+          beginCount += 1;
+          const txnNumber = beginCount;
+          events.push(`enter-${txnNumber}`);
+          if (txnNumber === 1) {
+            firstMigrationEntered.resolve();
+          }
+          if (txnNumber === 1) {
+            await releaseFirstMigration.promise;
+          }
+        } else if (/^COMMIT$/i.test(sql)) {
+          events.push(`exit-${beginCount}`);
+        } else {
+          const match = /PRAGMA user_version = (\d+)/i.exec(sql);
+          if (match) {
+            userVersion = Number(match[1]);
+            events.push(`set-user-version-${match[1]}`);
+          }
+          // Other pragmas and migration SQL are silently accepted.
         }
       }),
       getFirstAsync: jest.fn(async () => ({ user_version: userVersion })),
       runAsync: jest.fn(async () => undefined),
-      withExclusiveTransactionAsync: jest.fn(async (task) => {
-        transactionCount += 1;
-        const transactionNumber = transactionCount;
-        events.push(`enter-${transactionNumber}`);
-        if (transactionNumber === 1) {
-          firstMigrationEntered.resolve();
-        }
-        await task(db);
-        if (transactionNumber === 1) {
-          await releaseFirstMigration.promise;
-        }
-        events.push(`exit-${transactionNumber}`);
-      }),
     };
 
     const first = runMigrations(db);
@@ -609,18 +623,17 @@ describe('SQLite migration runner', () => {
     await firstMigrationEntered.promise;
     // While the first run holds its migration transaction, the second concurrent
     // run is queued behind it on the app-level migration queue: no other
-    // transaction has been entered. (Asserting on transactionCount rather than the
+    // transaction has been entered. (Asserting on beginCount rather than the
     // event order keeps this robust now that user_version is bumped mid-transaction.)
-    expect(transactionCount).toBe(1);
+    expect(beginCount).toBe(1);
 
     releaseFirstMigration.resolve();
     await Promise.all([first, second]);
 
     // The first run applies all pending migrations (three transactions); the second
     // run is serialized behind it, sees user_version already current, and does nothing.
-    expect(transactionCount).toBe(3);
+    expect(beginCount).toBe(3);
     expect(userVersion).toBe(3);
-    expect(db.withExclusiveTransactionAsync).toHaveBeenCalledTimes(3);
   });
 
   test('rolls back schema changes and leaves user_version untouched when migration history insert fails', async () => {

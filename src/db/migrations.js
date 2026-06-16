@@ -1,4 +1,4 @@
-import { configureDatabaseConnection, getDatabase, withDatabaseAccess } from './client';
+import { getDatabase, withDatabaseAccess } from './client';
 
 const LOCAL_SYNC_COLUMNS = `
   sync_status text not null default 'synced'
@@ -574,42 +574,58 @@ const getUserVersion = async (db) => {
 };
 
 const runInTransaction = async (db, task) => {
-  if (typeof db.withExclusiveTransactionAsync === 'function') {
-    return db.withExclusiveTransactionAsync(task);
+  // Manual transaction control on the supplied connection — no withExclusiveTransactionAsync
+  // (which opens a throwaway connection without our pragmas). Migrations run with
+  // foreign_keys OFF (set by runMigrationsNow between transactions, since PRAGMA
+  // foreign_keys is a no-op inside a transaction).
+  await db.execAsync('BEGIN IMMEDIATE');
+  try {
+    const result = await task(db);
+    await db.execAsync('COMMIT');
+    return result;
+  } catch (error) {
+    await db.execAsync('ROLLBACK');
+    throw error;
   }
-
-  return db.withTransactionAsync(task);
 };
 
 async function runMigrationsNow(database) {
   const db = database || await getDatabase();
-  await configureDatabaseConnection(db);
+  // Migrations run with FK enforcement OFF, then ON afterward. PRAGMA foreign_keys is a no-op
+  // inside a transaction, so set it here (between transactions) before/after the loop.
+  await db.execAsync('PRAGMA foreign_keys = OFF');
+  try {
+    let userVersion = await getUserVersion(db);
 
-  let userVersion = await getUserVersion(db);
+    for (const migration of MIGRATIONS) {
+      if (migration.version <= userVersion) {
+        continue;
+      }
 
-  for (const migration of MIGRATIONS) {
-    if (migration.version <= userVersion) {
-      continue;
+      await runInTransaction(db, async (txn) => {
+        await txn.execAsync(migration.sql);
+        await txn.runAsync(
+          'insert or ignore into schema_migrations (version, name) values (?, ?)',
+          migration.version,
+          migration.name
+        );
+        // Bump user_version INSIDE the transaction so the schema change and the
+        // version marker commit (or roll back) atomically. Setting it afterwards
+        // left a crash window: a committed migration whose user_version had not
+        // yet been written would replay on next launch and a non-idempotent
+        // migration (e.g. ALTER TABLE ADD COLUMN) would fail with duplicate-column,
+        // bricking startup migrations on that device. SQLite treats user_version
+        // as transactional (verified: commits with the txn, reverts on rollback).
+        await txn.execAsync(`PRAGMA user_version = ${migration.version}`);
+      });
+
+      userVersion = migration.version;
     }
-
-    await runInTransaction(db, async (txn) => {
-      await txn.execAsync(migration.sql);
-      await txn.runAsync(
-        'insert or ignore into schema_migrations (version, name) values (?, ?)',
-        migration.version,
-        migration.name
-      );
-      // Bump user_version INSIDE the transaction so the schema change and the
-      // version marker commit (or roll back) atomically. Setting it afterwards
-      // left a crash window: a committed migration whose user_version had not
-      // yet been written would replay on next launch and a non-idempotent
-      // migration (e.g. ALTER TABLE ADD COLUMN) would fail with duplicate-column,
-      // bricking startup migrations on that device. SQLite treats user_version
-      // as transactional (verified: commits with the txn, reverts on rollback).
-      await txn.execAsync(`PRAGMA user_version = ${migration.version}`);
-    });
-
-    userVersion = migration.version;
+  } finally {
+    // Restore runtime FK posture for ALL callers — the production writer AND injected test
+    // DBs (via runMigrations(database)). Without this, injected integration DBs would run
+    // FK-off, hiding the ordering bugs Task 5 exists to expose.
+    await db.execAsync('PRAGMA foreign_keys = ON');
   }
 }
 
