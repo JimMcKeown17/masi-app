@@ -55,7 +55,15 @@ All Jest/integration commands are prefixed with `PATH=$HOME/.nvm/versions/node/v
 
 - Establish the pre-change baseline (`npm test` + `npm run test:integration`) so any later red is attributable
   to the task that caused it.
-- **Status:** _running_
+- **Result:**
+  - **Integration:** ✅ 13 suites / 113 tests pass (`--runInBand`, file-backed SQLite — the reliable signal for db/sync work).
+  - **Unit:** 371/373 pass. The 2 "failures" — `AssessmentHistoryScreen.plan5` and `SessionHistoryScreen.plan5` —
+    are **pre-existing load-induced `waitFor` timeout flake** (16–17s under the 78-suite parallel run; **pass
+    deterministically in isolation in ~1.3s**). Orthogonal to this slice (UI history screens, not the db/sync
+    layer) and **not** caused by the P0 jest-scope change (which only *excludes* paths). Not fixed here (out of
+    slice scope — they belong to the Plan-5 UI work). **At Task 12** the release-gate full run may flake on these
+    two; if so, re-run them in isolation to confirm green before judging the gate.
+- **Status:** ✅ baseline accepted (green modulo the 2 documented pre-existing UI flakes)
 
 ---
 
