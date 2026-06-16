@@ -601,6 +601,8 @@ For each hit, confirm the db passed onward is the *closure* `database` (undefine
 Run: `PATH=$HOME/.nvm/versions/node/v20.19.4/bin:$PATH npm run test:integration` then `... npm test`
 Expected: any remaining write-on-reader path now throws a `query_only`/readonly error in tests. For each failure, locate the offending `resolveDatabase()`/`getDatabase()` + write, wrap it in `runRepositoryTransaction`, re-run. Iterate until green. Keep a running list of every file/method changed in the commit body.
 
+> **Coverage honesty (Codex plan pass 4, finding 1):** `query_only` is a runtime tripwire + the full suite exercises most paths, but it is **not** an exhaustive static proof — a write path no test executes (and the injected-db tests do NOT model the reader/writer split, since they pass a single db) would only throw on device. A precise function-level "no write reachable from a resolved handle outside a transaction" static check needs AST tooling (out of scope). Mitigations in lieu of that: the resolve-then-pass grep scan (Step 5a), and explicit **production-path device checks** in Task 12 for each named write surface (`localStateRepository.set/remove/clear`, `syncStateRepository.updateSyncMeta`, the `storage` facade writes, `retryFailedItem`, `clearDomainData`). Note this boundary in the commit body.
+
 - [ ] **Step 6: Commit (the single atomic commit for Tasks 3 + 4)**
 
 Only now, with the full suite green, commit the connection split and the write-path audit together:
@@ -653,21 +655,28 @@ it('NEGATIVE: inserting a child row before its parent fails with an FK error', a
   ).rejects.toThrow(/FOREIGN KEY/i);
 });
 
-it('POSITIVE: parent-before-child insert order commits', async () => {
+it('POSITIVE: real capture flows commit through public interfaces with FK ON', async () => {
+  // NOT a synthetic insert — exercise the actual parent→child write paths the audit
+  // guarantees, so FK-on can't silently break a legitimate capture (Codex plan pass 4).
   const db = await migrated();
-  // Insert in dependency order (schools/classes/children/sessions before attendees).
-  // Use the repositories' own save paths here in the real implementation; this asserts
-  // the ordering the audit guarantees. (Fill in with the seed helper used by sibling
-  // integration tests: seedCoreData from test-support/sqliteRepositoryTestUtils.)
-  // Example minimal chain:
-  await db.runAsync(`insert into schools (id, name, created_at, updated_at) values ('s1','S','2026-06-16','2026-06-16')`);
-  await db.runAsync(`insert into classes (id, school_id, name, created_at, updated_at) values ('c1','s1','C','2026-06-16','2026-06-16')`);
-  // ... (use seedCoreData for the full chain) ...
-  const rows = await db.getAllAsync(`select id from classes where id = 'c1'`);
-  expect(rows).toHaveLength(1);
+  await seedCoreData(db); // schools, programmes, academic_years, staff_programme_assignment, classes
+  const children = createChildrenRepository({ database: db });
+  await children.saveChild({ id: 'child-1', class_id: 'class-1', first_name: 'T', last_name: 'M' });
+  // ^ mirror the exact saveChild arg shape from __tests__/childrenRepository.test.js
+
+  // persistLiteracySession writes sessions → session_attendees → letter_mastery in order.
+  // Use the SAME call shape as __tests__/literacySessionPersistence.test.js (do not invent args).
+  await persistLiteracySession({ database: db, /* …args copied verbatim from that test… */ });
+  expect((await db.getAllAsync('select id from session_attendees')).length).toBeGreaterThan(0);
+  expect((await db.getAllAsync('select id from letter_mastery')).length).toBeGreaterThan(0);
+
+  // assessment save writes assessments → assessment_items.
+  const assessments = createAssessmentsRepository({ database: db });
+  await assessments.saveAssessment(/* …assessment + items as in __tests__/assessmentsRepository.test.js… */);
+  expect((await db.getAllAsync('select id from assessment_items')).length).toBeGreaterThan(0);
 });
 ```
-> If `schools`/`classes` columns differ, mirror `test-support/sqliteRepositoryTestUtils.seedCoreData`’s exact inserts (read it first).
+> Imports for this test: `seedCoreData` from `test-support/sqliteRepositoryTestUtils`, `createChildrenRepository`, `createAssessmentsRepository`, and `persistLiteracySession`. Copy the `saveChild`/`persistLiteracySession`/`saveAssessment` argument literals verbatim from the named sibling tests (real, correct call sites) — the point is to drive the **real** ordered writes, not re-derive their signatures.
 
 - [ ] **Step 2: Run it**
 
@@ -951,6 +960,8 @@ it('caps the retry delay at 15 minutes', () => {
 ```
 Plus an integration test (same file) asserting `getReadyRecords({ includeBackedOff: true })` returns a `failed` row whose `next_retry_at` is in the future, while the default call excludes it. (Use the outbox repo against a better-sqlite3 db; seed one failed row with a future `next_retry_at`.)
 
+Plus a **force-during-active-sync** test (Codex plan pass 4, finding 3): mock `syncAll` to record each call's `{ force }` and to resolve on a controllable deferred. Render `OfflineProvider`, trigger a (non-forced) background sync so `activeSyncPromise` is in-flight, then call `syncNow({ force: true })`. Resolve the first pass. Assert `syncAll` was called a **second** time with `{ force: true }` (the forced pass was chained, not swallowed by the in-flight non-forced promise).
+
 - [ ] **Step 2: Run it, verify it fails**
 
 Run: `PATH=$HOME/.nvm/versions/node/v20.19.4/bin:$PATH npx jest retryBackoff`
@@ -1012,14 +1023,42 @@ In `src/db/repositories/syncOutboxRepository.js`, `getReadyRecords` (line 69):
     return rows.map(toOutboxRecord);
   };
 ```
-In `src/context/OfflineContext.js`, `syncNow` (line 61) accepts `{ force }` and passes it:
+In `src/context/OfflineContext.js`, `syncNow` (line 61) accepts `{ force }` and passes it — **and handles the force-during-active-sync race** (Codex plan pass 4, finding 3): the existing `if (activeSyncPromise.current) return activeSyncPromise.current;` would otherwise hand a forced caller back an *in-flight non-forced* pass (which excludes backed-off rows), silently dropping the bypass. When `force` is requested during an active pass, chain a fresh forced pass after it settles instead:
 ```javascript
   const syncNow = useCallback((options = {}) => {
-    // ... unchanged guards ...
-        const result = await syncAll({ force: options.force === true });
-    // ...
+    const force = options.force === true;
+    if (activeSyncPromise.current) {
+      // A non-forced background sync may be mid-flight; don't return it for a forced request
+      // or backed-off rows stay excluded. Chain a forced pass after the active one settles.
+      if (force) {
+        return activeSyncPromise.current.catch(() => {}).then(() => syncNow({ force: true }));
+      }
+      return activeSyncPromise.current;
+    }
+    if (!isOnlineRef.current) {
+      console.log('Cannot sync while offline');
+      return Promise.resolve(null);
+    }
+    const syncPromise = (async () => {
+      setIsSyncing(true);
+      try {
+        const result = await syncAll({ force });
+        setLastSyncResult(result);
+        await refreshSyncStatus({ autoTrigger: false });
+        return result;
+      } catch (error) {
+        console.error('Sync failed:', error);
+        return { success: false, error };
+      } finally {
+        activeSyncPromise.current = null;
+        setIsSyncing(false);
+      }
+    })();
+    activeSyncPromise.current = syncPromise;
+    return syncPromise;
   }, [refreshSyncStatus]);
 ```
+> The chained call re-enters `syncNow` only after `activeSyncPromise.current` is cleared in the `finally`, so it runs a clean forced pass (no recursion build-up).
 In `src/screens/main/SyncStatusScreen.js`, the "Sync Now" button (line 136) and post-retry sync (line 64) pass force:
 ```javascript
         onPress={() => syncNow({ force: true })}
@@ -1270,7 +1309,8 @@ On an Android emulator against `masi-app-sqlite` with a seeded EA:
 3. Force-stop mid-sync, reopen, reconnect. **Observe:** in-flight rows recover, sync drains.
 4. Tap "Sync Now" with a backed-off failed row present. **Observe:** it uploads immediately (force bypass).
 5. On the Sync Status screen, tap the per-row **Retry** on a failed row. **Observe:** it succeeds (no `readonly`/`query_only` error) — proves `retryFailedItem` runs on the writer, not the query-only reader, on the production (no injected db) path.
-6. Verify Supabase rows via `npm run sqlite:staging:query -- "select count(*) from letter_mastery;"` (and spot-check `sessions`, `session_attendees`).
+6. **Production write-surface sweep** (the paths Jest's single-connection adapter can't verify under the split): on device, exercise each and confirm no `readonly`/`query_only` error — edit profile (Profile screen → `localStateRepository.set` user profile), pull-to-refresh/clear cache, run a sync (which writes `updateSyncMeta` + storage facade `markAsSynced`/`setSyncError`), and trigger `clearDomainData` (sign-out/reset if exposed). Each must succeed.
+7. Verify Supabase rows via `npm run sqlite:staging:query -- "select count(*) from letter_mastery;"` (and spot-check `sessions`, `session_attendees`).
 
 - [ ] **Step 4: Record the device pass** in `documentation/sqlite-refactor-log.md` (date, scenarios, observations) per AGENTS.md.
 
@@ -1286,5 +1326,6 @@ Run: `git log --oneline fix/sync-reliability-writer-batch ^main` to review the s
 **Atomicity (Codex pass on plan)** — Tasks 3 and 4 share a single commit; the `query_only` reader never lands before the write-path audit (no broken intermediate). ✅
 **Re-entrancy (Codex passes on plan)** — `withTransaction` is non-re-entrant by contract with **no runtime guard**: a depth guard deadlocks behind the queue or false-rejects concurrent writers under Hermes, and a watchdog risks partial-commit corruption (rollback can't cancel the abandoned task). Nesting deadlocks by design (non-corrupting); the threading defense is verified by a positive one-transaction test. ✅
 **FK posture (Codex pass on plan)** — `runMigrationsNow` restores `foreign_keys=ON` in a `finally`, so injected integration DBs enforce FK like production (asserted by a test); not just the production writer. ✅
-**Placeholders** — test-seeding is delegated to the existing sibling-test enqueue/`seedCoreData` helpers (named, not invented); the FK/contract parsers are real. No "TBD"/"add error handling". The two audit tasks (T4, T5) are checklist-driven but enforced by concrete tests (`query_only` throw, FK negative test). ✅
+**Degraded-path + test rigor (Codex plan pass 4)** — FK positive test now drives **real** capture flows (`persistLiteracySession`, `saveAssessment`) not a synthetic insert; `syncNow({force})` chains a forced pass when a non-forced sync is in-flight (no swallowed bypass) + test; write-path completeness boundary stated honestly (query_only tripwire + grep scan + per-surface device checks, since function-level static reachability needs AST tooling). ✅
+**Placeholders** — test-seeding is delegated to the existing sibling-test enqueue/`seedCoreData` helpers and named sibling tests for arg literals (real, not invented); the contract test reads `PRAGMA table_info` (no parser). No "TBD"/"add error handling". The two audit tasks (T4, T5) are enforced by concrete tests (`query_only` throw, FK negative + real-flow positive). ✅
 **Type/name consistency** — `finalizeManySuccess`/`finalizeManyRetriableFailure`/`finalizeManyTerminalFailure`, `getWriter`, `__contract`, `__testables`, `includeBackedOff`, `force` are used consistently across tasks; `transactionDepth` and the watchdog `timeoutMs` fully removed. ✅
