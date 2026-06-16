@@ -59,17 +59,15 @@ Invariants (constrain the plan; exact placement of the migration step is an impl
 ### `withTransaction` rewrite
 
 ```
-withTransaction(task) → withDatabaseAccess(async () => {     // existing queue = the writer's mutex
-  if (transactionDepth > 0) throw new Error('withTransaction is not re-entrant; thread the txn handle down');
-  const db = await getWriter();
-  await db.execAsync('BEGIN IMMEDIATE');                      // take the write lock upfront — no upgrade deadlock
-  try   { const r = await task(db); await db.execAsync('COMMIT'); return r; }
-  catch { await db.execAsync('ROLLBACK'); throw; }
+withTransaction(task) → withDatabaseAccess(async (db) => {    // existing queue = the writer's mutex; db = writer
+  await db.execAsync('BEGIN IMMEDIATE');                       // take the write lock upfront — no upgrade deadlock
+  try   { const r = await Promise.race([task(db), watchdog(timeoutMs)]); await db.execAsync('COMMIT'); return r; }
+  catch { await db.execAsync('ROLLBACK'); throw; }            // watchdog reject also rolls back + surfaces a clear error
 })
 ```
 
 - `BEGIN IMMEDIATE` acquires the write lock at the start, avoiding deferred-to-immediate upgrade deadlocks.
-- **Re-entrancy guard:** Masi threads an existing txn downward (`repositoryRuntime.js:18` — `withTransaction(txn => task(txn || db))`) rather than nesting; SQLite forbids nested `BEGIN`. The guard throws a *clear* error instead of SQLite's opaque one if a caller ever re-enters.
+- **Non-re-entrancy is a contract, enforced structurally + by a watchdog — *not* a synchronous depth guard.** Masi threads an existing txn downward (`repositoryRuntime.js:18`) rather than nesting; that is the primary defense and already holds for domain saves. A synchronous `transactionDepth>0` check is infeasible here: it sits behind the serial queue (so a nested call would *deadlock* before the guard runs), and moving it before the enqueue would *false-reject legitimate concurrent writers* (which the queue exists to serialize, not reject) — distinguishing nested from concurrent needs async-context tracking that Hermes lacks. Instead, a **watchdog timeout** races the task: an accidental nested `withTransaction` (which deadlocks on the queue) is converted into a clear, bounded error + `ROLLBACK` rather than a silent hang.
 - `resetDatabaseConnectionForTests` closes and nulls **both** connections.
 
 ### All writes go through the writer (enforced, not just audited)
@@ -172,7 +170,7 @@ Deliverable: a checklist of verified paths + tests (positive: correct order comm
 **Connection / transaction semantics (better-sqlite3 adapter):**
 - `withTransaction` returns the task value; commits on success; **rolls back on throw** (insert + throw → row absent).
 - **Serialization:** two concurrent `withTransaction` calls do not interleave.
-- **Re-entrancy guard:** nested `withTransaction` throws the clear error.
+- **Non-re-entrancy watchdog:** a nested `withTransaction` (injected with a small `timeoutMs`) *rejects within the timeout* with a clear error — proving it doesn't silently hang; a threaded multi-write (passing the txn handle down) commits in one transaction.
 - `resetDatabaseConnectionForTests` closes both connections.
 - **Pragma assertion:** `PRAGMA foreign_keys` / `busy_timeout` read inside a `withTransaction` callback return the writer's values — *this is the test that would have caught today's leak.*
 - **Reader is read-only:** a write attempted on the reader handle throws (`query_only=ON`); `localStateRepository.set/remove/clear` and `updateSyncMeta` still succeed under `query_only` (proving they moved to the writer); `clearDomainData` runs as a single writer transaction (assert one transaction, all tables empty after).
@@ -203,7 +201,7 @@ Deliverable: a checklist of verified paths + tests (positive: correct order comm
 6. Per-record error guard: a thrown error fails only that record, the pass continues, sync meta is always written.
 7. Dependency skipping is **left unchanged** this slice (table-level `failedTables`); the descope is documented and the pre-existing cross-pass orphan→terminal bug + recommended parent-outbox-status fix are captured for the dedicated follow-up slice (B3).
 8. FK migration-order audit complete with positive + negative tests.
-9. Re-entrancy guard on `withTransaction` with a clear error + test.
+9. `withTransaction` is non-re-entrant **by contract** (txn handles threaded down — the primary defense) with a **watchdog timeout** that converts an accidental nested-transaction deadlock into a clear, bounded error + `ROLLBACK` (no synchronous depth guard — infeasible under Hermes without false-rejecting concurrent writers); test proves a nested call rejects within the configured timeout rather than hanging.
 10. At least one device/emulator stress pass during heavy sync (large backlog) confirming no `database is locked` and that user writes (Finish Session) do not starve.
 11. `INTENTIONALLY_UNSYNCED` map (seeded `sessions.group_id`/`sessions.state` + reasons) **and** `LOCAL_ONLY_COLUMNS` (seeded from `LOCAL_ONLY_KEYS_TO_STRIP`); completeness test asserts every `PUSH_ORDER` table's local columns are in `SERVER_COLUMNS` ∪ `INTENTIONALLY_UNSYNCED` ∪ `LOCAL_ONLY_COLUMNS`, each column in exactly one set.
 12. `processBatch` batch-failure semantics: a throw after `markInFlight` finalizes every member via chunked `finalizeManyRetriableFailure` (O(chunks)) with `last_error` and returns one result per input record; covered by a mid-batch-throw test (incl. BEGIN count) and a healthy-later-record test.

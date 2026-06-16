@@ -272,10 +272,21 @@ it('rolls back when the task throws', async () => {
   expect(writer.calls).not.toContain('COMMIT');
 });
 
-it('throws a clear error on re-entrant withTransaction (no nested BEGIN)', async () => {
+it('rejects (does not hang) on a nested withTransaction, via the watchdog', async () => {
+  // Nesting deadlocks on the serial queue; the watchdog converts it to a bounded reject.
+  // Inject a tiny timeout so the test asserts promptly (well under Jest's default).
   await expect(
-    withTransaction(async () => { await withTransaction(async () => {}); })
-  ).rejects.toThrow(/not re-entrant/i);
+    withTransaction(async () => { await withTransaction(async () => {}); }, { timeoutMs: 50 })
+  ).rejects.toThrow(/timed out|nested/i);
+});
+
+it('a task doing multiple writes on the threaded handle commits in ONE transaction', async () => {
+  await withTransaction(async (db) => {
+    await db.runAsync('insert 1');
+    await db.runAsync('insert 2');
+  });
+  expect(writer.calls.filter((c) => c === 'BEGIN IMMEDIATE')).toHaveLength(1);
+  expect(writer.calls.filter((c) => c === 'COMMIT')).toHaveLength(1);
 });
 
 it('serializes concurrent transactions (no interleave)', async () => {
@@ -319,11 +330,12 @@ const READER_PRAGMAS = [
   'PRAGMA query_only = ON', // any stray write on the reader throws — see write-path audit
 ];
 
+const TRANSACTION_TIMEOUT_MS = 30000; // watchdog: bound an accidental nested-transaction hang
+
 let initPromise = null;
 let writerConnection = null;
 let readerConnection = null;
 let databaseQueue = Promise.resolve();
-let transactionDepth = 0;
 
 const applyPragmas = async (db, pragmas) => {
   for (const pragma of pragmas) {
@@ -385,24 +397,30 @@ export async function withDatabaseAccess(task) {
   return queuedTask;
 }
 
-export async function withTransaction(task) {
+// Non-re-entrant BY CONTRACT: callers thread the txn handle down; they must NOT call
+// withTransaction inside a transaction (it would deadlock on the serial queue). A
+// synchronous depth guard is infeasible here — it would either sit behind the queue (too
+// late) or false-reject legitimate concurrent writers. The watchdog converts an accidental
+// nested-transaction hang into a clear, bounded error instead of a silent deadlock.
+export async function withTransaction(task, { timeoutMs = TRANSACTION_TIMEOUT_MS } = {}) {
   return withDatabaseAccess(async (db) => {
-    if (transactionDepth > 0) {
-      throw new Error(
-        'withTransaction is not re-entrant; thread the existing txn handle down instead of nesting.'
-      );
-    }
-    transactionDepth += 1;
     await db.execAsync('BEGIN IMMEDIATE');
+    let watchdogTimer;
+    const watchdog = new Promise((_, reject) => {
+      watchdogTimer = setTimeout(() => reject(new Error(
+        'withTransaction timed out — likely a nested withTransaction (thread the txn handle '
+        + 'down instead of nesting) or a stuck write.'
+      )), timeoutMs);
+    });
     try {
-      const result = await task(db);
+      const result = await Promise.race([Promise.resolve().then(() => task(db)), watchdog]);
       await db.execAsync('COMMIT');
       return result;
     } catch (error) {
       await db.execAsync('ROLLBACK');
       throw error;
     } finally {
-      transactionDepth -= 1;
+      clearTimeout(watchdogTimer);
     }
   });
 }
@@ -417,7 +435,6 @@ export async function resetDatabaseConnectionForTests() {
   writerConnection = null;
   readerConnection = null;
   databaseQueue = Promise.resolve();
-  transactionDepth = 0;
 }
 ```
 
@@ -458,17 +475,15 @@ export const runRepositoryTransaction = async (database, task) => {
 Run: `PATH=$HOME/.nvm/versions/node/v20.19.4/bin:$PATH npx jest clientWriterConnection`
 Expected: PASS.
 
-- [ ] **Step 6: Commit**
+- [ ] **Step 6: DO NOT COMMIT YET**
 
-```bash
-git add src/db/client.js src/db/repositories/repositoryRuntime.js __tests__/clientWriterConnection.test.js
-git commit -m "feat(db): dedicated writer + read-only reader connections; non-re-entrant withTransaction"
-```
+The clientWriterConnection unit test passes now, but committing here would leave the `query_only` reader live while `localStateRepository`/`storage` still write on the reader handle — a broken intermediate state (the spec requires the split and the write-path audit to land **together**). Proceed directly to Task 4; **Tasks 3 and 4 are one atomic commit** made at the end of Task 4.
 
 ---
 
-### Task 4: Write-path audit — route every write through the writer; `query_only` enforcement
+### Task 4: Write-path audit — route every write through the writer (SAME ATOMIC COMMIT AS TASK 3)
 
+> **Atomicity:** This task shares one commit with Task 3 — the connection split is unsafe without it. Do not run a partial commit.
 > The `query_only=ON` reader makes any missed write throw. This task: (a) refactor the known offenders, (b) run the **full** suite to flush out the rest, (c) fix each until green. Treat a green suite + the guard test as proof of exhaustiveness.
 
 **Files:**
@@ -577,16 +592,22 @@ async clearDomainData() {
 Run: `PATH=$HOME/.nvm/versions/node/v20.19.4/bin:$PATH npm run test:integration` then `... npm test`
 Expected: any remaining write-on-reader path now throws a `query_only`/readonly error in tests. For each failure, locate the offending `resolveDatabase()`/`getDatabase()` + write, wrap it in `runRepositoryTransaction`, re-run. Iterate until green. Keep a running list of every file/method changed in the commit body.
 
-- [ ] **Step 6: Commit**
+- [ ] **Step 6: Commit (the single atomic commit for Tasks 3 + 4)**
 
+Only now, with the full suite green, commit the connection split and the write-path audit together:
 ```bash
-git add src/db/repositories/localStateRepository.js src/utils/storage.js __tests__/clientReadOnlyReader.test.js
-git commit -m "refactor(db): route all writes through the writer; reader is query_only
+git add src/db/client.js src/db/repositories/repositoryRuntime.js __tests__/clientWriterConnection.test.js \
+        src/db/repositories/localStateRepository.js src/utils/storage.js __tests__/clientReadOnlyReader.test.js \
+        <any other files touched while flushing out write-on-reader paths>
+git commit -m "feat(db): dedicated writer + read-only reader; all writes via writer
 
-Audited write-path sites moved off the reader handle: localStateRepository
-set/remove/clear, storage ensureSchoolExists/ensureClassExists/markAsSynced/
-markAsUnsynced/setSyncError, clearDomainData (now one transaction). query_only
-reader enforces no stray writes."
+Connection split (writer: FK-on post-migration + busy_timeout; reader:
+query_only + busy_timeout) lands ATOMICALLY with the write-path audit, since
+the query_only reader is unsafe until every write moves to the writer. Audited
+sites moved off the reader handle: localStateRepository set/remove/clear,
+storage ensureSchoolExists/ensureClassExists/markAsSynced/markAsUnsynced/
+setSyncError, clearDomainData (now one transaction). withTransaction is
+non-re-entrant by contract with a watchdog timeout (no synchronous depth guard)."
 ```
 
 ---
@@ -1243,6 +1264,8 @@ Run: `git log --oneline fix/sync-reliability-writer-batch ^main` to review the s
 
 ## Self-Review (completed by plan author)
 
-**Spec coverage** — every AC maps to a task: AC1/2 → T2,T3; AC3 → T6; AC4 → T11; AC5 → T8; AC6/12 → T7,T9; AC7 (descope) → no task (correct); AC8 → T5; AC9 → T3; AC10 → T12; AC11 → T10; AC13 → T3,T4. ✅
+**Spec coverage** — every AC maps to a task: AC1/2 → T2,T3; AC3 → T6; AC4 → T11; AC5 → T8; AC6/12 → T7,T9; AC7 (descope) → no task (correct); AC8 → T5; AC9 (watchdog) → T3; AC10 → T12; AC11 → T10; AC13 → T3+T4 (one atomic commit). ✅
+**Atomicity (Codex pass on plan)** — Tasks 3 and 4 share a single commit; the `query_only` reader never lands before the write-path audit (no broken intermediate). ✅
+**Re-entrancy (Codex pass on plan)** — no synchronous depth guard (would deadlock behind the queue / false-reject concurrent writers under Hermes); `withTransaction` is non-re-entrant by contract + a watchdog timeout, with a test proving a nested call *rejects within the timeout* rather than hanging. ✅
 **Placeholders** — test-seeding is delegated to the existing sibling-test enqueue/`seedCoreData` helpers (named, not invented); the FK/contract parsers are real. No "TBD"/"add error handling". The two audit tasks (T4, T5) are checklist-driven but enforced by concrete tests (`query_only` throw, FK negative test). ✅
-**Type/name consistency** — `finalizeManySuccess`/`finalizeManyRetriableFailure`/`finalizeManyTerminalFailure`, `getWriter`, `__contract`, `__testables`, `includeBackedOff`, `force` are used consistently across tasks. ✅
+**Type/name consistency** — `finalizeManySuccess`/`finalizeManyRetriableFailure`/`finalizeManyTerminalFailure`, `getWriter`, `__contract`, `__testables`, `includeBackedOff`, `force`, `timeoutMs` are used consistently across tasks; `transactionDepth` fully removed. ✅
