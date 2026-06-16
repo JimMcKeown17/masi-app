@@ -155,6 +155,13 @@ it('runs migrations without withExclusiveTransactionAsync and leaves a usable sc
   );
   expect(tables).toHaveLength(1);
 });
+
+it('leaves foreign_keys ON after migrations so injected DBs enforce FK like production', async () => {
+  const db = createBetterSqliteTestDatabase(':memory:');
+  await runMigrations(db);
+  const fk = await db.getFirstAsync('PRAGMA foreign_keys');
+  expect(fk.foreign_keys).toBe(1);
+});
 ```
 
 - [ ] **Step 2: Run it, verify it fails**
@@ -183,17 +190,20 @@ const runInTransaction = async (db, task) => {
 };
 ```
 
-Also, in `runMigrationsNow` (line 584), ensure FK is off for the duration. Replace the body opening (lines 584-588) so the existing `configureDatabaseConnection(db)` call is replaced by an explicit FK-off (the new `client.js` owns runtime pragmas; migrations only need FK off):
+Also, in `runMigrationsNow` (line 584), set FK **off for the migration duration and back ON afterward** via `try/finally`. This makes `runMigrationsNow` the single owner of the FK posture, so **every** caller — the production writer *and* injected test DBs (via `resolveDatabase(database)` → `runMigrations(database)`) — ends with FK enforcement ON. Without the `finally`, injected integration DBs would run FK-*off*, hiding the exact ordering bugs this slice exists to expose (Codex plan review, finding 2). Replace the body opening (lines 584-588), removing the `configureDatabaseConnection(db)` call:
 ```javascript
 async function runMigrationsNow(database) {
   const db = database || await getDatabase();
-  await db.execAsync('PRAGMA foreign_keys = OFF');
-
-  let userVersion = await getUserVersion(db);
-  // ... unchanged loop ...
+  await db.execAsync('PRAGMA foreign_keys = OFF'); // a no-op inside a txn; set between txns
+  try {
+    let userVersion = await getUserVersion(db);
+    // ... unchanged migration loop ...
+  } finally {
+    await db.execAsync('PRAGMA foreign_keys = ON'); // runtime posture for ALL callers
+  }
 }
 ```
-Remove the now-unused `configureDatabaseConnection` import from `migrations.js` if it is no longer referenced.
+Remove the now-unused `configureDatabaseConnection` import from `migrations.js` if no longer referenced. (Since `runMigrations` now leaves FK ON, the explicit `PRAGMA foreign_keys = ON` in `client.js` writer-init is redundant but harmless — keep it as a defensive assertion of the writer's posture.)
 
 - [ ] **Step 4: Run it, verify pass**
 
@@ -272,18 +282,14 @@ it('rolls back when the task throws', async () => {
   expect(writer.calls).not.toContain('COMMIT');
 });
 
-it('rejects (does not hang) on a nested withTransaction, via the watchdog', async () => {
-  // Nesting deadlocks on the serial queue; the watchdog converts it to a bounded reject.
-  // Inject a tiny timeout so the test asserts promptly (well under Jest's default).
-  await expect(
-    withTransaction(async () => { await withTransaction(async () => {}); }, { timeoutMs: 50 })
-  ).rejects.toThrow(/timed out|nested/i);
-});
-
+// Non-re-entrancy is a CONTRACT (no runtime guard — see client.js comment). We do NOT add a
+// nested-call test: nesting deadlocks by design and such a test would hang. Instead we prove
+// the PRIMARY defense — the threading discipline — with a positive test: a multi-write task
+// commits in exactly ONE transaction (so domain saves thread the handle, never nest).
 it('a task doing multiple writes on the threaded handle commits in ONE transaction', async () => {
   await withTransaction(async (db) => {
-    await db.runAsync('insert 1');
-    await db.runAsync('insert 2');
+    await db.runAsync('insert into t (id) values (1)');
+    await db.runAsync('insert into t (id) values (2)');
   });
   expect(writer.calls.filter((c) => c === 'BEGIN IMMEDIATE')).toHaveLength(1);
   expect(writer.calls.filter((c) => c === 'COMMIT')).toHaveLength(1);
@@ -329,8 +335,6 @@ const READER_PRAGMAS = [
   'PRAGMA busy_timeout = 5000',
   'PRAGMA query_only = ON', // any stray write on the reader throws — see write-path audit
 ];
-
-const TRANSACTION_TIMEOUT_MS = 30000; // watchdog: bound an accidental nested-transaction hang
 
 let initPromise = null;
 let writerConnection = null;
@@ -397,30 +401,29 @@ export async function withDatabaseAccess(task) {
   return queuedTask;
 }
 
-// Non-re-entrant BY CONTRACT: callers thread the txn handle down; they must NOT call
-// withTransaction inside a transaction (it would deadlock on the serial queue). A
-// synchronous depth guard is infeasible here — it would either sit behind the queue (too
-// late) or false-reject legitimate concurrent writers. The watchdog converts an accidental
-// nested-transaction hang into a clear, bounded error instead of a silent deadlock.
-export async function withTransaction(task, { timeoutMs = TRANSACTION_TIMEOUT_MS } = {}) {
+// Non-re-entrant BY CONTRACT: callers thread the txn handle down (the codebase already does
+// this for domain saves) and must NOT call withTransaction inside a transaction. Nesting
+// would deadlock on the serial queue — a loud, NON-corrupting dev-time failure that the
+// positive one-transaction test (below) guards against.
+//
+// We deliberately add NO runtime nesting guard:
+//   - A synchronous depth check would either sit behind the queue (too late to prevent the
+//     deadlock) or, if moved before the enqueue, FALSE-REJECT legitimate concurrent writers
+//     (the queue exists to serialize them, not reject them). Distinguishing nested from
+//     concurrent needs async-context tracking that Hermes lacks.
+//   - A watchdog timeout is WORSE than the hang it would replace: a promise cannot be
+//     cancelled, so rolling back on timeout releases the queue and lets the abandoned
+//     nested work COMMIT after the caller already saw a failure (partial-commit corruption).
+export async function withTransaction(task) {
   return withDatabaseAccess(async (db) => {
     await db.execAsync('BEGIN IMMEDIATE');
-    let watchdogTimer;
-    const watchdog = new Promise((_, reject) => {
-      watchdogTimer = setTimeout(() => reject(new Error(
-        'withTransaction timed out — likely a nested withTransaction (thread the txn handle '
-        + 'down instead of nesting) or a stuck write.'
-      )), timeoutMs);
-    });
     try {
-      const result = await Promise.race([Promise.resolve().then(() => task(db)), watchdog]);
+      const result = await task(db);
       await db.execAsync('COMMIT');
       return result;
     } catch (error) {
       await db.execAsync('ROLLBACK');
       throw error;
-    } finally {
-      clearTimeout(watchdogTimer);
     }
   });
 }
@@ -630,8 +633,7 @@ import { runMigrations } from '../src/db/migrations';
 
 const migrated = async () => {
   const db = createBetterSqliteTestDatabase(':memory:');
-  await runMigrations(db);
-  await db.execAsync('PRAGMA foreign_keys = ON'); // runtime posture
+  await runMigrations(db); // runMigrations now leaves foreign_keys ON (Task 2) — no manual flip needed
   return db;
 };
 
@@ -1266,6 +1268,7 @@ Run: `git log --oneline fix/sync-reliability-writer-batch ^main` to review the s
 
 **Spec coverage** — every AC maps to a task: AC1/2 → T2,T3; AC3 → T6; AC4 → T11; AC5 → T8; AC6/12 → T7,T9; AC7 (descope) → no task (correct); AC8 → T5; AC9 (watchdog) → T3; AC10 → T12; AC11 → T10; AC13 → T3+T4 (one atomic commit). ✅
 **Atomicity (Codex pass on plan)** — Tasks 3 and 4 share a single commit; the `query_only` reader never lands before the write-path audit (no broken intermediate). ✅
-**Re-entrancy (Codex pass on plan)** — no synchronous depth guard (would deadlock behind the queue / false-reject concurrent writers under Hermes); `withTransaction` is non-re-entrant by contract + a watchdog timeout, with a test proving a nested call *rejects within the timeout* rather than hanging. ✅
+**Re-entrancy (Codex passes on plan)** — `withTransaction` is non-re-entrant by contract with **no runtime guard**: a depth guard deadlocks behind the queue or false-rejects concurrent writers under Hermes, and a watchdog risks partial-commit corruption (rollback can't cancel the abandoned task). Nesting deadlocks by design (non-corrupting); the threading defense is verified by a positive one-transaction test. ✅
+**FK posture (Codex pass on plan)** — `runMigrationsNow` restores `foreign_keys=ON` in a `finally`, so injected integration DBs enforce FK like production (asserted by a test); not just the production writer. ✅
 **Placeholders** — test-seeding is delegated to the existing sibling-test enqueue/`seedCoreData` helpers (named, not invented); the FK/contract parsers are real. No "TBD"/"add error handling". The two audit tasks (T4, T5) are checklist-driven but enforced by concrete tests (`query_only` throw, FK negative test). ✅
-**Type/name consistency** — `finalizeManySuccess`/`finalizeManyRetriableFailure`/`finalizeManyTerminalFailure`, `getWriter`, `__contract`, `__testables`, `includeBackedOff`, `force`, `timeoutMs` are used consistently across tasks; `transactionDepth` fully removed. ✅
+**Type/name consistency** — `finalizeManySuccess`/`finalizeManyRetriableFailure`/`finalizeManyTerminalFailure`, `getWriter`, `__contract`, `__testables`, `includeBackedOff`, `force` are used consistently across tasks; `transactionDepth` and the watchdog `timeoutMs` fully removed. ✅
