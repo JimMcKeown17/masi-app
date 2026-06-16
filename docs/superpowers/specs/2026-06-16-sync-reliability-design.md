@@ -139,7 +139,8 @@ Extend `BATCHABLE_UPSERT_TABLES` (currently only `assessment_items` — `offline
 **Dependency skipping — corrected design.** The Codex review caught a false assumption in an earlier draft: `dependenciesForRecord` (`offlineSync.js:203-226`) returns dependency **table names** only — it inspects payload ids merely to *include/exclude a dependency table* (e.g. drop `'groups'` when `session_attendees.group_id` is null), never to identify *which* parent row. The concrete parent keys are **not** available today. So record-scoped skipping requires new code:
 
 - Add `dependencyKeysForRecord(record)` → concrete `(parent_table, parent_id)` keys from the payload, e.g. `session_attendees → [sessions:session_id, children:child_id, groups:group_id?]`, `assessment_items → [assessments:assessment_id]`, `children → [classes:class_id?]`.
-- Track a `failedKeys` Set of `"table:id"` strings (alongside, not replacing, the per-record failure recording). Skip a dependent only if one of *its* parent keys ∈ `failedKeys`.
+- Track a **`blockedKeys`** Set of `"table:id"` strings. Skip a dependent only if one of *its* parent keys ∈ `blockedKeys`.
+- **Transitive propagation is mandatory** (Codex pass 4): whenever a record **fails *or* is skipped**, add **its own** `table:id` key to `blockedKeys` before continuing. The current table-level code already does this (`failedTables.add(outboxRecord.table_name)` on skip — `offlineSync.js:738`); the key-scoped version must preserve it at key granularity. Otherwise a skipped `assessment(A)` leaves no `assessments:A` block, so `assessment_items(A)` later attempts to sync, the server rejects the orphan with FK `23503`, and `classifyError` marks it **terminal** (`offlineSync.js:256-262`) — turning a retryable grandparent failure into irreversible grandchild damage.
 - **Documented fallback:** a record whose payload lacks a usable parent id (or a table with no key extractor entry) falls back to the existing table-level block. List which tables fall back so the behavior is explicit, not accidental.
 - Effort: this is **more than a config tweak** (new extractor + key tracking + tests), heavier than the other item-2 fixes.
 
@@ -185,7 +186,7 @@ Deliverable: a checklist of verified paths + tests (positive: correct order comm
 - **Batch failure fan-out (B4):** a thrown error mid-batch (after `markInFlight`) finalizes **every** member as `failed` with `last_error` (none left in-flight), and returns one result per input record; plus a healthy record *after* a throwing batch still syncs in the same pass.
 - Backoff cap unit test; `retryFailedItem` resets `retry_count`; `force` flag includes backed-off rows.
 - Per-record guard: outbox `[throwing record, healthy record]` → healthy syncs, throwing ends `failed` with `last_error`, pass completes, sync meta updated.
-- Record-scoped dependency skip (corrected): `dependencyKeysForRecord` returns concrete parent keys; `[failing child A, healthy child B + assessment(B)]` → assessment(B) syncs in the same pass while assessment(A) is skipped; documented-fallback tables still table-block.
+- Record-scoped dependency skip (corrected) — **multi-hop**: `[failing child A, assessment(A), assessment_item(A), healthy child B, assessment(B)]` → A's *entire subtree* (assessment + item) is **skipped, not terminal**, while B syncs; verifies `blockedKeys` transitive propagation. Plus: documented-fallback tables still table-block.
 - FK: positive + negative ordering tests (C2).
 
 **Coverage boundary (stated honestly):** better-sqlite3 is single-connection and synchronous, so unit tests exercise *transaction semantics* but **not** the two-connection isolation (reader snapshot during a writer transaction; FK/busy_timeout living on a *separate* writer). That behavior is validated by the device/emulator stress pass (AC #10). Porting the companion's `expoSQLiteRealEngine` (top-10 testing finding #4) would let two-connection behavior be tested off-device and is the recommended follow-up.
@@ -198,7 +199,7 @@ Deliverable: a checklist of verified paths + tests (positive: correct order comm
 4. Batched upserts extended to `letter_mastery`/`session_attendees`/`sessions`/`time_entries`; `rls-sync-contract-map.md` updated.
 5. Backoff capped at 15 min; manual "Sync Now" bypasses backoff; `retryFailedItem` resets `retry_count`.
 6. Per-record error guard: a thrown error fails only that record, the pass continues, sync meta is always written.
-7. Record-scoped dependency skipping via a new `dependencyKeysForRecord` key extractor + `failedKeys` tracking; documented table-level fallbacks.
+7. Record-scoped dependency skipping via a new `dependencyKeysForRecord` key extractor + **`blockedKeys` tracking with transitive propagation** (a failed *or skipped* record adds its own key, so whole subtrees are skipped, never orphaned-terminal); documented table-level fallbacks; multi-hop regression test.
 8. FK migration-order audit complete with positive + negative tests.
 9. Re-entrancy guard on `withTransaction` with a clear error + test.
 10. At least one device/emulator stress pass during heavy sync (large backlog) confirming no `database is locked` and that user writes (Finish Session) do not starve.
