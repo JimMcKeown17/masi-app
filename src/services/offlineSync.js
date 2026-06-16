@@ -798,9 +798,10 @@ export const createOutboxSyncEngine = ({
   };
 
   const retryFailedItem = async (table, id) => {
-    const db = await resolveDatabase(database);
     const tableName = normalizeTableName(table);
-    await runRepositoryTransaction(db, async (txn) => {
+    // Route through the engine's `database` closure (undefined in prod → writer), NOT a
+    // resolved reader handle — resolving first and passing it would hit the query_only reader.
+    await runRepositoryTransaction(database, async (txn) => {
       await txn.runAsync(`
         update sync_outbox
         set status = 'pending',

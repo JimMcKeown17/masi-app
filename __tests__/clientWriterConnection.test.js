@@ -105,3 +105,46 @@ it('applies writer pragmas (WAL, busy_timeout, FK on) to the writer and query_on
     'PRAGMA query_only = ON',
   ]));
 });
+
+it('a ROLLBACK failure rethrows the original error (not the rollback error) and disposes the writer', async () => {
+  // Writer whose ROLLBACK throws — simulates SQLite having already auto-rolled-back.
+  writer.execAsync = jest.fn(async (sql) => {
+    writer.calls.push(sql);
+    if (sql === 'ROLLBACK') throw new Error('rollback boom');
+  });
+  let caught;
+  try {
+    await withTransaction(async () => { throw new Error('task boom'); });
+  } catch (e) {
+    caught = e;
+  }
+  expect(caught?.message).toBe('task boom');        // original error, NOT 'rollback boom'
+  expect(writer.calls).toContain('BEGIN IMMEDIATE');
+  expect(writer.calls).toContain('ROLLBACK');
+  expect(writer.closeAsync).toHaveBeenCalled();      // disposed so the next access re-bootstraps
+});
+
+it('disposes a half-open bootstrap when the reader open fails, allowing a clean retry', async () => {
+  // First open -> writer; second open (the reader) -> throws.
+  let openCount = 0;
+  __setDatabaseFactory(async () => {
+    if (openCount++ === 0) return writer;
+    throw new Error('reader open failed');
+  });
+  let caught;
+  try {
+    await getWriter();
+  } catch (e) {
+    caught = e;
+  }
+  expect(caught?.message).toMatch(/reader open failed/);
+  expect(writer.closeAsync).toHaveBeenCalled();      // half-open writer closed (no leak)
+
+  // initPromise was reset → a clean retry succeeds against a fresh factory.
+  const writer2 = fakeConn();
+  const reader2 = fakeConn();
+  let open2 = 0;
+  __setDatabaseFactory(async () => (open2++ === 0 ? writer2 : reader2));
+  const w = await getWriter();
+  expect(w).toBe(writer2);
+});

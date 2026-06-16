@@ -26,6 +26,20 @@ const applyPragmas = async (db, pragmas) => {
   }
 };
 
+// Close any open connections and clear bootstrap state so the next access re-initializes.
+// Used by the test reset, the bootstrap failure path, and a failed ROLLBACK (where the
+// writer may be left in an unknown transaction state).
+const disposeConnections = async () => {
+  for (const conn of [writerConnection, readerConnection]) {
+    if (conn && typeof conn.closeAsync === 'function') {
+      try { await conn.closeAsync(); } catch (_) { /* ignore */ }
+    }
+  }
+  initPromise = null;
+  writerConnection = null;
+  readerConnection = null;
+};
+
 // Single bootstrap: open the writer, migrate it (FK off), flip FK on, then open the
 // read-only reader. Both getDatabase()/getWriter() await this, so no query ever sees a
 // pre-migration schema. Migrations run directly on the writer (NOT via the queued
@@ -44,8 +58,11 @@ const initialize = async () => {
       readerConnection = reader;
 
       return { writerConnection, readerConnection };
-    })().catch((error) => {
-      initPromise = null;
+    })().catch(async (error) => {
+      // Half-open bootstrap (e.g. writer opened but the reader open/PRAGMA failed): close
+      // whatever opened and clear state so the next access re-bootstraps instead of leaking
+      // the writer's native handle.
+      await disposeConnections();
       throw error;
     });
   }
@@ -98,20 +115,22 @@ export async function withTransaction(task) {
       await db.execAsync('COMMIT');
       return result;
     } catch (error) {
-      await db.execAsync('ROLLBACK');
+      try {
+        await db.execAsync('ROLLBACK');
+      } catch (rollbackError) {
+        // Never let a ROLLBACK failure mask the original error. Commonly ROLLBACK throws
+        // "no transaction is active" because SQLite already auto-rolled-back — harmless. But
+        // if the writer is genuinely stuck mid-transaction, leaving it would poison every
+        // later queued write (their BEGIN IMMEDIATE would throw). Dispose the connections so
+        // the next access re-bootstraps a clean writer.
+        await disposeConnections();
+      }
       throw error;
     }
   });
 }
 
 export async function resetDatabaseConnectionForTests() {
-  for (const conn of [writerConnection, readerConnection]) {
-    if (conn && typeof conn.closeAsync === 'function') {
-      try { await conn.closeAsync(); } catch (_) { /* ignore */ }
-    }
-  }
-  initPromise = null;
-  writerConnection = null;
-  readerConnection = null;
+  await disposeConnections();
   databaseQueue = Promise.resolve();
 }
