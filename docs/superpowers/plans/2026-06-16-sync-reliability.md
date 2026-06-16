@@ -590,7 +590,13 @@ async clearDomainData() {
 ```
 > Add `import { runRepositoryTransaction } from '../db/repositories/repositoryRuntime';` to `storage.js` if not present.
 
-- [ ] **Step 5: Flush out remaining offenders — run the full integration + unit suites**
+- [ ] **Step 5a: Scan for the resolve-then-pass antipattern**
+
+Some writes resolve a db and pass it *as the injected arg*: `const db = await resolveDatabase(database); … runRepositoryTransaction(db, …)`. After the split, that routes writes to the **reader** (a missed case the `query_only` suite may not hit if the path isn't exercised by tests — e.g. `retryFailedItem`, fixed in Task 8). Grep and fix each to pass the `database` closure directly:
+Run: `grep -rn "resolveDatabase(database)" src && grep -rn "runRepositoryTransaction(db\b\|runWithTransaction(db\b" src`
+For each hit, confirm the db passed onward is the *closure* `database` (undefined→writer in prod), not a resolved reader handle.
+
+- [ ] **Step 5b: Flush out remaining offenders — run the full integration + unit suites**
 
 Run: `PATH=$HOME/.nvm/versions/node/v20.19.4/bin:$PATH npm run test:integration` then `... npm test`
 Expected: any remaining write-on-reader path now throws a `query_only`/readonly error in tests. For each failure, locate the offending `resolveDatabase()`/`getDatabase()` + write, wrap it in `runRepositoryTransaction`, re-run. Iterate until green. Keep a running list of every file/method changed in the commit body.
@@ -963,15 +969,27 @@ Export a testables hook at the bottom of the module (near the other exports):
 ```javascript
 export const __testables = { getRetryDelay };
 ```
-In `retryFailedItem` (line 804-813), add `retry_count = 0` to the UPDATE set clause:
+Fix `retryFailedItem` (lines 800-822) — **two changes**: (a) add `retry_count = 0` to the UPDATE; (b) **fix the transaction routing**. Today it does `const db = await resolveDatabase(database); … runRepositoryTransaction(db, …)`. After the connection split, in production `database` is `undefined` so `resolveDatabase()` returns the **query-only reader**, and passing that resolved `db` makes `runRepositoryTransaction` treat it as an injected connection → the UPDATE runs on the read-only reader and **throws**, defeating retry (Codex plan pass 3, finding 2). The finalize functions already do this correctly — they pass the `database` *closure* (undefined→writer). Mirror them:
 ```javascript
+  const retryFailedItem = async (table, id) => {
+    const tableName = normalizeTableName(table);
+    // Route through the engine's `database` closure (undefined in prod → writer), NOT a
+    // resolved reader handle. Resolving first and passing it would hit the query_only reader.
+    await runRepositoryTransaction(database, async (txn) => {
       await txn.runAsync(`
         update sync_outbox
         set status = 'pending', next_retry_at = null, last_error = null,
             retry_count = 0, updated_at = ?
         where lower(table_name) = ? and record_id = ? and status in ('failed', 'terminal')
       `, timestamp(), tableName, id);
+      const config = getConfig(tableName);
+      if (config) {
+        await setDomainSyncResult(txn, config.tableName, id, { syncStatus: 'pending', lastSyncError: null });
+      }
+    });
+  };
 ```
+Add an integration test (in `retryBackoff.test.js`, injected-db path) asserting a `failed` row with `retry_count = 3` becomes `pending` with `retry_count = 0` after `retryFailedItem`. The production reader/writer routing (that retry runs on the writer, not the query_only reader) is verified by the device pass (Task 12) and Task 3's `withTransaction` writer test — Jest's single-connection adapter can't model the split.
 Thread `force` through `syncAll` (line 680) → `getReadyRecords`:
 ```javascript
   const syncAll = async ({ tableName = null, force = false } = {}) => {
@@ -1108,29 +1126,26 @@ git commit -m "fix(sync): per-record error guard so one thrown error can't poiso
 
 - [ ] **Step 1: Write the failing test**
 
-Create `__tests__/syncContractCompleteness.test.js`:
+Create `__tests__/syncContractCompleteness.test.js`. Read the **actual migrated schema** via `PRAGMA table_info` (not regex over source) so the guard catches `ALTER TABLE ADD COLUMN` additions too — which is exactly how `sessions.group_id`/`state` arrive (Codex plan pass 3, finding 1):
 ```javascript
-import fs from 'fs';
-import path from 'path';
+jest.mock('expo-sqlite', () => require('../test-support/expoSQLiteMock'));
+import { createBetterSqliteTestDatabase } from '../test-support/betterSqliteAdapter';
+import { runMigrations } from '../src/db/migrations';
 import { __contract } from '../src/services/offlineSync'; // { SERVER_COLUMNS, PUSH_ORDER, INTENTIONALLY_UNSYNCED, LOCAL_ONLY_COLUMNS }
 
-// Parse local CREATE TABLE column names from migrations.js source (reuse the pattern from
-// __tests__/sessionsForwardPrepSupabaseMigration.test.js).
-const migrationsSrc = fs.readFileSync(path.join(__dirname, '../src/db/migrations.js'), 'utf8');
-const localColumns = (table) => {
-  const re = new RegExp(`create table[^(]*\\b${table}\\b\\s*\\(([\\s\\S]*?)\\);`, 'i');
-  const m = migrationsSrc.match(re);
-  if (!m) return [];
-  return m[1].split('\n').map((l) => l.trim()).filter(Boolean)
-    .map((l) => l.split(/\s+/)[0].replace(/["']/g, ''))
-    .filter((c) => /^[a-z_]+$/i.test(c) && !['primary','foreign','unique','check','constraint'].includes(c.toLowerCase()));
+let db;
+beforeAll(async () => { db = createBetterSqliteTestDatabase(':memory:'); await runMigrations(db); });
+
+const schemaColumns = async (table) => {
+  const info = await db.getAllAsync(`PRAGMA table_info(${table})`);
+  return info.map((c) => c.name); // includes CREATE-TABLE and ALTER-ADDED columns
 };
 
-it('every PUSH_ORDER table column is synced, intentionally-unsynced, or local-only (exactly one)', () => {
+it('every PUSH_ORDER table column is synced, intentionally-unsynced, or local-only (exactly one)', async () => {
   const { SERVER_COLUMNS, PUSH_ORDER, INTENTIONALLY_UNSYNCED, LOCAL_ONLY_COLUMNS } = __contract;
   for (const table of PUSH_ORDER) {
-    const cols = localColumns(table);
-    if (cols.length === 0) continue; // table defined via ALTER-only or alias; skip
+    const cols = await schemaColumns(table);
+    expect(cols.length).toBeGreaterThan(0); // table must exist in the migrated schema
     for (const col of cols) {
       const inServer = (SERVER_COLUMNS[table] || []).includes(col);
       const inIntentional = Boolean((INTENTIONALLY_UNSYNCED[table] || {})[col]);
@@ -1178,7 +1193,7 @@ export const __contract = { SERVER_COLUMNS, PUSH_ORDER, INTENTIONALLY_UNSYNCED, 
 - [ ] **Step 4: Run it, iterate to green**
 
 Run: `PATH=$HOME/.nvm/versions/node/v20.19.4/bin:$PATH npx jest syncContractCompleteness`
-Expected: For each remaining column the test flags, decide its bucket: a real synced column missing from `SERVER_COLUMNS` is a **bug to fix** (add it); a deliberate server-side hold goes in `INTENTIONALLY_UNSYNCED` with a reason; a local bookkeeping column goes in `LOCAL_ONLY_COLUMNS`. Iterate until green. (Tighten the `localColumns` parser if it misreads a column.)
+Expected: For each remaining column the test flags, decide its bucket: a real synced column missing from `SERVER_COLUMNS` is a **bug to fix** (add it); a deliberate server-side hold goes in `INTENTIONALLY_UNSYNCED` with a reason; a local bookkeeping column goes in `LOCAL_ONLY_COLUMNS`. Iterate until green. (Because the test reads `PRAGMA table_info` from the migrated DB, it sees every real column including ALTER-added ones — there is no parser to misread.)
 
 - [ ] **Step 5: Commit**
 
@@ -1254,7 +1269,8 @@ On an Android emulator against `masi-app-sqlite` with a seeded EA:
 2. Reconnect; trigger sync. **Observe:** no `database is locked`; the "Finish Session" / a foreground write completes promptly *during* the sync flush (no multi-second starvation).
 3. Force-stop mid-sync, reopen, reconnect. **Observe:** in-flight rows recover, sync drains.
 4. Tap "Sync Now" with a backed-off failed row present. **Observe:** it uploads immediately (force bypass).
-5. Verify Supabase rows via `npm run sqlite:staging:query -- "select count(*) from letter_mastery;"` (and spot-check `sessions`, `session_attendees`).
+5. On the Sync Status screen, tap the per-row **Retry** on a failed row. **Observe:** it succeeds (no `readonly`/`query_only` error) — proves `retryFailedItem` runs on the writer, not the query-only reader, on the production (no injected db) path.
+6. Verify Supabase rows via `npm run sqlite:staging:query -- "select count(*) from letter_mastery;"` (and spot-check `sessions`, `session_attendees`).
 
 - [ ] **Step 4: Record the device pass** in `documentation/sqlite-refactor-log.md` (date, scenarios, observations) per AGENTS.md.
 
