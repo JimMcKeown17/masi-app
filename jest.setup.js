@@ -35,15 +35,21 @@ const { resetDatabaseConnectionForTests } = require('./src/db/client');
 let sqliteTestDatabase = null;
 
 const resetSqliteTestDatabase = async () => {
+  // resetDatabaseConnectionForTests is async now (it closes the persistent writer/reader
+  // connections). Await it FIRST so the client's connection state is fully torn down before
+  // we recreate the shared test database — otherwise the deferred close could race a
+  // subsequent initialize().
+  await resetDatabaseConnectionForTests();
+
   if (sqliteTestDatabase) {
     try {
       await sqliteTestDatabase.closeAsync();
     } catch {
-      // Test databases may already be closed by focused SQLite tests.
+      // Test databases may already be closed by focused SQLite tests (or by the
+      // client reset above, since writer/reader share this connection in tests).
     }
   }
 
-  resetDatabaseConnectionForTests();
   expoSQLiteMock.__reset();
   sqliteTestDatabase = createBetterSqliteTestDatabase();
   expoSQLiteMock.__setDatabaseFactory(async () => sqliteTestDatabase);

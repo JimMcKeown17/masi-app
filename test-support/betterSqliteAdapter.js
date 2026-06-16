@@ -21,6 +21,14 @@ function createBetterSqliteTestDatabase(filename = ':memory:') {
 
   const adapter = {
     execAsync: async (sql) => {
+      // The production client uses TWO real connections: a writer and a query_only reader
+      // (a separate connection, so query_only never affects the writer). The test harness
+      // shares ONE better-sqlite3 connection for both, so honoring `PRAGMA query_only = ON`
+      // here would poison the writer too. Skip it — reader read-only enforcement is covered
+      // separately by clientReadOnlyReader.test.js and device-verified (spec AC #10 / Task 12).
+      if (/PRAGMA\s+query_only/i.test(sql)) {
+        return;
+      }
       database.exec(sql);
     },
 
