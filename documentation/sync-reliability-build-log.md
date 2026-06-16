@@ -128,7 +128,58 @@ All Jest/integration commands are prefixed with `PATH=$HOME/.nvm/versions/node/v
 - **Commits:** `cf12b95f` (manual BEGIN/COMMIT + FK lifecycle) · `697fc9b` (Codex fixes 1+2) · `846bc70` (adapter serialization).
 
 ### Task 3 + 4 — Dedicated writer + read-only reader; all writes via writer (ONE atomic commit)
-_status: pending_
+**Status:** ✅ done — **Codex-converged** (code-quality reviewer + 3 Codex passes; final verdict `approve`)
+
+- **What changed (commit `de9b77b`):**
+  - `src/db/client.js` rewritten: persistent **writer** (WAL + busy_timeout + FK-on post-migration) and
+    **reader** (`useNewConnection`, busy_timeout, `query_only=ON`). Single `initialize()` bootstrap migrates
+    the writer, then opens the reader. `getDatabase()`→reader, `getWriter()`→writer. `withTransaction` does
+    `BEGIN IMMEDIATE`/`COMMIT`/`ROLLBACK` on the writer, serialized by `databaseQueue`. **Non-re-entrant by
+    contract** — NO watchdog, NO depth guard (both unsafe under Hermes; nesting deadlocks by design = loud,
+    non-corrupting). `resetDatabaseConnectionForTests` is now async.
+  - `repositoryRuntime.js`: `resolveDatabase` migrates only injected (test) DBs; production returns the reader
+    (no migration on the query_only handle). `runRepositoryTransaction` routes production writes to the writer.
+  - **Write-path audit** (I did the discovery up-front): every repository `resolveDatabase` site is a READ; the
+    only write-on-resolved-handle offenders were `localStateRepository` (set/remove/clear) and 6 `storage.js`
+    methods (`ensureSchoolExists`, `ensureClassExists`, `markAsSynced`, `markAsUnsynced`, `setSyncError`,
+    `clearDomainData` → now one transaction with `defer_foreign_keys`). All routed through the writer.
+    `ensureChildExists` needed no change (its write already delegates to the closure-routed repo).
+- **Tests:** new `clientWriterConnection.test.js` (8 tests: BEGIN/COMMIT on writer, rollback, one-transaction,
+  serialization, writer/reader distinction, pragmas, + 2 from review) and `clientReadOnlyReader.test.js`
+  (proves `query_only`→throw via real better-sqlite3). Removed 3 superseded single-connection `sqliteFoundation`
+  tests (serialized-writes → covered by clientWriterConnection serialization test; pragmas-on-open → covered by
+  clientWriterConnection pragma test; on-demand-migration-waits → obsolete, migration serialization covered by
+  the surviving "serializes concurrent migration runs" test). Rewrote 1 `referenceDataRepository` test to the
+  single-writer model (same no-interleave invariant). `betterSqliteAdapter` no-ops `PRAGMA query_only` (the
+  shared single test connection can't honor it without poisoning writes; `:memory:` can't share across two
+  connections — enforcement proven by clientReadOnlyReader + device). jest setups `await` the now-async reset.
+- **Review loop (this is where it paid off):**
+  - **Code-quality reviewer (fresh subagent)** AND **Codex adversarial-review** *independently converged* on two
+    findings: **[high]** `withTransaction`'s unguarded ROLLBACK masks the original error (and could poison the
+    persistent writer — later queued `BEGIN IMMEDIATE` would throw); **[medium]** reader-init failure leaks the
+    already-open writer connection. Note: Task 2 had *already* established the "guard the rollback" pattern in
+    `runInTransaction` — `withTransaction` (specified from the older plan) hadn't gotten it. Classic fresh-eyes
+    consistency catch.
+  - The code-quality reviewer additionally flagged `retryFailedItem` still writing on the reader (plan deferred
+    its fix to Task 8). I pulled the **routing** fix forward so the write-path audit is genuinely complete now.
+- **Fixes (commit `0d4ef35`):** `withTransaction` wraps ROLLBACK in its own try/catch (rethrows original) and
+  calls a new `disposeConnections()` on rollback failure so a poisoned writer re-bootstraps; `initialize()`
+  disposes a half-open bootstrap; `retryFailedItem` routes through the `database` closure (writer in prod). +2
+  tests (rollback-masking, partial-init-cleanup).
+- **⚠️ Coverage gaps (by design, device-verified in Task 12):** the test harness uses ONE connection, so reader
+  `query_only` enforcement and the true writer/reader isolation are NOT exercised by Jest — proven by the
+  `clientReadOnlyReader` mechanism test + the Task 12 device pass (per-row Retry, production write-surface sweep).
+- **➡️ Task 8 scope reduced:** `retryFailedItem` routing is DONE here; Task 8 now only adds `retry_count = 0`
+  (plus its backoff cap + force-bypass work).
+- **Codex convergence pass** then found a gap BOTH my fix and the two reviewers missed: `initialize()` assigned
+  `writerConnection` only *after* writer pragmas/migrations succeeded, so a writer that opened but then failed
+  its pragmas/migrations leaked its handle (`disposeConnections` saw `null`). **Fixed (commit `66ccb19`):** assign
+  each connection to its module var immediately after `openDatabaseAsync`, before awaited config — so dispose
+  always closes it. Added the missing writer-bootstrap-failure regression test.
+- **Verification:** unit **399** pass, integration **111** pass (down from 114 — the 3 removed foundation tests).
+  Independently re-run green; the 2 known UI flakes didn't surface.
+- **Commits:** `de9b77b` (connection split + write-path audit) · `0d4ef35` (rollback guard + dispose + retry routing)
+  · `66ccb19` (writer-bootstrap dispose, Codex convergence).
 
 ### Task 5 — FK migration-order audit (positive + negative)
 _status: pending_
