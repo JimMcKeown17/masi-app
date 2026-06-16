@@ -88,7 +88,44 @@ All Jest/integration commands are prefixed with `PATH=$HOME/.nvm/versions/node/v
 - **Commits:** `468d863` (helpers) · `cf0199d` (Codex hardening).
 
 ### Task 2 — Migrations run FK-off via manual BEGIN/COMMIT
-_status: pending_
+**Status:** ✅ done (Codex-converged)
+
+- **What changed:**
+  - `runInTransaction` (migrations.js) → manual `BEGIN IMMEDIATE`/`COMMIT`/`ROLLBACK` on the supplied
+    connection (no more `withExclusiveTransactionAsync` throwaway connection).
+  - `runMigrationsNow` reads `user_version` first; **only** toggles `foreign_keys` OFF→(migrate)→ON when
+    migrations are pending. FK restored in `finally`.
+  - Dropped `configureDatabaseConnection` from the migration path/import (Task 3 stops `client.js` exporting it).
+- **Why FK handling changed:** migrations historically ran FK-off *by accident* (the throwaway exclusive-txn
+  connection defaults FK off). Manual BEGIN/COMMIT runs on the same connection, so FK-off is now explicit;
+  FK-on `finally` gives injected test DBs production-equivalent enforcement (Task 5 depends on it).
+- **Tests:** `migrationsForeignKeysOff.test.js` (manual-BEGIN path + FK-on-after + no-FK-toggle-when-nothing-pending);
+  `sqliteFoundation.test.js` realigned event-order + new rollback-masking test. Integration **13 suites / 114 tests**
+  green; previously-racy `offlineSyncOutbox` stable **5/5** runs.
+- **Codex adversarial-review (2 passes → converged):**
+  - Pass 1 `[high]`: no-op `runMigrationsNow` toggled FK on every `resolveDatabase` access → transient FK-off
+    window that could overlap a concurrent write (enforcement silently disabled) + restore no-ops if a txn is
+    open. **Verified real** (current `resolveDatabase` runs migrations on every access). **Fixed:** read
+    `user_version` first, skip FK toggle when nothing pending. *(The broader "production runs migrations every
+    access" half is **deferred to Task 3**, which removes that call by design — `resolveDatabase` will stop
+    migrating in production.)*
+  - Pass 1 `[medium]`: bare `await ROLLBACK` in the catch could mask the original migration error (SQLite
+    auto-rollback → "no transaction is active"). **Verified real. Fixed:** rollback wrapped in its own try/catch;
+    original error always rethrown.
+  - Pass 2: **approve** — fixes confirmed; Codex also probed a nested-`withExclusiveTransactionAsync` deadlock
+    in the new adapter queue and confirmed the codebase never nests (handles are threaded), so it's safe.
+- **Adapter fix (commit 846bc70):** `betterSqliteAdapter.withExclusiveTransactionAsync` now serializes concurrent
+  calls via a promise queue, mirroring real expo-sqlite (new connection per exclusive txn + WAL serialization).
+  Fix 1's microtask-timing change deterministically exposed a **single-connection test-adapter** limitation
+  (concurrent `Promise.all` finalizes double-BEGIN → "cannot start a transaction within a transaction"). Not a
+  production bug (prod serializes finalizes via the `databaseQueue`); the queue makes the adapter model reality.
+- **⚠️ Follow-up for Task 3:** Test 1 (`app-level migrations wait behind an active queued write transaction`) uses
+  a fully-migrated DB, so post-Fix-1 the no-op migration emits no events and its serialization assertion is
+  weakened (the "migration ran after the write" marker is gone). Migration-vs-migration serialization is still
+  covered by the "serializes concurrent migration runs" test. **Task 3 removes on-demand migration entirely**
+  (`resolveDatabase` stops migrating; migrations run once at bootstrap), so this test's scenario becomes obsolete —
+  revisit/retire it then.
+- **Commits:** `cf12b95f` (manual BEGIN/COMMIT + FK lifecycle) · `697fc9b` (Codex fixes 1+2) · `846bc70` (adapter serialization).
 
 ### Task 3 + 4 — Dedicated writer + read-only reader; all writes via writer (ONE atomic commit)
 _status: pending_
