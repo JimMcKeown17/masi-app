@@ -148,3 +148,31 @@ it('disposes a half-open bootstrap when the reader open fails, allowing a clean 
   const w = await getWriter();
   expect(w).toBe(writer2);
 });
+
+it('disposes the writer if a writer pragma/migration fails AFTER open (no leaked handle)', async () => {
+  // Writer opens successfully, but configuring it (first writer pragma) throws — the failure
+  // happens BEFORE the old code assigned writerConnection, so this proves the handle is still
+  // closed (regression for the Codex convergence finding).
+  writer.execAsync = jest.fn(async (sql) => {
+    writer.calls.push(sql);
+    if (/journal_mode = WAL/i.test(sql)) throw new Error('writer pragma failed');
+  });
+  let openCount = 0;
+  __setDatabaseFactory(async () => (openCount++ === 0 ? writer : reader));
+  let caught;
+  try {
+    await getWriter();
+  } catch (e) {
+    caught = e;
+  }
+  expect(caught?.message).toMatch(/writer pragma failed/);
+  expect(writer.closeAsync).toHaveBeenCalled();      // opened-but-unconfigured writer was closed
+
+  // initPromise was reset → a clean retry succeeds against a fresh factory.
+  const writer2 = fakeConn();
+  const reader2 = fakeConn();
+  let open2 = 0;
+  __setDatabaseFactory(async () => (open2++ === 0 ? writer2 : reader2));
+  const w = await getWriter();
+  expect(w).toBe(writer2);
+});

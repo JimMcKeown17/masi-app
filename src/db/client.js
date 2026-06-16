@@ -47,21 +47,25 @@ const disposeConnections = async () => {
 const initialize = async () => {
   if (!initPromise) {
     initPromise = (async () => {
-      const writer = await openDatabaseAsync(DATABASE_NAME);
-      await applyPragmas(writer, WRITER_PRE_MIGRATION_PRAGMAS);
-      await runMigrations(writer);
-      await writer.execAsync('PRAGMA foreign_keys = ON');
-      writerConnection = writer;
+      // Register each connection in its module var IMMEDIATELY after opening, BEFORE any awaited
+      // pragma/migration work. If configuration then throws, the handle is already visible to
+      // disposeConnections() in the catch — otherwise a writer that opened but failed its pragmas
+      // or migrations would leak its native handle (it wasn't yet assigned). Nothing reads these
+      // vars until initialize() resolves (every caller awaits initPromise), so early assignment
+      // of a not-yet-configured connection is safe.
+      writerConnection = await openDatabaseAsync(DATABASE_NAME);
+      await applyPragmas(writerConnection, WRITER_PRE_MIGRATION_PRAGMAS);
+      await runMigrations(writerConnection);
+      await writerConnection.execAsync('PRAGMA foreign_keys = ON');
 
-      const reader = await openDatabaseAsync(DATABASE_NAME, { useNewConnection: true });
-      await applyPragmas(reader, READER_PRAGMAS);
-      readerConnection = reader;
+      readerConnection = await openDatabaseAsync(DATABASE_NAME, { useNewConnection: true });
+      await applyPragmas(readerConnection, READER_PRAGMAS);
 
       return { writerConnection, readerConnection };
     })().catch(async (error) => {
-      // Half-open bootstrap (e.g. writer opened but the reader open/PRAGMA failed): close
-      // whatever opened and clear state so the next access re-bootstraps instead of leaking
-      // the writer's native handle.
+      // Any bootstrap failure (writer open/pragma/migration OR reader open/pragma): close
+      // whatever opened and clear state so the next access re-bootstraps instead of leaking a
+      // native handle.
       await disposeConnections();
       throw error;
     });
