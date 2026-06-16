@@ -24,3 +24,21 @@ describe('sqlPlaceholders', () => {
     expect(sqlPlaceholders(0)).toBe('');
   });
 });
+
+describe('chunkArray input validation', () => {
+  it.each([0, -1, 1.5, NaN, Infinity])('throws RangeError for invalid size %p', (bad) => {
+    expect(() => chunkArray([1, 2, 3], bad)).toThrow(RangeError);
+  });
+  it('still chunks normally with a valid size', () => {
+    expect(chunkArray([1, 2, 3], 2)).toEqual([[1, 2], [3]]);
+  });
+});
+
+describe('sqlPlaceholders input validation', () => {
+  it.each([-1, 2.5, NaN])('throws RangeError for invalid count %p', (bad) => {
+    expect(() => sqlPlaceholders(bad)).toThrow(RangeError);
+  });
+  it('still returns "" for 0 (valid)', () => {
+    expect(sqlPlaceholders(0)).toBe('');
+  });
+});
