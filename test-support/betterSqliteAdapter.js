@@ -11,6 +11,14 @@ const normalizeParams = (params) => {
 function createBetterSqliteTestDatabase(filename = ':memory:') {
   const database = new BetterSqlite3(filename);
 
+  // Serializes concurrent withExclusiveTransactionAsync calls, mirroring the real
+  // expo-sqlite behaviour where a second exclusive-transaction request queues behind
+  // the first. Without this, Promise.all batches that each trigger a repository
+  // transaction (via runRepositoryTransaction → runWithTransaction) would race at
+  // the SQLite-level BEGIN, producing "cannot start a transaction within a
+  // transaction" errors that do not occur on real devices.
+  let exclusiveTransactionQueue = Promise.resolve();
+
   const adapter = {
     execAsync: async (sql) => {
       database.exec(sql);
@@ -32,16 +40,25 @@ function createBetterSqliteTestDatabase(filename = ':memory:') {
       database.prepare(sql).get(normalizeParams(params)) || null
     ),
 
-    withExclusiveTransactionAsync: async (task) => {
-      database.exec('BEGIN');
-      try {
-        const result = await task(adapter);
-        database.exec('COMMIT');
-        return result;
-      } catch (error) {
-        database.exec('ROLLBACK');
-        throw error;
-      }
+    withExclusiveTransactionAsync: (task) => {
+      const slot = exclusiveTransactionQueue.then(async () => {
+        database.exec('BEGIN');
+        try {
+          const result = await task(adapter);
+          database.exec('COMMIT');
+          return result;
+        } catch (error) {
+          try {
+            database.exec('ROLLBACK');
+          } catch (rollbackError) {
+            // swallow — original error is the actionable one
+          }
+          throw error;
+        }
+      });
+      // Chain so the next caller waits for this slot to settle.
+      exclusiveTransactionQueue = slot.then(() => {}, () => {});
+      return slot;
     },
 
     closeAsync: async () => {
