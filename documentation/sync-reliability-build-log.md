@@ -70,7 +70,22 @@ All Jest/integration commands are prefixed with `PATH=$HOME/.nvm/versions/node/v
 ## Phase 1 — Foundation
 
 ### Task 1 — `chunkArray` + `sqlPlaceholders` helpers
-_status: pending_
+**Status:** ✅ done
+
+- **What changed:** added `chunkArray(items, size=200)` and `sqlPlaceholders(count)` to
+  `src/db/repositories/sqliteRepositoryUtils.js` (used later by bulk finalize + batched upserts).
+- **Tests:** `__tests__/sqliteRepositoryUtils.helpers.test.js` — TDD red→green; 15 tests green
+  (`npx jest sqliteRepositoryUtils.helpers`).
+- **Spec/quality review:** controller-verified from the committed diff (2 pure helpers — right-sized vs. a
+  dedicated reviewer subagent): matches plan verbatim, defensive guards, edge cases covered, no unrelated
+  files swept in.
+- **Codex adversarial-review:** `[high]` — `chunkArray` with `size<=0` is a **non-terminating loop** (hang in
+  sync finalization); `NaN`/`Infinity`/fractional also misbehave. **Verified real** against the code (current
+  callers all pass hardcoded `200`, so no live trigger — but it's a shared exported helper and a hang in
+  finalization is the exact field failure this slice prevents; also contradicts the slice's fail-loud ethos).
+  **Resolved:** both helpers now throw `RangeError` on out-of-contract input (guard-first, since running the
+  "red" would hang rather than fail). +9 validation tests.
+- **Commits:** `468d863` (helpers) · `cf0199d` (Codex hardening).
 
 ### Task 2 — Migrations run FK-off via manual BEGIN/COMMIT
 _status: pending_
