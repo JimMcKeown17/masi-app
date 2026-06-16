@@ -153,11 +153,10 @@ describe('SQLite foundation client', () => {
       'enter-write',
       'inside-write',
       'exit-write',
-      // runMigrationsNow sets FK off before the migration loop and restores it
-      // in finally. configureDatabaseConnection is no longer called here; WAL and
-      // busy_timeout are only set once by client.js initializeDatabase.
-      'exec:PRAGMA foreign_keys = OFF',
-      'exec:PRAGMA foreign_keys = ON',
+      // user_version is already at CURRENT_SCHEMA_VERSION so there are no pending
+      // migrations — runMigrationsNow returns immediately without touching foreign_keys.
+      // configureDatabaseConnection is no longer called here; WAL and busy_timeout are
+      // only set once by client.js initializeDatabase.
     ]);
   });
 });
@@ -255,11 +254,12 @@ describe('SQLite migration runner', () => {
     await runMigrations(db);
 
     expect(events).toEqual([
-      // FK enforcement is turned OFF before the migration loop and restored in finally.
+      // user_version is read FIRST to detect pending migrations before any FK toggle.
       // configureDatabaseConnection (WAL, busy_timeout) is no longer called here —
       // it runs once in client.js initializeDatabase when the connection is opened.
-      'exec:PRAGMA foreign_keys = OFF',
       'get:PRAGMA user_version',
+      // FK enforcement is turned OFF only when there are pending migrations.
+      'exec:PRAGMA foreign_keys = OFF',
       // Per pending migration: BEGIN IMMEDIATE, exec SQL, record it, bump user_version, COMMIT.
       // The db connection itself is passed as txn, so txn.execAsync === db.execAsync.
       'enter-migration-transaction',
@@ -277,7 +277,7 @@ describe('SQLite migration runner', () => {
       'txn:record-migration',
       'txn:set-user-version',
       'exit-migration-transaction',
-      // FK enforcement restored unconditionally in finally.
+      // FK enforcement restored in finally.
       'exec:PRAGMA foreign_keys = ON',
     ]);
   });
@@ -634,6 +634,30 @@ describe('SQLite migration runner', () => {
     // run is serialized behind it, sees user_version already current, and does nothing.
     expect(beginCount).toBe(3);
     expect(userVersion).toBe(3);
+  });
+
+  test('a ROLLBACK failure does not mask the original migration error', async () => {
+    const db = {
+      execAsync: jest.fn(async (sql) => {
+        if (/BEGIN IMMEDIATE/i.test(sql)) return;
+        if (/^ROLLBACK$/i.test(sql)) throw new Error('rollback boom');
+        if (/PRAGMA/i.test(sql)) return; // FK off/on, user_version bump
+        throw new Error('migration boom'); // first migration SQL statement fails
+      }),
+      getFirstAsync: jest.fn(async () => ({ user_version: 0 })),
+      runAsync: jest.fn(async () => undefined),
+    };
+    let caught;
+    try {
+      await runMigrations(db);
+    } catch (error) {
+      caught = error;
+    }
+    expect(caught).toBeDefined();
+    expect(caught.message).toMatch(/migration boom/);   // the ORIGINAL error
+    expect(caught.message).not.toMatch(/rollback boom/); // not masked by rollback failure
+    // FK restored in finally even on failure:
+    expect(db.execAsync).toHaveBeenCalledWith('PRAGMA foreign_keys = ON');
   });
 
   test('rolls back schema changes and leaves user_version untouched when migration history insert fails', async () => {

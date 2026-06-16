@@ -584,24 +584,35 @@ const runInTransaction = async (db, task) => {
     await db.execAsync('COMMIT');
     return result;
   } catch (error) {
-    await db.execAsync('ROLLBACK');
+    // Roll back, but never let a ROLLBACK failure mask the original migration error.
+    // SQLite may have already auto-rolled-back (making an explicit ROLLBACK throw
+    // "no transaction is active"), which would otherwise hide the actionable cause
+    // and break startup-migration diagnosis.
+    try {
+      await db.execAsync('ROLLBACK');
+    } catch (rollbackError) {
+      // swallow — the original error is the one worth surfacing
+    }
     throw error;
   }
 };
 
 async function runMigrationsNow(database) {
   const db = database || await getDatabase();
-  // Migrations run with FK enforcement OFF, then ON afterward. PRAGMA foreign_keys is a no-op
-  // inside a transaction, so set it here (between transactions) before/after the loop.
+  const userVersion = await getUserVersion(db);
+  const pending = MIGRATIONS.filter((migration) => migration.version > userVersion);
+  if (pending.length === 0) {
+    // Fully migrated: do NOT toggle foreign_keys. resolveDatabase() calls this on every
+    // repository access; toggling FK off/on each time would open a transient FK-off window
+    // on the shared connection that can overlap a concurrent write (enforcement silently
+    // disabled), and the restore no-ops if a write txn is open. A no-op call stays a true no-op.
+    return;
+  }
+  // Pending migrations run with FK enforcement OFF, restored ON in finally. PRAGMA
+  // foreign_keys is a no-op inside a transaction, so set it between transactions.
   await db.execAsync('PRAGMA foreign_keys = OFF');
   try {
-    let userVersion = await getUserVersion(db);
-
-    for (const migration of MIGRATIONS) {
-      if (migration.version <= userVersion) {
-        continue;
-      }
-
+    for (const migration of pending) {
       await runInTransaction(db, async (txn) => {
         await txn.execAsync(migration.sql);
         await txn.runAsync(
@@ -618,13 +629,9 @@ async function runMigrationsNow(database) {
         // as transactional (verified: commits with the txn, reverts on rollback).
         await txn.execAsync(`PRAGMA user_version = ${migration.version}`);
       });
-
-      userVersion = migration.version;
     }
   } finally {
-    // Restore runtime FK posture for ALL callers — the production writer AND injected test
-    // DBs (via runMigrations(database)). Without this, injected integration DBs would run
-    // FK-off, hiding the ordering bugs Task 5 exists to expose.
+    // Restore runtime FK posture for ALL callers — production writer AND injected test DBs.
     await db.execAsync('PRAGMA foreign_keys = ON');
   }
 }

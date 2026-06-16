@@ -25,3 +25,15 @@ it('leaves foreign_keys ON after migrations so injected DBs enforce FK like prod
   const fk = await db.getFirstAsync('PRAGMA foreign_keys');
   expect(fk.foreign_keys).toBe(1);
 });
+
+it('does not toggle foreign_keys when there are no pending migrations (no FK-off window)', async () => {
+  const db = createBetterSqliteTestDatabase(':memory:');
+  await runMigrations(db); // first run applies all migrations
+  const calls = [];
+  const origExec = db.execAsync.bind(db);
+  db.execAsync = async (sql) => { calls.push(sql); return origExec(sql); };
+  await runMigrations(db); // second run: nothing pending — must NOT touch foreign_keys
+  expect(calls.some((sql) => /foreign_keys/i.test(sql))).toBe(false);
+  const fk = await db.getFirstAsync('PRAGMA foreign_keys');
+  expect(fk.foreign_keys).toBe(1); // posture still ON from the first run
+});
