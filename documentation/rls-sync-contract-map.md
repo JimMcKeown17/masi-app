@@ -32,7 +32,7 @@ Use this map before changing any synced table, repository producer, outbox opera
 | Operation shape | Tables | Server call | RLS implication |
 | --- | --- | --- | --- |
 | Default outbox push | Most synced domain tables | `upsert(payload, { onConflict: 'id' })` | Needs both write permission and SELECT visibility for upsert. |
-| Batched upsert | `assessment_items`, `letter_mastery`, `session_attendees`, `time_entries` | `upsert(payloads, { onConflict: 'id' })` with per-record fallback on batch failure | Parent row (`assessments` / `children` / `sessions`) must be visible/writable first for tables with parent FKs. |
+| Batched upsert | `assessment_items`, `letter_mastery`, `session_attendees`, `time_entries` | `upsert(payloads, { onConflict: 'id' })` with per-record fallback on batch failure (returned error or thrown request) | Parent row (`assessments` / `children` / `sessions`) must be visible/writable first for tables with parent FKs. |
 | Immutable assignment insert retry | `child_ea_assignments`, `class_ea_assignments`, `group_ea_assignments` when `operation === 'insert'` | `upsert(payload, { onConflict: 'id', ignoreDuplicates: true })` | Duplicate insert retry must be insert-or-ignore, not update-capable upsert, because identity triggers reject changed identity/timestamp columns. |
 | Assignment archive/update | Same assignment tables when `operation === 'archive'` or update-like payload | Update-capable upsert | Allowed only for lifecycle fields such as `unassigned_at` / `handover_reason`; identity columns remain immutable. |
 | No-history child delete | `children` hard delete | RPC `delete_child_if_no_history(p_child_id)` | Direct mobile child DELETE is blocked; history rows require archive instead. |

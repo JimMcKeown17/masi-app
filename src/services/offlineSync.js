@@ -781,9 +781,17 @@ export const createOutboxSyncEngine = ({
         return await processBatchFallback(outboxRecords);
       }
 
-      const serverResult = await enqueueRequest(() => (
-        runBatchServerOperation(supabaseClient, config, inFlightRecords)
-      ));
+      let serverResult;
+      try {
+        serverResult = await enqueueRequest(() => (
+          runBatchServerOperation(supabaseClient, config, inFlightRecords)
+        ));
+      } catch (batchError) {
+        // A THROWN batch request (timeout / abort / oversized payload) — degrade to per-record so a
+        // deterministic batch-level failure isolates per row (smaller payloads make progress) instead
+        // of re-forming the same failing batch forever. processBatchFallback is allSettled-safe.
+        return await processBatchFallback(outboxRecords);
+      }
 
       if (!serverResult.success) {
         return await processBatchFallback(outboxRecords);

@@ -68,6 +68,40 @@ const seedAssessmentItemsForThrowTest = async (db, count = 3) => {
   }
 };
 
+it('a thrown batch request degrades to per-record fallback (rows still sync)', async () => {
+  const db = createBetterSqliteTestDatabase(':memory:');
+  await runMigrations(db);
+  await seedCoreData(db);
+  await seedAssessmentItemsForThrowTest(db, 3);
+
+  // Discriminate batch vs per-row by payload shape:
+  //   runBatchServerOperation passes an Array  → this represents the single batch call → THROW
+  //   runServerOperation passes a single Object → these are per-row fallback calls → SUCCEED
+  const batchThrowsPerRowSucceeds = () => ({
+    from: () => ({
+      upsert: async (payload) => {
+        if (Array.isArray(payload)) throw new Error('batch payload too large');
+        return { data: [{}], error: null }; // per-row succeeds
+      },
+      delete: () => ({
+        eq: async () => ({ error: null }),
+      }),
+    }),
+    rpc: async () => ({ data: true, error: null }),
+  });
+
+  const engine = createOutboxSyncEngine({ database: db, supabaseClient: batchThrowsPerRowSucceeds() });
+  const result = await engine.syncAll();
+
+  // All rows synced via the per-record fallback; outbox drained; none failed.
+  const remaining = await db.getAllAsync('select id from sync_outbox');
+  expect(remaining).toHaveLength(0);
+  expect(result.totalSynced).toBeGreaterThanOrEqual(3);
+  expect(result.totalFailed).toBe(0);
+
+  await db.closeAsync();
+});
+
 it('a thrown per-row request in the batch fallback finalizes retriable, none left in_flight', async () => {
   const db = createBetterSqliteTestDatabase(':memory:');
   await runMigrations(db);
