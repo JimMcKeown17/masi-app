@@ -1,6 +1,17 @@
 jest.mock('expo-sqlite', () => require('../test-support/expoSQLiteMock'));
 jest.mock('../src/services/supabaseClient', () => ({ supabase: {} }));
 
+// repairGroupOwnershipForSync runs in syncAll's preflight. By default delegate to the real
+// implementation (a no-op when no `groups` rows are seeded, which all the existing tests rely on);
+// individual tests override it via mockImplementationOnce to exercise the best-effort preflight guard.
+jest.mock('../src/db/repositories/groupsRepository', () => {
+  const actual = jest.requireActual('../src/db/repositories/groupsRepository');
+  return {
+    ...actual,
+    repairGroupOwnershipForSync: jest.fn(actual.repairGroupOwnershipForSync),
+  };
+});
+
 import { createBetterSqliteTestDatabase } from '../test-support/betterSqliteAdapter';
 import { runMigrations } from '../src/db/migrations';
 import { createSyncOutboxRepository } from '../src/db/repositories/syncOutboxRepository';
@@ -8,6 +19,7 @@ import { outboxRecordId } from '../src/db/repositories/syncOutboxRepository';
 import { createSyncStateRepository } from '../src/db/repositories/syncStateRepository';
 import { createOutboxSyncEngine } from '../src/services/offlineSync';
 import { createSupabaseRequestQueue } from '../src/services/supabaseRequestQueue';
+import { repairGroupOwnershipForSync } from '../src/db/repositories/groupsRepository';
 
 const enqueue = async (db, tableName, recordId, operation, payload) => {
   const outbox = createSyncOutboxRepository({ database: db });
@@ -467,6 +479,110 @@ it('Task 9 (allSettled race): sibling B synced even when A markInFlight throws b
   // Simple invariant: total new upserts in second pass ≤ 1 (only A may retry, B won't).
   const secondPassUpserts = totalUpsertCalls - upsertCallsBeforeSecondPass;
   expect(secondPassUpserts).toBeLessThanOrEqual(1);
+
+  await db.closeAsync();
+});
+
+// ─── Holistic fix: preflight runs INSIDE the convergence guard ──────────────────────────────────
+//
+// Finding: syncAll's preflight (repairGroupOwnershipForSync, resetInFlight, getReadyRecords) ran
+// OUTSIDE the Task-9 try/finally. A repair throw aborted the WHOLE pass before resetInFlight
+// recovered prior-stranded in_flight rows and before updateSyncMeta — and rejected the pass,
+// blocking ALL sync. The restructure: resetInFlight runs FIRST + best-effort; repair is
+// best-effort; the entire body is in one top-level try/catch/finally so the pass RESOLVES (never
+// rejects) and meta is always recorded.
+
+it('a repairGroupOwnershipForSync throw does NOT block sync, does NOT strand in_flight, and writes meta', async () => {
+  const db = createBetterSqliteTestDatabase(':memory:');
+  await runMigrations(db);
+
+  // A healthy, non-group pending row that must still drain despite the repair failure.
+  await seedTimeEntry(db, 'time-healthy');
+
+  // A pre-existing in_flight row (left by a prior interrupted pass). resetInFlight must recover it
+  // FIRST — before the repair throws — so it is no longer stranded. Seed it as a real time_entries
+  // row + outbox, then flip its outbox status directly to 'in_flight'.
+  await seedTimeEntry(db, 'time-prior-inflight');
+  const priorOutboxId = outboxRecordId('time_entries', 'time-prior-inflight', 'insert');
+  await db.runAsync(`update sync_outbox set status = 'in_flight' where id = ?`, priorOutboxId);
+
+  // Sanity: it really is in_flight before the pass (so getReadyRecords would skip it unless reset).
+  expect((await db.getFirstAsync('select status from sync_outbox where id = ?', priorOutboxId)).status)
+    .toBe('in_flight');
+
+  // Make the preflight repair throw for THIS pass only (reverts to the real no-op afterward).
+  repairGroupOwnershipForSync.mockImplementationOnce(async () => { throw new Error('repair boom'); });
+
+  const beforeSync = new Date().toISOString();
+  const engine = createOutboxSyncEngine({ database: db, supabaseClient: successSupabase() });
+
+  // Load-bearing: the pass RESOLVES — the repair throw must NOT reject syncAll.
+  const result = await engine.syncAll();
+  expect(result).toBeTruthy();
+
+  // Repair failed → result.success degraded to false (but sync still ran).
+  expect(result.success).toBe(false);
+
+  // The healthy row drained + synced despite the repair failure.
+  expect(await db.getFirstAsync('select sync_status from time_entries where id = ?', 'time-healthy'))
+    .toEqual({ sync_status: 'synced' });
+  expect(await db.getFirstAsync('select id from sync_outbox where record_id = ?', 'time-healthy'))
+    .toBeNull();
+
+  // The pre-existing in_flight row was recovered (resetInFlight ran FIRST, before the throw) and
+  // then synced this pass — so it is no longer in_flight.
+  const priorRow = await db.getFirstAsync('select id from sync_outbox where id = ?', priorOutboxId);
+  expect(priorRow).toBeNull(); // recovered → pending → synced → outbox deleted
+
+  // No row stranded in_flight anywhere.
+  expect((await db.getAllAsync(`select id from sync_outbox where status = 'in_flight'`))).toHaveLength(0);
+
+  // Meta written despite the preflight throw.
+  const meta = await createSyncStateRepository({ database: db }).getSyncMeta();
+  expect(meta.lastSyncTime).toBeTruthy();
+  expect(meta.lastSyncTime >= beforeSync).toBe(true);
+
+  await db.closeAsync();
+});
+
+it('a resetInFlight throw is best-effort: sync still completes, meta written, result.success=false', async () => {
+  const db = createBetterSqliteTestDatabase(':memory:');
+  await runMigrations(db);
+
+  await seedTimeEntry(db, 'time-healthy-reset');
+
+  // outboxRepository wrapper whose resetInFlight throws — must NOT reject the pass.
+  const real = createSyncOutboxRepository({ database: db });
+  const wrapped = {
+    ...real,
+    resetInFlight: async () => { throw new Error('resetInFlight boom'); },
+  };
+
+  const beforeSync = new Date().toISOString();
+  const engine = createOutboxSyncEngine({
+    database: db,
+    outboxRepository: wrapped,
+    supabaseClient: successSupabase(),
+  });
+
+  // Resolves (no reject) even though resetInFlight threw.
+  const result = await engine.syncAll();
+  expect(result).toBeTruthy();
+  expect(result.success).toBe(false);
+
+  // Healthy row still synced.
+  expect(await db.getFirstAsync('select sync_status from time_entries where id = ?', 'time-healthy-reset'))
+    .toEqual({ sync_status: 'synced' });
+  expect(await db.getFirstAsync('select id from sync_outbox where record_id = ?', 'time-healthy-reset'))
+    .toBeNull();
+
+  // No row stranded in_flight.
+  expect((await db.getAllAsync(`select id from sync_outbox where status = 'in_flight'`))).toHaveLength(0);
+
+  // Meta written despite the throw.
+  const meta = await createSyncStateRepository({ database: db }).getSyncMeta();
+  expect(meta.lastSyncTime).toBeTruthy();
+  expect(meta.lastSyncTime >= beforeSync).toBe(true);
 
   await db.closeAsync();
 });

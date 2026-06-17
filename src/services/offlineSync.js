@@ -826,18 +826,6 @@ export const createOutboxSyncEngine = ({
 
   const syncAll = async ({ tableName = null, force = false } = {}) => {
     const startedAt = Date.now();
-    await resolveDatabase(database);
-    await repairGroupOwnershipForSync({ database });
-    if (typeof outboxRepository.resetInFlight === 'function') {
-      await outboxRepository.resetInFlight();
-    }
-    const readyRecords = sortByPushOrder(
-      await outboxRepository.getReadyRecords({ limit: 1000, includeBackedOff: force })
-    );
-    const filteredRecords = tableName
-      ? readyRecords.filter((record) => record.table_name === normalizeTableName(tableName))
-      : readyRecords;
-
     const result = {
       success: true,
       totalSynced: 0,
@@ -868,6 +856,35 @@ export const createOutboxSyncEngine = ({
     };
 
     try {
+      await resolveDatabase(database);
+
+      // Recover rows left in_flight by a prior interrupted pass FIRST and best-effort, so a later
+      // preflight failure (e.g. repairGroupOwnershipForSync throwing) can't keep them stranded.
+      if (typeof outboxRepository.resetInFlight === 'function') {
+        try {
+          await outboxRepository.resetInFlight();
+        } catch (resetError) {
+          console.error('syncAll: resetInFlight failed (continuing):', resetError);
+          result.success = false;
+        }
+      }
+
+      // Group-ownership repair is best-effort: its failure must NOT block unrelated tables from
+      // syncing, and must NOT reject the pass before resetInFlight/updateSyncMeta have run.
+      try {
+        await repairGroupOwnershipForSync({ database });
+      } catch (repairError) {
+        console.error('syncAll: repairGroupOwnershipForSync failed (continuing):', repairError);
+        result.success = false;
+      }
+
+      const readyRecords = sortByPushOrder(
+        await outboxRepository.getReadyRecords({ limit: 1000, includeBackedOff: force })
+      );
+      const filteredRecords = tableName
+        ? readyRecords.filter((record) => record.table_name === normalizeTableName(tableName))
+        : readyRecords;
+
       for (let index = 0; index < filteredRecords.length; index += 1) {
         const outboxRecord = filteredRecords[index];
         const config = getConfig(outboxRecord.table_name);
@@ -935,6 +952,12 @@ export const createOutboxSyncEngine = ({
           applyRecordResult(outboxRecord, getConfig(outboxRecord.table_name), { success: false, terminal: false, failedRecord: makeFailedRecord(outboxRecord, reason) });
         }
       }
+    } catch (error) {
+      // Unexpected preflight failure (resolveDatabase / getReadyRecords). Don't reject the pass —
+      // mark it failed; the finally still records the attempt so meta is never skipped, and
+      // resetInFlight (run first, best-effort) has already recovered any prior-stranded rows.
+      console.error('syncAll: preflight error (continuing to record attempt):', error);
+      result.success = false;
     } finally {
       result.durationMs = Date.now() - startedAt;
       const now = new Date().toISOString();
