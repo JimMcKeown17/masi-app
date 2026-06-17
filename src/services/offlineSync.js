@@ -54,6 +54,19 @@ const LEGACY_KEYS_TO_STRIP = {
   sessions: ['session_type'],
 };
 
+// Real server columns deliberately withheld from push (reserved strictly for that — NOT a
+// catch-all). sessions.group_id/state are server-RLS-guarded out until the state-machine slice
+// (supabase/migrations/20260529214500_masi_sessions_forward_prep_columns.sql).
+const INTENTIONALLY_UNSYNCED = {
+  sessions: {
+    group_id: 'Forward-prep; server RLS pins group_id NULL until the state-machine slice (migration 20260529214500).',
+    state: 'Forward-prep; server RLS pins state=completed until the state-machine slice (migration 20260529214500).',
+  },
+};
+
+// Local-only bookkeeping columns the engine strips before push — never sent to the server.
+const LOCAL_ONLY_COLUMNS = ['synced', 'sync_status', 'last_sync_error', 'server_updated_at'];
+
 const SERVER_COLUMNS = {
   time_entries: [
     'id', 'user_id', 'sign_in_time', 'sign_in_lat', 'sign_in_lon', 'sign_out_time',
@@ -984,6 +997,7 @@ export const retryFailedItem = (table, id) => defaultEngine.retryFailedItem(tabl
 export const _testBuildSyncPayload = buildSyncPayload;
 export const _testClassifyError = classifyError;
 export const __testables = { getRetryDelay };
+export const __contract = { SERVER_COLUMNS, PUSH_ORDER, INTENTIONALLY_UNSYNCED, LOCAL_ONLY_COLUMNS };
 
 export const pullReferenceData = async ({
   supabaseClient = supabase,
