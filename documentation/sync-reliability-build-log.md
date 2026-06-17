@@ -225,7 +225,33 @@ All Jest/integration commands are prefixed with `PATH=$HOME/.nvm/versions/node/v
 - **Commit:** `621c83e`.
 
 ### Task 7 — Batch failure semantics (B4)
-_status: pending_
+**Status:** ✅ done — request-throw semantics closed; broader post-markInFlight invariant deferred to Task 9
+
+- **What changed (commit `612dde3`):** added `finalizeManyRetriableFailure` (bulk, mirrors per-row
+  `finalizeRetriableFailure` CAS, one txn/chunk); `processBatch` wraps the batch server call in try/catch — a
+  THROWN batch upload now bulk-finalizes every in-flight member as retriable failed (last_error + backed-off
+  next_retry_at) instead of stranding them `in_flight`.
+- **Codex `[high]` (and fix, commit `d357ae3`):** the per-row FALLBACK (`if (!serverResult.success) →
+  Promise.all(map(processRecord))`) could still strand rows: `processRecord`'s server call was unguarded, so a
+  thrown per-row request (degraded network) rejected the `Promise.all` and left the `markInFlight`'d row
+  `in_flight`. **Verified real** against the code (markInFlight at ~651, unguarded `await enqueueRequest` at ~658).
+  **Fixed:** `processRecord` wraps its server call in try/catch → `finalizeRetriableFailure` (mirrors the
+  batch-throw fix), so a thrown request finalizes retriable in BOTH the fallback and the direct per-record path.
+  Complementary to Task 9's outer-loop guard (which catches errors outside the server op).
+- **Tests:** `batchFailureSemantics` — (a) thrown batch → all 3 failed/none in_flight/totalFailed=3; (b) batch
+  `{error}` → fallback → 3 per-row throws → all failed/none in_flight (4 upsert calls). `offlineSyncOutbox` (28) +
+  integration (13/111) green.
+- **Codex convergence `[high]` → deferred to Task 9 (not a punt — see below):** Codex escalated to the broader
+  invariant: a throw from `getById` or the finalizers themselves (NOT the server request) after `markInFlight`
+  can still strand a row `in_flight`, since only the server call is inside try/catch. **Verified real**, but:
+  (a) **self-healing** — `syncAll` calls `resetInFlight()` at the start of every pass (`update sync_outbox set
+  status='pending' where status='in_flight'`), so a stranded row is reset+retried next sync (no data loss);
+  (b) these are rare local-SQLite exceptions; (c) it is **squarely Task 9's scope** ("per-record error guard").
+  **Decision:** mark Task 7 done (its request-throw semantics ARE closed) and **upgrade Task 9** to adopt Codex's
+  recommendation — a `processRecord`/`processBatch`-level outer guard that best-effort restores marked ids on ANY
+  post-markInFlight throw (better than the originally-planned syncAll-loop guard, which can't cleanly restore a
+  whole batch's ids). Self-healing means no interim ship risk.
+- **Commits:** `612dde3` (batch-throw semantics) · `d357ae3` (per-row fallback throw, Codex).
 
 ## Phase 3 — Convergence
 
