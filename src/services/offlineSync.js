@@ -207,7 +207,12 @@ const ARCHIVE_PUSH_ORDER = {
   child_ea_assignments: 7,
 };
 
-const BATCHABLE_UPSERT_TABLES = new Set(['assessment_items']);
+const BATCHABLE_UPSERT_TABLES = new Set([
+  'assessment_items',
+  'letter_mastery',
+  'session_attendees',
+  'time_entries',
+]);
 const IMMUTABLE_ASSIGNMENT_TABLES = new Set([
   'child_ea_assignments',
   'class_ea_assignments',
