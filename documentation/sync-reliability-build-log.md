@@ -256,7 +256,48 @@ All Jest/integration commands are prefixed with `PATH=$HOME/.nvm/versions/node/v
 ## Phase 3 — Convergence
 
 ### Task 8 — Backoff cap + retry reset + manual "Sync Now" bypass
-_status: pending_
+**Status:** ✅ done — Codex-converged (4 review passes; every manual sync affordance enumerated + forced)
+
+- **What changed (commit `5e7aa89`):** `getRetryDelay` capped at 15m (was unbounded exponential) + `__testables`
+  export; `retryFailedItem` resets `retry_count=0` (routing already fixed in T3+4); `getReadyRecords` gains
+  `includeBackedOff` (drops the `next_retry_at` clause + shifts bound params when forced); `syncAll` threads
+  `{force}` → `includeBackedOff`; `OfflineContext.syncNow({force})` chains a forced pass when a non-forced sync is
+  in-flight; `SyncStatusScreen` Sync Now + post-retry pass `{force:true}`.
+- **Tests:** `retryBackoff.test.js` (cap boundaries, includeBackedOff include/exclude, retry_count→0 reset);
+  force-during-active-sync test added to `OfflineContext.test.js` (kept separate from the real-engine retryBackoff
+  tests because it mocks `syncAll`). Full unit 412 / integration 111 green, zero flakes.
+- **Codex `[medium]` ×2 (fix commit `578af40`):**
+  - **Another manual Sync Now ignored backoff:** `ChildrenListScreen`'s "Sync Now" banner called `refreshSyncStatus`
+    (non-forced). **Verified** (+ swept ALL `syncNow` callers). **Fixed** → `syncNow({force:true})`.
+    (SyncStatusScreen already forced; `TimeEntriesListScreen` is an auto-sync-after-write, correctly left
+    non-forced; `SyncIndicator` navigates — its dead `syncNow` destructure removed.)
+  - **Forced reruns didn't coalesce:** every forced caller during an active sync appended its own `.then` pass →
+    N rapid taps = N backoff-bypassing passes hammering Supabase. **Fixed:** a `pendingForcedSync` ref coalesces to
+    at most ONE queued forced rerun per active pass (repeated taps share it). Coalescing test: 2 forced calls →
+    same promise, `syncAll` called exactly twice.
+  - *ChildrenListScreen screen-test skipped* (no existing test; heavy render) — one-line wiring is
+    inspection-verifiable; the coalescing test is the substantive new coverage.
+- **Codex convergence `[medium]` ×2 (fix commit `39ab2ed`):**
+  - **TimeEntriesListScreen pull-to-refresh was a non-forced manual sync** — I'd misclassified it as auto-post-write
+    during the sweep without reading it; it's a `RefreshControl` `onRefresh` handler (manual gesture). **Verified
+    (read it) → fixed** to `syncNow({force:true})`. (`ChildrenListScreen.onRefresh` left as-is: it's a data reload,
+    no `syncNow`, + has the dedicated forced banner.)
+  - **Forced-behind-forced didn't coalesce** — the first coalescing handled forced-behind-NON-forced but a forced
+    tap during an already-forced sync still queued a redundant 2nd backoff-bypassing pass. **Fixed** with an
+    `activeSyncIsForced` ref: forced-behind-forced now JOINs the active pass. Truth table now complete (4 cases) +
+    a forced-during-forced test (same promise, syncAll once).
+- **Codex final convergence `[medium]` (fix commit `081586c`):** `ChildrenListScreen.onRefresh` called
+  `refreshSyncStatus()` with default `autoTrigger:true`, which schedules a non-forced background sync — so the
+  My-Children pull-to-refresh was *also* a manual gesture silently respecting backoff (I'd missed that
+  `refreshSyncStatus` auto-triggers). **Fixed** → `syncNow({force:true})` then `refreshSyncStatus({autoTrigger:false})`.
+  **⚠️ PRODUCT NOTE for Jim:** My-Children pull-to-refresh now *force-pushes* data (consistent with Work History).
+  If you'd rather it be reload-only, the alternative is `refreshSyncStatus({autoTrigger:false})` with no `syncNow`.
+- **Affordance audit (now complete):** manual sync = SyncStatusScreen (button + post-retry), ChildrenListScreen
+  (banner + pull-to-refresh), TimeEntriesListScreen (pull-to-refresh) → ALL force. Auto/background = OfflineContext
+  timer (non-forced, respects backoff), TimeEntries post-write n/a. SyncIndicator navigates.
+- **Commits:** `5e7aa89` (backoff/force) · `578af40` (Codex: ChildrenListScreen banner + initial coalescing) ·
+  `39ab2ed` (Codex: pull-to-refresh force + forced-behind-forced join) · `081586c` (Codex: My-Children
+  pull-to-refresh force).
 
 ### Task 9 — Per-record error guard in `syncAll`
 _status: pending_
