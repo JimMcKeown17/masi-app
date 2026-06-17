@@ -3,6 +3,7 @@ import { enqueueSupabaseRequest } from './supabaseRequestQueue';
 import { storage } from '../utils/storage';
 import { resolveDatabase, runRepositoryTransaction } from '../db/repositories/repositoryRuntime';
 import {
+  chunkArray,
   quoteIdentifier,
   timestamp,
 } from '../db/repositories/sqliteRepositoryUtils';
@@ -536,6 +537,34 @@ const finalizeOutboxOnlyTerminalFailure = async ({
   return true;
 });
 
+const finalizeManySuccess = async ({ database, records, tableName }) => {
+  for (const chunk of chunkArray(records, 200)) {
+    await runRepositoryTransaction(database, async (txn) => {
+      for (const outboxRecord of chunk) {
+        const deleteResult = await txn.runAsync(`
+          delete from sync_outbox
+          where id = ? and updated_at = ? and status = 'in_flight'
+        `, outboxRecord.id, outboxRecord.updated_at);
+
+        if ((deleteResult?.changes || 0) === 0) {
+          await restorePendingAfterStaleFinalize(txn, outboxRecord, tableName);
+          continue;
+        }
+
+        if (outboxRecord.operation !== 'hard_delete') {
+          const hasRemainingOutbox = await txn.getFirstAsync(`
+            select id from sync_outbox where table_name = ? and record_id = ? limit 1
+          `, tableName, outboxRecord.record_id);
+          await setDomainSyncResult(txn, tableName, outboxRecord.record_id, {
+            syncStatus: hasRemainingOutbox ? 'pending' : 'synced',
+            lastSyncError: null,
+          });
+        }
+      }
+    });
+  }
+};
+
 const pushOrderForRecord = (record) => {
   if (record.operation === 'archive' && ARCHIVE_PUSH_ORDER[record.table_name] != null) {
     return ARCHIVE_PUSH_ORDER[record.table_name];
@@ -665,14 +694,7 @@ export const createOutboxSyncEngine = ({
       return Promise.all(outboxRecords.map(processRecord));
     }
 
-    await Promise.all(inFlightRecords.map((inFlightRecord) => (
-      finalizeSuccess({
-        database,
-        outboxRecord: inFlightRecord,
-        tableName: config.tableName,
-        outboxRepository,
-      })
-    )));
+    await finalizeManySuccess({ database, records: inFlightRecords, tableName: config.tableName });
 
     return outboxRecords.map(() => ({ success: true }));
   };
