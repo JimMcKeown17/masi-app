@@ -380,7 +380,15 @@ All Jest/integration commands are prefixed with `PATH=$HOME/.nvm/versions/node/v
 ## Phase 5 — Verification
 
 ### Task 12 — Full suite + device/emulator stress pass (AC #10)
-**Status:** 🟡 automated verification DONE; **device/emulator pass PENDING (handed to Jim — manual)**
+**Status:** ✅ done — automated verification + **device pass CONFIRMED CLEAN (Jim, 2026-06-17)**
+
+- **Device/emulator stress pass — ✅ PASSED (Jim, 2026-06-17):** built via the `preview` profile against
+  `masi-app-sqlite` (Fastlane installed for the local-iOS attempt; the keychain-import fragility on the local build
+  was sidestepped with a cloud build). User confirmed all 7 steps clean — no `database is locked`, no
+  `readonly`/`query_only` errors, no foreground starvation during the sync flush; backed-off rows force-synced;
+  per-row Retry succeeded on the writer; the production write-surface sweep + Supabase row verification all good.
+  This is the real-device proof the single-connection Jest harness can't provide (two-connection isolation +
+  `query_only`).
 
 - **Integration config:** added the 7 file-backed SQLite slice tests to `jest.integration.config.js` testMatch
   (`migrationsForeignKeysOff`, `foreignKeyEnforcement`, `clientReadOnlyReader`, `bulkFinalize`,
