@@ -361,7 +361,21 @@ All Jest/integration commands are prefixed with `PATH=$HOME/.nvm/versions/node/v
 - **Commits:** `9eb68c1` (maps + column guard) · `8f9bd50` (Codex: PUSH_ORDER table-set guard + verified allowlist).
 
 ### Task 11 — Extend `BATCHABLE_UPSERT_TABLES` + contract-map update
-_status: pending_
+**Status:** ✅ done — Codex-converged (verdict `approve`)
+
+- **What changed (commit `0782703`):** `BATCHABLE_UPSERT_TABLES` extended to `assessment_items`, `letter_mastery`,
+  `session_attendees`, `time_entries` (`sessions` excluded — low-volume; the three immutable-assignment tables
+  excluded — identity-lock triggers). Batch test (`offlineSyncOutbox.test.js`): 3 `letter_mastery` rows → exactly
+  ONE batched upsert call (array, `onConflict=id`). Contract map updated for the 3 newly-batched tables.
+- **Codex `[medium]` (fix commit `1befcc3`):** per-record fallback only fired on a RETURNED `{error}` — a THROWN
+  batch request (timeout/abort/**oversized payload**, likelier now with high-volume batching) marked the whole
+  batch retriable → re-formed the SAME batch forever (deterministic failures never sync). **Fixed:** `processBatch`
+  wraps the batch call in a nested try/catch — a thrown batch request now returns `processBatchFallback` (per-record,
+  allSettled-safe), same as a returned error; the outer catch (getById/finalizeManySuccess) stays retriable+markReady.
+  Test: batch throws + per-row succeeds → all rows synced, outbox drained. Contract map clarified
+  ("returned error or thrown request").
+- **Tests:** `batchFailureSemantics` 3/3 · offlineSyncOutbox/bulkFinalize/syncErrorGuard 36/36 · integration 112.
+- **Commits:** `0782703` (extend batchable + column guard) · `1befcc3` (Codex: thrown-batch → per-record fallback).
 
 ## Phase 5 — Verification
 
