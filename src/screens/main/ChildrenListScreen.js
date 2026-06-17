@@ -96,9 +96,13 @@ export default function ChildrenListScreen({ navigation }) {
 
   const onRefresh = async () => {
     setRefreshing(true);
+    // Pull-to-refresh is a manual gesture, so force a sync (bypass backoff) like Work History,
+    // then reload local data. autoTrigger:false on the status refresh avoids scheduling a second,
+    // non-forced background sync on top of the forced one.
+    await syncNow({ force: true });
     await loadChildren();
     await loadClasses();
-    await refreshSyncStatus();
+    await refreshSyncStatus({ autoTrigger: false });
     setRefreshing(false);
   };
 
