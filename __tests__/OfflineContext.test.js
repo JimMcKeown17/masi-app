@@ -32,6 +32,7 @@ describe('OfflineContext Plan 4 sync API', () => {
     jest.spyOn(AppState, 'addEventListener').mockReturnValue({ remove: jest.fn() });
     getSyncStatus.mockResolvedValue({
       unsyncedCount: 0,
+      inFlightCount: 0,
       failedItems: [],
       breakdown: {},
       lastSyncTime: null,
@@ -235,6 +236,7 @@ describe('OfflineContext Plan 4 sync API', () => {
     const { result } = await renderOfflineHook();
     getSyncStatus.mockResolvedValueOnce({
       unsyncedCount: 3,
+      inFlightCount: 0,
       failedItems: [],
       breakdown: { children: 3 },
       lastSyncTime: null,
@@ -256,5 +258,40 @@ describe('OfflineContext Plan 4 sync API', () => {
     });
 
     expect(syncAll).toHaveBeenCalledTimes(1);
+  });
+
+  test('schedules a background sync when only in_flight rows remain (recovery after a reset failure)', async () => {
+    // getSyncStatus returns unsyncedCount:0 but inFlightCount:1 — stranded in_flight work.
+    // Previously the autoTrigger condition only checked unsyncedCount>0, so the recovery
+    // pass would never be scheduled. After the fix it must fire.
+    getSyncStatus.mockResolvedValue({
+      unsyncedCount: 0,
+      inFlightCount: 1,
+      failedItems: [],
+      breakdown: {},
+      lastSyncTime: null,
+      lastSuccessfulSyncTime: null,
+    });
+    syncAll.mockReturnValue(new Promise(() => {})); // hold in-flight; we only care it was called
+
+    const { result } = await renderOfflineHook();
+
+    // renderOfflineHook waits for the initial getSyncStatus call and clears mocks.
+    // Now call refreshSyncStatus with autoTrigger (the default) to simulate the periodic
+    // poll / foreground event that discovers stranded in_flight work.
+    await act(async () => {
+      await result.current.refreshSyncStatus();
+    });
+
+    // The autoTrigger fires synchronously inside refreshSyncStatus, which schedules a
+    // debounced background sync. Advance past the debounce window.
+    await act(async () => {
+      jest.advanceTimersByTime(1000);
+      await Promise.resolve();
+    });
+
+    // A recovery pass MUST have been scheduled even though unsyncedCount === 0.
+    expect(syncAll).toHaveBeenCalledTimes(1);
+    expect(result.current.inFlightCount).toBe(1);
   });
 });

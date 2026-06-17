@@ -9,6 +9,7 @@ const OfflineContext = createContext({
   isOnline: true,
   isSyncing: false,
   unsyncedCount: 0,
+  inFlightCount: 0,
   syncStatus: {},
   lastSyncResult: null,
   triggerBackgroundSync: () => {},
@@ -20,6 +21,7 @@ export const OfflineProvider = ({ children }) => {
   const [isOnline, setIsOnline] = useState(true);
   const [isSyncing, setIsSyncing] = useState(false);
   const [unsyncedCount, setUnsyncedCount] = useState(0);
+  const [inFlightCount, setInFlightCount] = useState(0);
   const [syncStatus, setSyncStatus] = useState({});
   const [lastSyncResult, setLastSyncResult] = useState(null);
 
@@ -43,9 +45,10 @@ export const OfflineProvider = ({ children }) => {
     try {
       const status = await getSyncStatus();
       setUnsyncedCount(status.unsyncedCount);
+      setInFlightCount(status.inFlightCount || 0);
       setSyncStatus(status);
 
-      if (autoTrigger && status.unsyncedCount > 0 && isOnlineRef.current) {
+      if (autoTrigger && (status.unsyncedCount > 0 || (status.inFlightCount || 0) > 0) && isOnlineRef.current) {
         triggerBackgroundSyncRef.current();
       }
 
@@ -145,15 +148,15 @@ export const OfflineProvider = ({ children }) => {
       const wasOffline = !isOnline;
       setIsOnline(online);
 
-      // If we just came online and have unsynced data, sync
-      if (online && wasOffline && unsyncedCount > 0) {
+      // If we just came online and have unsynced or in_flight data, sync
+      if (online && wasOffline && (unsyncedCount > 0 || inFlightCount > 0)) {
         console.log('Connection restored, triggering sync...');
         triggerBackgroundSync();
       }
     });
 
     return () => unsubscribe();
-  }, [isOnline, unsyncedCount]);
+  }, [isOnline, unsyncedCount, inFlightCount]);
 
   /**
    * App state listener
@@ -166,8 +169,8 @@ export const OfflineProvider = ({ children }) => {
         console.log('App came to foreground');
         refreshSyncStatus();
 
-        // Auto-sync if online and have unsynced data
-        if (isOnline && unsyncedCount > 0) {
+        // Auto-sync if online and have unsynced or in_flight data
+        if (isOnline && (unsyncedCount > 0 || inFlightCount > 0)) {
           triggerBackgroundSync();
         }
       }
@@ -176,7 +179,7 @@ export const OfflineProvider = ({ children }) => {
       if (appState.current === 'active' && nextAppState.match(/inactive|background/)) {
         console.log('App going to background');
         // Try to sync before backgrounding
-        if (isOnline && unsyncedCount > 0) {
+        if (isOnline && (unsyncedCount > 0 || inFlightCount > 0)) {
           triggerBackgroundSync();
         }
       }
@@ -185,7 +188,7 @@ export const OfflineProvider = ({ children }) => {
     });
 
     return () => subscription.remove();
-  }, [isOnline, unsyncedCount, triggerBackgroundSync, refreshSyncStatus]);
+  }, [isOnline, unsyncedCount, inFlightCount, triggerBackgroundSync, refreshSyncStatus]);
 
   /**
    * Initial load: check network state and sync status
@@ -221,6 +224,7 @@ export const OfflineProvider = ({ children }) => {
     isOnline,
     isSyncing,
     unsyncedCount,
+    inFlightCount,
     syncStatus,
     lastSyncResult,
     triggerBackgroundSync,
