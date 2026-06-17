@@ -24,7 +24,7 @@ export default function ChildrenListScreen({ navigation }) {
   const { user } = useAuth();
   const { children, groups, childrenGroups, loading, loadChildren } = useChildren();
   const { classes, schools, loading: classesLoading, loadClasses, getChildrenInClass } = useClasses();
-  const { refreshSyncStatus } = useOffline();
+  const { refreshSyncStatus, syncNow } = useOffline();
 
   const [searchTerm, setSearchTerm] = useState('');
   const [refreshing, setRefreshing] = useState(false);
@@ -244,7 +244,7 @@ export default function ChildrenListScreen({ navigation }) {
           actions={[
             {
               label: 'Sync Now',
-              onPress: refreshSyncStatus,
+              onPress: () => syncNow({ force: true }),
             },
           ]}
           style={styles.banner}

@@ -140,6 +140,55 @@ describe('OfflineContext Plan 4 sync API', () => {
     await expect(forcedResult).resolves.toEqual({ success: true, totalSynced: 2, totalFailed: 0 });
   });
 
+  test('force coalescing: multiple forced calls during one active sync share ONE queued forced rerun', async () => {
+    const { result } = await renderOfflineHook();
+
+    let resolveFirstSync;
+    // First (non-forced) background sync — held in-flight until we manually resolve it
+    syncAll.mockReturnValueOnce(new Promise((resolve) => {
+      resolveFirstSync = resolve;
+    }));
+    // Coalesced forced rerun resolves immediately
+    syncAll.mockResolvedValueOnce({ success: true, totalSynced: 3, totalFailed: 0 });
+
+    let backgroundResult;
+    let forcedResult1;
+    let forcedResult2;
+
+    act(() => {
+      // Background (non-forced) sync starts — activeSyncPromise is now set
+      backgroundResult = result.current.syncNow();
+      // Two rapid forced calls while the background sync is in-flight
+      forcedResult1 = result.current.syncNow({ force: true });
+      forcedResult2 = result.current.syncNow({ force: true });
+    });
+
+    // Both forced calls must return the SAME queued promise (coalesced)
+    expect(forcedResult1).toBe(forcedResult2);
+    // Neither forced call is the background sync promise
+    expect(forcedResult1).not.toBe(backgroundResult);
+    // Only the background pass has started so far — no extra Supabase hit yet
+    expect(syncAll).toHaveBeenCalledTimes(1);
+    expect(syncAll).toHaveBeenLastCalledWith({ force: false });
+
+    // Let the background sync finish
+    await act(async () => {
+      resolveFirstSync({ success: true, totalSynced: 0, totalFailed: 0 });
+      await backgroundResult;
+    });
+
+    // The single coalesced forced pass runs now
+    await act(async () => {
+      await forcedResult1;
+    });
+
+    // Exactly 2 total syncAll calls: 1 background + 1 coalesced forced rerun (NOT 3)
+    expect(syncAll).toHaveBeenCalledTimes(2);
+    expect(syncAll).toHaveBeenLastCalledWith({ force: true });
+    await expect(forcedResult1).resolves.toEqual({ success: true, totalSynced: 3, totalFailed: 0 });
+    await expect(forcedResult2).resolves.toEqual({ success: true, totalSynced: 3, totalFailed: 0 });
+  });
+
   test('refreshSyncStatus updates local status without waiting for upload', async () => {
     const { result } = await renderOfflineHook();
     getSyncStatus.mockResolvedValueOnce({
