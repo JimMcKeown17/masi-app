@@ -718,7 +718,12 @@ export const createOutboxSyncEngine = ({
           outboxRepository,
           reason,
         });
-      } catch (_) { /* best-effort; resetInFlight recovers next pass */ }
+      } catch (_) {
+        // Full finalize (CAS + domain update) failed; last-resort plain outbox status reset so the
+        // row isn't left in_flight within THIS pass (markReady only touches sync_outbox, so it can
+        // succeed even when the domain write can't). resetInFlight is the cross-pass backstop.
+        try { await outboxRepository.markReady(outboxRecord.id); } catch (_2) { /* truly broken; resetInFlight recovers */ }
+      }
       return { success: false, terminal: false, failedRecord: makeFailedRecord(outboxRecord, reason) };
     }
   };
@@ -733,7 +738,7 @@ export const createOutboxSyncEngine = ({
       )).filter(Boolean);
 
       if (inFlightRecords.length !== outboxRecords.length) {
-        return Promise.all(outboxRecords.map(processRecord));
+        return await Promise.all(outboxRecords.map(processRecord));
       }
 
       const serverResult = await enqueueRequest(() => (
@@ -741,7 +746,7 @@ export const createOutboxSyncEngine = ({
       ));
 
       if (!serverResult.success) {
-        return Promise.all(outboxRecords.map(processRecord));
+        return await Promise.all(outboxRecords.map(processRecord));
       }
 
       await finalizeManySuccess({ database, records: inFlightRecords, tableName: config.tableName });
@@ -759,7 +764,12 @@ export const createOutboxSyncEngine = ({
           tableName: config.tableName,
           reason,
         });
-      } catch (_) { /* best-effort; resetInFlight recovers next pass */ }
+      } catch (_) {
+        // Last-resort per-id outbox status reset (see processRecord note).
+        for (const id of ids) {
+          try { await outboxRepository.markReady(id); } catch (_2) { /* resetInFlight recovers next pass */ }
+        }
+      }
       return outboxRecords.map((record) => (
         { success: false, terminal: false, failedRecord: makeFailedRecord(record, reason) }
       ));
