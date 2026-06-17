@@ -650,22 +650,52 @@ export const createOutboxSyncEngine = ({
     }
 
     await outboxRepository.markInFlight([outboxRecord.id]);
-    const inFlightRecord = await outboxRepository.getById(outboxRecord.id);
-    if (!inFlightRecord) {
-      const reason = `Outbox record disappeared before sync: ${outboxRecord.id}`;
-      return { success: false, terminal: false, failedRecord: makeFailedRecord(outboxRecord, reason) };
-    }
-
-    let serverResult;
+    let inFlightRecord = null;
     try {
-      serverResult = await enqueueRequest(() => (
+      inFlightRecord = await outboxRepository.getById(outboxRecord.id);
+      if (!inFlightRecord) {
+        const reason = `Outbox record disappeared before sync: ${outboxRecord.id}`;
+        return { success: false, terminal: false, failedRecord: makeFailedRecord(outboxRecord, reason) };
+      }
+
+      const serverResult = await enqueueRequest(() => (
         runServerOperation(supabaseClient, config, inFlightRecord)
       ));
-    } catch (error) {
-      // A thrown request (network throw) must finalize this row as retriable, not escape and
-      // strand it in_flight (it was markInFlight'd above). Mirrors the batch-throw handling
-      // in processBatch.
-      const reason = errorMessage(error) || 'Sync request threw';
+
+      if (serverResult.success) {
+        await finalizeSuccess({
+          database,
+          outboxRecord: inFlightRecord,
+          tableName: config.tableName,
+          outboxRepository,
+        });
+        return { success: true };
+      }
+
+      const classification = classifyError(serverResult.error, config);
+      const reason = errorMessage(serverResult.error);
+
+      if (classification.markAsSynced) {
+        await finalizeSuccess({
+          database,
+          outboxRecord: inFlightRecord,
+          tableName: config.tableName,
+          outboxRepository,
+        });
+        return { success: true };
+      }
+
+      if (classification.terminal) {
+        await finalizeTerminalFailure({
+          database,
+          outboxRecord: inFlightRecord,
+          tableName: config.tableName,
+          outboxRepository,
+          reason,
+        });
+        return { success: false, terminal: true, failedRecord: makeFailedRecord(outboxRecord, reason) };
+      }
+
       await finalizeRetriableFailure({
         database,
         outboxRecord: inFlightRecord,
@@ -674,83 +704,66 @@ export const createOutboxSyncEngine = ({
         reason,
       });
       return { success: false, terminal: false, failedRecord: makeFailedRecord(outboxRecord, reason) };
+    } catch (error) {
+      // Any post-markInFlight throw (server request, getById, or a finalize) must not strand the
+      // row in_flight. finalize-retriable with inFlightRecord when we have it (its updated_at makes
+      // the CAS HIT → row marked failed+backoff, correct for a real attempt); else the original
+      // record (CAS MISSES on the changed updated_at → restorePendingAfterStaleFinalize → pending).
+      const reason = errorMessage(error) || 'Sync record processing threw';
+      try {
+        await finalizeRetriableFailure({
+          database,
+          outboxRecord: inFlightRecord || outboxRecord,
+          tableName: config.tableName,
+          outboxRepository,
+          reason,
+        });
+      } catch (_) { /* best-effort; resetInFlight recovers next pass */ }
+      return { success: false, terminal: false, failedRecord: makeFailedRecord(outboxRecord, reason) };
     }
-
-    if (serverResult.success) {
-      await finalizeSuccess({
-        database,
-        outboxRecord: inFlightRecord,
-        tableName: config.tableName,
-        outboxRepository,
-      });
-      return { success: true };
-    }
-
-    const classification = classifyError(serverResult.error, config);
-    const reason = errorMessage(serverResult.error);
-
-    if (classification.markAsSynced) {
-      await finalizeSuccess({
-        database,
-        outboxRecord: inFlightRecord,
-        tableName: config.tableName,
-        outboxRepository,
-      });
-      return { success: true };
-    }
-
-    if (classification.terminal) {
-      await finalizeTerminalFailure({
-        database,
-        outboxRecord: inFlightRecord,
-        tableName: config.tableName,
-        outboxRepository,
-        reason,
-      });
-      return { success: false, terminal: true, failedRecord: makeFailedRecord(outboxRecord, reason) };
-    }
-
-    await finalizeRetriableFailure({
-      database,
-      outboxRecord: inFlightRecord,
-      tableName: config.tableName,
-      outboxRepository,
-      reason,
-    });
-    return { success: false, terminal: false, failedRecord: makeFailedRecord(outboxRecord, reason) };
   };
 
   const processBatch = async (outboxRecords, config) => {
     const ids = outboxRecords.map((record) => record.id);
     await outboxRepository.markInFlight(ids);
-    const inFlightRecords = (await Promise.all(
-      ids.map((id) => outboxRepository.getById(id))
-    )).filter(Boolean);
-
-    if (inFlightRecords.length !== outboxRecords.length) {
-      return Promise.all(outboxRecords.map(processRecord));
-    }
-
-    let serverResult;
+    let inFlightRecords = null;
     try {
-      serverResult = await enqueueRequest(() => (
+      inFlightRecords = (await Promise.all(
+        ids.map((id) => outboxRepository.getById(id))
+      )).filter(Boolean);
+
+      if (inFlightRecords.length !== outboxRecords.length) {
+        return Promise.all(outboxRecords.map(processRecord));
+      }
+
+      const serverResult = await enqueueRequest(() => (
         runBatchServerOperation(supabaseClient, config, inFlightRecords)
       ));
+
+      if (!serverResult.success) {
+        return Promise.all(outboxRecords.map(processRecord));
+      }
+
+      await finalizeManySuccess({ database, records: inFlightRecords, tableName: config.tableName });
+
+      return outboxRecords.map(() => ({ success: true }));
     } catch (error) {
-      const reason = errorMessage(error) || 'Batch upload threw';
-      await finalizeManyRetriableFailure({ database, records: inFlightRecords, tableName: config.tableName, reason });
+      // Post-markInFlight throw (getById / batch request / finalizeManySuccess) — don't strand the
+      // batch in_flight. finalizeManyRetriableFailure with inFlightRecords when we have them (CAS
+      // hits → failed+backoff); else the originals (CAS misses → restore pending).
+      const reason = errorMessage(error) || 'Batch processing threw';
+      try {
+        await finalizeManyRetriableFailure({
+          database,
+          records: inFlightRecords || outboxRecords,
+          tableName: config.tableName,
+          reason,
+        });
+      } catch (_) { /* best-effort; resetInFlight recovers next pass */ }
       return outboxRecords.map((record) => (
         { success: false, terminal: false, failedRecord: makeFailedRecord(record, reason) }
       ));
     }
-
-    if (!serverResult.success) {
-      return Promise.all(outboxRecords.map(processRecord));
-    }
-
-    await finalizeManySuccess({ database, records: inFlightRecords, tableName: config.tableName });
-
-    return outboxRecords.map(() => ({ success: true }));
   };
 
   const syncAll = async ({ tableName = null, force = false } = {}) => {
@@ -796,67 +809,82 @@ export const createOutboxSyncEngine = ({
       }
     };
 
-    for (let index = 0; index < filteredRecords.length; index += 1) {
-      const outboxRecord = filteredRecords[index];
-      const config = getConfig(outboxRecord.table_name);
-      const dependencies = dependenciesForRecord(outboxRecord);
-      const skippedDependency = dependencies.find((dependency) => failedTables.has(dependency));
-      if (skippedDependency) {
-        const tableResult = result.tableResults[outboxRecord.table_name] || {
-          success: false,
-          synced: 0,
-          failed: 0,
-          skipped: true,
-          skippedDependency,
-        };
-        tableResult.skipped = true;
-        tableResult.skippedDependency = skippedDependency;
-        result.tableResults[outboxRecord.table_name] = tableResult;
-        result.success = false;
-        failedTables.add(outboxRecord.table_name);
-        continue;
-      }
-
-      const tableKey = config?.tableName || outboxRecord.table_name;
-      if (!result.tableResults[tableKey]) {
-        result.tableResults[tableKey] = { success: true, synced: 0, failed: 0 };
-      }
-
-      if (canBatchRecord(outboxRecord, config)) {
-        const batchRecords = [outboxRecord];
-        for (let batchIndex = index + 1; batchIndex < filteredRecords.length; batchIndex += 1) {
-          const candidate = filteredRecords[batchIndex];
-          const candidateConfig = getConfig(candidate.table_name);
-          if (!canBatchRecord(candidate, candidateConfig) || candidateConfig.tableName !== config.tableName) {
-            break;
-          }
-          const candidateDependencies = dependenciesForRecord(candidate);
-          if (candidateDependencies.some((dependency) => failedTables.has(dependency))) {
-            break;
-          }
-          batchRecords.push(candidate);
-        }
-
-        if (batchRecords.length > 1) {
-          const batchResults = await processBatch(batchRecords, config);
-          batchResults.forEach((batchResult, batchResultIndex) => {
-            applyRecordResult(batchRecords[batchResultIndex], config, batchResult);
-          });
-          index += batchRecords.length - 1;
+    try {
+      for (let index = 0; index < filteredRecords.length; index += 1) {
+        const outboxRecord = filteredRecords[index];
+        const config = getConfig(outboxRecord.table_name);
+        const dependencies = dependenciesForRecord(outboxRecord);
+        const skippedDependency = dependencies.find((dependency) => failedTables.has(dependency));
+        if (skippedDependency) {
+          const tableResult = result.tableResults[outboxRecord.table_name] || {
+            success: false,
+            synced: 0,
+            failed: 0,
+            skipped: true,
+            skippedDependency,
+          };
+          tableResult.skipped = true;
+          tableResult.skippedDependency = skippedDependency;
+          result.tableResults[outboxRecord.table_name] = tableResult;
+          result.success = false;
+          failedTables.add(outboxRecord.table_name);
           continue;
         }
+
+        // Backstop for throws OUTSIDE processRecord/processBatch (those are self-cleaning):
+        // batch formation, dispatch, applyRecordResult. One thrown record fails only that record;
+        // healthy records still sync. The `continue`/`index +=` control flow still advances the
+        // for loop correctly from inside the try.
+        try {
+          const tableKey = config?.tableName || outboxRecord.table_name;
+          if (!result.tableResults[tableKey]) {
+            result.tableResults[tableKey] = { success: true, synced: 0, failed: 0 };
+          }
+
+          if (canBatchRecord(outboxRecord, config)) {
+            const batchRecords = [outboxRecord];
+            for (let batchIndex = index + 1; batchIndex < filteredRecords.length; batchIndex += 1) {
+              const candidate = filteredRecords[batchIndex];
+              const candidateConfig = getConfig(candidate.table_name);
+              if (!canBatchRecord(candidate, candidateConfig) || candidateConfig.tableName !== config.tableName) {
+                break;
+              }
+              const candidateDependencies = dependenciesForRecord(candidate);
+              if (candidateDependencies.some((dependency) => failedTables.has(dependency))) {
+                break;
+              }
+              batchRecords.push(candidate);
+            }
+
+            if (batchRecords.length > 1) {
+              const batchResults = await processBatch(batchRecords, config);
+              batchResults.forEach((batchResult, batchResultIndex) => {
+                applyRecordResult(batchRecords[batchResultIndex], config, batchResult);
+              });
+              index += batchRecords.length - 1;
+              continue;
+            }
+          }
+
+          const recordResult = await processRecord(outboxRecord);
+          applyRecordResult(outboxRecord, config, recordResult);
+        } catch (error) {
+          const reason = errorMessage(error) || 'Unhandled sync error';
+          const tableNameForRow = getConfig(outboxRecord.table_name)?.tableName || outboxRecord.table_name;
+          try {
+            await finalizeRetriableFailure({ database, outboxRecord, tableName: tableNameForRow, outboxRepository, reason });
+          } catch (_) { /* best-effort */ }
+          applyRecordResult(outboxRecord, getConfig(outboxRecord.table_name), { success: false, terminal: false, failedRecord: makeFailedRecord(outboxRecord, reason) });
+        }
       }
-
-      const recordResult = await processRecord(outboxRecord);
-      applyRecordResult(outboxRecord, config, recordResult);
+    } finally {
+      result.durationMs = Date.now() - startedAt;
+      const now = new Date().toISOString();
+      await stateRepository.updateSyncMeta({
+        lastSyncTime: now,
+        ...(result.success ? { lastSuccessfulSyncTime: now } : {}),
+      });
     }
-
-    result.durationMs = Date.now() - startedAt;
-    const now = new Date().toISOString();
-    await stateRepository.updateSyncMeta({
-      lastSyncTime: now,
-      ...(result.success ? { lastSuccessfulSyncTime: now } : {}),
-    });
 
     return result;
   };
