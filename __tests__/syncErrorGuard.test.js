@@ -545,17 +545,33 @@ it('a repairGroupOwnershipForSync throw does NOT block sync, does NOT strand in_
   await db.closeAsync();
 });
 
-it('a resetInFlight throw is best-effort: sync still completes, meta written, result.success=false', async () => {
+it('resetInFlight failure surfaces a preflight error, syncs healthy rows, and the stranded in_flight row recovers next pass', async () => {
   const db = createBetterSqliteTestDatabase(':memory:');
   await runMigrations(db);
 
+  // A healthy pending row that must still sync despite the reset failure.
   await seedTimeEntry(db, 'time-healthy-reset');
 
-  // outboxRepository wrapper whose resetInFlight throws — must NOT reject the pass.
+  // Seed a PRE-EXISTING in_flight row (left by a prior interrupted pass) — the reset failure means
+  // it stays in_flight for THIS pass (getReadyRecords excludes in_flight rows). It must self-heal
+  // on the next SUCCESSFUL pass when resetInFlight works again.
+  await seedTimeEntry(db, 'time-prior-inflight-reset');
+  const priorOutboxId = outboxRecordId('time_entries', 'time-prior-inflight-reset', 'insert');
+  await db.runAsync(`update sync_outbox set status = 'in_flight' where id = ?`, priorOutboxId);
+
+  // Sanity: it really is in_flight before the pass.
+  expect((await db.getFirstAsync('select status from sync_outbox where id = ?', priorOutboxId)).status)
+    .toBe('in_flight');
+
+  // outboxRepository wrapper whose resetInFlight can be toggled to throw.
   const real = createSyncOutboxRepository({ database: db });
+  let failReset = true;
   const wrapped = {
     ...real,
-    resetInFlight: async () => { throw new Error('resetInFlight boom'); },
+    resetInFlight: async () => {
+      if (failReset) throw new Error('resetInFlight boom');
+      return real.resetInFlight();
+    },
   };
 
   const beforeSync = new Date().toISOString();
@@ -565,24 +581,37 @@ it('a resetInFlight throw is best-effort: sync still completes, meta written, re
     supabaseClient: successSupabase(),
   });
 
-  // Resolves (no reject) even though resetInFlight threw.
+  // Pass 1 — degraded (reset threw).
   const result = await engine.syncAll();
   expect(result).toBeTruthy();
-  expect(result.success).toBe(false);
 
-  // Healthy row still synced.
+  // Degraded pass is surfaced — not a silent success.
+  expect(result.success).toBe(false);
+  expect(result.preflightErrors.some((e) => e.step === 'resetInFlight')).toBe(true);
+
+  // Healthy row still synced; meta written.
   expect(await db.getFirstAsync('select sync_status from time_entries where id = ?', 'time-healthy-reset'))
     .toEqual({ sync_status: 'synced' });
   expect(await db.getFirstAsync('select id from sync_outbox where record_id = ?', 'time-healthy-reset'))
     .toBeNull();
-
-  // No row stranded in_flight.
-  expect((await db.getAllAsync(`select id from sync_outbox where status = 'in_flight'`))).toHaveLength(0);
-
-  // Meta written despite the throw.
   const meta = await createSyncStateRepository({ database: db }).getSyncMeta();
   expect(meta.lastSyncTime).toBeTruthy();
   expect(meta.lastSyncTime >= beforeSync).toBe(true);
+
+  // The stranded in_flight row was NOT recovered this pass (reset threw) — still in_flight.
+  const stuckRow = await db.getFirstAsync('select status from sync_outbox where id = ?', priorOutboxId);
+  expect(stuckRow?.status).toBe('in_flight');
+
+  // Pass 2 — working reset. The stranded row recovers (reset → pending → synced → outbox deleted).
+  failReset = false;
+  const result2 = await engine.syncAll();
+  expect(result2).toBeTruthy();
+
+  const recoveredRows = await db.getAllAsync(
+    `select id from sync_outbox where id = ? and status = 'in_flight'`,
+    priorOutboxId,
+  );
+  expect(recoveredRows).toHaveLength(0); // no longer in_flight — recovered
 
   await db.closeAsync();
 });

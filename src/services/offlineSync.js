@@ -832,6 +832,7 @@ export const createOutboxSyncEngine = ({
       totalFailed: 0,
       failedRecords: [],
       tableResults: {},
+      preflightErrors: [],
       durationMs: 0,
     };
     const failedTables = new Set();
@@ -866,6 +867,7 @@ export const createOutboxSyncEngine = ({
         } catch (resetError) {
           console.error('syncAll: resetInFlight failed (continuing):', resetError);
           result.success = false;
+          result.preflightErrors.push({ step: 'resetInFlight', error: errorMessage(resetError) });
         }
       }
 
@@ -876,6 +878,7 @@ export const createOutboxSyncEngine = ({
       } catch (repairError) {
         console.error('syncAll: repairGroupOwnershipForSync failed (continuing):', repairError);
         result.success = false;
+        result.preflightErrors.push({ step: 'repairGroupOwnership', error: errorMessage(repairError) });
       }
 
       const readyRecords = sortByPushOrder(
@@ -958,6 +961,7 @@ export const createOutboxSyncEngine = ({
       // resetInFlight (run first, best-effort) has already recovered any prior-stranded rows.
       console.error('syncAll: preflight error (continuing to record attempt):', error);
       result.success = false;
+      result.preflightErrors.push({ step: 'preflight', error: errorMessage(error) });
     } finally {
       result.durationMs = Date.now() - startedAt;
       const now = new Date().toISOString();
