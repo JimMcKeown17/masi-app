@@ -25,6 +25,7 @@ export const OfflineProvider = ({ children }) => {
 
   const appState = useRef(AppState.currentState);
   const activeSyncPromise = useRef(null);
+  const activeSyncIsForced = useRef(false);
   const pendingForcedSync = useRef(null);
   const backgroundSyncTimer = useRef(null);
   const isOnlineRef = useRef(isOnline);
@@ -62,12 +63,10 @@ export const OfflineProvider = ({ children }) => {
   const syncNow = useCallback((options = {}) => {
     const force = options.force === true;
     if (activeSyncPromise.current) {
-      // A non-forced background sync may be mid-flight; it excludes backed-off rows, so don't
-      // hand it back to a forced caller. Chain a fresh forced pass after the active one settles.
       if (force) {
-        // Coalesce forced requests: at most ONE forced rerun queued behind the active sync.
-        // Repeated forced taps during one pass share that single queued pass instead of each
-        // appending another backoff-bypassing pass that re-hits Supabase.
+        // The active pass is already forced — it already uploads backed-off rows; just join it.
+        if (activeSyncIsForced.current) return activeSyncPromise.current;
+        // Active pass is non-forced — coalesce a single forced rerun behind it.
         if (pendingForcedSync.current) return pendingForcedSync.current;
         const queued = activeSyncPromise.current.catch(() => {}).then(() => {
           pendingForcedSync.current = null;
@@ -98,11 +97,13 @@ export const OfflineProvider = ({ children }) => {
         return { success: false, error };
       } finally {
         activeSyncPromise.current = null;
+        activeSyncIsForced.current = false;
         setIsSyncing(false);
       }
     })();
 
     activeSyncPromise.current = syncPromise;
+    activeSyncIsForced.current = force;
     return syncPromise;
   }, [refreshSyncStatus]);
 

@@ -189,6 +189,48 @@ describe('OfflineContext Plan 4 sync API', () => {
     await expect(forcedResult2).resolves.toEqual({ success: true, totalSynced: 3, totalFailed: 0 });
   });
 
+  test('forced-during-active-forced: joins the active forced pass, syncAll called only once', async () => {
+    const { result } = await renderOfflineHook();
+
+    let resolveFirstSync;
+    // Use mockImplementation so we capture every call in `calls` and control resolution
+    syncAll.mockImplementation((opts) => {
+      if (!resolveFirstSync) {
+        // First call — hold in-flight until we manually resolve it
+        return new Promise((resolve) => { resolveFirstSync = resolve; });
+      }
+      // Any subsequent call (which the test asserts does NOT happen)
+      return Promise.resolve({ success: true, totalSynced: 99, totalFailed: 0 });
+    });
+
+    let forcedResult1;
+    let forcedResult2;
+
+    act(() => {
+      // Start a FORCED sync — activeSyncPromise is now set AND activeSyncIsForced is true
+      forcedResult1 = result.current.syncNow({ force: true });
+      // Second forced call arrives while the forced pass is still in-flight
+      forcedResult2 = result.current.syncNow({ force: true });
+    });
+
+    // The second forced call must JOIN the active forced promise (same reference)
+    expect(forcedResult2).toBe(forcedResult1);
+    // Only the initial forced pass has started so far
+    expect(syncAll).toHaveBeenCalledTimes(1);
+    expect(syncAll).toHaveBeenLastCalledWith({ force: true });
+
+    // Resolve the active forced sync
+    await act(async () => {
+      resolveFirstSync({ success: true, totalSynced: 5, totalFailed: 0 });
+      await forcedResult1;
+    });
+
+    // Only ONE syncAll call was ever made — no redundant second forced pass
+    expect(syncAll).toHaveBeenCalledTimes(1);
+    await expect(forcedResult1).resolves.toEqual({ success: true, totalSynced: 5, totalFailed: 0 });
+    await expect(forcedResult2).resolves.toEqual({ success: true, totalSynced: 5, totalFailed: 0 });
+  });
+
   test('refreshSyncStatus updates local status without waiting for upload', async () => {
     const { result } = await renderOfflineHook();
     getSyncStatus.mockResolvedValueOnce({

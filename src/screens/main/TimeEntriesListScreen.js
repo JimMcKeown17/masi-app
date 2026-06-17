@@ -80,7 +80,7 @@ export default function TimeEntriesListScreen() {
 
     // Trigger sync
     try {
-      const syncResult = await syncNow();
+      const syncResult = await syncNow({ force: true });
 
       if (syncResult) {
         console.log('Sync result:', syncResult);
