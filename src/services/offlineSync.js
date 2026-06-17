@@ -655,9 +655,25 @@ export const createOutboxSyncEngine = ({
       return { success: false, terminal: false, failedRecord: makeFailedRecord(outboxRecord, reason) };
     }
 
-    const serverResult = await enqueueRequest(() => (
-      runServerOperation(supabaseClient, config, inFlightRecord)
-    ));
+    let serverResult;
+    try {
+      serverResult = await enqueueRequest(() => (
+        runServerOperation(supabaseClient, config, inFlightRecord)
+      ));
+    } catch (error) {
+      // A thrown request (network throw) must finalize this row as retriable, not escape and
+      // strand it in_flight (it was markInFlight'd above). Mirrors the batch-throw handling
+      // in processBatch.
+      const reason = errorMessage(error) || 'Sync request threw';
+      await finalizeRetriableFailure({
+        database,
+        outboxRecord: inFlightRecord,
+        tableName: config.tableName,
+        outboxRepository,
+        reason,
+      });
+      return { success: false, terminal: false, failedRecord: makeFailedRecord(outboxRecord, reason) };
+    }
 
     if (serverResult.success) {
       await finalizeSuccess({

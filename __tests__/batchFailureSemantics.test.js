@@ -68,6 +68,46 @@ const seedAssessmentItemsForThrowTest = async (db, count = 3) => {
   }
 };
 
+it('a thrown per-row request in the batch fallback finalizes retriable, none left in_flight', async () => {
+  const db = createBetterSqliteTestDatabase(':memory:');
+  await runMigrations(db);
+  await seedCoreData(db);
+  await seedAssessmentItemsForThrowTest(db, 3);
+
+  // First upsert call is the batch (3 items → 1 call) → returns error to trigger per-row fallback.
+  // Subsequent upsert calls are the per-row fallback requests (3 calls, one per item) → each throws.
+  // Both runBatchServerOperation and runServerOperation call .from(table).upsert(...).
+  let upsertCalls = 0;
+  const batchFailsThenRowThrows = {
+    from: () => ({
+      upsert: async () => {
+        upsertCalls += 1;
+        if (upsertCalls === 1) {
+          return { data: null, error: { message: 'batch rejected' } }; // batch → fallback
+        }
+        throw new Error('per-row network down'); // per-row fallback → throw
+      },
+      delete: () => ({
+        eq: async () => ({ error: null }),
+      }),
+    }),
+    rpc: async () => ({ data: true, error: null }),
+  };
+
+  const engine = createOutboxSyncEngine({ database: db, supabaseClient: batchFailsThenRowThrows });
+  await engine.syncAll();
+
+  const rows = await db.getAllAsync('select status, last_error from sync_outbox');
+  expect(rows).toHaveLength(3);
+  expect(rows.some((r) => r.status === 'in_flight')).toBe(false); // none stranded
+  expect(rows.every((r) => r.status === 'failed')).toBe(true);
+  expect(rows.every((r) => r.last_error && r.last_error.length > 0)).toBe(true);
+  // 1 batch call + 3 per-row calls = 4 total upsert calls
+  expect(upsertCalls).toBe(4);
+
+  await db.closeAsync();
+});
+
 it('a thrown batch error finalizes EVERY member as retriable failed with last_error (none in_flight)', async () => {
   const db = createBetterSqliteTestDatabase(':memory:');
   await runMigrations(db);
