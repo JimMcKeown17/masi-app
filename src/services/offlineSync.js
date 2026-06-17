@@ -565,6 +565,34 @@ const finalizeManySuccess = async ({ database, records, tableName }) => {
   }
 };
 
+const finalizeManyRetriableFailure = async ({ database, records, tableName, reason }) => {
+  for (const chunk of chunkArray(records, 200)) {
+    await runRepositoryTransaction(database, async (txn) => {
+      for (const outboxRecord of chunk) {
+        const failureResult = await txn.runAsync(`
+          update sync_outbox
+          set status = 'failed',
+              retry_count = retry_count + 1,
+              last_error = ?,
+              next_retry_at = ?,
+              updated_at = ?
+          where id = ? and updated_at = ? and status = 'in_flight'
+        `, reason, nextRetryTimestamp(outboxRecord.retry_count || 0), timestamp(), outboxRecord.id, outboxRecord.updated_at);
+
+        if ((failureResult?.changes || 0) === 0) {
+          await restorePendingAfterStaleFinalize(txn, outboxRecord, tableName);
+          continue;
+        }
+
+        await setDomainSyncResult(txn, tableName, outboxRecord.record_id, {
+          syncStatus: 'failed',
+          lastSyncError: reason,
+        });
+      }
+    });
+  }
+};
+
 const pushOrderForRecord = (record) => {
   if (record.operation === 'archive' && ARCHIVE_PUSH_ORDER[record.table_name] != null) {
     return ARCHIVE_PUSH_ORDER[record.table_name];
@@ -686,9 +714,18 @@ export const createOutboxSyncEngine = ({
       return Promise.all(outboxRecords.map(processRecord));
     }
 
-    const serverResult = await enqueueRequest(() => (
-      runBatchServerOperation(supabaseClient, config, inFlightRecords)
-    ));
+    let serverResult;
+    try {
+      serverResult = await enqueueRequest(() => (
+        runBatchServerOperation(supabaseClient, config, inFlightRecords)
+      ));
+    } catch (error) {
+      const reason = errorMessage(error) || 'Batch upload threw';
+      await finalizeManyRetriableFailure({ database, records: inFlightRecords, tableName: config.tableName, reason });
+      return outboxRecords.map((record) => (
+        { success: false, terminal: false, failedRecord: makeFailedRecord(record, reason) }
+      ));
+    }
 
     if (!serverResult.success) {
       return Promise.all(outboxRecords.map(processRecord));
