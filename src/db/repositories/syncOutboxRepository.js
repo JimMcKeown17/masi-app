@@ -66,16 +66,16 @@ export const createSyncOutboxRepository = ({ database } = {}) => {
     return toOutboxRecord(row);
   };
 
-  const getReadyRecords = async ({ limit = 50, now = timestamp() } = {}) => {
+  const getReadyRecords = async ({ limit = 50, now = timestamp(), includeBackedOff = false } = {}) => {
     const db = await resolveDatabase(database);
     const rows = await db.getAllAsync(`
       select *
       from sync_outbox
       where status in ('pending', 'failed')
-        and (next_retry_at is null or next_retry_at <= ?)
+        ${includeBackedOff ? '' : 'and (next_retry_at is null or next_retry_at <= ?)'}
       order by created_at, table_name, record_id
       limit ?
-    `, now, limit);
+    `, ...(includeBackedOff ? [limit] : [now, limit]));
     return rows.map(toOutboxRecord);
   };
 

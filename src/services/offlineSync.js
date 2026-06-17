@@ -238,8 +238,9 @@ const TABLE_CONFIGS = Object.fromEntries(PUSH_ORDER.map((tableName, index) => [
 
 const normalizeTableName = (tableName) => tableName?.toLowerCase();
 
+const MAX_RETRY_DELAY = 15 * 60 * 1000; // cap exponential backoff at 15 minutes
 const getRetryDelay = (retryCountBeforeFailure) => (
-  BASE_RETRY_DELAY * Math.pow(3, Math.max(0, retryCountBeforeFailure))
+  Math.min(BASE_RETRY_DELAY * Math.pow(3, Math.max(0, retryCountBeforeFailure)), MAX_RETRY_DELAY)
 );
 
 const nextRetryTimestamp = (retryCountBeforeFailure) => (
@@ -752,14 +753,16 @@ export const createOutboxSyncEngine = ({
     return outboxRecords.map(() => ({ success: true }));
   };
 
-  const syncAll = async ({ tableName = null } = {}) => {
+  const syncAll = async ({ tableName = null, force = false } = {}) => {
     const startedAt = Date.now();
     await resolveDatabase(database);
     await repairGroupOwnershipForSync({ database });
     if (typeof outboxRepository.resetInFlight === 'function') {
       await outboxRepository.resetInFlight();
     }
-    const readyRecords = sortByPushOrder(await outboxRepository.getReadyRecords({ limit: 1000 }));
+    const readyRecords = sortByPushOrder(
+      await outboxRepository.getReadyRecords({ limit: 1000, includeBackedOff: force })
+    );
     const filteredRecords = tableName
       ? readyRecords.filter((record) => record.table_name === normalizeTableName(tableName))
       : readyRecords;
@@ -880,6 +883,7 @@ export const createOutboxSyncEngine = ({
       await txn.runAsync(`
         update sync_outbox
         set status = 'pending',
+            retry_count = 0,
             next_retry_at = null,
             last_error = null,
             updated_at = ?
@@ -919,6 +923,7 @@ export const retryFailedItem = (table, id) => defaultEngine.retryFailedItem(tabl
 
 export const _testBuildSyncPayload = buildSyncPayload;
 export const _testClassifyError = classifyError;
+export const __testables = { getRetryDelay };
 
 export const pullReferenceData = async ({
   supabaseClient = supabase,

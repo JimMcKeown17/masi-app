@@ -58,8 +58,14 @@ export const OfflineProvider = ({ children }) => {
    * Perform a full sync
    * Includes lock to make concurrent callers share the same work
    */
-  const syncNow = useCallback(() => {
+  const syncNow = useCallback((options = {}) => {
+    const force = options.force === true;
     if (activeSyncPromise.current) {
+      // A non-forced background sync may be mid-flight; it excludes backed-off rows, so don't
+      // hand it back to a forced caller. Chain a fresh forced pass after the active one settles.
+      if (force) {
+        return activeSyncPromise.current.catch(() => {}).then(() => syncNow({ force: true }));
+      }
       return activeSyncPromise.current;
     }
 
@@ -70,14 +76,11 @@ export const OfflineProvider = ({ children }) => {
 
     const syncPromise = (async () => {
       setIsSyncing(true);
-
       try {
         console.log('Starting sync...');
-        const result = await syncAll();
-
+        const result = await syncAll({ force });
         setLastSyncResult(result);
         await refreshSyncStatus({ autoTrigger: false });
-
         console.log('Sync completed:', result);
         return result;
       } catch (error) {

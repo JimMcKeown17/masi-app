@@ -97,6 +97,49 @@ describe('OfflineContext Plan 4 sync API', () => {
     await expect(second).resolves.toEqual({ success: true, totalSynced: 1, totalFailed: 0 });
   });
 
+  test('force-during-active-sync: chains a forced pass after the background sync settles', async () => {
+    const { result } = await renderOfflineHook();
+
+    let resolveFirstSync;
+    // First (non-forced) call — resolves on demand so we can hold it in-flight
+    syncAll.mockReturnValueOnce(new Promise((resolve) => {
+      resolveFirstSync = resolve;
+    }));
+    // Second (forced) pass resolves immediately
+    syncAll.mockResolvedValueOnce({ success: true, totalSynced: 2, totalFailed: 0 });
+
+    let backgroundResult;
+    let forcedResult;
+
+    act(() => {
+      // Background (non-forced) sync starts first — activeSyncPromise is now set
+      backgroundResult = result.current.syncNow();
+      // Forced call while the background sync is still in-flight
+      forcedResult = result.current.syncNow({ force: true });
+    });
+
+    // The forced call must NOT return the same promise as the background sync
+    expect(forcedResult).not.toBe(backgroundResult);
+    // Only the background pass has started so far
+    expect(syncAll).toHaveBeenCalledTimes(1);
+    expect(syncAll).toHaveBeenLastCalledWith({ force: false });
+
+    // Let the background sync finish
+    await act(async () => {
+      resolveFirstSync({ success: true, totalSynced: 0, totalFailed: 0 });
+      await backgroundResult;
+    });
+
+    // The forced pass should have been chained after the background sync settled
+    await act(async () => {
+      await forcedResult;
+    });
+
+    expect(syncAll).toHaveBeenCalledTimes(2);
+    expect(syncAll).toHaveBeenLastCalledWith({ force: true });
+    await expect(forcedResult).resolves.toEqual({ success: true, totalSynced: 2, totalFailed: 0 });
+  });
+
   test('refreshSyncStatus updates local status without waiting for upload', async () => {
     const { result } = await renderOfflineHook();
     getSyncStatus.mockResolvedValueOnce({

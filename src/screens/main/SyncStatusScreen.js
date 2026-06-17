@@ -61,7 +61,7 @@ export default function SyncStatusScreen() {
     showSnackbar(`Retrying ${displayName}...`);
     await retryFailedItem(table, id);
     await refreshSyncStatus();
-    await syncNow();
+    await syncNow({ force: true });
   };
 
   // Only show rows where count > 0
@@ -133,7 +133,7 @@ export default function SyncStatusScreen() {
         {/* Sync Now Button */}
         <Button
           mode="contained"
-          onPress={syncNow}
+          onPress={() => syncNow({ force: true })}
           disabled={!isOnline || isSyncing}
           loading={isSyncing}
           style={styles.syncButton}
