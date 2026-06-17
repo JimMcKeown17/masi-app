@@ -380,4 +380,56 @@ All Jest/integration commands are prefixed with `PATH=$HOME/.nvm/versions/node/v
 ## Phase 5 — Verification
 
 ### Task 12 — Full suite + device/emulator stress pass (AC #10)
-_status: pending_
+**Status:** 🟡 automated verification DONE; **device/emulator pass PENDING (handed to Jim — manual)**
+
+- **Integration config:** added the 7 file-backed SQLite slice tests to `jest.integration.config.js` testMatch
+  (`migrationsForeignKeysOff`, `foreignKeyEnforcement`, `clientReadOnlyReader`, `bulkFinalize`,
+  `batchFailureSemantics`, `syncErrorGuard`, `syncContractCompleteness`). `clientWriterConnection` +
+  `sqliteRepositoryUtils.helpers` stay unit-only (mock/pure). Commit `d7c7861`.
+- **Full release gate — GREEN:**
+  - Unit (`npm test`): **88 suites / 424 tests** pass (no UI flakes this run).
+  - Integration (`npm run test:integration`): **20 suites / 130 tests** pass (was 13/112; +7 slice suites).
+  - SQLite staging guard (`npm run sqlite:staging:check`): **OK** — `target=sqlite-staging`,
+    `project_ref=segygjzpujphwvrubusm` (correct SQLite backend).
+- **⚠️ Device/emulator stress pass — REQUIRED, must be run by Jim (the harness can't model the real two-connection
+  split / `query_only` enforcement; `:memory:` test DBs use one connection).** On an Android (and ideally iOS)
+  build against `masi-app-sqlite` with a seeded EA:
+  1. Go offline; capture a large backlog (≥10 sessions × multi-child + several assessments) so the outbox holds
+     hundreds of rows incl. many `letter_mastery`/`assessment_items`.
+  2. Reconnect; trigger sync. **Observe:** NO `database is locked`; a foreground write ("Finish Session") completes
+     promptly *during* the flush (no multi-second starvation).
+  3. Force-stop mid-sync, reopen, reconnect. **Observe:** in-flight rows recover (`resetInFlight`), sync drains.
+  4. Tap "Sync Now" with a backed-off failed row present. **Observe:** it uploads immediately (force bypass).
+  5. Per-row **Retry** on a failed row. **Observe:** succeeds — NO `readonly`/`query_only` error (proves
+     `retryFailedItem` runs on the writer, not the query-only reader, on the production path).
+  6. **Production write-surface sweep** (paths Jest's single-connection adapter can't verify): edit profile
+     (Profile → `localStateRepository.set`), pull-to-refresh on My Children + Work History (now force-sync), run a
+     sync (writes `updateSyncMeta` + `storage.markAsSynced`/`setSyncError`), trigger `clearDomainData`
+     (sign-out/reset). Each must succeed with NO `readonly`/`query_only` error.
+  7. Verify Supabase rows: `npm run sqlite:staging:query -- "select count(*) from letter_mastery;"` (+ spot-check
+     `sessions`, `session_attendees`, `time_entries`).
+- **Final holistic Codex review (whole slice, base `af2b7c0^`):** validated cross-task coherence (client.js +
+  repositoryRuntime + migrations + offlineSync compose correctly; reads→reader, writes→writer; non-re-entrancy
+  upheld) and found ONE systemic `[medium]` that every per-task review missed: `syncAll`'s **preflight**
+  (`repairGroupOwnershipForSync`/`resetInFlight`/`getReadyRecords`) ran OUTSIDE the Task-9 guard, so a repair throw
+  aborted the whole pass before `resetInFlight` recovered stranded rows and before `updateSyncMeta` — blocking ALL
+  sync. **Fixed (commit `19b9a96`):** `syncAll` now runs `resetInFlight` FIRST + best-effort, `repair` best-effort
+  (failure degrades `result.success` but doesn't block other tables or reject), with the entire preflight + loop in
+  one top-level try/catch/finally so the pass always resolves and meta always writes. +2 tests (repair-throw,
+  resetInFlight-throw). (Known acceptable edge: total `resolveDatabase` failure still rejects via the finally's
+  meta-write, caught upstream by `OfflineContext.syncNow`.)
+  - **Holistic convergence `[high]` (fix `7033f46`):** making `resetInFlight` best-effort meant its failure left
+    prior `in_flight` rows invisible this pass (getReadyRecords excludes `in_flight`) while the pass looked clean.
+    **Fixed:** `result.preflightErrors[]` records each preflight failure (resetInFlight / repair /
+    resolveDatabase-getReadyRecords) + `result.success=false`, so a degraded pass is surfaced; stranded `in_flight`
+    rows self-heal on the next successful reset (syncs are serialized → `in_flight` is always stale). Test seeds a
+    pre-existing `in_flight` row + thrown reset → degraded surfaced, healthy synced, recovered next pass.
+  - **Holistic convergence `[high]` (fix `b59e888`):** the self-heal "next pass" could never run — OfflineContext
+    auto-synced only on `unsyncedCount>0` (pending/failed), so stranded `in_flight`-only work (which
+    `getSyncStatus` tracks as `inFlightCount`) scheduled nothing. **Fixed:** all auto-sync triggers
+    (refreshSyncStatus autoTrigger, reconnect, app-foreground) now also fire on `inFlightCount>0` (+ state/deps),
+    so stranded in_flight work reliably schedules a recovery pass (fresh `resetInFlight`). Test: `unsyncedCount:0
+    + inFlightCount:1` online → background sync scheduled. **Recovery guarantee now closed end-to-end:**
+    surfaced → scheduled → recovered.
+- **After the device pass:** record date + observations here AND in `documentation/sqlite-refactor-log.md`
+  (per AGENTS.md), then use `superpowers:finishing-a-development-branch` to decide merge/PR.
