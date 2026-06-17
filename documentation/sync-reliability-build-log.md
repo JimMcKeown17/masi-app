@@ -342,7 +342,23 @@ All Jest/integration commands are prefixed with `PATH=$HOME/.nvm/versions/node/v
 ## Phase 4 — Sync-contract completeness, then batched upserts
 
 ### Task 10 — `INTENTIONALLY_UNSYNCED` + `LOCAL_ONLY_COLUMNS` + completeness test
-_status: pending_
+**Status:** ✅ done
+
+- **What changed (commit `9eb68c1`):** added `INTENTIONALLY_UNSYNCED` (`sessions.group_id`/`state`, server-RLS-pinned
+  with reasons) + `LOCAL_ONLY_COLUMNS` (`synced`/`sync_status`/`last_sync_error`/`server_updated_at`) + exported
+  `__contract`. Test `syncContractCompleteness.test.js` reads `PRAGMA table_info` on the migrated schema (catches
+  ALTER-added cols) and asserts every column of all 17 `PUSH_ORDER` tables is in **exactly one** of the three sets.
+  Passed first-run — **no latent unsynced-column bug** (every data column already in `SERVER_COLUMNS`).
+- **Codex `[medium]` (fix commit `8f9bd50`):** the test trusted `PUSH_ORDER` as its own table source — a future
+  synced table forgotten from `PUSH_ORDER` (→ "unknown sync table" terminal-fail in prod) wouldn't be caught.
+  **Fixed:** new test derives every table carrying `sync_status` from the schema and asserts
+  `synced \ PULL_ONLY === PUSH_ORDER`. The 8 pull-only tables (`schools`, `job_titles`, `programmes`,
+  `academic_years`, `assessment_windows`, `assessment_tools`, `teachers`, `staff_programme_assignments`) are each
+  **verified** pull-only (populated via `pullReferenceData.replaceFromServer`, **zero** outbox enqueues —
+  independently confirmed by grep). `programmes`' lone local write sets `sync_status='terminal'` (never pushed).
+  **No latent forgotten-from-PUSH_ORDER bug.**
+- **Tests:** `syncContractCompleteness` 3/3; offlineSyncOutbox + integration green.
+- **Commits:** `9eb68c1` (maps + column guard) · `8f9bd50` (Codex: PUSH_ORDER table-set guard + verified allowlist).
 
 ### Task 11 — Extend `BATCHABLE_UPSERT_TABLES` + contract-map update
 _status: pending_
