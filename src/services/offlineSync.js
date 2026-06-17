@@ -728,6 +728,28 @@ export const createOutboxSyncEngine = ({
     }
   };
 
+  // Per-record fallback for a batch (used when the batch can't/ didn't upsert as a unit). Each
+  // processRecord self-cleans its own row; we wait for ALL to settle (Promise.allSettled, NOT
+  // fail-fast Promise.all) so one rejecting record can't trigger a whole-batch finalize that
+  // reverts a sibling whose upload already succeeded. A rejected fallback (e.g. markInFlight threw
+  // before processRecord's own try) gets a plain per-id markReady — siblings are left untouched.
+  const processBatchFallback = async (outboxRecords) => {
+    const settled = await Promise.allSettled(outboxRecords.map(processRecord));
+    const results = [];
+    for (let index = 0; index < settled.length; index += 1) {
+      const outcome = settled[index];
+      if (outcome.status === 'fulfilled') {
+        results.push(outcome.value);
+        continue;
+      }
+      const record = outboxRecords[index];
+      const reason = errorMessage(outcome.reason) || 'Fallback record processing threw';
+      try { await outboxRepository.markReady(record.id); } catch (_) { /* resetInFlight recovers next pass */ }
+      results.push({ success: false, terminal: false, failedRecord: makeFailedRecord(record, reason) });
+    }
+    return results;
+  };
+
   const processBatch = async (outboxRecords, config) => {
     const ids = outboxRecords.map((record) => record.id);
     await outboxRepository.markInFlight(ids);
@@ -738,7 +760,7 @@ export const createOutboxSyncEngine = ({
       )).filter(Boolean);
 
       if (inFlightRecords.length !== outboxRecords.length) {
-        return await Promise.all(outboxRecords.map(processRecord));
+        return await processBatchFallback(outboxRecords);
       }
 
       const serverResult = await enqueueRequest(() => (
@@ -746,7 +768,7 @@ export const createOutboxSyncEngine = ({
       ));
 
       if (!serverResult.success) {
-        return await Promise.all(outboxRecords.map(processRecord));
+        return await processBatchFallback(outboxRecords);
       }
 
       await finalizeManySuccess({ database, records: inFlightRecords, tableName: config.tableName });

@@ -323,3 +323,150 @@ it('Fix 2 (Test A): a fallback processRecord markInFlight throw is owned by proc
 // is inspection-verifiable (finalize → markReady → swallow) and the production device pass
 // (Task 12) provides the integration safety net.
 // (Test B skipped — see note above)
+
+// ─── Task 9 convergence: allSettled sibling race (Promise.all → Promise.allSettled) ──────────────
+//
+// Scenario: batch upsert fails → per-record fallback fires. Item A's markInFlight throws BEFORE
+// A reaches the server. Item B's per-row upsert succeeds (but via a deferred promise so, under
+// the OLD fail-fast Promise.all, A's rejection would settle the batch promise before B resolved).
+//
+// Old behaviour: Promise.all rejects instantly on A → processBatch catch runs
+// finalizeManyRetriableFailure over the WHOLE batch (including B) → B's CAS-safe delete miss →
+// restorePendingAfterStaleFinalize → B ends pending despite its upload having succeeded.
+//
+// New behaviour: processBatchFallback uses Promise.allSettled — waits for every record to settle,
+// handles each independently. B synced, A pending/failed, none in_flight, B not re-sent.
+
+it('Task 9 (allSettled race): sibling B synced even when A markInFlight throws before B upload settles', async () => {
+  const db = createBetterSqliteTestDatabase(':memory:');
+  await runMigrations(db);
+
+  // Prerequisite domain rows.
+  await db.runAsync(`insert or ignore into schools (id, name, sync_status) values ('school-1', 'Masi Primary', 'synced')`);
+  await db.runAsync(`insert or ignore into programmes (id, code, name) values ('programme-a', 'literacy', 'Literacy')`);
+  await db.runAsync(`
+    insert or ignore into children (id, first_name, last_name, sync_status)
+    values ('child-task9', 'Sipho', 'Dlamini', 'synced')
+  `);
+
+  const assessmentId = 'assessment-task9';
+  await db.runAsync(`
+    insert or ignore into assessments (
+      id, user_id, child_id, programme_id, assessment_type, assessment_date, sync_status
+    ) values (
+      ?, 'user-1', 'child-task9', 'programme-a', 'letter_sounds', '2026-06-16', 'synced'
+    )
+  `, assessmentId);
+
+  // Seed items A (position 0) and B (position 1) — distinct positions avoid domain-key collisions.
+  const aId = 'item-task9-a';
+  const bId = 'item-task9-b';
+  await seedAssessmentItem(db, aId, 0, assessmentId);
+  await seedAssessmentItem(db, bId, 1, assessmentId);
+
+  const aOutboxId = outboxRecordId('assessment_items', aId, 'insert');
+  const bOutboxId = outboxRecordId('assessment_items', bId, 'insert');
+
+  // Controllable deferred for B's per-row upsert — lets us ensure B hasn't settled yet when A
+  // rejects, exercising the OLD fail-fast race window.
+  let resolveBUpsert;
+  const bUpsertPromise = new Promise((resolve) => { resolveBUpsert = resolve; });
+
+  let totalUpsertCalls = 0;
+  let bUpsertCallCount = 0;
+
+  const supabaseMock = {
+    from: () => ({
+      upsert: async (payload) => {
+        totalUpsertCalls += 1;
+        if (totalUpsertCalls === 1) {
+          // First call is the batch upsert — fail it to force per-record fallback.
+          return { data: null, error: { message: 'batch server error task9' } };
+        }
+        // Per-row fallback. Determine which item this is by payload.
+        // buildSyncPayload derives a deterministic UUID; we can't easily match by original id,
+        // so instead track "which per-row call number" this is.
+        const callIndex = totalUpsertCalls - 1; // 1 = A's row, 2 = B's row (or reverse)
+        // We want B to be "delayed". We don't know which per-row call is B vs A because both
+        // processRecord calls run concurrently under Promise.allSettled. So we delay the SECOND
+        // per-row call (whichever arrives second) to ensure both are in-flight simultaneously.
+        if (callIndex === 2) {
+          bUpsertCallCount += 1;
+          await bUpsertPromise;
+        }
+        return { data: null, error: null };
+      },
+      delete: () => ({ eq: async () => ({ error: null }) }),
+    }),
+    rpc: async () => ({ data: true, error: null }),
+  };
+
+  const real = createSyncOutboxRepository({ database: db });
+  let markInFlightCallCount = 0;
+  const wrapped = {
+    ...real,
+    markInFlight: async (ids) => {
+      markInFlightCallCount += 1;
+      // Call 1: processBatch's whole-batch markInFlight — let through so batch reaches server.
+      // Subsequent single-id calls: per-record fallback markInFlight calls.
+      // Throw only for A's per-record call so A fails before reaching the server.
+      if (markInFlightCallCount > 1 && ids.length === 1 && ids[0] === aOutboxId) {
+        throw new Error('markInFlight boom for A task9');
+      }
+      return real.markInFlight(ids);
+    },
+  };
+
+  const freshQueue = createSupabaseRequestQueue();
+  const engine = createOutboxSyncEngine({
+    database: db,
+    supabaseClient: supabaseMock,
+    outboxRepository: wrapped,
+    enqueueRequest: (task) => freshQueue.enqueue(task),
+  });
+
+  // Start syncAll — it will reach per-record fallback. A rejects immediately (markInFlight throws);
+  // B starts its delayed upload. Resolve B's deferred so B's upload completes.
+  const syncPromise = engine.syncAll();
+  // Let A and B's processRecord calls enter the per-row upsert stage before resolving B.
+  // A doesn't reach upsert (markInFlight throws), B is awaiting bUpsertPromise.
+  // Use setImmediate to let the microtask queue drain (both concurrent processRecord calls start).
+  await new Promise((resolve) => setImmediate(resolve));
+  resolveBUpsert(); // B's upload completes successfully.
+
+  const result = await syncPromise;
+  expect(result).toBeTruthy();
+
+  // Load-bearing: B ended synced (upload succeeded, not reverted to pending).
+  const bDomainRow = await db.getFirstAsync('select sync_status from assessment_items where id = ?', bId);
+  expect(bDomainRow.sync_status).toBe('synced');
+  const bOutboxRow = await db.getFirstAsync('select id from sync_outbox where id = ?', bOutboxId);
+  expect(bOutboxRow).toBeNull(); // outbox entry deleted on success
+
+  // A ended pending or failed (markInFlight threw — its outbox row was never in_flight successfully).
+  const aOutboxRow = await db.getFirstAsync('select status from sync_outbox where id = ?', aOutboxId);
+  expect(aOutboxRow).toBeTruthy();
+  expect(aOutboxRow.status).not.toBe('in_flight');
+  expect(['pending', 'failed']).toContain(aOutboxRow.status);
+
+  // No row stranded in_flight.
+  const inFlightRows = await db.getAllAsync(`select id from sync_outbox where status = 'in_flight'`);
+  expect(inFlightRows).toHaveLength(0);
+
+  // Second pass: B should NOT be re-sent (upload already finalized on first pass).
+  const upsertCallsBeforeSecondPass = totalUpsertCalls;
+  const result2 = await engine.syncAll({ force: true });
+  expect(result2).toBeTruthy();
+  // B's outbox row is gone — no new upsert for B's uuid.
+  const bOutboxRowAfter = await db.getFirstAsync('select id from sync_outbox where id = ?', bOutboxId);
+  expect(bOutboxRowAfter).toBeNull();
+  // Upsert call count should not have increased for B (only A's retry or nothing new for B).
+  // We can't perfectly isolate "B's calls" from "A's retry calls" since A goes again, but we
+  // know B's outbox is gone so any new upsert must be for A's retry, not B.
+  // Assert: no new per-row calls targeted B's uuid (outbox deleted = not queued).
+  // Simple invariant: total new upserts in second pass ≤ 1 (only A may retry, B won't).
+  const secondPassUpserts = totalUpsertCalls - upsertCallsBeforeSecondPass;
+  expect(secondPassUpserts).toBeLessThanOrEqual(1);
+
+  await db.closeAsync();
+});
