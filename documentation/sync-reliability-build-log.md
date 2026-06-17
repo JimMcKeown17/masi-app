@@ -299,8 +299,45 @@ All Jest/integration commands are prefixed with `PATH=$HOME/.nvm/versions/node/v
   `39ab2ed` (Codex: pull-to-refresh force + forced-behind-forced join) · `081586c` (Codex: My-Children
   pull-to-refresh force).
 
-### Task 9 — Per-record error guard in `syncAll`
-_status: pending_
+### Task 9 — Per-record error guard in `syncAll` (+ Codex Task-7 self-cleaning)
+**Status:** ✅ done — Codex-converged (3 fix rounds on subtle batch-fallback concurrency; final verdict `approve`)
+
+- **What changed (commit `2fe732c`):** the per-record error guard, expanded to adopt Codex's Task-7 convergence
+  recommendation (function-level self-cleaning):
+  - `processRecord` + `processBatch` each wrap their WHOLE post-`markInFlight` body in ONE try/catch (replacing the
+    Task-7 inner server-op catch), tracking `inFlightRecord(s)` in outer scope. On ANY throw (getById, request, or a
+    finalize) they best-effort finalize-retriable with **`inFlightRecord(s) || original`** — CAS **hits** →
+    failed+backoff (real attempt); CAS **misses** (changed `updated_at`) → `restorePendingAfterStaleFinalize` →
+    pending (never-attempted). Best-effort wrapped (if the finalize itself throws, `resetInFlight` recovers next
+    pass). Net: no `markInFlight`'d row is stranded `in_flight`.
+  - `syncAll` wraps each loop iteration in a backstop try/catch (a throw in config/dependency/dispatch/applyResult
+    fails only that record; healthy records still sync) and moves `updateSyncMeta` into a `finally` (meta always
+    writes). The dependency-skip `continue` and batch `continue`/`index += len-1` control flow is preserved
+    (confirmed: batch-ordering + dependency-skip tests stayed green).
+- **Tests:** `syncErrorGuard.test.js` (3 cases): one record errors → only it fails + healthy syncs + meta written;
+  injected `getById` throw after markInFlight → row NOT left `in_flight` + pass completes; loop-body throw → meta
+  still written. Existing batchFailureSemantics/offlineSyncOutbox/bulkFinalize stayed green (unified catch didn't
+  change their behavior). Unit 417 / integration 111 green.
+- **Codex review `[high]`+`[medium]` (fix commit `99d638e`):**
+  - `[high]` the catch swallowed a recovery-finalize failure → row could stay `in_flight` within the pass while
+    meta still updated. **Fixed:** layered recovery — if `finalizeRetriableFailure`/`finalizeManyRetriableFailure`
+    throws, fall back to `markReady` (plain outbox-only `status='pending'` UPDATE, far less likely to fail than the
+    full CAS+domain finalize) before swallowing.
+  - `[medium]` both batch fallbacks were `return Promise.all(...)` (NOT awaited) — a fallback `processRecord`
+    rejection (e.g. `markInFlight` throwing *before* its own try) escaped `processBatch`'s catch, bubbled to
+    `syncAll` without advancing `index` → **double-process** risk. **Fixed:** `return await Promise.all(...)` so
+    `processBatch`'s catch owns fallback failures. Test A proves no `in_flight` + no double-process.
+  - *Test B (markReady fallback) skipped* — the domain UPDATE and `markReady` UPDATE share one connection/txn, so a
+    `runAsync` proxy can't fail one without the other; inspection + Task-12 device verified.
+- **Codex convergence `[high]` (fix commit `afcd84d`):** the `await Promise.all` fallback was still **fail-fast** —
+  it rejected on the FIRST fallback `processRecord` rejection without waiting for siblings, so `processBatch`'s
+  catch could whole-batch-finalize while a sibling's upload was still in flight → a successfully-sent row reverted
+  to pending (**double-send**). **Fixed:** new `processBatchFallback` uses `Promise.allSettled` (waits for every
+  record to settle), returns each record's own result, and cleans up ONLY a rejected record's id (`markReady`) —
+  no whole-batch finalize after fallback begins. Race test: deferred sibling upload + one `markInFlight` throw →
+  sibling ends `synced` (not reverted), thrower pending/failed, none `in_flight`, sibling not re-sent next pass.
+- **Commits:** `2fe732c` (guard + self-cleaning) · `99d638e` (Codex: layered recovery + awaited fallback) ·
+  `afcd84d` (Codex convergence: allSettled fallback, no double-send).
 
 ## Phase 4 — Sync-contract completeness, then batched upserts
 
