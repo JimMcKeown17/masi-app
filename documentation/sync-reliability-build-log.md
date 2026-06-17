@@ -201,8 +201,28 @@ All Jest/integration commands are prefixed with `PATH=$HOME/.nvm/versions/node/v
 
 ## Phase 2 — Bulk finalize & batch failure semantics
 
-### Task 6 — CAS-preserving bulk finalize (all outcomes)
-_status: pending_
+### Task 6 — CAS-preserving bulk finalize (success)
+**Status:** ✅ done — Codex `approve`
+
+- **What changed:** added `finalizeManySuccess` (one `runRepositoryTransaction` per `chunkArray(records,200)` chunk,
+  running the EXACT per-row CAS inside: delete `where id=? and updated_at=? and status='in_flight'` →
+  `restorePendingAfterStaleFinalize` on 0 changes → `setDomainSyncResult` synced/pending by `hasRemainingOutbox`).
+  `processBatch` now calls it instead of `Promise.all(inFlightRecords.map(finalizeSuccess))` (the per-record storm).
+  Added `chunkArray` import.
+- **YAGNI deviation from plan:** plan added all three bulk finalizers in Task 6; I added only `finalizeManySuccess`
+  (the only one `processBatch` uses now). `finalizeManyRetriableFailure` lands in Task 7 (its throw-path). There is
+  **no terminal-batch path** (batch failures are retriable or fall back to per-record `processRecord`), so a
+  terminal bulk finalizer would be dead code — omitted.
+- **Test:** `bulkFinalize.test.js` seeds 250 real `assessment_items` (+ parent assessment for FK), counts
+  `withExclusiveTransactionAsync` opens (the correct transaction proxy for the injected-db path — `BEGIN` is issued
+  on the underlying handle, not via the adapter's `execAsync`), asserts `< 20` (O(chunks): ~3-4 vs ~250 per-record),
+  outbox drained, all items `synced`.
+- **Codex:** `approve` — bulk finalizer mirrors per-row CAS; chunk boundaries don't change final state; test genuine.
+  *Optional (not done):* a batch-path stale-finalize test (mutate one row mid-batch, assert it stays pending while
+  siblings drain). Declined — that branch is byte-identical to the per-row `finalizeSuccess` stale-restore already
+  covered by `offlineSyncOutbox`. Noted for possible future tightening.
+- **Tests:** `bulkFinalize` + `offlineSyncOutbox` (26) + integration (13/111) green.
+- **Commit:** `621c83e`.
 
 ### Task 7 — Batch failure semantics (B4)
 _status: pending_
