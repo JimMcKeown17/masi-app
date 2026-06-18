@@ -22,7 +22,7 @@ Items 1–2 (sync reliability) already shipped; Item 10 (push notifications) def
 | Item | Title | Theme | Status |
 |------|-------|-------|--------|
 | 3 | Design-token system (colour ramp, type scale, guard test) | Design system | ✅ done (merged `65118aa`) |
-| 4 | Step-by-Step capture + extracted capture spine | Workflow + arch | ⏳ in progress |
+| 4 | Step-by-Step capture + extracted capture spine | Workflow + arch | ✅ code-complete (device pass + Supabase migration owed) |
 | 5 | Child Results workflow (row-tap → results, edit behind pencil) | Workflow | ☐ queued |
 | 6 | Performance pass for low-end Android | Performance | ☐ queued |
 | 7 | Motivation loop (onboarding, ring payoff, motion tiers) | Workflow + design | ☐ queued |
@@ -291,6 +291,51 @@ above — then `superpowers:finishing-a-development-branch` for the merge/PR.
   existing-test reconcile (`LetterAssessmentScreen.plan5.test.js`), `LOCAL_STATE_KEYS` buildability fix (Masi
   uses direct keys), async double-launch `launchingRef` guard, non-tautological elapsed-via-expiry test,
   push-allowlist (`SERVER_COLUMNS`) test. **Next:** dispatch Codex Task 1.
+
+### 2026-06-18 — Item 4: all 13 tasks built + committed; finish-gate suite GREEN
+
+- **Build method:** subagent-driven — Codex (`codex:codex-rescue`) built each task TDD red→green; the controller
+  (Claude) independently re-ran every focused suite + scope-checked every diff and committed; schema/hook/screen
+  tasks got a Codex adversarial pass (the two-LLM cross-review). Plan: `docs/superpowers/plans/2026-06-18-item4-sequential-capture.md`
+  (with a **Post-review revisions** section folding in the 8 plan-review fixes R1–R8).
+- **Commits (one per task):** T1 `273a23d` (capture-mode constants) · T2 `09030e5` (scoring + record builder) ·
+  T3 `fa62385` (sequential reducer + R1 race clamp) · **T4 `0f570ae` (capture_mode schema contract — 5 code
+  artifacts + 3 docs)** · T5 `9c344a0` (device-local preference, R5) · T6 `7d742cc` (route resolver) ·
+  **T7 `a716d68` (useAssessmentSession spine)** · **T8 `97f0f87` (LetterAssessmentScreen proving-slice refactor)** ·
+  T9 `4d67322` (EgraLetterGrid readOnly/currentIndex) · **T10 `9dddce3` (SequentialAssessmentScreen, R2)** ·
+  T11 `f6ee5ee` (nav register) · T12 `104315b` (entry-point routing, R6) · T13 `88f4c5f` (Profile toggle) ·
+  finish-gate test-pin fix `8015cb7`. Planning docs `eae2431`.
+- **Dual reviews (every finding engaged as a claim to verify):**
+  - **T4 schema — Codex SHIP** + 1 LOW applied (scoped the Supabase `pg_constraint` idempotency probe by `conrelid`
+    — `conname` isn't globally unique). Push path traced clean end-to-end; harness confirmed real better-sqlite3.
+  - **T7 hook — Codex SHIP-WITH-FIXES → both applied:** **H1** `abandonedRef` (an in-flight save must NOT navigate
+    to results after the EA hits Leave/Discard — a real slow-save race; RED→GREEN test); **H2** pure-updater timer
+    (side effects moved into the interval callback, out of the `setState` updater). +3 high-risk tests.
+  - **T8 proving slice — Codex SHIP-WITH-FIXES:** Vector 4 fixed via a `stopTimer()` affordance (last-attempted
+    sheet path now freezes the timer synchronously, parity with the original — `hasFinishedRef` couldn't be set early
+    as it guards the deferred save). Vector 6 (`navigate→replace` + local-first sync-after-nav) confirmed **intended**
+    hardening (handoff + CLAUDE.md), not a regression. Grid behavior otherwise identical.
+  - **T10 sequential — Codex SHIP:** no defects across 6 sequential edges. R2 reducer clamp closes the final-item
+    rapid-tap overshoot (proven by a no-overshoot race test).
+- **Decisions honored:** preference is **device-local + `resolveCaptureMode` org/user seam** (no new write path to
+  the read-only `users` table); **"Try Again" deferred to Item 5** (`AssessmentResultsScreen` untouched — verified 0
+  Item-4 changes). `capture_mode` nullable, **no DB default** (NULL=legacy/grid); `correction_count` in `__summary__`
+  metadata (no extra column).
+- **Finish-gate suite (Node 20, worktrees+node_modules excluded):** **106 suites / 600 tests GREEN.** One real catch:
+  `sqliteFoundation.test.js` pinned the migration list/count/user_version to 3 — migration v4 made it 4 (4 places
+  updated); that suite failing mid-migration had also cascaded a parallel-worker interference onto
+  `captureModeMigration` (which passed in isolation). Fixing the pins cleared all 5 failures. **No app-code bug.**
+- **OWED before merge/distribution (carried, not done):**
+  1. **Device/preview pass** — the two capture screens + the Profile toggle have **no on-device verification**.
+     `npm run sqlite:staging:ios` (or EAS `--profile preview`). Confirm: default launches Step-by-Step; the toggle
+     flips it; both modes save + show results; `capture_mode` lands in Supabase.
+  2. **DEPLOY GATE — apply the Supabase migration** `20260618120000_masi_assessments_capture_mode.sql` to
+     `masi-app-sqlite` (`segygjzpujphwvrubusm`) via the linked CLI (NOT the legacy-pinned MCP) **before** shipping a
+     build that writes `capture_mode` (else `PGRST204`). `masi-app-sqlite` has no field users, so applying is safe.
+  3. **Item 5 follow-up (disclosed gap):** route `AssessmentResultsScreen.handleTryAgain` through
+     `resolveAssessmentRoute` so "Try Again" honors the toggle (currently hardcodes the grid).
+- **Not pushed** (local branch ahead of `origin` — Jim's call). **Next:** `finishing-a-development-branch` (merge/PR
+  decision) → device pass → handoff to **Item 8**.
 
 <!-- append new entries below -->
 <!-- NOTE: the older "append new entries below" marker above is mid-file; this is the live tail. -->
