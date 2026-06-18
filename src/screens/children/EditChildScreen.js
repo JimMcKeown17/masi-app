@@ -393,15 +393,15 @@ const styles = StyleSheet.create({
     padding: spacing.md,
   },
   classInfoCard: {
-    backgroundColor: '#EEF2FF',
+    backgroundColor: colors.red50,
     marginBottom: spacing.md,
   },
   classInfoCardEmpty: {
-    backgroundColor: '#FFF8E1',
+    backgroundColor: colors.warningBg,
     marginBottom: spacing.md,
     borderWidth: 1.5,
     borderStyle: 'dashed',
-    borderColor: '#F9A825',
+    borderColor: colors.warning,
   },
   classCardRow: {
     flexDirection: 'row',
@@ -423,7 +423,7 @@ const styles = StyleSheet.create({
     marginTop: 2,
   },
   classDetailEmpty: {
-    color: '#F57F17',
+    color: colors.warningText,
     marginTop: 2,
   },
   card: {
@@ -441,10 +441,10 @@ const styles = StyleSheet.create({
   groupField: {
     marginBottom: spacing.sm,
     padding: spacing.md,
-    backgroundColor: '#F0F7FF',
+    backgroundColor: colors.red50,
     borderRadius: borderRadius.sm,
     borderWidth: 1.5,
-    borderColor: '#BBDEFB',
+    borderColor: colors.red100,
   },
   groupFieldLabel: {
     color: colors.primary,

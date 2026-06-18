@@ -189,7 +189,7 @@ const styles = StyleSheet.create({
     padding: spacing.md,
   },
   classInfoCard: {
-    backgroundColor: '#EEF2FF',
+    backgroundColor: colors.red50,
     marginBottom: spacing.md,
   },
   classLabel: {

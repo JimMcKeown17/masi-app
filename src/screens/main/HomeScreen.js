@@ -508,7 +508,7 @@ const styles = StyleSheet.create({
     borderRadius: borderRadius.sm,
   },
   daySquareActive: {
-    backgroundColor: '#E8F0FE',
+    backgroundColor: colors.red50,
   },
   daySquareToday: {
     borderWidth: 1.5,
@@ -543,7 +543,7 @@ const styles = StyleSheet.create({
     fontWeight: '700',
   },
   progressBar: {
-    backgroundColor: '#E8F0FE',
+    backgroundColor: colors.red50,
     borderRadius: 4,
     height: 8,
     overflow: 'hidden',
@@ -583,7 +583,7 @@ const styles = StyleSheet.create({
   insightIcon: {
     width: 36,
     height: 36,
-    backgroundColor: '#E8F0FE',
+    backgroundColor: colors.red50,
     borderRadius: borderRadius.sm,
     alignItems: 'center',
     justifyContent: 'center',

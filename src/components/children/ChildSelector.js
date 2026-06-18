@@ -159,7 +159,7 @@ const styles = StyleSheet.create({
     borderRadius: borderRadius.sm,
   },
   listItemSelected: {
-    backgroundColor: '#EEF2FF',
+    backgroundColor: colors.red50,
   },
   emptyText: {
     color: colors.textSecondary,
@@ -179,6 +179,6 @@ const styles = StyleSheet.create({
     gap: spacing.sm,
   },
   chip: {
-    backgroundColor: '#EEF2FF',
+    backgroundColor: colors.red50,
   },
 });

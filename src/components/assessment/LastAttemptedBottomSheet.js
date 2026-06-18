@@ -184,12 +184,12 @@ const styles = StyleSheet.create({
     borderColor: colors.success,
   },
   tileDisabled: {
-    backgroundColor: '#F0F0F0',
-    borderColor: '#E0E0E0',
+    backgroundColor: colors.background,
+    borderColor: colors.border,
     opacity: 0.5,
   },
   tileTextDisabled: {
-    color: '#BDBDBD',
+    color: colors.disabled,
   },
   tileSelected: {
     borderWidth: 3,

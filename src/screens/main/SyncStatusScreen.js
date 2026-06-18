@@ -221,7 +221,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.successBg,
   },
   badgeOffline: {
-    backgroundColor: '#FEF3C7',
+    backgroundColor: colors.warningBg,
   },
   badgeText: {
     fontWeight: 'bold',
@@ -231,7 +231,7 @@ const styles = StyleSheet.create({
     color: colors.success,
   },
   badgeTextOffline: {
-    color: '#B45309',
+    color: colors.warningText,
   },
 
   // Last synced

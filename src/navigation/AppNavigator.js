@@ -85,8 +85,8 @@ function MainTabNavigator() {
             <SyncIndicator onPress={() => navigation.navigate('SyncStatus')} />
           </View>
         ),
-        tabBarActiveTintColor: colors.tabActive,      // Brand blue
-        tabBarInactiveTintColor: colors.tabInactive,  // Gray
+        tabBarActiveTintColor: colors.tabActive,      // active brand tab
+        tabBarInactiveTintColor: colors.tabInactive,  // muted tab
         tabBarStyle: {
           backgroundColor: colors.surface,            // White background
           borderTopColor: colors.border,

@@ -352,13 +352,13 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     borderWidth: 1.5,
     borderStyle: 'dashed',
-    borderColor: '#F9A825',
-    backgroundColor: '#FFF8E1',
+    borderColor: colors.warning,
+    backgroundColor: colors.warningBg,
   },
   assignChipText: {
     fontSize: 11,
     fontWeight: '600',
-    color: '#F57F17',
+    color: colors.warningText,
   },
   emptyContainer: {
     flex: 1,

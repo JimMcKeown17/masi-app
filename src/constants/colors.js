@@ -48,6 +48,8 @@ export const colors = {
   error: ERROR,
   errorBg: ERROR_BG,
   warning: WARNING,
+  warningBg: '#FFF8E1', // light amber — caution/warning surfaces (empty-state cards, unsynced/offline badges)
+  warningText: '#8A4B00', // deep amber — caution text on warningBg (>=4.5:1 AA)
   info: MUTED,
   successBg: SUCCESS_BG,
   successText: SUCCESS_TEXT,

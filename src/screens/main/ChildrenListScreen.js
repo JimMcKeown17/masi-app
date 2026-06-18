@@ -318,8 +318,8 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   unsyncedBadge: {
-    color: colors.accent,
-    backgroundColor: '#FFF9CC',
+    color: colors.warningText,
+    backgroundColor: colors.warningBg,
     paddingHorizontal: 8,
     paddingVertical: 2,
     borderRadius: 4,

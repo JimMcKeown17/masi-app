@@ -76,7 +76,7 @@ const styles = StyleSheet.create({
   },
   barContainer: {
     flex: 1,
-    backgroundColor: '#E8F0FE',
+    backgroundColor: colors.red50,
     borderRadius: 3,
     height: 16,
     overflow: 'hidden',

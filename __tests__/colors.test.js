@@ -29,11 +29,13 @@ describe('Masi red-dominant design tokens', () => {
     const REQUIRED_KEYS = [
       'red50','red100','red200','red300','red400','red500','red600','red700','red800','red900',
       'primary','primaryLight','primaryDark','emphasis','accent','success',
-      'error','errorBg','warning','info','successBg','successText','successBorder',
+      'error','errorBg','warning','warningBg','warningText','info','successBg','successText','successBorder',
       'background','surface','cardBackground','text','textSecondary','border','disabled','placeholder',
       'tabActive','tabInactive','heroDark','onDark','onDarkMuted','ringNeutral','ringStart',
     ];
     REQUIRED_KEYS.forEach((key) => expect(Object.keys(colors)).toContain(key));
+    // Exact set: also fails if an unexpected extra token key is added (even with an approved value).
+    expect([...Object.keys(colors)].sort()).toEqual([...REQUIRED_KEYS].sort());
   });
 
   it('contains no retired legacy blue or yellow values', () => {
@@ -59,6 +61,11 @@ describe('Masi red-dominant design tokens', () => {
     expect(colors.successBg).toBe('#E7F3E5');
     expect(colors.successText).toBe('#2E7D27');
     expect(colors.successBorder).toBe('#CDE8C9');
+  });
+
+  it('exposes the warning surface token', () => {
+    expect(colors.warningBg).toBe('#FFF8E1');
+    expect(colors.warningText).toBe('#8A4B00');
   });
 
   it('keeps spacing unchanged and applies the Zazi radii', () => {
@@ -95,7 +102,7 @@ describe('Masi red-dominant design tokens', () => {
       '#b3a8a8', '#1c1517', '#c9bfc0', '#9aa3ab', '#8a939c',
       // semantic tokens
       '#3fa535', '#e7f3e5', '#2e7d27', '#cde8c9', '#b3261e',
-      '#fceae8', '#b26a00',
+      '#fceae8', '#b26a00', '#fff8e1', '#8a4b00',
     ]);
 
     Object.entries(colors).forEach(([name, value]) => {

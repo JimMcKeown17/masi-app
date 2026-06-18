@@ -13,7 +13,7 @@ const CIRCUMFERENCE = 2 * Math.PI * RADIUS;
 // so a distinct colour per state does not violate the "no rainbow" brand rule.
 const STATE_CONFIG = {
   below: {
-    color: colors.primary, // blue = in progress
+    color: colors.primary, // brand red = in progress
     label: ({ count, target }) => `${count} of ${target} sessions today. Below target.`,
   },
   met: {
@@ -21,11 +21,11 @@ const STATE_CONFIG = {
     label: ({ count, target }) => `${count} of ${target} sessions today. Goal met.`,
   },
   exceeded: {
-    color: colors.accent, // yellow = gentle "above the expected range" flag
+    color: colors.accent, // amber = gentle "above the expected range" flag
     label: ({ count, ceiling }) => `${count} sessions today. Above the usual maximum of ${ceiling}.`,
   },
   no_target: {
-    color: colors.disabled, // muted grey = activity, but no goal to measure against
+    color: colors.disabled, // muted neutral = activity, but no goal to measure against
     label: ({ count }) => `${count} sessions today.`,
   },
 };
