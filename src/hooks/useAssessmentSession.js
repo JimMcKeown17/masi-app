@@ -49,6 +49,10 @@ export function useAssessmentSession({
   const layout = { COLUMNS, GAP, tileWidth, tileHeight, tileSize };
 
   const startActive = useCallback(() => setPhase('active'), []);
+  // Synchronously stop the timer — used by the grid's last-attempted path to freeze precisely
+  // (parity with the original screen's clearInterval) WITHOUT setting hasFinishedRef, which would
+  // block the save that finishAndSave performs after the EA confirms the sheet.
+  const stopTimer = useCallback(() => clearInterval(timerRef.current), []);
 
   useEffect(() => {
     if (phase === 'active' && !isPaused) {
@@ -111,6 +115,6 @@ export function useAssessmentSession({
 
   return {
     phase, setPhase, timeRemaining, isPaused, setIsPaused, layout,
-    hasFinishedRef, startActive, finishAndSave, setOnTimerExpire,
+    hasFinishedRef, startActive, stopTimer, finishAndSave, setOnTimerExpire,
   };
 }

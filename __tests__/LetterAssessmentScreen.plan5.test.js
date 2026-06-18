@@ -1,4 +1,5 @@
 import React from 'react';
+import { Alert } from 'react-native';
 import { fireEvent, render, waitFor } from '@testing-library/react-native';
 import LetterAssessmentScreen from '../src/screens/assessments/LetterAssessmentScreen';
 import { useAuth } from '../src/context/AuthContext';
@@ -40,6 +41,7 @@ describe('LetterAssessmentScreen Plan 5 behavior', () => {
   const navigation = {
     addListener: jest.fn(() => jest.fn()),
     navigate: jest.fn(),
+    replace: jest.fn(),
     goBack: jest.fn(),
     dispatch: jest.fn(),
   };
@@ -68,10 +70,12 @@ describe('LetterAssessmentScreen Plan 5 behavior', () => {
     });
     assessmentsRepository.saveAssessment.mockResolvedValue(true);
     refreshSyncStatus.mockResolvedValue({ unsyncedCount: 1 });
+    jest.spyOn(Alert, 'alert').mockImplementation(() => {});
   });
 
   afterEach(() => {
     jest.useRealTimers();
+    jest.restoreAllMocks();
     jest.clearAllMocks();
   });
 
@@ -82,6 +86,8 @@ describe('LetterAssessmentScreen Plan 5 behavior', () => {
 
     fireEvent.press(getByText('Start Assessment'));
     fireEvent.press(getByLabelText('a, not marked'));
+    fireEvent.press(getByLabelText('a, correct'));
+    fireEvent.press(getByLabelText('a, not marked'));
     fireEvent.press(getByText('Finish'));
 
     await waitFor(() => expect(assessmentsRepository.saveAssessment).toHaveBeenCalledWith(expect.objectContaining({
@@ -91,6 +97,8 @@ describe('LetterAssessmentScreen Plan 5 behavior', () => {
       assessment_type: 'letter_egra',
       attempt_number: 2,
       letter_language: 'English',
+      capture_mode: 'grid',
+      correction_count: 1,
       correct_responses: 1,
       letters_attempted: 1,
       accuracy: 100,
@@ -100,16 +108,16 @@ describe('LetterAssessmentScreen Plan 5 behavior', () => {
     expect(refreshSyncStatus).toHaveBeenCalled();
     expect(triggerBackgroundSync).toHaveBeenCalled();
     expect(storage.saveAssessment).not.toHaveBeenCalled();
-    expect(navigation.navigate).toHaveBeenCalledWith('AssessmentResults', expect.objectContaining({
+    expect(navigation.replace).toHaveBeenCalledWith('AssessmentResults', expect.objectContaining({
       child: route.params.child,
       attemptNumber: 2,
       assessmentType: 'letter_egra',
     }));
   });
 
-  test('failed assessment save shows an error and lets the user retry without navigating away', async () => {
+  test('failed assessment save shows Retry/Discard alert without navigating away', async () => {
     assessmentsRepository.saveAssessment.mockRejectedValueOnce(new Error('SQLite write failed'));
-    const { getByText, getByLabelText, queryByText } = render(
+    const { getByText, getByLabelText } = render(
       <LetterAssessmentScreen navigation={navigation} route={route} />
     );
 
@@ -117,21 +125,19 @@ describe('LetterAssessmentScreen Plan 5 behavior', () => {
     fireEvent.press(getByLabelText('a, not marked'));
     fireEvent.press(getByText('Finish'));
 
-    await waitFor(() => expect(queryByText(/Assessment was not saved/i)).toBeTruthy());
+    await waitFor(() => expect(Alert.alert).toHaveBeenCalledWith(
+      'Could not save',
+      expect.any(String),
+      expect.arrayContaining([
+        expect.objectContaining({ text: 'Retry' }),
+        expect.objectContaining({ text: 'Discard' }),
+      ])
+    ));
+    const buttons = Alert.alert.mock.calls[0][2];
+    expect(buttons.map((button) => button.text)).toEqual(expect.arrayContaining(['Retry', 'Discard']));
+    expect(navigation.replace).not.toHaveBeenCalled();
     expect(navigation.navigate).not.toHaveBeenCalled();
     expect(refreshSyncStatus).not.toHaveBeenCalled();
     expect(triggerBackgroundSync).not.toHaveBeenCalled();
-
-    assessmentsRepository.saveAssessment.mockResolvedValueOnce(true);
-    fireEvent.press(getByText('Try Again'));
-
-    await waitFor(() => expect(navigation.navigate).toHaveBeenCalledWith(
-      'AssessmentResults',
-      expect.objectContaining({
-        child: route.params.child,
-        attemptNumber: 2,
-        assessmentType: 'letter_egra',
-      })
-    ));
   });
 });
