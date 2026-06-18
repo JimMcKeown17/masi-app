@@ -110,6 +110,8 @@ export default function AssessmentChildSelectScreen({ navigation, route }) {
       <Pressable
         onPress={() => handleChildPress(item)}
         style={({ pressed }) => [styles.childRow, pressed && styles.childRowPressed]}
+        accessibilityRole="button"
+        accessibilityLabel={`Select ${item.first_name} ${item.last_name} for assessment`}
       >
         <Text variant="bodyLarge" style={styles.childName}>
           {item.first_name} {item.last_name}

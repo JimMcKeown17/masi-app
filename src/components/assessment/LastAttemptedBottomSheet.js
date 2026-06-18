@@ -45,7 +45,11 @@ export default function LastAttemptedBottomSheet({
       animationType="slide"
       onRequestClose={onCancel}
     >
-      <TouchableWithoutFeedback onPress={onCancel}>
+      <TouchableWithoutFeedback
+        onPress={onCancel}
+        accessibilityRole="button"
+        accessibilityLabel="Dismiss last attempted selector"
+      >
         <View style={styles.backdrop} />
       </TouchableWithoutFeedback>
 
@@ -74,6 +78,9 @@ export default function LastAttemptedBottomSheet({
                 <Pressable
                   key={`${i}-${letter}`}
                   onPress={() => !isDisabled && setSelectedIndex(i)}
+                  accessibilityRole="button"
+                  accessibilityLabel={`Select ${isWord ? 'word' : 'letter'} ${letter} as last attempted`}
+                  accessibilityState={{ disabled: isDisabled, selected: isSelected }}
                   style={[
                     styles.tile,
                     { width: tileWidth, height: TILE_SIZE },

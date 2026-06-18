@@ -283,7 +283,11 @@ export default function GroupPickerBottomSheet({
       animationType="slide"
       onRequestClose={handleDismiss}
     >
-      <TouchableWithoutFeedback onPress={handleDismiss}>
+      <TouchableWithoutFeedback
+        onPress={handleDismiss}
+        accessibilityRole="button"
+        accessibilityLabel="Dismiss group picker"
+      >
         <View style={styles.backdrop} />
       </TouchableWithoutFeedback>
       <KeyboardAvoidingView
@@ -311,6 +315,9 @@ export default function GroupPickerBottomSheet({
                       style={styles.groupRow}
                       onPress={() => handleSelectVirtual(n)}
                       disabled={loading}
+                      accessibilityRole="button"
+                      accessibilityLabel={`Assign ${childName} to Group ${n}`}
+                      accessibilityState={{ disabled: loading }}
                     >
                       <View style={styles.groupInfo}>
                         <View style={[styles.groupColorDot, { backgroundColor: colorScheme.text }]} />
@@ -342,6 +349,9 @@ export default function GroupPickerBottomSheet({
                     ]}
                     onPress={() => handleSelectGroup(group.id)}
                     disabled={loading}
+                    accessibilityRole="button"
+                    accessibilityLabel={`Assign ${childName} to ${group.name}`}
+                    accessibilityState={{ disabled: loading, selected: isSelected }}
                   >
                     <View style={styles.groupInfo}>
                       <View style={[styles.groupColorDot, { backgroundColor: colorScheme.text }]} />
@@ -379,6 +389,9 @@ export default function GroupPickerBottomSheet({
                   style={styles.removeRow}
                   onPress={handleRemoveFromGroup}
                   disabled={loading}
+                  accessibilityRole="button"
+                  accessibilityLabel={`Remove ${childName} from group`}
+                  accessibilityState={{ disabled: loading }}
                 >
                   <Text variant="bodyMedium" style={styles.removeText}>
                     ✕  Remove from group
@@ -394,6 +407,9 @@ export default function GroupPickerBottomSheet({
                   style={styles.createRow}
                   onPress={handleAddNextNumbered}
                   disabled={loading}
+                  accessibilityRole="button"
+                  accessibilityLabel={`Add Group ${nextNumberedN}`}
+                  accessibilityState={{ disabled: loading }}
                 >
                   <Text style={styles.createText}>
                     +  Add Group {nextNumberedN}

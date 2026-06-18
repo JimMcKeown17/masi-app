@@ -3,12 +3,13 @@ import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { useAuth } from '../context/AuthContext';
-import { ActivityIndicator, View, TouchableOpacity, Pressable, Platform } from 'react-native';
+import { ActivityIndicator, View, Pressable, Platform } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import BottomTabIcon from '../components/navigation/BottomTabIcon';
 import { Text } from 'react-native-paper';
 import { colors } from '../constants/colors';
 import SyncIndicator from '../components/common/SyncIndicator';
+import ProfileGearButton from '../components/common/ProfileGearButton';
 
 // Auth screens
 import LoginScreen from '../screens/auth/LoginScreen';
@@ -101,9 +102,7 @@ function MainTabNavigator() {
           headerRight: () => (
             <View style={{ flexDirection: 'row', alignItems: 'center', marginRight: 16, gap: 8 }}>
               <SyncIndicator onPress={() => navigation.navigate('SyncStatus')} />
-              <TouchableOpacity onPress={() => navigation.navigate('Profile')}>
-                <Ionicons name="settings-outline" size={24} color={colors.textSecondary} />
-              </TouchableOpacity>
+              <ProfileGearButton onPress={() => navigation.navigate('Profile')} />
             </View>
           ),
         })}
@@ -136,6 +135,8 @@ function MainNavigator() {
             <Pressable
               onPress={() => navigation.goBack()}
               hitSlop={8}
+              accessibilityRole="button"
+              accessibilityLabel="Back"
               style={{ flexDirection: 'row', alignItems: 'center', marginLeft: Platform.OS === 'ios' ? -8 : 0 }}
             >
               <Ionicons name="chevron-back" size={28} color={colors.primary} />

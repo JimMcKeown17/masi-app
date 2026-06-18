@@ -156,6 +156,9 @@ function InlineCalendar({ selectedDate, onSelectDate }) {
                 key={day}
                 onPress={() => handleDayPress(day)}
                 disabled={future}
+                accessibilityRole="button"
+                accessibilityLabel={`Select ${formatDateForDisplay(new Date(viewYear, viewMonth, day))}`}
+                accessibilityState={{ disabled: future, selected }}
                 style={[
                   calStyles.dayCell,
                   selected && calStyles.dayCellSelected,

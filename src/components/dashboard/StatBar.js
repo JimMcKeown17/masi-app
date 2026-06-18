@@ -22,7 +22,13 @@ export default function StatBar({ items }) {
         );
         if (item.onPress) {
           return (
-            <Pressable key={i} onPress={item.onPress} style={styles.pillWrapper}>
+            <Pressable
+              key={i}
+              onPress={item.onPress}
+              style={styles.pillWrapper}
+              accessibilityRole="button"
+              accessibilityLabel={`View ${item.label}: ${item.value}`}
+            >
               {pill}
             </Pressable>
           );

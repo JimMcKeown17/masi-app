@@ -245,6 +245,7 @@ export default function LetterTrackerScreen({ route }) {
               key={letter}
               onPress={() => handleCellTap(letter)}
               disabled={isDisabled}
+              accessibilityState={{ disabled: isDisabled, selected: state !== 'default' }}
               style={({ pressed }) => [
                 styles.cell,
                 {

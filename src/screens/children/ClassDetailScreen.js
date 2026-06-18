@@ -88,6 +88,8 @@ export default function ClassDetailScreen({ route, navigation }) {
         style={styles.childCard}
         onPress={() => navigation.navigate('EditChild', { childId: item.id })}
         activeOpacity={0.7}
+        accessibilityRole="button"
+        accessibilityLabel={`Edit ${item.first_name} ${item.last_name}`}
       >
         {/* Left: name + details */}
         <View style={styles.childInfo}>
@@ -108,6 +110,8 @@ export default function ClassDetailScreen({ route, navigation }) {
                   style={[styles.groupChip, { backgroundColor: colorScheme.bg }]}
                   onPress={() => openGroupPicker(item)}
                   hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                  accessibilityRole="button"
+                  accessibilityLabel={`Change group for ${item.first_name} ${item.last_name}, currently ${group.name}`}
                 >
                   <Text style={[styles.groupChipText, { color: colorScheme.text }]}>
                     {group.name} ▾
@@ -121,6 +125,8 @@ export default function ClassDetailScreen({ route, navigation }) {
                   style={styles.assignChip}
                   onPress={() => openGroupPicker(item)}
                   hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                  accessibilityRole="button"
+                  accessibilityLabel={`Assign group to ${item.first_name} ${item.last_name}`}
                 >
                   <Text style={styles.assignChipText}>+ Group</Text>
                 </TouchableOpacity>
@@ -147,6 +153,7 @@ export default function ClassDetailScreen({ route, navigation }) {
             size={30}
             iconColor={colors.primary}
             style={styles.actionIcon}
+            accessibilityLabel={`Letter tracker for ${item.first_name} ${item.last_name}`}
             onPress={() => navigation.navigate('LetterTracker', { child: item, classItem })}
           />
           <IconButton
@@ -154,6 +161,7 @@ export default function ClassDetailScreen({ route, navigation }) {
             size={30}
             iconColor={colors.primary}
             style={styles.actionIcon}
+            accessibilityLabel={`Assessment summary for ${item.first_name} ${item.last_name}`}
             onPress={() => navigation.navigate('ChildAssessmentSummary', {
               child: item,
               classItem,
@@ -185,6 +193,7 @@ export default function ClassDetailScreen({ route, navigation }) {
             <IconButton
               icon="pencil"
               mode="contained-tonal"
+              accessibilityLabel="Edit class"
               onPress={() => navigation.navigate('EditClass', { classId })}
             />
           </View>

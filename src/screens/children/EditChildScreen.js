@@ -165,7 +165,12 @@ export default function EditChildScreen({ route, navigation }) {
     >
       <ScrollView contentContainerStyle={styles.scrollContent}>
         {/* Class info (tappable to change) */}
-        <TouchableOpacity onPress={() => setClassPickerVisible(true)} activeOpacity={0.7}>
+        <TouchableOpacity
+          onPress={() => setClassPickerVisible(true)}
+          activeOpacity={0.7}
+          accessibilityRole="button"
+          accessibilityLabel={`Choose class for ${child.first_name} ${child.last_name}`}
+        >
           <Card style={childClass ? styles.classInfoCard : styles.classInfoCardEmpty}>
             <Card.Content>
               <View style={styles.classCardRow}>
@@ -254,6 +259,8 @@ export default function EditChildScreen({ route, navigation }) {
                   currentGroup && { borderColor: colorScheme.text },
                 ]}
                 onPress={() => setGroupPickerVisible(true)}
+                accessibilityRole="button"
+                accessibilityLabel={`Choose group for ${child.first_name} ${child.last_name}`}
               >
                 {currentGroup ? (
                   <View style={styles.groupFieldValue}>
@@ -314,7 +321,11 @@ export default function EditChildScreen({ route, navigation }) {
         animationType="slide"
         onRequestClose={() => setClassPickerVisible(false)}
       >
-        <TouchableWithoutFeedback onPress={() => setClassPickerVisible(false)}>
+        <TouchableWithoutFeedback
+          onPress={() => setClassPickerVisible(false)}
+          accessibilityRole="button"
+          accessibilityLabel="Dismiss class picker"
+        >
           <View style={styles.classPickerBackdrop} />
         </TouchableWithoutFeedback>
         <View style={[styles.classPickerSheet, { paddingBottom: Math.max(insets.bottom, spacing.lg) }]}>
@@ -332,6 +343,9 @@ export default function EditChildScreen({ route, navigation }) {
                   key={cls.id}
                   style={[styles.classPickerRow, isSelected && styles.classPickerRowSelected]}
                   onPress={() => handleClassSelect(cls.id)}
+                  accessibilityRole="button"
+                  accessibilityLabel={`Select class ${cls.name}`}
+                  accessibilityState={{ selected: isSelected }}
                 >
                   <View style={{ flex: 1 }}>
                     <Text variant="bodyLarge" style={[

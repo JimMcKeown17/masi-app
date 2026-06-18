@@ -157,6 +157,8 @@ export default function HomeScreen({ navigation }) {
               style={[styles.syncBanner, { backgroundColor: banner.backgroundColor }]}
               onPress={() => navigation.navigate('SyncStatus')}
               activeOpacity={0.8}
+              accessibilityRole="button"
+              accessibilityLabel={`Open sync status, ${banner.text}`}
             >
               <Ionicons name={banner.icon} size={18} color={banner.iconColor} style={styles.bannerIcon} />
               <Text variant="bodySmall" style={[styles.bannerText, { color: banner.textColor }]}>
@@ -211,6 +213,8 @@ export default function HomeScreen({ navigation }) {
             <TouchableOpacity
               onPress={() => navigation.navigate('TimeEntriesList')}
               style={styles.viewHistoryLink}
+              accessibilityRole="button"
+              accessibilityLabel="View work history"
             >
               <Ionicons name="time-outline" size={14} color={colors.primary} />
               <Text style={styles.viewHistoryText}>View Work History</Text>
@@ -277,6 +281,8 @@ export default function HomeScreen({ navigation }) {
               style={styles.insightCard}
               onPress={() => navigation.navigate('LetterMasteryRanking')}
               activeOpacity={0.7}
+              accessibilityRole="button"
+              accessibilityLabel="View letter mastery rankings"
             >
               <View style={styles.insightIcon}>
                 <Ionicons name="school-outline" size={20} color={colors.primary} />
@@ -287,6 +293,8 @@ export default function HomeScreen({ navigation }) {
               style={styles.insightCard}
               onPress={() => navigation.navigate('AssessmentRanking')}
               activeOpacity={0.7}
+              accessibilityRole="button"
+              accessibilityLabel="View assessment score rankings"
             >
               <View style={styles.insightIcon}>
                 <Ionicons name="clipboard-outline" size={20} color={colors.primary} />
@@ -297,6 +305,8 @@ export default function HomeScreen({ navigation }) {
               style={styles.insightCard}
               onPress={() => navigation.navigate('SessionCountRanking')}
               activeOpacity={0.7}
+              accessibilityRole="button"
+              accessibilityLabel="View session count rankings"
             >
               <View style={styles.insightIcon}>
                 <Ionicons name="people-outline" size={20} color={colors.primary} />

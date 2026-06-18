@@ -38,7 +38,15 @@ export default function RankedBarRow({ rank, name, value, maxValue, barColor, la
   );
 
   if (onPress) {
-    return <Pressable onPress={onPress}>{content}</Pressable>;
+    return (
+      <Pressable
+        onPress={onPress}
+        accessibilityRole="button"
+        accessibilityLabel={`View details for ${name}, ${label}`}
+      >
+        {content}
+      </Pressable>
+    );
   }
   return content;
 }

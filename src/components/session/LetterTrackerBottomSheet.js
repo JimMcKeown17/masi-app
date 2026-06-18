@@ -147,7 +147,11 @@ export default function LetterTrackerBottomSheet({
 
   return (
     <Modal visible={visible} transparent animationType="slide" onRequestClose={onDismiss}>
-      <TouchableWithoutFeedback onPress={onDismiss}>
+      <TouchableWithoutFeedback
+        onPress={onDismiss}
+        accessibilityRole="button"
+        accessibilityLabel="Dismiss letter tracker"
+      >
         <View style={styles.backdrop} />
       </TouchableWithoutFeedback>
       <View style={styles.sheetWrapper}>
@@ -197,6 +201,9 @@ export default function LetterTrackerBottomSheet({
                       key={letter}
                       onPress={() => handleCellTap(letter)}
                       disabled={isLocked}
+                      accessibilityRole="button"
+                      accessibilityLabel={`${letter}, ${state === 'assessment' ? 'mastered from assessment' : state === 'taught' ? 'taught by coach' : 'not mastered'}`}
+                      accessibilityState={{ disabled: isLocked, selected: state !== 'default' }}
                       style={({ pressed }) => [
                         styles.cell,
                         {

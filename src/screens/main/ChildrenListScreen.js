@@ -177,6 +177,8 @@ export default function ChildrenListScreen({ navigation }) {
           <TouchableOpacity
             style={styles.addClassLink}
             onPress={() => navigation.navigate('CreateClass')}
+            accessibilityRole="button"
+            accessibilityLabel="Add another class"
           >
             <Text style={styles.addClassLinkText}>+ Add another class</Text>
           </TouchableOpacity>
