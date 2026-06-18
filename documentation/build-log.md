@@ -22,7 +22,7 @@ Items 1–2 (sync reliability) already shipped; Item 10 (push notifications) def
 | Item | Title | Theme | Status |
 |------|-------|-------|--------|
 | 3 | Design-token system (colour ramp, type scale, guard test) | Design system | ✅ done (merged `65118aa`) |
-| 4 | Step-by-Step capture + extracted capture spine | Workflow + arch | ✅ code-complete (device pass + Supabase migration owed) |
+| 4 | Step-by-Step capture + extracted capture spine | Workflow + arch | ✅ code-complete (Supabase migration applied; device pass owed) |
 | 5 | Child Results workflow (row-tap → results, edit behind pencil) | Workflow | ☐ queued |
 | 6 | Performance pass for low-end Android | Performance | ☐ queued |
 | 7 | Motivation loop (onboarding, ring payoff, motion tiers) | Workflow + design | ☐ queued |
@@ -329,9 +329,13 @@ above — then `superpowers:finishing-a-development-branch` for the merge/PR.
   1. **Device/preview pass** — the two capture screens + the Profile toggle have **no on-device verification**.
      `npm run sqlite:staging:ios` (or EAS `--profile preview`). Confirm: default launches Step-by-Step; the toggle
      flips it; both modes save + show results; `capture_mode` lands in Supabase.
-  2. **DEPLOY GATE — apply the Supabase migration** `20260618120000_masi_assessments_capture_mode.sql` to
-     `masi-app-sqlite` (`segygjzpujphwvrubusm`) via the linked CLI (NOT the legacy-pinned MCP) **before** shipping a
-     build that writes `capture_mode` (else `PGRST204`). `masi-app-sqlite` has no field users, so applying is safe.
+  2. **DEPLOY GATE — Supabase migration ✅ APPLIED 2026-06-18** (Jim-approved). `npm run sqlite:staging:push` applied
+     `20260618120000_masi_assessments_capture_mode.sql` to `masi-app-sqlite` (`segygjzpujphwvrubusm`) — and, since the
+     backend was 2 behind the files, also caught up `20260529212523_programmes_daily_session_target` and
+     `20260529214500_sessions_forward_prep_columns` (all additive/idempotent; no field users). Re-run dry-run confirms
+     "Remote database is up to date." (Column-level `information_schema` spot-check blocked by the known `db query` 401
+     — access-token/keychain in a non-interactive shell — so verify in an interactive terminal if desired; it also
+     surfaces during the device pass when `capture_mode` syncs.)
   3. **Item 5 follow-up (disclosed gap):** route `AssessmentResultsScreen.handleTryAgain` through
      `resolveAssessmentRoute` so "Try Again" honors the toggle (currently hardcodes the grid).
 - **Not pushed** (local branch ahead of `origin` — Jim's call). **Next:** `finishing-a-development-branch` (merge/PR
