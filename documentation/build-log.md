@@ -91,4 +91,76 @@ Earlier logs that predate this master log; fold in chronologically when convenie
 - **Next:** dispatch Codex (TDD) for Task 1 (token foundation) → Claude spec + code-quality review →
   Codex `/codex:adversarial-review` → engage → commit.
 
+### 2026-06-17 — Item 3 Task 1: built, reviewed (Claude + Codex), fixes routed
+
+- **Built (Codex):** `src/constants/colors.js` (red-dominant token system) + `__tests__/colors.test.js`
+  (fail-closed pin). Commit `cb3ca8d4`. 9/9 green (independently re-run by the controller).
+- **Reviewed — three passes converged (the two-LLM topology working):**
+  - Controller (Claude) **+ Codex adversarial `[high]`** independently flagged the same gap: the fail-closed
+    guard could NOT detect a *dropped* export key (it only iterated keys that exist) — the very import-safety
+    property Task 1 exists to protect. → **Fix A:** static `REQUIRED_KEYS` enumeration vs `Object.keys(colors)`.
+  - Claude reviewer `[important]`: `accent` (set to red500 per the plan) **collided with `primary`**. Grep
+    confirmed 14 `colors.accent` refs across 9 files used as a distinct caution/highlight colour. → **Fix C:**
+    `accent → amber #B26A00` (one-line token change serving both caution states *and* highlight badges; no
+    call-site surgery). *This was a controller/spec error the review caught — Codex built the plan faithfully.*
+  - Claude reviewer (minor): tautological remap assertions → **Fix B:** literal-pin the remap values.
+- **Decision (proceed-unless-vetoed):** `accent = amber #B26A00`. Small former-yellow highlight badges +
+  caution/mid-tier states become deep amber; **red stays dominant**. Consistent with the signed-off palette.
+- **Deferred to Task 6 (offender sweep):** stale "blue" comments (`SessionsTodayRing.js:16`, `AppNavigator.js:87`)
+  and a stray blue group-badge literal (`GroupPickerBottomSheet.js:27` `#E3F2FD`).
+- **Fix landed (Codex):** commit `44dd5d6` — TDD test-first (RED on the accent literal → GREEN).
+  Controller-verified: only the 2 files changed; the diff is exactly the 3 fixes; **10/10 green** on
+  independent re-run; `accent` now resolves to amber `#B26A00`. **✅ Task 1 ACCEPTED.**
+- **Sequencing for Tasks 2–6:** loop proven. Remaining tasks run **sequentially** (T2 → T3 → T4 → T5 → T6):
+  T5 (a11y) and T6 (colour guard) are broad sweeps that must run last (they touch the files T3/T4 modify),
+  so the graph is effectively linear; worktree-isolated parallelism isn't worth the merge overhead for 5
+  small tasks. Real parallelism deferred to a future item with disjoint workstreams.
+
+### 2026-06-17 — Item 3 Task 2: typography tokens (dispatched)
+
+- **Built (Codex):** commit `b3e3758` — `typography.js` (6 entries verbatim per spec) + `typography.test.js`
+  (full type-scale pin + 12px-floor test). Controller-verified: matches spec exactly, ~12 assertions, green
+  on re-run. **Right-sized review:** static design tokens fully pinned by their test → accepted on controller
+  (Claude) review; full Claude-subagent + Codex-adversarial review reserved for tasks with real breakage risk
+  (refactors/sweeps). **✅ Task 2 ACCEPTED.**
+
+### 2026-06-17 — Item 3 Task 3: hoist letter-state palette (dispatched)
+
+- **Revision (from plan):** the "assessment" letter cell → **`colors.accent` (amber)**, NOT `colors.primary`
+  (red). Rationale: amber ≈ the original `#FB8C00` orange marker and avoids red's "bad/wrong" connotation in a
+  results grid; reuses the accent token (DRY). taught=green, default=surface unchanged.
+- **Dispatched to Codex (TDD):** create `src/constants/letterStateColors.js` + test; replace the two
+  byte-identical local `CELL_COLORS` in `LetterTrackerBottomSheet.js` + `LetterTrackerScreen.js` with the
+  hoisted import (drops the stray `#FB8C00`). Full dual review (touches existing screens).
+
+### 2026-06-17 — Item 3 Task 3: committed + accepted; Task 4 dispatched
+
+- **Task 3 committed (controller):** `e2132c6` — 4 files. Controller-verified: diff is the exact mechanical
+  swap, `#FB8C00` gone from `src`, both LetterTracker regression suites green (3/3). Codex adversarial
+  confirmation running in parallel (read-only, non-blocking — the regression tests already prove the consumers).
+  **✅ Task 3 ACCEPTED.**
+- **Workflow change:** going forward Codex **builds + tests only**; the orchestrator commits the verified work
+  (Codex's sandbox blocked `.git` on Task 3). Cleaner review-before-commit gate.
+- **Task 4 (flat BrandButton + kill ALL gradients) dispatched to Codex** (build+test, no commit). Riskiest task
+  so far: touches HomeScreen (3 gradient sites), LoginScreen, App.js; no render tests on those screens → full
+  review + a flagged visual/device check before Item 3 closes.
+
+### 2026-06-17 — Item 3 Task 4: committed + accepted (with review fixes)
+
+- **Built + fixed (Codex) → committed (controller):** `609094a` — flat `BrandButton` (solid, + icon, + loading
+  spinner, + accessibilityState) replaces ALL gradient CTAs; HomeScreen header → `heroDark`; LoginScreen spinner
+  + Record-Session `+` icon restored; App.js `primaryContainer` → `red50`. Zero `LinearGradient`/`GRADIENT`
+  remain in src/App.js (−93 lines net).
+- **Dual review converged on 3 real mediums** (header solid-red not heroDark; lost `+` icon; lost login spinner)
+  — all fixed. BrandButton.test 4/4 green; `@expo/vector-icons` jest mock confirmed a genuine repo pattern.
+  **✅ Task 4 ACCEPTED.**
+- **⚠ Visual check owed before Item 3 merges:** HomeScreen/LoginScreen have no render tests, so the dark header,
+  the `+` icon, and the solid-red CTAs are review-verified but NOT visually confirmed → needs a
+  preview-build/screenshot pass.
+- **Accepted [low] nits → fold into Task 6:** call-site style overrides keep intentional per-button sizing (incl.
+  old `borderRadius: 8/20`); App.js `secondaryContainer: '#FFF9CC'` stray yellow + stale colour comments.
+
+**Item 3 progress:** Tasks 1–4 ✅ (tokens · typography · letter-state · BrandButton). Remaining: Task 5
+(a11y sweep, ~18 files) + Task 6 (colour-guard + port ~96 stray colour literals across ~22 files).
+
 <!-- append new entries below -->
