@@ -66,7 +66,11 @@ export default function SyncStatusScreen() {
 
   // Only show rows where count > 0
   const unsyncedRows = Object.entries(breakdown).filter(([, count]) => count > 0);
-  const allSynced = unsyncedRows.length === 0;
+  const hasPending = unsyncedRows.length > 0;
+  const hasFailed = failedItems.length > 0;
+  // "Up to date" must require BOTH no pending AND no failed/terminal items — otherwise the
+  // summary contradicts the Failed Items list below (terminal rows are excluded from `breakdown`).
+  const allSynced = !hasPending && !hasFailed;
 
   return (
     <View style={styles.outerContainer}>
@@ -107,6 +111,10 @@ export default function SyncStatusScreen() {
             {allSynced ? (
               <Text variant="bodyMedium" style={styles.allSyncedText}>
                 Everything is up to date.
+              </Text>
+            ) : !hasPending ? (
+              <Text variant="bodyMedium" style={styles.needsAttentionText}>
+                {failedItems.length} item{failedItems.length === 1 ? '' : 's'} failed to sync — see Failed Items below.
               </Text>
             ) : (
               unsyncedRows.map(([table, count]) => (
@@ -247,6 +255,9 @@ const styles = StyleSheet.create({
   // Unsynced list
   allSyncedText: {
     color: colors.success,
+  },
+  needsAttentionText: {
+    color: colors.error,
   },
   listIcon: {
     marginRight: spacing.sm,
