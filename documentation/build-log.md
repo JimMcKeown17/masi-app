@@ -21,8 +21,8 @@ Items 1–2 (sync reliability) already shipped; Item 10 (push notifications) def
 
 | Item | Title | Theme | Status |
 |------|-------|-------|--------|
-| 3 | Design-token system (colour ramp, type scale, guard test) | Design system | ⏳ in progress |
-| 4 | Step-by-Step capture + extracted capture spine | Workflow + arch | ☐ queued |
+| 3 | Design-token system (colour ramp, type scale, guard test) | Design system | ✅ done (merged `65118aa`) |
+| 4 | Step-by-Step capture + extracted capture spine | Workflow + arch | ⏳ in progress |
 | 5 | Child Results workflow (row-tap → results, edit behind pencil) | Workflow | ☐ queued |
 | 6 | Performance pass for low-end Android | Performance | ☐ queued |
 | 7 | Motivation loop (onboarding, ring payoff, motion tiers) | Workflow + design | ☐ queued |
@@ -239,3 +239,59 @@ Remaining: Task 6 (colour-guard capstone + port ~96 stray colour literals across
 BrandButton · a11y sweep · colour guard). **Owed before merge:** a visual/device preview pass — Task 4's
 HomeScreen dark header + "+" icon + solid-red CTAs are review-verified only, plus the 3 Task-6 visual flags
 above — then `superpowers:finishing-a-development-branch` for the merge/PR.
+
+### 2026-06-18 — Item 3 CLOSED (merged + visually verified)
+
+- Merged `ui/design-tokens` → `main` (fast-forward, tip `65118aa`); branch deleted. Full suite re-run on merged
+  main: **95 suites / 554 tests green**.
+- **Visual/device pass PASSED:** Jim preview-built on `npm run sqlite:staging:ios` — "build looks good." Task 4's
+  dark hero header / Record-Session `+` / solid-red CTAs **and** the three Task-6 visual flags (red50 bar/progress
+  tracks, `typeBadgeWord` amber, `onSecondary`) are all accepted. The owed visual gate is **cleared**.
+- Not pushed (local `main` ahead of `origin/main` — Jim's call when ready). **Item 3 = fully done.**
+- **Next: Item 4** (Step-by-Step capture + extracted capture spine). Handoff written to `/tmp/masi-item4-handoff.md`;
+  build order continues 3 → **4** → 8 → 5 → 7 → 6.
+
+### 2026-06-18 — Item 4: discovery + plan written (decisions locked)
+
+- **Plan:** [`docs/superpowers/plans/2026-06-18-item4-sequential-capture.md`](../docs/superpowers/plans/2026-06-18-item4-sequential-capture.md)
+  — 13 TDD tasks (constants · scoring/record-builder · reducer · **capture_mode schema contract** · device-pref ·
+  route resolver · **useAssessmentSession spine** · **LetterAssessmentScreen proving-slice refactor** · EgraLetterGrid
+  readOnly/currentIndex · SequentialAssessmentScreen · nav register · entry-point routing · Profile toggle).
+- **Discovery findings that shaped the plan** (verified across Masi + fork `c183d3e`):
+  - **Save path is an impedance layer, so the hook stays schema-agnostic.** `assessmentsRepository.saveAssessment`
+    takes the screen's "fat" record and itself injects `programme_id` (NOT-NULL, via `resolveProgrammeId`), maps
+    `date_assessed→assessment_date` / `correct_responses→score` / `letters_attempted→total_items`, and splits the EGRA
+    detail into the normalized `assessment_items` table (`__summary__` row + per-letter rows). The extracted hook just
+    rebuilds the same fat object + `capture_mode`; **no repo-internals surgery.**
+  - **`capture_mode` is a 3-file code contract**, not one: local migration (`src/db/migrations.js` v4) **+**
+    `ASSESSMENT_COLUMNS` (`assessmentsRepository.js`) **+** `SERVER_COLUMNS` (`src/services/offlineSync.js:195`) — miss
+    the last and it persists locally but never syncs — **+** Supabase migration **+** contract map **+** refactor log.
+  - **Column is nullable, NO DB default.** `NULL = legacy/grid`; a `DEFAULT 'sequential'` would mislabel grid rows
+    written by older field app versions → corrupts the A/B. Client stamps the resolved mode explicitly.
+  - **`correction_count`** rides in the existing `__summary__` metadata JSON (one line in `buildSummary`) → **no extra
+    migration.**
+  - **Three** assessment entry points exist (not two): `AssessmentChildSelectScreen:73`, `ChildAssessmentSummaryScreen:117`
+    ("Run Assessment"), `AssessmentResultsScreen:34` ("Try Again").
+  - `EgraLetterGrid` lacks `readOnly`/`currentIndex` (only `disabled`, which dims) → Task 9 adds them backward-compatibly.
+  - CONTEXT.md already defines **"marking mode"** (who scores) → plan adds a **"capture mode"** glossary entry to prevent
+    drift (orthogonal axis: which UI mechanic).
+- **Decisions locked (Jim, via question):**
+  1. **Preference scope = device-local + seam** (mirror the field-tested fork; `resolveCaptureMode` carries org/user as
+     no-op seams). No new write path to the read-only `users` table. Default = `sequential`.
+  2. **"Try Again" routing deferred to Item 5.** Route only the two clean entry points now;
+     `AssessmentResultsScreen.handleTryAgain` keeps launching the grid until Item 5 (which owns that screen + has
+     unrelated uncommitted edits there) routes it. **Disclosed gap, not silently dropped.**
+- **Branch:** `feature/sequential-capture` off `main` (per handoff).
+- **Plan reviewed (2026-06-18, two-LLM):** Claude `plan-reviewer` (SHIP-WITH-FIXES) + Codex adversarial
+  (NEEDS-REWORK) — **converged**; core design confirmed sound (sync contract, nullable/no-default, record
+  builder, correction_count round-trip, hook failed-save guard), and **8 fixes folded into the plan's
+  "Post-review revisions" section**: sequential reducer **race clamp** (fixes a latent bug in the *fork* —
+  reducer-level, not just the component guard), grid **finish-freeze** (`finishStartedRef` + `setPhase('finished')`
+  before the Last-Attempted sheet) + grid **correction tracking** (un-taps → symmetric A/B data, not 0),
+  existing-test reconcile (`LetterAssessmentScreen.plan5.test.js`), `LOCAL_STATE_KEYS` buildability fix (Masi
+  uses direct keys), async double-launch `launchingRef` guard, non-tautological elapsed-via-expiry test,
+  push-allowlist (`SERVER_COLUMNS`) test. **Next:** dispatch Codex Task 1.
+
+<!-- append new entries below -->
+<!-- NOTE: the older "append new entries below" marker above is mid-file; this is the live tail. -->
+
