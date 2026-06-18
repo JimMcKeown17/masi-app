@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useRef } from 'react';
 import { View, StyleSheet, ScrollView } from 'react-native';
 import { Text, Card, Button } from 'react-native-paper';
 import { useFocusEffect } from '@react-navigation/native';
@@ -7,6 +7,7 @@ import { colors, spacing, borderRadius, shadows } from '../../constants/colors';
 import { assessmentsRepository } from '../../db/repositories/assessmentsRepository';
 import { LETTER_SETS, WORD_SETS } from '../../constants/egraConstants';
 import { normalizeLanguageKey } from '../../utils/letterMastery';
+import { resolveAssessmentRoute } from '../../utils/assessmentRouting';
 
 const ASSESSMENT_TYPES = [
   { key: 'letter_egra', label: 'Letter Sound', description: 'EGRA letter sound recognition' },
@@ -31,8 +32,32 @@ export default function ChildAssessmentSummaryScreen({ navigation, route }) {
   const childName = `${child.first_name} ${child.last_name}`;
   const [latestByType, setLatestByType] = useState({});
   const [attemptCounts, setAttemptCounts] = useState({});
+  const launchingRef = useRef(false);
 
   const langKey = normalizeLanguageKey(classItem?.home_language);
+
+  const handleRunAssessment = async (assessmentType) => {
+    const sets = assessmentType === 'word_egra' ? WORD_SETS : LETTER_SETS;
+    const itemSet = sets[langKey];
+    if (!itemSet) {
+      navigation.navigate('AssessmentChildSelect', { assessmentType });
+      return;
+    }
+    if (launchingRef.current) return;
+    launchingRef.current = true;
+    try {
+      const { screenName, captureMode } = await resolveAssessmentRoute();
+      navigation.navigate(screenName, {
+        child,
+        letterSet: itemSet,
+        attemptNumber: (attemptCounts[assessmentType] || 0) + 1,
+        assessmentType,
+        captureMode,
+      });
+    } finally {
+      launchingRef.current = false;
+    }
+  };
 
   useFocusEffect(
     useCallback(() => {
@@ -110,20 +135,7 @@ export default function ChildAssessmentSummaryScreen({ navigation, route }) {
                   <Button
                     mode="contained"
                     compact
-                    onPress={() => {
-                      const sets = key === 'word_egra' ? WORD_SETS : LETTER_SETS;
-                      const itemSet = sets[langKey];
-                      if (itemSet) {
-                        navigation.navigate('LetterAssessment', {
-                          child,
-                          letterSet: itemSet,
-                          attemptNumber: (attemptCounts[key] || 0) + 1,
-                          assessmentType: key,
-                        });
-                      } else {
-                        navigation.navigate('AssessmentChildSelect', { assessmentType: key });
-                      }
-                    }}
+                    onPress={() => handleRunAssessment(key)}
                     style={styles.runButton}
                   >
                     Run Assessment
