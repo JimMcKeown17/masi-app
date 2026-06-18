@@ -96,7 +96,7 @@ const theme = {
   colors: {
     ...MD3LightTheme.colors,
     primary: colors.primary,           // Blue #294A99
-    primaryContainer: '#E3E9F5',       // Light blue container
+    primaryContainer: colors.red50,    // Light red container
     secondary: colors.accent,          // Yellow #FFDD00
     secondaryContainer: '#FFF9CC',     // Light yellow container
     tertiary: colors.emphasis,         // Red #E72D4D
