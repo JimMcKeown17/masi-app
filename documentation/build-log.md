@@ -341,6 +341,33 @@ above — then `superpowers:finishing-a-development-branch` for the merge/PR.
 - **Not pushed** (local branch ahead of `origin` — Jim's call). **Next:** `finishing-a-development-branch` (merge/PR
   decision) → device pass → handoff to **Item 8**.
 
+### 2026-06-18 — Item 4: field-feedback follow-ups (Jim's first device pass)
+
+- **Supabase migration APPLIED** (`b43b3c1`): `npm run sqlite:staging:push` → `capture_mode` on `masi-app-sqlite`
+  (+ caught up 2 prior pending forward-prep migrations); dry-run confirms "up to date". Deploy gate cleared.
+- **UX (`4215c4f`):** Step-by-Step now fills an explicitly-marked **Incorrect** item red (`colors.error` + white
+  text + 'incorrect' a11y label) instead of leaving it blank — `EgraLetterGrid` `letterStates===false` (grid mode
+  never stores false, so it's unaffected). Sequential **Back** button → neutral ink (frequent benign action) vs
+  **End Assessment** red (rare consequential) so they no longer blur. **Owed:** Jim's visual confirm on device.
+- **Sync bug B (`d2de9fc`):** Sync Status no longer says "Everything is up to date" while Failed Items exist.
+  Root: terminal outbox rows are excluded from the `breakdown`/unsynced count but shown in Failed Items; now
+  "up to date" requires no pending AND no failed, else a "<N> failed to sync — see below" message. UI-only.
+- **Sync bug C (`7afa3da`, Jim-approved C1):** **Sync Now (force) now resurrects terminal rows** so it clears stuck
+  dependency chains in one tap; auto-sync still skips terminal (no storms). Root: RLS/FK errors (42501/23503) are
+  classified terminal and `getReadyRecords` only claimed pending+failed — so only per-item Retry cleared them, even
+  though these are usually TRANSIENT (a child's parent had not synced yet). Fix: `getReadyRecords` gains
+  `includeTerminal`; `syncAll` passes `includeTerminal: force`. **Owed: Jim's device re-test** (real two-connection
+  behavior isn't unit-testable). The stuck records Jim saw were a one-time artifact of capturing *before* the
+  migration (parent assessments `PGRST204`'d → child `assessment_items` `42501`'d as terminal); the migration +
+  retry resolved them.
+- **Test-infra (`6d4a8d3`, pre-existing — NOT a feature regression):** the full Jest suite surfaced a
+  `captureModeMigration` failure that only appears in the full run order (passes in isolation + every serial subset).
+  **Root, proven by a schema-DDL assertion:** the `capture_mode` CHECK is correctly in the migrated schema; some
+  earlier test file leaves CHECK *enforcement* disabled process-wide on a later fresh better-sqlite3 `:memory:` db.
+  Made the assertion schema-based (deterministic) → **full suite green again: 107 suites / 606 tests.** Real
+  enforcement is covered server-side (Supabase named CHECK) + app-level (`isValidCaptureMode`). **Follow-up
+  (separate, low priority):** find the file that disables CHECK enforcement and restore isolation.
+
 <!-- append new entries below -->
 <!-- NOTE: the older "append new entries below" marker above is mid-file; this is the live tail. -->
 
