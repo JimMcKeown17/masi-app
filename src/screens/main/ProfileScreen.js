@@ -1,15 +1,24 @@
-import React, { useState } from 'react';
+import React, { useCallback, useContext, useState } from 'react';
 import { View, StyleSheet, ScrollView, KeyboardAvoidingView, Platform, Linking, Alert } from 'react-native';
-import { TextInput, Button, Text, Card, Divider, Snackbar } from 'react-native-paper';
+import { TextInput, Button, Text, Card, Divider, Snackbar, SegmentedButtons } from 'react-native-paper';
+import { NavigationContext, useFocusEffect } from '@react-navigation/native';
 import { useAuth } from '../../context/AuthContext';
 import { colors, spacing, borderRadius, shadows } from '../../constants/colors';
 import { supabase } from '../../services/supabaseClient';
 import { exportDatabase, exportLogs } from '../../utils/debugExport';
 import { getReleaseMetadata } from '../../utils/releaseMetadata';
+import { storage } from '../../utils/storage';
+import { CAPTURE_MODES } from '../../constants/egraConstants';
+
+function CaptureModeFocusLoader({ loadCaptureMode }) {
+  useFocusEffect(loadCaptureMode);
+  return null;
+}
 
 export default function ProfileScreen({ navigation }) {
   const { user, profile, updatePassword, signOut } = useAuth();
   const releaseMetadata = getReleaseMetadata();
+  const navigationContext = useContext(NavigationContext);
 
   // Password form state
   const [currentPassword, setCurrentPassword] = useState('');
@@ -24,8 +33,31 @@ export default function ProfileScreen({ navigation }) {
   // Feedback state
   const [snackbar, setSnackbar] = useState({ visible: false, message: '', type: 'success' });
 
+  const [captureMode, setCaptureMode] = useState(CAPTURE_MODES.SEQUENTIAL);
+  const loadCaptureMode = useCallback(() => {
+    let active = true;
+    (async () => {
+      const mode = await storage.getCaptureMode();
+      if (active) setCaptureMode(mode);
+    })();
+    return () => {
+      active = false;
+    };
+  }, []);
+
   const showMessage = (message, type = 'success') => {
     setSnackbar({ visible: true, message, type });
+  };
+
+  const handleChangeCaptureMode = async (mode) => {
+    const previous = captureMode;
+    setCaptureMode(mode);
+    try {
+      await storage.setCaptureMode(mode);
+    } catch (error) {
+      console.error('Set capture mode error:', error);
+      setCaptureMode(previous);
+    }
   };
 
   const handleShareLogs = async () => {
@@ -162,6 +194,7 @@ export default function ProfileScreen({ navigation }) {
       style={styles.container}
       keyboardVerticalOffset={Platform.OS === 'ios' ? 90 : 0}
     >
+      {navigationContext ? <CaptureModeFocusLoader loadCaptureMode={loadCaptureMode} /> : null}
       <ScrollView
         style={styles.scrollView}
         contentContainerStyle={styles.scrollContent}
@@ -214,6 +247,26 @@ export default function ProfileScreen({ navigation }) {
             <Text variant="bodySmall" style={styles.helperText}>
               Profile information is managed by administrators
             </Text>
+          </Card.Content>
+        </Card>
+
+        {/* Assessment Capture Section */}
+        <Card style={styles.card}>
+          <Card.Content>
+            <Text variant="titleMedium" style={styles.sectionTitle}>
+              Assessment capture
+            </Text>
+            <Text variant="bodySmall" style={styles.helperText}>
+              How you mark each item during an EGRA assessment.
+            </Text>
+            <SegmentedButtons
+              value={captureMode}
+              onValueChange={handleChangeCaptureMode}
+              buttons={[
+                { value: CAPTURE_MODES.GRID, label: 'Grid' },
+                { value: CAPTURE_MODES.SEQUENTIAL, label: 'Step-by-Step' },
+              ]}
+            />
           </Card.Content>
         </Card>
 
