@@ -883,7 +883,7 @@ export const createOutboxSyncEngine = ({
       }
 
       const readyRecords = sortByPushOrder(
-        await outboxRepository.getReadyRecords({ limit: 1000, includeBackedOff: force })
+        await outboxRepository.getReadyRecords({ limit: 1000, includeBackedOff: force, includeTerminal: force })
       );
       const filteredRecords = tableName
         ? readyRecords.filter((record) => record.table_name === normalizeTableName(tableName))

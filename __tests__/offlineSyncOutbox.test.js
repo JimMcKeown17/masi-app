@@ -209,6 +209,29 @@ describe('SQLite outbox offline sync', () => {
     await db.closeAsync();
   });
 
+  test('Sync Now (force) resurrects terminal rows; auto-sync leaves them terminal', async () => {
+    await db.runAsync(`
+      insert into classes (id, school_id, name, grade, sync_status)
+      values ('class-term', 'school-1', 'Grade 1A', '1', 'terminal')
+    `);
+    await enqueue(db, 'classes', 'class-term', 'insert', { id: 'class-term', school_id: 'school-1', name: 'Grade 1A', grade: '1' });
+    const outbox = createSyncOutboxRepository({ database: db });
+    await outbox.markTerminalFailure('classes:class-term:insert', { errorMessage: 'RLS denied' });
+
+    // Auto-sync (non-force): the terminal row is NOT retried and stays terminal.
+    const auto = createSupabaseMock();
+    await createOutboxSyncEngine({ database: db, supabaseClient: auto.supabaseClient }).syncAll();
+    expect(auto.calls.filter((c) => c.tableName === 'classes')).toEqual([]);
+    expect((await outbox.getById('classes:class-term:insert')).status).toBe('terminal');
+
+    // Sync Now (force): the terminal row is resurrected, uploaded, and finalized synced.
+    const forced = createSupabaseMock();
+    await createOutboxSyncEngine({ database: db, supabaseClient: forced.supabaseClient }).syncAll({ force: true });
+    expect(forced.calls.map((c) => `${c.type}:${c.tableName}`)).toEqual(['upsert:classes']);
+    expect(await db.getFirstAsync('select sync_status from classes where id = ?', 'class-term'))
+      .toEqual({ sync_status: 'synced' });
+  });
+
   test('processes parents before children and finalizes success locally', async () => {
     await db.runAsync(`
       insert into classes (id, school_id, name, grade, sync_status)

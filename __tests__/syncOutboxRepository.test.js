@@ -136,6 +136,19 @@ describe('SQLite sync outbox repository', () => {
       }),
     }));
   });
+
+  test('getReadyRecords claims terminal rows only when includeTerminal is set (force Sync Now)', async () => {
+    await outbox.enqueue({ tableName: 'assessments', recordId: 'term-1', operation: 'insert', payload: { id: 'term-1' } });
+    await outbox.markTerminalFailure('assessments:term-1:insert', { errorMessage: 'RLS denied' });
+
+    // Default (auto-sync + non-force Sync Now): terminal rows are NOT claimable.
+    expect(await outbox.getReadyRecords()).toEqual([]);
+    expect(await outbox.getReadyRecords({ includeBackedOff: true })).toEqual([]);
+
+    // includeTerminal (force Sync Now): the terminal row becomes claimable again.
+    const ready = await outbox.getReadyRecords({ includeBackedOff: true, includeTerminal: true });
+    expect(ready).toEqual([expect.objectContaining({ recordId: 'term-1', status: 'terminal' })]);
+  });
 });
 
 describe('SQLite sync state repository', () => {
