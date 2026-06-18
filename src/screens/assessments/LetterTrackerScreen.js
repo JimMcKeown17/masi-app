@@ -4,6 +4,7 @@ import { Text, ActivityIndicator } from 'react-native-paper';
 import { useFocusEffect } from '@react-navigation/native';
 import { v4 as uuidv4 } from 'uuid';
 import { colors, spacing, borderRadius } from '../../constants/colors';
+import { letterStateColors } from '../../constants/letterStateColors';
 import { LETTER_SETS, PEDAGOGICAL_ORDERS } from '../../constants/egraConstants';
 import { computeAssessmentMastery, normalizeLanguageKey } from '../../utils/letterMastery';
 import { assessmentsRepository } from '../../db/repositories/assessmentsRepository';
@@ -13,13 +14,7 @@ import { useOffline } from '../../context/OfflineContext';
 
 const GRID_COLUMNS = 5;
 const GRID_GAP = spacing.sm;
-
-// Cell color palette
-const CELL_COLORS = {
-  assessment: { bg: '#FB8C00', text: '#FFFFFF' },
-  taught: { bg: colors.success, text: '#FFFFFF' },
-  default: { bg: colors.surface, text: colors.text, border: colors.border },
-};
+const CELL_COLORS = letterStateColors;
 
 export default function LetterTrackerScreen({ route }) {
   const { child, classItem } = route.params;
