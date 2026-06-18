@@ -11,6 +11,7 @@ import {
   schoolsRepository,
 } from '../db/repositories/referenceDataRepository';
 import { localStateRepository } from '../db/repositories/localStateRepository';
+import { resolveCaptureMode, isValidCaptureMode } from '../constants/egraConstants';
 import { resolveDatabase, runRepositoryTransaction } from '../db/repositories/repositoryRuntime';
 import {
   setRecordLastSyncError,
@@ -112,6 +113,7 @@ const ensureChildExists = async (childId) => {
 const getSyncMetaKey = (table, id) => `${table}_${id}`;
 const payloadKey = (scope, id = 'list') => `storage_payload:${scope}:${id}`;
 const USER_PROFILE_KEY = 'user_profile';
+const CAPTURE_MODE_KEY = 'assessment_capture_mode';
 
 const savePayload = async (scope, id, payload) => {
   if (!id) return;
@@ -562,6 +564,19 @@ export const storage = {
 
   async clearUserProfile() {
     return await localStateRepository.remove(USER_PROFILE_KEY);
+  },
+
+  // Assessment capture mode (device-local; resolveCaptureMode seams cover future org/user layers)
+  async getCaptureMode() {
+    const stored = await localStateRepository.get(CAPTURE_MODE_KEY);
+    return resolveCaptureMode({ deviceFallback: stored });
+  },
+
+  async setCaptureMode(mode) {
+    if (!isValidCaptureMode(mode)) {
+      throw new Error('Invalid capture mode: ' + mode);
+    }
+    return await localStateRepository.set(CAPTURE_MODE_KEY, mode);
   },
 
   async getSyncMeta() {
