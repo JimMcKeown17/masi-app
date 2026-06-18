@@ -41,7 +41,7 @@ export const colors = {
   primaryLight: RED[400],
   primaryDark: RED[600],
   emphasis: RED[500],
-  accent: RED[500],
+  accent: WARNING, // amber #B26A00 — caution/highlight, distinct from primary red
   success: SUCCESS,
 
   // Semantic

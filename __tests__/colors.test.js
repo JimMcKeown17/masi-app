@@ -17,12 +17,23 @@ describe('Masi red-dominant design tokens', () => {
   });
 
   it('remaps legacy names onto the red system without breaking exports', () => {
-    expect(colors.primary).toBe(colors.red500);
-    expect(colors.primaryLight).toBe(colors.red400);
-    expect(colors.primaryDark).toBe(colors.red600);
-    expect(colors.emphasis).toBe(colors.red500);
-    expect(colors.accent).toBe(colors.red500);
-    expect(colors.tabActive).toBe(colors.red600);
+    expect(colors.primary).toBe('#E72D4D');
+    expect(colors.primaryLight).toBe('#EC5470');
+    expect(colors.primaryDark).toBe('#C81F3E');
+    expect(colors.emphasis).toBe('#E72D4D');
+    expect(colors.accent).toBe('#B26A00');
+    expect(colors.tabActive).toBe('#C81F3E');
+  });
+
+  it('preserves every required export key (fail-closed against dropped exports)', () => {
+    const REQUIRED_KEYS = [
+      'red50','red100','red200','red300','red400','red500','red600','red700','red800','red900',
+      'primary','primaryLight','primaryDark','emphasis','accent','success',
+      'error','errorBg','warning','info','successBg','successText','successBorder',
+      'background','surface','cardBackground','text','textSecondary','border','disabled','placeholder',
+      'tabActive','tabInactive','heroDark','onDark','onDarkMuted','ringNeutral','ringStart',
+    ];
+    REQUIRED_KEYS.forEach((key) => expect(Object.keys(colors)).toContain(key));
   });
 
   it('contains no retired legacy blue or yellow values', () => {
