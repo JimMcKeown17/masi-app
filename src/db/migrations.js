@@ -563,6 +563,14 @@ const MIGRATIONS = [
         check (state in ('completed', 'in_progress', 'paused', 'discarded'));
     `,
   },
+  {
+    version: 4,
+    name: 'assessments_capture_mode',
+    sql: `
+      alter table assessments add column capture_mode text
+        check (capture_mode is null or capture_mode in ('grid', 'sequential'));
+    `,
+  },
 ];
 
 // Derived from the migration list so it never drifts when a migration is added.

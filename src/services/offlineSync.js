@@ -67,7 +67,7 @@ const INTENTIONALLY_UNSYNCED = {
 // Local-only bookkeeping columns the engine strips before push — never sent to the server.
 const LOCAL_ONLY_COLUMNS = ['synced', 'sync_status', 'last_sync_error', 'server_updated_at'];
 
-const SERVER_COLUMNS = {
+export const SERVER_COLUMNS = {
   time_entries: [
     'id', 'user_id', 'sign_in_time', 'sign_in_lat', 'sign_in_lon', 'sign_out_time',
     'sign_out_lat', 'sign_out_lon', 'auto_clocked_out', 'created_at', 'updated_at',
@@ -133,8 +133,9 @@ const SERVER_COLUMNS = {
   assessments: [
     'id', 'user_id', 'child_id', 'programme_id', 'assessment_tool_id',
     'assessment_window_id', 'assessment_purpose', 'grade_snapshot',
-    'teacher_name_snapshot', 'assessment_type', 'assessment_date', 'score',
-    'total_items', 'items_tested', 'notes', 'created_at', 'updated_at',
+    'teacher_name_snapshot', 'assessment_type', 'capture_mode',
+    'assessment_date', 'score', 'total_items', 'items_tested', 'notes',
+    'created_at', 'updated_at',
   ],
   assessment_items: [
     'id', 'assessment_id', 'item_key', 'prompt', 'response', 'is_correct',
