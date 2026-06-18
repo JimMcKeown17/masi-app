@@ -198,3 +198,44 @@ Earlier logs that predate this master log; fold in chronologically when convenie
 
 **Item 3 progress:** Tasks 1–5 ✅ (tokens · typography · letter-state · BrandButton · a11y sweep).
 Remaining: Task 6 (colour-guard capstone + port ~96 stray colour literals across ~22 files).
+
+### 2026-06-18 — Item 3 Task 6: colour-guard capstone + offender port (committed + accepted)
+
+- **Scope reality (preflight):** a faithful pre-scan (fork `isAllowed` + the Masi ALLOWED set) found **14 files /
+  59 occurrences / 38 distinct literals** — not the plan's "~22 files / ~96". The plan also *assumed* group/
+  score-band palettes "don't exist in Masi yet"; the scan proved they DO (an 8-scheme `GROUP_COLORS`, a RAG
+  score scale), which forced the deferred design question.
+- **Decision (Jim):** **allowlist categorical/semantic data colours.** The group palette + RAG score scale are
+  category/performance encoding, not chrome — so "no orange/yellow" stays true for *chrome*. Implemented as:
+  hoist `GROUP_COLORS` → new `src/constants/groupColors.js` (a token-source file, excluded from the guard and
+  pinned fail-closed by `__tests__/groupColors.test.js`); allowlist `#1E7A34`/`#FFBB00` with justification.
+  Everything else ported to `colors.*`.
+- **Built (Codex, TDD) → controller-verified:** `__tests__/noLegacyHues.test.js` (fork scanner port; ALLOWED =
+  Masi brand set + the 2 semantic data colours; rgba regexes incl. red500; excludes colors.js + groupColors.js),
+  ~17 literal→token ports across 14 files, the `warningBg` token, and stale-comment cleanup.
+  - **HARD-RULE worked as designed:** Codex correctly **BLOCKED** on `App.js` `errorStyles` literals
+    (`#294A99`/`#F7F7F7`) my mapping table missed (I'd mistaken them for stale comments) rather than silently
+    allowlisting the *old blue primary*. Completed the mapping → resumed the same Codex session → GREEN.
+- **Dual review:** Claude reviewer `[APPROVE-WITH-NITS]` + Codex adversarial `[SHIP-WITH-FIXES]` (computed WCAG
+  ratios analytically). Cross-review caught real **contrast regressions the literal-port masked**:
+  - `onSecondary` (#221A1B on amber `#B26A00`) = 4.01:1; the only on-colour clearing 4.5:1 on that amber is pure
+    black → `onSecondary: #000000` (4.95:1).
+  - `warning` text on `warningBg` = 3.97:1 on small caution-badge text → new **`warningText` #8A4B00** (~6.4:1),
+    completing the `warningBg`/`warningText` semantic *pair*; remapped 4 badge/chip text sites.
+  - `tileDisabled` bg===border (lost its boundary) → bg `colors.background`.
+  - Guard hardening (both reviewers): exact-key-set assertion in `colors.test.js`; the `groupColors.test.js`
+    pin; documented the scanner's named-colour/processColor coverage boundary.
+- **Fix-application note:** the resumed Codex fix-round hit a **read-only sandbox** (`patch rejected`), so the
+  controller applied the precise, already-reviewed fixes directly and re-verified through the full guard suite.
+  (Delegated tool blocked ≠ skip the gate — the dual review had already happened; only the pen changed hands.)
+- **Deferred to the owed visual/device pass (review-flagged, not code-fixable here):** (1) `red50` for
+  bar/progress **TRACKS** — reviewers split (Claude: fine/tonal; Codex: should be a neutral) — verify behind
+  RAG-coloured fills; (2) `typeBadgeWord` uses `warningBg` (category vs caution register); (3) `onSecondary` is
+  an unused MD3 theme slot today.
+- **Tests:** `npx jest noLegacyHues colors groupColors App.plan5 GroupPickerBottomSheet EditChildScreen` →
+  **7 suites / 130 green** (Node 20, controller-run). Commit **`ca6912a`** (19 files). **✅ Task 6 ACCEPTED.**
+
+**Item 3 progress:** Tasks 1–6 ✅ — **design-token system COMPLETE** (tokens · typography · letter-state · flat
+BrandButton · a11y sweep · colour guard). **Owed before merge:** a visual/device preview pass — Task 4's
+HomeScreen dark header + "+" icon + solid-red CTAs are review-verified only, plus the 3 Task-6 visual flags
+above — then `superpowers:finishing-a-development-branch` for the merge/PR.
