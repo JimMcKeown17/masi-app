@@ -164,3 +164,37 @@ Earlier logs that predate this master log; fold in chronologically when convenie
 (a11y sweep, ~18 files) + Task 6 (colour-guard + port ~96 stray colour literals across ~22 files).
 
 <!-- append new entries below -->
+
+### 2026-06-18 — Item 3 Task 5: accessibility sweep (committed + accepted)
+
+- **Built (Codex, TDD) → committed (controller):** `0d14c6f` — 17 files. Extracted the Home Profile
+  gear into a testable `src/components/common/ProfileGearButton.js` (role=button, label, hitSlop),
+  proven by `__tests__/profileGearA11y.test.js` (red→green). Swept all raw
+  `TouchableOpacity`/`Pressable`/`TouchableWithoutFeedback` across the 18 touchable files, adding
+  meaningful `accessibilityRole`/`accessibilityLabel`, `accessibilityState` (disabled/selected) on
+  toggleable letter tiles, and `hitSlop` on icon-only controls. `EgraLetterGrid`, `LetterGrid`, and
+  `BrandButton` were already accessible (controller-verified, not double-labelled).
+- **Dual review (two-LLM cross-review):**
+  - **Codex adversarial `[SHIP]`** — clean across all 7 attack categories: no smuggled non-a11y
+    changes, no runtime-throwing label interpolations (verified `EditChildScreen` `child.*` access is
+    guarded by an early return), faithful gear extraction.
+  - **Claude reviewer `[APPROVE-WITH-NITS]`** — caught 3 real gaps Codex's raw-touchable scope missed
+    (the payoff of differing framings — *is it safe?* vs *is it complete?*): unlabelled icon-only
+    `IconButton`s in `ClassDetailScreen`, missing `accessibilityState.selected` on letter tiles, and a
+    back-button label ("Go back") not matching the visible "Back" text.
+- **Engaged (one Codex fix round, controller-verified):** labelled the 3 `ClassDetailScreen`
+  IconButtons (Letter tracker / Assessment summary / Edit class); added `selected: state !== 'default'`
+  to both letter-tile files; back label → "Back"; gear label → "Open profile" (verb-consistency with
+  the rest of the sweep; test updated red→green). Decorative `cloud-upload` `List.Icon` correctly left
+  unlabelled.
+- **Deferred follow-up (both reviewers agreed, non-blocking):** add `accessibilityViewIsModal={true}`
+  to the bottom-sheet content Views to trap screen-reader focus — makes the dismiss-backdrop labels
+  moot. It's a focus-management *behaviour* change → device-test-worthy, so it's its own slice, not
+  folded into a labelling task. (Also noted: `EgraLetterGrid` receives a `disabled` prop it doesn't
+  surface to `accessibilityState` — pre-existing, out of scope.)
+- **Tests:** `npx jest profileGearA11y.test GroupPickerBottomSheet.test EditChildScreen.test
+  LetterTrackerScreen.plan5 LetterTrackerBottomSheet.plan5` → 5 suites / 12 tests green (Node 20,
+  independently re-run by the controller after both the build and the fix round). **✅ Task 5 ACCEPTED.**
+
+**Item 3 progress:** Tasks 1–5 ✅ (tokens · typography · letter-state · BrandButton · a11y sweep).
+Remaining: Task 6 (colour-guard capstone + port ~96 stray colour literals across ~22 files).
