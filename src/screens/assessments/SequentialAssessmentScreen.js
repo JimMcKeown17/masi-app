@@ -114,7 +114,7 @@ export default function SequentialAssessmentScreen({ navigation, route }) {
           <Button mode="contained" buttonColor={colors.success} onPress={() => decide(true)} disabled={finished} style={styles.decisionButton} contentStyle={styles.decisionButtonContent} icon="check">Correct</Button>
           <Button mode="contained" buttonColor={colors.error} onPress={() => decide(false)} disabled={finished} style={styles.decisionButton} contentStyle={styles.decisionButtonContent} icon="close">Incorrect</Button>
         </View>
-        <Button mode="outlined" onPress={goBack} disabled={finished || state.cursor === 0} contentStyle={styles.backButtonContent} icon="arrow-left">Back</Button>
+        <Button mode="outlined" onPress={goBack} disabled={finished || state.cursor === 0} textColor={colors.text} contentStyle={styles.backButtonContent} icon="arrow-left">Back</Button>
         {phase === 'active' && (<Button mode="text" onPress={handleEndAssessment} textColor={colors.emphasis} compact>End Assessment</Button>)}
       </View>
     </View>

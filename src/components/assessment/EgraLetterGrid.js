@@ -15,6 +15,7 @@ export default function EgraLetterGrid({ letters, pageOffset, letterStates, onTo
       {letters.map((letter, i) => {
         const globalIndex = pageOffset + i;
         const isCorrect = letterStates[globalIndex] === true;
+        const isIncorrect = letterStates[globalIndex] === false;
         const isCurrent = globalIndex === currentIndex;
         return (
           <Pressable
@@ -24,12 +25,13 @@ export default function EgraLetterGrid({ letters, pageOffset, letterStates, onTo
               styles.tile,
               { width: effectiveWidth, height: effectiveHeight },
               isCorrect && styles.tileCorrect,
+              isIncorrect && styles.tileIncorrect,
               isCurrent && styles.tileCurrent,
               pressed && !disabled && !readOnly && styles.tilePressed,
               disabled && styles.tileDisabled,
             ]}
             accessibilityRole="button"
-            accessibilityLabel={`${letter}, ${isCorrect ? 'correct' : 'not marked'}${isCurrent ? ', current' : ''}`}
+            accessibilityLabel={`${letter}, ${isCorrect ? 'correct' : isIncorrect ? 'incorrect' : 'not marked'}${isCurrent ? ', current' : ''}`}
           >
             <Text
               numberOfLines={1}
@@ -39,6 +41,7 @@ export default function EgraLetterGrid({ letters, pageOffset, letterStates, onTo
                 styles.tileText,
                 { fontSize: baseFontSize },
                 isCorrect && styles.tileTextCorrect,
+                isIncorrect && styles.tileTextIncorrect,
                 letter.length === 2 && { fontSize: digraphFontSize },
                 letter.length > 2 && { fontSize: wordFontSize },
               ]}
@@ -70,6 +73,10 @@ const styles = StyleSheet.create({
     backgroundColor: colors.success,
     borderColor: colors.success,
   },
+  tileIncorrect: {
+    backgroundColor: colors.error,
+    borderColor: colors.error,
+  },
   tileCurrent: {
     borderColor: colors.primary,
     borderWidth: 2,
@@ -86,6 +93,9 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   tileTextCorrect: {
+    color: '#FFFFFF',
+  },
+  tileTextIncorrect: {
     color: '#FFFFFF',
   },
 });
