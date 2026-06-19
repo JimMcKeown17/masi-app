@@ -56,6 +56,7 @@ import SyncStatusScreen from '../screens/main/SyncStatusScreen';
 
 const Stack = createNativeStackNavigator();
 const Tab = createBottomTabNavigator();
+const ChildrenStack = createNativeStackNavigator();
 
 function AuthNavigator() {
   return (
@@ -71,6 +72,52 @@ function AuthNavigator() {
         }}
       />
     </Stack.Navigator>
+  );
+}
+
+function ChildrenStackNavigator() {
+  return (
+    <ChildrenStack.Navigator
+      screenOptions={({ navigation }) => ({
+        headerLeft: navigation.canGoBack()
+          ? () => (
+            <Pressable
+              onPress={() => navigation.goBack()}
+              hitSlop={8}
+              accessibilityRole="button"
+              accessibilityLabel="Back"
+              style={{ flexDirection: 'row', alignItems: 'center', marginLeft: Platform.OS === 'ios' ? -8 : 0 }}
+            >
+              <Ionicons name="chevron-back" size={28} color={colors.primary} />
+              <Text style={{ color: colors.primary, fontSize: 17 }}>Back</Text>
+            </Pressable>
+          )
+          : undefined,
+      })}
+    >
+      <ChildrenStack.Screen
+        name="ChildrenList"
+        component={ChildrenListScreen}
+        options={({ navigation }) => ({
+          title: 'My Children',
+          headerRight: () => (
+            <View style={{ marginRight: 16 }}>
+              <SyncIndicator onPress={() => navigation.navigate('SyncStatus')} />
+            </View>
+          ),
+        })}
+      />
+      <ChildrenStack.Screen
+        name="ClassDetail"
+        component={ClassDetailScreen}
+        options={{ title: 'Class Details', headerBackTitle: 'Back' }}
+      />
+      <ChildrenStack.Screen
+        name="ChildResults"
+        component={ChildResultsScreen}
+        options={{ title: 'Child Results', headerBackTitle: 'Back' }}
+      />
+    </ChildrenStack.Navigator>
   );
 }
 
@@ -110,8 +157,8 @@ function MainTabNavigator() {
       />
       <Tab.Screen
         name="Children"
-        component={ChildrenListScreen}
-        options={{ title: 'My Children' }}
+        component={ChildrenStackNavigator}
+        options={{ title: 'My Children', headerShown: false }}
       />
       <Tab.Screen
         name="Sessions"
@@ -189,14 +236,6 @@ function MainNavigator() {
         component={EditClassScreen}
         options={{
           title: 'Edit Class',
-          headerBackTitle: 'Back',
-        }}
-      />
-      <Stack.Screen
-        name="ClassDetail"
-        component={ClassDetailScreen}
-        options={{
-          title: 'Class Details',
           headerBackTitle: 'Back',
         }}
       />
@@ -279,14 +318,6 @@ function MainNavigator() {
         component={LetterTrackerScreen}
         options={{
           title: 'Letter Tracker',
-          headerBackTitle: 'Back',
-        }}
-      />
-      <Stack.Screen
-        name="ChildResults"
-        component={ChildResultsScreen}
-        options={{
-          title: 'Child Results',
           headerBackTitle: 'Back',
         }}
       />
