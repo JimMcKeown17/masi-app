@@ -107,6 +107,8 @@ function renderScreen() {
 }
 
 // add inside describe('AssessmentResultsScreen', ...):
+beforeEach(() => jest.clearAllMocks()); // each test.each case asserts a call count; the repo auto-clears nothing
+
 test.each([
   ['sequential', 'SequentialAssessment'],
   ['grid', 'LetterAssessment'],
@@ -197,12 +199,12 @@ Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>"
 - Verify (no change expected): `__tests__/LetterTrackerScreen.plan5.test.js`
 
 **Interfaces:**
-- Produces: `export default function LetterMasteryPanel({ child, classItem })` — a `<View>` (no own `ScrollView`) rendering: meta row (language badge, `"{n} / 26 letters mastered"`, optional `"Last assessed: {date}"`), retryable mutation-error text, legend, and the tappable 5-column letter grid. Loads on focus; writes taught records immediately (create / soft-delete / reactivate) via `masteryRepository`. Self-measures available width via `onLayout` with a `useWindowDimensions` fallback. Renders an "isn't available for this language yet" fallback when `LETTER_SETS[languageKey]` is undefined.
+- Produces: `export default function LetterMasteryPanel({ child, classItem })` — a `<View>` (no own `ScrollView`) rendering: meta row (language badge, `"{n} / 26 letters mastered"`, optional `"Last assessed: {date}"`), retryable mutation-error text, legend, and the tappable 5-column letter grid. Loads on focus; writes taught records immediately (create / soft-delete / reactivate) via `masteryRepository`. Self-measures available width via `onLayout` with a `useWindowDimensions` fallback.
 - Consumes (later tasks): `<LetterMasteryPanel child={child} classItem={classItem} />` embedded by `LetterTrackerScreen` (Task C) and `ChildResultsScreen` (Task D).
 
 ### Background — verbatim source
 The panel is extracted from `src/screens/assessments/LetterTrackerScreen.js`. Move this logic **verbatim** (it carries load-bearing sync correctness), changing only what Steps below specify:
-- `loadData` body (current lines 41-82) — **except** wrap the top in the `letterSet` guard (Step 3).
+- `loadData` body (current lines 41-82) — **verbatim**, with source-exact deps `[child.id, letterSet.language, pedagogicalOrder, user.id]`. No language guard: `normalizeLanguageKey` (`letterMastery.js:70-74`) always returns a mapped key, so `letterSet` is never undefined (see R2/R3).
 - `handleCellTap` body (current lines 90-173) — **verbatim**, including the re-fetch-active-record-on-untoggle and the `savedId = await saveLetterMasteryRecord(record)` / `setTaughtLetters(prev => ({ ...prev, [letter]: savedId }))` lines. These prevent duplicate-key sync errors and stale-id no-ops; do not "simplify" them.
 - `getCellState` (current lines 175-179) — verbatim.
 - The legend + grid JSX (current lines 219-272) — verbatim, but the grid's outer `<View style={[styles.grid, { gap: GRID_GAP }]}>` lives inside the panel's measured root `<View>`.
@@ -257,11 +259,26 @@ describe('LetterMasteryPanel', () => {
 
   afterEach(() => jest.clearAllMocks());
 
-  test('renders the unsupported-language fallback when the class language has no letter set', async () => {
-    const { getByText } = render(
-      <LetterMasteryPanel child={child} classItem={{ id: 'class-x', home_language: 'Klingon' }} />,
+  test('reactivates a soft-deleted record on toggle-on instead of creating a duplicate', async () => {
+    masteryRepository.getLetterMastery.mockResolvedValue([
+      { id: 'rec-a', child_id: 'child-1', letter: 'a', language: 'English', _deleted: true },
+    ]);
+    const { getByLabelText, getByText } = render(
+      <LetterMasteryPanel child={child} classItem={classItem} />,
     );
-    await waitFor(() => expect(getByText(/isn't available for this language/i)).toBeTruthy());
+    // the soft-deleted row is filtered out of the initial taught set
+    await waitFor(() => expect(getByLabelText('a, not mastered')).toBeTruthy());
+
+    fireEvent.press(getByLabelText('a, not mastered'));
+
+    await waitFor(() => {
+      expect(masteryRepository.updateLetterMasteryRecord).toHaveBeenCalledWith(
+        'rec-a',
+        expect.objectContaining({ _deleted: false, deleted_at: null }),
+      );
+    });
+    expect(masteryRepository.saveLetterMasteryRecord).not.toHaveBeenCalled();
+    expect(getByText('1 / 26 letters mastered')).toBeTruthy();
   });
 
   test('toggling a letter on then off uses the saved id and updates the mastered count', async () => {
@@ -356,24 +373,13 @@ export default function LetterMasteryPanel({ child, classItem }) {
   const tileSize = Math.floor((effectiveWidth - totalGapWidth) / GRID_COLUMNS);
 
   const loadData = useCallback(async () => {
-    if (!letterSet) { setLoading(false); return; }
     // ... VERBATIM body of LetterTrackerScreen.loadData (current lines 42-81) ...
-  }, [child.id, letterSet, pedagogicalOrder, user.id]);
+  }, [child.id, letterSet.language, pedagogicalOrder, user.id]);
 
   useFocusEffect(useCallback(() => { loadData(); }, [loadData]));
 
   // ... VERBATIM handleCellTap (LetterTrackerScreen 90-173) ...
   // ... VERBATIM getCellState (LetterTrackerScreen 175-179) ...
-
-  if (!letterSet) {
-    return (
-      <View style={styles.fallback}>
-        <Text variant="bodyMedium" style={styles.fallbackText}>
-          Letter tracking isn&apos;t available for this language yet.
-        </Text>
-      </View>
-    );
-  }
 
   if (loading) {
     return (
@@ -418,18 +424,7 @@ export default function LetterMasteryPanel({ child, classItem }) {
 }
 ```
 
-Move the `StyleSheet.create` block from `LetterTrackerScreen.js` (current lines 277-372) into the panel, **dropping** `container`, `content`, and `childName` (those move to the wrapper in Step 5), and **adding**:
-
-```javascript
-  fallback: {
-    paddingVertical: spacing.lg,
-    alignItems: 'center',
-  },
-  fallbackText: {
-    color: colors.textSecondary,
-    textAlign: 'center',
-  },
-```
+Move the `StyleSheet.create` block from `LetterTrackerScreen.js` (current lines 277-372) into the panel, **dropping** `container`, `content`, and `childName` (those move to the wrapper in Step 5). Keep `loadingContainer` (the panel still has a loading branch).
 
 - [ ] **Step 4: Run the panel tests to verify they pass**
 
@@ -659,6 +654,7 @@ Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>"
 
 **Files:**
 - Modify: `src/navigation/AppNavigator.js`
+- Modify: `src/screens/children/ClassDetailScreen.js` (comment-only — the now-stale `popToTop` rationale at lines 31-35; see Step 2b)
 
 **Interfaces:**
 - Consumes: `ChildrenListScreen`, `ClassDetailScreen`, `ChildResultsScreen` (all already imported).
@@ -738,6 +734,10 @@ In `MainTabNavigator`, replace the `Children` `Tab.Screen` (lines 111-115) with:
 
 In `MainNavigator`, **delete** the `ClassDetail` `Stack.Screen` (lines 195-202) and the `ChildResults` `Stack.Screen` (the block added in Task D Step 5). `EditChild`, `AddChild`, `LetterTracker`, `LetterMasteryRanking`, etc. **stay** on `MainNavigator`.
 
+- [ ] **Step 2b: Fix the now-stale `popToTop` comment in `ClassDetailScreen`**
+
+After nesting, `ClassDetailScreen`'s "Manage classes" `navigation.popToTop()` (line 36) pops the **Children stack** to its `ChildrenList` root (not the root stack to `MainTabs`). Behavior is preserved — `ChildrenList` stays mounted → `hasAutoRouted` intact → no re-bounce, and the tab bar now stays visible. **Code unchanged** (`popToTop()` is still correct); only update the comment at `ClassDetailScreen.js:31-35`: replace "ClassDetail sits above MainTabs (the root stack's initial route)" with "ClassDetail is a screen in the Children stack; popToTop returns to the live ChildrenList root (ref intact → no re-route)."
+
 - [ ] **Step 3: Run the full unit suite for no regressions**
 
 Run: `PATH=$HOME/.nvm/versions/node/v20.19.4/bin:$PATH npm test`
@@ -751,7 +751,8 @@ Build/run against the SQLite backend (`npm run sqlite:staging:ios` or an EAS `--
 - [ ] Tapping a child's chart icon opens **ChildResults** with the tab bar still visible; the embedded mastery panel renders + cell taps persist.
 - [ ] **Run Assessment** from ChildResults launches the assessment (cross-navigator nav to root resolves).
 - [ ] Count-aware auto-route: a single-class EA still lands directly in ClassDetail with the tab bar visible.
-- [ ] The letter icon on a ClassDetail row still opens the standalone Letter Tracker.
+- [ ] The letter icon on a ClassDetail row still opens the standalone Letter Tracker. (This still **hides** the tab bar — `LetterTracker` stays on root this item by design; the row icon goes away in the deferred group item. Do NOT flag the hidden tab bar here as a regression.)
+- [ ] "Manage classes" from ClassDetail returns to the class list **without re-bouncing** a single-class EA back into ClassDetail (`popToTop` now pops the Children stack to its live `ChildrenList` root; ref intact → `hasAutoRouted` preserved).
 
 - [ ] **Step 5: Commit**
 
@@ -771,7 +772,7 @@ Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>"
 ## Final gate (after all tasks)
 
 - [ ] **Full suite (Node 20):** `PATH=$HOME/.nvm/versions/node/v20.19.4/bin:$PATH npm test && PATH=$HOME/.nvm/versions/node/v20.19.4/bin:$PATH npm run test:integration`
-  Expected: GREEN — unit baseline 115 suites / 629 + Item-5 additions (LetterMasteryPanel ~3, ChildResults ~1, AssessmentResults +2); integration 23 suites / 145 unchanged (no integration-tier files touched).
+  Expected: GREEN — unit = the prior baseline (115 suites / 629) **plus** Item-5 additions (new suites `LetterMasteryPanel` ~3 + `ChildResults` ~1; AssessmentResults +2 routing tests; `LetterTrackerScreen.plan5` kept as a wrapper smoke test). Treat this as "baseline + additions," not an exact number. Integration 23 suites / 145 unchanged (no integration-tier files touched).
 - [ ] **Device-verify gate (Task E Step 4)** completed by Jim.
 - [ ] **Append an Item 5 entry to `documentation/build-log.md`** (commits + tests + reviews).
 - [ ] `superpowers:finishing-a-development-branch` → offer merge to local `main`; then `handoff` to the **group-centric capture & navigation** item.
@@ -784,3 +785,18 @@ Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>"
 - **T-E (HIGH):** Claude `plan-reviewer` + Codex adversarial cross-review at plan time + the device-verify gate (not unit-testable).
 
 This plan itself is going to a Codex adversarial review before execution.
+
+---
+
+## Post-review revisions (two-LLM cross-review, 2026-06-19 — all applied inline above)
+
+Reviewed by Codex (adversarial) + a Claude reviewer. Both independently re-verified the Task-C verbatim line-ranges, the missed-caller/nav-orphan analysis, and the Task-E header/tab-bar handling as **sound**. Findings engaged as claims and verified against source before applying:
+
+- **R1 [HIGH, Codex] — mock accumulation.** The Try-Again `test.each` asserts `resolveAssessmentRoute` called once per case, but the repo auto-clears nothing (convention is manual clearing — `assessmentEntryRouting.test.js:127`, `LetterTrackerScreen.plan5.test.js:61`). → Added `beforeEach(jest.clearAllMocks())` to Task B Step 1.
+- **R2 [BUILD-BREAKER, Claude] — unreachable language fallback.** Verified `normalizeLanguageKey` (`letterMastery.js:70-74`) returns `'english'` for any non-xhosa input, so `LETTER_SETS[key]` is always defined and the `!letterSet` guard is dead code — the fallback test would fail forever. → Removed the fallback UI, its styles, the `loadData` guard line, and the test from Task C; the extraction is now a pure verbatim move.
+- **R3 [MED, Claude] — loadData dep deviation.** Reverted the dep array to source-exact `[child.id, letterSet.language, pedagogicalOrder, user.id]` (a consequence of R2) so the "match source" HARD RULE won't halt the builder.
+- **R4 [MED, Codex] — reactivation path uncovered.** Added a Task C panel test asserting toggle-on of a soft-deleted record calls `updateLetterMasteryRecord` (reactivate), not `saveLetterMasteryRecord` — covering the duplicate-key guard.
+- **R5 [MED, Claude] — cross-navigator LetterTracker.** `navigate('LetterTracker')` from nested `ClassDetail` resolves by bubbling to root and hides the tab bar (existing, intended this item). → Noted in the Task E device-verify gate so it isn't flagged as a regression.
+- **R6 [LOW, Claude] — stale popToTop comment.** Post-nesting, `popToTop()` pops the Children stack to `ChildrenList` (behavior preserved, no re-bounce). → Task E adds Step 2b (comment-only fix) + a device-verify item; `ClassDetailScreen.js` added to Task E's file list.
+- **R7 [LOW, Claude] — test-count reconciliation.** Final gate now reads as "baseline + additions," not an exact number.
+- **Confirmations (no change):** Codex Vectors 1/2/5 clean; Claude spec-coverage + line-ref + TDD checks clean; the `assessmentEntryRouting` paper-mock-missing-`ActivityIndicator` risk is already handled by mocking the panel to null (Task D Step 7).
