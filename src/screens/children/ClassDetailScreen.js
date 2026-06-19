@@ -162,7 +162,7 @@ export default function ClassDetailScreen({ route, navigation }) {
             iconColor={colors.primary}
             style={styles.actionIcon}
             accessibilityLabel={`Assessment summary for ${item.first_name} ${item.last_name}`}
-            onPress={() => navigation.navigate('ChildAssessmentSummary', {
+            onPress={() => navigation.navigate('ChildResults', {
               child: item,
               classItem,
             })}

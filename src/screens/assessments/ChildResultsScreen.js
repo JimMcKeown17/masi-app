@@ -8,6 +8,7 @@ import { assessmentsRepository } from '../../db/repositories/assessmentsReposito
 import { LETTER_SETS, WORD_SETS } from '../../constants/egraConstants';
 import { normalizeLanguageKey } from '../../utils/letterMastery';
 import { resolveAssessmentRoute } from '../../utils/assessmentRouting';
+import LetterMasteryPanel from '../../components/assessment/LetterMasteryPanel';
 
 const ASSESSMENT_TYPES = [
   { key: 'letter_egra', label: 'Letter Sound', description: 'EGRA letter sound recognition' },
@@ -26,7 +27,7 @@ function getFeedbackColor(accuracy) {
   return colors.emphasis;
 }
 
-export default function ChildAssessmentSummaryScreen({ navigation, route }) {
+export default function ChildResultsScreen({ navigation, route }) {
   const { user } = useAuth();
   const { child, classItem } = route.params;
   const childName = `${child.first_name} ${child.last_name}`;
@@ -147,13 +148,14 @@ export default function ChildAssessmentSummaryScreen({ navigation, route }) {
         );
       })}
 
-      {/* Letter Tracker shortcut */}
-      <Card style={styles.card} onPress={() => navigation.navigate('LetterTracker', { child, classItem })}>
-        <Card.Content style={styles.trackerCard}>
+      {/* Letter mastery — embedded panel (one source of truth) */}
+      <Card style={styles.card}>
+        <Card.Content>
           <Text variant="titleMedium" style={styles.cardTitle}>Letter Tracker</Text>
           <Text variant="bodySmall" style={styles.cardDescription}>
-            View and manage letter mastery progress
+            Tap letters to mark them as taught
           </Text>
+          <LetterMasteryPanel child={child} classItem={classItem} />
         </Card.Content>
       </Card>
     </ScrollView>
@@ -239,8 +241,5 @@ const styles = StyleSheet.create({
   },
   runButton: {
     alignSelf: 'center',
-  },
-  trackerCard: {
-    flexDirection: 'column',
   },
 });

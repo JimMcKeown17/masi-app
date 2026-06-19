@@ -1,7 +1,7 @@
 import React from 'react';
 import { fireEvent, render, waitFor } from '@testing-library/react-native';
 import AssessmentChildSelectScreen from '../src/screens/assessments/AssessmentChildSelectScreen';
-import ChildAssessmentSummaryScreen from '../src/screens/assessments/ChildAssessmentSummaryScreen';
+import ChildResultsScreen from '../src/screens/assessments/ChildResultsScreen';
 import { useAuth } from '../src/context/AuthContext';
 import { useChildren } from '../src/context/ChildrenContext';
 import { useClasses } from '../src/context/ClassesContext';
@@ -91,6 +91,8 @@ jest.mock('../src/utils/assessmentRouting', () => ({
   resolveAssessmentRoute: jest.fn(),
 }));
 
+jest.mock('../src/components/assessment/LetterMasteryPanel', () => () => null);
+
 jest.mock('react-native-safe-area-context', () => ({
   useSafeAreaInsets: () => ({ top: 0, right: 0, bottom: 0, left: 0 }),
 }));
@@ -165,14 +167,14 @@ describe('assessment entry routing', () => {
   );
 
   test.each(['sequential', 'grid'])(
-    'ChildAssessmentSummaryScreen routes %s mode through the resolver',
+    'ChildResultsScreen routes %s mode through the resolver',
     async (mode) => {
       const resolved = routeExpectationByMode[mode];
       resolveAssessmentRoute.mockResolvedValueOnce(resolved);
       const navigation = makeNavigation();
 
       const screen = render(
-        <ChildAssessmentSummaryScreen
+        <ChildResultsScreen
           navigation={navigation}
           route={{ params: { child, classItem } }}
         />
