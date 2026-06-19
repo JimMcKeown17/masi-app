@@ -14,6 +14,7 @@ module.exports = {
     '<rootDir>/__tests__/classesRepository.test.js',
     '<rootDir>/__tests__/sessionsRepository.test.js',
     '<rootDir>/__tests__/assessmentsRepository.test.js',
+    '<rootDir>/__tests__/timeEntriesRepository.test.js',
     '<rootDir>/__tests__/referenceDataRepository.test.js',
     '<rootDir>/__tests__/ChildrenContext.test.js',
     '<rootDir>/__tests__/ClassesContext.plan5.test.js',
