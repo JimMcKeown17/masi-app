@@ -1,9 +1,10 @@
-import React from 'react';
+import React, { useRef } from 'react';
 import { View, StyleSheet, ScrollView } from 'react-native';
 import { Text, Button } from 'react-native-paper';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { colors, spacing, borderRadius, shadows } from '../../constants/colors';
 import AssessmentDetailGrid from '../../components/assessment/AssessmentDetailGrid';
+import { resolveAssessmentRoute } from '../../utils/assessmentRouting';
 
 function getFeedback(accuracy) {
   if (accuracy >= 90) return { message: 'Excellent work!', color: colors.success };
@@ -29,14 +30,23 @@ export default function AssessmentResultsScreen({ navigation, route }) {
   const incorrect = assessment.letters_attempted - assessment.correct_responses;
   const feedback = getFeedback(assessment.accuracy);
   const insets = useSafeAreaInsets();
+  const launchingRef = useRef(false);
 
-  const handleTryAgain = () => {
-    navigation.replace('LetterAssessment', {
-      child,
-      letterSet,
-      attemptNumber: attemptNumber + 1,
-      assessmentType,
-    });
+  const handleTryAgain = async () => {
+    if (launchingRef.current) return;
+    launchingRef.current = true;
+    try {
+      const { screenName, captureMode } = await resolveAssessmentRoute();
+      navigation.replace(screenName, {
+        child,
+        letterSet,
+        attemptNumber: attemptNumber + 1,
+        assessmentType,
+        captureMode,
+      });
+    } finally {
+      launchingRef.current = false;
+    }
   };
 
   const handleDone = () => {
