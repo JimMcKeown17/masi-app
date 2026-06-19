@@ -54,15 +54,21 @@ export default function AssessmentResultsScreen({ navigation, route }) {
           {letterSet.language} - Attempt #{attemptNumber}
         </Text>
 
-        {/* Hero accuracy section */}
+        {/* Hero result section */}
         <View style={styles.heroSection}>
           <View style={[styles.accuracyRing, { borderColor: feedback.color }]}>
-            <Text style={[styles.accuracyNumber, { color: feedback.color }]}>
-              {assessment.accuracy}%
+            <Text
+              accessibilityLabel="Assessment main result"
+              style={[styles.accuracyNumber, { color: feedback.color }]}
+            >
+              {assessment.correct_responses}
             </Text>
           </View>
           <Text variant="headlineSmall" style={[styles.feedbackText, { color: feedback.color }]}>
             {feedback.message}
+          </Text>
+          <Text variant="bodyMedium" style={styles.accuracyText}>
+            {assessment.accuracy}% correct
           </Text>
           <Text variant="bodyMedium" style={styles.timeText}>
             Completed in {assessment.completion_time}s
@@ -157,6 +163,10 @@ const styles = StyleSheet.create({
   },
   timeText: {
     color: colors.textSecondary,
+  },
+  accuracyText: {
+    color: colors.textSecondary,
+    marginBottom: 2,
   },
   // Stat cards
   statsRow: {
