@@ -407,3 +407,9 @@ above — then `superpowers:finishing-a-development-branch` for the merge/PR.
   2. **Low-priority test-infra:** the pre-existing cross-file CHECK-enforcement isolation issue (some file leaves CHECK enforcement off process-wide). Not surfaced by this run.
 - **Not pushed** (local branch ahead of `origin` — Jim's call). **Next:** `finishing-a-development-branch` (merge/PR decision) → `handoff` to **Item 5**.
 
+### 2026-06-19 — Item 8 follow-up: RLS probe env fix (made the owed live probe runnable)
+
+- **The owed `npm run rls:probe` failed on Jim's first real run** — two bugs the CI-safe test couldn't catch because it fed `validateProbeEnv` synthetic objects and never exercised the real env wiring (the classic "the live run exists to catch this"): (1) the probe read `process.env` directly and **never loaded `.env.local`**; (2) Codex invented var names (`SUPABASE_URL_SQLITE` / `SUPABASE_ANON_KEY_SQLITE` / `SUPABASE_SERVICE_ROLE_KEY_SQLITE`) that don't match the project's `*_SQLITE` convention.
+- **Fix (`fix/rls-probe-env`, merged to local `main`):** the probe now auto-loads `.env`/`.env.local` via `sqlite-staging.cjs`'s exported `parseEnvContent`, and uses the real names — `SUPABASE_PROJECT_URL_SQLITE`, `SUPABASE_PUBLISHABLE_KEY_SQLITE` (anon/EA client), `SUPABASE_SECRET_KEY_SQLITE` (service-role/secret, admin seed), `SUPABASE_PROJECT_ID_SQLITE`. CI-safe test updated to the new names (4/4 green). Verified: the probe now loads `.env.local` and fails only on the missing secret key.
+- **Still owed (Jim):** add `SUPABASE_SECRET_KEY_SQLITE` (the masi-app-sqlite **service-role/secret** key — Supabase dashboard → the sqlite project → Settings → API) to `.env.local`, then `npm run rls:probe`. The full live behavioral path (create test EA → seed → sign in as EA → upsert per rule → assert SELECT-visibility) remains unverified until that runs; if it errors past auth, iterate on the seed/upsert logic.
+

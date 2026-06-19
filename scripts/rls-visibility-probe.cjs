@@ -4,19 +4,40 @@
 /**
  * Opt-in staging probe for RLS SELECT visibility required by PostgREST upsert.
  *
- * This script is intentionally not part of CI. Run it manually against the
- * wipeable masi-app-sqlite backend after sourcing the *_SQLITE env vars.
+ * This script is intentionally not part of CI. It auto-loads .env / .env.local
+ * and requires these masi-app-sqlite vars:
+ *   - SUPABASE_PROJECT_URL_SQLITE     (https://<ref>.supabase.co)
+ *   - SUPABASE_PUBLISHABLE_KEY_SQLITE (anon/publishable key — the EA client)
+ *   - SUPABASE_SECRET_KEY_SQLITE      (service-role/secret key — admin seed; add from the dashboard)
+ *   - SUPABASE_PROJECT_ID_SQLITE      (segygjzpujphwvrubusm)
+ * Run: npm run rls:probe
  */
 
+const fs = require('fs');
+const path = require('path');
 const { randomUUID } = require('crypto');
+const { parseEnvContent } = require('./sqlite-staging.cjs');
+
+// Load .env / .env.local so `npm run rls:probe` works without manual exports
+// (mirrors scripts/sqlite-staging.cjs). An explicit process.env value still wins.
+const loadEnvFiles = (cwd = process.cwd()) => {
+  const fileEnv = {};
+  for (const filename of ['.env', '.env.local']) {
+    const filePath = path.join(cwd, filename);
+    if (fs.existsSync(filePath)) {
+      Object.assign(fileEnv, parseEnvContent(fs.readFileSync(filePath, 'utf8')));
+    }
+  }
+  return { ...fileEnv, ...process.env };
+};
 
 const SQLITE_PROJECT_ID = 'segygjzpujphwvrubusm';
 const LEGACY_PROJECT_ID = 'jcqrlwetutnpuchjoyyd';
 
 const REQUIRED_ENV = [
-  'SUPABASE_URL_SQLITE',
-  'SUPABASE_ANON_KEY_SQLITE',
-  'SUPABASE_SERVICE_ROLE_KEY_SQLITE',
+  'SUPABASE_PROJECT_URL_SQLITE',
+  'SUPABASE_PUBLISHABLE_KEY_SQLITE',
+  'SUPABASE_SECRET_KEY_SQLITE',
   'SUPABASE_PROJECT_ID_SQLITE',
 ];
 
@@ -56,12 +77,12 @@ const validateProbeEnv = (env) => {
     );
   }
 
-  if (env.SUPABASE_URL_SQLITE.includes(LEGACY_PROJECT_ID)) {
-    throw new Error(`SUPABASE_URL_SQLITE must not target legacy project ${LEGACY_PROJECT_ID}.`);
+  if (env.SUPABASE_PROJECT_URL_SQLITE.includes(LEGACY_PROJECT_ID)) {
+    throw new Error(`SUPABASE_PROJECT_URL_SQLITE must not target legacy project ${LEGACY_PROJECT_ID}.`);
   }
 
-  if (!env.SUPABASE_URL_SQLITE.includes(SQLITE_PROJECT_ID)) {
-    throw new Error(`SUPABASE_URL_SQLITE must contain ${SQLITE_PROJECT_ID}.`);
+  if (!env.SUPABASE_PROJECT_URL_SQLITE.includes(SQLITE_PROJECT_ID)) {
+    throw new Error(`SUPABASE_PROJECT_URL_SQLITE must contain ${SQLITE_PROJECT_ID}.`);
   }
 
   return env;
@@ -239,10 +260,10 @@ const seedProbeContext = async ({ admin, anon, email, password }) => {
   }
 };
 
-const runProbe = async (env = process.env) => {
+const runProbe = async (env = loadEnvFiles()) => {
   const safeEnv = validateProbeEnv(env);
-  const admin = makeClient(safeEnv.SUPABASE_URL_SQLITE, safeEnv.SUPABASE_SERVICE_ROLE_KEY_SQLITE);
-  const anon = makeClient(safeEnv.SUPABASE_URL_SQLITE, safeEnv.SUPABASE_ANON_KEY_SQLITE);
+  const admin = makeClient(safeEnv.SUPABASE_PROJECT_URL_SQLITE, safeEnv.SUPABASE_SECRET_KEY_SQLITE);
+  const anon = makeClient(safeEnv.SUPABASE_PROJECT_URL_SQLITE, safeEnv.SUPABASE_PUBLISHABLE_KEY_SQLITE);
   const password = `RlsProbe-${randomUUID()}aA1!`;
   const email = `rls-probe-${Date.now()}-${randomUUID()}@example.invalid`;
   let context;
