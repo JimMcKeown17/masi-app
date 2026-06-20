@@ -437,3 +437,9 @@ above — then `superpowers:finishing-a-development-branch` for the merge/PR.
 - **No schema/sync/RLS changes this item** (screen/component/navigation only) — no migration, no contract-map update.
 - **Not pushed** (local branch ahead of `origin` — Jim's call). **Next:** `finishing-a-development-branch` (merge/PR decision) → **the group-centric capture & navigation item** (brainstorm → `grill-with-docs` → ADR → plan), which owns the deferred F/G + the whole-class-access requirement.
 
+### 2026-06-20 — Item 5: merged to local `main` + device gate CLEARED — fully done
+
+- **Merged** `feature/child-results` → local `main` via fast-forward (tip `f4b60a0`; branch kept per convention; **not pushed** — `main` ~101 ahead of `origin`, Jim's schedule). Re-verified on merged main: **117 unit suites / 636 tests + 23 integration / 145 GREEN** (Node 20).
+- **✓ Device-verify gate CLEARED (Jim, 2026-06-20):** nav looks good across screens — the bottom tab bar stays visible on My Children / ClassDetail / ChildResults, and back-from-ClassDetail doesn't bounce. Assessment → cancel → returns to the select-child screen, confirmed **fine** by Jim. **Item 5 has no remaining owed items.**
+- **Next:** handoff written for the **group-centric capture & navigation** item (the immediate next item, per Jim — supersedes the original 7→6 ordering for now). It owns deferred §5 F (group cards replace the row-tap flip) + G (group-based last/next summaries) **and** the whole-class-access requirement (control-group assessment + replacement; reconcile `CONTEXT.md:149` via `grill-with-docs` + ADR).
+
