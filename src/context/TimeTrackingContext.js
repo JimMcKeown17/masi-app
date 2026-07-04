@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect, useRef } from 'react';
+import React, { createContext, useContext, useState, useEffect } from 'react';
 import { useAuth } from './AuthContext';
 import { useOffline } from './OfflineContext';
 import { timeEntriesRepository, OPEN_TIME_ENTRY_EXISTS } from '../db/repositories/timeEntriesRepository';
@@ -19,11 +19,8 @@ function useTimeTrackingState() {
   const [isSignedIn, setIsSignedIn] = useState(false);
   const [activeEntry, setActiveEntry] = useState(null);
   const [loadingLocation, setLoadingLocation] = useState(false);
-  const [elapsedTime, setElapsedTime] = useState(0);
   const [snackbarMessage, setSnackbarMessage] = useState('');
   const [snackbarVisible, setSnackbarVisible] = useState(false);
-
-  const elapsedInterval = useRef(null);
 
   const showSnackbar = (message) => {
     setSnackbarMessage(message);
@@ -32,20 +29,23 @@ function useTimeTrackingState() {
 
   useEffect(() => {
     loadActiveEntry();
-    return () => {
-      if (elapsedInterval.current) {
-        clearInterval(elapsedInterval.current);
-      }
-    };
   }, [user?.id]);
 
   useEffect(() => {
-    if (isSignedIn && activeEntry) {
-      startElapsedTimer();
-    } else {
-      stopElapsedTimer();
-    }
-    return () => stopElapsedTimer();
+    if (!isSignedIn || !activeEntry) return undefined;
+
+    // Low-frequency watchdog: no per-tick state (the 1Hz display lives in the
+    // ElapsedTime leaf component); state only changes when the 10h limit trips.
+    const checkAutoClockOut = () => {
+      const elapsed = Date.now() - new Date(activeEntry.sign_in_time).getTime();
+      if (elapsed >= MAX_SHIFT_MS) {
+        autoClockOut(activeEntry);
+      }
+    };
+
+    checkAutoClockOut();
+    const interval = setInterval(checkAutoClockOut, 30 * 1000);
+    return () => clearInterval(interval);
   }, [isSignedIn, activeEntry]);
 
   const autoClockOut = async (entry) => {
@@ -64,7 +64,6 @@ function useTimeTrackingState() {
     await timeEntriesRepository.updateTimeEntry(entry.id, updatedEntry);
     setActiveEntry(null);
     setIsSignedIn(false);
-    setElapsedTime(0);
     await refreshSyncStatus();
     triggerBackgroundSync?.();
     showSnackbar(`Auto clocked out after ${MAX_SHIFT_HOURS} hours.`);
@@ -75,7 +74,6 @@ function useTimeTrackingState() {
       if (!user?.id) {
         setActiveEntry(null);
         setIsSignedIn(false);
-        setElapsedTime(0);
         return;
       }
 
@@ -92,38 +90,6 @@ function useTimeTrackingState() {
     } catch (error) {
       console.error('Error loading active entry:', error);
     }
-  };
-
-  const startElapsedTimer = () => {
-    if (elapsedInterval.current) {
-      clearInterval(elapsedInterval.current);
-    }
-    const updateElapsed = () => {
-      if (activeEntry?.sign_in_time) {
-        const elapsed = Date.now() - new Date(activeEntry.sign_in_time).getTime();
-        if (elapsed >= MAX_SHIFT_MS) {
-          autoClockOut(activeEntry);
-          return;
-        }
-        setElapsedTime(elapsed);
-      }
-    };
-    updateElapsed();
-    elapsedInterval.current = setInterval(updateElapsed, 1000);
-  };
-
-  const stopElapsedTimer = () => {
-    if (elapsedInterval.current) {
-      clearInterval(elapsedInterval.current);
-      elapsedInterval.current = null;
-    }
-  };
-
-  const formatElapsedTime = (milliseconds) => {
-    const hours = Math.floor(milliseconds / (1000 * 60 * 60));
-    const minutes = Math.floor((milliseconds % (1000 * 60 * 60)) / (1000 * 60));
-    const seconds = Math.floor((milliseconds % (1000 * 60)) / 1000);
-    return `${hours}h ${minutes}m ${seconds}s`;
   };
 
   const formatTime = (isoString) => {
@@ -197,7 +163,6 @@ function useTimeTrackingState() {
       if (!current) {
         setActiveEntry(null);
         setIsSignedIn(false);
-        setElapsedTime(0);
         showSnackbar('You are not clocked in.');
         return;
       }
@@ -225,7 +190,6 @@ function useTimeTrackingState() {
       await timeEntriesRepository.updateTimeEntry(current.id, updatedEntry);
       setActiveEntry(null);
       setIsSignedIn(false);
-      setElapsedTime(0);
       await refreshSyncStatus();
       triggerBackgroundSync?.();
       showSnackbar(`Clocked out. ${hoursWorked} hours worked.`);
@@ -241,13 +205,11 @@ function useTimeTrackingState() {
     isSignedIn,
     activeEntry,
     loadingLocation,
-    elapsedTime,
     snackbarMessage,
     snackbarVisible,
     setSnackbarVisible,
     handleSignIn,
     handleSignOut,
-    formatElapsedTime,
     formatTime,
   };
 }

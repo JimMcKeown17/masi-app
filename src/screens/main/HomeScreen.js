@@ -13,6 +13,7 @@ import { sessionsRepository } from '../../db/repositories/sessionsRepository';
 import { assessmentsRepository } from '../../db/repositories/assessmentsRepository';
 import ClockInBeforeSessionDialog from '../../components/sessions/ClockInBeforeSessionDialog';
 import BrandButton from '../../components/common/BrandButton';
+import ElapsedTime from '../../components/common/ElapsedTime';
 import {
   getDaysWorkedThisMonth,
   getWeekSessionCounts,
@@ -30,13 +31,11 @@ export default function HomeScreen({ navigation }) {
     isSignedIn,
     activeEntry,
     loadingLocation,
-    elapsedTime,
     snackbarMessage,
     snackbarVisible,
     setSnackbarVisible,
     handleSignIn,
     handleSignOut,
-    formatElapsedTime,
     formatTime,
   } = useTimeTracking();
   const {
@@ -196,7 +195,7 @@ export default function HomeScreen({ navigation }) {
                       Clocked in at {formatTime(activeEntry?.sign_in_time)}
                     </Text>
                   </View>
-                  <Text style={styles.elapsedText}>{formatElapsedTime(elapsedTime)}</Text>
+                  <ElapsedTime signInTime={activeEntry?.sign_in_time} style={styles.elapsedText} />
                 </View>
                 <Button
                   mode="contained"
