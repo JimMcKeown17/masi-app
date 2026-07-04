@@ -41,15 +41,37 @@ jest.mock('../src/context/LookupsContext', () => ({ useLookupsContext: () => moc
 jest.mock('../src/context/ChildrenContext', () => ({ useChildren: () => mockUseChildren() }));
 
 import React from 'react';
-import { render } from '@testing-library/react-native';
+import { render, fireEvent } from '@testing-library/react-native';
+import { Alert } from 'react-native';
 import { PaperProvider } from 'react-native-paper';
 import LiteracySessionForm from '../src/screens/sessions/LiteracySessionForm';
+import { READING_LEVELS } from '../src/constants/literacyConstants';
 
-const renderForm = () => render(
-  <PaperProvider settings={{ icon: () => null }}>
-    <LiteracySessionForm navigation={{ replace: jest.fn() }} />
-  </PaperProvider>
-);
+const buildNavigation = () => {
+  const listeners = {};
+  return {
+    replace: jest.fn(),
+    dispatch: jest.fn(),
+    addListener: jest.fn((event, callback) => {
+      listeners[event] = callback;
+      return jest.fn();
+    }),
+    emitBeforeRemove: () => {
+      const event = { preventDefault: jest.fn(), data: { action: { type: 'GO_BACK' } } };
+      listeners.beforeRemove?.(event);
+      return event;
+    },
+  };
+};
+
+const renderForm = (navigation = buildNavigation()) => {
+  const screen = render(
+    <PaperProvider settings={{ icon: () => null }}>
+      <LiteracySessionForm navigation={navigation} />
+    </PaperProvider>
+  );
+  return { navigation, ...screen };
+};
 
 describe('LiteracySessionForm', () => {
   beforeEach(() => {
@@ -78,5 +100,31 @@ describe('LiteracySessionForm', () => {
     expect(screen.getByText('Select Children')).toBeTruthy();
     expect(screen.getByText('Letters Focused On')).toBeTruthy();
     expect(screen.getByText('Submit Session')).toBeTruthy();
+  });
+
+  describe('unsaved-changes leave guard', () => {
+    test('a dirty form blocks leaving and asks for confirmation', () => {
+      const alertSpy = jest.spyOn(Alert, 'alert').mockImplementation(() => {});
+      const { navigation, getByPlaceholderText } = renderForm();
+      fireEvent.changeText(getByPlaceholderText('Add session notes...'), 'worked on m sounds');
+      const event = navigation.emitBeforeRemove();
+      expect(event.preventDefault).toHaveBeenCalled();
+      expect(alertSpy).toHaveBeenCalled();
+      alertSpy.mockRestore();
+    });
+
+    test('choosing a session reading level alone makes the form dirty', () => {
+      const { navigation, getByText } = renderForm();
+      fireEvent.press(getByText('Select a level'));
+      fireEvent.press(getByText(READING_LEVELS[0]));
+      const event = navigation.emitBeforeRemove();
+      expect(event.preventDefault).toHaveBeenCalled();
+    });
+
+    test('a clean form leaves without prompting', () => {
+      const { navigation } = renderForm();
+      const event = navigation.emitBeforeRemove();
+      expect(event.preventDefault).not.toHaveBeenCalled();
+    });
   });
 });
