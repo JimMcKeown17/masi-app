@@ -36,7 +36,7 @@
 - Removes: the `getTrackerCount` export (dead code; zero production callers).
 - Consumes: `assessmentsRepository.getAssessments({ userId, childId })`, `masteryRepository.getLetterMastery({ userId, childId })`, `computeAssessmentMastery`, `LETTER_SETS`/`PEDAGOGICAL_ORDERS`.
 
-- [ ] **Step 1: Write the failing regression test THROUGH THE RENDERED SHEET**
+- [x] **Step 1: Write the failing regression test THROUGH THE RENDERED SHEET**
 
 The bug's real surface is the rendered sheet (locked cells + subtitle count), and `getTrackerCount` turns out to have zero production callers (verified 2026-07-04: only its own test imports it), so the regression must render. In `__tests__/LetterTrackerBottomSheet.plan5.test.js` (keep its existing repository module mocks; add React/RTL/Paper imports and `import { LETTER_SETS } from '../src/constants/egraConstants';`), add:
 
@@ -94,7 +94,7 @@ const renderSheet = (props = {}) => render(
 
 (The default export needs importing alongside the existing named import: `import LetterTrackerBottomSheet, { ... }` — after Step 5 removes `getTrackerCount`, the import becomes default-only.)
 
-- [ ] **Step 2: Run to verify it fails**
+- [x] **Step 2: Run to verify it fails**
 
 ```bash
 npx jest __tests__/LetterTrackerBottomSheet.plan5.test.js -t "word assessment" --verbose
@@ -102,7 +102,7 @@ npx jest __tests__/LetterTrackerBottomSheet.plan5.test.js -t "word assessment" -
 
 Expected: FAIL — the cell renders with label `..., not mastered` because the newer word assessment wins the latest-assessment sort and `computeAssessmentMastery` returns an empty set.
 
-- [ ] **Step 3: Create the shared loader**
+- [x] **Step 3: Create the shared loader**
 
 Create `src/utils/masteryState.js`:
 
@@ -171,7 +171,7 @@ export function countMastered({ assessmentMastered, taughtLetters, pendingChange
 }
 ```
 
-- [ ] **Step 4: Add the loader's own unit tests**
+- [x] **Step 4: Add the loader's own unit tests**
 
 Create `__tests__/masteryState.test.js`:
 
@@ -264,7 +264,7 @@ describe('countMastered', () => {
 });
 ```
 
-- [ ] **Step 5: Point the bottom sheet at the loader**
+- [x] **Step 5: Point the bottom sheet at the loader**
 
 In `src/components/session/LetterTrackerBottomSheet.js`:
 
@@ -315,7 +315,7 @@ import { loadMasteryState, countMastered } from '../../utils/masteryState';
 
 5. **Port the plan5 test file's existing `getTrackerCount` cases to `countMastered`:** for each existing test in `__tests__/LetterTrackerBottomSheet.plan5.test.js` that asserts a count from `getTrackerCount`, add an equivalent `countMastered` case to the `countMastered` describe in `__tests__/masteryState.test.js` (same fixtures expressed as `assessmentMastered`/`taughtLetters`/`pendingChanges` inputs), then delete the old helper tests. The plan5 file keeps its repository mocks and now holds the rendered-sheet tests from Step 1.
 
-- [ ] **Step 6: Run to verify green**
+- [x] **Step 6: Run to verify green**
 
 ```bash
 npx jest __tests__/LetterTrackerBottomSheet.plan5.test.js __tests__/masteryState.test.js __tests__/LiteracySessionForm.test.js --verbose
@@ -323,7 +323,7 @@ npx jest __tests__/LetterTrackerBottomSheet.plan5.test.js __tests__/masteryState
 
 Expected: PASS, including the Step 1 regression test and all pre-existing sheet/form tests.
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add src/utils/masteryState.js __tests__/masteryState.test.js src/components/session/LetterTrackerBottomSheet.js __tests__/LetterTrackerBottomSheet.plan5.test.js
@@ -342,7 +342,7 @@ Behavior-preserving: the panel's filter was already correct; this removes the du
 **Interfaces:**
 - Consumes: `loadMasteryState` from Task 1 (exact signature above). The panel's write path (`handleCellTap`) is untouched.
 
-- [ ] **Step 1: Rewrite `loadData`**
+- [x] **Step 1: Rewrite `loadData`**
 
 In `src/components/assessment/LetterMasteryPanel.js`, add the import:
 
@@ -376,7 +376,7 @@ Remove the now-unused imports of `computeAssessmentMastery` (keep `normalizeLang
   }, [child.id, languageKey, user.id]);
 ```
 
-- [ ] **Step 2: Run the panel suite plus the loader tests**
+- [x] **Step 2: Run the panel suite plus the loader tests**
 
 ```bash
 npx jest __tests__/LetterMasteryPanel.test.js __tests__/masteryState.test.js __tests__/ChildResultsScreen.test.js --verbose
@@ -384,7 +384,7 @@ npx jest __tests__/LetterMasteryPanel.test.js __tests__/masteryState.test.js __t
 
 Expected: PASS with zero test-file changes; the panel's 4 existing behavior tests pin the rewrite.
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add src/components/assessment/LetterMasteryPanel.js
@@ -407,7 +407,7 @@ git commit -m "refactor(mastery): LetterMasteryPanel reads through the shared ma
 - Produces: `TimeTrackingProvider`, `useTimeTracking` (same return API as today: `isSignedIn, activeEntry, loadingLocation, elapsedTime, snackbarMessage, snackbarVisible, setSnackbarVisible, handleSignIn, handleSignOut, formatElapsedTime, formatTime`). Tasks 4-6 modify this context file.
 - Consumes: `useAuth`, `useOffline` (so the provider must sit inside both in App.js).
 
-- [ ] **Step 1: Create the context by moving the hook body**
+- [x] **Step 1: Create the context by moving the hook body**
 
 Create `src/context/TimeTrackingContext.js` with exactly this structure: copy the ENTIRE body of `src/hooks/useTimeTracking.js` (lines 1-236, verbatim, including all imports, `MAX_SHIFT_HOURS`/`MAX_SHIFT_MS`, and every function), then apply only these mechanical changes:
 
@@ -444,7 +444,7 @@ export function useTimeTracking() {
 }
 ```
 
-- [ ] **Step 2: Turn the hook file into a shim**
+- [x] **Step 2: Turn the hook file into a shim**
 
 Replace the entire content of `src/hooks/useTimeTracking.js` with:
 
@@ -454,7 +454,7 @@ Replace the entire content of `src/hooks/useTimeTracking.js` with:
 export { useTimeTracking } from '../context/TimeTrackingContext';
 ```
 
-- [ ] **Step 3: Mount the provider in App.js**
+- [x] **Step 3: Mount the provider in App.js**
 
 In `App.js`, add the import:
 
@@ -481,7 +481,7 @@ and wrap directly inside `<AuthProvider>` (it consumes useAuth and useOffline, b
           </OfflineProvider>
 ```
 
-- [ ] **Step 4: Mock the new provider in the App root test**
+- [x] **Step 4: Mock the new provider in the App root test**
 
 `__tests__/App.plan5.test.js` mocks `AuthContext` and `OfflineContext` as provider-only pass-throughs (lines 24-30) with no `useAuth`/`useOffline`, so the REAL `TimeTrackingProvider` would crash there. Add the matching pass-through mock alongside the existing context mocks:
 
@@ -491,7 +491,7 @@ jest.mock('../src/context/TimeTrackingContext', () => ({
 }));
 ```
 
-- [ ] **Step 5: Wrap the two hook test files and add the single-truth test**
+- [x] **Step 5: Wrap the two hook test files and add the single-truth test**
 
 In `__tests__/useTimeTracking.plan5.test.js` and `__tests__/useTimeTracking.integration.test.js`: add
 
@@ -532,7 +532,7 @@ Then add the single-truth pinning test to `__tests__/useTimeTracking.plan5.test.
 
 (Note: after Task 4 lands, `saveTimeEntry.mockResolvedValue` in this test becomes `createOpenTimeEntry.mockResolvedValue`; Task 4 owns that edit.)
 
-- [ ] **Step 6: Run the moved-truth suites plus every screen that consumes the shim**
+- [x] **Step 6: Run the moved-truth suites plus every screen that consumes the shim**
 
 ```bash
 npx jest __tests__/useTimeTracking.plan5.test.js __tests__/useTimeTracking.integration.test.js __tests__/TimeTrackingScreen.test.js __tests__/HomeScreen.test.js __tests__/sessionLaunchGuard.test.js __tests__/App.plan5.test.js --verbose
@@ -540,7 +540,7 @@ npx jest __tests__/useTimeTracking.plan5.test.js __tests__/useTimeTracking.integ
 
 Expected: PASS. The screen tests mock the shim's module path, so they never see the context.
 
-- [ ] **Step 7: Run the full unit suite**
+- [x] **Step 7: Run the full unit suite**
 
 ```bash
 npx jest --silent
@@ -548,7 +548,7 @@ npx jest --silent
 
 Expected: all green (`App.plan5.test.js` sees only the Step 4 pass-through mock, never the real provider).
 
-- [ ] **Step 8: Commit**
+- [x] **Step 8: Commit**
 
 ```bash
 git add src/context/TimeTrackingContext.js src/hooks/useTimeTracking.js App.js __tests__/App.plan5.test.js __tests__/useTimeTracking.plan5.test.js __tests__/useTimeTracking.integration.test.js
@@ -570,7 +570,7 @@ Belt under the context's braces: even with one context, a crash-restart race or 
 - Produces: `createOpenTimeEntry(entry, { transaction }) -> Promise<true>`, throws error with `code === 'OPEN_TIME_ENTRY_EXISTS'` when the user already has an open entry. Exported constant `OPEN_TIME_ENTRY_EXISTS = 'OPEN_TIME_ENTRY_EXISTS'`.
 - Consumes: existing `normalizeForWrite`, `upsertRecord`, `shouldEnqueueOutbox`, `enqueueDomainOutbox` (identical record shape and outbox operation as `saveTimeEntry`, so the sync contract is unchanged).
 
-- [ ] **Step 1: Write the failing repository tests**
+- [x] **Step 1: Write the failing repository tests**
 
 In `__tests__/timeEntriesRepository.test.js` (real-SQLite suite; follow its existing setup conventions), add:
 
@@ -606,7 +606,7 @@ In `__tests__/timeEntriesRepository.test.js` (real-SQLite suite; follow its exis
 
 Adapt `buildEntry`/`repository` to the file's existing helpers (it already creates entries and a repository against the test database; reuse those exact helper names, adding a `buildEntry` helper only if none exists). Known repo gotcha: `expect(...).rejects.toThrow()` misreports in multi-file runs, hence the try/catch assertion for the error code.
 
-- [ ] **Step 2: Run to verify they fail**
+- [x] **Step 2: Run to verify they fail**
 
 ```bash
 npx jest __tests__/timeEntriesRepository.test.js --verbose
@@ -614,7 +614,7 @@ npx jest __tests__/timeEntriesRepository.test.js --verbose
 
 Expected: FAIL with `repository.createOpenTimeEntry is not a function`.
 
-- [ ] **Step 3: Implement the guarded method**
+- [x] **Step 3: Implement the guarded method**
 
 In `src/db/repositories/timeEntriesRepository.js`, add above `createTimeEntriesRepository`:
 
@@ -662,7 +662,7 @@ and inside the factory, after `saveTimeEntry`:
 
 Add `createOpenTimeEntry` to the returned object.
 
-- [ ] **Step 4: Run to verify green**
+- [x] **Step 4: Run to verify green**
 
 ```bash
 npx jest __tests__/timeEntriesRepository.test.js --verbose
@@ -671,7 +671,7 @@ npm run test:integration
 
 Expected: PASS (the same file runs in the integration tier).
 
-- [ ] **Step 5: Wire `handleSignIn` to the guarded method**
+- [x] **Step 5: Wire `handleSignIn` to the guarded method**
 
 In `src/context/TimeTrackingContext.js`, add `OPEN_TIME_ENTRY_EXISTS` to the repository import line, change `await timeEntriesRepository.saveTimeEntry(timeEntry);` to `await timeEntriesRepository.createOpenTimeEntry(timeEntry);`, and extend the catch block of `handleSignIn`:
 
@@ -714,7 +714,7 @@ Then in `__tests__/useTimeTracking.plan5.test.js`: add `createOpenTimeEntry: jes
   });
 ```
 
-- [ ] **Step 6: Run both time suites**
+- [x] **Step 6: Run both time suites**
 
 ```bash
 npx jest __tests__/useTimeTracking.plan5.test.js __tests__/useTimeTracking.integration.test.js __tests__/timeEntriesRepository.test.js --verbose
@@ -722,7 +722,7 @@ npx jest __tests__/useTimeTracking.plan5.test.js __tests__/useTimeTracking.integ
 
 Expected: PASS. Note the integration suite's clock-in vertical exercises the real repository through `handleSignIn`; it now goes through `createOpenTimeEntry` and must still pass unchanged (it starts from an empty table).
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add src/db/repositories/timeEntriesRepository.js src/context/TimeTrackingContext.js __tests__/timeEntriesRepository.test.js __tests__/useTimeTracking.plan5.test.js
@@ -742,7 +742,7 @@ The reverse corruption path: a stale `activeEntry` (entry already closed elsewhe
 **Interfaces:**
 - Consumes: `timeEntriesRepository.getActiveTimeEntry(userId)` (existing).
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 ```javascript
   test('clock-out with no open entry resets state without writing', async () => {
@@ -764,7 +764,7 @@ The reverse corruption path: a stale `activeEntry` (entry already closed elsewhe
   });
 ```
 
-- [ ] **Step 2: Run to verify it fails**
+- [x] **Step 2: Run to verify it fails**
 
 ```bash
 npx jest __tests__/useTimeTracking.plan5.test.js -t "no open entry" --verbose
@@ -772,7 +772,7 @@ npx jest __tests__/useTimeTracking.plan5.test.js -t "no open entry" --verbose
 
 Expected: FAIL (`updateTimeEntry` WAS called: the current code trusts the stale `activeEntry`).
 
-- [ ] **Step 3: Implement the re-resolve**
+- [x] **Step 3: Implement the re-resolve**
 
 In `handleSignOut`, immediately after `setLoadingLocation(true); try {` and BEFORE the `getCurrentPosition()` call, insert:
 
@@ -792,7 +792,7 @@ In `handleSignOut`, immediately after `setLoadingLocation(true); try {` and BEFO
 
 and change the rest of the function to operate on `current` instead of `activeEntry`: `const signInMs = new Date(current.sign_in_time).getTime();` and `const updatedEntry = { ...current, ... }` and `await timeEntriesRepository.updateTimeEntry(current.id, updatedEntry);`.
 
-- [ ] **Step 4: Run to verify green (both time suites)**
+- [x] **Step 4: Run to verify green (both time suites)**
 
 ```bash
 npx jest __tests__/useTimeTracking.plan5.test.js __tests__/useTimeTracking.integration.test.js --verbose
@@ -800,7 +800,7 @@ npx jest __tests__/useTimeTracking.plan5.test.js __tests__/useTimeTracking.integ
 
 Expected: PASS. (Existing clock-out tests must keep passing: they mock `getActiveTimeEntry` with the open entry, so the re-resolve returns it. If an existing test used `mockResolvedValueOnce` for the mount load only, extend it to also serve the re-resolve call.)
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add src/context/TimeTrackingContext.js __tests__/useTimeTracking.plan5.test.js
@@ -823,7 +823,7 @@ Today the context (previously each screen) runs `setElapsedTime` every second, r
 - Produces: `<ElapsedTime signInTime style variant />` (renders a Paper `<Text>` with `Xh Ym Zs`, ticking at 1Hz internally; renders null without `signInTime`). Exports `formatElapsedTime(ms)`.
 - Removes from the context API: `elapsedTime`, `formatElapsedTime` (screens stop consuming them; the screen tests mock the hook module, so extra/missing keys in their stubs are inert).
 
-- [ ] **Step 1: Write the component test**
+- [x] **Step 1: Write the component test**
 
 Create `__tests__/ElapsedTime.test.js`:
 
@@ -863,7 +863,7 @@ describe('ElapsedTime', () => {
 });
 ```
 
-- [ ] **Step 2: Run to verify it fails**
+- [x] **Step 2: Run to verify it fails**
 
 ```bash
 npx jest __tests__/ElapsedTime.test.js --verbose
@@ -871,7 +871,7 @@ npx jest __tests__/ElapsedTime.test.js --verbose
 
 Expected: FAIL (module not found).
 
-- [ ] **Step 3: Create the component**
+- [x] **Step 3: Create the component**
 
 Create `src/components/common/ElapsedTime.js`:
 
@@ -910,7 +910,7 @@ export default function ElapsedTime({ signInTime, style, variant }) {
 
 Run the Step 1 test: expected PASS.
 
-- [ ] **Step 4: Replace the two render sites**
+- [x] **Step 4: Replace the two render sites**
 
 `src/screens/main/HomeScreen.js` (~line 199): replace
 
@@ -942,7 +942,7 @@ with
 
 with the same import and destructure cleanup.
 
-- [ ] **Step 5: Replace the context's 1Hz timer with a 30s watchdog**
+- [x] **Step 5: Replace the context's 1Hz timer with a 30s watchdog**
 
 In `src/context/TimeTrackingContext.js`:
 
@@ -971,7 +971,7 @@ In `src/context/TimeTrackingContext.js`:
 3. Remove `elapsedTime` and `formatElapsedTime` from the returned value object (`formatTime` stays: both screens render the clock-in time with it).
 4. Remove `useRef` from the React import if no other ref remains in the file after the `elapsedInterval` ref is deleted.
 
-- [ ] **Step 6: Run the affected suites, then the full suite**
+- [x] **Step 6: Run the affected suites, then the full suite**
 
 ```bash
 npx jest __tests__/ElapsedTime.test.js __tests__/useTimeTracking.plan5.test.js __tests__/useTimeTracking.integration.test.js __tests__/HomeScreen.test.js __tests__/TimeTrackingScreen.test.js --verbose
@@ -992,7 +992,7 @@ git commit -m "perf(time): isolate 1Hz elapsed ticker in ElapsedTime; 30s auto-c
 
 ### Task 7: Phase wrap
 
-- [ ] **Step 1: Full gates**
+- [x] **Step 1: Full gates**
 
 ```bash
 npx jest --silent
@@ -1001,7 +1001,7 @@ npm run test:integration
 
 Expected: both green (Phase 1 baseline was 118 suites / 647 unit tests; this phase adds suites/tests).
 
-- [ ] **Step 2: Documentation**
+- [x] **Step 2: Documentation**
 
 Add one row to the verification table in `documentation/sqlite-refactor-log.md` (time-entries guard + mastery loader, suites green, contract map untouched). Tick this plan's checkboxes. Update the Phase 2 entry in `PRD.md` Development Progress.
 
