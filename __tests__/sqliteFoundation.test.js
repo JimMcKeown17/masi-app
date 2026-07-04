@@ -139,6 +139,11 @@ describe('SQLite migration runner', () => {
       'txn:record-migration',
       'txn:set-user-version',
       'exit-migration-transaction',
+      'enter-migration-transaction',
+      'txn:exec-migration-sql',
+      'txn:record-migration',
+      'txn:set-user-version',
+      'exit-migration-transaction',
       // FK enforcement restored in finally.
       'exec:PRAGMA foreign_keys = ON',
     ]);
@@ -160,7 +165,7 @@ describe('SQLite migration runner', () => {
       ]));
 
       const migrations = await db.getAllAsync('select version from schema_migrations');
-      expect(migrations).toEqual([{ version: 1 }, { version: 2 }, { version: 3 }, { version: 4 }]);
+      expect(migrations).toEqual([{ version: 1 }, { version: 2 }, { version: 3 }, { version: 4 }, { version: 5 }]);
     } finally {
       await db.closeAsync();
     }
@@ -492,10 +497,10 @@ describe('SQLite migration runner', () => {
     releaseFirstMigration.resolve();
     await Promise.all([first, second]);
 
-    // The first run applies all pending migrations (four transactions); the second
+    // The first run applies all pending migrations (five transactions); the second
     // run is serialized behind it, sees user_version already current, and does nothing.
-    expect(beginCount).toBe(4);
-    expect(userVersion).toBe(4);
+    expect(beginCount).toBe(5);
+    expect(userVersion).toBe(5);
   });
 
   test('a ROLLBACK failure does not mask the original migration error', async () => {
@@ -595,6 +600,7 @@ describe('SQLite debug dump', () => {
           { version: 2, name: 'programmes_daily_session_target' },
           { version: 3, name: 'sessions_forward_prep_columns' },
           { version: 4, name: 'assessments_capture_mode' },
+          { version: 5, name: 'hot_path_covering_indexes' },
         ],
         tableCounts: expect.objectContaining({
           schools: 1,

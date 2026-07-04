@@ -571,6 +571,20 @@ const MIGRATIONS = [
         check (capture_mode is null or capture_mode in ('grid', 'sequential'));
     `,
   },
+  {
+    version: 5,
+    name: 'hot_path_covering_indexes',
+    sql: `
+      create index if not exists idx_session_attendees_session on session_attendees(session_id);
+      create index if not exists idx_assessment_items_assessment on assessment_items(assessment_id);
+      create index if not exists idx_assessments_programme_child on assessments(programme_id, child_id);
+      create index if not exists idx_sessions_programme_date on sessions(programme_id, session_date);
+      create index if not exists idx_letter_mastery_user_child on letter_mastery(user_id, child_id);
+      create index if not exists idx_child_group_memberships_group on child_group_memberships(group_id);
+      create index if not exists idx_sync_outbox_ready on sync_outbox(status, next_retry_at);
+      create index if not exists idx_time_entries_user_signin on time_entries(user_id, sign_in_time);
+    `,
+  },
 ];
 
 // Derived from the migration list so it never drifts when a migration is added.
