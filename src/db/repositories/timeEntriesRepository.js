@@ -43,6 +43,15 @@ const mapTimeEntry = (row) => mapRowFromSqlite({
   booleanColumns: ['auto_clocked_out'],
 });
 
+export const OPEN_TIME_ENTRY_EXISTS = 'OPEN_TIME_ENTRY_EXISTS';
+
+class OpenTimeEntryExistsError extends Error {
+  constructor() {
+    super('An open time entry already exists for this user.');
+    this.code = OPEN_TIME_ENTRY_EXISTS;
+  }
+}
+
 export const createTimeEntriesRepository = ({ database } = {}) => {
   const runWrite = (transaction, task) => (
     transaction ? task(transaction) : runRepositoryTransaction(database, task)
@@ -80,6 +89,33 @@ export const createTimeEntriesRepository = ({ database } = {}) => {
   };
 
   const saveTimeEntry = async (entry, { transaction } = {}) => runWrite(transaction, async (txn) => {
+    const record = normalizeForWrite(entry);
+    await upsertRecord(txn, {
+      tableName: 'time_entries',
+      columns: TIME_ENTRY_COLUMNS,
+      booleanColumns: ['auto_clocked_out'],
+      record,
+    });
+    if (shouldEnqueueOutbox(record)) {
+      await enqueueDomainOutbox(txn, 'time_entries', entry.id, 'insert', record);
+    }
+    return true;
+  });
+
+  const createOpenTimeEntry = async (entry, { transaction } = {}) => runWrite(transaction, async (txn) => {
+    // Atomic open-entry invariant: the existence check and the insert share one
+    // writer transaction, so two racing sign-ins cannot both pass the check.
+    const open = await txn.getFirstAsync(`
+      select id
+      from time_entries
+      where user_id = ?
+        and sign_out_time is null
+      limit 1
+    `, entry.user_id);
+    if (open) {
+      throw new OpenTimeEntryExistsError();
+    }
+
     const record = normalizeForWrite(entry);
     await upsertRecord(txn, {
       tableName: 'time_entries',
@@ -147,6 +183,7 @@ export const createTimeEntriesRepository = ({ database } = {}) => {
   return {
     getTimeEntries,
     saveTimeEntry,
+    createOpenTimeEntry,
     updateTimeEntry,
     getActiveTimeEntry,
     getUnsyncedRecords,

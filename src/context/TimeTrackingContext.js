@@ -1,7 +1,7 @@
 import React, { createContext, useContext, useState, useEffect, useRef } from 'react';
 import { useAuth } from './AuthContext';
 import { useOffline } from './OfflineContext';
-import { timeEntriesRepository } from '../db/repositories/timeEntriesRepository';
+import { timeEntriesRepository, OPEN_TIME_ENTRY_EXISTS } from '../db/repositories/timeEntriesRepository';
 import { getCurrentPosition } from '../services/locationService';
 import { v4 as uuidv4 } from 'uuid';
 
@@ -163,13 +163,18 @@ function useTimeTrackingState() {
         synced: false,
       };
 
-      await timeEntriesRepository.saveTimeEntry(timeEntry);
+      await timeEntriesRepository.createOpenTimeEntry(timeEntry);
       setActiveEntry(timeEntry);
       setIsSignedIn(true);
       await refreshSyncStatus();
       triggerBackgroundSync?.();
       showSnackbar(`Clocked in at ${formatTime(timeEntry.sign_in_time)}`);
     } catch (error) {
+      if (error?.code === OPEN_TIME_ENTRY_EXISTS) {
+        await loadActiveEntry();
+        showSnackbar('Already clocked in. Please clock out first.');
+        return;
+      }
       console.error('Error signing in:', error);
       showSnackbar('Failed to clock in. Please try again.');
     } finally {
