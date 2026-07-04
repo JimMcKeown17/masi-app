@@ -1,6 +1,7 @@
 import React from 'react';
 import { act, renderHook, waitFor } from '@testing-library/react-native';
 import { AppState } from 'react-native';
+import NetInfo from '@react-native-community/netinfo';
 import { OfflineProvider, useOffline } from '../src/context/OfflineContext';
 import { getSyncStatus, syncAll } from '../src/services/offlineSync';
 
@@ -293,5 +294,22 @@ describe('OfflineContext Plan 4 sync API', () => {
     // A recovery pass MUST have been scheduled even though unsyncedCount === 0.
     expect(syncAll).toHaveBeenCalledTimes(1);
     expect(result.current.inFlightCount).toBe(1);
+  });
+
+  describe('unknown reachability is treated as online', () => {
+    test('initial fetch with isInternetReachable null leaves the app online', async () => {
+      NetInfo.fetch.mockResolvedValueOnce({ isConnected: true, isInternetReachable: null });
+      const { result } = await renderOfflineHook();
+      await waitFor(() => expect(result.current.isOnline).toBe(true));
+    });
+
+    test('a listener event with isInternetReachable null keeps the app online', async () => {
+      const { result } = await renderOfflineHook();
+      const listener = NetInfo.addEventListener.mock.calls[0][0];
+      act(() => {
+        listener({ isConnected: true, isInternetReachable: null });
+      });
+      await waitFor(() => expect(result.current.isOnline).toBe(true));
+    });
   });
 });

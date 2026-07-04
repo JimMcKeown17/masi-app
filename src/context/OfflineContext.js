@@ -138,7 +138,7 @@ export const OfflineProvider = ({ children }) => {
    */
   useEffect(() => {
     const unsubscribe = NetInfo.addEventListener(state => {
-      const online = state.isConnected && state.isInternetReachable;
+      const online = Boolean(state.isConnected) && state.isInternetReachable !== false;
       console.log('Network state changed:', {
         isConnected: state.isConnected,
         isInternetReachable: state.isInternetReachable,
@@ -197,7 +197,7 @@ export const OfflineProvider = ({ children }) => {
     const initialize = async () => {
       // Check initial network state
       const netInfoState = await NetInfo.fetch();
-      setIsOnline(netInfoState.isConnected && netInfoState.isInternetReachable);
+      setIsOnline(Boolean(netInfoState.isConnected) && netInfoState.isInternetReachable !== false);
 
       // Load sync status. refreshSyncStatus schedules a background sync when
       // unsynced work exists, but does not block startup on upload.
