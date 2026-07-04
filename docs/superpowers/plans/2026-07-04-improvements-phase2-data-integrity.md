@@ -981,7 +981,7 @@ npm run test:integration
 
 Expected: PASS. If any existing hook test asserts on `elapsedTime` or auto-clock-out via 1s ticks, port it to the watchdog (advance fake timers by 30s) or to `__tests__/ElapsedTime.test.js`; do not delete auto-clock-out coverage.
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add src/components/common/ElapsedTime.js __tests__/ElapsedTime.test.js src/context/TimeTrackingContext.js src/screens/main/HomeScreen.js src/screens/main/TimeTrackingScreen.js __tests__/useTimeTracking.plan5.test.js __tests__/useTimeTracking.integration.test.js
@@ -1005,7 +1005,7 @@ Expected: both green (Phase 1 baseline was 118 suites / 647 unit tests; this pha
 
 Add one row to the verification table in `documentation/sqlite-refactor-log.md` (time-entries guard + mastery loader, suites green, contract map untouched). Tick this plan's checkboxes. Update the Phase 2 entry in `PRD.md` Development Progress.
 
-- [ ] **Step 3: Commit, push, PR**
+- [x] **Step 3: Commit, push, PR**
 
 ```bash
 git add -A documentation/sqlite-refactor-log.md docs/superpowers/plans/2026-07-04-improvements-phase2-data-integrity.md PRD.md
