@@ -24,7 +24,7 @@ export default function ChildrenListScreen({ navigation }) {
   const { user } = useAuth();
   const { children, groups, childrenGroups, loading, loadChildren } = useChildren();
   const { classes, schools, loading: classesLoading, loadClasses, getChildrenInClass } = useClasses();
-  const { refreshSyncStatus } = useOffline();
+  const { refreshSyncStatus, syncNow } = useOffline();
 
   const [searchTerm, setSearchTerm] = useState('');
   const [refreshing, setRefreshing] = useState(false);
@@ -96,9 +96,13 @@ export default function ChildrenListScreen({ navigation }) {
 
   const onRefresh = async () => {
     setRefreshing(true);
+    // Pull-to-refresh is a manual gesture, so force a sync (bypass backoff) like Work History,
+    // then reload local data. autoTrigger:false on the status refresh avoids scheduling a second,
+    // non-forced background sync on top of the forced one.
+    await syncNow({ force: true });
     await loadChildren();
     await loadClasses();
-    await refreshSyncStatus();
+    await refreshSyncStatus({ autoTrigger: false });
     setRefreshing(false);
   };
 
@@ -173,6 +177,8 @@ export default function ChildrenListScreen({ navigation }) {
           <TouchableOpacity
             style={styles.addClassLink}
             onPress={() => navigation.navigate('CreateClass')}
+            accessibilityRole="button"
+            accessibilityLabel="Add another class"
           >
             <Text style={styles.addClassLinkText}>+ Add another class</Text>
           </TouchableOpacity>
@@ -244,7 +250,7 @@ export default function ChildrenListScreen({ navigation }) {
           actions={[
             {
               label: 'Sync Now',
-              onPress: refreshSyncStatus,
+              onPress: () => syncNow({ force: true }),
             },
           ]}
           style={styles.banner}
@@ -312,8 +318,8 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   unsyncedBadge: {
-    color: colors.accent,
-    backgroundColor: '#FFF9CC',
+    color: colors.warningText,
+    backgroundColor: colors.warningBg,
     paddingHorizontal: 8,
     paddingVertical: 2,
     borderRadius: 4,

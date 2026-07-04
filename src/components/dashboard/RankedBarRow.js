@@ -38,7 +38,15 @@ export default function RankedBarRow({ rank, name, value, maxValue, barColor, la
   );
 
   if (onPress) {
-    return <Pressable onPress={onPress}>{content}</Pressable>;
+    return (
+      <Pressable
+        onPress={onPress}
+        accessibilityRole="button"
+        accessibilityLabel={`View details for ${name}, ${label}`}
+      >
+        {content}
+      </Pressable>
+    );
   }
   return content;
 }
@@ -68,7 +76,7 @@ const styles = StyleSheet.create({
   },
   barContainer: {
     flex: 1,
-    backgroundColor: '#E8F0FE',
+    backgroundColor: colors.red50,
     borderRadius: 3,
     height: 16,
     overflow: 'hidden',

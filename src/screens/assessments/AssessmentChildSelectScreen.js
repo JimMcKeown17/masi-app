@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useRef } from 'react';
 import { View, StyleSheet, FlatList, Pressable } from 'react-native';
 import { Text, Searchbar, Portal, Dialog, Button, RadioButton } from 'react-native-paper';
 import { useFocusEffect } from '@react-navigation/native';
@@ -9,6 +9,7 @@ import { LETTER_SETS, WORD_SETS } from '../../constants/egraConstants';
 import { colors, spacing, borderRadius, shadows } from '../../constants/colors';
 import { assessmentsRepository } from '../../db/repositories/assessmentsRepository';
 import { NO_TEXT_SUGGESTIONS } from '../../constants/textInputProps';
+import { resolveAssessmentRoute } from '../../utils/assessmentRouting';
 
 function formatShortDate(dateStr) {
   const [y, m, d] = dateStr.split('-').map(Number);
@@ -28,6 +29,7 @@ export default function AssessmentChildSelectScreen({ navigation, route }) {
   const [languageDialogVisible, setLanguageDialogVisible] = useState(false);
   const [selectedLanguage, setSelectedLanguage] = useState('english');
   const [assessmentMap, setAssessmentMap] = useState({});
+  const launchingRef = useRef(false);
 
   useFocusEffect(
     useCallback(() => {
@@ -69,13 +71,21 @@ export default function AssessmentChildSelectScreen({ navigation, route }) {
     return fullName.includes(query);
   });
 
-  const navigateToAssessment = (child, letterSet) => {
-    navigation.navigate('LetterAssessment', {
-      child,
-      letterSet,
-      attemptNumber: (assessmentMap[child.id]?.attemptCount || 0) + 1,
-      assessmentType,
-    });
+  const navigateToAssessment = async (child, letterSet) => {
+    if (launchingRef.current) return;
+    launchingRef.current = true;
+    try {
+      const { screenName, captureMode } = await resolveAssessmentRoute();
+      navigation.navigate(screenName, {
+        child,
+        letterSet,
+        attemptNumber: (assessmentMap[child.id]?.attemptCount || 0) + 1,
+        assessmentType,
+        captureMode,
+      });
+    } finally {
+      launchingRef.current = false;
+    }
   };
 
   const handleChildPress = (child) => {
@@ -110,6 +120,8 @@ export default function AssessmentChildSelectScreen({ navigation, route }) {
       <Pressable
         onPress={() => handleChildPress(item)}
         style={({ pressed }) => [styles.childRow, pressed && styles.childRowPressed]}
+        accessibilityRole="button"
+        accessibilityLabel={`Select ${item.first_name} ${item.last_name} for assessment`}
       >
         <Text variant="bodyLarge" style={styles.childName}>
           {item.first_name} {item.last_name}

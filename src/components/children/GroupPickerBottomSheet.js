@@ -17,22 +17,8 @@ import {
 } from 'react-native-paper';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { colors, spacing, borderRadius } from '../../constants/colors';
+import { GROUP_COLORS } from '../../constants/groupColors';
 import { useChildren } from '../../context/ChildrenContext';
-
-/**
- * Color palette for group chips — assigned by group index (wrapping).
- * Each entry: { bg: background, text: text color }
- */
-const GROUP_COLORS = [
-  { bg: '#E3F2FD', text: '#1565C0' }, // Blue
-  { bg: '#E8F5E9', text: '#2E7D32' }, // Green
-  { bg: '#FFF3E0', text: '#E65100' }, // Orange
-  { bg: '#F3E5F5', text: '#7B1FA2' }, // Purple
-  { bg: '#E0F7FA', text: '#00695C' }, // Teal
-  { bg: '#FCE4EC', text: '#C62828' }, // Pink
-  { bg: '#FFF8E1', text: '#F57F17' }, // Amber
-  { bg: '#E8EAF6', text: '#283593' }, // Indigo
-];
 
 /**
  * Number of virtual preset rows to show when the user has zero groups.
@@ -283,7 +269,11 @@ export default function GroupPickerBottomSheet({
       animationType="slide"
       onRequestClose={handleDismiss}
     >
-      <TouchableWithoutFeedback onPress={handleDismiss}>
+      <TouchableWithoutFeedback
+        onPress={handleDismiss}
+        accessibilityRole="button"
+        accessibilityLabel="Dismiss group picker"
+      >
         <View style={styles.backdrop} />
       </TouchableWithoutFeedback>
       <KeyboardAvoidingView
@@ -311,6 +301,9 @@ export default function GroupPickerBottomSheet({
                       style={styles.groupRow}
                       onPress={() => handleSelectVirtual(n)}
                       disabled={loading}
+                      accessibilityRole="button"
+                      accessibilityLabel={`Assign ${childName} to Group ${n}`}
+                      accessibilityState={{ disabled: loading }}
                     >
                       <View style={styles.groupInfo}>
                         <View style={[styles.groupColorDot, { backgroundColor: colorScheme.text }]} />
@@ -342,6 +335,9 @@ export default function GroupPickerBottomSheet({
                     ]}
                     onPress={() => handleSelectGroup(group.id)}
                     disabled={loading}
+                    accessibilityRole="button"
+                    accessibilityLabel={`Assign ${childName} to ${group.name}`}
+                    accessibilityState={{ disabled: loading, selected: isSelected }}
                   >
                     <View style={styles.groupInfo}>
                       <View style={[styles.groupColorDot, { backgroundColor: colorScheme.text }]} />
@@ -379,6 +375,9 @@ export default function GroupPickerBottomSheet({
                   style={styles.removeRow}
                   onPress={handleRemoveFromGroup}
                   disabled={loading}
+                  accessibilityRole="button"
+                  accessibilityLabel={`Remove ${childName} from group`}
+                  accessibilityState={{ disabled: loading }}
                 >
                   <Text variant="bodyMedium" style={styles.removeText}>
                     ✕  Remove from group
@@ -394,6 +393,9 @@ export default function GroupPickerBottomSheet({
                   style={styles.createRow}
                   onPress={handleAddNextNumbered}
                   disabled={loading}
+                  accessibilityRole="button"
+                  accessibilityLabel={`Add Group ${nextNumberedN}`}
+                  accessibilityState={{ disabled: loading }}
                 >
                   <Text style={styles.createText}>
                     +  Add Group {nextNumberedN}

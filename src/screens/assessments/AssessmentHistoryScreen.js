@@ -271,10 +271,10 @@ const styles = StyleSheet.create({
     borderRadius: 10,
   },
   typeBadgeLetter: {
-    backgroundColor: '#DBEAFE',
+    backgroundColor: colors.red50,
   },
   typeBadgeWord: {
-    backgroundColor: '#FEF3C7',
+    backgroundColor: colors.warningBg,
   },
   typeBadgeText: {
     fontWeight: '600',

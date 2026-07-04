@@ -768,6 +768,18 @@ Requirements to be gathered as we progress through development phases.
 
 ### In Progress
 
+#### Improvements 2026-07 — Phase 1: Safety Net
+Branch: `improvement/p1-safety-net`
+Roadmap: `documentation/improvements-2026-07-roadmap.md` · Plan: `docs/superpowers/plans/2026-07-03-improvements-phase1-safety-net.md`
+
+- [x] Task 1: Deflake LetterMasteryPanel toggle test (state-before-sync-refresh reorder) — `cdb640f`, reviewed PASS
+- [x] Task 2: Treat NetInfo unknown reachability as online — `4682615`, reviewed PASS
+- [x] Task 3: Unsaved-changes leave guard on the session form — `585ae74`, reviewed PASS
+- [x] Task 4: Hot-path covering indexes (schema v5) — `79edfe0`, reviewed PASS
+- [x] Task 5: CI workflow for unit + integration suites — `9e7f33b`; first run green on PR #40 (2m31s)
+
+Phase 1 complete 2026-07-04: PR #40 open, all commits reviewed PASS, CI green. Merge decision + optional required-status-check setting are Jim's.
+
 #### SQLite RLS/App Contract Closeout
 Branch: `plan-5/context-screen-migration`
 

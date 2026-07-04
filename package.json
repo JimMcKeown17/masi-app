@@ -17,6 +17,7 @@
     "sqlite:staging:start": "node scripts/sqlite-staging.cjs start",
     "sqlite:staging:ios": "node scripts/sqlite-staging.cjs ios",
     "sqlite:staging:android": "node scripts/sqlite-staging.cjs android",
+    "rls:probe": "node scripts/rls-visibility-probe.cjs",
     "test": "jest",
     "test:integration": "jest --runInBand --config jest.integration.config.js",
     "test:release": "npm test && npm run test:integration && npm run sqlite:staging:check"
@@ -54,6 +55,15 @@
     ],
     "setupFiles": [
       "./jest.setup.js"
+    ],
+    "testPathIgnorePatterns": [
+      "/node_modules/",
+      "/.claude/worktrees/",
+      "/.codex/worktrees/"
+    ],
+    "modulePathIgnorePatterns": [
+      "/.claude/worktrees/",
+      "/.codex/worktrees/"
     ]
   },
   "private": true,

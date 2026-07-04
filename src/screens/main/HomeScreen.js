@@ -1,8 +1,7 @@
 import React, { useState, useCallback } from 'react';
-import { View, StyleSheet, ScrollView, TouchableOpacity, Pressable } from 'react-native';
+import { View, StyleSheet, ScrollView, TouchableOpacity } from 'react-native';
 import { Text, Button, ActivityIndicator, Snackbar } from 'react-native-paper';
 import { Ionicons } from '@expo/vector-icons';
-import { LinearGradient } from 'expo-linear-gradient';
 import { useFocusEffect } from '@react-navigation/native';
 import { useAuth } from '../../context/AuthContext';
 import { useOffline } from '../../context/OfflineContext';
@@ -13,6 +12,7 @@ import { timeEntriesRepository } from '../../db/repositories/timeEntriesReposito
 import { sessionsRepository } from '../../db/repositories/sessionsRepository';
 import { assessmentsRepository } from '../../db/repositories/assessmentsRepository';
 import ClockInBeforeSessionDialog from '../../components/sessions/ClockInBeforeSessionDialog';
+import BrandButton from '../../components/common/BrandButton';
 import {
   getDaysWorkedThisMonth,
   getWeekSessionCounts,
@@ -21,8 +21,6 @@ import {
   getMonthlyStatsFootnote,
 } from '../../utils/dashboardStats';
 import { colors, spacing, borderRadius, shadows } from '../../constants/colors';
-
-const GRADIENT = ['#0984E3', '#E72D4D'];
 
 export default function HomeScreen({ navigation }) {
   const { user, profile } = useAuth();
@@ -127,13 +125,8 @@ export default function HomeScreen({ navigation }) {
   return (
     <View style={styles.outerContainer}>
       <ScrollView style={styles.container}>
-        {/* ── Gradient Header with Stats ── */}
-        <LinearGradient
-          colors={GRADIENT}
-          start={{ x: 0, y: 0 }}
-          end={{ x: 1, y: 0 }}
-          style={styles.header}
-        >
+        {/* ── Header with Stats ── */}
+        <View style={styles.header}>
           <Text variant="titleLarge" style={styles.welcomeText}>
             Welcome, {profile?.first_name || 'User'}!
           </Text>
@@ -155,7 +148,7 @@ export default function HomeScreen({ navigation }) {
             </View>
           </View>
           {statsFootnote ? <Text style={styles.statsFootnote}>{statsFootnote}</Text> : null}
-        </LinearGradient>
+        </View>
 
         <View style={styles.content}>
           {/* ── Sync Banner ── */}
@@ -164,6 +157,8 @@ export default function HomeScreen({ navigation }) {
               style={[styles.syncBanner, { backgroundColor: banner.backgroundColor }]}
               onPress={() => navigation.navigate('SyncStatus')}
               activeOpacity={0.8}
+              accessibilityRole="button"
+              accessibilityLabel={`Open sync status, ${banner.text}`}
             >
               <Ionicons name={banner.icon} size={18} color={banner.iconColor} style={styles.bannerIcon} />
               <Text variant="bodySmall" style={[styles.bannerText, { color: banner.textColor }]}>
@@ -186,16 +181,11 @@ export default function HomeScreen({ navigation }) {
                   <Text style={styles.clockTitle}>Today</Text>
                   <Text style={styles.clockSubtitle}>Not clocked in</Text>
                 </View>
-                <Pressable onPress={handleSignIn} style={styles.clockButton}>
-                  <LinearGradient
-                    colors={GRADIENT}
-                    start={{ x: 0, y: 0 }}
-                    end={{ x: 1, y: 0 }}
-                    style={styles.clockButtonGradient}
-                  >
-                    <Text style={styles.clockButtonText}>Clock In</Text>
-                  </LinearGradient>
-                </Pressable>
+                <BrandButton
+                  label="Clock In"
+                  onPress={handleSignIn}
+                  style={styles.clockButton}
+                />
               </View>
             ) : (
               <View>
@@ -223,6 +213,8 @@ export default function HomeScreen({ navigation }) {
             <TouchableOpacity
               onPress={() => navigation.navigate('TimeEntriesList')}
               style={styles.viewHistoryLink}
+              accessibilityRole="button"
+              accessibilityLabel="View work history"
             >
               <Ionicons name="time-outline" size={14} color={colors.primary} />
               <Text style={styles.viewHistoryText}>View Work History</Text>
@@ -255,22 +247,12 @@ export default function HomeScreen({ navigation }) {
                 </View>
               ))}
             </View>
-            <Pressable
+            <BrandButton
+              label="Record Session"
+              icon="add-circle-outline"
               onPress={() => requestSessionLaunch()}
               style={styles.recordSessionButton}
-            >
-              <LinearGradient
-                colors={GRADIENT}
-                start={{ x: 0, y: 0 }}
-                end={{ x: 1, y: 0 }}
-                style={styles.recordSessionBorder}
-              >
-                <View style={styles.recordSessionInner}>
-                  <Ionicons name="add-circle-outline" size={16} color="#0984E3" />
-                  <Text style={styles.recordSessionText}>Record Session</Text>
-                </View>
-              </LinearGradient>
-            </Pressable>
+            />
           </View>
 
           {/* ── Assessment Coverage ── */}
@@ -299,6 +281,8 @@ export default function HomeScreen({ navigation }) {
               style={styles.insightCard}
               onPress={() => navigation.navigate('LetterMasteryRanking')}
               activeOpacity={0.7}
+              accessibilityRole="button"
+              accessibilityLabel="View letter mastery rankings"
             >
               <View style={styles.insightIcon}>
                 <Ionicons name="school-outline" size={20} color={colors.primary} />
@@ -309,6 +293,8 @@ export default function HomeScreen({ navigation }) {
               style={styles.insightCard}
               onPress={() => navigation.navigate('AssessmentRanking')}
               activeOpacity={0.7}
+              accessibilityRole="button"
+              accessibilityLabel="View assessment score rankings"
             >
               <View style={styles.insightIcon}>
                 <Ionicons name="clipboard-outline" size={20} color={colors.primary} />
@@ -319,6 +305,8 @@ export default function HomeScreen({ navigation }) {
               style={styles.insightCard}
               onPress={() => navigation.navigate('SessionCountRanking')}
               activeOpacity={0.7}
+              accessibilityRole="button"
+              accessibilityLabel="View session count rankings"
             >
               <View style={styles.insightIcon}>
                 <Ionicons name="people-outline" size={20} color={colors.primary} />
@@ -357,6 +345,7 @@ const styles = StyleSheet.create({
 
   // ── Header ──
   header: {
+    backgroundColor: colors.heroDark,
     padding: spacing.lg,
     paddingBottom: spacing.md,
   },
@@ -444,17 +433,8 @@ const styles = StyleSheet.create({
   },
   clockButton: {
     borderRadius: 20,
-    overflow: 'hidden',
-  },
-  clockButtonGradient: {
     paddingVertical: 8,
     paddingHorizontal: 20,
-    borderRadius: 20,
-  },
-  clockButtonText: {
-    color: '#FFFFFF',
-    fontSize: 13,
-    fontWeight: '600',
   },
   elapsedText: {
     color: colors.primary,
@@ -528,7 +508,7 @@ const styles = StyleSheet.create({
     borderRadius: borderRadius.sm,
   },
   daySquareActive: {
-    backgroundColor: '#E8F0FE',
+    backgroundColor: colors.red50,
   },
   daySquareToday: {
     borderWidth: 1.5,
@@ -554,25 +534,7 @@ const styles = StyleSheet.create({
   // ── Record Session Button ──
   recordSessionButton: {
     borderRadius: borderRadius.sm,
-    overflow: 'hidden',
-  },
-  recordSessionBorder: {
-    padding: 1.5,
-    borderRadius: borderRadius.sm,
-  },
-  recordSessionInner: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: colors.surface,
-    borderRadius: borderRadius.sm - 2,
     paddingVertical: 10,
-    gap: spacing.xs,
-  },
-  recordSessionText: {
-    color: '#0984E3',
-    fontSize: 13,
-    fontWeight: '600',
   },
 
   // ── Assessment Coverage ──
@@ -581,7 +543,7 @@ const styles = StyleSheet.create({
     fontWeight: '700',
   },
   progressBar: {
-    backgroundColor: '#E8F0FE',
+    backgroundColor: colors.red50,
     borderRadius: 4,
     height: 8,
     overflow: 'hidden',
@@ -621,7 +583,7 @@ const styles = StyleSheet.create({
   insightIcon: {
     width: 36,
     height: 36,
-    backgroundColor: '#E8F0FE',
+    backgroundColor: colors.red50,
     borderRadius: borderRadius.sm,
     alignItems: 'center',
     justifyContent: 'center',

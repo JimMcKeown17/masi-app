@@ -23,6 +23,7 @@ const ASSESSMENT_COLUMNS = [
   'grade_snapshot',
   'teacher_name_snapshot',
   'assessment_type',
+  'capture_mode',
   'assessment_date',
   'score',
   'total_items',
@@ -55,6 +56,7 @@ const SUMMARY_ITEM_KEY = '__summary__';
 
 const buildSummary = (assessment) => ({
   attempt_number: assessment.attempt_number,
+  correction_count: assessment.correction_count ?? 0,
   letter_set_id: assessment.letter_set_id,
   letter_language: assessment.letter_language,
   completion_time: assessment.completion_time,

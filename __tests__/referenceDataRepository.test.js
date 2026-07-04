@@ -30,44 +30,57 @@ describe('reference data repositories', () => {
   });
 
   test('default reference replacements share the global SQLite write queue', async () => {
+    // New model: there is ONE persistent writer connection and all writes — repository
+    // transactions (via runRepositoryTransaction → withTransaction) AND raw withTransaction
+    // calls — funnel through it, serialized on the client's databaseQueue. We model that
+    // single writer and prove a repository replace and a raw transaction do NOT interleave.
     const firstTransactionEntered = createDeferred();
     const releaseFirstTransaction = createDeferred();
     const events = [];
-    const db = {
-      execAsync: jest.fn(),
-      getFirstAsync: jest.fn(async (sql) => (
-        sql === 'PRAGMA user_version' ? { user_version: CURRENT_SCHEMA_VERSION } : null
-      )),
-      withExclusiveTransactionAsync: jest.fn(async (task) => {
-        const transactionNumber = db.withExclusiveTransactionAsync.mock.calls.length;
-        const txn = {
-          id: `txn-${transactionNumber}`,
-          runAsync: jest.fn(async () => {}),
-          getAllAsync: jest.fn(async () => []),
-          getFirstAsync: jest.fn(async () => null),
-        };
-
-        events.push(`enter-${txn.id}`);
-        if (transactionNumber === 1) {
-          firstTransactionEntered.resolve();
-          await releaseFirstTransaction.promise;
+    let beginCount = 0;
+    const writer = {
+      // BEGIN IMMEDIATE / COMMIT / ROLLBACK + post-migration FK pragma all flow through here.
+      execAsync: jest.fn(async (sql) => {
+        if (/BEGIN IMMEDIATE/i.test(sql)) {
+          beginCount += 1;
+          const txnNumber = beginCount;
+          events.push(`enter-txn-${txnNumber}`);
+          if (txnNumber === 1) {
+            firstTransactionEntered.resolve();
+            await releaseFirstTransaction.promise;
+          }
+        } else if (/^COMMIT$/i.test(sql)) {
+          events.push(`exit-txn-${beginCount}`);
         }
-        await task(txn);
-        events.push(`exit-${txn.id}`);
       }),
+      // Schema already current so the bootstrap runMigrations is a no-op.
+      getFirstAsync: jest.fn(async (sql) => (
+        /user_version/i.test(sql) ? { user_version: CURRENT_SCHEMA_VERSION } : null
+      )),
+      // The repository replace path reads conflicts and writes rows on the writer (txn === writer).
+      getAllAsync: jest.fn(async () => []),
+      runAsync: jest.fn(async () => ({ changes: 0 })),
     };
 
-    __setDatabaseFactory(async () => db);
+    // First open -> writer; second open (reader) -> a query_only-style stub (unused by writes).
+    let openCount = 0;
+    __setDatabaseFactory(async () => (openCount++ === 0 ? writer : {
+      execAsync: jest.fn(async () => {}),
+      getFirstAsync: jest.fn(async () => null),
+      getAllAsync: jest.fn(async () => []),
+      runAsync: jest.fn(async () => ({ changes: 0 })),
+    }));
     const schoolsRepository = createSchoolsRepository();
 
     const first = schoolsRepository.replaceFromServer([{ id: 'school-1', name: 'Cached School' }]);
     await firstTransactionEntered.promise;
-    const second = withTransaction(async (txn) => {
-      events.push(`task-b-${txn.id}`);
+    const second = withTransaction(async () => {
+      events.push('task-b-txn-2');
     });
 
     await Promise.resolve();
 
+    // The second transaction is queued behind the first: only txn-1 has begun.
     expect(events).toEqual(['enter-txn-1']);
 
     releaseFirstTransaction.resolve();

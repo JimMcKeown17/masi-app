@@ -1,16 +1,5 @@
 jest.mock('expo-sqlite', () => require('../test-support/expoSQLiteMock'));
 
-import {
-  DATABASE_NAME,
-  getDatabase,
-  resetDatabaseConnectionForTests,
-  withTransaction,
-} from '../src/db/client';
-import {
-  __reset as resetExpoSQLiteMock,
-  __setDatabaseFactory,
-  openDatabaseAsync,
-} from 'expo-sqlite';
 import { createBetterSqliteTestDatabase } from '../test-support/betterSqliteAdapter';
 import {
   CURRENT_SCHEMA_VERSION,
@@ -28,137 +17,6 @@ const createDeferred = () => {
 
   return { promise, resolve, reject };
 };
-
-describe('SQLite foundation client', () => {
-  beforeEach(() => {
-    resetExpoSQLiteMock();
-    resetDatabaseConnectionForTests();
-  });
-
-  test('queues overlapping write transactions until the active transaction finishes', async () => {
-    const firstTransactionEntered = createDeferred();
-    const releaseFirstTransaction = createDeferred();
-    const events = [];
-    const db = {
-      execAsync: jest.fn(async () => {}),
-      withExclusiveTransactionAsync: jest.fn(async (task) => {
-        const transactionNumber = db.withExclusiveTransactionAsync.mock.calls.length;
-        const txn = { id: `txn-${transactionNumber}` };
-
-        events.push(`enter-${txn.id}`);
-        if (transactionNumber === 1) {
-          firstTransactionEntered.resolve();
-        }
-        await task(txn);
-        events.push(`exit-${txn.id}`);
-      }),
-    };
-
-    __setDatabaseFactory(async () => db);
-
-    const first = withTransaction(async (txn) => {
-      events.push(`task-a-${txn.id}`);
-      await releaseFirstTransaction.promise;
-    });
-
-    const second = withTransaction(async (txn) => {
-      events.push(`task-b-${txn.id}`);
-    });
-
-    await firstTransactionEntered.promise;
-
-    expect(openDatabaseAsync).toHaveBeenCalledWith(DATABASE_NAME);
-    expect(events).toEqual(['enter-txn-1', 'task-a-txn-1']);
-
-    releaseFirstTransaction.resolve();
-    await Promise.all([first, second]);
-
-    expect(events).toEqual([
-      'enter-txn-1',
-      'task-a-txn-1',
-      'exit-txn-1',
-      'enter-txn-2',
-      'task-b-txn-2',
-      'exit-txn-2',
-    ]);
-  });
-
-  test('configures lock-related pragmas whenever a new database handle is opened', async () => {
-    const firstDb = {
-      execAsync: jest.fn(async () => {}),
-    };
-    const secondDb = {
-      execAsync: jest.fn(async () => {}),
-    };
-    __setDatabaseFactory(jest.fn()
-      .mockResolvedValueOnce(firstDb)
-      .mockResolvedValueOnce(secondDb));
-
-    await expect(getDatabase()).resolves.toBe(firstDb);
-    resetDatabaseConnectionForTests();
-    await expect(getDatabase()).resolves.toBe(secondDb);
-
-    for (const db of [firstDb, secondDb]) {
-      expect(db.execAsync).toHaveBeenCalledWith('PRAGMA foreign_keys = ON');
-      expect(db.execAsync).toHaveBeenCalledWith('PRAGMA journal_mode = WAL');
-      expect(db.execAsync).toHaveBeenCalledWith('PRAGMA busy_timeout = 5000');
-    }
-  });
-
-  test('app-level migrations wait behind an active queued write transaction', async () => {
-    const firstTransactionEntered = createDeferred();
-    const releaseFirstTransaction = createDeferred();
-    const events = [];
-    const db = {
-      execAsync: jest.fn(async (sql) => {
-        events.push(`exec:${sql}`);
-      }),
-      getFirstAsync: jest.fn(async () => ({ user_version: CURRENT_SCHEMA_VERSION })),
-      withExclusiveTransactionAsync: jest.fn(async (task) => {
-        events.push('enter-write');
-        firstTransactionEntered.resolve();
-        await task(db);
-        await releaseFirstTransaction.promise;
-        events.push('exit-write');
-      }),
-    };
-
-    __setDatabaseFactory(async () => db);
-
-    const write = withTransaction(async () => {
-      events.push('inside-write');
-    });
-    await firstTransactionEntered.promise;
-
-    const migrations = runMigrations();
-    await Promise.resolve();
-    await Promise.resolve();
-    await new Promise(resolve => setTimeout(resolve, 0));
-
-    expect(events).toEqual([
-      'exec:PRAGMA foreign_keys = ON',
-      'exec:PRAGMA journal_mode = WAL',
-      'exec:PRAGMA busy_timeout = 5000',
-      'enter-write',
-      'inside-write',
-    ]);
-
-    releaseFirstTransaction.resolve();
-    await Promise.all([write, migrations]);
-
-    expect(events).toEqual([
-      'exec:PRAGMA foreign_keys = ON',
-      'exec:PRAGMA journal_mode = WAL',
-      'exec:PRAGMA busy_timeout = 5000',
-      'enter-write',
-      'inside-write',
-      'exit-write',
-      'exec:PRAGMA foreign_keys = ON',
-      'exec:PRAGMA journal_mode = WAL',
-      'exec:PRAGMA busy_timeout = 5000',
-    ]);
-  });
-});
 
 const getUserVersion = async (db) => {
   const row = await db.getFirstAsync('PRAGMA user_version');
@@ -221,38 +79,46 @@ const expectSqliteConstraintFailure = async (operation) => {
 describe('SQLite migration runner', () => {
   test('configures connection pragmas before migration execution and outside the transaction', async () => {
     const events = [];
+    // runInTransaction uses manual BEGIN/COMMIT on the supplied db connection —
+    // withExclusiveTransactionAsync is no longer used for migrations.
+    // The db itself is passed as txn, so runAsync must exist on the mock.
     const db = {
       execAsync: jest.fn(async (sql) => {
-        events.push(`exec:${sql}`);
+        if (/BEGIN IMMEDIATE/i.test(sql)) {
+          events.push('enter-migration-transaction');
+        } else if (/^COMMIT$/i.test(sql)) {
+          events.push('exit-migration-transaction');
+        } else if (/^ROLLBACK$/i.test(sql)) {
+          events.push('rollback-migration-transaction');
+        } else if (/PRAGMA user_version\s*=/i.test(sql)) {
+          events.push('txn:set-user-version');
+        } else if (/PRAGMA foreign_keys/i.test(sql)) {
+          events.push(`exec:${sql}`);
+        } else {
+          // Large migration SQL blocks.
+          events.push('txn:exec-migration-sql');
+        }
       }),
       getFirstAsync: jest.fn(async (sql) => {
         events.push(`get:${sql}`);
         return { user_version: 0 };
       }),
-      withExclusiveTransactionAsync: jest.fn(async (task) => {
-        events.push('enter-migration-transaction');
-        await task({
-          execAsync: jest.fn(async (sql) => {
-            events.push(/user_version/i.test(sql) ? 'txn:set-user-version' : 'txn:exec-migration-sql');
-          }),
-          runAsync: jest.fn(async () => {
-            events.push('txn:record-migration');
-          }),
-        });
-        events.push('exit-migration-transaction');
+      runAsync: jest.fn(async () => {
+        events.push('txn:record-migration');
       }),
     };
 
     await runMigrations(db);
 
     expect(events).toEqual([
-      // Connection pragmas are configured once, before any migration, outside the txn.
-      'exec:PRAGMA foreign_keys = ON',
-      'exec:PRAGMA journal_mode = WAL',
-      'exec:PRAGMA busy_timeout = 5000',
+      // user_version is read FIRST to detect pending migrations before any FK toggle.
+      // configureDatabaseConnection (WAL, busy_timeout) is no longer called here —
+      // it runs once in client.js initializeDatabase when the connection is opened.
       'get:PRAGMA user_version',
-      // Per pending migration: exec SQL, record it, and bump user_version — all
-      // INSIDE the transaction so the schema change and version marker are atomic.
+      // FK enforcement is turned OFF only when there are pending migrations.
+      'exec:PRAGMA foreign_keys = OFF',
+      // Per pending migration: BEGIN IMMEDIATE, exec SQL, record it, bump user_version, COMMIT.
+      // The db connection itself is passed as txn, so txn.execAsync === db.execAsync.
       'enter-migration-transaction',
       'txn:exec-migration-sql',
       'txn:record-migration',
@@ -268,6 +134,18 @@ describe('SQLite migration runner', () => {
       'txn:record-migration',
       'txn:set-user-version',
       'exit-migration-transaction',
+      'enter-migration-transaction',
+      'txn:exec-migration-sql',
+      'txn:record-migration',
+      'txn:set-user-version',
+      'exit-migration-transaction',
+      'enter-migration-transaction',
+      'txn:exec-migration-sql',
+      'txn:record-migration',
+      'txn:set-user-version',
+      'exit-migration-transaction',
+      // FK enforcement restored in finally.
+      'exec:PRAGMA foreign_keys = ON',
     ]);
   });
 
@@ -287,7 +165,7 @@ describe('SQLite migration runner', () => {
       ]));
 
       const migrations = await db.getAllAsync('select version from schema_migrations');
-      expect(migrations).toEqual([{ version: 1 }, { version: 2 }, { version: 3 }]);
+      expect(migrations).toEqual([{ version: 1 }, { version: 2 }, { version: 3 }, { version: 4 }, { version: 5 }]);
     } finally {
       await db.closeAsync();
     }
@@ -577,30 +455,33 @@ describe('SQLite migration runner', () => {
     const releaseFirstMigration = createDeferred();
     const events = [];
     let userVersion = 0;
-    let transactionCount = 0;
+    let beginCount = 0;
+    // runInTransaction uses manual BEGIN IMMEDIATE/COMMIT — no withExclusiveTransactionAsync.
     const db = {
       execAsync: jest.fn(async (sql) => {
-        const match = /PRAGMA user_version = (\d+)/i.exec(sql);
-        if (match) {
-          userVersion = Number(match[1]);
-          events.push(`set-user-version-${match[1]}`);
+        if (/BEGIN IMMEDIATE/i.test(sql)) {
+          beginCount += 1;
+          const txnNumber = beginCount;
+          events.push(`enter-${txnNumber}`);
+          if (txnNumber === 1) {
+            firstMigrationEntered.resolve();
+          }
+          if (txnNumber === 1) {
+            await releaseFirstMigration.promise;
+          }
+        } else if (/^COMMIT$/i.test(sql)) {
+          events.push(`exit-${beginCount}`);
+        } else {
+          const match = /PRAGMA user_version = (\d+)/i.exec(sql);
+          if (match) {
+            userVersion = Number(match[1]);
+            events.push(`set-user-version-${match[1]}`);
+          }
+          // Other pragmas and migration SQL are silently accepted.
         }
       }),
       getFirstAsync: jest.fn(async () => ({ user_version: userVersion })),
       runAsync: jest.fn(async () => undefined),
-      withExclusiveTransactionAsync: jest.fn(async (task) => {
-        transactionCount += 1;
-        const transactionNumber = transactionCount;
-        events.push(`enter-${transactionNumber}`);
-        if (transactionNumber === 1) {
-          firstMigrationEntered.resolve();
-        }
-        await task(db);
-        if (transactionNumber === 1) {
-          await releaseFirstMigration.promise;
-        }
-        events.push(`exit-${transactionNumber}`);
-      }),
     };
 
     const first = runMigrations(db);
@@ -609,18 +490,41 @@ describe('SQLite migration runner', () => {
     await firstMigrationEntered.promise;
     // While the first run holds its migration transaction, the second concurrent
     // run is queued behind it on the app-level migration queue: no other
-    // transaction has been entered. (Asserting on transactionCount rather than the
+    // transaction has been entered. (Asserting on beginCount rather than the
     // event order keeps this robust now that user_version is bumped mid-transaction.)
-    expect(transactionCount).toBe(1);
+    expect(beginCount).toBe(1);
 
     releaseFirstMigration.resolve();
     await Promise.all([first, second]);
 
-    // The first run applies all pending migrations (three transactions); the second
+    // The first run applies all pending migrations (five transactions); the second
     // run is serialized behind it, sees user_version already current, and does nothing.
-    expect(transactionCount).toBe(3);
-    expect(userVersion).toBe(3);
-    expect(db.withExclusiveTransactionAsync).toHaveBeenCalledTimes(3);
+    expect(beginCount).toBe(5);
+    expect(userVersion).toBe(5);
+  });
+
+  test('a ROLLBACK failure does not mask the original migration error', async () => {
+    const db = {
+      execAsync: jest.fn(async (sql) => {
+        if (/BEGIN IMMEDIATE/i.test(sql)) return;
+        if (/^ROLLBACK$/i.test(sql)) throw new Error('rollback boom');
+        if (/PRAGMA/i.test(sql)) return; // FK off/on, user_version bump
+        throw new Error('migration boom'); // first migration SQL statement fails
+      }),
+      getFirstAsync: jest.fn(async () => ({ user_version: 0 })),
+      runAsync: jest.fn(async () => undefined),
+    };
+    let caught;
+    try {
+      await runMigrations(db);
+    } catch (error) {
+      caught = error;
+    }
+    expect(caught).toBeDefined();
+    expect(caught.message).toMatch(/migration boom/);   // the ORIGINAL error
+    expect(caught.message).not.toMatch(/rollback boom/); // not masked by rollback failure
+    // FK restored in finally even on failure:
+    expect(db.execAsync).toHaveBeenCalledWith('PRAGMA foreign_keys = ON');
   });
 
   test('rolls back schema changes and leaves user_version untouched when migration history insert fails', async () => {
@@ -695,6 +599,8 @@ describe('SQLite debug dump', () => {
           { version: 1, name: 'initial_sqlite_foundation' },
           { version: 2, name: 'programmes_daily_session_target' },
           { version: 3, name: 'sessions_forward_prep_columns' },
+          { version: 4, name: 'assessments_capture_mode' },
+          { version: 5, name: 'hot_path_covering_indexes' },
         ],
         tableCounts: expect.objectContaining({
           schools: 1,

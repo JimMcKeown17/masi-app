@@ -50,16 +50,21 @@ const removeDatabaseFiles = (filename) => {
 };
 
 const resetSqliteIntegrationDatabase = async () => {
+  // resetDatabaseConnectionForTests is async now (it closes the persistent writer/reader
+  // connections). Await it FIRST so client connection state is torn down before we recreate
+  // the shared file-backed database — preventing a deferred close from racing initialize().
+  await resetDatabaseConnectionForTests();
+
   if (sqliteTestDatabase) {
     try {
       await sqliteTestDatabase.closeAsync();
     } catch {
-      // Tests may close the database explicitly before the global reset runs.
+      // Tests may close the database explicitly before the global reset runs (or the
+      // client reset above already closed it, since writer/reader share this connection).
     }
   }
 
   removeDatabaseFiles(sqliteTestDatabasePath);
-  resetDatabaseConnectionForTests();
   expoSQLiteMock.__reset();
 
   sqliteTestDatabasePath = path.join(

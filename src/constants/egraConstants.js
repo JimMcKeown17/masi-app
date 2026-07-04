@@ -73,6 +73,35 @@ export const WORD_SETS = { english: ENGLISH_WORD_SET, isixhosa: ISIXHOSA_WORD_SE
 
 export const ASSESSMENT_DURATION = 60; // seconds
 
+// --- Assessment capture modes ---
+// 'grid'       : tap-correct-only grid (the original UI; untapped = incorrect/not-reached,
+//                disambiguated by the LastAttemptedBottomSheet).
+// 'sequential' : single cursor, explicit correct/incorrect per item, big back button,
+//                no last-attempted step (every in-range item is deliberately decided).
+export const CAPTURE_MODES = { GRID: 'grid', SEQUENTIAL: 'sequential' };
+export const DEFAULT_CAPTURE_MODE = CAPTURE_MODES.SEQUENTIAL;
+
+const CAPTURE_MODE_VALUES = Object.values(CAPTURE_MODES);
+
+export function isValidCaptureMode(value) {
+  return CAPTURE_MODE_VALUES.includes(value);
+}
+
+/**
+ * Resolve the active capture mode by precedence (first valid layer wins):
+ *   org default -> per-user preference -> device fallback -> hardcoded default.
+ * 'Broadest scope overrides': an org default OVERRIDES a user preference (intended —
+ * orgs can mandate a mode). v1 only wires deviceFallback (device-local storage);
+ * orgDefault/userPref are reserved seams — passing them today is a no-op unless valid.
+ */
+export function resolveCaptureMode({ orgDefault, userPref, deviceFallback } = {}) {
+  const layers = [orgDefault, userPref, deviceFallback];
+  for (const layer of layers) {
+    if (isValidCaptureMode(layer)) return layer;
+  }
+  return DEFAULT_CAPTURE_MODE;
+}
+
 // Pedagogical order for the 26-letter tracker grid (NOT the EGRA 60-letter assessment set).
 // These are the unique letters in teaching order, used by the Letter Tracker feature.
 export const ENGLISH_PEDAGOGICAL_ORDER = [

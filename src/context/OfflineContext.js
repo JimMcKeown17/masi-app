@@ -9,6 +9,7 @@ const OfflineContext = createContext({
   isOnline: true,
   isSyncing: false,
   unsyncedCount: 0,
+  inFlightCount: 0,
   syncStatus: {},
   lastSyncResult: null,
   triggerBackgroundSync: () => {},
@@ -20,11 +21,14 @@ export const OfflineProvider = ({ children }) => {
   const [isOnline, setIsOnline] = useState(true);
   const [isSyncing, setIsSyncing] = useState(false);
   const [unsyncedCount, setUnsyncedCount] = useState(0);
+  const [inFlightCount, setInFlightCount] = useState(0);
   const [syncStatus, setSyncStatus] = useState({});
   const [lastSyncResult, setLastSyncResult] = useState(null);
 
   const appState = useRef(AppState.currentState);
   const activeSyncPromise = useRef(null);
+  const activeSyncIsForced = useRef(false);
+  const pendingForcedSync = useRef(null);
   const backgroundSyncTimer = useRef(null);
   const isOnlineRef = useRef(isOnline);
   const triggerBackgroundSyncRef = useRef(() => {});
@@ -41,9 +45,10 @@ export const OfflineProvider = ({ children }) => {
     try {
       const status = await getSyncStatus();
       setUnsyncedCount(status.unsyncedCount);
+      setInFlightCount(status.inFlightCount || 0);
       setSyncStatus(status);
 
-      if (autoTrigger && status.unsyncedCount > 0 && isOnlineRef.current) {
+      if (autoTrigger && (status.unsyncedCount > 0 || (status.inFlightCount || 0) > 0) && isOnlineRef.current) {
         triggerBackgroundSyncRef.current();
       }
 
@@ -58,8 +63,21 @@ export const OfflineProvider = ({ children }) => {
    * Perform a full sync
    * Includes lock to make concurrent callers share the same work
    */
-  const syncNow = useCallback(() => {
+  const syncNow = useCallback((options = {}) => {
+    const force = options.force === true;
     if (activeSyncPromise.current) {
+      if (force) {
+        // The active pass is already forced — it already uploads backed-off rows; just join it.
+        if (activeSyncIsForced.current) return activeSyncPromise.current;
+        // Active pass is non-forced — coalesce a single forced rerun behind it.
+        if (pendingForcedSync.current) return pendingForcedSync.current;
+        const queued = activeSyncPromise.current.catch(() => {}).then(() => {
+          pendingForcedSync.current = null;
+          return syncNow({ force: true });
+        });
+        pendingForcedSync.current = queued;
+        return queued;
+      }
       return activeSyncPromise.current;
     }
 
@@ -70,14 +88,11 @@ export const OfflineProvider = ({ children }) => {
 
     const syncPromise = (async () => {
       setIsSyncing(true);
-
       try {
         console.log('Starting sync...');
-        const result = await syncAll();
-
+        const result = await syncAll({ force });
         setLastSyncResult(result);
         await refreshSyncStatus({ autoTrigger: false });
-
         console.log('Sync completed:', result);
         return result;
       } catch (error) {
@@ -85,11 +100,13 @@ export const OfflineProvider = ({ children }) => {
         return { success: false, error };
       } finally {
         activeSyncPromise.current = null;
+        activeSyncIsForced.current = false;
         setIsSyncing(false);
       }
     })();
 
     activeSyncPromise.current = syncPromise;
+    activeSyncIsForced.current = force;
     return syncPromise;
   }, [refreshSyncStatus]);
 
@@ -121,7 +138,7 @@ export const OfflineProvider = ({ children }) => {
    */
   useEffect(() => {
     const unsubscribe = NetInfo.addEventListener(state => {
-      const online = state.isConnected && state.isInternetReachable;
+      const online = Boolean(state.isConnected) && state.isInternetReachable !== false;
       console.log('Network state changed:', {
         isConnected: state.isConnected,
         isInternetReachable: state.isInternetReachable,
@@ -131,15 +148,15 @@ export const OfflineProvider = ({ children }) => {
       const wasOffline = !isOnline;
       setIsOnline(online);
 
-      // If we just came online and have unsynced data, sync
-      if (online && wasOffline && unsyncedCount > 0) {
+      // If we just came online and have unsynced or in_flight data, sync
+      if (online && wasOffline && (unsyncedCount > 0 || inFlightCount > 0)) {
         console.log('Connection restored, triggering sync...');
         triggerBackgroundSync();
       }
     });
 
     return () => unsubscribe();
-  }, [isOnline, unsyncedCount]);
+  }, [isOnline, unsyncedCount, inFlightCount]);
 
   /**
    * App state listener
@@ -152,8 +169,8 @@ export const OfflineProvider = ({ children }) => {
         console.log('App came to foreground');
         refreshSyncStatus();
 
-        // Auto-sync if online and have unsynced data
-        if (isOnline && unsyncedCount > 0) {
+        // Auto-sync if online and have unsynced or in_flight data
+        if (isOnline && (unsyncedCount > 0 || inFlightCount > 0)) {
           triggerBackgroundSync();
         }
       }
@@ -162,7 +179,7 @@ export const OfflineProvider = ({ children }) => {
       if (appState.current === 'active' && nextAppState.match(/inactive|background/)) {
         console.log('App going to background');
         // Try to sync before backgrounding
-        if (isOnline && unsyncedCount > 0) {
+        if (isOnline && (unsyncedCount > 0 || inFlightCount > 0)) {
           triggerBackgroundSync();
         }
       }
@@ -171,7 +188,7 @@ export const OfflineProvider = ({ children }) => {
     });
 
     return () => subscription.remove();
-  }, [isOnline, unsyncedCount, triggerBackgroundSync, refreshSyncStatus]);
+  }, [isOnline, unsyncedCount, inFlightCount, triggerBackgroundSync, refreshSyncStatus]);
 
   /**
    * Initial load: check network state and sync status
@@ -180,7 +197,7 @@ export const OfflineProvider = ({ children }) => {
     const initialize = async () => {
       // Check initial network state
       const netInfoState = await NetInfo.fetch();
-      setIsOnline(netInfoState.isConnected && netInfoState.isInternetReachable);
+      setIsOnline(Boolean(netInfoState.isConnected) && netInfoState.isInternetReachable !== false);
 
       // Load sync status. refreshSyncStatus schedules a background sync when
       // unsynced work exists, but does not block startup on upload.
@@ -207,6 +224,7 @@ export const OfflineProvider = ({ children }) => {
     isOnline,
     isSyncing,
     unsyncedCount,
+    inFlightCount,
     syncStatus,
     lastSyncResult,
     triggerBackgroundSync,

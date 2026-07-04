@@ -3,6 +3,7 @@ import { enqueueSupabaseRequest } from './supabaseRequestQueue';
 import { storage } from '../utils/storage';
 import { resolveDatabase, runRepositoryTransaction } from '../db/repositories/repositoryRuntime';
 import {
+  chunkArray,
   quoteIdentifier,
   timestamp,
 } from '../db/repositories/sqliteRepositoryUtils';
@@ -53,7 +54,20 @@ const LEGACY_KEYS_TO_STRIP = {
   sessions: ['session_type'],
 };
 
-const SERVER_COLUMNS = {
+// Real server columns deliberately withheld from push (reserved strictly for that — NOT a
+// catch-all). sessions.group_id/state are server-RLS-guarded out until the state-machine slice
+// (supabase/migrations/20260529214500_masi_sessions_forward_prep_columns.sql).
+const INTENTIONALLY_UNSYNCED = {
+  sessions: {
+    group_id: 'Forward-prep; server RLS pins group_id NULL until the state-machine slice (migration 20260529214500).',
+    state: 'Forward-prep; server RLS pins state=completed until the state-machine slice (migration 20260529214500).',
+  },
+};
+
+// Local-only bookkeeping columns the engine strips before push — never sent to the server.
+const LOCAL_ONLY_COLUMNS = ['synced', 'sync_status', 'last_sync_error', 'server_updated_at'];
+
+export const SERVER_COLUMNS = {
   time_entries: [
     'id', 'user_id', 'sign_in_time', 'sign_in_lat', 'sign_in_lon', 'sign_out_time',
     'sign_out_lat', 'sign_out_lon', 'auto_clocked_out', 'created_at', 'updated_at',
@@ -119,8 +133,9 @@ const SERVER_COLUMNS = {
   assessments: [
     'id', 'user_id', 'child_id', 'programme_id', 'assessment_tool_id',
     'assessment_window_id', 'assessment_purpose', 'grade_snapshot',
-    'teacher_name_snapshot', 'assessment_type', 'assessment_date', 'score',
-    'total_items', 'items_tested', 'notes', 'created_at', 'updated_at',
+    'teacher_name_snapshot', 'assessment_type', 'capture_mode',
+    'assessment_date', 'score', 'total_items', 'items_tested', 'notes',
+    'created_at', 'updated_at',
   ],
   assessment_items: [
     'id', 'assessment_id', 'item_key', 'prompt', 'response', 'is_correct',
@@ -193,7 +208,12 @@ const ARCHIVE_PUSH_ORDER = {
   child_ea_assignments: 7,
 };
 
-const BATCHABLE_UPSERT_TABLES = new Set(['assessment_items']);
+const BATCHABLE_UPSERT_TABLES = new Set([
+  'assessment_items',
+  'letter_mastery',
+  'session_attendees',
+  'time_entries',
+]);
 const IMMUTABLE_ASSIGNMENT_TABLES = new Set([
   'child_ea_assignments',
   'class_ea_assignments',
@@ -237,8 +257,9 @@ const TABLE_CONFIGS = Object.fromEntries(PUSH_ORDER.map((tableName, index) => [
 
 const normalizeTableName = (tableName) => tableName?.toLowerCase();
 
+const MAX_RETRY_DELAY = 15 * 60 * 1000; // cap exponential backoff at 15 minutes
 const getRetryDelay = (retryCountBeforeFailure) => (
-  BASE_RETRY_DELAY * Math.pow(3, Math.max(0, retryCountBeforeFailure))
+  Math.min(BASE_RETRY_DELAY * Math.pow(3, Math.max(0, retryCountBeforeFailure)), MAX_RETRY_DELAY)
 );
 
 const nextRetryTimestamp = (retryCountBeforeFailure) => (
@@ -536,6 +557,62 @@ const finalizeOutboxOnlyTerminalFailure = async ({
   return true;
 });
 
+const finalizeManySuccess = async ({ database, records, tableName }) => {
+  for (const chunk of chunkArray(records, 200)) {
+    await runRepositoryTransaction(database, async (txn) => {
+      for (const outboxRecord of chunk) {
+        const deleteResult = await txn.runAsync(`
+          delete from sync_outbox
+          where id = ? and updated_at = ? and status = 'in_flight'
+        `, outboxRecord.id, outboxRecord.updated_at);
+
+        if ((deleteResult?.changes || 0) === 0) {
+          await restorePendingAfterStaleFinalize(txn, outboxRecord, tableName);
+          continue;
+        }
+
+        if (outboxRecord.operation !== 'hard_delete') {
+          const hasRemainingOutbox = await txn.getFirstAsync(`
+            select id from sync_outbox where table_name = ? and record_id = ? limit 1
+          `, tableName, outboxRecord.record_id);
+          await setDomainSyncResult(txn, tableName, outboxRecord.record_id, {
+            syncStatus: hasRemainingOutbox ? 'pending' : 'synced',
+            lastSyncError: null,
+          });
+        }
+      }
+    });
+  }
+};
+
+const finalizeManyRetriableFailure = async ({ database, records, tableName, reason }) => {
+  for (const chunk of chunkArray(records, 200)) {
+    await runRepositoryTransaction(database, async (txn) => {
+      for (const outboxRecord of chunk) {
+        const failureResult = await txn.runAsync(`
+          update sync_outbox
+          set status = 'failed',
+              retry_count = retry_count + 1,
+              last_error = ?,
+              next_retry_at = ?,
+              updated_at = ?
+          where id = ? and updated_at = ? and status = 'in_flight'
+        `, reason, nextRetryTimestamp(outboxRecord.retry_count || 0), timestamp(), outboxRecord.id, outboxRecord.updated_at);
+
+        if ((failureResult?.changes || 0) === 0) {
+          await restorePendingAfterStaleFinalize(txn, outboxRecord, tableName);
+          continue;
+        }
+
+        await setDomainSyncResult(txn, tableName, outboxRecord.record_id, {
+          syncStatus: 'failed',
+          lastSyncError: reason,
+        });
+      }
+    });
+  }
+};
+
 const pushOrderForRecord = (record) => {
   if (record.operation === 'archive' && ARCHIVE_PUSH_ORDER[record.table_name] != null) {
     return ARCHIVE_PUSH_ORDER[record.table_name];
@@ -592,109 +669,171 @@ export const createOutboxSyncEngine = ({
     }
 
     await outboxRepository.markInFlight([outboxRecord.id]);
-    const inFlightRecord = await outboxRepository.getById(outboxRecord.id);
-    if (!inFlightRecord) {
-      const reason = `Outbox record disappeared before sync: ${outboxRecord.id}`;
-      return { success: false, terminal: false, failedRecord: makeFailedRecord(outboxRecord, reason) };
-    }
+    let inFlightRecord = null;
+    try {
+      inFlightRecord = await outboxRepository.getById(outboxRecord.id);
+      if (!inFlightRecord) {
+        const reason = `Outbox record disappeared before sync: ${outboxRecord.id}`;
+        return { success: false, terminal: false, failedRecord: makeFailedRecord(outboxRecord, reason) };
+      }
 
-    const serverResult = await enqueueRequest(() => (
-      runServerOperation(supabaseClient, config, inFlightRecord)
-    ));
+      const serverResult = await enqueueRequest(() => (
+        runServerOperation(supabaseClient, config, inFlightRecord)
+      ));
 
-    if (serverResult.success) {
-      await finalizeSuccess({
-        database,
-        outboxRecord: inFlightRecord,
-        tableName: config.tableName,
-        outboxRepository,
-      });
-      return { success: true };
-    }
+      if (serverResult.success) {
+        await finalizeSuccess({
+          database,
+          outboxRecord: inFlightRecord,
+          tableName: config.tableName,
+          outboxRepository,
+        });
+        return { success: true };
+      }
 
-    const classification = classifyError(serverResult.error, config);
-    const reason = errorMessage(serverResult.error);
+      const classification = classifyError(serverResult.error, config);
+      const reason = errorMessage(serverResult.error);
 
-    if (classification.markAsSynced) {
-      await finalizeSuccess({
-        database,
-        outboxRecord: inFlightRecord,
-        tableName: config.tableName,
-        outboxRepository,
-      });
-      return { success: true };
-    }
+      if (classification.markAsSynced) {
+        await finalizeSuccess({
+          database,
+          outboxRecord: inFlightRecord,
+          tableName: config.tableName,
+          outboxRepository,
+        });
+        return { success: true };
+      }
 
-    if (classification.terminal) {
-      await finalizeTerminalFailure({
+      if (classification.terminal) {
+        await finalizeTerminalFailure({
+          database,
+          outboxRecord: inFlightRecord,
+          tableName: config.tableName,
+          outboxRepository,
+          reason,
+        });
+        return { success: false, terminal: true, failedRecord: makeFailedRecord(outboxRecord, reason) };
+      }
+
+      await finalizeRetriableFailure({
         database,
         outboxRecord: inFlightRecord,
         tableName: config.tableName,
         outboxRepository,
         reason,
       });
-      return { success: false, terminal: true, failedRecord: makeFailedRecord(outboxRecord, reason) };
+      return { success: false, terminal: false, failedRecord: makeFailedRecord(outboxRecord, reason) };
+    } catch (error) {
+      // Any post-markInFlight throw (server request, getById, or a finalize) must not strand the
+      // row in_flight. finalize-retriable with inFlightRecord when we have it (its updated_at makes
+      // the CAS HIT → row marked failed+backoff, correct for a real attempt); else the original
+      // record (CAS MISSES on the changed updated_at → restorePendingAfterStaleFinalize → pending).
+      const reason = errorMessage(error) || 'Sync record processing threw';
+      try {
+        await finalizeRetriableFailure({
+          database,
+          outboxRecord: inFlightRecord || outboxRecord,
+          tableName: config.tableName,
+          outboxRepository,
+          reason,
+        });
+      } catch (_) {
+        // Full finalize (CAS + domain update) failed; last-resort plain outbox status reset so the
+        // row isn't left in_flight within THIS pass (markReady only touches sync_outbox, so it can
+        // succeed even when the domain write can't). resetInFlight is the cross-pass backstop.
+        try { await outboxRepository.markReady(outboxRecord.id); } catch (_2) { /* truly broken; resetInFlight recovers */ }
+      }
+      return { success: false, terminal: false, failedRecord: makeFailedRecord(outboxRecord, reason) };
     }
+  };
 
-    await finalizeRetriableFailure({
-      database,
-      outboxRecord: inFlightRecord,
-      tableName: config.tableName,
-      outboxRepository,
-      reason,
-    });
-    return { success: false, terminal: false, failedRecord: makeFailedRecord(outboxRecord, reason) };
+  // Per-record fallback for a batch (used when the batch can't/ didn't upsert as a unit). Each
+  // processRecord self-cleans its own row; we wait for ALL to settle (Promise.allSettled, NOT
+  // fail-fast Promise.all) so one rejecting record can't trigger a whole-batch finalize that
+  // reverts a sibling whose upload already succeeded. A rejected fallback (e.g. markInFlight threw
+  // before processRecord's own try) gets a plain per-id markReady — siblings are left untouched.
+  const processBatchFallback = async (outboxRecords) => {
+    const settled = await Promise.allSettled(outboxRecords.map(processRecord));
+    const results = [];
+    for (let index = 0; index < settled.length; index += 1) {
+      const outcome = settled[index];
+      if (outcome.status === 'fulfilled') {
+        results.push(outcome.value);
+        continue;
+      }
+      const record = outboxRecords[index];
+      const reason = errorMessage(outcome.reason) || 'Fallback record processing threw';
+      try { await outboxRepository.markReady(record.id); } catch (_) { /* resetInFlight recovers next pass */ }
+      results.push({ success: false, terminal: false, failedRecord: makeFailedRecord(record, reason) });
+    }
+    return results;
   };
 
   const processBatch = async (outboxRecords, config) => {
     const ids = outboxRecords.map((record) => record.id);
     await outboxRepository.markInFlight(ids);
-    const inFlightRecords = (await Promise.all(
-      ids.map((id) => outboxRepository.getById(id))
-    )).filter(Boolean);
+    let inFlightRecords = null;
+    try {
+      inFlightRecords = (await Promise.all(
+        ids.map((id) => outboxRepository.getById(id))
+      )).filter(Boolean);
 
-    if (inFlightRecords.length !== outboxRecords.length) {
-      return Promise.all(outboxRecords.map(processRecord));
+      if (inFlightRecords.length !== outboxRecords.length) {
+        return await processBatchFallback(outboxRecords);
+      }
+
+      let serverResult;
+      try {
+        serverResult = await enqueueRequest(() => (
+          runBatchServerOperation(supabaseClient, config, inFlightRecords)
+        ));
+      } catch (batchError) {
+        // A THROWN batch request (timeout / abort / oversized payload) — degrade to per-record so a
+        // deterministic batch-level failure isolates per row (smaller payloads make progress) instead
+        // of re-forming the same failing batch forever. processBatchFallback is allSettled-safe.
+        return await processBatchFallback(outboxRecords);
+      }
+
+      if (!serverResult.success) {
+        return await processBatchFallback(outboxRecords);
+      }
+
+      await finalizeManySuccess({ database, records: inFlightRecords, tableName: config.tableName });
+
+      return outboxRecords.map(() => ({ success: true }));
+    } catch (error) {
+      // Post-markInFlight throw (getById / batch request / finalizeManySuccess) — don't strand the
+      // batch in_flight. finalizeManyRetriableFailure with inFlightRecords when we have them (CAS
+      // hits → failed+backoff); else the originals (CAS misses → restore pending).
+      const reason = errorMessage(error) || 'Batch processing threw';
+      try {
+        await finalizeManyRetriableFailure({
+          database,
+          records: inFlightRecords || outboxRecords,
+          tableName: config.tableName,
+          reason,
+        });
+      } catch (_) {
+        // Last-resort per-id outbox status reset (see processRecord note).
+        for (const id of ids) {
+          try { await outboxRepository.markReady(id); } catch (_2) { /* resetInFlight recovers next pass */ }
+        }
+      }
+      return outboxRecords.map((record) => (
+        { success: false, terminal: false, failedRecord: makeFailedRecord(record, reason) }
+      ));
     }
-
-    const serverResult = await enqueueRequest(() => (
-      runBatchServerOperation(supabaseClient, config, inFlightRecords)
-    ));
-
-    if (!serverResult.success) {
-      return Promise.all(outboxRecords.map(processRecord));
-    }
-
-    await Promise.all(inFlightRecords.map((inFlightRecord) => (
-      finalizeSuccess({
-        database,
-        outboxRecord: inFlightRecord,
-        tableName: config.tableName,
-        outboxRepository,
-      })
-    )));
-
-    return outboxRecords.map(() => ({ success: true }));
   };
 
-  const syncAll = async ({ tableName = null } = {}) => {
+  const syncAll = async ({ tableName = null, force = false } = {}) => {
     const startedAt = Date.now();
-    await resolveDatabase(database);
-    await repairGroupOwnershipForSync({ database });
-    if (typeof outboxRepository.resetInFlight === 'function') {
-      await outboxRepository.resetInFlight();
-    }
-    const readyRecords = sortByPushOrder(await outboxRepository.getReadyRecords({ limit: 1000 }));
-    const filteredRecords = tableName
-      ? readyRecords.filter((record) => record.table_name === normalizeTableName(tableName))
-      : readyRecords;
-
     const result = {
       success: true,
       totalSynced: 0,
       totalFailed: 0,
       failedRecords: [],
       tableResults: {},
+      preflightErrors: [],
       durationMs: 0,
     };
     const failedTables = new Set();
@@ -718,67 +857,120 @@ export const createOutboxSyncEngine = ({
       }
     };
 
-    for (let index = 0; index < filteredRecords.length; index += 1) {
-      const outboxRecord = filteredRecords[index];
-      const config = getConfig(outboxRecord.table_name);
-      const dependencies = dependenciesForRecord(outboxRecord);
-      const skippedDependency = dependencies.find((dependency) => failedTables.has(dependency));
-      if (skippedDependency) {
-        const tableResult = result.tableResults[outboxRecord.table_name] || {
-          success: false,
-          synced: 0,
-          failed: 0,
-          skipped: true,
-          skippedDependency,
-        };
-        tableResult.skipped = true;
-        tableResult.skippedDependency = skippedDependency;
-        result.tableResults[outboxRecord.table_name] = tableResult;
-        result.success = false;
-        failedTables.add(outboxRecord.table_name);
-        continue;
-      }
+    try {
+      await resolveDatabase(database);
 
-      const tableKey = config?.tableName || outboxRecord.table_name;
-      if (!result.tableResults[tableKey]) {
-        result.tableResults[tableKey] = { success: true, synced: 0, failed: 0 };
-      }
-
-      if (canBatchRecord(outboxRecord, config)) {
-        const batchRecords = [outboxRecord];
-        for (let batchIndex = index + 1; batchIndex < filteredRecords.length; batchIndex += 1) {
-          const candidate = filteredRecords[batchIndex];
-          const candidateConfig = getConfig(candidate.table_name);
-          if (!canBatchRecord(candidate, candidateConfig) || candidateConfig.tableName !== config.tableName) {
-            break;
-          }
-          const candidateDependencies = dependenciesForRecord(candidate);
-          if (candidateDependencies.some((dependency) => failedTables.has(dependency))) {
-            break;
-          }
-          batchRecords.push(candidate);
+      // Recover rows left in_flight by a prior interrupted pass FIRST and best-effort, so a later
+      // preflight failure (e.g. repairGroupOwnershipForSync throwing) can't keep them stranded.
+      if (typeof outboxRepository.resetInFlight === 'function') {
+        try {
+          await outboxRepository.resetInFlight();
+        } catch (resetError) {
+          console.error('syncAll: resetInFlight failed (continuing):', resetError);
+          result.success = false;
+          result.preflightErrors.push({ step: 'resetInFlight', error: errorMessage(resetError) });
         }
+      }
 
-        if (batchRecords.length > 1) {
-          const batchResults = await processBatch(batchRecords, config);
-          batchResults.forEach((batchResult, batchResultIndex) => {
-            applyRecordResult(batchRecords[batchResultIndex], config, batchResult);
-          });
-          index += batchRecords.length - 1;
+      // Group-ownership repair is best-effort: its failure must NOT block unrelated tables from
+      // syncing, and must NOT reject the pass before resetInFlight/updateSyncMeta have run.
+      try {
+        await repairGroupOwnershipForSync({ database });
+      } catch (repairError) {
+        console.error('syncAll: repairGroupOwnershipForSync failed (continuing):', repairError);
+        result.success = false;
+        result.preflightErrors.push({ step: 'repairGroupOwnership', error: errorMessage(repairError) });
+      }
+
+      const readyRecords = sortByPushOrder(
+        await outboxRepository.getReadyRecords({ limit: 1000, includeBackedOff: force, includeTerminal: force })
+      );
+      const filteredRecords = tableName
+        ? readyRecords.filter((record) => record.table_name === normalizeTableName(tableName))
+        : readyRecords;
+
+      for (let index = 0; index < filteredRecords.length; index += 1) {
+        const outboxRecord = filteredRecords[index];
+        const config = getConfig(outboxRecord.table_name);
+        const dependencies = dependenciesForRecord(outboxRecord);
+        const skippedDependency = dependencies.find((dependency) => failedTables.has(dependency));
+        if (skippedDependency) {
+          const tableResult = result.tableResults[outboxRecord.table_name] || {
+            success: false,
+            synced: 0,
+            failed: 0,
+            skipped: true,
+            skippedDependency,
+          };
+          tableResult.skipped = true;
+          tableResult.skippedDependency = skippedDependency;
+          result.tableResults[outboxRecord.table_name] = tableResult;
+          result.success = false;
+          failedTables.add(outboxRecord.table_name);
           continue;
         }
+
+        // Backstop for throws OUTSIDE processRecord/processBatch (those are self-cleaning):
+        // batch formation, dispatch, applyRecordResult. One thrown record fails only that record;
+        // healthy records still sync. The `continue`/`index +=` control flow still advances the
+        // for loop correctly from inside the try.
+        try {
+          const tableKey = config?.tableName || outboxRecord.table_name;
+          if (!result.tableResults[tableKey]) {
+            result.tableResults[tableKey] = { success: true, synced: 0, failed: 0 };
+          }
+
+          if (canBatchRecord(outboxRecord, config)) {
+            const batchRecords = [outboxRecord];
+            for (let batchIndex = index + 1; batchIndex < filteredRecords.length; batchIndex += 1) {
+              const candidate = filteredRecords[batchIndex];
+              const candidateConfig = getConfig(candidate.table_name);
+              if (!canBatchRecord(candidate, candidateConfig) || candidateConfig.tableName !== config.tableName) {
+                break;
+              }
+              const candidateDependencies = dependenciesForRecord(candidate);
+              if (candidateDependencies.some((dependency) => failedTables.has(dependency))) {
+                break;
+              }
+              batchRecords.push(candidate);
+            }
+
+            if (batchRecords.length > 1) {
+              const batchResults = await processBatch(batchRecords, config);
+              batchResults.forEach((batchResult, batchResultIndex) => {
+                applyRecordResult(batchRecords[batchResultIndex], config, batchResult);
+              });
+              index += batchRecords.length - 1;
+              continue;
+            }
+          }
+
+          const recordResult = await processRecord(outboxRecord);
+          applyRecordResult(outboxRecord, config, recordResult);
+        } catch (error) {
+          const reason = errorMessage(error) || 'Unhandled sync error';
+          const tableNameForRow = getConfig(outboxRecord.table_name)?.tableName || outboxRecord.table_name;
+          try {
+            await finalizeRetriableFailure({ database, outboxRecord, tableName: tableNameForRow, outboxRepository, reason });
+          } catch (_) { /* best-effort */ }
+          applyRecordResult(outboxRecord, getConfig(outboxRecord.table_name), { success: false, terminal: false, failedRecord: makeFailedRecord(outboxRecord, reason) });
+        }
       }
-
-      const recordResult = await processRecord(outboxRecord);
-      applyRecordResult(outboxRecord, config, recordResult);
+    } catch (error) {
+      // Unexpected preflight failure (resolveDatabase / getReadyRecords). Don't reject the pass —
+      // mark it failed; the finally still records the attempt so meta is never skipped, and
+      // resetInFlight (run first, best-effort) has already recovered any prior-stranded rows.
+      console.error('syncAll: preflight error (continuing to record attempt):', error);
+      result.success = false;
+      result.preflightErrors.push({ step: 'preflight', error: errorMessage(error) });
+    } finally {
+      result.durationMs = Date.now() - startedAt;
+      const now = new Date().toISOString();
+      await stateRepository.updateSyncMeta({
+        lastSyncTime: now,
+        ...(result.success ? { lastSuccessfulSyncTime: now } : {}),
+      });
     }
-
-    result.durationMs = Date.now() - startedAt;
-    const now = new Date().toISOString();
-    await stateRepository.updateSyncMeta({
-      lastSyncTime: now,
-      ...(result.success ? { lastSuccessfulSyncTime: now } : {}),
-    });
 
     return result;
   };
@@ -798,12 +990,14 @@ export const createOutboxSyncEngine = ({
   };
 
   const retryFailedItem = async (table, id) => {
-    const db = await resolveDatabase(database);
     const tableName = normalizeTableName(table);
-    await runRepositoryTransaction(db, async (txn) => {
+    // Route through the engine's `database` closure (undefined in prod → writer), NOT a
+    // resolved reader handle — resolving first and passing it would hit the query_only reader.
+    await runRepositoryTransaction(database, async (txn) => {
       await txn.runAsync(`
         update sync_outbox
         set status = 'pending',
+            retry_count = 0,
             next_retry_at = null,
             last_error = null,
             updated_at = ?
@@ -843,6 +1037,8 @@ export const retryFailedItem = (table, id) => defaultEngine.retryFailedItem(tabl
 
 export const _testBuildSyncPayload = buildSyncPayload;
 export const _testClassifyError = classifyError;
+export const __testables = { getRetryDelay };
+export const __contract = { SERVER_COLUMNS, PUSH_ORDER, INTENTIONALLY_UNSYNCED, LOCAL_ONLY_COLUMNS };
 
 export const pullReferenceData = async ({
   supabaseClient = supabase,

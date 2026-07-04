@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useRef } from 'react';
 import { View, StyleSheet, ScrollView } from 'react-native';
 import { Text, Card, Button } from 'react-native-paper';
 import { useFocusEffect } from '@react-navigation/native';
@@ -7,6 +7,8 @@ import { colors, spacing, borderRadius, shadows } from '../../constants/colors';
 import { assessmentsRepository } from '../../db/repositories/assessmentsRepository';
 import { LETTER_SETS, WORD_SETS } from '../../constants/egraConstants';
 import { normalizeLanguageKey } from '../../utils/letterMastery';
+import { resolveAssessmentRoute } from '../../utils/assessmentRouting';
+import LetterMasteryPanel from '../../components/assessment/LetterMasteryPanel';
 
 const ASSESSMENT_TYPES = [
   { key: 'letter_egra', label: 'Letter Sound', description: 'EGRA letter sound recognition' },
@@ -25,14 +27,38 @@ function getFeedbackColor(accuracy) {
   return colors.emphasis;
 }
 
-export default function ChildAssessmentSummaryScreen({ navigation, route }) {
+export default function ChildResultsScreen({ navigation, route }) {
   const { user } = useAuth();
   const { child, classItem } = route.params;
   const childName = `${child.first_name} ${child.last_name}`;
   const [latestByType, setLatestByType] = useState({});
   const [attemptCounts, setAttemptCounts] = useState({});
+  const launchingRef = useRef(false);
 
   const langKey = normalizeLanguageKey(classItem?.home_language);
+
+  const handleRunAssessment = async (assessmentType) => {
+    const sets = assessmentType === 'word_egra' ? WORD_SETS : LETTER_SETS;
+    const itemSet = sets[langKey];
+    if (!itemSet) {
+      navigation.navigate('AssessmentChildSelect', { assessmentType });
+      return;
+    }
+    if (launchingRef.current) return;
+    launchingRef.current = true;
+    try {
+      const { screenName, captureMode } = await resolveAssessmentRoute();
+      navigation.navigate(screenName, {
+        child,
+        letterSet: itemSet,
+        attemptNumber: (attemptCounts[assessmentType] || 0) + 1,
+        assessmentType,
+        captureMode,
+      });
+    } finally {
+      launchingRef.current = false;
+    }
+  };
 
   useFocusEffect(
     useCallback(() => {
@@ -110,20 +136,7 @@ export default function ChildAssessmentSummaryScreen({ navigation, route }) {
                   <Button
                     mode="contained"
                     compact
-                    onPress={() => {
-                      const sets = key === 'word_egra' ? WORD_SETS : LETTER_SETS;
-                      const itemSet = sets[langKey];
-                      if (itemSet) {
-                        navigation.navigate('LetterAssessment', {
-                          child,
-                          letterSet: itemSet,
-                          attemptNumber: (attemptCounts[key] || 0) + 1,
-                          assessmentType: key,
-                        });
-                      } else {
-                        navigation.navigate('AssessmentChildSelect', { assessmentType: key });
-                      }
-                    }}
+                    onPress={() => handleRunAssessment(key)}
                     style={styles.runButton}
                   >
                     Run Assessment
@@ -135,13 +148,14 @@ export default function ChildAssessmentSummaryScreen({ navigation, route }) {
         );
       })}
 
-      {/* Letter Tracker shortcut */}
-      <Card style={styles.card} onPress={() => navigation.navigate('LetterTracker', { child, classItem })}>
-        <Card.Content style={styles.trackerCard}>
+      {/* Letter mastery — embedded panel (one source of truth) */}
+      <Card style={styles.card}>
+        <Card.Content>
           <Text variant="titleMedium" style={styles.cardTitle}>Letter Tracker</Text>
           <Text variant="bodySmall" style={styles.cardDescription}>
-            View and manage letter mastery progress
+            Tap letters to mark them as taught
           </Text>
+          <LetterMasteryPanel child={child} classItem={classItem} />
         </Card.Content>
       </Card>
     </ScrollView>
@@ -227,8 +241,5 @@ const styles = StyleSheet.create({
   },
   runButton: {
     alignSelf: 'center',
-  },
-  trackerCard: {
-    flexDirection: 'column',
   },
 });

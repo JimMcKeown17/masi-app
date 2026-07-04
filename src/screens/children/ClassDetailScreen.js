@@ -28,11 +28,10 @@ export default function ClassDetailScreen({ route, navigation }) {
   useLayoutEffect(() => {
     navigation.setOptions({
       headerRight: () => (
-        // ClassDetail sits above MainTabs (the root stack's initial route). Pop
-        // back to the EXISTING MainTabs/Children instance rather than navigating
-        // forward — navigate() could remount the tab, resetting hasAutoRouted and
-        // bouncing a single-class EA straight back here. popToTop reuses the live
-        // ChildrenListScreen (ref intact → no re-route) and never grows the stack.
+        // ClassDetail is a screen in the Children stack; popToTop returns to the
+        // live ChildrenList root (ref intact → no re-route), so navigate() does
+        // not remount the tab, reset hasAutoRouted, or bounce a single-class EA
+        // straight back here.
         <Button compact onPress={() => navigation.popToTop()}>
           Manage classes
         </Button>
@@ -88,6 +87,8 @@ export default function ClassDetailScreen({ route, navigation }) {
         style={styles.childCard}
         onPress={() => navigation.navigate('EditChild', { childId: item.id })}
         activeOpacity={0.7}
+        accessibilityRole="button"
+        accessibilityLabel={`Edit ${item.first_name} ${item.last_name}`}
       >
         {/* Left: name + details */}
         <View style={styles.childInfo}>
@@ -108,6 +109,8 @@ export default function ClassDetailScreen({ route, navigation }) {
                   style={[styles.groupChip, { backgroundColor: colorScheme.bg }]}
                   onPress={() => openGroupPicker(item)}
                   hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                  accessibilityRole="button"
+                  accessibilityLabel={`Change group for ${item.first_name} ${item.last_name}, currently ${group.name}`}
                 >
                   <Text style={[styles.groupChipText, { color: colorScheme.text }]}>
                     {group.name} ▾
@@ -121,6 +124,8 @@ export default function ClassDetailScreen({ route, navigation }) {
                   style={styles.assignChip}
                   onPress={() => openGroupPicker(item)}
                   hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                  accessibilityRole="button"
+                  accessibilityLabel={`Assign group to ${item.first_name} ${item.last_name}`}
                 >
                   <Text style={styles.assignChipText}>+ Group</Text>
                 </TouchableOpacity>
@@ -147,6 +152,7 @@ export default function ClassDetailScreen({ route, navigation }) {
             size={30}
             iconColor={colors.primary}
             style={styles.actionIcon}
+            accessibilityLabel={`Letter tracker for ${item.first_name} ${item.last_name}`}
             onPress={() => navigation.navigate('LetterTracker', { child: item, classItem })}
           />
           <IconButton
@@ -154,7 +160,8 @@ export default function ClassDetailScreen({ route, navigation }) {
             size={30}
             iconColor={colors.primary}
             style={styles.actionIcon}
-            onPress={() => navigation.navigate('ChildAssessmentSummary', {
+            accessibilityLabel={`Assessment summary for ${item.first_name} ${item.last_name}`}
+            onPress={() => navigation.navigate('ChildResults', {
               child: item,
               classItem,
             })}
@@ -185,6 +192,7 @@ export default function ClassDetailScreen({ route, navigation }) {
             <IconButton
               icon="pencil"
               mode="contained-tonal"
+              accessibilityLabel="Edit class"
               onPress={() => navigation.navigate('EditClass', { classId })}
             />
           </View>
@@ -343,13 +351,13 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     borderWidth: 1.5,
     borderStyle: 'dashed',
-    borderColor: '#F9A825',
-    backgroundColor: '#FFF8E1',
+    borderColor: colors.warning,
+    backgroundColor: colors.warningBg,
   },
   assignChipText: {
     fontSize: 11,
     fontWeight: '600',
-    color: '#F57F17',
+    color: colors.warningText,
   },
   emptyContainer: {
     flex: 1,

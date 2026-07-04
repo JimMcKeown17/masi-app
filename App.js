@@ -51,31 +51,31 @@ const errorStyles = RNStyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: '#F7F7F7',
+    backgroundColor: colors.background,
     padding: 32,
   },
   emoji: {
     fontSize: 48,
     fontWeight: 'bold',
-    color: '#E72D4D',
+    color: colors.primary,
     marginBottom: 16,
   },
   title: {
     fontSize: 22,
     fontWeight: '700',
-    color: '#294A99',
+    color: colors.primary,
     marginBottom: 12,
     textAlign: 'center',
   },
   message: {
     fontSize: 16,
-    color: '#666',
+    color: colors.textSecondary,
     textAlign: 'center',
     marginBottom: 24,
     lineHeight: 22,
   },
   button: {
-    backgroundColor: '#294A99',
+    backgroundColor: colors.primary,
     paddingHorizontal: 32,
     paddingVertical: 14,
     borderRadius: 8,
@@ -95,25 +95,25 @@ const theme = {
   ...MD3LightTheme,
   colors: {
     ...MD3LightTheme.colors,
-    primary: colors.primary,           // Blue #294A99
-    primaryContainer: '#E3E9F5',       // Light blue container
-    secondary: colors.accent,          // Yellow #FFDD00
-    secondaryContainer: '#FFF9CC',     // Light yellow container
-    tertiary: colors.emphasis,         // Red #E72D4D
-    tertiaryContainer: '#FCEAED',      // Light red container
-    error: colors.error,               // Red #E72D4D
-    errorContainer: '#FCEAED',
-    background: colors.background,     // #F7F7F7
-    surface: colors.surface,           // #FFFFFF
-    surfaceVariant: colors.cardBackground, // #FAFAFA
-    onPrimary: '#FFFFFF',              // Text on primary (blue) backgrounds
-    onSecondary: '#111111',            // Text on secondary (yellow) backgrounds
-    onTertiary: '#FFFFFF',             // Text on tertiary (red) backgrounds
-    onBackground: colors.text,         // #111111
-    onSurface: colors.text,            // #111111
-    outline: colors.border,            // #E5E7EB
+    primary: colors.primary,           // brand red
+    primaryContainer: colors.red50,    // soft brand surface
+    secondary: colors.accent,          // caution accent
+    secondaryContainer: colors.warningBg, // warning surface
+    tertiary: colors.emphasis,         // emphasis red
+    tertiaryContainer: colors.red50,   // soft emphasis surface
+    error: colors.error,               // semantic error
+    errorContainer: colors.errorBg,
+    background: colors.background,     // warm canvas
+    surface: colors.surface,           // plain surface
+    surfaceVariant: colors.cardBackground, // card surface
+    onPrimary: '#FFFFFF',              // text on primary surfaces
+    onSecondary: '#000000',            // black for AA contrast on amber secondary
+    onTertiary: '#FFFFFF',             // text on tertiary surfaces
+    onBackground: colors.text,         // text on canvas
+    onSurface: colors.text,            // text on surfaces
+    outline: colors.border,            // warm divider
     outlineVariant: colors.border,
-    success: colors.success,           // Green #3FA535 (custom)
+    success: colors.success,           // semantic success
   },
 };
 

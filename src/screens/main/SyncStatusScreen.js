@@ -61,12 +61,16 @@ export default function SyncStatusScreen() {
     showSnackbar(`Retrying ${displayName}...`);
     await retryFailedItem(table, id);
     await refreshSyncStatus();
-    await syncNow();
+    await syncNow({ force: true });
   };
 
   // Only show rows where count > 0
   const unsyncedRows = Object.entries(breakdown).filter(([, count]) => count > 0);
-  const allSynced = unsyncedRows.length === 0;
+  const hasPending = unsyncedRows.length > 0;
+  const hasFailed = failedItems.length > 0;
+  // "Up to date" must require BOTH no pending AND no failed/terminal items — otherwise the
+  // summary contradicts the Failed Items list below (terminal rows are excluded from `breakdown`).
+  const allSynced = !hasPending && !hasFailed;
 
   return (
     <View style={styles.outerContainer}>
@@ -108,6 +112,10 @@ export default function SyncStatusScreen() {
               <Text variant="bodyMedium" style={styles.allSyncedText}>
                 Everything is up to date.
               </Text>
+            ) : !hasPending ? (
+              <Text variant="bodyMedium" style={styles.needsAttentionText}>
+                {failedItems.length} item{failedItems.length === 1 ? '' : 's'} failed to sync — see Failed Items below.
+              </Text>
             ) : (
               unsyncedRows.map(([table, count]) => (
                 <List.Item
@@ -133,7 +141,7 @@ export default function SyncStatusScreen() {
         {/* Sync Now Button */}
         <Button
           mode="contained"
-          onPress={syncNow}
+          onPress={() => syncNow({ force: true })}
           disabled={!isOnline || isSyncing}
           loading={isSyncing}
           style={styles.syncButton}
@@ -221,7 +229,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.successBg,
   },
   badgeOffline: {
-    backgroundColor: '#FEF3C7',
+    backgroundColor: colors.warningBg,
   },
   badgeText: {
     fontWeight: 'bold',
@@ -231,7 +239,7 @@ const styles = StyleSheet.create({
     color: colors.success,
   },
   badgeTextOffline: {
-    color: '#B45309',
+    color: colors.warningText,
   },
 
   // Last synced
@@ -247,6 +255,9 @@ const styles = StyleSheet.create({
   // Unsynced list
   allSyncedText: {
     color: colors.success,
+  },
+  needsAttentionText: {
+    color: colors.error,
   },
   listIcon: {
     marginRight: spacing.sm,

@@ -95,6 +95,8 @@ export default function SessionsScreen({ navigation }) {
               style={styles.callout}
               onPress={() => navigation.navigate('SessionCountRanking')}
               activeOpacity={0.7}
+              accessibilityRole="button"
+              accessibilityLabel={`${stats.notSeenThisWeek.length} ${stats.notSeenThisWeek.length === 1 ? 'child' : 'children'} not seen this week`}
             >
               <Text style={styles.calloutText}>
                 {stats.notSeenThisWeek.length} {stats.notSeenThisWeek.length === 1 ? 'child' : 'children'} not seen this week

@@ -3,12 +3,13 @@ import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { useAuth } from '../context/AuthContext';
-import { ActivityIndicator, View, TouchableOpacity, Pressable, Platform } from 'react-native';
+import { ActivityIndicator, View, Pressable, Platform } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import BottomTabIcon from '../components/navigation/BottomTabIcon';
 import { Text } from 'react-native-paper';
 import { colors } from '../constants/colors';
 import SyncIndicator from '../components/common/SyncIndicator';
+import ProfileGearButton from '../components/common/ProfileGearButton';
 
 // Auth screens
 import LoginScreen from '../screens/auth/LoginScreen';
@@ -38,11 +39,12 @@ import SessionHistoryScreen from '../screens/sessions/SessionHistoryScreen';
 // Assessment screens
 import AssessmentChildSelectScreen from '../screens/assessments/AssessmentChildSelectScreen';
 import LetterAssessmentScreen from '../screens/assessments/LetterAssessmentScreen';
+import SequentialAssessmentScreen from '../screens/assessments/SequentialAssessmentScreen';
 import AssessmentResultsScreen from '../screens/assessments/AssessmentResultsScreen';
 import AssessmentHistoryScreen from '../screens/assessments/AssessmentHistoryScreen';
 import AssessmentDetailScreen from '../screens/assessments/AssessmentDetailScreen';
 import LetterTrackerScreen from '../screens/assessments/LetterTrackerScreen';
-import ChildAssessmentSummaryScreen from '../screens/assessments/ChildAssessmentSummaryScreen';
+import ChildResultsScreen from '../screens/assessments/ChildResultsScreen';
 
 // Insight screens
 import LetterMasteryRankingScreen from '../screens/insights/LetterMasteryRankingScreen';
@@ -54,6 +56,7 @@ import SyncStatusScreen from '../screens/main/SyncStatusScreen';
 
 const Stack = createNativeStackNavigator();
 const Tab = createBottomTabNavigator();
+const ChildrenStack = createNativeStackNavigator();
 
 function AuthNavigator() {
   return (
@@ -72,6 +75,52 @@ function AuthNavigator() {
   );
 }
 
+function ChildrenStackNavigator() {
+  return (
+    <ChildrenStack.Navigator
+      screenOptions={({ navigation }) => ({
+        headerLeft: navigation.canGoBack()
+          ? () => (
+            <Pressable
+              onPress={() => navigation.goBack()}
+              hitSlop={8}
+              accessibilityRole="button"
+              accessibilityLabel="Back"
+              style={{ flexDirection: 'row', alignItems: 'center', marginLeft: Platform.OS === 'ios' ? -8 : 0 }}
+            >
+              <Ionicons name="chevron-back" size={28} color={colors.primary} />
+              <Text style={{ color: colors.primary, fontSize: 17 }}>Back</Text>
+            </Pressable>
+          )
+          : undefined,
+      })}
+    >
+      <ChildrenStack.Screen
+        name="ChildrenList"
+        component={ChildrenListScreen}
+        options={({ navigation }) => ({
+          title: 'My Children',
+          headerRight: () => (
+            <View style={{ marginRight: 16 }}>
+              <SyncIndicator onPress={() => navigation.navigate('SyncStatus')} />
+            </View>
+          ),
+        })}
+      />
+      <ChildrenStack.Screen
+        name="ClassDetail"
+        component={ClassDetailScreen}
+        options={{ title: 'Class Details', headerBackTitle: 'Back' }}
+      />
+      <ChildrenStack.Screen
+        name="ChildResults"
+        component={ChildResultsScreen}
+        options={{ title: 'Child Results', headerBackTitle: 'Back' }}
+      />
+    </ChildrenStack.Navigator>
+  );
+}
+
 function MainTabNavigator() {
   return (
     <Tab.Navigator
@@ -84,8 +133,8 @@ function MainTabNavigator() {
             <SyncIndicator onPress={() => navigation.navigate('SyncStatus')} />
           </View>
         ),
-        tabBarActiveTintColor: colors.tabActive,      // Brand blue
-        tabBarInactiveTintColor: colors.tabInactive,  // Gray
+        tabBarActiveTintColor: colors.tabActive,      // active brand tab
+        tabBarInactiveTintColor: colors.tabInactive,  // muted tab
         tabBarStyle: {
           backgroundColor: colors.surface,            // White background
           borderTopColor: colors.border,
@@ -101,17 +150,15 @@ function MainTabNavigator() {
           headerRight: () => (
             <View style={{ flexDirection: 'row', alignItems: 'center', marginRight: 16, gap: 8 }}>
               <SyncIndicator onPress={() => navigation.navigate('SyncStatus')} />
-              <TouchableOpacity onPress={() => navigation.navigate('Profile')}>
-                <Ionicons name="settings-outline" size={24} color={colors.textSecondary} />
-              </TouchableOpacity>
+              <ProfileGearButton onPress={() => navigation.navigate('Profile')} />
             </View>
           ),
         })}
       />
       <Tab.Screen
         name="Children"
-        component={ChildrenListScreen}
-        options={{ title: 'My Children' }}
+        component={ChildrenStackNavigator}
+        options={{ title: 'My Children', headerShown: false }}
       />
       <Tab.Screen
         name="Sessions"
@@ -136,6 +183,8 @@ function MainNavigator() {
             <Pressable
               onPress={() => navigation.goBack()}
               hitSlop={8}
+              accessibilityRole="button"
+              accessibilityLabel="Back"
               style={{ flexDirection: 'row', alignItems: 'center', marginLeft: Platform.OS === 'ios' ? -8 : 0 }}
             >
               <Ionicons name="chevron-back" size={28} color={colors.primary} />
@@ -187,14 +236,6 @@ function MainNavigator() {
         component={EditClassScreen}
         options={{
           title: 'Edit Class',
-          headerBackTitle: 'Back',
-        }}
-      />
-      <Stack.Screen
-        name="ClassDetail"
-        component={ClassDetailScreen}
-        options={{
-          title: 'Class Details',
           headerBackTitle: 'Back',
         }}
       />
@@ -255,6 +296,11 @@ function MainNavigator() {
         options={{ headerShown: false }}
       />
       <Stack.Screen
+        name="SequentialAssessment"
+        component={SequentialAssessmentScreen}
+        options={{ headerShown: false }}
+      />
+      <Stack.Screen
         name="AssessmentResults"
         component={AssessmentResultsScreen}
         options={{ headerShown: false }}
@@ -272,14 +318,6 @@ function MainNavigator() {
         component={LetterTrackerScreen}
         options={{
           title: 'Letter Tracker',
-          headerBackTitle: 'Back',
-        }}
-      />
-      <Stack.Screen
-        name="ChildAssessmentSummary"
-        component={ChildAssessmentSummaryScreen}
-        options={{
-          title: 'Assessment Summary',
           headerBackTitle: 'Back',
         }}
       />

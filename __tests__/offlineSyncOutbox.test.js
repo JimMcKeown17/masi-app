@@ -209,6 +209,29 @@ describe('SQLite outbox offline sync', () => {
     await db.closeAsync();
   });
 
+  test('Sync Now (force) resurrects terminal rows; auto-sync leaves them terminal', async () => {
+    await db.runAsync(`
+      insert into classes (id, school_id, name, grade, sync_status)
+      values ('class-term', 'school-1', 'Grade 1A', '1', 'terminal')
+    `);
+    await enqueue(db, 'classes', 'class-term', 'insert', { id: 'class-term', school_id: 'school-1', name: 'Grade 1A', grade: '1' });
+    const outbox = createSyncOutboxRepository({ database: db });
+    await outbox.markTerminalFailure('classes:class-term:insert', { errorMessage: 'RLS denied' });
+
+    // Auto-sync (non-force): the terminal row is NOT retried and stays terminal.
+    const auto = createSupabaseMock();
+    await createOutboxSyncEngine({ database: db, supabaseClient: auto.supabaseClient }).syncAll();
+    expect(auto.calls.filter((c) => c.tableName === 'classes')).toEqual([]);
+    expect((await outbox.getById('classes:class-term:insert')).status).toBe('terminal');
+
+    // Sync Now (force): the terminal row is resurrected, uploaded, and finalized synced.
+    const forced = createSupabaseMock();
+    await createOutboxSyncEngine({ database: db, supabaseClient: forced.supabaseClient }).syncAll({ force: true });
+    expect(forced.calls.map((c) => `${c.type}:${c.tableName}`)).toEqual(['upsert:classes']);
+    expect(await db.getFirstAsync('select sync_status from classes where id = ?', 'class-term'))
+      .toEqual({ sync_status: 'synced' });
+  });
+
   test('processes parents before children and finalizes success locally', async () => {
     await db.runAsync(`
       insert into classes (id, school_id, name, grade, sync_status)
@@ -784,6 +807,63 @@ describe('SQLite outbox offline sync', () => {
       last_sync_error: 'Missing assessment parent',
     });
     expect(await db.getFirstAsync('select count(*) as count from sync_outbox')).toEqual({ count: 1 });
+  });
+
+  test('batches letter_mastery upserts into a single call', async () => {
+    // Seed a child that FK-satisfies letter_mastery rows (programme-1 is seeded by seedReferences).
+    await db.runAsync(`
+      insert into children (id, first_name, last_name, sync_status)
+      values ('child-mastery-batch', 'Amahle', 'Dlamini', 'synced')
+    `);
+
+    const letters = ['a', 'b', 'c'];
+    for (const letter of letters) {
+      const id = `mastery-batch-${letter}`;
+      await db.runAsync(`
+        insert into letter_mastery (
+          id, user_id, child_id, programme_id, letter, language, source, sync_status
+        )
+        values (?, 'user-1', 'child-mastery-batch', 'programme-1', ?, 'isiXhosa', 'taught', 'pending')
+      `, id, letter);
+      await enqueue(db, 'letter_mastery', id, 'insert', {
+        id,
+        user_id: 'user-1',
+        child_id: 'child-mastery-batch',
+        programme_id: 'programme-1',
+        letter,
+        language: 'isiXhosa',
+        source: 'taught',
+      });
+    }
+
+    const { supabaseClient, calls } = createSupabaseMock();
+    const engine = createOutboxSyncEngine({ database: db, supabaseClient });
+
+    const result = await engine.syncAll();
+
+    const masteryBatchCalls = calls.filter(call => call.tableName === 'letter_mastery');
+    expect(masteryBatchCalls).toHaveLength(1);
+    expect(masteryBatchCalls[0]).toEqual(expect.objectContaining({
+      type: 'upsert',
+      tableName: 'letter_mastery',
+      payload: expect.arrayContaining([
+        expect.objectContaining({ letter: 'a', language: 'isiXhosa', source: 'taught' }),
+        expect.objectContaining({ letter: 'b', language: 'isiXhosa', source: 'taught' }),
+        expect.objectContaining({ letter: 'c', language: 'isiXhosa', source: 'taught' }),
+      ]),
+      options: expect.objectContaining({ onConflict: 'id' }),
+    }));
+    expect(result).toEqual(expect.objectContaining({
+      success: true,
+      totalSynced: letters.length,
+      totalFailed: 0,
+    }));
+    expect(await db.getFirstAsync(`
+      select count(*) as count
+      from letter_mastery
+      where sync_status = 'synced'
+    `)).toEqual({ count: letters.length });
+    expect(await db.getFirstAsync('select count(*) as count from sync_outbox')).toEqual({ count: 0 });
   });
 
   test('syncAll recovers in-flight rows left by an interrupted process', async () => {

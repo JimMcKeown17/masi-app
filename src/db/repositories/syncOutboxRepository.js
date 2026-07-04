@@ -66,16 +66,21 @@ export const createSyncOutboxRepository = ({ database } = {}) => {
     return toOutboxRecord(row);
   };
 
-  const getReadyRecords = async ({ limit = 50, now = timestamp() } = {}) => {
+  const getReadyRecords = async ({ limit = 50, now = timestamp(), includeBackedOff = false, includeTerminal = false } = {}) => {
     const db = await resolveDatabase(database);
+    // A forced ("Sync Now") pass also resurrects terminal rows so the user can clear a stuck
+    // dependency chain (e.g. assessment_items that 42501'd because their parent had not synced yet);
+    // auto-sync (includeTerminal=false) keeps skipping terminal rows so genuine permission failures
+    // do not retry-storm.
+    const statuses = includeTerminal ? "('pending', 'failed', 'terminal')" : "('pending', 'failed')";
     const rows = await db.getAllAsync(`
       select *
       from sync_outbox
-      where status in ('pending', 'failed')
-        and (next_retry_at is null or next_retry_at <= ?)
+      where status in ${statuses}
+        ${includeBackedOff ? '' : 'and (next_retry_at is null or next_retry_at <= ?)'}
       order by created_at, table_name, record_id
       limit ?
-    `, now, limit);
+    `, ...(includeBackedOff ? [limit] : [now, limit]));
     return rows.map(toOutboxRecord);
   };
 

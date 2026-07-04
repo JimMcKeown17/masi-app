@@ -2,6 +2,25 @@ const IDENTIFIER_PATTERN = /^[A-Za-z_][A-Za-z0-9_]*$/;
 
 export const timestamp = () => new Date().toISOString();
 
+export const chunkArray = (items, size = 200) => {
+  if (!Number.isInteger(size) || size <= 0) {
+    throw new RangeError(`chunkArray size must be a positive integer, got ${size}`);
+  }
+  if (!Array.isArray(items) || items.length === 0) return [];
+  const chunks = [];
+  for (let i = 0; i < items.length; i += size) {
+    chunks.push(items.slice(i, i + size));
+  }
+  return chunks;
+};
+
+export const sqlPlaceholders = (count) => {
+  if (!Number.isInteger(count) || count < 0) {
+    throw new RangeError(`sqlPlaceholders count must be a non-negative integer, got ${count}`);
+  }
+  return Array.from({ length: count }, () => '?').join(', ');
+};
+
 export const quoteIdentifier = (identifier) => {
   if (!IDENTIFIER_PATTERN.test(identifier)) {
     throw new Error(`Unsafe SQLite identifier: ${identifier}`);

@@ -1,5 +1,5 @@
-import React, { useState, useMemo } from 'react';
-import { View, StyleSheet, ScrollView, Pressable } from 'react-native';
+import React, { useState, useMemo, useRef, useEffect } from 'react';
+import { View, StyleSheet, ScrollView, Pressable, Alert } from 'react-native';
 import {
   Text,
   TextInput,
@@ -156,6 +156,9 @@ function InlineCalendar({ selectedDate, onSelectDate }) {
                 key={day}
                 onPress={() => handleDayPress(day)}
                 disabled={future}
+                accessibilityRole="button"
+                accessibilityLabel={`Select ${formatDateForDisplay(new Date(viewYear, viewMonth, day))}`}
+                accessibilityState={{ disabled: future, selected }}
                 style={[
                   calStyles.dayCell,
                   selected && calStyles.dayCellSelected,
@@ -207,6 +210,42 @@ export default function LiteracySessionForm({ navigation }) {
   const [validationErrors, setValidationErrors] = useState({});
   const [snackbarMessage, setSnackbarMessage] = useState('');
   const [snackbarVisible, setSnackbarVisible] = useState(false);
+
+  // Leave guard: same field-hardened pattern as useAssessmentSession. allowLeaveRef is
+  // released only right before the success replace, so a failed save stays guarded.
+  // Dirty = any save-bearing field differs from its initial value (all of these reach
+  // the persisted session payload in handleSubmit).
+  const allowLeaveRef = useRef(false);
+  const initialSessionDateRef = useRef(sessionDate);
+  const isDirtyRef = useRef(false);
+  isDirtyRef.current =
+    selectedChildren.length > 0 ||
+    selectedLetters.length > 0 ||
+    sessionReadingLevel !== null ||
+    Object.keys(childReadingLevels).length > 0 ||
+    Object.values(letterTrackerChanges).some((changes) => Object.keys(changes || {}).length > 0) ||
+    comments.trim().length > 0 ||
+    sessionDate.getTime() !== initialSessionDateRef.current.getTime();
+
+  useEffect(() => {
+    const unsubscribe = navigation.addListener('beforeRemove', (event) => {
+      if (allowLeaveRef.current || !isDirtyRef.current) return;
+      event.preventDefault();
+      Alert.alert(
+        'Discard this session?',
+        'Your session details have not been saved. Leaving now will discard them.',
+        [
+          { text: 'Keep Editing', style: 'cancel' },
+          {
+            text: 'Discard',
+            style: 'destructive',
+            onPress: () => navigation.dispatch(event.data.action),
+          },
+        ],
+      );
+    });
+    return unsubscribe;
+  }, [navigation]);
 
   const showSnackbar = (message) => {
     setSnackbarMessage(message);
@@ -302,6 +341,7 @@ export default function LiteracySessionForm({ navigation }) {
       triggerBackgroundSync?.();
       // Replace (not push) so Back can't return to the just-submitted form; the
       // completion screen confirms capture and shows updated daily progress.
+      allowLeaveRef.current = true;
       navigation.replace('SessionComplete', { childCount: selectedChildIds.length });
     } catch (error) {
       console.error('Error saving session:', error);

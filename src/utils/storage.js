@@ -11,7 +11,8 @@ import {
   schoolsRepository,
 } from '../db/repositories/referenceDataRepository';
 import { localStateRepository } from '../db/repositories/localStateRepository';
-import { resolveDatabase } from '../db/repositories/repositoryRuntime';
+import { resolveCaptureMode, isValidCaptureMode } from '../constants/egraConstants';
+import { resolveDatabase, runRepositoryTransaction } from '../db/repositories/repositoryRuntime';
 import {
   setRecordLastSyncError,
   setRecordSyncStatus,
@@ -40,16 +41,17 @@ const TABLE_BY_SYNC_KEY = {
 const clone = (value) => JSON.parse(JSON.stringify(value));
 
 const ensureSchoolExists = async (schoolId = 'local-school') => {
-  const db = await resolveDatabase();
-  await upsertRecord(db, {
-    tableName: 'schools',
-    columns: ['id', 'name', 'is_active', 'sync_status'],
-    record: {
-      id: schoolId,
-      name: schoolId === 'local-school' ? 'Local School' : `School ${schoolId}`,
-      is_active: 1,
-      sync_status: 'synced',
-    },
+  await runRepositoryTransaction(undefined, async (txn) => {
+    await upsertRecord(txn, {
+      tableName: 'schools',
+      columns: ['id', 'name', 'is_active', 'sync_status'],
+      record: {
+        id: schoolId,
+        name: schoolId === 'local-school' ? 'Local School' : `School ${schoolId}`,
+        is_active: 1,
+        sync_status: 'synced',
+      },
+    });
   });
   return schoolId;
 };
@@ -61,16 +63,18 @@ const ensureClassExists = async (classId) => {
   if (existing) return classId;
 
   const schoolId = await ensureSchoolExists();
-  await upsertRecord(db, {
-    tableName: 'classes',
-    columns: ['id', 'school_id', 'name', 'grade', 'sync_status'],
-    record: {
-      id: classId,
-      school_id: schoolId,
-      name: `Class ${classId}`,
-      grade: 'Unknown',
-      sync_status: 'synced',
-    },
+  await runRepositoryTransaction(undefined, async (txn) => {
+    await upsertRecord(txn, {
+      tableName: 'classes',
+      columns: ['id', 'school_id', 'name', 'grade', 'sync_status'],
+      record: {
+        id: classId,
+        school_id: schoolId,
+        name: `Class ${classId}`,
+        grade: 'Unknown',
+        sync_status: 'synced',
+      },
+    });
   });
   return classId;
 };
@@ -109,6 +113,7 @@ const ensureChildExists = async (childId) => {
 const getSyncMetaKey = (table, id) => `${table}_${id}`;
 const payloadKey = (scope, id = 'list') => `storage_payload:${scope}:${id}`;
 const USER_PROFILE_KEY = 'user_profile';
+const CAPTURE_MODE_KEY = 'assessment_capture_mode';
 
 const savePayload = async (scope, id, payload) => {
   if (!id) return;
@@ -468,8 +473,9 @@ export const storage = {
   async markAsSynced(table, id) {
     const tableName = TABLE_BY_SYNC_KEY[table.toUpperCase()];
     if (!tableName) return false;
-    const db = await resolveDatabase();
-    await setRecordSyncStatus(db, tableName, id, 'synced');
+    await runRepositoryTransaction(undefined, async (txn) => {
+      await setRecordSyncStatus(txn, tableName, id, 'synced');
+    });
     for (const scope of ['time_entries', 'sessions', 'classes', 'children', 'staff_children', 'groups', 'children_groups', 'assessments', 'letter_mastery']) {
       const payload = await getPayload(scope, id);
       if (payload) {
@@ -482,8 +488,9 @@ export const storage = {
   async markAsUnsynced(table, id) {
     const tableName = TABLE_BY_SYNC_KEY[table.toUpperCase()];
     if (!tableName) return false;
-    const db = await resolveDatabase();
-    await setRecordSyncStatus(db, tableName, id, 'pending');
+    await runRepositoryTransaction(undefined, async (txn) => {
+      await setRecordSyncStatus(txn, tableName, id, 'pending');
+    });
     for (const scope of ['time_entries', 'sessions', 'classes', 'children', 'staff_children', 'groups', 'children_groups', 'assessments', 'letter_mastery']) {
       const payload = await getPayload(scope, id);
       if (payload) {
@@ -526,25 +533,18 @@ export const storage = {
 
   async clearDomainData() {
     try {
-      const db = await resolveDatabase();
-      await db.runAsync('delete from assessment_items');
-      await db.runAsync('delete from assessments');
-      await db.runAsync('delete from session_attendees');
-      await db.runAsync('delete from sessions');
-      await db.runAsync('delete from letter_mastery');
-      await db.runAsync('delete from child_group_memberships');
-      await db.runAsync('delete from group_ea_assignments');
-      await db.runAsync('delete from groups');
-      await db.runAsync('delete from child_class_memberships');
-      await db.runAsync('delete from class_grouping_state');
-      await db.runAsync('delete from grouping_versions');
-      await db.runAsync('delete from class_ea_assignments');
-      await db.runAsync('delete from child_programme_enrollments');
-      await db.runAsync('delete from child_ea_assignments');
-      await db.runAsync('delete from children');
-      await db.runAsync('delete from classes');
-      await db.runAsync('delete from time_entries');
-      await db.runAsync('delete from sync_outbox');
+      await runRepositoryTransaction(undefined, async (txn) => {
+        await txn.execAsync('PRAGMA defer_foreign_keys = ON'); // allow any delete order within this txn
+        for (const table of [
+          'assessment_items', 'assessments', 'session_attendees', 'sessions', 'letter_mastery',
+          'child_group_memberships', 'group_ea_assignments', 'groups', 'child_class_memberships',
+          'class_grouping_state', 'grouping_versions', 'class_ea_assignments',
+          'child_programme_enrollments', 'child_ea_assignments', 'children', 'classes',
+          'time_entries', 'sync_outbox',
+        ]) {
+          await txn.runAsync(`delete from ${table}`);
+        }
+      });
       await localStateRepository.remove('sync_meta');
       await localStateRepository.remove('sync_queue');
       return true;
@@ -564,6 +564,19 @@ export const storage = {
 
   async clearUserProfile() {
     return await localStateRepository.remove(USER_PROFILE_KEY);
+  },
+
+  // Assessment capture mode (device-local; resolveCaptureMode seams cover future org/user layers)
+  async getCaptureMode() {
+    const stored = await localStateRepository.get(CAPTURE_MODE_KEY);
+    return resolveCaptureMode({ deviceFallback: stored });
+  },
+
+  async setCaptureMode(mode) {
+    if (!isValidCaptureMode(mode)) {
+      throw new Error('Invalid capture mode: ' + mode);
+    }
+    return await localStateRepository.set(CAPTURE_MODE_KEY, mode);
   },
 
   async getSyncMeta() {
@@ -602,8 +615,9 @@ export const storage = {
     meta.lastErrors[getSyncMetaKey(table, id)] = errorMsg;
     const tableName = TABLE_BY_SYNC_KEY[table.toUpperCase()];
     if (tableName) {
-      const db = await resolveDatabase();
-      await setRecordLastSyncError(db, tableName, id, errorMsg);
+      await runRepositoryTransaction(undefined, async (txn) => {
+        await setRecordLastSyncError(txn, tableName, id, errorMsg);
+      });
     }
     return await localStateRepository.set('sync_meta', meta);
   },

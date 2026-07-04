@@ -1,9 +1,9 @@
 import React, { useState } from 'react';
-import { View, StyleSheet, KeyboardAvoidingView, Platform, ScrollView, Image, Pressable } from 'react-native';
-import { TextInput, Button, Text, Snackbar, ActivityIndicator } from 'react-native-paper';
-import { LinearGradient } from 'expo-linear-gradient';
+import { View, StyleSheet, KeyboardAvoidingView, Platform, ScrollView, Image } from 'react-native';
+import { TextInput, Button, Text, Snackbar } from 'react-native-paper';
 import { useAuth } from '../../context/AuthContext';
 import { colors, spacing } from '../../constants/colors';
+import BrandButton from '../../components/common/BrandButton';
 
 export default function LoginScreen({ navigation }) {
   const [email, setEmail] = useState('');
@@ -79,24 +79,13 @@ export default function LoginScreen({ navigation }) {
             }
           />
 
-          <Pressable
+          <BrandButton
+            label="Sign In"
             onPress={handleLogin}
             disabled={loading}
+            loading={loading}
             style={[styles.button, loading && styles.buttonDisabled]}
-          >
-            <LinearGradient
-              colors={['#0984E3', '#E72D4D']}
-              start={{ x: 0, y: 0 }}
-              end={{ x: 1, y: 0 }}
-              style={styles.buttonGradient}
-            >
-              {loading ? (
-                <ActivityIndicator size="small" color="#FFFFFF" />
-              ) : (
-                <Text style={styles.buttonText}>Sign In</Text>
-              )}
-            </LinearGradient>
-          </Pressable>
+          />
 
           <Button
             mode="text"
@@ -153,22 +142,13 @@ const styles = StyleSheet.create({
   button: {
     marginTop: spacing.md,
     borderRadius: 8,
-    overflow: 'hidden',
-  },
-  buttonDisabled: {
-    opacity: 0.6,
-  },
-  buttonGradient: {
     paddingVertical: 14,
     alignItems: 'center',
     justifyContent: 'center',
     minHeight: 48,
   },
-  buttonText: {
-    color: '#FFFFFF',
-    fontSize: 16,
-    fontWeight: '600',
-    letterSpacing: 0.5,
+  buttonDisabled: {
+    opacity: 0.6,
   },
   forgotButton: {
     marginTop: spacing.sm,

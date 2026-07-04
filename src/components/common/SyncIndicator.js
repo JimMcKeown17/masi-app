@@ -15,7 +15,7 @@ import { colors, spacing } from '../../constants/colors';
  * - Badge count: Number of unsynced items
  */
 export default function SyncIndicator({ onPress }) {
-  const { isOnline, isSyncing, unsyncedCount, syncNow } = useOffline();
+  const { isOnline, isSyncing, unsyncedCount } = useOffline();
 
   // Determine icon and color based on state
   const getIconConfig = () => {
@@ -51,12 +51,22 @@ export default function SyncIndicator({ onPress }) {
   };
 
   const iconConfig = getIconConfig();
+  const syncLabel = isSyncing
+    ? 'Open sync status, syncing'
+    : !isOnline
+      ? 'Open sync status, offline'
+      : unsyncedCount > 0
+        ? `Open sync status, ${unsyncedCount} item${unsyncedCount === 1 ? '' : 's'} waiting to sync`
+        : 'Open sync status, all synced';
 
   return (
     <TouchableOpacity
       onPress={onPress}
       style={[styles.container, { backgroundColor: iconConfig.backgroundColor }]}
       activeOpacity={0.7}
+      accessibilityRole="button"
+      accessibilityLabel={syncLabel}
+      hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
     >
       {isSyncing ? (
         <ActivityIndicator size={20} color={iconConfig.color} />

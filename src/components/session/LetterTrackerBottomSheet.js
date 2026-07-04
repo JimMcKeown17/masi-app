@@ -10,6 +10,7 @@ import {
 import { Text, ActivityIndicator } from 'react-native-paper';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { colors, spacing, borderRadius } from '../../constants/colors';
+import { letterStateColors } from '../../constants/letterStateColors';
 import { LETTER_SETS, PEDAGOGICAL_ORDERS } from '../../constants/egraConstants';
 import { computeAssessmentMastery, normalizeLanguageKey } from '../../utils/letterMastery';
 import { assessmentsRepository } from '../../db/repositories/assessmentsRepository';
@@ -17,12 +18,7 @@ import { masteryRepository } from '../../db/repositories/masteryRepository';
 
 const GRID_COLUMNS = 5;
 const GRID_GAP = spacing.sm;
-
-const CELL_COLORS = {
-  assessment: { bg: '#FB8C00', text: '#FFFFFF' },
-  taught: { bg: colors.success, text: '#FFFFFF' },
-  default: { bg: colors.surface, text: colors.text, border: colors.border },
-};
+const CELL_COLORS = letterStateColors;
 
 /**
  * Bottom sheet for updating a child's letter tracker from the session form.
@@ -151,7 +147,11 @@ export default function LetterTrackerBottomSheet({
 
   return (
     <Modal visible={visible} transparent animationType="slide" onRequestClose={onDismiss}>
-      <TouchableWithoutFeedback onPress={onDismiss}>
+      <TouchableWithoutFeedback
+        onPress={onDismiss}
+        accessibilityRole="button"
+        accessibilityLabel="Dismiss letter tracker"
+      >
         <View style={styles.backdrop} />
       </TouchableWithoutFeedback>
       <View style={styles.sheetWrapper}>
@@ -201,6 +201,9 @@ export default function LetterTrackerBottomSheet({
                       key={letter}
                       onPress={() => handleCellTap(letter)}
                       disabled={isLocked}
+                      accessibilityRole="button"
+                      accessibilityLabel={`${letter}, ${state === 'assessment' ? 'mastered from assessment' : state === 'taught' ? 'taught by coach' : 'not mastered'}`}
+                      accessibilityState={{ disabled: isLocked, selected: state !== 'default' }}
                       style={({ pressed }) => [
                         styles.cell,
                         {

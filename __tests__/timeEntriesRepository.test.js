@@ -205,4 +205,22 @@ describe('timeEntriesRepository', () => {
       await db.closeAsync();
     }
   });
+
+  test('clock-out closes the active time entry for the user', async () => {
+    const db = createBetterSqliteTestDatabase();
+
+    try {
+      await runMigrations(db);
+      const repository = createTimeEntriesRepository({ database: db });
+
+      await repository.saveTimeEntry(makeEntry());
+      await repository.updateTimeEntry('time-1', {
+        sign_out_time: '2026-05-21T17:00:00.000Z',
+      });
+
+      expect(await repository.getActiveTimeEntry('user-1')).toBeNull();
+    } finally {
+      await db.closeAsync();
+    }
+  });
 });

@@ -81,6 +81,10 @@ A Battery Run captured *between* the canonical Windows for ad-hoc check-ins on a
 **Marking mode** (per-Question attribute, not glossary-critical):
 Either `ea_marks_live` (EA scores on the device while the child responds), `ea_marks_from_paper` (child writes on paper, EA marks each item on the device as the child works), or `head_office_marks` (paper-only, no in-app capture — fully retired path, kept only for Questions we cannot move into the app). The first two are both "in-app" from a sync/data perspective; the distinction is only about *what the EA looks at while scoring*.
 
+**Capture mode** (per-`assessment`, stamped at creation — `assessments.capture_mode`):
+Which capture *mechanic* the EA used to record a Question's items — `grid` (the original tap-correct-only grid; untapped = incorrect/not-reached, disambiguated by a last-attempted step) or `sequential` (single cursor, explicit ✓/✗ per item — "Step-by-Step"). **Orthogonal to marking mode** (who scores and from what) and to `assessment_type` (letter/word EGRA). Resolved per-EA by `resolveCaptureMode` (device-local in v1; org/user are reserved seams), defaulting to `sequential`. `NULL` = legacy/grid captured before the column existed; the value is stamped client-side at creation and never re-derived from current settings, so the grid-vs-sequential capture-quality A/B stays valid.
+_Avoid_: conflating **capture mode** (which UI mechanic) with **marking mode** (who marks) — different axes.
+
 > The legacy terms **Field Assessment** (long-form, HQ-marked) and **In-App Assessment** (short, app-marked) are retired in favor of the Question / Battery / Run / marking-mode vocabulary above. They described a workflow distinction that no longer holds once WelaPLUS Questions are EA-marked in the app: a Battery can mix marking modes per Question.
 
 ## Relationships
