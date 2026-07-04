@@ -190,6 +190,18 @@ function useTimeTrackingState() {
 
     setLoadingLocation(true);
     try {
+      // Re-resolve from the repository: the cached entry may have been closed
+      // by auto-clock-out or another path. Never write a sign_out_time onto a
+      // row that is no longer the open entry.
+      const current = await timeEntriesRepository.getActiveTimeEntry(user.id);
+      if (!current) {
+        setActiveEntry(null);
+        setIsSignedIn(false);
+        setElapsedTime(0);
+        showSnackbar('You are not clocked in.');
+        return;
+      }
+
       const locationResult = await getCurrentPosition();
       if (locationResult.error) {
         showSnackbar(`Location error: ${locationResult.error}`);
@@ -198,19 +210,19 @@ function useTimeTrackingState() {
 
       const { latitude, longitude } = locationResult.coords;
       const signOutTime = new Date().toISOString();
-      const signInMs = new Date(activeEntry.sign_in_time).getTime();
+      const signInMs = new Date(current.sign_in_time).getTime();
       const signOutMs = new Date(signOutTime).getTime();
       const hoursWorked = ((signOutMs - signInMs) / (1000 * 60 * 60)).toFixed(2);
 
       const updatedEntry = {
-        ...activeEntry,
+        ...current,
         sign_out_time: signOutTime,
         sign_out_lat: latitude,
         sign_out_lon: longitude,
         synced: false,
       };
 
-      await timeEntriesRepository.updateTimeEntry(activeEntry.id, updatedEntry);
+      await timeEntriesRepository.updateTimeEntry(current.id, updatedEntry);
       setActiveEntry(null);
       setIsSignedIn(false);
       setElapsedTime(0);

@@ -143,4 +143,22 @@ describe('useTimeTracking Plan 5 behavior', () => {
     expect(result.current.isSignedIn).toBe(true);
     expect(result.current.activeEntry?.id).toBe('existing-entry');
   });
+
+  test('clock-out with no open entry resets state without writing', async () => {
+    timeEntriesRepository.getActiveTimeEntry
+      .mockResolvedValueOnce({ id: 'stale-entry', user_id: 'user-1', sign_in_time: new Date().toISOString(), sign_out_time: null }) // mount
+      .mockResolvedValue(null); // re-resolve at clock-out: already closed elsewhere
+    getCurrentPosition.mockResolvedValue({ coords: { latitude: -33.9, longitude: 25.6 } });
+
+    const { result } = renderHook(() => useTimeTracking(), { wrapper });
+    await waitFor(() => expect(result.current.isSignedIn).toBe(true));
+
+    await act(async () => {
+      await result.current.handleSignOut();
+    });
+
+    expect(timeEntriesRepository.updateTimeEntry).not.toHaveBeenCalled();
+    expect(result.current.isSignedIn).toBe(false);
+    expect(result.current.activeEntry).toBeNull();
+  });
 });
