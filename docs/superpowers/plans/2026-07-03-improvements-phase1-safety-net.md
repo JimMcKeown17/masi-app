@@ -208,7 +208,7 @@ git commit -m "fix(mastery): update panel state before sync-status refresh; defl
 - Consumes: the file's existing NetInfo mock (`addEventListener: jest.fn(() => jest.fn())`, `fetch: jest.fn(async () => (...))`) and its `renderOfflineHook()` helper.
 - Produces: `isOnline` is now always a boolean (never `null`).
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 Add inside the existing top-level `describe` in `__tests__/OfflineContext.test.js` (so it inherits the `beforeEach` fake-timer and `getSyncStatus` setup), and add the import at the top of the file:
 
@@ -235,7 +235,7 @@ import NetInfo from '@react-native-community/netinfo';
   });
 ```
 
-- [ ] **Step 2: Run to verify both fail**
+- [x] **Step 2: Run to verify both fail**
 
 ```bash
 npx jest __tests__/OfflineContext.test.js -t "unknown reachability" --verbose
@@ -243,7 +243,7 @@ npx jest __tests__/OfflineContext.test.js -t "unknown reachability" --verbose
 
 Expected: FAIL twice with `expect(received).toBe(true)` where received is `null` (the raw `true && null` result reaches `setIsOnline`).
 
-- [ ] **Step 3: Fix both sites**
+- [x] **Step 3: Fix both sites**
 
 `src/context/OfflineContext.js:141`, in the NetInfo listener:
 
@@ -257,7 +257,7 @@ Expected: FAIL twice with `expect(received).toBe(true)` where received is `null`
       setIsOnline(Boolean(netInfoState.isConnected) && netInfoState.isInternetReachable !== false);
 ```
 
-- [ ] **Step 4: Run the whole OfflineContext suite**
+- [x] **Step 4: Run the whole OfflineContext suite**
 
 ```bash
 npx jest __tests__/OfflineContext.test.js --verbose
@@ -265,7 +265,7 @@ npx jest __tests__/OfflineContext.test.js --verbose
 
 Expected: PASS, including all pre-existing tests (they use `isInternetReachable: true`, unaffected).
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add src/context/OfflineContext.js __tests__/OfflineContext.test.js
@@ -286,7 +286,7 @@ git commit -m "fix(sync): treat NetInfo unknown reachability as online so sync i
 - Consumes: the `navigation` prop the screen already receives (`export default function LiteracySessionForm({ navigation })`, line 190); adds usage of `navigation.addListener` and `navigation.dispatch`.
 - Produces: `buildNavigation()` test helper returning `{ replace, dispatch, addListener, emitBeforeRemove }`; `renderForm(navigation?)` now returns `{ navigation, ...renderResult }`.
 
-- [ ] **Step 1: Extend the test file's navigation stub and `renderForm`**
+- [x] **Step 1: Extend the test file's navigation stub and `renderForm`**
 
 In `__tests__/LiteracySessionForm.test.js`, add above `renderForm` (~line 48):
 
@@ -324,7 +324,7 @@ const renderForm = (navigation = buildNavigation()) => {
 
 Existing tests keep working: they destructure queries from the returned object, and the stub still provides `replace`.
 
-- [ ] **Step 2: Write the failing tests**
+- [x] **Step 2: Write the failing tests**
 
 The file currently imports only `render` from RTL. Extend the imports at the top:
 
@@ -366,7 +366,7 @@ describe('unsaved-changes leave guard', () => {
 
 (The reading-level test drives the real Portal dialog: the trigger button renders 'Select a level' when unset, and `RadioButton.Item` labels are the `READING_LEVELS` values themselves. The two RTL-driven fields plus the clean case cover the guard's wiring; the remaining dirty-predicate disjuncts are plain boolean derivations of state the form already persists, verified by reading `handleSubmit`.)
 
-- [ ] **Step 3: Run to verify the dirty-form test fails**
+- [x] **Step 3: Run to verify the dirty-form test fails**
 
 ```bash
 npx jest __tests__/LiteracySessionForm.test.js -t "leave guard" --verbose
@@ -374,7 +374,7 @@ npx jest __tests__/LiteracySessionForm.test.js -t "leave guard" --verbose
 
 Expected: "a dirty form blocks leaving" and "choosing a session reading level" both FAIL (`preventDefault` never called; no listener is registered yet). "a clean form leaves" passes trivially; that is fine, it pins the non-annoying half of the behavior.
 
-- [ ] **Step 4: Implement the guard**
+- [x] **Step 4: Implement the guard**
 
 `src/screens/sessions/LiteracySessionForm.js` line 1-2, extend the imports:
 
@@ -431,7 +431,7 @@ In `handleSubmit`, immediately above the existing `navigation.replace('SessionCo
 
 (`navigation.replace` also fires `beforeRemove`, which is exactly why the flag must be set first.)
 
-- [ ] **Step 5: Run the file's full suite**
+- [x] **Step 5: Run the file's full suite**
 
 ```bash
 npx jest __tests__/LiteracySessionForm.test.js --verbose
@@ -439,7 +439,7 @@ npx jest __tests__/LiteracySessionForm.test.js --verbose
 
 Expected: PASS, including all pre-existing characterization tests.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add src/screens/sessions/LiteracySessionForm.js __tests__/LiteracySessionForm.test.js
@@ -460,7 +460,7 @@ Every index in the device schema is a partial *unique* index, which cannot serve
 - Consumes: `createBetterSqliteTestDatabase()` from `test-support/betterSqliteAdapter` and `runMigrations`/`CURRENT_SCHEMA_VERSION` from `src/db/migrations` (same setup as `__tests__/sqliteFoundation.test.js`).
 - Produces: `CURRENT_SCHEMA_VERSION` becomes `5` (it is derived from the array, no constant to edit); eight index names listed below, which Phase 4's query work may reference.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Create `__tests__/hotPathIndexes.test.js`:
 
@@ -528,7 +528,7 @@ describe('hot-path covering indexes (migration v5)', () => {
 });
 ```
 
-- [ ] **Step 2: Run to verify it fails**
+- [x] **Step 2: Run to verify it fails**
 
 ```bash
 npx jest __tests__/hotPathIndexes.test.js --verbose
@@ -536,7 +536,7 @@ npx jest __tests__/hotPathIndexes.test.js --verbose
 
 Expected: FAIL with `expect(CURRENT_SCHEMA_VERSION).toBe(5)` receiving `4`, and missing index names.
 
-- [ ] **Step 3: Append migration v5**
+- [x] **Step 3: Append migration v5**
 
 In `src/db/migrations.js`, after the `version: 4` block (~line 573), add:
 
@@ -561,7 +561,7 @@ In `src/db/migrations.js`, after the `version: 4` block (~line 573), add:
 
 Deliberate scope limits (do not "improve" these during implementation): no ORDER BY suffix columns on the assessments/sessions indexes (per-child and per-day result sets are tens of rows; the in-memory sort is trivial and every extra index column taxes each capture write), and no `created_at` in the outbox index (with a range predicate on `next_retry_at` plus `IN` on `status`, SQLite cannot use one index to also satisfy `ORDER BY created_at`; the ready-set sort is unavoidable and cheap).
 
-- [ ] **Step 4: Run the new test, then both full suites (pin sweep)**
+- [x] **Step 4: Run the new test, then both full suites (pin sweep)**
 
 ```bash
 npx jest __tests__/hotPathIndexes.test.js --verbose
@@ -576,11 +576,11 @@ Expected: the new test PASSES, and two literal pins in `__tests__/sqliteFoundati
 
 Update both, re-run both suites, expect green. No other suite pins schema literals.
 
-- [ ] **Step 5: Log it**
+- [x] **Step 5: Log it**
 
 Add one row to the verification table in `documentation/sqlite-refactor-log.md`: date, `migration v5 hot_path_covering_indexes`, unit + integration green, note that indexes are device-local only (no Supabase counterpart, contract map untouched).
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add src/db/migrations.js __tests__/hotPathIndexes.test.js __tests__/sqliteFoundation.test.js documentation/sqlite-refactor-log.md
@@ -600,7 +600,7 @@ No GitHub workflow runs any tests today; the schema-drift and colour guards only
 - Consumes: `npm test` (jest) and `npm run test:integration` from `package.json`; Node version from `.nvmrc`.
 - Produces: a `tests` check on every PR and on pushes to main.
 
-- [ ] **Step 1: Create the workflow**
+- [x] **Step 1: Create the workflow**
 
 Create `.github/workflows/tests.yml`:
 
