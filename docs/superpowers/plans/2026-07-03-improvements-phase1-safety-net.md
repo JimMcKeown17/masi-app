@@ -630,7 +630,7 @@ jobs:
 
 (`sqlite:staging:check` stays local-only; it needs a supabase login.)
 
-- [ ] **Step 2: Commit and push the branch**
+- [x] **Step 2: Commit and push the branch**
 
 ```bash
 git add .github/workflows/tests.yml
@@ -638,7 +638,7 @@ git commit -m "ci: run unit + integration suites on PRs and main"
 git push -u origin improvement/p1-safety-net
 ```
 
-- [ ] **Step 3: Verify the run is green**
+- [x] **Step 3: Verify the run is green**
 
 ```bash
 gh run list --branch improvement/p1-safety-net --limit 3
@@ -647,7 +647,7 @@ gh run watch $(gh run list --branch improvement/p1-safety-net --workflow tests -
 
 Expected: the `tests` workflow completes with conclusion `success`. If `better-sqlite3` fails to build on the runner, add a `- run: npm rebuild better-sqlite3` step after `npm ci` and re-push.
 
-- [ ] **Step 4: Wrap up the phase**
+- [x] **Step 4: Wrap up the phase**
 
 Open a PR for `improvement/p1-safety-net` (repo convention; issues referenced as `(#N)` do not auto-close, so close any related issue manually after merge). Making `tests` a required status check is a repo-settings decision for Jim, not part of this plan.
 

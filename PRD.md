@@ -776,7 +776,9 @@ Roadmap: `documentation/improvements-2026-07-roadmap.md` · Plan: `docs/superpow
 - [x] Task 2: Treat NetInfo unknown reachability as online — `4682615`, reviewed PASS
 - [x] Task 3: Unsaved-changes leave guard on the session form — `585ae74`, reviewed PASS
 - [x] Task 4: Hot-path covering indexes (schema v5) — `79edfe0`, reviewed PASS
-- [ ] Task 5: CI workflow for unit + integration suites — `9e7f33b` committed; awaiting first green run on the PR
+- [x] Task 5: CI workflow for unit + integration suites — `9e7f33b`; first run green on PR #40 (2m31s)
+
+Phase 1 complete 2026-07-04: PR #40 open, all commits reviewed PASS, CI green. Merge decision + optional required-status-check setting are Jim's.
 
 #### SQLite RLS/App Contract Closeout
 Branch: `plan-5/context-screen-migration`
