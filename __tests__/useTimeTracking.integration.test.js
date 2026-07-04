@@ -1,8 +1,10 @@
 jest.mock('expo-sqlite', () => require('../test-support/expoSQLiteMock'));
 
+import React from 'react';
 import { act, renderHook, waitFor } from '@testing-library/react-native';
 import { __reset, __setDatabaseFactory } from 'expo-sqlite';
 import { useTimeTracking } from '../src/hooks/useTimeTracking';
+import { TimeTrackingProvider } from '../src/context/TimeTrackingContext';
 import { resetDatabaseConnectionForTests } from '../src/db/client';
 import { createBetterSqliteTestDatabase } from '../test-support/betterSqliteAdapter';
 
@@ -24,6 +26,8 @@ jest.mock('../src/context/OfflineContext', () => ({
 jest.mock('../src/services/locationService', () => ({
   getCurrentPosition: (...args) => mockGetCurrentPosition(...args),
 }));
+
+const wrapper = ({ children }) => <TimeTrackingProvider>{children}</TimeTrackingProvider>;
 
 let testDb;
 
@@ -47,7 +51,7 @@ afterEach(async () => {
 });
 
 test('clock-in writes a time_entries row and enqueues an insert outbox record', async () => {
-  const { result } = renderHook(() => useTimeTracking());
+  const { result } = renderHook(() => useTimeTracking(), { wrapper });
 
   await waitFor(() => expect(result.current).toBeTruthy());
 

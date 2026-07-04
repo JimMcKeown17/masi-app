@@ -1,5 +1,7 @@
+import React from 'react';
 import { act, renderHook, waitFor } from '@testing-library/react-native';
 import { useTimeTracking } from '../src/hooks/useTimeTracking';
+import { TimeTrackingProvider } from '../src/context/TimeTrackingContext';
 import { useAuth } from '../src/context/AuthContext';
 import { useOffline } from '../src/context/OfflineContext';
 import { getCurrentPosition } from '../src/services/locationService';
@@ -38,6 +40,8 @@ jest.mock('../src/utils/storage', () => ({
   },
 }));
 
+const wrapper = ({ children }) => <TimeTrackingProvider>{children}</TimeTrackingProvider>;
+
 describe('useTimeTracking Plan 5 behavior', () => {
   const refreshSyncStatus = jest.fn();
   const triggerBackgroundSync = jest.fn();
@@ -69,7 +73,7 @@ describe('useTimeTracking Plan 5 behavior', () => {
   });
 
   test('clock-in writes to the time entries repository and triggers background sync', async () => {
-    const { result } = renderHook(() => useTimeTracking());
+    const { result } = renderHook(() => useTimeTracking(), { wrapper });
 
     await waitFor(() => expect(timeEntriesRepository.getActiveTimeEntry).toHaveBeenCalledWith('user-1'));
 
@@ -90,5 +94,27 @@ describe('useTimeTracking Plan 5 behavior', () => {
     expect(refreshSyncStatus).toHaveBeenCalled();
     expect(triggerBackgroundSync).toHaveBeenCalled();
     expect(storage.saveTimeEntry).not.toHaveBeenCalled();
+  });
+
+  test('two consumers under one provider share a single clock-in truth', async () => {
+    timeEntriesRepository.getActiveTimeEntry.mockResolvedValue(null);
+    timeEntriesRepository.saveTimeEntry.mockResolvedValue(true);
+    getCurrentPosition.mockResolvedValue({ coords: { latitude: -33.9, longitude: 25.6 } });
+
+    const { result } = renderHook(
+      () => ({ home: useTimeTracking(), timeTracking: useTimeTracking() }),
+      { wrapper },
+    );
+
+    // Let the mount-time loadActiveEntry consume its mocked call first, so the
+    // sign-in path cannot race it for the queued mock results.
+    await waitFor(() => expect(timeEntriesRepository.getActiveTimeEntry).toHaveBeenCalledTimes(1));
+
+    await act(async () => {
+      await result.current.timeTracking.handleSignIn();
+    });
+
+    expect(result.current.home.isSignedIn).toBe(true);
+    expect(result.current.home.activeEntry).toBe(result.current.timeTracking.activeEntry);
   });
 });

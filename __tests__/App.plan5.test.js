@@ -29,6 +29,10 @@ jest.mock('../src/context/OfflineContext', () => ({
   OfflineProvider: ({ children }) => <>{children}</>,
 }));
 
+jest.mock('../src/context/TimeTrackingContext', () => ({
+  TimeTrackingProvider: ({ children }) => <>{children}</>,
+}));
+
 jest.mock('../src/context/LookupsContext', () => ({
   LookupsProvider: ({ children }) => <>{children}</>,
 }));
