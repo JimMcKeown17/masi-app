@@ -1,9 +1,16 @@
-import { getTrackerCount } from '../src/components/session/LetterTrackerBottomSheet';
+import React from 'react';
+import { render, waitFor } from '@testing-library/react-native';
+import { PaperProvider } from 'react-native-paper';
+import LetterTrackerBottomSheet from '../src/components/session/LetterTrackerBottomSheet';
+import { LETTER_SETS } from '../src/constants/egraConstants';
 import { assessmentsRepository } from '../src/db/repositories/assessmentsRepository';
 import { masteryRepository } from '../src/db/repositories/masteryRepository';
-import { storage } from '../src/utils/storage';
 
 jest.mock('react-native-safe-area-context', () => ({
+  SafeAreaProvider: ({ children }) => children,
+  SafeAreaInsetsContext: {
+    Consumer: ({ children }) => children({ top: 0, right: 0, bottom: 0, left: 0 }),
+  },
   useSafeAreaInsets: () => ({ top: 0, right: 0, bottom: 0, left: 0 }),
 }));
 
@@ -19,12 +26,20 @@ jest.mock('../src/db/repositories/masteryRepository', () => ({
   },
 }));
 
-jest.mock('../src/utils/storage', () => ({
-  storage: {
-    getAssessments: jest.fn(),
-    getLetterMastery: jest.fn(),
-  },
-}));
+const renderSheet = (props = {}) => render(
+  <PaperProvider settings={{ icon: () => null }}>
+    <LetterTrackerBottomSheet
+      visible
+      onDismiss={jest.fn()}
+      child={{ id: 'child-1', first_name: 'Amahle', last_name: 'Dlamini' }}
+      userId="user-1"
+      languageKey="english"
+      pendingChanges={{}}
+      onChangesUpdate={jest.fn()}
+      {...props}
+    />
+  </PaperProvider>
+);
 
 describe('LetterTrackerBottomSheet Plan 5 behavior', () => {
   beforeEach(() => {
@@ -51,21 +66,38 @@ describe('LetterTrackerBottomSheet Plan 5 behavior', () => {
     jest.clearAllMocks();
   });
 
-  test('tracker count reads assessments and mastery from SQLite repositories', async () => {
-    await expect(getTrackerCount('child-1', 'english', {
-      m: true,
-      s: false,
-    }, { userId: 'user-1' })).resolves.toBe(2);
+  test('a newer word assessment does not wipe rendered assessment mastery', async () => {
+    assessmentsRepository.getAssessments.mockResolvedValue([
+      {
+        id: 'a-letter',
+        child_id: 'child-1',
+        assessment_type: 'letter_egra',
+        letter_language: 'English',
+        date_assessed: '2026-07-01',
+        created_at: '2026-07-01T10:00:00Z',
+        last_letter_attempted: { index: 2 },
+        correct_letters: [{ index: 0 }, { index: 1 }, { index: 2 }],
+      },
+      {
+        id: 'a-word',
+        child_id: 'child-1',
+        assessment_type: 'word_egra',
+        letter_language: 'English',
+        date_assessed: '2026-07-02',
+        created_at: '2026-07-02T10:00:00Z',
+        last_letter_attempted: { index: 5 },
+        correct_letters: [],
+      },
+    ]);
+    masteryRepository.getLetterMastery.mockResolvedValue([]);
 
-    expect(assessmentsRepository.getAssessments).toHaveBeenCalledWith(expect.objectContaining({
-      userId: 'user-1',
-      childId: 'child-1',
-    }));
-    expect(masteryRepository.getLetterMastery).toHaveBeenCalledWith(expect.objectContaining({
-      userId: 'user-1',
-      childId: 'child-1',
-    }));
-    expect(storage.getAssessments).not.toHaveBeenCalled();
-    expect(storage.getLetterMastery).not.toHaveBeenCalled();
+    // The letter at EGRA position 0 was attempted and fully correct in the
+    // letter assessment; the newer word assessment must not unlock it.
+    const firstEgraLetter = LETTER_SETS.english.letters[0].toLowerCase();
+    const { getByLabelText } = renderSheet();
+
+    await waitFor(() =>
+      expect(getByLabelText(`${firstEgraLetter}, mastered from assessment`)).toBeTruthy(),
+    );
   });
 });
