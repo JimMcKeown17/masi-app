@@ -80,11 +80,13 @@ describe('LetterMasteryPanel', () => {
       { id: 'saved-id-1', child_id: 'child-1', letter: 'a', language: 'English', _deleted: false },
     ]);
     fireEvent.press(getByLabelText('a, taught by coach'));
-    await waitFor(() => expect(queryByText('1 / 26 letters mastered')).toBeNull());
-    expect(masteryRepository.updateLetterMasteryRecord).toHaveBeenCalledWith(
-      'saved-id-1',
-      expect.objectContaining({ _deleted: true }),
+    await waitFor(() =>
+      expect(masteryRepository.updateLetterMasteryRecord).toHaveBeenCalledWith(
+        'saved-id-1',
+        expect.objectContaining({ _deleted: true }),
+      ),
     );
+    await waitFor(() => expect(queryByText('1 / 26 letters mastered')).toBeNull());
   });
 
   test('failed taught-letter save keeps the cell unsaved and shows a retryable error', async () => {
@@ -100,5 +102,18 @@ describe('LetterMasteryPanel', () => {
     expect(queryByText('1 / 26 letters mastered')).toBeNull();
     expect(refreshSyncStatus).not.toHaveBeenCalled();
     expect(triggerBackgroundSync).not.toHaveBeenCalled();
+  });
+
+  test('a sync-status refresh failure after a successful write does not show the save error', async () => {
+    refreshSyncStatus.mockRejectedValueOnce(new Error('sync status read failed'));
+    const { getByLabelText, getByText, queryByText } = render(
+      <LetterMasteryPanel child={child} classItem={classItem} />,
+    );
+    await waitFor(() => expect(getByLabelText('a, not mastered')).toBeTruthy());
+
+    fireEvent.press(getByLabelText('a, not mastered'));
+
+    await waitFor(() => expect(getByText('1 / 26 letters mastered')).toBeTruthy());
+    expect(queryByText(/Letter update was not saved/i)).toBeNull();
   });
 });

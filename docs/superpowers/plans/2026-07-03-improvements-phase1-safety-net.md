@@ -32,7 +32,7 @@ The failure observed 2026-07-02: full-suite run failed at `__tests__/LetterMaste
 - Consumes: `masteryRepository.updateLetterMasteryRecord(id, patch)`, `masteryRepository.saveLetterMasteryRecord(record) -> savedId`, `refreshSyncStatus()` and `triggerBackgroundSync()` from `useOffline()` (all unchanged).
 - Produces: no API changes. Behavior change (intentional): a failure inside `refreshSyncStatus` no longer surfaces as "Letter update was not saved" when the mastery write itself succeeded.
 
-- [ ] **Step 1: Reproduce (best effort)**
+- [x] **Step 1: Reproduce (best effort)**
 
 Run the full suite up to three times:
 
@@ -42,7 +42,7 @@ for i in 1 2 3; do npx jest --silent 2>&1 | tail -3; done
 
 Expected: at least one run fails the toggle test (it reproduced under parallel load on 2026-07-02). If it refuses to reproduce today, continue anyway; the fix removes the timing sensitivity and is behavior-preserving.
 
-- [ ] **Step 2: Reorder `handleCellTap` so UI state updates immediately after the repository write**
+- [x] **Step 2: Reorder `handleCellTap` so UI state updates immediately after the repository write**
 
 Replace the body of the `try` block in `handleCellTap` (`src/components/assessment/LetterMasteryPanel.js`, currently lines ~100-168) with the version below. The change in every branch is the same: repository write first, `setTaughtLetters` immediately after, then `refreshSyncStatus().catch(() => {})` + `triggerBackgroundSync?.()` as fire-and-forget signals. All comments and lookup logic are preserved.
 
@@ -121,7 +121,7 @@ Replace the body of the `try` block in `handleCellTap` (`src/components/assessme
 
 Note: the `setTaughtLetters` clear in the toggle-OFF branch stays outside `if (active)` on purpose (clearing a stale cached id is intentional today); only the sync signals are gated on a write having happened, exactly as before.
 
-- [ ] **Step 3: Run the panel suite; existing assertions must still pass**
+- [x] **Step 3: Run the panel suite; existing assertions must still pass**
 
 ```bash
 npx jest __tests__/LetterMasteryPanel.test.js --verbose
@@ -129,7 +129,7 @@ npx jest __tests__/LetterMasteryPanel.test.js --verbose
 
 Expected: PASS. `refreshSyncStatus` is still called (the existing call-assertions hold); the failed-save test still shows the retryable error because `saveLetterMasteryRecord` rejects before any state update.
 
-- [ ] **Step 4: Harden the flaky assertion to await the observable side effect first**
+- [x] **Step 4: Harden the flaky assertion to await the observable side effect first**
 
 In `__tests__/LetterMasteryPanel.test.js`, in the "toggling a letter on then off" test, replace:
 
@@ -157,7 +157,7 @@ with:
 
 Then grep the file for the other `waitFor(() => expect(queryByText(...)).toBeNull())` occurrences (`grep -n "toBeNull" __tests__/LetterMasteryPanel.test.js`, 4 total) and apply the same await-the-side-effect-first pattern wherever a repository call precedes the UI assertion.
 
-- [ ] **Step 5: Add a regression test for the intentional behavior change**
+- [x] **Step 5: Add a regression test for the intentional behavior change**
 
 The reorder means a `refreshSyncStatus` failure no longer masquerades as a failed mastery write. Pin that. In `__tests__/LetterMasteryPanel.test.js` (the file's `refreshSyncStatus`/`triggerBackgroundSync` mocks are file-scoped consts, lines 29-36), add:
 
@@ -179,7 +179,7 @@ The reorder means a `refreshSyncStatus` failure no longer masquerades as a faile
 Run: `npx jest __tests__/LetterMasteryPanel.test.js -t "sync-status refresh failure" --verbose`
 Expected: PASS with the Step 2 reorder in place. (Against the old code it would FAIL: the awaited refresh rejection landed in the catch block and raised the error banner even though the write succeeded.)
 
-- [ ] **Step 6: Verify with three consecutive full-suite runs**
+- [x] **Step 6: Verify with three consecutive full-suite runs**
 
 ```bash
 for i in 1 2 3; do npx jest --silent || { echo "RUN $i FAILED"; break; }; done
@@ -187,7 +187,7 @@ for i in 1 2 3; do npx jest --silent || { echo "RUN $i FAILED"; break; }; done
 
 Expected: three green runs, no `RUN n FAILED` line.
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add src/components/assessment/LetterMasteryPanel.js __tests__/LetterMasteryPanel.test.js

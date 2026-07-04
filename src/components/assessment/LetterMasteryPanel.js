@@ -116,14 +116,16 @@ export default function LetterMasteryPanel({ child, classItem }) {
             synced: false,
             updated_at: new Date().toISOString(),
           });
-          await refreshSyncStatus();
-          triggerBackgroundSync?.();
         }
         setTaughtLetters(prev => {
           const next = { ...prev };
           delete next[letter];
           return next;
         });
+        if (active) {
+          refreshSyncStatus().catch(() => {});
+          triggerBackgroundSync?.();
+        }
       } else {
         // Currently gray -> toggle ON
         // Check for existing soft-deleted record to reuse (avoids duplicate key on sync)
@@ -142,9 +144,9 @@ export default function LetterMasteryPanel({ child, classItem }) {
             synced: false,
             updated_at: new Date().toISOString(),
           });
-          await refreshSyncStatus();
-          triggerBackgroundSync?.();
           setTaughtLetters(prev => ({ ...prev, [letter]: existing.id }));
+          refreshSyncStatus().catch(() => {});
+          triggerBackgroundSync?.();
         } else {
           // Create new record
           const record = {
@@ -161,9 +163,9 @@ export default function LetterMasteryPanel({ child, classItem }) {
           // saveLetterMasteryRecord canonicalises the id (deterministic logical-key id), so
           // track the returned id — not the discarded local uuid — or toggle-off no-ops.
           const savedId = await masteryRepository.saveLetterMasteryRecord(record);
-          await refreshSyncStatus();
-          triggerBackgroundSync?.();
           setTaughtLetters(prev => ({ ...prev, [letter]: savedId }));
+          refreshSyncStatus().catch(() => {});
+          triggerBackgroundSync?.();
         }
       }
     } catch (error) {
