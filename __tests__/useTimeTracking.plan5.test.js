@@ -1,5 +1,7 @@
+import React from 'react';
 import { act, renderHook, waitFor } from '@testing-library/react-native';
 import { useTimeTracking } from '../src/hooks/useTimeTracking';
+import { TimeTrackingProvider } from '../src/context/TimeTrackingContext';
 import { useAuth } from '../src/context/AuthContext';
 import { useOffline } from '../src/context/OfflineContext';
 import { getCurrentPosition } from '../src/services/locationService';
@@ -23,9 +25,11 @@ jest.mock('uuid', () => ({
 }));
 
 jest.mock('../src/db/repositories/timeEntriesRepository', () => ({
+  OPEN_TIME_ENTRY_EXISTS: 'OPEN_TIME_ENTRY_EXISTS',
   timeEntriesRepository: {
     getActiveTimeEntry: jest.fn(),
     saveTimeEntry: jest.fn(),
+    createOpenTimeEntry: jest.fn(),
     updateTimeEntry: jest.fn(),
   },
 }));
@@ -37,6 +41,8 @@ jest.mock('../src/utils/storage', () => ({
     updateTimeEntry: jest.fn(),
   },
 }));
+
+const wrapper = ({ children }) => <TimeTrackingProvider>{children}</TimeTrackingProvider>;
 
 describe('useTimeTracking Plan 5 behavior', () => {
   const refreshSyncStatus = jest.fn();
@@ -59,6 +65,7 @@ describe('useTimeTracking Plan 5 behavior', () => {
     });
     timeEntriesRepository.getActiveTimeEntry.mockResolvedValue(null);
     timeEntriesRepository.saveTimeEntry.mockResolvedValue(true);
+    timeEntriesRepository.createOpenTimeEntry.mockResolvedValue(true);
     timeEntriesRepository.updateTimeEntry.mockResolvedValue(true);
     refreshSyncStatus.mockResolvedValue({ unsyncedCount: 1 });
   });
@@ -69,7 +76,7 @@ describe('useTimeTracking Plan 5 behavior', () => {
   });
 
   test('clock-in writes to the time entries repository and triggers background sync', async () => {
-    const { result } = renderHook(() => useTimeTracking());
+    const { result } = renderHook(() => useTimeTracking(), { wrapper });
 
     await waitFor(() => expect(timeEntriesRepository.getActiveTimeEntry).toHaveBeenCalledWith('user-1'));
 
@@ -77,7 +84,7 @@ describe('useTimeTracking Plan 5 behavior', () => {
       await result.current.handleSignIn();
     });
 
-    expect(timeEntriesRepository.saveTimeEntry).toHaveBeenCalledWith(expect.objectContaining({
+    expect(timeEntriesRepository.createOpenTimeEntry).toHaveBeenCalledWith(expect.objectContaining({
       id: 'time-entry-1',
       user_id: 'user-1',
       sign_in_time: '2026-05-21T08:00:00.000Z',
@@ -90,5 +97,68 @@ describe('useTimeTracking Plan 5 behavior', () => {
     expect(refreshSyncStatus).toHaveBeenCalled();
     expect(triggerBackgroundSync).toHaveBeenCalled();
     expect(storage.saveTimeEntry).not.toHaveBeenCalled();
+  });
+
+  test('two consumers under one provider share a single clock-in truth', async () => {
+    timeEntriesRepository.getActiveTimeEntry.mockResolvedValue(null);
+    timeEntriesRepository.createOpenTimeEntry.mockResolvedValue(true);
+    getCurrentPosition.mockResolvedValue({ coords: { latitude: -33.9, longitude: 25.6 } });
+
+    const { result } = renderHook(
+      () => ({ home: useTimeTracking(), timeTracking: useTimeTracking() }),
+      { wrapper },
+    );
+
+    // Let the mount-time loadActiveEntry consume its mocked call first, so the
+    // sign-in path cannot race it for the queued mock results.
+    await waitFor(() => expect(timeEntriesRepository.getActiveTimeEntry).toHaveBeenCalledTimes(1));
+
+    await act(async () => {
+      await result.current.timeTracking.handleSignIn();
+    });
+
+    expect(result.current.home.isSignedIn).toBe(true);
+    expect(result.current.home.activeEntry).toBe(result.current.timeTracking.activeEntry);
+  });
+
+  test('a conflicting open entry recovers state instead of double-clocking-in', async () => {
+    timeEntriesRepository.getActiveTimeEntry
+      .mockResolvedValueOnce(null) // initial mount load
+      .mockResolvedValue({ id: 'existing-entry', user_id: 'user-1', sign_in_time: new Date().toISOString(), sign_out_time: null });
+    getCurrentPosition.mockResolvedValue({ coords: { latitude: -33.9, longitude: 25.6 } });
+    const conflict = new Error('open entry exists');
+    conflict.code = 'OPEN_TIME_ENTRY_EXISTS';
+    timeEntriesRepository.createOpenTimeEntry.mockRejectedValue(conflict);
+
+    const { result } = renderHook(() => useTimeTracking(), { wrapper });
+
+    // Wait out the mount-time load so its mockResolvedValueOnce(null) is
+    // consumed before sign-in's conflict recovery re-queries.
+    await waitFor(() => expect(timeEntriesRepository.getActiveTimeEntry).toHaveBeenCalledTimes(1));
+
+    await act(async () => {
+      await result.current.handleSignIn();
+    });
+
+    expect(result.current.isSignedIn).toBe(true);
+    expect(result.current.activeEntry?.id).toBe('existing-entry');
+  });
+
+  test('clock-out with no open entry resets state without writing', async () => {
+    timeEntriesRepository.getActiveTimeEntry
+      .mockResolvedValueOnce({ id: 'stale-entry', user_id: 'user-1', sign_in_time: new Date().toISOString(), sign_out_time: null }) // mount
+      .mockResolvedValue(null); // re-resolve at clock-out: already closed elsewhere
+    getCurrentPosition.mockResolvedValue({ coords: { latitude: -33.9, longitude: 25.6 } });
+
+    const { result } = renderHook(() => useTimeTracking(), { wrapper });
+    await waitFor(() => expect(result.current.isSignedIn).toBe(true));
+
+    await act(async () => {
+      await result.current.handleSignOut();
+    });
+
+    expect(timeEntriesRepository.updateTimeEntry).not.toHaveBeenCalled();
+    expect(result.current.isSignedIn).toBe(false);
+    expect(result.current.activeEntry).toBeNull();
   });
 });

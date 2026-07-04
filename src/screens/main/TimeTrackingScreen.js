@@ -4,19 +4,18 @@ import { Card, Text, Button, ActivityIndicator, Divider, Snackbar } from 'react-
 import { colors, spacing, borderRadius, shadows } from '../../constants/colors';
 import { formatCoordinates } from '../../services/locationService';
 import { useTimeTracking } from '../../hooks/useTimeTracking';
+import ElapsedTime from '../../components/common/ElapsedTime';
 
 export default function TimeTrackingScreen({ navigation }) {
   const {
     isSignedIn,
     activeEntry,
     loadingLocation,
-    elapsedTime,
     snackbarMessage,
     snackbarVisible,
     setSnackbarVisible,
     handleSignIn,
     handleSignOut,
-    formatElapsedTime,
     formatTime,
   } = useTimeTracking();
 
@@ -63,9 +62,7 @@ export default function TimeTrackingScreen({ navigation }) {
                   <Text variant="bodyMedium" style={styles.label}>
                     Elapsed time:
                   </Text>
-                  <Text variant="bodyMedium" style={[styles.value, styles.elapsed]}>
-                    {formatElapsedTime(elapsedTime)}
-                  </Text>
+                  <ElapsedTime signInTime={activeEntry?.sign_in_time} variant="bodyMedium" style={[styles.value, styles.elapsed]} />
                 </View>
 
                 <View style={styles.statusRow}>

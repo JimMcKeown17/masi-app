@@ -119,6 +119,52 @@ describe('timeEntriesRepository', () => {
     }
   });
 
+  test('createOpenTimeEntry rejects a second open entry for the same user', async () => {
+    const db = createBetterSqliteTestDatabase();
+
+    try {
+      await runMigrations(db);
+      const repository = createTimeEntriesRepository({ database: db });
+
+      const first = makeEntry({ id: 'entry-1', sign_out_time: null });
+      await repository.createOpenTimeEntry(first);
+
+      const second = makeEntry({ id: 'entry-2', sign_out_time: null });
+      await expect(async () => {
+        await repository.createOpenTimeEntry(second);
+      }).rejects.toBeTruthy();
+
+      let thrown = null;
+      try {
+        await repository.createOpenTimeEntry(second);
+      } catch (error) {
+        thrown = error;
+      }
+      expect(thrown?.code).toBe('OPEN_TIME_ENTRY_EXISTS');
+
+      const rows = await repository.getTimeEntries({ userId: first.user_id });
+      expect(rows.filter(r => r.sign_out_time === null)).toHaveLength(1);
+    } finally {
+      await db.closeAsync();
+    }
+  });
+
+  test('createOpenTimeEntry allows sign-in after the previous entry is closed', async () => {
+    const db = createBetterSqliteTestDatabase();
+
+    try {
+      await runMigrations(db);
+      const repository = createTimeEntriesRepository({ database: db });
+
+      await repository.createOpenTimeEntry(makeEntry({ id: 'entry-1', sign_out_time: null }));
+      await repository.updateTimeEntry('entry-1', { sign_out_time: '2026-07-04T15:00:00.000Z', synced: false });
+
+      await expect(repository.createOpenTimeEntry(makeEntry({ id: 'entry-2', sign_out_time: null }))).resolves.toBe(true);
+    } finally {
+      await db.closeAsync();
+    }
+  });
+
   test('updateTimeEntry keeps the outbox payload current for an unsynced time entry', async () => {
     const db = createBetterSqliteTestDatabase();
 

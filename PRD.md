@@ -780,6 +780,21 @@ Roadmap: `documentation/improvements-2026-07-roadmap.md` · Plan: `docs/superpow
 
 Phase 1 complete 2026-07-04: PR #40 open, all commits reviewed PASS, CI green. Merge decision + optional required-status-check setting are Jim's.
 
+#### Improvements 2026-07 - Phase 2: Data Integrity
+Branch: `improvement/p2-data-integrity`
+Roadmap: `documentation/improvements-2026-07-roadmap.md` · Plan: `docs/superpowers/plans/2026-07-04-improvements-phase2-data-integrity.md`
+
+- [x] Task 1: Shared mastery-state loader; word assessments no longer wipe tracker mastery - `c909693`
+- [x] Task 2: LetterMasteryPanel reads through the shared mastery-state loader - `9875f6a`
+- [x] Task 3: Promote time tracking to a single-truth TimeTrackingContext - `c605452`
+- [x] Task 4: Repository guard prevents overlapping open time entries - `ee7a51a`
+- [x] Task 5: Clock-out re-resolves the active entry before closing - `2f48faf`
+- [x] Task 6: Leaf `ElapsedTime` ticker and 30s auto-clockout watchdog - `3bd5507`, reviewed PASS
+
+Phase 2 complete 2026-07-04: PR #41 open, all six task commits reviewed PASS, CI green (unit 120/664, integration 23/147). Merge + device gate are Jim's.
+
+Phase 2 local gates 2026-07-04: unit suite `120/664` and integration suite `23/147` green under Node 20. `documentation/rls-sync-contract-map.md` untouched. Local commit/push/PR gate pending because this sandbox cannot create `.git/index.lock`.
+
 #### SQLite RLS/App Contract Closeout
 Branch: `plan-5/context-screen-migration`
 

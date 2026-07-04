@@ -12,9 +12,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { colors, spacing, borderRadius } from '../../constants/colors';
 import { letterStateColors } from '../../constants/letterStateColors';
 import { LETTER_SETS, PEDAGOGICAL_ORDERS } from '../../constants/egraConstants';
-import { computeAssessmentMastery, normalizeLanguageKey } from '../../utils/letterMastery';
-import { assessmentsRepository } from '../../db/repositories/assessmentsRepository';
-import { masteryRepository } from '../../db/repositories/masteryRepository';
+import { loadMasteryState, countMastered } from '../../utils/masteryState';
 
 const GRID_COLUMNS = 5;
 const GRID_GAP = spacing.sm;
@@ -61,40 +59,20 @@ export default function LetterTrackerBottomSheet({
     (async () => {
       setLoading(true);
       try {
-        // 1. Compute assessment mastery from latest assessment
-        const allAssessments = await assessmentsRepository.getAssessments({
+        const { assessmentMastered: masteredSet, taughtRecords } = await loadMasteryState({
           userId,
           childId: child.id,
+          languageKey,
         });
-        const childAssessments = allAssessments
-          .filter(a => a.child_id === child.id && a.letter_language === letterSet.language)
-          .sort((a, b) => {
-            const dateCmp = b.date_assessed.localeCompare(a.date_assessed);
-            if (dateCmp !== 0) return dateCmp;
-            return b.created_at.localeCompare(a.created_at);
-          });
-        const latestAssessment = childAssessments[0] || null;
-        const masteredSet = computeAssessmentMastery(latestAssessment, letterSet, pedagogicalOrder);
         setAssessmentMastered(masteredSet);
-
-        // 2. Load existing taught letters from storage
-        const allMastery = await masteryRepository.getLetterMastery({
-          userId,
-          childId: child.id,
-        });
-        const childTaught = allMastery.filter(
-          r => r.child_id === child.id &&
-               r.language === letterSet.language &&
-               !r._deleted
-        );
-        setExistingTaught(new Set(childTaught.map(r => r.letter)));
+        setExistingTaught(new Set(taughtRecords.map(r => r.letter)));
       } catch (error) {
         console.error('Error loading tracker data for bottom sheet:', error);
       } finally {
         setLoading(false);
       }
     })();
-  }, [visible, child?.id, letterSet.language]);
+  }, [visible, child?.id, languageKey, userId]);
 
   const getCellState = (letter) => {
     if (assessmentMastered.has(letter)) return 'assessment';
@@ -142,7 +120,7 @@ export default function LetterTrackerBottomSheet({
 
   // Count total mastered for display
   const masteredCount = pedagogicalOrder
-    ? pedagogicalOrder.filter(l => getCellState(l) !== 'default').length
+    ? countMastered({ assessmentMastered, taughtLetters: existingTaught, pendingChanges, pedagogicalOrder })
     : 0;
 
   return (
@@ -232,51 +210,6 @@ export default function LetterTrackerBottomSheet({
       </View>
     </Modal>
   );
-}
-
-/**
- * Compute the display count for the button label (total mastered letters).
- * Exported so the parent form can call this without opening the bottom sheet.
- */
-export async function getTrackerCount(childId, languageKey, pendingChanges = {}, { userId } = {}) {
-  const letterSet = LETTER_SETS[languageKey];
-  const pedagogicalOrder = PEDAGOGICAL_ORDERS[languageKey];
-  if (!letterSet || !pedagogicalOrder) return 0;
-
-  // Assessment mastery
-  const allAssessments = await assessmentsRepository.getAssessments({
-    userId,
-    childId,
-  });
-  const childAssessments = allAssessments
-    .filter(a => a.child_id === childId && a.letter_language === letterSet.language)
-    .sort((a, b) => {
-      const dateCmp = b.date_assessed.localeCompare(a.date_assessed);
-      if (dateCmp !== 0) return dateCmp;
-      return b.created_at.localeCompare(a.created_at);
-    });
-  const masteredSet = computeAssessmentMastery(childAssessments[0] || null, letterSet, pedagogicalOrder);
-
-  // Existing taught
-  const allMastery = await masteryRepository.getLetterMastery({
-    userId,
-    childId,
-  });
-  const existingTaught = new Set(
-    allMastery
-      .filter(r => r.child_id === childId && r.language === letterSet.language && !r._deleted)
-      .map(r => r.letter)
-  );
-
-  // Count
-  let count = 0;
-  for (const letter of pedagogicalOrder) {
-    if (masteredSet.has(letter)) { count++; continue; }
-    if (pendingChanges[letter] === true) { count++; continue; }
-    if (pendingChanges[letter] === false) continue;
-    if (existingTaught.has(letter)) { count++; continue; }
-  }
-  return count;
 }
 
 const styles = StyleSheet.create({
