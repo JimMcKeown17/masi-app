@@ -6,8 +6,8 @@ import { v4 as uuidv4 } from 'uuid';
 import { colors, spacing, borderRadius } from '../../constants/colors';
 import { letterStateColors } from '../../constants/letterStateColors';
 import { LETTER_SETS, PEDAGOGICAL_ORDERS } from '../../constants/egraConstants';
-import { computeAssessmentMastery, normalizeLanguageKey } from '../../utils/letterMastery';
-import { assessmentsRepository } from '../../db/repositories/assessmentsRepository';
+import { normalizeLanguageKey } from '../../utils/letterMastery';
+import { loadMasteryState } from '../../utils/masteryState';
 import { masteryRepository } from '../../db/repositories/masteryRepository';
 import { useAuth } from '../../context/AuthContext';
 import { useOffline } from '../../context/OfflineContext';
@@ -44,44 +44,23 @@ export default function LetterMasteryPanel({ child, classItem }) {
     try {
       setLoading(true);
 
-      // 1. Find the child's most recent assessment for this language
-      const allAssessments = await assessmentsRepository.getAssessments({
+      const { assessmentMastered: masteredSet, latestAssessment, taughtRecords } = await loadMasteryState({
         userId: user.id,
         childId: child.id,
+        languageKey,
       });
-      const childAssessments = allAssessments
-        .filter(a => a.child_id === child.id && a.letter_language === letterSet.language && (a.assessment_type || 'letter_egra') === 'letter_egra')
-        .sort((a, b) => {
-          const dateCmp = b.date_assessed.localeCompare(a.date_assessed);
-          if (dateCmp !== 0) return dateCmp;
-          return b.created_at.localeCompare(a.created_at);
-        });
-      const latestAssessment = childAssessments[0] || null;
       setLatestAssessmentDate(latestAssessment?.date_assessed || null);
-
-      // 2. Compute assessment mastery
-      const masteredSet = computeAssessmentMastery(latestAssessment, letterSet, pedagogicalOrder);
       setAssessmentMastered(masteredSet);
 
-      // 3. Load coach-taught letters
-      const allMastery = await masteryRepository.getLetterMastery({
-        userId: user.id,
-        childId: child.id,
-      });
-      const childTaught = allMastery.filter(
-        r => r.child_id === child.id &&
-             r.language === letterSet.language &&
-             !r._deleted
-      );
       const taughtMap = {};
-      childTaught.forEach(r => { taughtMap[r.letter] = r.id; });
+      taughtRecords.forEach(r => { taughtMap[r.letter] = r.id; });
       setTaughtLetters(taughtMap);
     } catch (error) {
       console.error('Error loading letter tracker data:', error);
     } finally {
       setLoading(false);
     }
-  }, [child.id, letterSet.language, pedagogicalOrder, user.id]);
+  }, [child.id, languageKey, user.id]);
 
   useFocusEffect(
     useCallback(() => {
