@@ -68,7 +68,10 @@ describe('Classes storage (offline-first CRUD)', () => {
     await storage.saveClass(cls);
     const result = await storage.getClasses();
     expect(result).toHaveLength(1);
-    expect(result[0]).toEqual(cls);
+    // Facade reads surface the repository's sync_status alongside the payload
+    // fields (issue #42: sync state must come from the repo row, not a stale
+    // payload copy).
+    expect(result[0]).toEqual({ ...cls, sync_status: 'pending' });
   });
 
   test('saveClass appends to existing classes', async () => {

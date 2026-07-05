@@ -5,6 +5,7 @@ import {
   getActiveProgrammeId,
   mapDomainRow,
   normalizeSyncFields,
+  serverPullWouldClobberPendingLocal,
   shouldEnqueueOutbox,
   upsertDomainRecord,
 } from './domainRepositoryUtils';
@@ -92,6 +93,9 @@ export const createClassesRepository = ({ database } = {}) => {
       created_by: classData.created_by || ownerUserId,
       sync_status: incomingSyncStatus,
     });
+    if (await serverPullWouldClobberPendingLocal(txn, 'classes', record)) {
+      return false;
+    }
     await upsertDomainRecord(txn, {
       tableName: 'classes',
       columns: CLASS_COLUMNS,

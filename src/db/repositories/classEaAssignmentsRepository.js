@@ -4,6 +4,7 @@ import {
   enqueueDomainOutbox,
   mapDomainRow,
   normalizeSyncFields,
+  serverPullWouldClobberPendingLocal,
   shouldEnqueueOutbox,
   upsertDomainRecord,
 } from './domainRepositoryUtils';
@@ -31,6 +32,9 @@ export const createClassEaAssignmentsRepository = ({ database } = {}) => {
     assertRlsRequiredFields('class_ea_assignments', assignment, REQUIRED_RLS_FIELDS);
     const write = async (txn) => {
       const record = normalizeSyncFields(assignment);
+      if (await serverPullWouldClobberPendingLocal(txn, 'class_ea_assignments', record)) {
+        return false;
+      }
       await upsertDomainRecord(txn, {
         tableName: 'class_ea_assignments',
         columns: COLUMNS,

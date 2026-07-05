@@ -1,23 +1,12 @@
 import React, { createContext, useState, useEffect, useContext, useRef, useMemo, useCallback } from 'react';
 import { storage } from '../utils/storage';
 import { pullPreloadedChildData } from '../services/preloadedChildData';
+import { mergeServerRows } from '../utils/mergeServerRows';
 import { useAuth } from './AuthContext';
 import { useOffline } from './OfflineContext';
 import { v4 as uuidv4 } from 'uuid';
 
 const ChildrenContext = createContext({});
-
-const mergeServerRows = (cached, serverRows) => {
-  const serverIds = new Set(serverRows.map(row => row.id));
-  const localToKeep = cached.filter(row => (
-    !serverIds.has(row.id)
-    && (
-      row.synced === false
-      || (row.sync_status && row.sync_status !== 'synced')
-    )
-  ));
-  return [...serverRows, ...localToKeep];
-};
 
 const shouldApplyPulledRows = (rows, errors) => (
   Array.isArray(rows) && (rows.length > 0 || errors.length === 0)
@@ -89,10 +78,20 @@ export const ChildrenProvider = ({ children }) => {
     try {
       setLoading(true);
 
-      const [cachedChildren, cachedGroups, cachedMemberships] = await Promise.all([
+      const [
+        cachedChildren,
+        cachedGroups,
+        cachedMemberships,
+        unsyncedChildren,
+        unsyncedGroups,
+        unsyncedMemberships,
+      ] = await Promise.all([
         storage.getMyChildren(activeUserId),
         storage.getGroups({ userId: activeUserId }),
         storage.getChildrenGroups(),
+        storage.getUnsyncedChildren(),
+        storage.getUnsyncedGroups(),
+        storage.getUnsyncedChildrenGroups(),
       ]);
       if (activeUserIdRef.current !== activeUserId) return;
       setChildrenList(cachedChildren);
@@ -105,7 +104,7 @@ export const ChildrenProvider = ({ children }) => {
         if (activeUserIdRef.current !== activeUserId) return;
 
         if (shouldApplyPulledRows(pulled.children, errors)) {
-          const merged = mergeServerRows(cachedChildren, pulled.children);
+          const merged = mergeServerRows(cachedChildren, pulled.children, { unpushedRows: unsyncedChildren });
           await saveRows(pulled.children, storage.saveChild);
           setChildrenList(merged);
         }
@@ -116,13 +115,13 @@ export const ChildrenProvider = ({ children }) => {
         await saveRows(pulled.childClassMemberships, storage.saveChildClassMembership);
 
         if (shouldApplyPulledRows(pulled.groups, errors)) {
-          const merged = mergeServerRows(cachedGroups, pulled.groups);
+          const merged = mergeServerRows(cachedGroups, pulled.groups, { unpushedRows: unsyncedGroups });
           await saveRows(pulled.groups, storage.saveGroup);
           setGroups(merged);
         }
 
         if (shouldApplyPulledRows(pulled.childrenGroups, errors)) {
-          const merged = mergeServerRows(cachedMemberships, pulled.childrenGroups);
+          const merged = mergeServerRows(cachedMemberships, pulled.childrenGroups, { unpushedRows: unsyncedMemberships });
           await saveRows(pulled.childrenGroups, storage.saveChildrenGroup);
           setChildrenGroups(merged);
         }

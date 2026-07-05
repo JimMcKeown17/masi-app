@@ -26,6 +26,7 @@ Use this map before changing any synced table, repository producer, outbox opera
 5. Relationship tables that grant access are not generic mutable rows. `child_ea_assignments`, `class_ea_assignments`, and `group_ea_assignments` have immutable identity columns protected by database triggers. Insert retries must not become identity-changing updates.
 6. Insert and archive ordering differ. Insert can create access evidence early; archive must keep access-granting assignment rows alive until protected cleanup rows have synced.
 7. Reference/admin tables are pulled from the server and are not mobile-writable through app-role DML.
+8. Server pulls must not overwrite pending local rows (pending-local-wins, issue #42 / ZZ F7). See "Pull Merge Invariant" below.
 
 ## Operation Semantics
 
@@ -51,6 +52,24 @@ These direct SELECT fallbacks are intentional and should not be removed just to 
 Accepted advisor context: `multiple_permissive_policies` warnings on `children`, `classes`, and `groups` SELECT are expected while the mobile client uses Supabase upsert from queued local rows.
 
 **Probes/guards (Item 8).** The four rules above are guarded by `__tests__/rlsVisibilityProbe.test.js` (CI-safe: pins the four `{table, policy}` pairs — incl. the real `sessions_select_own_or_assigned_child_history` — and the project-ref guard) plus `scripts/rls-visibility-probe.cjs` (opt-in *live* probe of upsert SELECT-visibility against the wipeable `masi-app-sqlite`; `npm run rls:probe`, interactive — the management token 401s in non-interactive shells). Separately, the `SERVER_COLUMNS` allowlist is guarded against the Supabase migration schema by `__tests__/syncContractServerSchema.test.js` (the PGRST204 direction — every pushed column must exist server-side), complementing `syncContractCompleteness.test.js` (which guards it against the local SQLite schema).
+
+## Pull Merge Invariant (pending-local-wins)
+
+A pulled server row is stamped `sync_status: 'synced'` before it reaches a repository save function (`markSynced` in `src/services/preloadedChildData.js`; inline in `ClassesContext.loadClasses`). Local writes always claim `pending`, and push acknowledgement flips status through `setRecordSyncStatus`, never a whole-row replace. That makes the guard intrinsic — no `fromServer` flag is needed:
+
+- A row claiming `sync_status = 'synced'` may not replace a local row whose `sync_status` is `pending` or `failed`. The save function skips the write and returns `false`.
+- `synced` and `terminal` local rows may be overwritten (server is authoritative for acknowledged data; a quarantined `terminal` row has no queued push, so the server copy is strictly better).
+- The check runs inside the same transaction as the upsert it guards: `serverPullWouldClobberPendingLocal` in `src/db/repositories/domainRepositoryUtils.js`.
+- The storage facade (`src/utils/storage.js`) writes its legacy payload only when the repository applied the row, so facade reads cannot show a clobbered copy. Facade reads also surface the repository row's `sync_status` (never the payload's stale pull-time copy), so consumers can trust it.
+- UI-state merges mirror the same policy through the shared `src/utils/mergeServerRows.js` (used by `ChildrenContext` and `ClassesContext`): any dirty signal (`synced === false` or `pending`/`failed` status) wins over a same-id server row; dirty local rows unknown to the server are kept; synced local rows the server stopped returning are dropped from state (not from SQLite). For `terminal` rows the UI errs toward the local copy for one cycle while SQLite applies the server row; state converges on the next storage reload.
+- Offline tombstones must suppress their server copy in UI state. The cached lists feeding the merges are active-only reads (`removed_at`/`archived_at`/assignment-join filters), so a row removed or archived offline is invisible in `cached` while the server still returns its id until the push lands. The contexts therefore also pass the unfiltered `getUnsynced*` rows to `mergeServerRows`, which drops server rows whose id has unpushed local changes but no visible cached row — otherwise a pull visibly resurrects the item the user just removed.
+- The queued outbox payload of a pending edit is untouched by pulls; guarded (skipped) rows enqueue nothing.
+
+Guarded pulled tables: `children`, `classes`, `groups`, `child_group_memberships`, `child_ea_assignments`, `child_programme_enrollments`, `child_class_memberships`, `class_ea_assignments`.
+
+Known limit (issue #47 scope): the guard keys on `id`. Tables whose server conflict arbiter is a secondary unique index (active-pair tables) can still collide when a pending local row and a server row share the pair but not the id.
+
+Tests: `__tests__/serverPullGuard.test.js` (real-engine, runs in both unit and integration tiers), the `ChildrenContext.test.js` pending-local-wins case, and the `ClassesContext.plan5.test.js` pending-edit case.
 
 ## Table Contract Map
 

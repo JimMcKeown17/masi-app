@@ -7,6 +7,7 @@ import {
   mapDomainRow,
   normalizeSyncFields,
   resolveProgrammeId,
+  serverPullWouldClobberPendingLocal,
   shouldEnqueueOutbox,
   upsertDomainRecord,
 } from './domainRepositoryUtils';
@@ -153,6 +154,9 @@ export const createGroupsRepository = ({ database } = {}) => {
       created_by: ownerUserId,
       sync_status: group.sync_status || syncStatusFromSynced(group.synced),
     });
+    if (await serverPullWouldClobberPendingLocal(txn, 'groups', record)) {
+      return false;
+    }
     await upsertDomainRecord(txn, {
       tableName: 'groups',
       columns: GROUP_COLUMNS,
@@ -214,6 +218,9 @@ export const createGroupsRepository = ({ database } = {}) => {
       created_by: membership.created_by || ownerUserId,
       sync_status: membership.sync_status || syncStatusFromSynced(membership.synced),
     });
+    if (await serverPullWouldClobberPendingLocal(txn, 'child_group_memberships', record)) {
+      return false;
+    }
     await upsertDomainRecord(txn, {
       tableName: 'child_group_memberships',
       columns: MEMBERSHIP_COLUMNS,

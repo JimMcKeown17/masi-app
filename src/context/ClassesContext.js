@@ -5,6 +5,7 @@ import { fetchAndCacheSchools } from '../services/offlineSync';
 import { enqueueSupabaseRequest } from '../services/supabaseRequestQueue';
 import { academicYearsRepository } from '../db/repositories/referenceDataRepository';
 import { getActiveProgrammeId } from '../db/repositories/domainRepositoryUtils';
+import { mergeServerRows } from '../utils/mergeServerRows';
 import { resolveDatabase } from '../db/repositories/repositoryRuntime';
 import { useAuth } from './AuthContext';
 import { useOffline } from './OfflineContext';
@@ -17,22 +18,6 @@ const saveRows = async (rows, saveRow) => {
   for (const row of rows || []) {
     await saveRow(row);
   }
-};
-
-const mergeServerRows = (cached, serverRows) => {
-  const serverIds = new Set(serverRows.map(row => row.id));
-  const isDirtyLocal = (row) => (
-    row.synced === false
-    || (row.sync_status && row.sync_status !== 'synced')
-  );
-  const dirtyLocalById = new Map(
-    cached
-      .filter(isDirtyLocal)
-      .map(row => [row.id, row])
-  );
-  const mergedServerRows = serverRows.map(row => dirtyLocalById.get(row.id) || row);
-  const localToKeep = cached.filter(row => !serverIds.has(row.id) && isDirtyLocal(row));
-  return [...mergedServerRows, ...localToKeep];
 };
 
 export const ClassesProvider = ({ children: reactChildren }) => {
@@ -114,7 +99,10 @@ export const ClassesProvider = ({ children: reactChildren }) => {
         return;
       }
 
-      const cached = await storage.getClasses({ userId: activeUserId });
+      const [cached, unsyncedClasses] = await Promise.all([
+        storage.getClasses({ userId: activeUserId }),
+        storage.getUnsyncedClasses(),
+      ]);
       if (activeUserIdRef.current !== activeUserId) return;
       setClasses(cached);
 
@@ -162,19 +150,10 @@ export const ClassesProvider = ({ children: reactChildren }) => {
             synced: true,
             sync_status: classItem.sync_status || 'synced',
           }));
-          const merged = mergeServerRows(cached, serverClasses);
-          const dirtyCachedIds = new Set(
-            cached
-              .filter(classItem => (
-                classItem.synced === false
-                || (classItem.sync_status && classItem.sync_status !== 'synced')
-              ))
-              .map(classItem => classItem.id)
-          );
-          await saveRows(
-            serverClasses.filter(classItem => !dirtyCachedIds.has(classItem.id)),
-            storage.saveClass
-          );
+          const merged = mergeServerRows(cached, serverClasses, { unpushedRows: unsyncedClasses });
+          // No caller-side dirty filtering: the repository pull guard decides,
+          // inside the write transaction, whether a server row may land.
+          await saveRows(serverClasses, storage.saveClass);
           await saveRows(serverAssignments, storage.saveClassEaAssignment);
           setClasses(merged);
         }
