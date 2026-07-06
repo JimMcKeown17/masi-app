@@ -141,9 +141,13 @@ const mergeFacadeRecord = async (scope, record) => {
     return cleaned;
   }
 
+  // Sync state comes from the repository row, never the payload: update paths
+  // merge edits into the stored payload, which can preserve a stale pull-time
+  // sync_status ('synced') under a row that is actually pending again.
   return {
     ...payload,
     synced: cleaned.synced,
+    sync_status: record.sync_status,
   };
 };
 
@@ -223,8 +227,13 @@ export const storage = {
       last_name: child.last_name || '',
       ...child,
     };
-    await savePayload('children', normalized.id, normalized);
-    return await childrenRepository.saveChildRecord(await normalizeChildForLegacyFacade(normalized));
+    // Repository first: when the pull guard skips a server row (pending local
+    // edit), the facade payload must not be clobbered either — it wins on reads.
+    const applied = await childrenRepository.saveChildRecord(await normalizeChildForLegacyFacade(normalized));
+    if (applied !== false) {
+      await savePayload('children', normalized.id, normalized);
+    }
+    return applied;
   },
 
   async createChild(child, options = {}) {
@@ -274,8 +283,11 @@ export const storage = {
   },
 
   async saveStaffChild(assignment) {
-    await savePayload('staff_children', assignment.id, assignment);
-    return await childrenRepository.saveStaffChild(assignment);
+    const applied = await childrenRepository.saveStaffChild(assignment);
+    if (applied !== false) {
+      await savePayload('staff_children', assignment.id, assignment);
+    }
+    return applied;
   },
 
   async saveChildProgrammeEnrollment(enrollment) {
@@ -299,8 +311,11 @@ export const storage = {
   },
 
   async saveGroup(group) {
-    await savePayload('groups', group.id, group);
-    return await groupsRepository.saveGroup(group);
+    const applied = await groupsRepository.saveGroup(group);
+    if (applied !== false) {
+      await savePayload('groups', group.id, group);
+    }
+    return applied;
   },
 
   async updateGroup(id, updates) {
@@ -324,8 +339,11 @@ export const storage = {
   },
 
   async saveChildrenGroup(membership) {
-    await savePayload('children_groups', membership.id, membership);
-    return await groupsRepository.saveChildrenGroup(membership);
+    const applied = await groupsRepository.saveChildrenGroup(membership);
+    if (applied !== false) {
+      await savePayload('children_groups', membership.id, membership);
+    }
+    return applied;
   },
 
   async deleteChildrenGroup(childId, groupId) {
@@ -365,8 +383,11 @@ export const storage = {
   },
 
   async saveClass(classData) {
-    await savePayload('classes', classData.id, classData);
-    return await classesRepository.saveClass(await normalizeClassForLegacyFacade(classData));
+    const applied = await classesRepository.saveClass(await normalizeClassForLegacyFacade(classData));
+    if (applied !== false) {
+      await savePayload('classes', classData.id, classData);
+    }
+    return applied;
   },
 
   async saveClassEaAssignment(assignment) {

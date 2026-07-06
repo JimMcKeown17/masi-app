@@ -55,6 +55,9 @@ jest.mock('../src/db/repositories/referenceDataRepository', () => ({
 
 jest.mock('../src/db/repositories/domainRepositoryUtils', () => ({
   getActiveProgrammeId: jest.fn(),
+  // Real predicate: the context merge must apply the same pending-local-wins
+  // policy as the repository pull guard, so don't stub it out.
+  hasUnpushedLocalChanges: jest.requireActual('../src/db/repositories/domainRepositoryUtils').hasUnpushedLocalChanges,
 }));
 
 jest.mock('../src/db/repositories/repositoryRuntime', () => ({
@@ -65,6 +68,7 @@ jest.mock('../src/utils/storage', () => ({
   storage: {
     getSchools: jest.fn(),
     getClasses: jest.fn(),
+    getUnsyncedClasses: jest.fn(),
     saveClass: jest.fn(),
     saveClassEaAssignment: jest.fn(),
     updateClass: jest.fn(),
@@ -88,6 +92,7 @@ describe('ClassesContext Plan 5 behavior', () => {
     });
     storage.getSchools.mockResolvedValue([]);
     storage.getClasses.mockResolvedValue([]);
+    storage.getUnsyncedClasses.mockResolvedValue([]);
     storage.saveClass.mockResolvedValue(true);
     storage.saveClassEaAssignment.mockResolvedValue(true);
     storage.updateClass.mockResolvedValue(true);
@@ -228,9 +233,64 @@ describe('ClassesContext Plan 5 behavior', () => {
         teacher: 'Edited Teacher',
       }),
     ]));
-    expect(storage.saveClass).not.toHaveBeenCalledWith(expect.objectContaining({
+    // The context hands every server row to storage; the repository-layer pull
+    // guard (serverPullWouldClobberPendingLocal) is what protects the pending
+    // local edit in SQLite, inside the same transaction as the write.
+    await waitFor(() => expect(storage.saveClass).toHaveBeenCalledWith(expect.objectContaining({
       id: 'class-1',
       name: 'Server Class',
-    }));
+    })));
+    expect(result.current.classes).toEqual([
+      expect.objectContaining({
+        id: 'class-1',
+        name: 'Edited Local Class',
+        teacher: 'Edited Teacher',
+      }),
+    ]);
+  });
+
+  test('a class archived offline does not resurrect in UI state when a pull still returns it', async () => {
+    // getClasses is an active-only read (archived_at is null), so the pending
+    // tombstone only surfaces through getUnsyncedClasses; the merge must
+    // suppress the server copy until the archive pushes.
+    storage.getClasses.mockResolvedValueOnce([]);
+    storage.getUnsyncedClasses.mockResolvedValueOnce([
+      {
+        id: 'class-1',
+        name: 'Archived Class',
+        archived_at: '2026-07-04T08:00:00.000Z',
+        synced: false,
+        sync_status: 'pending',
+      },
+    ]);
+    mockSupabaseFrom.mockImplementation((tableName) => {
+      if (tableName === 'staff_programme_assignments') {
+        return queryResult({
+          data: [{ programme_id: 'programme-a' }],
+          error: null,
+        });
+      }
+      if (tableName === 'classes') {
+        return queryResult({
+          data: [{
+            id: 'class-1',
+            name: 'Archived Class',
+            class_ea_assignments: [{ id: 'class-assignment-1', class_id: 'class-1', ea_user_id: 'user-1' }],
+            sync_status: 'synced',
+          }],
+          error: null,
+        });
+      }
+      return queryResult({ data: [], error: null });
+    });
+
+    const { result } = renderHook(() => useClasses(), { wrapper });
+
+    await waitFor(() => expect(storage.saveClass).toHaveBeenCalledWith(expect.objectContaining({
+      id: 'class-1',
+    })));
+    await waitFor(() => expect(result.current.loading).toBe(false));
+
+    expect(result.current.classes.map(row => row.id)).not.toContain('class-1');
   });
 });

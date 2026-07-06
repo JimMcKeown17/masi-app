@@ -7,6 +7,7 @@ import {
   mapDomainRow,
   normalizeSyncFields,
   resolveProgrammeId,
+  serverPullWouldClobberPendingLocal,
   shouldEnqueueOutbox,
   upsertDomainRecord,
 } from './domainRepositoryUtils';
@@ -320,6 +321,9 @@ export const createChildrenRepository = ({ database } = {}) => {
       ...normalizeChildRecord(child),
       sync_status: child.sync_status || syncStatusFromSynced(child.synced),
     });
+    if (await serverPullWouldClobberPendingLocal(txn, 'children', record)) {
+      return false;
+    }
     await upsertDomainRecord(txn, {
       tableName: 'children',
       columns: CHILD_COLUMNS,
@@ -355,6 +359,9 @@ export const createChildrenRepository = ({ database } = {}) => {
       created_by: assignment.created_by || assignment.staff_id || assignment.user_id,
       sync_status: assignment.sync_status || syncStatusFromSynced(assignment.synced),
     });
+    if (await serverPullWouldClobberPendingLocal(txn, 'child_ea_assignments', record)) {
+      return false;
+    }
     if (shouldEnqueueOutbox(record)) {
       assertRlsRequiredFields('child_ea_assignments', record, ['user_id', 'child_id', 'created_by']);
     }
@@ -374,6 +381,9 @@ export const createChildrenRepository = ({ database } = {}) => {
       ...enrollment,
       sync_status: enrollment.sync_status || syncStatusFromSynced(enrollment.synced),
     });
+    if (await serverPullWouldClobberPendingLocal(txn, 'child_programme_enrollments', record)) {
+      return false;
+    }
     if (shouldEnqueueOutbox(record)) {
       assertRlsRequiredFields('child_programme_enrollments', record, ['child_id', 'programme_id', 'created_by']);
     }
@@ -393,6 +403,9 @@ export const createChildrenRepository = ({ database } = {}) => {
       ...membership,
       sync_status: membership.sync_status || syncStatusFromSynced(membership.synced),
     });
+    if (await serverPullWouldClobberPendingLocal(txn, 'child_class_memberships', record)) {
+      return false;
+    }
     if (shouldEnqueueOutbox(record)) {
       assertRlsRequiredFields('child_class_memberships', record, ['child_id', 'class_id', 'created_by']);
     }

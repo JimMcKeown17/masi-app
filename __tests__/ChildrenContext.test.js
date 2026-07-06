@@ -27,6 +27,9 @@ jest.mock('../src/utils/storage', () => ({
     getMyChildren: jest.fn(),
     getGroups: jest.fn(),
     getChildrenGroups: jest.fn(),
+    getUnsyncedChildren: jest.fn(),
+    getUnsyncedGroups: jest.fn(),
+    getUnsyncedChildrenGroups: jest.fn(),
     saveChild: jest.fn(),
     createChild: jest.fn(),
     saveStaffChild: jest.fn(),
@@ -65,6 +68,9 @@ describe('ChildrenContext Plan 5 hydration', () => {
     storage.getChildrenGroups.mockResolvedValue([
       { id: 'cached-membership', child_id: 'cached-child', group_id: 'cached-group', synced: false },
     ]);
+    storage.getUnsyncedChildren.mockResolvedValue([]);
+    storage.getUnsyncedGroups.mockResolvedValue([]);
+    storage.getUnsyncedChildrenGroups.mockResolvedValue([]);
     storage.saveChild.mockResolvedValue(true);
     storage.createChild.mockResolvedValue(true);
     storage.saveStaffChild.mockResolvedValue(true);
@@ -182,6 +188,110 @@ describe('ChildrenContext Plan 5 hydration', () => {
       'pending-membership',
       'server-membership',
     ]);
+  });
+
+  test('a pending local edit whose id exists on the server survives the pull in UI state (pending-local-wins)', async () => {
+    storage.getMyChildren.mockResolvedValueOnce([
+      { id: 'shared-child', first_name: 'Edited Locally', synced: false, sync_status: 'pending' },
+    ]);
+    storage.getGroups.mockResolvedValueOnce([
+      { id: 'shared-group', name: 'Renamed Locally', synced: false, sync_status: 'pending' },
+    ]);
+    storage.getChildrenGroups.mockResolvedValueOnce([]);
+    pullPreloadedChildData.mockResolvedValueOnce({
+      children: [{ id: 'shared-child', first_name: 'Stale Server', synced: true, sync_status: 'synced' }],
+      classes: [],
+      childEaAssignments: [],
+      childProgrammeEnrollments: [],
+      childClassMemberships: [],
+      groups: [{ id: 'shared-group', name: 'Stale Server Group', synced: true, sync_status: 'synced' }],
+      childrenGroups: [],
+      errors: [],
+    });
+
+    const { result } = renderHook(() => useChildren(), { wrapper });
+    await waitFor(() => expect(pullPreloadedChildData).toHaveBeenCalledTimes(1));
+
+    await waitFor(() => {
+      const child = result.current.children.find(row => row.id === 'shared-child');
+      expect(child.first_name).toBe('Edited Locally');
+      expect(child.synced).toBe(false);
+    });
+    expect(result.current.children.filter(row => row.id === 'shared-child')).toHaveLength(1);
+    const group = result.current.groups.find(row => row.id === 'shared-group');
+    expect(group.name).toBe('Renamed Locally');
+    expect(result.current.groups.filter(row => row.id === 'shared-group')).toHaveLength(1);
+  });
+
+  test('a pending edit still wins when the cached row carries a stale sync_status from the facade payload', async () => {
+    // The legacy facade payload can hold sync_status 'synced' from pull time while a
+    // later offline edit only overlays synced: false — the merge must trust the
+    // dirty signal, not the stale status (Codex P2 on issue #42).
+    storage.getMyChildren.mockResolvedValueOnce([
+      { id: 'shared-child', first_name: 'Edited Locally', synced: false, sync_status: 'synced' },
+    ]);
+    storage.getGroups.mockResolvedValueOnce([]);
+    storage.getChildrenGroups.mockResolvedValueOnce([]);
+    pullPreloadedChildData.mockResolvedValueOnce({
+      children: [{ id: 'shared-child', first_name: 'Stale Server', synced: true, sync_status: 'synced' }],
+      classes: [],
+      childEaAssignments: [],
+      childProgrammeEnrollments: [],
+      childClassMemberships: [],
+      groups: [],
+      childrenGroups: [],
+      errors: [],
+    });
+
+    const { result } = renderHook(() => useChildren(), { wrapper });
+    await waitFor(() => expect(pullPreloadedChildData).toHaveBeenCalledTimes(1));
+
+    await waitFor(() => {
+      const child = result.current.children.find(row => row.id === 'shared-child');
+      expect(child.first_name).toBe('Edited Locally');
+    });
+    expect(result.current.children.filter(row => row.id === 'shared-child')).toHaveLength(1);
+  });
+
+  test('a membership removed offline does not resurrect in UI state when a pull still returns it', async () => {
+    // The active-only cache read hides the tombstone (removed_at set), so the
+    // merge must learn about it from the unfiltered unsynced read and suppress
+    // the server copy instead of resurrecting the membership (Codex P2 #2).
+    storage.getChildrenGroups.mockResolvedValueOnce([]);
+    storage.getUnsyncedChildrenGroups.mockResolvedValueOnce([
+      {
+        id: 'removed-membership',
+        child_id: 'cached-child',
+        group_id: 'cached-group',
+        removed_at: '2026-07-04T08:00:00.000Z',
+        synced: false,
+        sync_status: 'pending',
+      },
+    ]);
+    pullPreloadedChildData.mockResolvedValueOnce({
+      children: [],
+      classes: [],
+      childEaAssignments: [],
+      childProgrammeEnrollments: [],
+      childClassMemberships: [],
+      groups: [],
+      childrenGroups: [
+        { id: 'removed-membership', child_id: 'cached-child', group_id: 'cached-group', synced: true, sync_status: 'synced' },
+      ],
+      errors: [],
+    });
+
+    const { result } = renderHook(() => useChildren(), { wrapper });
+
+    // Anchor on the pull having been fully applied (saves precede the state
+    // update, which precedes loading=false) so the negative assertion below
+    // cannot pass vacuously before the merge lands.
+    await waitFor(() => expect(storage.saveChildrenGroup).toHaveBeenCalledWith(
+      expect.objectContaining({ id: 'removed-membership' })
+    ));
+    await waitFor(() => expect(result.current.loading).toBe(false));
+
+    expect(result.current.childrenGroups.map(row => row.id)).not.toContain('removed-membership');
   });
 
   test('deleteChild uses repository-backed delete/archive instead of hidden_at update', async () => {

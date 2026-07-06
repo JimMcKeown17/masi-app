@@ -58,12 +58,12 @@
     ],
     "testPathIgnorePatterns": [
       "/node_modules/",
-      "/.claude/worktrees/",
-      "/.codex/worktrees/"
+      "<rootDir>/.claude/worktrees/",
+      "<rootDir>/.codex/worktrees/"
     ],
     "modulePathIgnorePatterns": [
-      "/.claude/worktrees/",
-      "/.codex/worktrees/"
+      "<rootDir>/.claude/worktrees/",
+      "<rootDir>/.codex/worktrees/"
     ]
   },
   "private": true,

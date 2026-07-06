@@ -28,5 +28,6 @@ module.exports = {
     '<rootDir>/__tests__/syncErrorGuard.test.js',
     '<rootDir>/__tests__/syncContractCompleteness.test.js',
     '<rootDir>/__tests__/forceStopReopenOutbox.test.js',
+    '<rootDir>/__tests__/serverPullGuard.test.js',
   ],
 };

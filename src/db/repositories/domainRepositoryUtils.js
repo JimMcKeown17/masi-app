@@ -2,6 +2,7 @@ import { v5 as uuidv5, validate as uuidValidate } from 'uuid';
 import {
   insertOutboxRecord,
   mapRowFromSqlite,
+  quoteIdentifier,
   syncStatusFromSynced,
   timestamp,
   upsertRecord,
@@ -92,6 +93,36 @@ export const enqueueDomainOutbox = async (db, tableName, recordId, operation, pa
 );
 
 export const shouldEnqueueOutbox = (record = {}) => !['synced', 'terminal'].includes(record.sync_status);
+
+// Statuses that mean "this row has local changes the server has not acknowledged".
+// 'terminal' is deliberately excluded: a quarantined row has no queued push, so a
+// server copy arriving under the same id is strictly better data and may overwrite it.
+export const PENDING_LOCAL_SYNC_STATUSES = ['pending', 'failed'];
+
+// Either dirty signal keeps the local row: legacy facade payloads can carry a
+// stale sync_status ('synced' from pull time) under a fresh synced: false, and
+// trusting the stale status over the dirty flag re-opens the F7 clobber in UI
+// state. Erring dirty is the safe direction — worst case a quarantined row
+// stays visible one cycle while SQLite already holds the server copy.
+export const hasUnpushedLocalChanges = (row) => (
+  row?.synced === false
+  || PENDING_LOCAL_SYNC_STATUSES.includes(row?.sync_status)
+);
+
+// Pending-local-wins pull guard (ZZ F7): only server pulls hand whole rows claiming
+// sync_status 'synced' to the save functions — local writes always claim 'pending',
+// and push acknowledgement flips status via setRecordSyncStatus, never a row replace.
+// So a 'synced' row arriving for an id whose local row still has unpushed changes is
+// a pull about to clobber a pending edit, and must be skipped. Must run inside the
+// same transaction as the upsert it guards.
+export const serverPullWouldClobberPendingLocal = async (db, tableName, record) => {
+  if (record?.sync_status !== 'synced' || record?.id == null) return false;
+  const existing = await db.getFirstAsync(
+    `select sync_status from ${quoteIdentifier(tableName)} where id = ?`,
+    record.id
+  );
+  return Boolean(existing && PENDING_LOCAL_SYNC_STATUSES.includes(existing.sync_status));
+};
 
 export const getActiveProgrammeAssignment = async (db, userId) => db.getFirstAsync(`
   select *
