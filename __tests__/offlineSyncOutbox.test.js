@@ -5,7 +5,11 @@ jest.mock('../src/services/supabaseClient', () => ({
 
 import { createBetterSqliteTestDatabase } from '../test-support/betterSqliteAdapter';
 import { runMigrations } from '../src/db/migrations';
-import { createOutboxSyncEngine, pullReferenceData } from '../src/services/offlineSync';
+import {
+  AUTHENTICATED_DENIAL_MARKER,
+  createOutboxSyncEngine,
+  pullReferenceData,
+} from '../src/services/offlineSync';
 import { getActiveProgrammeId } from '../src/db/repositories/domainRepositoryUtils';
 import {
   createMigratedDatabase,
@@ -1338,12 +1342,13 @@ describe('SQLite outbox offline sync', () => {
 
     const result = await engine.syncAll();
     const status = await engine.getSyncStatus();
+    const authenticatedRlsDenied = `${AUTHENTICATED_DENIAL_MARKER} RLS denied`;
 
     expect(result.success).toBe(false);
     expect(await db.getFirstAsync('select sync_status, last_sync_error from assessments where id = ?', 'assessment-1'))
       .toEqual({ sync_status: 'terminal', last_sync_error: 'missing parent' });
     expect(await db.getFirstAsync('select sync_status, last_sync_error from letter_mastery where id = ?', 'mastery-1'))
-      .toEqual({ sync_status: 'terminal', last_sync_error: 'RLS denied' });
+      .toEqual({ sync_status: 'terminal', last_sync_error: authenticatedRlsDenied });
     expect(status.failedItems).toEqual([
       expect.objectContaining({
         table: 'assessments',
@@ -1355,7 +1360,7 @@ describe('SQLite outbox offline sync', () => {
         table: 'letter_mastery',
         id: 'mastery-1',
         terminal: true,
-        reason: 'RLS denied',
+        reason: authenticatedRlsDenied,
       }),
     ]);
   });

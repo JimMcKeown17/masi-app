@@ -286,6 +286,11 @@ const classifyError = (error, { duplicateIsSuccess = false } = {}) => {
   return { terminal: false, markAsSynced: false };
 };
 
+// Stamped onto last_error when a 42501 is quarantined WITH a live session.
+// Post-gate, that means a genuine RLS denial; the auth-restore heal
+// (syncRescue.requeueTerminalRlsFailures) must never touch marked rows.
+export const AUTHENTICATED_DENIAL_MARKER = '42501-authenticated:';
+
 const buildSyncPayload = (tableName, record) => {
   const tableLegacyKeys = LEGACY_KEYS_TO_STRIP[tableName] || [];
   const keysToStrip = new Set([...LOCAL_ONLY_KEYS_TO_STRIP, ...tableLegacyKeys]);
@@ -693,7 +698,21 @@ export const createOutboxSyncEngine = ({
       }
 
       const classification = classifyError(serverResult.error, config);
-      const reason = errorMessage(serverResult.error);
+      let reason = errorMessage(serverResult.error);
+
+      if (serverResult.error?.code === '42501' && classification.terminal) {
+        let liveSession = null;
+        try {
+          ({ data: { session: liveSession } = {} } = await getAuthSession());
+        } catch (_) { /* treat as no session and downgrade below */ }
+        if (!liveSession) {
+          // A permission denial without a live session is not trustworthy
+          // evidence; retry after auth restore instead of quarantining.
+          classification.terminal = false;
+        } else {
+          reason = `${AUTHENTICATED_DENIAL_MARKER} ${reason}`;
+        }
+      }
 
       if (classification.markAsSynced) {
         await finalizeSuccess({
