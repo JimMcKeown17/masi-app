@@ -84,6 +84,17 @@ export const createSyncOutboxRepository = ({ database } = {}) => {
     return rows.map(toOutboxRecord);
   };
 
+  const getTerminalRecords = async () => {
+    const db = await resolveDatabase(database);
+    const rows = await db.getAllAsync(`
+      select *
+      from sync_outbox
+      where status = 'terminal'
+      order by created_at, table_name, record_id
+    `);
+    return rows.map(toOutboxRecord);
+  };
+
   const markInFlight = async (ids, { transaction } = {}) => {
     if (!ids || ids.length === 0) return true;
     return runWrite(transaction, async (txn) => {
@@ -120,6 +131,27 @@ export const createSyncOutboxRepository = ({ database } = {}) => {
     `, timestamp(), id);
     return true;
   });
+
+  const requeueTerminalRows = async (ids, { transaction } = {}) => {
+    if (!ids || ids.length === 0) return 0;
+    return runWrite(transaction, async (txn) => {
+      let count = 0;
+      for (const id of ids) {
+        const result = await txn.runAsync(`
+          update sync_outbox
+          set status = 'pending',
+              retry_count = 0,
+              next_retry_at = null,
+              last_error = null,
+              updated_at = ?
+          where id = ?
+            and status = 'terminal'
+        `, timestamp(), id);
+        count += result?.changes || 0;
+      }
+      return count;
+    });
+  };
 
   const markRetriableFailure = async (id, {
     errorMessage,
@@ -213,9 +245,11 @@ export const createSyncOutboxRepository = ({ database } = {}) => {
     enqueue,
     getById,
     getReadyRecords,
+    getTerminalRecords,
     markInFlight,
     resetInFlight,
     markReady,
+    requeueTerminalRows,
     markRetriableFailure,
     markTerminalFailure,
     deleteRecord,
