@@ -34,7 +34,7 @@
 - Produces: `createOutboxSyncEngine` accepts an injectable `getAuthSession` (defaults to `() => supabase.auth.getSession()`); a sessionless `syncAll` returns `{ success: true, skippedNoSession: true, totalSynced: 0, totalFailed: 0, failedRecords: [], tableResults: {}, preflightErrors: [], durationMs: <number> }` without touching the database, the outbox, sync meta, or the network. Task 2 reuses `getAuthSession` inside the record processor; Task 4's OfflineContext wiring relies on the skip shape.
 - Consumes: `supabase` (already imported at `offlineSync.js:1`).
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 Create `__tests__/offlineSyncAuthGate.test.js` on the real-SQLite pattern used by `__tests__/offlineSyncOutbox.test.js` (same `jest.mock('expo-sqlite', ...)` + `createBetterSqliteTestDatabase` + engine construction via `createOutboxSyncEngine`; mirror that file's setup verbatim, including how it seeds outbox rows and stubs the Supabase request path). ZZ's reference suite is `zazi-izandi-app/__tests__/offlineSyncAuthGate.test.js` Parts 1 and 4. Tests:
 
@@ -77,7 +77,7 @@ const engine = createOutboxSyncEngine({
 });
 ```
 
-- [ ] **Step 2: Run to verify both fail**
+- [x] **Step 2: Run to verify both fail**
 
 ```bash
 npx jest __tests__/offlineSyncAuthGate.test.js --verbose
@@ -85,7 +85,7 @@ npx jest __tests__/offlineSyncAuthGate.test.js --verbose
 
 Expected: FAIL (`skippedNoSession` undefined; the engine ignores `getAuthSession`).
 
-- [ ] **Step 3: Implement the gate**
+- [x] **Step 3: Implement the gate**
 
 In `src/services/offlineSync.js`:
 
@@ -135,7 +135,7 @@ Note the deliberate choices: `success: true` (a skipped pass is not a failure; a
 
 3. `defaultEngine` needs no change (the default covers it).
 
-- [ ] **Step 4: Run to verify green, then the neighboring sync suites**
+- [x] **Step 4: Run to verify green, then the neighboring sync suites**
 
 ```bash
 npx jest __tests__/offlineSyncAuthGate.test.js __tests__/offlineSyncOutbox.test.js __tests__/OfflineContext.test.js --verbose
@@ -147,7 +147,7 @@ Expected: the new suite PASSES. **The session stub sweep is repo-wide, not one p
 npx jest --silent
 ```
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add src/services/offlineSync.js __tests__/offlineSyncAuthGate.test.js __tests__/offlineSyncOutbox.test.js __tests__/letterMasterySync.test.js __tests__/bulkFinalize.test.js __tests__/batchFailureSemantics.test.js __tests__/childClassReassignment.test.js __tests__/syncErrorGuard.test.js __tests__/offlineSync.pendingSessions.test.js
@@ -170,7 +170,7 @@ git commit -m "feat(sync): skip sync passes when no Supabase session exists (#43
 - Produces: exported constant `AUTHENTICATED_DENIAL_MARKER = '42501-authenticated:'`. Terminal 42501 rows written with a live session have `last_error` starting with that marker. Task 3's heal predicate keys on its ABSENCE.
 - Consumes: `getAuthSession` from Task 1 (available in the engine closure).
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 In `__tests__/offlineSyncAuthGate.test.js`, using the same engine/fixtures:
 
@@ -202,7 +202,7 @@ Add a third test for the BATCH path (review finding: batched failures degrade to
   });
 ```
 
-- [ ] **Step 2: Run to verify both fail**
+- [x] **Step 2: Run to verify both fail**
 
 ```bash
 npx jest __tests__/offlineSyncAuthGate.test.js -t "42501" --verbose
@@ -210,7 +210,7 @@ npx jest __tests__/offlineSyncAuthGate.test.js -t "42501" --verbose
 
 Expected: FAIL (today both cases go terminal, no marker).
 
-- [ ] **Step 3: Implement**
+- [x] **Step 3: Implement**
 
 In `src/services/offlineSync.js`:
 
@@ -253,14 +253,14 @@ with:
 
 (The existing `if (classification.terminal)` / retriable branches below need no change; they consume the mutated `classification` and `reason`.)
 
-- [ ] **Step 4: Run green + integration**
+- [x] **Step 4: Run green + integration**
 
 ```bash
 npx jest __tests__/offlineSyncAuthGate.test.js __tests__/offlineSyncOutbox.test.js --verbose
 npm run test:integration
 ```
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add src/services/offlineSync.js __tests__/offlineSyncAuthGate.test.js
@@ -282,7 +282,7 @@ git commit -m "feat(sync): downgrade mid-cycle 42501 to retriable; mark authenti
 - Produces: engine method + module export `requeueTerminalRlsFailures(userId) -> Promise<number>`; repository methods `getTerminalRecords()` (toOutboxRecord shape, payload decoded) and `requeueTerminalRows(ids, { transaction }) -> count` (transaction-composable: `status='pending', retry_count=0, next_retry_at=null, last_error=null`).
 - Consumes: `AUTHENTICATED_DENIAL_MARKER` (same module, Task 2); `setDomainSyncResult`/`getConfig`/`runRepositoryTransaction`/`resolveDatabase` (already in `offlineSync.js`).
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 Create `__tests__/requeueTerminalRlsFailures.test.js` on the real-SQLite engine pattern (mirror `offlineSyncOutbox.test.js`: `createBetterSqliteTestDatabase`, repositories created with `{ database: db }`, engine via `createOutboxSyncEngine({ outboxRepository, stateRepository, database: db, getAuthSession: liveTestSession })` — the injected-database discipline is what makes these tests real). Seed domain rows through the domain repositories and outbox terminal states via `markTerminalFailure` with crafted `last_error` strings. Cover, minimum:
 
@@ -295,7 +295,7 @@ Create `__tests__/requeueTerminalRlsFailures.test.js` on the real-SQLite engine 
 7. Idempotency: calling twice returns `1` then `0`.
 8. `class_grouping_state` heals via its class: a row with null completed/reopened user columns but whose `classes.created_by === 'user-1'` (through `class_id`) heals.
 
-- [ ] **Step 2: Run to verify red**
+- [x] **Step 2: Run to verify red**
 
 ```bash
 npx jest __tests__/requeueTerminalRlsFailures.test.js --verbose
@@ -303,7 +303,7 @@ npx jest __tests__/requeueTerminalRlsFailures.test.js --verbose
 
 Expected: FAIL (`getTerminalRecords`/`requeueTerminalRlsFailures` are not functions).
 
-- [ ] **Step 3: Implement the repository methods**
+- [x] **Step 3: Implement the repository methods**
 
 In `src/db/repositories/syncOutboxRepository.js` add (and export from the returned object):
 
@@ -341,7 +341,7 @@ In `src/db/repositories/syncOutboxRepository.js` add (and export from the return
   };
 ```
 
-- [ ] **Step 4: Implement the heal in `offlineSync.js`**
+- [x] **Step 4: Implement the heal in `offlineSync.js`**
 
 Module-level helpers (near `AUTHENTICATED_DENIAL_MARKER`):
 
@@ -468,14 +468,14 @@ Add `requeueTerminalRlsFailures` to the engine's returned object and export the 
 export const requeueTerminalRlsFailures = (userId) => defaultEngine.requeueTerminalRlsFailures(userId);
 ```
 
-- [ ] **Step 5: Run green + integration**
+- [x] **Step 5: Run green + integration**
 
 ```bash
 npx jest __tests__/requeueTerminalRlsFailures.test.js --verbose
 npm run test:integration
 ```
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add src/services/offlineSync.js src/db/repositories/syncOutboxRepository.js __tests__/requeueTerminalRlsFailures.test.js
@@ -493,7 +493,7 @@ git commit -m "feat(sync): auth-restore heal for RLS-quarantined outbox rows (#4
 **Interfaces:**
 - Produces: on `SIGNED_IN`, `TOKEN_REFRESHED`, or `INITIAL_SESSION`-with-session, the heal runs for the signed-in user and a background sync is triggered. `SIGNED_OUT` and `INITIAL_SESSION`-without-session do nothing (a null INITIAL_SESSION belongs to AuthContext's cold-start gate, Task 6).
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 In `__tests__/OfflineContext.test.js` (add `requeueTerminalRlsFailures: jest.fn(async () => 0)` to the EXISTING `../src/services/offlineSync` module mock at the top of the file, and add a supabase-client mock — the file has none today (verified), so add `jest.mock('../src/services/supabaseClient', () => ({ supabase: { auth: { onAuthStateChange: jest.fn(() => ({ data: { subscription: { unsubscribe: jest.fn() } } })) } } }));` and capture the callback):
 
@@ -527,7 +527,7 @@ In `__tests__/OfflineContext.test.js` (add `requeueTerminalRlsFailures: jest.fn(
 
 (Adapt `syncAll` assertions to the file's existing debounce conventions; note Task 1's gate means the triggered `syncAll` is the module mock here, unaffected.)
 
-- [ ] **Step 2: Run red, then implement**
+- [x] **Step 2: Run red, then implement**
 
 Add to `src/context/OfflineContext.js` (imports: `supabase` from `../services/supabaseClient`; extend the existing `../services/offlineSync` import with `requeueTerminalRlsFailures`), a new effect after the AppState effect:
 
@@ -557,13 +557,13 @@ Add to `src/context/OfflineContext.js` (imports: `supabase` from `../services/su
   }, []);
 ```
 
-- [ ] **Step 3: Run green**
+- [x] **Step 3: Run green**
 
 ```bash
 npx jest __tests__/OfflineContext.test.js --verbose
 ```
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add src/context/OfflineContext.js __tests__/OfflineContext.test.js
@@ -581,11 +581,11 @@ git commit -m "feat(sync): requeue RLS-quarantined rows on auth restore (#44)"
 **Interfaces:**
 - Produces: `getAuthStorageKey()`, `readPersistedSession() -> session|null` (only sessions with `refresh_token` and `user.id`; handles auth-js's split `${key}-user` record; null on absent/malformed/any throw), `clearPersistedSession()` (removes the key, `-code-verifier`, `-user`). Port of ZZ's `src/services/persistedAuthSession.js` (73 lines) — adapt imports to masi (`supabase` from `./supabaseClient`, AsyncStorage) and keep the logic identical: prefer `supabase.auth.storageKey`, else derive `sb-<projectRef>-auth-token` from the client URL, else `'supabase.auth.token'`.
 
-- [ ] **Step 1: Port the tests first**
+- [x] **Step 1: Port the tests first**
 
 Create `__tests__/persistedAuthSession.test.js` mirroring ZZ's 5-test suite (`zazi-izandi-app/__tests__/persistedAuthSession.test.js`): reads a session that a real `createClient()` persisted (pins the genuine auth-js storage format — follow ZZ's `_saveSession` technique; if masi's supabase-js version differs, write the session JSON in the documented v2 shape instead and note it); null on absent, malformed JSON, and non-refreshable (no refresh_token) sessions; merges split `${key}-user` records; `clearPersistedSession` removes all three keys. Mock AsyncStorage per masi's jest setup (it already mocks AsyncStorage globally; verify and reuse).
 
-- [ ] **Step 2: Red, then port the module, then green**
+- [x] **Step 2: Red, then port the module, then green**
 
 ```bash
 npx jest __tests__/persistedAuthSession.test.js --verbose
@@ -593,7 +593,7 @@ npx jest __tests__/persistedAuthSession.test.js --verbose
 
 Port ZZ's file with masi imports. IMPORTANT masi check: the storage key must resolve for the ACTIVE backend project ref (`segygjzpujphwvrubusm` in the sqlite-staging config) — `supabase.auth.storageKey` handles this automatically when supabase-js exposes it; the URL-derivation fallback must parse masi's `resolveSupabaseProjectConfig` URL. Add one test asserting the derived key contains the ref parsed from the mocked client URL.
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add src/services/persistedAuthSession.js __tests__/persistedAuthSession.test.js
@@ -614,7 +614,7 @@ git commit -m "feat(auth): persisted-session reader for offline cold-start resto
 - Produces: cold-start null-session events route through `resolveColdStartGate` (restore from persisted session, `session` stays null until `TOKEN_REFRESHED`); genuine `SIGNED_OUT` still clears (correlated against persisted storage: auth-js clears storage BEFORE emitting a genuine SIGNED_OUT, so a surviving persisted session for the current user marks the event as a stale echo); `signOut()` is local-first (clear profile + persisted session + state synchronously, then fire-and-forget `supabase.auth.signOut({ scope: 'local' })`).
 - Consumes: Task 5's `readPersistedSession`/`clearPersistedSession`.
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 Create `__tests__/authColdStartRestore.test.js`, adapting ZZ's `__tests__/AuthContext.test.js` suite to masi (mock `../src/services/supabaseClient` capturing the `onAuthStateChange` callback; mock `../src/services/persistedAuthSession`; mock `storage`, `pullReferenceData` via the offlineSync module mock, and `enqueueSupabaseRequest`; render a probe exposing `loading|user?.id|session` through `useAuth`). Port these cases, keeping ZZ's names where they apply:
 
@@ -627,7 +627,7 @@ Create `__tests__/authColdStartRestore.test.js`, adapting ZZ's `__tests__/AuthCo
 7. `TOKEN_REFRESHED` after an offline restore flips `session` from null to live.
 8. The 15s grace period still applies to a non-SIGNED_OUT null event while a user is active (pin existing behavior: 14999ms still signed in, 15000ms signed out).
 
-- [ ] **Step 2: Run red, then implement**
+- [x] **Step 2: Run red, then implement**
 
 In `src/context/AuthContext.js`:
 
@@ -732,7 +732,7 @@ In `src/context/AuthContext.js`:
 
 Check `signOut` callers (`grep -rn "signOut" src/screens`) for anyone depending on the old thrown/error contract; ProfileScreen's handler must still behave (it now always gets `{ error: null }` — acceptable and matches the local-first contract; note it in the commit body if a caller branch dies).
 
-- [ ] **Step 3: Run green + the full suites**
+- [x] **Step 3: Run green + the full suites**
 
 ```bash
 npx jest __tests__/authColdStartRestore.test.js __tests__/OfflineContext.test.js --verbose
@@ -742,7 +742,7 @@ npm run test:integration
 
 (The pre-existing auth-adjacent suites — HomeScreen, App.plan5, sessionLaunchGuard — must stay green; they mock `useAuth`/AuthProvider and are unaffected structurally.)
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add src/context/AuthContext.js __tests__/authColdStartRestore.test.js
@@ -753,11 +753,11 @@ git commit -m "fix(auth): offline cold start restores the persisted session; ech
 
 ### Task 7: Contract map + phase wrap
 
-- [ ] **Step 1: Update `documentation/rls-sync-contract-map.md`**
+- [x] **Step 1: Update `documentation/rls-sync-contract-map.md`**
 
 Add a Global Contract entry (follow the numbering/format PR #49 established with Global Contract 8) covering: (a) sync passes are auth-gated (sessionless pass = structured skip, no outbox/meta mutation); (b) terminal `42501` written with a live session carries `42501-authenticated:` in `last_error` and is never auto-healed; (c) unmarked RLS-terminal rows are requeued on auth restore, scoped to the signed-in user via per-table owner resolution (list the resolver table). Reference issues #43/#44.
 
-- [ ] **Step 2: Full gates + docs**
+- [x] **Step 2: Full gates + docs**
 
 ```bash
 npx jest --silent
@@ -766,7 +766,7 @@ npm run test:integration
 
 One row in `documentation/sqlite-refactor-log.md`; tick all plan checkboxes; PRD.md Development Progress entry ("Sync auth hardening (#43-45)" with per-task commits).
 
-- [ ] **Step 3: Commit and hand off**
+- [x] **Step 3: Commit and hand off**
 
 ```bash
 git add documentation/rls-sync-contract-map.md documentation/sqlite-refactor-log.md docs/superpowers/plans/2026-07-06-sync-auth-hardening.md PRD.md

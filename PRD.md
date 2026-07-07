@@ -795,6 +795,20 @@ Phase 2 complete 2026-07-04: PR #41 open, all six task commits reviewed PASS, CI
 
 Phase 2 local gates 2026-07-04: unit suite `120/664` and integration suite `23/147` green under Node 20. `documentation/rls-sync-contract-map.md` untouched. Local commit/push/PR gate pending because this sandbox cannot create `.git/index.lock`.
 
+#### Sync auth hardening (#43-45)
+Branch: `fix/sync-auth-hardening`
+Plan: `docs/superpowers/plans/2026-07-06-sync-auth-hardening.md`
+Status: PR pending
+
+- [x] Task 1: Sessionless sync pass auth gate - `6a15e73`
+- [x] Task 2: Mid-cycle auth-loss downgrade and authenticated `42501` marker - `b64a9b9`
+- [x] Task 3: Auth-restore heal for terminal RLS outbox rows - `6335bd6`
+- [x] Task 4: OfflineContext auth-event wiring for restore heal - `7a3f7a2`
+- [x] Task 5: Persisted Supabase Auth session reader - `dbd780f`
+- [x] Task 6: AuthContext cold-start restore gate and echo-proof local sign-out - `83f14f1`
+
+Sync auth hardening complete 2026-07-07: PR pending; full local gates green under Node 20 (unit 125/712, integration 24/162). Contract map updated for issues #43/#44; #45 covered by the cold-start restore entry.
+
 #### SQLite RLS/App Contract Closeout
 Branch: `plan-5/context-screen-migration`
 
