@@ -2,6 +2,7 @@ import React, { createContext, useState, useEffect, useContext, useRef } from 'r
 import { supabase } from '../services/supabaseClient';
 import { enqueueSupabaseRequest } from '../services/supabaseRequestQueue';
 import { pullReferenceData } from '../services/offlineSync';
+import { readPersistedSession, clearPersistedSession } from '../services/persistedAuthSession';
 import { storage } from '../utils/storage';
 import { normalizeProfile } from '../utils/profileNormalizer';
 
@@ -14,6 +15,7 @@ export const AuthProvider = ({ children }) => {
   const [loading, setLoading] = useState(true);
   const [session, setSession] = useState(null);
   const manualSignOutInProgressRef = useRef(false);
+  const localSignOutCommittedRef = useRef(false);
   const pendingSignOutTimeoutRef = useRef(null);
   const currentUserIdRef = useRef(null);
   const profileLoadVersionRef = useRef(0);
@@ -41,14 +43,45 @@ export const AuthProvider = ({ children }) => {
     profileLoadVersionRef.current += 1;
   };
 
+  const restoreOfflineSession = (persistedSession, reason) => {
+    clearPendingSignOutTimeout();
+    currentUserIdRef.current = persistedSession.user.id;
+    setSession(null);
+    setLoading(true);
+    scheduleAuthenticatedStartup(persistedSession.user);
+    console.log(`[Auth] Restored persisted offline session (${reason})`);
+  };
+
+  const resolveColdStartGate = async (reason) => {
+    if (localSignOutCommittedRef.current) {
+      commitSignedOutState(`${reason}-after-local-sign-out`);
+      return;
+    }
+    const persistedSession = await readPersistedSession();
+    const persistedUserId = persistedSession?.user?.id ?? null;
+    if (persistedUserId && persistedUserId === currentUserIdRef.current) {
+      setLoading(false);
+      return;
+    }
+    if (persistedUserId && !currentUserIdRef.current) {
+      restoreOfflineSession(persistedSession, reason);
+      return;
+    }
+    commitSignedOutState(reason);
+  };
+
   useEffect(() => {
     // Supabase emits INITIAL_SESSION through this subscription after its own
     // storage recovery finishes; calling getSession here creates a second
     // startup lock contender on Android.
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, nextSession) => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, nextSession) => {
       console.log(`[Auth] Event=${event} hasSession=${Boolean(nextSession)}`);
 
       if (nextSession?.user) {
+        if (localSignOutCommittedRef.current && event !== 'SIGNED_IN') return;
+        if (event === 'SIGNED_IN') {
+          localSignOutCommittedRef.current = false;
+        }
         clearPendingSignOutTimeout();
         setSession(nextSession);
         if (event === 'TOKEN_REFRESHED' && currentUserIdRef.current === nextSession.user.id) {
@@ -60,9 +93,26 @@ export const AuthProvider = ({ children }) => {
         return;
       }
 
-      if (event === 'SIGNED_OUT' && manualSignOutInProgressRef.current) {
-        manualSignOutInProgressRef.current = false;
-        commitSignedOutState('manual-sign-out');
+      if (event === 'SIGNED_OUT') {
+        if (manualSignOutInProgressRef.current) {
+          manualSignOutInProgressRef.current = false;
+          commitSignedOutState('manual-sign-out');
+          return;
+        }
+        const persisted = await readPersistedSession();
+        if (persisted?.user?.id && persisted.user.id === currentUserIdRef.current) {
+          console.warn('[Auth] Ignoring stale SIGNED_OUT; a valid session for the current user persists');
+          return;
+        }
+        localSignOutCommittedRef.current = true;
+        await storage.clearUserProfile();
+        await clearPersistedSession();
+        commitSignedOutState('signed-out');
+        return;
+      }
+
+      if (event === 'INITIAL_SESSION') {
+        resolveColdStartGate(`${event}-no-active-user`);
         return;
       }
 
@@ -79,7 +129,7 @@ export const AuthProvider = ({ children }) => {
         return;
       }
 
-      commitSignedOutState(`${event}-no-active-user`);
+      resolveColdStartGate(`${event}-no-active-user`);
     });
 
     return () => {
@@ -191,23 +241,25 @@ export const AuthProvider = ({ children }) => {
   };
 
   const signOut = async () => {
+    manualSignOutInProgressRef.current = true;
+    clearPendingSignOutTimeout();
+    invalidateProfileLoads();
+    localSignOutCommittedRef.current = true;
+    setSession(null);
+    setUser(null);
+    setProfile(null);
+    setLoading(false);
     try {
-      manualSignOutInProgressRef.current = true;
-      clearPendingSignOutTimeout();
-      invalidateProfileLoads();
-      setSession(null);
-      setUser(null);
-      setProfile(null);
-      setLoading(false);
       await storage.clearUserProfile();
-      const { error } = await supabase.auth.signOut();
-      if (error) throw error;
-      return { error: null };
+      await clearPersistedSession();
     } catch (error) {
-      manualSignOutInProgressRef.current = false;
-      console.error('Sign out error:', error);
-      return { error };
+      console.error('Sign out local cleanup error:', error);
     }
+    supabase.auth.signOut({ scope: 'local' }).catch((error) => {
+      console.warn('[Auth] Background Supabase sign-out failed:', error?.message);
+    });
+    manualSignOutInProgressRef.current = false;
+    return { error: null };
   };
 
   const resetPassword = async (email) => {
