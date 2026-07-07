@@ -1,7 +1,8 @@
 import React, { createContext, useState, useEffect, useContext, useRef, useCallback } from 'react';
 import NetInfo from '@react-native-community/netinfo';
 import { AppState } from 'react-native';
-import { syncAll, getSyncStatus } from '../services/offlineSync';
+import { supabase } from '../services/supabaseClient';
+import { syncAll, getSyncStatus, requeueTerminalRlsFailures } from '../services/offlineSync';
 
 const BACKGROUND_SYNC_DEBOUNCE_MS = 1000;
 
@@ -189,6 +190,30 @@ export const OfflineProvider = ({ children }) => {
 
     return () => subscription.remove();
   }, [isOnline, unsyncedCount, inFlightCount, triggerBackgroundSync, refreshSyncStatus]);
+
+  /**
+   * Auth-restore heal: rows RLS-quarantined while the session was dead requeue
+   * when a real session returns (#44). Idempotent (healed rows leave the
+   * candidate set) and user-scoped, so firing on every restore event is safe.
+   * A null INITIAL_SESSION is AuthContext's cold-start concern, not ours.
+   */
+  useEffect(() => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
+      const shouldHeal = event === 'SIGNED_IN'
+        || event === 'TOKEN_REFRESHED'
+        || (event === 'INITIAL_SESSION' && Boolean(session));
+      if (!shouldHeal) return;
+      const userId = session?.user?.id ?? null;
+      if (!userId) return;
+      try {
+        await requeueTerminalRlsFailures(userId);
+      } catch (error) {
+        console.error('Auth-restore requeue failed:', error);
+      }
+      triggerBackgroundSyncRef.current();
+    });
+    return () => subscription.unsubscribe();
+  }, []);
 
   /**
    * Initial load: check network state and sync status
