@@ -11,6 +11,10 @@ import {
   seedCoreData,
 } from '../test-support/sqliteRepositoryTestUtils';
 
+const liveTestSession = async () => ({
+  data: { session: { user: { id: 'test-user' } } },
+});
+
 const expectedDomainId = () => letterMasteryDomainId({
   userId: LOGICAL_KEY.user_id,
   childId: LOGICAL_KEY.child_id,
@@ -127,7 +131,7 @@ describe('letter_mastery sync — deterministic logical-key push ids (idempotent
     await seedCoreData(serverDb);
     await seedChild(serverDb);
     const { supabaseClient } = createServerBackedSupabase(serverDb);
-    const engine = createOutboxSyncEngine({ database: db, supabaseClient });
+    const engine = createOutboxSyncEngine({ getAuthSession: liveTestSession, database: db, supabaseClient });
 
     const result = await engine.syncAll();
 
@@ -159,7 +163,7 @@ describe('letter_mastery sync — deterministic logical-key push ids (idempotent
     await seedCoreData(serverDb);
     await seedChild(serverDb);
     const { supabaseClient } = createServerBackedSupabase(serverDb);
-    const engine = createOutboxSyncEngine({ database: db, supabaseClient });
+    const engine = createOutboxSyncEngine({ getAuthSession: liveTestSession, database: db, supabaseClient });
 
     const result = await engine.syncAll();
 
@@ -185,7 +189,7 @@ describe('letter_mastery sync — deterministic logical-key push ids (idempotent
       await seedCoreData(db);
       await seedChild(db);
       await createMasteryRepository({ database: db }).saveLetterMasteryRecord({ ...LOGICAL_KEY, synced: false });
-      const engine = createOutboxSyncEngine({ database: db, supabaseClient });
+      const engine = createOutboxSyncEngine({ getAuthSession: liveTestSession, database: db, supabaseClient });
       const result = await engine.syncAll();
       expect(result.failedRecords).toEqual([]); // second install does not 23505
       await db.closeAsync();
@@ -222,7 +226,7 @@ describe('letter_mastery sync — deterministic logical-key push ids (idempotent
     await insertMastery(serverDb, LEGACY_SERVER_ID);
 
     const { supabaseClient } = createServerBackedSupabase(serverDb);
-    const engine = createOutboxSyncEngine({ database: db, supabaseClient });
+    const engine = createOutboxSyncEngine({ getAuthSession: liveTestSession, database: db, supabaseClient });
 
     const result = await engine.syncAll();
 

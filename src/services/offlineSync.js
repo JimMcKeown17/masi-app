@@ -644,6 +644,7 @@ export const createOutboxSyncEngine = ({
   tableConfigs = TABLE_CONFIGS,
   safeDuplicateSuccessTables = [],
   enqueueRequest = enqueueSupabaseRequest,
+  getAuthSession = () => supabase.auth.getSession(),
 } = {}) => {
   const safeDuplicateTables = new Set(safeDuplicateSuccessTables.map(normalizeTableName));
   const getConfig = (tableName) => {
@@ -826,6 +827,30 @@ export const createOutboxSyncEngine = ({
   };
 
   const syncAll = async ({ tableName = null, force = false } = {}) => {
+    // Auth gate: with no live session an upload pass would run anonymously and
+    // RLS-quarantine the whole outbox as terminal (ZZ 2026-06-09 field incident).
+    // getSession() can also return null while the refresh endpoint is merely
+    // unreachable offline, so a null here means "skip this pass", never "sign out".
+    let session = null;
+    try {
+      ({ data: { session } = {} } = await getAuthSession());
+    } catch (error) {
+      console.warn('syncAll: session check failed, skipping pass:', errorMessage(error));
+    }
+    if (!session) {
+      console.log('Sync skipped: no auth session');
+      return {
+        success: true,
+        skippedNoSession: true,
+        totalSynced: 0,
+        totalFailed: 0,
+        failedRecords: [],
+        tableResults: {},
+        preflightErrors: [],
+        durationMs: 0,
+      };
+    }
+
     const startedAt = Date.now();
     const result = {
       success: true,

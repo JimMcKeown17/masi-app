@@ -21,6 +21,10 @@ import { createOutboxSyncEngine } from '../src/services/offlineSync';
 import { createSupabaseRequestQueue } from '../src/services/supabaseRequestQueue';
 import { repairGroupOwnershipForSync } from '../src/db/repositories/groupsRepository';
 
+const liveTestSession = async () => ({
+  data: { session: { user: { id: 'test-user' } } },
+});
+
 const enqueue = async (db, tableName, recordId, operation, payload) => {
   const outbox = createSyncOutboxRepository({ database: db });
   await outbox.enqueue({ tableName, recordId, operation, payload });
@@ -76,7 +80,7 @@ it('one record fails while the healthy record still syncs and meta is written', 
 
   const beforeSync = new Date().toISOString();
   // time_entries upsert errors (retriable); classes succeeds.
-  const engine = createOutboxSyncEngine({ database: db, supabaseClient: supabaseFailingTable('time_entries') });
+  const engine = createOutboxSyncEngine({ getAuthSession: liveTestSession, database: db, supabaseClient: supabaseFailingTable('time_entries') });
 
   const result = await engine.syncAll();
 
@@ -122,7 +126,7 @@ it('a getById throw after markInFlight does not strand the row in_flight and the
   };
 
   const beforeSync = new Date().toISOString();
-  const engine = createOutboxSyncEngine({ database: db, outboxRepository: wrapped, supabaseClient: successSupabase() });
+  const engine = createOutboxSyncEngine({ getAuthSession: liveTestSession, database: db, outboxRepository: wrapped, supabaseClient: successSupabase() });
 
   // Must not throw.
   const result = await engine.syncAll();
@@ -168,6 +172,7 @@ it('sync meta is written even when a loop-body path throws', async () => {
   const updateSpy = jest.spyOn(stateRepository, 'updateSyncMeta');
 
   const engine = createOutboxSyncEngine({
+    getAuthSession: liveTestSession,
     database: db,
     outboxRepository: wrapped,
     stateRepository,
@@ -293,6 +298,7 @@ it('Fix 2 (Test A): a fallback processRecord markInFlight throw is owned by proc
   // Use a fresh isolated queue so global queue state from other tests doesn't leak in.
   const freshQueue = createSupabaseRequestQueue();
   const engine = createOutboxSyncEngine({
+    getAuthSession: liveTestSession,
     database: db,
     supabaseClient: batchErrorThenPerRowSupabase,
     outboxRepository: wrapped,
@@ -431,6 +437,7 @@ it('Task 9 (allSettled race): sibling B synced even when A markInFlight throws b
 
   const freshQueue = createSupabaseRequestQueue();
   const engine = createOutboxSyncEngine({
+    getAuthSession: liveTestSession,
     database: db,
     supabaseClient: supabaseMock,
     outboxRepository: wrapped,
@@ -514,7 +521,7 @@ it('a repairGroupOwnershipForSync throw does NOT block sync, does NOT strand in_
   repairGroupOwnershipForSync.mockImplementationOnce(async () => { throw new Error('repair boom'); });
 
   const beforeSync = new Date().toISOString();
-  const engine = createOutboxSyncEngine({ database: db, supabaseClient: successSupabase() });
+  const engine = createOutboxSyncEngine({ getAuthSession: liveTestSession, database: db, supabaseClient: successSupabase() });
 
   // Load-bearing: the pass RESOLVES — the repair throw must NOT reject syncAll.
   const result = await engine.syncAll();
@@ -576,6 +583,7 @@ it('resetInFlight failure surfaces a preflight error, syncs healthy rows, and th
 
   const beforeSync = new Date().toISOString();
   const engine = createOutboxSyncEngine({
+    getAuthSession: liveTestSession,
     database: db,
     outboxRepository: wrapped,
     supabaseClient: successSupabase(),
