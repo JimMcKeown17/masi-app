@@ -303,6 +303,70 @@ const TABLE_CONFIGS = Object.fromEntries(PUSH_ORDER.map((tableName, index) => [
 
 const normalizeTableName = (tableName) => tableName?.toLowerCase();
 
+// Resolve an FK/subject value from the outbox payload first, then the record's own local
+// domain row (archive/update payloads carry only id + a timestamp). Local state only; the
+// domain row is fetched at most once, lazily.
+const makeFieldResolver = (database, outboxRecord) => {
+  const payload = outboxRecord?.payload || {};
+  let domainRow;
+  let fetched = false;
+  return async (column) => {
+    if (payload[column] != null) return payload[column];
+    if (!fetched) {
+      fetched = true;
+      try {
+        domainRow = await database.getFirstAsync(
+          `select * from ${quoteIdentifier(outboxRecord.table_name)} where id = ?`,
+          outboxRecord.record_id,
+        );
+      } catch (_) { domainRow = null; }
+    }
+    return domainRow?.[column] ?? null;
+  };
+};
+
+const hasPendingActiveAssignment = async (database, grantTable, subjectColumn, subjectValue) => {
+  const row = await database.getFirstAsync(
+    `select 1 as present from ${quoteIdentifier(grantTable)}
+       where ${quoteIdentifier(subjectColumn)} = ?
+         and unassigned_at is null
+         and sync_status in ('pending', 'failed', 'in_flight')
+       limit 1`,
+    subjectValue,
+  );
+  return !!row;
+};
+
+// True when the record still has locally-pending evidence it legitimately needs: its FK
+// parent (for 23503 and the created_by half of 42501 grants) or, when includeGrant is set
+// (42501 only), an active assignment grant that has not synced. No server calls.
+const computeEvidencePending = async ({ database, outboxRepository, outboxRecord, includeGrant }) => {
+  const table = normalizeTableName(outboxRecord?.table_name);
+  const getField = makeFieldResolver(database, outboxRecord);
+
+  const fkColumns = PARENT_FK_COLUMNS[table] || {};
+  for (const [parentTable, column] of Object.entries(fkColumns)) {
+    const recordId = await getField(column);
+    if (recordId && await outboxRepository.hasPendingRecord({ tableName: parentTable, recordId })) {
+      return true;
+    }
+  }
+
+  if (includeGrant) {
+    const grants = GRANT_SUBJECTS[table] || [];
+    for (const { grantTable, subjectColumn } of grants) {
+      const subjectValue = await getField(subjectColumn);
+      if (subjectValue && await hasPendingActiveAssignment(database, grantTable, subjectColumn, subjectValue)) {
+        return true;
+      }
+    }
+  }
+
+  return false;
+};
+
+export const _testComputeEvidencePending = computeEvidencePending;
+
 const MAX_RETRY_DELAY = 15 * 60 * 1000; // cap exponential backoff at 15 minutes
 const getRetryDelay = (retryCountBeforeFailure) => (
   Math.min(BASE_RETRY_DELAY * Math.pow(3, Math.max(0, retryCountBeforeFailure)), MAX_RETRY_DELAY)

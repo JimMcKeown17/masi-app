@@ -9,6 +9,7 @@ import {
   AUTHENTICATED_DENIAL_MARKER,
   createOutboxSyncEngine,
   pullReferenceData,
+  _testComputeEvidencePending,
 } from '../src/services/offlineSync';
 import { getActiveProgrammeId } from '../src/db/repositories/domainRepositoryUtils';
 import {
@@ -668,6 +669,185 @@ describe('SQLite outbox offline sync', () => {
     `);
     expect(outboxRow.status).toBe('terminal');
     expect(outboxRow.last_error).toMatch(/identity/i);
+  });
+
+  describe('computeEvidencePending (#48)', () => {
+    test('FK-parent evidence: true when the parent has a pending outbox row', async () => {
+      await db.runAsync(`
+        insert into children (id, first_name, last_name, sync_status)
+        values ('child-1', 'Amahle', 'Dlamini', 'synced')
+      `);
+      await db.runAsync(`
+        insert into assessments (
+          id,
+          child_id,
+          user_id,
+          programme_id,
+          assessment_type,
+          assessment_date,
+          sync_status
+        )
+        values (
+          'asmt-1',
+          'child-1',
+          'user-1',
+          'programme-1',
+          'egra',
+          '2026-07-08',
+          'pending'
+        )
+      `);
+      await enqueue(db, 'assessments', 'asmt-1', 'insert', {
+        id: 'asmt-1',
+        child_id: 'child-1',
+      });
+      const outboxRepository = createSyncOutboxRepository({ database: db });
+
+      const pending = await _testComputeEvidencePending({
+        database: db,
+        outboxRepository,
+        outboxRecord: {
+          table_name: 'assessment_items',
+          record_id: 'ai-1',
+          payload: { id: 'ai-1', assessment_id: 'asmt-1' },
+        },
+        includeGrant: false,
+      });
+
+      expect(pending).toBe(true);
+    });
+
+    test('grant evidence: true when the granting child_ea_assignment is unsynced (42501 only)', async () => {
+      await db.runAsync(`
+        insert into children (id, first_name, last_name, sync_status)
+        values ('child-1', 'Amahle', 'Dlamini', 'synced')
+      `);
+      await db.runAsync(`
+        insert into child_ea_assignments (
+          id,
+          child_id,
+          user_id,
+          created_by,
+          sync_status
+        )
+        values (
+          'cea-1',
+          'child-1',
+          'user-1',
+          'user-1',
+          'pending'
+        )
+      `);
+      const outboxRepository = createSyncOutboxRepository({ database: db });
+      const record = {
+        table_name: 'session_attendees',
+        record_id: 'sa-1',
+        payload: { id: 'sa-1', child_id: 'child-1', session_id: 's-1' },
+      };
+
+      expect(await _testComputeEvidencePending({
+        database: db,
+        outboxRepository,
+        outboxRecord: record,
+        includeGrant: true,
+      })).toBe(true);
+      expect(await _testComputeEvidencePending({
+        database: db,
+        outboxRepository,
+        outboxRecord: record,
+        includeGrant: false,
+      })).toBe(false);
+    });
+
+    test('domain-row fallback: an archive payload with only id still yields evidence', async () => {
+      await db.runAsync(`
+        insert into children (id, first_name, last_name, sync_status)
+        values ('child-2', 'Amahle', 'Dlamini', 'synced')
+      `);
+      await db.runAsync(`
+        insert into groups (id, name, programme_id, created_by, sync_status)
+        values ('g-1', 'G', 'programme-1', 'user-1', 'synced')
+      `);
+      await db.runAsync(`
+        insert into child_ea_assignments (
+          id,
+          child_id,
+          user_id,
+          created_by,
+          sync_status
+        )
+        values (
+          'cea-2',
+          'child-2',
+          'user-1',
+          'user-1',
+          'pending'
+        )
+      `);
+      await db.runAsync(`
+        insert into child_group_memberships (
+          id,
+          child_id,
+          group_id,
+          sync_status
+        )
+        values (
+          'cgm-1',
+          'child-2',
+          'g-1',
+          'pending'
+        )
+      `);
+      const outboxRepository = createSyncOutboxRepository({ database: db });
+      const record = {
+        table_name: 'child_group_memberships',
+        record_id: 'cgm-1',
+        payload: { id: 'cgm-1', removed_at: '2026-07-08T00:00:00Z' },
+      };
+
+      expect(await _testComputeEvidencePending({
+        database: db,
+        outboxRepository,
+        outboxRecord: record,
+        includeGrant: true,
+      })).toBe(true);
+    });
+
+    test('false when no parent and no grant is pending (genuine denial)', async () => {
+      await db.runAsync(`
+        insert into children (id, first_name, last_name, sync_status)
+        values ('child-3', 'Amahle', 'Dlamini', 'synced')
+      `);
+      await db.runAsync(`
+        insert into child_ea_assignments (
+          id,
+          child_id,
+          user_id,
+          created_by,
+          sync_status
+        )
+        values (
+          'cea-3',
+          'child-3',
+          'user-1',
+          'user-1',
+          'synced'
+        )
+      `);
+      const outboxRepository = createSyncOutboxRepository({ database: db });
+      const record = {
+        table_name: 'session_attendees',
+        record_id: 'sa-9',
+        payload: { id: 'sa-9', child_id: 'child-3', session_id: 's-9' },
+      };
+
+      expect(await _testComputeEvidencePending({
+        database: db,
+        outboxRepository,
+        outboxRecord: record,
+        includeGrant: true,
+      })).toBe(false);
+    });
   });
 
   test('time entry repository writes are consumed by the sync engine', async () => {
