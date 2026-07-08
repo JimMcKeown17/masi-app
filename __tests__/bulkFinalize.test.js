@@ -6,6 +6,10 @@ import { runMigrations } from '../src/db/migrations';
 import { createSyncOutboxRepository } from '../src/db/repositories/syncOutboxRepository';
 import { createOutboxSyncEngine } from '../src/services/offlineSync';
 
+const liveTestSession = async () => ({
+  data: { session: { user: { id: 'test-user' } } },
+});
+
 const createSuccessSupabaseMock = () => {
   const supabaseClient = {
     from: jest.fn(() => ({
@@ -92,7 +96,7 @@ it('finalizes a 250-row success batch in O(chunks) transactions (not O(N)), CAS 
   };
 
   const { supabaseClient } = createSuccessSupabaseMock();
-  const engine = createOutboxSyncEngine({ database: db, supabaseClient });
+  const engine = createOutboxSyncEngine({ getAuthSession: liveTestSession, database: db, supabaseClient });
   await engine.syncAll();
 
   // Bulk finalize: 250 rows / 200 per chunk = 2 finalize transactions.

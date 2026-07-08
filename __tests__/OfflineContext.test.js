@@ -3,11 +3,23 @@ import { act, renderHook, waitFor } from '@testing-library/react-native';
 import { AppState } from 'react-native';
 import NetInfo from '@react-native-community/netinfo';
 import { OfflineProvider, useOffline } from '../src/context/OfflineContext';
-import { getSyncStatus, syncAll } from '../src/services/offlineSync';
+import { supabase } from '../src/services/supabaseClient';
+import { getSyncStatus, requeueTerminalRlsFailures, syncAll } from '../src/services/offlineSync';
 
 jest.mock('../src/services/offlineSync', () => ({
   getSyncStatus: jest.fn(),
+  requeueTerminalRlsFailures: jest.fn(async () => 0),
   syncAll: jest.fn(),
+}));
+
+jest.mock('../src/services/supabaseClient', () => ({
+  supabase: {
+    auth: {
+      onAuthStateChange: jest.fn(() => ({
+        data: { subscription: { unsubscribe: jest.fn() } },
+      })),
+    },
+  },
 }));
 
 jest.mock('@react-native-community/netinfo', () => ({
@@ -40,6 +52,7 @@ describe('OfflineContext Plan 4 sync API', () => {
       lastSuccessfulSyncTime: null,
     });
     syncAll.mockResolvedValue({ success: true, totalSynced: 0, totalFailed: 0 });
+    requeueTerminalRlsFailures.mockResolvedValue(0);
   });
 
   afterEach(() => {
@@ -310,6 +323,41 @@ describe('OfflineContext Plan 4 sync API', () => {
         listener({ isConnected: true, isInternetReachable: null });
       });
       await waitFor(() => expect(result.current.isOnline).toBe(true));
+    });
+  });
+
+  describe('auth-restore heal wiring', () => {
+    const emitAuthEvent = async (event, session) => {
+      const callback = supabase.auth.onAuthStateChange.mock.calls[0][0];
+      await act(async () => {
+        await callback(event, session);
+      });
+    };
+
+    test.each([
+      ['SIGNED_IN'],
+      ['TOKEN_REFRESHED'],
+      ['INITIAL_SESSION'],
+    ])('%s with a session heals then schedules a sync', async (event) => {
+      await renderOfflineHook();
+
+      await emitAuthEvent(event, { user: { id: 'user-1' } });
+
+      expect(requeueTerminalRlsFailures).toHaveBeenCalledWith('user-1');
+      await act(async () => {
+        jest.advanceTimersByTime(1500);
+        await Promise.resolve();
+      });
+      expect(syncAll).toHaveBeenCalled();
+    });
+
+    test('SIGNED_OUT and a null INITIAL_SESSION do not heal', async () => {
+      await renderOfflineHook();
+
+      await emitAuthEvent('SIGNED_OUT', null);
+      await emitAuthEvent('INITIAL_SESSION', null);
+
+      expect(requeueTerminalRlsFailures).not.toHaveBeenCalled();
     });
   });
 });

@@ -9,6 +9,10 @@ import {
   seedCoreData,
 } from '../test-support/sqliteRepositoryTestUtils';
 
+const liveTestSession = async () => ({
+  data: { session: { user: { id: 'test-user' } } },
+});
+
 // #35 (write-path root-cause fix): a class change must keep children.class_id and
 // the active child_class_memberships row in sync, so getChildrenInClass and the
 // roster query (which joins memberships ON exited_at IS NULL) never disagree.
@@ -170,7 +174,7 @@ describe('updateChild — offline create → reassign → sync coalesces the uns
     const serverDb = await createMigratedDatabase(runMigrations);
     await seedTwoClasses(serverDb);
     const { supabaseClient } = createServerBackedSupabase(serverDb);
-    const engine = createOutboxSyncEngine({ database: db, supabaseClient });
+    const engine = createOutboxSyncEngine({ getAuthSession: liveTestSession, database: db, supabaseClient });
 
     const result = await engine.syncAll();
 

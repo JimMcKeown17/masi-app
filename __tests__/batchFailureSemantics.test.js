@@ -7,6 +7,10 @@ import { createSyncOutboxRepository } from '../src/db/repositories/syncOutboxRep
 import { createOutboxSyncEngine } from '../src/services/offlineSync';
 import { seedCoreData } from '../test-support/sqliteRepositoryTestUtils';
 
+const liveTestSession = async () => ({
+  data: { session: { user: { id: 'test-user' } } },
+});
+
 // Supabase mock whose upsert THROWS — simulates a network throw mid-batch.
 // .from() returns synchronously, .upsert() is the async call that throws.
 // This routes through runBatchServerOperation's `supabaseClient.from(...).upsert(...)` path.
@@ -90,7 +94,7 @@ it('a thrown batch request degrades to per-record fallback (rows still sync)', a
     rpc: async () => ({ data: true, error: null }),
   });
 
-  const engine = createOutboxSyncEngine({ database: db, supabaseClient: batchThrowsPerRowSucceeds() });
+  const engine = createOutboxSyncEngine({ getAuthSession: liveTestSession, database: db, supabaseClient: batchThrowsPerRowSucceeds() });
   const result = await engine.syncAll();
 
   // All rows synced via the per-record fallback; outbox drained; none failed.
@@ -128,7 +132,7 @@ it('a thrown per-row request in the batch fallback finalizes retriable, none lef
     rpc: async () => ({ data: true, error: null }),
   };
 
-  const engine = createOutboxSyncEngine({ database: db, supabaseClient: batchFailsThenRowThrows });
+  const engine = createOutboxSyncEngine({ getAuthSession: liveTestSession, database: db, supabaseClient: batchFailsThenRowThrows });
   await engine.syncAll();
 
   const rows = await db.getAllAsync('select status, last_error from sync_outbox');
@@ -148,7 +152,7 @@ it('a thrown batch error finalizes EVERY member as retriable failed with last_er
   await seedCoreData(db);
   await seedAssessmentItemsForThrowTest(db, 3);
 
-  const engine = createOutboxSyncEngine({ database: db, supabaseClient: throwingSupabase() });
+  const engine = createOutboxSyncEngine({ getAuthSession: liveTestSession, database: db, supabaseClient: throwingSupabase() });
   const result = await engine.syncAll();
 
   const rows = await db.getAllAsync(`select status, last_error from sync_outbox`);

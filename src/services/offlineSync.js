@@ -286,6 +286,72 @@ const classifyError = (error, { duplicateIsSuccess = false } = {}) => {
   return { terminal: false, markAsSynced: false };
 };
 
+// Stamped onto last_error when a 42501 is quarantined WITH a live session.
+// Post-gate, that means a genuine RLS denial; the auth-restore heal
+// (offlineSync.requeueTerminalRlsFailures) must never touch marked rows.
+export const AUTHENTICATED_DENIAL_MARKER = '42501-authenticated:';
+
+const RLS_ERROR_SIGNATURE = /row-level security|42501/i;
+
+const isHealableRlsError = (record) => {
+  const err = record?.last_error;
+  if (typeof err !== 'string') return false;
+  if (err.startsWith(AUTHENTICATED_DENIAL_MARKER)) return false;
+  return RLS_ERROR_SIGNATURE.test(err);
+};
+
+// Owner-candidate resolution per synced table. `row` is the local domain row
+// (null for hard-deletes whose row is gone); `payload` the outbox snapshot.
+// created_by is the schema-true owner on created tables; staff_id/legacy keys
+// exist ONLY as payload input fallbacks (repositories normalize them away).
+const directOwner = (...columns) => async ({ row, payload }) => (
+  columns.map((column) => row?.[column] ?? payload?.[column]).filter(Boolean)
+);
+
+const viaParentOwner = (parentTable, foreignKey, parentOwnerColumn) => async ({ db, row, payload }) => {
+  const parentId = row?.[foreignKey] ?? payload?.[foreignKey];
+  if (!parentId) return [];
+  const parent = await db.getFirstAsync(
+    `select * from ${quoteIdentifier(parentTable)} where id = ?`,
+    parentId
+  );
+  if (!parent) return [];
+  return [parent[parentOwnerColumn]].filter(Boolean);
+};
+
+const combineOwners = (...resolvers) => async (context) => {
+  const owners = [];
+  for (const resolver of resolvers) {
+    owners.push(...await resolver(context));
+  }
+  return owners;
+};
+
+const OWNER_RESOLVERS = {
+  time_entries: directOwner('user_id'),
+  classes: directOwner('created_by', 'staff_id'),
+  children: directOwner('created_by'),
+  child_ea_assignments: directOwner('user_id', 'created_by'),
+  child_programme_enrollments: directOwner('created_by'),
+  child_class_memberships: directOwner('created_by'),
+  class_ea_assignments: directOwner('ea_user_id', 'created_by'),
+  grouping_versions: directOwner('created_by', 'accepted_by_user_id', 'archived_by_user_id'),
+  class_grouping_state: combineOwners(
+    directOwner('class_list_completed_by_user_id', 'class_list_reopened_by_user_id'),
+    viaParentOwner('classes', 'class_id', 'created_by'),
+  ),
+  groups: directOwner('created_by', 'staff_id'),
+  group_ea_assignments: directOwner('ea_user_id', 'created_by'),
+  child_group_memberships: directOwner('created_by'),
+  sessions: directOwner('user_id'),
+  session_attendees: viaParentOwner('sessions', 'session_id', 'user_id'),
+  assessments: directOwner('user_id'),
+  assessment_items: viaParentOwner('assessments', 'assessment_id', 'user_id'),
+  letter_mastery: directOwner('user_id'),
+};
+
+const genericOwnerResolver = directOwner('user_id', 'created_by', 'staff_id', 'ea_user_id');
+
 const buildSyncPayload = (tableName, record) => {
   const tableLegacyKeys = LEGACY_KEYS_TO_STRIP[tableName] || [];
   const keysToStrip = new Set([...LOCAL_ONLY_KEYS_TO_STRIP, ...tableLegacyKeys]);
@@ -644,6 +710,7 @@ export const createOutboxSyncEngine = ({
   tableConfigs = TABLE_CONFIGS,
   safeDuplicateSuccessTables = [],
   enqueueRequest = enqueueSupabaseRequest,
+  getAuthSession = () => supabase.auth.getSession(),
 } = {}) => {
   const safeDuplicateTables = new Set(safeDuplicateSuccessTables.map(normalizeTableName));
   const getConfig = (tableName) => {
@@ -692,7 +759,21 @@ export const createOutboxSyncEngine = ({
       }
 
       const classification = classifyError(serverResult.error, config);
-      const reason = errorMessage(serverResult.error);
+      let reason = errorMessage(serverResult.error);
+
+      if (serverResult.error?.code === '42501' && classification.terminal) {
+        let liveSession = null;
+        try {
+          ({ data: { session: liveSession } = {} } = await getAuthSession());
+        } catch (_) { /* treat as no session and downgrade below */ }
+        if (!liveSession) {
+          // A permission denial without a live session is not trustworthy
+          // evidence; retry after auth restore instead of quarantining.
+          classification.terminal = false;
+        } else {
+          reason = `${AUTHENTICATED_DENIAL_MARKER} ${reason}`;
+        }
+      }
 
       if (classification.markAsSynced) {
         await finalizeSuccess({
@@ -826,6 +907,30 @@ export const createOutboxSyncEngine = ({
   };
 
   const syncAll = async ({ tableName = null, force = false } = {}) => {
+    // Auth gate: with no live session an upload pass would run anonymously and
+    // RLS-quarantine the whole outbox as terminal (ZZ 2026-06-09 field incident).
+    // getSession() can also return null while the refresh endpoint is merely
+    // unreachable offline, so a null here means "skip this pass", never "sign out".
+    let session = null;
+    try {
+      ({ data: { session } = {} } = await getAuthSession());
+    } catch (error) {
+      console.warn('syncAll: session check failed, skipping pass:', errorMessage(error));
+    }
+    if (!session) {
+      console.log('Sync skipped: no auth session');
+      return {
+        success: true,
+        skippedNoSession: true,
+        totalSynced: 0,
+        totalFailed: 0,
+        failedRecords: [],
+        tableResults: {},
+        preflightErrors: [],
+        durationMs: 0,
+      };
+    }
+
     const startedAt = Date.now();
     const result = {
       success: true,
@@ -989,6 +1094,58 @@ export const createOutboxSyncEngine = ({
     };
   };
 
+  /**
+   * Auth-restore heal for RLS-quarantined rows (#44, port of ZZ OTA 1.1.0+4).
+   * Unmarked RLS terminals are auth-loss collateral; marked ones
+   * (AUTHENTICATED_DENIAL_MARKER, written post-gate with a live session) are
+   * genuine denials and are never healed. The outbox requeue and the domain
+   * sync_status reset share one transaction so the pending-local-wins pull
+   * guard protects the row immediately (terminal rows are outside that guard).
+   */
+  const requeueTerminalRlsFailures = async (userId) => {
+    if (!userId) return 0;
+    const db = await resolveDatabase(database);
+    const candidates = (await outboxRepository.getTerminalRecords()).filter(isHealableRlsError);
+    if (candidates.length === 0) return 0;
+
+    const heals = [];
+    for (const record of candidates) {
+      const resolver = OWNER_RESOLVERS[record.table_name] || genericOwnerResolver;
+      const row = await db.getFirstAsync(
+        `select * from ${quoteIdentifier(record.table_name)} where id = ?`,
+        record.record_id
+      ).catch(() => null);
+      const owners = await resolver({ db, row, payload: record.payload });
+      if (owners.length === 0) {
+        console.warn(`syncRescue: skipping ${record.table_name} ${record.record_id} (no owner field)`);
+        continue;
+      }
+      if (!owners.includes(userId)) {
+        console.warn(`syncRescue: skipping ${record.table_name} ${record.record_id} (owner mismatch)`);
+        continue;
+      }
+      heals.push(record);
+    }
+    if (heals.length === 0) return 0;
+
+    let count = 0;
+    await runRepositoryTransaction(database, async (txn) => {
+      count = await outboxRepository.requeueTerminalRows(heals.map((record) => record.id), { transaction: txn });
+      for (const record of heals) {
+        if (record.operation === 'hard_delete') continue;
+        const config = getConfig(record.table_name);
+        if (config) {
+          await setDomainSyncResult(txn, config.tableName, record.record_id, {
+            syncStatus: 'pending',
+            lastSyncError: null,
+          });
+        }
+      }
+    });
+    console.log(`syncRescue: requeued ${count} RLS-quarantined outbox rows for ${userId}`);
+    return count;
+  };
+
   const retryFailedItem = async (table, id) => {
     const tableName = normalizeTableName(table);
     // Route through the engine's `database` closure (undefined in prod → writer), NOT a
@@ -1019,6 +1176,7 @@ export const createOutboxSyncEngine = ({
     syncAll,
     syncTableByName,
     getSyncStatus,
+    requeueTerminalRlsFailures,
     retryFailedItem,
   };
 };
@@ -1033,6 +1191,7 @@ const defaultEngine = createOutboxSyncEngine({
 export const syncAll = (options) => defaultEngine.syncAll(options);
 export const syncTableByName = (tableName) => defaultEngine.syncTableByName(tableName);
 export const getSyncStatus = () => defaultEngine.getSyncStatus();
+export const requeueTerminalRlsFailures = (userId) => defaultEngine.requeueTerminalRlsFailures(userId);
 export const retryFailedItem = (table, id) => defaultEngine.retryFailedItem(table, id);
 
 export const _testBuildSyncPayload = buildSyncPayload;

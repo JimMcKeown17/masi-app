@@ -27,6 +27,7 @@ Use this map before changing any synced table, repository producer, outbox opera
 6. Insert and archive ordering differ. Insert can create access evidence early; archive must keep access-granting assignment rows alive until protected cleanup rows have synced.
 7. Reference/admin tables are pulled from the server and are not mobile-writable through app-role DML.
 8. Server pulls must not overwrite pending local rows (pending-local-wins, issue #42 / ZZ F7). See "Pull Merge Invariant" below.
+9. Sync auth state is part of the RLS contract (issues #43/#44). A sync pass with no Supabase session must return a structured skip (`{ success: true, skippedNoSession: true }`) before touching the outbox or sync metadata. A terminal `42501` recorded while a live session exists must store `last_error` with the `42501-authenticated:` prefix and must never be auto-healed. Unmarked RLS-terminal rows are treated as auth-loss collateral: when auth is restored through `SIGNED_IN`, `TOKEN_REFRESHED`, or sessionful `INITIAL_SESSION`, the engine requeues only rows owned by the signed-in user, and the outbox requeue plus domain `sync_status = 'pending'` reset happen in one SQLite transaction. See "Auth-Restore RLS Heal" below.
 
 ## Operation Semantics
 
@@ -70,6 +71,37 @@ Guarded pulled tables: `children`, `classes`, `groups`, `child_group_memberships
 Known limit (issue #47 scope): the guard keys on `id`. Tables whose server conflict arbiter is a secondary unique index (active-pair tables) can still collide when a pending local row and a server row share the pair but not the id.
 
 Tests: `__tests__/serverPullGuard.test.js` (real-engine, runs in both unit and integration tiers), the `ChildrenContext.test.js` pending-local-wins case, and the `ClassesContext.plan5.test.js` pending-edit case.
+
+## Auth-Restore RLS Heal
+
+Auth-loss `42501` failures are recoverable only when they were written without a live session marker. `OfflineContext` calls `offlineSync.requeueTerminalRlsFailures()` on `SIGNED_IN`, `TOKEN_REFRESHED`, and `INITIAL_SESSION` events that include a session. The engine resolves ownership against the restored user before requeueing, so a new user cannot revive another user's quarantined outbox rows.
+
+Rows marked with `42501-authenticated:` in `sync_outbox.last_error` are genuine authenticated RLS denials and remain terminal. Rows without that marker may be requeued when their owner matches the restored auth user. `sync_outbox.status`, retry counters, `last_error`, and the domain row's `sync_status`/`last_sync_error` are reset inside the same SQLite transaction, so the queue and domain table cannot disagree after a heal.
+
+Owner resolution in `src/services/offlineSync.js`:
+
+| Table | Owner resolution |
+| --- | --- |
+| `time_entries` | Direct `user_id` |
+| `classes` | Direct `created_by` or `staff_id` |
+| `children` | Direct `created_by` |
+| `child_ea_assignments` | Direct `user_id` or `created_by` |
+| `child_programme_enrollments` | Direct `created_by` |
+| `child_class_memberships` | Direct `created_by` |
+| `class_ea_assignments` | Direct `ea_user_id` or `created_by` |
+| `grouping_versions` | Direct `created_by`, `accepted_by_user_id`, or `archived_by_user_id` |
+| `class_grouping_state` | Direct `class_list_completed_by_user_id` or `class_list_reopened_by_user_id`; otherwise parent `classes.created_by` through `class_id` |
+| `groups` | Direct `created_by` or `staff_id` |
+| `group_ea_assignments` | Direct `ea_user_id` or `created_by` |
+| `child_group_memberships` | Direct `created_by` |
+| `sessions` | Direct `user_id` |
+| `session_attendees` | Parent `sessions.user_id` through `session_id` |
+| `assessments` | Direct `user_id` |
+| `assessment_items` | Parent `assessments.user_id` through `assessment_id` |
+| `letter_mastery` | Direct `user_id` |
+| Fallback for unmapped tables | Direct `user_id`, `created_by`, `staff_id`, or `ea_user_id` |
+
+Tests: `__tests__/offlineSyncAuthGate.test.js`, `__tests__/requeueTerminalRlsFailures.test.js`, and `__tests__/OfflineContext.test.js`.
 
 ## Table Contract Map
 
