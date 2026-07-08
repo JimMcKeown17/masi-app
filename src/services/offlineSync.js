@@ -195,6 +195,52 @@ const ARCHIVE_TABLE_DEPENDENCIES = {
   group_ea_assignments: ['child_group_memberships'],
 };
 
+// The payload/domain column holding each FK-parent's id, per child table. Covers 23503
+// and the "<parent>.created_by" half of 42501 write-grants. Explicit (not name-derived)
+// because class_grouping_state references grouping_versions via active_grouping_version_id.
+// A superset of TABLE_DEPENDENCIES (extra grouping-version edges); the drift test asserts
+// coverage, not equality.
+const PARENT_FK_COLUMNS = {
+  children: { classes: 'class_id' },
+  child_ea_assignments: { children: 'child_id' },
+  child_programme_enrollments: { children: 'child_id' },
+  child_class_memberships: { children: 'child_id', classes: 'class_id' },
+  class_ea_assignments: { classes: 'class_id' },
+  grouping_versions: { classes: 'class_id' },
+  class_grouping_state: { classes: 'class_id', grouping_versions: 'active_grouping_version_id' },
+  groups: { classes: 'class_id', grouping_versions: 'grouping_version_id' },
+  group_ea_assignments: { groups: 'group_id' },
+  child_group_memberships: { children: 'child_id', groups: 'group_id', grouping_versions: 'grouping_version_id' },
+  sessions: { classes: 'class_id' },
+  session_attendees: { sessions: 'session_id', children: 'child_id', groups: 'group_id' },
+  assessments: { children: 'child_id' },
+  assessment_items: { assessments: 'assessment_id' },
+  letter_mastery: { children: 'child_id' },
+};
+
+// The active-assignment grant(s) each write needs, per RLS private.current_user_can_write_for_*
+// (migration 20260521144901 lines 368-517). Only the assignment half is here; the created_by
+// half is covered by PARENT_FK_COLUMNS. staff_programme_assignments is excluded (reference data,
+// never pushed, so a 42501 from it is a genuine terminal denial). Used for 42501 only.
+const GRANT_SUBJECTS = {
+  child_class_memberships: [
+    { grantTable: 'child_ea_assignments', subjectColumn: 'child_id' },
+    { grantTable: 'class_ea_assignments', subjectColumn: 'class_id' },
+  ],
+  child_programme_enrollments: [{ grantTable: 'child_ea_assignments', subjectColumn: 'child_id' }],
+  child_group_memberships: [
+    { grantTable: 'child_ea_assignments', subjectColumn: 'child_id' },
+    { grantTable: 'group_ea_assignments', subjectColumn: 'group_id' },
+  ],
+  session_attendees: [{ grantTable: 'child_ea_assignments', subjectColumn: 'child_id' }],
+  assessments: [{ grantTable: 'child_ea_assignments', subjectColumn: 'child_id' }],
+  letter_mastery: [{ grantTable: 'child_ea_assignments', subjectColumn: 'child_id' }],
+  grouping_versions: [{ grantTable: 'class_ea_assignments', subjectColumn: 'class_id' }],
+  class_grouping_state: [{ grantTable: 'class_ea_assignments', subjectColumn: 'class_id' }],
+};
+
+export const _testEvidenceMaps = { TABLE_DEPENDENCIES, PARENT_FK_COLUMNS, GRANT_SUBJECTS };
+
 const ARCHIVE_PUSH_ORDER = {
   time_entries: 0,
   classes: 1,
