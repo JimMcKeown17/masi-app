@@ -628,6 +628,48 @@ describe('SQLite outbox offline sync', () => {
     `)).toEqual({ sync_status: 'synced', last_sync_error: null });
   });
 
+  test('a 23514 identity-trigger rejection on an archive re-push is terminal, not infinite retry (#48)', async () => {
+    await db.runAsync(`
+      insert into groups (id, name, programme_id, created_by, sync_status)
+      values ('g-1', 'G', 'programme-1', 'user-1', 'synced')
+    `);
+    await enqueue(db, 'group_ea_assignments', 'gea-1', 'archive', {
+      id: 'gea-1',
+      group_id: 'g-1',
+      ea_user_id: 'user-1',
+      programme_id: 'programme-1',
+      created_by: 'user-1',
+      unassigned_at: '2026-07-08T00:00:00.000Z',
+    });
+
+    const { supabaseClient } = createSupabaseMock({
+      upsertResults: {
+        group_ea_assignments: ({ options }) => (
+          options.ignoreDuplicates === true
+            ? { error: null }
+            : {
+              error: {
+                code: '23514',
+                message: 'group_ea_assignments identity columns cannot be changed after insert',
+              },
+            }
+        ),
+      },
+    });
+    const engine = createOutboxSyncEngine({ getAuthSession: liveTestSession, database: db, supabaseClient });
+
+    await engine.syncAll();
+
+    const outboxRow = await db.getFirstAsync(`
+      select status, last_error
+      from sync_outbox
+      where table_name = 'group_ea_assignments'
+        and record_id = 'gea-1'
+    `);
+    expect(outboxRow.status).toBe('terminal');
+    expect(outboxRow.last_error).toMatch(/identity/i);
+  });
+
   test('time entry repository writes are consumed by the sync engine', async () => {
     const repository = createTimeEntriesRepository({ database: db });
     await repository.saveTimeEntry({

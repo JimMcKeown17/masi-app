@@ -266,8 +266,19 @@ const nextRetryTimestamp = (retryCountBeforeFailure) => (
   new Date(Date.now() + getRetryDelay(retryCountBeforeFailure)).toISOString()
 );
 
-const classifyError = (error, { duplicateIsSuccess = false } = {}) => {
+const classifyError = (error, { duplicateIsSuccess = false, tableName } = {}) => {
   const code = error?.code;
+
+  // Identity-immutability triggers on assignment tables raise 23514 when an
+  // update-capable re-push carries drifted identity fields. The same payload
+  // can never satisfy the trigger, so retrying on backoff would loop forever.
+  if (code === '23514' && IMMUTABLE_ASSIGNMENT_TABLES.has(normalizeTableName(tableName))) {
+    return {
+      terminal: true,
+      markAsSynced: false,
+      reason: 'Immutable identity columns rejected the update (23514)',
+    };
+  }
 
   if (code === '23505') {
     return { terminal: true, markAsSynced: duplicateIsSuccess };
@@ -760,6 +771,9 @@ export const createOutboxSyncEngine = ({
 
       const classification = classifyError(serverResult.error, config);
       let reason = errorMessage(serverResult.error);
+      if (classification.reason) {
+        reason = `${classification.reason}: ${reason}`;
+      }
 
       if (serverResult.error?.code === '42501' && classification.terminal) {
         let liveSession = null;
