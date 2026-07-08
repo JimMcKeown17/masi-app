@@ -84,6 +84,19 @@ export const createSyncOutboxRepository = ({ database } = {}) => {
     return rows.map(toOutboxRecord);
   };
 
+  const hasPendingRecord = async ({ tableName, recordId }) => {
+    if (!tableName || !recordId) return false;
+    const db = await resolveDatabase(database);
+    // "Still owed" means the outbox row has not been acknowledged. Terminal rows do not count.
+    const row = await db.getFirstAsync(`
+      select id from sync_outbox
+      where table_name = ? and record_id = ?
+        and status in ('pending', 'failed', 'in_flight')
+      limit 1
+    `, tableName, recordId);
+    return !!row;
+  };
+
   const getTerminalRecords = async () => {
     const db = await resolveDatabase(database);
     const rows = await db.getAllAsync(`
@@ -245,6 +258,7 @@ export const createSyncOutboxRepository = ({ database } = {}) => {
     enqueue,
     getById,
     getReadyRecords,
+    hasPendingRecord,
     getTerminalRecords,
     markInFlight,
     resetInFlight,
