@@ -376,7 +376,11 @@ const nextRetryTimestamp = (retryCountBeforeFailure) => (
   new Date(Date.now() + getRetryDelay(retryCountBeforeFailure)).toISOString()
 );
 
-const classifyError = (error, { duplicateIsSuccess = false, tableName } = {}) => {
+const classifyError = (
+  error,
+  { duplicateIsSuccess = false, tableName } = {},
+  { parentEvidencePending = false } = {},
+) => {
   const code = error?.code;
 
   // Identity-immutability triggers on assignment tables raise 23514 when an
@@ -394,10 +398,14 @@ const classifyError = (error, { duplicateIsSuccess = false, tableName } = {}) =>
     return { terminal: true, markAsSynced: duplicateIsSuccess };
   }
 
+  if (code === '23503' || code === '42501') {
+    // A FK/RLS denial while required local evidence is still pending is a
+    // cross-pass race. Without pending evidence, it is a genuine rejection.
+    return { terminal: !parentEvidencePending, markAsSynced: false };
+  }
+
   if (
-    code === '23503'
-    || code === '42501'
-    || code === 'ARCHIVE_REQUIRED'
+    code === 'ARCHIVE_REQUIRED'
     || code === 'LOCAL_ONLY_REFERENCE'
     || code === 'MISSING_OUTBOX_PAYLOAD'
   ) {
@@ -879,10 +887,23 @@ export const createOutboxSyncEngine = ({
         return { success: true };
       }
 
-      const classification = classifyError(serverResult.error, config);
+      const failureCode = serverResult.error?.code;
+      const parentEvidencePending = (failureCode === '23503' || failureCode === '42501')
+        ? await computeEvidencePending({
+            database,
+            outboxRepository,
+            outboxRecord: inFlightRecord,
+            includeGrant: failureCode === '42501',
+          })
+        : false;
+      const classification = classifyError(serverResult.error, config, { parentEvidencePending });
       let reason = errorMessage(serverResult.error);
       if (classification.reason) {
         reason = `${classification.reason}: ${reason}`;
+      }
+      if (parentEvidencePending) {
+        // Observability: make support logs distinguish evidence races from genuine denials.
+        console.log(`Sync retry deferred: ${config.tableName}:${inFlightRecord.record_id} awaiting pending local evidence (${failureCode})`);
       }
 
       if (serverResult.error?.code === '42501' && classification.terminal) {

@@ -77,3 +77,43 @@ describe('evidence maps (#48 part 2)', () => {
     expect(GRANT_SUBJECTS.groups).toBeUndefined(); // created_by + staff_programme_assignments only: no device assignment grant
   });
 });
+
+describe('classifyError evidence-pending downgrade for 42501/23503 (#48 part 2)', () => {
+  test('23503 retriable when evidence pending, terminal otherwise', () => {
+    expect(
+      _testClassifyError(
+        { code: '23503' },
+        { tableName: 'assessment_items' },
+        { parentEvidencePending: true }
+      ).terminal
+    ).toBe(false);
+    expect(
+      _testClassifyError(
+        { code: '23503' },
+        { tableName: 'assessment_items' },
+        { parentEvidencePending: false }
+      ).terminal
+    ).toBe(true);
+  });
+
+  test('42501 retriable when evidence pending, terminal otherwise', () => {
+    expect(
+      _testClassifyError(
+        { code: '42501' },
+        { tableName: 'session_attendees' },
+        { parentEvidencePending: true }
+      ).terminal
+    ).toBe(false);
+    expect(
+      _testClassifyError(
+        { code: '42501' },
+        { tableName: 'session_attendees' },
+        { parentEvidencePending: false }
+      ).terminal
+    ).toBe(true);
+  });
+
+  test('context defaults to not-pending for two-arg callers', () => {
+    expect(_testClassifyError({ code: '23503' }, { tableName: 'assessment_items' }).terminal).toBe(true);
+  });
+});
