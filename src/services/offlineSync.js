@@ -30,6 +30,7 @@ import {
   childEaAssignmentDomainId,
   childProgrammeEnrollmentDomainId,
   classEaAssignmentDomainId,
+  classGroupingStateDomainId,
   ensureServerUuid,
   groupEaAssignmentDomainId,
   LEGACY_PROGRAMME_ID,
@@ -566,6 +567,17 @@ const buildSyncPayload = (tableName, record) => {
   }
   if (tableName === 'group_ea_assignments' && payload.id && payload.group_id) {
     payload.id = groupEaAssignmentDomainId({ groupId: payload.group_id });
+  }
+  if (
+    tableName === 'class_grouping_state'
+    && payload.id
+    && payload.class_id
+    && payload.academic_year_id
+  ) {
+    payload.id = classGroupingStateDomainId({
+      classId: payload.class_id,
+      academicYearId: payload.academic_year_id,
+    });
   }
   return payload;
 };
