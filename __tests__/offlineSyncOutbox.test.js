@@ -9,6 +9,7 @@ import {
   AUTHENTICATED_DENIAL_MARKER,
   createOutboxSyncEngine,
   pullReferenceData,
+  _testComputeEvidencePending,
 } from '../src/services/offlineSync';
 import { getActiveProgrammeId } from '../src/db/repositories/domainRepositoryUtils';
 import {
@@ -626,6 +627,412 @@ describe('SQLite outbox offline sync', () => {
       from group_ea_assignments
       where id = 'group-assignment-existing'
     `)).toEqual({ sync_status: 'synced', last_sync_error: null });
+  });
+
+  test('a 23514 identity-trigger rejection on an archive re-push is terminal, not infinite retry (#48)', async () => {
+    await db.runAsync(`
+      insert into groups (id, name, programme_id, created_by, sync_status)
+      values ('g-1', 'G', 'programme-1', 'user-1', 'synced')
+    `);
+    await enqueue(db, 'group_ea_assignments', 'gea-1', 'archive', {
+      id: 'gea-1',
+      group_id: 'g-1',
+      ea_user_id: 'user-1',
+      programme_id: 'programme-1',
+      created_by: 'user-1',
+      unassigned_at: '2026-07-08T00:00:00.000Z',
+    });
+
+    const { supabaseClient } = createSupabaseMock({
+      upsertResults: {
+        group_ea_assignments: ({ options }) => (
+          options.ignoreDuplicates === true
+            ? { error: null }
+            : {
+              error: {
+                code: '23514',
+                message: 'group_ea_assignments identity columns cannot be changed after insert',
+              },
+            }
+        ),
+      },
+    });
+    const engine = createOutboxSyncEngine({ getAuthSession: liveTestSession, database: db, supabaseClient });
+
+    await engine.syncAll();
+
+    const outboxRow = await db.getFirstAsync(`
+      select status, last_error
+      from sync_outbox
+      where table_name = 'group_ea_assignments'
+        and record_id = 'gea-1'
+    `);
+    expect(outboxRow.status).toBe('terminal');
+    expect(outboxRow.last_error).toMatch(/identity/i);
+  });
+
+  describe('computeEvidencePending (#48)', () => {
+    test('FK-parent evidence: true when the parent has a pending outbox row', async () => {
+      await db.runAsync(`
+        insert into children (id, first_name, last_name, sync_status)
+        values ('child-1', 'Amahle', 'Dlamini', 'synced')
+      `);
+      await db.runAsync(`
+        insert into assessments (
+          id,
+          child_id,
+          user_id,
+          programme_id,
+          assessment_type,
+          assessment_date,
+          sync_status
+        )
+        values (
+          'asmt-1',
+          'child-1',
+          'user-1',
+          'programme-1',
+          'egra',
+          '2026-07-08',
+          'pending'
+        )
+      `);
+      await enqueue(db, 'assessments', 'asmt-1', 'insert', {
+        id: 'asmt-1',
+        child_id: 'child-1',
+      });
+      const outboxRepository = createSyncOutboxRepository({ database: db });
+
+      const pending = await _testComputeEvidencePending({
+        database: db,
+        outboxRepository,
+        outboxRecord: {
+          table_name: 'assessment_items',
+          record_id: 'ai-1',
+          payload: { id: 'ai-1', assessment_id: 'asmt-1' },
+        },
+        includeGrant: false,
+      });
+
+      expect(pending).toBe(true);
+    });
+
+    test('grant evidence: true when the granting child_ea_assignment is unsynced (42501 only)', async () => {
+      await db.runAsync(`
+        insert into children (id, first_name, last_name, sync_status)
+        values ('child-1', 'Amahle', 'Dlamini', 'synced')
+      `);
+      await db.runAsync(`
+        insert into child_ea_assignments (
+          id,
+          child_id,
+          user_id,
+          created_by,
+          sync_status
+        )
+        values (
+          'cea-1',
+          'child-1',
+          'user-1',
+          'user-1',
+          'pending'
+        )
+      `);
+      const outboxRepository = createSyncOutboxRepository({ database: db });
+      const record = {
+        table_name: 'session_attendees',
+        record_id: 'sa-1',
+        payload: { id: 'sa-1', child_id: 'child-1', session_id: 's-1' },
+      };
+
+      expect(await _testComputeEvidencePending({
+        database: db,
+        outboxRepository,
+        outboxRecord: record,
+        includeGrant: true,
+      })).toBe(true);
+      expect(await _testComputeEvidencePending({
+        database: db,
+        outboxRepository,
+        outboxRecord: record,
+        includeGrant: false,
+      })).toBe(false);
+    });
+
+    test('domain-row fallback: an archive payload with only id still yields evidence', async () => {
+      await db.runAsync(`
+        insert into children (id, first_name, last_name, sync_status)
+        values ('child-2', 'Amahle', 'Dlamini', 'synced')
+      `);
+      await db.runAsync(`
+        insert into groups (id, name, programme_id, created_by, sync_status)
+        values ('g-1', 'G', 'programme-1', 'user-1', 'synced')
+      `);
+      await db.runAsync(`
+        insert into child_ea_assignments (
+          id,
+          child_id,
+          user_id,
+          created_by,
+          sync_status
+        )
+        values (
+          'cea-2',
+          'child-2',
+          'user-1',
+          'user-1',
+          'pending'
+        )
+      `);
+      await db.runAsync(`
+        insert into child_group_memberships (
+          id,
+          child_id,
+          group_id,
+          sync_status
+        )
+        values (
+          'cgm-1',
+          'child-2',
+          'g-1',
+          'pending'
+        )
+      `);
+      const outboxRepository = createSyncOutboxRepository({ database: db });
+      const record = {
+        table_name: 'child_group_memberships',
+        record_id: 'cgm-1',
+        payload: { id: 'cgm-1', removed_at: '2026-07-08T00:00:00Z' },
+      };
+
+      expect(await _testComputeEvidencePending({
+        database: db,
+        outboxRepository,
+        outboxRecord: record,
+        includeGrant: true,
+      })).toBe(true);
+    });
+
+    test('false when no parent and no grant is pending (genuine denial)', async () => {
+      await db.runAsync(`
+        insert into children (id, first_name, last_name, sync_status)
+        values ('child-3', 'Amahle', 'Dlamini', 'synced')
+      `);
+      await db.runAsync(`
+        insert into child_ea_assignments (
+          id,
+          child_id,
+          user_id,
+          created_by,
+          sync_status
+        )
+        values (
+          'cea-3',
+          'child-3',
+          'user-1',
+          'user-1',
+          'synced'
+        )
+      `);
+      const outboxRepository = createSyncOutboxRepository({ database: db });
+      const record = {
+        table_name: 'session_attendees',
+        record_id: 'sa-9',
+        payload: { id: 'sa-9', child_id: 'child-3', session_id: 's-9' },
+      };
+
+      expect(await _testComputeEvidencePending({
+        database: db,
+        outboxRepository,
+        outboxRecord: record,
+        includeGrant: true,
+      })).toBe(false);
+    });
+  });
+
+  test('AC2: a 42501 stays retriable while its FK parent is pending, then succeeds after the parent syncs (#48)', async () => {
+    await db.runAsync(`
+      insert into children (id, first_name, last_name, sync_status)
+      values ('child-1', 'Amahle', 'Dlamini', 'synced')
+    `);
+    await db.runAsync(`
+      insert into assessments (
+        id,
+        child_id,
+        user_id,
+        programme_id,
+        assessment_type,
+        assessment_date,
+        sync_status
+      )
+      values (
+        'asmt-1',
+        'child-1',
+        'user-1',
+        'programme-1',
+        'egra',
+        '2026-07-08',
+        'pending'
+      )
+    `);
+    await enqueue(db, 'assessments', 'asmt-1', 'insert', {
+      id: 'asmt-1',
+      child_id: 'child-1',
+      user_id: 'user-1',
+      programme_id: 'programme-1',
+      assessment_type: 'egra',
+      assessment_date: '2026-07-08',
+    });
+    await db.runAsync(`
+      insert into assessment_items (id, assessment_id, item_key, sync_status)
+      values ('ai-1', 'asmt-1', 'letter-a', 'pending')
+    `);
+    await enqueue(db, 'assessment_items', 'ai-1', 'insert', {
+      id: 'ai-1',
+      assessment_id: 'asmt-1',
+      item_key: 'letter-a',
+    });
+
+    let denyItem = true;
+    const { supabaseClient } = createSupabaseMock({
+      upsertResults: {
+        assessment_items: () => (
+          denyItem
+            ? { error: { code: '42501', message: 'row-level security' } }
+            : { error: null }
+        ),
+        assessments: { error: null },
+      },
+    });
+    const engine = createOutboxSyncEngine({ getAuthSession: liveTestSession, database: db, supabaseClient });
+
+    await engine.syncAll({ tableName: 'assessment_items' });
+    let item = await db.getFirstAsync(`
+      select status, last_error
+      from sync_outbox
+      where record_id = 'ai-1'
+    `);
+    expect(item.status).toBe('failed');
+    expect(item.last_error || '').not.toContain(AUTHENTICATED_DENIAL_MARKER);
+
+    denyItem = false;
+    await engine.syncAll({ force: true });
+    item = await db.getFirstAsync(`
+      select id
+      from sync_outbox
+      where record_id = 'ai-1'
+    `);
+    expect(item).toBeFalsy();
+  });
+
+  test('a 42501 with a live session and no pending evidence is terminal and marked (#48)', async () => {
+    await db.runAsync(`
+      insert into children (id, first_name, last_name, sync_status)
+      values ('child-2', 'Amahle', 'Dlamini', 'synced')
+    `);
+    await db.runAsync(`
+      insert into assessments (
+        id,
+        child_id,
+        user_id,
+        programme_id,
+        assessment_type,
+        assessment_date,
+        sync_status
+      )
+      values (
+        'asmt-2',
+        'child-2',
+        'user-1',
+        'programme-1',
+        'egra',
+        '2026-07-08',
+        'synced'
+      )
+    `);
+    await db.runAsync(`
+      insert into child_ea_assignments (id, child_id, user_id, created_by, sync_status)
+      values ('cea-2', 'child-2', 'user-1', 'user-1', 'synced')
+    `);
+    await db.runAsync(`
+      insert into assessment_items (id, assessment_id, item_key, sync_status)
+      values ('ai-2', 'asmt-2', 'letter-b', 'pending')
+    `);
+    await enqueue(db, 'assessment_items', 'ai-2', 'insert', {
+      id: 'ai-2',
+      assessment_id: 'asmt-2',
+      item_key: 'letter-b',
+    });
+
+    const { supabaseClient } = createSupabaseMock({
+      upsertResults: {
+        assessment_items: { error: { code: '42501', message: 'row-level security' } },
+      },
+    });
+    const engine = createOutboxSyncEngine({ getAuthSession: liveTestSession, database: db, supabaseClient });
+
+    await engine.syncAll({ tableName: 'assessment_items' });
+
+    const item = await db.getFirstAsync(`
+      select status, last_error
+      from sync_outbox
+      where record_id = 'ai-2'
+    `);
+    expect(item.status).toBe('terminal');
+    expect(item.last_error).toContain(AUTHENTICATED_DENIAL_MARKER);
+  });
+
+  test('a 42501 stays retriable while the granting child_ea_assignment is unsynced (#48)', async () => {
+    await db.runAsync(`
+      insert into children (id, first_name, last_name, sync_status)
+      values ('child-3', 'Amahle', 'Dlamini', 'synced')
+    `);
+    await db.runAsync(`
+      insert into sessions (
+        id,
+        user_id,
+        programme_id,
+        session_date,
+        sync_status
+      )
+      values (
+        's-3',
+        'user-1',
+        'programme-1',
+        '2026-07-08',
+        'synced'
+      )
+    `);
+    await db.runAsync(`
+      insert into child_ea_assignments (id, child_id, user_id, created_by, sync_status)
+      values ('cea-3', 'child-3', 'user-1', 'user-1', 'pending')
+    `);
+    await db.runAsync(`
+      insert into session_attendees (id, session_id, child_id, sync_status)
+      values ('sa-3', 's-3', 'child-3', 'pending')
+    `);
+    await enqueue(db, 'session_attendees', 'sa-3', 'insert', {
+      id: 'sa-3',
+      session_id: 's-3',
+      child_id: 'child-3',
+    });
+
+    const { supabaseClient } = createSupabaseMock({
+      upsertResults: {
+        session_attendees: { error: { code: '42501', message: 'row-level security' } },
+      },
+    });
+    const engine = createOutboxSyncEngine({ getAuthSession: liveTestSession, database: db, supabaseClient });
+
+    await engine.syncAll({ tableName: 'session_attendees' });
+
+    const attendee = await db.getFirstAsync(`
+      select status, last_error
+      from sync_outbox
+      where record_id = 'sa-3'
+    `);
+    expect(attendee.status).toBe('failed');
+    expect(attendee.last_error || '').not.toContain(AUTHENTICATED_DENIAL_MARKER);
   });
 
   test('time entry repository writes are consumed by the sync engine', async () => {

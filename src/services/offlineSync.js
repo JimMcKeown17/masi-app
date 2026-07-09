@@ -195,6 +195,58 @@ const ARCHIVE_TABLE_DEPENDENCIES = {
   group_ea_assignments: ['child_group_memberships'],
 };
 
+// The payload/domain column holding each FK-parent's id, per child table. Covers 23503
+// and the "<parent>.created_by" half of 42501 write-grants. Explicit (not name-derived)
+// because class_grouping_state references grouping_versions via active_grouping_version_id.
+// A superset of TABLE_DEPENDENCIES (extra grouping-version edges); the drift test asserts
+// coverage, not equality.
+const PARENT_FK_COLUMNS = {
+  children: { classes: 'class_id' },
+  child_ea_assignments: { children: 'child_id' },
+  child_programme_enrollments: { children: 'child_id' },
+  child_class_memberships: { children: 'child_id', classes: 'class_id' },
+  class_ea_assignments: { classes: 'class_id' },
+  grouping_versions: { classes: 'class_id' },
+  class_grouping_state: { classes: 'class_id', grouping_versions: 'active_grouping_version_id' },
+  groups: { classes: 'class_id', grouping_versions: 'grouping_version_id' },
+  group_ea_assignments: { groups: 'group_id' },
+  child_group_memberships: { children: 'child_id', groups: 'group_id', grouping_versions: 'grouping_version_id' },
+  sessions: { classes: 'class_id' },
+  session_attendees: { sessions: 'session_id', children: 'child_id', groups: 'group_id' },
+  assessments: { children: 'child_id' },
+  assessment_items: { assessments: 'assessment_id' },
+  letter_mastery: { children: 'child_id' },
+};
+
+// The DIRECT active-assignment grant(s) each write needs, per RLS
+// private.current_user_can_write_for_* (migration 20260521144901 lines 368-517). Only the
+// assignment half is here; the created_by half is covered by PARENT_FK_COLUMNS.
+// staff_programme_assignments is excluded (reference data, never pushed, so a 42501 from it is a
+// genuine terminal denial). Used for 42501 only. LIMITATION: write_for_child also grants via two
+// membership-mediated paths (class_ea via child_class_memberships, group_ea via
+// child_group_memberships) that this single-hop map cannot express; a child write whose ONLY
+// grant is a pending class/group assignment would false-terminal. Not reachable in the current
+// direct-child-assignment field model; extend this before group-centric (whole-class) access
+// ships. See rls-sync-contract-map.md "Error Classification (Item 10)".
+const GRANT_SUBJECTS = {
+  child_class_memberships: [
+    { grantTable: 'child_ea_assignments', subjectColumn: 'child_id' },
+    { grantTable: 'class_ea_assignments', subjectColumn: 'class_id' },
+  ],
+  child_programme_enrollments: [{ grantTable: 'child_ea_assignments', subjectColumn: 'child_id' }],
+  child_group_memberships: [
+    { grantTable: 'child_ea_assignments', subjectColumn: 'child_id' },
+    { grantTable: 'group_ea_assignments', subjectColumn: 'group_id' },
+  ],
+  session_attendees: [{ grantTable: 'child_ea_assignments', subjectColumn: 'child_id' }],
+  assessments: [{ grantTable: 'child_ea_assignments', subjectColumn: 'child_id' }],
+  letter_mastery: [{ grantTable: 'child_ea_assignments', subjectColumn: 'child_id' }],
+  grouping_versions: [{ grantTable: 'class_ea_assignments', subjectColumn: 'class_id' }],
+  class_grouping_state: [{ grantTable: 'class_ea_assignments', subjectColumn: 'class_id' }],
+};
+
+export const _testEvidenceMaps = { TABLE_DEPENDENCIES, PARENT_FK_COLUMNS, GRANT_SUBJECTS };
+
 const ARCHIVE_PUSH_ORDER = {
   time_entries: 0,
   classes: 1,
@@ -257,6 +309,70 @@ const TABLE_CONFIGS = Object.fromEntries(PUSH_ORDER.map((tableName, index) => [
 
 const normalizeTableName = (tableName) => tableName?.toLowerCase();
 
+// Resolve an FK/subject value from the outbox payload first, then the record's own local
+// domain row (archive/update payloads carry only id + a timestamp). Local state only; the
+// domain row is fetched at most once, lazily.
+const makeFieldResolver = (database, outboxRecord) => {
+  const payload = outboxRecord?.payload || {};
+  let domainRow;
+  let fetched = false;
+  return async (column) => {
+    if (payload[column] != null) return payload[column];
+    if (!fetched) {
+      fetched = true;
+      try {
+        domainRow = await database.getFirstAsync(
+          `select * from ${quoteIdentifier(outboxRecord.table_name)} where id = ?`,
+          outboxRecord.record_id,
+        );
+      } catch (_) { domainRow = null; }
+    }
+    return domainRow?.[column] ?? null;
+  };
+};
+
+const hasPendingActiveAssignment = async (database, grantTable, subjectColumn, subjectValue) => {
+  const row = await database.getFirstAsync(
+    `select 1 as present from ${quoteIdentifier(grantTable)}
+       where ${quoteIdentifier(subjectColumn)} = ?
+         and unassigned_at is null
+         and sync_status in ('pending', 'failed', 'in_flight')
+       limit 1`,
+    subjectValue,
+  );
+  return !!row;
+};
+
+// True when the record still has locally-pending evidence it legitimately needs: its FK
+// parent (for 23503 and the created_by half of 42501 grants) or, when includeGrant is set
+// (42501 only), an active assignment grant that has not synced. No server calls.
+const computeEvidencePending = async ({ database, outboxRepository, outboxRecord, includeGrant }) => {
+  const table = normalizeTableName(outboxRecord?.table_name);
+  const getField = makeFieldResolver(database, outboxRecord);
+
+  const fkColumns = PARENT_FK_COLUMNS[table] || {};
+  for (const [parentTable, column] of Object.entries(fkColumns)) {
+    const recordId = await getField(column);
+    if (recordId && await outboxRepository.hasPendingRecord({ tableName: parentTable, recordId })) {
+      return true;
+    }
+  }
+
+  if (includeGrant) {
+    const grants = GRANT_SUBJECTS[table] || [];
+    for (const { grantTable, subjectColumn } of grants) {
+      const subjectValue = await getField(subjectColumn);
+      if (subjectValue && await hasPendingActiveAssignment(database, grantTable, subjectColumn, subjectValue)) {
+        return true;
+      }
+    }
+  }
+
+  return false;
+};
+
+export const _testComputeEvidencePending = computeEvidencePending;
+
 const MAX_RETRY_DELAY = 15 * 60 * 1000; // cap exponential backoff at 15 minutes
 const getRetryDelay = (retryCountBeforeFailure) => (
   Math.min(BASE_RETRY_DELAY * Math.pow(3, Math.max(0, retryCountBeforeFailure)), MAX_RETRY_DELAY)
@@ -266,17 +382,38 @@ const nextRetryTimestamp = (retryCountBeforeFailure) => (
   new Date(Date.now() + getRetryDelay(retryCountBeforeFailure)).toISOString()
 );
 
-const classifyError = (error, { duplicateIsSuccess = false } = {}) => {
+const classifyError = (
+  error,
+  { duplicateIsSuccess = false, tableName } = {},
+  { parentEvidencePending = false } = {},
+) => {
   const code = error?.code;
+
+  // Identity-immutability triggers on assignment tables raise 23514 when an
+  // update-capable re-push carries drifted identity fields; native CHECK
+  // constraints on the same tables (e.g. unassigned_at >= assigned_at) also
+  // raise 23514. Neither can be satisfied by re-pushing the same payload, so
+  // retrying on backoff would loop forever. Both are terminal on these tables.
+  if (code === '23514' && IMMUTABLE_ASSIGNMENT_TABLES.has(normalizeTableName(tableName))) {
+    return {
+      terminal: true,
+      markAsSynced: false,
+      reason: 'Immutable identity or check constraint rejected the update (23514)',
+    };
+  }
 
   if (code === '23505') {
     return { terminal: true, markAsSynced: duplicateIsSuccess };
   }
 
+  if (code === '23503' || code === '42501') {
+    // A FK/RLS denial while required local evidence is still pending is a
+    // cross-pass race. Without pending evidence, it is a genuine rejection.
+    return { terminal: !parentEvidencePending, markAsSynced: false };
+  }
+
   if (
-    code === '23503'
-    || code === '42501'
-    || code === 'ARCHIVE_REQUIRED'
+    code === 'ARCHIVE_REQUIRED'
     || code === 'LOCAL_ONLY_REFERENCE'
     || code === 'MISSING_OUTBOX_PAYLOAD'
   ) {
@@ -758,8 +895,24 @@ export const createOutboxSyncEngine = ({
         return { success: true };
       }
 
-      const classification = classifyError(serverResult.error, config);
+      const failureCode = serverResult.error?.code;
+      const parentEvidencePending = (failureCode === '23503' || failureCode === '42501')
+        ? await computeEvidencePending({
+            database,
+            outboxRepository,
+            outboxRecord: inFlightRecord,
+            includeGrant: failureCode === '42501',
+          })
+        : false;
+      const classification = classifyError(serverResult.error, config, { parentEvidencePending });
       let reason = errorMessage(serverResult.error);
+      if (classification.reason) {
+        reason = `${classification.reason}: ${reason}`;
+      }
+      if (parentEvidencePending) {
+        // Observability: make support logs distinguish evidence races from genuine denials.
+        console.log(`Sync retry deferred: ${config.tableName}:${inFlightRecord.record_id} awaiting pending local evidence (${failureCode})`);
+      }
 
       if (serverResult.error?.code === '42501' && classification.terminal) {
         let liveSession = null;

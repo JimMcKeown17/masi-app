@@ -149,6 +149,33 @@ describe('SQLite sync outbox repository', () => {
     const ready = await outbox.getReadyRecords({ includeBackedOff: true, includeTerminal: true });
     expect(ready).toEqual([expect.objectContaining({ recordId: 'term-1', status: 'terminal' })]);
   });
+
+  describe('hasPendingRecord point-query for pending parent evidence (#48)', () => {
+    test('true when a pending row exists for (table, id)', async () => {
+      await outbox.enqueue({ tableName: 'children', recordId: 'child-1', operation: 'insert', payload: { id: 'child-1' } });
+      expect(await outbox.hasPendingRecord({ tableName: 'children', recordId: 'child-1' })).toBe(true);
+    });
+
+    test('true when the row is in_flight', async () => {
+      await outbox.enqueue({ tableName: 'children', recordId: 'child-2', operation: 'insert', payload: { id: 'child-2' } });
+      await outbox.markInFlight(['children:child-2:insert']);
+      expect(await outbox.hasPendingRecord({ tableName: 'children', recordId: 'child-2' })).toBe(true);
+    });
+
+    test('false when no row exists (parent already synced -> row deleted)', async () => {
+      expect(await outbox.hasPendingRecord({ tableName: 'children', recordId: 'nope' })).toBe(false);
+    });
+
+    test('false when the only row is terminal (doomed parent must not keep children retrying)', async () => {
+      await outbox.enqueue({ tableName: 'children', recordId: 'child-3', operation: 'insert', payload: { id: 'child-3' } });
+      await outbox.markTerminalFailure('children:child-3:insert', { errorMessage: 'boom' });
+      expect(await outbox.hasPendingRecord({ tableName: 'children', recordId: 'child-3' })).toBe(false);
+    });
+
+    test('false for missing args', async () => {
+      expect(await outbox.hasPendingRecord({ tableName: 'children', recordId: null })).toBe(false);
+    });
+  });
 });
 
 describe('SQLite sync state repository', () => {
