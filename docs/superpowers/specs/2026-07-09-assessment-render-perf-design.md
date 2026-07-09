@@ -1,7 +1,7 @@
 # Assessment Render-Performance Pack — Design
 
 **Date:** 2026-07-09
-**Status:** Design (awaiting Jim's spec review before writing-plans)
+**Status:** Implemented (branch `feat/assessment-render-perf`); pending low-end device verification
 **Source of truth for the problem:** `documentation/zz-field-lessons-sync-review-2026-07-04.html`, Finding 5 (P1).
 **Scope:** device render-performance and timer-correctness of the assessment capture flow. This is **not** a sync change; `documentation/rls-sync-contract-map.md` is not touched.
 
