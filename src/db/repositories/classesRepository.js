@@ -1,6 +1,6 @@
-import { v4 as uuidv4 } from 'uuid';
 import { resolveDatabase, runRepositoryTransaction } from './repositoryRuntime';
 import {
+  classEaAssignmentDomainId,
   enqueueDomainOutbox,
   getActiveProgrammeId,
   mapDomainRow,
@@ -116,7 +116,11 @@ export const createClassesRepository = ({ database } = {}) => {
 
       if (!activeAssignment) {
         const assignment = normalizeSyncFields({
-          id: uuidv4(),
+          id: activeAssignment?.id || classEaAssignmentDomainId({
+            classId: classData.id,
+            eaUserId: ownerUserId,
+            programmeId,
+          }),
           class_id: classData.id,
           ea_user_id: ownerUserId,
           programme_id: programmeId,
