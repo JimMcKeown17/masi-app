@@ -46,8 +46,8 @@ Derived helpers (both `useCallback`, stable identity):
 
 Lifecycle:
 
-- `startActive`: `accumulatedMsRef = 0; startedAtRef = Date.now(); runningRef = true; setPhase('active')`.
-- `stopTimer` (freeze precisely, e.g. before the last-attempted sheet): bank `Date.now() - startedAtRef` into `accumulatedMsRef`, set `startedAtRef = null`, `runningRef = false`, clear the expiry interval. Preserves the current "freeze the clock while the sheet is open" intent without setting `hasFinishedRef`.
+- `startActive`: `accumulatedMsRef = 0; startedAtRef = monotonicNow(); runningRef = true; setPhase('active')`.
+- `stopTimer` (freeze precisely, e.g. before the last-attempted sheet): bank `monotonicNow() - startedAtRef` into `accumulatedMsRef`, set `startedAtRef = null`, `runningRef = false`, clear the expiry interval. Preserves the current "freeze the clock while the sheet is open" intent without setting `hasFinishedRef`.
 - `finishAndSave`: snapshot `elapsedSeconds = min(ASSESSMENT_DURATION, round(getElapsedMs() / 1000))` **before** freezing, then freeze (as `stopTimer`) and `setPhase('finished')`.
 
 Expiry detection: the `phase === 'active'` effect starts an interval that each second checks `isExpired()` **and** `isForegroundRef.current`, and only when both hold clears itself and fires `onTimerExpireRef.current()` (disposition R8: never finalize while backgrounded; defers to the next foreground tick). It performs no `setState` the screen observes. Only `timeRemaining` and `isPaused` state are removed from the hook; `phase` state is retained (it still drives the instructions/active/finished UI). See Public interface.
@@ -114,9 +114,9 @@ Both `handleFinish` and `finishWith` are idempotent via `hasFinishedRef`/`finish
 
 ## Testing plan
 
-Behavioral (Jest, real timers faked + `Date.now` mocked + `AppState` mocked):
+Behavioral (Jest, fake timers + the monotonic clock module mocked via a mutable `mockNow` + `AppState` mocked):
 
-1. **Drift immunity:** advance `Date.now` by 5 s while firing only 2 interval ticks; assert remaining reflects the 5 s delta, not the tick count.
+1. **Drift immunity:** set the mocked clock 5 s ahead while firing 0-1 interval ticks; assert elapsed reflects the 5 s delta from the clock, not the tick count.
 2. **isExpired hard-stop:** with elapsed >= 60 s, a `handleToggle`/`decide` records nothing and triggers finish.
 3. **Background pause:** background at 10 s, advance real time 30 s, foreground; assert elapsed is still ~10 s.
 4. **runningRef guard:** after `stopTimer`, a background/foreground cycle does not resume the clock.
