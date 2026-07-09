@@ -286,10 +286,12 @@ export function useAssessmentSession({
 Run: `PATH=$HOME/.nvm/versions/node/v20.19.4/bin:$PATH npx jest useAssessmentSession.timer -c package.json`
 Expected: PASS (4 tests).
 
-- [ ] **Step 5: Confirm no regression in the existing screen test**
+- [ ] **Step 5: Confirm no regression in the existing hook + screen contract tests**
 
-Run: `PATH=$HOME/.nvm/versions/node/v20.19.4/bin:$PATH npx jest LetterAssessmentScreen.plan5 -c package.json`
-Expected: PASS (2 tests).
+The hook file was fully rewritten, so run its pre-existing 7-test contract suite (`__tests__/useAssessmentSession.test.js`: idempotency, retry, discard, abandon-during-save, leave-guard, and R7 `completion_time === 60` at expiry) alongside the screen test. The `useAssessmentSession` pattern matches BOTH the new `.timer` file and the existing file.
+
+Run: `PATH=$HOME/.nvm/versions/node/v20.19.4/bin:$PATH npx jest useAssessmentSession LetterAssessmentScreen.plan5 -c package.json`
+Expected: PASS (new timer suite + existing 7 hook tests + 2 plan5 tests). R7 stays green because `round(60000/1000) === 60`.
 
 - [ ] **Step 6: Commit**
 
@@ -716,10 +718,12 @@ const styles = StyleSheet.create({
 });
 ```
 
-- [ ] **Step 5: Run tests to verify they pass**
+- [ ] **Step 5: Run tests to verify they pass (including the pre-existing grid suite)**
 
-Run: `PATH=$HOME/.nvm/versions/node/v20.19.4/bin:$PATH npx jest LetterTile EgraLetterGrid.renderCount -c package.json`
-Expected: PASS (LetterTile 3 tests, grid 2 tests).
+The `EgraLetterGrid` pattern matches BOTH the new `EgraLetterGrid.renderCount` file and the pre-existing `__tests__/egraLetterGridReadOnly.test.js` (5 tests: readOnly blocks onToggle, currentIndex marks the current tile, incorrect tile has `backgroundColor: colors.error`, etc.). The refactored `LetterTile` must keep those green (same labels, same function-style, same `tileIncorrect` background).
+
+Run: `PATH=$HOME/.nvm/versions/node/v20.19.4/bin:$PATH npx jest LetterTile EgraLetterGrid -c package.json`
+Expected: PASS (LetterTile 3, renderCount 2, egraLetterGridReadOnly 5).
 
 - [ ] **Step 6: Confirm no regression in the existing screen test**
 
@@ -790,14 +794,19 @@ describe('LetterAssessmentScreen expiry + timing', () => {
   });
   afterEach(() => { jest.useRealTimers(); jest.restoreAllMocks(); jest.clearAllMocks(); });
 
-  test('a tap after expiry does not record the tile', () => {
-    const { getByText, getByLabelText, queryByLabelText } = render(
+  test('a tap after expiry records nothing AND triggers finish', async () => {
+    const { getByText, getByLabelText } = render(
       <LetterAssessmentScreen navigation={navigation} route={route} />
     );
     fireEvent.press(getByText('Start Assessment'));
+    fireEvent.press(getByLabelText('a, not marked'));    // record the only letter correct (pre-expiry)
     act(() => { jest.setSystemTime(at(65)); });          // past the 60s deadline, no watchdog tick fired
-    fireEvent.press(getByLabelText('a, not marked'));
-    expect(queryByLabelText('a, correct')).toBeNull();   // the expired tap did not record
+    fireEvent.press(getByLabelText('a, correct'));        // an expired tap would normally untoggle (a correction)
+    // "triggers finish": the guard routes to handleFinish, which saves directly (last index is correct).
+    await waitFor(() => expect(assessmentsRepository.saveAssessment).toHaveBeenCalled());
+    const saved = assessmentsRepository.saveAssessment.mock.calls[0][0];
+    expect(saved.correct_responses).toBe(1);             // "records nothing": the expired tap did NOT untoggle
+    expect(saved.correction_count).toBe(0);              // and logged no correction
   });
 
   test('completion_time reflects real elapsed seconds', async () => {
@@ -817,7 +826,7 @@ describe('LetterAssessmentScreen expiry + timing', () => {
 - [ ] **Step 2: Run tests to verify they fail**
 
 Run: `PATH=$HOME/.nvm/versions/node/v20.19.4/bin:$PATH npx jest LetterAssessmentScreen.expiry -c package.json`
-Expected: FAIL (the expired tap currently records because there is no `isExpired()` guard; `completion_time` may not equal 7 yet only if elapsed differs — the guard test is the key red).
+Expected: FAIL. Without the `isExpired()` guard, the expired tap untoggles the letter and does not finalize, so `saveAssessment` is never called (the `waitFor` times out) and `correct_responses`/`correction_count` are wrong. The `completion_time` test also fails until `getElapsedMs`-derived `elapsedSeconds` is wired through the screen.
 
 - [ ] **Step 3: Update the destructure and timer render**
 
@@ -928,10 +937,12 @@ Swap the timer for `CountdownTimer`, stop consuming `timeRemaining`/`isPaused`, 
 
 **Files:**
 - Modify: `src/screens/assessments/SequentialAssessmentScreen.js`
-- Test: `__tests__/SequentialAssessmentScreen.expiry.test.js`
+- Test: `__tests__/SequentialAssessmentScreen.expiry.test.js`, `__tests__/SequentialAssessmentScreen.renderCount.test.js`
 
 **Interfaces:**
 - Consumes: `getElapsedMs`, `isExpired`, `finishAndSave`, `setOnTimerExpire`, `phase`, `layout`, `hasFinishedRef`, `startActive` from the hook; `finishWith` local callback (declared before `decide`/`goBack`).
+
+**Note on the sequential isolation target:** unlike grid mode (one tap flips one tile: 26 -> 1), a sequential decision changes exactly **two** tiles: the decided tile's `state` changes AND `currentIndex` (`displayCursor`) moves off it onto the next tile, so `isCurrent` flips on two tiles (26 -> 2). Two is still the minimal set; the render-count proof below asserts exactly 2.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -1059,12 +1070,82 @@ Replace `goBack` (currently line 57) with:
 - [ ] **Step 5: Run tests to verify they pass**
 
 Run: `PATH=$HOME/.nvm/versions/node/v20.19.4/bin:$PATH npx jest SequentialAssessmentScreen -c package.json`
-Expected: PASS (expiry 1 test; plus any existing SequentialAssessmentScreen tests still green).
+Expected: PASS (expiry 1 test; plus the pre-existing `sequentialAssessmentScreen.test.js` still green — it renders the real `CountdownTimer` transparently and `isExpired()` is false at t=0).
 
-- [ ] **Step 6: Commit**
+- [ ] **Step 6: Add the sequential render-count proof (26 -> 2)**
+
+Create `__tests__/SequentialAssessmentScreen.renderCount.test.js`. This characterizes the sequential isolation via the same `LetterTile` render-spy; it may already pass once Task 4's memoization is in place (the grid passes scalar props) — its job is to lock in the 26 -> 2 behavior and guard against regressions.
+
+```javascript
+import React from 'react';
+import { Alert } from 'react-native';
+import { fireEvent, render } from '@testing-library/react-native';
+
+jest.mock('../src/components/assessment/LetterTile', () => {
+  const ReactLib = require('react');
+  const { Pressable } = require('react-native');
+  const renderSpy = jest.fn();
+  const Tile = ReactLib.memo(function MockTile({ index, letter, state, isCurrent, onPress }) {
+    renderSpy(index);
+    const label = `${letter}, ${state === true ? 'correct' : state === false ? 'incorrect' : 'not marked'}${isCurrent ? ', current' : ''}`;
+    return ReactLib.createElement(Pressable, { accessibilityLabel: label, onPress: () => { if (onPress) onPress(index); } });
+  });
+  return { __esModule: true, default: Tile, renderSpy };
+});
+
+import SequentialAssessmentScreen from '../src/screens/assessments/SequentialAssessmentScreen';
+import { renderSpy } from '../src/components/assessment/LetterTile';
+import { useAuth } from '../src/context/AuthContext';
+import { useOffline } from '../src/context/OfflineContext';
+
+jest.mock('../src/context/AuthContext', () => ({ useAuth: jest.fn() }));
+jest.mock('../src/context/OfflineContext', () => ({ useOffline: jest.fn() }));
+jest.mock('../src/db/repositories/assessmentsRepository', () => ({
+  assessmentsRepository: { saveAssessment: jest.fn() },
+}));
+jest.mock('uuid', () => ({ v4: jest.fn(() => 'assessment-1') }));
+jest.mock('react-native-safe-area-context', () => ({
+  useSafeAreaInsets: () => ({ top: 0, right: 0, bottom: 0, left: 0 }),
+}));
+
+describe('SequentialAssessmentScreen render isolation', () => {
+  const navigation = { addListener: jest.fn(() => jest.fn()), navigate: jest.fn(), replace: jest.fn(), goBack: jest.fn(), dispatch: jest.fn() };
+  const route = { params: {
+    child: { id: 'child-1', first_name: 'A', last_name: 'B' },
+    letterSet: { id: 'english-test', language: 'English', letters: ['a', 'b', 'c'], lettersPerPage: 20, columns: 5 },
+    attemptNumber: 1, assessmentType: 'letter_egra', captureMode: 'sequential',
+  } };
+
+  beforeEach(() => {
+    jest.useFakeTimers();
+    jest.setSystemTime(new Date('2026-07-09T08:00:00.000Z'));
+    useAuth.mockReturnValue({ user: { id: 'user-1' } });
+    useOffline.mockReturnValue({ refreshSyncStatus: jest.fn().mockResolvedValue({}), triggerBackgroundSync: jest.fn() });
+    jest.spyOn(Alert, 'alert').mockImplementation(() => {});
+    renderSpy.mockClear();
+  });
+  afterEach(() => { jest.useRealTimers(); jest.restoreAllMocks(); jest.clearAllMocks(); });
+
+  test('a decision re-renders exactly two tiles (decided + next current)', () => {
+    const { getByText } = render(<SequentialAssessmentScreen navigation={navigation} route={route} />);
+    fireEvent.press(getByText('Start Assessment'));
+    renderSpy.mockClear();
+    fireEvent.press(getByText('Correct'));
+    expect(renderSpy).toHaveBeenCalledTimes(2);
+    expect(renderSpy.mock.calls.map((c) => c[0]).sort()).toEqual([0, 1]);
+  });
+});
+```
+
+- [ ] **Step 7: Run the sequential tests to verify they pass**
+
+Run: `PATH=$HOME/.nvm/versions/node/v20.19.4/bin:$PATH npx jest SequentialAssessmentScreen -c package.json`
+Expected: PASS (expiry 1, renderCount 1, pre-existing suite green).
+
+- [ ] **Step 8: Commit**
 
 ```bash
-git add src/screens/assessments/SequentialAssessmentScreen.js __tests__/SequentialAssessmentScreen.expiry.test.js
+git add src/screens/assessments/SequentialAssessmentScreen.js __tests__/SequentialAssessmentScreen.expiry.test.js __tests__/SequentialAssessmentScreen.renderCount.test.js
 git commit -m "perf(assessment): isolate sequential-screen timer and add isExpired hard-stop"
 ```
 
@@ -1249,9 +1330,29 @@ git commit -m "docs(assessment): log render-perf pack and completion_time semant
 - isExpired guards at all three capture-mutation sites (Letter handleToggle; Sequential decide + goBack): Tasks 5-6. ✓
 - Interface change (drop timeRemaining/isPaused/setIsPaused; add getElapsedMs/isExpired): Tasks 1 (add) + 7 (remove). ✓
 - completion_time = real elapsed: Task 1 (impl) + Task 5 (test) + Task 8 (doc). ✓
-- Testing: render-spy (Task 4 tile-spy, Task 7 grid-spy), behavioral drift/expiry/pause/runningRef (Tasks 1-2), device check (Task 8 doc). ✓
+- Testing: render-count spies (Task 4 grid tile-spy proving 26 -> 1; Task 6 sequential tile-spy proving 26 -> 2; Task 7 grid-spy proving ticks -> 0 screen re-renders), behavioral drift/expiry/pause/runningRef (Tasks 1-2), device check (Task 8 doc). Note the per-tap re-render target is mode-specific: grid = 1 tile, sequential = 2 tiles (decided + next current). ✓
 - Non-goals honored: no sync/RLS/migration files touched. ✓
 
 **Placeholder scan:** No TBD/TODO; every code and test step contains full content. ✓
 
 **Type consistency:** `getElapsedMs`/`isExpired`/`startActive`/`stopTimer` names match across hook return (Task 1), screen consumption (Tasks 5-6), and the final return (Task 7). `LetterTile` prop names (`state`, `isCurrent`, `onPress`, `fontSize`) match between the component (Task 4), the grid (Task 4), and the mock in the render-count test (Task 4). ✓
+
+---
+
+## Adversarial Review Dispositions
+
+Independent Opus adversarial review (2026-07-09), each finding re-verified against the tree before folding. Verdict: fundamentally sound, no blocker/major. Dispositions below.
+
+- **R1 (MINOR, accepted) — Task 1 rewrites the hook but its 7-test contract file (`__tests__/useAssessmentSession.test.js`) was not run until Task 7.** A subtle rewrite regression would surface six tasks late. Verified: all 7 existing tests (idempotency, retry, discard, abandon-during-save, leave-guard, R7 `completion_time===60` at expiry) stay green under the new hook because `finishAndSave`/`beforeRemove`/catch control flow is preserved and `round(60000/1000)===60`. Fix applied: Task 1 Step 5 now runs `npx jest useAssessmentSession LetterAssessmentScreen.plan5` (the `useAssessmentSession` pattern matches both the new `.timer` file and the existing contract file).
+
+- **R2 (MINOR, accepted) — the Letter expiry test proved "records nothing" but not the spec's "and triggers finish" half.** Fix applied: Task 5 Step 1 test now records the only letter correct pre-expiry, then taps the (now correct) tile after expiry; it asserts `saveAssessment` was called (finish triggered) and `correct_responses===1`/`correction_count===0` (the expired tap did not untoggle). Both halves covered.
+
+- **R3 (MINOR, accepted) — the 26 -> 1 claim is grid-mode only; a sequential decision changes two tiles (decided tile `state` + `isCurrent` shifting to the next), i.e. 26 -> 2.** Verified against `sequentialAssessmentReducer.js` and `SequentialAssessmentScreen.js:108` (`currentIndex={finished ? -1 : displayCursor}`). Fix applied: added `__tests__/SequentialAssessmentScreen.renderCount.test.js` (Task 6 Step 6) asserting exactly 2 tiles re-render per decision, and corrected the self-review to state the target is mode-specific (grid 1, sequential 2).
+
+- **R4 (INFO, accepted as designed) — after expiry, `goBack` finalizes instead of undoing, and the Back button can be enabled during watchdog tick-lag (expired but `phase` still `active`), so a reflexive Back tap at the buzzer ends the session.** This is the locked spec behavior ("no corrections after time is up", spec line ~96); it normally auto-finalizes via the watchdog within ~1s anyway. Making Back reactively disabled on expiry would require extra state and a re-render, which the isolation deliberately avoids. Kept as designed; flagged to Jim for confirmation.
+
+- **R5 (INFO, no action) — `completion_time` moves from raw tick count to `round(getElapsedMs()/1000)` capped at 60 (strictly more accurate).** No test pins a non-60 tick value; buildAssessmentRecord and sync are untouched. Logged in Task 8.
+
+- **R6 (self-caught during verification, accepted) — Task 4's `EgraLetterGrid.renderCount` test pattern did not match the pre-existing `egraLetterGridReadOnly.test.js`.** Fix applied: Task 4 Step 5 now runs the broader `EgraLetterGrid` pattern (covers both the new render-count suite and the existing 5-test readOnly suite), which the refactored `LetterTile` keeps green (same labels, function-style, `tileIncorrect` background).
+
+A second independent Codex (gpt-5.6-sol) adversarial review of this updated plan is being run before the build; its dispositions will be appended as R7+.
