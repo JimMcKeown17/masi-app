@@ -69,6 +69,10 @@ export const groupEaAssignmentDomainId = ({ groupId }) => (
   deterministicDomainId('group_ea_assignments', groupId)
 );
 
+export const classGroupingStateDomainId = ({ classId, academicYearId }) => (
+  deterministicDomainId('class_grouping_state', classId, academicYearId)
+);
+
 export const ensureServerUuid = (id, ...fallbackParts) => {
   if (uuidValidate(id)) return id;
   if (fallbackParts.length === 1 && uuidValidate(fallbackParts[0])) {

@@ -1,5 +1,6 @@
 import { resolveDatabase, runRepositoryTransaction } from './repositoryRuntime';
 import {
+  classGroupingStateDomainId,
   enqueueDomainOutbox,
   mapDomainRow,
   normalizeSyncFields,
@@ -28,6 +29,12 @@ export const createClassGroupingStateRepository = ({ database } = {}) => {
   const save = async (state, { transaction } = {}) => {
     const write = async (txn) => {
       const record = normalizeSyncFields(state);
+      if (record.class_id && record.academic_year_id) {
+        record.id = classGroupingStateDomainId({
+          classId: record.class_id,
+          academicYearId: record.academic_year_id,
+        });
+      }
       await upsertDomainRecord(txn, {
         tableName: 'class_grouping_state',
         columns: COLUMNS,
