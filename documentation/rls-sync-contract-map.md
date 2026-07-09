@@ -29,6 +29,7 @@ Use this map before changing any synced table, repository producer, outbox opera
 8. Server pulls must not overwrite pending local rows (pending-local-wins, issue #42 / ZZ F7). See "Pull Merge Invariant" below.
 9. Sync auth state is part of the RLS contract (issues #43/#44). A sync pass with no Supabase session must return a structured skip (`{ success: true, skippedNoSession: true }`) before touching the outbox or sync metadata. A terminal `42501` recorded while a live session exists must store `last_error` with the `42501-authenticated:` prefix and must never be auto-healed. Unmarked RLS-terminal rows are treated as auth-loss collateral: when auth is restored through `SIGNED_IN`, `TOKEN_REFRESHED`, or sessionful `INITIAL_SESSION`, the engine requeues only rows owned by the signed-in user, and the outbox requeue plus domain `sync_status = 'pending'` reset happen in one SQLite transaction. See "Auth-Restore RLS Heal" below.
 10. Error classification is local-state-only and never loops forever (issue #48). `23514` from the immutable-assignment identity triggers (`child_ea_assignments`, `class_ea_assignments`, `group_ea_assignments`) is terminal with reason `Immutable identity or check constraint rejected the update (23514)`; the insert path already avoids it via `ignoreDuplicates`, so this covers archive/update re-pushes. `23503` is retriable while the FK parent has a `pending`/`failed`/`in_flight` `sync_outbox` row (`hasPendingRecord`), terminal otherwise. `42501` is retriable while the FK parent OR the RLS assignment grant is pending locally, terminal otherwise; grant evidence is a direct active (`unassigned_at is null`), unsynced `child_ea_assignments`/`class_ea_assignments`/`group_ea_assignments` row for the record's subject (`PARENT_FK_COLUMNS` + `GRANT_SUBJECTS`). Only the direct-assignment arm of `private.current_user_can_write_for_*` is modeled (see limitations). Subject and FK values resolve from the outbox payload first and the record's own local domain row second, so archive/update payloads still yield evidence. The `42501` no-session downgrade (Item 9) still applies to an otherwise-terminal `42501`. See "Error Classification" below.
+11. Active-pair identity is collision-proof by construction (issue #47). The four active-pair tables whose identity IS their server partial-unique key -- `child_ea_assignments` `(user_id, child_id)`, `child_programme_enrollments` `(child_id, programme_id)`, `class_ea_assignments` `(class_id, ea_user_id, programme_id)`, `group_ea_assignments` `(group_id)` -- use a deterministic UUIDv5 id keyed EXACTLY on those columns (local mint in the repository create path plus a force-remap on push in `buildSyncPayload`, gated on all key columns so bare archive payloads are never remapped). Every writer (device or the future head-office seed) that means the same active pair derives the same id, so a would-be partial-index `23505` becomes an idempotent id-match. `child_class_memberships` cannot use this (it recurs on class moves and needs distinct archived rows for `deleteIfNoHistory` audit), so it uses reconcile-before-upsert: before an insert, a pre-push server read archives a conflicting active `(child_id, academic_year_id)` row (device-move-wins, audit-preserving), with a conservative fallback to the normal upsert on any error. See "Active-Pair Collision-Proofing" below.
 
 ## Operation Semantics
 
@@ -60,6 +61,26 @@ Known limitations:
 
 Guarded by `__tests__/classifyErrorHardening.test.js` (unit, via `_testClassifyError` / `_testEvidenceMaps` / `_testComputeEvidencePending`) and the `23514` / `42501` / evidence integration tests in `__tests__/offlineSyncOutbox.test.js`.
 
+## Active-Pair Collision-Proofing (Item 11)
+
+The four deterministic-id tables neutralize their partial-unique `23505` by construction; `child_class_memberships` reconciles.
+
+| Table | Server partial-unique index | Mechanism |
+| --- | --- | --- |
+| `child_ea_assignments` | `(user_id, child_id) where unassigned_at is null` | deterministic id `f(user_id, child_id)` |
+| `child_programme_enrollments` | `(child_id, programme_id) where ended_at is null` | deterministic id `f(child_id, programme_id)` |
+| `class_ea_assignments` | `(class_id, ea_user_id, programme_id) where unassigned_at is null` | deterministic id `f(class_id, ea_user_id, programme_id)` |
+| `group_ea_assignments` | `(group_id) where unassigned_at is null` | deterministic id `f(group_id)` (one active EA per group; server-wins on conflict) |
+| `child_class_memberships` | `(child_id, academic_year_id) where exited_at is null` | reconcile-before-upsert (archive the conflicting server-active row, then insert) |
+
+**Cross-writer id-derivation contract (the linchpin).** The multi-writer neutralization only works if EVERY writer derives the identical id. Any writer of these four tables -- the mobile app today, the future Head-Office seed script, the HO NextJS dashboard -- MUST use: UUIDv5, namespace `09dcf4b2-6c53-4c46-917f-33bc7f2df4d2`, parts joined by the unit-separator character (`U+001F`), parts = `[<table_name>, <key columns in the order above>]`, each part stringified as `String(part ?? '')`. This mirrors `deterministicDomainId` (`src/db/repositories/domainRepositoryUtils.js:14-17`). The seed-script author MUST reproduce this exactly, or seeded rows will collide with device rows instead of matching them.
+
+**Deploy gate (mandatory, Jim-run at cutover).** `ignoreDuplicates` uses `onConflict: 'id'`, which does NOT arbitrate the partial-unique index, so a leftover pre-fix RANDOM-id active row still `23505`s a deterministic push. Before shipping: (1) clean pre-fix random-id active rows for the four tables on `masi-app-sqlite` (wipeable dev data, no field users), AND (2) ensure devices start from a fresh/wiped LOCAL DB (a pre-fix local row's insert remaps R to D while its bare archive stays keyed on the local id R, so the archive would mis-target). Mirrors the `letter_mastery` Task 0 gate.
+
+**ccm reconcile boundary (RLS).** The reconcile archives the conflicting server row with an UPDATE that is itself RLS-gated on that row's class (`child_class_memberships_update_write_child_class`). It succeeds for a same-school move; a cross-school Head-Office reassignment (child in a class the device cannot access) is RLS-denied, the reconcile falls back conservatively, and the insert lands terminal (classified by Item 10). Acceptable while HO central reassignment is deferred; a complete fix would be a `SECURITY DEFINER` archive+insert RPC (follow-up, schema change). `group_ea_assignments` is not a pulled table, so a device self-assignment that loses to another EA's server row is not auto-corrected (harmless under the current single-writer scope).
+
+Guarded by `__tests__/activePairDomainIds.test.js`, the deterministic-id + archive-preservation tests in `__tests__/offlineSyncOutbox.test.js`, the per-repository mint tests, and `__tests__/childClassMembershipReconcile.test.js` (real second-SQLite server; note: runs no RLS, so the cross-school boundary above is not exercised in tests).
+
 ## Upsert Visibility Rules
 
 These direct SELECT fallbacks are intentional and should not be removed just to satisfy advisor output:
@@ -89,7 +110,7 @@ A pulled server row is stamped `sync_status: 'synced'` before it reaches a repos
 
 Guarded pulled tables: `children`, `classes`, `groups`, `child_group_memberships`, `child_ea_assignments`, `child_programme_enrollments`, `child_class_memberships`, `class_ea_assignments`.
 
-Known limit (issue #47 scope): the guard keys on `id`. Tables whose server conflict arbiter is a secondary unique index (active-pair tables) can still collide when a pending local row and a server row share the pair but not the id.
+Resolved (issue #47): this guard keys on `id`, but the active-pair tables no longer rely on it for collision safety. The four deterministic-id tables converge a pending local row and a server row for the same pair onto one id, and `child_class_memberships` reconciles before insert, so a shared-pair-but-different-id collision no longer terminal-quarantines. See "Active-Pair Collision-Proofing (Item 11)".
 
 Tests: `__tests__/serverPullGuard.test.js` (real-engine, runs in both unit and integration tiers), the `ChildrenContext.test.js` pending-local-wins case, and the `ClassesContext.plan5.test.js` pending-edit case.
 
