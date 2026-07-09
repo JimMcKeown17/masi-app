@@ -185,12 +185,15 @@ Create `src/utils/monotonicClock.js`:
 // (Date) changes - NTP corrections, manual clock changes - which matters for a standardized
 // 60-second timed assessment whose elapsed feeds completion_time. Falls back to Date.now()
 // only if performance.now is unavailable.
-const perf = (typeof performance !== 'undefined' && typeof performance.now === 'function')
-  ? performance
-  : null;
-
+//
+// IMPORTANT (R12): resolve globalThis.performance INSIDE now() on every call. Do NOT capture
+// `performance` at module-eval time: jest.useFakeTimers() replaces global.performance with a
+// fake, and a captured reference would keep reading the real clock (verified: captured-delta=0
+// vs resolved-delta=60000 under advanceTimersByTime(60000)), silently breaking the existing
+// completion_time===60 expiry test.
 export function now() {
-  return perf ? perf.now() : Date.now();
+  const perf = globalThis.performance;
+  return (perf && typeof perf.now === 'function') ? perf.now() : Date.now();
 }
 ```
 
@@ -876,6 +879,12 @@ Create `__tests__/LetterAssessmentScreen.expiry.test.js`:
 import React from 'react';
 import { Alert } from 'react-native';
 import { fireEvent, render, waitFor, act } from '@testing-library/react-native';
+
+// R13: elapsed is driven by the monotonic clock, not Date. Mock it (setSystemTime no longer
+// advances assessment time).
+let mockNow = 0;
+jest.mock('../src/utils/monotonicClock', () => ({ now: () => mockNow }));
+
 import LetterAssessmentScreen from '../src/screens/assessments/LetterAssessmentScreen';
 import { useAuth } from '../src/context/AuthContext';
 import { useOffline } from '../src/context/OfflineContext';
@@ -891,9 +900,6 @@ jest.mock('react-native-safe-area-context', () => ({
   useSafeAreaInsets: () => ({ top: 0, right: 0, bottom: 0, left: 0 }),
 }));
 
-const T0 = new Date('2026-07-09T08:00:00.000Z');
-const at = (s) => new Date(T0.getTime() + s * 1000);
-
 describe('LetterAssessmentScreen expiry + timing', () => {
   const navigation = { addListener: jest.fn(() => jest.fn()), navigate: jest.fn(), replace: jest.fn(), goBack: jest.fn(), dispatch: jest.fn() };
   const route = { params: {
@@ -904,7 +910,7 @@ describe('LetterAssessmentScreen expiry + timing', () => {
 
   beforeEach(() => {
     jest.useFakeTimers();
-    jest.setSystemTime(T0);
+    mockNow = 0;
     useAuth.mockReturnValue({ user: { id: 'user-1' } });
     useOffline.mockReturnValue({ refreshSyncStatus: jest.fn().mockResolvedValue({}), triggerBackgroundSync: jest.fn() });
     assessmentsRepository.saveAssessment.mockResolvedValue(true);
@@ -916,9 +922,9 @@ describe('LetterAssessmentScreen expiry + timing', () => {
     const { getByText, getByLabelText } = render(
       <LetterAssessmentScreen navigation={navigation} route={route} />
     );
-    fireEvent.press(getByText('Start Assessment'));
+    fireEvent.press(getByText('Start Assessment'));       // startedAt = mockNow = 0
     fireEvent.press(getByLabelText('a, not marked'));    // record the only letter correct (pre-expiry)
-    act(() => { jest.setSystemTime(at(65)); });          // past the 60s deadline, no watchdog tick fired
+    act(() => { mockNow = 65000; });                      // past the 60s deadline, no watchdog tick fired
     fireEvent.press(getByLabelText('a, correct'));        // an expired tap would normally untoggle (a correction)
     // "triggers finish": the guard routes to handleFinish, which saves directly (last index is correct).
     await waitFor(() => expect(assessmentsRepository.saveAssessment).toHaveBeenCalled());
@@ -933,7 +939,7 @@ describe('LetterAssessmentScreen expiry + timing', () => {
     );
     fireEvent.press(getByText('Start Assessment'));
     fireEvent.press(getByLabelText('a, not marked'));    // record a correct so Finish saves directly
-    act(() => { jest.setSystemTime(at(7)); });
+    act(() => { mockNow = 7000; });
     fireEvent.press(getByText('Finish'));
     await waitFor(() => expect(assessmentsRepository.saveAssessment).toHaveBeenCalled());
     expect(assessmentsRepository.saveAssessment.mock.calls[0][0].completion_time).toBe(7);
@@ -944,7 +950,7 @@ describe('LetterAssessmentScreen expiry + timing', () => {
 - [ ] **Step 2: Run tests to verify they fail**
 
 Run: `PATH=$HOME/.nvm/versions/node/v20.19.4/bin:$PATH npx jest LetterAssessmentScreen.expiry -c package.json`
-Expected: FAIL. Without the `isExpired()` guard, the expired tap untoggles the letter and does not finalize, so `saveAssessment` is never called (the `waitFor` times out) and `correct_responses`/`correction_count` are wrong. The `completion_time` test also fails until `getElapsedMs`-derived `elapsedSeconds` is wired through the screen.
+Expected: FAIL on the hard-stop test. Without the `isExpired()` guard, the expired tap untoggles the letter and does not finalize, so `saveAssessment` is never called (the `waitFor` times out) and `correct_responses`/`correction_count` are wrong. (The `completion_time` test may already pass, since Task 1 wired `elapsedSeconds` from `getElapsedMs` in the hook; the guard test is the red that Task 5 turns green.)
 
 - [ ] **Step 3: Update the destructure and timer render**
 
@@ -1140,6 +1146,11 @@ Create `__tests__/SequentialAssessmentScreen.expiry.test.js`:
 import React from 'react';
 import { Alert } from 'react-native';
 import { fireEvent, render, waitFor, act } from '@testing-library/react-native';
+
+// R13: elapsed is driven by the monotonic clock, not Date. Mock it.
+let mockNow = 0;
+jest.mock('../src/utils/monotonicClock', () => ({ now: () => mockNow }));
+
 import SequentialAssessmentScreen from '../src/screens/assessments/SequentialAssessmentScreen';
 import { useAuth } from '../src/context/AuthContext';
 import { useOffline } from '../src/context/OfflineContext';
@@ -1155,9 +1166,6 @@ jest.mock('react-native-safe-area-context', () => ({
   useSafeAreaInsets: () => ({ top: 0, right: 0, bottom: 0, left: 0 }),
 }));
 
-const T0 = new Date('2026-07-09T08:00:00.000Z');
-const at = (s) => new Date(T0.getTime() + s * 1000);
-
 describe('SequentialAssessmentScreen expiry', () => {
   const navigation = { addListener: jest.fn(() => jest.fn()), navigate: jest.fn(), replace: jest.fn(), goBack: jest.fn(), dispatch: jest.fn() };
   const route = { params: {
@@ -1168,7 +1176,7 @@ describe('SequentialAssessmentScreen expiry', () => {
 
   beforeEach(() => {
     jest.useFakeTimers();
-    jest.setSystemTime(T0);
+    mockNow = 0;
     useAuth.mockReturnValue({ user: { id: 'user-1' } });
     useOffline.mockReturnValue({ refreshSyncStatus: jest.fn().mockResolvedValue({}), triggerBackgroundSync: jest.fn() });
     assessmentsRepository.saveAssessment.mockResolvedValue(true);
@@ -1178,8 +1186,8 @@ describe('SequentialAssessmentScreen expiry', () => {
 
   test('a decision after expiry finalizes without recording it', async () => {
     const { getByText } = render(<SequentialAssessmentScreen navigation={navigation} route={route} />);
-    fireEvent.press(getByText('Start Assessment'));
-    act(() => { jest.setSystemTime(at(65)); });          // past the deadline
+    fireEvent.press(getByText('Start Assessment'));       // startedAt = mockNow = 0
+    act(() => { mockNow = 65000; });                      // past the deadline
     fireEvent.press(getByText('Correct'));
     await waitFor(() => expect(assessmentsRepository.saveAssessment).toHaveBeenCalled());
     expect(assessmentsRepository.saveAssessment.mock.calls[0][0].correct_responses).toBe(0);
@@ -1558,3 +1566,9 @@ Independent Codex (gpt-5.6-sol, xhigh) adversarial review (2026-07-09) of the R1
 - **R11 (MEDIUM, accepted) — the green-between-tasks gate omitted the Sequential consumer after Tasks 1-2.** After Task 1 rewrites the shared hook and Task 2 adds an always-mounted AppState effect, the gate ran only the hook + Letter suites, so several commits could pass with a broken Sequential consumer. Fix applied: Task 1 Step 5 and Task 2 Step 4 now run `useAssessmentSession LetterAssessmentScreen SequentialAssessmentScreen` together as the shared-consumer gate.
 
 Non-findings noted by Codex: its own `npx jest` run failed on a read-only-sandbox haste-map write (a sandbox artifact, not a plan defect), and it re-flagged the pending low-end Android device verification (already Task 8 / the device-check gate).
+
+Second Codex re-review (gpt-5.6-sol) of the R7-R11 revision confirmed R8/R9/R10/R11 sound but found two consequences of the R7 clock change. Both re-verified against the tree (probe: captured-delta=0 vs resolved-delta=60000 under `advanceTimersByTime(60000)`) and fixed.
+
+- **R12 (HIGH, accepted) — the clock module captured `performance` at import, defeating jest's fake clock.** `jest.useFakeTimers()` (in `beforeEach`) swaps `global.performance` for a fake AFTER the module is imported, so a captured reference keeps reading the real clock: `now()` would not advance under `advanceTimersByTime`, silently breaking the existing `completion_time===60` expiry test and the new clock-jump test. My initial probe missed this because it called `performance.now()` directly (resolving the fake at call time) rather than through a captured reference. Fix applied: `monotonicClock.now()` resolves `globalThis.performance` on every call (verified: resolved-delta=60000).
+
+- **R13 (MEDIUM, accepted) — the screen expiry tests still used `jest.setSystemTime` to simulate elapsed.** With the monotonic clock, `setSystemTime` no longer advances assessment elapsed, so the "expired tap" and `completion_time===7` assertions would fail (elapsed stays ~0). Fix applied: both `LetterAssessmentScreen.expiry` and `SequentialAssessmentScreen.expiry` now `jest.mock` the clock with a mutable `mockNow` (set to 65000 for the hard-stop tests, 7000 for the completion-time test), matching the hook timer tests.

@@ -141,7 +141,7 @@ Known flake to expect: `CreateClassScreen.test.js` times out under parallel load
 
 ## Files touched
 
-- `src/utils/monotonicClock.js` — new (R7); `now()` = `performance.now()` with `Date.now()` fallback; mockable in tests.
+- `src/utils/monotonicClock.js` — new (R7); `now()` = `performance.now()` with `Date.now()` fallback; **resolves `globalThis.performance` inside `now()` on every call** (R12: caching it at import would read the real clock after `jest.useFakeTimers` swaps `global.performance`, breaking the fake-timer tests); mockable in tests.
 - `src/hooks/useAssessmentSession.js` — Seams A, B (monotonic clock + `isForegroundRef`); interface change.
 - `src/components/assessment/CountdownTimer.js` — new (Seam C).
 - `src/components/assessment/LetterTile.js` — new (Seam D).
