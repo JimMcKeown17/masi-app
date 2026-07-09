@@ -53,6 +53,22 @@ export const letterMasteryDomainId = ({
   source || 'taught'
 );
 
+export const childEaAssignmentDomainId = ({ userId, childId }) => (
+  deterministicDomainId('child_ea_assignments', userId, childId)
+);
+
+export const childProgrammeEnrollmentDomainId = ({ childId, programmeId }) => (
+  deterministicDomainId('child_programme_enrollments', childId, programmeId)
+);
+
+export const classEaAssignmentDomainId = ({ classId, eaUserId, programmeId }) => (
+  deterministicDomainId('class_ea_assignments', classId, eaUserId, programmeId)
+);
+
+export const groupEaAssignmentDomainId = ({ groupId }) => (
+  deterministicDomainId('group_ea_assignments', groupId)
+);
+
 export const ensureServerUuid = (id, ...fallbackParts) => {
   if (uuidValidate(id)) return id;
   if (fallbackParts.length === 1 && uuidValidate(fallbackParts[0])) {
