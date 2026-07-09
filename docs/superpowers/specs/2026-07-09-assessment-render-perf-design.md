@@ -22,7 +22,7 @@ The `completion_time` angle matters beyond UI: `elapsedSeconds` (currently the r
 ## Decisions locked with Jim (2026-07-09)
 
 - **Background = pause & resume.** When the app is backgrounded mid-assessment, the clock freezes and resumes on return. Rationale: a background event during an EGRA read is almost always an accidental interruption (notification, misclick, call); pausing protects an otherwise-valid read. Accepted trade-off: a mid-read pause can slightly inflate fluency versus a strictly continuous 60-second norm; the alternative (silently eating the child's seconds) is worse and more common. ZZ field-validated pause.
-- **Testing = render-spy + device.** In addition to behavioral tests, add a render-count test asserting exactly one tile re-renders per tap (proves the 26 -> 1 claim in CI), plus a manual low-end device/emulator check.
+- **Testing = render-spy + device.** In addition to behavioral tests, add render-count tests proving the memoization in CI, plus a manual low-end device/emulator check. The per-interaction re-render target is mode-specific: a **grid/letter** tap re-renders exactly **1** tile (26 -> 1), while a **sequential** decision re-renders exactly **2** tiles (the decided tile's `state` changes and `isCurrent` moves to the next tile: 26 -> 2). A third spy proves ticks cause **0** screen re-renders.
 
 ## Technical choices (author's calls, recorded)
 
@@ -124,7 +124,7 @@ Behavioral (Jest, fake timers + the monotonic clock module mocked via a mutable 
 
 Render-spy (Jest):
 
-6. Render the grid with an injected render-spy (a test-only optional prop that is a no-op in production, or an equivalent module-level counter). Assert: initial mount renders N tiles; one tap that flips one tile's `state` re-renders exactly 1 tile.
+6. Render the grid (grid mode) with a render-spy on the memoized tile. Assert: initial mount renders N tiles; one tap that flips one tile's `state` re-renders exactly 1 tile. (Sequential mode's 2-tile expectation is proven separately by the plan's sequential render-count test.)
 
 Device/emulator (manual, documented as device-verified in the log):
 
