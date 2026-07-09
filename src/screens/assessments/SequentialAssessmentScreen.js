@@ -4,7 +4,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Text, Button } from 'react-native-paper';
 import { CAPTURE_MODES } from '../../constants/egraConstants';
 import EgraLetterGrid from '../../components/assessment/EgraLetterGrid';
-import AssessmentTimer from '../../components/assessment/AssessmentTimer';
+import CountdownTimer from '../../components/assessment/CountdownTimer';
 import { useAssessmentSession } from '../../hooks/useAssessmentSession';
 import { initSequentialState, sequentialReducer } from '../../utils/sequentialAssessmentReducer';
 import { colors, spacing, borderRadius } from '../../constants/colors';
@@ -25,7 +25,7 @@ export default function SequentialAssessmentScreen({ navigation, route }) {
     navigation, child, letterSet, attemptNumber, assessmentType, captureMode, isWordAssessment,
   });
   // Destructure stable members so callback/effect deps don't depend on the per-render session object.
-  const { phase, timeRemaining, isPaused, layout, finishAndSave, setOnTimerExpire, hasFinishedRef } = session;
+  const { phase, layout, finishAndSave, setOnTimerExpire, hasFinishedRef, getElapsedMs, isExpired } = session;
   const { tileWidth, tileHeight, tileSize, GAP } = layout;
 
   const totalLetters = letterSet.letters.length;
@@ -43,8 +43,9 @@ export default function SequentialAssessmentScreen({ navigation, route }) {
     // Guard on finish-state AND the cursor bound: queued/rapid taps on the final item must
     // not push the cursor past the last index (which would over-count letters_attempted).
     if (hasFinishedRef.current || stateRef.current.cursor >= totalLetters) return;
+    if (isExpired()) { finishWith(stateRef.current); return; } // authoritative hard-stop
     dispatch({ type: 'decide', correct, totalLetters });
-  }, [hasFinishedRef, totalLetters]);
+  }, [hasFinishedRef, totalLetters, isExpired, finishWith]);
 
   // Early-finish from COMMITTED state — NOT a hand-rolled `next` + stale-ref last-item check.
   // Once the cursor has consumed the final item, save. Deriving this from committed state
@@ -54,7 +55,10 @@ export default function SequentialAssessmentScreen({ navigation, route }) {
     if (phase === 'active' && state.cursor >= totalLetters) finishWith(state);
   }, [state, phase, totalLetters, finishWith]);
 
-  const goBack = useCallback(() => dispatch({ type: 'back' }), []);
+  const goBack = useCallback(() => {
+    if (isExpired()) { finishWith(stateRef.current); return; } // no corrections after time is up
+    dispatch({ type: 'back' });
+  }, [isExpired, finishWith]);
 
   const handleEndAssessment = useCallback(() => {
     Alert.alert('End Assessment?', 'End the assessment now and record current results?', [
@@ -95,7 +99,7 @@ export default function SequentialAssessmentScreen({ navigation, route }) {
   const finished = phase === 'finished';
   return (
     <View style={[styles.container, { paddingTop: insets.top }]}>
-      <View style={styles.timerRow}><AssessmentTimer timeRemaining={timeRemaining} isPaused={isPaused} /></View>
+      <View style={styles.timerRow}><CountdownTimer getElapsedMs={getElapsedMs} /></View>
       <View style={styles.pageInfo}>
         <Text variant="bodySmall" style={styles.pageText}>Grid {currentPage + 1} of {totalPages}</Text>
         <View style={styles.dots}>

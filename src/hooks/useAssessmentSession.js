@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { Alert, useWindowDimensions } from 'react-native';
+import { Alert, AppState, useWindowDimensions } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { v4 as uuidv4 } from 'uuid';
 import { useAuth } from '../context/AuthContext';
@@ -8,6 +8,9 @@ import { assessmentsRepository } from '../db/repositories/assessmentsRepository'
 import { ASSESSMENT_DURATION } from '../constants/egraConstants';
 import { buildAssessmentRecord } from '../utils/assessmentScoring';
 import { spacing } from '../constants/colors';
+import { now as monotonicNow } from '../utils/monotonicClock';
+
+const DURATION_MS = ASSESSMENT_DURATION * 1000;
 
 export function useAssessmentSession({
   navigation, child, letterSet, attemptNumber = 1, assessmentType, captureMode, isWordAssessment,
@@ -16,17 +19,28 @@ export function useAssessmentSession({
   const { triggerBackgroundSync, refreshSyncStatus } = useOffline();
 
   const [phase, setPhase] = useState('instructions');
-  const [timeRemaining, setTimeRemaining] = useState(ASSESSMENT_DURATION);
-  const [isPaused, setIsPaused] = useState(false);
 
   const timerRef = useRef(null);
   const hasFinishedRef = useRef(false);
   const allowLeaveRef = useRef(false);
   const abandonedRef = useRef(false);
-  const elapsedRef = useRef(0);
+
+  // Monotonic timekeeping: monotonicNow()-delta accounting means no tick-counting and no drift.
+  const runningRef = useRef(false);    // intent: clock should accrue (between startActive and stop/finish)
+  const startedAtRef = useRef(null);   // monotonicNow() of the current accruing segment; null while paused/frozen/stopped
+  const accumulatedMsRef = useRef(0);  // ms banked from earlier segments (before pauses/freezes)
+  const isForegroundRef = useRef(true);   // R8: watchdog only finalizes while foreground; default true keeps headless tests finalizing
 
   const onTimerExpireRef = useRef(() => {});
   const setOnTimerExpire = useCallback((fn) => { onTimerExpireRef.current = fn; }, []);
+
+  const getElapsedMs = useCallback(() => {
+    const running = startedAtRef.current != null;
+    const raw = accumulatedMsRef.current + (running ? monotonicNow() - startedAtRef.current : 0);
+    return Math.min(DURATION_MS, Math.max(0, raw));
+  }, []);
+
+  const isExpired = useCallback(() => getElapsedMs() >= DURATION_MS, [getElapsedMs]);
 
   const { width: screenWidth, height: screenHeight } = useWindowDimensions();
   const insets = useSafeAreaInsets();
@@ -48,25 +62,54 @@ export function useAssessmentSession({
   const tileSize = Math.min(tileWidth, tileHeight);
   const layout = { COLUMNS, GAP, tileWidth, tileHeight, tileSize };
 
-  const startActive = useCallback(() => setPhase('active'), []);
-  // Synchronously stop the timer — used by the grid's last-attempted path to freeze precisely
-  // (parity with the original screen's clearInterval) WITHOUT setting hasFinishedRef, which would
-  // block the save that finishAndSave performs after the EA confirms the sheet.
-  const stopTimer = useCallback(() => clearInterval(timerRef.current), []);
+  const startActive = useCallback(() => {
+    accumulatedMsRef.current = 0;
+    startedAtRef.current = monotonicNow();
+    runningRef.current = true;
+    setPhase('active');
+  }, []);
 
-  useEffect(() => {
-    if (phase === 'active' && !isPaused) {
-      timerRef.current = setInterval(() => {
-        elapsedRef.current += 1;
-        setTimeRemaining(Math.max(0, ASSESSMENT_DURATION - elapsedRef.current));
-        if (elapsedRef.current >= ASSESSMENT_DURATION) {
-          clearInterval(timerRef.current);
-          onTimerExpireRef.current();
-        }
-      }, 1000);
+  // Freeze the clock precisely (parity with the original clearInterval) WITHOUT setting
+  // hasFinishedRef, so a later finishAndSave can still save. Banks elapsed, stops accrual.
+  const stopTimer = useCallback(() => {
+    if (startedAtRef.current != null) {
+      accumulatedMsRef.current += monotonicNow() - startedAtRef.current;
+      startedAtRef.current = null;
     }
+    runningRef.current = false;
+    clearInterval(timerRef.current);
+  }, []);
+
+  // Background-as-pause (R8). Track foreground on every change; freeze accrual on
+  // background/inactive and resume on foreground. Clock changes are gated by runningRef so a
+  // clock frozen by stopTimer/finish never un-freezes.
+  useEffect(() => {
+    const sub = AppState.addEventListener('change', (next) => {
+      isForegroundRef.current = next === 'active';
+      if (!runningRef.current) return;
+      if (next === 'active') {
+        if (startedAtRef.current == null) startedAtRef.current = monotonicNow();
+      } else if (startedAtRef.current != null) {
+        accumulatedMsRef.current += monotonicNow() - startedAtRef.current;
+        startedAtRef.current = null;
+      }
+    });
+    return () => sub.remove();
+  }, []);
+
+  // Expiry watchdog: authoritative, ref-based, fires onTimerExpire. No setState the screen
+  // renders. Only finalizes while foreground (R8) so an expiry is never committed with the
+  // stimulus hidden; it defers to the first foreground tick.
+  useEffect(() => {
+    if (phase !== 'active') return undefined;
+    timerRef.current = setInterval(() => {
+      if (isExpired() && isForegroundRef.current) {
+        clearInterval(timerRef.current);
+        onTimerExpireRef.current();
+      }
+    }, 1000);
     return () => clearInterval(timerRef.current);
-  }, [phase, isPaused]);
+  }, [phase, isExpired]);
 
   useEffect(() => {
     if (phase !== 'active' && phase !== 'finished') return undefined;
@@ -84,13 +127,14 @@ export function useAssessmentSession({
   const finishAndSave = useCallback(async ({ letterStates, finalLastIndex, correctionCount }) => {
     if (hasFinishedRef.current) return;
     hasFinishedRef.current = true;
-    clearInterval(timerRef.current);
+    const elapsedSeconds = Math.min(ASSESSMENT_DURATION, Math.round(getElapsedMs() / 1000));
+    stopTimer();
     setPhase('finished');
 
     const record = buildAssessmentRecord({
       id: uuidv4(), userId: user.id, childId: child.id, assessmentType, letterSet,
       attemptNumber, captureMode, correctionCount,
-      elapsedSeconds: elapsedRef.current,
+      elapsedSeconds,
       finalLastIndex, letterStates, now: new Date(),
     });
 
@@ -111,10 +155,11 @@ export function useAssessmentSession({
       refreshSyncStatus?.().catch(() => {});
     };
     await saveThenNavigate();
-  }, [user, child, assessmentType, letterSet, attemptNumber, captureMode, navigation, triggerBackgroundSync, refreshSyncStatus]);
+  }, [user, child, assessmentType, letterSet, attemptNumber, captureMode, navigation, triggerBackgroundSync, refreshSyncStatus, getElapsedMs, stopTimer]);
 
   return {
-    phase, setPhase, timeRemaining, isPaused, setIsPaused, layout,
+    phase, setPhase, layout,
     hasFinishedRef, startActive, stopTimer, finishAndSave, setOnTimerExpire,
+    getElapsedMs, isExpired,
   };
 }
