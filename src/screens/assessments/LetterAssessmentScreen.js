@@ -4,7 +4,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Text, Button } from 'react-native-paper';
 import { CAPTURE_MODES } from '../../constants/egraConstants';
 import EgraLetterGrid from '../../components/assessment/EgraLetterGrid';
-import AssessmentTimer from '../../components/assessment/AssessmentTimer';
+import CountdownTimer from '../../components/assessment/CountdownTimer';
 import LastAttemptedBottomSheet from '../../components/assessment/LastAttemptedBottomSheet';
 import { useAssessmentSession } from '../../hooks/useAssessmentSession';
 import { colors, spacing, borderRadius } from '../../constants/colors';
@@ -21,7 +21,7 @@ export default function LetterAssessmentScreen({ navigation, route }) {
     navigation, child, letterSet, attemptNumber, assessmentType, captureMode, isWordAssessment,
   });
   const {
-    phase, timeRemaining, isPaused, layout, finishAndSave, setOnTimerExpire, setPhase, stopTimer, hasFinishedRef,
+    phase, layout, finishAndSave, setOnTimerExpire, setPhase, stopTimer, hasFinishedRef, getElapsedMs, isExpired,
   } = session;
   const { tileSize, tileWidth, tileHeight, GAP } = layout;
 
@@ -40,21 +40,6 @@ export default function LetterAssessmentScreen({ navigation, route }) {
 
   const totalPages = Math.ceil(letterSet.letters.length / letterSet.lettersPerPage);
 
-  const handleToggle = useCallback((globalIndex) => {
-    if (hasFinishedRef.current) return;
-    setLetterStates((prev) => {
-      const next = { ...prev };
-      if (next[globalIndex]) {
-        delete next[globalIndex];
-        correctionCountRef.current += 1;
-      } else {
-        next[globalIndex] = true;
-      }
-      return next;
-    });
-    setLastTappedIndex((prev) => Math.max(prev, globalIndex));
-  }, [hasFinishedRef]);
-
   const handleFinish = useCallback(() => {
     if (finishStartedRef.current) return;
     finishStartedRef.current = true;
@@ -66,11 +51,27 @@ export default function LetterAssessmentScreen({ navigation, route }) {
         correctionCount: correctionCountRef.current,
       });
     } else {
-      stopTimer();          // synchronous timer stop — parity with the original's clearInterval
+      stopTimer();          // synchronous timer freeze — parity with the original clearInterval
       setPhase('finished'); // freeze the grid (disabled) before the last-attempted sheet
       setShowLastAttempted(true);
     }
   }, [finishAndSave, letterSet, setPhase, stopTimer]);
+
+  const handleToggle = useCallback((globalIndex) => {
+    if (hasFinishedRef.current) return;
+    if (isExpired()) { handleFinish(); return; } // authoritative hard-stop
+    setLetterStates((prev) => {
+      const next = { ...prev };
+      if (next[globalIndex]) {
+        delete next[globalIndex];
+        correctionCountRef.current += 1;
+      } else {
+        next[globalIndex] = true;
+      }
+      return next;
+    });
+    setLastTappedIndex((prev) => Math.max(prev, globalIndex));
+  }, [hasFinishedRef, isExpired, handleFinish]);
 
   useEffect(() => { setOnTimerExpire(handleFinish); }, [setOnTimerExpire, handleFinish]);
 
@@ -164,7 +165,7 @@ export default function LetterAssessmentScreen({ navigation, route }) {
   return (
     <View style={[styles.container, { paddingTop: insets.top }]}>
       <View style={styles.timerRow}>
-        <AssessmentTimer timeRemaining={timeRemaining} isPaused={isPaused} />
+        <CountdownTimer getElapsedMs={getElapsedMs} />
       </View>
 
       <View style={styles.pageInfo}>
