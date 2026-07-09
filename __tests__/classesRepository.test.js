@@ -4,6 +4,7 @@ import { runMigrations } from '../src/db/migrations';
 import { createClassesRepository } from '../src/db/repositories/classesRepository';
 import { createClassEaAssignmentsRepository } from '../src/db/repositories/classEaAssignmentsRepository';
 import { createChildrenRepository } from '../src/db/repositories/childrenRepository';
+import { classEaAssignmentDomainId } from '../src/db/repositories/domainRepositoryUtils';
 import {
   createMigratedDatabase,
   seedCoreData,
@@ -76,10 +77,15 @@ describe('classesRepository', () => {
         }),
       ]);
       expect(await db.getFirstAsync(`
-        select class_id, ea_user_id, programme_id, unassigned_at
+        select id, class_id, ea_user_id, programme_id, unassigned_at
         from class_ea_assignments
         where class_id = ?
       `, 'class-created-on-device')).toEqual({
+        id: classEaAssignmentDomainId({
+          classId: 'class-created-on-device',
+          eaUserId: 'user-1',
+          programmeId: 'programme-a',
+        }),
         class_id: 'class-created-on-device',
         ea_user_id: 'user-1',
         programme_id: 'programme-a',

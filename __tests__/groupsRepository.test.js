@@ -1,8 +1,12 @@
 jest.mock('expo-sqlite', () => require('../test-support/expoSQLiteMock'));
 
 import { runMigrations } from '../src/db/migrations';
+import { groupEaAssignmentDomainId } from '../src/db/repositories/domainRepositoryUtils';
 import { createChildrenRepository } from '../src/db/repositories/childrenRepository';
-import { createGroupsRepository } from '../src/db/repositories/groupsRepository';
+import {
+  createGroupsRepository,
+  repairGroupOwnershipForSync,
+} from '../src/db/repositories/groupsRepository';
 import { createGroupingVersionsRepository } from '../src/db/repositories/groupingVersionsRepository';
 import {
   createMigratedDatabase,
@@ -120,11 +124,12 @@ describe('groupsRepository', () => {
       });
 
       const assignment = await db.getFirstAsync(`
-        select group_id, ea_user_id, programme_id, created_by, sync_status
+        select id, group_id, ea_user_id, programme_id, created_by, sync_status
         from group_ea_assignments
         where group_id = 'group-1'
       `);
       expect(assignment).toEqual({
+        id: groupEaAssignmentDomainId({ groupId: 'group-1' }),
         group_id: 'group-1',
         ea_user_id: 'user-1',
         programme_id: 'programme-a',
@@ -142,6 +147,51 @@ describe('groupsRepository', () => {
       expect(outboxTables).toEqual([
         { table_name: 'group_ea_assignments', operation: 'insert' },
         { table_name: 'groups', operation: 'insert' },
+      ]);
+    } finally {
+      await db.closeAsync();
+    }
+  });
+
+  test('ownership repair reactivates an archived deterministic group EA row without duplicating it', async () => {
+    const db = await createMigratedDatabase(runMigrations);
+
+    try {
+      await seedCoreData(db);
+      const groupsRepository = createGroupsRepository({ database: db });
+      const groupId = 'group-archived-assignment';
+      const assignmentId = groupEaAssignmentDomainId({ groupId });
+
+      await groupsRepository.saveGroup({
+        id: groupId,
+        name: 'Archived Assignment Group',
+        staff_id: 'user-1',
+        synced: false,
+      });
+      await db.runAsync(
+        'update group_ea_assignments set unassigned_at = ? where id = ?',
+        '2026-05-25T00:00:00.000Z',
+        assignmentId
+      );
+      await db.runAsync('update groups set created_by = null where id = ?', groupId);
+
+      await repairGroupOwnershipForSync({ database: db });
+
+      const assignments = await db.getAllAsync(`
+        select id, group_id, ea_user_id, programme_id, created_by, unassigned_at, sync_status
+        from group_ea_assignments
+        where group_id = ?
+      `, groupId);
+      expect(assignments).toEqual([
+        {
+          id: assignmentId,
+          group_id: groupId,
+          ea_user_id: 'user-1',
+          programme_id: 'programme-a',
+          created_by: 'user-1',
+          unassigned_at: null,
+          sync_status: 'pending',
+        },
       ]);
     } finally {
       await db.closeAsync();
