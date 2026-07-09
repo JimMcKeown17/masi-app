@@ -1,9 +1,9 @@
 import { resolveDatabase, runRepositoryTransaction } from './repositoryRuntime';
 import {
-  deterministicDomainId,
   enqueueDomainOutbox,
   getActiveProgrammeAssignment,
   getActiveProgrammeId,
+  groupEaAssignmentDomainId,
   mapDomainRow,
   normalizeSyncFields,
   resolveProgrammeId,
@@ -95,8 +95,38 @@ const createMissingGroupAssignment = async (txn, {
   `, groupId);
   if (existingAssignment) return mapDomainRow(existingAssignment);
 
+  const assignmentId = groupEaAssignmentDomainId({ groupId });
+  const archivedAssignment = await txn.getFirstAsync(`
+    select *
+    from group_ea_assignments
+    where group_id = ?
+    order by case when id = ? then 0 else 1 end
+    limit 1
+  `, groupId, assignmentId);
+  if (archivedAssignment?.id === assignmentId) {
+    const updatedAt = timestamp();
+    // Assignment identity fields are immutable server-side. Reactivation only
+    // clears lifecycle archive fields on the existing deterministic row.
+    await txn.runAsync(`
+      update group_ea_assignments
+      set unassigned_at = null,
+          handover_reason = null,
+          sync_status = ?,
+          last_sync_error = null,
+          updated_at = ?
+      where id = ?
+    `, syncStatus, updatedAt, assignmentId);
+    const reactivatedAssignment = await txn.getFirstAsync(
+      'select * from group_ea_assignments where id = ?',
+      assignmentId
+    );
+    const assignment = mapDomainRow(reactivatedAssignment);
+    await enqueueDomainOutbox(txn, 'group_ea_assignments', assignment.id, 'insert', assignment);
+    return assignment;
+  }
+
   const assignment = normalizeSyncFields({
-    id: deterministicDomainId('group_ea_assignments', groupId, ownerUserId, programmeId),
+    id: assignmentId,
     group_id: groupId,
     ea_user_id: ownerUserId,
     programme_id: programmeId,
