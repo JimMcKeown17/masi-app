@@ -28,6 +28,7 @@ Use this map before changing any synced table, repository producer, outbox opera
 7. Reference/admin tables are pulled from the server and are not mobile-writable through app-role DML.
 8. Server pulls must not overwrite pending local rows (pending-local-wins, issue #42 / ZZ F7). See "Pull Merge Invariant" below.
 9. Sync auth state is part of the RLS contract (issues #43/#44). A sync pass with no Supabase session must return a structured skip (`{ success: true, skippedNoSession: true }`) before touching the outbox or sync metadata. A terminal `42501` recorded while a live session exists must store `last_error` with the `42501-authenticated:` prefix and must never be auto-healed. Unmarked RLS-terminal rows are treated as auth-loss collateral: when auth is restored through `SIGNED_IN`, `TOKEN_REFRESHED`, or sessionful `INITIAL_SESSION`, the engine requeues only rows owned by the signed-in user, and the outbox requeue plus domain `sync_status = 'pending'` reset happen in one SQLite transaction. See "Auth-Restore RLS Heal" below.
+10. Error classification is local-state-only and never loops forever (issue #48). `23514` from the immutable-assignment identity triggers (`child_ea_assignments`, `class_ea_assignments`, `group_ea_assignments`) is terminal with reason `Immutable identity columns rejected the update (23514)`; the insert path already avoids it via `ignoreDuplicates`, so this covers archive/update re-pushes. `23503` is retriable while the FK parent has a `pending`/`failed`/`in_flight` `sync_outbox` row (`hasPendingRecord`), terminal otherwise. `42501` is retriable while the FK parent OR the RLS assignment grant is pending locally, terminal otherwise; grant evidence is an active (`unassigned_at is null`), unsynced `child_ea_assignments`/`class_ea_assignments`/`group_ea_assignments` row for the record's subject (`PARENT_FK_COLUMNS` + `GRANT_SUBJECTS`, grounded in `private.current_user_can_write_for_*`). Subject and FK values resolve from the outbox payload first and the record's own local domain row second, so archive/update payloads still yield evidence. The `42501` no-session downgrade (Item 9) still applies to an otherwise-terminal `42501`. See "Error Classification" below.
 
 ## Operation Semantics
 
@@ -38,6 +39,25 @@ Use this map before changing any synced table, repository producer, outbox opera
 | Immutable assignment insert retry | `child_ea_assignments`, `class_ea_assignments`, `group_ea_assignments` when `operation === 'insert'` | `upsert(payload, { onConflict: 'id', ignoreDuplicates: true })` | Duplicate insert retry must be insert-or-ignore, not update-capable upsert, because identity triggers reject changed identity/timestamp columns. |
 | Assignment archive/update | Same assignment tables when `operation === 'archive'` or update-like payload | Update-capable upsert | Allowed only for lifecycle fields such as `unassigned_at` / `handover_reason`; identity columns remain immutable. |
 | No-history child delete | `children` hard delete | RPC `delete_child_if_no_history(p_child_id)` | Direct mobile child DELETE is blocked; history rows require archive instead. |
+
+## Error Classification (Item 10)
+
+Classification is a pure decision in `classifyError` from `(code, tableName, parentEvidencePending)`, plus the per-record loop that computes `parentEvidencePending` from local state via `computeEvidencePending`. No server calls occur in the per-record failure path.
+
+| Server error | Classification | Evidence checked |
+| --- | --- | --- |
+| `23514` on `child_ea_assignments` / `class_ea_assignments` / `group_ea_assignments` | Terminal, reason `Immutable identity columns rejected the update (23514)` | none (drifted identity can never satisfy the trigger) |
+| `23514` on any other table | Retriable (unchanged, out of #48 scope) | none |
+| `23503` | Retriable while FK parent is pending in the outbox, terminal otherwise | `PARENT_FK_COLUMNS` via `hasPendingRecord` |
+| `42501` (live session) | Retriable while FK parent OR assignment grant is pending, else terminal with the `42501-authenticated:` marker | `PARENT_FK_COLUMNS` + `GRANT_SUBJECTS` |
+| `42501` (no session) | Retriable, unmarked (Item 9) | n/a |
+
+Known limitations:
+- `staff_programme_assignments` grants are not device-produced (never pushed), so a `42501` that needs one stays terminal, which is correct: a real programme-assignment denial.
+- A parent or grant that heals through the Item 9 auth-restore after its child was already stamped terminal does not auto-rescue the child (identical to pre-#48 behavior); force "Sync Now" (`includeTerminal`) resurrects the chain.
+- Non-immutable-table `23514` (generic CHECK violations, e.g. an age check) still retries; scoping it is a follow-up.
+
+Guarded by `__tests__/classifyErrorHardening.test.js` (unit, via `_testClassifyError` / `_testEvidenceMaps` / `_testComputeEvidencePending`) and the `23514` / `42501` / evidence integration tests in `__tests__/offlineSyncOutbox.test.js`.
 
 ## Upsert Visibility Rules
 
