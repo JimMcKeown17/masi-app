@@ -8,6 +8,9 @@ import { assessmentsRepository } from '../db/repositories/assessmentsRepository'
 import { ASSESSMENT_DURATION } from '../constants/egraConstants';
 import { buildAssessmentRecord } from '../utils/assessmentScoring';
 import { spacing } from '../constants/colors';
+import { now as monotonicNow } from '../utils/monotonicClock';
+
+const DURATION_MS = ASSESSMENT_DURATION * 1000;
 
 export function useAssessmentSession({
   navigation, child, letterSet, attemptNumber = 1, assessmentType, captureMode, isWordAssessment,
@@ -16,6 +19,7 @@ export function useAssessmentSession({
   const { triggerBackgroundSync, refreshSyncStatus } = useOffline();
 
   const [phase, setPhase] = useState('instructions');
+  // Transitional display state; removed in the render-isolation cleanup task.
   const [timeRemaining, setTimeRemaining] = useState(ASSESSMENT_DURATION);
   const [isPaused, setIsPaused] = useState(false);
 
@@ -23,10 +27,22 @@ export function useAssessmentSession({
   const hasFinishedRef = useRef(false);
   const allowLeaveRef = useRef(false);
   const abandonedRef = useRef(false);
-  const elapsedRef = useRef(0);
+
+  // Monotonic timekeeping: monotonicNow()-delta accounting means no tick-counting and no drift.
+  const runningRef = useRef(false);    // intent: clock should accrue (between startActive and stop/finish)
+  const startedAtRef = useRef(null);   // monotonicNow() of the current accruing segment; null while paused/frozen/stopped
+  const accumulatedMsRef = useRef(0);  // ms banked from earlier segments (before pauses/freezes)
 
   const onTimerExpireRef = useRef(() => {});
   const setOnTimerExpire = useCallback((fn) => { onTimerExpireRef.current = fn; }, []);
+
+  const getElapsedMs = useCallback(() => {
+    const running = startedAtRef.current != null;
+    const raw = accumulatedMsRef.current + (running ? monotonicNow() - startedAtRef.current : 0);
+    return Math.min(DURATION_MS, Math.max(0, raw));
+  }, []);
+
+  const isExpired = useCallback(() => getElapsedMs() >= DURATION_MS, [getElapsedMs]);
 
   const { width: screenWidth, height: screenHeight } = useWindowDimensions();
   const insets = useSafeAreaInsets();
@@ -48,25 +64,38 @@ export function useAssessmentSession({
   const tileSize = Math.min(tileWidth, tileHeight);
   const layout = { COLUMNS, GAP, tileWidth, tileHeight, tileSize };
 
-  const startActive = useCallback(() => setPhase('active'), []);
-  // Synchronously stop the timer — used by the grid's last-attempted path to freeze precisely
-  // (parity with the original screen's clearInterval) WITHOUT setting hasFinishedRef, which would
-  // block the save that finishAndSave performs after the EA confirms the sheet.
-  const stopTimer = useCallback(() => clearInterval(timerRef.current), []);
+  const startActive = useCallback(() => {
+    accumulatedMsRef.current = 0;
+    startedAtRef.current = monotonicNow();
+    runningRef.current = true;
+    setPhase('active');
+  }, []);
 
+  // Freeze the clock precisely (parity with the original clearInterval) WITHOUT setting
+  // hasFinishedRef, so a later finishAndSave can still save. Banks elapsed, stops accrual.
+  const stopTimer = useCallback(() => {
+    if (startedAtRef.current != null) {
+      accumulatedMsRef.current += monotonicNow() - startedAtRef.current;
+      startedAtRef.current = null;
+    }
+    runningRef.current = false;
+    clearInterval(timerRef.current);
+  }, []);
+
+  // Display + expiry watchdog. Display is derived from the monotonic clock (drift-free);
+  // the watchdog fires onTimerExpire authoritatively.
   useEffect(() => {
     if (phase === 'active' && !isPaused) {
       timerRef.current = setInterval(() => {
-        elapsedRef.current += 1;
-        setTimeRemaining(Math.max(0, ASSESSMENT_DURATION - elapsedRef.current));
-        if (elapsedRef.current >= ASSESSMENT_DURATION) {
+        setTimeRemaining(Math.max(0, ASSESSMENT_DURATION - Math.floor(getElapsedMs() / 1000)));
+        if (isExpired()) {
           clearInterval(timerRef.current);
           onTimerExpireRef.current();
         }
       }, 1000);
     }
     return () => clearInterval(timerRef.current);
-  }, [phase, isPaused]);
+  }, [phase, isPaused, getElapsedMs, isExpired]);
 
   useEffect(() => {
     if (phase !== 'active' && phase !== 'finished') return undefined;
@@ -84,13 +113,14 @@ export function useAssessmentSession({
   const finishAndSave = useCallback(async ({ letterStates, finalLastIndex, correctionCount }) => {
     if (hasFinishedRef.current) return;
     hasFinishedRef.current = true;
-    clearInterval(timerRef.current);
+    const elapsedSeconds = Math.min(ASSESSMENT_DURATION, Math.round(getElapsedMs() / 1000));
+    stopTimer();
     setPhase('finished');
 
     const record = buildAssessmentRecord({
       id: uuidv4(), userId: user.id, childId: child.id, assessmentType, letterSet,
       attemptNumber, captureMode, correctionCount,
-      elapsedSeconds: elapsedRef.current,
+      elapsedSeconds,
       finalLastIndex, letterStates, now: new Date(),
     });
 
@@ -111,10 +141,11 @@ export function useAssessmentSession({
       refreshSyncStatus?.().catch(() => {});
     };
     await saveThenNavigate();
-  }, [user, child, assessmentType, letterSet, attemptNumber, captureMode, navigation, triggerBackgroundSync, refreshSyncStatus]);
+  }, [user, child, assessmentType, letterSet, attemptNumber, captureMode, navigation, triggerBackgroundSync, refreshSyncStatus, getElapsedMs, stopTimer]);
 
   return {
     phase, setPhase, timeRemaining, isPaused, setIsPaused, layout,
     hasFinishedRef, startActive, stopTimer, finishAndSave, setOnTimerExpire,
+    getElapsedMs, isExpired,
   };
 }
