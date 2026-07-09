@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Eliminate assessment-capture tap lag and countdown drift on low-end field Android by isolating the 1 Hz countdown into a self-ticking leaf, memoizing grid tiles, and replacing tick-counting with a monotonic `Date.now()` clock that pauses on background and hard-stops on expiry.
+**Goal:** Eliminate assessment-capture tap lag and countdown drift on low-end field Android by isolating the 1 Hz countdown into a self-ticking leaf, memoizing grid tiles, and replacing tick-counting with a monotonic `performance.now()` clock that pauses on background and hard-stops on expiry.
 
 **Architecture:** Timekeeping becomes ref-based and monotonic inside `useAssessmentSession` (no per-tick screen re-render). A new `CountdownTimer` leaf self-ticks and reads `getElapsedMs()` so only it re-renders each second. Grid tiles move into a `React.memo` `LetterTile` fed scalar props. An authoritative `isExpired()` guards every capture-mutation path. Background is an explicit pause. This is not a sync change.
 
@@ -11,7 +11,7 @@
 ## Global Constraints
 
 - Design spec: `docs/superpowers/specs/2026-07-09-assessment-render-perf-design.md` (locked decisions: background = pause & resume; testing = render-spy + device).
-- Clock source is `Date.now()` delta (parity with `src/components/common/ElapsedTime.js`), clamped to `[0, ASSESSMENT_DURATION * 1000]`. Do not use `performance.now()`.
+- Clock source is a monotonic `performance.now()` via `src/utils/monotonicClock.js` (`now()` with a `Date.now()` fallback), clamped to `[0, ASSESSMENT_DURATION * 1000]`. Revised from `Date.now()` per adversarial-review disposition R7; do NOT revert to `Date.now()` deltas for elapsed (wall-clock jumps would corrupt a standardized timer). `Date.now()`/`new Date()` remain fine for the record timestamp (`now: new Date()`).
 - `ASSESSMENT_DURATION = 60` (seconds), from `src/constants/egraConstants.js`. Duration in ms is `ASSESSMENT_DURATION * 1000`.
 - Tests live flat in `/__tests__/` as `*.test.js`. Run under Node 20: prefix commands with `PATH=$HOME/.nvm/versions/node/v20.19.4/bin:$PATH`.
 - Known flake (not a regression): `CreateClassScreen.test.js` can time out under parallel load; it passes in isolation.
@@ -21,36 +21,43 @@
 
 ## File Structure
 
-- `src/hooks/useAssessmentSession.js` (modify) — monotonic timekeeping refs, `getElapsedMs`, `isExpired`, AppState pause, `runningRef`-gated `startActive`/`stopTimer`; later drops `timeRemaining`/`isPaused`.
+- `src/utils/monotonicClock.js` (create) — `now()` = `performance.now()` (with `Date.now()` fallback); the single monotonic time source, mockable in tests (R7).
+- `src/hooks/useAssessmentSession.js` (modify) — monotonic timekeeping refs, `getElapsedMs`, `isExpired`, AppState pause + `isForegroundRef`, `runningRef`-gated `startActive`/`stopTimer`; later drops `timeRemaining`/`isPaused`.
 - `src/components/assessment/CountdownTimer.js` (create) — self-ticking 1 Hz leaf; renders `AssessmentTimer`.
 - `src/components/assessment/LetterTile.js` (create) — `React.memo` single tile, scalar props.
 - `src/components/assessment/EgraLetterGrid.js` (modify) — render `LetterTile` with scalar props.
 - `src/components/assessment/AssessmentTimer.js` (unchanged) — stays a pure presentational bar+text.
 - `src/screens/assessments/LetterAssessmentScreen.js` (modify) — consume `CountdownTimer`, add `isExpired()` guard.
 - `src/screens/assessments/SequentialAssessmentScreen.js` (modify) — consume `CountdownTimer`, add `isExpired()` guards.
-- Tests (create): `__tests__/useAssessmentSession.timer.test.js`, `__tests__/CountdownTimer.test.js`, `__tests__/LetterTile.test.js`, `__tests__/EgraLetterGrid.renderCount.test.js`, `__tests__/LetterAssessmentScreen.expiry.test.js`, `__tests__/SequentialAssessmentScreen.expiry.test.js`, `__tests__/LetterAssessmentScreen.renderIsolation.test.js`.
+- Tests (create): `__tests__/useAssessmentSession.timer.test.js`, `__tests__/useAssessmentSession.clockJump.test.js`, `__tests__/CountdownTimer.test.js`, `__tests__/LetterTile.test.js`, `__tests__/EgraLetterGrid.renderCount.test.js`, `__tests__/LetterAssessmentScreen.expiry.test.js`, `__tests__/LetterAssessmentScreen.renderCount.test.js`, `__tests__/SequentialAssessmentScreen.expiry.test.js`, `__tests__/SequentialAssessmentScreen.renderCount.test.js`, `__tests__/LetterAssessmentScreen.renderIsolation.test.js`.
 - Docs (modify): `documentation/sqlite-refactor-log.md`, and spec status line.
 
 ---
 
 ### Task 1: Hook — monotonic timekeeping, `getElapsedMs`, `isExpired`
 
-Replace tick-counting with `Date.now()`-delta accounting. Keep `timeRemaining`/`isPaused` in the return for now (removed in Task 7) so both screens keep compiling. The display interval now derives from the monotonic clock (already drift-free) and also runs the expiry watchdog.
+Replace tick-counting with monotonic `performance.now()`-delta accounting (via `monotonicClock.now()`, R7). Keep `timeRemaining`/`isPaused` in the return for now (removed in Task 7) so both screens keep compiling. The display interval now derives from the monotonic clock (already drift-free) and also runs the expiry watchdog.
 
 **Files:**
+- Create: `src/utils/monotonicClock.js` (R7: mockable monotonic clock)
 - Modify: `src/hooks/useAssessmentSession.js`
-- Test: `__tests__/useAssessmentSession.timer.test.js`
+- Test: `__tests__/useAssessmentSession.timer.test.js`, `__tests__/useAssessmentSession.clockJump.test.js`
 
 **Interfaces:**
-- Produces: `getElapsedMs(): number` (clamped ms elapsed), `isExpired(): boolean`, `startActive(): void`, `stopTimer(): void` (freezes clock, banks elapsed, clears watchdog, sets `runningRef=false`), plus still-returned `phase`, `setPhase`, `layout`, `hasFinishedRef`, `finishAndSave`, `setOnTimerExpire`, and (transitional) `timeRemaining`, `isPaused`.
-- Consumes: `ASSESSMENT_DURATION` from `src/constants/egraConstants.js`; `buildAssessmentRecord` unchanged.
+- Produces: `monotonicClock.now(): number` (`performance.now()` ms with `Date.now()` fallback); `getElapsedMs(): number` (clamped ms elapsed, monotonic), `isExpired(): boolean`, `startActive(): void`, `stopTimer(): void` (freezes clock, banks elapsed, clears watchdog, sets `runningRef=false`), plus still-returned `phase`, `setPhase`, `layout`, `hasFinishedRef`, `finishAndSave`, `setOnTimerExpire`, and (transitional) `timeRemaining`, `isPaused`.
+- Consumes: `ASSESSMENT_DURATION` from `src/constants/egraConstants.js`; `now` from `src/utils/monotonicClock.js`; `buildAssessmentRecord` unchanged.
 
 - [ ] **Step 1: Write the failing tests**
 
-Create `__tests__/useAssessmentSession.timer.test.js`:
+Create `__tests__/useAssessmentSession.timer.test.js`. The monotonic clock module is mocked with a mutable `mockNow` so elapsed can be controlled independently of jest timers; this is what lets the R10 test advance elapsed past the deadline while firing only a single watchdog tick.
 
 ```javascript
 import { renderHook, act } from '@testing-library/react-native';
+
+// Mockable monotonic clock (R7/R10): control elapsed independently of jest fake timers.
+let mockNow = 0;
+jest.mock('../src/utils/monotonicClock', () => ({ now: () => mockNow }));
+
 import { useAssessmentSession } from '../src/hooks/useAssessmentSession';
 import { useAuth } from '../src/context/AuthContext';
 import { useOffline } from '../src/context/OfflineContext';
@@ -60,9 +67,6 @@ jest.mock('../src/context/OfflineContext', () => ({ useOffline: jest.fn() }));
 jest.mock('react-native-safe-area-context', () => ({
   useSafeAreaInsets: () => ({ top: 0, right: 0, bottom: 0, left: 0 }),
 }));
-
-const T0 = new Date('2026-07-09T08:00:00.000Z');
-const at = (s) => new Date(T0.getTime() + s * 1000);
 
 const makeArgs = () => ({
   navigation: { addListener: jest.fn(() => jest.fn()), replace: jest.fn(), goBack: jest.fn(), dispatch: jest.fn() },
@@ -77,26 +81,29 @@ const makeArgs = () => ({
 describe('useAssessmentSession monotonic timekeeping', () => {
   beforeEach(() => {
     jest.useFakeTimers();
-    jest.setSystemTime(T0);
+    mockNow = 0;
     useAuth.mockReturnValue({ user: { id: 'user-1' } });
     useOffline.mockReturnValue({ triggerBackgroundSync: jest.fn(), refreshSyncStatus: jest.fn() });
   });
   afterEach(() => { jest.useRealTimers(); jest.restoreAllMocks(); jest.clearAllMocks(); });
 
-  test('elapsed is Date-based and immune to throttled ticks', () => {
+  test('elapsed reads the monotonic clock (immune to throttled ticks)', () => {
     const { result } = renderHook(() => useAssessmentSession(makeArgs()));
     act(() => { result.current.startActive(); });
-    // Wall clock advances 5s but NO interval ticks fire (simulates Android throttling).
-    act(() => { jest.setSystemTime(at(5)); });
+    // Clock advances 5s with NO watchdog ticks fired (simulates Android throttling).
+    mockNow = 5000;
     expect(result.current.getElapsedMs()).toBe(5000);
     expect(result.current.isExpired()).toBe(false);
   });
 
-  test('isExpired() true at duration and watchdog fires onTimerExpire once', () => {
+  test('watchdog finalizes from the clock, not a tick count (R10)', () => {
     const onExpire = jest.fn();
     const { result } = renderHook(() => useAssessmentSession(makeArgs()));
     act(() => { result.current.setOnTimerExpire(onExpire); result.current.startActive(); });
-    act(() => { jest.advanceTimersByTime(60000); });
+    // Elapsed jumps past the deadline; fire EXACTLY ONE watchdog tick. A tick-count
+    // regression would need 60 ticks and would NOT expire here.
+    mockNow = 60001;
+    act(() => { jest.advanceTimersByTime(1000); });
     expect(result.current.isExpired()).toBe(true);
     expect(onExpire).toHaveBeenCalledTimes(1);
   });
@@ -104,27 +111,90 @@ describe('useAssessmentSession monotonic timekeeping', () => {
   test('elapsed is clamped to the duration ceiling', () => {
     const { result } = renderHook(() => useAssessmentSession(makeArgs()));
     act(() => { result.current.startActive(); });
-    act(() => { jest.setSystemTime(at(120)); });
+    mockNow = 120000;
     expect(result.current.getElapsedMs()).toBe(60000);
   });
 
   test('stopTimer freezes elapsed at the banked value', () => {
     const { result } = renderHook(() => useAssessmentSession(makeArgs()));
     act(() => { result.current.startActive(); });
-    act(() => { jest.setSystemTime(at(8)); });
+    mockNow = 8000;
     act(() => { result.current.stopTimer(); });
-    act(() => { jest.setSystemTime(at(30)); });
+    mockNow = 30000;
     expect(result.current.getElapsedMs()).toBe(8000);
+  });
+});
+```
+
+Also create `__tests__/useAssessmentSession.clockJump.test.js`. This one does NOT mock the clock, so it proves the real `performance.now()`-based clock is immune to wall-clock (`Date`) changes (verified: `jest.setSystemTime` does not move `performance.now`).
+
+```javascript
+import { renderHook, act } from '@testing-library/react-native';
+import { useAssessmentSession } from '../src/hooks/useAssessmentSession';
+import { useAuth } from '../src/context/AuthContext';
+import { useOffline } from '../src/context/OfflineContext';
+
+jest.mock('../src/context/AuthContext', () => ({ useAuth: jest.fn() }));
+jest.mock('../src/context/OfflineContext', () => ({ useOffline: jest.fn() }));
+jest.mock('react-native-safe-area-context', () => ({
+  useSafeAreaInsets: () => ({ top: 0, right: 0, bottom: 0, left: 0 }),
+}));
+
+const makeArgs = () => ({
+  navigation: { addListener: jest.fn(() => jest.fn()), replace: jest.fn(), goBack: jest.fn(), dispatch: jest.fn() },
+  child: { id: 'child-1' },
+  letterSet: { letters: ['a', 'b'], lettersPerPage: 20, columns: 5, language: 'English' },
+  attemptNumber: 1, assessmentType: 'letter_egra', captureMode: 'grid', isWordAssessment: false,
+});
+
+describe('useAssessmentSession clock jump-immunity (R7)', () => {
+  beforeEach(() => {
+    jest.useFakeTimers();
+    jest.setSystemTime(new Date('2026-07-09T08:00:00.000Z'));
+    useAuth.mockReturnValue({ user: { id: 'user-1' } });
+    useOffline.mockReturnValue({ triggerBackgroundSync: jest.fn(), refreshSyncStatus: jest.fn() });
+  });
+  afterEach(() => { jest.useRealTimers(); jest.restoreAllMocks(); jest.clearAllMocks(); });
+
+  test('a wall-clock jump does not change elapsed or expiry', () => {
+    const { result } = renderHook(() => useAssessmentSession(makeArgs()));
+    act(() => { result.current.startActive(); });
+    act(() => { jest.advanceTimersByTime(10000); }); // advances performance.now by 10s
+    const before = result.current.getElapsedMs();
+    expect(before).toBe(10000);
+    act(() => { jest.setSystemTime(new Date('2026-07-09T07:00:00.000Z')); }); // wall clock -1h
+    expect(result.current.getElapsedMs()).toBe(before);
+    act(() => { jest.setSystemTime(new Date('2026-07-09T09:00:00.000Z')); }); // wall clock +1h
+    expect(result.current.getElapsedMs()).toBe(before);
+    expect(result.current.isExpired()).toBe(false);
   });
 });
 ```
 
 - [ ] **Step 2: Run tests to verify they fail**
 
-Run: `PATH=$HOME/.nvm/versions/node/v20.19.4/bin:$PATH npx jest useAssessmentSession.timer -c package.json`
-Expected: FAIL (`getElapsedMs`/`isExpired` are not functions).
+Run: `PATH=$HOME/.nvm/versions/node/v20.19.4/bin:$PATH npx jest useAssessmentSession.timer useAssessmentSession.clockJump -c package.json`
+Expected: FAIL (`src/utils/monotonicClock` cannot be resolved; `getElapsedMs`/`isExpired` are not functions).
 
-- [ ] **Step 3: Rewrite the hook's timekeeping**
+- [ ] **Step 3a: Create the monotonic clock module**
+
+Create `src/utils/monotonicClock.js`:
+
+```javascript
+// Monotonic time source for the assessment timer. performance.now() is immune to wall-clock
+// (Date) changes - NTP corrections, manual clock changes - which matters for a standardized
+// 60-second timed assessment whose elapsed feeds completion_time. Falls back to Date.now()
+// only if performance.now is unavailable.
+const perf = (typeof performance !== 'undefined' && typeof performance.now === 'function')
+  ? performance
+  : null;
+
+export function now() {
+  return perf ? perf.now() : Date.now();
+}
+```
+
+- [ ] **Step 3b: Rewrite the hook's timekeeping**
 
 Replace the entire contents of `src/hooks/useAssessmentSession.js` with:
 
@@ -139,6 +209,7 @@ import { assessmentsRepository } from '../db/repositories/assessmentsRepository'
 import { ASSESSMENT_DURATION } from '../constants/egraConstants';
 import { buildAssessmentRecord } from '../utils/assessmentScoring';
 import { spacing } from '../constants/colors';
+import { now as monotonicNow } from '../utils/monotonicClock';
 
 const DURATION_MS = ASSESSMENT_DURATION * 1000;
 
@@ -158,9 +229,9 @@ export function useAssessmentSession({
   const allowLeaveRef = useRef(false);
   const abandonedRef = useRef(false);
 
-  // Monotonic timekeeping: Date.now()-delta accounting means no tick-counting and no drift.
+  // Monotonic timekeeping: monotonicNow()-delta accounting means no tick-counting and no drift.
   const runningRef = useRef(false);    // intent: clock should accrue (between startActive and stop/finish)
-  const startedAtRef = useRef(null);   // Date.now() of the current accruing segment; null while paused/frozen/stopped
+  const startedAtRef = useRef(null);   // monotonicNow() of the current accruing segment; null while paused/frozen/stopped
   const accumulatedMsRef = useRef(0);  // ms banked from earlier segments (before pauses/freezes)
 
   const onTimerExpireRef = useRef(() => {});
@@ -168,7 +239,7 @@ export function useAssessmentSession({
 
   const getElapsedMs = useCallback(() => {
     const running = startedAtRef.current != null;
-    const raw = accumulatedMsRef.current + (running ? Date.now() - startedAtRef.current : 0);
+    const raw = accumulatedMsRef.current + (running ? monotonicNow() - startedAtRef.current : 0);
     return Math.min(DURATION_MS, Math.max(0, raw));
   }, []);
 
@@ -196,7 +267,7 @@ export function useAssessmentSession({
 
   const startActive = useCallback(() => {
     accumulatedMsRef.current = 0;
-    startedAtRef.current = Date.now();
+    startedAtRef.current = monotonicNow();
     runningRef.current = true;
     setPhase('active');
   }, []);
@@ -205,7 +276,7 @@ export function useAssessmentSession({
   // hasFinishedRef, so a later finishAndSave can still save. Banks elapsed, stops accrual.
   const stopTimer = useCallback(() => {
     if (startedAtRef.current != null) {
-      accumulatedMsRef.current += Date.now() - startedAtRef.current;
+      accumulatedMsRef.current += monotonicNow() - startedAtRef.current;
       startedAtRef.current = null;
     }
     runningRef.current = false;
@@ -283,21 +354,21 @@ export function useAssessmentSession({
 
 - [ ] **Step 4: Run tests to verify they pass**
 
-Run: `PATH=$HOME/.nvm/versions/node/v20.19.4/bin:$PATH npx jest useAssessmentSession.timer -c package.json`
-Expected: PASS (4 tests).
+Run: `PATH=$HOME/.nvm/versions/node/v20.19.4/bin:$PATH npx jest useAssessmentSession.timer useAssessmentSession.clockJump -c package.json`
+Expected: PASS (timer 4 tests + clockJump 1 test).
 
-- [ ] **Step 5: Confirm no regression in the existing hook + screen contract tests**
+- [ ] **Step 5: Confirm no regression across BOTH hook consumers (R11)**
 
-The hook file was fully rewritten, so run its pre-existing 7-test contract suite (`__tests__/useAssessmentSession.test.js`: idempotency, retry, discard, abandon-during-save, leave-guard, and R7 `completion_time === 60` at expiry) alongside the screen test. The `useAssessmentSession` pattern matches BOTH the new `.timer` file and the existing file.
+The hook file was fully rewritten and is consumed by BOTH capture screens, so run its pre-existing 7-test contract suite (`__tests__/useAssessmentSession.test.js`: idempotency, retry, discard, abandon-during-save, leave-guard, and R7 `completion_time === 60` at expiry) alongside BOTH screens. The `useAssessmentSession` pattern matches the new `.timer`/`.clockJump` files and the existing contract file.
 
-Run: `PATH=$HOME/.nvm/versions/node/v20.19.4/bin:$PATH npx jest useAssessmentSession LetterAssessmentScreen.plan5 -c package.json`
-Expected: PASS (new timer suite + existing 7 hook tests + 2 plan5 tests). R7 stays green because `round(60000/1000) === 60`.
+Run: `PATH=$HOME/.nvm/versions/node/v20.19.4/bin:$PATH npx jest useAssessmentSession LetterAssessmentScreen SequentialAssessmentScreen -c package.json`
+Expected: PASS (new timer + clockJump suites + existing 7 hook tests + both pre-existing screen suites). R7 stays green because `advanceTimersByTime(60000)` advances `performance.now` by 60000, so `round(60000/1000) === 60`.
 
 - [ ] **Step 6: Commit**
 
 ```bash
-git add src/hooks/useAssessmentSession.js __tests__/useAssessmentSession.timer.test.js
-git commit -m "perf(assessment): monotonic Date.now() timekeeping with isExpired hard-stop"
+git add src/utils/monotonicClock.js src/hooks/useAssessmentSession.js __tests__/useAssessmentSession.timer.test.js __tests__/useAssessmentSession.clockJump.test.js
+git commit -m "perf(assessment): monotonic performance.now timekeeping with isExpired hard-stop"
 ```
 
 ---
@@ -316,43 +387,67 @@ Add an AppState listener that freezes accrual on background/inactive and resumes
 
 - [ ] **Step 1: Write the failing tests (append to the existing describe block)**
 
-Add these two tests inside the `describe('useAssessmentSession monotonic timekeeping', ...)` block in `__tests__/useAssessmentSession.timer.test.js`, and add `AppState` to the react-native import usage by importing it at the top of the file:
+Add `import { AppState } from 'react-native';` to the top of `__tests__/useAssessmentSession.timer.test.js`, then add these four tests inside the `describe('useAssessmentSession monotonic timekeeping', ...)` block. They drive `mockNow` (the mocked clock) and a captured AppState handler:
 
 ```javascript
 // add to the top imports:
 import { AppState } from 'react-native';
 
 // add inside the describe block:
-  test('backgrounding pauses the clock and foregrounding resumes it', () => {
+  const spyAppState = () => {
     let handler;
     jest.spyOn(AppState, 'addEventListener').mockImplementation((type, fn) => {
       handler = fn;
       return { remove: jest.fn() };
     });
+    return () => handler;
+  };
+
+  test('backgrounding pauses the clock and foregrounding resumes it', () => {
+    const getHandler = spyAppState();
     const { result } = renderHook(() => useAssessmentSession(makeArgs()));
-    act(() => { result.current.startActive(); });
-    act(() => { jest.setSystemTime(at(10)); });          // 10s elapsed
-    act(() => { handler('background'); });
-    act(() => { jest.setSystemTime(at(40)); });          // 30s in background: must not count
+    act(() => { result.current.startActive(); });   // startedAt = 0
+    mockNow = 10000;
+    act(() => { getHandler()('background'); });       // bank 10000, pause
+    mockNow = 40000;                                  // 30s "in background" must not count
     expect(result.current.getElapsedMs()).toBe(10000);
-    act(() => { handler('active'); });
-    act(() => { jest.setSystemTime(at(42)); });          // 2s after resume
+    act(() => { getHandler()('active'); });           // resume: startedAt = 40000
+    mockNow = 42000;
     expect(result.current.getElapsedMs()).toBe(12000);
   });
 
   test('after stopTimer, a background/foreground cycle does not resume the clock', () => {
-    let handler;
-    jest.spyOn(AppState, 'addEventListener').mockImplementation((type, fn) => {
-      handler = fn;
-      return { remove: jest.fn() };
-    });
+    const getHandler = spyAppState();
     const { result } = renderHook(() => useAssessmentSession(makeArgs()));
     act(() => { result.current.startActive(); });
-    act(() => { jest.setSystemTime(at(5)); });
+    mockNow = 5000;
     act(() => { result.current.stopTimer(); });
-    act(() => { handler('background'); handler('active'); });
-    act(() => { jest.setSystemTime(at(25)); });
+    act(() => { const h = getHandler(); h('background'); h('active'); });
+    mockNow = 25000;
     expect(result.current.getElapsedMs()).toBe(5000);
+  });
+
+  test('watchdog does not finalize while backgrounded, then finalizes on foreground (R8)', () => {
+    const onExpire = jest.fn();
+    const getHandler = spyAppState();
+    const { result } = renderHook(() => useAssessmentSession(makeArgs()));
+    act(() => { result.current.setOnTimerExpire(onExpire); result.current.startActive(); });
+    mockNow = 60001;                                  // deadline reached
+    act(() => { getHandler()('background'); });        // pause + isForeground false
+    act(() => { jest.advanceTimersByTime(1000); });    // a tick fires but foreground is false
+    expect(onExpire).not.toHaveBeenCalled();
+    act(() => { getHandler()('active'); });            // isForeground true again
+    act(() => { jest.advanceTimersByTime(1000); });    // now the watchdog finalizes
+    expect(onExpire).toHaveBeenCalledTimes(1);
+  });
+
+  test('an AppState change before startActive is a no-op', () => {
+    const getHandler = spyAppState();
+    const { result } = renderHook(() => useAssessmentSession(makeArgs()));
+    act(() => { const h = getHandler(); h('background'); h('active'); }); // runningRef false: no throw, no accrual
+    act(() => { result.current.startActive(); });
+    mockNow = 3000;
+    expect(result.current.getElapsedMs()).toBe(3000);
   });
 ```
 
@@ -361,7 +456,7 @@ import { AppState } from 'react-native';
 Run: `PATH=$HOME/.nvm/versions/node/v20.19.4/bin:$PATH npx jest useAssessmentSession.timer -c package.json`
 Expected: FAIL (the new "resume" test sees elapsed keep counting during background, and/or `AppState.addEventListener` is never called so `handler` is undefined).
 
-- [ ] **Step 3: Add the AppState pause effect and import**
+- [ ] **Step 3a: Add `AppState` import and the `isForegroundRef`**
 
 In `src/hooks/useAssessmentSession.js`, change the react-native import line to include `AppState`:
 
@@ -369,18 +464,28 @@ In `src/hooks/useAssessmentSession.js`, change the react-native import line to i
 import { Alert, AppState, useWindowDimensions } from 'react-native';
 ```
 
-Then add this effect immediately after the `stopTimer` `useCallback` (before the display/watchdog `useEffect`):
+Add the foreground ref alongside the other timekeeping refs (immediately after `const accumulatedMsRef = useRef(0);`):
 
 ```javascript
-  // Background-as-pause. Freeze accrual on background/inactive; resume on foreground.
-  // Gated by runningRef so a clock frozen by stopTimer/finish never un-freezes.
+  const isForegroundRef = useRef(true);   // R8: watchdog only finalizes while foreground; default true keeps headless tests finalizing
+```
+
+- [ ] **Step 3b: Add the AppState pause effect**
+
+Add this effect immediately after the `stopTimer` `useCallback` (before the display/watchdog `useEffect`):
+
+```javascript
+  // Background-as-pause (R8). Track foreground on every change; freeze accrual on
+  // background/inactive and resume on foreground. Clock changes are gated by runningRef so a
+  // clock frozen by stopTimer/finish never un-freezes.
   useEffect(() => {
     const sub = AppState.addEventListener('change', (next) => {
+      isForegroundRef.current = next === 'active';
       if (!runningRef.current) return;
       if (next === 'active') {
-        if (startedAtRef.current == null) startedAtRef.current = Date.now();
+        if (startedAtRef.current == null) startedAtRef.current = monotonicNow();
       } else if (startedAtRef.current != null) {
-        accumulatedMsRef.current += Date.now() - startedAtRef.current;
+        accumulatedMsRef.current += monotonicNow() - startedAtRef.current;
         startedAtRef.current = null;
       }
     });
@@ -388,10 +493,23 @@ Then add this effect immediately after the `stopTimer` `useCallback` (before the
   }, []);
 ```
 
-- [ ] **Step 4: Run tests to verify they pass**
+- [ ] **Step 3c: Gate the watchdog finalize on foreground**
 
-Run: `PATH=$HOME/.nvm/versions/node/v20.19.4/bin:$PATH npx jest useAssessmentSession.timer -c package.json`
-Expected: PASS (6 tests).
+In the display/watchdog `useEffect`, change the expiry guard so it only finalizes while foreground:
+
+```javascript
+        if (isExpired() && isForegroundRef.current) {
+          clearInterval(timerRef.current);
+          onTimerExpireRef.current();
+        }
+```
+
+- [ ] **Step 4: Run tests to verify they pass (broadened consumer gate, R11)**
+
+Task 2 adds an always-mounted AppState lifecycle effect to the shared hook, so verify both consumers, not just the timer suite.
+
+Run: `PATH=$HOME/.nvm/versions/node/v20.19.4/bin:$PATH npx jest useAssessmentSession LetterAssessmentScreen SequentialAssessmentScreen -c package.json`
+Expected: PASS (timer suite now 8 tests + clockJump 1 + existing 7 hook tests + both pre-existing screen suites).
 
 - [ ] **Step 5: Commit**
 
@@ -745,7 +863,7 @@ Swap the timer for `CountdownTimer`, stop consuming `timeRemaining`/`isPaused`, 
 
 **Files:**
 - Modify: `src/screens/assessments/LetterAssessmentScreen.js`
-- Test: `__tests__/LetterAssessmentScreen.expiry.test.js`
+- Test: `__tests__/LetterAssessmentScreen.expiry.test.js`, `__tests__/LetterAssessmentScreen.renderCount.test.js`
 
 **Interfaces:**
 - Consumes: `getElapsedMs`, `isExpired`, `startActive`, `stopTimer`, `finishAndSave`, `setOnTimerExpire`, `phase`, `setPhase`, `layout`, `hasFinishedRef` from the hook; `CountdownTimer` from Task 3.
@@ -922,10 +1040,80 @@ Move `handleFinish` above `handleToggle` and add the expiry guard to `handleTogg
 Run: `PATH=$HOME/.nvm/versions/node/v20.19.4/bin:$PATH npx jest LetterAssessmentScreen -c package.json`
 Expected: PASS (expiry file 2 tests + plan5 file 2 tests).
 
-- [ ] **Step 6: Commit**
+- [ ] **Step 6: Add the screen-level render-count proof (R9)**
+
+Create `__tests__/LetterAssessmentScreen.renderCount.test.js`. Unlike the Task 4 grid Harness (which supplies its own synthetic stable `useCallback`), this renders the REAL screen so it exercises the real `handleToggle -> handleFinish -> finishAndSave` dependency chain. If `handleToggle`'s identity churned, every tile would re-render and this test would fail.
+
+```javascript
+import React from 'react';
+import { Alert } from 'react-native';
+import { fireEvent, render } from '@testing-library/react-native';
+
+jest.mock('../src/components/assessment/LetterTile', () => {
+  const ReactLib = require('react');
+  const { Pressable } = require('react-native');
+  const renderSpy = jest.fn();
+  const Tile = ReactLib.memo(function MockTile({ index, letter, state, isCurrent, onPress }) {
+    renderSpy(index);
+    const label = `${letter}, ${state === true ? 'correct' : state === false ? 'incorrect' : 'not marked'}${isCurrent ? ', current' : ''}`;
+    return ReactLib.createElement(Pressable, { accessibilityLabel: label, onPress: () => { if (onPress) onPress(index); } });
+  });
+  return { __esModule: true, default: Tile, renderSpy };
+});
+
+import LetterAssessmentScreen from '../src/screens/assessments/LetterAssessmentScreen';
+import { renderSpy } from '../src/components/assessment/LetterTile';
+import { useAuth } from '../src/context/AuthContext';
+import { useOffline } from '../src/context/OfflineContext';
+
+jest.mock('../src/context/AuthContext', () => ({ useAuth: jest.fn() }));
+jest.mock('../src/context/OfflineContext', () => ({ useOffline: jest.fn() }));
+jest.mock('../src/db/repositories/assessmentsRepository', () => ({
+  assessmentsRepository: { saveAssessment: jest.fn() },
+}));
+jest.mock('uuid', () => ({ v4: jest.fn(() => 'assessment-1') }));
+jest.mock('react-native-safe-area-context', () => ({
+  useSafeAreaInsets: () => ({ top: 0, right: 0, bottom: 0, left: 0 }),
+}));
+
+describe('LetterAssessmentScreen render isolation (real onPress identity)', () => {
+  const navigation = { addListener: jest.fn(() => jest.fn()), navigate: jest.fn(), replace: jest.fn(), goBack: jest.fn(), dispatch: jest.fn() };
+  const route = { params: {
+    child: { id: 'child-1', first_name: 'A', last_name: 'B' },
+    letterSet: { id: 'english-test', language: 'English', letters: ['a', 'b', 'c'], lettersPerPage: 20, columns: 5 },
+    attemptNumber: 1, assessmentType: 'letter_egra',
+  } };
+
+  beforeEach(() => {
+    jest.useFakeTimers();
+    jest.setSystemTime(new Date('2026-07-09T08:00:00.000Z'));
+    useAuth.mockReturnValue({ user: { id: 'user-1' } });
+    useOffline.mockReturnValue({ refreshSyncStatus: jest.fn().mockResolvedValue({}), triggerBackgroundSync: jest.fn() });
+    jest.spyOn(Alert, 'alert').mockImplementation(() => {});
+    renderSpy.mockClear();
+  });
+  afterEach(() => { jest.useRealTimers(); jest.restoreAllMocks(); jest.clearAllMocks(); });
+
+  test('tapping one tile re-renders exactly that tile (real handleToggle identity)', () => {
+    const { getByText, getByLabelText } = render(<LetterAssessmentScreen navigation={navigation} route={route} />);
+    fireEvent.press(getByText('Start Assessment'));
+    renderSpy.mockClear();
+    fireEvent.press(getByLabelText('a, not marked'));
+    expect(renderSpy).toHaveBeenCalledTimes(1);
+    expect(renderSpy).toHaveBeenCalledWith(0);
+  });
+});
+```
+
+- [ ] **Step 7: Run and verify the render-count proof passes**
+
+Run: `PATH=$HOME/.nvm/versions/node/v20.19.4/bin:$PATH npx jest LetterAssessmentScreen -c package.json`
+Expected: PASS (expiry 2 + plan5 2 + renderCount 1).
+
+- [ ] **Step 8: Commit**
 
 ```bash
-git add src/screens/assessments/LetterAssessmentScreen.js __tests__/LetterAssessmentScreen.expiry.test.js
+git add src/screens/assessments/LetterAssessmentScreen.js __tests__/LetterAssessmentScreen.expiry.test.js __tests__/LetterAssessmentScreen.renderCount.test.js
 git commit -m "perf(assessment): isolate letter-screen timer and add isExpired hard-stop"
 ```
 
@@ -1241,11 +1429,13 @@ Remove these two state lines (and the transitional comment above them):
 Replace the display/watchdog effect with an expiry-only watchdog:
 
 ```javascript
-  // Expiry watchdog: authoritative, ref-based, fires onTimerExpire. No setState the screen renders.
+  // Expiry watchdog: authoritative, ref-based, fires onTimerExpire. No setState the screen
+  // renders. Only finalizes while foreground (R8) so an expiry is never committed with the
+  // stimulus hidden; it defers to the first foreground tick.
   useEffect(() => {
     if (phase !== 'active') return undefined;
     timerRef.current = setInterval(() => {
-      if (isExpired()) {
+      if (isExpired() && isForegroundRef.current) {
         clearInterval(timerRef.current);
         onTimerExpireRef.current();
       }
@@ -1355,4 +1545,16 @@ Independent Opus adversarial review (2026-07-09), each finding re-verified again
 
 - **R6 (self-caught during verification, accepted) — Task 4's `EgraLetterGrid.renderCount` test pattern did not match the pre-existing `egraLetterGridReadOnly.test.js`.** Fix applied: Task 4 Step 5 now runs the broader `EgraLetterGrid` pattern (covers both the new render-count suite and the existing 5-test readOnly suite), which the refactored `LetterTile` keeps green (same labels, function-style, `tileIncorrect` background).
 
-A second independent Codex (gpt-5.6-sol) adversarial review of this updated plan is being run before the build; its dispositions will be appended as R7+.
+Independent Codex (gpt-5.6-sol, xhigh) adversarial review (2026-07-09) of the R1-R6 plan. Verdict: needs-attention / no-ship. It caught two issues the first review missed (the clock and the render-count bypass). Each re-verified against the tree; dispositions below. All accepted.
+
+- **R7 (HIGH, accepted) — `Date.now()` is a wall clock, not monotonic.** A 60-second standardized assessment whose elapsed feeds `completion_time` must be immune to wall-clock jumps (NTP/manual): `Date.now()` can move backward (extra time) or forward (early expiry), and clamping only bounds the error. This reverses my earlier `Date.now()`-for-parity call and realigns with Finding 5's `performance.now()`. Fix applied: new `src/utils/monotonicClock.js` (`now()` = `performance.now()` with `Date.now()` fallback), consumed by the hook; timekeeping tests mock it for precise control, and `__tests__/useAssessmentSession.clockJump.test.js` proves a `setSystemTime` wall-clock jump does not change elapsed. Verified against the tree: `jest.advanceTimersByTime` advances `performance.now` (so the existing R7 `completion_time===60` test stays green) while `jest.setSystemTime` does not (so the jump-immunity test is meaningful).
+
+- **R8 (HIGH, accepted, scoped) — the watchdog could finalize without confirming the app is foreground.** The pause design already prevents *counting* background time in the common path, but the finalize path did not consult foreground state, so a queued expiry at a background transition could finalize with the stimulus hidden. Fix applied: an internal `isForegroundRef` (default `true`), maintained on every AppState change, gates the watchdog finalize (`isExpired() && isForegroundRef.current`); finalization defers to the first foreground tick. Verified the RN AppState jest mock exposes `currentState` as a `jest.fn` (not a string), which is exactly why the guard uses an internal ref, not `AppState.currentState` (that keeps the existing headless R7 expiry test green). Tests added for background-before-startActive and finalize-defers-until-foreground.
+
+- **R9 (MEDIUM, accepted) — the grid render-count test used a synthetic stable `useCallback`, masking the real `onPress` identity risk.** The Task 4 Harness supplies its own stable `onToggle`, so it cannot catch `LetterAssessmentScreen.handleToggle` churning through its `handleFinish -> finishAndSave` dependency chain (which would re-render every tile in production). Fix applied: `__tests__/LetterAssessmentScreen.renderCount.test.js` (Task 5 Step 6) renders the REAL screen with the `LetterTile` spy, taps a real tile, and asserts exactly one tile re-renders. The Task 4 Harness test is kept (it isolates the grid); this adds the end-to-end guard.
+
+- **R10 (MEDIUM, accepted) — the timekeeping tests did not prove the watchdog uses the clock rather than a tick count.** With `advanceTimersByTime(60000)` delivering all 60 callbacks, a regression reverting the watchdog to tick-counting would still pass. Fix applied: the mockable clock lets the R10 test set elapsed past 60 s and fire exactly one watchdog tick, asserting `onTimerExpire` fires once (a tick-count implementation would need 60 ticks and would not expire).
+
+- **R11 (MEDIUM, accepted) — the green-between-tasks gate omitted the Sequential consumer after Tasks 1-2.** After Task 1 rewrites the shared hook and Task 2 adds an always-mounted AppState effect, the gate ran only the hook + Letter suites, so several commits could pass with a broken Sequential consumer. Fix applied: Task 1 Step 5 and Task 2 Step 4 now run `useAssessmentSession LetterAssessmentScreen SequentialAssessmentScreen` together as the shared-consumer gate.
+
+Non-findings noted by Codex: its own `npx jest` run failed on a read-only-sandbox haste-map write (a sandbox artifact, not a plan defect), and it re-flagged the pending low-end Android device verification (already Task 8 / the device-check gate).

@@ -26,7 +26,7 @@ The `completion_time` angle matters beyond UI: `elapsedSeconds` (currently the r
 
 ## Technical choices (author's calls, recorded)
 
-- **Clock source: `Date.now()` delta, not `performance.now()`.** Mirrors the shipped `ElapsedTime.js` pattern and is universally available on Hermes. With explicit pause we do not rely on any background-clock behavior, and a 60-second active window makes a mid-assessment wall-clock jump negligible; elapsed is clamped to `[0, duration]` regardless.
+- **Clock source: monotonic `performance.now()` via an injectable clock module, not `Date.now()`.** (Revised after the Codex adversarial review, disposition R7.) The initial design used `Date.now()` for parity with `ElapsedTime.js`, but a 60-second *standardized* assessment whose elapsed feeds a recorded `completion_time` is exactly the case where wall-clock jump-immunity matters: an NTP correction or manual clock change can move `Date.now()` backward (granting extra time) or forward (early expiry), and clamping to `[0, duration]` only bounds that error, it does not prevent elapsed from reversing. `performance.now()` is monotonic and unaffected by clock changes; the explicit background pause means we never rely on its background behavior. This realigns with Finding 5's field-validated approach. The clock lives in `src/utils/monotonicClock.js` (`now()` = `performance.now()` with a `Date.now()` fallback) so it is mockable in tests. Elapsed is still clamped to `[0, ASSESSMENT_DURATION * 1000]`.
 - **Expiry authority stays in the hook (ref-based), not in the display leaf.** The display leaf is cosmetic and may be stale by up to one second on resume (same property as `ElapsedTime.js`); the hard-stop must not depend on it being mounted.
 
 ## Design: four seams
@@ -36,12 +36,12 @@ The `completion_time` angle matters beyond UI: `elapsedSeconds` (currently the r
 Replace tick-counting with timestamp accounting. New refs in `useAssessmentSession`:
 
 - `runningRef` — intent flag: true between `startActive` and the first `stopTimer`/finish.
-- `startedAtRef` — `Date.now()` when the clock is actively accruing; `null` while paused, frozen, or stopped.
+- `startedAtRef` — `monotonicNow()` (`performance.now()`) when the clock is actively accruing; `null` while paused, frozen, or stopped.
 - `accumulatedMsRef` — milliseconds banked from earlier active segments (before pauses/freezes).
 
 Derived helpers (both `useCallback`, stable identity):
 
-- `getElapsedMs()` = `accumulatedMsRef + (startedAtRef != null ? Date.now() - startedAtRef : 0)`, clamped to `[0, ASSESSMENT_DURATION * 1000]`.
+- `getElapsedMs()` = `accumulatedMsRef + (startedAtRef != null ? monotonicNow() - startedAtRef : 0)`, clamped to `[0, ASSESSMENT_DURATION * 1000]`.
 - `isExpired()` = `getElapsedMs() >= ASSESSMENT_DURATION * 1000`.
 
 Lifecycle:
@@ -50,16 +50,17 @@ Lifecycle:
 - `stopTimer` (freeze precisely, e.g. before the last-attempted sheet): bank `Date.now() - startedAtRef` into `accumulatedMsRef`, set `startedAtRef = null`, `runningRef = false`, clear the expiry interval. Preserves the current "freeze the clock while the sheet is open" intent without setting `hasFinishedRef`.
 - `finishAndSave`: snapshot `elapsedSeconds = min(ASSESSMENT_DURATION, round(getElapsedMs() / 1000))` **before** freezing, then freeze (as `stopTimer`) and `setPhase('finished')`.
 
-Expiry detection: the `phase === 'active'` effect starts an interval that each second calls `isExpired()` and, when true, clears itself and fires `onTimerExpireRef.current()`. It performs no `setState` the screen observes. Only `timeRemaining` and `isPaused` state are removed from the hook; `phase` state is retained (it still drives the instructions/active/finished UI). See Public interface.
+Expiry detection: the `phase === 'active'` effect starts an interval that each second checks `isExpired()` **and** `isForegroundRef.current`, and only when both hold clears itself and fires `onTimerExpireRef.current()` (disposition R8: never finalize while backgrounded; defers to the next foreground tick). It performs no `setState` the screen observes. Only `timeRemaining` and `isPaused` state are removed from the hook; `phase` state is retained (it still drives the instructions/active/finished UI). See Public interface.
 
 ### Seam B — Background pause via AppState
 
-A dedicated effect subscribes to `AppState` for the life of the screen and gates on `runningRef`:
+A dedicated effect subscribes to `AppState` for the life of the screen. It maintains `isForegroundRef` (default `true`) on every change, then gates the clock on `runningRef`:
 
-- On `background`/`inactive`: if `runningRef && startedAtRef != null`, bank `Date.now() - startedAtRef` into `accumulatedMsRef` and set `startedAtRef = null` (pause).
-- On `active`: if `runningRef && startedAtRef == null`, set `startedAtRef = Date.now()` (resume).
+- Always: `isForegroundRef.current = (next === 'active')`.
+- On `background`/`inactive`: if `runningRef && startedAtRef != null`, bank `monotonicNow() - startedAtRef` into `accumulatedMsRef` and set `startedAtRef = null` (pause).
+- On `active`: if `runningRef && startedAtRef == null`, set `startedAtRef = monotonicNow()` (resume).
 
-Because `runningRef` gates resume, a clock frozen by `stopTimer` (last-attempted sheet) or finish never un-freezes on foreground. The user never sees a "PAUSED" state (pause happens while backgrounded, resume completes before the screen repaints), so no paused UI is added.
+Because `runningRef` gates resume, a clock frozen by `stopTimer` (last-attempted sheet) or finish never un-freezes on foreground. The `isForegroundRef` defaults to `true` so headless/hook tests that never emit an AppState change still finalize on expiry (the RN AppState jest mock exposes `currentState` as a `jest.fn`, not a string, so the watchdog must consult this internal ref, not `AppState.currentState`). The user never sees a "PAUSED" state (pause happens while backgrounded, resume completes before the screen repaints), so no paused UI is added.
 
 ### Seam C — Isolated 1 Hz countdown leaf
 
@@ -107,7 +108,8 @@ Both `handleFinish` and `finishWith` are idempotent via `hasFinishedRef`/`finish
 - **stopTimer + background (last-attempted sheet):** handled by `runningRef` gating resume (Seam B).
 - **Expired tap between last tick and finish:** dropped by the `isExpired()` guard; finish is idempotent.
 - **Double-tap on final item (sequential):** existing cursor-bound guard (`:45`) preserved; expiry guard is additive.
-- **Clock jump during active window:** elapsed clamped to `[0, duration]`; a backward jump briefly raises remaining but cannot corrupt expiry beyond the clamp.
+- **Wall-clock jump during active window:** with the monotonic `performance.now()` clock (R7), device clock changes (NTP/manual) cannot affect elapsed, expiry, or `completion_time`; a dedicated test asserts a `setSystemTime` jump leaves elapsed unchanged. Elapsed is still clamped to `[0, duration]`.
+- **Expiry during a background transition (R8):** the watchdog only finalizes while `isForegroundRef.current` is true, so it never finalizes an assessment whose stimulus is hidden; finalization defers to the first foreground tick.
 - **Resume staleness:** the leaf may show a value up to 1 second stale until its next tick after foreground; acceptable and identical to `ElapsedTime.js`.
 
 ## Testing plan
@@ -128,11 +130,19 @@ Device/emulator (manual, documented as device-verified in the log):
 
 7. On a low-end device/emulator: taps feel immediate, countdown is smooth and accurate to wall-clock, backgrounding pauses and foregrounding resumes, expiry hard-stops.
 
+Additional tests from the Codex review (R7-R11):
+
+8. **Clock jump-immunity (R7):** with the real monotonic clock, `startActive` then `jest.setSystemTime` a large backward/forward wall-clock jump; assert `getElapsedMs`, `isExpired`, and `completion_time` are unchanged (verified: `setSystemTime` does not move `performance.now`).
+9. **Watchdog-uses-the-clock (R10):** with the clock module mocked, advance elapsed past 60 s and fire exactly one watchdog tick (no tap); assert `onTimerExpire` fires once. A regression to tick-counting would not expire on a single tick and would fail.
+10. **Foreground-gated finalize (R8):** simulate `background` then advance/expire; assert the watchdog does not finalize; then `active` and assert it finalizes.
+11. **Screen-level render-count (R9):** render `LetterAssessmentScreen` with the `LetterTile` spy, start, clear the spy, tap one real tile; assert exactly one tile re-renders. This guards the real `handleToggle -> handleFinish -> finishAndSave` `onPress` identity chain that the grid-only Harness test cannot.
+
 Known flake to expect: `CreateClassScreen.test.js` times out under parallel load, passes in isolation (not a regression). Run tests under Node 20 (`PATH=$HOME/.nvm/versions/node/v20.19.4/bin:$PATH`).
 
 ## Files touched
 
-- `src/hooks/useAssessmentSession.js` — Seams A, B; interface change.
+- `src/utils/monotonicClock.js` — new (R7); `now()` = `performance.now()` with `Date.now()` fallback; mockable in tests.
+- `src/hooks/useAssessmentSession.js` — Seams A, B (monotonic clock + `isForegroundRef`); interface change.
 - `src/components/assessment/CountdownTimer.js` — new (Seam C).
 - `src/components/assessment/LetterTile.js` — new (Seam D).
 - `src/components/assessment/EgraLetterGrid.js` — render `LetterTile` with scalar props.
