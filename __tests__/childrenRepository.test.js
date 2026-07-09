@@ -2,7 +2,10 @@ jest.mock('expo-sqlite', () => require('../test-support/expoSQLiteMock'));
 
 import { runMigrations } from '../src/db/migrations';
 import { createChildrenRepository } from '../src/db/repositories/childrenRepository';
-import { childEaAssignmentDomainId } from '../src/db/repositories/domainRepositoryUtils';
+import {
+  childEaAssignmentDomainId,
+  childProgrammeEnrollmentDomainId,
+} from '../src/db/repositories/domainRepositoryUtils';
 import { createGroupsRepository } from '../src/db/repositories/groupsRepository';
 import {
   createMigratedDatabase,
@@ -87,6 +90,30 @@ describe('childrenRepository', () => {
     }
   });
 
+  test('a new child programme enrollment uses the deterministic child_programme_enrollment id (#47)', async () => {
+    const db = await createMigratedDatabase(runMigrations);
+
+    try {
+      await seedCoreData(db);
+      const repository = createChildrenRepository({ database: db });
+
+      await repository.save(makeChild(), { actorUserId: 'user-1' });
+
+      const enrollment = await db.getFirstAsync(`
+        select id, child_id, programme_id
+        from child_programme_enrollments
+        where child_id = ?
+      `, 'child-1');
+
+      expect(enrollment.id).toBe(childProgrammeEnrollmentDomainId({
+        childId: enrollment.child_id,
+        programmeId: enrollment.programme_id,
+      }));
+    } finally {
+      await db.closeAsync();
+    }
+  });
+
   test('saving a child canonicalizes display gender labels before local persistence', async () => {
     const db = await createMigratedDatabase(runMigrations);
 
@@ -135,7 +162,7 @@ describe('childrenRepository', () => {
     }
   });
 
-  test('reassigning a child to a different EA after ended relationships preserves historical rows', async () => {
+  test('reassigning a child to a different EA after ended relationships preserves supported historical rows', async () => {
     const db = await createMigratedDatabase(runMigrations);
 
     try {
@@ -187,11 +214,9 @@ describe('childrenRepository', () => {
         { id: originalAssignment.id, unassigned_at: expect.any(String) },
         { id: expect.not.stringMatching(originalAssignment.id), unassigned_at: null },
       ]));
-      expect(enrollments).toHaveLength(2);
-      expect(enrollments).toEqual(expect.arrayContaining([
-        { id: originalEnrollment.id, ended_at: '2026-05-22T00:00:00.000Z' },
-        { id: expect.not.stringMatching(originalEnrollment.id), ended_at: null },
-      ]));
+      expect(enrollments).toEqual([
+        { id: originalEnrollment.id, ended_at: null },
+      ]);
       expect(classMemberships).toHaveLength(2);
       expect(classMemberships).toEqual(expect.arrayContaining([
         { id: originalClassMembership.id, exited_at: '2026-05-22T00:00:00.000Z' },
@@ -214,7 +239,7 @@ describe('childrenRepository', () => {
         { table_name: 'child_programme_enrollments', record_id: originalEnrollment.id, operation: 'insert' },
         { table_name: 'child_class_memberships', record_id: originalClassMembership.id, operation: 'insert' },
       ]));
-      expect(insertOutboxRows).toHaveLength(6);
+      expect(insertOutboxRows).toHaveLength(5);
     } finally {
       await db.closeAsync();
     }

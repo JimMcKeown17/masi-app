@@ -3,6 +3,7 @@ import { resolveDatabase, runRepositoryTransaction } from './repositoryRuntime';
 import {
   assertRlsRequiredFields,
   childEaAssignmentDomainId,
+  childProgrammeEnrollmentDomainId,
   enqueueDomainOutbox,
   getActiveAcademicYear,
   mapDomainRow,
@@ -152,11 +153,13 @@ export const createChildrenRepository = ({ database } = {}) => {
           and ended_at is null
       `, child.id, programmeId);
       if (!activeEnrollment) {
+        const enrollmentId = activeEnrollment?.id || childProgrammeEnrollmentDomainId({ childId: child.id, programmeId });
         const enrollment = normalizeSyncFields({
-          id: uuidv4(),
+          id: enrollmentId,
           child_id: child.id,
           programme_id: programmeId,
           enrolled_at: now,
+          ended_at: null,
           created_by: actorUserId,
           sync_status: 'pending',
         });
