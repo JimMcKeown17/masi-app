@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { Alert, useWindowDimensions } from 'react-native';
+import { Alert, AppState, useWindowDimensions } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { v4 as uuidv4 } from 'uuid';
 import { useAuth } from '../context/AuthContext';
@@ -32,6 +32,7 @@ export function useAssessmentSession({
   const runningRef = useRef(false);    // intent: clock should accrue (between startActive and stop/finish)
   const startedAtRef = useRef(null);   // monotonicNow() of the current accruing segment; null while paused/frozen/stopped
   const accumulatedMsRef = useRef(0);  // ms banked from earlier segments (before pauses/freezes)
+  const isForegroundRef = useRef(true);   // R8: watchdog only finalizes while foreground; default true keeps headless tests finalizing
 
   const onTimerExpireRef = useRef(() => {});
   const setOnTimerExpire = useCallback((fn) => { onTimerExpireRef.current = fn; }, []);
@@ -82,13 +83,30 @@ export function useAssessmentSession({
     clearInterval(timerRef.current);
   }, []);
 
+  // Background-as-pause (R8). Track foreground on every change; freeze accrual on
+  // background/inactive and resume on foreground. Clock changes are gated by runningRef so a
+  // clock frozen by stopTimer/finish never un-freezes.
+  useEffect(() => {
+    const sub = AppState.addEventListener('change', (next) => {
+      isForegroundRef.current = next === 'active';
+      if (!runningRef.current) return;
+      if (next === 'active') {
+        if (startedAtRef.current == null) startedAtRef.current = monotonicNow();
+      } else if (startedAtRef.current != null) {
+        accumulatedMsRef.current += monotonicNow() - startedAtRef.current;
+        startedAtRef.current = null;
+      }
+    });
+    return () => sub.remove();
+  }, []);
+
   // Display + expiry watchdog. Display is derived from the monotonic clock (drift-free);
   // the watchdog fires onTimerExpire authoritatively.
   useEffect(() => {
     if (phase === 'active' && !isPaused) {
       timerRef.current = setInterval(() => {
         setTimeRemaining(Math.max(0, ASSESSMENT_DURATION - Math.floor(getElapsedMs() / 1000)));
-        if (isExpired()) {
+        if (isExpired() && isForegroundRef.current) {
           clearInterval(timerRef.current);
           onTimerExpireRef.current();
         }
