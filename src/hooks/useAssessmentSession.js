@@ -19,9 +19,6 @@ export function useAssessmentSession({
   const { triggerBackgroundSync, refreshSyncStatus } = useOffline();
 
   const [phase, setPhase] = useState('instructions');
-  // Transitional display state; removed in the render-isolation cleanup task.
-  const [timeRemaining, setTimeRemaining] = useState(ASSESSMENT_DURATION);
-  const [isPaused, setIsPaused] = useState(false);
 
   const timerRef = useRef(null);
   const hasFinishedRef = useRef(false);
@@ -100,20 +97,19 @@ export function useAssessmentSession({
     return () => sub.remove();
   }, []);
 
-  // Display + expiry watchdog. Display is derived from the monotonic clock (drift-free);
-  // the watchdog fires onTimerExpire authoritatively.
+  // Expiry watchdog: authoritative, ref-based, fires onTimerExpire. No setState the screen
+  // renders. Only finalizes while foreground (R8) so an expiry is never committed with the
+  // stimulus hidden; it defers to the first foreground tick.
   useEffect(() => {
-    if (phase === 'active' && !isPaused) {
-      timerRef.current = setInterval(() => {
-        setTimeRemaining(Math.max(0, ASSESSMENT_DURATION - Math.floor(getElapsedMs() / 1000)));
-        if (isExpired() && isForegroundRef.current) {
-          clearInterval(timerRef.current);
-          onTimerExpireRef.current();
-        }
-      }, 1000);
-    }
+    if (phase !== 'active') return undefined;
+    timerRef.current = setInterval(() => {
+      if (isExpired() && isForegroundRef.current) {
+        clearInterval(timerRef.current);
+        onTimerExpireRef.current();
+      }
+    }, 1000);
     return () => clearInterval(timerRef.current);
-  }, [phase, isPaused, getElapsedMs, isExpired]);
+  }, [phase, isExpired]);
 
   useEffect(() => {
     if (phase !== 'active' && phase !== 'finished') return undefined;
@@ -162,7 +158,7 @@ export function useAssessmentSession({
   }, [user, child, assessmentType, letterSet, attemptNumber, captureMode, navigation, triggerBackgroundSync, refreshSyncStatus, getElapsedMs, stopTimer]);
 
   return {
-    phase, setPhase, timeRemaining, isPaused, setIsPaused, layout,
+    phase, setPhase, layout,
     hasFinishedRef, startActive, stopTimer, finishAndSave, setOnTimerExpire,
     getElapsedMs, isExpired,
   };
