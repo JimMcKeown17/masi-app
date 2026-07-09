@@ -574,6 +574,33 @@ const errorMessage = (error) => (
   error?.message || error?.code || String(error || 'Unknown sync error')
 );
 
+// child_class_memberships recurs (class moves) and needs its distinct archived rows for audit
+// history, so it cannot use a deterministic-pair id. Before an insert, reconcile against the
+// server's active (child_id, academic_year_id) row: if a DIFFERENT membership already holds the
+// pair (a seed/head-office row the device never archived), archive it first so the insert does
+// not 23505 on the partial-unique index. Device-move-wins, audit-preserving. Local state is not
+// enough here -- this is the one place a pre-push SERVER read is warranted. Conservative: any
+// error falls through to the normal upsert (then #48 classifies the outcome).
+const reconcileChildClassMembership = async (supabaseClient, payload) => {
+  if (!payload?.child_id || !payload?.academic_year_id) return;
+  try {
+    const { data, error } = await supabaseClient
+      .from('child_class_memberships')
+      .select('id')
+      .eq('child_id', payload.child_id)
+      .eq('academic_year_id', payload.academic_year_id)
+      .is('exited_at', null)
+      .limit(1);
+    if (error) return; // conservative fallback
+    const serverRow = Array.isArray(data) ? data[0] : data;
+    if (!serverRow || serverRow.id === payload.id) return;
+    await supabaseClient
+      .from('child_class_memberships')
+      .update({ exited_at: new Date().toISOString() })
+      .eq('id', serverRow.id);
+  } catch (_) { /* conservative fallback: proceed to the normal upsert */ }
+};
+
 const makeFailedRecord = (outboxRecord, reason) => ({
   id: outboxRecord.record_id,
   table: outboxRecord.table_name,
@@ -630,6 +657,10 @@ const runServerOperation = async (supabaseClient, config, outboxRecord) => {
       .delete()
       .eq('id', outboxRecord.record_id);
     return error ? { success: false, error } : { success: true };
+  }
+
+  if (config.tableName === 'child_class_memberships' && outboxRecord.operation === 'insert') {
+    await reconcileChildClassMembership(supabaseClient, payload);
   }
 
   const { error } = await supabaseClient
