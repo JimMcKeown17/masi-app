@@ -2,6 +2,7 @@ import { v4 as uuidv4 } from 'uuid';
 import { resolveDatabase, runRepositoryTransaction } from './repositoryRuntime';
 import {
   assertRlsRequiredFields,
+  childEaAssignmentDomainId,
   enqueueDomainOutbox,
   getActiveAcademicYear,
   mapDomainRow,
@@ -126,8 +127,9 @@ export const createChildrenRepository = ({ database } = {}) => {
           and unassigned_at is null
       `, actorUserId, child.id);
       if (!activeAssignment) {
+        const assignmentId = activeAssignment?.id || childEaAssignmentDomainId({ userId: actorUserId, childId: child.id });
         const assignment = normalizeSyncFields({
-          id: uuidv4(),
+          id: assignmentId,
           user_id: actorUserId,
           child_id: child.id,
           assigned_at: now,
