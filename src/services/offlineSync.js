@@ -27,7 +27,11 @@ import {
 } from '../db/repositories/referenceDataRepository';
 import {
   assessmentItemDomainId,
+  childEaAssignmentDomainId,
+  childProgrammeEnrollmentDomainId,
+  classEaAssignmentDomainId,
   ensureServerUuid,
+  groupEaAssignmentDomainId,
   LEGACY_PROGRAMME_ID,
   letterMasteryDomainId,
   sessionAttendeeDomainId,
@@ -527,6 +531,41 @@ const buildSyncPayload = (tableName, record) => {
       language: payload.language,
       source: payload.source || 'taught',
     });
+  }
+  // Active-pair identity is the server partial-unique key. Only full insert payloads carry every
+  // key column; bare archive payloads must keep their original row id.
+  if (tableName === 'child_ea_assignments' && payload.id && payload.user_id && payload.child_id) {
+    payload.id = childEaAssignmentDomainId({
+      userId: payload.user_id,
+      childId: payload.child_id,
+    });
+  }
+  if (
+    tableName === 'child_programme_enrollments'
+    && payload.id
+    && payload.child_id
+    && payload.programme_id
+  ) {
+    payload.id = childProgrammeEnrollmentDomainId({
+      childId: payload.child_id,
+      programmeId: payload.programme_id,
+    });
+  }
+  if (
+    tableName === 'class_ea_assignments'
+    && payload.id
+    && payload.class_id
+    && payload.ea_user_id
+    && payload.programme_id
+  ) {
+    payload.id = classEaAssignmentDomainId({
+      classId: payload.class_id,
+      eaUserId: payload.ea_user_id,
+      programmeId: payload.programme_id,
+    });
+  }
+  if (tableName === 'group_ea_assignments' && payload.id && payload.group_id) {
+    payload.id = groupEaAssignmentDomainId({ groupId: payload.group_id });
   }
   return payload;
 };

@@ -11,7 +11,14 @@ import {
   pullReferenceData,
   _testComputeEvidencePending,
 } from '../src/services/offlineSync';
-import { getActiveProgrammeId } from '../src/db/repositories/domainRepositoryUtils';
+import {
+  childEaAssignmentDomainId,
+  childProgrammeEnrollmentDomainId,
+  classEaAssignmentDomainId,
+  deterministicDomainId,
+  getActiveProgrammeId,
+  groupEaAssignmentDomainId,
+} from '../src/db/repositories/domainRepositoryUtils';
 import {
   createMigratedDatabase,
   seedCoreData,
@@ -277,6 +284,199 @@ describe('SQLite outbox offline sync', () => {
     expect(await db.getFirstAsync('select sync_status, last_sync_error from child_ea_assignments where id = ?', 'assignment-1'))
       .toEqual({ sync_status: 'synced', last_sync_error: null });
     expect(await db.getFirstAsync('select count(*) as count from sync_outbox')).toEqual({ count: 0 });
+  });
+
+  test.each([
+    {
+      tableName: 'child_ea_assignments',
+      recordId: 'random-child-ea-assignment',
+      seed: async () => {
+        await db.runAsync(`
+          insert into children (id, first_name, last_name, created_by, sync_status)
+          values ('child-remap-1', 'Amahle', 'Dlamini', 'user-1', 'synced')
+        `);
+        await db.runAsync(`
+          insert into child_ea_assignments (id, user_id, child_id, created_by, sync_status)
+          values ('random-child-ea-assignment', 'user-1', 'child-remap-1', 'user-1', 'pending')
+        `);
+      },
+      payload: {
+        id: 'random-child-ea-assignment',
+        user_id: 'user-1',
+        child_id: 'child-remap-1',
+        created_by: 'user-1',
+      },
+      expectedId: () => childEaAssignmentDomainId({ userId: 'user-1', childId: 'child-remap-1' }),
+    },
+    {
+      tableName: 'child_programme_enrollments',
+      recordId: 'random-child-programme-enrollment',
+      seed: async () => {
+        await db.runAsync(`
+          insert into children (id, first_name, last_name, created_by, sync_status)
+          values ('child-remap-2', 'Amahle', 'Dlamini', 'user-1', 'synced')
+        `);
+        await db.runAsync(`
+          insert into child_programme_enrollments (id, child_id, programme_id, created_by, sync_status)
+          values ('random-child-programme-enrollment', 'child-remap-2', 'programme-1', 'user-1', 'pending')
+        `);
+      },
+      payload: {
+        id: 'random-child-programme-enrollment',
+        child_id: 'child-remap-2',
+        programme_id: 'programme-1',
+        created_by: 'user-1',
+      },
+      expectedId: () => childProgrammeEnrollmentDomainId({ childId: 'child-remap-2', programmeId: 'programme-1' }),
+    },
+    {
+      tableName: 'class_ea_assignments',
+      recordId: 'random-class-ea-assignment',
+      seed: async () => {
+        await db.runAsync(`
+          insert into classes (id, school_id, name, grade, sync_status)
+          values ('class-remap-1', 'school-1', 'Grade 1A', '1', 'synced')
+        `);
+        await db.runAsync(`
+          insert into class_ea_assignments (
+            id,
+            class_id,
+            ea_user_id,
+            programme_id,
+            created_by,
+            sync_status
+          )
+          values (
+            'random-class-ea-assignment',
+            'class-remap-1',
+            'user-1',
+            'programme-1',
+            'user-1',
+            'pending'
+          )
+        `);
+      },
+      payload: {
+        id: 'random-class-ea-assignment',
+        class_id: 'class-remap-1',
+        ea_user_id: 'user-1',
+        programme_id: 'programme-1',
+        created_by: 'user-1',
+      },
+      expectedId: () => classEaAssignmentDomainId({
+        classId: 'class-remap-1',
+        eaUserId: 'user-1',
+        programmeId: 'programme-1',
+      }),
+    },
+    {
+      tableName: 'group_ea_assignments',
+      recordId: 'random-group-ea-assignment',
+      seed: async () => {
+        await db.runAsync(`
+          insert into groups (id, name, programme_id, created_by, sync_status)
+          values ('group-remap-1', 'Group 1', 'programme-1', 'user-1', 'synced')
+        `);
+        await db.runAsync(`
+          insert into group_ea_assignments (
+            id,
+            group_id,
+            ea_user_id,
+            programme_id,
+            created_by,
+            sync_status
+          )
+          values (
+            'random-group-ea-assignment',
+            'group-remap-1',
+            'user-1',
+            'programme-1',
+            'user-1',
+            'pending'
+          )
+        `);
+      },
+      payload: {
+        id: 'random-group-ea-assignment',
+        group_id: 'group-remap-1',
+        ea_user_id: 'user-1',
+        programme_id: 'programme-1',
+        created_by: 'user-1',
+      },
+      expectedId: () => groupEaAssignmentDomainId({ groupId: 'group-remap-1' }),
+    },
+  ])('push remaps $tableName insert payload id to its deterministic id (#47)', async ({
+    tableName,
+    recordId,
+    seed,
+    payload,
+    expectedId,
+  }) => {
+    await seed();
+    await enqueue(db, tableName, recordId, 'insert', payload);
+
+    const { supabaseClient, calls } = createSupabaseMock();
+    const engine = createOutboxSyncEngine({ getAuthSession: liveTestSession, database: db, supabaseClient });
+
+    const result = await engine.syncAll({ tableName });
+
+    expect(result.success).toBe(true);
+    const upserts = calls.filter(call => call.type === 'upsert' && call.tableName === tableName);
+    expect(upserts).toHaveLength(1);
+    expect(upserts[0].payload.id).toBe(expectedId());
+    expect(upserts[0].payload.id).not.toBe(recordId);
+  });
+
+  test('bare child_ea_assignments archive keeps its real id, not a bogus deterministic id (#47)', async () => {
+    const archivedAt = '2026-07-09T10:00:00.000Z';
+    await db.runAsync(`
+      insert into children (id, first_name, last_name, created_by, sync_status)
+      values ('child-archive-remap', 'Amahle', 'Dlamini', 'user-1', 'synced')
+    `);
+    await db.runAsync(`
+      insert into child_ea_assignments (
+        id,
+        user_id,
+        child_id,
+        created_by,
+        assigned_at,
+        unassigned_at,
+        sync_status
+      )
+      values (
+        'random-1',
+        'user-1',
+        'child-archive-remap',
+        'user-1',
+        '2026-07-01T10:00:00.000Z',
+        ?,
+        'pending'
+      )
+    `, archivedAt);
+    await enqueue(db, 'child_ea_assignments', 'random-1', 'archive', {
+      id: 'random-1',
+      unassigned_at: archivedAt,
+    });
+
+    const { supabaseClient, calls } = createSupabaseMock();
+    const engine = createOutboxSyncEngine({ getAuthSession: liveTestSession, database: db, supabaseClient });
+
+    const result = await engine.syncAll({ tableName: 'child_ea_assignments' });
+
+    expect(result.success).toBe(true);
+    const upserts = calls.filter(call => (
+      call.type === 'upsert' && call.tableName === 'child_ea_assignments'
+    ));
+    expect(upserts).toHaveLength(1);
+    expect(upserts[0].payload).toEqual({
+      id: 'random-1',
+      unassigned_at: archivedAt,
+    });
+    expect(upserts[0].payload.id).not.toBe(deterministicDomainId('child_ea_assignments', undefined));
+    expect(upserts[0].payload.id).not.toBe(childEaAssignmentDomainId({
+      userId: undefined,
+      childId: undefined,
+    }));
   });
 
   test('repairs stale group ownership payloads before retrying failed sync', async () => {
