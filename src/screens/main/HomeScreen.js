@@ -4,7 +4,6 @@ import { Text, Button, ActivityIndicator, Snackbar } from 'react-native-paper';
 import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect } from '@react-navigation/native';
 import { useAuth } from '../../context/AuthContext';
-import { useOffline } from '../../context/OfflineContext';
 import { useChildren } from '../../context/ChildrenContext';
 import { useTimeTracking } from '../../hooks/useTimeTracking';
 import { useSessionLaunchGuard } from '../../hooks/useSessionLaunchGuard';
@@ -14,6 +13,7 @@ import { assessmentsRepository } from '../../db/repositories/assessmentsReposito
 import ClockInBeforeSessionDialog from '../../components/sessions/ClockInBeforeSessionDialog';
 import BrandButton from '../../components/common/BrandButton';
 import ElapsedTime from '../../components/common/ElapsedTime';
+import SyncStatusBanner from '../../components/common/SyncStatusBanner';
 import {
   getDaysWorkedThisMonth,
   getWeekSessionCounts,
@@ -25,7 +25,6 @@ import { colors, spacing, borderRadius, shadows } from '../../constants/colors';
 
 export default function HomeScreen({ navigation }) {
   const { user, profile } = useAuth();
-  const { isOnline, unsyncedCount, syncStatus } = useOffline();
   const { children: childrenList } = useChildren();
   const {
     isSignedIn,
@@ -86,36 +85,6 @@ export default function HomeScreen({ navigation }) {
     }, [childrenList, user.id])
   );
 
-  // Sync banner config (unchanged from original)
-  const failedCount = syncStatus?.failedItems?.length ?? 0;
-  const showBanner = !isOnline || unsyncedCount > 0 || failedCount > 0;
-  const bannerVariant = failedCount > 0 ? 'failed' : !isOnline ? 'offline' : 'unsynced';
-
-  const bannerConfig = {
-    failed: {
-      icon: 'alert-circle-outline',
-      text: `${failedCount} item${failedCount !== 1 ? 's' : ''} failed to sync`,
-      backgroundColor: colors.emphasis,
-      textColor: '#FFFFFF',
-      iconColor: '#FFFFFF',
-    },
-    offline: {
-      icon: 'cloud-offline-outline',
-      text: 'Offline — data will sync when connected',
-      backgroundColor: colors.disabled,
-      textColor: '#FFFFFF',
-      iconColor: '#FFFFFF',
-    },
-    unsynced: {
-      icon: 'cloud-upload-outline',
-      text: `${unsyncedCount} item${unsyncedCount !== 1 ? 's' : ''} waiting to sync`,
-      backgroundColor: colors.accent,
-      textColor: colors.text,
-      iconColor: colors.text,
-    },
-  };
-  const banner = bannerConfig[bannerVariant];
-
   // Coverage bar color
   const coverageColor = coverage.percent >= 75 ? colors.success
     : coverage.percent >= 50 ? colors.primary
@@ -151,21 +120,7 @@ export default function HomeScreen({ navigation }) {
 
         <View style={styles.content}>
           {/* ── Sync Banner ── */}
-          {showBanner && (
-            <TouchableOpacity
-              style={[styles.syncBanner, { backgroundColor: banner.backgroundColor }]}
-              onPress={() => navigation.navigate('SyncStatus')}
-              activeOpacity={0.8}
-              accessibilityRole="button"
-              accessibilityLabel={`Open sync status, ${banner.text}`}
-            >
-              <Ionicons name={banner.icon} size={18} color={banner.iconColor} style={styles.bannerIcon} />
-              <Text variant="bodySmall" style={[styles.bannerText, { color: banner.textColor }]}>
-                {banner.text}
-              </Text>
-              <Ionicons name="chevron-forward" size={16} color={banner.iconColor} />
-            </TouchableOpacity>
-          )}
+          <SyncStatusBanner onPress={() => navigation.navigate('SyncStatus')} />
 
           {/* ── Clock Card (Compact) ── */}
           <View style={[styles.clockCard, !isSignedIn && !loadingLocation && styles.clockCardNotSignedIn]}>
@@ -387,21 +342,6 @@ const styles = StyleSheet.create({
   // ── Content ──
   content: {
     padding: spacing.md,
-  },
-
-  // ── Sync Banner ──
-  syncBanner: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    borderRadius: borderRadius.md,
-    padding: spacing.sm,
-    marginBottom: spacing.md,
-  },
-  bannerIcon: {
-    marginRight: spacing.sm,
-  },
-  bannerText: {
-    flex: 1,
   },
 
   // ── Clock Card ──
