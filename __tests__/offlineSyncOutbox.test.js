@@ -1754,7 +1754,11 @@ describe('SQLite outbox offline sync', () => {
 
     const result = await engine.syncAll();
 
-    expect(result.success).toBe(false);
+    // Finding 6 semantics: this RLS denial is downgraded to retriable (its grant evidence
+    // is still pending locally), so the pass itself is successful.
+    expect(result.success).toBe(true);
+    expect(result.totalRetriable).toBe(1);
+    expect(result.totalTerminal).toBe(0);
     expect(calls.map(call => `${call.type}:${call.tableName}`)).toEqual([
       'upsert:children',
       'upsert:child_programme_enrollments',
@@ -1885,7 +1889,11 @@ describe('SQLite outbox offline sync', () => {
 
     const result = await engine.syncAll();
 
-    expect(result.success).toBe(false);
+    // Finding 6 semantics: a retriable parent failure with skipped dependents is still a
+    // successful pass (nothing terminal, nothing preflight); the work simply waits.
+    expect(result.success).toBe(true);
+    expect(result.totalRetriable).toBe(1);
+    expect(result.totalTerminal).toBe(0);
     expect(calls.map(call => `${call.type}:${call.tableName}`)).toEqual([
       'upsert:classes',
       'upsert:children',
@@ -2050,7 +2058,9 @@ describe('SQLite outbox offline sync', () => {
     try {
       const result = await engine.syncAll();
 
-      expect(result.success).toBe(false);
+      // Finding 6 semantics: a backed-off retriable failure no longer flips the pass.
+      expect(result.success).toBe(true);
+      expect(result.totalRetriable).toBe(1);
       expect(setTimeoutSpy).not.toHaveBeenCalled();
       expect(await db.getFirstAsync('select sync_status, last_sync_error from classes where id = ?', 'class-1'))
         .toEqual({ sync_status: 'failed', last_sync_error: 'network down' });
