@@ -1,10 +1,11 @@
 import React, { useState } from 'react';
 import { View, ScrollView, StyleSheet } from 'react-native';
-import { Card, Text, Button, List, Snackbar } from 'react-native-paper';
+import { Card, Text, Button, Snackbar } from 'react-native-paper';
 import { Ionicons } from '@expo/vector-icons';
 import { useOffline } from '../../context/OfflineContext';
 import { retryFailedItem } from '../../services/offlineSync';
 import { colors, spacing, borderRadius, shadows } from '../../constants/colors';
+import { deriveSyncState, describeSyncState, describeWaitingDetail } from '../../utils/syncStatusPresenter';
 
 const TABLE_DISPLAY_NAMES = {
   TIME_ENTRIES: 'Time Entries',
@@ -42,14 +43,22 @@ const formatSyncTime = (isoString) => {
 };
 
 export default function SyncStatusScreen() {
-  const { isOnline, isSyncing, syncStatus, syncNow, refreshSyncStatus } = useOffline();
+  const {
+    isOnline, isSyncing, syncStatus, syncNow, refreshSyncStatus,
+    waitingCount, needsAttentionCount,
+  } = useOffline();
   const [snackbarMessage, setSnackbarMessage] = useState('');
   const [snackbarVisible, setSnackbarVisible] = useState(false);
 
-  const breakdown = syncStatus.breakdown || {};
-  const failedItems = syncStatus.failedItems || [];
+  const needsAttentionItems = syncStatus.needsAttentionItems || [];
+  const backedOffCount = syncStatus.backedOffCount || 0;
+  const nextRetryAt = syncStatus.nextRetryAt || null;
   const lastSyncTime = syncStatus.lastSyncTime || null;
   const lastSuccessfulSyncTime = syncStatus.lastSuccessfulSyncTime || null;
+
+  const state = deriveSyncState({ isOnline, isSyncing, waitingCount, needsAttentionCount });
+  const summary = describeSyncState(state, { waitingCount, needsAttentionCount });
+  const waitingDetail = describeWaitingDetail({ waitingCount, backedOffCount, nextRetryAt });
 
   const showSnackbar = (message) => {
     setSnackbarMessage(message);
@@ -57,6 +66,7 @@ export default function SyncStatusScreen() {
   };
 
   const handleRetry = async (table, id) => {
+    if (!isOnline) return;
     const displayName = TABLE_DISPLAY_NAMES[table] || table;
     showSnackbar(`Retrying ${displayName}...`);
     await retryFailedItem(table, id);
@@ -64,17 +74,35 @@ export default function SyncStatusScreen() {
     await syncNow({ force: true });
   };
 
-  // Only show rows where count > 0
-  const unsyncedRows = Object.entries(breakdown).filter(([, count]) => count > 0);
-  const hasPending = unsyncedRows.length > 0;
-  const hasFailed = failedItems.length > 0;
-  // "Up to date" must require BOTH no pending AND no failed/terminal items — otherwise the
-  // summary contradicts the Failed Items list below (terminal rows are excluded from `breakdown`).
-  const allSynced = !hasPending && !hasFailed;
-
   return (
     <View style={styles.outerContainer}>
       <ScrollView style={styles.container}>
+        {/* Summary: the same voice as the Home banner and the header indicator */}
+        <Card style={styles.card}>
+          <Card.Content>
+            <View style={styles.summaryRow}>
+              {summary.icon && (
+                <Ionicons name={summary.icon} size={22} color={summary.color} style={styles.summaryIcon} />
+              )}
+              <Text variant="titleMedium" style={[styles.summaryText, { color: summary.color }]}>
+                {summary.message}
+              </Text>
+            </View>
+            {waitingDetail && (
+              <>
+                <Text variant="bodyMedium" style={styles.waitingText}>
+                  {waitingDetail.title}
+                </Text>
+                {waitingDetail.detail && (
+                  <Text variant="bodySmall" style={styles.waitingHint}>
+                    {waitingDetail.detail}
+                  </Text>
+                )}
+              </>
+            )}
+          </Card.Content>
+        </Card>
+
         {/* Network Status */}
         <Card style={styles.card}>
           <Card.Content>
@@ -104,40 +132,6 @@ export default function SyncStatusScreen() {
           </Card.Content>
         </Card>
 
-        {/* Unsynced Items */}
-        <Card style={styles.card}>
-          <Card.Content>
-            <Text variant="titleMedium" style={styles.sectionTitle}>Unsynced Items</Text>
-            {allSynced ? (
-              <Text variant="bodyMedium" style={styles.allSyncedText}>
-                Everything is up to date.
-              </Text>
-            ) : !hasPending ? (
-              <Text variant="bodyMedium" style={styles.needsAttentionText}>
-                {failedItems.length} item{failedItems.length === 1 ? '' : 's'} failed to sync — see Failed Items below.
-              </Text>
-            ) : (
-              unsyncedRows.map(([table, count]) => (
-                <List.Item
-                  key={table}
-                  title={TABLE_DISPLAY_NAMES[table] || table}
-                  description={`${count} pending`}
-                  left={() => (
-                    <Ionicons
-                      name="cloud-upload-outline"
-                      size={24}
-                      color={colors.primary}
-                      style={styles.listIcon}
-                    />
-                  )}
-                  titleStyle={styles.listTitle}
-                  descriptionStyle={styles.listDescription}
-                />
-              ))
-            )}
-          </Card.Content>
-        </Card>
-
         {/* Sync Now Button */}
         <Button
           mode="contained"
@@ -149,12 +143,17 @@ export default function SyncStatusScreen() {
           Sync Now
         </Button>
 
-        {/* Failed Items — only rendered when there are failures */}
-        {failedItems.length > 0 && (
+        {/* Needs Attention: the only itemized list; terminal rows with per-row Retry */}
+        {needsAttentionItems.length > 0 && (
           <Card style={styles.card}>
             <Card.Content>
-              <Text variant="titleMedium" style={styles.sectionTitle}>Failed Items</Text>
-              {failedItems.map((item, index) => (
+              <Text variant="titleMedium" style={styles.sectionTitle}>Needs Attention</Text>
+              {!isOnline && (
+                <Text variant="bodySmall" style={styles.reconnectHint}>
+                  Reconnect to retry these items.
+                </Text>
+              )}
+              {needsAttentionItems.map((item) => (
                 <Card key={`${item.table}_${item.id}`} style={styles.failedItemCard}>
                   <Card.Content>
                     <Text variant="bodyLarge" style={styles.failedItemTable}>
@@ -174,6 +173,7 @@ export default function SyncStatusScreen() {
                       onPress={() => handleRetry(item.table, item.id)}
                       style={styles.retryButton}
                       compact
+                      disabled={!isOnline}
                     >
                       Retry
                     </Button>
@@ -215,6 +215,27 @@ const styles = StyleSheet.create({
     marginBottom: spacing.sm,
   },
 
+  // Summary
+  summaryRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  summaryIcon: {
+    marginRight: spacing.sm,
+  },
+  summaryText: {
+    flex: 1,
+  },
+  waitingText: {
+    color: colors.textSecondary,
+    marginTop: spacing.sm,
+  },
+  waitingHint: {
+    color: colors.textSecondary,
+    marginTop: spacing.xs,
+    fontStyle: 'italic',
+  },
+
   // Network badge
   badgeRow: {
     flexDirection: 'row',
@@ -252,30 +273,17 @@ const styles = StyleSheet.create({
     fontStyle: 'italic',
   },
 
-  // Unsynced list
-  allSyncedText: {
-    color: colors.success,
-  },
-  needsAttentionText: {
-    color: colors.error,
-  },
-  listIcon: {
-    marginRight: spacing.sm,
-  },
-  listTitle: {
-    color: colors.text,
-  },
-  listDescription: {
-    color: colors.textSecondary,
-  },
-
   // Sync Now button
   syncButton: {
     marginHorizontal: spacing.md,
     marginBottom: spacing.md,
   },
 
-  // Failed items
+  // Needs Attention
+  reconnectHint: {
+    color: colors.warningText,
+    marginBottom: spacing.sm,
+  },
   failedItemCard: {
     backgroundColor: colors.cardBackground,
     marginBottom: spacing.sm,

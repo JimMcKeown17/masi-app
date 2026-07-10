@@ -78,6 +78,8 @@ describe('HomeScreen', () => {
     mockUseOffline.mockReturnValue({
       isOnline: true,
       unsyncedCount: 0,
+      waitingCount: 0,
+      needsAttentionCount: 0,
       syncStatus: { failedItems: [] },
     });
     mockUseChildren.mockReturnValue({ children: [] });

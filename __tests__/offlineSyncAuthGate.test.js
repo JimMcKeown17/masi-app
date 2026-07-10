@@ -235,9 +235,12 @@ describe('SQLite outbox auth gate', () => {
     const outboxRow = await outboxRepository.getById('classes:class-auth-gate:insert');
 
     expect(result).toEqual(expect.objectContaining({
-      success: false,
+      // Finding 6 semantics: the downgraded (retriable) 42501 leaves the pass successful.
+      success: true,
       totalSynced: 0,
       totalFailed: 1,
+      totalRetriable: 1,
+      totalTerminal: 0,
     }));
     expect(mockGetAuthSession).toHaveBeenCalledTimes(2);
     expect(outboxRow.status).toBe('failed');

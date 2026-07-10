@@ -1159,6 +1159,8 @@ export const createOutboxSyncEngine = ({
         skippedNoSession: true,
         totalSynced: 0,
         totalFailed: 0,
+        totalTerminal: 0,
+        totalRetriable: 0,
         failedRecords: [],
         tableResults: {},
         preflightErrors: [],
@@ -1171,6 +1173,8 @@ export const createOutboxSyncEngine = ({
       success: true,
       totalSynced: 0,
       totalFailed: 0,
+      totalTerminal: 0,
+      totalRetriable: 0,
       failedRecords: [],
       tableResults: {},
       preflightErrors: [],
@@ -1188,7 +1192,15 @@ export const createOutboxSyncEngine = ({
         result.totalSynced += 1;
         result.tableResults[tableKey].synced += 1;
       } else {
-        result.success = false;
+        // Trust semantics (Finding 6): only a terminal record makes the pass unsuccessful.
+        // A retriable/backed-off record is safe on the device and will retry; it must not
+        // read like a broken sync (it used to hold "Last Synced" at Never indefinitely).
+        if (recordResult.terminal) {
+          result.success = false;
+          result.totalTerminal += 1;
+        } else {
+          result.totalRetriable += 1;
+        }
         result.totalFailed += 1;
         result.tableResults[tableKey].success = false;
         result.tableResults[tableKey].failed += 1;
@@ -1245,7 +1257,9 @@ export const createOutboxSyncEngine = ({
           tableResult.skipped = true;
           tableResult.skippedDependency = skippedDependency;
           result.tableResults[outboxRecord.table_name] = tableResult;
-          result.success = false;
+          // Skipped rows stay pending for the next pass. Whether this pass "succeeded" is
+          // decided by the blocking failure itself: terminal already flipped success in
+          // applyRecordResult; a retriable block leaves the pass successful.
           failedTables.add(outboxRecord.table_name);
           continue;
         }
