@@ -22,6 +22,8 @@ const toFailedItem = (row) => ({
   reason: row.last_error || 'Sync failed',
   failedAt: row.updated_at,
   terminal: row.status === 'terminal',
+  nextRetryAt: row.next_retry_at || null,
+  retryCount: row.retry_count || 0,
 });
 
 export const outboxRecordId = (tableName, recordId, operation) => (
@@ -218,15 +220,20 @@ export const createSyncOutboxRepository = ({ database } = {}) => {
 
   const getSyncStatus = async () => {
     const db = await resolveDatabase(database);
-    const rows = await db.getAllAsync(`
-      select table_name, status, count(*) as count
-      from sync_outbox
-      group by table_name, status
-    `);
+    // ONE statement = one snapshot (R1): counts and itemized lists must never disagree.
+    // Separate queries can interleave with a sync pass finalizing rows, yielding e.g.
+    // needsAttentionCount 1 with an empty needsAttentionItems. The outbox is a small,
+    // bounded backlog, so loading it whole is cheap.
+    const rows = await db.getAllAsync('select * from sync_outbox');
+    const now = timestamp();
+
     const breakdown = {};
     let unsyncedCount = 0;
     let failedCount = 0;
     let inFlightCount = 0;
+    let needsAttentionCount = 0;
+    let backedOffCount = 0;
+    let nextRetryAt = null;
 
     for (const row of rows) {
       if (!(row.table_name in breakdown)) {
@@ -234,23 +241,53 @@ export const createSyncOutboxRepository = ({ database } = {}) => {
       }
 
       if (row.status === 'pending' || row.status === 'failed') {
-        breakdown[row.table_name] += row.count;
-        unsyncedCount += row.count;
+        breakdown[row.table_name] += 1;
+        unsyncedCount += 1;
       }
       if (row.status === 'failed' || row.status === 'terminal') {
-        failedCount += row.count;
+        failedCount += 1;
       }
       if (row.status === 'in_flight') {
-        inFlightCount += row.count;
+        inFlightCount += 1;
+      }
+      if (row.status === 'terminal') {
+        needsAttentionCount += 1;
+      }
+      // Backed-off subset of waiting: retriable failures whose next attempt is in the
+      // future. ISO-8601 UTC strings compare correctly as text.
+      if (row.status === 'failed' && row.next_retry_at && row.next_retry_at > now) {
+        backedOffCount += 1;
+        if (!nextRetryAt || row.next_retry_at < nextRetryAt) {
+          nextRetryAt = row.next_retry_at;
+        }
       }
     }
+
+    // Same ordering as getFailedItems (failed first, then updated_at, table, record).
+    const failedItems = rows
+      .filter((row) => row.status === 'failed' || row.status === 'terminal')
+      .sort((a, b) => (
+        ((a.status === 'failed' ? 0 : 1) - (b.status === 'failed' ? 0 : 1))
+        || (a.updated_at || '').localeCompare(b.updated_at || '')
+        || a.table_name.localeCompare(b.table_name)
+        || a.record_id.localeCompare(b.record_id)
+      ))
+      .map(toFailedItem);
 
     return {
       unsyncedCount,
       failedCount,
       inFlightCount,
+      // Everything still owed except terminal (R5): a row stranded in_flight by a killed
+      // pass must read as waiting, not as synced. resetInFlight only runs at the start of
+      // the NEXT pass, which never comes while offline.
+      waitingCount: unsyncedCount + inFlightCount,
+      needsAttentionCount,
+      backedOffCount,
+      nextRetryAt,
       breakdown,
-      failedItems: await getFailedItems(),
+      failedItems,
+      needsAttentionItems: failedItems.filter((item) => item.terminal),
     };
   };
 

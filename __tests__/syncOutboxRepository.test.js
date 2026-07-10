@@ -176,6 +176,63 @@ describe('SQLite sync outbox repository', () => {
       expect(await outbox.hasPendingRecord({ tableName: 'children', recordId: null })).toBe(false);
     });
   });
+
+  test('getSyncStatus splits waiting, backed-off, and needs-attention counts in one snapshot', async () => {
+    await outbox.enqueue({ tableName: 'children', recordId: 'pending-1', operation: 'insert', payload: { id: 'pending-1' } });
+    await outbox.enqueue({ tableName: 'sessions', recordId: 'ready-failed-1', operation: 'insert', payload: { id: 'ready-failed-1' } });
+    await outbox.enqueue({ tableName: 'sessions', recordId: 'backed-off-1', operation: 'insert', payload: { id: 'backed-off-1' } });
+    await outbox.enqueue({ tableName: 'assessments', recordId: 'terminal-1', operation: 'insert', payload: { id: 'terminal-1' } });
+    await outbox.enqueue({ tableName: 'groups', recordId: 'stranded-1', operation: 'insert', payload: { id: 'stranded-1' } });
+
+    // next_retry_at null means "ready now" (still waiting, not backed off).
+    await outbox.markRetriableFailure('sessions:ready-failed-1:insert', { errorMessage: 'network down' });
+    await outbox.markRetriableFailure('sessions:backed-off-1:insert', {
+      errorMessage: 'server busy',
+      nextRetryAt: '2099-01-01T00:00:00.000Z',
+    });
+    await outbox.markTerminalFailure('assessments:terminal-1:insert', { errorMessage: 'RLS denied' });
+    // A row stranded in_flight by a killed pass is still owed (R5): it counts as waiting.
+    await outbox.markInFlight(['groups:stranded-1:insert']);
+
+    const status = await outbox.getSyncStatus();
+
+    expect(status.waitingCount).toBe(4);        // pending + both retriable-failed + stranded in_flight
+    expect(status.needsAttentionCount).toBe(1); // terminal only
+    expect(status.backedOffCount).toBe(1);      // failed with a future next_retry_at
+    expect(status.nextRetryAt).toBe('2099-01-01T00:00:00.000Z');
+
+    // Back-compat fields unchanged.
+    expect(status.unsyncedCount).toBe(3);       // in_flight still excluded here, as before
+    expect(status.failedCount).toBe(3);         // failed(2) + terminal(1), conflated as before
+    expect(status.inFlightCount).toBe(1);
+
+    // Itemized terminal rows only, now carrying retry metadata.
+    expect(status.needsAttentionItems).toEqual([
+      expect.objectContaining({
+        table: 'assessments',
+        id: 'terminal-1',
+        terminal: true,
+        nextRetryAt: null,
+        retryCount: 0,
+      }),
+    ]);
+    const backedOffItem = status.failedItems.find((item) => item.id === 'backed-off-1');
+    expect(backedOffItem).toEqual(expect.objectContaining({
+      nextRetryAt: '2099-01-01T00:00:00.000Z',
+      retryCount: 1,
+    }));
+  });
+
+  test('getSyncStatus on an empty outbox reports zero split counts and no nextRetryAt', async () => {
+    const status = await outbox.getSyncStatus();
+    expect(status).toEqual(expect.objectContaining({
+      waitingCount: 0,
+      needsAttentionCount: 0,
+      backedOffCount: 0,
+      nextRetryAt: null,
+      needsAttentionItems: [],
+    }));
+  });
 });
 
 describe('SQLite sync state repository', () => {
