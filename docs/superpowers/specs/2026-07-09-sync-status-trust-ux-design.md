@@ -1,7 +1,7 @@
 # Sync-Status Trust UX — Design
 
 **Date:** 2026-07-09
-**Status:** Design (awaiting Jim's spec review before writing-plans)
+**Status:** Implemented (plan: docs/superpowers/plans/2026-07-09-sync-status-trust-ux.md; note plan dispositions R5 — `waitingCount` includes stranded `in_flight` rows, superseding Seam A's "equals today's unsyncedCount" — and D2/R6 — the Home banner and work-history snackbar surfaces were added in build)
 **Source of truth for the problem:** `documentation/zz-field-lessons-sync-review-2026-07-04.html`, Finding 6 (P1, ZZ F2, "trust-destroying").
 **Scope:** how sync status is *communicated* to field staff. This is not a change to the sync engine's retry/backoff policy, RLS, synced write payloads, migrations, or outbox ordering, so `documentation/rls-sync-contract-map.md` is not touched.
 
