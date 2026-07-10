@@ -7,6 +7,7 @@ import { useOffline } from '../../context/OfflineContext';
 import { colors, spacing, borderRadius, shadows } from '../../constants/colors';
 import { timeEntriesRepository } from '../../db/repositories/timeEntriesRepository';
 import { formatCoordinates } from '../../services/locationService';
+import { describeSyncState } from '../../utils/syncStatusPresenter';
 
 export default function TimeEntriesListScreen() {
   const { user } = useAuth();
@@ -86,11 +87,16 @@ export default function TimeEntriesListScreen() {
         console.log('Sync result:', syncResult);
 
         if (syncResult.totalSynced > 0) {
-          showSnackbar(`${syncResult.totalSynced} ${syncResult.totalSynced === 1 ? 'entry' : 'entries'} synced`);
+          // Pass-level count (syncNow uploads every table), so "items", not "entries".
+          showSnackbar(`${syncResult.totalSynced} ${syncResult.totalSynced === 1 ? 'item' : 'items'} synced`);
         }
 
-        if (syncResult.totalFailed > 0) {
-          showSnackbar(`${syncResult.totalFailed} ${syncResult.totalFailed === 1 ? 'entry' : 'entries'} failed — will retry`);
+        // Trust voice (Finding 6): retriable items are safe and waiting, not "failed";
+        // only terminal items are called out. The presenter owns the wording.
+        if (syncResult.totalTerminal > 0) {
+          showSnackbar(describeSyncState('needs_attention', { needsAttentionCount: syncResult.totalTerminal }).message);
+        } else if (syncResult.totalRetriable > 0) {
+          showSnackbar(describeSyncState('waiting', { waitingCount: syncResult.totalRetriable }).message);
         }
       }
 
@@ -184,6 +190,7 @@ export default function TimeEntriesListScreen() {
     <View style={styles.outerContainer}>
       <ScrollView
         style={styles.container}
+        testID="time-entries-scroll"
         refreshControl={
           <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
         }
