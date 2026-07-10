@@ -46,7 +46,12 @@ describe('OfflineContext Plan 4 sync API', () => {
     getSyncStatus.mockResolvedValue({
       unsyncedCount: 0,
       inFlightCount: 0,
+      waitingCount: 0,
+      needsAttentionCount: 0,
+      backedOffCount: 0,
+      nextRetryAt: null,
       failedItems: [],
+      needsAttentionItems: [],
       breakdown: {},
       lastSyncTime: null,
       lastSuccessfulSyncTime: null,
@@ -359,5 +364,31 @@ describe('OfflineContext Plan 4 sync API', () => {
 
       expect(requeueTerminalRlsFailures).not.toHaveBeenCalled();
     });
+  });
+
+  test('exposes waitingCount, needsAttentionCount, and nextRetryAt from sync status', async () => {
+    const { result } = await renderOfflineHook();
+    getSyncStatus.mockResolvedValueOnce({
+      unsyncedCount: 3,
+      inFlightCount: 0,
+      waitingCount: 3,
+      needsAttentionCount: 2,
+      backedOffCount: 1,
+      nextRetryAt: '2099-01-01T00:00:00.000Z',
+      failedItems: [],
+      needsAttentionItems: [],
+      breakdown: {},
+      lastSyncTime: null,
+      lastSuccessfulSyncTime: null,
+    });
+    syncAll.mockReturnValue(new Promise(() => {}));
+
+    await act(async () => {
+      await result.current.refreshSyncStatus();
+    });
+
+    expect(result.current.waitingCount).toBe(3);
+    expect(result.current.needsAttentionCount).toBe(2);
+    expect(result.current.nextRetryAt).toBe('2099-01-01T00:00:00.000Z');
   });
 });

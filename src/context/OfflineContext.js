@@ -11,6 +11,9 @@ const OfflineContext = createContext({
   isSyncing: false,
   unsyncedCount: 0,
   inFlightCount: 0,
+  waitingCount: 0,
+  needsAttentionCount: 0,
+  nextRetryAt: null,
   syncStatus: {},
   lastSyncResult: null,
   triggerBackgroundSync: () => {},
@@ -245,11 +248,16 @@ export const OfflineProvider = ({ children }) => {
     return () => clearInterval(interval);
   }, [refreshSyncStatus]);
 
+  const waitingCount = syncStatus.waitingCount ?? unsyncedCount;
+  const needsAttentionCount = syncStatus.needsAttentionCount ?? 0;
+  const nextRetryAt = syncStatus.nextRetryAt ?? null;
+
   const value = {
     isOnline,
     isSyncing,
     unsyncedCount,
     inFlightCount,
+    waitingCount, needsAttentionCount, nextRetryAt,
     syncStatus,
     lastSyncResult,
     triggerBackgroundSync,
