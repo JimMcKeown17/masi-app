@@ -150,25 +150,20 @@ export const AuthProvider = ({ children }) => {
     }, 0);
   };
 
-  const hydrateAuthenticatedUser = async (authUser, version) => {
-    try {
-      try {
-        await pullReferenceData({ userId: authUser.id });
-      } catch (error) {
-        console.error('Error pulling startup reference data:', error);
-      }
-
-      if (!isCurrentProfileLoad(authUser.id, version)) {
-        return;
-      }
-
-      await loadUserProfile(authUser.id, version, { setLoadingOnComplete: false });
-    } finally {
-      if (isCurrentProfileLoad(authUser.id, version)) {
-        setUser(authUser);
-        setLoading(false);
-      }
+  const hydrateAuthenticatedUser = (authUser, version) => {
+    if (!isCurrentProfileLoad(authUser.id, version)) {
+      return;
     }
+
+    setUser(authUser);
+    setLoading(false);
+
+    loadUserProfile(authUser.id, version, { setLoadingOnComplete: false }).catch((error) => {
+      console.error('Error loading startup profile:', error);
+    });
+    pullReferenceData({ userId: authUser.id }).catch((error) => {
+      console.error('Error pulling startup reference data:', error);
+    });
   };
 
   const loadUserProfile = async (userId, version = null, { setLoadingOnComplete = true } = {}) => {
