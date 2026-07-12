@@ -891,9 +891,21 @@ export const createOutboxSyncEngine = ({
     };
   };
 
-  const processRecord = async (outboxRecord) => {
+  const getMatchingPassSession = async (passUserId) => {
+    try {
+      const { data: { session: currentSession } = {} } = await getAuthSession();
+      return currentSession?.user?.id === passUserId ? currentSession : null;
+    } catch (_) {
+      return null;
+    }
+  };
+
+  const processRecord = async (outboxRecord, passUserId) => {
     const config = getConfig(outboxRecord.table_name);
     if (!config) {
+      if (!await getMatchingPassSession(passUserId)) {
+        return { success: false, abortedUserSwitch: true };
+      }
       const reason = `Unknown sync table: ${outboxRecord.table_name}`;
       await finalizeOutboxOnlyTerminalFailure({
         database,
@@ -910,6 +922,11 @@ export const createOutboxSyncEngine = ({
       if (!inFlightRecord) {
         const reason = `Outbox record disappeared before sync: ${outboxRecord.id}`;
         return { success: false, terminal: false, failedRecord: makeFailedRecord(outboxRecord, reason) };
+      }
+
+      if (!await getMatchingPassSession(passUserId)) {
+        await outboxRepository.markReady(outboxRecord.id);
+        return { success: false, abortedUserSwitch: true };
       }
 
       const serverResult = await enqueueRequest(() => (
@@ -1017,8 +1034,10 @@ export const createOutboxSyncEngine = ({
   // fail-fast Promise.all) so one rejecting record can't trigger a whole-batch finalize that
   // reverts a sibling whose upload already succeeded. A rejected fallback (e.g. markInFlight threw
   // before processRecord's own try) gets a plain per-id markReady — siblings are left untouched.
-  const processBatchFallback = async (outboxRecords) => {
-    const settled = await Promise.allSettled(outboxRecords.map(processRecord));
+  const processBatchFallback = async (outboxRecords, passUserId) => {
+    const settled = await Promise.allSettled(
+      outboxRecords.map((record) => processRecord(record, passUserId))
+    );
     const results = [];
     for (let index = 0; index < settled.length; index += 1) {
       const outcome = settled[index];
@@ -1034,7 +1053,7 @@ export const createOutboxSyncEngine = ({
     return results;
   };
 
-  const processBatch = async (outboxRecords, config) => {
+  const processBatch = async (outboxRecords, config, passUserId) => {
     const ids = outboxRecords.map((record) => record.id);
     await outboxRepository.markInFlight(ids);
     let inFlightRecords = null;
@@ -1044,7 +1063,12 @@ export const createOutboxSyncEngine = ({
       )).filter(Boolean);
 
       if (inFlightRecords.length !== outboxRecords.length) {
-        return await processBatchFallback(outboxRecords);
+        return await processBatchFallback(outboxRecords, passUserId);
+      }
+
+      if (!await getMatchingPassSession(passUserId)) {
+        await Promise.all(ids.map((id) => outboxRepository.markReady(id)));
+        return outboxRecords.map(() => ({ success: false, abortedUserSwitch: true }));
       }
 
       let serverResult;
@@ -1056,11 +1080,11 @@ export const createOutboxSyncEngine = ({
         // A THROWN batch request (timeout / abort / oversized payload) — degrade to per-record so a
         // deterministic batch-level failure isolates per row (smaller payloads make progress) instead
         // of re-forming the same failing batch forever. processBatchFallback is allSettled-safe.
-        return await processBatchFallback(outboxRecords);
+        return await processBatchFallback(outboxRecords, passUserId);
       }
 
       if (!serverResult.success) {
-        return await processBatchFallback(outboxRecords);
+        return await processBatchFallback(outboxRecords, passUserId);
       }
 
       await finalizeManySuccess({ database, records: inFlightRecords, tableName: config.tableName });
@@ -1116,6 +1140,7 @@ export const createOutboxSyncEngine = ({
         durationMs: 0,
       };
     }
+    const passUserId = session.user?.id;
 
     const startedAt = Date.now();
     const result = {
@@ -1165,7 +1190,7 @@ export const createOutboxSyncEngine = ({
       // preflight failure (e.g. repairGroupOwnershipForSync throwing) can't keep them stranded.
       if (typeof outboxRepository.resetInFlight === 'function') {
         try {
-          await outboxRepository.resetInFlight();
+          await outboxRepository.resetInFlight({ ownerUserId: passUserId });
         } catch (resetError) {
           console.error('syncAll: resetInFlight failed (continuing):', resetError);
           result.success = false;
@@ -1184,7 +1209,12 @@ export const createOutboxSyncEngine = ({
       }
 
       const readyRecords = sortByPushOrder(
-        await outboxRepository.getReadyRecords({ limit: 1000, includeBackedOff: force, includeTerminal: force })
+        await outboxRepository.getReadyRecords({
+          limit: 1000,
+          includeBackedOff: force,
+          includeTerminal: force,
+          ownerUserId: passUserId,
+        })
       );
       const filteredRecords = tableName
         ? readyRecords.filter((record) => record.table_name === normalizeTableName(tableName))
@@ -1239,7 +1269,10 @@ export const createOutboxSyncEngine = ({
             }
 
             if (batchRecords.length > 1) {
-              const batchResults = await processBatch(batchRecords, config);
+              const batchResults = await processBatch(batchRecords, config, passUserId);
+              if (batchResults.some((batchResult) => batchResult.abortedUserSwitch)) {
+                break;
+              }
               batchResults.forEach((batchResult, batchResultIndex) => {
                 applyRecordResult(batchRecords[batchResultIndex], config, batchResult);
               });
@@ -1248,7 +1281,10 @@ export const createOutboxSyncEngine = ({
             }
           }
 
-          const recordResult = await processRecord(outboxRecord);
+          const recordResult = await processRecord(outboxRecord, passUserId);
+          if (recordResult.abortedUserSwitch) {
+            break;
+          }
           applyRecordResult(outboxRecord, config, recordResult);
         } catch (error) {
           const reason = errorMessage(error) || 'Unhandled sync error';
@@ -1280,9 +1316,9 @@ export const createOutboxSyncEngine = ({
 
   const syncTableByName = async (name) => syncAll({ tableName: name });
 
-  const getSyncStatus = async () => {
+  const getSyncStatus = async (options = {}) => {
     const [status, meta] = await Promise.all([
-      outboxRepository.getSyncStatus(),
+      outboxRepository.getSyncStatus(options),
       stateRepository.getSyncMeta(),
     ]);
     return {
@@ -1392,7 +1428,7 @@ const defaultEngine = createOutboxSyncEngine({
 
 export const syncAll = (options) => defaultEngine.syncAll(options);
 export const syncTableByName = (tableName) => defaultEngine.syncTableByName(tableName);
-export const getSyncStatus = () => defaultEngine.getSyncStatus();
+export const getSyncStatus = (options) => defaultEngine.getSyncStatus(options);
 export const requeueTerminalRlsFailures = (userId) => defaultEngine.requeueTerminalRlsFailures(userId);
 export const retryFailedItem = (table, id) => defaultEngine.retryFailedItem(table, id);
 

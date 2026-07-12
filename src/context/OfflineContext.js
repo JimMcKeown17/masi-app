@@ -42,6 +42,7 @@ export const OfflineProvider = ({ children }) => {
   const isOnlineRef = useRef(isOnline);
   const readyCountRef = useRef(0);
   const inFlightCountRef = useRef(0);
+  const currentUserIdRef = useRef(null);
   const triggerBackgroundSyncRef = useRef(() => {});
 
   // Keep ref in sync with state so event-listener closures always read current value
@@ -54,7 +55,7 @@ export const OfflineProvider = ({ children }) => {
    */
   const refreshSyncStatus = useCallback(async ({ autoTrigger = true } = {}) => {
     try {
-      const status = await getSyncStatus();
+      const status = await getSyncStatus({ ownerUserId: currentUserIdRef.current });
       setUnsyncedCount(status.unsyncedCount);
       setInFlightCount(status.inFlightCount || 0);
       readyCountRef.current = status.readyCount || 0;
@@ -212,21 +213,29 @@ export const OfflineProvider = ({ children }) => {
    */
   useEffect(() => {
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
+      const userId = session?.user?.id ?? null;
+      currentUserIdRef.current = userId;
       const shouldHeal = event === 'SIGNED_IN'
         || event === 'TOKEN_REFRESHED'
         || (event === 'INITIAL_SESSION' && Boolean(session));
-      if (!shouldHeal) return;
-      const userId = session?.user?.id ?? null;
-      if (!userId) return;
-      try {
-        await requeueTerminalRlsFailures(userId);
-      } catch (error) {
-        console.error('Auth-restore requeue failed:', error);
+      if (shouldHeal && userId) {
+        try {
+          await requeueTerminalRlsFailures(userId);
+        } catch (error) {
+          console.error('Auth-restore requeue failed:', error);
+        }
+        triggerBackgroundSyncRef.current();
       }
-      triggerBackgroundSyncRef.current();
+      const shouldRefresh = event === 'SIGNED_IN'
+        || event === 'TOKEN_REFRESHED'
+        || event === 'SIGNED_OUT'
+        || (event === 'INITIAL_SESSION' && Boolean(session));
+      if (shouldRefresh) {
+        await refreshSyncStatus();
+      }
     });
     return () => subscription.unsubscribe();
-  }, []);
+  }, [refreshSyncStatus]);
 
   /**
    * Initial load: check network state and sync status

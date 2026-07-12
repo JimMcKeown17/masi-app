@@ -196,7 +196,7 @@ describe('SQLite outbox auth gate', () => {
 
     const result = await engine.syncAll();
 
-    expect(mockGetAuthSession).toHaveBeenCalledTimes(1);
+    expect(mockGetAuthSession).toHaveBeenCalledTimes(2);
     expect(result).toEqual(expect.objectContaining({
       success: true,
       totalSynced: 1,
@@ -213,6 +213,153 @@ describe('SQLite outbox auth gate', () => {
     }));
   });
 
+  test('a session only pushes its own rows plus grandfathered NULL-owner rows', async () => {
+    const aPayload = await seedPendingClass(db, { id: 'class-a', name: 'Grade A' });
+    const bPayload = await seedPendingClass(db, { id: 'class-b', name: 'Grade B' });
+    await seedPendingClass(db, { id: 'class-null', name: 'Grade NULL' });
+    await outboxRepository.enqueue({
+      tableName: 'classes', recordId: aPayload.id, operation: 'insert', payload: aPayload, ownerUserId: 'ea-a',
+    });
+    await outboxRepository.enqueue({
+      tableName: 'classes', recordId: bPayload.id, operation: 'insert', payload: bPayload, ownerUserId: 'ea-b',
+    });
+    const { supabaseClient, calls } = createSupabaseMock();
+    const engine = createOutboxSyncEngine({
+      database: db,
+      supabaseClient,
+      outboxRepository,
+      stateRepository,
+      getAuthSession: async () => ({ data: { session: { user: { id: 'ea-b' } } } }),
+    });
+
+    const result = await engine.syncAll();
+
+    expect(result).toEqual(expect.objectContaining({ totalSynced: 2, totalFailed: 0 }));
+    expect(calls.map((call) => call.payload.id).sort()).toEqual(['class-b', 'class-null']);
+    expect(await outboxRepository.getById('classes:class-a:insert')).toEqual(expect.objectContaining({
+      status: 'pending',
+      owner_user_id: 'ea-a',
+    }));
+    expect(await db.getFirstAsync("select sync_status from classes where id = 'class-a'"))
+      .toEqual({ sync_status: 'pending' });
+  });
+
+  test('engine getSyncStatus threads the owner filter into the real repository snapshot', async () => {
+    await outboxRepository.enqueue({
+      tableName: 'classes', recordId: 'a-row', operation: 'insert', payload: { id: 'a-row' }, ownerUserId: 'ea-a',
+    });
+    await outboxRepository.enqueue({
+      tableName: 'classes', recordId: 'b-row', operation: 'insert', payload: { id: 'b-row' }, ownerUserId: 'ea-b',
+    });
+    await outboxRepository.enqueue({
+      tableName: 'classes', recordId: 'null-row', operation: 'insert', payload: { id: 'null-row' }, ownerUserId: null,
+    });
+    const engine = createOutboxSyncEngine({
+      database: db,
+      supabaseClient: createSupabaseMock().supabaseClient,
+      outboxRepository,
+      stateRepository,
+      getAuthSession: liveTestSession,
+    });
+
+    expect(await engine.getSyncStatus({ ownerUserId: 'ea-b' })).toEqual(expect.objectContaining({
+      unsyncedCount: 2,
+      readyCount: 2,
+      breakdown: { classes: 2 },
+    }));
+  });
+
+  test('a pass only resets in-flight rows for its owner plus NULL rows', async () => {
+    for (const [recordId, ownerUserId] of [
+      ['class-a', 'ea-a'],
+      ['class-b', 'ea-b'],
+      ['class-null', null],
+    ]) {
+      const payload = await seedPendingClass(db, { id: recordId, name: recordId });
+      await outboxRepository.enqueue({
+        tableName: 'classes', recordId, operation: 'insert', payload, ownerUserId,
+      });
+    }
+    await outboxRepository.markInFlight([
+      'classes:class-a:insert',
+      'classes:class-b:insert',
+      'classes:class-null:insert',
+    ]);
+    const { supabaseClient, calls } = createSupabaseMock();
+    const engine = createOutboxSyncEngine({
+      database: db,
+      supabaseClient,
+      outboxRepository,
+      stateRepository,
+      getAuthSession: async () => ({ data: { session: { user: { id: 'ea-b' } } } }),
+    });
+
+    await engine.syncAll();
+
+    expect(calls.map((call) => call.payload.id)).toEqual(['class-b', 'class-null']);
+    expect(await outboxRepository.getById('classes:class-a:insert')).toEqual(expect.objectContaining({
+      status: 'in_flight',
+      owner_user_id: 'ea-a',
+    }));
+  });
+
+  test('a mid-pass user switch aborts before upload and leaves the selected row pending', async () => {
+    const payload = await seedPendingClass(db, { id: 'class-a', name: 'Grade A' });
+    await outboxRepository.enqueue({
+      tableName: 'classes', recordId: payload.id, operation: 'insert', payload, ownerUserId: 'ea-a',
+    });
+    const { supabaseClient, calls } = createSupabaseMock();
+    const getAuthSession = jest.fn()
+      .mockResolvedValueOnce({ data: { session: { user: { id: 'ea-a' } } } })
+      .mockResolvedValue({ data: { session: { user: { id: 'ea-b' } } } });
+    const engine = createOutboxSyncEngine({
+      database: db,
+      supabaseClient,
+      outboxRepository,
+      stateRepository,
+      getAuthSession,
+    });
+
+    const result = await engine.syncAll();
+
+    expect(getAuthSession).toHaveBeenCalledTimes(2);
+    expect(calls).toEqual([]);
+    expect(result).toEqual(expect.objectContaining({ totalSynced: 0, totalFailed: 0 }));
+    expect(await outboxRepository.getById('classes:class-a:insert')).toEqual(expect.objectContaining({
+      status: 'pending',
+      retry_count: 0,
+      last_error: null,
+    }));
+  });
+
+  test('a mid-pass user switch aborts a batch before upload and restores every row to pending', async () => {
+    const itemIds = await seedAssessmentItems(db);
+    await db.runAsync("update sync_outbox set owner_user_id = 'ea-a' where table_name = 'assessment_items'");
+    const { supabaseClient, calls } = createSupabaseMock();
+    const getAuthSession = jest.fn()
+      .mockResolvedValueOnce({ data: { session: { user: { id: 'ea-a' } } } })
+      .mockResolvedValue({ data: { session: { user: { id: 'ea-b' } } } });
+    const engine = createOutboxSyncEngine({
+      database: db,
+      supabaseClient,
+      outboxRepository,
+      stateRepository,
+      getAuthSession,
+    });
+
+    const result = await engine.syncAll();
+
+    expect(getAuthSession).toHaveBeenCalledTimes(2);
+    expect(calls).toEqual([]);
+    expect(result).toEqual(expect.objectContaining({ totalSynced: 0, totalFailed: 0 }));
+    const rows = await Promise.all(
+      itemIds.map((itemId) => outboxRepository.getById(`assessment_items:${itemId}:insert`))
+    );
+    expect(rows).toHaveLength(2);
+    expect(rows.every((row) => row.status === 'pending')).toBe(true);
+    expect(rows.every((row) => row.retry_count === 0 && row.last_error === null)).toBe(true);
+  });
+
   test('a 42501 after the session vanished mid-cycle is retriable, not terminal', async () => {
     await seedPendingClass(db);
     const { supabaseClient } = createSupabaseMock({
@@ -221,6 +368,7 @@ describe('SQLite outbox auth gate', () => {
       },
     });
     const mockGetAuthSession = jest.fn()
+      .mockResolvedValueOnce({ data: { session: liveSession } })
       .mockResolvedValueOnce({ data: { session: liveSession } })
       .mockResolvedValue({ data: { session: null } });
     const engine = createOutboxSyncEngine({
@@ -242,7 +390,7 @@ describe('SQLite outbox auth gate', () => {
       totalRetriable: 1,
       totalTerminal: 0,
     }));
-    expect(mockGetAuthSession).toHaveBeenCalledTimes(2);
+    expect(mockGetAuthSession).toHaveBeenCalledTimes(3);
     expect(outboxRow.status).toBe('failed');
     expect(outboxRow.next_retry_at).toEqual(expect.any(String));
     expect(outboxRow.last_error).toBe('RLS denied');
@@ -275,7 +423,7 @@ describe('SQLite outbox auth gate', () => {
       totalSynced: 0,
       totalFailed: 1,
     }));
-    expect(mockGetAuthSession).toHaveBeenCalledTimes(2);
+    expect(mockGetAuthSession).toHaveBeenCalledTimes(3);
     expect(outboxRow.status).toBe('terminal');
     expect(outboxRow.next_retry_at).toBeNull();
     expect(outboxRow.last_error).toBe(`${AUTHENTICATED_DENIAL_MARKER} RLS denied`);

@@ -10,7 +10,7 @@ import {
 } from '../test-support/sqliteRepositoryTestUtils';
 
 const liveTestSession = async () => ({
-  data: { session: { user: { id: 'test-user' } } },
+  data: { session: { user: { id: 'user-1' } } },
 });
 
 // #35 (write-path root-cause fix): a class change must keep children.class_id and

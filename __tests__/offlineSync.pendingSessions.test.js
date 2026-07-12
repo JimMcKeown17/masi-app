@@ -1,7 +1,7 @@
 jest.mock('../src/services/supabaseClient', () => ({
   supabase: {
     auth: {
-      getSession: jest.fn(async () => ({ data: { session: { user: { id: 'test-user' } } } })),
+      getSession: jest.fn(async () => ({ data: { session: { user: { id: 'user-1' } } } })),
     },
     from: jest.fn(() => ({
       upsert: jest.fn().mockResolvedValue({ error: null }),
