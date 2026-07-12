@@ -388,6 +388,8 @@ const nextRetryTimestamp = (retryCountBeforeFailure) => (
   new Date(Date.now() + getRetryDelay(retryCountBeforeFailure)).toISOString()
 );
 
+const DETERMINISTIC_ERROR_CODES = ['PGRST204', '42703', '22P02', '23502', '23514'];
+
 const classifyError = (
   error,
   { duplicateIsSuccess = false, tableName } = {},
@@ -752,17 +754,19 @@ const finalizeTerminalFailure = async ({
   outboxRecord,
   tableName,
   reason,
+  retryCount = null,
 }) => runRepositoryTransaction(database, async (txn) => {
   const failureResult = await txn.runAsync(`
     update sync_outbox
     set status = 'terminal',
+        retry_count = coalesce(?, retry_count),
         last_error = ?,
         next_retry_at = null,
         updated_at = ?
     where id = ?
       and updated_at = ?
       and status = 'in_flight'
-  `, reason, timestamp(), outboxRecord.id, outboxRecord.updated_at);
+  `, retryCount, reason, timestamp(), outboxRecord.id, outboxRecord.updated_at);
 
   if ((failureResult?.changes || 0) === 0) {
     return restorePendingAfterStaleFinalize(txn, outboxRecord, tableName);
@@ -995,6 +999,24 @@ export const createOutboxSyncEngine = ({
           reason,
         });
         return { success: false, terminal: true, failedRecord: makeFailedRecord(outboxRecord, reason) };
+      }
+
+      const attemptNumber = (inFlightRecord.retry_count || 0) + 1;
+      if (DETERMINISTIC_ERROR_CODES.includes(failureCode) && attemptNumber >= 8) {
+        const deterministicReason = `deterministic: ${reason}`;
+        await finalizeTerminalFailure({
+          database,
+          outboxRecord: inFlightRecord,
+          tableName: config.tableName,
+          outboxRepository,
+          reason: deterministicReason,
+          retryCount: attemptNumber,
+        });
+        return {
+          success: false,
+          terminal: true,
+          failedRecord: makeFailedRecord(outboxRecord, deterministicReason),
+        };
       }
 
       await finalizeRetriableFailure({
