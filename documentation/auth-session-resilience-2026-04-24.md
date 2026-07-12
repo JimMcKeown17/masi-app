@@ -3,6 +3,8 @@
 Date: 2026-04-24
 Scope: `src/services/supabaseClient.js`, `src/context/AuthContext.js`
 
+> **Status note (2026-07-12):** partially superseded. Current code treats `SIGNED_OUT` specially: it commits sign-out immediately unless persisted auth proves the event stale (`AuthContext.js`, `manualSignOutInProgressRef` / persisted-session check). The 15-second grace below now applies only to OTHER null-session events, and the log format is `[Auth] Event=<NAME> ...`. Persisted-session cold-start restore also landed (2026-07-07). See `documentation/codebase-audit-2026-07-12.md` (docs-vs-code drift section).
+
 ## Why this change was made
 
 Field testers reported unexpected sign-outs on Android. The app is offline-first and used in real-world field conditions (intermittent data, app backgrounding, device variability), so strict immediate logout behavior creates user friction.
