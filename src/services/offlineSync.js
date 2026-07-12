@@ -15,6 +15,7 @@ import {
   createSyncStateRepository,
   syncStateRepository,
 } from '../db/repositories/syncStateRepository';
+import { resolveRecordOwners } from '../db/repositories/outboxOwnership';
 import { repairGroupOwnershipForSync } from '../db/repositories/groupsRepository';
 import {
   academicYearsRepository,
@@ -441,58 +442,6 @@ const isHealableRlsError = (record) => {
   if (err.startsWith(AUTHENTICATED_DENIAL_MARKER)) return false;
   return RLS_ERROR_SIGNATURE.test(err);
 };
-
-// Owner-candidate resolution per synced table. `row` is the local domain row
-// (null for hard-deletes whose row is gone); `payload` the outbox snapshot.
-// created_by is the schema-true owner on created tables; staff_id/legacy keys
-// exist ONLY as payload input fallbacks (repositories normalize them away).
-const directOwner = (...columns) => async ({ row, payload }) => (
-  columns.map((column) => row?.[column] ?? payload?.[column]).filter(Boolean)
-);
-
-const viaParentOwner = (parentTable, foreignKey, parentOwnerColumn) => async ({ db, row, payload }) => {
-  const parentId = row?.[foreignKey] ?? payload?.[foreignKey];
-  if (!parentId) return [];
-  const parent = await db.getFirstAsync(
-    `select * from ${quoteIdentifier(parentTable)} where id = ?`,
-    parentId
-  );
-  if (!parent) return [];
-  return [parent[parentOwnerColumn]].filter(Boolean);
-};
-
-const combineOwners = (...resolvers) => async (context) => {
-  const owners = [];
-  for (const resolver of resolvers) {
-    owners.push(...await resolver(context));
-  }
-  return owners;
-};
-
-const OWNER_RESOLVERS = {
-  time_entries: directOwner('user_id'),
-  classes: directOwner('created_by', 'staff_id'),
-  children: directOwner('created_by'),
-  child_ea_assignments: directOwner('user_id', 'created_by'),
-  child_programme_enrollments: directOwner('created_by'),
-  child_class_memberships: directOwner('created_by'),
-  class_ea_assignments: directOwner('ea_user_id', 'created_by'),
-  grouping_versions: directOwner('created_by', 'accepted_by_user_id', 'archived_by_user_id'),
-  class_grouping_state: combineOwners(
-    directOwner('class_list_completed_by_user_id', 'class_list_reopened_by_user_id'),
-    viaParentOwner('classes', 'class_id', 'created_by'),
-  ),
-  groups: directOwner('created_by', 'staff_id'),
-  group_ea_assignments: directOwner('ea_user_id', 'created_by'),
-  child_group_memberships: directOwner('created_by'),
-  sessions: directOwner('user_id'),
-  session_attendees: viaParentOwner('sessions', 'session_id', 'user_id'),
-  assessments: directOwner('user_id'),
-  assessment_items: viaParentOwner('assessments', 'assessment_id', 'user_id'),
-  letter_mastery: directOwner('user_id'),
-};
-
-const genericOwnerResolver = directOwner('user_id', 'created_by', 'staff_id', 'ea_user_id');
 
 const buildSyncPayload = (tableName, record) => {
   const tableLegacyKeys = LEGACY_KEYS_TO_STRIP[tableName] || [];
@@ -1359,12 +1308,16 @@ export const createOutboxSyncEngine = ({
 
     const heals = [];
     for (const record of candidates) {
-      const resolver = OWNER_RESOLVERS[record.table_name] || genericOwnerResolver;
       const row = await db.getFirstAsync(
         `select * from ${quoteIdentifier(record.table_name)} where id = ?`,
         record.record_id
       ).catch(() => null);
-      const owners = await resolver({ db, row, payload: record.payload });
+      const owners = await resolveRecordOwners({
+        db,
+        tableName: record.table_name,
+        row,
+        payload: record.payload,
+      });
       if (owners.length === 0) {
         console.warn(`syncRescue: skipping ${record.table_name} ${record.record_id} (no owner field)`);
         continue;
