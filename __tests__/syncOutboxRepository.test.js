@@ -25,12 +25,14 @@ describe('SQLite sync outbox repository', () => {
       recordId: 'child-1',
       operation: 'insert',
       payload: { id: 'child-1', first_name: 'Old' },
+      ownerUserId: 'ea-old',
     });
     await outbox.enqueue({
       tableName: 'children',
       recordId: 'child-1',
       operation: 'insert',
       payload: { id: 'child-1', first_name: 'Updated' },
+      ownerUserId: 'ea-updated',
     });
 
     const rows = await db.getAllAsync('select * from sync_outbox');
@@ -42,6 +44,7 @@ describe('SQLite sync outbox repository', () => {
       operation: 'insert',
       status: 'pending',
       retry_count: 0,
+      owner_user_id: 'ea-updated',
     }));
     expect(JSON.parse(rows[0].payload)).toEqual({ id: 'child-1', first_name: 'Updated' });
   });
@@ -101,6 +104,87 @@ describe('SQLite sync outbox repository', () => {
 
     expect(status.unsyncedCount).toBe(2);
     expect(status.readyCount).toBe(1);
+  });
+
+  test('readiness and every status counter are scoped to the current owner plus NULL rows', async () => {
+    const enqueue = (recordId, ownerUserId) => outbox.enqueue({
+      tableName: 'sessions',
+      recordId,
+      operation: 'insert',
+      payload: { id: recordId },
+      ownerUserId,
+    });
+
+    await enqueue('a-pending', 'ea-a');
+    await enqueue('a-terminal', 'ea-a');
+    await enqueue('b-pending', 'ea-b');
+    await enqueue('b-backed-off', 'ea-b');
+    await enqueue('b-terminal', 'ea-b');
+    await enqueue('null-pending', null);
+    await enqueue('null-terminal', null);
+    await outbox.markTerminalFailure('sessions:a-terminal:insert', { errorMessage: 'A terminal' });
+    await outbox.markRetriableFailure('sessions:b-backed-off:insert', {
+      errorMessage: 'B waiting',
+      nextRetryAt: '2099-01-01T00:00:00.000Z',
+    });
+    await outbox.markTerminalFailure('sessions:b-terminal:insert', { errorMessage: 'B terminal' });
+    await outbox.markTerminalFailure('sessions:null-terminal:insert', { errorMessage: 'NULL terminal' });
+
+    expect((await outbox.getReadyRecords({ ownerUserId: 'ea-b' })).map((row) => row.record_id))
+      .toEqual(['b-pending', 'null-pending']);
+    expect((await outbox.getReadyRecords()).map((row) => row.record_id))
+      .toEqual(['a-pending', 'b-pending', 'null-pending']);
+
+    const scoped = await outbox.getSyncStatus({ ownerUserId: 'ea-b' });
+    expect(scoped).toEqual(expect.objectContaining({
+      unsyncedCount: 3,
+      readyCount: 2,
+      failedCount: 3,
+      inFlightCount: 0,
+      waitingCount: 3,
+      needsAttentionCount: 2,
+      backedOffCount: 1,
+      breakdown: { sessions: 3 },
+    }));
+    expect(scoped.needsAttentionItems.map((item) => item.id)).toEqual([
+      'b-terminal',
+      'null-terminal',
+    ]);
+
+    const unscoped = await outbox.getSyncStatus();
+    expect(unscoped).toEqual(expect.objectContaining({
+      unsyncedCount: 4,
+      readyCount: 3,
+      failedCount: 4,
+      needsAttentionCount: 3,
+      backedOffCount: 1,
+      breakdown: { sessions: 4 },
+    }));
+  });
+
+  test('resetInFlight only recovers the current owner plus NULL rows', async () => {
+    await outbox.enqueue({
+      tableName: 'sessions', recordId: 'a-row', operation: 'insert', payload: { id: 'a-row' }, ownerUserId: 'ea-a',
+    });
+    await outbox.enqueue({
+      tableName: 'sessions', recordId: 'b-row', operation: 'insert', payload: { id: 'b-row' }, ownerUserId: 'ea-b',
+    });
+    await outbox.enqueue({
+      tableName: 'sessions', recordId: 'null-row', operation: 'insert', payload: { id: 'null-row' }, ownerUserId: null,
+    });
+    await outbox.markInFlight([
+      'sessions:a-row:insert',
+      'sessions:b-row:insert',
+      'sessions:null-row:insert',
+    ]);
+
+    await outbox.resetInFlight({ ownerUserId: 'ea-b' });
+
+    expect(await db.getAllAsync('select record_id, status from sync_outbox order by record_id')).toEqual([
+      { record_id: 'a-row', status: 'in_flight' },
+      { record_id: 'b-row', status: 'pending' },
+      { record_id: 'null-row', status: 'pending' },
+    ]);
   });
 
   test('failed and terminal rows are visible while in-flight rows do not inflate unsynced count', async () => {

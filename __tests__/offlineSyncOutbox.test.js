@@ -68,7 +68,7 @@ const seedReferences = async (db) => {
 };
 
 const liveTestSession = async () => ({
-  data: { session: { user: { id: 'test-user' } } },
+  data: { session: { user: { id: 'user-1' } } },
 });
 
 const enqueue = async (db, tableName, recordId, operation, payload) => {

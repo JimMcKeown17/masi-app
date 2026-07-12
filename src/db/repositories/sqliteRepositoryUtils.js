@@ -226,6 +226,7 @@ export const insertOutboxRecord = async (db, {
   operation,
   payload = null,
   status = 'pending',
+  ownerUserId = null,
   createdAt = timestamp(),
 }) => upsertRecord(db, {
   tableName: 'sync_outbox',
@@ -236,6 +237,7 @@ export const insertOutboxRecord = async (db, {
     'operation',
     'payload',
     'status',
+    'owner_user_id',
     'retry_count',
     'last_error',
     'next_retry_at',
@@ -249,6 +251,7 @@ export const insertOutboxRecord = async (db, {
     operation,
     payload,
     status,
+    owner_user_id: ownerUserId,
     retry_count: 0,
     last_error: null,
     next_retry_at: null,

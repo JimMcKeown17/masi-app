@@ -807,6 +807,19 @@ Roadmap: `documentation/improvements-2026-07-roadmap.md` · Plan: `docs/superpow
 
 Phase 3 implementation complete 2026-07-12: unit suite `145/843` and integration suite `24/185` green under Node 20. No sync payload, RLS, outbox-ordering, or schema contract changed; `documentation/rls-sync-contract-map.md` remains untouched. Push, PR, CI, merge, and the post-merge device gate remain with the orchestrator and Jim.
 
+#### Sprint 2A: Outbox Ownership + Deterministic Error Budget
+Branch: `improvement/s2-outbox-ownership-and-error-budget`
+Plan: `docs/superpowers/plans/2026-07-12-sprint2-outbox-ownership-error-budget.md`
+
+- [x] Schema v6 adds local-only `sync_outbox.owner_user_id` - `6b38fb6`
+- [x] Shared ownership resolvers serve enqueue and auth-restore requeue - `7ec9a51`
+- [x] Every domain enqueue stamps ownership, including partial archives and hard deletes - `d47be76`
+- [x] Readiness, status, in-flight recovery, and upload passes are owner-scoped; mid-pass user changes abort before server requests - `f667c99`
+- [x] Deterministic server errors receive 8 attempts before needs-attention; forced Sync Now can recover them - `3a90baf`
+- [x] Contract map, plan checklist, and refactor log updated
+
+Sprint 2A implementation complete 2026-07-12: one EA's session cannot push or terminalize another EA's owned outbox rows; NULL-owner pre-v6 rows remain grandfathered. Final Node 20 gates: unit `149/873` and integration `24/187` green. Device handover and forced-error validation remain Jim-owned after merge.
+
 #### Sync auth hardening (#43-45)
 Branch: `fix/sync-auth-hardening`
 Plan: `docs/superpowers/plans/2026-07-06-sync-auth-hardening.md`

@@ -7,6 +7,7 @@ import {
   timestamp,
   upsertRecord,
 } from './sqliteRepositoryUtils';
+import { resolvePrimaryOwner } from './outboxOwnership';
 
 export const LEGACY_PROGRAMME_ID = 'local-legacy-programme';
 const MASI_DOMAIN_ID_NAMESPACE = '09dcf4b2-6c53-4c46-917f-33bc7f2df4d2';
@@ -102,15 +103,29 @@ export const normalizeSyncFields = (record = {}) => {
   };
 };
 
-export const enqueueDomainOutbox = async (db, tableName, recordId, operation, payload = null) => (
-  insertOutboxRecord(db, {
+export const enqueueDomainOutbox = async (
+  db,
+  tableName,
+  recordId,
+  operation,
+  payload = null,
+  { ownerRow } = {}
+) => {
+  const row = ownerRow || await db.getFirstAsync(
+    `select * from ${quoteIdentifier(tableName)} where id = ?`,
+    recordId
+  ).catch(() => null);
+  const ownerUserId = await resolvePrimaryOwner({ db, tableName, row, payload });
+
+  return insertOutboxRecord(db, {
     id: outboxId(tableName, recordId, operation),
     tableName,
     recordId,
     operation,
     payload,
-  })
-);
+    ownerUserId,
+  });
+};
 
 export const shouldEnqueueOutbox = (record = {}) => !['synced', 'terminal'].includes(record.sync_status);
 

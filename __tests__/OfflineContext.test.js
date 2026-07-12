@@ -620,6 +620,35 @@ describe('OfflineContext Plan 4 sync API', () => {
 
       expect(requeueTerminalRlsFailures).not.toHaveBeenCalled();
     });
+
+    test('an initial session refreshes status for that owner', async () => {
+      await renderOfflineHook();
+
+      await emitAuthEvent('INITIAL_SESSION', { user: { id: 'ea-a' } });
+
+      expect(getSyncStatus).toHaveBeenLastCalledWith({ ownerUserId: 'ea-a' });
+    });
+
+    test('an A-to-B auth transition replaces the visible status owner', async () => {
+      await renderOfflineHook();
+      await emitAuthEvent('SIGNED_IN', { user: { id: 'ea-a' } });
+      getSyncStatus.mockClear();
+
+      await emitAuthEvent('SIGNED_IN', { user: { id: 'ea-b' } });
+
+      expect(getSyncStatus).toHaveBeenCalledWith({ ownerUserId: 'ea-b' });
+      expect(getSyncStatus).not.toHaveBeenCalledWith({ ownerUserId: 'ea-a' });
+    });
+
+    test('sign-out refreshes status with a null owner', async () => {
+      await renderOfflineHook();
+      await emitAuthEvent('SIGNED_IN', { user: { id: 'ea-a' } });
+      getSyncStatus.mockClear();
+
+      await emitAuthEvent('SIGNED_OUT', null);
+
+      expect(getSyncStatus).toHaveBeenCalledWith({ ownerUserId: null });
+    });
   });
 
   test('exposes waitingCount, needsAttentionCount, and nextRetryAt from sync status', async () => {

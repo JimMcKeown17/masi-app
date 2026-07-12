@@ -40,6 +40,7 @@ export const createSyncOutboxRepository = ({ database } = {}) => {
     recordId,
     operation,
     payload = null,
+    ownerUserId = null,
     id = outboxRecordId(tableName, recordId, operation),
   }, { transaction } = {}) => runWrite(transaction, async (txn) => {
     await insertOutboxRecord(txn, {
@@ -49,6 +50,7 @@ export const createSyncOutboxRepository = ({ database } = {}) => {
       operation,
       payload,
       status: 'pending',
+      ownerUserId,
     });
     await txn.runAsync(`
       update sync_outbox
@@ -68,21 +70,33 @@ export const createSyncOutboxRepository = ({ database } = {}) => {
     return toOutboxRecord(row);
   };
 
-  const getReadyRecords = async ({ limit = 50, now = timestamp(), includeBackedOff = false, includeTerminal = false } = {}) => {
+  const getReadyRecords = async ({
+    limit = 50,
+    now = timestamp(),
+    includeBackedOff = false,
+    includeTerminal = false,
+    ownerUserId,
+  } = {}) => {
     const db = await resolveDatabase(database);
     // A forced ("Sync Now") pass also resurrects terminal rows so the user can clear a stuck
     // dependency chain (e.g. assessment_items that 42501'd because their parent had not synced yet);
     // auto-sync (includeTerminal=false) keeps skipping terminal rows so genuine permission failures
     // do not retry-storm.
     const statuses = includeTerminal ? "('pending', 'failed', 'terminal')" : "('pending', 'failed')";
+    const ownerScoped = ownerUserId !== undefined;
+    const params = [];
+    if (!includeBackedOff) params.push(now);
+    if (ownerScoped) params.push(ownerUserId);
+    params.push(limit);
     const rows = await db.getAllAsync(`
       select *
       from sync_outbox
       where status in ${statuses}
         ${includeBackedOff ? '' : 'and (next_retry_at is null or next_retry_at <= ?)'}
+        ${ownerScoped ? 'and (owner_user_id is null or owner_user_id = ?)' : ''}
       order by created_at, table_name, record_id
       limit ?
-    `, ...(includeBackedOff ? [limit] : [now, limit]));
+    `, ...params);
     return rows.map(toOutboxRecord);
   };
 
@@ -126,13 +140,15 @@ export const createSyncOutboxRepository = ({ database } = {}) => {
     });
   };
 
-  const resetInFlight = async ({ transaction } = {}) => runWrite(transaction, async (txn) => {
+  const resetInFlight = async ({ ownerUserId, transaction } = {}) => runWrite(transaction, async (txn) => {
+    const ownerScoped = ownerUserId !== undefined;
     await txn.runAsync(`
       update sync_outbox
       set status = 'pending',
           updated_at = ?
       where status = 'in_flight'
-    `, timestamp());
+        ${ownerScoped ? 'and (owner_user_id is null or owner_user_id = ?)' : ''}
+    `, ...[timestamp(), ...(ownerScoped ? [ownerUserId] : [])]);
     return true;
   });
 
@@ -218,13 +234,16 @@ export const createSyncOutboxRepository = ({ database } = {}) => {
     return rows.map(toFailedItem);
   };
 
-  const getSyncStatus = async () => {
+  const getSyncStatus = async ({ ownerUserId } = {}) => {
     const db = await resolveDatabase(database);
     // ONE statement = one snapshot (R1): counts and itemized lists must never disagree.
     // Separate queries can interleave with a sync pass finalizing rows, yielding e.g.
     // needsAttentionCount 1 with an empty needsAttentionItems. The outbox is a small,
     // bounded backlog, so loading it whole is cheap.
-    const rows = await db.getAllAsync('select * from sync_outbox');
+    const snapshotRows = await db.getAllAsync('select * from sync_outbox');
+    const rows = ownerUserId === undefined
+      ? snapshotRows
+      : snapshotRows.filter((row) => row.owner_user_id == null || row.owner_user_id === ownerUserId);
     const now = timestamp();
 
     const breakdown = {};
