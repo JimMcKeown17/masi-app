@@ -1,5 +1,5 @@
 import * as Location from 'expo-location';
-import { Alert } from 'react-native';
+import { Alert, Linking } from 'react-native';
 
 /**
  * Location Service
@@ -14,6 +14,7 @@ import { Alert } from 'react-native';
 // Medium accuracy (50-100m) - sufficient for school vicinity
 const LOCATION_ACCURACY = Location.Accuracy.Balanced;
 const LOCATION_TIMEOUT = 10000; // 10 seconds
+const LAST_KNOWN_MAX_AGE_MS = 15 * 60 * 1000;
 
 /**
  * Request location permission with persistent prompts
@@ -21,9 +22,34 @@ const LOCATION_TIMEOUT = 10000; // 10 seconds
  */
 export const requestLocationPermission = async () => {
   try {
-    const { status } = await Location.requestForegroundPermissionsAsync();
+    const { status, canAskAgain } = await Location.requestForegroundPermissionsAsync();
 
     if (status !== 'granted') {
+      if (canAskAgain === false) {
+        return new Promise((resolve) => {
+          Alert.alert(
+            'Location Disabled',
+            'Location permission is disabled for this app. Open your device settings to enable it for time tracking.',
+            [
+              {
+                text: 'Open Settings',
+                onPress: async () => {
+                  try {
+                    await Linking.openSettings();
+                  } catch {}
+                  resolve(false);
+                },
+              },
+              {
+                text: 'Cancel',
+                style: 'cancel',
+                onPress: () => resolve(false),
+              },
+            ]
+          );
+        });
+      }
+
       // Show explanation and prompt again
       return new Promise((resolve) => {
         Alert.alert(
@@ -95,9 +121,36 @@ export const getCurrentPosition = async () => {
     }
 
     // Get current position
-    const location = await Location.getCurrentPositionAsync({
-      accuracy: LOCATION_ACCURACY,
-      timeInterval: LOCATION_TIMEOUT,
+    const location = await new Promise((resolve, reject) => {
+      let settled = false;
+      const timer = setTimeout(async () => {
+        if (settled) return;
+        settled = true;
+        try {
+          const lastKnown = await Location.getLastKnownPositionAsync({
+            maxAge: LAST_KNOWN_MAX_AGE_MS,
+          });
+          if (lastKnown) {
+            resolve(lastKnown);
+            return;
+          }
+        } catch {}
+        reject({ code: 'E_LOCATION_TIMEOUT' });
+      }, LOCATION_TIMEOUT);
+
+      Location.getCurrentPositionAsync({ accuracy: LOCATION_ACCURACY })
+        .then((result) => {
+          if (settled) return;
+          settled = true;
+          clearTimeout(timer);
+          resolve(result);
+        })
+        .catch((error) => {
+          if (settled) return;
+          settled = true;
+          clearTimeout(timer);
+          reject(error);
+        });
     });
 
     return {

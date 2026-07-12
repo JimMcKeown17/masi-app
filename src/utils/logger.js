@@ -6,6 +6,26 @@ const LOGS_KEY = '@app_logs';
 const FLUSH_INTERVAL = 30000; // Flush to disk every 30 seconds
 const MAX_AGE_MS = 48 * 60 * 60 * 1000; // Drop logs older than 48 hours
 
+const serializeArg = (arg) => {
+  if (arg instanceof Error) {
+    return `${arg.name}: ${arg.message}\n${arg.stack}`;
+  }
+
+  if (arg !== null && typeof arg === 'object') {
+    try {
+      return JSON.stringify(arg);
+    } catch {
+      let type = typeof arg;
+      try {
+        type = arg.constructor?.name || type;
+      } catch {}
+      return `[unserializable: ${type}]`;
+    }
+  }
+
+  return String(arg);
+};
+
 class Logger {
   constructor() {
     this.buffer = [];
@@ -64,7 +84,7 @@ class Logger {
     this.buffer.push({
       timestamp: new Date().toISOString(),
       level,
-      message: args.map(a => typeof a === 'object' ? JSON.stringify(a) : String(a)).join(' '),
+      message: args.map(serializeArg).join(' '),
     });
   }
 
