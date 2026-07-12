@@ -820,6 +820,17 @@ Plan: `docs/superpowers/plans/2026-07-12-sprint2-outbox-ownership-error-budget.m
 
 Sprint 2A implementation complete 2026-07-12: one EA's session cannot push or terminalize another EA's owned outbox rows; NULL-owner pre-v6 rows remain grandfathered. Final Node 20 gates: unit `149/873` and integration `24/187` green. Device handover and forced-error validation remain Jim-owned after merge.
 
+#### Sprint 2B: Publish-First Auth + Idempotent Child Delete
+Branch: `improvement/s2-auth-and-delete`
+Plan: `docs/superpowers/plans/2026-07-12-sprint2-auth-publish-first-idempotent-delete.md`
+
+- [x] Restored users publish immediately while profile and reference refreshes run independently in the background - `a78325d`
+- [x] Idempotent absent-child RPC replacement authored with a static migration guard; remote application remains orchestrator-owned - `5f83683`
+- [x] Owner-scoped pending hard deletes suppress pulled children and their FK relationships before merge or persistence - `4fa0457`
+- [x] Contract map, plan checklist, and refactor log updated
+
+Sprint 2B implementation complete 2026-07-12. Final Node 20 gates: unit `151/879` and integration `25/190` green. The migration is authored only and still needs orchestrator application and live verification; the airplane-mode cold-start and force-kill delete retry checks remain Jim-owned device gates.
+
 #### Sync auth hardening (#43-45)
 Branch: `fix/sync-auth-hardening`
 Plan: `docs/superpowers/plans/2026-07-06-sync-auth-hardening.md`
