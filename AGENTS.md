@@ -5,6 +5,10 @@ This file is the single source of truth for agent guidance in this repo. `CLAUDE
 ## Project Overview
 A React Native mobile application for Masi, a nonprofit, to manage their field staff's work with children, track time, record educational sessions, and children's assessments.
 
+## When Building
+
+Default build workflow for Claude: Claude/Fable owns design, spec, review, and verification; delegate non-trivial implementation to Codex via `codex-first`, then inspect the diff and tests before ship. Use gpt-5.6-sol for most tasks.
+
 ## Agent skills
 
 ### Issue tracker
@@ -160,9 +164,10 @@ Two Supabase projects exist:
 - `masi-app-sqlite` — **current forward backend**, ref `segygjzpujphwvrubusm` (the repo is `supabase link`ed to this one). This is the dev/staging + future-production backend for the new SQLite build. **As of 2026-06-09 it has NO field users** — the deployed field app still runs on the legacy backend (below), so `masi-app-sqlite` data is dev/test data you can wipe freely without coordinating with field staff.
 - `masi-app` — **legacy pre-SQLite backend**, ref `jcqrlwetutnpuchjoyyd`. **This is what the deployed field app is still writing to.** Do not use for new mobile work unless the user explicitly asks for legacy-backend maintenance.
 
-**Which backend is which — three places, three different defaults, so always check the ref (`segygjzpujphwvrubusm` = sqlite, `jcqrlwetutnpuchjoyyd` = legacy):**
+**Which backend is which (`segygjzpujphwvrubusm` = sqlite, `jcqrlwetutnpuchjoyyd` = legacy). As of 2026-07-12 every default points at the SQLite backend; verify the ref anyway:**
+- **The app** → `config/supabaseProjectConfig.js` defaults to `sqlite-staging` with committed publishable-key fallbacks, so plain `npm start`, dev builds, and the `eas.json` preview and production profiles all target `masi-app-sqlite`. The legacy backend is reachable only behind an explicit `EXPO_PUBLIC_SUPABASE_TARGET=primary`. A URL that belongs to a different target than the selected one (e.g. a stale `.env.local` override) fails fast at startup with an actionable error instead of silently connecting to the wrong backend.
 - **The repo `supabase link`** → `masi-app-sqlite` ✅. So `supabase ... --linked` (and the `npm run sqlite:staging:*` scripts) hit the SQLite backend.
-- **`.env.local`** → may carry the legacy connection (`MASI_SUPABASE_URL` / `EXPO_PUBLIC_SUPABASE_URL` resolve to `jcqrlwetutnpuchjoyyd`). The SQLite app instead selects `masi-app-sqlite` via `config/supabaseProjectConfig.js`.
+- **`.env.local`** → `EXPO_PUBLIC_*` values now point at the sqlite backend (target, URL, publishable key), matching the code default. Legacy credentials remain available under `SUPABASE_PROJECT_URL` / `SUPABASE_ANON_KEY` / `MASI_SUPABASE_URL` for legacy-only tooling.
 - **The Supabase MCP server** → pinned to the **LEGACY** ref in its URL (`https://mcp.supabase.com/mcp?project_ref=jcqrlwetutnpuchjoyyd`) ⚠️. **Do NOT use the Supabase MCP for `masi-app-sqlite` work** — `execute_sql`/`apply_migration` through it hit the *legacy* backend. Verify the ref before authenticating/using it.
 
 **How to run ad-hoc SQL against `masi-app-sqlite` (read-only preflights, verification, disposable-data cleanup — NOT DDL; schema changes go through migrations):**
@@ -176,6 +181,7 @@ The `query` action (in `scripts/sqlite-staging.cjs`) reads the DB password from 
 - A **stale `SUPABASE_ACCESS_TOKEN` env var** (often exported from a shell profile) **silently overrides `supabase login`** — the CLI trusts the env var first, so a fresh login "doesn't take." Fix: `unset SUPABASE_ACCESS_TOKEN` (or refresh it to a valid token), then re-run.
 - A **non-interactive shell** (e.g. an agent's Bash, CI without a token) often **can't reach the keychain** where `supabase login` stores the token, so it 401s even when your own terminal works. Run `db query`/cleanup in the **same interactive terminal where you logged in**.
 - Always verify the target before a write: the command summary prints `project_ref=` — confirm `segygjzpujphwvrubusm` (sqlite), not `jcqrlwetutnpuchjoyyd` (legacy).
+- **Non-interactive fallback that works (verified 2026-07-12):** direct psql with the DB password from `.env.local`, bypassing CLI auth entirely. Read-only probes only: `PGPASSWORD=<SUPABASE_DB_PASSWORD_SQLITE> /opt/homebrew/opt/libpq/bin/psql -h db.segygjzpujphwvrubusm.supabase.co -U postgres -d postgres`. Never paste the password into output or docs.
 
 Trap: running the `supabase` CLI with `.env.local` injected into its environment (e.g. a `dotenv` wrapper) can make the CLI pick up the legacy connection and silently query the wrong backend even with `--linked`. Don't inject `.env.local` into `supabase` commands — use `--linked` (or the `sqlite:staging:query` helper, which does this correctly).
 
@@ -193,6 +199,15 @@ const url = process.env.EXPO_PUBLIC_SUPABASE_URL
 ---
 
 ## Documentation Guidelines
+
+### Anti-drift rule: standing docs ship with the code that changes them
+
+Docs are intent; code is truth; the gap between them is a bug with a fuse. Two doc classes, two rules:
+
+- **Standing docs** (CONTEXT.md, `documentation/rls-sync-contract-map.md`, DEPLOYMENT.md, behavior docs like the auth-session-resilience notes, and this file) describe the present. When a code change contradicts one, update the doc **in the same branch as the code change**. If you find a standing doc making a claim the code contradicts, fix the doc immediately or file it; do not leave it for the next reader.
+- **Dated docs** (reviews, audits, plans, PRDs, the refactor log) are historical records. Never rewrite them to match later reality; instead add a short dated status note at the top pointing at what superseded them.
+
+The 2026-07-12 audit (`documentation/codebase-audit-2026-07-12.md`) found four standing-doc drifts this rule would have prevented; periodic audits verify docs against code with file:line evidence, but the same-branch rule is what keeps the interval clean.
 
 ### IMPORTANT: Track Progress and Document Decisions
 
