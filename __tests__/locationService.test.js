@@ -138,4 +138,39 @@ describe('locationService', () => {
       expect(jest.getTimerCount()).toBe(0);
     });
   });
+
+  describe('requestLocationPermission', () => {
+    test('permanently denied permission does not re-prompt and offers settings', async () => {
+      Location.requestForegroundPermissionsAsync.mockResolvedValue({
+        status: 'denied',
+        canAskAgain: false,
+      });
+
+      const permissionPromise = requestLocationPermission();
+      await waitForMockCall(Alert.alert);
+      const buttons = Alert.alert.mock.calls[0][2];
+      const openSettingsButton = buttons.find((button) => button.text === 'Open Settings');
+
+      expect(openSettingsButton).toBeDefined();
+      await openSettingsButton.onPress();
+      await expect(permissionPromise).resolves.toBe(false);
+      expect(Location.requestForegroundPermissionsAsync).toHaveBeenCalledTimes(1);
+      expect(Linking.openSettings).toHaveBeenCalledTimes(1);
+    });
+
+    test('deniable permission still re-prompts', async () => {
+      Location.requestForegroundPermissionsAsync
+        .mockResolvedValueOnce({ status: 'denied', canAskAgain: true })
+        .mockResolvedValueOnce({ status: 'granted' });
+
+      const permissionPromise = requestLocationPermission();
+      await waitForMockCall(Alert.alert);
+      const buttons = Alert.alert.mock.calls[0][2];
+      const enableLocationButton = buttons.find((button) => button.text === 'Enable Location');
+
+      await enableLocationButton.onPress();
+      await expect(permissionPromise).resolves.toBe(true);
+      expect(Location.requestForegroundPermissionsAsync).toHaveBeenCalledTimes(2);
+    });
+  });
 });

@@ -1,5 +1,5 @@
 import * as Location from 'expo-location';
-import { Alert } from 'react-native';
+import { Alert, Linking } from 'react-native';
 
 /**
  * Location Service
@@ -22,9 +22,34 @@ const LAST_KNOWN_MAX_AGE_MS = 15 * 60 * 1000;
  */
 export const requestLocationPermission = async () => {
   try {
-    const { status } = await Location.requestForegroundPermissionsAsync();
+    const { status, canAskAgain } = await Location.requestForegroundPermissionsAsync();
 
     if (status !== 'granted') {
+      if (canAskAgain === false) {
+        return new Promise((resolve) => {
+          Alert.alert(
+            'Location Disabled',
+            'Location permission is disabled for this app. Open your device settings to enable it for time tracking.',
+            [
+              {
+                text: 'Open Settings',
+                onPress: async () => {
+                  try {
+                    await Linking.openSettings();
+                  } catch {}
+                  resolve(false);
+                },
+              },
+              {
+                text: 'Cancel',
+                style: 'cancel',
+                onPress: () => resolve(false),
+              },
+            ]
+          );
+        });
+      }
+
       // Show explanation and prompt again
       return new Promise((resolve) => {
         Alert.alert(
