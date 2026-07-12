@@ -1,10 +1,15 @@
-import React, { createContext, useState, useEffect, useContext, useRef, useCallback } from 'react';
+import React, { createContext, useState, useEffect, useContext, useRef, useCallback, useMemo } from 'react';
 import NetInfo from '@react-native-community/netinfo';
 import { AppState } from 'react-native';
 import { supabase } from '../services/supabaseClient';
 import { syncAll, getSyncStatus, requeueTerminalRlsFailures } from '../services/offlineSync';
 
 const BACKGROUND_SYNC_DEBOUNCE_MS = 1000;
+
+// Cheap deep-compare for sync status snapshots. The object is small (a few
+// counters, a per-table breakdown, and the usually-empty failedItems list),
+// and both sides come from the same code path, so key order is stable.
+const isSameSyncStatus = (a, b) => JSON.stringify(a) === JSON.stringify(b);
 
 const OfflineContext = createContext({
   isOnline: true,
@@ -35,6 +40,8 @@ export const OfflineProvider = ({ children }) => {
   const pendingForcedSync = useRef(null);
   const backgroundSyncTimer = useRef(null);
   const isOnlineRef = useRef(isOnline);
+  const readyCountRef = useRef(0);
+  const inFlightCountRef = useRef(0);
   const triggerBackgroundSyncRef = useRef(() => {});
 
   // Keep ref in sync with state so event-listener closures always read current value
@@ -50,9 +57,11 @@ export const OfflineProvider = ({ children }) => {
       const status = await getSyncStatus();
       setUnsyncedCount(status.unsyncedCount);
       setInFlightCount(status.inFlightCount || 0);
-      setSyncStatus(status);
+      readyCountRef.current = status.readyCount || 0;
+      inFlightCountRef.current = status.inFlightCount || 0;
+      setSyncStatus(prev => (isSameSyncStatus(prev, status) ? prev : status));
 
-      if (autoTrigger && (status.unsyncedCount > 0 || (status.inFlightCount || 0) > 0) && isOnlineRef.current) {
+      if (autoTrigger && ((status.readyCount || 0) > 0 || (status.inFlightCount || 0) > 0) && isOnlineRef.current) {
         triggerBackgroundSyncRef.current();
       }
 
@@ -149,18 +158,19 @@ export const OfflineProvider = ({ children }) => {
         online
       });
 
-      const wasOffline = !isOnline;
+      const wasOffline = !isOnlineRef.current;
       setIsOnline(online);
+      isOnlineRef.current = online;
 
-      // If we just came online and have unsynced or in_flight data, sync
-      if (online && wasOffline && (unsyncedCount > 0 || inFlightCount > 0)) {
+      // If we just came online and have ready or in_flight data, sync
+      if (online && wasOffline && (readyCountRef.current > 0 || inFlightCountRef.current > 0)) {
         console.log('Connection restored, triggering sync...');
-        triggerBackgroundSync();
+        triggerBackgroundSyncRef.current();
       }
     });
 
     return () => unsubscribe();
-  }, [isOnline, unsyncedCount, inFlightCount]);
+  }, []);
 
   /**
    * App state listener
@@ -173,9 +183,9 @@ export const OfflineProvider = ({ children }) => {
         console.log('App came to foreground');
         refreshSyncStatus();
 
-        // Auto-sync if online and have unsynced or in_flight data
-        if (isOnline && (unsyncedCount > 0 || inFlightCount > 0)) {
-          triggerBackgroundSync();
+        // Auto-sync if online and have ready or in_flight data
+        if (isOnlineRef.current && (readyCountRef.current > 0 || inFlightCountRef.current > 0)) {
+          triggerBackgroundSyncRef.current();
         }
       }
 
@@ -183,8 +193,8 @@ export const OfflineProvider = ({ children }) => {
       if (appState.current === 'active' && nextAppState.match(/inactive|background/)) {
         console.log('App going to background');
         // Try to sync before backgrounding
-        if (isOnline && (unsyncedCount > 0 || inFlightCount > 0)) {
-          triggerBackgroundSync();
+        if (isOnlineRef.current && (readyCountRef.current > 0 || inFlightCountRef.current > 0)) {
+          triggerBackgroundSyncRef.current();
         }
       }
 
@@ -192,7 +202,7 @@ export const OfflineProvider = ({ children }) => {
     });
 
     return () => subscription.remove();
-  }, [isOnline, unsyncedCount, inFlightCount, triggerBackgroundSync, refreshSyncStatus]);
+  }, [refreshSyncStatus]);
 
   /**
    * Auth-restore heal: rows RLS-quarantined while the session was dead requeue
@@ -252,7 +262,7 @@ export const OfflineProvider = ({ children }) => {
   const needsAttentionCount = syncStatus.needsAttentionCount ?? 0;
   const nextRetryAt = syncStatus.nextRetryAt ?? null;
 
-  const value = {
+  const value = useMemo(() => ({
     isOnline,
     isSyncing,
     unsyncedCount,
@@ -263,7 +273,20 @@ export const OfflineProvider = ({ children }) => {
     triggerBackgroundSync,
     syncNow,
     refreshSyncStatus,
-  };
+  }), [
+    isOnline,
+    isSyncing,
+    unsyncedCount,
+    inFlightCount,
+    waitingCount,
+    needsAttentionCount,
+    nextRetryAt,
+    syncStatus,
+    lastSyncResult,
+    triggerBackgroundSync,
+    syncNow,
+    refreshSyncStatus,
+  ]);
 
   return (
     <OfflineContext.Provider value={value}>

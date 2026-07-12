@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useContext, useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { useAuth } from './AuthContext';
 import { useOffline } from './OfflineContext';
 import { timeEntriesRepository, OPEN_TIME_ENTRY_EXISTS } from '../db/repositories/timeEntriesRepository';
@@ -21,15 +21,73 @@ function useTimeTrackingState() {
   const [loadingLocation, setLoadingLocation] = useState(false);
   const [snackbarMessage, setSnackbarMessage] = useState('');
   const [snackbarVisible, setSnackbarVisible] = useState(false);
+  const isSignedInRef = useRef(isSignedIn);
+  const activeEntryRef = useRef(activeEntry);
+  const userRef = useRef(user);
+  userRef.current = user;
 
-  const showSnackbar = (message) => {
+  const setSignedInState = useCallback((value) => {
+    isSignedInRef.current = value;
+    setIsSignedIn(value);
+  }, []);
+
+  const setActiveEntryState = useCallback((value) => {
+    activeEntryRef.current = value;
+    setActiveEntry(value);
+  }, []);
+
+  const showSnackbar = useCallback((message) => {
     setSnackbarMessage(message);
     setSnackbarVisible(true);
-  };
+  }, []);
+
+  const autoClockOut = useCallback(async (entry) => {
+    const signInMs = new Date(entry.sign_in_time).getTime();
+    const signOutTime = new Date(signInMs + MAX_SHIFT_MS).toISOString();
+
+    const updatedEntry = {
+      ...entry,
+      sign_out_time: signOutTime,
+      sign_out_lat: null,
+      sign_out_lon: null,
+      auto_clocked_out: true,
+      synced: false,
+    };
+
+    await timeEntriesRepository.updateTimeEntry(entry.id, updatedEntry);
+    setActiveEntryState(null);
+    setSignedInState(false);
+    await refreshSyncStatus();
+    triggerBackgroundSync?.();
+    showSnackbar(`Auto clocked out after ${MAX_SHIFT_HOURS} hours.`);
+  }, [refreshSyncStatus, triggerBackgroundSync, showSnackbar, setActiveEntryState, setSignedInState]);
+
+  const loadActiveEntry = useCallback(async () => {
+    try {
+      if (!user?.id) {
+        setActiveEntryState(null);
+        setSignedInState(false);
+        return;
+      }
+
+      const active = await timeEntriesRepository.getActiveTimeEntry(user.id);
+      if (active) {
+        const elapsed = Date.now() - new Date(active.sign_in_time).getTime();
+        if (elapsed >= MAX_SHIFT_MS) {
+          await autoClockOut(active);
+        } else {
+          setActiveEntryState(active);
+          setSignedInState(true);
+        }
+      }
+    } catch (error) {
+      console.error('Error loading active entry:', error);
+    }
+  }, [user?.id, autoClockOut, setActiveEntryState, setSignedInState]);
 
   useEffect(() => {
     loadActiveEntry();
-  }, [user?.id]);
+  }, [user?.id, loadActiveEntry]);
 
   useEffect(() => {
     if (!isSignedIn || !activeEntry) return undefined;
@@ -46,53 +104,9 @@ function useTimeTrackingState() {
     checkAutoClockOut();
     const interval = setInterval(checkAutoClockOut, 30 * 1000);
     return () => clearInterval(interval);
-  }, [isSignedIn, activeEntry]);
+  }, [isSignedIn, activeEntry, autoClockOut]);
 
-  const autoClockOut = async (entry) => {
-    const signInMs = new Date(entry.sign_in_time).getTime();
-    const signOutTime = new Date(signInMs + MAX_SHIFT_MS).toISOString();
-
-    const updatedEntry = {
-      ...entry,
-      sign_out_time: signOutTime,
-      sign_out_lat: null,
-      sign_out_lon: null,
-      auto_clocked_out: true,
-      synced: false,
-    };
-
-    await timeEntriesRepository.updateTimeEntry(entry.id, updatedEntry);
-    setActiveEntry(null);
-    setIsSignedIn(false);
-    await refreshSyncStatus();
-    triggerBackgroundSync?.();
-    showSnackbar(`Auto clocked out after ${MAX_SHIFT_HOURS} hours.`);
-  };
-
-  const loadActiveEntry = async () => {
-    try {
-      if (!user?.id) {
-        setActiveEntry(null);
-        setIsSignedIn(false);
-        return;
-      }
-
-      const active = await timeEntriesRepository.getActiveTimeEntry(user.id);
-      if (active) {
-        const elapsed = Date.now() - new Date(active.sign_in_time).getTime();
-        if (elapsed >= MAX_SHIFT_MS) {
-          await autoClockOut(active);
-        } else {
-          setActiveEntry(active);
-          setIsSignedIn(true);
-        }
-      }
-    } catch (error) {
-      console.error('Error loading active entry:', error);
-    }
-  };
-
-  const formatTime = (isoString) => {
+  const formatTime = useCallback((isoString) => {
     if (!isoString) return '--';
     const date = new Date(isoString);
     return date.toLocaleTimeString('en-US', {
@@ -100,10 +114,10 @@ function useTimeTrackingState() {
       minute: '2-digit',
       hour12: true,
     });
-  };
+  }, []);
 
-  const handleSignIn = async () => {
-    if (isSignedIn) {
+  const handleSignIn = useCallback(async () => {
+    if (isSignedInRef.current) {
       showSnackbar('Already clocked in. Please clock out first.');
       return;
     }
@@ -119,7 +133,7 @@ function useTimeTrackingState() {
       const { latitude, longitude } = locationResult.coords;
       const timeEntry = {
         id: uuidv4(),
-        user_id: user.id,
+        user_id: userRef.current.id,
         sign_in_time: new Date().toISOString(),
         sign_in_lat: latitude,
         sign_in_lon: longitude,
@@ -130,8 +144,8 @@ function useTimeTrackingState() {
       };
 
       await timeEntriesRepository.createOpenTimeEntry(timeEntry);
-      setActiveEntry(timeEntry);
-      setIsSignedIn(true);
+      setActiveEntryState(timeEntry);
+      setSignedInState(true);
       await refreshSyncStatus();
       triggerBackgroundSync?.();
       showSnackbar(`Clocked in at ${formatTime(timeEntry.sign_in_time)}`);
@@ -146,10 +160,13 @@ function useTimeTrackingState() {
     } finally {
       setLoadingLocation(false);
     }
-  };
+  }, [
+    refreshSyncStatus, triggerBackgroundSync, showSnackbar, formatTime,
+    loadActiveEntry, setActiveEntryState, setSignedInState,
+  ]);
 
-  const handleSignOut = async () => {
-    if (!isSignedIn || !activeEntry) {
+  const handleSignOut = useCallback(async () => {
+    if (!isSignedInRef.current || !activeEntryRef.current) {
       showSnackbar('You must clock in first before clocking out.');
       return;
     }
@@ -159,10 +176,10 @@ function useTimeTrackingState() {
       // Re-resolve from the repository: the cached entry may have been closed
       // by auto-clock-out or another path. Never write a sign_out_time onto a
       // row that is no longer the open entry.
-      const current = await timeEntriesRepository.getActiveTimeEntry(user.id);
+      const current = await timeEntriesRepository.getActiveTimeEntry(userRef.current.id);
       if (!current) {
-        setActiveEntry(null);
-        setIsSignedIn(false);
+        setActiveEntryState(null);
+        setSignedInState(false);
         showSnackbar('You are not clocked in.');
         return;
       }
@@ -188,8 +205,8 @@ function useTimeTrackingState() {
       };
 
       await timeEntriesRepository.updateTimeEntry(current.id, updatedEntry);
-      setActiveEntry(null);
-      setIsSignedIn(false);
+      setActiveEntryState(null);
+      setSignedInState(false);
       await refreshSyncStatus();
       triggerBackgroundSync?.();
       showSnackbar(`Clocked out. ${hoursWorked} hours worked.`);
@@ -199,9 +216,12 @@ function useTimeTrackingState() {
     } finally {
       setLoadingLocation(false);
     }
-  };
+  }, [
+    refreshSyncStatus, triggerBackgroundSync, showSnackbar,
+    setActiveEntryState, setSignedInState,
+  ]);
 
-  return {
+  return useMemo(() => ({
     isSignedIn,
     activeEntry,
     loadingLocation,
@@ -211,7 +231,10 @@ function useTimeTrackingState() {
     handleSignIn,
     handleSignOut,
     formatTime,
-  };
+  }), [
+    isSignedIn, activeEntry, loadingLocation, snackbarMessage, snackbarVisible,
+    setSnackbarVisible, handleSignIn, handleSignOut, formatTime,
+  ]);
 }
 
 const TimeTrackingContext = createContext(null);
