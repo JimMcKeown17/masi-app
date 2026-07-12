@@ -6,6 +6,11 @@ import { syncAll, getSyncStatus, requeueTerminalRlsFailures } from '../services/
 
 const BACKGROUND_SYNC_DEBOUNCE_MS = 1000;
 
+// Cheap deep-compare for sync status snapshots. The object is small (a few
+// counters, a per-table breakdown, and the usually-empty failedItems list),
+// and both sides come from the same code path, so key order is stable.
+const isSameSyncStatus = (a, b) => JSON.stringify(a) === JSON.stringify(b);
+
 const OfflineContext = createContext({
   isOnline: true,
   isSyncing: false,
@@ -50,7 +55,7 @@ export const OfflineProvider = ({ children }) => {
       const status = await getSyncStatus();
       setUnsyncedCount(status.unsyncedCount);
       setInFlightCount(status.inFlightCount || 0);
-      setSyncStatus(status);
+      setSyncStatus(prev => (isSameSyncStatus(prev, status) ? prev : status));
 
       if (autoTrigger && ((status.readyCount || 0) > 0 || (status.inFlightCount || 0) > 0) && isOnlineRef.current) {
         triggerBackgroundSyncRef.current();

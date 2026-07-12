@@ -374,6 +374,54 @@ describe('OfflineContext Plan 4 sync API', () => {
     expect(syncAll).toHaveBeenCalledTimes(1);
   });
 
+  test('a no-change status refresh does not re-render consumers', async () => {
+    let renders = 0;
+    const { result } = renderHook(() => {
+      renders += 1;
+      return useOffline();
+    }, { wrapper });
+    await waitFor(() => expect(getSyncStatus).toHaveBeenCalled());
+    await waitFor(() => expect(result.current.syncStatus).toEqual(expect.objectContaining({
+      unsyncedCount: 0,
+      readyCount: 0,
+      waitingCount: 0,
+    })));
+    getSyncStatus.mockClear();
+    getSyncStatus.mockResolvedValue({
+      ...result.current.syncStatus,
+      failedItems: [...result.current.syncStatus.failedItems],
+      needsAttentionItems: [...result.current.syncStatus.needsAttentionItems],
+      breakdown: { ...result.current.syncStatus.breakdown },
+    });
+
+    const rendersAfterMount = renders;
+    await act(async () => {
+      await result.current.refreshSyncStatus({ autoTrigger: false });
+    });
+
+    expect(renders).toBe(rendersAfterMount);
+
+    getSyncStatus.mockResolvedValue({
+      unsyncedCount: 3,
+      readyCount: 3,
+      inFlightCount: 0,
+      waitingCount: 3,
+      needsAttentionCount: 0,
+      backedOffCount: 0,
+      nextRetryAt: null,
+      failedCount: 0,
+      failedItems: [],
+      needsAttentionItems: [],
+      breakdown: { sessions: 3 },
+      lastSyncTime: null,
+      lastSuccessfulSyncTime: null,
+    });
+    await act(async () => {
+      await result.current.refreshSyncStatus({ autoTrigger: false });
+    });
+    expect(renders).toBeGreaterThan(rendersAfterMount);
+  });
+
   describe('unknown reachability is treated as online', () => {
     test('initial fetch with isInternetReachable null leaves the app online', async () => {
       NetInfo.fetch.mockResolvedValueOnce({ isConnected: true, isInternetReachable: null });
