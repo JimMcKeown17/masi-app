@@ -43,29 +43,7 @@ export const ChildrenProvider = ({ children }) => {
     [childrenList]
   );
 
-  // Load data on mount when user is authenticated
-  useEffect(() => {
-    activeUserIdRef.current = user?.id || null;
-    if (user?.id) {
-      loadPreloadedChildData();
-      return;
-    }
-    setChildrenList([]);
-    setGroups([]);
-    setChildrenGroups([]);
-    setLoading(false);
-  }, [user?.id]);
-
-  // Reload from storage after sync completes to pick up updated synced flags
-  const prevSyncingRef = useRef(isSyncing);
-  useEffect(() => {
-    if (prevSyncingRef.current && !isSyncing && user?.id) {
-      loadPreloadedChildData();
-    }
-    prevSyncingRef.current = isSyncing;
-  }, [isSyncing]);
-
-  const loadPreloadedChildData = async () => {
+  const loadPreloadedChildData = useCallback(async () => {
     const activeUserId = user?.id;
     if (!activeUserId) {
       setChildrenList([]);
@@ -133,14 +111,36 @@ export const ChildrenProvider = ({ children }) => {
         setLoading(false);
       }
     }
-  };
+  }, [user?.id]);
+
+  // Load data on mount when user is authenticated
+  useEffect(() => {
+    activeUserIdRef.current = user?.id || null;
+    if (user?.id) {
+      loadPreloadedChildData();
+      return;
+    }
+    setChildrenList([]);
+    setGroups([]);
+    setChildrenGroups([]);
+    setLoading(false);
+  }, [user?.id, loadPreloadedChildData]);
+
+  // Reload from storage after sync completes to pick up updated synced flags
+  const prevSyncingRef = useRef(isSyncing);
+  useEffect(() => {
+    if (prevSyncingRef.current && !isSyncing && user?.id) {
+      loadPreloadedChildData();
+    }
+    prevSyncingRef.current = isSyncing;
+  }, [isSyncing, user?.id, loadPreloadedChildData]);
 
   /**
    * Load children assigned to current user
    * Cache-first pattern: show cached data immediately, then merge from server.
    * Unsynced local records are preserved so they aren't lost before sync.
    */
-  const loadChildren = async () => {
+  const loadChildren = useCallback(async () => {
     try {
       setLoading(true);
 
@@ -150,13 +150,13 @@ export const ChildrenProvider = ({ children }) => {
     } finally {
       setLoading(false);
     }
-  };
+  }, [loadPreloadedChildData]);
 
   /**
    * Add a new child
    * Creates both the child record AND the staff-child assignment (many-to-many)
    */
-  const addChild = async (childData) => {
+  const addChild = useCallback(async (childData) => {
     try {
       const childId = uuidv4();
 
@@ -185,12 +185,12 @@ export const ChildrenProvider = ({ children }) => {
       console.error('Error adding child:', error);
       return { success: false, error };
     }
-  };
+  }, [user?.id, refreshSyncStatus]);
 
   /**
    * Update a child's information
    */
-  const updateChild = async (childId, updates) => {
+  const updateChild = useCallback(async (childId, updates) => {
     try {
       const updated = {
         ...updates,
@@ -202,8 +202,8 @@ export const ChildrenProvider = ({ children }) => {
       // with the acting user (matches saveChild) — see childrenRepository.updateChild (#35).
       await storage.updateChild(childId, updated, { actorUserId: user.id });
 
-      setChildrenList(
-        childrenList.map(c =>
+      setChildrenList(prev =>
+        prev.map(c =>
           c.id === childId ? { ...c, ...updated } : c
         )
       );
@@ -215,7 +215,7 @@ export const ChildrenProvider = ({ children }) => {
       console.error('Error updating child:', error);
       return { success: false, error };
     }
-  };
+  }, [user?.id, refreshSyncStatus]);
 
   /**
    * Hide a child from the user's active list (soft-delete).
@@ -225,7 +225,7 @@ export const ChildrenProvider = ({ children }) => {
    * and the derived `children` value in the context filters out records
    * with hidden_at set.
    */
-  const deleteChild = async (childId) => {
+  const deleteChild = useCallback(async (childId) => {
     try {
       const ok = await storage.deleteChild(childId, {
         actorUserId: user.id,
@@ -244,23 +244,23 @@ export const ChildrenProvider = ({ children }) => {
       console.error('Error hiding child:', error);
       return { success: false, error };
     }
-  };
+  }, [user?.id, refreshSyncStatus]);
 
   /**
    * Load groups for current user
    */
-  const loadGroups = async () => {
+  const loadGroups = useCallback(async () => {
     try {
       await loadPreloadedChildData();
     } catch (error) {
       console.error('Error in loadGroups:', error);
     }
-  };
+  }, [loadPreloadedChildData]);
 
   /**
    * Add a new group
    */
-  const addGroup = async (groupData) => {
+  const addGroup = useCallback(async (groupData) => {
     try {
       const group = {
         id: uuidv4(),
@@ -273,7 +273,7 @@ export const ChildrenProvider = ({ children }) => {
       };
 
       await storage.saveGroup(group);
-      setGroups([...groups, group]);
+      setGroups(prev => [...prev, group]);
       await refreshSyncStatus();
 
       return { success: true, group };
@@ -281,12 +281,12 @@ export const ChildrenProvider = ({ children }) => {
       console.error('Error adding group:', error);
       return { success: false, error };
     }
-  };
+  }, [user?.id, refreshSyncStatus]);
 
   /**
    * Update a group's information
    */
-  const updateGroup = async (groupId, updates) => {
+  const updateGroup = useCallback(async (groupId, updates) => {
     try {
       const updated = {
         ...updates,
@@ -296,8 +296,8 @@ export const ChildrenProvider = ({ children }) => {
 
       await storage.updateGroup(groupId, updated);
 
-      setGroups(
-        groups.map(g =>
+      setGroups(prev =>
+        prev.map(g =>
           g.id === groupId ? { ...g, ...updated } : g
         )
       );
@@ -309,23 +309,20 @@ export const ChildrenProvider = ({ children }) => {
       console.error('Error updating group:', error);
       return { success: false, error };
     }
-  };
+  }, [refreshSyncStatus]);
 
   /**
    * Delete a group
    * Also removes all child-group memberships
    */
-  const deleteGroup = async (groupId) => {
+  const deleteGroup = useCallback(async (groupId) => {
     try {
       await storage.deleteGroup(groupId);
-      setGroups(groups.filter(g => g.id !== groupId));
+      setGroups(prev => prev.filter(g => g.id !== groupId));
 
       // Remove all memberships for this group from active state. Repository
       // archive/delete handles local persistence and outbox rows.
-      const updatedMemberships = childrenGroups.filter(
-        cg => cg.group_id !== groupId
-      );
-      setChildrenGroups(updatedMemberships);
+      setChildrenGroups(prev => prev.filter(cg => cg.group_id !== groupId));
       await refreshSyncStatus();
 
       return { success: true };
@@ -333,7 +330,7 @@ export const ChildrenProvider = ({ children }) => {
       console.error('Error deleting group:', error);
       return { success: false, error };
     }
-  };
+  }, [refreshSyncStatus]);
 
   /**
    * Load children-groups junction data
@@ -349,7 +346,7 @@ export const ChildrenProvider = ({ children }) => {
   /**
    * Add a child to a group
    */
-  const addChildToGroup = async (childId, groupId) => {
+  const addChildToGroup = useCallback(async (childId, groupId) => {
     try {
       // Check if already exists
       const exists = childrenGroups.some(
@@ -370,7 +367,7 @@ export const ChildrenProvider = ({ children }) => {
       };
 
       await storage.saveChildrenGroup(membership);
-      setChildrenGroups([...childrenGroups, membership]);
+      setChildrenGroups(prev => [...prev, membership]);
       await refreshSyncStatus();
 
       return { success: true, membership };
@@ -378,17 +375,17 @@ export const ChildrenProvider = ({ children }) => {
       console.error('Error adding child to group:', error);
       return { success: false, error };
     }
-  };
+  }, [childrenGroups, user?.id, refreshSyncStatus]);
 
   /**
    * Remove a child from a group
    */
-  const removeChildFromGroup = async (childId, groupId) => {
+  const removeChildFromGroup = useCallback(async (childId, groupId) => {
     try {
       await storage.deleteChildrenGroup(childId, groupId);
 
-      setChildrenGroups(
-        childrenGroups.filter(
+      setChildrenGroups(prev =>
+        prev.filter(
           cg => !(cg.child_id === childId && cg.group_id === groupId)
         )
       );
@@ -399,59 +396,64 @@ export const ChildrenProvider = ({ children }) => {
       console.error('Error removing child from group:', error);
       return { success: false, error };
     }
-  };
+  }, [refreshSyncStatus]);
 
   /**
    * Get all children in a specific group.
    * Filters against visibleChildren so hidden children can't leak into
    * session selection (ChildSelector) or group counts (GroupPickerBottomSheet).
    */
-  const getChildrenInGroup = (groupId) => {
+  const getChildrenInGroup = useCallback((groupId) => {
     const membershipIds = childrenGroups
       .filter(cg => cg.group_id === groupId && !cg.removed_at)
       .map(cg => cg.child_id);
 
     return visibleChildren.filter(c => membershipIds.includes(c.id));
-  };
+  }, [childrenGroups, visibleChildren]);
 
   /**
    * Get all groups a child belongs to
    */
-  const getGroupsForChild = (childId) => {
+  const getGroupsForChild = useCallback((childId) => {
     const groupIds = childrenGroups
       .filter(cg => cg.child_id === childId && !cg.removed_at)
       .map(cg => cg.group_id);
 
     return groups.filter(g => groupIds.includes(g.id));
-  };
+  }, [childrenGroups, groups]);
 
   // `children` is the filtered active list — what every list view, picker, and
   // stats helper should consume. `allChildren` exposes the unfiltered set
   // including soft-deleted (hidden_at IS NOT NULL) records — only use it for
   // historical name resolution where dropping a name to "Unknown" would degrade UX.
+  const value = useMemo(() => ({
+    children: visibleChildren,
+    allChildren: childrenList,
+    getChildById,
+    groups,
+    childrenGroups,
+    loading,
+    loadChildren,
+    addChild,
+    updateChild,
+    deleteChild,
+    loadGroups,
+    addGroup,
+    updateGroup,
+    deleteGroup,
+    addChildToGroup,
+    removeChildFromGroup,
+    getChildrenInGroup,
+    getGroupsForChild,
+  }), [
+    visibleChildren, childrenList, getChildById, groups, childrenGroups, loading,
+    loadChildren, addChild, updateChild, deleteChild, loadGroups, addGroup,
+    updateGroup, deleteGroup, addChildToGroup, removeChildFromGroup,
+    getChildrenInGroup, getGroupsForChild,
+  ]);
+
   return (
-    <ChildrenContext.Provider
-      value={{
-        children: visibleChildren,
-        allChildren: childrenList,
-        getChildById,
-        groups,
-        childrenGroups,
-        loading,
-        loadChildren,
-        addChild,
-        updateChild,
-        deleteChild,
-        loadGroups,
-        addGroup,
-        updateGroup,
-        deleteGroup,
-        addChildToGroup,
-        removeChildFromGroup,
-        getChildrenInGroup,
-        getGroupsForChild,
-      }}
-    >
+    <ChildrenContext.Provider value={value}>
       {children}
     </ChildrenContext.Provider>
   );
