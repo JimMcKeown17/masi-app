@@ -1,4 +1,4 @@
-import React, { createContext, useState, useEffect, useContext, useRef } from 'react';
+import React, { createContext, useState, useEffect, useContext, useRef, useCallback, useMemo } from 'react';
 import { supabase } from '../services/supabaseClient';
 import { storage } from '../utils/storage';
 import { fetchAndCacheSchools } from '../services/offlineSync';
@@ -30,43 +30,12 @@ export const ClassesProvider = ({ children: reactChildren }) => {
   const [loading, setLoading] = useState(false);
   const activeUserIdRef = useRef(null);
 
-  // Load data on mount when user is authenticated
-  useEffect(() => {
-    activeUserIdRef.current = user?.id || null;
-    if (user?.id) {
-      loadSchools();
-      loadClasses();
-      return;
-    }
-    setSchools([]);
-    setClasses([]);
-    setLoading(false);
-  }, [user?.id]);
-
-  // Re-fetch schools when connectivity is restored (they may have failed on mount)
-  const prevOnlineRef = useRef(isOnline);
-  useEffect(() => {
-    if (!prevOnlineRef.current && isOnline && user?.id && schools.length === 0) {
-      loadSchools();
-    }
-    prevOnlineRef.current = isOnline;
-  }, [isOnline]);
-
-  // Reload from storage after sync completes to pick up updated synced flags
-  const prevSyncingRef = useRef(isSyncing);
-  useEffect(() => {
-    if (prevSyncingRef.current && !isSyncing && user?.id) {
-      loadClasses();
-    }
-    prevSyncingRef.current = isSyncing;
-  }, [isSyncing]);
-
   /**
    * Load schools — cache-first, then always attempt a server fetch.
    * We don't gate on isOnline because it can be stale (race condition on mount).
    * If the fetch fails (offline / network error), we just keep the cached data.
    */
-  const loadSchools = async () => {
+  const loadSchools = useCallback(async () => {
     try {
       const activeUserId = user?.id;
       const cached = await storage.getSchools();
@@ -84,13 +53,13 @@ export const ClassesProvider = ({ children: reactChildren }) => {
     } catch (error) {
       console.error('Error in loadSchools:', error);
     }
-  };
+  }, [user?.id]);
 
   /**
    * Load classes for current user — cache-first, merge from server if online.
    * Same pattern as loadGroups in ChildrenContext.
    */
-  const loadClasses = async () => {
+  const loadClasses = useCallback(async () => {
     try {
       setLoading(true);
       const activeUserId = user?.id;
@@ -165,12 +134,43 @@ export const ClassesProvider = ({ children: reactChildren }) => {
         setLoading(false);
       }
     }
-  };
+  }, [user?.id]);
+
+  // Load data on mount when user is authenticated
+  useEffect(() => {
+    activeUserIdRef.current = user?.id || null;
+    if (user?.id) {
+      loadSchools();
+      loadClasses();
+      return;
+    }
+    setSchools([]);
+    setClasses([]);
+    setLoading(false);
+  }, [user?.id, loadSchools, loadClasses]);
+
+  // Re-fetch schools when connectivity is restored (they may have failed on mount)
+  const prevOnlineRef = useRef(isOnline);
+  useEffect(() => {
+    if (!prevOnlineRef.current && isOnline && user?.id && schools.length === 0) {
+      loadSchools();
+    }
+    prevOnlineRef.current = isOnline;
+  }, [isOnline, user?.id, schools.length, loadSchools]);
+
+  // Reload from storage after sync completes to pick up updated synced flags
+  const prevSyncingRef = useRef(isSyncing);
+  useEffect(() => {
+    if (prevSyncingRef.current && !isSyncing && user?.id) {
+      loadClasses();
+    }
+    prevSyncingRef.current = isSyncing;
+  }, [isSyncing, user?.id, loadClasses]);
 
   /**
    * Add a new class
    */
-  const addClass = async (classData) => {
+  const addClass = useCallback(async (classData) => {
     try {
       const activeAcademicYear = classData.academic_year_id
         ? null
@@ -206,12 +206,12 @@ export const ClassesProvider = ({ children: reactChildren }) => {
       console.error('Error adding class:', error);
       return { success: false, error };
     }
-  };
+  }, [user?.id, refreshSyncStatus]);
 
   /**
    * Update a class
    */
-  const updateClass = async (classId, updates) => {
+  const updateClass = useCallback(async (classId, updates) => {
     try {
       const updated = {
         ...updates,
@@ -230,14 +230,14 @@ export const ClassesProvider = ({ children: reactChildren }) => {
       console.error('Error updating class:', error);
       return { success: false, error };
     }
-  };
+  }, [refreshSyncStatus]);
 
   /**
    * Archive a class through the storage facade.
    * Child membership/assignment side effects belong in the repository transaction,
    * so the context should not double-write child rows here.
    */
-  const deleteClass = async (classId) => {
+  const deleteClass = useCallback(async (classId) => {
     try {
       await storage.deleteClass(classId);
       setClasses(prev => prev.filter(c => c.id !== classId));
@@ -248,29 +248,32 @@ export const ClassesProvider = ({ children: reactChildren }) => {
       console.error('Error deleting class:', error);
       return { success: false, error };
     }
-  };
+  }, [refreshSyncStatus]);
 
   /**
    * Get children in a specific class
    */
-  const getChildrenInClass = (classId) => {
+  const getChildrenInClass = useCallback((classId) => {
     return childrenList.filter(c => c.class_id === classId);
-  };
+  }, [childrenList]);
+
+  const value = useMemo(() => ({
+    schools,
+    classes,
+    loading,
+    loadSchools,
+    loadClasses,
+    addClass,
+    updateClass,
+    deleteClass,
+    getChildrenInClass,
+  }), [
+    schools, classes, loading, loadSchools, loadClasses, addClass,
+    updateClass, deleteClass, getChildrenInClass,
+  ]);
 
   return (
-    <ClassesContext.Provider
-      value={{
-        schools,
-        classes,
-        loading,
-        loadSchools,
-        loadClasses,
-        addClass,
-        updateClass,
-        deleteClass,
-        getChildrenInClass,
-      }}
-    >
+    <ClassesContext.Provider value={value}>
       {reactChildren}
     </ClassesContext.Provider>
   );

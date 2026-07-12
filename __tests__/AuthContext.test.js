@@ -1,5 +1,6 @@
 import React from 'react';
-import { act, renderHook, waitFor } from '@testing-library/react-native';
+import { act, fireEvent, render, renderHook, waitFor } from '@testing-library/react-native';
+import { Pressable } from 'react-native';
 import { AuthProvider, useAuth } from '../src/context/AuthContext';
 import { supabase } from '../src/services/supabaseClient';
 import { pullReferenceData } from '../src/services/offlineSync';
@@ -106,6 +107,34 @@ describe('AuthContext Plan 5 startup discipline', () => {
 
     await waitFor(() => expect(pullReferenceData).toHaveBeenCalledWith({ userId: 'user-1' }));
     await waitFor(() => expect(supabase.from).toHaveBeenCalledWith('users'));
+  });
+
+  test('a parent-only rerender does not re-render Auth consumers', async () => {
+    let authConsumerRenders = 0;
+    const AuthProbe = React.memo(() => {
+      useAuth();
+      authConsumerRenders += 1;
+      return null;
+    });
+    const Harness = () => {
+      const [, setParentTick] = React.useState(0);
+      return (
+        <>
+          <Pressable testID="parent-rerender" onPress={() => setParentTick(value => value + 1)} />
+          <AuthProvider>
+            <AuthProbe />
+          </AuthProvider>
+        </>
+      );
+    };
+
+    const { getByTestId } = render(<Harness />);
+    await waitFor(() => expect(authCallback).toEqual(expect.any(Function)));
+    const rendersAfterMount = authConsumerRenders;
+
+    fireEvent.press(getByTestId('parent-rerender'));
+
+    expect(authConsumerRenders).toBe(rendersAfterMount);
   });
 
   test('authenticated startup pulls reference data before publishing user to child providers', async () => {

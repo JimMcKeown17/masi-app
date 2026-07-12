@@ -1,4 +1,4 @@
-import React, { createContext, useState, useEffect, useContext, useRef } from 'react';
+import React, { createContext, useState, useEffect, useContext, useRef, useCallback, useMemo } from 'react';
 import { supabase } from '../services/supabaseClient';
 import { enqueueSupabaseRequest } from '../services/supabaseRequestQueue';
 import { pullReferenceData } from '../services/offlineSync';
@@ -225,7 +225,7 @@ export const AuthProvider = ({ children }) => {
     }
   };
 
-  const signIn = async (email, password) => {
+  const signIn = useCallback(async (email, password) => {
     try {
       const { data, error } = await supabase.auth.signInWithPassword({
         email,
@@ -238,9 +238,9 @@ export const AuthProvider = ({ children }) => {
       console.error('Sign in error:', error);
       return { data: null, error };
     }
-  };
+  }, []);
 
-  const signOut = async () => {
+  const signOut = useCallback(async () => {
     manualSignOutInProgressRef.current = true;
     clearPendingSignOutTimeout();
     invalidateProfileLoads();
@@ -260,9 +260,9 @@ export const AuthProvider = ({ children }) => {
     });
     manualSignOutInProgressRef.current = false;
     return { error: null };
-  };
+  }, []);
 
-  const resetPassword = async (email) => {
+  const resetPassword = useCallback(async (email) => {
     try {
       const { error } = await supabase.auth.resetPasswordForEmail(email, {
         redirectTo: 'masi-app://reset-password',
@@ -273,9 +273,9 @@ export const AuthProvider = ({ children }) => {
       console.error('Reset password error:', error);
       return { error };
     }
-  };
+  }, []);
 
-  const updatePassword = async (newPassword) => {
+  const updatePassword = useCallback(async (newPassword) => {
     try {
       const { error } = await supabase.auth.updateUser({
         password: newPassword,
@@ -286,15 +286,15 @@ export const AuthProvider = ({ children }) => {
       console.error('Update password error:', error);
       return { error };
     }
-  };
+  }, []);
 
-  const refreshProfile = async () => {
+  const refreshProfile = useCallback(async () => {
     if (user?.id) {
       await loadUserProfile(user.id);
     }
-  };
+  }, [user?.id]);
 
-  const value = {
+  const value = useMemo(() => ({
     user,
     profile,
     session,
@@ -304,7 +304,10 @@ export const AuthProvider = ({ children }) => {
     resetPassword,
     updatePassword,
     refreshProfile,
-  };
+  }), [
+    user, profile, session, loading, signIn, signOut,
+    resetPassword, updatePassword, refreshProfile,
+  ]);
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 };
