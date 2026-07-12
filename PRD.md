@@ -795,6 +795,18 @@ Phase 2 complete 2026-07-04: PR #41 open, all six task commits reviewed PASS, CI
 
 Phase 2 local gates 2026-07-04: unit suite `120/664` and integration suite `23/147` green under Node 20. `documentation/rls-sync-contract-map.md` untouched. Local commit/push/PR gate pending because this sandbox cannot create `.git/index.lock`.
 
+#### Improvements 2026-07 - Phase 3: Amplifier
+Branch: `improvement/p3-amplifier`
+Roadmap: `documentation/improvements-2026-07-roadmap.md` · Plan: `docs/superpowers/plans/2026-07-04-improvements-phase3-amplifier.md`
+
+- [x] Task 1: Gate automatic sync on ready work instead of backed-off counts - `18b20b6`
+- [x] Task 2: Bail the 30-second status poll when the snapshot is unchanged - `9391b5c`
+- [x] Task 3: Stabilize NetInfo/AppState subscriptions and memoize OfflineContext - `238e133`
+- [x] Task 4: Memoize ChildrenContext and cut the Offline render cascade - `bfae863`
+- [x] Task 5: Memoize Classes, Lookups, Auth, and TimeTracking providers - `8b442bc`
+
+Phase 3 implementation complete 2026-07-12: unit suite `145/843` and integration suite `24/185` green under Node 20. No sync payload, RLS, outbox-ordering, or schema contract changed; `documentation/rls-sync-contract-map.md` remains untouched. Push, PR, CI, merge, and the post-merge device gate remain with the orchestrator and Jim.
+
 #### Sync auth hardening (#43-45)
 Branch: `fix/sync-auth-hardening`
 Plan: `docs/superpowers/plans/2026-07-06-sync-auth-hardening.md`
