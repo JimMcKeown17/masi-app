@@ -3,8 +3,21 @@ const KNOWN_SUPABASE_PROJECTS = {
   'sqlite-staging': 'segygjzpujphwvrubusm',
 };
 
-const PRIMARY_SUPABASE_URL = 'https://jcqrlwetutnpuchjoyyd.supabase.co';
-const PRIMARY_SUPABASE_ANON_KEY = 'sb_publishable_Fg3Papwm3y4H3_L5c9RrWg_WwDk8Rs0';
+// The forward backend (masi-app-sqlite) is the default; the retired pre-SQLite
+// backend stays reachable only behind EXPO_PUBLIC_SUPABASE_TARGET=primary.
+const DEFAULT_SUPABASE_TARGET = 'sqlite-staging';
+
+// Publishable (anon) keys only; safe to commit.
+const TARGET_FALLBACKS = {
+  primary: {
+    url: 'https://jcqrlwetutnpuchjoyyd.supabase.co',
+    anonKey: 'sb_publishable_Fg3Papwm3y4H3_L5c9RrWg_WwDk8Rs0',
+  },
+  'sqlite-staging': {
+    url: 'https://segygjzpujphwvrubusm.supabase.co',
+    anonKey: 'sb_publishable_nBApylByXt6pn1Owd8eaxg_MA_QwZg7',
+  },
+};
 
 const readValue = (env, expoExtra, envName, extraName) => (
   env?.[envName] || expoExtra?.[extraName] || ''
@@ -27,13 +40,20 @@ const assertUrlMatchesProject = (url, projectId) => {
   }
 };
 
+const targetOwningUrl = (url) => {
+  const normalized = normalizeUrl(url);
+  return Object.keys(KNOWN_SUPABASE_PROJECTS).find(
+    (target) => expectedSupabaseUrl(KNOWN_SUPABASE_PROJECTS[target]) === normalized
+  );
+};
+
 const resolveSupabaseProjectConfig = ({
   env = process.env,
   expoExtra = {},
 } = {}) => {
   const supabaseTarget =
     readValue(env, expoExtra, 'EXPO_PUBLIC_SUPABASE_TARGET', 'supabaseTarget') ||
-    'primary';
+    DEFAULT_SUPABASE_TARGET;
 
   const expectedProjectId = KNOWN_SUPABASE_PROJECTS[supabaseTarget];
   if (!expectedProjectId) {
@@ -54,10 +74,10 @@ const resolveSupabaseProjectConfig = ({
     'supabaseAnonKey'
   );
 
+  const fallbacks = TARGET_FALLBACKS[supabaseTarget] || {};
   const supabaseProjectId = envProjectId || expectedProjectId;
-  const supabaseUrl = envUrl || (supabaseTarget === 'primary' ? PRIMARY_SUPABASE_URL : '');
-  const supabaseAnonKey =
-    envAnonKey || (supabaseTarget === 'primary' ? PRIMARY_SUPABASE_ANON_KEY : '');
+  const supabaseUrl = envUrl || fallbacks.url || '';
+  const supabaseAnonKey = envAnonKey || fallbacks.anonKey || '';
 
   assertPresent(supabaseProjectId, 'EXPO_PUBLIC_SUPABASE_PROJECT_ID', supabaseTarget);
   assertPresent(supabaseUrl, 'EXPO_PUBLIC_SUPABASE_URL', supabaseTarget);
@@ -66,6 +86,15 @@ const resolveSupabaseProjectConfig = ({
   if (supabaseProjectId !== expectedProjectId) {
     throw new Error(
       `Supabase project ID "${supabaseProjectId}" is not allowed for target "${supabaseTarget}".`
+    );
+  }
+
+  const owningTarget = targetOwningUrl(supabaseUrl);
+  if (owningTarget && owningTarget !== supabaseTarget) {
+    throw new Error(
+      `EXPO_PUBLIC_SUPABASE_URL "${supabaseUrl}" belongs to target "${owningTarget}" but the selected target is "${supabaseTarget}". `
+      + `Either set EXPO_PUBLIC_SUPABASE_TARGET=${owningTarget} explicitly, or remove stale `
+      + `EXPO_PUBLIC_SUPABASE_URL/EXPO_PUBLIC_SUPABASE_ANON_KEY overrides (e.g. from .env.local).`
     );
   }
 

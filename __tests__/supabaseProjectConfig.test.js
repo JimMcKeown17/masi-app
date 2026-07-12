@@ -4,33 +4,41 @@ const {
 } = require('../config/supabaseProjectConfig');
 
 describe('supabase project config resolver', () => {
-  test('defaults to the current primary project', () => {
+  test('defaults to the sqlite backend with zero env configuration', () => {
+    const config = resolveSupabaseProjectConfig({ env: {}, expoExtra: {} });
+
+    expect(config).toEqual({
+      supabaseTarget: 'sqlite-staging',
+      supabaseProjectId: 'segygjzpujphwvrubusm',
+      supabaseUrl: 'https://segygjzpujphwvrubusm.supabase.co',
+      supabaseAnonKey: 'sb_publishable_nBApylByXt6pn1Owd8eaxg_MA_QwZg7',
+    });
+    expect(KNOWN_SUPABASE_PROJECTS['sqlite-staging']).toBe('segygjzpujphwvrubusm');
+  });
+
+  test('legacy backend stays reachable behind an explicit target', () => {
     const config = resolveSupabaseProjectConfig({
-      env: {},
-      expoExtra: {
-        supabaseUrl: 'https://jcqrlwetutnpuchjoyyd.supabase.co',
-        supabaseAnonKey: 'primary-key',
-      },
+      env: { EXPO_PUBLIC_SUPABASE_TARGET: 'primary' },
+      expoExtra: {},
     });
 
     expect(config).toEqual({
       supabaseTarget: 'primary',
       supabaseProjectId: 'jcqrlwetutnpuchjoyyd',
       supabaseUrl: 'https://jcqrlwetutnpuchjoyyd.supabase.co',
-      supabaseAnonKey: 'primary-key',
+      supabaseAnonKey: 'sb_publishable_Fg3Papwm3y4H3_L5c9RrWg_WwDk8Rs0',
     });
     expect(KNOWN_SUPABASE_PROJECTS.primary).toBe('jcqrlwetutnpuchjoyyd');
   });
 
-  test('requires explicit project ID, URL, and key for sqlite staging', () => {
+  test('a stale legacy URL under the default target fails with an actionable error', () => {
     expect(() => resolveSupabaseProjectConfig({
       env: {
-        EXPO_PUBLIC_SUPABASE_TARGET: 'sqlite-staging',
-        EXPO_PUBLIC_SUPABASE_PROJECT_ID: 'segygjzpujphwvrubusm',
-        EXPO_PUBLIC_SUPABASE_URL: 'https://segygjzpujphwvrubusm.supabase.co',
+        EXPO_PUBLIC_SUPABASE_URL: 'https://jcqrlwetutnpuchjoyyd.supabase.co',
+        EXPO_PUBLIC_SUPABASE_ANON_KEY: 'legacy-key',
       },
       expoExtra: {},
-    })).toThrow(/EXPO_PUBLIC_SUPABASE_ANON_KEY/);
+    })).toThrow(/belongs to target "primary".*EXPO_PUBLIC_SUPABASE_TARGET/s);
   });
 
   test('resolves the sqlite staging target from explicit env values', () => {
