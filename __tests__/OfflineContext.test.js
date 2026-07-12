@@ -6,6 +6,8 @@ import { OfflineProvider, useOffline } from '../src/context/OfflineContext';
 import { supabase } from '../src/services/supabaseClient';
 import { getSyncStatus, requeueTerminalRlsFailures, syncAll } from '../src/services/offlineSync';
 
+const appStateCurrentStateDescriptor = Object.getOwnPropertyDescriptor(AppState, 'currentState');
+
 jest.mock('../src/services/offlineSync', () => ({
   getSyncStatus: jest.fn(),
   requeueTerminalRlsFailures: jest.fn(async () => 0),
@@ -42,6 +44,11 @@ const renderOfflineHook = async () => {
 describe('OfflineContext Plan 4 sync API', () => {
   beforeEach(() => {
     jest.useFakeTimers();
+    Object.defineProperty(AppState, 'currentState', {
+      configurable: true,
+      writable: true,
+      value: 'active',
+    });
     jest.spyOn(AppState, 'addEventListener').mockReturnValue({ remove: jest.fn() });
     getSyncStatus.mockResolvedValue({
       unsyncedCount: 0,
@@ -62,6 +69,7 @@ describe('OfflineContext Plan 4 sync API', () => {
   });
 
   afterEach(() => {
+    Object.defineProperty(AppState, 'currentState', appStateCurrentStateDescriptor);
     jest.useRealTimers();
     jest.clearAllMocks();
     jest.restoreAllMocks();
@@ -420,6 +428,146 @@ describe('OfflineContext Plan 4 sync API', () => {
       await result.current.refreshSyncStatus({ autoTrigger: false });
     });
     expect(renders).toBeGreaterThan(rendersAfterMount);
+  });
+
+  test('status changes do not re-subscribe the NetInfo and AppState listeners', async () => {
+    const { result } = await renderOfflineHook();
+    const netInfoSubscriptions = NetInfo.addEventListener.mock.calls.length;
+    const appStateSubscriptions = AppState.addEventListener.mock.calls.length;
+    const netInfoUnsubscribe = NetInfo.addEventListener.mock.results[0].value;
+    const appStateRemove = AppState.addEventListener.mock.results[0].value.remove;
+
+    getSyncStatus.mockResolvedValue({
+      unsyncedCount: 5,
+      readyCount: 5,
+      inFlightCount: 1,
+      waitingCount: 6,
+      needsAttentionCount: 2,
+      backedOffCount: 0,
+      nextRetryAt: '2099-01-01T00:00:00.000Z',
+      failedCount: 2,
+      failedItems: [],
+      needsAttentionItems: [],
+      breakdown: { sessions: 5 },
+      lastSyncTime: null,
+      lastSuccessfulSyncTime: null,
+    });
+    await act(async () => {
+      await result.current.refreshSyncStatus({ autoTrigger: false });
+    });
+
+    expect(NetInfo.addEventListener.mock.calls.length).toBe(netInfoSubscriptions);
+    expect(AppState.addEventListener.mock.calls.length).toBe(appStateSubscriptions);
+    expect(netInfoUnsubscribe).not.toHaveBeenCalled();
+    expect(appStateRemove).not.toHaveBeenCalled();
+    expect(result.current.waitingCount).toBe(6);
+    expect(result.current.needsAttentionCount).toBe(2);
+    expect(result.current.nextRetryAt).toBe('2099-01-01T00:00:00.000Z');
+  });
+
+  test('reconnecting with ready work still schedules a background sync', async () => {
+    const { result } = await renderOfflineHook();
+    getSyncStatus.mockResolvedValue({
+      unsyncedCount: 2,
+      readyCount: 2,
+      inFlightCount: 0,
+      waitingCount: 2,
+      needsAttentionCount: 0,
+      backedOffCount: 0,
+      nextRetryAt: null,
+      failedCount: 0,
+      failedItems: [],
+      needsAttentionItems: [],
+      breakdown: { sessions: 2 },
+      lastSyncTime: null,
+      lastSuccessfulSyncTime: null,
+    });
+    await act(async () => {
+      await result.current.refreshSyncStatus({ autoTrigger: false });
+    });
+    syncAll.mockClear();
+
+    const listener = NetInfo.addEventListener.mock.calls[0][0];
+    act(() => {
+      listener({ isConnected: false, isInternetReachable: false });
+      listener({ isConnected: true, isInternetReachable: true });
+    });
+    await act(async () => {
+      jest.advanceTimersByTime(1500);
+      await Promise.resolve();
+    });
+
+    expect(syncAll).toHaveBeenCalledTimes(1);
+  });
+
+  test('reconnecting with only backed-off work does not schedule a background sync', async () => {
+    const { result } = await renderOfflineHook();
+    getSyncStatus.mockResolvedValue({
+      unsyncedCount: 2,
+      readyCount: 0,
+      inFlightCount: 0,
+      waitingCount: 2,
+      needsAttentionCount: 0,
+      backedOffCount: 2,
+      nextRetryAt: '2099-01-01T00:00:00.000Z',
+      failedCount: 2,
+      failedItems: [],
+      needsAttentionItems: [],
+      breakdown: { sessions: 2 },
+      lastSyncTime: null,
+      lastSuccessfulSyncTime: null,
+    });
+    await act(async () => {
+      await result.current.refreshSyncStatus({ autoTrigger: false });
+    });
+    syncAll.mockClear();
+
+    const listener = NetInfo.addEventListener.mock.calls[0][0];
+    act(() => {
+      listener({ isConnected: false, isInternetReachable: false });
+      listener({ isConnected: true, isInternetReachable: true });
+    });
+    await act(async () => {
+      jest.advanceTimersByTime(1500);
+      await Promise.resolve();
+    });
+
+    expect(syncAll).not.toHaveBeenCalled();
+  });
+
+  test('foregrounding with only backed-off work does not schedule a background sync', async () => {
+    const { result } = await renderOfflineHook();
+    getSyncStatus.mockResolvedValue({
+      unsyncedCount: 2,
+      readyCount: 0,
+      inFlightCount: 0,
+      waitingCount: 2,
+      needsAttentionCount: 0,
+      backedOffCount: 2,
+      nextRetryAt: '2099-01-01T00:00:00.000Z',
+      failedCount: 2,
+      failedItems: [],
+      needsAttentionItems: [],
+      breakdown: { sessions: 2 },
+      lastSyncTime: null,
+      lastSuccessfulSyncTime: null,
+    });
+    await act(async () => {
+      await result.current.refreshSyncStatus({ autoTrigger: false });
+    });
+    syncAll.mockClear();
+
+    const listener = AppState.addEventListener.mock.calls.at(-1)[1];
+    act(() => {
+      listener('background');
+      listener('active');
+    });
+    await act(async () => {
+      jest.advanceTimersByTime(1500);
+      await Promise.resolve();
+    });
+
+    expect(syncAll).not.toHaveBeenCalled();
   });
 
   describe('unknown reachability is treated as online', () => {
