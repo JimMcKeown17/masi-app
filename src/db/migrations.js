@@ -585,6 +585,13 @@ const MIGRATIONS = [
       create index if not exists idx_time_entries_user_signin on time_entries(user_id, sign_in_time);
     `,
   },
+  {
+    version: 6,
+    name: 'sync_outbox_owner_user_id',
+    sql: `
+      alter table sync_outbox add column owner_user_id text;
+    `,
+  },
 ];
 
 // Derived from the migration list so it never drifts when a migration is added.
