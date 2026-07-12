@@ -47,6 +47,7 @@ jest.mock('../src/utils/storage', () => ({
     getUnsyncedChildren: jest.fn(),
     getUnsyncedGroups: jest.fn(),
     getUnsyncedChildrenGroups: jest.fn(),
+    getPendingHardDeleteIds: jest.fn(),
     getSchools: jest.fn(),
     getClasses: jest.fn(),
     getUnsyncedClasses: jest.fn(),
@@ -183,6 +184,7 @@ describe('context render isolation', () => {
     storage.getUnsyncedChildren.mockResolvedValue([]);
     storage.getUnsyncedGroups.mockResolvedValue([]);
     storage.getUnsyncedChildrenGroups.mockResolvedValue([]);
+    storage.getPendingHardDeleteIds.mockResolvedValue(new Set());
     storage.getSchools.mockResolvedValue([]);
     storage.getClasses.mockResolvedValue([]);
     storage.getUnsyncedClasses.mockResolvedValue([]);

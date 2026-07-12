@@ -22,7 +22,11 @@ const isDirtyLocal = (row) => (
 // archived, hidden, exited) is invisible in `cached` while the server still
 // returns its id until the push lands. Those ids must suppress their server
 // copy, or the pull visibly resurrects the item the user just removed.
-export const mergeServerRows = (cached, serverRows, { unpushedRows = [] } = {}) => {
+export const mergeServerRows = (
+  cached,
+  serverRows,
+  { unpushedRows = [], pendingDeleteIds = new Set() } = {}
+) => {
   const serverIds = new Set(serverRows.map(row => row.id));
   const cachedIds = new Set(cached.map(row => row.id));
   const localWinnersById = new Map(
@@ -36,7 +40,7 @@ export const mergeServerRows = (cached, serverRows, { unpushedRows = [] } = {}) 
       .map(row => row.id)
   );
   const mergedServerRows = serverRows
-    .filter(row => !tombstonedIds.has(row.id))
+    .filter(row => !tombstonedIds.has(row.id) && !pendingDeleteIds.has(row.id))
     .map(row => localWinnersById.get(row.id) || row);
   const localToKeep = cached.filter(row => !serverIds.has(row.id) && isDirtyLocal(row));
   return [...mergedServerRows, ...localToKeep];

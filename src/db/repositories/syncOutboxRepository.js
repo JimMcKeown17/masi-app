@@ -113,6 +113,21 @@ export const createSyncOutboxRepository = ({ database } = {}) => {
     return !!row;
   };
 
+  const getPendingHardDeleteIds = async ({ tableName, ownerUserId } = {}) => {
+    if (!tableName) return new Set();
+    const db = await resolveDatabase(database);
+    const ownerScoped = ownerUserId !== undefined;
+    const rows = await db.getAllAsync(`
+      select distinct record_id
+      from sync_outbox
+      where table_name = ?
+        and operation = 'hard_delete'
+        and status in ('pending', 'failed', 'in_flight')
+        ${ownerScoped ? 'and (owner_user_id is null or owner_user_id = ?)' : ''}
+    `, tableName, ...(ownerScoped ? [ownerUserId] : []));
+    return new Set(rows.map((row) => row.record_id));
+  };
+
   const getTerminalRecords = async () => {
     const db = await resolveDatabase(database);
     const rows = await db.getAllAsync(`
@@ -321,6 +336,7 @@ export const createSyncOutboxRepository = ({ database } = {}) => {
     getById,
     getReadyRecords,
     hasPendingRecord,
+    getPendingHardDeleteIds,
     getTerminalRecords,
     markInFlight,
     resetInFlight,

@@ -18,6 +18,7 @@ module.exports = {
     '<rootDir>/__tests__/useTimeTracking.integration.test.js',
     '<rootDir>/__tests__/referenceDataRepository.test.js',
     '<rootDir>/__tests__/ChildrenContext.test.js',
+    '<rootDir>/__tests__/ChildrenContextPendingDelete.integration.test.js',
     '<rootDir>/__tests__/ClassesContext.plan5.test.js',
     // Sync-reliability slice — file-backed SQLite (better-sqlite3) integration tests.
     '<rootDir>/__tests__/migrationsForeignKeysOff.test.js',
