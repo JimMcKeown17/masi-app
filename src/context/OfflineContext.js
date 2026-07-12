@@ -52,7 +52,7 @@ export const OfflineProvider = ({ children }) => {
       setInFlightCount(status.inFlightCount || 0);
       setSyncStatus(status);
 
-      if (autoTrigger && (status.unsyncedCount > 0 || (status.inFlightCount || 0) > 0) && isOnlineRef.current) {
+      if (autoTrigger && ((status.readyCount || 0) > 0 || (status.inFlightCount || 0) > 0) && isOnlineRef.current) {
         triggerBackgroundSyncRef.current();
       }
 

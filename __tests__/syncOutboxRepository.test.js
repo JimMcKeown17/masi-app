@@ -79,6 +79,30 @@ describe('SQLite sync outbox repository', () => {
     ]);
   });
 
+  test('getSyncStatus separates ready work from backed-off work', async () => {
+    await outbox.enqueue({
+      tableName: 'sessions',
+      recordId: 'ready-1',
+      operation: 'insert',
+      payload: { id: 'ready-1' },
+    });
+    await outbox.enqueue({
+      tableName: 'sessions',
+      recordId: 'backed-off-1',
+      operation: 'insert',
+      payload: { id: 'backed-off-1' },
+    });
+    await outbox.markRetriableFailure('sessions:backed-off-1:insert', {
+      errorMessage: 'network down',
+      nextRetryAt: '2099-01-01T00:00:00.000Z',
+    });
+
+    const status = await outbox.getSyncStatus();
+
+    expect(status.unsyncedCount).toBe(2);
+    expect(status.readyCount).toBe(1);
+  });
+
   test('failed and terminal rows are visible while in-flight rows do not inflate unsynced count', async () => {
     await outbox.enqueue({
       tableName: 'children',

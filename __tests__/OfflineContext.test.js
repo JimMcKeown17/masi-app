@@ -45,6 +45,7 @@ describe('OfflineContext Plan 4 sync API', () => {
     jest.spyOn(AppState, 'addEventListener').mockReturnValue({ remove: jest.fn() });
     getSyncStatus.mockResolvedValue({
       unsyncedCount: 0,
+      readyCount: 0,
       inFlightCount: 0,
       waitingCount: 0,
       needsAttentionCount: 0,
@@ -255,6 +256,7 @@ describe('OfflineContext Plan 4 sync API', () => {
     const { result } = await renderOfflineHook();
     getSyncStatus.mockResolvedValueOnce({
       unsyncedCount: 3,
+      readyCount: 3,
       inFlightCount: 0,
       failedItems: [],
       breakdown: { children: 3 },
@@ -314,6 +316,64 @@ describe('OfflineContext Plan 4 sync API', () => {
     expect(result.current.inFlightCount).toBe(1);
   });
 
+  test('a backed-off record does not schedule a background sync pass', async () => {
+    const { result } = await renderOfflineHook();
+    getSyncStatus.mockResolvedValue({
+      unsyncedCount: 2,
+      readyCount: 0,
+      inFlightCount: 0,
+      waitingCount: 2,
+      needsAttentionCount: 0,
+      backedOffCount: 2,
+      nextRetryAt: '2099-01-01T00:00:00.000Z',
+      failedCount: 2,
+      failedItems: [],
+      needsAttentionItems: [],
+      breakdown: { sessions: 2 },
+      lastSyncTime: null,
+      lastSuccessfulSyncTime: null,
+    });
+
+    await act(async () => {
+      await result.current.refreshSyncStatus();
+    });
+    await act(async () => {
+      jest.advanceTimersByTime(1500);
+      await Promise.resolve();
+    });
+
+    expect(syncAll).not.toHaveBeenCalled();
+  });
+
+  test('ready records still schedule a background sync pass', async () => {
+    const { result } = await renderOfflineHook();
+    getSyncStatus.mockResolvedValue({
+      unsyncedCount: 2,
+      readyCount: 2,
+      inFlightCount: 0,
+      waitingCount: 2,
+      needsAttentionCount: 0,
+      backedOffCount: 0,
+      nextRetryAt: null,
+      failedCount: 0,
+      failedItems: [],
+      needsAttentionItems: [],
+      breakdown: { sessions: 2 },
+      lastSyncTime: null,
+      lastSuccessfulSyncTime: null,
+    });
+
+    await act(async () => {
+      await result.current.refreshSyncStatus();
+    });
+    await act(async () => {
+      jest.advanceTimersByTime(1500);
+      await Promise.resolve();
+    });
+
+    expect(syncAll).toHaveBeenCalledTimes(1);
+  });
+
   describe('unknown reachability is treated as online', () => {
     test('initial fetch with isInternetReachable null leaves the app online', async () => {
       NetInfo.fetch.mockResolvedValueOnce({ isConnected: true, isInternetReachable: null });
@@ -370,6 +430,7 @@ describe('OfflineContext Plan 4 sync API', () => {
     const { result } = await renderOfflineHook();
     getSyncStatus.mockResolvedValueOnce({
       unsyncedCount: 3,
+      readyCount: 0,
       inFlightCount: 0,
       waitingCount: 3,
       needsAttentionCount: 2,

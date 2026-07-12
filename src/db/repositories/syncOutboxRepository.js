@@ -229,6 +229,7 @@ export const createSyncOutboxRepository = ({ database } = {}) => {
 
     const breakdown = {};
     let unsyncedCount = 0;
+    let readyCount = 0;
     let failedCount = 0;
     let inFlightCount = 0;
     let needsAttentionCount = 0;
@@ -243,6 +244,10 @@ export const createSyncOutboxRepository = ({ database } = {}) => {
       if (row.status === 'pending' || row.status === 'failed') {
         breakdown[row.table_name] += 1;
         unsyncedCount += 1;
+      }
+      if (row.status === 'pending'
+        || (row.status === 'failed' && (!row.next_retry_at || row.next_retry_at <= now))) {
+        readyCount += 1;
       }
       if (row.status === 'failed' || row.status === 'terminal') {
         failedCount += 1;
@@ -276,6 +281,7 @@ export const createSyncOutboxRepository = ({ database } = {}) => {
 
     return {
       unsyncedCount,
+      readyCount,
       failedCount,
       inFlightCount,
       // Everything still owed except terminal (R5): a row stranded in_flight by a killed
