@@ -40,6 +40,7 @@ export const createSyncOutboxRepository = ({ database } = {}) => {
     recordId,
     operation,
     payload = null,
+    ownerUserId = null,
     id = outboxRecordId(tableName, recordId, operation),
   }, { transaction } = {}) => runWrite(transaction, async (txn) => {
     await insertOutboxRecord(txn, {
@@ -49,6 +50,7 @@ export const createSyncOutboxRepository = ({ database } = {}) => {
       operation,
       payload,
       status: 'pending',
+      ownerUserId,
     });
     await txn.runAsync(`
       update sync_outbox

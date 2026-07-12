@@ -25,12 +25,14 @@ describe('SQLite sync outbox repository', () => {
       recordId: 'child-1',
       operation: 'insert',
       payload: { id: 'child-1', first_name: 'Old' },
+      ownerUserId: 'ea-old',
     });
     await outbox.enqueue({
       tableName: 'children',
       recordId: 'child-1',
       operation: 'insert',
       payload: { id: 'child-1', first_name: 'Updated' },
+      ownerUserId: 'ea-updated',
     });
 
     const rows = await db.getAllAsync('select * from sync_outbox');
@@ -42,6 +44,7 @@ describe('SQLite sync outbox repository', () => {
       operation: 'insert',
       status: 'pending',
       retry_count: 0,
+      owner_user_id: 'ea-updated',
     }));
     expect(JSON.parse(rows[0].payload)).toEqual({ id: 'child-1', first_name: 'Updated' });
   });

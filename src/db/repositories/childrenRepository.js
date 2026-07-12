@@ -549,7 +549,10 @@ export const createChildrenRepository = ({ database } = {}) => {
       }
     }
 
-    const child = await txn.getFirstAsync('select sync_status from children where id = ?', childId);
+    const child = await txn.getFirstAsync(
+      'select sync_status, created_by from children where id = ?',
+      childId
+    );
     if (!child) return false;
 
     await txn.runAsync('delete from child_class_memberships where child_id = ?', childId);
@@ -558,7 +561,14 @@ export const createChildrenRepository = ({ database } = {}) => {
     await txn.runAsync('delete from children where id = ?', childId);
 
     if (child.sync_status === 'synced') {
-      await enqueueDomainOutbox(txn, 'children', childId, 'hard_delete', { id: childId });
+      await enqueueDomainOutbox(
+        txn,
+        'children',
+        childId,
+        'hard_delete',
+        { id: childId },
+        { ownerRow: child }
+      );
     }
 
     return true;

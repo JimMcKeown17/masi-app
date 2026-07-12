@@ -440,7 +440,7 @@ describe('childrenRepository', () => {
 
       expect(await db.getFirstAsync('select count(*) as count from children')).toEqual({ count: 0 });
       expect(await db.getFirstAsync(`
-        select table_name, record_id, operation
+        select table_name, record_id, operation, owner_user_id
         from sync_outbox
         where table_name = 'children'
           and record_id = 'child-1'
@@ -448,6 +448,7 @@ describe('childrenRepository', () => {
         table_name: 'children',
         record_id: 'child-1',
         operation: 'hard_delete',
+        owner_user_id: 'user-1',
       });
     } finally {
       await db.closeAsync();
