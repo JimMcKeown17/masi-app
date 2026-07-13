@@ -33,6 +33,7 @@ jest.mock('@react-native-community/netinfo', () => ({
 jest.mock('../src/db/repositories/syncStateRepository', () => ({
   syncStateRepository: {
     getPullState: jest.fn(),
+    getReconcileBreakerNotes: jest.fn(),
   },
 }));
 
@@ -74,6 +75,7 @@ describe('OfflineContext Plan 4 sync API', () => {
     syncAll.mockResolvedValue({ success: true, totalSynced: 0, totalFailed: 0 });
     requeueTerminalRlsFailures.mockResolvedValue(0);
     syncStateRepository.getPullState.mockResolvedValue(null);
+    syncStateRepository.getReconcileBreakerNotes.mockResolvedValue([]);
   });
 
   afterEach(() => {
@@ -107,6 +109,36 @@ describe('OfflineContext Plan 4 sync API', () => {
     });
 
     expect(syncAll).toHaveBeenCalledTimes(1);
+  });
+
+  test('refreshSyncStatus surfaces persisted breaker notes as needs-attention state', async () => {
+    const note = {
+      scope: 'childEaAssignments',
+      candidateCount: 15,
+      wouldEndCount: 12,
+      triggeredAt: '2026-07-13T12:00:00.000Z',
+    };
+    syncStateRepository.getReconcileBreakerNotes.mockResolvedValue([note]);
+
+    const { result } = await renderOfflineHook();
+
+    expect(result.current.needsAttentionCount).toBe(1);
+    expect(result.current.syncStatus.reconcileBreakerNotes).toEqual([note]);
+  });
+
+  test('Apply authorizes one scope once and forces the next domain pull', async () => {
+    const { result } = await renderOfflineHook();
+
+    act(() => {
+      result.current.authorizeReconcileBreaker('childEaAssignments');
+    });
+
+    expect(result.current.domainPullNonce).toBe(1);
+    expect(result.current.hasReconcileBreakerAuthorization('childEaAssignments')).toBe(true);
+    expect(result.current.consumeReconcileBreakerAuthorization('childEaAssignments')).toBe(true);
+    expect(result.current.hasReconcileBreakerAuthorization('childEaAssignments')).toBe(false);
+    expect(result.current.consumeReconcileBreakerAuthorization('childEaAssignments')).toBe(false);
+    expect(result.current.consumeReconcileBreakerAuthorization('classEaAssignments')).toBe(false);
   });
 
   test('concurrent manual sync calls share one in-flight promise', async () => {

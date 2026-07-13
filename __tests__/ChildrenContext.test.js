@@ -278,6 +278,55 @@ describe('ChildrenContext Plan 5 hydration', () => {
     });
   });
 
+  test('Apply arriving after an active pull reconciles queues one authorized follow-up pull', async () => {
+    let authorized = false;
+    const consumeReconcileBreakerAuthorization = jest.fn((scope) => {
+      if (scope !== 'childEaAssignments' || !authorized) return false;
+      authorized = false;
+      return true;
+    });
+    const hasReconcileBreakerAuthorization = jest.fn(
+      (scope) => scope === 'childEaAssignments' && authorized
+    );
+    const offlineValue = (domainPullNonce) => ({
+      isOnline: true,
+      refreshSyncStatus: jest.fn(),
+      isSyncing: false,
+      domainPullNonce,
+      consumeReconcileBreakerAuthorization,
+      hasReconcileBreakerAuthorization,
+    });
+    useOffline.mockReturnValue(offlineValue(0));
+
+    let releaseFinalRead;
+    const heldFinalRead = new Promise((resolve) => {
+      releaseFinalRead = resolve;
+    });
+    const cachedRows = [{ id: 'cached-child', first_name: 'Cached', synced: true }];
+    childrenRepository.getMyChildren
+      .mockResolvedValueOnce(cachedRows)
+      .mockReturnValueOnce(heldFinalRead)
+      .mockResolvedValue(cachedRows);
+
+    const { rerender } = renderHook(() => useChildren(), { wrapper });
+    await waitFor(() => expect(childrenRepository.saveServerStaffChildRows).toHaveBeenCalledTimes(1));
+
+    authorized = true;
+    useOffline.mockReturnValue(offlineValue(1));
+    rerender();
+    expect(pullPreloadedChildData).toHaveBeenCalledTimes(1);
+
+    await act(async () => {
+      releaseFinalRead(cachedRows);
+      await heldFinalRead;
+    });
+
+    await waitFor(() => expect(pullPreloadedChildData).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(childrenRepository.saveServerStaffChildRows).toHaveBeenCalledTimes(2));
+    expect(childrenRepository.saveServerStaffChildRows.mock.calls[1][1].reconcile)
+      .toEqual(expect.objectContaining({ bypassBreaker: true }));
+  });
+
   test('an A-to-B user transition starts one pull per user and only publishes B after A settles', async () => {
     useAuth.mockReturnValue({ user: { id: 'user-a' } });
     childrenRepository.getMyChildren.mockImplementation(async (userId) => ([
@@ -381,6 +430,36 @@ describe('ChildrenContext Plan 5 hydration', () => {
     await waitFor(() => expect(result.current.loading).toBe(false));
 
     expect(syncStateRepository.setPullState).not.toHaveBeenCalled();
+  });
+
+  test('an authorized child-assignment breaker bypass is scope-specific and refreshes status on success', async () => {
+    const refreshSyncStatus = jest.fn();
+    const consumeReconcileBreakerAuthorization = jest.fn(
+      (scope) => scope === 'childEaAssignments'
+    );
+    useOffline.mockReturnValue({
+      isOnline: true,
+      refreshSyncStatus,
+      isSyncing: false,
+      domainPullNonce: 0,
+      consumeReconcileBreakerAuthorization,
+    });
+    childrenRepository.saveServerStaffChildRows.mockResolvedValue({
+      applied: 0,
+      skipped: 0,
+      reconcileCompleted: true,
+    });
+
+    const { result } = renderHook(() => useChildren(), { wrapper });
+    await waitFor(() => expect(result.current.loading).toBe(false));
+
+    expect(childrenRepository.saveServerStaffChildRows).toHaveBeenCalledWith(
+      expect.any(Array),
+      { reconcile: expect.objectContaining({ bypassBreaker: true }) }
+    );
+    expect(childrenRepository.saveServerChildProgrammeEnrollmentRows.mock.calls[0][1].reconcile)
+      .not.toHaveProperty('bypassBreaker', true);
+    expect(refreshSyncStatus).toHaveBeenCalledWith({ autoTrigger: false });
   });
 
   test('persists pulled group assignments after their groups', async () => {

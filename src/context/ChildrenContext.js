@@ -12,6 +12,14 @@ import { useOffline } from './OfflineContext';
 import { v4 as uuidv4 } from 'uuid';
 
 const ChildrenContext = createContext({});
+const denyReconcileBreakerAuthorization = () => false;
+const CHILD_RECONCILE_BREAKER_SCOPES = [
+  'childEaAssignments',
+  'childProgrammeEnrollments',
+  'childClassMemberships',
+  'groupEaAssignments',
+  'childrenGroups',
+];
 
 const savePulledRows = async (saveRows, rows, reconcile, reconcileResults) => {
   const result = reconcile ? await saveRows(rows, { reconcile }) : await saveRows(rows);
@@ -21,7 +29,13 @@ const savePulledRows = async (saveRows, rows, reconcile, reconcileResults) => {
 
 export const ChildrenProvider = ({ children }) => {
   const { user } = useAuth();
-  const { refreshSyncStatus, isSyncing, domainPullNonce = 0 } = useOffline();
+  const {
+    refreshSyncStatus,
+    isSyncing,
+    domainPullNonce = 0,
+    hasReconcileBreakerAuthorization = denyReconcileBreakerAuthorization,
+    consumeReconcileBreakerAuthorization = denyReconcileBreakerAuthorization,
+  } = useOffline();
 
   const [childrenList, setChildrenList] = useState([]);
   const [groups, setGroups] = useState([]);
@@ -30,7 +44,13 @@ export const ChildrenProvider = ({ children }) => {
   const activeUserIdRef = useRef(null);
   const activePullRef = useRef(null);
   const previousDomainPullNonceRef = useRef(domainPullNonce);
+  const refreshSyncStatusRef = useRef(refreshSyncStatus);
+  const hasReconcileBreakerAuthorizationRef = useRef(hasReconcileBreakerAuthorization);
+  const consumeReconcileBreakerAuthorizationRef = useRef(consumeReconcileBreakerAuthorization);
   activeUserIdRef.current = user?.id || null;
+  refreshSyncStatusRef.current = refreshSyncStatus;
+  hasReconcileBreakerAuthorizationRef.current = hasReconcileBreakerAuthorization;
+  consumeReconcileBreakerAuthorizationRef.current = consumeReconcileBreakerAuthorization;
 
   // Active children only — hidden_at IS NULL. This is what every list view,
   // picker, and stats helper should consume. Hidden children stay in
@@ -76,6 +96,11 @@ export const ChildrenProvider = ({ children }) => {
       setLoading(false);
       return;
     }
+    const authorizedBreakerScopes = new Set(
+      CHILD_RECONCILE_BREAKER_SCOPES.filter(
+        (scope) => consumeReconcileBreakerAuthorizationRef.current(scope)
+      )
+    );
 
     try {
       setLoading(true);
@@ -91,6 +116,20 @@ export const ChildrenProvider = ({ children }) => {
       const pulledAt = new Date().toISOString();
       const programmeScopeOk = scopes.programmeAssignment.ok && Boolean(activeProgrammeId);
       const reconcileResults = [];
+      let bypassedReconcileCompleted = false;
+      const saveScopedPulledRows = async (scope, saveRows, rows, reconcile) => {
+        const bypassBreaker = Boolean(reconcile) && authorizedBreakerScopes.has(scope);
+        const result = await savePulledRows(
+          saveRows,
+          rows,
+          bypassBreaker ? { ...reconcile, bypassBreaker: true } : reconcile,
+          reconcileResults
+        );
+        if (bypassBreaker && result?.reconcileCompleted === true) {
+          bypassedReconcileCompleted = true;
+        }
+        return result;
+      };
 
       const pendingChildDeleteIds = await syncOutboxRepository.getPendingHardDeleteIds({
         tableName: 'children',
@@ -129,7 +168,8 @@ export const ChildrenProvider = ({ children }) => {
         await childrenRepository.saveServerChildRows(pulledChildren);
       }
       if (scopes.childEaAssignments.ok) {
-        await savePulledRows(
+        await saveScopedPulledRows(
+          'childEaAssignments',
           childrenRepository.saveServerStaffChildRows,
           pulledChildEaAssignments,
           scopes.childEaAssignments.complete && programmeScopeOk
@@ -138,12 +178,12 @@ export const ChildrenProvider = ({ children }) => {
               pulledAt,
               userId: activeUserId,
             }
-            : undefined,
-          reconcileResults
+            : undefined
         );
       }
       if (scopes.childProgrammeEnrollments.ok) {
-        await savePulledRows(
+        await saveScopedPulledRows(
+          'childProgrammeEnrollments',
           childrenRepository.saveServerChildProgrammeEnrollmentRows,
           pulledChildProgrammeEnrollments,
           scopes.childProgrammeEnrollments.complete
@@ -156,12 +196,12 @@ export const ChildrenProvider = ({ children }) => {
               programmeId: activeProgrammeId,
               pulledAt,
             }
-            : undefined,
-          reconcileResults
+            : undefined
         );
       }
       if (scopes.childClassMemberships.ok) {
-        await savePulledRows(
+        await saveScopedPulledRows(
+          'childClassMemberships',
           childrenRepository.saveServerChildClassMembershipRows,
           pulledChildClassMemberships,
           scopes.childClassMemberships.complete
@@ -173,15 +213,15 @@ export const ChildrenProvider = ({ children }) => {
                 .map((row) => row.id),
               pulledAt,
             }
-            : undefined,
-          reconcileResults
+            : undefined
         );
       }
       if (scopes.groups.ok) {
         await groupsRepository.saveServerGroupRows(scopes.groups.rows);
       }
       if (scopes.groupEaAssignments.ok) {
-        await savePulledRows(
+        await saveScopedPulledRows(
+          'groupEaAssignments',
           groupEaAssignmentsRepository.saveServerRows,
           scopes.groupEaAssignments.rows,
           scopes.groupEaAssignments.complete
@@ -193,12 +233,12 @@ export const ChildrenProvider = ({ children }) => {
               programmeId: activeProgrammeId,
               pulledAt,
             }
-            : undefined,
-          reconcileResults
+            : undefined
         );
       }
       if (scopes.childrenGroups.ok) {
-        await savePulledRows(
+        await saveScopedPulledRows(
+          'childrenGroups',
           groupsRepository.saveServerChildrenGroupRows,
           scopes.childrenGroups.rows,
           scopes.childrenGroups.complete
@@ -209,8 +249,7 @@ export const ChildrenProvider = ({ children }) => {
               acknowledgedGroupIds: scopes.groups.rows.map((row) => row.id),
               pulledAt,
             }
-            : undefined,
-          reconcileResults
+            : undefined
         );
       }
 
@@ -233,6 +272,9 @@ export const ChildrenProvider = ({ children }) => {
       setChildrenList(freshChildren);
       setGroups(freshGroups);
       setChildrenGroups(freshMemberships);
+      if (bypassedReconcileCompleted) {
+        await refreshSyncStatusRef.current({ autoTrigger: false });
+      }
     } catch (error) {
       console.error('Error in pullFromServer:', error);
     } finally {
@@ -254,6 +296,13 @@ export const ChildrenProvider = ({ children }) => {
       } finally {
         if (activePullRef.current?.promise === pullPromise) {
           activePullRef.current = null;
+          const authorizedFollowUpNeeded = activeUserIdRef.current === activeUserId
+            && CHILD_RECONCILE_BREAKER_SCOPES.some(
+              (scope) => hasReconcileBreakerAuthorizationRef.current(scope)
+            );
+          if (authorizedFollowUpNeeded) {
+            pullFromServer();
+          }
         }
       }
     })();

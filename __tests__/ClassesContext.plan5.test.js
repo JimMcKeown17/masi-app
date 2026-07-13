@@ -227,6 +227,71 @@ describe('ClassesContext Plan 5 behavior', () => {
     });
   });
 
+  test('Apply arriving after an active class pull reconciles queues one authorized follow-up pull', async () => {
+    let authorized = false;
+    const consumeReconcileBreakerAuthorization = jest.fn((scope) => {
+      if (scope !== 'classEaAssignments' || !authorized) return false;
+      authorized = false;
+      return true;
+    });
+    const hasReconcileBreakerAuthorization = jest.fn(
+      (scope) => scope === 'classEaAssignments' && authorized
+    );
+    const offlineValue = (domainPullNonce) => ({
+      isOnline: true,
+      refreshSyncStatus: jest.fn(),
+      isSyncing: false,
+      domainPullNonce,
+      consumeReconcileBreakerAuthorization,
+      hasReconcileBreakerAuthorization,
+    });
+    useOffline.mockReturnValue(offlineValue(0));
+    classEaAssignmentsRepository.saveServerRows.mockResolvedValue({
+      applied: 0,
+      skipped: 0,
+      reconcileCompleted: true,
+    });
+    mockSupabaseFrom.mockImplementation((tableName) => {
+      if (tableName === 'staff_programme_assignments') {
+        return queryResult({ data: [{ programme_id: 'programme-a' }], error: null });
+      }
+      if (tableName === 'classes') {
+        return queryResult({ data: [], error: null });
+      }
+      return queryResult({ data: [], error: null });
+    });
+
+    let releaseFinalRead;
+    const heldFinalRead = new Promise((resolve) => {
+      releaseFinalRead = resolve;
+    });
+    classesRepository.getClasses
+      .mockResolvedValueOnce([])
+      .mockReturnValueOnce(heldFinalRead)
+      .mockResolvedValue([]);
+
+    const { rerender } = renderHook(() => useClasses(), { wrapper });
+    await waitFor(() => expect(classEaAssignmentsRepository.saveServerRows).toHaveBeenCalledTimes(1));
+
+    authorized = true;
+    useOffline.mockReturnValue(offlineValue(1));
+    rerender();
+    expect(mockSupabaseFrom.mock.calls.filter(([table]) => table === 'staff_programme_assignments'))
+      .toHaveLength(1);
+
+    await act(async () => {
+      releaseFinalRead([]);
+      await heldFinalRead;
+    });
+
+    await waitFor(() => expect(
+      mockSupabaseFrom.mock.calls.filter(([table]) => table === 'staff_programme_assignments')
+    ).toHaveLength(2));
+    await waitFor(() => expect(classEaAssignmentsRepository.saveServerRows).toHaveBeenCalledTimes(2));
+    expect(classEaAssignmentsRepository.saveServerRows.mock.calls[1][1].reconcile)
+      .toEqual(expect.objectContaining({ bypassBreaker: true }));
+  });
+
   test('an A-to-B user transition starts one class pull per user and only publishes B after A settles', async () => {
     useAuth.mockReturnValue({ user: { id: 'user-a' } });
     classesRepository.getClasses.mockImplementation(async ({ userId }) => ([
@@ -467,6 +532,55 @@ describe('ClassesContext Plan 5 behavior', () => {
 
     await waitFor(() => expect(classEaAssignmentsRepository.saveServerRows).toHaveBeenCalled());
     expect(syncStateRepository.setPullState).not.toHaveBeenCalled();
+  });
+
+  test('an authorized class-assignment breaker bypass refreshes status on success', async () => {
+    const refreshSyncStatus = jest.fn();
+    const consumeReconcileBreakerAuthorization = jest.fn(
+      (scope) => scope === 'classEaAssignments'
+    );
+    useOffline.mockReturnValue({
+      isOnline: true,
+      refreshSyncStatus,
+      isSyncing: false,
+      domainPullNonce: 0,
+      consumeReconcileBreakerAuthorization,
+    });
+    classEaAssignmentsRepository.saveServerRows.mockResolvedValue({
+      applied: 1,
+      skipped: 0,
+      reconcileCompleted: true,
+    });
+    mockSupabaseFrom.mockImplementation((tableName) => {
+      if (tableName === 'staff_programme_assignments') {
+        return queryResult({ data: [{ programme_id: 'programme-a' }], error: null });
+      }
+      if (tableName === 'classes') {
+        return queryResult({
+          data: [{
+            id: 'class-1',
+            name: 'Class 1',
+            class_ea_assignments: [{
+              id: 'assignment-1',
+              class_id: 'class-1',
+              ea_user_id: 'user-1',
+              programme_id: 'programme-a',
+            }],
+          }],
+          error: null,
+        });
+      }
+      return queryResult({ data: [], error: null });
+    });
+
+    renderHook(() => useClasses(), { wrapper });
+
+    await waitFor(() => expect(classEaAssignmentsRepository.saveServerRows).toHaveBeenCalled());
+    expect(classEaAssignmentsRepository.saveServerRows).toHaveBeenCalledWith(
+      expect.any(Array),
+      { reconcile: expect.objectContaining({ bypassBreaker: true }) }
+    );
+    expect(refreshSyncStatus).toHaveBeenCalledWith({ autoTrigger: false });
   });
 
   test('an incomplete class-assignment scope persists rows without reconcile', async () => {

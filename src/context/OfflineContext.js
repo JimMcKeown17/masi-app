@@ -25,6 +25,9 @@ const OfflineContext = createContext({
   lastSyncResult: null,
   domainPullNonce: 0,
   requestDomainPull: async () => false,
+  authorizeReconcileBreaker: () => false,
+  hasReconcileBreakerAuthorization: () => false,
+  consumeReconcileBreakerAuthorization: () => false,
   triggerBackgroundSync: () => {},
   syncNow: async () => {},
   refreshSyncStatus: async () => {},
@@ -49,6 +52,7 @@ export const OfflineProvider = ({ children }) => {
   const inFlightCountRef = useRef(0);
   const currentUserIdRef = useRef(null);
   const triggerBackgroundSyncRef = useRef(() => {});
+  const reconcileBreakerAuthorizationsRef = useRef(new Set());
 
   // Keep ref in sync with state so event-listener closures always read current value
   useEffect(() => {
@@ -60,7 +64,15 @@ export const OfflineProvider = ({ children }) => {
    */
   const refreshSyncStatus = useCallback(async ({ autoTrigger = true } = {}) => {
     try {
-      const status = await getSyncStatus({ ownerUserId: currentUserIdRef.current });
+      const [outboxStatus, reconcileBreakerNotes] = await Promise.all([
+        getSyncStatus({ ownerUserId: currentUserIdRef.current }),
+        syncStateRepository.getReconcileBreakerNotes(),
+      ]);
+      const status = {
+        ...outboxStatus,
+        needsAttentionCount: (outboxStatus.needsAttentionCount || 0) + reconcileBreakerNotes.length,
+        reconcileBreakerNotes,
+      };
       setUnsyncedCount(status.unsyncedCount);
       setInFlightCount(status.inFlightCount || 0);
       readyCountRef.current = status.readyCount || 0;
@@ -172,6 +184,24 @@ export const OfflineProvider = ({ children }) => {
       return false;
     }
   }, []);
+
+  const authorizeReconcileBreaker = useCallback((scope) => {
+    if (!scope) return false;
+    reconcileBreakerAuthorizationsRef.current.add(scope);
+    setDomainPullNonce((nonce) => nonce + 1);
+    return true;
+  }, []);
+
+  const consumeReconcileBreakerAuthorization = useCallback((scope) => {
+    if (!reconcileBreakerAuthorizationsRef.current.has(scope)) return false;
+    reconcileBreakerAuthorizationsRef.current.delete(scope);
+    return true;
+  }, []);
+
+  const hasReconcileBreakerAuthorization = useCallback(
+    (scope) => reconcileBreakerAuthorizationsRef.current.has(scope),
+    []
+  );
 
   /**
    * Network state listener
@@ -312,6 +342,9 @@ export const OfflineProvider = ({ children }) => {
     lastSyncResult,
     domainPullNonce,
     requestDomainPull,
+    authorizeReconcileBreaker,
+    hasReconcileBreakerAuthorization,
+    consumeReconcileBreakerAuthorization,
     triggerBackgroundSync,
     syncNow,
     refreshSyncStatus,
@@ -327,6 +360,9 @@ export const OfflineProvider = ({ children }) => {
     lastSyncResult,
     domainPullNonce,
     requestDomainPull,
+    authorizeReconcileBreaker,
+    hasReconcileBreakerAuthorization,
+    consumeReconcileBreakerAuthorization,
     triggerBackgroundSync,
     syncNow,
     refreshSyncStatus,

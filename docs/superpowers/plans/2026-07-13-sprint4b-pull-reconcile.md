@@ -111,13 +111,14 @@ Convergence pass 3 (verdict BUILD-WITH-FIXES; all six fixes applied to the text 
 
 **Files:** Modify `src/context/OfflineContext.js`, both contexts, `src/utils/syncStatusPresenter.js` + `src/screens/main/SyncStatusScreen.js` (breaker card per decision 7); extend `__tests__/OfflineContext.test.js`, context suites, `__tests__/contextRenderIsolation.test.js`, the presenter/screen suites.
 
-- [ ] RED (breaker surface, decision 7): with a persisted breaker note, the presenter emits the needs-attention card copy (exact-string pin per the presenter suite's conventions); the Apply action sets the one-shot authorization and triggers a pull; a successful bypassed reconcile clears the note and the card disappears; no note → no card.
+- [x] RED (breaker surface, decision 7): with a persisted breaker note, the presenter emits the needs-attention card copy (exact-string pin per the presenter suite's conventions); the Apply action sets the one-shot authorization and triggers a pull; a successful bypassed reconcile clears the note and the card disappears; no note → no card.
 
 - [x] RED (OfflineContext): offline→online with a stale or missing stamp bumps `domainPullNonce` once; fresh stamps do not; foreground same pair; render-isolation suite stays green with the nonce in the value.
 - [x] RED (contexts, S11's four): initial mount = exactly ONE network pull (nonce initialization does not double-pull); one increment = one pull; rapid same-user increments join the in-flight promise; an A→B user transition during a held A pull produces one pull per user and only B state is published (the old promise's completion must not clear B's in-flight ref).
 - [x] RED (stamping, S10/S6): a transport-failed pull does not stamp; a query-failed scope still stamps; a pull whose reconcile-requesting scope reports `reconcileCompleted: false` does not stamp.
-- [x] GREEN: implement per decision 9.
+- [x] GREEN: implement per decisions 7/9.
 - [x] Commit: `feat(pull): staleness-gated domain pull on reconnect and foreground`
+- [x] Commit: `feat(pull): breaker needs-attention card with one-shot authorized apply`
 
 ### Task 6: Killer-scenario acceptance gate (GREEN; any failure is a regression)
 

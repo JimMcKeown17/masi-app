@@ -21,6 +21,8 @@ import { useChildren } from './ChildrenContext';
 import { v4 as uuidv4 } from 'uuid';
 
 const ClassesContext = createContext({});
+const denyReconcileBreakerAuthorization = () => false;
+const CLASS_RECONCILE_BREAKER_SCOPE = 'classEaAssignments';
 
 const successfulPullScope = (rows = []) => ({
   ok: true,
@@ -41,7 +43,14 @@ const dependencyPullScope = () => failedPullScope('dependency');
 
 export const ClassesProvider = ({ children: reactChildren }) => {
   const { user } = useAuth();
-  const { isOnline, refreshSyncStatus, isSyncing, domainPullNonce = 0 } = useOffline();
+  const {
+    isOnline,
+    refreshSyncStatus,
+    isSyncing,
+    domainPullNonce = 0,
+    hasReconcileBreakerAuthorization = denyReconcileBreakerAuthorization,
+    consumeReconcileBreakerAuthorization = denyReconcileBreakerAuthorization,
+  } = useOffline();
   const {
     children: childrenList,
     refreshFromCache: refreshChildrenFromCache,
@@ -53,7 +62,13 @@ export const ClassesProvider = ({ children: reactChildren }) => {
   const activeUserIdRef = useRef(null);
   const activePullRef = useRef(null);
   const previousDomainPullNonceRef = useRef(domainPullNonce);
+  const refreshSyncStatusRef = useRef(refreshSyncStatus);
+  const hasReconcileBreakerAuthorizationRef = useRef(hasReconcileBreakerAuthorization);
+  const consumeReconcileBreakerAuthorizationRef = useRef(consumeReconcileBreakerAuthorization);
   activeUserIdRef.current = user?.id || null;
+  refreshSyncStatusRef.current = refreshSyncStatus;
+  hasReconcileBreakerAuthorizationRef.current = hasReconcileBreakerAuthorization;
+  consumeReconcileBreakerAuthorizationRef.current = consumeReconcileBreakerAuthorization;
 
   const refreshFromCache = useCallback(async () => {
     const activeUserId = user?.id;
@@ -99,6 +114,9 @@ export const ClassesProvider = ({ children: reactChildren }) => {
       setLoading(false);
       return;
     }
+    const bypassClassAssignmentBreaker = consumeReconcileBreakerAuthorizationRef.current(
+      CLASS_RECONCILE_BREAKER_SCOPE
+    );
 
     try {
       setLoading(true);
@@ -219,9 +237,13 @@ export const ClassesProvider = ({ children: reactChildren }) => {
             userId: activeUserId,
             programmeId: activeProgrammeId,
             pulledAt,
+            ...(bypassClassAssignmentBreaker ? { bypassBreaker: true } : {}),
           },
         });
         await stampPullIfComplete([reconcileResult]);
+        if (bypassClassAssignmentBreaker && reconcileResult?.reconcileCompleted === true) {
+          await refreshSyncStatusRef.current({ autoTrigger: false });
+        }
       } else {
         await classEaAssignmentsRepository.saveServerRows(scopes.classEaAssignments.rows);
         await stampPullIfComplete();
@@ -251,6 +273,11 @@ export const ClassesProvider = ({ children: reactChildren }) => {
       } finally {
         if (activePullRef.current?.promise === pullPromise) {
           activePullRef.current = null;
+          const authorizedFollowUpNeeded = activeUserIdRef.current === activeUserId
+            && hasReconcileBreakerAuthorizationRef.current(CLASS_RECONCILE_BREAKER_SCOPE);
+          if (authorizedFollowUpNeeded) {
+            pullFromServer();
+          }
         }
       }
     })();

@@ -95,6 +95,14 @@ jest.mock('../src/db/repositories/syncOutboxRepository', () => ({
   },
 }));
 
+jest.mock('../src/db/repositories/syncStateRepository', () => ({
+  syncStateRepository: {
+    getPullState: jest.fn(async () => null),
+    getReconcileBreakerNotes: jest.fn(async () => []),
+    setPullState: jest.fn(async () => true),
+  },
+}));
+
 jest.mock('../src/services/preloadedChildData', () => ({
   PULL_SCOPE_COMPLETENESS_LIMIT: 1000,
   classifyPullFailureKind: jest.fn(() => 'query'),

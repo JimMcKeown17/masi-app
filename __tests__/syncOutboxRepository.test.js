@@ -413,4 +413,21 @@ describe('SQLite sync state repository', () => {
       lastSuccessfulSyncTime: '2026-05-21T10:01:00.000Z',
     }));
   });
+
+  test('reads persisted reconcile breaker notes without returning ordinary pull state', async () => {
+    const note = {
+      scope: 'childEaAssignments',
+      candidateCount: 15,
+      wouldEndCount: 12,
+      triggeredAt: '2026-07-13T12:00:00.000Z',
+    };
+    await syncState.setPullState('pull_reconcile_breaker:childEaAssignments', {
+      cursor: JSON.stringify(note),
+    });
+    await syncState.setPullState('child_data_pull', {
+      lastPulledAt: '2026-07-13T12:01:00.000Z',
+    });
+
+    await expect(syncState.getReconcileBreakerNotes()).resolves.toEqual([note]);
+  });
 });
