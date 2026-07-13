@@ -79,9 +79,9 @@ Convergence pass (verdict BUILD-WITH-FIXES; all applied to the text above on 202
 
 **Produces:** the component the next three tasks consume.
 
-- [ ] RED: new suite pins the primitive's contract — renders `title`/`subtitle`/children when `visible`; renders nothing when not; backdrop press fires `onDismiss` and carries the `dismissLabel` a11y label; hardware back (`onRequestClose`) fires `onDismiss`; `headerExtras` renders between subtitle and body; `footer` renders below the body; `scrollable={false}` renders the body without a ScrollView; `keyboardAvoiding={false}` omits the KeyboardAvoidingView.
-- [ ] GREEN: implement with the canonical chrome from locked decision 1.
-- [ ] Commit: `feat(ui): shared BottomSheet primitive`
+- [x] RED: new suite pins the primitive's contract — renders `title`/`subtitle`/children when `visible`; renders nothing when not; backdrop press fires `onDismiss` and carries the `dismissLabel` a11y label; hardware back (`onRequestClose`) fires `onDismiss`; `headerExtras` renders between subtitle and body; `footer` renders below the body; `scrollable={false}` renders the body without a ScrollView; `keyboardAvoiding={false}` omits the KeyboardAvoidingView.
+- [x] GREEN: implement with the canonical chrome from locked decision 1.
+- [x] Commit: `feat(ui): shared BottomSheet primitive`
 
 ### Task 3: The three real sheets render through the primitive
 
