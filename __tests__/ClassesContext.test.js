@@ -1,6 +1,7 @@
 import React from 'react';
 import { renderHook, act } from '@testing-library/react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { childrenRepository } from '../src/db/repositories/childrenRepository';
 import { storage } from '../src/utils/storage';
 import { resolveDatabase } from '../src/db/repositories/repositoryRuntime';
 
@@ -81,14 +82,14 @@ describe('ClassesContext storage operations', () => {
     await storage.deleteClass('class-1');
 
     // Manually null out class_id on affected children (mirrors ClassesContext logic)
-    const allChildren = await storage.getChildren();
+    const allChildren = await childrenRepository.getChildren();
     for (const child of allChildren) {
       if (child.class_id === 'class-1') {
         await storage.updateChild(child.id, { class_id: null, synced: false });
       }
     }
 
-    const children = await storage.getChildren();
+    const children = await childrenRepository.getChildren();
     const alice = children.find(c => c.id === 'child-1');
     const bob = children.find(c => c.id === 'child-2');
 

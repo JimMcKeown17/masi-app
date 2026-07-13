@@ -5,7 +5,6 @@ import LetterAssessmentScreen from '../src/screens/assessments/LetterAssessmentS
 import { useAuth } from '../src/context/AuthContext';
 import { useOffline } from '../src/context/OfflineContext';
 import { assessmentsRepository } from '../src/db/repositories/assessmentsRepository';
-import { storage } from '../src/utils/storage';
 
 jest.mock('../src/context/AuthContext', () => ({
   useAuth: jest.fn(),
@@ -17,12 +16,6 @@ jest.mock('../src/context/OfflineContext', () => ({
 
 jest.mock('../src/db/repositories/assessmentsRepository', () => ({
   assessmentsRepository: {
-    saveAssessment: jest.fn(),
-  },
-}));
-
-jest.mock('../src/utils/storage', () => ({
-  storage: {
     saveAssessment: jest.fn(),
   },
 }));
@@ -107,7 +100,6 @@ describe('LetterAssessmentScreen Plan 5 behavior', () => {
     })));
     expect(refreshSyncStatus).toHaveBeenCalled();
     expect(triggerBackgroundSync).toHaveBeenCalled();
-    expect(storage.saveAssessment).not.toHaveBeenCalled();
     expect(navigation.replace).toHaveBeenCalledWith('AssessmentResults', expect.objectContaining({
       child: route.params.child,
       attemptNumber: 2,

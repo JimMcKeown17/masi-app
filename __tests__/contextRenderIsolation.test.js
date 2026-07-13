@@ -40,7 +40,6 @@ jest.mock('../src/context/AuthContext', () => ({
 
 jest.mock('../src/utils/storage', () => ({
   storage: {
-    getChildren: jest.fn(),
     getMyChildren: jest.fn(),
     getGroups: jest.fn(),
     getChildrenGroups: jest.fn(),
@@ -177,7 +176,6 @@ describe('context render isolation', () => {
     lookupsApi = null;
     timeTrackingApi = null;
     getSyncStatus.mockResolvedValue(statusWith());
-    storage.getChildren.mockResolvedValue([]);
     storage.getMyChildren.mockResolvedValue([]);
     storage.getGroups.mockResolvedValue([]);
     storage.getChildrenGroups.mockResolvedValue([]);

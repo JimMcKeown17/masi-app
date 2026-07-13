@@ -3,7 +3,10 @@ jest.mock('expo-sqlite', () => require('../test-support/expoSQLiteMock'));
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { storage } from '../src/utils/storage';
 import { runMigrations } from '../src/db/migrations';
-import { createChildrenRepository } from '../src/db/repositories/childrenRepository';
+import {
+  childrenRepository,
+  createChildrenRepository,
+} from '../src/db/repositories/childrenRepository';
 import { createGroupsRepository } from '../src/db/repositories/groupsRepository';
 import { createClassesRepository } from '../src/db/repositories/classesRepository';
 import { createClassEaAssignmentsRepository } from '../src/db/repositories/classEaAssignmentsRepository';
@@ -340,7 +343,7 @@ describe('server pull guard — pending-local-wins (issue #42, ZZ F7)', () => {
   });
 });
 
-describe('server pull guard — storage facade reads stay consistent with SQLite', () => {
+describe('server pull guard repository reads stay consistent with SQLite', () => {
   beforeEach(async () => {
     await AsyncStorage.clear();
   });
@@ -353,17 +356,17 @@ describe('server pull guard — storage facade reads stay consistent with SQLite
 
     await storage.saveChild(serverRow);
 
-    const children = await storage.getChildren();
+    const children = await childrenRepository.getChildren();
     const child = children.find((row) => row.id === 'child-1');
     expect(child.first_name).toBe('Amahle-Edited');
     expect(child.synced).toBe(false);
   });
 
-  test('facade reads report the repository sync_status, not a stale payload copy', async () => {
+  test('repository reads report the current sync_status', async () => {
     await storage.saveChild(serverChild());
     await storage.updateChild('child-1', { first_name: 'Amahle-Edited', synced: false }, { actorUserId: 'user-1' });
 
-    const children = await storage.getChildren();
+    const children = await childrenRepository.getChildren();
     const child = children.find((row) => row.id === 'child-1');
     expect(child.sync_status).toBe('pending');
     expect(child.synced).toBe(false);

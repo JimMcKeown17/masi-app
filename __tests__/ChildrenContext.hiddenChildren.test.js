@@ -1,4 +1,5 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { childrenRepository } from '../src/db/repositories/childrenRepository';
 import { resolveDatabase } from '../src/db/repositories/repositoryRuntime';
 import { storage } from '../src/utils/storage';
 
@@ -36,13 +37,13 @@ describe('hidden children — storage-level soft-delete', () => {
 
     expect(ok).toBe(true);
 
-    const all = await storage.getChildren();
+    const all = await childrenRepository.getChildren();
     const c1 = all.find(c => c.id === 'child-1');
     const c2 = all.find(c => c.id === 'child-2');
 
     expect(c1.hidden_at).toBe(hiddenAt);
     expect(c1.synced).toBe(false);
-    expect(c2.hidden_at).toBeUndefined();
+    expect(c2.hidden_at).toBeNull();
     expect(c2.synced).toBe(true);
   });
 
@@ -64,7 +65,7 @@ describe('hidden children — storage-level soft-delete', () => {
       synced: false,
     });
 
-    const all = await storage.getChildren();
+    const all = await childrenRepository.getChildren();
     expect(all).toHaveLength(1);
     expect(all[0].id).toBe('child-1');
     expect(all[0].hidden_at).toBeTruthy();
@@ -100,7 +101,7 @@ describe('hidden children — storage-level soft-delete', () => {
     expect(await storage.deleteChild('child-with-history', { actorUserId: 'user-1' }))
       .toEqual({ deleted: false, archived: true });
 
-    const all = await storage.getChildren();
+    const all = await childrenRepository.getChildren();
     expect(all.find(c => c.id === 'child-no-history')).toBeUndefined();
     expect(all.find(c => c.id === 'child-with-history')).toEqual(expect.objectContaining({
       id: 'child-with-history',

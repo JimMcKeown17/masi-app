@@ -113,20 +113,6 @@ describe('Classes storage (offline-first CRUD)', () => {
   });
 });
 
-describe('getAllUnsyncedCount includes CLASSES', () => {
-  test('counts unsynced classes in the total', async () => {
-    await storage.saveClass({
-      id: 'c1',
-      name: '1A',
-      created_by: 'user-1',
-      programme_id: 'programme-a',
-      synced: false,
-    });
-    const count = await storage.getAllUnsyncedCount();
-    expect(count).toBeGreaterThanOrEqual(1);
-  });
-});
-
 describe('storage facade cleanup', () => {
   test('user profile cache is stored in SQLite local state, not AsyncStorage domain keys', async () => {
     await storage.saveUserProfile({ id: 'user-1', first_name: 'Nomsa' });

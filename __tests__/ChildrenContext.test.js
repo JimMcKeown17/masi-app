@@ -23,7 +23,6 @@ jest.mock('../src/context/OfflineContext', () => ({
 
 jest.mock('../src/utils/storage', () => ({
   storage: {
-    getChildren: jest.fn(),
     getMyChildren: jest.fn(),
     getGroups: jest.fn(),
     getChildrenGroups: jest.fn(),
@@ -57,9 +56,6 @@ const wrapper = ({ children }) => (
 
 describe('ChildrenContext Plan 5 hydration', () => {
   beforeEach(() => {
-    storage.getChildren.mockResolvedValue([
-      { id: 'cached-child', first_name: 'Cached', last_name: 'Child', synced: false },
-    ]);
     storage.getMyChildren.mockResolvedValue([
       { id: 'cached-child', first_name: 'Cached', last_name: 'Child', synced: false },
     ]);

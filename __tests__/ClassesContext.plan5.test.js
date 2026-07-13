@@ -73,7 +73,6 @@ jest.mock('../src/utils/storage', () => ({
     saveClassEaAssignment: jest.fn(),
     updateClass: jest.fn(),
     deleteClass: jest.fn(),
-    getChildren: jest.fn(),
     updateChild: jest.fn(),
   },
 }));
@@ -97,7 +96,6 @@ describe('ClassesContext Plan 5 behavior', () => {
     storage.saveClassEaAssignment.mockResolvedValue(true);
     storage.updateClass.mockResolvedValue(true);
     storage.deleteClass.mockResolvedValue(true);
-    storage.getChildren.mockResolvedValue([]);
     storage.updateChild.mockResolvedValue(true);
     fetchAndCacheSchools.mockResolvedValue([]);
     academicYearsRepository.getActive.mockResolvedValue({ id: 'year-2026', label: '2026' });
@@ -144,7 +142,6 @@ describe('ClassesContext Plan 5 behavior', () => {
     });
 
     expect(storage.deleteClass).toHaveBeenCalledWith('class-1');
-    expect(storage.getChildren).not.toHaveBeenCalled();
     expect(storage.updateChild).not.toHaveBeenCalled();
     expect(updateChild).not.toHaveBeenCalled();
   });
