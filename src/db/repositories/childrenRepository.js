@@ -91,6 +91,18 @@ export const createChildrenRepository = ({ database } = {}) => {
   const runWrite = (transaction, task) => (
     transaction ? task(transaction) : runRepositoryTransaction(database, task)
   );
+  const saveServerRows = async (rows, saveRow) => runRepositoryTransaction(database, async (txn) => {
+    let applied = 0;
+    let skipped = 0;
+    for (const row of rows) {
+      if (await saveRow(row, { transaction: txn }) === false) {
+        skipped += 1;
+      } else {
+        applied += 1;
+      }
+    }
+    return { applied, skipped };
+  });
 
   const getChildren = async () => {
     const db = await resolveDatabase(database);
@@ -424,6 +436,35 @@ export const createChildrenRepository = ({ database } = {}) => {
     return true;
   });
 
+  const saveServerChildRows = async (rows = []) => runRepositoryTransaction(database, async (txn) => {
+    let applied = 0;
+    let skipped = 0;
+    for (const row of rows) {
+      let record = row;
+      if (row.class_id) {
+        const classExists = await txn.getFirstAsync('select id from classes where id = ?', row.class_id);
+        if (!classExists) {
+          console.warn(`Pulled child ${row.id} referenced missing class ${row.class_id}; saving class_id as null`);
+          record = { ...row, class_id: null };
+        }
+      }
+      if (await saveChildRecord(record, { transaction: txn }) === false) {
+        skipped += 1;
+      } else {
+        applied += 1;
+      }
+    }
+    return { applied, skipped };
+  });
+
+  const saveServerStaffChildRows = async (rows = []) => saveServerRows(rows, saveStaffChild);
+  const saveServerChildProgrammeEnrollmentRows = async (rows = []) => (
+    saveServerRows(rows, saveChildProgrammeEnrollment)
+  );
+  const saveServerChildClassMembershipRows = async (rows = []) => (
+    saveServerRows(rows, saveChildClassMembership)
+  );
+
   const deleteStaffChild = async (staffId, childId, { transaction } = {}) => runWrite(transaction, async (txn) => {
     const endedAt = new Date().toISOString();
     const rows = await txn.getAllAsync(`
@@ -580,12 +621,16 @@ export const createChildrenRepository = ({ database } = {}) => {
     save,
     saveChild: save,
     saveChildRecord,
+    saveServerChildRows,
     updateChild,
     getUnsyncedChildren,
     getStaffChildren,
     saveStaffChild,
+    saveServerStaffChildRows,
     saveChildProgrammeEnrollment,
+    saveServerChildProgrammeEnrollmentRows,
     saveChildClassMembership,
+    saveServerChildClassMembershipRows,
     deleteStaffChild,
     getUnsyncedStaffChildren,
     archiveChild,

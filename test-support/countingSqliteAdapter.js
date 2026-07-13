@@ -24,9 +24,10 @@ function createCountingSqliteTestDatabase(filename = ':memory:') {
       record('getFirstAsync', sql);
       return base.getFirstAsync(sql, ...params);
     },
-    withExclusiveTransactionAsync: task => base.withExclusiveTransactionAsync(
-      () => task(adapter)
-    ),
+    withExclusiveTransactionAsync: task => {
+      record('transaction', 'BEGIN EXCLUSIVE');
+      return base.withExclusiveTransactionAsync(() => task(adapter));
+    },
     resetQueryLog: () => {
       queries = [];
     },
@@ -34,6 +35,7 @@ function createCountingSqliteTestDatabase(filename = ':memory:') {
       queries.filter(query => includeMigrationControl || !query.migrationControl)
     ),
     getQueryCount: options => adapter.getQueryLog(options).length,
+    getTransactionCount: () => queries.filter(query => query.method === 'transaction').length,
   };
 
   return adapter;

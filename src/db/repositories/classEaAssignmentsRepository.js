@@ -29,11 +29,13 @@ const REQUIRED_RLS_FIELDS = ['class_id', 'ea_user_id', 'programme_id', 'created_
 
 export const createClassEaAssignmentsRepository = ({ database } = {}) => {
   const save = async (assignment, { transaction } = {}) => {
-    assertRlsRequiredFields('class_ea_assignments', assignment, REQUIRED_RLS_FIELDS);
     const write = async (txn) => {
       const record = normalizeSyncFields(assignment);
       if (await serverPullWouldClobberPendingLocal(txn, 'class_ea_assignments', record)) {
         return false;
+      }
+      if (shouldEnqueueOutbox(record)) {
+        assertRlsRequiredFields('class_ea_assignments', record, REQUIRED_RLS_FIELDS);
       }
       await upsertDomainRecord(txn, {
         tableName: 'class_ea_assignments',
@@ -54,7 +56,20 @@ export const createClassEaAssignmentsRepository = ({ database } = {}) => {
     return rows.map(mapDomainRow);
   };
 
-  return { save, getAll };
+  const saveServerRows = async (rows = []) => runRepositoryTransaction(database, async (txn) => {
+    let applied = 0;
+    let skipped = 0;
+    for (const row of rows) {
+      if (await save(row, { transaction: txn }) === false) {
+        skipped += 1;
+      } else {
+        applied += 1;
+      }
+    }
+    return { applied, skipped };
+  });
+
+  return { save, saveServerRows, getAll };
 };
 
 export const classEaAssignmentsRepository = createClassEaAssignmentsRepository();

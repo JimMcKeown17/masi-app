@@ -138,6 +138,19 @@ export const createClassesRepository = ({ database } = {}) => {
     return true;
   });
 
+  const saveServerClassRows = async (rows = []) => runRepositoryTransaction(database, async (txn) => {
+    let applied = 0;
+    let skipped = 0;
+    for (const row of rows) {
+      if (await saveClass(row, { transaction: txn }) === false) {
+        skipped += 1;
+      } else {
+        applied += 1;
+      }
+    }
+    return { applied, skipped };
+  });
+
   const updateClass = async (id, updates, { transaction } = {}) => runWrite(transaction, async (txn) => {
     const existing = await txn.getFirstAsync('select * from classes where id = ?', id);
     if (!existing) return false;
@@ -249,6 +262,7 @@ export const createClassesRepository = ({ database } = {}) => {
   return {
     getClasses,
     saveClass,
+    saveServerClassRows,
     updateClass,
     deleteClass,
     getUnsyncedClasses,

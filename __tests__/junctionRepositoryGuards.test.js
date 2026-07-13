@@ -50,6 +50,37 @@ describe('class_ea_assignments junction guards (RLS contract)', () => {
       await db.closeAsync();
     }
   });
+
+  test('a synced server assignment may retain a null created_by without enqueueing', async () => {
+    const db = await createMigratedDatabase(runMigrations);
+    try {
+      await seedCoreData(db);
+      const repository = createClassEaAssignmentsRepository({ database: db });
+
+      await expect(repository.save({
+        id: 'server-assignment-1',
+        class_id: 'class-1',
+        ea_user_id: 'user-1',
+        programme_id: 'programme-a',
+        assigned_at: '2026-05-21T08:00:00.000Z',
+        created_by: null,
+        sync_status: 'synced',
+      })).resolves.toBe(true);
+
+      expect(await db.getFirstAsync(
+        'select id, created_by, sync_status from class_ea_assignments where id = ?',
+        'server-assignment-1'
+      )).toEqual({
+        id: 'server-assignment-1',
+        created_by: null,
+        sync_status: 'synced',
+      });
+      expect(await db.getFirstAsync('select count(*) as count from sync_outbox'))
+        .toEqual({ count: 0 });
+    } finally {
+      await db.closeAsync();
+    }
+  });
 });
 
 describe('child_class_memberships junction guards (RLS contract)', () => {
