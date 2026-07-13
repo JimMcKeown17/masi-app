@@ -124,11 +124,11 @@ Convergence pass 3 (verdict BUILD-WITH-FIXES; all six fixes applied to the text 
 
 **Files:** Extend both pull integration suites (or one `pullReconcileOffline.integration.test.js`, registered), using tmp FILE databases: close the first adapter, reopen a second adapter + fresh repository instances against the same file, no network.
 
-- [ ] Acceptance (expected green; a failure returns to the owning task): HO ends a class assignment → pull → restart offline → class stays gone; HO ends a child assignment → child stays gone; HO ends only an enrollment → child gone but the assignment row is STILL ACTIVE locally (S1 proof); HO unassigns a group → group gone, membership unpublished but intact (S2/S9 proof); HO archives a group → tombstone arrives, group gone.
-- [ ] Commit: `test(pull): server removals stay gone offline across restart`
+- [x] Acceptance (expected green; a failure returns to the owning task): HO ends a class assignment → pull → restart offline → class stays gone; HO ends a child assignment → child stays gone; HO ends only an enrollment → child gone but the assignment row is STILL ACTIVE locally (S1 proof); HO unassigns a group → group gone, membership unpublished but intact (S2/S9 proof); HO archives a group → tombstone arrives, group gone.
+- [x] Commit: `test(pull): server removals stay gone offline across restart`
 
 ### Task 7: Contract map rewrite + wrap
 
 **Files:** Modify `documentation/rls-sync-contract-map.md` ("Pull Merge Invariant" → "Pull Persistence & Reconcile": the revised semantics table, invariants incl. breaker/observability/truncation/failureKind, gea now a pulled+persisted table with assignment-scoped group reads, `mergeServerRows` removed, scheduling stamps, the RLS under-return hazard + RPC follow-up), `documentation/LEARNING.md` (state-as-function-of-SQLite addendum incl. why relationship-specific scopes beat intersection inference), `documentation/sqlite-refactor-log.md`, `PRD.md` (tick 4B; LIFT the 4A non-releasable note), this plan's checkboxes.
 
-- [ ] Full gates one last time; exact counts in the log row. Commit: `docs(s4b): pull reconcile wrap - contract map, checklists, log row`
+- [x] Full gates one last time; exact counts in the log row. Commit: `docs(s4b): pull reconcile wrap - contract map, checklists, log row`

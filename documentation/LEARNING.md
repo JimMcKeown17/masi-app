@@ -1212,9 +1212,23 @@ Key takeaways:
 35. **Performance invariants need statement budgets.** Data equality alone does not catch an N+1 regression.
 36. **Known transaction context is reusable evidence.** Passing a resolved owner avoids redundant reads while preserving the same outbox stamp.
 
-**Last Updated**: 2026-07-12
+**Last Updated**: 2026-07-13
 **Document Status**: Living document - updated as we build
 
 ### Sprint 3 addendum: why local dates are pinned to Africa/Johannesburg
 
 `utils/localDate.js` fixes business-day attribution to SAST rather than the device timezone. This was a deliberate orchestrator decision, not a test convenience: Masi operates in one country, head office reads day totals in SAST, and low-end field devices sometimes carry wrong timezone settings, so device-local attribution is LESS reliable than programme-timezone attribution. A side benefit is determinism: date tests now assert hardcoded SAST expectations on any machine, including CI. The one seam to remember: capture-time date stamps (`session_date`, `date_assessed`) are still device-local calendar dates. On a correctly-set South African device the two are identical; a device set to another timezone would stamp capture dates in its own calendar while displays attribute by SAST. If Masi ever operates outside SAST, LOCAL_TIME_ZONE becomes a programme-level setting.
+
+### Sprint 4B addendum: let SQLite be the one roster truth
+
+It is tempting to treat a pull as three lists that need clever merging: the old React state, the new server rows, and the local SQLite rows. That looks flexible, but it creates two authorities. React can temporarily show a row that SQLite has ended, or hide a row without persisting why it disappeared. After a restart, React is rebuilt from SQLite, so any decision made only in memory is lost.
+
+Sprint 4B uses a simpler mental model: React state is a pure function of SQLite. A context may publish the cached SQLite snapshot before the network finishes so the screen stays responsive. After the pull, repositories persist returned rows and reconcile acknowledged removals in transactions. The context then reads SQLite again and publishes that result. Restarting the app repeats the same read and produces the same state. There is no separate merge policy to remember, test, or keep in sync.
+
+The word "acknowledged" is important. An empty result is safe evidence of removal only when the query asked about one relationship and completed successfully. Consider a child who has both an active `child_ea_assignments` row and an active `child_programme_enrollments` row. The old children query returned the intersection of those relationships. If Head Office ended only the enrollment, the child disappeared from the intersection. Inferring from that absence would also end the EA assignment, even though the server still says the assignment is active. That false update would survive offline and could be pushed into later reasoning as if it were fact.
+
+The fix is relationship-specific acknowledged scopes. The assignment query decides assignment removals. The enrollment query decides enrollment removals within the active Programme and acknowledged assigned-child set. The children intersection still decides which children should be visible, but it decides neither relationship's lifecycle. In the worked example, the enrollment ends, My Children becomes empty, and the active assignment row remains intact for another Programme or a later re-enrollment.
+
+The same rule explains groups. A group missing from an EA-scoped query means the assignment ended; it does not mean the shared group entity was archived. The assignment is ended locally, the group and membership rows stay intact, and assignment-scoped repository reads stop publishing them. If the assignment returns, the same rows become visible again.
+
+The broader lesson is that a query result carries the semantics of its predicate. Never infer which relationship changed from an intersection. Persist the server fact inside the scope that actually acknowledged it, then let every screen derive from the durable local model.

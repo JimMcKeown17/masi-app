@@ -855,7 +855,20 @@ Plan: `docs/superpowers/plans/2026-07-13-sprint4a-facade-retirement.md`
 - [x] Delete `src/utils/storage.js` and add local migration v7 for retired sidecar cleanup
 - [x] Update the pull merge contract, migration pins, and final unit and integration gates
 
-Sprint 4A implementation complete 2026-07-13 after the R1-R15 review loop. Final Node 20 gates: unit `161/929` and integration `28/210` green. Sprint 4A is not releasable on its own: no preview or production build may be cut until Sprint 4B adds foreground and reconnect pull scheduling and merges into the same release tree.
+Sprint 4A implementation complete 2026-07-13 after the R1-R15 review loop. Final Node 20 gates: unit `161/929` and integration `28/210` green. Sprint 4A was intentionally not releasable on its own. That restriction is now lifted for the Sprint 4 tree because Sprint 4B has merged foreground and reconnect pull scheduling into the same tree.
+
+#### Sprint 4B: Server Removal Reconcile and Pull Scheduling
+Branch: `improvement/s4b-pull-reconcile`
+Plan: `docs/superpowers/plans/2026-07-13-sprint4b-pull-reconcile.md`
+
+- [x] Return relationship-specific pull scopes with completeness and failure classification
+- [x] Persist and reconcile acknowledged relationship removals without outbox writes
+- [x] Derive Children and Classes state from SQLite and remove `mergeServerRows`
+- [x] Add staleness-gated foreground and reconnect pulls with durable pull stamps
+- [x] Add mass-end breaker recovery and restart acceptance coverage
+- [x] Update the pull contract, learning note, refactor log, and final gates
+
+Sprint 4B implementation complete 2026-07-13 after the S1-S13 and convergence review loop. Final Node 20 gates: unit `162/995` and integration `30/257` green. The Sprint 4 tree is releasable again because remote roster changes now pull on foreground and reconnect, reconcile into SQLite, and remain correct across an offline restart.
 
 #### Sync auth hardening (#43-45)
 Branch: `fix/sync-auth-hardening`
