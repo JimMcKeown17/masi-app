@@ -7,6 +7,8 @@ import { colors, spacing, borderRadius, shadows } from '../../constants/colors';
 import { sessionsRepository } from '../../db/repositories/sessionsRepository';
 import { useLookupsContext } from '../../context/LookupsContext';
 
+import { toLocalDateString } from '../../utils/localDate';
+
 const THIRTY_DAYS_MS = 30 * 24 * 60 * 60 * 1000;
 
 function formatSessionDate(dateString) {
@@ -34,23 +36,6 @@ export default function SessionHistoryScreen() {
     setSnackbarVisible(true);
   };
 
-  const filterAndSort = useCallback((allSessions) => {
-    const now = Date.now();
-    const cutoff = now - THIRTY_DAYS_MS;
-
-    return allSessions
-      .filter((s) => {
-        if (s.user_id !== user?.id) return false;
-        const [y, m, d] = s.session_date.split('-').map(Number);
-        const sessionTime = new Date(y, m - 1, d).getTime();
-        return sessionTime >= cutoff;
-      })
-      .sort((a, b) => {
-        if (a.session_date !== b.session_date) return a.session_date > b.session_date ? -1 : 1;
-        return new Date(b.created_at) - new Date(a.created_at);
-      });
-  }, [user?.id]);
-
   /**
    * Load recent session history from local SQLite. Network sync runs through
    * the outbox engine; this screen only renders the local cache.
@@ -68,9 +53,14 @@ export default function SessionHistoryScreen() {
 
         try {
           setLoading(true);
-          const cached = await sessionsRepository.getSessions({ userId: user.id });
+          const cached = await sessionsRepository.getSessions({
+            userId: user.id,
+            recordedByUserId: user.id,
+            sinceDate: toLocalDateString(new Date(Date.now() - THIRTY_DAYS_MS)),
+            order: 'desc',
+          });
           if (active) {
-            setSessions(filterAndSort(cached));
+            setSessions(cached);
           }
         } catch (error) {
           console.error('Error loading sessions:', error);
@@ -88,7 +78,7 @@ export default function SessionHistoryScreen() {
       return () => {
         active = false;
       };
-    }, [filterAndSort, user?.id])
+    }, [user?.id])
   );
 
   const renderItem = ({ item }) => {

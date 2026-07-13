@@ -59,13 +59,16 @@ export const createMasteryRepository = ({ database } = {}) => {
     const operation = pendingInsert
       ? 'insert'
       : (masteryRecord.deleted_at ? 'archive' : fallbackActiveOp);
-    await enqueueDomainOutbox(txn, 'letter_mastery', id, operation, masteryRecord);
+    await enqueueDomainOutbox(txn, 'letter_mastery', id, operation, masteryRecord, {
+      ownerRow: masteryRecord,
+    });
   };
 
   const getLetterMastery = async ({
     transaction,
     userId,
     childId,
+    childIds,
     programmeId,
   } = {}) => {
     const db = transaction || await resolveDatabase(database);
@@ -84,6 +87,11 @@ export const createMasteryRepository = ({ database } = {}) => {
     if (childId) {
       clauses.push('child_id = ?');
       params.push(childId);
+    }
+    if (childIds) {
+      if (childIds.length === 0) return [];
+      clauses.push(`child_id in (${childIds.map(() => '?').join(', ')})`);
+      params.push(...childIds);
     }
     const where = clauses.length ? `where ${clauses.join(' and ')}` : '';
     const rows = await db.getAllAsync(

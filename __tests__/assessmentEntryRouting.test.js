@@ -84,6 +84,7 @@ jest.mock('../src/context/ClassesContext', () => ({
 jest.mock('../src/db/repositories/assessmentsRepository', () => ({
   assessmentsRepository: {
     getAssessments: jest.fn(),
+    countAssessments: jest.fn(),
   },
 }));
 
@@ -132,6 +133,7 @@ describe('assessment entry routing', () => {
     useChildren.mockReturnValue({ children: [child] });
     useClasses.mockReturnValue({ classes: [classItem] });
     assessmentsRepository.getAssessments.mockResolvedValue([]);
+    assessmentsRepository.countAssessments.mockResolvedValue(0);
   });
 
   test.each(['sequential', 'grid'])(
@@ -165,6 +167,32 @@ describe('assessment entry routing', () => {
       });
     }
   );
+
+  test('AssessmentChildSelectScreen resolves attempt number at launch while preload is pending', async () => {
+    assessmentsRepository.getAssessments.mockReturnValue(new Promise(() => {}));
+    assessmentsRepository.countAssessments.mockResolvedValue(3);
+    resolveAssessmentRoute.mockResolvedValue(routeExpectationByMode.sequential);
+    const navigation = makeNavigation();
+
+    const screen = render(
+      <AssessmentChildSelectScreen
+        navigation={navigation}
+        route={{ params: { assessmentType: 'letter_egra' } }}
+      />
+    );
+
+    fireEvent.press(screen.getByText('Amahle Dlamini'));
+
+    await waitFor(() => expect(navigation.navigate).toHaveBeenCalledWith(
+      'SequentialAssessment',
+      expect.objectContaining({ attemptNumber: 4 })
+    ));
+    expect(assessmentsRepository.countAssessments).toHaveBeenCalledWith({
+      userId: 'user-1',
+      childId: 'child-1',
+      assessmentType: 'letter_egra',
+    });
+  });
 
   test.each(['sequential', 'grid'])(
     'ChildResultsScreen routes %s mode through the resolver',

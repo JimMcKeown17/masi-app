@@ -6,6 +6,7 @@ import { useAuth } from '../../context/AuthContext';
 import { useChildren } from '../../context/ChildrenContext';
 import { colors, spacing, borderRadius, shadows } from '../../constants/colors';
 import { assessmentsRepository } from '../../db/repositories/assessmentsRepository';
+import { toLocalDateString } from '../../utils/localDate';
 
 const THIRTY_DAYS_MS = 30 * 24 * 60 * 60 * 1000;
 
@@ -31,20 +32,6 @@ export default function AssessmentHistoryScreen({ navigation }) {
   const [snackbarMessage, setSnackbarMessage] = useState('');
   const [snackbarVisible, setSnackbarVisible] = useState(false);
 
-  const filterAndSort = useCallback((all) => {
-    const cutoff = Date.now() - THIRTY_DAYS_MS;
-    return all
-      .filter((a) => {
-        if (a.user_id !== user?.id) return false;
-        const [y, m, d] = a.date_assessed.split('-').map(Number);
-        return new Date(y, m - 1, d).getTime() >= cutoff;
-      })
-      .sort((a, b) => {
-        if (a.date_assessed !== b.date_assessed) return a.date_assessed > b.date_assessed ? -1 : 1;
-        return new Date(b.created_at) - new Date(a.created_at);
-      });
-  }, [user?.id]);
-
   useFocusEffect(
     useCallback(() => {
       let active = true;
@@ -58,9 +45,14 @@ export default function AssessmentHistoryScreen({ navigation }) {
 
         try {
           setLoading(true);
-          const cached = await assessmentsRepository.getAssessments({ userId: user.id });
+          const cached = await assessmentsRepository.getAssessments({
+            userId: user.id,
+            recordedByUserId: user.id,
+            sinceDate: toLocalDateString(new Date(Date.now() - THIRTY_DAYS_MS)),
+            order: 'desc',
+          });
           if (active) {
-            setAssessments(filterAndSort(cached));
+            setAssessments(cached);
           }
         } catch (error) {
           console.error('Error loading assessments:', error);
@@ -79,7 +71,7 @@ export default function AssessmentHistoryScreen({ navigation }) {
       return () => {
         active = false;
       };
-    }, [filterAndSort, user?.id])
+    }, [user?.id])
   );
 
   const childInfoMap = React.useMemo(() => {

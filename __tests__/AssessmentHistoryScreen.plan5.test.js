@@ -81,6 +81,12 @@ describe('AssessmentHistoryScreen Plan 5 behavior', () => {
     expect(getByText('English - Attempt #1')).toBeTruthy();
     expect(queryByText('No assessments yet. Run your first assessment!')).toBeNull();
     expect(assessmentsRepository.getAssessments).toHaveBeenCalledTimes(1);
+    expect(assessmentsRepository.getAssessments).toHaveBeenCalledWith({
+      userId: 'user-1',
+      recordedByUserId: 'user-1',
+      sinceDate: '2026-04-21',
+      order: 'desc',
+    });
     expect(supabase.from).not.toHaveBeenCalled();
   });
 });

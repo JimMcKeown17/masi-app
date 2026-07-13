@@ -21,6 +21,7 @@ import {
   getAssessmentCoverage,
   getMonthlyStatsFootnote,
 } from '../../utils/dashboardStats';
+import { toLocalDateString } from '../../utils/localDate';
 import { colors, spacing, borderRadius, shadows } from '../../constants/colors';
 
 export default function HomeScreen({ navigation }) {
@@ -62,24 +63,30 @@ export default function HomeScreen({ navigation }) {
   useFocusEffect(
     useCallback(() => {
       const loadStats = async () => {
-        const [timeEntries, sessions, assessments] = await Promise.all([
-          timeEntriesRepository.getTimeEntries({ userId: user.id }),
-          sessionsRepository.getSessions({ userId: user.id }),
-          assessmentsRepository.getAssessments({ userId: user.id }),
+        const monthStart = `${toLocalDateString(new Date()).slice(0, 7)}-01`;
+        const monthStartIso = new Date(`${monthStart}T00:00:00+02:00`).toISOString();
+        const [timeEntries, sessionCounts, assessmentCounts] = await Promise.all([
+          timeEntriesRepository.getTimeEntries({
+            userId: user.id,
+            sinceIso: monthStartIso,
+            completedOnly: true,
+          }),
+          sessionsRepository.getSessionCountsSince({ userId: user.id, sinceDate: monthStart }),
+          assessmentsRepository.getAssessmentCountsSince({ userId: user.id, sinceDate: monthStart }),
         ]);
 
         setDaysWorked(getDaysWorkedThisMonth(timeEntries));
 
-        const monthCount = getSessionsThisMonth(sessions);
+        const monthCount = getSessionsThisMonth(sessionCounts);
         setSessionsThisMonth(monthCount);
         // Same load moment as the counts above — keeps the period label in sync.
         setStatsFootnote(getMonthlyStatsFootnote());
 
-        const week = getWeekSessionCounts(sessions);
+        const week = getWeekSessionCounts(sessionCounts);
         setWeekCounts(week);
         setWeekTotal(week.reduce((sum, d) => sum + d.count, 0));
 
-        setCoverage(getAssessmentCoverage(childrenList, assessments));
+        setCoverage(getAssessmentCoverage(childrenList, assessmentCounts));
       };
       loadStats();
     }, [childrenList, user.id])

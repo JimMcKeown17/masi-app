@@ -67,6 +67,10 @@ describe('TimeEntriesListScreen sync-voice snackbars', () => {
     // Exact presenter copy: the counts are pass-level (all tables), so no "entries" claim.
     expect(getByText('Saved on your phone · 2 waiting to sync')).toBeTruthy();
     expect(queryByText(/failed/i)).toBeNull();
+    expect(timeEntriesRepository.getTimeEntries).toHaveBeenCalledTimes(2);
+    expect(timeEntriesRepository.getTimeEntries.mock.calls[1]).toEqual(
+      timeEntriesRepository.getTimeEntries.mock.calls[0]
+    );
   });
 
   test('terminal failures show the presenter needs-attention message', async () => {

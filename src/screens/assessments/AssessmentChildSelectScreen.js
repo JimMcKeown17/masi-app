@@ -10,6 +10,7 @@ import { colors, spacing, borderRadius, shadows } from '../../constants/colors';
 import { assessmentsRepository } from '../../db/repositories/assessmentsRepository';
 import { NO_TEXT_SUGGESTIONS } from '../../constants/textInputProps';
 import { resolveAssessmentRoute } from '../../utils/assessmentRouting';
+import { buildAssessmentMap } from '../../utils/assessmentHistoryMap';
 
 function formatShortDate(dateStr) {
   const [y, m, d] = dateStr.split('-').map(Number);
@@ -35,20 +36,7 @@ export default function AssessmentChildSelectScreen({ navigation, route }) {
     useCallback(() => {
       (async () => {
         const allAssessments = await assessmentsRepository.getAssessments({ userId: user.id });
-        const typeFiltered = allAssessments.filter(x => (x.assessment_type || 'letter_egra') === assessmentType);
-        const map = {};
-        for (const a of typeFiltered) {
-          const existing = map[a.child_id];
-          if (!existing || a.date_assessed > existing.date_assessed ||
-              (a.date_assessed === existing.date_assessed && a.created_at > existing.created_at)) {
-            map[a.child_id] = {
-              date_assessed: a.date_assessed,
-              accuracy: a.accuracy,
-              attemptCount: typeFiltered.filter(x => x.child_id === a.child_id).length,
-            };
-          }
-        }
-        setAssessmentMap(map);
+        setAssessmentMap(buildAssessmentMap(allAssessments, assessmentType));
       })();
     }, [assessmentType, user.id])
   );
@@ -75,11 +63,18 @@ export default function AssessmentChildSelectScreen({ navigation, route }) {
     if (launchingRef.current) return;
     launchingRef.current = true;
     try {
-      const { screenName, captureMode } = await resolveAssessmentRoute();
+      const [{ screenName, captureMode }, attemptCount] = await Promise.all([
+        resolveAssessmentRoute(),
+        assessmentsRepository.countAssessments({
+          userId: user.id,
+          childId: child.id,
+          assessmentType,
+        }),
+      ]);
       navigation.navigate(screenName, {
         child,
         letterSet,
-        attemptNumber: (assessmentMap[child.id]?.attemptCount || 0) + 1,
+        attemptNumber: attemptCount + 1,
         assessmentType,
         captureMode,
       });

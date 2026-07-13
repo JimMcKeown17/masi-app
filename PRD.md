@@ -831,6 +831,19 @@ Plan: `docs/superpowers/plans/2026-07-12-sprint2-auth-publish-first-idempotent-d
 
 Sprint 2B implementation complete 2026-07-12. Final Node 20 gates: unit `151/879` and integration `25/190` green. The migration is authored only and still needs orchestrator application and live verification; the airplane-mode cold-start and force-kill delete retry checks remain Jim-owned device gates.
 
+#### Sprint 3: Read-Path Efficiency and Local Dates
+Branch: `improvement/s3-read-path`
+Plan: `docs/superpowers/plans/2026-07-12-sprint3-read-path.md`
+
+- [x] Shared SAST local-date utility and both live UTC-day fixes - `d0a5b09`
+- [x] Default batched repository hydration, SQL bounds, and aggregate reads - `3c32107`
+- [x] Aggregate-backed Home stats, EA-scoped histories, and SectionList work history - `f38d62e`
+- [x] Launch-time assessment attempt counts independent of screen preload - `18c26af`
+- [x] Owner-resolution fast paths, changed-child mastery prefetch, and navigate-on-commit - `7599628`
+- [x] Plan checklist, learning note, and refactor log updated
+
+Sprint 3 implementation complete 2026-07-12. Query budgets are pinned at 3 reads for 30 sessions, 3 reads for 30 assessments, and 5 reads for the Home repository bundle. Completion writes remain intentionally row-based: 124 writes and 0 owner-resolution reads for a 61-item assessment; 22 writes and 0 owner-resolution reads for a 10-attendee session. Final Node 20 gates: unit `156/903` and integration `25/190` green. The device experience gate remains Jim-owned after merge.
+
 #### Sync auth hardening (#43-45)
 Branch: `fix/sync-auth-hardening`
 Plan: `docs/superpowers/plans/2026-07-06-sync-auth-hardening.md`

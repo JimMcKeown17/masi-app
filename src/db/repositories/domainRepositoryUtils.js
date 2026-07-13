@@ -109,13 +109,16 @@ export const enqueueDomainOutbox = async (
   recordId,
   operation,
   payload = null,
-  { ownerRow } = {}
+  { ownerRow, ownerUserId } = {}
 ) => {
-  const row = ownerRow || await db.getFirstAsync(
-    `select * from ${quoteIdentifier(tableName)} where id = ?`,
-    recordId
-  ).catch(() => null);
-  const ownerUserId = await resolvePrimaryOwner({ db, tableName, row, payload });
+  let resolvedOwnerUserId = ownerUserId;
+  if (resolvedOwnerUserId === undefined) {
+    const row = ownerRow || await db.getFirstAsync(
+      `select * from ${quoteIdentifier(tableName)} where id = ?`,
+      recordId
+    ).catch(() => null);
+    resolvedOwnerUserId = await resolvePrimaryOwner({ db, tableName, row, payload });
+  }
 
   return insertOutboxRecord(db, {
     id: outboxId(tableName, recordId, operation),
@@ -123,7 +126,7 @@ export const enqueueDomainOutbox = async (
     recordId,
     operation,
     payload,
-    ownerUserId,
+    ownerUserId: resolvedOwnerUserId,
   });
 };
 

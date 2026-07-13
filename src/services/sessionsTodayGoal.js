@@ -2,7 +2,8 @@ import { resolveDatabase } from '../db/repositories/repositoryRuntime';
 import { getActiveProgrammeId } from '../db/repositories/domainRepositoryUtils';
 import { programmesRepository } from '../db/repositories/referenceDataRepository';
 import { sessionsRepository } from '../db/repositories/sessionsRepository';
-import { getSessionGoal, filterTodaysSessionsForProgramme } from '../utils/sessionGoal';
+import { getSessionGoal } from '../utils/sessionGoal';
+import { toLocalDateString } from '../utils/localDate';
 
 /**
  * Resolve the EA's Sessions Today goal for their active programme.
@@ -28,13 +29,10 @@ export async function getSessionsTodayGoal({ userId, now = new Date() } = {}) {
   const programme = programmes.find((p) => p.id === programmeId);
   if (!programme) return null;
 
-  // `getSessions` is programme-scoped, not user-scoped, and sign-out does not wipe
-  // the local SQLite domain tables. On a shared device another EA's synced sessions
-  // for this programme would otherwise inflate the count — so scope to the signed-in
-  // EA here. (filterTodaysSessionsForProgramme then re-narrows by programme + today.)
-  const sessions = await sessionsRepository.getSessions({ userId, programmeId });
-  const mySessions = sessions.filter((session) => session.user_id === userId);
-  const todaysSessions = filterTodaysSessionsForProgramme(mySessions, programmeId, now);
-
-  return getSessionGoal(programme, todaysSessions);
+  const count = await sessionsRepository.countSessionsOnDate({
+    userId,
+    programmeId,
+    date: toLocalDateString(now),
+  });
+  return getSessionGoal(programme, Array(count));
 }

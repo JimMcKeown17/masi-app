@@ -65,13 +65,9 @@ const stripLegacySessionPayload = (record) => {
   };
 };
 
-const mapSession = async (db, row) => {
+const mapSession = (row, attendees = []) => {
   if (!row) return null;
   const mapped = mapDomainRow(row, { jsonColumns: ['activities'] });
-  const attendees = await db.getAllAsync(
-    'select child_id, group_id from session_attendees where session_id = ? order by created_at, id',
-    row.id
-  );
   const activities = mapped.activities || {};
   const legacy = activities.__legacySession || {};
   delete activities.__legacySession;
@@ -97,26 +93,110 @@ const mapSession = async (db, row) => {
   return result;
 };
 
+const hydrateSessions = async (db, rows) => {
+  if (rows.length === 0) return [];
+  const placeholders = rows.map(() => '?').join(', ');
+  const attendees = await db.getAllAsync(`
+    select session_id, child_id, group_id
+    from session_attendees
+    where session_id in (${placeholders})
+    order by created_at, id
+  `, ...rows.map(row => row.id));
+  const attendeesBySession = new Map();
+  for (const attendee of attendees) {
+    const current = attendeesBySession.get(attendee.session_id) || [];
+    current.push(attendee);
+    attendeesBySession.set(attendee.session_id, current);
+  }
+  return rows.map(row => mapSession(row, attendeesBySession.get(row.id) || []));
+};
+
 export const createSessionsRepository = ({ database } = {}) => {
   const runWrite = (transaction, task) => (
     transaction ? task(transaction) : runRepositoryTransaction(database, task)
   );
 
-  const getSessions = async ({ userId, programmeId } = {}) => {
+  const resolveActiveProgrammeId = async (db, { userId, programmeId }) => (
+    programmeId || (userId ? await getActiveProgrammeId(db, userId) : null)
+  );
+
+  const getSessions = async ({
+    userId,
+    programmeId,
+    recordedByUserId,
+    sinceDate,
+    order = 'asc',
+  } = {}) => {
     const db = await resolveDatabase(database);
-    const activeProgrammeId = programmeId || (userId ? await getActiveProgrammeId(db, userId) : null);
+    const activeProgrammeId = await resolveActiveProgrammeId(db, { userId, programmeId });
     if (userId && !activeProgrammeId) return [];
-    const rows = activeProgrammeId
-      ? await db.getAllAsync(
-        'select * from sessions where programme_id = ? order by session_date, created_at',
-        activeProgrammeId
-      )
-      : await db.getAllAsync('select * from sessions order by session_date, created_at');
-    const mapped = [];
-    for (const row of rows) {
-      mapped.push(await mapSession(db, row));
+    const clauses = [];
+    const params = [];
+    if (activeProgrammeId) {
+      clauses.push('programme_id = ?');
+      params.push(activeProgrammeId);
     }
-    return mapped;
+    if (recordedByUserId) {
+      clauses.push('user_id = ?');
+      params.push(recordedByUserId);
+    }
+    if (sinceDate) {
+      clauses.push('session_date >= ?');
+      params.push(sinceDate);
+    }
+    const where = clauses.length ? `where ${clauses.join(' and ')}` : '';
+    const direction = order === 'desc' ? 'desc' : 'asc';
+    const rows = await db.getAllAsync(
+      `select * from sessions ${where} order by session_date ${direction}, created_at ${direction}`,
+      ...params
+    );
+    return hydrateSessions(db, rows);
+  };
+
+  const getSessionCountsSince = async ({ userId, programmeId, sinceDate } = {}) => {
+    const db = await resolveDatabase(database);
+    const activeProgrammeId = await resolveActiveProgrammeId(db, { userId, programmeId });
+    if (userId && !activeProgrammeId) return [];
+    const clauses = [];
+    const params = [];
+    if (activeProgrammeId) {
+      clauses.push('programme_id = ?');
+      params.push(activeProgrammeId);
+    }
+    if (sinceDate) {
+      clauses.push('session_date >= ?');
+      params.push(sinceDate);
+    }
+    const where = clauses.length ? `where ${clauses.join(' and ')}` : '';
+    const rows = await db.getAllAsync(`
+      select session_date, count(*) as count
+      from sessions
+      ${where}
+      group by session_date
+      order by session_date
+    `, ...params);
+    return rows.map(row => ({ ...row, count: Number(row.count) }));
+  };
+
+  const countSessionsOnDate = async ({ userId, programmeId, date } = {}) => {
+    const db = await resolveDatabase(database);
+    const activeProgrammeId = await resolveActiveProgrammeId(db, { userId, programmeId });
+    if (userId && !activeProgrammeId) return 0;
+    const clauses = ['session_date = ?'];
+    const params = [date];
+    if (activeProgrammeId) {
+      clauses.push('programme_id = ?');
+      params.push(activeProgrammeId);
+    }
+    if (userId) {
+      clauses.push('user_id = ?');
+      params.push(userId);
+    }
+    const row = await db.getFirstAsync(
+      `select count(*) as count from sessions where ${clauses.join(' and ')}`,
+      ...params
+    );
+    return Number(row?.count || 0);
   };
 
   const saveSession = async (session, { transaction } = {}) => runWrite(transaction, async (txn) => {
@@ -138,7 +218,9 @@ export const createSessionsRepository = ({ database } = {}) => {
       jsonColumns: ['activities'],
     }, record);
     if (shouldEnqueueOutbox(record)) {
-      await enqueueDomainOutbox(txn, 'sessions', session.id, 'insert', stripLegacySessionPayload(record));
+      await enqueueDomainOutbox(txn, 'sessions', session.id, 'insert', stripLegacySessionPayload(record), {
+        ownerRow: record,
+      });
     }
 
     const childIds = session.children_ids || [];
@@ -157,7 +239,9 @@ export const createSessionsRepository = ({ database } = {}) => {
         columns: ATTENDEE_COLUMNS,
       }, attendee);
       if (shouldEnqueueOutbox(attendee)) {
-        await enqueueDomainOutbox(txn, 'session_attendees', attendee.id, 'insert', attendee);
+        await enqueueDomainOutbox(txn, 'session_attendees', attendee.id, 'insert', attendee, {
+          ownerUserId: record.user_id,
+        });
       }
     }
 
@@ -165,7 +249,8 @@ export const createSessionsRepository = ({ database } = {}) => {
   });
 
   const updateSession = async (id, updates, keysToRemove = [], { transaction } = {}) => runWrite(transaction, async (txn) => {
-    const existing = await mapSession(txn, await txn.getFirstAsync('select * from sessions where id = ?', id));
+    const rows = await hydrateSessions(txn, [await txn.getFirstAsync('select * from sessions where id = ?', id)].filter(Boolean));
+    const existing = rows[0] || null;
     if (!existing) return false;
     const next = { ...existing, ...updates };
     for (const key of keysToRemove) {
@@ -178,15 +263,13 @@ export const createSessionsRepository = ({ database } = {}) => {
   const getUnsyncedRecords = async () => {
     const db = await resolveDatabase(database);
     const rows = await db.getAllAsync("select * from sessions where sync_status <> 'synced' order by created_at");
-    const mapped = [];
-    for (const row of rows) {
-      mapped.push(await mapSession(db, row));
-    }
-    return mapped;
+    return hydrateSessions(db, rows);
   };
 
   return {
     getSessions,
+    getSessionCountsSince,
+    countSessionsOnDate,
     saveSession,
     updateSession,
     getUnsyncedRecords,

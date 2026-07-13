@@ -13,7 +13,7 @@ jest.mock('@react-navigation/native', () => ({
 }));
 jest.mock('../src/context/AuthContext', () => ({ useAuth: jest.fn() }));
 jest.mock('../src/db/repositories/assessmentsRepository', () => ({
-  assessmentsRepository: { getAssessments: jest.fn() },
+  assessmentsRepository: { getAssessments: jest.fn(), countAssessments: jest.fn() },
 }));
 jest.mock('../src/components/assessment/LetterMasteryPanel', () => {
   const { Text } = require('react-native');
@@ -25,6 +25,7 @@ describe('ChildResultsScreen', () => {
     jest.clearAllMocks();
     useAuth.mockReturnValue({ user: { id: 'user-1' } });
     assessmentsRepository.getAssessments.mockResolvedValue([]);
+    assessmentsRepository.countAssessments.mockResolvedValue(0);
   });
 
   test('renders assessment sections and embeds the mastery panel', async () => {

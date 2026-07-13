@@ -1,5 +1,6 @@
 import React from 'react';
 import { render, waitFor } from '@testing-library/react-native';
+import { SectionList } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import TimeEntriesListScreen from '../src/screens/main/TimeEntriesListScreen';
 import { useAuth } from '../src/context/AuthContext';
@@ -79,11 +80,12 @@ describe('TimeEntriesListScreen Plan 5 behavior', () => {
   });
 
   afterEach(() => {
+    jest.useRealTimers();
     jest.clearAllMocks();
   });
 
   test('loads completed work history from SQLite without screen-owned Supabase or storage pulls', async () => {
-    const { getByText, queryByText } = render(
+    const { getByText, queryByText, UNSAFE_getByType } = render(
       <SafeAreaProvider>
         <TimeEntriesListScreen />
       </SafeAreaProvider>
@@ -93,8 +95,37 @@ describe('TimeEntriesListScreen Plan 5 behavior', () => {
 
     expect(getByText('3.00')).toBeTruthy();
     expect(getByText('Unsynced')).toBeTruthy();
+    expect(getByText('Showing last 60 days')).toBeTruthy();
+    expect(UNSAFE_getByType(SectionList).props.sections).toEqual([
+      expect.objectContaining({ title: '2026-05-21' }),
+    ]);
     expect(queryByText('No Time Entries Yet')).toBeNull();
     expect(timeEntriesRepository.getTimeEntries).toHaveBeenCalledTimes(1);
     expect(supabase.from).not.toHaveBeenCalled();
+  });
+
+  test('groups a 00:30 SAST entry under its local day and marks that day as today', async () => {
+    jest.useFakeTimers();
+    jest.setSystemTime(new Date('2026-07-11T22:45:00.000Z'));
+    timeEntriesRepository.getTimeEntries.mockResolvedValue([{
+      id: 'entry-boundary',
+      user_id: 'user-1',
+      sign_in_time: '2026-07-11T22:30:00.000Z',
+      sign_out_time: '2026-07-11T23:30:00.000Z',
+      synced: true,
+    }]);
+
+    const { getByText } = render(
+      <SafeAreaProvider>
+        <TimeEntriesListScreen />
+      </SafeAreaProvider>
+    );
+
+    await waitFor(() => expect(getByText('Sunday, Jul 12, 2026')).toBeTruthy());
+    expect(getByText('Today')).toBeTruthy();
+    expect(timeEntriesRepository.getTimeEntries).toHaveBeenCalledWith({
+      userId: 'user-1',
+      sinceIso: '2026-05-12T22:00:00.000Z',
+    });
   });
 });

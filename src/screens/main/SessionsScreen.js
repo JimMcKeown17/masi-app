@@ -16,6 +16,17 @@ import ClockInBeforeSessionDialog from '../../components/sessions/ClockInBeforeS
 import { getActiveProgrammeGate } from '../../services/activeProgrammeGate';
 import NoActiveProgrammeNotice from '../../components/common/NoActiveProgrammeNotice';
 import SectionHeader from '../../components/common/SectionHeader';
+import { toLocalDateString } from '../../utils/localDate';
+
+const getStatsCutoff = () => {
+  const today = toLocalDateString(new Date());
+  const monthStart = `${today.slice(0, 7)}-01`;
+  const calendar = new Date(`${today}T12:00:00.000Z`);
+  const daysSinceMonday = calendar.getUTCDay() === 0 ? 6 : calendar.getUTCDay() - 1;
+  calendar.setUTCDate(calendar.getUTCDate() - daysSinceMonday);
+  const monday = calendar.toISOString().slice(0, 10);
+  return monday < monthStart ? monday : monthStart;
+};
 
 export default function SessionsScreen({ navigation }) {
   const { user } = useAuth();
@@ -45,7 +56,11 @@ export default function SessionsScreen({ navigation }) {
           // write at save, so fall back to the usable capture UI on a read error.
           setProgrammeGate({ hasActiveProgramme: true, programme: null });
         }
-        const sessions = await sessionsRepository.getSessions({ userId: user.id });
+        const sessions = await sessionsRepository.getSessions({
+          userId: user.id,
+          recordedByUserId: user.id,
+          sinceDate: getStatsCutoff(),
+        });
         setStats(getSessionsTabStats(sessions, childrenList, user.id));
         // Re-resolved on every focus, so the ring reflects a session the EA just
         // recorded the moment they navigate back to this tab.

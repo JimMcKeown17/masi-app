@@ -8,7 +8,7 @@ jest.mock('../src/db/repositories/referenceDataRepository', () => ({
   programmesRepository: { getAll: jest.fn() },
 }));
 jest.mock('../src/db/repositories/sessionsRepository', () => ({
-  sessionsRepository: { getSessions: jest.fn() },
+  sessionsRepository: { countSessionsOnDate: jest.fn() },
 }));
 
 import { getSessionsTodayGoal } from '../src/services/sessionsTodayGoal';
@@ -30,16 +30,17 @@ describe('getSessionsTodayGoal', () => {
       { id: 'prog-literacy', code: 'literacy', daily_session_target: 3, daily_session_ceiling: 5 },
       { id: 'prog-other', code: 'numeracy', daily_session_target: 5, daily_session_ceiling: 5 },
     ]);
-    sessionsRepository.getSessions.mockResolvedValue([
-      { id: 's1', user_id: 'ea-1', programme_id: 'prog-literacy', session_date: '2026-05-29' }, // today + active → counts
-      { id: 's2', user_id: 'ea-1', programme_id: 'prog-literacy', session_date: '2026-05-28' }, // active, yesterday → excluded
-      { id: 's3', user_id: 'ea-1', programme_id: 'prog-other', session_date: '2026-05-29' },    // today, other programme → excluded
-    ]);
+    sessionsRepository.countSessionsOnDate.mockResolvedValue(1);
 
     const goal = await getSessionsTodayGoal({ userId: 'ea-1', now });
 
     // count === 1 proves only s1 survived the today + active-programme filter
     expect(goal).toEqual({ target: 3, ceiling: 5, count: 1, state: 'below' });
+    expect(sessionsRepository.countSessionsOnDate).toHaveBeenCalledWith({
+      userId: 'ea-1',
+      programmeId: 'prog-literacy',
+      date: '2026-05-29',
+    });
   });
 
   test("excludes another EA's sessions cached on a shared device", async () => {
@@ -47,10 +48,7 @@ describe('getSessionsTodayGoal', () => {
     programmesRepository.getAll.mockResolvedValue([
       { id: 'prog-literacy', code: 'literacy', daily_session_target: 3, daily_session_ceiling: 5 },
     ]);
-    sessionsRepository.getSessions.mockResolvedValue([
-      { id: 's1', user_id: 'ea-1', programme_id: 'prog-literacy', session_date: '2026-05-29' }, // mine
-      { id: 's2', user_id: 'ea-2', programme_id: 'prog-literacy', session_date: '2026-05-29' }, // another EA, same programme/day
-    ]);
+    sessionsRepository.countSessionsOnDate.mockResolvedValue(1);
 
     const goal = await getSessionsTodayGoal({ userId: 'ea-1', now });
 
