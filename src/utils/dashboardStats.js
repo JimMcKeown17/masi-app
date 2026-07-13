@@ -91,7 +91,7 @@ export function getWeekSessionCounts(sessions) {
   for (const session of sessions) {
     const dateStr = toDateString(session.session_date);
     if (dateStr in dateToIndex) {
-      weekDays[dateToIndex[dateStr]].count++;
+      weekDays[dateToIndex[dateStr]].count += Number(session.count || 1);
     }
   }
 
@@ -105,7 +105,9 @@ export function getSessionsThisMonth(sessions) {
   const now = new Date();
   let count = 0;
   for (const session of sessions) {
-    if (isSameMonth(toDateString(session.session_date), now)) count++;
+    if (isSameMonth(toDateString(session.session_date), now)) {
+      count += Number(session.count || 1);
+    }
   }
   return count;
 }

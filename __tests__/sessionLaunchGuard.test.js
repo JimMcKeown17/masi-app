@@ -10,6 +10,8 @@ const mockGetActiveTimeEntry = jest.fn();
 const mockGetTimeEntries = jest.fn();
 const mockGetSessions = jest.fn();
 const mockGetAssessments = jest.fn();
+const mockGetSessionCountsSince = jest.fn();
+const mockGetAssessmentCountsSince = jest.fn();
 const mockUseTimeTracking = jest.fn();
 const mockUseAuth = jest.fn();
 const mockUseOffline = jest.fn();
@@ -45,12 +47,14 @@ jest.mock('../src/db/repositories/timeEntriesRepository', () => ({
 jest.mock('../src/db/repositories/sessionsRepository', () => ({
   sessionsRepository: {
     getSessions: (...args) => mockGetSessions(...args),
+    getSessionCountsSince: (...args) => mockGetSessionCountsSince(...args),
   },
 }));
 
 jest.mock('../src/db/repositories/assessmentsRepository', () => ({
   assessmentsRepository: {
     getAssessments: (...args) => mockGetAssessments(...args),
+    getAssessmentCountsSince: (...args) => mockGetAssessmentCountsSince(...args),
   },
 }));
 
@@ -112,6 +116,8 @@ beforeEach(() => {
   mockGetTimeEntries.mockResolvedValue([]);
   mockGetSessions.mockResolvedValue([]);
   mockGetAssessments.mockResolvedValue([]);
+  mockGetSessionCountsSince.mockResolvedValue([]);
+  mockGetAssessmentCountsSince.mockResolvedValue([]);
 });
 
 describe('session launch clock-in warning', () => {

@@ -92,6 +92,12 @@ describe('SessionHistoryScreen Plan 5 behavior', () => {
     expect(getByText('A, M')).toBeTruthy();
     expect(queryByText('No sessions yet. Record your first session!')).toBeNull();
     expect(sessionsRepository.getSessions).toHaveBeenCalledTimes(1);
+    expect(sessionsRepository.getSessions).toHaveBeenCalledWith({
+      userId: 'user-1',
+      recordedByUserId: 'user-1',
+      sinceDate: '2026-04-21',
+      order: 'desc',
+    });
     expect(supabase.from).not.toHaveBeenCalled();
   });
 });

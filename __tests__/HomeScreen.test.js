@@ -6,6 +6,8 @@ const mockUseSessionLaunchGuard = jest.fn();
 const mockGetTimeEntries = jest.fn();
 const mockGetSessions = jest.fn();
 const mockGetAssessments = jest.fn();
+const mockGetSessionCountsSince = jest.fn();
+const mockGetAssessmentCountsSince = jest.fn();
 
 jest.mock('@expo/vector-icons', () => new Proxy({}, {
   get: (target, prop) => {
@@ -34,10 +36,16 @@ jest.mock('../src/db/repositories/timeEntriesRepository', () => ({
   timeEntriesRepository: { getTimeEntries: (...args) => mockGetTimeEntries(...args) },
 }));
 jest.mock('../src/db/repositories/sessionsRepository', () => ({
-  sessionsRepository: { getSessions: (...args) => mockGetSessions(...args) },
+  sessionsRepository: {
+    getSessions: (...args) => mockGetSessions(...args),
+    getSessionCountsSince: (...args) => mockGetSessionCountsSince(...args),
+  },
 }));
 jest.mock('../src/db/repositories/assessmentsRepository', () => ({
-  assessmentsRepository: { getAssessments: (...args) => mockGetAssessments(...args) },
+  assessmentsRepository: {
+    getAssessments: (...args) => mockGetAssessments(...args),
+    getAssessmentCountsSince: (...args) => mockGetAssessmentCountsSince(...args),
+  },
 }));
 
 import React from 'react';
@@ -95,6 +103,12 @@ describe('HomeScreen', () => {
     mockGetTimeEntries.mockResolvedValue([]);
     mockGetSessions.mockResolvedValue([]);
     mockGetAssessments.mockResolvedValue([]);
+    mockGetSessionCountsSince.mockResolvedValue([]);
+    mockGetAssessmentCountsSince.mockResolvedValue([]);
+  });
+
+  afterEach(() => {
+    jest.useRealTimers();
   });
 
   test('renders the greeting with the user first name', async () => {
@@ -133,5 +147,45 @@ describe('HomeScreen', () => {
     const screen = renderHome();
 
     await waitFor(() => expect(screen.getByText('Record Session')).toBeTruthy());
+  });
+
+  test('renders Home stats from bounded and aggregate repository reads', async () => {
+    jest.useFakeTimers();
+    jest.setSystemTime(new Date('2026-07-12T08:00:00.000Z'));
+    mockUseChildren.mockReturnValue({
+      children: [
+        { id: 'child-1', first_name: 'Amahle' },
+        { id: 'child-2', first_name: 'Lwazi' },
+      ],
+    });
+    mockGetTimeEntries.mockResolvedValue([{
+      sign_in_time: '2026-07-01T06:00:00.000Z',
+      sign_out_time: '2026-07-01T08:00:00.000Z',
+    }]);
+    mockGetSessionCountsSince.mockResolvedValue([
+      { session_date: '2026-07-06', count: 2 },
+      { session_date: '2026-07-07', count: 1 },
+    ]);
+    mockGetAssessmentCountsSince.mockResolvedValue([{ child_id: 'child-1', count: 3 }]);
+
+    const screen = renderHome();
+
+    await waitFor(() => expect(screen.getByText('1 of 2 children assessed')).toBeTruthy());
+    expect(mockGetTimeEntries).toHaveBeenCalledWith(expect.objectContaining({
+      userId: 'ea-1',
+      sinceIso: '2026-06-30T22:00:00.000Z',
+      completedOnly: true,
+    }));
+    expect(mockGetSessionCountsSince).toHaveBeenCalledWith({
+      userId: 'ea-1',
+      sinceDate: '2026-07-01',
+    });
+    expect(mockGetAssessmentCountsSince).toHaveBeenCalledWith({
+      userId: 'ea-1',
+      sinceDate: '2026-07-01',
+    });
+    expect(mockGetSessions).not.toHaveBeenCalled();
+    expect(mockGetAssessments).not.toHaveBeenCalled();
+    jest.useRealTimers();
   });
 });

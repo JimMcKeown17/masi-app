@@ -203,5 +203,17 @@ describe('repository read-path query budgets', () => {
       date: '2026-07-01',
     })).resolves.toBe(1);
     expect(db.getQueryCount()).toBe(1);
+
+    db.resetQueryLog();
+    await Promise.all([
+      sessions.getSessionCountsSince({ userId: 'user-1', sinceDate: '2026-07-01' }),
+      assessments.getAssessmentCountsSince({ userId: 'user-1', sinceDate: '2026-07-01' }),
+      createTimeEntriesRepository({ database: db }).getTimeEntries({
+        userId: 'user-1',
+        sinceIso: '2026-06-30T22:00:00.000Z',
+        completedOnly: true,
+      }),
+    ]);
+    expect(db.getQueryCount()).toBeLessThanOrEqual(6);
   });
 });

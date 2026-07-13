@@ -1,5 +1,6 @@
 import React from 'react';
 import { render, waitFor } from '@testing-library/react-native';
+import { SectionList } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import TimeEntriesListScreen from '../src/screens/main/TimeEntriesListScreen';
 import { useAuth } from '../src/context/AuthContext';
@@ -84,7 +85,7 @@ describe('TimeEntriesListScreen Plan 5 behavior', () => {
   });
 
   test('loads completed work history from SQLite without screen-owned Supabase or storage pulls', async () => {
-    const { getByText, queryByText } = render(
+    const { getByText, queryByText, UNSAFE_getByType } = render(
       <SafeAreaProvider>
         <TimeEntriesListScreen />
       </SafeAreaProvider>
@@ -94,6 +95,10 @@ describe('TimeEntriesListScreen Plan 5 behavior', () => {
 
     expect(getByText('3.00')).toBeTruthy();
     expect(getByText('Unsynced')).toBeTruthy();
+    expect(getByText('Showing last 60 days')).toBeTruthy();
+    expect(UNSAFE_getByType(SectionList).props.sections).toEqual([
+      expect.objectContaining({ title: '2026-05-21' }),
+    ]);
     expect(queryByText('No Time Entries Yet')).toBeNull();
     expect(timeEntriesRepository.getTimeEntries).toHaveBeenCalledTimes(1);
     expect(supabase.from).not.toHaveBeenCalled();
@@ -118,5 +123,9 @@ describe('TimeEntriesListScreen Plan 5 behavior', () => {
 
     await waitFor(() => expect(getByText('Sunday, Jul 12, 2026')).toBeTruthy());
     expect(getByText('Today')).toBeTruthy();
+    expect(timeEntriesRepository.getTimeEntries).toHaveBeenCalledWith({
+      userId: 'user-1',
+      sinceIso: '2026-05-12T22:00:00.000Z',
+    });
   });
 });

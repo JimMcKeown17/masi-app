@@ -1,5 +1,5 @@
 import React, { useState, useCallback } from 'react';
-import { View, StyleSheet, ScrollView, RefreshControl } from 'react-native';
+import { View, StyleSheet, ScrollView, SectionList, RefreshControl } from 'react-native';
 import { Card, Text, Divider, Chip, Snackbar } from 'react-native-paper';
 import { useFocusEffect } from '@react-navigation/native';
 import { useAuth } from '../../context/AuthContext';
@@ -15,7 +15,7 @@ export default function TimeEntriesListScreen() {
   const { syncNow } = useOffline();
 
   const [timeEntries, setTimeEntries] = useState([]);
-  const [groupedEntries, setGroupedEntries] = useState({});
+  const [sections, setSections] = useState([]);
   const [refreshing, setRefreshing] = useState(false);
   const [loading, setLoading] = useState(true);
   const [snackbarMessage, setSnackbarMessage] = useState('');
@@ -38,7 +38,9 @@ export default function TimeEntriesListScreen() {
         return;
       }
       setLoading(true);
-      const cached = await timeEntriesRepository.getTimeEntries({ userId: user.id });
+      const cutoffDate = toLocalDateString(new Date(Date.now() - (60 * 24 * 60 * 60 * 1000)));
+      const sinceIso = new Date(`${cutoffDate}T00:00:00+02:00`).toISOString();
+      const cached = await timeEntriesRepository.getTimeEntries({ userId: user.id, sinceIso });
       const cachedUserEntries = cached
         .filter(entry => entry.sign_out_time !== null)
         .sort((a, b) => new Date(b.sign_in_time) - new Date(a.sign_in_time));
@@ -71,7 +73,7 @@ export default function TimeEntriesListScreen() {
       return acc;
     }, {});
 
-    setGroupedEntries(grouped);
+    setSections(Object.entries(grouped).map(([title, data]) => ({ title, data })));
   };
 
   /**
@@ -188,29 +190,32 @@ export default function TimeEntriesListScreen() {
 
   return (
     <View style={styles.outerContainer}>
-      <ScrollView
+      <SectionList
         style={styles.container}
         testID="time-entries-scroll"
+        sections={sections}
+        keyExtractor={(item) => item.id}
+        contentContainerStyle={styles.content}
         refreshControl={
           <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
         }
-      >
-        <View style={styles.content}>
-        <Text variant="titleLarge" style={styles.pageTitle}>
-          Work History
-        </Text>
-        <Text variant="bodySmall" style={styles.subtitle}>
-          Your completed time entries
-        </Text>
-
-        {Object.keys(groupedEntries).map((dateKey) => (
-          <View key={dateKey} style={styles.dateGroup}>
-            {/* Date Header */}
+        ListHeaderComponent={(
+          <View>
+            <Text variant="titleLarge" style={styles.pageTitle}>
+              Work History
+            </Text>
+            <Text variant="bodySmall" style={styles.subtitle}>
+              Your completed time entries
+            </Text>
+          </View>
+        )}
+        renderSectionHeader={({ section }) => (
+          <View style={styles.dateGroup}>
             <View style={styles.dateHeader}>
               <Text variant="titleMedium" style={styles.dateHeaderText}>
-                {formatDateHeader(dateKey)}
+                {formatDateHeader(section.title)}
               </Text>
-              {isToday(dateKey) && (
+              {isToday(section.title) && (
                 <Chip
                   mode="flat"
                   style={styles.todayChip}
@@ -220,74 +225,62 @@ export default function TimeEntriesListScreen() {
                 </Chip>
               )}
             </View>
-
-            {/* Time Entries for this date */}
-            {groupedEntries[dateKey].map((entry, index) => (
-              <Card key={entry.id} style={styles.entryCard}>
-                <Card.Content>
-                  <View style={styles.entryHeader}>
-                    <View style={styles.hoursContainer}>
-                      <Text variant="headlineMedium" style={styles.hoursText}>
-                        {calculateHours(entry.sign_in_time, entry.sign_out_time)}
-                      </Text>
-                      <Text variant="bodySmall" style={styles.hoursLabel}>
-                        hours
-                      </Text>
-                    </View>
-
-                    {!entry.synced && (
-                      <Chip
-                        mode="outlined"
-                        icon="cloud-upload-outline"
-                        style={styles.unsyncedChip}
-                        textStyle={styles.unsyncedChipText}
-                      >
-                        Unsynced
-                      </Chip>
-                    )}
-                  </View>
-
-                  <Divider style={styles.divider} />
-
-                  <View style={styles.detailsRow}>
-                    <View style={styles.detailColumn}>
-                      <Text variant="labelSmall" style={styles.detailLabel}>
-                        Clock In
-                      </Text>
-                      <Text variant="bodyMedium" style={styles.detailValue}>
-                        {formatTime(entry.sign_in_time)}
-                      </Text>
-                      <Text variant="bodySmall" style={styles.coordsText}>
-                        {formatCoordinates(entry.sign_in_lat, entry.sign_in_lon)}
-                      </Text>
-                    </View>
-
-                    <View style={styles.detailColumn}>
-                      <Text variant="labelSmall" style={styles.detailLabel}>
-                        Clock Out
-                      </Text>
-                      <Text variant="bodyMedium" style={styles.detailValue}>
-                        {formatTime(entry.sign_out_time)}
-                      </Text>
-                      <Text variant="bodySmall" style={styles.coordsText}>
-                        {formatCoordinates(entry.sign_out_lat, entry.sign_out_lon)}
-                      </Text>
-                    </View>
-                  </View>
-                </Card.Content>
-              </Card>
-            ))}
           </View>
-        ))}
-
-        {/* Footer info */}
-        <View style={styles.footer}>
-          <Text variant="bodySmall" style={styles.footerText}>
-            Pull down to refresh and sync with server
-          </Text>
-        </View>
-        </View>
-      </ScrollView>
+        )}
+        renderItem={({ item: entry }) => (
+          <Card style={styles.entryCard}>
+            <Card.Content>
+              <View style={styles.entryHeader}>
+                <View style={styles.hoursContainer}>
+                  <Text variant="headlineMedium" style={styles.hoursText}>
+                    {calculateHours(entry.sign_in_time, entry.sign_out_time)}
+                  </Text>
+                  <Text variant="bodySmall" style={styles.hoursLabel}>hours</Text>
+                </View>
+                {!entry.synced && (
+                  <Chip
+                    mode="outlined"
+                    icon="cloud-upload-outline"
+                    style={styles.unsyncedChip}
+                    textStyle={styles.unsyncedChipText}
+                  >
+                    Unsynced
+                  </Chip>
+                )}
+              </View>
+              <Divider style={styles.divider} />
+              <View style={styles.detailsRow}>
+                <View style={styles.detailColumn}>
+                  <Text variant="labelSmall" style={styles.detailLabel}>Clock In</Text>
+                  <Text variant="bodyMedium" style={styles.detailValue}>
+                    {formatTime(entry.sign_in_time)}
+                  </Text>
+                  <Text variant="bodySmall" style={styles.coordsText}>
+                    {formatCoordinates(entry.sign_in_lat, entry.sign_in_lon)}
+                  </Text>
+                </View>
+                <View style={styles.detailColumn}>
+                  <Text variant="labelSmall" style={styles.detailLabel}>Clock Out</Text>
+                  <Text variant="bodyMedium" style={styles.detailValue}>
+                    {formatTime(entry.sign_out_time)}
+                  </Text>
+                  <Text variant="bodySmall" style={styles.coordsText}>
+                    {formatCoordinates(entry.sign_out_lat, entry.sign_out_lon)}
+                  </Text>
+                </View>
+              </View>
+            </Card.Content>
+          </Card>
+        )}
+        ListFooterComponent={(
+          <View style={styles.footer}>
+            <Text variant="bodySmall" style={styles.footerText}>Showing last 60 days</Text>
+            <Text variant="bodySmall" style={styles.footerText}>
+              Pull down to refresh and sync with server
+            </Text>
+          </View>
+        )}
+      />
 
       <Snackbar
         visible={snackbarVisible}
