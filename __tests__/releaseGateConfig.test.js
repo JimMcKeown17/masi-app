@@ -45,7 +45,6 @@ describe('Plan 6 release gate configuration', () => {
       '<rootDir>/__tests__/debugExport.test.js',
       '<rootDir>/__tests__/syncOutboxRepository.test.js',
       '<rootDir>/__tests__/offlineSyncOutbox.test.js',
-      '<rootDir>/__tests__/storage-classes.test.js',
       '<rootDir>/__tests__/childrenRepository.test.js',
       '<rootDir>/__tests__/classesRepository.test.js',
       '<rootDir>/__tests__/sessionsRepository.test.js',

@@ -1,6 +1,5 @@
 import { supabase } from './supabaseClient';
 import { enqueueSupabaseRequest } from './supabaseRequestQueue';
-import { storage } from '../utils/storage';
 import { resolveDatabase, runRepositoryTransaction } from '../db/repositories/repositoryRuntime';
 import {
   chunkArray,
@@ -1454,9 +1453,17 @@ export const getSyncStatus = (options) => defaultEngine.getSyncStatus(options);
 export const requeueTerminalRlsFailures = (userId) => defaultEngine.requeueTerminalRlsFailures(userId);
 export const retryFailedItem = (table, id) => defaultEngine.retryFailedItem(table, id);
 
+let referenceDataReadyThisSession = false;
+let referenceDataPromise = null;
+
+const resetReferenceDataBarrierForTests = () => {
+  referenceDataReadyThisSession = false;
+  referenceDataPromise = null;
+};
+
 export const _testBuildSyncPayload = buildSyncPayload;
 export const _testClassifyError = classifyError;
-export const __testables = { getRetryDelay };
+export const __testables = { getRetryDelay, resetReferenceDataBarrierForTests };
 export const __contract = { SERVER_COLUMNS, PUSH_ORDER, INTENTIONALLY_UNSYNCED, LOCAL_ONLY_COLUMNS };
 
 export const pullReferenceData = async ({
@@ -1505,6 +1512,53 @@ export const pullReferenceData = async ({
   return results;
 };
 
+export const ensureReferenceData = ({
+  supabaseClient = supabase,
+  repositories = {
+    schools: schoolsRepository,
+    job_titles: jobTitlesRepository,
+    programmes: programmesRepository,
+    academic_years: academicYearsRepository,
+    assessment_windows: assessmentWindowsRepository,
+    teachers: teachersRepository,
+    staff_programme_assignments: staffProgrammeAssignmentsRepository,
+  },
+  userId,
+  enqueueRequest = enqueueSupabaseRequest,
+} = {}) => {
+  if (referenceDataReadyThisSession) {
+    return Promise.resolve();
+  }
+  if (referenceDataPromise) {
+    return referenceDataPromise;
+  }
+
+  referenceDataPromise = (async () => {
+    const requiredRows = await Promise.all([
+      repositories.schools.getAll(),
+      repositories.programmes.getAll(),
+      repositories.academic_years.getAll(),
+    ]);
+    if (requiredRows.every((rows) => rows.length > 0)) {
+      referenceDataReadyThisSession = true;
+      return;
+    }
+
+    const result = await pullReferenceData({
+      supabaseClient,
+      repositories,
+      userId,
+      enqueueRequest,
+    });
+    referenceDataReadyThisSession = true;
+    return result;
+  })().finally(() => {
+    referenceDataPromise = null;
+  });
+
+  return referenceDataPromise;
+};
+
 /**
  * Fetch schools from Supabase and cache locally.
  * Schools are admin-managed reference data, not an outbox push table.
@@ -1518,6 +1572,6 @@ export const fetchAndCacheSchools = async () => {
   ));
 
   if (error) throw error;
-  await storage.setSchools(data || []);
+  await schoolsRepository.replaceFromServer(data || []);
   return data || [];
 };

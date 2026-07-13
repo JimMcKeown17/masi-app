@@ -7,7 +7,7 @@ import { colors, spacing, borderRadius, shadows } from '../../constants/colors';
 import { supabase } from '../../services/supabaseClient';
 import { exportDatabase, exportLogs } from '../../utils/debugExport';
 import { getReleaseMetadata } from '../../utils/releaseMetadata';
-import { storage } from '../../utils/storage';
+import { deviceSettings } from '../../services/deviceSettings';
 import { CAPTURE_MODES } from '../../constants/egraConstants';
 
 function CaptureModeFocusLoader({ loadCaptureMode }) {
@@ -37,7 +37,7 @@ export default function ProfileScreen({ navigation }) {
   const loadCaptureMode = useCallback(() => {
     let active = true;
     (async () => {
-      const mode = await storage.getCaptureMode();
+      const mode = await deviceSettings.getCaptureMode();
       if (active) setCaptureMode(mode);
     })();
     return () => {
@@ -53,7 +53,7 @@ export default function ProfileScreen({ navigation }) {
     const previous = captureMode;
     setCaptureMode(mode);
     try {
-      await storage.setCaptureMode(mode);
+      await deviceSettings.setCaptureMode(mode);
     } catch (error) {
       console.error('Set capture mode error:', error);
       setCaptureMode(previous);

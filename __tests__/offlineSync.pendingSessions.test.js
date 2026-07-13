@@ -10,7 +10,7 @@ jest.mock('../src/services/supabaseClient', () => ({
 }));
 
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { storage } from '../src/utils/storage';
+import { sessionsRepository } from '../src/db/repositories/sessionsRepository';
 import { syncTableByName, getSyncStatus } from '../src/services/offlineSync';
 import { supabase } from '../src/services/supabaseClient';
 import { resolveDatabase } from '../src/db/repositories/repositoryRuntime';
@@ -39,7 +39,7 @@ beforeEach(async () => {
 
 describe('pending session outbox handling', () => {
   test('refuses to create sessions when the user has no active programme assignment', async () => {
-    await expect(storage.saveSession(makePendingSession()))
+    await expect(sessionsRepository.saveSession(makePendingSession()))
       .rejects.toThrow(/No active programme assignment/i);
 
     const status = await getSyncStatus();
@@ -57,7 +57,7 @@ describe('pending session outbox handling', () => {
       insert into programmes (id, code, name, sync_status)
       values ('programme-1', 'lit', 'Literacy', 'synced')
     `);
-    await storage.saveSession(makePendingSession({
+    await sessionsRepository.saveSession(makePendingSession({
       programme_id: 'programme-1',
       session_type: 'Literacy Coach',
       session_type_id: 'legacy-job-title',
@@ -83,7 +83,14 @@ describe('pending session outbox handling', () => {
     expect(upsert.mock.calls[0][0]).not.toHaveProperty('children_ids');
     expect(upsert.mock.calls[0][0]).not.toHaveProperty('group_ids');
 
-    const [session] = await storage.getSessions();
+    const [session] = await sessionsRepository.getSessions();
     expect(session.synced).toBe(true);
+  });
+
+  test('rejects a session without the user required by the producer contract', async () => {
+    await expect(sessionsRepository.saveSession(makePendingSession({
+      user_id: undefined,
+      programme_id: 'programme-1',
+    }))).rejects.toThrow(/sessions\.user_id is required/i);
   });
 });

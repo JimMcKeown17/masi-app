@@ -1,4 +1,8 @@
-import { resolveDatabase, runRepositoryTransaction } from './repositoryRuntime';
+import {
+  resolveDatabase,
+  runBatchWithPerRowFallback,
+  runRepositoryTransaction,
+} from './repositoryRuntime';
 import {
   enqueueDomainOutbox,
   getActiveProgrammeAssignment,
@@ -261,6 +265,20 @@ export const createGroupsRepository = ({ database } = {}) => {
     return true;
   });
 
+  const saveServerGroupRows = async (rows = []) => runBatchWithPerRowFallback({
+    database,
+    rows,
+    saveRow: saveGroup,
+    tableName: 'groups',
+  });
+
+  const saveServerChildrenGroupRows = async (rows = []) => runBatchWithPerRowFallback({
+    database,
+    rows,
+    saveRow: addChildToGroup,
+    tableName: 'child_group_memberships',
+  });
+
   const removeChildFromGroup = async (childId, groupId, {
     removedAt = new Date().toISOString(),
     transaction,
@@ -356,12 +374,14 @@ export const createGroupsRepository = ({ database } = {}) => {
   return {
     getGroups,
     saveGroup,
+    saveServerGroupRows,
     updateGroup,
     deleteGroup,
     getUnsyncedGroups,
     getChildrenGroups,
     addChildToGroup,
     saveChildrenGroup: addChildToGroup,
+    saveServerChildrenGroupRows,
     removeChildFromGroup,
     deleteChildrenGroup: removeChildFromGroup,
     getUnsyncedChildrenGroups,

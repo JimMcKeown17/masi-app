@@ -49,7 +49,7 @@ it('PUSH_ORDER contains every locally-written synced table (no pushable table om
   // the server (pullReferenceData / fetchAndCacheSchools), never pushed via the sync_outbox —
   // so they are intentionally NOT in PUSH_ORDER.
   // Verification method for each: grep -rn "<table>" src/db/repositories src/services
-  //   src/utils/storage.js — confirmed zero enqueueDomainOutbox / insertOutboxRecord calls.
+  //   confirmed zero enqueueDomainOutbox / insertOutboxRecord calls.
   const PULL_ONLY_SYNCED_TABLES = [
     // Admin-managed reference data; populated exclusively by fetchAndCacheSchools and
     // pullReferenceData → schoolsRepository.replaceFromServer. No local write path enqueues

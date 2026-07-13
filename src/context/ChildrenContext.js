@@ -1,6 +1,10 @@
 import React, { createContext, useState, useEffect, useContext, useRef, useMemo, useCallback } from 'react';
-import { storage } from '../utils/storage';
 import { pullPreloadedChildData } from '../services/preloadedChildData';
+import { ensureReferenceData } from '../services/offlineSync';
+import { childrenRepository } from '../db/repositories/childrenRepository';
+import { classesRepository } from '../db/repositories/classesRepository';
+import { groupsRepository } from '../db/repositories/groupsRepository';
+import { syncOutboxRepository } from '../db/repositories/syncOutboxRepository';
 import { mergeServerRows } from '../utils/mergeServerRows';
 import { useAuth } from './AuthContext';
 import { useOffline } from './OfflineContext';
@@ -11,12 +15,6 @@ const ChildrenContext = createContext({});
 const shouldApplyPulledRows = (rows, errors) => (
   Array.isArray(rows) && (rows.length > 0 || errors.length === 0)
 );
-
-const saveRows = async (rows, saveRow) => {
-  for (const row of rows || []) {
-    await saveRow(row);
-  }
-};
 
 export const ChildrenProvider = ({ children }) => {
   const { user } = useAuth();
@@ -43,7 +41,27 @@ export const ChildrenProvider = ({ children }) => {
     [childrenList]
   );
 
-  const loadPreloadedChildData = useCallback(async () => {
+  const refreshFromCache = useCallback(async () => {
+    const activeUserId = user?.id;
+    if (!activeUserId) {
+      setChildrenList([]);
+      setGroups([]);
+      setChildrenGroups([]);
+      return;
+    }
+
+    const [cachedChildren, cachedGroups, cachedMemberships] = await Promise.all([
+      childrenRepository.getMyChildren(activeUserId),
+      groupsRepository.getGroups({ userId: activeUserId }),
+      groupsRepository.getChildrenGroups(),
+    ]);
+    if (activeUserIdRef.current !== activeUserId) return;
+    setChildrenList(cachedChildren);
+    setGroups(cachedGroups);
+    setChildrenGroups(cachedMemberships);
+  }, [user?.id]);
+
+  const pullFromServer = useCallback(async () => {
     const activeUserId = user?.id;
     if (!activeUserId) {
       setChildrenList([]);
@@ -55,118 +73,132 @@ export const ChildrenProvider = ({ children }) => {
 
     try {
       setLoading(true);
+      // Cache-first display: publish the SQLite snapshot immediately so a slow
+      // or stalled network never holds the roster hostage. The merge below
+      // re-publishes from a fresh post-commit snapshot when the pull lands.
+      await refreshFromCache();
+      const pulled = await pullPreloadedChildData({ userId: activeUserId });
+      if (activeUserIdRef.current !== activeUserId) return;
+      await ensureReferenceData({ userId: activeUserId });
+      if (activeUserIdRef.current !== activeUserId) return;
+
+      const pendingChildDeleteIds = await syncOutboxRepository.getPendingHardDeleteIds({
+        tableName: 'children',
+        ownerUserId: activeUserId,
+      });
+      const errors = pulled.errors || [];
+      const pulledChildren = (pulled.children || [])
+        .filter((row) => !pendingChildDeleteIds.has(row.id));
+      const pulledChildEaAssignments = (pulled.childEaAssignments || [])
+        .filter((row) => !pendingChildDeleteIds.has(row.child_id));
+      const pulledChildProgrammeEnrollments = (pulled.childProgrammeEnrollments || [])
+        .filter((row) => !pendingChildDeleteIds.has(row.child_id));
+      const pulledChildClassMemberships = (pulled.childClassMemberships || [])
+        .filter((row) => !pendingChildDeleteIds.has(row.child_id));
+
+      await classesRepository.saveServerClassRows(pulled.classes || []);
+      if (shouldApplyPulledRows(pulledChildren, errors)) {
+        await childrenRepository.saveServerChildRows(pulledChildren);
+      }
+      await childrenRepository.saveServerStaffChildRows(pulledChildEaAssignments);
+      await childrenRepository.saveServerChildProgrammeEnrollmentRows(
+        pulledChildProgrammeEnrollments
+      );
+      await childrenRepository.saveServerChildClassMembershipRows(pulledChildClassMemberships);
+      if (shouldApplyPulledRows(pulled.groups, errors)) {
+        await groupsRepository.saveServerGroupRows(pulled.groups || []);
+      }
+      if (shouldApplyPulledRows(pulled.childrenGroups, errors)) {
+        await groupsRepository.saveServerChildrenGroupRows(pulled.childrenGroups || []);
+      }
 
       const [
-        cachedChildren,
-        cachedGroups,
-        cachedMemberships,
+        freshChildren,
+        freshGroups,
+        freshMemberships,
         unsyncedChildren,
         unsyncedGroups,
         unsyncedMemberships,
-        pendingChildDeleteIds,
+        freshPendingChildDeleteIds,
       ] = await Promise.all([
-        storage.getMyChildren(activeUserId),
-        storage.getGroups({ userId: activeUserId }),
-        storage.getChildrenGroups(),
-        storage.getUnsyncedChildren(),
-        storage.getUnsyncedGroups(),
-        storage.getUnsyncedChildrenGroups(),
-        storage.getPendingHardDeleteIds({
+        childrenRepository.getMyChildren(activeUserId),
+        groupsRepository.getGroups({ userId: activeUserId }),
+        groupsRepository.getChildrenGroups(),
+        childrenRepository.getUnsyncedChildren(),
+        groupsRepository.getUnsyncedGroups(),
+        groupsRepository.getUnsyncedChildrenGroups(),
+        syncOutboxRepository.getPendingHardDeleteIds({
           tableName: 'children',
           ownerUserId: activeUserId,
         }),
       ]);
       if (activeUserIdRef.current !== activeUserId) return;
-      setChildrenList(cachedChildren);
-      setGroups(cachedGroups);
-      setChildrenGroups(cachedMemberships);
 
-      if (activeUserIdRef.current === activeUserId) {
-        const pulled = await pullPreloadedChildData({ userId: activeUserId });
-        const errors = pulled.errors || [];
-        if (activeUserIdRef.current !== activeUserId) return;
-        const pulledChildren = (pulled.children || [])
-          .filter((row) => !pendingChildDeleteIds.has(row.id));
-        const pulledChildEaAssignments = (pulled.childEaAssignments || [])
-          .filter((row) => !pendingChildDeleteIds.has(row.child_id));
-        const pulledChildProgrammeEnrollments = (pulled.childProgrammeEnrollments || [])
-          .filter((row) => !pendingChildDeleteIds.has(row.child_id));
-        const pulledChildClassMemberships = (pulled.childClassMemberships || [])
-          .filter((row) => !pendingChildDeleteIds.has(row.child_id));
+      const mergedChildren = shouldApplyPulledRows(pulledChildren, errors)
+        ? mergeServerRows(freshChildren, pulledChildren, {
+          unpushedRows: unsyncedChildren,
+          pendingDeleteIds: freshPendingChildDeleteIds,
+        })
+        : freshChildren;
+      const mergedGroups = shouldApplyPulledRows(pulled.groups, errors)
+        ? mergeServerRows(freshGroups, pulled.groups || [], { unpushedRows: unsyncedGroups })
+        : freshGroups;
+      const mergedMemberships = shouldApplyPulledRows(pulled.childrenGroups, errors)
+        ? mergeServerRows(freshMemberships, pulled.childrenGroups || [], {
+          unpushedRows: unsyncedMemberships,
+        })
+        : freshMemberships;
 
-        if (shouldApplyPulledRows(pulledChildren, errors)) {
-          const merged = mergeServerRows(cachedChildren, pulledChildren, {
-            unpushedRows: unsyncedChildren,
-            pendingDeleteIds: pendingChildDeleteIds,
-          });
-          await saveRows(pulledChildren, storage.saveChild);
-          setChildrenList(merged);
-        }
-
-        await saveRows(pulled.classes, storage.saveClass);
-        await saveRows(pulledChildEaAssignments, storage.saveStaffChild);
-        await saveRows(pulledChildProgrammeEnrollments, storage.saveChildProgrammeEnrollment);
-        await saveRows(pulledChildClassMemberships, storage.saveChildClassMembership);
-
-        if (shouldApplyPulledRows(pulled.groups, errors)) {
-          const merged = mergeServerRows(cachedGroups, pulled.groups, { unpushedRows: unsyncedGroups });
-          await saveRows(pulled.groups, storage.saveGroup);
-          setGroups(merged);
-        }
-
-        if (shouldApplyPulledRows(pulled.childrenGroups, errors)) {
-          const merged = mergeServerRows(cachedMemberships, pulled.childrenGroups, { unpushedRows: unsyncedMemberships });
-          await saveRows(pulled.childrenGroups, storage.saveChildrenGroup);
-          setChildrenGroups(merged);
-        }
-      }
+      setChildrenList(mergedChildren);
+      setGroups(mergedGroups);
+      setChildrenGroups(mergedMemberships);
     } catch (error) {
-      console.error('Error in loadPreloadedChildData:', error);
+      console.error('Error in pullFromServer:', error);
     } finally {
       if (activeUserIdRef.current === activeUserId) {
         setLoading(false);
       }
     }
-  }, [user?.id]);
+  }, [user?.id, refreshFromCache]);
 
   // Load data on mount when user is authenticated
   useEffect(() => {
     activeUserIdRef.current = user?.id || null;
     if (user?.id) {
-      loadPreloadedChildData();
+      pullFromServer();
       return;
     }
     setChildrenList([]);
     setGroups([]);
     setChildrenGroups([]);
     setLoading(false);
-  }, [user?.id, loadPreloadedChildData]);
+  }, [user?.id, pullFromServer]);
 
-  // Reload from storage after sync completes to pick up updated synced flags
+  // Reload from SQLite after sync completes to pick up updated synced flags.
   const prevSyncingRef = useRef(isSyncing);
   useEffect(() => {
     if (prevSyncingRef.current && !isSyncing && user?.id) {
-      loadPreloadedChildData();
+      refreshFromCache();
     }
     prevSyncingRef.current = isSyncing;
-  }, [isSyncing, user?.id, loadPreloadedChildData]);
+  }, [isSyncing, user?.id, refreshFromCache]);
 
   /**
    * Load children assigned to current user
-   * Cache-first pattern: show cached data immediately, then merge from server.
-   * Unsynced local records are preserved so they aren't lost before sync.
+   * Pull server rows, persist them, then derive state from a fresh SQLite snapshot.
+   * Pending local records are preserved by the repository guard and interim merge.
    */
   const loadChildren = useCallback(async () => {
     try {
       setLoading(true);
 
-      await loadPreloadedChildData();
+      await pullFromServer();
     } catch (error) {
       console.error('Error in loadChildren:', error);
     } finally {
       setLoading(false);
     }
-  }, [loadPreloadedChildData]);
+  }, [pullFromServer]);
 
   /**
    * Add a new child
@@ -186,7 +218,7 @@ export const ChildrenProvider = ({ children }) => {
         synced: false,
       };
 
-      await storage.createChild(child, {
+      await childrenRepository.save(child, {
         actorUserId: user.id,
       });
 
@@ -216,7 +248,7 @@ export const ChildrenProvider = ({ children }) => {
 
       // actorUserId lets the class-change membership reassignment stamp created_by
       // with the acting user (matches saveChild) — see childrenRepository.updateChild (#35).
-      await storage.updateChild(childId, updated, { actorUserId: user.id });
+      await childrenRepository.updateChild(childId, updated, { actorUserId: user.id });
 
       setChildrenList(prev =>
         prev.map(c =>
@@ -243,11 +275,19 @@ export const ChildrenProvider = ({ children }) => {
    */
   const deleteChild = useCallback(async (childId) => {
     try {
-      const ok = await storage.deleteChild(childId, {
+      const existing = (await childrenRepository.getChildren())
+        .find((child) => child.id === childId);
+      if (!existing) {
+        return { success: false, error: 'Child not found in local cache' };
+      }
+
+      const deleted = await childrenRepository.deleteIfNoHistory(childId, {
         actorUserId: user.id,
       });
-      if (!ok) {
-        return { success: false, error: 'Child not found in local cache' };
+      if (!deleted) {
+        await childrenRepository.archiveChild(childId, {
+          actorUserId: user.id,
+        });
       }
 
       setChildrenList(prev => prev.filter(c => c.id !== childId));
@@ -267,11 +307,11 @@ export const ChildrenProvider = ({ children }) => {
    */
   const loadGroups = useCallback(async () => {
     try {
-      await loadPreloadedChildData();
+      await pullFromServer();
     } catch (error) {
       console.error('Error in loadGroups:', error);
     }
-  }, [loadPreloadedChildData]);
+  }, [pullFromServer]);
 
   /**
    * Add a new group
@@ -288,7 +328,7 @@ export const ChildrenProvider = ({ children }) => {
         synced: false,
       };
 
-      await storage.saveGroup(group);
+      await groupsRepository.saveGroup(group);
       setGroups(prev => [...prev, group]);
       await refreshSyncStatus();
 
@@ -310,7 +350,7 @@ export const ChildrenProvider = ({ children }) => {
         synced: false,
       };
 
-      await storage.updateGroup(groupId, updated);
+      await groupsRepository.updateGroup(groupId, updated);
 
       setGroups(prev =>
         prev.map(g =>
@@ -333,7 +373,7 @@ export const ChildrenProvider = ({ children }) => {
    */
   const deleteGroup = useCallback(async (groupId) => {
     try {
-      await storage.deleteGroup(groupId);
+      await groupsRepository.deleteGroup(groupId);
       setGroups(prev => prev.filter(g => g.id !== groupId));
 
       // Remove all memberships for this group from active state. Repository
@@ -351,13 +391,13 @@ export const ChildrenProvider = ({ children }) => {
   /**
    * Load children-groups junction data
    */
-  const loadChildrenGroups = async () => {
+  const loadChildrenGroups = useCallback(async () => {
     try {
-      await loadPreloadedChildData();
+      await pullFromServer();
     } catch (error) {
       console.error('Error in loadChildrenGroups:', error);
     }
-  };
+  }, [pullFromServer]);
 
   /**
    * Add a child to a group
@@ -382,7 +422,7 @@ export const ChildrenProvider = ({ children }) => {
         synced: false,
       };
 
-      await storage.saveChildrenGroup(membership);
+      await groupsRepository.addChildToGroup(membership);
       setChildrenGroups(prev => [...prev, membership]);
       await refreshSyncStatus();
 
@@ -398,7 +438,7 @@ export const ChildrenProvider = ({ children }) => {
    */
   const removeChildFromGroup = useCallback(async (childId, groupId) => {
     try {
-      await storage.deleteChildrenGroup(childId, groupId);
+      await groupsRepository.removeChildFromGroup(childId, groupId);
 
       setChildrenGroups(prev =>
         prev.filter(
@@ -449,6 +489,7 @@ export const ChildrenProvider = ({ children }) => {
     groups,
     childrenGroups,
     loading,
+    refreshFromCache,
     loadChildren,
     addChild,
     updateChild,
@@ -463,7 +504,7 @@ export const ChildrenProvider = ({ children }) => {
     getGroupsForChild,
   }), [
     visibleChildren, childrenList, getChildById, groups, childrenGroups, loading,
-    loadChildren, addChild, updateChild, deleteChild, loadGroups, addGroup,
+    refreshFromCache, loadChildren, addChild, updateChild, deleteChild, loadGroups, addGroup,
     updateGroup, deleteGroup, addChildToGroup, removeChildFromGroup,
     getChildrenInGroup, getGroupsForChild,
   ]);

@@ -149,6 +149,11 @@ describe('SQLite migration runner', () => {
       'txn:record-migration',
       'txn:set-user-version',
       'exit-migration-transaction',
+      'enter-migration-transaction',
+      'txn:exec-migration-sql',
+      'txn:record-migration',
+      'txn:set-user-version',
+      'exit-migration-transaction',
       // FK enforcement restored in finally.
       'exec:PRAGMA foreign_keys = ON',
     ]);
@@ -177,8 +182,47 @@ describe('SQLite migration runner', () => {
         { version: 4 },
         { version: 5 },
         { version: 6 },
+        { version: 7 },
       ]);
       expect(await getColumnNames(db, 'sync_outbox')).toContain('owner_user_id');
+    } finally {
+      await db.closeAsync();
+    }
+  });
+
+  test('migration v7 purges only retired local-state sidecar keys and restores foreign keys', async () => {
+    const db = createBetterSqliteTestDatabase();
+
+    try {
+      await runMigrations(db);
+      await db.runAsync('delete from schema_migrations where version = 7');
+      await db.execAsync('PRAGMA user_version = 6');
+      await db.runAsync(`
+        insert into local_state (key, value)
+        values
+          ('storage_payload:children:x', '{}'),
+          ('sync_queue', '[]'),
+          ('sync_meta', '{"lastSyncTime":"2026-07-13T12:00:00.000Z"}'),
+          ('user_profile', '{"id":"user-1"}')
+      `);
+
+      await runMigrations(db);
+
+      expect(CURRENT_SCHEMA_VERSION).toBe(7);
+      expect(await getUserVersion(db)).toBe(7);
+      expect(await db.getAllAsync('select key, value from local_state order by key')).toEqual([
+        { key: 'sync_meta', value: '{"lastSyncTime":"2026-07-13T12:00:00.000Z"}' },
+        { key: 'user_profile', value: '{"id":"user-1"}' },
+      ]);
+      expect(await db.getFirstAsync('PRAGMA foreign_keys')).toEqual({ foreign_keys: 1 });
+
+      const stateAfterMigration = await db.getAllAsync('select * from local_state order by key');
+      await runMigrations(db);
+      expect(await db.getAllAsync('select * from local_state order by key')).toEqual(stateAfterMigration);
+      expect(await db.getFirstAsync('PRAGMA foreign_keys')).toEqual({ foreign_keys: 1 });
+      expect(await db.getFirstAsync(
+        'select count(*) as count from schema_migrations where version = 7'
+      )).toEqual({ count: 1 });
     } finally {
       await db.closeAsync();
     }
@@ -510,10 +554,10 @@ describe('SQLite migration runner', () => {
     releaseFirstMigration.resolve();
     await Promise.all([first, second]);
 
-    // The first run applies all pending migrations (six transactions); the second
+    // The first run applies all pending migrations (seven transactions); the second
     // run is serialized behind it, sees user_version already current, and does nothing.
-    expect(beginCount).toBe(6);
-    expect(userVersion).toBe(6);
+    expect(beginCount).toBe(7);
+    expect(userVersion).toBe(7);
   });
 
   test('a ROLLBACK failure does not mask the original migration error', async () => {
@@ -615,6 +659,7 @@ describe('SQLite debug dump', () => {
           { version: 4, name: 'assessments_capture_mode' },
           { version: 5, name: 'hot_path_covering_indexes' },
           { version: 6, name: 'sync_outbox_owner_user_id' },
+          { version: 7, name: 'local_state_sidecar_cleanup' },
         ],
         tableCounts: expect.objectContaining({
           schools: 1,

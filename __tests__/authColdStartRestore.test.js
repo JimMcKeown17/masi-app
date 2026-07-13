@@ -6,7 +6,7 @@ import {
   clearPersistedSession,
   readPersistedSession,
 } from '../src/services/persistedAuthSession';
-import { storage } from '../src/utils/storage';
+import { deviceSettings } from '../src/services/deviceSettings';
 import { pullReferenceData } from '../src/services/offlineSync';
 import { enqueueSupabaseRequest } from '../src/services/supabaseRequestQueue';
 
@@ -56,8 +56,8 @@ jest.mock('../src/services/supabaseRequestQueue', () => ({
   enqueueSupabaseRequest: jest.fn(),
 }));
 
-jest.mock('../src/utils/storage', () => ({
-  storage: {
+jest.mock('../src/services/deviceSettings', () => ({
+  deviceSettings: {
     getUserProfile: jest.fn(),
     clearUserProfile: jest.fn(),
     saveUserProfile: jest.fn(),
@@ -130,9 +130,9 @@ describe('AuthContext offline cold-start restore', () => {
     clearPersistedSession.mockResolvedValue(undefined);
     pullReferenceData.mockResolvedValue(undefined);
     enqueueSupabaseRequest.mockImplementation(async (operation) => operation());
-    storage.getUserProfile.mockResolvedValue(null);
-    storage.clearUserProfile.mockResolvedValue(true);
-    storage.saveUserProfile.mockResolvedValue(true);
+    deviceSettings.getUserProfile.mockResolvedValue(null);
+    deviceSettings.clearUserProfile.mockResolvedValue(true);
+    deviceSettings.saveUserProfile.mockResolvedValue(true);
     mockSingle.mockResolvedValue({ data: null, error: null });
   });
 
@@ -156,7 +156,7 @@ describe('AuthContext offline cold-start restore', () => {
     });
 
     expect(pullReferenceData).toHaveBeenCalledTimes(1);
-    expect(storage.clearUserProfile).not.toHaveBeenCalled();
+    expect(deviceSettings.clearUserProfile).not.toHaveBeenCalled();
     expect(screen.getByTestId('auth-state')).toHaveTextContent('ready|user-1|no-session');
   });
 
@@ -179,7 +179,7 @@ describe('AuthContext offline cold-start restore', () => {
     await emitAuthEvent('SIGNED_OUT', null);
 
     expect(screen.getByTestId('auth-state')).toHaveTextContent('ready|no-user|no-session');
-    expect(storage.clearUserProfile).toHaveBeenCalled();
+    expect(deviceSettings.clearUserProfile).toHaveBeenCalled();
     expect(clearPersistedSession).toHaveBeenCalled();
   });
 
@@ -196,7 +196,7 @@ describe('AuthContext offline cold-start restore', () => {
     });
 
     expect(screen.getByTestId('auth-state')).toHaveTextContent('ready|user-1|session');
-    expect(storage.clearUserProfile).not.toHaveBeenCalled();
+    expect(deviceSettings.clearUserProfile).not.toHaveBeenCalled();
   });
 
   it('signs out locally without waiting for Supabase network sign-out', async () => {
@@ -218,7 +218,7 @@ describe('AuthContext offline cold-start restore', () => {
     expect(outcome).toEqual({ error: null });
     expect(screen.getByTestId('auth-state')).toHaveTextContent('ready|no-user|no-session');
     expect(clearPersistedSession).toHaveBeenCalled();
-    expect(storage.clearUserProfile).toHaveBeenCalled();
+    expect(deviceSettings.clearUserProfile).toHaveBeenCalled();
     expect(mockSignOut).toHaveBeenCalledWith({ scope: 'local' });
   });
 

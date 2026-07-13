@@ -26,8 +26,8 @@ describe('hot-path covering indexes (migration v5)', () => {
     await db.closeAsync();
   });
 
-  test('schema version is 6', () => {
-    expect(CURRENT_SCHEMA_VERSION).toBe(6);
+  test('schema version is 7', () => {
+    expect(CURRENT_SCHEMA_VERSION).toBe(7);
   });
 
   test('all covering indexes exist after migration', async () => {

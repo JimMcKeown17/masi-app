@@ -1,4 +1,4 @@
-import { storage } from './storage';
+import { deviceSettings } from '../services/deviceSettings';
 import { CAPTURE_MODES } from '../constants/egraConstants';
 
 /**
@@ -8,7 +8,7 @@ import { CAPTURE_MODES } from '../constants/egraConstants';
  * mode fresh at launch time so a stale mount-loaded value can never route (or stamp) the wrong mode.
  */
 export async function resolveAssessmentRoute() {
-  const captureMode = await storage.getCaptureMode();
+  const captureMode = await deviceSettings.getCaptureMode();
   return {
     screenName: captureMode === CAPTURE_MODES.SEQUENTIAL ? 'SequentialAssessment' : 'LetterAssessment',
     captureMode,

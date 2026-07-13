@@ -1,9 +1,9 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { childrenRepository } from '../src/db/repositories/childrenRepository';
 import { resolveDatabase } from '../src/db/repositories/repositoryRuntime';
-import { storage } from '../src/utils/storage';
 
 // Following the convention in ClassesContext.test.js: full provider mounting
-// requires Auth/Offline/Children stacked together, so we test the storage-level
+// requires Auth/Offline/Children stacked together, so we test the repository
 // operations and merge logic that ChildrenContext orchestrates. The visibleChildren
 // derivation is `childrenList.filter(c => !c.hidden_at)` — we verify that filter
 // shape against representative inputs.
@@ -12,15 +12,15 @@ beforeEach(async () => {
   await AsyncStorage.clear();
 });
 
-describe('hidden children — storage-level soft-delete', () => {
-  test('storage.updateChild persists hidden_at + synced:false on the target row', async () => {
-    await storage.saveChild({
+describe('hidden children - repository soft-delete', () => {
+  test('childrenRepository.updateChild persists hidden_at + synced:false on the target row', async () => {
+    await childrenRepository.saveChildRecord({
       id: 'child-1',
       first_name: 'Asanda',
       last_name: 'M',
       synced: true,
     });
-    await storage.saveChild({
+    await childrenRepository.saveChildRecord({
       id: 'child-2',
       first_name: 'Bongani',
       last_name: 'K',
@@ -28,7 +28,7 @@ describe('hidden children — storage-level soft-delete', () => {
     });
 
     const hiddenAt = '2026-04-30T10:15:00.000Z';
-    const ok = await storage.updateChild('child-1', {
+    const ok = await childrenRepository.updateChild('child-1', {
       hidden_at: hiddenAt,
       synced: false,
       updated_at: hiddenAt,
@@ -36,20 +36,20 @@ describe('hidden children — storage-level soft-delete', () => {
 
     expect(ok).toBe(true);
 
-    const all = await storage.getChildren();
+    const all = await childrenRepository.getChildren();
     const c1 = all.find(c => c.id === 'child-1');
     const c2 = all.find(c => c.id === 'child-2');
 
     expect(c1.hidden_at).toBe(hiddenAt);
     expect(c1.synced).toBe(false);
-    expect(c2.hidden_at).toBeUndefined();
+    expect(c2.hidden_at).toBeNull();
     expect(c2.synced).toBe(true);
   });
 
-  test('storage.updateChild returns false for an unknown id (deleteChild validation path)', async () => {
-    await storage.saveChild({ id: 'child-1', first_name: 'A', last_name: 'M', synced: true });
+  test('childrenRepository.updateChild returns false for an unknown id', async () => {
+    await childrenRepository.saveChildRecord({ id: 'child-1', first_name: 'A', last_name: 'M', synced: true });
 
-    const ok = await storage.updateChild('nonexistent-id', {
+    const ok = await childrenRepository.updateChild('nonexistent-id', {
       hidden_at: '2026-04-30T10:15:00.000Z',
       synced: false,
     });
@@ -58,21 +58,21 @@ describe('hidden children — storage-level soft-delete', () => {
   });
 
   test('hidden child remains in local children cache so allChildren can resolve names later', async () => {
-    await storage.saveChild({ id: 'child-1', first_name: 'A', last_name: 'M', synced: true });
-    await storage.updateChild('child-1', {
+    await childrenRepository.saveChildRecord({ id: 'child-1', first_name: 'A', last_name: 'M', synced: true });
+    await childrenRepository.updateChild('child-1', {
       hidden_at: '2026-04-30T10:15:00.000Z',
       synced: false,
     });
 
-    const all = await storage.getChildren();
+    const all = await childrenRepository.getChildren();
     expect(all).toHaveLength(1);
     expect(all[0].id).toBe('child-1');
     expect(all[0].hidden_at).toBeTruthy();
   });
 
-  test('storage.deleteChild hard-deletes no-history children and archives children with history', async () => {
-    await storage.saveChild({ id: 'child-no-history', first_name: 'A', last_name: 'M', synced: true });
-    await storage.saveChild({ id: 'child-with-history', first_name: 'B', last_name: 'K', synced: true });
+  test('repository primitives hard-delete no-history children and archive children with history', async () => {
+    await childrenRepository.saveChildRecord({ id: 'child-no-history', first_name: 'A', last_name: 'M', synced: true });
+    await childrenRepository.saveChildRecord({ id: 'child-with-history', first_name: 'B', last_name: 'K', synced: true });
 
     const db = await resolveDatabase();
     await db.runAsync("insert into programmes (id, code, name) values ('programme-a', 'literacy', 'Literacy')");
@@ -95,12 +95,11 @@ describe('hidden children — storage-level soft-delete', () => {
       )
     `);
 
-    expect(await storage.deleteChild('child-no-history', { actorUserId: 'user-1' }))
-      .toEqual({ deleted: true, archived: false });
-    expect(await storage.deleteChild('child-with-history', { actorUserId: 'user-1' }))
-      .toEqual({ deleted: false, archived: true });
+    expect(await childrenRepository.deleteIfNoHistory('child-no-history')).toBe(true);
+    expect(await childrenRepository.deleteIfNoHistory('child-with-history')).toBe(false);
+    await childrenRepository.archiveChild('child-with-history', { actorUserId: 'user-1' });
 
-    const all = await storage.getChildren();
+    const all = await childrenRepository.getChildren();
     expect(all.find(c => c.id === 'child-no-history')).toBeUndefined();
     expect(all.find(c => c.id === 'child-with-history')).toEqual(expect.objectContaining({
       id: 'child-with-history',

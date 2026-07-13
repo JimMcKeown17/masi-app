@@ -6,7 +6,6 @@ import { useAuth } from '../src/context/AuthContext';
 import { useOffline } from '../src/context/OfflineContext';
 import { getCurrentPosition } from '../src/services/locationService';
 import { timeEntriesRepository } from '../src/db/repositories/timeEntriesRepository';
-import { storage } from '../src/utils/storage';
 
 jest.mock('../src/context/AuthContext', () => ({
   useAuth: jest.fn(),
@@ -30,14 +29,6 @@ jest.mock('../src/db/repositories/timeEntriesRepository', () => ({
     getActiveTimeEntry: jest.fn(),
     saveTimeEntry: jest.fn(),
     createOpenTimeEntry: jest.fn(),
-    updateTimeEntry: jest.fn(),
-  },
-}));
-
-jest.mock('../src/utils/storage', () => ({
-  storage: {
-    getTimeEntries: jest.fn(),
-    saveTimeEntry: jest.fn(),
     updateTimeEntry: jest.fn(),
   },
 }));
@@ -96,7 +87,6 @@ describe('useTimeTracking Plan 5 behavior', () => {
     expect(result.current.isSignedIn).toBe(true);
     expect(refreshSyncStatus).toHaveBeenCalled();
     expect(triggerBackgroundSync).toHaveBeenCalled();
-    expect(storage.saveTimeEntry).not.toHaveBeenCalled();
   });
 
   test('two consumers under one provider share a single clock-in truth', async () => {
