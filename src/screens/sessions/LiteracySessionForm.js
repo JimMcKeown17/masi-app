@@ -6,10 +6,6 @@ import {
   Button,
   Card,
   Menu,
-  Portal,
-  Dialog,
-  RadioButton,
-  Divider,
   IconButton,
   Snackbar,
 } from 'react-native-paper';
@@ -27,6 +23,9 @@ import { buildSessionTypeFields } from '../../utils/sessionTypeResolver';
 import { persistLiteracySession } from '../../services/literacySessionPersistence';
 import { NO_TEXT_SUGGESTIONS } from '../../constants/textInputProps';
 import { v4 as uuidv4 } from 'uuid';
+import SelectSheet from '../../components/common/SelectSheet';
+
+const READING_LEVEL_OPTIONS = READING_LEVELS.map(level => ({ key: level, label: level }));
 
 // ---------------------------------------------------------------------------
 // Calendar helpers
@@ -546,46 +545,29 @@ export default function LiteracySessionForm({ navigation }) {
         }}
       />
 
-      {/* ── Session Reading Level Dialog ── */}
-      <Portal>
-        <Dialog visible={readingLevelMenuVisible} onDismiss={() => setReadingLevelMenuVisible(false)}>
-          <Dialog.Title>Session Reading Level</Dialog.Title>
-          <Dialog.Content>
-            <RadioButton.Group
-              onValueChange={(value) => {
-                setSessionReadingLevel(value);
-                setReadingLevelMenuVisible(false);
-                setValidationErrors((prev) => { const { readingLevel, ...rest } = prev; return rest; });
-              }}
-              value={sessionReadingLevel || ''}
-            >
-              {READING_LEVELS.map((level) => (
-                <RadioButton.Item key={level} label={level} value={level} />
-              ))}
-            </RadioButton.Group>
-          </Dialog.Content>
-        </Dialog>
-      </Portal>
+      <SelectSheet
+        visible={readingLevelMenuVisible}
+        onDismiss={() => setReadingLevelMenuVisible(false)}
+        title="Session Reading Level"
+        dismissLabel="Dismiss session reading level picker"
+        options={READING_LEVEL_OPTIONS}
+        selectedKey={sessionReadingLevel}
+        onSelect={(value) => {
+          setSessionReadingLevel(value);
+          setValidationErrors((prev) => { const { readingLevel, ...rest } = prev; return rest; });
+        }}
+      />
 
-      {/* ── Child Reading Level Dialog ── */}
-      <Portal>
-        <Dialog visible={openChildLevelMenu !== null} onDismiss={() => setOpenChildLevelMenu(null)}>
-          <Dialog.Title>Reading Level</Dialog.Title>
-          <Dialog.Content>
-            <RadioButton.Group
-              onValueChange={(value) => handleSetChildReadingLevel(openChildLevelMenu, value)}
-              value={openChildLevelMenu ? (childReadingLevels[openChildLevelMenu] || '') : ''}
-            >
-              {READING_LEVELS.map((level) => (
-                <RadioButton.Item key={level} label={level} value={level} />
-              ))}
-            </RadioButton.Group>
-          </Dialog.Content>
-          <Dialog.Actions>
-            <Button onPress={() => setOpenChildLevelMenu(null)}>Cancel</Button>
-          </Dialog.Actions>
-        </Dialog>
-      </Portal>
+      <SelectSheet
+        visible={openChildLevelMenu !== null}
+        onDismiss={() => setOpenChildLevelMenu(null)}
+        title="Reading Level"
+        dismissLabel="Dismiss child reading level picker"
+        options={READING_LEVEL_OPTIONS}
+        selectedKey={openChildLevelMenu ? (childReadingLevels[openChildLevelMenu] || null) : null}
+        onSelect={(value) => handleSetChildReadingLevel(openChildLevelMenu, value)}
+        cancelLabel="Cancel"
+      />
 
       <Snackbar
         visible={snackbarVisible}

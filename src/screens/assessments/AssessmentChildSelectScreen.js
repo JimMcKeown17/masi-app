@@ -1,6 +1,6 @@
 import React, { useState, useCallback, useRef } from 'react';
 import { View, StyleSheet, FlatList, Pressable } from 'react-native';
-import { Text, Searchbar, Portal, Dialog, Button, RadioButton } from 'react-native-paper';
+import { Text, Searchbar } from 'react-native-paper';
 import { useFocusEffect } from '@react-navigation/native';
 import { useAuth } from '../../context/AuthContext';
 import { useChildren } from '../../context/ChildrenContext';
@@ -11,6 +11,12 @@ import { assessmentsRepository } from '../../db/repositories/assessmentsReposito
 import { NO_TEXT_SUGGESTIONS } from '../../constants/textInputProps';
 import { resolveAssessmentRoute } from '../../utils/assessmentRouting';
 import { buildAssessmentMap } from '../../utils/assessmentHistoryMap';
+import SelectSheet from '../../components/common/SelectSheet';
+
+const LANGUAGE_OPTIONS = [
+  { key: 'english', label: 'English' },
+  { key: 'isixhosa', label: 'isiXhosa' },
+];
 
 function formatShortDate(dateStr) {
   const [y, m, d] = dateStr.split('-').map(Number);
@@ -27,7 +33,7 @@ export default function AssessmentChildSelectScreen({ navigation, route }) {
   const { classes } = useClasses();
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedChild, setSelectedChild] = useState(null);
-  const [languageDialogVisible, setLanguageDialogVisible] = useState(false);
+  const [languagePickerVisible, setLanguagePickerVisible] = useState(false);
   const [selectedLanguage, setSelectedLanguage] = useState('english');
   const [assessmentMap, setAssessmentMap] = useState({});
   const launchingRef = useRef(false);
@@ -95,14 +101,14 @@ export default function AssessmentChildSelectScreen({ navigation, route }) {
         }
       }
     }
-    // Fallback: show language picker dialog
+    // Fallback: show the language picker
     setSelectedChild(child);
-    setLanguageDialogVisible(true);
+    setLanguagePickerVisible(true);
   };
 
-  const handleLanguageConfirm = () => {
-    setLanguageDialogVisible(false);
-    navigateToAssessment(selectedChild, itemSets[selectedLanguage]);
+  const handleLanguageConfirm = (language) => {
+    setSelectedLanguage(language);
+    navigateToAssessment(selectedChild, itemSets[language]);
   };
 
   const renderChild = ({ item }) => {
@@ -155,21 +161,17 @@ export default function AssessmentChildSelectScreen({ navigation, route }) {
         }
       />
 
-      <Portal>
-        <Dialog visible={languageDialogVisible} onDismiss={() => setLanguageDialogVisible(false)}>
-          <Dialog.Title>Select Language</Dialog.Title>
-          <Dialog.Content>
-            <RadioButton.Group onValueChange={setSelectedLanguage} value={selectedLanguage}>
-              <RadioButton.Item label="English" value="english" />
-              <RadioButton.Item label="isiXhosa" value="isixhosa" />
-            </RadioButton.Group>
-          </Dialog.Content>
-          <Dialog.Actions>
-            <Button onPress={() => setLanguageDialogVisible(false)}>Cancel</Button>
-            <Button mode="contained" onPress={handleLanguageConfirm}>Start</Button>
-          </Dialog.Actions>
-        </Dialog>
-      </Portal>
+      <SelectSheet
+        visible={languagePickerVisible}
+        onDismiss={() => setLanguagePickerVisible(false)}
+        title="Select Language"
+        dismissLabel="Dismiss assessment language picker"
+        options={LANGUAGE_OPTIONS}
+        selectedKey={selectedLanguage}
+        onSelect={handleLanguageConfirm}
+        confirmLabel="Start"
+        cancelLabel="Cancel"
+      />
     </View>
   );
 }
