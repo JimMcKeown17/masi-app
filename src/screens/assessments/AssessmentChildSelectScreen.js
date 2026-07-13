@@ -63,11 +63,18 @@ export default function AssessmentChildSelectScreen({ navigation, route }) {
     if (launchingRef.current) return;
     launchingRef.current = true;
     try {
-      const { screenName, captureMode } = await resolveAssessmentRoute();
+      const [{ screenName, captureMode }, attemptCount] = await Promise.all([
+        resolveAssessmentRoute(),
+        assessmentsRepository.countAssessments({
+          userId: user.id,
+          childId: child.id,
+          assessmentType,
+        }),
+      ]);
       navigation.navigate(screenName, {
         child,
         letterSet,
-        attemptNumber: (assessmentMap[child.id]?.attemptCount || 0) + 1,
+        attemptNumber: attemptCount + 1,
         assessmentType,
         captureMode,
       });

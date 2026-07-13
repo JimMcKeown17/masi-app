@@ -169,6 +169,20 @@ export const createAssessmentsRepository = ({ database } = {}) => {
     return rows.map(row => ({ ...row, count: Number(row.count) }));
   };
 
+  const countAssessments = async ({ userId, childId, assessmentType = 'letter_egra' } = {}) => {
+    const db = await resolveDatabase(database);
+    const activeProgrammeId = await resolveActiveProgrammeId(db, { userId });
+    if (!activeProgrammeId) return 0;
+    const row = await db.getFirstAsync(`
+      select count(*) as count
+      from assessments
+      where programme_id = ?
+        and child_id = ?
+        and coalesce(assessment_type, 'letter_egra') = ?
+    `, activeProgrammeId, childId, assessmentType);
+    return Number(row?.count || 0);
+  };
+
   const saveAssessment = async (assessment, { transaction } = {}) => runWrite(transaction, async (txn) => {
     assertRlsRequiredFields('assessments', assessment, ['user_id']);
     const programmeId = await resolveProgrammeId(txn, {
@@ -264,6 +278,7 @@ export const createAssessmentsRepository = ({ database } = {}) => {
   return {
     getAssessments,
     getAssessmentCountsSince,
+    countAssessments,
     saveAssessment,
     getUnsyncedRecords,
   };

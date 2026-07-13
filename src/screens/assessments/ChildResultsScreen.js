@@ -32,7 +32,6 @@ export default function ChildResultsScreen({ navigation, route }) {
   const { child, classItem } = route.params;
   const childName = `${child.first_name} ${child.last_name}`;
   const [latestByType, setLatestByType] = useState({});
-  const [attemptCounts, setAttemptCounts] = useState({});
   const launchingRef = useRef(false);
 
   const langKey = normalizeLanguageKey(classItem?.home_language);
@@ -47,11 +46,18 @@ export default function ChildResultsScreen({ navigation, route }) {
     if (launchingRef.current) return;
     launchingRef.current = true;
     try {
-      const { screenName, captureMode } = await resolveAssessmentRoute();
+      const [{ screenName, captureMode }, attemptCount] = await Promise.all([
+        resolveAssessmentRoute(),
+        assessmentsRepository.countAssessments({
+          userId: user.id,
+          childId: child.id,
+          assessmentType,
+        }),
+      ]);
       navigation.navigate(screenName, {
         child,
         letterSet: itemSet,
-        attemptNumber: (attemptCounts[assessmentType] || 0) + 1,
+        attemptNumber: attemptCount + 1,
         assessmentType,
         captureMode,
       });
@@ -68,11 +74,9 @@ export default function ChildResultsScreen({ navigation, route }) {
           childId: child.id,
         });
         const byType = {};
-        const counts = {};
         for (const a of all) {
           if (a.child_id !== child.id) continue;
           const type = a.assessment_type || 'letter_egra';
-          counts[type] = (counts[type] || 0) + 1;
           const prev = byType[type];
           if (!prev || a.date_assessed > prev.date_assessed ||
               (a.date_assessed === prev.date_assessed && a.created_at > prev.created_at)) {
@@ -80,7 +84,6 @@ export default function ChildResultsScreen({ navigation, route }) {
           }
         }
         setLatestByType(byType);
-        setAttemptCounts(counts);
       })();
     }, [child.id, user.id])
   );

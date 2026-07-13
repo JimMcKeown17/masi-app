@@ -216,4 +216,31 @@ describe('repository read-path query budgets', () => {
     ]);
     expect(db.getQueryCount()).toBeLessThanOrEqual(6);
   });
+
+  test('countAssessments resolves active programme and counts a compatible assessment type in two queries', async () => {
+    db = await createDatabase();
+    await seedChildren(db, 1);
+    await db.runAsync(`
+      insert into assessments (
+        id, user_id, child_id, programme_id, assessment_type,
+        assessment_date, created_at, sync_status
+      ) values
+        ('a1', 'user-1', 'child-0', 'programme-a', 'letter_egra', '2026-07-01', '2026-07-01T08:00:00Z', 'synced'),
+        ('a2', 'user-2', 'child-0', 'programme-a', 'letter_egra', '2026-07-02', '2026-07-02T08:00:00Z', 'synced'),
+        ('a3', 'user-1', 'child-0', 'programme-a', 'letter_egra', '2026-07-03', '2026-07-03T08:00:00Z', 'synced'),
+        ('a4', 'user-1', 'child-0', 'programme-a', 'word_egra', '2026-07-04', '2026-07-04T08:00:00Z', 'synced')
+    `);
+    db.resetQueryLog();
+
+    await expect(createAssessmentsRepository({ database: db }).countAssessments({
+      userId: 'user-1',
+      childId: 'child-0',
+      assessmentType: 'letter_egra',
+    })).resolves.toBe(3);
+
+    expect(db.getQueryCount()).toBe(2);
+    expect(normalizedSql(db).some(sql => (
+      sql.includes("coalesce(assessment_type, 'letter_egra') = ?")
+    ))).toBe(true);
+  });
 });
