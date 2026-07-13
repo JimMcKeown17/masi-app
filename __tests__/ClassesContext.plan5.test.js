@@ -10,8 +10,10 @@ import { resolveDatabase } from '../src/db/repositories/repositoryRuntime';
 import { ensureReferenceData, fetchAndCacheSchools } from '../src/services/offlineSync';
 import { useChildren } from '../src/context/ChildrenContext';
 import { useOffline } from '../src/context/OfflineContext';
+import { useAuth } from '../src/context/AuthContext';
 import { classesRepository } from '../src/db/repositories/classesRepository';
 import { classEaAssignmentsRepository } from '../src/db/repositories/classEaAssignmentsRepository';
+import { syncStateRepository } from '../src/db/repositories/syncStateRepository';
 
 const mockSupabaseFrom = jest.fn();
 const queryResult = (result) => {
@@ -41,6 +43,7 @@ jest.mock('../src/context/OfflineContext', () => ({
     isOnline: true,
     refreshSyncStatus: jest.fn(),
     isSyncing: false,
+    domainPullNonce: 0,
   })),
 }));
 
@@ -89,6 +92,12 @@ jest.mock('../src/db/repositories/classEaAssignmentsRepository', () => ({
   },
 }));
 
+jest.mock('../src/db/repositories/syncStateRepository', () => ({
+  syncStateRepository: {
+    setPullState: jest.fn(),
+  },
+}));
+
 const wrapper = ({ children }) => (
   <ClassesProvider>{children}</ClassesProvider>
 );
@@ -98,6 +107,7 @@ describe('ClassesContext Plan 5 behavior', () => {
   const refreshChildrenFromCache = jest.fn();
 
   beforeEach(() => {
+    useAuth.mockReturnValue({ user: { id: 'user-1' } });
     useChildren.mockReturnValue({
       children: [],
       updateChild,
@@ -110,6 +120,7 @@ describe('ClassesContext Plan 5 behavior', () => {
     classesRepository.updateClass.mockResolvedValue(true);
     classesRepository.deleteClass.mockResolvedValue(true);
     classEaAssignmentsRepository.saveServerRows.mockResolvedValue({ applied: 0, skipped: 0 });
+    syncStateRepository.setPullState.mockResolvedValue(true);
     refreshChildrenFromCache.mockResolvedValue(undefined);
     fetchAndCacheSchools.mockResolvedValue([]);
     ensureReferenceData.mockResolvedValue({});
@@ -120,6 +131,7 @@ describe('ClassesContext Plan 5 behavior', () => {
       isOnline: true,
       refreshSyncStatus: jest.fn(),
       isSyncing: false,
+      domainPullNonce: 0,
     });
     mockSupabaseFrom.mockImplementation((tableName) => {
       if (tableName === 'staff_programme_assignments') {
@@ -150,6 +162,132 @@ describe('ClassesContext Plan 5 behavior', () => {
 
     await waitFor(() => expect(classesRepository.getClasses).toHaveBeenCalledWith({ userId: 'user-1' }));
     expect(mockSupabaseFrom).not.toHaveBeenCalled();
+  });
+
+  test('one domain-pull nonce increment triggers exactly one additional class pull', async () => {
+    const { rerender } = renderHook(() => useClasses(), { wrapper });
+    await waitFor(() => expect(mockSupabaseFrom).toHaveBeenCalledWith('staff_programme_assignments'));
+    await waitFor(() => expect(classesRepository.getClasses).toHaveBeenCalled());
+    mockSupabaseFrom.mockClear();
+
+    useOffline.mockReturnValue({
+      isOnline: true,
+      refreshSyncStatus: jest.fn(),
+      isSyncing: false,
+      domainPullNonce: 1,
+    });
+    rerender();
+
+    await waitFor(() => expect(mockSupabaseFrom).toHaveBeenCalledTimes(1));
+    expect(mockSupabaseFrom).toHaveBeenCalledWith('staff_programme_assignments');
+  });
+
+  test('mount performs exactly one class network pull', async () => {
+    renderHook(() => useClasses(), { wrapper });
+
+    await waitFor(() => expect(mockSupabaseFrom).toHaveBeenCalledWith('staff_programme_assignments'));
+    expect(mockSupabaseFrom).toHaveBeenCalledTimes(1);
+  });
+
+  test('rapid same-user nonce increments join one in-flight class pull', async () => {
+    const { rerender } = renderHook(() => useClasses(), { wrapper });
+    await waitFor(() => expect(mockSupabaseFrom).toHaveBeenCalledWith('staff_programme_assignments'));
+    mockSupabaseFrom.mockClear();
+    let releaseAssignments;
+    const heldAssignments = new Promise((resolve) => {
+      releaseAssignments = resolve;
+    });
+    mockSupabaseFrom.mockImplementation(() => {
+      const builder = queryResult({ data: [], error: null });
+      builder.limit = jest.fn(() => heldAssignments);
+      return builder;
+    });
+
+    useOffline.mockReturnValue({
+      isOnline: true,
+      refreshSyncStatus: jest.fn(),
+      isSyncing: false,
+      domainPullNonce: 1,
+    });
+    rerender();
+    await waitFor(() => expect(mockSupabaseFrom).toHaveBeenCalledTimes(1));
+
+    useOffline.mockReturnValue({
+      isOnline: true,
+      refreshSyncStatus: jest.fn(),
+      isSyncing: false,
+      domainPullNonce: 2,
+    });
+    rerender();
+    expect(mockSupabaseFrom).toHaveBeenCalledTimes(1);
+
+    await act(async () => {
+      releaseAssignments({ data: [], error: null });
+      await heldAssignments;
+    });
+  });
+
+  test('an A-to-B user transition starts one class pull per user and only publishes B after A settles', async () => {
+    useAuth.mockReturnValue({ user: { id: 'user-a' } });
+    classesRepository.getClasses.mockImplementation(async ({ userId }) => ([
+      { id: `${userId}-class`, name: userId, synced: true },
+    ]));
+    let releaseUserAAssignments;
+    const heldUserAAssignments = new Promise((resolve) => {
+      releaseUserAAssignments = resolve;
+    });
+    let releaseUserBAssignments;
+    const heldUserBAssignments = new Promise((resolve) => {
+      releaseUserBAssignments = resolve;
+    });
+    mockSupabaseFrom.mockImplementation(() => {
+      let requestedUserId = null;
+      const builder = queryResult({ data: [], error: null });
+      builder.eq = jest.fn((column, value) => {
+        if (column === 'user_id') requestedUserId = value;
+        return builder;
+      });
+      builder.limit = jest.fn(() => (
+        requestedUserId === 'user-a'
+          ? heldUserAAssignments
+          : heldUserBAssignments
+      ));
+      return builder;
+    });
+
+    const { rerender, result } = renderHook(() => useClasses(), { wrapper });
+    await waitFor(() => expect(mockSupabaseFrom).toHaveBeenCalledTimes(1));
+
+    useAuth.mockReturnValue({ user: { id: 'user-b' } });
+    rerender();
+
+    await waitFor(() => expect(result.current.classes).toEqual([
+      expect.objectContaining({ id: 'user-b-class' }),
+    ]));
+
+    await act(async () => {
+      releaseUserAAssignments({ data: [], error: null });
+      await heldUserAAssignments;
+    });
+    await waitFor(() => expect(mockSupabaseFrom).toHaveBeenCalledTimes(2));
+
+    useOffline.mockReturnValue({
+      isOnline: true,
+      refreshSyncStatus: jest.fn(),
+      isSyncing: false,
+      domainPullNonce: 1,
+    });
+    rerender();
+    expect(mockSupabaseFrom).toHaveBeenCalledTimes(2);
+
+    await act(async () => {
+      releaseUserBAssignments({ data: [], error: null });
+      await heldUserBAssignments;
+    });
+
+    expect(result.current.classes).toEqual([
+      expect.objectContaining({ id: 'user-b-class' }),
+    ]);
   });
 
   test('mount publishes cached SQLite classes before the server pull resolves', async () => {
@@ -271,6 +409,64 @@ describe('ClassesContext Plan 5 behavior', () => {
     await waitFor(() => expect(mockSupabaseFrom).toHaveBeenCalledWith('classes'));
     expect(classesRepository.saveServerClassRows).not.toHaveBeenCalled();
     expect(classEaAssignmentsRepository.saveServerRows).not.toHaveBeenCalled();
+  });
+
+  test('a query-failed classes pull still stamps its completion time', async () => {
+    mockSupabaseFrom.mockImplementation((tableName) => {
+      if (tableName === 'staff_programme_assignments') {
+        return queryResult({ data: [{ programme_id: 'programme-a' }], error: null });
+      }
+      if (tableName === 'classes') {
+        return queryResult({ data: null, error: { message: 'class query failed' } });
+      }
+      return queryResult({ data: [], error: null });
+    });
+
+    renderHook(() => useClasses(), { wrapper });
+
+    await waitFor(() => expect(mockSupabaseFrom).toHaveBeenCalledWith('classes'));
+    expect(syncStateRepository.setPullState).toHaveBeenCalledWith('classes_pull', {
+      lastPulledAt: expect.any(String),
+    });
+  });
+
+  test('a transport-failed classes pull does not stamp', async () => {
+    mockSupabaseFrom.mockImplementation((tableName) => {
+      if (tableName === 'staff_programme_assignments') {
+        return queryResult({
+          data: null,
+          error: { message: 'network request failed' },
+        });
+      }
+      return queryResult({ data: [], error: null });
+    });
+
+    renderHook(() => useClasses(), { wrapper });
+
+    await waitFor(() => expect(mockSupabaseFrom).toHaveBeenCalledWith('staff_programme_assignments'));
+    expect(syncStateRepository.setPullState).not.toHaveBeenCalled();
+  });
+
+  test('a classes pull with an incomplete reconcile does not stamp', async () => {
+    classEaAssignmentsRepository.saveServerRows.mockResolvedValue({
+      applied: 0,
+      skipped: 0,
+      reconcileCompleted: false,
+    });
+    mockSupabaseFrom.mockImplementation((tableName) => {
+      if (tableName === 'staff_programme_assignments') {
+        return queryResult({ data: [{ programme_id: 'programme-a' }], error: null });
+      }
+      if (tableName === 'classes') {
+        return queryResult({ data: [], error: null });
+      }
+      return queryResult({ data: [], error: null });
+    });
+
+    renderHook(() => useClasses(), { wrapper });
+
+    await waitFor(() => expect(classEaAssignmentsRepository.saveServerRows).toHaveBeenCalled());
+    expect(syncStateRepository.setPullState).not.toHaveBeenCalled();
   });
 
   test('an incomplete class-assignment scope persists rows without reconcile', async () => {

@@ -32,6 +32,7 @@ jest.mock('../src/context/OfflineContext', () => ({
 
 jest.mock('../src/services/preloadedChildData', () => ({
   PULL_SCOPE_COMPLETENESS_LIMIT: 1000,
+  classifyPullFailureKind: jest.fn(() => 'query'),
   pullPreloadedChildData: (...args) => mockPullPreloadedChildData(...args),
 }));
 

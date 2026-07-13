@@ -9,6 +9,7 @@ import { classesRepository } from '../src/db/repositories/classesRepository';
 import { groupsRepository } from '../src/db/repositories/groupsRepository';
 import { groupEaAssignmentsRepository } from '../src/db/repositories/groupEaAssignmentsRepository';
 import { syncOutboxRepository } from '../src/db/repositories/syncOutboxRepository';
+import { syncStateRepository } from '../src/db/repositories/syncStateRepository';
 import { ensureReferenceData } from '../src/services/offlineSync';
 
 jest.mock('../src/services/supabaseClient', () => ({
@@ -24,6 +25,7 @@ jest.mock('../src/context/OfflineContext', () => ({
     isOnline: true,
     refreshSyncStatus: jest.fn(),
     isSyncing: false,
+    domainPullNonce: 0,
   })),
 }));
 
@@ -82,6 +84,12 @@ jest.mock('../src/db/repositories/syncOutboxRepository', () => ({
   },
 }));
 
+jest.mock('../src/db/repositories/syncStateRepository', () => ({
+  syncStateRepository: {
+    setPullState: jest.fn(),
+  },
+}));
+
 const wrapper = ({ children }) => (
   <ChildrenProvider>{children}</ChildrenProvider>
 );
@@ -131,6 +139,13 @@ const pulledBundle = ({
 
 describe('ChildrenContext Plan 5 hydration', () => {
   beforeEach(() => {
+    useAuth.mockReturnValue({ user: { id: 'user-1' } });
+    useOffline.mockReturnValue({
+      isOnline: true,
+      refreshSyncStatus: jest.fn(),
+      isSyncing: false,
+      domainPullNonce: 0,
+    });
     ensureReferenceData.mockResolvedValue({});
     childrenRepository.getMyChildren.mockResolvedValue([
       { id: 'cached-child', first_name: 'Cached', last_name: 'Child', synced: false },
@@ -154,6 +169,7 @@ describe('ChildrenContext Plan 5 hydration', () => {
     groupsRepository.addChildToGroup.mockResolvedValue(true);
     groupsRepository.removeChildFromGroup.mockResolvedValue(true);
     syncOutboxRepository.getPendingHardDeleteIds.mockResolvedValue(new Set());
+    syncStateRepository.setPullState.mockResolvedValue(true);
     classesRepository.saveServerClassRows.mockResolvedValue({ applied: 0, skipped: 0 });
     childrenRepository.saveServerChildRows.mockResolvedValue({ applied: 0, skipped: 0 });
     childrenRepository.saveServerStaffChildRows.mockResolvedValue({ applied: 0, skipped: 0 });
@@ -210,6 +226,161 @@ describe('ChildrenContext Plan 5 hydration', () => {
     expect(groupsRepository.saveServerChildrenGroupRows.mock.calls[0][0]).toEqual([
       expect.objectContaining({ id: 'server-membership' }),
     ]);
+  });
+
+  test('one domain-pull nonce increment triggers exactly one additional pull', async () => {
+    const { rerender, result } = renderHook(() => useChildren(), { wrapper });
+    await waitFor(() => expect(result.current.loading).toBe(false));
+    pullPreloadedChildData.mockClear();
+
+    useOffline.mockReturnValue({
+      isOnline: true,
+      refreshSyncStatus: jest.fn(),
+      isSyncing: false,
+      domainPullNonce: 1,
+    });
+    rerender();
+
+    await waitFor(() => expect(pullPreloadedChildData).toHaveBeenCalledTimes(1));
+  });
+
+  test('rapid same-user nonce increments join one in-flight pull', async () => {
+    const { rerender, result } = renderHook(() => useChildren(), { wrapper });
+    await waitFor(() => expect(result.current.loading).toBe(false));
+    pullPreloadedChildData.mockClear();
+    let releasePull;
+    const heldPull = new Promise((resolve) => {
+      releasePull = resolve;
+    });
+    pullPreloadedChildData.mockReturnValue(heldPull);
+
+    useOffline.mockReturnValue({
+      isOnline: true,
+      refreshSyncStatus: jest.fn(),
+      isSyncing: false,
+      domainPullNonce: 1,
+    });
+    rerender();
+    await waitFor(() => expect(pullPreloadedChildData).toHaveBeenCalledTimes(1));
+
+    useOffline.mockReturnValue({
+      isOnline: true,
+      refreshSyncStatus: jest.fn(),
+      isSyncing: false,
+      domainPullNonce: 2,
+    });
+    rerender();
+    expect(pullPreloadedChildData).toHaveBeenCalledTimes(1);
+
+    await act(async () => {
+      releasePull(pulledBundle());
+      await heldPull;
+    });
+  });
+
+  test('an A-to-B user transition starts one pull per user and only publishes B after A settles', async () => {
+    useAuth.mockReturnValue({ user: { id: 'user-a' } });
+    childrenRepository.getMyChildren.mockImplementation(async (userId) => ([
+      { id: `${userId}-child`, first_name: userId, synced: true },
+    ]));
+    groupsRepository.getGroups.mockResolvedValue([]);
+    groupsRepository.getVisibleChildrenGroups.mockResolvedValue([]);
+    let releaseUserAPull;
+    const heldUserAPull = new Promise((resolve) => {
+      releaseUserAPull = resolve;
+    });
+    pullPreloadedChildData.mockImplementation(({ userId }) => (
+      userId === 'user-a' ? heldUserAPull : Promise.resolve(pulledBundle())
+    ));
+
+    const { rerender, result } = renderHook(() => useChildren(), { wrapper });
+    await waitFor(() => expect(pullPreloadedChildData).toHaveBeenCalledWith({ userId: 'user-a' }));
+
+    useAuth.mockReturnValue({ user: { id: 'user-b' } });
+    rerender();
+
+    await waitFor(() => expect(pullPreloadedChildData).toHaveBeenCalledWith({ userId: 'user-b' }));
+    await waitFor(() => expect(result.current.children).toEqual([
+      expect.objectContaining({ id: 'user-b-child' }),
+    ]));
+
+    await act(async () => {
+      releaseUserAPull(pulledBundle());
+      await heldUserAPull;
+    });
+
+    expect(pullPreloadedChildData).toHaveBeenCalledTimes(2);
+    expect(result.current.children).toEqual([
+      expect.objectContaining({ id: 'user-b-child' }),
+    ]);
+  });
+
+  test('a query-failed child-data pull still stamps its completion time', async () => {
+    const dependencyScope = failedScope('dependency');
+    pullPreloadedChildData.mockResolvedValueOnce(pulledBundle({
+      activeProgrammeId: null,
+      programmeAssignment: [],
+      scopeOverrides: {
+        programmeAssignment: failedScope('query', { message: 'query failed' }),
+        children: dependencyScope,
+        childEaAssignments: dependencyScope,
+        childProgrammeEnrollments: dependencyScope,
+        childClassMemberships: dependencyScope,
+        classes: dependencyScope,
+        groups: dependencyScope,
+        groupEaAssignments: dependencyScope,
+        childrenGroups: dependencyScope,
+      },
+    }));
+
+    const { result } = renderHook(() => useChildren(), { wrapper });
+    await waitFor(() => expect(result.current.loading).toBe(false));
+
+    expect(syncStateRepository.setPullState).toHaveBeenCalledWith('child_data_pull', {
+      lastPulledAt: expect.any(String),
+    });
+  });
+
+  test('a transport-failed child-data pull does not stamp', async () => {
+    const dependencyScope = failedScope('dependency');
+    pullPreloadedChildData.mockResolvedValueOnce(pulledBundle({
+      activeProgrammeId: null,
+      programmeAssignment: [],
+      scopeOverrides: {
+        programmeAssignment: failedScope('transport', { message: 'network failed' }),
+        children: dependencyScope,
+        childEaAssignments: dependencyScope,
+        childProgrammeEnrollments: dependencyScope,
+        childClassMemberships: dependencyScope,
+        classes: dependencyScope,
+        groups: dependencyScope,
+        groupEaAssignments: dependencyScope,
+        childrenGroups: dependencyScope,
+      },
+    }));
+
+    const { result } = renderHook(() => useChildren(), { wrapper });
+    await waitFor(() => expect(result.current.loading).toBe(false));
+
+    expect(syncStateRepository.setPullState).not.toHaveBeenCalled();
+  });
+
+  test('a child-data pull with an incomplete reconcile does not stamp', async () => {
+    const completed = { applied: 0, skipped: 0, reconcileCompleted: true };
+    childrenRepository.saveServerStaffChildRows.mockResolvedValue({
+      applied: 0,
+      skipped: 0,
+      reconcileCompleted: false,
+    });
+    childrenRepository.saveServerChildProgrammeEnrollmentRows.mockResolvedValue(completed);
+    childrenRepository.saveServerChildClassMembershipRows.mockResolvedValue(completed);
+    groupEaAssignmentsRepository.saveServerRows.mockResolvedValue(completed);
+    groupsRepository.saveServerChildrenGroupRows.mockResolvedValue(completed);
+
+    const { result } = renderHook(() => useChildren(), { wrapper });
+    await waitFor(() => expect(result.current.loading).toBe(false));
+
+    expect(syncStateRepository.setPullState).not.toHaveBeenCalled();
   });
 
   test('persists pulled group assignments after their groups', async () => {

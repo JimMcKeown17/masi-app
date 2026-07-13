@@ -6,25 +6,31 @@ import { classesRepository } from '../db/repositories/classesRepository';
 import { groupsRepository } from '../db/repositories/groupsRepository';
 import { groupEaAssignmentsRepository } from '../db/repositories/groupEaAssignmentsRepository';
 import { syncOutboxRepository } from '../db/repositories/syncOutboxRepository';
+import { syncStateRepository } from '../db/repositories/syncStateRepository';
 import { useAuth } from './AuthContext';
 import { useOffline } from './OfflineContext';
 import { v4 as uuidv4 } from 'uuid';
 
 const ChildrenContext = createContext({});
 
-const savePulledRows = (saveRows, rows, reconcile) => (
-  reconcile ? saveRows(rows, { reconcile }) : saveRows(rows)
-);
+const savePulledRows = async (saveRows, rows, reconcile, reconcileResults) => {
+  const result = reconcile ? await saveRows(rows, { reconcile }) : await saveRows(rows);
+  if (reconcile) reconcileResults.push(result);
+  return result;
+};
 
 export const ChildrenProvider = ({ children }) => {
   const { user } = useAuth();
-  const { refreshSyncStatus, isSyncing } = useOffline();
+  const { refreshSyncStatus, isSyncing, domainPullNonce = 0 } = useOffline();
 
   const [childrenList, setChildrenList] = useState([]);
   const [groups, setGroups] = useState([]);
   const [childrenGroups, setChildrenGroups] = useState([]);
   const [loading, setLoading] = useState(false);
   const activeUserIdRef = useRef(null);
+  const activePullRef = useRef(null);
+  const previousDomainPullNonceRef = useRef(domainPullNonce);
+  activeUserIdRef.current = user?.id || null;
 
   // Active children only — hidden_at IS NULL. This is what every list view,
   // picker, and stats helper should consume. Hidden children stay in
@@ -61,7 +67,7 @@ export const ChildrenProvider = ({ children }) => {
     setChildrenGroups(cachedMemberships);
   }, [user?.id]);
 
-  const pullFromServer = useCallback(async () => {
+  const performPullFromServer = useCallback(async () => {
     const activeUserId = user?.id;
     if (!activeUserId) {
       setChildrenList([]);
@@ -84,6 +90,7 @@ export const ChildrenProvider = ({ children }) => {
       const { activeProgrammeId, scopes } = pulled;
       const pulledAt = new Date().toISOString();
       const programmeScopeOk = scopes.programmeAssignment.ok && Boolean(activeProgrammeId);
+      const reconcileResults = [];
 
       const pendingChildDeleteIds = await syncOutboxRepository.getPendingHardDeleteIds({
         tableName: 'children',
@@ -131,7 +138,8 @@ export const ChildrenProvider = ({ children }) => {
               pulledAt,
               userId: activeUserId,
             }
-            : undefined
+            : undefined,
+          reconcileResults
         );
       }
       if (scopes.childProgrammeEnrollments.ok) {
@@ -148,7 +156,8 @@ export const ChildrenProvider = ({ children }) => {
               programmeId: activeProgrammeId,
               pulledAt,
             }
-            : undefined
+            : undefined,
+          reconcileResults
         );
       }
       if (scopes.childClassMemberships.ok) {
@@ -164,7 +173,8 @@ export const ChildrenProvider = ({ children }) => {
                 .map((row) => row.id),
               pulledAt,
             }
-            : undefined
+            : undefined,
+          reconcileResults
         );
       }
       if (scopes.groups.ok) {
@@ -183,7 +193,8 @@ export const ChildrenProvider = ({ children }) => {
               programmeId: activeProgrammeId,
               pulledAt,
             }
-            : undefined
+            : undefined,
+          reconcileResults
         );
       }
       if (scopes.childrenGroups.ok) {
@@ -198,8 +209,18 @@ export const ChildrenProvider = ({ children }) => {
               acknowledgedGroupIds: scopes.groups.rows.map((row) => row.id),
               pulledAt,
             }
-            : undefined
+            : undefined,
+          reconcileResults
         );
+      }
+
+      if (activeUserIdRef.current !== activeUserId) return;
+      const transportFailed = Object.values(scopes)
+        .some((scope) => scope.failureKind === 'transport');
+      const reconcilesCompleted = reconcileResults
+        .every((result) => result?.reconcileCompleted === true);
+      if (!transportFailed && reconcilesCompleted) {
+        await syncStateRepository.setPullState('child_data_pull', { lastPulledAt: pulledAt });
       }
 
       const [freshChildren, freshGroups, freshMemberships] = await Promise.all([
@@ -221,9 +242,27 @@ export const ChildrenProvider = ({ children }) => {
     }
   }, [user?.id, refreshFromCache]);
 
+  const pullFromServer = useCallback(() => {
+    const activeUserId = user?.id;
+    if (activePullRef.current && activePullRef.current.userId === activeUserId) {
+      return activePullRef.current.promise;
+    }
+
+    const pullPromise = (async () => {
+      try {
+        return await performPullFromServer();
+      } finally {
+        if (activePullRef.current?.promise === pullPromise) {
+          activePullRef.current = null;
+        }
+      }
+    })();
+    activePullRef.current = { userId: activeUserId, promise: pullPromise };
+    return pullPromise;
+  }, [user?.id, performPullFromServer]);
+
   // Load data on mount when user is authenticated
   useEffect(() => {
-    activeUserIdRef.current = user?.id || null;
     if (user?.id) {
       pullFromServer();
       return;
@@ -233,6 +272,14 @@ export const ChildrenProvider = ({ children }) => {
     setChildrenGroups([]);
     setLoading(false);
   }, [user?.id, pullFromServer]);
+
+  useEffect(() => {
+    if (previousDomainPullNonceRef.current === domainPullNonce) return;
+    previousDomainPullNonceRef.current = domainPullNonce;
+    if (user?.id) {
+      pullFromServer();
+    }
+  }, [domainPullNonce, user?.id, pullFromServer]);
 
   // Reload from SQLite after sync completes to pick up updated synced flags.
   const prevSyncingRef = useRef(isSyncing);

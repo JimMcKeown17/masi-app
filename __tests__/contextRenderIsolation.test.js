@@ -97,6 +97,7 @@ jest.mock('../src/db/repositories/syncOutboxRepository', () => ({
 
 jest.mock('../src/services/preloadedChildData', () => ({
   PULL_SCOPE_COMPLETENESS_LIMIT: 1000,
+  classifyPullFailureKind: jest.fn(() => 'query'),
   pullPreloadedChildData: jest.fn(),
 }));
 

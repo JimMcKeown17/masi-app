@@ -69,16 +69,17 @@ const dependencyScopes = () => Object.fromEntries(
   DOMAIN_SCOPE_NAMES.map((scopeName) => [scopeName, dependencyScope()]),
 );
 
-const returnedErrorIsTransport = (error) => {
+export const classifyPullFailureKind = (error) => {
   const code = String(error?.code || '');
   const name = String(error?.name || '');
   const text = [error?.message, error?.details, error?.hint]
     .filter(Boolean)
     .join(' ');
 
-  return /ECONN|ENOTFOUND|ETIMEDOUT|NETWORK|FETCH|ABORT/i.test(code)
+  const isTransport = /ECONN|ENOTFOUND|ETIMEDOUT|NETWORK|FETCH|ABORT/i.test(code)
     || /NetworkError|FetchError|AbortError/i.test(name)
     || /network request failed|failed to fetch|fetch failed|network error|socket hang up|connection (?:reset|refused|timed out)/i.test(text);
+  return isTransport ? 'transport' : 'query';
 };
 
 const queryScope = async (task) => {
@@ -86,7 +87,7 @@ const queryScope = async (task) => {
     const result = await task();
     if (result?.error) {
       return failedScope(
-        returnedErrorIsTransport(result.error) ? 'transport' : 'query',
+        classifyPullFailureKind(result.error),
         result.error,
       );
     }
