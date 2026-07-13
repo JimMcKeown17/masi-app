@@ -54,7 +54,7 @@ export const ChildrenProvider = ({ children }) => {
     const [cachedChildren, cachedGroups, cachedMemberships] = await Promise.all([
       childrenRepository.getMyChildren(activeUserId),
       groupsRepository.getGroups({ userId: activeUserId }),
-      groupsRepository.getChildrenGroups(),
+      groupsRepository.getVisibleChildrenGroups({ userId: activeUserId }),
     ]);
     if (activeUserIdRef.current !== activeUserId) return;
     setChildrenList(cachedChildren);
@@ -135,7 +135,7 @@ export const ChildrenProvider = ({ children }) => {
       ] = await Promise.all([
         childrenRepository.getMyChildren(activeUserId),
         groupsRepository.getGroups({ userId: activeUserId }),
-        groupsRepository.getChildrenGroups(),
+        groupsRepository.getVisibleChildrenGroups({ userId: activeUserId }),
         childrenRepository.getUnsyncedChildren(),
         groupsRepository.getUnsyncedGroups(),
         groupsRepository.getUnsyncedChildrenGroups(),
@@ -155,8 +155,11 @@ export const ChildrenProvider = ({ children }) => {
       const mergedGroups = shouldApplyPulledRows(scopes.groups.rows, scopes)
         ? mergeServerRows(freshGroups, scopes.groups.rows, { unpushedRows: unsyncedGroups })
         : freshGroups;
+      const visibleGroupIds = new Set(mergedGroups.map((group) => group.id));
+      const visiblePulledMemberships = scopes.childrenGroups.rows
+        .filter((membership) => visibleGroupIds.has(membership.group_id));
       const mergedMemberships = shouldApplyPulledRows(scopes.childrenGroups.rows, scopes)
-        ? mergeServerRows(freshMemberships, scopes.childrenGroups.rows, {
+        ? mergeServerRows(freshMemberships, visiblePulledMemberships, {
           unpushedRows: unsyncedMemberships,
         })
         : freshMemberships;

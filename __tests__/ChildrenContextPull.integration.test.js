@@ -8,6 +8,7 @@ import { ChildrenProvider, useChildren } from '../src/context/ChildrenContext';
 import { getWriter, resetDatabaseConnectionForTests } from '../src/db/client';
 import { childrenRepository } from '../src/db/repositories/childrenRepository';
 import { groupsRepository } from '../src/db/repositories/groupsRepository';
+import { groupEaAssignmentsRepository } from '../src/db/repositories/groupEaAssignmentsRepository';
 import { __testables as offlineSyncTestables } from '../src/services/offlineSync';
 import { createBetterSqliteTestDatabase } from '../test-support/betterSqliteAdapter';
 import { seedCoreData } from '../test-support/sqliteRepositoryTestUtils';
@@ -160,6 +161,17 @@ const createDeferred = () => {
     resolve = promiseResolve;
   });
   return { promise, resolve };
+};
+
+const countGroupsForClass = ({ children, childrenGroups }, classId) => {
+  const classChildIds = new Set(
+    children.filter((child) => child.class_id === classId).map((child) => child.id)
+  );
+  return new Set(
+    childrenGroups
+      .filter((membership) => classChildIds.has(membership.child_id))
+      .map((membership) => membership.group_id)
+  ).size;
 };
 
 const seedContextRows = async (db) => {
@@ -425,4 +437,71 @@ test('an empty cache pulls reference parents before persisting the domain bundle
     .toEqual({ id: 'year-server' });
   expect(await testDb.getAllAsync('PRAGMA foreign_key_check')).toEqual([]);
   expect(result.current.children.map((row) => row.id)).toEqual(['child-server']);
+});
+
+test('ended group assignments hide intact memberships until a later pull re-acknowledges the group', async () => {
+  await seedContextRows(testDb);
+  mockPullPreloadedChildData.mockResolvedValue(pulledBundle());
+  const { result } = renderHook(() => useChildren(), { wrapper });
+  await waitFor(() => expect(result.current.loading).toBe(false));
+
+  expect(result.current.groups.map((group) => group.id)).toEqual(['group-1']);
+  expect(result.current.childrenGroups.map((membership) => membership.id))
+    .toEqual(['membership-1']);
+  expect(countGroupsForClass(result.current, 'class-1')).toBe(1);
+  const membershipBeforeAssignmentEnd = await testDb.getFirstAsync(`
+    select *
+    from child_group_memberships
+    where id = 'membership-1'
+  `);
+
+  await groupEaAssignmentsRepository.saveServerRows([], {
+    reconcile: {
+      acknowledgedGroupIds: [],
+      userId: 'user-1',
+      programmeId: 'programme-a',
+      pulledAt: '2026-07-13T14:00:00.000Z',
+    },
+  });
+  await act(async () => {
+    await result.current.refreshFromCache();
+  });
+
+  expect(result.current.groups).toEqual([]);
+  expect(result.current.childrenGroups).toEqual([]);
+  expect(countGroupsForClass(result.current, 'class-1')).toBe(0);
+  expect(await testDb.getFirstAsync(`
+    select *
+    from child_group_memberships
+    where id = 'membership-1'
+  `)).toEqual(membershipBeforeAssignmentEnd);
+  expect(membershipBeforeAssignmentEnd.removed_at).toBeNull();
+
+  await groupEaAssignmentsRepository.saveServerRows([{
+    ...pulledBundle().scopes.groupEaAssignments.rows[0],
+    unassigned_at: null,
+    updated_at: '2026-07-13T15:00:00.000Z',
+  }]);
+  expect(await testDb.getFirstAsync(`
+    select ea_user_id, programme_id, unassigned_at
+    from group_ea_assignments
+    where id = 'gea-group-1'
+  `)).toEqual({
+    ea_user_id: 'user-1',
+    programme_id: 'programme-a',
+    unassigned_at: null,
+  });
+  await act(async () => {
+    await result.current.refreshFromCache();
+  });
+
+  expect(result.current.groups.map((group) => group.id)).toEqual(['group-1']);
+  expect(result.current.childrenGroups.map((membership) => membership.id))
+    .toEqual(['membership-1']);
+  expect(countGroupsForClass(result.current, 'class-1')).toBe(1);
+  expect(await testDb.getFirstAsync(`
+    select *
+    from child_group_memberships
+    where id = 'membership-1'
+  `)).toEqual(membershipBeforeAssignmentEnd);
 });

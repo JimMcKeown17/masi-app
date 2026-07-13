@@ -11,7 +11,7 @@ import { seedCoreData } from '../test-support/sqliteRepositoryTestUtils';
 const readers = {
   children: () => childrenRepository.getMyChildren('user-1'),
   groups: () => groupsRepository.getGroups({ userId: 'user-1' }),
-  memberships: () => groupsRepository.getChildrenGroups(),
+  memberships: () => groupsRepository.getVisibleChildrenGroups({ userId: 'user-1' }),
   classes: () => classesRepository.getClasses({ userId: 'user-1' }),
 };
 
@@ -90,6 +90,14 @@ describe('consumer-visible context row shapes', () => {
         id, name, programme_id, class_id, created_by, sync_status
       ) values (
         'group-1', 'Blue Group', 'programme-a', 'class-1', 'user-1', 'synced'
+      )
+    `);
+    await writer.runAsync(`
+      insert into group_ea_assignments (
+        id, group_id, ea_user_id, programme_id, assigned_at, created_by, sync_status
+      ) values (
+        'gea-group-1', 'group-1', 'user-1', 'programme-a',
+        '2026-01-15T00:00:00.000Z', 'user-1', 'synced'
       )
     `);
     await writer.runAsync(`

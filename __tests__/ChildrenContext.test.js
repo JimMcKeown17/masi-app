@@ -60,7 +60,7 @@ jest.mock('../src/db/repositories/classesRepository', () => ({
 jest.mock('../src/db/repositories/groupsRepository', () => ({
   groupsRepository: {
     getGroups: jest.fn(),
-    getChildrenGroups: jest.fn(),
+    getVisibleChildrenGroups: jest.fn(),
     getUnsyncedGroups: jest.fn(),
     getUnsyncedChildrenGroups: jest.fn(),
     saveGroup: jest.fn(),
@@ -149,7 +149,7 @@ describe('ChildrenContext Plan 5 hydration', () => {
     groupsRepository.getGroups.mockResolvedValue([
       { id: 'cached-group', name: 'Cached Group', synced: false },
     ]);
-    groupsRepository.getChildrenGroups.mockResolvedValue([
+    groupsRepository.getVisibleChildrenGroups.mockResolvedValue([
       { id: 'cached-membership', child_id: 'cached-child', group_id: 'cached-group', synced: false },
     ]);
     groupsRepository.getUnsyncedGroups.mockResolvedValue([]);
@@ -450,7 +450,7 @@ describe('ChildrenContext Plan 5 hydration', () => {
       { id: 'synced-stale-group', name: 'Stale Group', synced: true, sync_status: 'synced' },
       { id: 'pending-group', name: 'Pending Group', synced: false, sync_status: 'pending' },
     ]);
-    groupsRepository.getChildrenGroups.mockResolvedValue([
+    groupsRepository.getVisibleChildrenGroups.mockResolvedValue([
       { id: 'synced-stale-membership', child_id: 'synced-stale-child', group_id: 'synced-stale-group', synced: true, sync_status: 'synced' },
       { id: 'pending-membership', child_id: 'pending-child', group_id: 'pending-group', synced: false, sync_status: 'pending' },
     ]);
@@ -491,7 +491,7 @@ describe('ChildrenContext Plan 5 hydration', () => {
     groupsRepository.getGroups.mockResolvedValue([
       { id: 'shared-group', name: 'Renamed Locally', synced: false, sync_status: 'pending' },
     ]);
-    groupsRepository.getChildrenGroups.mockResolvedValue([]);
+    groupsRepository.getVisibleChildrenGroups.mockResolvedValue([]);
     pullPreloadedChildData.mockResolvedValueOnce(pulledBundle({
       children: [{ id: 'shared-child', first_name: 'Stale Server', synced: true, sync_status: 'synced' }],
       classes: [],
@@ -524,7 +524,7 @@ describe('ChildrenContext Plan 5 hydration', () => {
       { id: 'shared-child', first_name: 'Edited Locally', synced: false, sync_status: 'synced' },
     ]);
     groupsRepository.getGroups.mockResolvedValue([]);
-    groupsRepository.getChildrenGroups.mockResolvedValue([]);
+    groupsRepository.getVisibleChildrenGroups.mockResolvedValue([]);
     pullPreloadedChildData.mockResolvedValueOnce(pulledBundle({
       children: [{ id: 'shared-child', first_name: 'Stale Server', synced: true, sync_status: 'synced' }],
       classes: [],
@@ -549,7 +549,7 @@ describe('ChildrenContext Plan 5 hydration', () => {
     // The active-only cache read hides the tombstone (removed_at set), so the
     // merge must learn about it from the unfiltered unsynced read and suppress
     // the server copy instead of resurrecting the membership (Codex P2 #2).
-    groupsRepository.getChildrenGroups.mockResolvedValue([]);
+    groupsRepository.getVisibleChildrenGroups.mockResolvedValue([]);
     groupsRepository.getUnsyncedChildrenGroups.mockResolvedValue([
       {
         id: 'removed-membership',
@@ -685,7 +685,7 @@ describe('ChildrenContext Plan 5 hydration', () => {
   });
 
   test('getChildrenInGroup ignores removed memberships', async () => {
-    groupsRepository.getChildrenGroups.mockResolvedValue([
+    groupsRepository.getVisibleChildrenGroups.mockResolvedValue([
       {
         id: 'removed-membership',
         child_id: 'cached-child',

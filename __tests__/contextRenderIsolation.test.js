@@ -79,7 +79,7 @@ jest.mock('../src/db/repositories/classEaAssignmentsRepository', () => ({
 jest.mock('../src/db/repositories/groupsRepository', () => ({
   groupsRepository: {
     getGroups: jest.fn(),
-    getChildrenGroups: jest.fn(),
+    getVisibleChildrenGroups: jest.fn(),
     getUnsyncedGroups: jest.fn(),
     getUnsyncedChildrenGroups: jest.fn(),
     saveServerGroupRows: jest.fn(),
@@ -214,7 +214,7 @@ describe('context render isolation', () => {
     childrenRepository.getMyChildren.mockResolvedValue([]);
     childrenRepository.getUnsyncedChildren.mockResolvedValue([]);
     groupsRepository.getGroups.mockResolvedValue([]);
-    groupsRepository.getChildrenGroups.mockResolvedValue([]);
+    groupsRepository.getVisibleChildrenGroups.mockResolvedValue([]);
     groupsRepository.getUnsyncedGroups.mockResolvedValue([]);
     groupsRepository.getUnsyncedChildrenGroups.mockResolvedValue([]);
     syncOutboxRepository.getPendingHardDeleteIds.mockResolvedValue(new Set());
@@ -272,7 +272,7 @@ describe('context render isolation', () => {
     await waitFor(() => {
       expect(childrenRepository.getMyChildren).toHaveBeenCalledWith('user-1');
       expect(groupsRepository.getGroups).toHaveBeenCalledWith({ userId: 'user-1' });
-      expect(groupsRepository.getChildrenGroups).toHaveBeenCalled();
+      expect(groupsRepository.getVisibleChildrenGroups).toHaveBeenCalledWith({ userId: 'user-1' });
       expect(pullPreloadedChildData).toHaveBeenCalledWith({ userId: 'user-1' });
       expect(childrenApi.loading).toBe(false);
     });
@@ -291,7 +291,7 @@ describe('context render isolation', () => {
       expect(getSyncStatus).toHaveBeenCalled();
       expect(childrenRepository.getMyChildren).toHaveBeenCalledWith('user-1');
       expect(groupsRepository.getGroups).toHaveBeenCalledWith({ userId: 'user-1' });
-      expect(groupsRepository.getChildrenGroups).toHaveBeenCalled();
+      expect(groupsRepository.getVisibleChildrenGroups).toHaveBeenCalledWith({ userId: 'user-1' });
       expect(pullPreloadedChildData).toHaveBeenCalledWith({ userId: 'user-1' });
       expect(childrenApi.loading).toBe(false);
     });

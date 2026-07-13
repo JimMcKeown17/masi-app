@@ -210,7 +210,20 @@ export const createGroupsRepository = ({ database } = {}) => {
     const db = await resolveDatabase(database);
     const activeProgrammeId = programmeId || (userId ? await getActiveProgrammeId(db, userId) : null);
     if (userId && !activeProgrammeId) return [];
-    const rows = activeProgrammeId
+    const rows = userId
+      ? await db.getAllAsync(`
+        select g.*
+        from groups g
+        join group_ea_assignments gea
+          on gea.group_id = g.id
+         and gea.ea_user_id = ?
+         and gea.programme_id = ?
+         and gea.unassigned_at is null
+        where g.archived_at is null
+          and g.programme_id = ?
+        order by g.name
+      `, userId, activeProgrammeId, activeProgrammeId)
+      : activeProgrammeId
       ? await db.getAllAsync(
         'select * from groups where archived_at is null and programme_id = ? order by name',
         activeProgrammeId
@@ -227,6 +240,29 @@ export const createGroupsRepository = ({ database } = {}) => {
       ${includeRemoved ? '' : 'where removed_at is null'}
       order by joined_at
     `);
+    return rows.map(mapDomainRow);
+  };
+
+  const getVisibleChildrenGroups = async ({ userId, programmeId } = {}) => {
+    if (!userId) return [];
+    const db = await resolveDatabase(database);
+    const activeProgrammeId = programmeId || await getActiveProgrammeId(db, userId);
+    if (!activeProgrammeId) return [];
+    const rows = await db.getAllAsync(`
+      select cgm.*
+      from child_group_memberships cgm
+      join groups g
+        on g.id = cgm.group_id
+       and g.archived_at is null
+       and g.programme_id = ?
+      join group_ea_assignments gea
+        on gea.group_id = g.id
+       and gea.ea_user_id = ?
+       and gea.programme_id = ?
+       and gea.unassigned_at is null
+      where cgm.removed_at is null
+      order by cgm.joined_at
+    `, activeProgrammeId, userId, activeProgrammeId);
     return rows.map(mapDomainRow);
   };
 
@@ -435,6 +471,7 @@ export const createGroupsRepository = ({ database } = {}) => {
     deleteGroup,
     getUnsyncedGroups,
     getChildrenGroups,
+    getVisibleChildrenGroups,
     addChildToGroup,
     saveChildrenGroup: addChildToGroup,
     saveServerChildrenGroupRows,
