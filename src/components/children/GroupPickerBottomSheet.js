@@ -3,22 +3,17 @@ import {
   View,
   StyleSheet,
   TouchableOpacity,
-  TouchableWithoutFeedback,
-  ScrollView,
-  KeyboardAvoidingView,
-  Platform,
   Alert,
-  Modal,
 } from 'react-native';
 import {
   Text,
   IconButton,
   Divider,
 } from 'react-native-paper';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { colors, spacing, borderRadius } from '../../constants/colors';
 import { useChildren } from '../../context/ChildrenContext';
 import { compareGroups, getGroupColor, nextGroupNumber } from '../../utils/groupHelpers';
+import BottomSheet from '../common/BottomSheet';
 
 /**
  * Number of virtual preset rows to show when the user has zero groups.
@@ -46,7 +41,6 @@ export default function GroupPickerBottomSheet({
   currentGroupId,
   onGroupChanged,
 }) {
-  const insets = useSafeAreaInsets();
   const {
     groups,
     addGroup,
@@ -221,34 +215,13 @@ export default function GroupPickerBottomSheet({
   };
 
   return (
-    <Modal
+    <BottomSheet
       visible={visible}
-      transparent
-      animationType="slide"
-      onRequestClose={handleDismiss}
+      onDismiss={handleDismiss}
+      title="Assign Group"
+      subtitle={childName}
+      dismissLabel="Dismiss group picker"
     >
-      <TouchableWithoutFeedback
-        onPress={handleDismiss}
-        accessibilityRole="button"
-        accessibilityLabel="Dismiss group picker"
-      >
-        <View style={styles.backdrop} />
-      </TouchableWithoutFeedback>
-      <KeyboardAvoidingView
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-        style={styles.sheetWrapper}
-      >
-        <View style={[styles.sheet, { paddingBottom: Math.max(insets.bottom, spacing.lg) }]}>
-            {/* Handle */}
-            <View style={styles.handleContainer}>
-              <View style={styles.handle} />
-            </View>
-
-            {/* Header */}
-            <Text variant="titleMedium" style={styles.title}>Assign Group</Text>
-            <Text variant="bodySmall" style={styles.subtitle}>{childName}</Text>
-
-            <ScrollView style={styles.scrollArea} bounces={false}>
               {/* Virtual preset rows — shown only when user has no groups yet */}
               {groups.length === 0 &&
                 Array.from({ length: PRESET_VIRTUAL_COUNT }, (_, i) => i + 1).map((n) => {
@@ -360,54 +333,11 @@ export default function GroupPickerBottomSheet({
                   </Text>
                 </TouchableOpacity>
               )}
-            </ScrollView>
-          </View>
-        </KeyboardAvoidingView>
-    </Modal>
+    </BottomSheet>
   );
 }
 
 const styles = StyleSheet.create({
-  backdrop: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
-  },
-  sheetWrapper: {
-    position: 'absolute',
-    bottom: 0,
-    left: 0,
-    right: 0,
-  },
-  sheet: {
-    backgroundColor: colors.surface,
-    borderTopLeftRadius: borderRadius.lg,
-    borderTopRightRadius: borderRadius.lg,
-    maxHeight: '80%',
-  },
-  handleContainer: {
-    alignItems: 'center',
-    paddingTop: spacing.sm,
-    paddingBottom: spacing.xs,
-  },
-  handle: {
-    width: 36,
-    height: 4,
-    backgroundColor: colors.border,
-    borderRadius: 2,
-  },
-  title: {
-    fontWeight: '700',
-    marginHorizontal: spacing.lg,
-    marginTop: spacing.sm,
-  },
-  subtitle: {
-    color: colors.textSecondary,
-    marginHorizontal: spacing.lg,
-    marginBottom: spacing.md,
-  },
-  scrollArea: {
-    paddingHorizontal: spacing.lg,
-  },
   groupRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',

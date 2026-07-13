@@ -2,17 +2,15 @@ import React, { useState, useEffect } from 'react';
 import {
   View,
   StyleSheet,
-  TouchableWithoutFeedback,
   Pressable,
-  Modal,
   useWindowDimensions,
 } from 'react-native';
 import { Text, ActivityIndicator } from 'react-native-paper';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { colors, spacing, borderRadius } from '../../constants/colors';
 import { letterStateColors } from '../../constants/letterStateColors';
 import { LETTER_SETS, PEDAGOGICAL_ORDERS } from '../../constants/egraConstants';
 import { loadMasteryState, countMastered } from '../../utils/masteryState';
+import BottomSheet from '../common/BottomSheet';
 
 const GRID_COLUMNS = 5;
 const GRID_GAP = spacing.sm;
@@ -38,7 +36,6 @@ export default function LetterTrackerBottomSheet({
   pendingChanges,
   onChangesUpdate,
 }) {
-  const insets = useSafeAreaInsets();
   const { width: screenWidth } = useWindowDimensions();
 
   const [assessmentMastered, setAssessmentMastered] = useState(new Set());
@@ -123,132 +120,81 @@ export default function LetterTrackerBottomSheet({
     ? countMastered({ assessmentMastered, taughtLetters: existingTaught, pendingChanges, pedagogicalOrder })
     : 0;
 
-  return (
-    <Modal visible={visible} transparent animationType="slide" onRequestClose={onDismiss}>
-      <TouchableWithoutFeedback
-        onPress={onDismiss}
-        accessibilityRole="button"
-        accessibilityLabel="Dismiss letter tracker"
-      >
-        <View style={styles.backdrop} />
-      </TouchableWithoutFeedback>
-      <View style={styles.sheetWrapper}>
-        <View style={[styles.sheet, { paddingBottom: Math.max(insets.bottom, spacing.lg) }]}>
-          {/* Handle */}
-          <View style={styles.handleContainer}>
-            <View style={styles.handle} />
-          </View>
-
-          {/* Header */}
-          <Text variant="titleMedium" style={styles.title}>Letter Tracker</Text>
-          <Text variant="bodySmall" style={styles.subtitle}>
-            {childName} — {masteredCount}/26 letters
-          </Text>
-
-          {loading ? (
-            <View style={styles.loadingArea}>
-              <ActivityIndicator size="small" color={colors.primary} />
-            </View>
-          ) : (
-            <>
-              {/* Legend */}
-              <View style={styles.legend}>
-                <View style={styles.legendItem}>
-                  <View style={[styles.legendSwatch, { backgroundColor: CELL_COLORS.assessment.bg }]} />
-                  <Text variant="labelSmall" style={styles.legendLabel}>Assessment</Text>
-                </View>
-                <View style={styles.legendItem}>
-                  <View style={[styles.legendSwatch, { backgroundColor: CELL_COLORS.taught.bg }]} />
-                  <Text variant="labelSmall" style={styles.legendLabel}>Taught</Text>
-                </View>
-                <View style={styles.legendItem}>
-                  <View style={[styles.legendSwatch, styles.legendSwatchDefault]} />
-                  <Text variant="labelSmall" style={styles.legendLabel}>Not yet</Text>
-                </View>
-              </View>
-
-              {/* Grid */}
-              <View style={[styles.grid, { gap: GRID_GAP, paddingHorizontal: spacing.lg }]}>
-                {pedagogicalOrder.map((letter) => {
-                  const state = getCellState(letter);
-                  const cellColors = CELL_COLORS[state];
-                  const isLocked = state === 'assessment';
-
-                  return (
-                    <Pressable
-                      key={letter}
-                      onPress={() => handleCellTap(letter)}
-                      disabled={isLocked}
-                      accessibilityRole="button"
-                      accessibilityLabel={`${letter}, ${state === 'assessment' ? 'mastered from assessment' : state === 'taught' ? 'taught by coach' : 'not mastered'}`}
-                      accessibilityState={{ disabled: isLocked, selected: state !== 'default' }}
-                      style={({ pressed }) => [
-                        styles.cell,
-                        {
-                          width: tileSize,
-                          height: tileSize,
-                          backgroundColor: cellColors.bg,
-                          borderColor: state === 'default' ? cellColors.border : cellColors.bg,
-                        },
-                        pressed && !isLocked && styles.cellPressed,
-                        isLocked && styles.cellLocked,
-                      ]}
-                    >
-                      <Text style={[
-                        styles.cellText,
-                        { color: cellColors.text, fontSize: Math.max(16, Math.floor(tileSize * 0.35)) },
-                      ]}>
-                        {letter.toUpperCase()}
-                      </Text>
-                    </Pressable>
-                  );
-                })}
-              </View>
-            </>
-          )}
-        </View>
+  const legend = loading ? null : (
+    <View style={styles.legend}>
+      <View style={styles.legendItem}>
+        <View style={[styles.legendSwatch, { backgroundColor: CELL_COLORS.assessment.bg }]} />
+        <Text variant="labelSmall" style={styles.legendLabel}>Assessment</Text>
       </View>
-    </Modal>
+      <View style={styles.legendItem}>
+        <View style={[styles.legendSwatch, { backgroundColor: CELL_COLORS.taught.bg }]} />
+        <Text variant="labelSmall" style={styles.legendLabel}>Taught</Text>
+      </View>
+      <View style={styles.legendItem}>
+        <View style={[styles.legendSwatch, styles.legendSwatchDefault]} />
+        <Text variant="labelSmall" style={styles.legendLabel}>Not yet</Text>
+      </View>
+    </View>
+  );
+
+  return (
+    <BottomSheet
+      visible={visible}
+      onDismiss={onDismiss}
+      title="Letter Tracker"
+      subtitle={`${childName} \u2014 ${masteredCount}/26 letters`}
+      dismissLabel="Dismiss letter tracker"
+      headerExtras={legend}
+      scrollable={false}
+      keyboardAvoiding={false}
+    >
+      {loading ? (
+        <View style={styles.loadingArea}>
+          <ActivityIndicator size="small" color={colors.primary} />
+        </View>
+      ) : (
+        <View style={[styles.grid, { gap: GRID_GAP }]}>
+          {pedagogicalOrder.map((letter) => {
+            const state = getCellState(letter);
+            const cellColors = CELL_COLORS[state];
+            const isLocked = state === 'assessment';
+
+            return (
+              <Pressable
+                key={letter}
+                onPress={() => handleCellTap(letter)}
+                disabled={isLocked}
+                accessibilityRole="button"
+                accessibilityLabel={`${letter}, ${state === 'assessment' ? 'mastered from assessment' : state === 'taught' ? 'taught by coach' : 'not mastered'}`}
+                accessibilityState={{ disabled: isLocked, selected: state !== 'default' }}
+                style={({ pressed }) => [
+                  styles.cell,
+                  {
+                    width: tileSize,
+                    height: tileSize,
+                    backgroundColor: cellColors.bg,
+                    borderColor: state === 'default' ? cellColors.border : cellColors.bg,
+                  },
+                  pressed && !isLocked && styles.cellPressed,
+                  isLocked && styles.cellLocked,
+                ]}
+              >
+                <Text style={[
+                  styles.cellText,
+                  { color: cellColors.text, fontSize: Math.max(16, Math.floor(tileSize * 0.35)) },
+                ]}>
+                  {letter.toUpperCase()}
+                </Text>
+              </Pressable>
+            );
+          })}
+        </View>
+      )}
+    </BottomSheet>
   );
 }
 
 const styles = StyleSheet.create({
-  backdrop: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
-  },
-  sheetWrapper: {
-    position: 'absolute',
-    bottom: 0,
-    left: 0,
-    right: 0,
-  },
-  sheet: {
-    backgroundColor: colors.surface,
-    borderTopLeftRadius: borderRadius.lg,
-    borderTopRightRadius: borderRadius.lg,
-  },
-  handleContainer: {
-    alignItems: 'center',
-    paddingTop: spacing.sm,
-    paddingBottom: spacing.xs,
-  },
-  handle: {
-    width: 36,
-    height: 4,
-    backgroundColor: colors.border,
-    borderRadius: 2,
-  },
-  title: {
-    fontWeight: '700',
-    marginHorizontal: spacing.lg,
-    marginTop: spacing.sm,
-  },
-  subtitle: {
-    color: colors.textSecondary,
-    marginHorizontal: spacing.lg,
-    marginBottom: spacing.md,
-  },
   loadingArea: {
     padding: spacing.xl,
     alignItems: 'center',
@@ -256,8 +202,6 @@ const styles = StyleSheet.create({
   legend: {
     flexDirection: 'row',
     gap: spacing.md,
-    marginBottom: spacing.md,
-    paddingHorizontal: spacing.lg,
   },
   legendItem: {
     flexDirection: 'row',
