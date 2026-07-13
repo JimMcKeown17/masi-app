@@ -7,7 +7,9 @@ import { useOffline } from '../src/context/OfflineContext';
 import { childrenRepository } from '../src/db/repositories/childrenRepository';
 import { classesRepository } from '../src/db/repositories/classesRepository';
 import { groupsRepository } from '../src/db/repositories/groupsRepository';
+import { groupEaAssignmentsRepository } from '../src/db/repositories/groupEaAssignmentsRepository';
 import { syncOutboxRepository } from '../src/db/repositories/syncOutboxRepository';
+import { syncStateRepository } from '../src/db/repositories/syncStateRepository';
 import { ensureReferenceData } from '../src/services/offlineSync';
 
 jest.mock('../src/services/supabaseClient', () => ({
@@ -23,6 +25,7 @@ jest.mock('../src/context/OfflineContext', () => ({
     isOnline: true,
     refreshSyncStatus: jest.fn(),
     isSyncing: false,
+    domainPullNonce: 0,
   })),
 }));
 
@@ -38,7 +41,6 @@ jest.mock('../src/db/repositories/childrenRepository', () => ({
   childrenRepository: {
     getMyChildren: jest.fn(),
     getChildren: jest.fn(),
-    getUnsyncedChildren: jest.fn(),
     save: jest.fn(),
     updateChild: jest.fn(),
     deleteIfNoHistory: jest.fn(),
@@ -59,9 +61,7 @@ jest.mock('../src/db/repositories/classesRepository', () => ({
 jest.mock('../src/db/repositories/groupsRepository', () => ({
   groupsRepository: {
     getGroups: jest.fn(),
-    getChildrenGroups: jest.fn(),
-    getUnsyncedGroups: jest.fn(),
-    getUnsyncedChildrenGroups: jest.fn(),
+    getVisibleChildrenGroups: jest.fn(),
     saveGroup: jest.fn(),
     updateGroup: jest.fn(),
     deleteGroup: jest.fn(),
@@ -72,9 +72,21 @@ jest.mock('../src/db/repositories/groupsRepository', () => ({
   },
 }));
 
+jest.mock('../src/db/repositories/groupEaAssignmentsRepository', () => ({
+  groupEaAssignmentsRepository: {
+    saveServerRows: jest.fn(),
+  },
+}));
+
 jest.mock('../src/db/repositories/syncOutboxRepository', () => ({
   syncOutboxRepository: {
     getPendingHardDeleteIds: jest.fn(),
+  },
+}));
+
+jest.mock('../src/db/repositories/syncStateRepository', () => ({
+  syncStateRepository: {
+    setPullState: jest.fn(),
   },
 }));
 
@@ -82,8 +94,58 @@ const wrapper = ({ children }) => (
   <ChildrenProvider>{children}</ChildrenProvider>
 );
 
+const successfulScope = (rows) => ({
+  ok: true,
+  rows,
+  complete: true,
+  failureKind: null,
+});
+
+const failedScope = (failureKind, error) => ({
+  ok: false,
+  rows: [],
+  complete: false,
+  failureKind,
+  ...(error ? { error } : {}),
+});
+
+const pulledBundle = ({
+  activeProgrammeId = 'programme-a',
+  programmeAssignment = [{ programme_id: activeProgrammeId }],
+  children = [],
+  childEaAssignments = [],
+  childProgrammeEnrollments = [],
+  childClassMemberships = [],
+  classes = [],
+  groups = [],
+  groupEaAssignments = [],
+  childrenGroups = [],
+  scopeOverrides = {},
+} = {}) => ({
+  activeProgrammeId,
+  scopes: {
+    programmeAssignment: successfulScope(programmeAssignment),
+    children: successfulScope(children),
+    childEaAssignments: successfulScope(childEaAssignments),
+    childProgrammeEnrollments: successfulScope(childProgrammeEnrollments),
+    childClassMemberships: successfulScope(childClassMemberships),
+    classes: successfulScope(classes),
+    groups: successfulScope(groups),
+    groupEaAssignments: successfulScope(groupEaAssignments),
+    childrenGroups: successfulScope(childrenGroups),
+    ...scopeOverrides,
+  },
+});
+
 describe('ChildrenContext Plan 5 hydration', () => {
   beforeEach(() => {
+    useAuth.mockReturnValue({ user: { id: 'user-1' } });
+    useOffline.mockReturnValue({
+      isOnline: true,
+      refreshSyncStatus: jest.fn(),
+      isSyncing: false,
+      domainPullNonce: 0,
+    });
     ensureReferenceData.mockResolvedValue({});
     childrenRepository.getMyChildren.mockResolvedValue([
       { id: 'cached-child', first_name: 'Cached', last_name: 'Child', synced: false },
@@ -91,7 +153,6 @@ describe('ChildrenContext Plan 5 hydration', () => {
     childrenRepository.getChildren.mockResolvedValue([
       { id: 'cached-child', first_name: 'Cached', last_name: 'Child', synced: false },
     ]);
-    childrenRepository.getUnsyncedChildren.mockResolvedValue([]);
     childrenRepository.save.mockResolvedValue(true);
     childrenRepository.updateChild.mockResolvedValue(true);
     childrenRepository.deleteIfNoHistory.mockResolvedValue(false);
@@ -99,17 +160,16 @@ describe('ChildrenContext Plan 5 hydration', () => {
     groupsRepository.getGroups.mockResolvedValue([
       { id: 'cached-group', name: 'Cached Group', synced: false },
     ]);
-    groupsRepository.getChildrenGroups.mockResolvedValue([
+    groupsRepository.getVisibleChildrenGroups.mockResolvedValue([
       { id: 'cached-membership', child_id: 'cached-child', group_id: 'cached-group', synced: false },
     ]);
-    groupsRepository.getUnsyncedGroups.mockResolvedValue([]);
-    groupsRepository.getUnsyncedChildrenGroups.mockResolvedValue([]);
     groupsRepository.saveGroup.mockResolvedValue(true);
     groupsRepository.updateGroup.mockResolvedValue(true);
     groupsRepository.deleteGroup.mockResolvedValue(true);
     groupsRepository.addChildToGroup.mockResolvedValue(true);
     groupsRepository.removeChildFromGroup.mockResolvedValue(true);
     syncOutboxRepository.getPendingHardDeleteIds.mockResolvedValue(new Set());
+    syncStateRepository.setPullState.mockResolvedValue(true);
     classesRepository.saveServerClassRows.mockResolvedValue({ applied: 0, skipped: 0 });
     childrenRepository.saveServerChildRows.mockResolvedValue({ applied: 0, skipped: 0 });
     childrenRepository.saveServerStaffChildRows.mockResolvedValue({ applied: 0, skipped: 0 });
@@ -117,23 +177,24 @@ describe('ChildrenContext Plan 5 hydration', () => {
     childrenRepository.saveServerChildClassMembershipRows.mockResolvedValue({ applied: 0, skipped: 0 });
     groupsRepository.saveServerGroupRows.mockResolvedValue({ applied: 0, skipped: 0 });
     groupsRepository.saveServerChildrenGroupRows.mockResolvedValue({ applied: 0, skipped: 0 });
-    pullPreloadedChildData.mockResolvedValue({
+    groupEaAssignmentsRepository.saveServerRows.mockResolvedValue({ applied: 0, skipped: 0 });
+    pullPreloadedChildData.mockResolvedValue(pulledBundle({
       children: [{ id: 'server-child', first_name: 'Server', last_name: 'Child', synced: true }],
       classes: [{ id: 'server-class', name: 'Server Class', synced: true }],
       childEaAssignments: [{ id: 'cea-1', child_id: 'server-child', user_id: 'user-1', synced: true }],
       childProgrammeEnrollments: [{ id: 'cpe-1', child_id: 'server-child', programme_id: 'programme-a', synced: true }],
       childClassMemberships: [{ id: 'ccm-1', child_id: 'server-child', class_id: 'server-class', synced: true }],
       groups: [{ id: 'server-group', name: 'Server Group', synced: true }],
+      groupEaAssignments: [],
       childrenGroups: [{ id: 'server-membership', child_id: 'server-child', group_id: 'server-group', synced: true }],
-      errors: [],
-    });
+    }));
   });
 
   afterEach(() => {
     jest.clearAllMocks();
   });
 
-  test('mount performs one preloaded child-data pull and distributes the result', async () => {
+  test('mount performs one preloaded child-data pull and persists the result', async () => {
     const { result } = renderHook(() => useChildren(), { wrapper });
 
     await waitFor(() => expect(pullPreloadedChildData).toHaveBeenCalledTimes(1));
@@ -144,29 +205,350 @@ describe('ChildrenContext Plan 5 hydration', () => {
     }));
     expect(childrenRepository.getMyChildren).toHaveBeenCalledWith('user-1');
     expect(groupsRepository.getGroups).toHaveBeenCalledWith(expect.objectContaining({ userId: 'user-1' }));
-    await waitFor(() => expect(result.current.children.map(child => child.id)).toContain('server-child'));
-    expect(result.current.groups.map(group => group.id)).toContain('server-group');
-    expect(result.current.childrenGroups.map(membership => membership.id)).toContain('server-membership');
     expect(childrenRepository.saveServerChildRows).toHaveBeenCalledWith([
       expect.objectContaining({ id: 'server-child' }),
     ]);
     expect(classesRepository.saveServerClassRows).toHaveBeenCalledWith([
       expect.objectContaining({ id: 'server-class' }),
     ]);
-    expect(childrenRepository.saveServerStaffChildRows).toHaveBeenCalledWith([
+    expect(childrenRepository.saveServerStaffChildRows.mock.calls[0][0]).toEqual([
       expect.objectContaining({ id: 'cea-1' }),
     ]);
-    expect(childrenRepository.saveServerChildProgrammeEnrollmentRows).toHaveBeenCalledWith([
+    expect(childrenRepository.saveServerChildProgrammeEnrollmentRows.mock.calls[0][0]).toEqual([
       expect.objectContaining({ id: 'cpe-1' }),
     ]);
-    expect(childrenRepository.saveServerChildClassMembershipRows).toHaveBeenCalledWith([
+    expect(childrenRepository.saveServerChildClassMembershipRows.mock.calls[0][0]).toEqual([
       expect.objectContaining({ id: 'ccm-1' }),
     ]);
     expect(groupsRepository.saveServerGroupRows).toHaveBeenCalledWith([
       expect.objectContaining({ id: 'server-group' }),
     ]);
-    expect(groupsRepository.saveServerChildrenGroupRows).toHaveBeenCalledWith([
+    expect(groupsRepository.saveServerChildrenGroupRows.mock.calls[0][0]).toEqual([
       expect.objectContaining({ id: 'server-membership' }),
+    ]);
+  });
+
+  test('one domain-pull nonce increment triggers exactly one additional pull', async () => {
+    const { rerender, result } = renderHook(() => useChildren(), { wrapper });
+    await waitFor(() => expect(result.current.loading).toBe(false));
+    pullPreloadedChildData.mockClear();
+
+    useOffline.mockReturnValue({
+      isOnline: true,
+      refreshSyncStatus: jest.fn(),
+      isSyncing: false,
+      domainPullNonce: 1,
+    });
+    rerender();
+
+    await waitFor(() => expect(pullPreloadedChildData).toHaveBeenCalledTimes(1));
+  });
+
+  test('rapid same-user nonce increments join one in-flight pull', async () => {
+    const { rerender, result } = renderHook(() => useChildren(), { wrapper });
+    await waitFor(() => expect(result.current.loading).toBe(false));
+    pullPreloadedChildData.mockClear();
+    let releasePull;
+    const heldPull = new Promise((resolve) => {
+      releasePull = resolve;
+    });
+    pullPreloadedChildData.mockReturnValue(heldPull);
+
+    useOffline.mockReturnValue({
+      isOnline: true,
+      refreshSyncStatus: jest.fn(),
+      isSyncing: false,
+      domainPullNonce: 1,
+    });
+    rerender();
+    await waitFor(() => expect(pullPreloadedChildData).toHaveBeenCalledTimes(1));
+
+    useOffline.mockReturnValue({
+      isOnline: true,
+      refreshSyncStatus: jest.fn(),
+      isSyncing: false,
+      domainPullNonce: 2,
+    });
+    rerender();
+    expect(pullPreloadedChildData).toHaveBeenCalledTimes(1);
+
+    await act(async () => {
+      releasePull(pulledBundle());
+      await heldPull;
+    });
+  });
+
+  test('Apply arriving after an active pull reconciles queues one authorized follow-up pull', async () => {
+    let authorized = false;
+    const consumeReconcileBreakerAuthorization = jest.fn((scope) => {
+      if (scope !== 'childEaAssignments' || !authorized) return false;
+      authorized = false;
+      return true;
+    });
+    const hasReconcileBreakerAuthorization = jest.fn(
+      (scope) => scope === 'childEaAssignments' && authorized
+    );
+    const offlineValue = (domainPullNonce) => ({
+      isOnline: true,
+      refreshSyncStatus: jest.fn(),
+      isSyncing: false,
+      domainPullNonce,
+      consumeReconcileBreakerAuthorization,
+      hasReconcileBreakerAuthorization,
+    });
+    useOffline.mockReturnValue(offlineValue(0));
+
+    let releaseFinalRead;
+    const heldFinalRead = new Promise((resolve) => {
+      releaseFinalRead = resolve;
+    });
+    const cachedRows = [{ id: 'cached-child', first_name: 'Cached', synced: true }];
+    childrenRepository.getMyChildren
+      .mockResolvedValueOnce(cachedRows)
+      .mockReturnValueOnce(heldFinalRead)
+      .mockResolvedValue(cachedRows);
+
+    const { rerender } = renderHook(() => useChildren(), { wrapper });
+    await waitFor(() => expect(childrenRepository.saveServerStaffChildRows).toHaveBeenCalledTimes(1));
+
+    authorized = true;
+    useOffline.mockReturnValue(offlineValue(1));
+    rerender();
+    expect(pullPreloadedChildData).toHaveBeenCalledTimes(1);
+
+    await act(async () => {
+      releaseFinalRead(cachedRows);
+      await heldFinalRead;
+    });
+
+    await waitFor(() => expect(pullPreloadedChildData).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(childrenRepository.saveServerStaffChildRows).toHaveBeenCalledTimes(2));
+    expect(childrenRepository.saveServerStaffChildRows.mock.calls[1][1].reconcile)
+      .toEqual(expect.objectContaining({ bypassBreaker: true }));
+  });
+
+  test('an A-to-B user transition starts one pull per user and only publishes B after A settles', async () => {
+    useAuth.mockReturnValue({ user: { id: 'user-a' } });
+    childrenRepository.getMyChildren.mockImplementation(async (userId) => ([
+      { id: `${userId}-child`, first_name: userId, synced: true },
+    ]));
+    groupsRepository.getGroups.mockResolvedValue([]);
+    groupsRepository.getVisibleChildrenGroups.mockResolvedValue([]);
+    let releaseUserAPull;
+    const heldUserAPull = new Promise((resolve) => {
+      releaseUserAPull = resolve;
+    });
+    pullPreloadedChildData.mockImplementation(({ userId }) => (
+      userId === 'user-a' ? heldUserAPull : Promise.resolve(pulledBundle())
+    ));
+
+    const { rerender, result } = renderHook(() => useChildren(), { wrapper });
+    await waitFor(() => expect(pullPreloadedChildData).toHaveBeenCalledWith({ userId: 'user-a' }));
+
+    useAuth.mockReturnValue({ user: { id: 'user-b' } });
+    rerender();
+
+    await waitFor(() => expect(pullPreloadedChildData).toHaveBeenCalledWith({ userId: 'user-b' }));
+    await waitFor(() => expect(result.current.children).toEqual([
+      expect.objectContaining({ id: 'user-b-child' }),
+    ]));
+
+    await act(async () => {
+      releaseUserAPull(pulledBundle());
+      await heldUserAPull;
+    });
+
+    expect(pullPreloadedChildData).toHaveBeenCalledTimes(2);
+    expect(result.current.children).toEqual([
+      expect.objectContaining({ id: 'user-b-child' }),
+    ]);
+  });
+
+  test('a query-failed child-data pull still stamps its completion time', async () => {
+    const dependencyScope = failedScope('dependency');
+    pullPreloadedChildData.mockResolvedValueOnce(pulledBundle({
+      activeProgrammeId: null,
+      programmeAssignment: [],
+      scopeOverrides: {
+        programmeAssignment: failedScope('query', { message: 'query failed' }),
+        children: dependencyScope,
+        childEaAssignments: dependencyScope,
+        childProgrammeEnrollments: dependencyScope,
+        childClassMemberships: dependencyScope,
+        classes: dependencyScope,
+        groups: dependencyScope,
+        groupEaAssignments: dependencyScope,
+        childrenGroups: dependencyScope,
+      },
+    }));
+
+    const { result } = renderHook(() => useChildren(), { wrapper });
+    await waitFor(() => expect(result.current.loading).toBe(false));
+
+    expect(syncStateRepository.setPullState).toHaveBeenCalledWith('child_data_pull', {
+      lastPulledAt: expect.any(String),
+    });
+  });
+
+  test('a transport-failed child-data pull does not stamp', async () => {
+    const dependencyScope = failedScope('dependency');
+    pullPreloadedChildData.mockResolvedValueOnce(pulledBundle({
+      activeProgrammeId: null,
+      programmeAssignment: [],
+      scopeOverrides: {
+        programmeAssignment: failedScope('transport', { message: 'network failed' }),
+        children: dependencyScope,
+        childEaAssignments: dependencyScope,
+        childProgrammeEnrollments: dependencyScope,
+        childClassMemberships: dependencyScope,
+        classes: dependencyScope,
+        groups: dependencyScope,
+        groupEaAssignments: dependencyScope,
+        childrenGroups: dependencyScope,
+      },
+    }));
+
+    const { result } = renderHook(() => useChildren(), { wrapper });
+    await waitFor(() => expect(result.current.loading).toBe(false));
+
+    expect(syncStateRepository.setPullState).not.toHaveBeenCalled();
+  });
+
+  test('a child-data pull with an incomplete reconcile does not stamp', async () => {
+    const completed = { applied: 0, skipped: 0, reconcileCompleted: true };
+    childrenRepository.saveServerStaffChildRows.mockResolvedValue({
+      applied: 0,
+      skipped: 0,
+      reconcileCompleted: false,
+    });
+    childrenRepository.saveServerChildProgrammeEnrollmentRows.mockResolvedValue(completed);
+    childrenRepository.saveServerChildClassMembershipRows.mockResolvedValue(completed);
+    groupEaAssignmentsRepository.saveServerRows.mockResolvedValue(completed);
+    groupsRepository.saveServerChildrenGroupRows.mockResolvedValue(completed);
+
+    const { result } = renderHook(() => useChildren(), { wrapper });
+    await waitFor(() => expect(result.current.loading).toBe(false));
+
+    expect(syncStateRepository.setPullState).not.toHaveBeenCalled();
+  });
+
+  test('an authorized child-assignment breaker bypass is scope-specific and refreshes status on success', async () => {
+    const refreshSyncStatus = jest.fn();
+    const consumeReconcileBreakerAuthorization = jest.fn(
+      (scope) => scope === 'childEaAssignments'
+    );
+    useOffline.mockReturnValue({
+      isOnline: true,
+      refreshSyncStatus,
+      isSyncing: false,
+      domainPullNonce: 0,
+      consumeReconcileBreakerAuthorization,
+    });
+    childrenRepository.saveServerStaffChildRows.mockResolvedValue({
+      applied: 0,
+      skipped: 0,
+      reconcileCompleted: true,
+    });
+
+    const { result } = renderHook(() => useChildren(), { wrapper });
+    await waitFor(() => expect(result.current.loading).toBe(false));
+
+    expect(childrenRepository.saveServerStaffChildRows).toHaveBeenCalledWith(
+      expect.any(Array),
+      { reconcile: expect.objectContaining({ bypassBreaker: true }) }
+    );
+    expect(childrenRepository.saveServerChildProgrammeEnrollmentRows.mock.calls[0][1].reconcile)
+      .not.toHaveProperty('bypassBreaker', true);
+    expect(refreshSyncStatus).toHaveBeenCalledWith({ autoTrigger: false });
+  });
+
+  test('persists pulled group assignments after their groups', async () => {
+    const groupRow = { id: 'server-group', name: 'Server Group', synced: true };
+    const assignmentRow = {
+      id: 'gea-1',
+      group_id: 'server-group',
+      ea_user_id: 'user-1',
+      programme_id: 'programme-a',
+      synced: true,
+    };
+    pullPreloadedChildData.mockResolvedValueOnce(pulledBundle({
+      groups: [groupRow],
+      groupEaAssignments: [assignmentRow],
+    }));
+
+    const { result } = renderHook(() => useChildren(), { wrapper });
+
+    await waitFor(() => expect(result.current.loading).toBe(false));
+    expect(groupsRepository.saveServerGroupRows).toHaveBeenCalledWith([groupRow]);
+    expect(groupEaAssignmentsRepository.saveServerRows.mock.calls[0][0]).toEqual([assignmentRow]);
+    expect(groupsRepository.saveServerGroupRows.mock.invocationCallOrder[0])
+      .toBeLessThan(groupEaAssignmentsRepository.saveServerRows.mock.invocationCallOrder[0]);
+  });
+
+  test('persists the deduplicated union of intersection and assignment-embedded children', async () => {
+    pullPreloadedChildData.mockResolvedValueOnce(pulledBundle({
+      children: [
+        { id: 'child-a', first_name: 'Intersection', synced: true },
+      ],
+      childEaAssignments: [
+        {
+          id: 'cea-a',
+          child_id: 'child-a',
+          user_id: 'user-1',
+          children: { id: 'child-a', first_name: 'Embedded duplicate', synced: true },
+          synced: true,
+        },
+        {
+          id: 'cea-b',
+          child_id: 'child-b',
+          user_id: 'user-1',
+          children: { id: 'child-b', first_name: 'Embedded only', synced: true },
+          synced: true,
+        },
+      ],
+    }));
+
+    const { result } = renderHook(() => useChildren(), { wrapper });
+
+    await waitFor(() => expect(result.current.loading).toBe(false));
+    const persistedChildren = childrenRepository.saveServerChildRows.mock.calls[0][0];
+    expect(persistedChildren.map((row) => row.id).sort()).toEqual(['child-a', 'child-b']);
+  });
+
+  test('pending hard-delete ids filter assignment-embedded children and direct relationships', async () => {
+    syncOutboxRepository.getPendingHardDeleteIds.mockResolvedValue(new Set(['child-deleted']));
+    pullPreloadedChildData.mockResolvedValueOnce(pulledBundle({
+      childEaAssignments: [
+        {
+          id: 'cea-deleted',
+          child_id: 'child-deleted',
+          children: { id: 'child-deleted', first_name: 'Deleted', synced: true },
+          synced: true,
+        },
+        {
+          id: 'cea-kept',
+          child_id: 'child-kept',
+          children: { id: 'child-kept', first_name: 'Kept', synced: true },
+          synced: true,
+        },
+      ],
+      childProgrammeEnrollments: [
+        { id: 'cpe-deleted', child_id: 'child-deleted', synced: true },
+        { id: 'cpe-kept', child_id: 'child-kept', synced: true },
+      ],
+    }));
+
+    const { result } = renderHook(() => useChildren(), { wrapper });
+
+    await waitFor(() => expect(result.current.loading).toBe(false));
+    expect(childrenRepository.saveServerChildRows).toHaveBeenCalledWith([
+      expect.objectContaining({ id: 'child-kept' }),
+    ]);
+    expect(childrenRepository.saveServerStaffChildRows.mock.calls[0][0]).toEqual([
+      expect.objectContaining({ id: 'cea-kept' }),
+    ]);
+    expect(childrenRepository.saveServerChildProgrammeEnrollmentRows.mock.calls[0][0]).toEqual([
+      expect.objectContaining({ id: 'cpe-kept' }),
     ]);
   });
 
@@ -184,10 +566,7 @@ describe('ChildrenContext Plan 5 hydration', () => {
     expect(result.current.childrenGroups.map(membership => membership.id)).toContain('cached-membership');
 
     await act(async () => {
-      releasePull({
-        children: [], classes: [], childEaAssignments: [], childProgrammeEnrollments: [],
-        childClassMemberships: [], groups: [], childrenGroups: [], errors: [],
-      });
+      releasePull(pulledBundle());
     });
   });
 
@@ -244,19 +623,20 @@ describe('ChildrenContext Plan 5 hydration', () => {
     expect(childrenRepository.saveServerChildRows).toHaveBeenCalledWith([
       expect.objectContaining({ id: 'server-child' }),
     ]);
-    expect(childrenRepository.saveServerStaffChildRows).toHaveBeenCalledWith([
+    expect(childrenRepository.saveServerStaffChildRows.mock.calls[0][0]).toEqual([
       expect.objectContaining({ id: 'cea-1' }),
     ]);
-    expect(childrenRepository.saveServerChildProgrammeEnrollmentRows).toHaveBeenCalledWith([
+    expect(childrenRepository.saveServerChildProgrammeEnrollmentRows.mock.calls[0][0]).toEqual([
       expect.objectContaining({ id: 'cpe-1' }),
     ]);
-    expect(childrenRepository.saveServerChildClassMembershipRows).toHaveBeenCalledWith([
+    expect(childrenRepository.saveServerChildClassMembershipRows.mock.calls[0][0]).toEqual([
       expect.objectContaining({ id: 'ccm-1' }),
     ]);
     expect(groupsRepository.saveServerGroupRows).toHaveBeenCalledWith([
       expect.objectContaining({ id: 'server-group' }),
     ]);
-    expect(groupsRepository.saveServerChildrenGroupRows).toHaveBeenCalledWith([
+    expect(groupEaAssignmentsRepository.saveServerRows.mock.calls[0][0]).toEqual([]);
+    expect(groupsRepository.saveServerChildrenGroupRows.mock.calls[0][0]).toEqual([
       expect.objectContaining({ id: 'server-membership' }),
     ]);
 
@@ -268,18 +648,139 @@ describe('ChildrenContext Plan 5 hydration', () => {
       childrenRepository.saveServerChildProgrammeEnrollmentRows,
       childrenRepository.saveServerChildClassMembershipRows,
       groupsRepository.saveServerGroupRows,
+      groupEaAssignmentsRepository.saveServerRows,
       groupsRepository.saveServerChildrenGroupRows,
     ].map((mock) => mock.mock.invocationCallOrder[0]);
     expect(callsInOrder).toEqual([...callsInOrder].sort((a, b) => a - b));
   });
 
-  test('partial preload failure keeps cached child, group, and membership lists visible', async () => {
-    pullPreloadedChildData.mockResolvedValueOnce({
-      children: [],
-      groups: [],
-      childrenGroups: [],
-      errors: [{ scope: 'children', message: 'network down' }],
+  test('successful complete scopes pass relationship-specific reconcile contracts to every batch', async () => {
+    renderHook(() => useChildren(), { wrapper });
+
+    await waitFor(() => expect(groupsRepository.saveServerChildrenGroupRows).toHaveBeenCalled());
+
+    expect(childrenRepository.saveServerStaffChildRows).toHaveBeenCalledWith(
+      [expect.objectContaining({ id: 'cea-1' })],
+      { reconcile: {
+        acknowledgedIds: ['cea-1'],
+        pulledAt: expect.any(String),
+        userId: 'user-1',
+      } }
+    );
+    expect(childrenRepository.saveServerChildProgrammeEnrollmentRows).toHaveBeenCalledWith(
+      [expect.objectContaining({ id: 'cpe-1' })],
+      { reconcile: {
+        acknowledgedIds: ['cpe-1'],
+        acknowledgedAssignedChildIds: ['server-child'],
+        programmeId: 'programme-a',
+        pulledAt: expect.any(String),
+      } }
+    );
+    expect(childrenRepository.saveServerChildClassMembershipRows).toHaveBeenCalledWith(
+      [expect.objectContaining({ id: 'ccm-1' })],
+      { reconcile: {
+        acknowledgedIds: ['ccm-1'],
+        acknowledgedChildIds: ['server-child'],
+        pulledAt: expect.any(String),
+      } }
+    );
+    expect(groupEaAssignmentsRepository.saveServerRows).toHaveBeenCalledWith(
+      [],
+      { reconcile: {
+        acknowledgedGroupIds: ['server-group'],
+        userId: 'user-1',
+        programmeId: 'programme-a',
+        pulledAt: expect.any(String),
+      } }
+    );
+    expect(groupsRepository.saveServerChildrenGroupRows).toHaveBeenCalledWith(
+      [expect.objectContaining({ id: 'server-membership' })],
+      { reconcile: {
+        acknowledgedIds: ['server-membership'],
+        acknowledgedGroupIds: ['server-group'],
+        pulledAt: expect.any(String),
+      } }
+    );
+
+    const pulledAtValues = [
+      childrenRepository.saveServerStaffChildRows,
+      childrenRepository.saveServerChildProgrammeEnrollmentRows,
+      childrenRepository.saveServerChildClassMembershipRows,
+      groupEaAssignmentsRepository.saveServerRows,
+      groupsRepository.saveServerChildrenGroupRows,
+    ].map((mock) => mock.mock.calls[0][1].reconcile.pulledAt);
+    expect(new Set(pulledAtValues)).toHaveProperty('size', 1);
+  });
+
+  test('a failed assignment scope is not persisted and blocks reconcile on an empty enrollment scope', async () => {
+    pullPreloadedChildData.mockResolvedValueOnce(pulledBundle({
+      childProgrammeEnrollments: [],
+      scopeOverrides: {
+        childEaAssignments: failedScope('query', { message: 'assignment query failed' }),
+      },
+    }));
+
+    renderHook(() => useChildren(), { wrapper });
+
+    await waitFor(() => {
+      expect(childrenRepository.saveServerChildProgrammeEnrollmentRows).toHaveBeenCalled();
     });
+    expect(childrenRepository.saveServerStaffChildRows).not.toHaveBeenCalled();
+    expect(childrenRepository.saveServerChildProgrammeEnrollmentRows).toHaveBeenCalledWith([]);
+  });
+
+  test('a failed membership scope does not block empty group-assignment reconcile', async () => {
+    pullPreloadedChildData.mockResolvedValueOnce(pulledBundle({
+      groups: [],
+      groupEaAssignments: [],
+      scopeOverrides: {
+        childrenGroups: failedScope('query', { message: 'membership query failed' }),
+      },
+    }));
+
+    renderHook(() => useChildren(), { wrapper });
+
+    await waitFor(() => expect(groupEaAssignmentsRepository.saveServerRows).toHaveBeenCalled());
+    expect(groupsRepository.saveServerGroupRows).toHaveBeenCalledWith([]);
+    expect(groupEaAssignmentsRepository.saveServerRows).toHaveBeenCalledWith([], {
+      reconcile: {
+        acknowledgedGroupIds: [],
+        userId: 'user-1',
+        programmeId: 'programme-a',
+        pulledAt: expect.any(String),
+      },
+    });
+    expect(groupsRepository.saveServerChildrenGroupRows).not.toHaveBeenCalled();
+  });
+
+  test('an incomplete assignment scope persists rows without reconcile', async () => {
+    const assignment = {
+      id: 'cea-incomplete',
+      child_id: 'server-child',
+      user_id: 'user-1',
+      children: { id: 'server-child', first_name: 'Server' },
+    };
+    pullPreloadedChildData.mockResolvedValueOnce(pulledBundle({
+      scopeOverrides: {
+        childEaAssignments: {
+          ...successfulScope([assignment]),
+          complete: false,
+        },
+      },
+    }));
+
+    renderHook(() => useChildren(), { wrapper });
+
+    await waitFor(() => expect(childrenRepository.saveServerStaffChildRows).toHaveBeenCalled());
+    expect(childrenRepository.saveServerStaffChildRows).toHaveBeenCalledWith([assignment]);
+  });
+
+  test('a failed children scope leaves its cache visible while successful scopes still persist', async () => {
+    pullPreloadedChildData.mockResolvedValueOnce(pulledBundle({
+      scopeOverrides: {
+        children: failedScope('transport', { message: 'network down' }),
+      },
+    }));
 
     const { result } = renderHook(() => useChildren(), { wrapper });
 
@@ -295,164 +796,14 @@ describe('ChildrenContext Plan 5 hydration', () => {
     expect(result.current.childrenGroups).toEqual([
       expect.objectContaining({ id: 'cached-membership' }),
     ]);
-    expect(childrenRepository.saveServerChildRows).not.toHaveBeenCalled();
-    expect(groupsRepository.saveServerGroupRows).not.toHaveBeenCalled();
-    expect(groupsRepository.saveServerChildrenGroupRows).not.toHaveBeenCalled();
-  });
-
-  test('successful preload drops synced local rows that disappeared from the server but keeps dirty local rows', async () => {
-    childrenRepository.getMyChildren.mockResolvedValue([
-      { id: 'synced-stale-child', first_name: 'Stale', synced: true, sync_status: 'synced' },
-      { id: 'pending-child', first_name: 'Pending', synced: false, sync_status: 'pending' },
-      { id: 'failed-child', first_name: 'Failed', synced: false, sync_status: 'failed' },
-      { id: 'terminal-child', first_name: 'Terminal', synced: false, sync_status: 'terminal' },
-    ]);
-    groupsRepository.getGroups.mockResolvedValue([
-      { id: 'synced-stale-group', name: 'Stale Group', synced: true, sync_status: 'synced' },
-      { id: 'pending-group', name: 'Pending Group', synced: false, sync_status: 'pending' },
-    ]);
-    groupsRepository.getChildrenGroups.mockResolvedValue([
-      { id: 'synced-stale-membership', child_id: 'synced-stale-child', group_id: 'synced-stale-group', synced: true, sync_status: 'synced' },
-      { id: 'pending-membership', child_id: 'pending-child', group_id: 'pending-group', synced: false, sync_status: 'pending' },
-    ]);
-    pullPreloadedChildData.mockResolvedValueOnce({
-      children: [{ id: 'server-child', first_name: 'Server', synced: true, sync_status: 'synced' }],
-      classes: [],
-      childEaAssignments: [],
-      childProgrammeEnrollments: [],
-      childClassMemberships: [],
-      groups: [{ id: 'server-group', name: 'Server Group', synced: true, sync_status: 'synced' }],
-      childrenGroups: [{ id: 'server-membership', child_id: 'server-child', group_id: 'server-group', synced: true, sync_status: 'synced' }],
-      errors: [],
-    });
-
-    const { result } = renderHook(() => useChildren(), { wrapper });
-
-    await waitFor(() => expect(result.current.children.map(child => child.id)).toContain('server-child'));
-
-    expect(result.current.children.map(child => child.id).sort()).toEqual([
-      'failed-child',
-      'pending-child',
-      'server-child',
-      'terminal-child',
-    ]);
-    expect(result.current.groups.map(group => group.id).sort()).toEqual([
-      'pending-group',
-      'server-group',
-    ]);
-    expect(result.current.childrenGroups.map(membership => membership.id).sort()).toEqual([
-      'pending-membership',
-      'server-membership',
-    ]);
-  });
-
-  test('a pending local edit whose id exists on the server survives the pull in UI state (pending-local-wins)', async () => {
-    childrenRepository.getMyChildren.mockResolvedValue([
-      { id: 'shared-child', first_name: 'Edited Locally', synced: false, sync_status: 'pending' },
-    ]);
-    groupsRepository.getGroups.mockResolvedValue([
-      { id: 'shared-group', name: 'Renamed Locally', synced: false, sync_status: 'pending' },
-    ]);
-    groupsRepository.getChildrenGroups.mockResolvedValue([]);
-    pullPreloadedChildData.mockResolvedValueOnce({
-      children: [{ id: 'shared-child', first_name: 'Stale Server', synced: true, sync_status: 'synced' }],
-      classes: [],
-      childEaAssignments: [],
-      childProgrammeEnrollments: [],
-      childClassMemberships: [],
-      groups: [{ id: 'shared-group', name: 'Stale Server Group', synced: true, sync_status: 'synced' }],
-      childrenGroups: [],
-      errors: [],
-    });
-
-    const { result } = renderHook(() => useChildren(), { wrapper });
-    await waitFor(() => expect(pullPreloadedChildData).toHaveBeenCalledTimes(1));
-
-    await waitFor(() => {
-      const child = result.current.children.find(row => row.id === 'shared-child');
-      expect(child.first_name).toBe('Edited Locally');
-      expect(child.synced).toBe(false);
-    });
-    expect(result.current.children.filter(row => row.id === 'shared-child')).toHaveLength(1);
-    const group = result.current.groups.find(row => row.id === 'shared-group');
-    expect(group.name).toBe('Renamed Locally');
-    expect(result.current.groups.filter(row => row.id === 'shared-group')).toHaveLength(1);
-  });
-
-  test('a pending edit still wins when the cached row carries a stale sync_status from the facade payload', async () => {
-    // The legacy facade payload can hold sync_status 'synced' from pull time while a
-    // later offline edit only overlays synced: false — the merge must trust the
-    // dirty signal, not the stale status (Codex P2 on issue #42).
-    childrenRepository.getMyChildren.mockResolvedValue([
-      { id: 'shared-child', first_name: 'Edited Locally', synced: false, sync_status: 'synced' },
-    ]);
-    groupsRepository.getGroups.mockResolvedValue([]);
-    groupsRepository.getChildrenGroups.mockResolvedValue([]);
-    pullPreloadedChildData.mockResolvedValueOnce({
-      children: [{ id: 'shared-child', first_name: 'Stale Server', synced: true, sync_status: 'synced' }],
-      classes: [],
-      childEaAssignments: [],
-      childProgrammeEnrollments: [],
-      childClassMemberships: [],
-      groups: [],
-      childrenGroups: [],
-      errors: [],
-    });
-
-    const { result } = renderHook(() => useChildren(), { wrapper });
-    await waitFor(() => expect(pullPreloadedChildData).toHaveBeenCalledTimes(1));
-
-    await waitFor(() => {
-      const child = result.current.children.find(row => row.id === 'shared-child');
-      expect(child.first_name).toBe('Edited Locally');
-    });
-    expect(result.current.children.filter(row => row.id === 'shared-child')).toHaveLength(1);
-  });
-
-  test('a membership removed offline does not resurrect in UI state when a pull still returns it', async () => {
-    // The active-only cache read hides the tombstone (removed_at set), so the
-    // merge must learn about it from the unfiltered unsynced read and suppress
-    // the server copy instead of resurrecting the membership (Codex P2 #2).
-    groupsRepository.getChildrenGroups.mockResolvedValue([]);
-    groupsRepository.getUnsyncedChildrenGroups.mockResolvedValue([
-      {
-        id: 'removed-membership',
-        child_id: 'cached-child',
-        group_id: 'cached-group',
-        removed_at: '2026-07-04T08:00:00.000Z',
-        synced: false,
-        sync_status: 'pending',
-      },
-    ]);
-    pullPreloadedChildData.mockResolvedValueOnce({
-      children: [],
-      classes: [],
-      childEaAssignments: [],
-      childProgrammeEnrollments: [],
-      childClassMemberships: [],
-      groups: [],
-      childrenGroups: [
-        { id: 'removed-membership', child_id: 'cached-child', group_id: 'cached-group', synced: true, sync_status: 'synced' },
-      ],
-      errors: [],
-    });
-
-    const { result } = renderHook(() => useChildren(), { wrapper });
-
-    // Anchor on the pull having been fully applied (saves precede the state
-    // update, which precedes loading=false) so the negative assertion below
-    // cannot pass vacuously before the merge lands.
-    await waitFor(() => expect(groupsRepository.saveServerChildrenGroupRows).toHaveBeenCalledWith([
-      expect.objectContaining({ id: 'removed-membership' }),
-    ]));
-    await waitFor(() => expect(result.current.loading).toBe(false));
-
-    expect(result.current.childrenGroups.map(row => row.id)).not.toContain('removed-membership');
+    expect(childrenRepository.saveServerChildRows).toHaveBeenCalledWith([]);
+    expect(groupsRepository.saveServerGroupRows).toHaveBeenCalled();
+    expect(groupsRepository.saveServerChildrenGroupRows).toHaveBeenCalled();
   });
 
   test('a pending child hard-delete suppresses the child and its pulled relationships', async () => {
     syncOutboxRepository.getPendingHardDeleteIds.mockResolvedValue(new Set(['child-9']));
-    pullPreloadedChildData.mockResolvedValueOnce({
+    pullPreloadedChildData.mockResolvedValueOnce(pulledBundle({
       children: [{ id: 'child-9', first_name: 'Deleted', synced: true }],
       classes: [],
       childEaAssignments: [{ id: 'cea-9', child_id: 'child-9', user_id: 'user-1', synced: true }],
@@ -460,8 +811,7 @@ describe('ChildrenContext Plan 5 hydration', () => {
       childClassMemberships: [{ id: 'ccm-9', child_id: 'child-9', class_id: 'class-1', synced: true }],
       groups: [],
       childrenGroups: [],
-      errors: [],
-    });
+    }));
 
     const { result } = renderHook(() => useChildren(), { wrapper });
 
@@ -473,9 +823,21 @@ describe('ChildrenContext Plan 5 hydration', () => {
 
     expect(result.current.children.map(row => row.id)).not.toContain('child-9');
     expect(childrenRepository.saveServerChildRows).toHaveBeenCalledWith([]);
-    expect(childrenRepository.saveServerStaffChildRows).toHaveBeenCalledWith([]);
-    expect(childrenRepository.saveServerChildProgrammeEnrollmentRows).toHaveBeenCalledWith([]);
-    expect(childrenRepository.saveServerChildClassMembershipRows).toHaveBeenCalledWith([]);
+    expect(childrenRepository.saveServerStaffChildRows.mock.calls[0][0]).toEqual([]);
+    expect(childrenRepository.saveServerChildProgrammeEnrollmentRows.mock.calls[0][0]).toEqual([]);
+    expect(childrenRepository.saveServerChildClassMembershipRows.mock.calls[0][0]).toEqual([]);
+    expect(childrenRepository.saveServerStaffChildRows.mock.calls[0][1].reconcile)
+      .toEqual(expect.objectContaining({ acknowledgedIds: ['cea-9'] }));
+    expect(childrenRepository.saveServerChildProgrammeEnrollmentRows.mock.calls[0][1].reconcile)
+      .toEqual(expect.objectContaining({
+        acknowledgedIds: ['cpe-9'],
+        acknowledgedAssignedChildIds: ['child-9'],
+      }));
+    expect(childrenRepository.saveServerChildClassMembershipRows.mock.calls[0][1].reconcile)
+      .toEqual(expect.objectContaining({
+        acknowledgedIds: ['ccm-9'],
+        acknowledgedChildIds: ['child-9'],
+      }));
   });
 
   test('deleteChild uses the repository hard-delete then archive path', async () => {
@@ -551,7 +913,7 @@ describe('ChildrenContext Plan 5 hydration', () => {
   });
 
   test('getChildrenInGroup ignores removed memberships', async () => {
-    groupsRepository.getChildrenGroups.mockResolvedValue([
+    groupsRepository.getVisibleChildrenGroups.mockResolvedValue([
       {
         id: 'removed-membership',
         child_id: 'cached-child',
@@ -559,12 +921,7 @@ describe('ChildrenContext Plan 5 hydration', () => {
         removed_at: '2026-05-21T00:00:00.000Z',
       },
     ]);
-    pullPreloadedChildData.mockResolvedValueOnce({
-      children: [],
-      groups: [],
-      childrenGroups: [],
-      errors: [],
-    });
+    pullPreloadedChildData.mockResolvedValueOnce(pulledBundle());
 
     const { result } = renderHook(() => useChildren(), { wrapper });
     await waitFor(() => expect(result.current.children.map(child => child.id)).toContain('cached-child'));

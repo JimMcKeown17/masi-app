@@ -75,9 +75,38 @@ test('terminal plus waiting shows the needs-attention summary AND the waiting co
   expect(getByText('2 items saved on your phone, waiting to sync')).toBeTruthy();
 });
 
-test('clean state claims all saved and synced', () => {
+test('clean state claims all saved and synced and shows no breaker card', () => {
   mockUseOffline.mockReturnValue(offline());
-  expect(renderScreen().getByText('All saved and synced')).toBeTruthy();
+  const { getByText, queryByText } = renderScreen();
+  expect(getByText('All saved and synced')).toBeTruthy();
+  expect(queryByText('Large roster change from Head Office is waiting')).toBeNull();
+});
+
+test('a persisted reconcile breaker note renders its card and Apply requests that scope', () => {
+  const authorizeReconcileBreaker = jest.fn();
+  mockUseOffline.mockReturnValue(offline({
+    needsAttentionCount: 1,
+    authorizeReconcileBreaker,
+    syncStatus: {
+      reconcileBreakerNotes: [{
+        scope: 'childEaAssignments',
+        candidateCount: 15,
+        wouldEndCount: 12,
+        triggeredAt: '2026-07-13T12:00:00.000Z',
+      }],
+    },
+  }));
+
+  const rendered = renderScreen();
+  const { getByText, queryByText, rerender } = rendered;
+  expect(getByText('Large roster change from Head Office is waiting')).toBeTruthy();
+
+  fireEvent.press(getByText('Apply'));
+  expect(authorizeReconcileBreaker).toHaveBeenCalledWith('childEaAssignments');
+
+  mockUseOffline.mockReturnValue(offline());
+  rerender(<SafeAreaProvider initialMetrics={metrics}><SyncStatusScreen /></SafeAreaProvider>);
+  expect(queryByText('Large roster change from Head Office is waiting')).toBeNull();
 });
 
 test('offline with terminal items shows reconnect framing and an inert Retry', () => {

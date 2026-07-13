@@ -3,8 +3,10 @@ import NetInfo from '@react-native-community/netinfo';
 import { AppState } from 'react-native';
 import { supabase } from '../services/supabaseClient';
 import { syncAll, getSyncStatus, requeueTerminalRlsFailures } from '../services/offlineSync';
+import { syncStateRepository } from '../db/repositories/syncStateRepository';
 
 const BACKGROUND_SYNC_DEBOUNCE_MS = 1000;
+export const DOMAIN_PULL_STALENESS_MS = 15 * 60 * 1000;
 
 // Cheap deep-compare for sync status snapshots. The object is small (a few
 // counters, a per-table breakdown, and the usually-empty failedItems list),
@@ -21,6 +23,11 @@ const OfflineContext = createContext({
   nextRetryAt: null,
   syncStatus: {},
   lastSyncResult: null,
+  domainPullNonce: 0,
+  requestDomainPull: async () => false,
+  authorizeReconcileBreaker: () => false,
+  hasReconcileBreakerAuthorization: () => false,
+  consumeReconcileBreakerAuthorization: () => false,
   triggerBackgroundSync: () => {},
   syncNow: async () => {},
   refreshSyncStatus: async () => {},
@@ -33,6 +40,7 @@ export const OfflineProvider = ({ children }) => {
   const [inFlightCount, setInFlightCount] = useState(0);
   const [syncStatus, setSyncStatus] = useState({});
   const [lastSyncResult, setLastSyncResult] = useState(null);
+  const [domainPullNonce, setDomainPullNonce] = useState(0);
 
   const appState = useRef(AppState.currentState);
   const activeSyncPromise = useRef(null);
@@ -44,6 +52,7 @@ export const OfflineProvider = ({ children }) => {
   const inFlightCountRef = useRef(0);
   const currentUserIdRef = useRef(null);
   const triggerBackgroundSyncRef = useRef(() => {});
+  const reconcileBreakerAuthorizationsRef = useRef(new Set());
 
   // Keep ref in sync with state so event-listener closures always read current value
   useEffect(() => {
@@ -55,7 +64,15 @@ export const OfflineProvider = ({ children }) => {
    */
   const refreshSyncStatus = useCallback(async ({ autoTrigger = true } = {}) => {
     try {
-      const status = await getSyncStatus({ ownerUserId: currentUserIdRef.current });
+      const [outboxStatus, reconcileBreakerNotes] = await Promise.all([
+        getSyncStatus({ ownerUserId: currentUserIdRef.current }),
+        syncStateRepository.getReconcileBreakerNotes(),
+      ]);
+      const status = {
+        ...outboxStatus,
+        needsAttentionCount: (outboxStatus.needsAttentionCount || 0) + reconcileBreakerNotes.length,
+        reconcileBreakerNotes,
+      };
       setUnsyncedCount(status.unsyncedCount);
       setInFlightCount(status.inFlightCount || 0);
       readyCountRef.current = status.readyCount || 0;
@@ -146,6 +163,46 @@ export const OfflineProvider = ({ children }) => {
     triggerBackgroundSyncRef.current = triggerBackgroundSync;
   }, [triggerBackgroundSync]);
 
+  const requestDomainPull = useCallback(async (reason) => {
+    try {
+      const [childDataState, classesState] = await Promise.all([
+        syncStateRepository.getPullState('child_data_pull'),
+        syncStateRepository.getPullState('classes_pull'),
+      ]);
+      const staleBefore = Date.now() - DOMAIN_PULL_STALENESS_MS;
+      const isStale = (state) => {
+        const lastPulledAt = Date.parse(state?.lastPulledAt || '');
+        return !Number.isFinite(lastPulledAt) || lastPulledAt < staleBefore;
+      };
+      if (!isStale(childDataState) && !isStale(classesState)) return false;
+
+      console.log('Requesting domain pull:', reason);
+      setDomainPullNonce((nonce) => nonce + 1);
+      return true;
+    } catch (error) {
+      console.error('Error checking domain pull staleness:', error);
+      return false;
+    }
+  }, []);
+
+  const authorizeReconcileBreaker = useCallback((scope) => {
+    if (!scope) return false;
+    reconcileBreakerAuthorizationsRef.current.add(scope);
+    setDomainPullNonce((nonce) => nonce + 1);
+    return true;
+  }, []);
+
+  const consumeReconcileBreakerAuthorization = useCallback((scope) => {
+    if (!reconcileBreakerAuthorizationsRef.current.has(scope)) return false;
+    reconcileBreakerAuthorizationsRef.current.delete(scope);
+    return true;
+  }, []);
+
+  const hasReconcileBreakerAuthorization = useCallback(
+    (scope) => reconcileBreakerAuthorizationsRef.current.has(scope),
+    []
+  );
+
   /**
    * Network state listener
    * Triggers sync when connection is restored
@@ -168,10 +225,13 @@ export const OfflineProvider = ({ children }) => {
         console.log('Connection restored, triggering sync...');
         triggerBackgroundSyncRef.current();
       }
+      if (online && wasOffline) {
+        requestDomainPull('reconnect');
+      }
     });
 
     return () => unsubscribe();
-  }, []);
+  }, [requestDomainPull]);
 
   /**
    * App state listener
@@ -183,6 +243,7 @@ export const OfflineProvider = ({ children }) => {
       if (appState.current.match(/inactive|background/) && nextAppState === 'active') {
         console.log('App came to foreground');
         refreshSyncStatus();
+        requestDomainPull('foreground');
 
         // Auto-sync if online and have ready or in_flight data
         if (isOnlineRef.current && (readyCountRef.current > 0 || inFlightCountRef.current > 0)) {
@@ -203,7 +264,7 @@ export const OfflineProvider = ({ children }) => {
     });
 
     return () => subscription.remove();
-  }, [refreshSyncStatus]);
+  }, [refreshSyncStatus, requestDomainPull]);
 
   /**
    * Auth-restore heal: rows RLS-quarantined while the session was dead requeue
@@ -279,6 +340,11 @@ export const OfflineProvider = ({ children }) => {
     waitingCount, needsAttentionCount, nextRetryAt,
     syncStatus,
     lastSyncResult,
+    domainPullNonce,
+    requestDomainPull,
+    authorizeReconcileBreaker,
+    hasReconcileBreakerAuthorization,
+    consumeReconcileBreakerAuthorization,
     triggerBackgroundSync,
     syncNow,
     refreshSyncStatus,
@@ -292,6 +358,11 @@ export const OfflineProvider = ({ children }) => {
     nextRetryAt,
     syncStatus,
     lastSyncResult,
+    domainPullNonce,
+    requestDomainPull,
+    authorizeReconcileBreaker,
+    hasReconcileBreakerAuthorization,
+    consumeReconcileBreakerAuthorization,
     triggerBackgroundSync,
     syncNow,
     refreshSyncStatus,

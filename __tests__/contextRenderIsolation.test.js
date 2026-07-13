@@ -13,6 +13,7 @@ import { childrenRepository } from '../src/db/repositories/childrenRepository';
 import { classesRepository } from '../src/db/repositories/classesRepository';
 import { classEaAssignmentsRepository } from '../src/db/repositories/classEaAssignmentsRepository';
 import { groupsRepository } from '../src/db/repositories/groupsRepository';
+import { groupEaAssignmentsRepository } from '../src/db/repositories/groupEaAssignmentsRepository';
 import { syncOutboxRepository } from '../src/db/repositories/syncOutboxRepository';
 import {
   jobTitlesRepository,
@@ -50,7 +51,6 @@ jest.mock('../src/context/AuthContext', () => ({
 jest.mock('../src/db/repositories/childrenRepository', () => ({
   childrenRepository: {
     getMyChildren: jest.fn(),
-    getUnsyncedChildren: jest.fn(),
     saveServerChildRows: jest.fn(),
     saveServerStaffChildRows: jest.fn(),
     saveServerChildProgrammeEnrollmentRows: jest.fn(),
@@ -61,7 +61,6 @@ jest.mock('../src/db/repositories/childrenRepository', () => ({
 jest.mock('../src/db/repositories/classesRepository', () => ({
   classesRepository: {
     getClasses: jest.fn(),
-    getUnsyncedClasses: jest.fn(),
     saveServerClassRows: jest.fn(),
     saveClass: jest.fn(),
     updateClass: jest.fn(),
@@ -78,11 +77,15 @@ jest.mock('../src/db/repositories/classEaAssignmentsRepository', () => ({
 jest.mock('../src/db/repositories/groupsRepository', () => ({
   groupsRepository: {
     getGroups: jest.fn(),
-    getChildrenGroups: jest.fn(),
-    getUnsyncedGroups: jest.fn(),
-    getUnsyncedChildrenGroups: jest.fn(),
+    getVisibleChildrenGroups: jest.fn(),
     saveServerGroupRows: jest.fn(),
     saveServerChildrenGroupRows: jest.fn(),
+  },
+}));
+
+jest.mock('../src/db/repositories/groupEaAssignmentsRepository', () => ({
+  groupEaAssignmentsRepository: {
+    saveServerRows: jest.fn(),
   },
 }));
 
@@ -92,7 +95,17 @@ jest.mock('../src/db/repositories/syncOutboxRepository', () => ({
   },
 }));
 
+jest.mock('../src/db/repositories/syncStateRepository', () => ({
+  syncStateRepository: {
+    getPullState: jest.fn(async () => null),
+    getReconcileBreakerNotes: jest.fn(async () => []),
+    setPullState: jest.fn(async () => true),
+  },
+}));
+
 jest.mock('../src/services/preloadedChildData', () => ({
+  PULL_SCOPE_COMPLETENESS_LIMIT: 1000,
+  classifyPullFailureKind: jest.fn(() => 'query'),
   pullPreloadedChildData: jest.fn(),
 }));
 
@@ -118,7 +131,7 @@ jest.mock('../src/db/repositories/repositoryRuntime', () => ({
 }));
 
 jest.mock('../src/services/supabaseRequestQueue', () => ({
-  enqueueSupabaseRequest: jest.fn(async () => ({ data: [], error: null })),
+  enqueueSupabaseRequest: jest.fn(),
 }));
 
 jest.mock('../src/services/locationService', () => ({
@@ -205,15 +218,11 @@ describe('context render isolation', () => {
     timeTrackingApi = null;
     getSyncStatus.mockResolvedValue(statusWith());
     childrenRepository.getMyChildren.mockResolvedValue([]);
-    childrenRepository.getUnsyncedChildren.mockResolvedValue([]);
     groupsRepository.getGroups.mockResolvedValue([]);
-    groupsRepository.getChildrenGroups.mockResolvedValue([]);
-    groupsRepository.getUnsyncedGroups.mockResolvedValue([]);
-    groupsRepository.getUnsyncedChildrenGroups.mockResolvedValue([]);
+    groupsRepository.getVisibleChildrenGroups.mockResolvedValue([]);
     syncOutboxRepository.getPendingHardDeleteIds.mockResolvedValue(new Set());
     schoolsRepository.getAll.mockResolvedValue([]);
     classesRepository.getClasses.mockResolvedValue([]);
-    classesRepository.getUnsyncedClasses.mockResolvedValue([]);
     jobTitlesRepository.getAll.mockResolvedValue([]);
     classesRepository.saveServerClassRows.mockResolvedValue({ applied: 0, skipped: 0 });
     classEaAssignmentsRepository.saveServerRows.mockResolvedValue({ applied: 0, skipped: 0 });
@@ -225,21 +234,43 @@ describe('context render isolation', () => {
     jobTitlesRepository.replaceFromServer.mockResolvedValue(true);
     groupsRepository.saveServerGroupRows.mockResolvedValue({ applied: 0, skipped: 0 });
     groupsRepository.saveServerChildrenGroupRows.mockResolvedValue({ applied: 0, skipped: 0 });
+    groupEaAssignmentsRepository.saveServerRows.mockResolvedValue({ applied: 0, skipped: 0 });
     fetchAndCacheSchools.mockResolvedValue([]);
-    enqueueSupabaseRequest.mockResolvedValue({ data: [], error: null });
+    enqueueSupabaseRequest.mockResolvedValue({
+      activeProgrammeId: 'programme-a',
+      scopes: {
+        programmeAssignment: {
+          ok: true,
+          rows: [{ programme_id: 'programme-a' }],
+          complete: true,
+          failureKind: null,
+        },
+        classes: { ok: true, rows: [], complete: true, failureKind: null },
+        classEaAssignments: { ok: true, rows: [], complete: true, failureKind: null },
+      },
+    });
     timeEntriesRepository.getActiveTimeEntry.mockResolvedValue(null);
     timeEntriesRepository.saveTimeEntry.mockResolvedValue(true);
     timeEntriesRepository.createOpenTimeEntry.mockResolvedValue(true);
     timeEntriesRepository.updateTimeEntry.mockResolvedValue(true);
     pullPreloadedChildData.mockResolvedValue({
-      children: [],
-      classes: [],
-      childEaAssignments: [],
-      childProgrammeEnrollments: [],
-      childClassMemberships: [],
-      groups: [],
-      childrenGroups: [],
-      errors: [],
+      activeProgrammeId: 'programme-a',
+      scopes: Object.fromEntries([
+        ['programmeAssignment', [{ programme_id: 'programme-a' }]],
+        ['children', []],
+        ['classes', []],
+        ['childEaAssignments', []],
+        ['childProgrammeEnrollments', []],
+        ['childClassMemberships', []],
+        ['groups', []],
+        ['groupEaAssignments', []],
+        ['childrenGroups', []],
+      ].map(([name, rows]) => [name, {
+        ok: true,
+        rows,
+        complete: true,
+        failureKind: null,
+      }])),
     });
   });
 
@@ -255,7 +286,7 @@ describe('context render isolation', () => {
     await waitFor(() => {
       expect(childrenRepository.getMyChildren).toHaveBeenCalledWith('user-1');
       expect(groupsRepository.getGroups).toHaveBeenCalledWith({ userId: 'user-1' });
-      expect(groupsRepository.getChildrenGroups).toHaveBeenCalled();
+      expect(groupsRepository.getVisibleChildrenGroups).toHaveBeenCalledWith({ userId: 'user-1' });
       expect(pullPreloadedChildData).toHaveBeenCalledWith({ userId: 'user-1' });
       expect(childrenApi.loading).toBe(false);
     });
@@ -274,7 +305,7 @@ describe('context render isolation', () => {
       expect(getSyncStatus).toHaveBeenCalled();
       expect(childrenRepository.getMyChildren).toHaveBeenCalledWith('user-1');
       expect(groupsRepository.getGroups).toHaveBeenCalledWith({ userId: 'user-1' });
-      expect(groupsRepository.getChildrenGroups).toHaveBeenCalled();
+      expect(groupsRepository.getVisibleChildrenGroups).toHaveBeenCalledWith({ userId: 'user-1' });
       expect(pullPreloadedChildData).toHaveBeenCalledWith({ userId: 'user-1' });
       expect(childrenApi.loading).toBe(false);
     });
@@ -308,7 +339,6 @@ describe('context render isolation', () => {
       expect(schoolsRepository.getAll).toHaveBeenCalled();
       expect(fetchAndCacheSchools).toHaveBeenCalled();
       expect(classesRepository.getClasses).toHaveBeenCalledWith({ userId: 'user-1' });
-      expect(classesRepository.getUnsyncedClasses).toHaveBeenCalled();
       expect(classesApi.loading).toBe(false);
     });
   });
@@ -330,7 +360,6 @@ describe('context render isolation', () => {
       expect(schoolsRepository.getAll).toHaveBeenCalled();
       expect(fetchAndCacheSchools).toHaveBeenCalled();
       expect(classesRepository.getClasses).toHaveBeenCalledWith({ userId: 'user-1' });
-      expect(classesRepository.getUnsyncedClasses).toHaveBeenCalled();
       expect(classesApi.loading).toBe(false);
     });
     const rendersAfterSettle = classesRenders;

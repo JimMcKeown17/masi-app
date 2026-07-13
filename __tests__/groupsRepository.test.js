@@ -373,6 +373,79 @@ describe('groupsRepository', () => {
     }
   });
 
+  test('visible membership reads exclude active rows for groups the EA cannot see', async () => {
+    const db = await createMigratedDatabase(runMigrations);
+
+    try {
+      await seedCoreData(db);
+      await createChildrenRepository({ database: db }).save({
+        id: 'child-1',
+        first_name: 'Amahle',
+        last_name: 'Dlamini',
+        class_id: 'class-1',
+        created_by: 'user-1',
+        synced: false,
+      }, { actorUserId: 'user-1' });
+      const repository = createGroupsRepository({ database: db });
+
+      for (const [id, name] of [
+        ['group-visible', 'A Visible Group'],
+        ['group-ended', 'B Ended Assignment'],
+        ['group-archived', 'C Archived Group'],
+      ]) {
+        await repository.saveGroup({
+          id,
+          name,
+          programme_id: 'programme-a',
+          class_id: 'class-1',
+          created_by: 'user-1',
+          synced: false,
+        });
+        await repository.addChildToGroup({
+          id: `membership-${id}`,
+          child_id: 'child-1',
+          group_id: id,
+          created_by: 'user-1',
+          synced: false,
+        });
+      }
+      await db.runAsync(`
+        update group_ea_assignments
+        set unassigned_at = '2026-05-22T00:00:00.000Z'
+        where group_id = 'group-ended'
+      `);
+      await db.runAsync(`
+        update groups
+        set archived_at = '2026-05-22T00:00:00.000Z'
+        where id = 'group-archived'
+      `);
+
+      expect((await repository.getChildrenGroups())
+        .map((membership) => membership.id).sort()).toEqual([
+        'membership-group-archived',
+        'membership-group-ended',
+        'membership-group-visible',
+      ]);
+      expect((await repository.getVisibleChildrenGroups({
+        userId: 'user-1',
+        programmeId: 'programme-a',
+      })).map((membership) => membership.id)).toEqual([
+        'membership-group-visible',
+      ]);
+      expect(await db.getAllAsync(`
+        select id, removed_at
+        from child_group_memberships
+        order by id
+      `)).toEqual([
+        { id: 'membership-group-archived', removed_at: null },
+        { id: 'membership-group-ended', removed_at: null },
+        { id: 'membership-group-visible', removed_at: null },
+      ]);
+    } finally {
+      await db.closeAsync();
+    }
+  });
+
   test('group saves require an active programme assignment when programme_id is omitted', async () => {
     const db = await createMigratedDatabase(runMigrations);
 
@@ -424,6 +497,71 @@ describe('groupsRepository', () => {
         .toEqual(['group-literacy', 'group-numeracy']);
       expect(await repository.getGroups({ userId: 'user-1' })).toEqual([
         expect.objectContaining({ id: 'group-literacy', programme_id: 'programme-a' }),
+      ]);
+    } finally {
+      await db.closeAsync();
+    }
+  });
+
+  test('user-scoped group reads require an active assignment for that EA', async () => {
+    const db = await createMigratedDatabase(runMigrations);
+
+    try {
+      await seedCoreData(db);
+      const repository = createGroupsRepository({ database: db });
+
+      await repository.saveGroup({
+        id: 'group-visible',
+        name: 'A Visible Group',
+        programme_id: 'programme-a',
+        class_id: 'class-1',
+        created_by: 'user-1',
+        synced: false,
+      });
+      await repository.saveGroup({
+        id: 'group-ended',
+        name: 'B Ended Assignment',
+        programme_id: 'programme-a',
+        class_id: 'class-1',
+        created_by: 'user-1',
+        synced: false,
+      });
+      await repository.saveGroup({
+        id: 'group-unassigned',
+        name: 'C Never Assigned',
+        programme_id: 'programme-a',
+        class_id: 'class-1',
+        created_by: 'user-2',
+        synced: false,
+      });
+      await repository.saveGroup({
+        id: 'group-archived',
+        name: 'D Archived Group',
+        programme_id: 'programme-a',
+        class_id: 'class-1',
+        created_by: 'user-1',
+        synced: false,
+      });
+      await db.runAsync(`
+        update group_ea_assignments
+        set unassigned_at = '2026-05-22T00:00:00.000Z'
+        where group_id = 'group-ended'
+      `);
+      await db.runAsync(`
+        update groups
+        set archived_at = '2026-05-22T00:00:00.000Z'
+        where id = 'group-archived'
+      `);
+
+      expect((await repository.getGroups({
+        userId: 'user-1',
+        programmeId: 'programme-a',
+      })).map((group) => group.id)).toEqual(['group-visible']);
+
+      expect((await repository.getGroups()).map((group) => group.id)).toEqual([
+        'group-visible',
+        'group-ended',
+        'group-unassigned',
       ]);
     } finally {
       await db.closeAsync();

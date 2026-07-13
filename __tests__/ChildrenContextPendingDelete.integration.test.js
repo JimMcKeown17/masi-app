@@ -54,40 +54,51 @@ beforeEach(async () => {
     ownerUserId: 'user-1',
   });
 
+  const successfulScope = (rows) => ({
+    ok: true,
+    rows,
+    complete: true,
+    failureKind: null,
+  });
   mockPullPreloadedChildData.mockResolvedValue({
-    children: [{
-      id: 'child-9',
-      first_name: 'Deleted',
-      last_name: 'Child',
-      created_by: 'user-1',
-      synced: true,
-    }],
-    classes: [],
-    childEaAssignments: [{
-      id: 'cea-9',
-      child_id: 'child-9',
-      user_id: 'user-1',
-      created_by: 'user-1',
-      synced: true,
-    }],
-    childProgrammeEnrollments: [{
-      id: 'cpe-9',
-      child_id: 'child-9',
-      programme_id: 'programme-a',
-      created_by: 'user-1',
-      synced: true,
-    }],
-    childClassMemberships: [{
-      id: 'ccm-9',
-      child_id: 'child-9',
-      class_id: 'class-1',
-      academic_year_id: 'year-2026',
-      created_by: 'user-1',
-      synced: true,
-    }],
-    groups: [],
-    childrenGroups: [],
-    errors: [],
+    activeProgrammeId: 'programme-a',
+    scopes: {
+      programmeAssignment: successfulScope([{ programme_id: 'programme-a' }]),
+      children: successfulScope([]),
+      classes: successfulScope([]),
+      childEaAssignments: successfulScope([{
+        id: 'cea-9',
+        child_id: 'child-9',
+        user_id: 'user-1',
+        created_by: 'user-1',
+        synced: true,
+        children: {
+          id: 'child-9',
+          first_name: 'Deleted',
+          last_name: 'Child',
+          created_by: 'user-1',
+          synced: true,
+        },
+      }]),
+      childProgrammeEnrollments: successfulScope([{
+        id: 'cpe-9',
+        child_id: 'child-9',
+        programme_id: 'programme-a',
+        created_by: 'user-1',
+        synced: true,
+      }]),
+      childClassMemberships: successfulScope([{
+        id: 'ccm-9',
+        child_id: 'child-9',
+        class_id: 'class-1',
+        academic_year_id: 'year-2026',
+        created_by: 'user-1',
+        synced: true,
+      }]),
+      groups: successfulScope([]),
+      groupEaAssignments: successfulScope([]),
+      childrenGroups: successfulScope([]),
+    },
   });
 });
 

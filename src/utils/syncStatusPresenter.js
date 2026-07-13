@@ -85,3 +85,10 @@ export const describeWaitingDetail = ({ waitingCount = 0, backedOffCount = 0, ne
   }
   return { title, detail };
 };
+
+export const describeReconcileBreakerNote = ({ scope } = {}) => ({
+  scope,
+  title: 'Large roster change from Head Office is waiting',
+  actionLabel: 'Apply',
+  accessibilityLabel: 'Large roster change from Head Office is waiting. Apply',
+});

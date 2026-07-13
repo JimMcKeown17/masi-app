@@ -4,27 +4,53 @@ import { ensureReferenceData } from '../services/offlineSync';
 import { childrenRepository } from '../db/repositories/childrenRepository';
 import { classesRepository } from '../db/repositories/classesRepository';
 import { groupsRepository } from '../db/repositories/groupsRepository';
+import { groupEaAssignmentsRepository } from '../db/repositories/groupEaAssignmentsRepository';
 import { syncOutboxRepository } from '../db/repositories/syncOutboxRepository';
-import { mergeServerRows } from '../utils/mergeServerRows';
+import { syncStateRepository } from '../db/repositories/syncStateRepository';
 import { useAuth } from './AuthContext';
 import { useOffline } from './OfflineContext';
 import { v4 as uuidv4 } from 'uuid';
 
 const ChildrenContext = createContext({});
+const denyReconcileBreakerAuthorization = () => false;
+const CHILD_RECONCILE_BREAKER_SCOPES = [
+  'childEaAssignments',
+  'childProgrammeEnrollments',
+  'childClassMemberships',
+  'groupEaAssignments',
+  'childrenGroups',
+];
 
-const shouldApplyPulledRows = (rows, errors) => (
-  Array.isArray(rows) && (rows.length > 0 || errors.length === 0)
-);
+const savePulledRows = async (saveRows, rows, reconcile, reconcileResults) => {
+  const result = reconcile ? await saveRows(rows, { reconcile }) : await saveRows(rows);
+  if (reconcile) reconcileResults.push(result);
+  return result;
+};
 
 export const ChildrenProvider = ({ children }) => {
   const { user } = useAuth();
-  const { refreshSyncStatus, isSyncing } = useOffline();
+  const {
+    refreshSyncStatus,
+    isSyncing,
+    domainPullNonce = 0,
+    hasReconcileBreakerAuthorization = denyReconcileBreakerAuthorization,
+    consumeReconcileBreakerAuthorization = denyReconcileBreakerAuthorization,
+  } = useOffline();
 
   const [childrenList, setChildrenList] = useState([]);
   const [groups, setGroups] = useState([]);
   const [childrenGroups, setChildrenGroups] = useState([]);
   const [loading, setLoading] = useState(false);
   const activeUserIdRef = useRef(null);
+  const activePullRef = useRef(null);
+  const previousDomainPullNonceRef = useRef(domainPullNonce);
+  const refreshSyncStatusRef = useRef(refreshSyncStatus);
+  const hasReconcileBreakerAuthorizationRef = useRef(hasReconcileBreakerAuthorization);
+  const consumeReconcileBreakerAuthorizationRef = useRef(consumeReconcileBreakerAuthorization);
+  activeUserIdRef.current = user?.id || null;
+  refreshSyncStatusRef.current = refreshSyncStatus;
+  hasReconcileBreakerAuthorizationRef.current = hasReconcileBreakerAuthorization;
+  consumeReconcileBreakerAuthorizationRef.current = consumeReconcileBreakerAuthorization;
 
   // Active children only — hidden_at IS NULL. This is what every list view,
   // picker, and stats helper should consume. Hidden children stay in
@@ -53,7 +79,7 @@ export const ChildrenProvider = ({ children }) => {
     const [cachedChildren, cachedGroups, cachedMemberships] = await Promise.all([
       childrenRepository.getMyChildren(activeUserId),
       groupsRepository.getGroups({ userId: activeUserId }),
-      groupsRepository.getChildrenGroups(),
+      groupsRepository.getVisibleChildrenGroups({ userId: activeUserId }),
     ]);
     if (activeUserIdRef.current !== activeUserId) return;
     setChildrenList(cachedChildren);
@@ -61,7 +87,7 @@ export const ChildrenProvider = ({ children }) => {
     setChildrenGroups(cachedMemberships);
   }, [user?.id]);
 
-  const pullFromServer = useCallback(async () => {
+  const performPullFromServer = useCallback(async () => {
     const activeUserId = user?.id;
     if (!activeUserId) {
       setChildrenList([]);
@@ -70,88 +96,185 @@ export const ChildrenProvider = ({ children }) => {
       setLoading(false);
       return;
     }
+    const authorizedBreakerScopes = new Set(
+      CHILD_RECONCILE_BREAKER_SCOPES.filter(
+        (scope) => consumeReconcileBreakerAuthorizationRef.current(scope)
+      )
+    );
 
     try {
       setLoading(true);
       // Cache-first display: publish the SQLite snapshot immediately so a slow
-      // or stalled network never holds the roster hostage. The merge below
-      // re-publishes from a fresh post-commit snapshot when the pull lands.
+      // or stalled network never holds the roster hostage.
       await refreshFromCache();
       const pulled = await pullPreloadedChildData({ userId: activeUserId });
       if (activeUserIdRef.current !== activeUserId) return;
       await ensureReferenceData({ userId: activeUserId });
       if (activeUserIdRef.current !== activeUserId) return;
 
+      const { activeProgrammeId, scopes } = pulled;
+      const pulledAt = new Date().toISOString();
+      const programmeScopeOk = scopes.programmeAssignment.ok && Boolean(activeProgrammeId);
+      const reconcileResults = [];
+      let bypassedReconcileCompleted = false;
+      const saveScopedPulledRows = async (scope, saveRows, rows, reconcile) => {
+        const bypassBreaker = Boolean(reconcile) && authorizedBreakerScopes.has(scope);
+        const result = await savePulledRows(
+          saveRows,
+          rows,
+          bypassBreaker ? { ...reconcile, bypassBreaker: true } : reconcile,
+          reconcileResults
+        );
+        if (bypassBreaker && result?.reconcileCompleted === true) {
+          bypassedReconcileCompleted = true;
+        }
+        return result;
+      };
+
       const pendingChildDeleteIds = await syncOutboxRepository.getPendingHardDeleteIds({
         tableName: 'children',
         ownerUserId: activeUserId,
       });
-      const errors = pulled.errors || [];
-      const pulledChildren = (pulled.children || [])
+      const childrenById = new Map();
+      for (const child of [
+        ...(scopes.children.ok ? scopes.children.rows : []),
+        ...(scopes.childEaAssignments.ok
+          ? scopes.childEaAssignments.rows.map((assignment) => assignment.children)
+          : []),
+      ]) {
+        if (child?.id && !childrenById.has(child.id)) {
+          childrenById.set(child.id, child);
+        }
+      }
+      const pulledChildren = [...childrenById.values()]
         .filter((row) => !pendingChildDeleteIds.has(row.id));
-      const pulledChildEaAssignments = (pulled.childEaAssignments || [])
+      const pulledChildEaAssignments = (scopes.childEaAssignments.ok
+        ? scopes.childEaAssignments.rows
+        : [])
         .filter((row) => !pendingChildDeleteIds.has(row.child_id));
-      const pulledChildProgrammeEnrollments = (pulled.childProgrammeEnrollments || [])
+      const pulledChildProgrammeEnrollments = (scopes.childProgrammeEnrollments.ok
+        ? scopes.childProgrammeEnrollments.rows
+        : [])
         .filter((row) => !pendingChildDeleteIds.has(row.child_id));
-      const pulledChildClassMemberships = (pulled.childClassMemberships || [])
+      const pulledChildClassMemberships = (scopes.childClassMemberships.ok
+        ? scopes.childClassMemberships.rows
+        : [])
         .filter((row) => !pendingChildDeleteIds.has(row.child_id));
 
-      await classesRepository.saveServerClassRows(pulled.classes || []);
-      if (shouldApplyPulledRows(pulledChildren, errors)) {
+      if (scopes.classes.ok) {
+        await classesRepository.saveServerClassRows(scopes.classes.rows);
+      }
+      if (scopes.children.ok || scopes.childEaAssignments.ok) {
         await childrenRepository.saveServerChildRows(pulledChildren);
       }
-      await childrenRepository.saveServerStaffChildRows(pulledChildEaAssignments);
-      await childrenRepository.saveServerChildProgrammeEnrollmentRows(
-        pulledChildProgrammeEnrollments
-      );
-      await childrenRepository.saveServerChildClassMembershipRows(pulledChildClassMemberships);
-      if (shouldApplyPulledRows(pulled.groups, errors)) {
-        await groupsRepository.saveServerGroupRows(pulled.groups || []);
+      if (scopes.childEaAssignments.ok) {
+        await saveScopedPulledRows(
+          'childEaAssignments',
+          childrenRepository.saveServerStaffChildRows,
+          pulledChildEaAssignments,
+          scopes.childEaAssignments.complete && programmeScopeOk
+            ? {
+              acknowledgedIds: scopes.childEaAssignments.rows.map((row) => row.id),
+              pulledAt,
+              userId: activeUserId,
+            }
+            : undefined
+        );
       }
-      if (shouldApplyPulledRows(pulled.childrenGroups, errors)) {
-        await groupsRepository.saveServerChildrenGroupRows(pulled.childrenGroups || []);
+      if (scopes.childProgrammeEnrollments.ok) {
+        await saveScopedPulledRows(
+          'childProgrammeEnrollments',
+          childrenRepository.saveServerChildProgrammeEnrollmentRows,
+          pulledChildProgrammeEnrollments,
+          scopes.childProgrammeEnrollments.complete
+            && programmeScopeOk
+            && scopes.childEaAssignments.ok
+            ? {
+              acknowledgedIds: scopes.childProgrammeEnrollments.rows.map((row) => row.id),
+              acknowledgedAssignedChildIds: scopes.childEaAssignments.rows
+                .map((row) => row.child_id),
+              programmeId: activeProgrammeId,
+              pulledAt,
+            }
+            : undefined
+        );
+      }
+      if (scopes.childClassMemberships.ok) {
+        await saveScopedPulledRows(
+          'childClassMemberships',
+          childrenRepository.saveServerChildClassMembershipRows,
+          pulledChildClassMemberships,
+          scopes.childClassMemberships.complete
+            && programmeScopeOk
+            && scopes.children.ok
+            ? {
+              acknowledgedIds: scopes.childClassMemberships.rows.map((row) => row.id),
+              acknowledgedChildIds: scopes.children.rows
+                .map((row) => row.id),
+              pulledAt,
+            }
+            : undefined
+        );
+      }
+      if (scopes.groups.ok) {
+        await groupsRepository.saveServerGroupRows(scopes.groups.rows);
+      }
+      if (scopes.groupEaAssignments.ok) {
+        await saveScopedPulledRows(
+          'groupEaAssignments',
+          groupEaAssignmentsRepository.saveServerRows,
+          scopes.groupEaAssignments.rows,
+          scopes.groupEaAssignments.complete
+            && programmeScopeOk
+            && scopes.groups.ok
+            ? {
+              acknowledgedGroupIds: scopes.groups.rows.map((row) => row.id),
+              userId: activeUserId,
+              programmeId: activeProgrammeId,
+              pulledAt,
+            }
+            : undefined
+        );
+      }
+      if (scopes.childrenGroups.ok) {
+        await saveScopedPulledRows(
+          'childrenGroups',
+          groupsRepository.saveServerChildrenGroupRows,
+          scopes.childrenGroups.rows,
+          scopes.childrenGroups.complete
+            && programmeScopeOk
+            && scopes.groups.ok
+            ? {
+              acknowledgedIds: scopes.childrenGroups.rows.map((row) => row.id),
+              acknowledgedGroupIds: scopes.groups.rows.map((row) => row.id),
+              pulledAt,
+            }
+            : undefined
+        );
       }
 
-      const [
-        freshChildren,
-        freshGroups,
-        freshMemberships,
-        unsyncedChildren,
-        unsyncedGroups,
-        unsyncedMemberships,
-        freshPendingChildDeleteIds,
-      ] = await Promise.all([
+      if (activeUserIdRef.current !== activeUserId) return;
+      const transportFailed = Object.values(scopes)
+        .some((scope) => scope.failureKind === 'transport');
+      const reconcilesCompleted = reconcileResults
+        .every((result) => result?.reconcileCompleted === true);
+      if (!transportFailed && reconcilesCompleted) {
+        await syncStateRepository.setPullState('child_data_pull', { lastPulledAt: pulledAt });
+      }
+
+      const [freshChildren, freshGroups, freshMemberships] = await Promise.all([
         childrenRepository.getMyChildren(activeUserId),
         groupsRepository.getGroups({ userId: activeUserId }),
-        groupsRepository.getChildrenGroups(),
-        childrenRepository.getUnsyncedChildren(),
-        groupsRepository.getUnsyncedGroups(),
-        groupsRepository.getUnsyncedChildrenGroups(),
-        syncOutboxRepository.getPendingHardDeleteIds({
-          tableName: 'children',
-          ownerUserId: activeUserId,
-        }),
+        groupsRepository.getVisibleChildrenGroups({ userId: activeUserId }),
       ]);
       if (activeUserIdRef.current !== activeUserId) return;
 
-      const mergedChildren = shouldApplyPulledRows(pulledChildren, errors)
-        ? mergeServerRows(freshChildren, pulledChildren, {
-          unpushedRows: unsyncedChildren,
-          pendingDeleteIds: freshPendingChildDeleteIds,
-        })
-        : freshChildren;
-      const mergedGroups = shouldApplyPulledRows(pulled.groups, errors)
-        ? mergeServerRows(freshGroups, pulled.groups || [], { unpushedRows: unsyncedGroups })
-        : freshGroups;
-      const mergedMemberships = shouldApplyPulledRows(pulled.childrenGroups, errors)
-        ? mergeServerRows(freshMemberships, pulled.childrenGroups || [], {
-          unpushedRows: unsyncedMemberships,
-        })
-        : freshMemberships;
-
-      setChildrenList(mergedChildren);
-      setGroups(mergedGroups);
-      setChildrenGroups(mergedMemberships);
+      setChildrenList(freshChildren);
+      setGroups(freshGroups);
+      setChildrenGroups(freshMemberships);
+      if (bypassedReconcileCompleted) {
+        await refreshSyncStatusRef.current({ autoTrigger: false });
+      }
     } catch (error) {
       console.error('Error in pullFromServer:', error);
     } finally {
@@ -161,9 +284,34 @@ export const ChildrenProvider = ({ children }) => {
     }
   }, [user?.id, refreshFromCache]);
 
+  const pullFromServer = useCallback(() => {
+    const activeUserId = user?.id;
+    if (activePullRef.current && activePullRef.current.userId === activeUserId) {
+      return activePullRef.current.promise;
+    }
+
+    const pullPromise = (async () => {
+      try {
+        return await performPullFromServer();
+      } finally {
+        if (activePullRef.current?.promise === pullPromise) {
+          activePullRef.current = null;
+          const authorizedFollowUpNeeded = activeUserIdRef.current === activeUserId
+            && CHILD_RECONCILE_BREAKER_SCOPES.some(
+              (scope) => hasReconcileBreakerAuthorizationRef.current(scope)
+            );
+          if (authorizedFollowUpNeeded) {
+            pullFromServer();
+          }
+        }
+      }
+    })();
+    activePullRef.current = { userId: activeUserId, promise: pullPromise };
+    return pullPromise;
+  }, [user?.id, performPullFromServer]);
+
   // Load data on mount when user is authenticated
   useEffect(() => {
-    activeUserIdRef.current = user?.id || null;
     if (user?.id) {
       pullFromServer();
       return;
@@ -173,6 +321,14 @@ export const ChildrenProvider = ({ children }) => {
     setChildrenGroups([]);
     setLoading(false);
   }, [user?.id, pullFromServer]);
+
+  useEffect(() => {
+    if (previousDomainPullNonceRef.current === domainPullNonce) return;
+    previousDomainPullNonceRef.current = domainPullNonce;
+    if (user?.id) {
+      pullFromServer();
+    }
+  }, [domainPullNonce, user?.id, pullFromServer]);
 
   // Reload from SQLite after sync completes to pick up updated synced flags.
   const prevSyncingRef = useRef(isSyncing);
@@ -186,7 +342,7 @@ export const ChildrenProvider = ({ children }) => {
   /**
    * Load children assigned to current user
    * Pull server rows, persist them, then derive state from a fresh SQLite snapshot.
-   * Pending local records are preserved by the repository guard and interim merge.
+   * Pending local records are preserved by the repository guard.
    */
   const loadChildren = useCallback(async () => {
     try {

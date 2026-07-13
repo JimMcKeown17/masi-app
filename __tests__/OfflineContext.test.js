@@ -5,6 +5,7 @@ import NetInfo from '@react-native-community/netinfo';
 import { OfflineProvider, useOffline } from '../src/context/OfflineContext';
 import { supabase } from '../src/services/supabaseClient';
 import { getSyncStatus, requeueTerminalRlsFailures, syncAll } from '../src/services/offlineSync';
+import { syncStateRepository } from '../src/db/repositories/syncStateRepository';
 
 const appStateCurrentStateDescriptor = Object.getOwnPropertyDescriptor(AppState, 'currentState');
 
@@ -27,6 +28,13 @@ jest.mock('../src/services/supabaseClient', () => ({
 jest.mock('@react-native-community/netinfo', () => ({
   addEventListener: jest.fn(() => jest.fn()),
   fetch: jest.fn(async () => ({ isConnected: true, isInternetReachable: true })),
+}));
+
+jest.mock('../src/db/repositories/syncStateRepository', () => ({
+  syncStateRepository: {
+    getPullState: jest.fn(),
+    getReconcileBreakerNotes: jest.fn(),
+  },
 }));
 
 const wrapper = ({ children }) => (
@@ -66,6 +74,8 @@ describe('OfflineContext Plan 4 sync API', () => {
     });
     syncAll.mockResolvedValue({ success: true, totalSynced: 0, totalFailed: 0 });
     requeueTerminalRlsFailures.mockResolvedValue(0);
+    syncStateRepository.getPullState.mockResolvedValue(null);
+    syncStateRepository.getReconcileBreakerNotes.mockResolvedValue([]);
   });
 
   afterEach(() => {
@@ -99,6 +109,36 @@ describe('OfflineContext Plan 4 sync API', () => {
     });
 
     expect(syncAll).toHaveBeenCalledTimes(1);
+  });
+
+  test('refreshSyncStatus surfaces persisted breaker notes as needs-attention state', async () => {
+    const note = {
+      scope: 'childEaAssignments',
+      candidateCount: 15,
+      wouldEndCount: 12,
+      triggeredAt: '2026-07-13T12:00:00.000Z',
+    };
+    syncStateRepository.getReconcileBreakerNotes.mockResolvedValue([note]);
+
+    const { result } = await renderOfflineHook();
+
+    expect(result.current.needsAttentionCount).toBe(1);
+    expect(result.current.syncStatus.reconcileBreakerNotes).toEqual([note]);
+  });
+
+  test('Apply authorizes one scope once and forces the next domain pull', async () => {
+    const { result } = await renderOfflineHook();
+
+    act(() => {
+      result.current.authorizeReconcileBreaker('childEaAssignments');
+    });
+
+    expect(result.current.domainPullNonce).toBe(1);
+    expect(result.current.hasReconcileBreakerAuthorization('childEaAssignments')).toBe(true);
+    expect(result.current.consumeReconcileBreakerAuthorization('childEaAssignments')).toBe(true);
+    expect(result.current.hasReconcileBreakerAuthorization('childEaAssignments')).toBe(false);
+    expect(result.current.consumeReconcileBreakerAuthorization('childEaAssignments')).toBe(false);
+    expect(result.current.consumeReconcileBreakerAuthorization('classEaAssignments')).toBe(false);
   });
 
   test('concurrent manual sync calls share one in-flight promise', async () => {
@@ -498,6 +538,69 @@ describe('OfflineContext Plan 4 sync API', () => {
     });
 
     expect(syncAll).toHaveBeenCalledTimes(1);
+  });
+
+  test('reconnecting requests one domain pull when either pull stamp is missing', async () => {
+    const { result } = await renderOfflineHook();
+    const listener = NetInfo.addEventListener.mock.calls[0][0];
+
+    await act(async () => {
+      listener({ isConnected: false, isInternetReachable: false });
+      listener({ isConnected: true, isInternetReachable: true });
+      await Promise.resolve();
+    });
+
+    expect(syncStateRepository.getPullState).toHaveBeenCalledWith('child_data_pull');
+    expect(syncStateRepository.getPullState).toHaveBeenCalledWith('classes_pull');
+    expect(result.current.domainPullNonce).toBe(1);
+  });
+
+  test('reconnecting does not request a domain pull when both stamps are fresh', async () => {
+    const freshState = { lastPulledAt: new Date(Date.now() - 1000).toISOString() };
+    syncStateRepository.getPullState.mockResolvedValue(freshState);
+    const { result } = await renderOfflineHook();
+    const listener = NetInfo.addEventListener.mock.calls[0][0];
+
+    await act(async () => {
+      listener({ isConnected: false, isInternetReachable: false });
+      listener({ isConnected: true, isInternetReachable: true });
+      await Promise.resolve();
+    });
+
+    expect(result.current.domainPullNonce).toBe(0);
+  });
+
+  test('foregrounding requests one domain pull when either pull stamp is stale', async () => {
+    const freshState = { lastPulledAt: new Date(Date.now() - 1000).toISOString() };
+    const staleState = { lastPulledAt: new Date(Date.now() - (16 * 60 * 1000)).toISOString() };
+    syncStateRepository.getPullState
+      .mockResolvedValueOnce(freshState)
+      .mockResolvedValueOnce(staleState);
+    const { result } = await renderOfflineHook();
+    const listener = AppState.addEventListener.mock.calls.at(-1)[1];
+
+    await act(async () => {
+      listener('background');
+      listener('active');
+      await Promise.resolve();
+    });
+
+    expect(result.current.domainPullNonce).toBe(1);
+  });
+
+  test('foregrounding does not request a domain pull when both stamps are fresh', async () => {
+    const freshState = { lastPulledAt: new Date(Date.now() - 1000).toISOString() };
+    syncStateRepository.getPullState.mockResolvedValue(freshState);
+    const { result } = await renderOfflineHook();
+    const listener = AppState.addEventListener.mock.calls.at(-1)[1];
+
+    await act(async () => {
+      listener('background');
+      listener('active');
+      await Promise.resolve();
+    });
+
+    expect(result.current.domainPullNonce).toBe(0);
   });
 
   test('reconnecting with only backed-off work does not schedule a background sync', async () => {

@@ -5,10 +5,26 @@ import { createChildrenRepository } from '../src/db/repositories/childrenReposit
 import { createClassesRepository } from '../src/db/repositories/classesRepository';
 import { createClassEaAssignmentsRepository } from '../src/db/repositories/classEaAssignmentsRepository';
 import { createGroupsRepository } from '../src/db/repositories/groupsRepository';
+import { createGroupEaAssignmentsRepository } from '../src/db/repositories/groupEaAssignmentsRepository';
 import { createCountingSqliteTestDatabase } from '../test-support/countingSqliteAdapter';
 import { seedCoreData } from '../test-support/sqliteRepositoryTestUtils';
 
 const FIXED_AT = '2026-07-13T12:00:00.000Z';
+
+const batchResult = ({
+  applied,
+  skipped = 0,
+  failed = 0,
+  fallbackUsed = false,
+  reconcileCompleted = false,
+}) => ({
+  applied,
+  skipped,
+  failed,
+  ended: 0,
+  fallbackUsed,
+  reconcileCompleted,
+});
 
 const createDatabase = async () => {
   const db = createCountingSqliteTestDatabase();
@@ -116,6 +132,19 @@ const groupMembershipRows = () => childRows().map((child, index) => ({
   synced: true,
 }));
 
+const groupEaAssignmentRows = () => groupRows().map((group, index) => ({
+  id: `group-ea-${String(index).padStart(2, '0')}`,
+  group_id: group.id,
+  ea_user_id: 'user-1',
+  programme_id: 'programme-a',
+  assigned_at: FIXED_AT,
+  created_by: 'user-1',
+  created_at: FIXED_AT,
+  updated_at: FIXED_AT,
+  sync_status: 'synced',
+  synced: true,
+}));
+
 describe('batched pull persistence budgets', () => {
   beforeEach(() => {
     jest.useFakeTimers();
@@ -135,11 +164,9 @@ describe('batched pull persistence budgets', () => {
       const rows = childRows();
 
       batchDb.resetQueryLog();
-      await expect(batchRepository.saveServerChildRows(rows)).resolves.toEqual({
+      await expect(batchRepository.saveServerChildRows(rows)).resolves.toEqual(batchResult({
         applied: 30,
-        skipped: 0,
-        failed: 0,
-      });
+      }));
       expect(batchDb.getTransactionCount()).toBe(1);
 
       for (const row of rows) {
@@ -168,11 +195,9 @@ describe('batched pull persistence budgets', () => {
         class_id: 'class-not-pulled',
       };
 
-      await expect(repository.saveServerChildRows([row])).resolves.toEqual({
+      await expect(repository.saveServerChildRows([row])).resolves.toEqual(batchResult({
         applied: 1,
-        skipped: 0,
-        failed: 0,
-      });
+      }));
       expect(await db.getFirstAsync(
         'select id, class_id from children where id = ?',
         row.id
@@ -198,11 +223,13 @@ describe('batched pull persistence budgets', () => {
       const rows = staffChildRows();
 
       batchDb.resetQueryLog();
-      await expect(batchRepository.saveServerStaffChildRows(rows)).resolves.toEqual({
-        applied: 30,
-        skipped: 0,
-        failed: 0,
-      });
+      await expect(batchRepository.saveServerStaffChildRows(rows, {
+        reconcile: {
+          acknowledgedIds: rows.map((row) => row.id),
+          pulledAt: FIXED_AT,
+          userId: 'user-1',
+        },
+      })).resolves.toEqual(batchResult({ applied: 30, reconcileCompleted: true }));
       expect(batchDb.getTransactionCount()).toBe(1);
       for (const row of rows) {
         await perRowRepository.saveStaffChild(row);
@@ -229,11 +256,14 @@ describe('batched pull persistence budgets', () => {
       const rows = programmeEnrollmentRows();
 
       batchDb.resetQueryLog();
-      await expect(batchRepository.saveServerChildProgrammeEnrollmentRows(rows)).resolves.toEqual({
-        applied: 30,
-        skipped: 0,
-        failed: 0,
-      });
+      await expect(batchRepository.saveServerChildProgrammeEnrollmentRows(rows, {
+        reconcile: {
+          acknowledgedIds: rows.map((row) => row.id),
+          acknowledgedAssignedChildIds: rows.map((row) => row.child_id),
+          programmeId: 'programme-a',
+          pulledAt: FIXED_AT,
+        },
+      })).resolves.toEqual(batchResult({ applied: 30, reconcileCompleted: true }));
       expect(batchDb.getTransactionCount()).toBe(1);
       for (const row of rows) {
         await perRowRepository.saveChildProgrammeEnrollment(row);
@@ -260,11 +290,13 @@ describe('batched pull persistence budgets', () => {
       const rows = classMembershipRows();
 
       batchDb.resetQueryLog();
-      await expect(batchRepository.saveServerChildClassMembershipRows(rows)).resolves.toEqual({
-        applied: 30,
-        skipped: 0,
-        failed: 0,
-      });
+      await expect(batchRepository.saveServerChildClassMembershipRows(rows, {
+        reconcile: {
+          acknowledgedIds: rows.map((row) => row.id),
+          acknowledgedChildIds: rows.map((row) => row.child_id),
+          pulledAt: FIXED_AT,
+        },
+      })).resolves.toEqual(batchResult({ applied: 30, reconcileCompleted: true }));
       expect(batchDb.getTransactionCount()).toBe(1);
       for (const row of rows) {
         await perRowRepository.saveChildClassMembership(row);
@@ -297,11 +329,11 @@ describe('batched pull persistence budgets', () => {
         { ...classMembershipRows()[2], id: 'ccm-valid-b' },
       ];
 
-      await expect(repository.saveServerChildClassMembershipRows(rows)).resolves.toEqual({
+      await expect(repository.saveServerChildClassMembershipRows(rows)).resolves.toEqual(batchResult({
         applied: 2,
-        skipped: 0,
         failed: 1,
-      });
+        fallbackUsed: true,
+      }));
       expect(await db.getAllAsync(
         "select id from child_class_memberships where id like 'ccm-valid-%' order by id"
       )).toEqual([
@@ -335,11 +367,10 @@ describe('batched pull persistence budgets', () => {
       );
 
       db.resetQueryLog();
-      await expect(repository.saveServerChildRows(rows)).resolves.toEqual({
+      await expect(repository.saveServerChildRows(rows)).resolves.toEqual(batchResult({
         applied: 29,
         skipped: 1,
-        failed: 0,
-      });
+      }));
       expect(db.getTransactionCount()).toBe(1);
       expect(await db.getFirstAsync(
         'select first_name, sync_status from children where id = ?',
@@ -363,11 +394,9 @@ describe('batched pull persistence budgets', () => {
       const rows = classRows();
 
       batchDb.resetQueryLog();
-      await expect(batchRepository.saveServerClassRows(rows)).resolves.toEqual({
+      await expect(batchRepository.saveServerClassRows(rows)).resolves.toEqual(batchResult({
         applied: 30,
-        skipped: 0,
-        failed: 0,
-      });
+      }));
       expect(batchDb.getTransactionCount()).toBe(1);
       for (const row of rows) {
         await perRowRepository.saveClass(row);
@@ -392,11 +421,11 @@ describe('batched pull persistence budgets', () => {
         { ...classRows()[2], id: 'class-valid-b' },
       ];
 
-      await expect(repository.saveServerClassRows(rows)).resolves.toEqual({
+      await expect(repository.saveServerClassRows(rows)).resolves.toEqual(batchResult({
         applied: 2,
-        skipped: 0,
         failed: 1,
-      });
+        fallbackUsed: true,
+      }));
       expect(await db.getAllAsync(
         "select id from classes where id like 'class-valid-%' order by id"
       )).toEqual([
@@ -428,11 +457,14 @@ describe('batched pull persistence budgets', () => {
       const rows = classEaAssignmentRows();
 
       batchDb.resetQueryLog();
-      await expect(batchRepository.saveServerRows(rows)).resolves.toEqual({
-        applied: 30,
-        skipped: 0,
-        failed: 0,
-      });
+      await expect(batchRepository.saveServerRows(rows, {
+        reconcile: {
+          acknowledgedClassIds: rows.map((row) => row.class_id),
+          userId: 'user-1',
+          programmeId: 'programme-a',
+          pulledAt: FIXED_AT,
+        },
+      })).resolves.toEqual(batchResult({ applied: 30, reconcileCompleted: true }));
       expect(batchDb.getTransactionCount()).toBe(1);
       for (const row of rows) {
         await perRowRepository.save(row);
@@ -455,11 +487,9 @@ describe('batched pull persistence budgets', () => {
       const rows = groupRows();
 
       batchDb.resetQueryLog();
-      await expect(batchRepository.saveServerGroupRows(rows)).resolves.toEqual({
+      await expect(batchRepository.saveServerGroupRows(rows)).resolves.toEqual(batchResult({
         applied: 30,
-        skipped: 0,
-        failed: 0,
-      });
+      }));
       expect(batchDb.getTransactionCount()).toBe(1);
       for (const row of rows) {
         await perRowRepository.saveGroup(row);
@@ -470,6 +500,30 @@ describe('batched pull persistence budgets', () => {
     } finally {
       await batchDb.closeAsync();
       await perRowDb.closeAsync();
+    }
+  });
+
+  test('group assignment saveServerRows uses one transaction with reconcile', async () => {
+    const db = await createDatabase();
+    try {
+      const groupsRepository = createGroupsRepository({ database: db });
+      const repository = createGroupEaAssignmentsRepository({ database: db });
+      const groups = groupRows();
+      const rows = groupEaAssignmentRows();
+      await groupsRepository.saveServerGroupRows(groups);
+
+      db.resetQueryLog();
+      await expect(repository.saveServerRows(rows, {
+        reconcile: {
+          acknowledgedGroupIds: rows.map((row) => row.group_id),
+          userId: 'user-1',
+          programmeId: 'programme-a',
+          pulledAt: FIXED_AT,
+        },
+      })).resolves.toEqual(batchResult({ applied: 30, reconcileCompleted: true }));
+      expect(db.getTransactionCount()).toBe(1);
+    } finally {
+      await db.closeAsync();
     }
   });
 
@@ -492,11 +546,13 @@ describe('batched pull persistence budgets', () => {
       const rows = groupMembershipRows();
 
       batchDb.resetQueryLog();
-      await expect(batchRepository.saveServerChildrenGroupRows(rows)).resolves.toEqual({
-        applied: 30,
-        skipped: 0,
-        failed: 0,
-      });
+      await expect(batchRepository.saveServerChildrenGroupRows(rows, {
+        reconcile: {
+          acknowledgedIds: rows.map((row) => row.id),
+          acknowledgedGroupIds: rows.map((row) => row.group_id),
+          pulledAt: FIXED_AT,
+        },
+      })).resolves.toEqual(batchResult({ applied: 30, reconcileCompleted: true }));
       expect(batchDb.getTransactionCount()).toBe(1);
       for (const row of rows) {
         await perRowRepository.addChildToGroup(row);

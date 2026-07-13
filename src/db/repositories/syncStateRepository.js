@@ -1,4 +1,8 @@
-import { resolveDatabase, runRepositoryTransaction } from './repositoryRuntime';
+import {
+  RECONCILE_BREAKER_SCOPE_PREFIX,
+  resolveDatabase,
+  runRepositoryTransaction,
+} from './repositoryRuntime';
 import {
   decodeJson,
   encodeJson,
@@ -45,6 +49,19 @@ export const createSyncStateRepository = ({ database } = {}) => {
     return true;
   });
 
+  const getReconcileBreakerNotes = async () => {
+    const db = await resolveDatabase(database);
+    const rows = await db.getAllAsync(`
+      select cursor
+      from sync_state
+      where scope like ?
+      order by scope
+    `, `${RECONCILE_BREAKER_SCOPE_PREFIX}%`);
+    return rows
+      .map((row) => decodeJson(row.cursor, null))
+      .filter((note) => note?.scope);
+  };
+
   const getSyncMeta = async () => {
     const db = await resolveDatabase(database);
     const row = await db.getFirstAsync('select value from local_state where key = ?', SYNC_META_KEY);
@@ -75,6 +92,7 @@ export const createSyncStateRepository = ({ database } = {}) => {
   return {
     getPullState,
     setPullState,
+    getReconcileBreakerNotes,
     getSyncMeta,
     updateSyncMeta,
   };

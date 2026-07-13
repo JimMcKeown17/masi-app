@@ -5,7 +5,12 @@ import { Ionicons } from '@expo/vector-icons';
 import { useOffline } from '../../context/OfflineContext';
 import { retryFailedItem } from '../../services/offlineSync';
 import { colors, spacing, borderRadius, shadows } from '../../constants/colors';
-import { deriveSyncState, describeSyncState, describeWaitingDetail } from '../../utils/syncStatusPresenter';
+import {
+  deriveSyncState,
+  describeReconcileBreakerNote,
+  describeSyncState,
+  describeWaitingDetail,
+} from '../../utils/syncStatusPresenter';
 
 const TABLE_DISPLAY_NAMES = {
   TIME_ENTRIES: 'Time Entries',
@@ -45,12 +50,14 @@ const formatSyncTime = (isoString) => {
 export default function SyncStatusScreen() {
   const {
     isOnline, isSyncing, syncStatus, syncNow, refreshSyncStatus,
-    waitingCount, needsAttentionCount,
+    waitingCount, needsAttentionCount, authorizeReconcileBreaker,
   } = useOffline();
   const [snackbarMessage, setSnackbarMessage] = useState('');
   const [snackbarVisible, setSnackbarVisible] = useState(false);
 
   const needsAttentionItems = syncStatus.needsAttentionItems || [];
+  const reconcileBreakerCards = (syncStatus.reconcileBreakerNotes || [])
+    .map(describeReconcileBreakerNote);
   const backedOffCount = syncStatus.backedOffCount || 0;
   const nextRetryAt = syncStatus.nextRetryAt || null;
   const lastSyncTime = syncStatus.lastSyncTime || null;
@@ -102,6 +109,25 @@ export default function SyncStatusScreen() {
             )}
           </Card.Content>
         </Card>
+
+        {reconcileBreakerCards.map((card) => (
+          <Card key={card.scope} style={styles.card}>
+            <Card.Content>
+              <Text variant="titleMedium" style={styles.breakerTitle}>
+                {card.title}
+              </Text>
+              <Button
+                mode="contained"
+                onPress={() => authorizeReconcileBreaker(card.scope)}
+                accessibilityLabel={card.accessibilityLabel}
+                disabled={!isOnline || isSyncing}
+                style={styles.applyButton}
+              >
+                {card.actionLabel}
+              </Button>
+            </Card.Content>
+          </Card>
+        ))}
 
         {/* Network Status */}
         <Card style={styles.card}>
@@ -234,6 +260,13 @@ const styles = StyleSheet.create({
     color: colors.textSecondary,
     marginTop: spacing.xs,
     fontStyle: 'italic',
+  },
+  breakerTitle: {
+    color: colors.warningText,
+  },
+  applyButton: {
+    marginTop: spacing.sm,
+    alignSelf: 'flex-start',
   },
 
   // Network badge

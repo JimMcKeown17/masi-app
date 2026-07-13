@@ -8,6 +8,7 @@ import { ChildrenProvider, useChildren } from '../src/context/ChildrenContext';
 import { getWriter, resetDatabaseConnectionForTests } from '../src/db/client';
 import { childrenRepository } from '../src/db/repositories/childrenRepository';
 import { groupsRepository } from '../src/db/repositories/groupsRepository';
+import { groupEaAssignmentsRepository } from '../src/db/repositories/groupEaAssignmentsRepository';
 import { __testables as offlineSyncTestables } from '../src/services/offlineSync';
 import { createBetterSqliteTestDatabase } from '../test-support/betterSqliteAdapter';
 import { seedCoreData } from '../test-support/sqliteRepositoryTestUtils';
@@ -41,75 +42,133 @@ const wrapper = ({ children }) => (
   <ChildrenProvider>{children}</ChildrenProvider>
 );
 
-const pulledBundle = (overrides = {}) => ({
-  children: [{
-    id: 'child-1',
-    first_name: 'Stale Server Name',
-    last_name: 'Dlamini',
-    class_id: 'class-1',
-    created_by: 'user-1',
-    synced: true,
-    sync_status: 'synced',
-  }],
-  classes: [{
-    id: 'class-1',
-    school_id: 'school-1',
-    name: 'Grade 1A',
-    grade: '1',
-    academic_year_id: 'year-2026',
-    created_by: 'user-1',
-    synced: true,
-    sync_status: 'synced',
-  }],
-  childEaAssignments: [{
-    id: 'cea-child-1',
-    user_id: 'user-1',
-    child_id: 'child-1',
-    assigned_at: '2026-01-15T00:00:00.000Z',
-    created_by: 'user-1',
-    synced: true,
-    sync_status: 'synced',
-  }],
-  childProgrammeEnrollments: [{
-    id: 'cpe-child-1',
-    child_id: 'child-1',
-    programme_id: 'programme-a',
-    enrolled_at: '2026-01-15T00:00:00.000Z',
-    created_by: 'user-1',
-    synced: true,
-    sync_status: 'synced',
-  }],
-  childClassMemberships: [{
-    id: 'ccm-child-1',
-    child_id: 'child-1',
-    class_id: 'class-1',
-    academic_year_id: 'year-2026',
-    enrolled_at: '2026-01-15T00:00:00.000Z',
-    created_by: 'user-1',
-    synced: true,
-    sync_status: 'synced',
-  }],
-  groups: [{
-    id: 'group-1',
-    name: 'Stale Server Group',
-    programme_id: 'programme-a',
-    class_id: 'class-1',
-    created_by: 'user-1',
-    synced: true,
-    sync_status: 'synced',
-  }],
-  childrenGroups: [{
-    id: 'membership-1',
-    child_id: 'child-1',
-    group_id: 'group-1',
-    joined_at: '2026-02-01T00:00:00.000Z',
-    created_by: 'user-1',
-    synced: true,
-    sync_status: 'synced',
-  }],
-  errors: [],
-  ...overrides,
+const successfulScope = (rows) => ({
+  ok: true,
+  rows,
+  complete: true,
+  failureKind: null,
 });
+
+const failedScope = (failureKind, error) => ({
+  ok: false,
+  rows: [],
+  complete: false,
+  failureKind,
+  ...(error ? { error } : {}),
+});
+
+const pulledBundle = (overrides = {}) => {
+  const {
+    activeProgrammeId = 'programme-a',
+    scopeOverrides = {},
+    ...rowOverrides
+  } = overrides;
+  const rows = {
+    programmeAssignment: [{ programme_id: activeProgrammeId }],
+    children: [{
+      id: 'child-1',
+      first_name: 'Stale Server Name',
+      last_name: 'Dlamini',
+      class_id: 'class-1',
+      created_by: 'user-1',
+      synced: true,
+      sync_status: 'synced',
+    }],
+    classes: [{
+      id: 'class-1',
+      school_id: 'school-1',
+      name: 'Grade 1A',
+      grade: '1',
+      academic_year_id: 'year-2026',
+      created_by: 'user-1',
+      synced: true,
+      sync_status: 'synced',
+    }],
+    childEaAssignments: [{
+      id: 'cea-child-1',
+      user_id: 'user-1',
+      child_id: 'child-1',
+      assigned_at: '2026-01-15T00:00:00.000Z',
+      created_by: 'user-1',
+      synced: true,
+      sync_status: 'synced',
+      children: {
+        id: 'child-1',
+        first_name: 'Stale Server Name',
+        last_name: 'Dlamini',
+        class_id: 'class-1',
+        created_by: 'user-1',
+        synced: true,
+        sync_status: 'synced',
+      },
+    }],
+    childProgrammeEnrollments: [{
+      id: 'cpe-child-1',
+      child_id: 'child-1',
+      programme_id: 'programme-a',
+      enrolled_at: '2026-01-15T00:00:00.000Z',
+      created_by: 'user-1',
+      synced: true,
+      sync_status: 'synced',
+    }],
+    childClassMemberships: [{
+      id: 'ccm-child-1',
+      child_id: 'child-1',
+      class_id: 'class-1',
+      academic_year_id: 'year-2026',
+      enrolled_at: '2026-01-15T00:00:00.000Z',
+      created_by: 'user-1',
+      synced: true,
+      sync_status: 'synced',
+    }],
+    groups: [{
+      id: 'group-1',
+      name: 'Stale Server Group',
+      programme_id: 'programme-a',
+      class_id: 'class-1',
+      created_by: 'user-1',
+      synced: true,
+      sync_status: 'synced',
+    }],
+    groupEaAssignments: [{
+      id: 'gea-group-1',
+      group_id: 'group-1',
+      ea_user_id: 'user-1',
+      programme_id: 'programme-a',
+      assigned_at: '2026-01-15T00:00:00.000Z',
+      created_by: 'user-1',
+      synced: true,
+      sync_status: 'synced',
+    }],
+    childrenGroups: [{
+      id: 'membership-1',
+      child_id: 'child-1',
+      group_id: 'group-1',
+      joined_at: '2026-02-01T00:00:00.000Z',
+      created_by: 'user-1',
+      synced: true,
+      sync_status: 'synced',
+    }],
+    ...rowOverrides,
+  };
+  return {
+    activeProgrammeId,
+    scopes: {
+      ...Object.fromEntries([
+      'programmeAssignment',
+      'children',
+      'classes',
+      'childEaAssignments',
+      'childProgrammeEnrollments',
+      'childClassMemberships',
+      'groups',
+      'groupEaAssignments',
+      'childrenGroups',
+      ].map((name) => [name, successfulScope(rows[name] || [])])),
+      ...scopeOverrides,
+    },
+  };
+};
 
 const createDeferred = () => {
   let resolve;
@@ -117,6 +176,17 @@ const createDeferred = () => {
     resolve = promiseResolve;
   });
   return { promise, resolve };
+};
+
+const countGroupsForClass = ({ children, childrenGroups }, classId) => {
+  const classChildIds = new Set(
+    children.filter((child) => child.class_id === classId).map((child) => child.id)
+  );
+  return new Set(
+    childrenGroups
+      .filter((membership) => classChildIds.has(membership.child_id))
+      .map((membership) => membership.group_id)
+  ).size;
 };
 
 const seedContextRows = async (db) => {
@@ -155,6 +225,14 @@ const seedContextRows = async (db) => {
       id, name, programme_id, class_id, created_by, sync_status
     ) values (
       'group-1', 'Original Local Group', 'programme-a', 'class-1', 'user-1', 'synced'
+    )
+  `);
+  await db.runAsync(`
+    insert into group_ea_assignments (
+      id, group_id, ea_user_id, programme_id, assigned_at, created_by, sync_status
+    ) values (
+      'gea-group-1', 'group-1', 'user-1', 'programme-a',
+      '2026-01-15T00:00:00.000Z', 'user-1', 'synced'
     )
   `);
   await db.runAsync(`
@@ -227,6 +305,9 @@ test('a child edit made while the network pull is pending survives in React stat
   mockPullPreloadedChildData.mockReturnValue(deferredPull.promise);
   const { result } = renderHook(() => useChildren(), { wrapper });
   await waitFor(() => expect(mockPullPreloadedChildData).toHaveBeenCalledWith({ userId: 'user-1' }));
+  await waitFor(() => expect(result.current.children).toEqual([
+    expect.objectContaining({ id: 'child-1', first_name: 'Original Local Name' }),
+  ]));
 
   await act(async () => {
     await result.current.updateChild('child-1', { first_name: 'Edited Mid Pull' });
@@ -251,6 +332,9 @@ test('a group edit made while the network pull is pending survives in React stat
   mockPullPreloadedChildData.mockReturnValue(deferredPull.promise);
   const { result } = renderHook(() => useChildren(), { wrapper });
   await waitFor(() => expect(mockPullPreloadedChildData).toHaveBeenCalledTimes(1));
+  await waitFor(() => expect(result.current.groups).toEqual([
+    expect.objectContaining({ id: 'group-1', name: 'Original Local Group' }),
+  ]));
 
   await act(async () => {
     await result.current.updateGroup('group-1', { name: 'Edited Group Mid Pull' });
@@ -275,6 +359,9 @@ test('a membership removal made while the network pull is pending survives in Re
   mockPullPreloadedChildData.mockReturnValue(deferredPull.promise);
   const { result } = renderHook(() => useChildren(), { wrapper });
   await waitFor(() => expect(mockPullPreloadedChildData).toHaveBeenCalledTimes(1));
+  await waitFor(() => expect(result.current.childrenGroups).toEqual([
+    expect.objectContaining({ id: 'membership-1' }),
+  ]));
 
   await act(async () => {
     await result.current.removeChildFromGroup('child-1', 'group-1');
@@ -285,7 +372,7 @@ test('a membership removal made while the network pull is pending survives in Re
   });
   await waitFor(() => expect(result.current.loading).toBe(false));
 
-  const sqliteMemberships = await groupsRepository.getChildrenGroups();
+  const sqliteMemberships = await groupsRepository.getVisibleChildrenGroups({ userId: 'user-1' });
   expect(sqliteMemberships).toEqual([]);
   expect(result.current.childrenGroups).toEqual(sqliteMemberships);
 });
@@ -304,6 +391,8 @@ test('a full context pull creates no storage facade sidecar rows', async () => {
 
 test('an empty cache pulls reference parents before persisting the domain bundle', async () => {
   mockPullPreloadedChildData.mockResolvedValue(pulledBundle({
+    activeProgrammeId: 'programme-server',
+    programmeAssignment: [{ programme_id: 'programme-server' }],
     children: [{
       id: 'child-server',
       first_name: 'Server',
@@ -351,6 +440,14 @@ test('an empty cache pulls reference parents before persisting the domain bundle
       created_by: 'user-1',
       synced: true,
     }],
+    groupEaAssignments: [{
+      id: 'gea-server',
+      group_id: 'group-server',
+      ea_user_id: 'user-1',
+      programme_id: 'programme-server',
+      created_by: 'user-1',
+      synced: true,
+    }],
     childrenGroups: [{
       id: 'membership-server',
       child_id: 'child-server',
@@ -372,4 +469,112 @@ test('an empty cache pulls reference parents before persisting the domain bundle
     .toEqual({ id: 'year-server' });
   expect(await testDb.getAllAsync('PRAGMA foreign_key_check')).toEqual([]);
   expect(result.current.children.map((row) => row.id)).toEqual(['child-server']);
+});
+
+test('ended group assignments hide intact memberships until a later pull re-acknowledges the group', async () => {
+  await seedContextRows(testDb);
+  mockPullPreloadedChildData.mockResolvedValue(pulledBundle());
+  const { result } = renderHook(() => useChildren(), { wrapper });
+  await waitFor(() => expect(result.current.loading).toBe(false));
+
+  expect(result.current.groups.map((group) => group.id)).toEqual(['group-1']);
+  expect(result.current.childrenGroups.map((membership) => membership.id))
+    .toEqual(['membership-1']);
+  expect(countGroupsForClass(result.current, 'class-1')).toBe(1);
+  const membershipBeforeAssignmentEnd = await testDb.getFirstAsync(`
+    select *
+    from child_group_memberships
+    where id = 'membership-1'
+  `);
+
+  await groupEaAssignmentsRepository.saveServerRows([], {
+    reconcile: {
+      acknowledgedGroupIds: [],
+      userId: 'user-1',
+      programmeId: 'programme-a',
+      pulledAt: '2026-07-13T14:00:00.000Z',
+    },
+  });
+  await act(async () => {
+    await result.current.refreshFromCache();
+  });
+
+  expect(result.current.groups).toEqual([]);
+  expect(result.current.childrenGroups).toEqual([]);
+  expect(countGroupsForClass(result.current, 'class-1')).toBe(0);
+  expect(await testDb.getFirstAsync(`
+    select *
+    from child_group_memberships
+    where id = 'membership-1'
+  `)).toEqual(membershipBeforeAssignmentEnd);
+  expect(membershipBeforeAssignmentEnd.removed_at).toBeNull();
+
+  await groupEaAssignmentsRepository.saveServerRows([{
+    ...pulledBundle().scopes.groupEaAssignments.rows[0],
+    unassigned_at: null,
+    updated_at: '2026-07-13T15:00:00.000Z',
+  }]);
+  expect(await testDb.getFirstAsync(`
+    select ea_user_id, programme_id, unassigned_at
+    from group_ea_assignments
+    where id = 'gea-group-1'
+  `)).toEqual({
+    ea_user_id: 'user-1',
+    programme_id: 'programme-a',
+    unassigned_at: null,
+  });
+  await act(async () => {
+    await result.current.refreshFromCache();
+  });
+
+  expect(result.current.groups.map((group) => group.id)).toEqual(['group-1']);
+  expect(result.current.childrenGroups.map((membership) => membership.id))
+    .toEqual(['membership-1']);
+  expect(countGroupsForClass(result.current, 'class-1')).toBe(1);
+  expect(await testDb.getFirstAsync(`
+    select *
+    from child_group_memberships
+    where id = 'membership-1'
+  `)).toEqual(membershipBeforeAssignmentEnd);
+});
+
+test('a failed membership scope does not block empty group reconcile and final state comes from SQLite', async () => {
+  await seedContextRows(testDb);
+  const deferredPull = createDeferred();
+  mockPullPreloadedChildData.mockReturnValue(deferredPull.promise);
+  const { result } = renderHook(() => useChildren(), { wrapper });
+
+  await waitFor(() => expect(mockPullPreloadedChildData).toHaveBeenCalledTimes(1));
+  await waitFor(() => expect(result.current.groups.map((group) => group.id)).toEqual(['group-1']));
+  expect(result.current.childrenGroups.map((membership) => membership.id))
+    .toEqual(['membership-1']);
+
+  await act(async () => {
+    deferredPull.resolve(pulledBundle({
+      groups: [],
+      groupEaAssignments: [],
+      scopeOverrides: {
+        childrenGroups: failedScope('query', { message: 'membership query failed' }),
+      },
+    }));
+    await deferredPull.promise;
+  });
+  await waitFor(() => expect(result.current.loading).toBe(false));
+
+  const freshGroups = await groupsRepository.getGroups({ userId: 'user-1' });
+  const freshMemberships = await groupsRepository.getVisibleChildrenGroups({ userId: 'user-1' });
+  expect(result.current.groups).toEqual(freshGroups);
+  expect(result.current.childrenGroups).toEqual(freshMemberships);
+  expect(freshGroups).toEqual([]);
+  expect(freshMemberships).toEqual([]);
+  expect(await testDb.getFirstAsync(`
+    select unassigned_at
+    from group_ea_assignments
+    where id = 'gea-group-1'
+  `)).toEqual({ unassigned_at: expect.any(String) });
+  expect(await testDb.getFirstAsync(`
+    select removed_at
+    from child_group_memberships
+    where id = 'membership-1'
+  `)).toEqual({ removed_at: null });
 });

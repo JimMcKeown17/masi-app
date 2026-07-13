@@ -1,4 +1,9 @@
-import { deriveSyncState, describeSyncState, describeWaitingDetail } from '../src/utils/syncStatusPresenter';
+import {
+  deriveSyncState,
+  describeReconcileBreakerNote,
+  describeSyncState,
+  describeWaitingDetail,
+} from '../src/utils/syncStatusPresenter';
 import { colors } from '../src/constants/colors';
 
 describe('deriveSyncState priority', () => {
@@ -133,5 +138,16 @@ describe('describeWaitingDetail', () => {
 
   test('a backed-off count without a timestamp yields no hint', () => {
     expect(describeWaitingDetail({ waitingCount: 2, backedOffCount: 1, nextRetryAt: null }).detail).toBeNull();
+  });
+});
+
+describe('describeReconcileBreakerNote copy (exact strings)', () => {
+  test('a persisted breaker note becomes an actionable Head Office card', () => {
+    expect(describeReconcileBreakerNote({ scope: 'childEaAssignments' })).toEqual({
+      scope: 'childEaAssignments',
+      title: 'Large roster change from Head Office is waiting',
+      actionLabel: 'Apply',
+      accessibilityLabel: 'Large roster change from Head Office is waiting. Apply',
+    });
   });
 });

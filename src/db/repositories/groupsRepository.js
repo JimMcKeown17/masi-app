@@ -1,6 +1,7 @@
 import {
   resolveDatabase,
   runBatchWithPerRowFallback,
+  runReconcileWithMassEndBreaker,
   runRepositoryTransaction,
 } from './repositoryRuntime';
 import {
@@ -151,11 +152,78 @@ export const createGroupsRepository = ({ database } = {}) => {
     transaction ? task(transaction) : runRepositoryTransaction(database, task)
   );
 
+  const buildMembershipReconcile = ({
+    acknowledgedIds,
+    acknowledgedGroupIds,
+    pulledAt,
+    bypassBreaker = false,
+  } = {}) => {
+    if (!Array.isArray(acknowledgedIds) || !Array.isArray(acknowledgedGroupIds) || !pulledAt) {
+      throw new Error(
+        'childrenGroups reconcile requires acknowledgedIds, acknowledgedGroupIds, and pulledAt'
+      );
+    }
+    const acknowledgedIdsJson = JSON.stringify(acknowledgedIds);
+    const acknowledgedGroupIdsJson = JSON.stringify(acknowledgedGroupIds);
+    const activeScopeSql = `
+      from child_group_memberships
+      where group_id in (select value from json_each(?))
+        and removed_at is null
+        and sync_status = 'synced'
+    `;
+    const absentSql = `${activeScopeSql}
+      and id not in (select value from json_each(?))
+    `;
+    return (transaction) => runReconcileWithMassEndBreaker({
+      transaction,
+      scope: 'childrenGroups',
+      pulledAt,
+      bypassBreaker,
+      countCandidates: async (txn) => (
+        await txn.getFirstAsync(
+          `select count(*) as count ${activeScopeSql}`,
+          acknowledgedGroupIdsJson
+        )
+      )?.count,
+      countWouldEnd: async (txn) => (
+        await txn.getFirstAsync(
+          `select count(*) as count ${absentSql}`,
+          acknowledgedGroupIdsJson,
+          acknowledgedIdsJson
+        )
+      )?.count,
+      apply: async (txn) => (
+        await txn.runAsync(`
+          update child_group_memberships
+          set removed_at = ?,
+              updated_at = ?
+          where group_id in (select value from json_each(?))
+            and removed_at is null
+            and sync_status = 'synced'
+            and id not in (select value from json_each(?))
+        `, pulledAt, pulledAt, acknowledgedGroupIdsJson, acknowledgedIdsJson)
+      ).changes,
+    });
+  };
+
   const getGroups = async ({ userId, programmeId } = {}) => {
     const db = await resolveDatabase(database);
     const activeProgrammeId = programmeId || (userId ? await getActiveProgrammeId(db, userId) : null);
     if (userId && !activeProgrammeId) return [];
-    const rows = activeProgrammeId
+    const rows = userId
+      ? await db.getAllAsync(`
+        select g.*
+        from groups g
+        join group_ea_assignments gea
+          on gea.group_id = g.id
+         and gea.ea_user_id = ?
+         and gea.programme_id = ?
+         and gea.unassigned_at is null
+        where g.archived_at is null
+          and g.programme_id = ?
+        order by g.name
+      `, userId, activeProgrammeId, activeProgrammeId)
+      : activeProgrammeId
       ? await db.getAllAsync(
         'select * from groups where archived_at is null and programme_id = ? order by name',
         activeProgrammeId
@@ -172,6 +240,29 @@ export const createGroupsRepository = ({ database } = {}) => {
       ${includeRemoved ? '' : 'where removed_at is null'}
       order by joined_at
     `);
+    return rows.map(mapDomainRow);
+  };
+
+  const getVisibleChildrenGroups = async ({ userId, programmeId } = {}) => {
+    if (!userId) return [];
+    const db = await resolveDatabase(database);
+    const activeProgrammeId = programmeId || await getActiveProgrammeId(db, userId);
+    if (!activeProgrammeId) return [];
+    const rows = await db.getAllAsync(`
+      select cgm.*
+      from child_group_memberships cgm
+      join groups g
+        on g.id = cgm.group_id
+       and g.archived_at is null
+       and g.programme_id = ?
+      join group_ea_assignments gea
+        on gea.group_id = g.id
+       and gea.ea_user_id = ?
+       and gea.programme_id = ?
+       and gea.unassigned_at is null
+      where cgm.removed_at is null
+      order by cgm.joined_at
+    `, activeProgrammeId, userId, activeProgrammeId);
     return rows.map(mapDomainRow);
   };
 
@@ -272,11 +363,12 @@ export const createGroupsRepository = ({ database } = {}) => {
     tableName: 'groups',
   });
 
-  const saveServerChildrenGroupRows = async (rows = []) => runBatchWithPerRowFallback({
+  const saveServerChildrenGroupRows = async (rows = [], { reconcile } = {}) => runBatchWithPerRowFallback({
     database,
     rows,
     saveRow: addChildToGroup,
     tableName: 'child_group_memberships',
+    reconcile: reconcile ? buildMembershipReconcile(reconcile) : undefined,
   });
 
   const removeChildFromGroup = async (childId, groupId, {
@@ -379,6 +471,7 @@ export const createGroupsRepository = ({ database } = {}) => {
     deleteGroup,
     getUnsyncedGroups,
     getChildrenGroups,
+    getVisibleChildrenGroups,
     addChildToGroup,
     saveChildrenGroup: addChildToGroup,
     saveServerChildrenGroupRows,
