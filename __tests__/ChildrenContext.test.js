@@ -170,6 +170,27 @@ describe('ChildrenContext Plan 5 hydration', () => {
     ]);
   });
 
+  test('mount publishes cached SQLite rows before the server pull resolves', async () => {
+    let releasePull;
+    pullPreloadedChildData.mockImplementation(() => new Promise((resolve) => {
+      releasePull = resolve;
+    }));
+
+    const { result } = renderHook(() => useChildren(), { wrapper });
+
+    await waitFor(() => expect(pullPreloadedChildData).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(result.current.children.map(child => child.id)).toContain('cached-child'));
+    expect(result.current.groups.map(group => group.id)).toContain('cached-group');
+    expect(result.current.childrenGroups.map(membership => membership.id)).toContain('cached-membership');
+
+    await act(async () => {
+      releasePull({
+        children: [], classes: [], childEaAssignments: [], childProgrammeEnrollments: [],
+        childClassMemberships: [], groups: [], childrenGroups: [], errors: [],
+      });
+    });
+  });
+
   test('sync completion refreshes SQLite state without pulling from the server', async () => {
     useOffline.mockReturnValue({
       isOnline: true,
@@ -196,7 +217,7 @@ describe('ChildrenContext Plan 5 hydration', () => {
     const { result } = renderHook(() => useChildren(), { wrapper });
     await waitFor(() => expect(pullPreloadedChildData).toHaveBeenCalledTimes(1));
     pullPreloadedChildData.mockClear();
-    childrenRepository.getMyChildren.mockResolvedValueOnce([
+    childrenRepository.getMyChildren.mockResolvedValue([
       { id: 'cache-refresh-child', first_name: 'Cache', synced: true },
     ]);
 
@@ -280,17 +301,17 @@ describe('ChildrenContext Plan 5 hydration', () => {
   });
 
   test('successful preload drops synced local rows that disappeared from the server but keeps dirty local rows', async () => {
-    childrenRepository.getMyChildren.mockResolvedValueOnce([
+    childrenRepository.getMyChildren.mockResolvedValue([
       { id: 'synced-stale-child', first_name: 'Stale', synced: true, sync_status: 'synced' },
       { id: 'pending-child', first_name: 'Pending', synced: false, sync_status: 'pending' },
       { id: 'failed-child', first_name: 'Failed', synced: false, sync_status: 'failed' },
       { id: 'terminal-child', first_name: 'Terminal', synced: false, sync_status: 'terminal' },
     ]);
-    groupsRepository.getGroups.mockResolvedValueOnce([
+    groupsRepository.getGroups.mockResolvedValue([
       { id: 'synced-stale-group', name: 'Stale Group', synced: true, sync_status: 'synced' },
       { id: 'pending-group', name: 'Pending Group', synced: false, sync_status: 'pending' },
     ]);
-    groupsRepository.getChildrenGroups.mockResolvedValueOnce([
+    groupsRepository.getChildrenGroups.mockResolvedValue([
       { id: 'synced-stale-membership', child_id: 'synced-stale-child', group_id: 'synced-stale-group', synced: true, sync_status: 'synced' },
       { id: 'pending-membership', child_id: 'pending-child', group_id: 'pending-group', synced: false, sync_status: 'pending' },
     ]);
@@ -326,13 +347,13 @@ describe('ChildrenContext Plan 5 hydration', () => {
   });
 
   test('a pending local edit whose id exists on the server survives the pull in UI state (pending-local-wins)', async () => {
-    childrenRepository.getMyChildren.mockResolvedValueOnce([
+    childrenRepository.getMyChildren.mockResolvedValue([
       { id: 'shared-child', first_name: 'Edited Locally', synced: false, sync_status: 'pending' },
     ]);
-    groupsRepository.getGroups.mockResolvedValueOnce([
+    groupsRepository.getGroups.mockResolvedValue([
       { id: 'shared-group', name: 'Renamed Locally', synced: false, sync_status: 'pending' },
     ]);
-    groupsRepository.getChildrenGroups.mockResolvedValueOnce([]);
+    groupsRepository.getChildrenGroups.mockResolvedValue([]);
     pullPreloadedChildData.mockResolvedValueOnce({
       children: [{ id: 'shared-child', first_name: 'Stale Server', synced: true, sync_status: 'synced' }],
       classes: [],
@@ -362,11 +383,11 @@ describe('ChildrenContext Plan 5 hydration', () => {
     // The legacy facade payload can hold sync_status 'synced' from pull time while a
     // later offline edit only overlays synced: false — the merge must trust the
     // dirty signal, not the stale status (Codex P2 on issue #42).
-    childrenRepository.getMyChildren.mockResolvedValueOnce([
+    childrenRepository.getMyChildren.mockResolvedValue([
       { id: 'shared-child', first_name: 'Edited Locally', synced: false, sync_status: 'synced' },
     ]);
-    groupsRepository.getGroups.mockResolvedValueOnce([]);
-    groupsRepository.getChildrenGroups.mockResolvedValueOnce([]);
+    groupsRepository.getGroups.mockResolvedValue([]);
+    groupsRepository.getChildrenGroups.mockResolvedValue([]);
     pullPreloadedChildData.mockResolvedValueOnce({
       children: [{ id: 'shared-child', first_name: 'Stale Server', synced: true, sync_status: 'synced' }],
       classes: [],
@@ -392,8 +413,8 @@ describe('ChildrenContext Plan 5 hydration', () => {
     // The active-only cache read hides the tombstone (removed_at set), so the
     // merge must learn about it from the unfiltered unsynced read and suppress
     // the server copy instead of resurrecting the membership (Codex P2 #2).
-    groupsRepository.getChildrenGroups.mockResolvedValueOnce([]);
-    groupsRepository.getUnsyncedChildrenGroups.mockResolvedValueOnce([
+    groupsRepository.getChildrenGroups.mockResolvedValue([]);
+    groupsRepository.getUnsyncedChildrenGroups.mockResolvedValue([
       {
         id: 'removed-membership',
         child_id: 'cached-child',
@@ -530,7 +551,7 @@ describe('ChildrenContext Plan 5 hydration', () => {
   });
 
   test('getChildrenInGroup ignores removed memberships', async () => {
-    groupsRepository.getChildrenGroups.mockResolvedValueOnce([
+    groupsRepository.getChildrenGroups.mockResolvedValue([
       {
         id: 'removed-membership',
         child_id: 'cached-child',

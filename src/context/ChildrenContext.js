@@ -73,6 +73,10 @@ export const ChildrenProvider = ({ children }) => {
 
     try {
       setLoading(true);
+      // Cache-first display: publish the SQLite snapshot immediately so a slow
+      // or stalled network never holds the roster hostage. The merge below
+      // re-publishes from a fresh post-commit snapshot when the pull lands.
+      await refreshFromCache();
       const pulled = await pullPreloadedChildData({ userId: activeUserId });
       if (activeUserIdRef.current !== activeUserId) return;
       await ensureReferenceData({ userId: activeUserId });
@@ -155,7 +159,7 @@ export const ChildrenProvider = ({ children }) => {
         setLoading(false);
       }
     }
-  }, [user?.id]);
+  }, [user?.id, refreshFromCache]);
 
   // Load data on mount when user is authenticated
   useEffect(() => {
