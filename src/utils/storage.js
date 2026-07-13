@@ -2,10 +2,6 @@ import { classEaAssignmentsRepository } from '../db/repositories/classEaAssignme
 import { classesRepository } from '../db/repositories/classesRepository';
 import { childrenRepository } from '../db/repositories/childrenRepository';
 import { groupsRepository } from '../db/repositories/groupsRepository';
-import {
-  jobTitlesRepository,
-  schoolsRepository,
-} from '../db/repositories/referenceDataRepository';
 import { localStateRepository } from '../db/repositories/localStateRepository';
 import { syncOutboxRepository } from '../db/repositories/syncOutboxRepository';
 import { resolveDatabase, runRepositoryTransaction } from '../db/repositories/repositoryRuntime';
@@ -232,25 +228,6 @@ export const storage = {
 
   async getUnsyncedChildrenGroups() {
     return await groupsRepository.getUnsyncedChildrenGroups();
-  },
-
-  async getSchools() {
-    const exactList = await localStateRepository.get(payloadKey('schools'), null);
-    if (exactList) return exactList;
-    return await schoolsRepository.getAll();
-  },
-
-  async setSchools(list) {
-    await localStateRepository.set(payloadKey('schools'), list);
-    return await schoolsRepository.replaceFromServer(list);
-  },
-
-  async getJobTitles() {
-    return await jobTitlesRepository.getAll();
-  },
-
-  async saveJobTitles(list) {
-    return await jobTitlesRepository.replaceFromServer(list);
   },
 
   async getClasses(options = {}) {

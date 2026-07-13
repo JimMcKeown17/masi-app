@@ -1,6 +1,5 @@
 import { supabase } from './supabaseClient';
 import { enqueueSupabaseRequest } from './supabaseRequestQueue';
-import { storage } from '../utils/storage';
 import { resolveDatabase, runRepositoryTransaction } from '../db/repositories/repositoryRuntime';
 import {
   chunkArray,
@@ -1518,6 +1517,6 @@ export const fetchAndCacheSchools = async () => {
   ));
 
   if (error) throw error;
-  await storage.setSchools(data || []);
+  await schoolsRepository.replaceFromServer(data || []);
   return data || [];
 };

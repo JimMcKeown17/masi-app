@@ -1,7 +1,7 @@
 import React, { createContext, useState, useEffect, useContext, useRef, useCallback, useMemo } from 'react';
 import { supabase } from '../services/supabaseClient';
 import { enqueueSupabaseRequest } from '../services/supabaseRequestQueue';
-import { storage } from '../utils/storage';
+import { jobTitlesRepository } from '../db/repositories/referenceDataRepository';
 import { useAuth } from './AuthContext';
 import { useOffline } from './OfflineContext';
 
@@ -18,7 +18,7 @@ export const LookupsProvider = ({ children }) => {
     const activeUserId = user?.id;
     try {
       setLoading(true);
-      const cached = await storage.getJobTitles();
+      const cached = await jobTitlesRepository.getAll();
       if (activeUserIdRef.current !== activeUserId) return;
       setJobTitles(cached);
 
@@ -32,7 +32,7 @@ export const LookupsProvider = ({ children }) => {
 
         if (error) throw error;
         const serverJobTitles = data || [];
-        await storage.saveJobTitles(serverJobTitles);
+        await jobTitlesRepository.replaceFromServer(serverJobTitles);
         if (activeUserIdRef.current !== activeUserId) return;
         setJobTitles(serverJobTitles);
       } catch (error) {

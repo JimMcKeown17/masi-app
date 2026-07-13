@@ -10,6 +10,10 @@ import { storage } from '../src/utils/storage';
 import { pullPreloadedChildData } from '../src/services/preloadedChildData';
 import { enqueueSupabaseRequest } from '../src/services/supabaseRequestQueue';
 import { timeEntriesRepository } from '../src/db/repositories/timeEntriesRepository';
+import {
+  jobTitlesRepository,
+  schoolsRepository,
+} from '../src/db/repositories/referenceDataRepository';
 
 jest.mock('../src/services/offlineSync', () => ({
   getSyncStatus: jest.fn(),
@@ -47,10 +51,8 @@ jest.mock('../src/utils/storage', () => ({
     getUnsyncedGroups: jest.fn(),
     getUnsyncedChildrenGroups: jest.fn(),
     getPendingHardDeleteIds: jest.fn(),
-    getSchools: jest.fn(),
     getClasses: jest.fn(),
     getUnsyncedClasses: jest.fn(),
-    getJobTitles: jest.fn(),
     saveChild: jest.fn(),
     createChild: jest.fn(),
     saveStaffChild: jest.fn(),
@@ -60,7 +62,6 @@ jest.mock('../src/utils/storage', () => ({
     saveClassEaAssignment: jest.fn(),
     updateClass: jest.fn(),
     deleteClass: jest.fn(),
-    saveJobTitles: jest.fn(),
     updateChild: jest.fn(),
     deleteChild: jest.fn(),
     saveGroup: jest.fn(),
@@ -78,6 +79,13 @@ jest.mock('../src/services/preloadedChildData', () => ({
 jest.mock('../src/db/repositories/referenceDataRepository', () => ({
   academicYearsRepository: {
     getActive: jest.fn(async () => ({ id: 'year-2026' })),
+  },
+  jobTitlesRepository: {
+    getAll: jest.fn(),
+    replaceFromServer: jest.fn(),
+  },
+  schoolsRepository: {
+    getAll: jest.fn(),
   },
 }));
 
@@ -183,10 +191,10 @@ describe('context render isolation', () => {
     storage.getUnsyncedGroups.mockResolvedValue([]);
     storage.getUnsyncedChildrenGroups.mockResolvedValue([]);
     storage.getPendingHardDeleteIds.mockResolvedValue(new Set());
-    storage.getSchools.mockResolvedValue([]);
+    schoolsRepository.getAll.mockResolvedValue([]);
     storage.getClasses.mockResolvedValue([]);
     storage.getUnsyncedClasses.mockResolvedValue([]);
-    storage.getJobTitles.mockResolvedValue([]);
+    jobTitlesRepository.getAll.mockResolvedValue([]);
     storage.saveChild.mockResolvedValue(true);
     storage.createChild.mockResolvedValue(true);
     storage.saveStaffChild.mockResolvedValue(true);
@@ -194,7 +202,7 @@ describe('context render isolation', () => {
     storage.saveChildClassMembership.mockResolvedValue(true);
     storage.saveClass.mockResolvedValue(true);
     storage.saveClassEaAssignment.mockResolvedValue(true);
-    storage.saveJobTitles.mockResolvedValue(true);
+    jobTitlesRepository.replaceFromServer.mockResolvedValue(true);
     storage.saveGroup.mockResolvedValue(true);
     storage.saveChildrenGroup.mockResolvedValue(true);
     fetchAndCacheSchools.mockResolvedValue([]);
@@ -277,7 +285,7 @@ describe('context render isolation', () => {
     )).not.toThrow();
 
     await waitFor(() => {
-      expect(storage.getSchools).toHaveBeenCalled();
+      expect(schoolsRepository.getAll).toHaveBeenCalled();
       expect(fetchAndCacheSchools).toHaveBeenCalled();
       expect(storage.getClasses).toHaveBeenCalledWith({ userId: 'user-1' });
       expect(storage.getUnsyncedClasses).toHaveBeenCalled();
@@ -299,7 +307,7 @@ describe('context render isolation', () => {
     await waitFor(() => {
       expect(getSyncStatus).toHaveBeenCalled();
       expect(storage.getMyChildren).toHaveBeenCalledWith('user-1');
-      expect(storage.getSchools).toHaveBeenCalled();
+      expect(schoolsRepository.getAll).toHaveBeenCalled();
       expect(fetchAndCacheSchools).toHaveBeenCalled();
       expect(storage.getClasses).toHaveBeenCalledWith({ userId: 'user-1' });
       expect(storage.getUnsyncedClasses).toHaveBeenCalled();
@@ -330,9 +338,9 @@ describe('context render isolation', () => {
     )).not.toThrow();
 
     await waitFor(() => {
-      expect(storage.getJobTitles).toHaveBeenCalled();
+      expect(jobTitlesRepository.getAll).toHaveBeenCalled();
       expect(enqueueSupabaseRequest).toHaveBeenCalled();
-      expect(storage.saveJobTitles).toHaveBeenCalledWith([]);
+      expect(jobTitlesRepository.replaceFromServer).toHaveBeenCalledWith([]);
       expect(lookupsApi.loading).toBe(false);
     });
   });
@@ -348,9 +356,9 @@ describe('context render isolation', () => {
     );
     await waitFor(() => {
       expect(getSyncStatus).toHaveBeenCalled();
-      expect(storage.getJobTitles).toHaveBeenCalled();
+      expect(jobTitlesRepository.getAll).toHaveBeenCalled();
       expect(enqueueSupabaseRequest).toHaveBeenCalled();
-      expect(storage.saveJobTitles).toHaveBeenCalledWith([]);
+      expect(jobTitlesRepository.replaceFromServer).toHaveBeenCalledWith([]);
       expect(lookupsApi.loading).toBe(false);
     });
     const rendersAfterSettle = lookupsRenders;

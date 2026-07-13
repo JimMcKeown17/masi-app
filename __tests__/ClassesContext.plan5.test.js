@@ -2,7 +2,10 @@ import React from 'react';
 import { act, renderHook, waitFor } from '@testing-library/react-native';
 import { ClassesProvider, useClasses } from '../src/context/ClassesContext';
 import { storage } from '../src/utils/storage';
-import { academicYearsRepository } from '../src/db/repositories/referenceDataRepository';
+import {
+  academicYearsRepository,
+  schoolsRepository,
+} from '../src/db/repositories/referenceDataRepository';
 import { getActiveProgrammeId } from '../src/db/repositories/domainRepositoryUtils';
 import { resolveDatabase } from '../src/db/repositories/repositoryRuntime';
 import { fetchAndCacheSchools } from '../src/services/offlineSync';
@@ -51,6 +54,9 @@ jest.mock('../src/db/repositories/referenceDataRepository', () => ({
   academicYearsRepository: {
     getActive: jest.fn(),
   },
+  schoolsRepository: {
+    getAll: jest.fn(),
+  },
 }));
 
 jest.mock('../src/db/repositories/domainRepositoryUtils', () => ({
@@ -66,7 +72,6 @@ jest.mock('../src/db/repositories/repositoryRuntime', () => ({
 
 jest.mock('../src/utils/storage', () => ({
   storage: {
-    getSchools: jest.fn(),
     getClasses: jest.fn(),
     getUnsyncedClasses: jest.fn(),
     saveClass: jest.fn(),
@@ -89,7 +94,7 @@ describe('ClassesContext Plan 5 behavior', () => {
       children: [],
       updateChild,
     });
-    storage.getSchools.mockResolvedValue([]);
+    schoolsRepository.getAll.mockResolvedValue([]);
     storage.getClasses.mockResolvedValue([]);
     storage.getUnsyncedClasses.mockResolvedValue([]);
     storage.saveClass.mockResolvedValue(true);
@@ -116,6 +121,7 @@ describe('ClassesContext Plan 5 behavior', () => {
   test('addClass automatically uses the active academic year', async () => {
     const { result } = renderHook(() => useClasses(), { wrapper });
     await waitFor(() => expect(storage.getClasses).toHaveBeenCalled());
+    expect(schoolsRepository.getAll).toHaveBeenCalled();
 
     await act(async () => {
       await result.current.addClass({

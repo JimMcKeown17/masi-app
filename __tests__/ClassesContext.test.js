@@ -2,6 +2,7 @@ import React from 'react';
 import { renderHook, act } from '@testing-library/react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { childrenRepository } from '../src/db/repositories/childrenRepository';
+import { schoolsRepository } from '../src/db/repositories/referenceDataRepository';
 import { storage } from '../src/utils/storage';
 import { resolveDatabase } from '../src/db/repositories/repositoryRuntime';
 
@@ -104,10 +105,10 @@ describe('ClassesContext storage operations', () => {
       { id: 's1', name: 'School A' },
       { id: 's2', name: 'School B' },
     ];
-    await storage.setSchools(schools);
+    await schoolsRepository.replaceFromServer(schools);
 
-    const cached = await storage.getSchools();
-    expect(cached).toEqual(schools);
+    const cached = await schoolsRepository.getAll();
+    expect(cached.map(({ id, name }) => ({ id, name }))).toEqual(schools);
   });
 
   test('classes list updates after saveClass', async () => {

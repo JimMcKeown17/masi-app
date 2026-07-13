@@ -19,31 +19,6 @@ beforeEach(async () => {
   await seedReferenceData();
 });
 
-describe('Schools storage (read-only cache)', () => {
-  test('getSchools returns empty array when no data', async () => {
-    const result = await storage.getSchools();
-    expect(result).toEqual([]);
-  });
-
-  test('setSchools stores and getSchools retrieves the list', async () => {
-    const schools = [
-      { id: 'school-1', name: 'Sunrise Primary' },
-      { id: 'school-2', name: 'Hilltop School' },
-    ];
-    await storage.setSchools(schools);
-    const result = await storage.getSchools();
-    expect(result).toEqual(schools);
-  });
-
-  test('setSchools replaces the entire cache', async () => {
-    await storage.setSchools([{ id: 's1', name: 'Old School' }]);
-    await storage.setSchools([{ id: 's2', name: 'New School' }]);
-    const result = await storage.getSchools();
-    expect(result).toHaveLength(1);
-    expect(result[0].name).toBe('New School');
-  });
-});
-
 describe('Classes storage (offline-first CRUD)', () => {
   const makeClass = (overrides = {}) => ({
     id: 'class-1',

@@ -3,7 +3,10 @@ import { supabase } from '../services/supabaseClient';
 import { storage } from '../utils/storage';
 import { fetchAndCacheSchools } from '../services/offlineSync';
 import { enqueueSupabaseRequest } from '../services/supabaseRequestQueue';
-import { academicYearsRepository } from '../db/repositories/referenceDataRepository';
+import {
+  academicYearsRepository,
+  schoolsRepository,
+} from '../db/repositories/referenceDataRepository';
 import { getActiveProgrammeId } from '../db/repositories/domainRepositoryUtils';
 import { mergeServerRows } from '../utils/mergeServerRows';
 import { resolveDatabase } from '../db/repositories/repositoryRuntime';
@@ -38,7 +41,7 @@ export const ClassesProvider = ({ children: reactChildren }) => {
   const loadSchools = useCallback(async () => {
     try {
       const activeUserId = user?.id;
-      const cached = await storage.getSchools();
+      const cached = await schoolsRepository.getAll();
       if (activeUserIdRef.current !== activeUserId) return;
       setSchools(cached);
 
