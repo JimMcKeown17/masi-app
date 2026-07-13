@@ -7,6 +7,7 @@
 
 import { computeAssessmentMastery, normalizeLanguageKey } from './letterMastery';
 import { LETTER_SETS, PEDAGOGICAL_ORDERS } from '../constants/egraConstants';
+import { toLocalDateString } from './localDate';
 
 // ─── Helpers ───────────────────────────────────────────────────────────
 
@@ -15,16 +16,11 @@ import { LETTER_SETS, PEDAGOGICAL_ORDERS } from '../constants/egraConstants';
  * Critical: South Africa is UTC+2 — using toISOString() would shift
  * dates backward across midnight, breaking week/month boundaries.
  */
-function toLocalDateString(d) {
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, '0');
-  const day = String(d.getDate()).padStart(2, '0');
-  return `${y}-${m}-${day}`;
-}
-
 export function toDateString(dateOrString) {
   if (!dateOrString) return null;
-  if (typeof dateOrString === 'string') return dateOrString.slice(0, 10);
+  if (typeof dateOrString === 'string' && !dateOrString.includes('T')) {
+    return dateOrString.slice(0, 10);
+  }
   return toLocalDateString(dateOrString);
 }
 

@@ -79,6 +79,7 @@ describe('TimeEntriesListScreen Plan 5 behavior', () => {
   });
 
   afterEach(() => {
+    jest.useRealTimers();
     jest.clearAllMocks();
   });
 
@@ -96,5 +97,26 @@ describe('TimeEntriesListScreen Plan 5 behavior', () => {
     expect(queryByText('No Time Entries Yet')).toBeNull();
     expect(timeEntriesRepository.getTimeEntries).toHaveBeenCalledTimes(1);
     expect(supabase.from).not.toHaveBeenCalled();
+  });
+
+  test('groups a 00:30 SAST entry under its local day and marks that day as today', async () => {
+    jest.useFakeTimers();
+    jest.setSystemTime(new Date('2026-07-11T22:45:00.000Z'));
+    timeEntriesRepository.getTimeEntries.mockResolvedValue([{
+      id: 'entry-boundary',
+      user_id: 'user-1',
+      sign_in_time: '2026-07-11T22:30:00.000Z',
+      sign_out_time: '2026-07-11T23:30:00.000Z',
+      synced: true,
+    }]);
+
+    const { getByText } = render(
+      <SafeAreaProvider>
+        <TimeEntriesListScreen />
+      </SafeAreaProvider>
+    );
+
+    await waitFor(() => expect(getByText('Sunday, Jul 12, 2026')).toBeTruthy());
+    expect(getByText('Today')).toBeTruthy();
   });
 });

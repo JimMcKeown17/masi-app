@@ -8,6 +8,7 @@ import { colors, spacing, borderRadius, shadows } from '../../constants/colors';
 import { timeEntriesRepository } from '../../db/repositories/timeEntriesRepository';
 import { formatCoordinates } from '../../services/locationService';
 import { describeSyncState } from '../../utils/syncStatusPresenter';
+import { formatDisplayDate, toLocalDateString } from '../../utils/localDate';
 
 export default function TimeEntriesListScreen() {
   const { user } = useAuth();
@@ -62,7 +63,7 @@ export default function TimeEntriesListScreen() {
    */
   const groupEntriesByDate = (entries) => {
     const grouped = entries.reduce((acc, entry) => {
-      const date = new Date(entry.sign_in_time).toISOString().split('T')[0]; // YYYY-MM-DD
+      const date = toLocalDateString(entry.sign_in_time);
       if (!acc[date]) {
         acc[date] = [];
       }
@@ -113,8 +114,7 @@ export default function TimeEntriesListScreen() {
    * Format date as "Monday, Jan 27, 2026"
    */
   const formatDateHeader = (dateString) => {
-    const date = new Date(dateString);
-    return date.toLocaleDateString('en-US', {
+    return formatDisplayDate(dateString, {
       weekday: 'long',
       year: 'numeric',
       month: 'short',
@@ -150,7 +150,7 @@ export default function TimeEntriesListScreen() {
    * Check if entry is from today
    */
   const isToday = (dateString) => {
-    const today = new Date().toISOString().split('T')[0];
+    const today = toLocalDateString(new Date());
     return dateString === today;
   };
 
