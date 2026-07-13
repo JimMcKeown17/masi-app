@@ -768,6 +768,20 @@ Requirements to be gathered as we progress through development phases.
 
 ### In Progress
 
+#### Design Foundation Sprint
+Branch: `improvement/design-foundation`
+Plan: `docs/superpowers/plans/2026-07-13-design-foundation.md`
+
+- [x] Task 0: Add the PRD progress checklist
+- [ ] Task 1: Move group helpers out of the picker component
+- [ ] Task 2: Build the shared BottomSheet primitive
+- [ ] Task 3: Render the three existing sheets through BottomSheet
+- [ ] Task 4: Convert class and child pickers to SelectSheet
+- [ ] Task 5: Convert session and assessment pickers to SelectSheet
+- [ ] Task 6: Extract shared assessment capture chrome
+- [ ] Task 7: Virtualize the session roster
+- [ ] Task 8: Close the sprint documentation and gates
+
 #### Improvements 2026-07 — Phase 1: Safety Net
 Branch: `improvement/p1-safety-net`
 Roadmap: `documentation/improvements-2026-07-roadmap.md` · Plan: `docs/superpowers/plans/2026-07-03-improvements-phase1-safety-net.md`
