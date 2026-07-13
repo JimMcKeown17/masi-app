@@ -31,6 +31,7 @@ jest.mock('../src/context/OfflineContext', () => ({
 }));
 
 jest.mock('../src/services/preloadedChildData', () => ({
+  PULL_SCOPE_COMPLETENESS_LIMIT: 1000,
   pullPreloadedChildData: (...args) => mockPullPreloadedChildData(...args),
 }));
 
@@ -185,6 +186,57 @@ test('a class edit made while the network pull is pending survives in React stat
     expect.objectContaining({ id: 'class-1', name: 'Edited Mid Pull', synced: false }),
   ]);
   expect(result.current.classesContext.classes).toEqual(sqliteClasses);
+});
+
+test('no active programme leaves the existing active class assignment untouched', async () => {
+  mockSupabaseFrom.mockImplementation((tableName) => {
+    if (tableName === 'staff_programme_assignments') {
+      return queryResult({ data: [], error: null });
+    }
+    return queryResult({ data: [], error: null });
+  });
+
+  const { result } = renderHook(() => useContexts(), { wrapper });
+  await waitFor(() => expect(mockSupabaseFrom).toHaveBeenCalledWith('staff_programme_assignments'));
+  await waitFor(() => expect(result.current.classesContext.loading).toBe(false));
+
+  expect(mockSupabaseFrom).not.toHaveBeenCalledWith('classes');
+  expect(await testDb.getFirstAsync(`
+    select unassigned_at
+    from class_ea_assignments
+    where id = 'class-assignment-1'
+  `)).toEqual({ unassigned_at: null });
+  const freshClasses = await classesRepository.getClasses({ userId: 'user-1' });
+  expect(result.current.classesContext.classes).toEqual(freshClasses);
+  expect(freshClasses).toEqual([
+    expect.objectContaining({ id: 'class-1' }),
+  ]);
+});
+
+test('an active programme with zero classes ends the existing active class assignment', async () => {
+  mockSupabaseFrom.mockImplementation((tableName) => {
+    if (tableName === 'staff_programme_assignments') {
+      return queryResult({ data: [{ programme_id: 'programme-a' }], error: null });
+    }
+    if (tableName === 'classes') {
+      return queryResult({ data: [], error: null });
+    }
+    return queryResult({ data: [], error: null });
+  });
+
+  const { result } = renderHook(() => useContexts(), { wrapper });
+  await waitFor(() => expect(mockSupabaseFrom).toHaveBeenCalledWith('classes'));
+  await waitFor(async () => {
+    expect(await testDb.getFirstAsync(`
+      select unassigned_at
+      from class_ea_assignments
+      where id = 'class-assignment-1'
+    `)).toEqual({ unassigned_at: expect.any(String) });
+  });
+  await waitFor(() => expect(result.current.classesContext.loading).toBe(false));
+  const freshClasses = await classesRepository.getClasses({ userId: 'user-1' });
+  expect(result.current.classesContext.classes).toEqual(freshClasses);
+  expect(freshClasses).toEqual([]);
 });
 
 test('archiving a class offline refreshes child assignment state without a server pull', async () => {

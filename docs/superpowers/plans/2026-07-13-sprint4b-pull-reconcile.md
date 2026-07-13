@@ -102,10 +102,10 @@ Convergence pass 3 (verdict BUILD-WITH-FIXES; all six fixes applied to the text 
 
 **Files:** Modify `src/context/ChildrenContext.js`, `src/context/ClassesContext.js`; delete `src/utils/mergeServerRows.js` + `__tests__/mergeServerRows.test.js`; update context suites; extend both pull integration suites.
 
-- [ ] RED (unit, call-shape only): each batch call carries a `reconcile` spec exactly when decision-7 gating passes; an errored scope is not persisted; an ok+complete EMPTY scope is persisted (empty batch) WITH reconcile (empty-clearing); the ClassesContext two-stage trichotomy per S4 (mocked here, proven on SQLite below).
-- [ ] RED (integration): S4 branches on real SQLite -- no-programme leaves an active class assignment untouched; zero-classes-with-programme ends it; the #20 case end-to-end (membership scope fails with `'query'`, groups ok+empty → group assignments reconciled, memberships intact-but-unpublished); S12 behaviors -- cached rows visible while the pull is held open (R14), final state equals a fresh SQLite read after release; the held-pull edit races stay green.
-- [ ] GREEN: wire gating; delete the merge, `shouldApplyPulledRows`, and the unsynced-rows merge plumbing; keep `pendingDeleteIds` pre-persist filtering.
-- [ ] Commit: `refactor(pull): contexts derive state from SQLite; per-scope gating replaces the in-memory merge`
+- [x] RED (unit, call-shape only): each batch call carries a `reconcile` spec exactly when decision-7 gating passes; an errored scope is not persisted; an ok+complete EMPTY scope is persisted (empty batch) WITH reconcile (empty-clearing); the ClassesContext two-stage trichotomy per S4 (mocked here, proven on SQLite below).
+- [x] RED (integration): S4 branches on real SQLite -- no-programme leaves an active class assignment untouched; zero-classes-with-programme ends it; the #20 case end-to-end (membership scope fails with `'query'`, groups ok+empty → group assignments reconciled, memberships intact-but-unpublished); S12 behaviors -- cached rows visible while the pull is held open (R14), final state equals a fresh SQLite read after release; the held-pull edit races stay green.
+- [x] GREEN: wire gating; delete the merge, `shouldApplyPulledRows`, and the unsynced-rows merge plumbing; keep `pendingDeleteIds` pre-persist filtering.
+- [x] Commit: `refactor(pull): contexts derive state from SQLite; per-scope gating replaces the in-memory merge`
 
 ### Task 5: Pull scheduling (user-keyed single-flight, staleness stamps) + breaker needs-attention surface
 

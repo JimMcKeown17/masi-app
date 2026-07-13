@@ -49,8 +49,20 @@ const successfulScope = (rows) => ({
   failureKind: null,
 });
 
+const failedScope = (failureKind, error) => ({
+  ok: false,
+  rows: [],
+  complete: false,
+  failureKind,
+  ...(error ? { error } : {}),
+});
+
 const pulledBundle = (overrides = {}) => {
-  const activeProgrammeId = overrides.activeProgrammeId || 'programme-a';
+  const {
+    activeProgrammeId = 'programme-a',
+    scopeOverrides = {},
+    ...rowOverrides
+  } = overrides;
   const rows = {
     programmeAssignment: [{ programme_id: activeProgrammeId }],
     children: [{
@@ -137,11 +149,12 @@ const pulledBundle = (overrides = {}) => {
       synced: true,
       sync_status: 'synced',
     }],
-    ...overrides,
+    ...rowOverrides,
   };
   return {
     activeProgrammeId,
-    scopes: Object.fromEntries([
+    scopes: {
+      ...Object.fromEntries([
       'programmeAssignment',
       'children',
       'classes',
@@ -151,7 +164,9 @@ const pulledBundle = (overrides = {}) => {
       'groups',
       'groupEaAssignments',
       'childrenGroups',
-    ].map((name) => [name, successfulScope(rows[name] || [])])),
+      ].map((name) => [name, successfulScope(rows[name] || [])])),
+      ...scopeOverrides,
+    },
   };
 };
 
@@ -210,6 +225,14 @@ const seedContextRows = async (db) => {
       id, name, programme_id, class_id, created_by, sync_status
     ) values (
       'group-1', 'Original Local Group', 'programme-a', 'class-1', 'user-1', 'synced'
+    )
+  `);
+  await db.runAsync(`
+    insert into group_ea_assignments (
+      id, group_id, ea_user_id, programme_id, assigned_at, created_by, sync_status
+    ) values (
+      'gea-group-1', 'group-1', 'user-1', 'programme-a',
+      '2026-01-15T00:00:00.000Z', 'user-1', 'synced'
     )
   `);
   await db.runAsync(`
@@ -282,6 +305,9 @@ test('a child edit made while the network pull is pending survives in React stat
   mockPullPreloadedChildData.mockReturnValue(deferredPull.promise);
   const { result } = renderHook(() => useChildren(), { wrapper });
   await waitFor(() => expect(mockPullPreloadedChildData).toHaveBeenCalledWith({ userId: 'user-1' }));
+  await waitFor(() => expect(result.current.children).toEqual([
+    expect.objectContaining({ id: 'child-1', first_name: 'Original Local Name' }),
+  ]));
 
   await act(async () => {
     await result.current.updateChild('child-1', { first_name: 'Edited Mid Pull' });
@@ -306,6 +332,9 @@ test('a group edit made while the network pull is pending survives in React stat
   mockPullPreloadedChildData.mockReturnValue(deferredPull.promise);
   const { result } = renderHook(() => useChildren(), { wrapper });
   await waitFor(() => expect(mockPullPreloadedChildData).toHaveBeenCalledTimes(1));
+  await waitFor(() => expect(result.current.groups).toEqual([
+    expect.objectContaining({ id: 'group-1', name: 'Original Local Group' }),
+  ]));
 
   await act(async () => {
     await result.current.updateGroup('group-1', { name: 'Edited Group Mid Pull' });
@@ -330,6 +359,9 @@ test('a membership removal made while the network pull is pending survives in Re
   mockPullPreloadedChildData.mockReturnValue(deferredPull.promise);
   const { result } = renderHook(() => useChildren(), { wrapper });
   await waitFor(() => expect(mockPullPreloadedChildData).toHaveBeenCalledTimes(1));
+  await waitFor(() => expect(result.current.childrenGroups).toEqual([
+    expect.objectContaining({ id: 'membership-1' }),
+  ]));
 
   await act(async () => {
     await result.current.removeChildFromGroup('child-1', 'group-1');
@@ -340,7 +372,7 @@ test('a membership removal made while the network pull is pending survives in Re
   });
   await waitFor(() => expect(result.current.loading).toBe(false));
 
-  const sqliteMemberships = await groupsRepository.getChildrenGroups();
+  const sqliteMemberships = await groupsRepository.getVisibleChildrenGroups({ userId: 'user-1' });
   expect(sqliteMemberships).toEqual([]);
   expect(result.current.childrenGroups).toEqual(sqliteMemberships);
 });
@@ -504,4 +536,45 @@ test('ended group assignments hide intact memberships until a later pull re-ackn
     from child_group_memberships
     where id = 'membership-1'
   `)).toEqual(membershipBeforeAssignmentEnd);
+});
+
+test('a failed membership scope does not block empty group reconcile and final state comes from SQLite', async () => {
+  await seedContextRows(testDb);
+  const deferredPull = createDeferred();
+  mockPullPreloadedChildData.mockReturnValue(deferredPull.promise);
+  const { result } = renderHook(() => useChildren(), { wrapper });
+
+  await waitFor(() => expect(mockPullPreloadedChildData).toHaveBeenCalledTimes(1));
+  await waitFor(() => expect(result.current.groups.map((group) => group.id)).toEqual(['group-1']));
+  expect(result.current.childrenGroups.map((membership) => membership.id))
+    .toEqual(['membership-1']);
+
+  await act(async () => {
+    deferredPull.resolve(pulledBundle({
+      groups: [],
+      groupEaAssignments: [],
+      scopeOverrides: {
+        childrenGroups: failedScope('query', { message: 'membership query failed' }),
+      },
+    }));
+    await deferredPull.promise;
+  });
+  await waitFor(() => expect(result.current.loading).toBe(false));
+
+  const freshGroups = await groupsRepository.getGroups({ userId: 'user-1' });
+  const freshMemberships = await groupsRepository.getVisibleChildrenGroups({ userId: 'user-1' });
+  expect(result.current.groups).toEqual(freshGroups);
+  expect(result.current.childrenGroups).toEqual(freshMemberships);
+  expect(freshGroups).toEqual([]);
+  expect(freshMemberships).toEqual([]);
+  expect(await testDb.getFirstAsync(`
+    select unassigned_at
+    from group_ea_assignments
+    where id = 'gea-group-1'
+  `)).toEqual({ unassigned_at: expect.any(String) });
+  expect(await testDb.getFirstAsync(`
+    select removed_at
+    from child_group_memberships
+    where id = 'membership-1'
+  `)).toEqual({ removed_at: null });
 });

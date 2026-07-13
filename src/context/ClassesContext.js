@@ -9,7 +9,7 @@ import {
 import { getActiveProgrammeId } from '../db/repositories/domainRepositoryUtils';
 import { classesRepository } from '../db/repositories/classesRepository';
 import { classEaAssignmentsRepository } from '../db/repositories/classEaAssignmentsRepository';
-import { mergeServerRows } from '../utils/mergeServerRows';
+import { PULL_SCOPE_COMPLETENESS_LIMIT } from '../services/preloadedChildData';
 import { resolveDatabase } from '../db/repositories/repositoryRuntime';
 import { useAuth } from './AuthContext';
 import { useOffline } from './OfflineContext';
@@ -17,6 +17,23 @@ import { useChildren } from './ChildrenContext';
 import { v4 as uuidv4 } from 'uuid';
 
 const ClassesContext = createContext({});
+
+const successfulPullScope = (rows = []) => ({
+  ok: true,
+  rows,
+  complete: rows.length < PULL_SCOPE_COMPLETENESS_LIMIT,
+  failureKind: null,
+});
+
+const failedPullScope = (failureKind, error) => ({
+  ok: false,
+  rows: [],
+  complete: false,
+  failureKind,
+  ...(error ? { error } : {}),
+});
+
+const dependencyPullScope = () => failedPullScope('dependency');
 
 export const ClassesProvider = ({ children: reactChildren }) => {
   const { user } = useAuth();
@@ -80,7 +97,7 @@ export const ClassesProvider = ({ children: reactChildren }) => {
       setLoading(true);
       await refreshFromCache();
 
-      const { data, error } = await enqueueSupabaseRequest(async () => {
+      const pulled = await enqueueSupabaseRequest(async () => {
         const { data: assignments, error: assignmentError } = await supabase
           .from('staff_programme_assignments')
           .select('programme_id')
@@ -89,14 +106,31 @@ export const ClassesProvider = ({ children: reactChildren }) => {
           .order('assigned_at', { ascending: false })
           .limit(1);
 
-        if (assignmentError || !assignments?.[0]?.programme_id) {
+        if (assignmentError) {
           return {
-            data: [],
-            error: assignmentError || null,
+            activeProgrammeId: null,
+            scopes: {
+              programmeAssignment: failedPullScope('query', assignmentError),
+              classes: dependencyPullScope(),
+              classEaAssignments: dependencyPullScope(),
+            },
           };
         }
 
-        return supabase
+        const programmeAssignment = successfulPullScope(assignments || []);
+        const activeProgrammeId = assignments?.[0]?.programme_id || null;
+        if (!activeProgrammeId) {
+          return {
+            activeProgrammeId: null,
+            scopes: {
+              programmeAssignment,
+              classes: dependencyPullScope(),
+              classEaAssignments: dependencyPullScope(),
+            },
+          };
+        }
+
+        const { data, error } = await supabase
           .from('classes')
           .select(`
             *,
@@ -106,38 +140,76 @@ export const ClassesProvider = ({ children: reactChildren }) => {
           .eq('class_ea_assignments.programme_id', assignments[0].programme_id)
           .is('class_ea_assignments.unassigned_at', null)
           .order('name', { ascending: true });
+
+        if (error) {
+          return {
+            activeProgrammeId,
+            scopes: {
+              programmeAssignment,
+              classes: failedPullScope('query', error),
+              classEaAssignments: dependencyPullScope(),
+            },
+          };
+        }
+
+        const classRows = data || [];
+        const serverAssignments = classRows.flatMap(({ class_ea_assignments }) => (
+          (class_ea_assignments || []).map(assignment => ({
+            ...assignment,
+            synced: true,
+            sync_status: assignment.sync_status || 'synced',
+          }))
+        ));
+        const serverClasses = classRows.map(({ class_ea_assignments, ...classItem }) => ({
+          ...classItem,
+          synced: true,
+          sync_status: classItem.sync_status || 'synced',
+        }));
+
+        return {
+          activeProgrammeId,
+          scopes: {
+            programmeAssignment,
+            classes: successfulPullScope(serverClasses),
+            classEaAssignments: successfulPullScope(serverAssignments),
+          },
+        };
       });
 
       if (activeUserIdRef.current !== activeUserId) return;
-      if (error) {
-        console.error('Error loading classes from server:', error);
+      const { activeProgrammeId, scopes } = pulled;
+      if (!scopes.classes.ok || !scopes.classEaAssignments.ok) {
+        const error = scopes.programmeAssignment.error || scopes.classes.error;
+        if (error) {
+          console.error('Error loading classes from server:', error);
+        }
         return;
       }
 
-      const serverAssignments = (data || []).flatMap(({ class_ea_assignments }) => (
-        (class_ea_assignments || []).map(assignment => ({
-          ...assignment,
-          synced: true,
-          sync_status: assignment.sync_status || 'synced',
-        }))
-      ));
-      const serverClasses = (data || []).map(({ class_ea_assignments, ...classItem }) => ({
-        ...classItem,
-        synced: true,
-        sync_status: classItem.sync_status || 'synced',
-      }));
-
       await ensureReferenceData({ userId: activeUserId });
       if (activeUserIdRef.current !== activeUserId) return;
-      await classesRepository.saveServerClassRows(serverClasses);
-      await classEaAssignmentsRepository.saveServerRows(serverAssignments);
+      await classesRepository.saveServerClassRows(scopes.classes.rows);
+      const pulledAt = new Date().toISOString();
+      const shouldReconcileAssignments = Boolean(activeProgrammeId)
+        && scopes.programmeAssignment.ok
+        && scopes.classes.ok
+        && scopes.classEaAssignments.complete;
+      if (shouldReconcileAssignments) {
+        await classEaAssignmentsRepository.saveServerRows(scopes.classEaAssignments.rows, {
+          reconcile: {
+            acknowledgedClassIds: scopes.classes.rows.map((row) => row.id),
+            userId: activeUserId,
+            programmeId: activeProgrammeId,
+            pulledAt,
+          },
+        });
+      } else {
+        await classEaAssignmentsRepository.saveServerRows(scopes.classEaAssignments.rows);
+      }
 
-      const [freshClasses, unsyncedClasses] = await Promise.all([
-        classesRepository.getClasses({ userId: activeUserId }),
-        classesRepository.getUnsyncedClasses(),
-      ]);
+      const freshClasses = await classesRepository.getClasses({ userId: activeUserId });
       if (activeUserIdRef.current !== activeUserId) return;
-      setClasses(mergeServerRows(freshClasses, serverClasses, { unpushedRows: unsyncedClasses }));
+      setClasses(freshClasses);
     } catch (error) {
       console.error('Error in pullFromServer:', error);
     } finally {

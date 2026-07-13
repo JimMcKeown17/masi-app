@@ -76,7 +76,6 @@ jest.mock('../src/db/repositories/repositoryRuntime', () => ({
 jest.mock('../src/db/repositories/classesRepository', () => ({
   classesRepository: {
     getClasses: jest.fn(),
-    getUnsyncedClasses: jest.fn(),
     saveServerClassRows: jest.fn(),
     saveClass: jest.fn(),
     updateClass: jest.fn(),
@@ -106,7 +105,6 @@ describe('ClassesContext Plan 5 behavior', () => {
     });
     schoolsRepository.getAll.mockResolvedValue([]);
     classesRepository.getClasses.mockResolvedValue([]);
-    classesRepository.getUnsyncedClasses.mockResolvedValue([]);
     classesRepository.saveServerClassRows.mockResolvedValue({ applied: 0, skipped: 0 });
     classesRepository.saveClass.mockResolvedValue(true);
     classesRepository.updateClass.mockResolvedValue(true);
@@ -213,7 +211,7 @@ describe('ClassesContext Plan 5 behavior', () => {
     await waitFor(() => expect(classesRepository.saveServerClassRows).toHaveBeenCalledWith([
       expect.objectContaining({ id: 'server-class', sync_status: 'synced' }),
     ]));
-    expect(classEaAssignmentsRepository.saveServerRows).toHaveBeenCalledWith([
+    expect(classEaAssignmentsRepository.saveServerRows.mock.calls[0][0]).toEqual([
       expect.objectContaining({ id: 'assignment-1', sync_status: 'synced' }),
     ]);
     expect(ensureReferenceData).toHaveBeenCalledWith({ userId: 'user-1' });
@@ -221,6 +219,86 @@ describe('ClassesContext Plan 5 behavior', () => {
       .toBeLessThan(classesRepository.saveServerClassRows.mock.invocationCallOrder[0]);
     expect(classesRepository.saveServerClassRows.mock.invocationCallOrder[0])
       .toBeLessThan(classEaAssignmentsRepository.saveServerRows.mock.invocationCallOrder[0]);
+  });
+
+  test('an active programme with zero classes persists an empty assignment batch with reconcile', async () => {
+    mockSupabaseFrom.mockImplementation((tableName) => {
+      if (tableName === 'staff_programme_assignments') {
+        return queryResult({ data: [{ programme_id: 'programme-a' }], error: null });
+      }
+      if (tableName === 'classes') {
+        return queryResult({ data: [], error: null });
+      }
+      return queryResult({ data: [], error: null });
+    });
+
+    renderHook(() => useClasses(), { wrapper });
+
+    await waitFor(() => expect(classEaAssignmentsRepository.saveServerRows).toHaveBeenCalled());
+    expect(classesRepository.saveServerClassRows).toHaveBeenCalledWith([]);
+    expect(classEaAssignmentsRepository.saveServerRows).toHaveBeenCalledWith([], {
+      reconcile: {
+        acknowledgedClassIds: [],
+        userId: 'user-1',
+        programmeId: 'programme-a',
+        pulledAt: expect.any(String),
+      },
+    });
+  });
+
+  test('no active programme marks class scopes as dependencies and performs no persistence', async () => {
+    renderHook(() => useClasses(), { wrapper });
+
+    await waitFor(() => expect(mockSupabaseFrom).toHaveBeenCalledWith('staff_programme_assignments'));
+    expect(mockSupabaseFrom).not.toHaveBeenCalledWith('classes');
+    expect(classesRepository.saveServerClassRows).not.toHaveBeenCalled();
+    expect(classEaAssignmentsRepository.saveServerRows).not.toHaveBeenCalled();
+  });
+
+  test('a class query error performs no persistence or reconcile', async () => {
+    mockSupabaseFrom.mockImplementation((tableName) => {
+      if (tableName === 'staff_programme_assignments') {
+        return queryResult({ data: [{ programme_id: 'programme-a' }], error: null });
+      }
+      if (tableName === 'classes') {
+        return queryResult({ data: null, error: { message: 'class query failed' } });
+      }
+      return queryResult({ data: [], error: null });
+    });
+
+    renderHook(() => useClasses(), { wrapper });
+
+    await waitFor(() => expect(mockSupabaseFrom).toHaveBeenCalledWith('classes'));
+    expect(classesRepository.saveServerClassRows).not.toHaveBeenCalled();
+    expect(classEaAssignmentsRepository.saveServerRows).not.toHaveBeenCalled();
+  });
+
+  test('an incomplete class-assignment scope persists rows without reconcile', async () => {
+    const serverClasses = Array.from({ length: 1000 }, (_, index) => ({
+      id: `class-${index}`,
+      name: `Class ${index}`,
+      class_ea_assignments: [{
+        id: `assignment-${index}`,
+        class_id: `class-${index}`,
+        ea_user_id: 'user-1',
+        programme_id: 'programme-a',
+      }],
+    }));
+    mockSupabaseFrom.mockImplementation((tableName) => {
+      if (tableName === 'staff_programme_assignments') {
+        return queryResult({ data: [{ programme_id: 'programme-a' }], error: null });
+      }
+      if (tableName === 'classes') {
+        return queryResult({ data: serverClasses, error: null });
+      }
+      return queryResult({ data: [], error: null });
+    });
+
+    renderHook(() => useClasses(), { wrapper });
+
+    await waitFor(() => expect(classEaAssignmentsRepository.saveServerRows).toHaveBeenCalled());
+    expect(classEaAssignmentsRepository.saveServerRows.mock.calls[0]).toHaveLength(1);
+    expect(classEaAssignmentsRepository.saveServerRows.mock.calls[0][0]).toHaveLength(1000);
   });
 
   afterEach(() => {
@@ -263,149 +341,4 @@ describe('ClassesContext Plan 5 behavior', () => {
     expect(updateChild).not.toHaveBeenCalled();
   });
 
-  test('successful class pull drops synced local classes absent from the server but keeps dirty local classes', async () => {
-    classesRepository.getClasses.mockResolvedValue([
-      { id: 'synced-stale-class', name: 'Stale', synced: true, sync_status: 'synced' },
-      { id: 'pending-class', name: 'Pending', synced: false, sync_status: 'pending' },
-      { id: 'terminal-class', name: 'Terminal', synced: false, sync_status: 'terminal' },
-    ]);
-    mockSupabaseFrom.mockImplementation((tableName) => {
-      if (tableName === 'staff_programme_assignments') {
-        return queryResult({
-          data: [{ programme_id: 'programme-a' }],
-          error: null,
-        });
-      }
-      if (tableName === 'classes') {
-        return queryResult({
-          data: [{
-            id: 'server-class',
-            name: 'Server',
-            class_ea_assignments: [{ id: 'class-assignment-1', class_id: 'server-class', ea_user_id: 'user-1' }],
-            sync_status: 'synced',
-          }],
-          error: null,
-        });
-      }
-      return queryResult({ data: [], error: null });
-    });
-
-    const { result } = renderHook(() => useClasses(), { wrapper });
-
-    await waitFor(() => expect(result.current.classes.map(classItem => classItem.id)).toContain('server-class'));
-
-    expect(result.current.classes.map(classItem => classItem.id).sort()).toEqual([
-      'pending-class',
-      'server-class',
-      'terminal-class',
-    ]);
-    expect(classEaAssignmentsRepository.saveServerRows).toHaveBeenCalledWith([
-      expect.objectContaining({
-        id: 'class-assignment-1',
-        class_id: 'server-class',
-        sync_status: 'synced',
-      }),
-    ]);
-  });
-
-  test('successful class pull keeps a pending local edit when the server returns the same class id', async () => {
-    classesRepository.getClasses.mockResolvedValue([
-      {
-        id: 'class-1',
-        name: 'Edited Local Class',
-        teacher: 'Edited Teacher',
-        synced: false,
-        sync_status: 'pending',
-      },
-    ]);
-    mockSupabaseFrom.mockImplementation((tableName) => {
-      if (tableName === 'staff_programme_assignments') {
-        return queryResult({
-          data: [{ programme_id: 'programme-a' }],
-          error: null,
-        });
-      }
-      if (tableName === 'classes') {
-        return queryResult({
-          data: [{
-            id: 'class-1',
-            name: 'Server Class',
-            teacher: 'Server Teacher',
-            class_ea_assignments: [{ id: 'class-assignment-1', class_id: 'class-1', ea_user_id: 'user-1' }],
-            sync_status: 'synced',
-          }],
-          error: null,
-        });
-      }
-      return queryResult({ data: [], error: null });
-    });
-
-    const { result } = renderHook(() => useClasses(), { wrapper });
-
-    await waitFor(() => expect(result.current.classes).toEqual([
-      expect.objectContaining({
-        id: 'class-1',
-        name: 'Edited Local Class',
-        teacher: 'Edited Teacher',
-      }),
-    ]));
-    await waitFor(() => expect(classesRepository.saveServerClassRows).toHaveBeenCalledWith([
-      expect.objectContaining({
-        id: 'class-1',
-        name: 'Server Class',
-      }),
-    ]));
-    expect(result.current.classes).toEqual([
-      expect.objectContaining({
-        id: 'class-1',
-        name: 'Edited Local Class',
-        teacher: 'Edited Teacher',
-      }),
-    ]);
-  });
-
-  test('a class archived offline does not resurrect in UI state when a pull still returns it', async () => {
-    // getClasses is an active-only read (archived_at is null), so the pending
-    // tombstone only surfaces through getUnsyncedClasses; the merge must
-    // suppress the server copy until the archive pushes.
-    classesRepository.getClasses.mockResolvedValue([]);
-    classesRepository.getUnsyncedClasses.mockResolvedValue([
-      {
-        id: 'class-1',
-        name: 'Archived Class',
-        archived_at: '2026-07-04T08:00:00.000Z',
-        synced: false,
-        sync_status: 'pending',
-      },
-    ]);
-    mockSupabaseFrom.mockImplementation((tableName) => {
-      if (tableName === 'staff_programme_assignments') {
-        return queryResult({
-          data: [{ programme_id: 'programme-a' }],
-          error: null,
-        });
-      }
-      if (tableName === 'classes') {
-        return queryResult({
-          data: [{
-            id: 'class-1',
-            name: 'Archived Class',
-            class_ea_assignments: [{ id: 'class-assignment-1', class_id: 'class-1', ea_user_id: 'user-1' }],
-            sync_status: 'synced',
-          }],
-          error: null,
-        });
-      }
-      return queryResult({ data: [], error: null });
-    });
-
-    const { result } = renderHook(() => useClasses(), { wrapper });
-
-    await waitFor(() => expect(classesRepository.saveServerClassRows).toHaveBeenCalledWith([
-      expect.objectContaining({ id: 'class-1' }),
-    ]));
-    await waitFor(() => expect(result.current.loading).toBe(false));
-
-    expect(result.current.classes.map(row => row.id)).not.toContain('class-1');
-  });
 });

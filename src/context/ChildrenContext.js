@@ -6,15 +6,14 @@ import { classesRepository } from '../db/repositories/classesRepository';
 import { groupsRepository } from '../db/repositories/groupsRepository';
 import { groupEaAssignmentsRepository } from '../db/repositories/groupEaAssignmentsRepository';
 import { syncOutboxRepository } from '../db/repositories/syncOutboxRepository';
-import { mergeServerRows } from '../utils/mergeServerRows';
 import { useAuth } from './AuthContext';
 import { useOffline } from './OfflineContext';
 import { v4 as uuidv4 } from 'uuid';
 
 const ChildrenContext = createContext({});
 
-const shouldApplyPulledRows = (rows, scopes) => (
-  rows.length > 0 || !Object.values(scopes).some((scope) => scope.ok === false)
+const savePulledRows = (saveRows, rows, reconcile) => (
+  reconcile ? saveRows(rows, { reconcile }) : saveRows(rows)
 );
 
 export const ChildrenProvider = ({ children }) => {
@@ -75,15 +74,16 @@ export const ChildrenProvider = ({ children }) => {
     try {
       setLoading(true);
       // Cache-first display: publish the SQLite snapshot immediately so a slow
-      // or stalled network never holds the roster hostage. The merge below
-      // re-publishes from a fresh post-commit snapshot when the pull lands.
+      // or stalled network never holds the roster hostage.
       await refreshFromCache();
       const pulled = await pullPreloadedChildData({ userId: activeUserId });
       if (activeUserIdRef.current !== activeUserId) return;
       await ensureReferenceData({ userId: activeUserId });
       if (activeUserIdRef.current !== activeUserId) return;
 
-      const { scopes } = pulled;
+      const { activeProgrammeId, scopes } = pulled;
+      const pulledAt = new Date().toISOString();
+      const programmeScopeOk = scopes.programmeAssignment.ok && Boolean(activeProgrammeId);
 
       const pendingChildDeleteIds = await syncOutboxRepository.getPendingHardDeleteIds({
         tableName: 'children',
@@ -91,8 +91,10 @@ export const ChildrenProvider = ({ children }) => {
       });
       const childrenById = new Map();
       for (const child of [
-        ...scopes.children.rows,
-        ...scopes.childEaAssignments.rows.map((assignment) => assignment.children),
+        ...(scopes.children.ok ? scopes.children.rows : []),
+        ...(scopes.childEaAssignments.ok
+          ? scopes.childEaAssignments.rows.map((assignment) => assignment.children)
+          : []),
       ]) {
         if (child?.id && !childrenById.has(child.id)) {
           childrenById.set(child.id, child);
@@ -100,73 +102,116 @@ export const ChildrenProvider = ({ children }) => {
       }
       const pulledChildren = [...childrenById.values()]
         .filter((row) => !pendingChildDeleteIds.has(row.id));
-      const pulledChildEaAssignments = scopes.childEaAssignments.rows
+      const pulledChildEaAssignments = (scopes.childEaAssignments.ok
+        ? scopes.childEaAssignments.rows
+        : [])
         .filter((row) => !pendingChildDeleteIds.has(row.child_id));
-      const pulledChildProgrammeEnrollments = scopes.childProgrammeEnrollments.rows
+      const pulledChildProgrammeEnrollments = (scopes.childProgrammeEnrollments.ok
+        ? scopes.childProgrammeEnrollments.rows
+        : [])
         .filter((row) => !pendingChildDeleteIds.has(row.child_id));
-      const pulledChildClassMemberships = scopes.childClassMemberships.rows
+      const pulledChildClassMemberships = (scopes.childClassMemberships.ok
+        ? scopes.childClassMemberships.rows
+        : [])
         .filter((row) => !pendingChildDeleteIds.has(row.child_id));
 
-      await classesRepository.saveServerClassRows(scopes.classes.rows);
-      if (shouldApplyPulledRows(pulledChildren, scopes)) {
+      if (scopes.classes.ok) {
+        await classesRepository.saveServerClassRows(scopes.classes.rows);
+      }
+      if (scopes.children.ok || scopes.childEaAssignments.ok) {
         await childrenRepository.saveServerChildRows(pulledChildren);
       }
-      await childrenRepository.saveServerStaffChildRows(pulledChildEaAssignments);
-      await childrenRepository.saveServerChildProgrammeEnrollmentRows(
-        pulledChildProgrammeEnrollments
-      );
-      await childrenRepository.saveServerChildClassMembershipRows(pulledChildClassMemberships);
-      if (shouldApplyPulledRows(scopes.groups.rows, scopes)) {
+      if (scopes.childEaAssignments.ok) {
+        await savePulledRows(
+          childrenRepository.saveServerStaffChildRows,
+          pulledChildEaAssignments,
+          scopes.childEaAssignments.complete && programmeScopeOk
+            ? {
+              acknowledgedIds: scopes.childEaAssignments.rows.map((row) => row.id),
+              pulledAt,
+              userId: activeUserId,
+            }
+            : undefined
+        );
+      }
+      if (scopes.childProgrammeEnrollments.ok) {
+        await savePulledRows(
+          childrenRepository.saveServerChildProgrammeEnrollmentRows,
+          pulledChildProgrammeEnrollments,
+          scopes.childProgrammeEnrollments.complete
+            && programmeScopeOk
+            && scopes.childEaAssignments.ok
+            ? {
+              acknowledgedIds: scopes.childProgrammeEnrollments.rows.map((row) => row.id),
+              acknowledgedAssignedChildIds: scopes.childEaAssignments.rows
+                .map((row) => row.child_id),
+              programmeId: activeProgrammeId,
+              pulledAt,
+            }
+            : undefined
+        );
+      }
+      if (scopes.childClassMemberships.ok) {
+        await savePulledRows(
+          childrenRepository.saveServerChildClassMembershipRows,
+          pulledChildClassMemberships,
+          scopes.childClassMemberships.complete
+            && programmeScopeOk
+            && scopes.children.ok
+            ? {
+              acknowledgedIds: scopes.childClassMemberships.rows.map((row) => row.id),
+              acknowledgedChildIds: scopes.children.rows
+                .map((row) => row.id),
+              pulledAt,
+            }
+            : undefined
+        );
+      }
+      if (scopes.groups.ok) {
         await groupsRepository.saveServerGroupRows(scopes.groups.rows);
       }
-      await groupEaAssignmentsRepository.saveServerRows(scopes.groupEaAssignments.rows);
-      if (shouldApplyPulledRows(scopes.childrenGroups.rows, scopes)) {
-        await groupsRepository.saveServerChildrenGroupRows(scopes.childrenGroups.rows);
+      if (scopes.groupEaAssignments.ok) {
+        await savePulledRows(
+          groupEaAssignmentsRepository.saveServerRows,
+          scopes.groupEaAssignments.rows,
+          scopes.groupEaAssignments.complete
+            && programmeScopeOk
+            && scopes.groups.ok
+            ? {
+              acknowledgedGroupIds: scopes.groups.rows.map((row) => row.id),
+              userId: activeUserId,
+              programmeId: activeProgrammeId,
+              pulledAt,
+            }
+            : undefined
+        );
+      }
+      if (scopes.childrenGroups.ok) {
+        await savePulledRows(
+          groupsRepository.saveServerChildrenGroupRows,
+          scopes.childrenGroups.rows,
+          scopes.childrenGroups.complete
+            && programmeScopeOk
+            && scopes.groups.ok
+            ? {
+              acknowledgedIds: scopes.childrenGroups.rows.map((row) => row.id),
+              acknowledgedGroupIds: scopes.groups.rows.map((row) => row.id),
+              pulledAt,
+            }
+            : undefined
+        );
       }
 
-      const [
-        freshChildren,
-        freshGroups,
-        freshMemberships,
-        unsyncedChildren,
-        unsyncedGroups,
-        unsyncedMemberships,
-        freshPendingChildDeleteIds,
-      ] = await Promise.all([
+      const [freshChildren, freshGroups, freshMemberships] = await Promise.all([
         childrenRepository.getMyChildren(activeUserId),
         groupsRepository.getGroups({ userId: activeUserId }),
         groupsRepository.getVisibleChildrenGroups({ userId: activeUserId }),
-        childrenRepository.getUnsyncedChildren(),
-        groupsRepository.getUnsyncedGroups(),
-        groupsRepository.getUnsyncedChildrenGroups(),
-        syncOutboxRepository.getPendingHardDeleteIds({
-          tableName: 'children',
-          ownerUserId: activeUserId,
-        }),
       ]);
       if (activeUserIdRef.current !== activeUserId) return;
 
-      const mergedChildren = shouldApplyPulledRows(pulledChildren, scopes)
-        ? mergeServerRows(freshChildren, pulledChildren, {
-          unpushedRows: unsyncedChildren,
-          pendingDeleteIds: freshPendingChildDeleteIds,
-        })
-        : freshChildren;
-      const mergedGroups = shouldApplyPulledRows(scopes.groups.rows, scopes)
-        ? mergeServerRows(freshGroups, scopes.groups.rows, { unpushedRows: unsyncedGroups })
-        : freshGroups;
-      const visibleGroupIds = new Set(mergedGroups.map((group) => group.id));
-      const visiblePulledMemberships = scopes.childrenGroups.rows
-        .filter((membership) => visibleGroupIds.has(membership.group_id));
-      const mergedMemberships = shouldApplyPulledRows(scopes.childrenGroups.rows, scopes)
-        ? mergeServerRows(freshMemberships, visiblePulledMemberships, {
-          unpushedRows: unsyncedMemberships,
-        })
-        : freshMemberships;
-
-      setChildrenList(mergedChildren);
-      setGroups(mergedGroups);
-      setChildrenGroups(mergedMemberships);
+      setChildrenList(freshChildren);
+      setGroups(freshGroups);
+      setChildrenGroups(freshMemberships);
     } catch (error) {
       console.error('Error in pullFromServer:', error);
     } finally {
@@ -201,7 +246,7 @@ export const ChildrenProvider = ({ children }) => {
   /**
    * Load children assigned to current user
    * Pull server rows, persist them, then derive state from a fresh SQLite snapshot.
-   * Pending local records are preserved by the repository guard and interim merge.
+   * Pending local records are preserved by the repository guard.
    */
   const loadChildren = useCallback(async () => {
     try {

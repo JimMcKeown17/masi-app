@@ -51,7 +51,6 @@ jest.mock('../src/context/AuthContext', () => ({
 jest.mock('../src/db/repositories/childrenRepository', () => ({
   childrenRepository: {
     getMyChildren: jest.fn(),
-    getUnsyncedChildren: jest.fn(),
     saveServerChildRows: jest.fn(),
     saveServerStaffChildRows: jest.fn(),
     saveServerChildProgrammeEnrollmentRows: jest.fn(),
@@ -62,7 +61,6 @@ jest.mock('../src/db/repositories/childrenRepository', () => ({
 jest.mock('../src/db/repositories/classesRepository', () => ({
   classesRepository: {
     getClasses: jest.fn(),
-    getUnsyncedClasses: jest.fn(),
     saveServerClassRows: jest.fn(),
     saveClass: jest.fn(),
     updateClass: jest.fn(),
@@ -80,8 +78,6 @@ jest.mock('../src/db/repositories/groupsRepository', () => ({
   groupsRepository: {
     getGroups: jest.fn(),
     getVisibleChildrenGroups: jest.fn(),
-    getUnsyncedGroups: jest.fn(),
-    getUnsyncedChildrenGroups: jest.fn(),
     saveServerGroupRows: jest.fn(),
     saveServerChildrenGroupRows: jest.fn(),
   },
@@ -100,6 +96,7 @@ jest.mock('../src/db/repositories/syncOutboxRepository', () => ({
 }));
 
 jest.mock('../src/services/preloadedChildData', () => ({
+  PULL_SCOPE_COMPLETENESS_LIMIT: 1000,
   pullPreloadedChildData: jest.fn(),
 }));
 
@@ -125,7 +122,7 @@ jest.mock('../src/db/repositories/repositoryRuntime', () => ({
 }));
 
 jest.mock('../src/services/supabaseRequestQueue', () => ({
-  enqueueSupabaseRequest: jest.fn(async () => ({ data: [], error: null })),
+  enqueueSupabaseRequest: jest.fn(),
 }));
 
 jest.mock('../src/services/locationService', () => ({
@@ -212,15 +209,11 @@ describe('context render isolation', () => {
     timeTrackingApi = null;
     getSyncStatus.mockResolvedValue(statusWith());
     childrenRepository.getMyChildren.mockResolvedValue([]);
-    childrenRepository.getUnsyncedChildren.mockResolvedValue([]);
     groupsRepository.getGroups.mockResolvedValue([]);
     groupsRepository.getVisibleChildrenGroups.mockResolvedValue([]);
-    groupsRepository.getUnsyncedGroups.mockResolvedValue([]);
-    groupsRepository.getUnsyncedChildrenGroups.mockResolvedValue([]);
     syncOutboxRepository.getPendingHardDeleteIds.mockResolvedValue(new Set());
     schoolsRepository.getAll.mockResolvedValue([]);
     classesRepository.getClasses.mockResolvedValue([]);
-    classesRepository.getUnsyncedClasses.mockResolvedValue([]);
     jobTitlesRepository.getAll.mockResolvedValue([]);
     classesRepository.saveServerClassRows.mockResolvedValue({ applied: 0, skipped: 0 });
     classEaAssignmentsRepository.saveServerRows.mockResolvedValue({ applied: 0, skipped: 0 });
@@ -234,7 +227,19 @@ describe('context render isolation', () => {
     groupsRepository.saveServerChildrenGroupRows.mockResolvedValue({ applied: 0, skipped: 0 });
     groupEaAssignmentsRepository.saveServerRows.mockResolvedValue({ applied: 0, skipped: 0 });
     fetchAndCacheSchools.mockResolvedValue([]);
-    enqueueSupabaseRequest.mockResolvedValue({ data: [], error: null });
+    enqueueSupabaseRequest.mockResolvedValue({
+      activeProgrammeId: 'programme-a',
+      scopes: {
+        programmeAssignment: {
+          ok: true,
+          rows: [{ programme_id: 'programme-a' }],
+          complete: true,
+          failureKind: null,
+        },
+        classes: { ok: true, rows: [], complete: true, failureKind: null },
+        classEaAssignments: { ok: true, rows: [], complete: true, failureKind: null },
+      },
+    });
     timeEntriesRepository.getActiveTimeEntry.mockResolvedValue(null);
     timeEntriesRepository.saveTimeEntry.mockResolvedValue(true);
     timeEntriesRepository.createOpenTimeEntry.mockResolvedValue(true);
@@ -325,7 +330,6 @@ describe('context render isolation', () => {
       expect(schoolsRepository.getAll).toHaveBeenCalled();
       expect(fetchAndCacheSchools).toHaveBeenCalled();
       expect(classesRepository.getClasses).toHaveBeenCalledWith({ userId: 'user-1' });
-      expect(classesRepository.getUnsyncedClasses).toHaveBeenCalled();
       expect(classesApi.loading).toBe(false);
     });
   });
@@ -347,7 +351,6 @@ describe('context render isolation', () => {
       expect(schoolsRepository.getAll).toHaveBeenCalled();
       expect(fetchAndCacheSchools).toHaveBeenCalled();
       expect(classesRepository.getClasses).toHaveBeenCalledWith({ userId: 'user-1' });
-      expect(classesRepository.getUnsyncedClasses).toHaveBeenCalled();
       expect(classesApi.loading).toBe(false);
     });
     const rendersAfterSettle = classesRenders;
