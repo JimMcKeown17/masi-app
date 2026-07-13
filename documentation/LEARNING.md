@@ -1188,5 +1188,29 @@ Key takeaways:
 31. **Creator SELECT on parent rows is a sync requirement.** It is not only a convenience read policy when parent rows sync before their junction rows.
 32. **Immutable identity rows need insert-or-ignore retry semantics.** Do not let an outbox `insert` retry turn into an identity-changing update.
 
-**Last Updated**: 2026-05-26
+---
+
+## Chapter 23: Read Work Should Scale With Screens, Not Rows
+
+The Sprint 3 bottleneck was not SQLite itself. It was repository shape. Session and assessment reads loaded parent rows, then issued one child-table query per parent. That makes latency proportional to history size even when the screen needs only a recent window or a few totals.
+
+The durable pattern is to keep deep behavior behind additive repository options:
+
+1. Filter by programme, EA, and local date in SQL before hydration.
+2. Load related rows in one `IN (...)` query and assemble the result in memory.
+3. Use grouped counts when the screen needs totals rather than full domain objects.
+4. Preserve existing output order and summary override rules so faster reads do not quietly change behavior.
+
+Query-count tests are the architectural boundary. Result assertions prove correctness for one fixture, while statement budgets prove the cost does not grow back into N+1 behavior as history expands.
+
+The write-side lesson is similar but not identical. Assessment items and attendees still require one domain write plus one outbox write per row because enqueue-per-row semantics are part of the offline contract. The safe optimization was to remove repeated owner-resolution reads by carrying already-known ownership into the enqueue call. This cuts latency without changing transactions, payloads, ordering, or retry identity.
+
+Key takeaways:
+
+33. **Bound first, hydrate second.** A repository should discard irrelevant rows before loading related data.
+34. **Aggregate screens should use aggregate contracts.** Do not construct hundreds of objects to display three numbers.
+35. **Performance invariants need statement budgets.** Data equality alone does not catch an N+1 regression.
+36. **Known transaction context is reusable evidence.** Passing a resolved owner avoids redundant reads while preserving the same outbox stamp.
+
+**Last Updated**: 2026-07-12
 **Document Status**: Living document - updated as we build
