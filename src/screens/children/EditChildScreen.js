@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { View, StyleSheet, ScrollView, KeyboardAvoidingView, Platform, Alert, TouchableOpacity, TouchableWithoutFeedback, Modal } from 'react-native';
+import { View, StyleSheet, ScrollView, KeyboardAvoidingView, Platform, Alert, TouchableOpacity } from 'react-native';
 import {
   Text,
   TextInput,
@@ -8,7 +8,6 @@ import {
   HelperText,
   Snackbar,
 } from 'react-native-paper';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { colors, spacing, borderRadius } from '../../constants/colors';
 import SectionHeader from '../../components/common/SectionHeader';
 import { useChildren } from '../../context/ChildrenContext';
@@ -18,10 +17,10 @@ import GroupPickerBottomSheet from '../../components/children/GroupPickerBottomS
 import { compareGroups, getGroupColor } from '../../utils/groupHelpers';
 import { NO_TEXT_SUGGESTIONS } from '../../constants/textInputProps';
 import ChipSelector from '../../components/forms/ChipSelector';
+import SelectSheet from '../../components/common/SelectSheet';
 
 export default function EditChildScreen({ route, navigation }) {
   const { childId } = route.params;
-  const insets = useSafeAreaInsets();
   const { children, groups, childrenGroups, updateChild, deleteChild } = useChildren();
   const { classes, schools } = useClasses();
 
@@ -315,64 +314,26 @@ export default function EditChildScreen({ route, navigation }) {
         onGroupChanged={() => setRefreshKey(k => k + 1)}
       />
 
-      {/* Class Picker Bottom Sheet */}
-      <Modal
+      <SelectSheet
         visible={classPickerVisible}
-        transparent
-        animationType="slide"
-        onRequestClose={() => setClassPickerVisible(false)}
-      >
-        <TouchableWithoutFeedback
-          onPress={() => setClassPickerVisible(false)}
-          accessibilityRole="button"
-          accessibilityLabel="Dismiss class picker"
-        >
-          <View style={styles.classPickerBackdrop} />
-        </TouchableWithoutFeedback>
-        <View style={[styles.classPickerSheet, { paddingBottom: Math.max(insets.bottom, spacing.lg) }]}>
-          <View style={styles.classPickerHandle} />
-          <Text variant="titleMedium" style={styles.classPickerTitle}>Choose Class</Text>
-          <Text variant="bodySmall" style={styles.classPickerSubtitle}>
-            {child.first_name} {child.last_name}
-          </Text>
-          <ScrollView bounces={false}>
-            {classes.map(cls => {
-              const school = schools.find(s => s.id === cls.school_id);
-              const isSelected = cls.id === child?.class_id;
-              return (
-                <TouchableOpacity
-                  key={cls.id}
-                  style={[styles.classPickerRow, isSelected && styles.classPickerRowSelected]}
-                  onPress={() => handleClassSelect(cls.id)}
-                  accessibilityRole="button"
-                  accessibilityLabel={`Select class ${cls.name}`}
-                  accessibilityState={{ selected: isSelected }}
-                >
-                  <View style={{ flex: 1 }}>
-                    <Text variant="bodyLarge" style={[
-                      styles.classPickerRowName,
-                      isSelected && { color: colors.primary, fontWeight: '700' },
-                    ]}>
-                      {cls.name}
-                    </Text>
-                    <Text variant="bodySmall" style={styles.classPickerRowDetail}>
-                      {school?.name || 'Unknown school'} • {cls.grade} • {cls.teacher}
-                    </Text>
-                  </View>
-                  {isSelected && (
-                    <Text style={styles.classPickerCheck}>✓</Text>
-                  )}
-                </TouchableOpacity>
-              );
-            })}
-            {classes.length === 0 && (
-              <Text variant="bodyMedium" style={styles.classPickerEmpty}>
-                No classes available. Create a class first.
-              </Text>
-            )}
-          </ScrollView>
-        </View>
-      </Modal>
+        onDismiss={() => setClassPickerVisible(false)}
+        title="Choose Class"
+        subtitle={`${child.first_name} ${child.last_name}`}
+        dismissLabel="Dismiss class picker"
+        options={classes.map(cls => {
+          const school = schools.find(item => item.id === cls.school_id);
+          return {
+            key: cls.id,
+            label: cls.name,
+            description: `${school?.name || 'Unknown school'} • ${cls.grade} • ${cls.teacher}`,
+            accessibilityLabel: `Select class ${cls.name}`,
+          };
+        })}
+        selectedKey={child?.class_id || null}
+        onSelect={handleClassSelect}
+        emptyMessage="No classes available. Create a class first."
+        maxHeight="60%"
+      />
 
       <Snackbar
         visible={snackbar.visible}
@@ -494,71 +455,5 @@ const styles = StyleSheet.create({
   deleteButton: {
     marginBottom: spacing.lg,
     borderColor: colors.error,
-  },
-  // Class picker bottom sheet
-  classPickerBackdrop: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
-  },
-  classPickerSheet: {
-    position: 'absolute',
-    bottom: 0,
-    left: 0,
-    right: 0,
-    backgroundColor: colors.surface,
-    borderTopLeftRadius: borderRadius.lg,
-    borderTopRightRadius: borderRadius.lg,
-    maxHeight: '60%',
-    paddingHorizontal: spacing.lg,
-  },
-  classPickerHandle: {
-    width: 36,
-    height: 4,
-    backgroundColor: colors.border,
-    borderRadius: 2,
-    alignSelf: 'center',
-    marginTop: spacing.sm,
-    marginBottom: spacing.xs,
-  },
-  classPickerTitle: {
-    fontWeight: '700',
-    marginTop: spacing.sm,
-  },
-  classPickerSubtitle: {
-    color: colors.textSecondary,
-    marginBottom: spacing.md,
-  },
-  classPickerRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingVertical: spacing.md,
-    paddingHorizontal: spacing.md,
-    backgroundColor: colors.cardBackground,
-    borderRadius: borderRadius.sm,
-    marginBottom: spacing.sm,
-    borderWidth: 1,
-    borderColor: colors.border,
-  },
-  classPickerRowSelected: {
-    borderColor: colors.primary,
-    borderWidth: 2,
-  },
-  classPickerRowName: {
-    fontWeight: '500',
-  },
-  classPickerRowDetail: {
-    color: colors.textSecondary,
-    marginTop: 2,
-  },
-  classPickerCheck: {
-    color: colors.primary,
-    fontSize: 18,
-    fontWeight: '700',
-  },
-  classPickerEmpty: {
-    color: colors.textSecondary,
-    textAlign: 'center',
-    padding: spacing.lg,
   },
 });

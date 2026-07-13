@@ -776,7 +776,7 @@ Plan: `docs/superpowers/plans/2026-07-13-design-foundation.md`
 - [x] Task 1: Move group helpers out of the picker component
 - [x] Task 2: Build the shared BottomSheet primitive
 - [x] Task 3: Render the three existing sheets through BottomSheet
-- [ ] Task 4: Convert class and child pickers to SelectSheet
+- [x] Task 4: Convert class and child pickers to SelectSheet
 - [ ] Task 5: Convert session and assessment pickers to SelectSheet
 - [ ] Task 6: Extract shared assessment capture chrome
 - [ ] Task 7: Virtualize the session roster

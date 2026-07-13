@@ -7,15 +7,13 @@ import {
   Card,
   HelperText,
   Snackbar,
-  Portal,
-  Dialog,
-  RadioButton,
 } from 'react-native-paper';
 import { colors, spacing } from '../../constants/colors';
 import SectionHeader from '../../components/common/SectionHeader';
 import { useClasses } from '../../context/ClassesContext';
 import { GRADES, HOME_LANGUAGES } from '../../constants/options';
 import { NO_TEXT_SUGGESTIONS } from '../../constants/textInputProps';
+import SelectSheet from '../../components/common/SelectSheet';
 
 export default function EditClassScreen({ route, navigation }) {
   const { classId } = route.params;
@@ -31,9 +29,9 @@ export default function EditClassScreen({ route, navigation }) {
   const [teacher, setTeacher] = useState('');
   const [homeLanguage, setHomeLanguage] = useState('');
 
-  const [schoolDialogVisible, setSchoolDialogVisible] = useState(false);
-  const [gradeDialogVisible, setGradeDialogVisible] = useState(false);
-  const [languageDialogVisible, setLanguageDialogVisible] = useState(false);
+  const [schoolPickerVisible, setSchoolPickerVisible] = useState(false);
+  const [gradePickerVisible, setGradePickerVisible] = useState(false);
+  const [languagePickerVisible, setLanguagePickerVisible] = useState(false);
 
   const [errors, setErrors] = useState({});
   const [loading, setLoading] = useState(false);
@@ -140,8 +138,8 @@ export default function EditClassScreen({ route, navigation }) {
               mode="outlined"
               style={styles.input}
               editable={false}
-              right={<TextInput.Icon icon="chevron-down" onPress={() => schools.length > 0 && setSchoolDialogVisible(true)} />}
-              onPressIn={() => schools.length > 0 && setSchoolDialogVisible(true)}
+              right={<TextInput.Icon icon="chevron-down" onPress={() => schools.length > 0 && setSchoolPickerVisible(true)} />}
+              onPressIn={() => schools.length > 0 && setSchoolPickerVisible(true)}
               error={!!errors.school}
             />
             {errors.school && <HelperText type="error">{errors.school}</HelperText>}
@@ -154,8 +152,8 @@ export default function EditClassScreen({ route, navigation }) {
               mode="outlined"
               style={styles.input}
               editable={false}
-              right={<TextInput.Icon icon="chevron-down" onPress={() => setGradeDialogVisible(true)} />}
-              onPressIn={() => setGradeDialogVisible(true)}
+              right={<TextInput.Icon icon="chevron-down" onPress={() => setGradePickerVisible(true)} />}
+              onPressIn={() => setGradePickerVisible(true)}
               error={!!errors.grade}
             />
             {errors.grade && <HelperText type="error">{errors.grade}</HelperText>}
@@ -193,8 +191,8 @@ export default function EditClassScreen({ route, navigation }) {
               mode="outlined"
               style={styles.input}
               editable={false}
-              right={<TextInput.Icon icon="chevron-down" onPress={() => setLanguageDialogVisible(true)} />}
-              onPressIn={() => setLanguageDialogVisible(true)}
+              right={<TextInput.Icon icon="chevron-down" onPress={() => setLanguagePickerVisible(true)} />}
+              onPressIn={() => setLanguagePickerVisible(true)}
               error={!!errors.homeLanguage}
             />
             {errors.homeLanguage && <HelperText type="error">{errors.homeLanguage}</HelperText>}
@@ -224,72 +222,40 @@ export default function EditClassScreen({ route, navigation }) {
         </Button>
       </ScrollView>
 
-      {/* School Dialog */}
-      <Portal>
-        <Dialog visible={schoolDialogVisible} onDismiss={() => setSchoolDialogVisible(false)}>
-          <Dialog.Title>Select School</Dialog.Title>
-          <Dialog.ScrollArea style={styles.dialogScrollArea}>
-            <ScrollView>
-              <RadioButton.Group
-                onValueChange={(value) => {
-                  const school = schools.find(s => s.id === value);
-                  setSchoolId(value);
-                  setSchoolName(school?.name || '');
-                  setSchoolDialogVisible(false);
-                }}
-                value={schoolId}
-              >
-                {schools.map(s => (
-                  <RadioButton.Item key={s.id} label={s.name} value={s.id} />
-                ))}
-              </RadioButton.Group>
-            </ScrollView>
-          </Dialog.ScrollArea>
-          <Dialog.Actions>
-            <Button onPress={() => setSchoolDialogVisible(false)}>Cancel</Button>
-          </Dialog.Actions>
-        </Dialog>
-      </Portal>
+      <SelectSheet
+        visible={schoolPickerVisible}
+        onDismiss={() => setSchoolPickerVisible(false)}
+        title="Select School"
+        dismissLabel="Dismiss school picker"
+        options={schools.map(school => ({ key: school.id, label: school.name }))}
+        selectedKey={schoolId}
+        onSelect={(value) => {
+          const school = schools.find(item => item.id === value);
+          setSchoolId(value);
+          setSchoolName(school?.name || '');
+        }}
+        cancelLabel="Cancel"
+      />
 
-      {/* Grade Dialog */}
-      <Portal>
-        <Dialog visible={gradeDialogVisible} onDismiss={() => setGradeDialogVisible(false)}>
-          <Dialog.Title>Select Grade</Dialog.Title>
-          <Dialog.Content>
-            <RadioButton.Group
-              onValueChange={(value) => {
-                setGrade(value);
-                setGradeDialogVisible(false);
-              }}
-              value={grade}
-            >
-              {GRADES.map(g => (
-                <RadioButton.Item key={g} label={g} value={g} />
-              ))}
-            </RadioButton.Group>
-          </Dialog.Content>
-        </Dialog>
-      </Portal>
+      <SelectSheet
+        visible={gradePickerVisible}
+        onDismiss={() => setGradePickerVisible(false)}
+        title="Select Grade"
+        dismissLabel="Dismiss grade picker"
+        options={GRADES.map(value => ({ key: value, label: value }))}
+        selectedKey={grade}
+        onSelect={setGrade}
+      />
 
-      {/* Home Language Dialog */}
-      <Portal>
-        <Dialog visible={languageDialogVisible} onDismiss={() => setLanguageDialogVisible(false)}>
-          <Dialog.Title>Select Home Language</Dialog.Title>
-          <Dialog.Content>
-            <RadioButton.Group
-              onValueChange={(value) => {
-                setHomeLanguage(value);
-                setLanguageDialogVisible(false);
-              }}
-              value={homeLanguage}
-            >
-              {HOME_LANGUAGES.map(lang => (
-                <RadioButton.Item key={lang} label={lang} value={lang} />
-              ))}
-            </RadioButton.Group>
-          </Dialog.Content>
-        </Dialog>
-      </Portal>
+      <SelectSheet
+        visible={languagePickerVisible}
+        onDismiss={() => setLanguagePickerVisible(false)}
+        title="Select Home Language"
+        dismissLabel="Dismiss home language picker"
+        options={HOME_LANGUAGES.map(value => ({ key: value, label: value }))}
+        selectedKey={homeLanguage}
+        onSelect={setHomeLanguage}
+      />
 
       <Snackbar
         visible={snackbar.visible}
@@ -320,9 +286,6 @@ const styles = StyleSheet.create({
   },
   button: {
     marginTop: spacing.lg,
-  },
-  dialogScrollArea: {
-    maxHeight: 300,
   },
   deleteButton: {
     marginBottom: spacing.lg,

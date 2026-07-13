@@ -8,10 +8,11 @@ const mockDeleteClass = jest.fn();
 const mockGetChildrenInClass = jest.fn(() => []);
 const mockNavigationGoBack = jest.fn();
 let mockClasses;
+let mockSchools;
 
 jest.mock('../src/context/ClassesContext', () => ({
   useClasses: () => ({
-    schools: [{ id: 'school-1', name: 'Sunrise Primary' }],
+    schools: mockSchools,
     classes: mockClasses,
     updateClass: mockUpdateClass,
     deleteClass: mockDeleteClass,
@@ -38,6 +39,10 @@ const collectNativeTextInputs = (node) => {
 
 beforeEach(() => {
   jest.clearAllMocks();
+  mockSchools = [
+    { id: 'school-1', name: 'Sunrise Primary' },
+    { id: 'school-2', name: 'Hilltop School' },
+  ];
   mockClasses = [{
     id: 'class-1',
     school_id: 'school-1',
@@ -93,5 +98,36 @@ describe('EditClassScreen', () => {
     screen.rerender(classScreenElement());
 
     expect(screen.getByDisplayValue('Typed Class')).toBeTruthy();
+  });
+
+  test('saves the selected school id, grade, and home language', async () => {
+    const screen = renderScreen();
+    const pickerButtons = screen.getAllByTestId('right-icon-adornment');
+
+    fireEvent.press(pickerButtons[0]);
+    fireEvent.press(screen.getByText('Hilltop School'));
+    expect(screen.getByDisplayValue('Hilltop School')).toBeTruthy();
+
+    fireEvent.press(pickerButtons[1]);
+    fireEvent.press(screen.getByText('Grade 2'));
+
+    fireEvent.press(pickerButtons[2]);
+    fireEvent.press(screen.getByText('English'));
+
+    fireEvent.press(screen.getByText('Save Changes'));
+
+    await waitFor(() => expect(mockUpdateClass).toHaveBeenCalledWith('class-1', expect.objectContaining({
+      school_id: 'school-2',
+      grade: 'Grade 2',
+      home_language: 'English',
+    })));
+  });
+
+  test('keeps the visible Cancel action on the school picker', () => {
+    const screen = renderScreen();
+
+    fireEvent.press(screen.getAllByTestId('right-icon-adornment')[0]);
+
+    expect(screen.getByText('Cancel')).toBeTruthy();
   });
 });
