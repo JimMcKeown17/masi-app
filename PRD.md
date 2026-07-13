@@ -844,6 +844,19 @@ Plan: `docs/superpowers/plans/2026-07-12-sprint3-read-path.md`
 
 Sprint 3 implementation complete 2026-07-12. Query budgets are pinned at 3 reads for 30 sessions, 3 reads for 30 assessments, and 5 reads for the Home repository bundle. Completion writes remain intentionally row-based: 124 writes and 0 owner-resolution reads for a 61-item assessment; 22 writes and 0 owner-resolution reads for a 10-attendee session. Final Node 20 gates: unit `156/903` and integration `25/190` green. The device experience gate remains Jim-owned after merge.
 
+#### Sprint 4A: Storage Facade Retirement and Batched Pull Persistence
+Branch: `improvement/s4a-facade-retirement`
+Plan: `docs/superpowers/plans/2026-07-13-sprint4a-facade-retirement.md`
+
+- [x] Pin consumer-visible repository row shapes before facade removal
+- [x] Move device settings, reference data, children, groups, memberships, and classes onto repository-owned paths
+- [x] Persist each pulled table in one happy-path writer transaction with per-row fallback for constraint failures
+- [x] Split cache refresh from network pulls and remove duplicate refresh work
+- [x] Delete `src/utils/storage.js` and add local migration v7 for retired sidecar cleanup
+- [x] Update the pull merge contract, migration pins, and final unit and integration gates
+
+Sprint 4A implementation complete 2026-07-13 after the R1-R15 review loop. Final Node 20 gates: unit `161/929` and integration `28/210` green. Sprint 4A is not releasable on its own: no preview or production build may be cut until Sprint 4B adds foreground and reconnect pull scheduling and merges into the same release tree.
+
 #### Sync auth hardening (#43-45)
 Branch: `fix/sync-auth-hardening`
 Plan: `docs/superpowers/plans/2026-07-06-sync-auth-hardening.md`

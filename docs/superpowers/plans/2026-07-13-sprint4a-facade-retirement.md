@@ -76,41 +76,41 @@ Re-review pass 2 (same reviewer, verdict BUILD-WITH-FIXES; all fixes applied to 
 
 **Files:** Create `__tests__/contextRowShape.test.js` (register in the integration config the way `serverPullGuard.test.js` is).
 
-- [ ] GREEN characterization baseline (R11 — this is deliberately not a RED step): the suite pins CURRENT behavior through the facade, so it must pass on the pre-change tree; its value is staying green after every later task. Seed a real SQLite database (migrated via the existing test adapter) with: one child (+ active cea/cpe/ccm for user `user-1`, programme, class), one group + membership, one class + class EA assignment, one hidden child (`hidden_at` set), one archived class.
-- [ ] Assert through the CURRENT read path (`storage.getMyChildren('user-1')`, `storage.getGroups({ userId })`, `storage.getChildrenGroups()`, `storage.getClasses({ userId })`) the exact fields screens consume (verified consumers 2026-07-13): children `id`, `first_name`, `last_name`, `preferred_name`, `age`, `gender`, `class_id`, `hidden_at`, `synced`; groups `id`, `name`, `programme_id`, `class_id`; memberships `id`, `child_id`, `group_id`, `removed_at`; classes `id`, `name`, `grade`, `teacher`, `home_language`, `school_id`, `archived_at`, `synced` (`home_language` is a CLASSES column; `staff_id` is deliberately unpinned — see locked decision 4). Pin field VALUES, not whole-object equality (facade reads strip nulls; repository reads will not — assert on the fields, tolerate extras).
-- [ ] Structure the suite so the read entry points are swappable in one place (a `readers` object at the top). Later tasks re-point `readers` to repositories; every assertion below stays untouched.
-- [ ] Run: `PATH=$HOME/.nvm/versions/node/v20.19.4/bin:$PATH npx jest contextRowShape --silent` → PASS.
-- [ ] Commit: `test(pull): pin consumer-visible row shapes ahead of facade retirement`
+- [x] GREEN characterization baseline (R11 — this is deliberately not a RED step): the suite pins CURRENT behavior through the facade, so it must pass on the pre-change tree; its value is staying green after every later task. Seed a real SQLite database (migrated via the existing test adapter) with: one child (+ active cea/cpe/ccm for user `user-1`, programme, class), one group + membership, one class + class EA assignment, one hidden child (`hidden_at` set), one archived class.
+- [x] Assert through the CURRENT read path (`storage.getMyChildren('user-1')`, `storage.getGroups({ userId })`, `storage.getChildrenGroups()`, `storage.getClasses({ userId })`) the exact fields screens consume (verified consumers 2026-07-13): children `id`, `first_name`, `last_name`, `preferred_name`, `age`, `gender`, `class_id`, `hidden_at`, `synced`; groups `id`, `name`, `programme_id`, `class_id`; memberships `id`, `child_id`, `group_id`, `removed_at`; classes `id`, `name`, `grade`, `teacher`, `home_language`, `school_id`, `archived_at`, `synced` (`home_language` is a CLASSES column; `staff_id` is deliberately unpinned — see locked decision 4). Pin field VALUES, not whole-object equality (facade reads strip nulls; repository reads will not — assert on the fields, tolerate extras).
+- [x] Structure the suite so the read entry points are swappable in one place (a `readers` object at the top). Later tasks re-point `readers` to repositories; every assertion below stays untouched.
+- [x] Run: `PATH=$HOME/.nvm/versions/node/v20.19.4/bin:$PATH npx jest contextRowShape --silent` → PASS.
+- [x] Commit: `test(pull): pin consumer-visible row shapes ahead of facade retirement`
 
 ### Task 2: Delete the dead facade surface
 
 **Files:** Modify `src/utils/storage.js`; migrate `__tests__/offlineSync.pendingSessions.test.js`.
 
-- [ ] For each method in the dead set — time entries (`getTimeEntries`/`saveTimeEntry`/`updateTimeEntry`), sessions (`getSessions`/`saveSession`/`updateSession`), `getChildren`, `getStaffChildren`/`deleteStaffChild`/`getUnsyncedStaffChildren`, `archiveChild`, assessments (`getAssessments`/`saveAssessment`/`getUnsyncedAssessments`), mastery (all five), `getUnsyncedRecords`/`markAsSynced`/`markAsUnsynced`/`getAllUnsyncedCount`, sync-queue block, sync-meta block, `clear`/`clearDomainData` — run `rg -n "storage\.<name>|\b<name>\b.*storage" src __tests__ test-support scripts` first (R3: production AND test callers). A production hit outside `storage.js` = STOP, report, do not delete. A test hit = migrate or delete that pin IN THIS TASK (known: the `getAllUnsyncedCount` pin at `storage-classes.test.js:116`).
-- [ ] Migrate `offlineSync.pendingSessions.test.js` to drive `sessionsRepository` directly as a GREEN boundary refactor (R9): all existing assertions (missing-programme rejection, payload stripping, synced read-back) survive verbatim at the repository boundary; no facade-normalization assertion exists to flip. Add ONE NEW repository test: `saveSession` with a missing `user_id` rejects (producer guard).
-- [ ] Remove the facade mocks and their vacuous not-called pins from `__tests__/LetterAssessmentScreen.plan5.test.js` and `__tests__/useTimeTracking.plan5.test.js` in THIS task (R3): once the dead methods are gone, "screen does not call the facade" is meaningless, and the module import breaks at deletion time otherwise.
-- [ ] Delete the dead methods and the now-orphaned helpers: `ensureChildExists`, `clone`, `DEFAULT_SYNC_META`, `TABLE_BY_SYNC_KEY`, `getSyncMetaKey`, unused imports. `ensureSchoolExists`/`ensureClassExists`/`normalize*ForLegacyFacade` stay for now (live `saveChild`/`saveClass` callers) — they die in Tasks 5-6.
-- [ ] Run full unit suite: `PATH=... npx jest --silent --maxWorkers=4` → all green (shape pins included).
-- [ ] Commit: `refactor(storage): delete the dead two-thirds of the facade`
+- [x] For each method in the dead set — time entries (`getTimeEntries`/`saveTimeEntry`/`updateTimeEntry`), sessions (`getSessions`/`saveSession`/`updateSession`), `getChildren`, `getStaffChildren`/`deleteStaffChild`/`getUnsyncedStaffChildren`, `archiveChild`, assessments (`getAssessments`/`saveAssessment`/`getUnsyncedAssessments`), mastery (all five), `getUnsyncedRecords`/`markAsSynced`/`markAsUnsynced`/`getAllUnsyncedCount`, sync-queue block, sync-meta block, `clear`/`clearDomainData` — run `rg -n "storage\.<name>|\b<name>\b.*storage" src __tests__ test-support scripts` first (R3: production AND test callers). A production hit outside `storage.js` = STOP, report, do not delete. A test hit = migrate or delete that pin IN THIS TASK (known: the `getAllUnsyncedCount` pin at `storage-classes.test.js:116`).
+- [x] Migrate `offlineSync.pendingSessions.test.js` to drive `sessionsRepository` directly as a GREEN boundary refactor (R9): all existing assertions (missing-programme rejection, payload stripping, synced read-back) survive verbatim at the repository boundary; no facade-normalization assertion exists to flip. Add ONE NEW repository test: `saveSession` with a missing `user_id` rejects (producer guard).
+- [x] Remove the facade mocks and their vacuous not-called pins from `__tests__/LetterAssessmentScreen.plan5.test.js` and `__tests__/useTimeTracking.plan5.test.js` in THIS task (R3): once the dead methods are gone, "screen does not call the facade" is meaningless, and the module import breaks at deletion time otherwise.
+- [x] Delete the dead methods and the now-orphaned helpers: `ensureChildExists`, `clone`, `DEFAULT_SYNC_META`, `TABLE_BY_SYNC_KEY`, `getSyncMetaKey`, unused imports. `ensureSchoolExists`/`ensureClassExists`/`normalize*ForLegacyFacade` stay for now (live `saveChild`/`saveClass` callers) — they die in Tasks 5-6.
+- [x] Run full unit suite: `PATH=... npx jest --silent --maxWorkers=4` → all green (shape pins included).
+- [x] Commit: `refactor(storage): delete the dead two-thirds of the facade`
 
 ### Task 3: deviceSettings module (profile + capture mode)
 
 **Files:** Create `src/services/deviceSettings.js`, `__tests__/deviceSettings.test.js`; modify `src/context/AuthContext.js`, `src/screens/main/ProfileScreen.js`, **`src/utils/assessmentRouting.js` (R2 — imports the facade as `from './storage'` and reads capture mode at launch)**; migrate `__tests__/storageCaptureMode.test.js` into the new suite; re-point mocks in `__tests__/profileCaptureModeToggle.test.js`, `__tests__/AuthContext.test.js`, `__tests__/authColdStartRestore.test.js`, `__tests__/assessmentRouting.test.js`; migrate the profile pins at `storage-classes.test.js:130` (R3).
 
-- [ ] RED: `deviceSettings.test.js` — `getUserProfile` null default; `saveUserProfile`/`getUserProfile` round-trip under key `user_profile`; `clearUserProfile` removes; `getCaptureMode` resolves through `resolveCaptureMode` with stored `assessment_capture_mode` as device fallback; `setCaptureMode('bogus')` throws; `setCaptureMode('sequential')` round-trips. Port every behavioral case from `storageCaptureMode.test.js`.
-- [ ] GREEN: implement `src/services/deviceSettings.js` exporting `{ getUserProfile, saveUserProfile, clearUserProfile, getCaptureMode, setCaptureMode }` over `localStateRepository`, keys and validation copied verbatim from `storage.js:583-606`.
-- [ ] Migrate AuthContext, ProfileScreen, AND `assessmentRouting.js` (R2: preserve the fresh-at-launch `getCaptureMode()` read; run the focused routing suite green BEFORE deleting the facade methods); re-point the four mock sites; migrate/delete the `storage-classes.test.js` profile pins (R3); delete the five methods + `USER_PROFILE_KEY`/`CAPTURE_MODE_KEY` from `storage.js`; delete `storageCaptureMode.test.js`.
-- [ ] Run: focused suites then full unit → green.
-- [ ] Commit: `refactor(settings): deviceSettings module over localStateRepository; facade profile and capture-mode paths retired`
+- [x] RED: `deviceSettings.test.js` — `getUserProfile` null default; `saveUserProfile`/`getUserProfile` round-trip under key `user_profile`; `clearUserProfile` removes; `getCaptureMode` resolves through `resolveCaptureMode` with stored `assessment_capture_mode` as device fallback; `setCaptureMode('bogus')` throws; `setCaptureMode('sequential')` round-trips. Port every behavioral case from `storageCaptureMode.test.js`.
+- [x] GREEN: implement `src/services/deviceSettings.js` exporting `{ getUserProfile, saveUserProfile, clearUserProfile, getCaptureMode, setCaptureMode }` over `localStateRepository`, keys and validation copied verbatim from `storage.js:583-606`.
+- [x] Migrate AuthContext, ProfileScreen, AND `assessmentRouting.js` (R2: preserve the fresh-at-launch `getCaptureMode()` read; run the focused routing suite green BEFORE deleting the facade methods); re-point the four mock sites; migrate/delete the `storage-classes.test.js` profile pins (R3); delete the five methods + `USER_PROFILE_KEY`/`CAPTURE_MODE_KEY` from `storage.js`; delete `storageCaptureMode.test.js`.
+- [x] Run: focused suites then full unit → green.
+- [x] Commit: `refactor(settings): deviceSettings module over localStateRepository; facade profile and capture-mode paths retired`
 
 ### Task 4: Lookups + schools off the facade
 
 **Files:** Modify `src/context/LookupsContext.js`, `src/context/ClassesContext.js` (schools read only), `src/services/offlineSync.js` (`fetchAndCacheSchools`), `src/utils/storage.js`.
 
-- [ ] RED: extend/adjust the existing Lookups/Classes suites: job titles load from `jobTitlesRepository.getAll()` and persist via `jobTitlesRepository.replaceFromServer`; `fetchAndCacheSchools` persists via `schoolsRepository.replaceFromServer` and returns server rows; `ClassesContext.loadSchools` renders repository schools (no `storage_payload` read).
-- [ ] GREEN: point LookupsContext at `jobTitlesRepository`; `ClassesContext.getSchools` path at `schoolsRepository.getAll()`; rewrite `fetchAndCacheSchools` repository-direct; migrate the school pins at `storage-classes.test.js:22` and `ClassesContext.test.js:101` (R3); delete `getSchools`/`setSchools`/`getJobTitles`/`saveJobTitles` from the facade.
-- [ ] Run full unit suite → green.
-- [ ] Commit: `refactor(reference): lookups and schools read repositories directly`
+- [x] RED: extend/adjust the existing Lookups/Classes suites: job titles load from `jobTitlesRepository.getAll()` and persist via `jobTitlesRepository.replaceFromServer`; `fetchAndCacheSchools` persists via `schoolsRepository.replaceFromServer` and returns server rows; `ClassesContext.loadSchools` renders repository schools (no `storage_payload` read).
+- [x] GREEN: point LookupsContext at `jobTitlesRepository`; `ClassesContext.getSchools` path at `schoolsRepository.getAll()`; rewrite `fetchAndCacheSchools` repository-direct; migrate the school pins at `storage-classes.test.js:22` and `ClassesContext.test.js:101` (R3); delete `getSchools`/`setSchools`/`getJobTitles`/`saveJobTitles` from the facade.
+- [x] Run full unit suite → green.
+- [x] Commit: `refactor(reference): lookups and schools read repositories directly`
 
 ### Task 5: Batched server-row persistence (`saveServer*Rows`) + transaction-count budget
 
@@ -118,14 +118,14 @@ Re-review pass 2 (same reviewer, verdict BUILD-WITH-FIXES; all fixes applied to 
 
 **Produces (4B relies on these exact names):** `childrenRepository.saveServerChildRows(rows)`, `.saveServerStaffChildRows(rows)`, `.saveServerChildProgrammeEnrollmentRows(rows)`, `.saveServerChildClassMembershipRows(rows)`; `classesRepository.saveServerClassRows(rows)`; `classEaAssignmentsRepository.saveServerRows(rows)`; `groupsRepository.saveServerGroupRows(rows)`, `.saveServerChildrenGroupRows(rows)`. Each: one writer transaction, per-row semantics identical to the single-row save, returns `{ applied, skipped }`.
 
-- [ ] PRE-STEP (R5): fix `classEaAssignmentsRepository.save` — normalize + pull-guard first, `assertRlsRequiredFields` only when `shouldEnqueueOutbox(record)`. RED first: a synced server assignment with `created_by: null` currently throws; GREEN: it persists with no outbox row while a local pending assignment with `created_by: null` still rejects.
-- [ ] Extend the counting adapter: record `withExclusiveTransactionAsync` invocations (`record('transaction', 'BEGIN EXCLUSIVE')`), expose `getTransactionCount()`; keep the inner task receiving the counting adapter so statements inside are still logged.
-- [ ] RED (budget): with 30 pulled children + 30 assignments + 30 enrollments + 30 memberships, EACH batch API performs exactly ONE transaction (assert per API, not in aggregate — R11) and zero `storage_payload` writes at the repository layer; golden-compare the resulting SQLite rows against 30x per-row `saveChildRecord` (etc.) output on a twin database, using fixed explicit timestamps in fixtures (R11).
-- [ ] RED (FK order, R4): fresh migrated DB with `PRAGMA foreign_keys = ON`, no pre-existing classes; persisting a pulled child+class bundle in the fixed order (`classes` → `children` → `child_ea_assignments` → `child_programme_enrollments` → `child_class_memberships` → `groups` → `child_group_memberships`) succeeds and the child appears through `getMyChildren`; a pulled child whose `class_id` has no class row after the classes batch persists with `class_id` nulled (support log line) instead of failing the batch.
-- [ ] RED (guard preserved): seed one locally-`pending` child among the 30; the batch skips it (`skipped: 1`), its row and outbox payload untouched — same assertion shape as `serverPullGuard.test.js`.
-- [ ] GREEN: implement the eight batch functions (loop the existing per-row save inside one `runRepositoryTransaction`).
-- [ ] Run: `npm run test:integration` → green.
-- [ ] Commit: `perf(pull): one writer transaction per table for server-row persistence`
+- [x] PRE-STEP (R5): fix `classEaAssignmentsRepository.save` — normalize + pull-guard first, `assertRlsRequiredFields` only when `shouldEnqueueOutbox(record)`. RED first: a synced server assignment with `created_by: null` currently throws; GREEN: it persists with no outbox row while a local pending assignment with `created_by: null` still rejects.
+- [x] Extend the counting adapter: record `withExclusiveTransactionAsync` invocations (`record('transaction', 'BEGIN EXCLUSIVE')`), expose `getTransactionCount()`; keep the inner task receiving the counting adapter so statements inside are still logged.
+- [x] RED (budget): with 30 pulled children + 30 assignments + 30 enrollments + 30 memberships, EACH batch API performs exactly ONE transaction (assert per API, not in aggregate — R11) and zero `storage_payload` writes at the repository layer; golden-compare the resulting SQLite rows against 30x per-row `saveChildRecord` (etc.) output on a twin database, using fixed explicit timestamps in fixtures (R11).
+- [x] RED (FK order, R4): fresh migrated DB with `PRAGMA foreign_keys = ON`, no pre-existing classes; persisting a pulled child+class bundle in the fixed order (`classes` → `children` → `child_ea_assignments` → `child_programme_enrollments` → `child_class_memberships` → `groups` → `child_group_memberships`) succeeds and the child appears through `getMyChildren`; a pulled child whose `class_id` has no class row after the classes batch persists with `class_id` nulled (support log line) instead of failing the batch.
+- [x] RED (guard preserved): seed one locally-`pending` child among the 30; the batch skips it (`skipped: 1`), its row and outbox payload untouched — same assertion shape as `serverPullGuard.test.js`.
+- [x] GREEN: implement the eight batch functions (loop the existing per-row save inside one `runRepositoryTransaction`).
+- [x] Run: `npm run test:integration` → green.
+- [x] Commit: `perf(pull): one writer transaction per table for server-row persistence`
 
 ### Task 6: ChildrenContext off the facade + cache/pull split
 
@@ -152,14 +152,14 @@ Re-review pass 2 (same reviewer, verdict BUILD-WITH-FIXES; all fixes applied to 
 
 **Files:** Delete `src/utils/storage.js`, `__tests__/storage-classes.test.js` (whatever pins remain after R3's per-task migrations); modify `src/db/migrations.js`, `__tests__/sqliteFoundation.test.js` (the local migration-runner suite, per R10), `__tests__/serverPullGuard.test.js` (retire the facade read-back case; keep every repository-level case), `__tests__/syncContractCompleteness.test.js` (comment), `documentation/rls-sync-contract-map.md`.
 
-- [ ] Verify zero remaining imports (R2's broad guard, not the narrow one): `rg -n "utils/storage|from '\.\./storage'|from '\./storage'|require\(.*storage'\)" src __tests__ test-support scripts` plus a manual check for destructuring/bracket access on `storage` → only files being deleted in this task. Any other hit = STOP and migrate it first.
-- [ ] RED (migration): extend the migration pin suite — after migrating a database seeded with `storage_payload:children:x`, `sync_meta`, `sync_queue`, and `user_profile` keys, v7 deletes `storage_payload:*` and `sync_queue` and PRESERVES `sync_meta` and `user_profile` (sync_meta is live syncStateRepository property); `CURRENT_SCHEMA_VERSION` is 7; re-running migrations is a no-op (idempotent).
-- [ ] GREEN: append migration `{ version: 7, name: 'local_state_sidecar_cleanup' }` per locked decision 7.
-- [ ] Port any still-valuable behavior pins from `storage-classes.test.js` to `classesRepository`/context suites before deleting it; delete the facade and its test; update the contract map's Pull Merge Invariant facade bullet (sidecar gone; repositories are the only write path; UI merge still `mergeServerRows` until 4B) and the `syncContractCompleteness` comment.
-- [ ] Full gates: `PATH=... npx jest --silent --maxWorkers=4` AND `npm run test:integration` → exact counts reported.
-- [ ] Commit: `refactor(storage)!: retire the facade; migration v7 purges the sidecar`
+- [x] Verify zero remaining imports (R2's broad guard, not the narrow one): `rg -n "utils/storage|from '\.\./storage'|from '\./storage'|require\(.*storage'\)" src __tests__ test-support scripts` plus a manual check for destructuring/bracket access on `storage` → only files being deleted in this task. Any other hit = STOP and migrate it first.
+- [x] RED (migration): extend the migration pin suite — after migrating a database seeded with `storage_payload:children:x`, `sync_meta`, `sync_queue`, and `user_profile` keys, v7 deletes `storage_payload:*` and `sync_queue` and PRESERVES `sync_meta` and `user_profile` (sync_meta is live syncStateRepository property); `CURRENT_SCHEMA_VERSION` is 7; re-running migrations is a no-op (idempotent).
+- [x] GREEN: append migration `{ version: 7, name: 'local_state_sidecar_cleanup' }` per locked decision 7.
+- [x] Port any still-valuable behavior pins from `storage-classes.test.js` to `classesRepository`/context suites before deleting it; delete the facade and its test; update the contract map's Pull Merge Invariant facade bullet (sidecar gone; repositories are the only write path; UI merge still `mergeServerRows` until 4B) and the `syncContractCompleteness` comment.
+- [x] Full gates: `PATH=... npx jest --silent --maxWorkers=4` AND `npm run test:integration` → exact counts reported.
+- [x] Commit: `refactor(storage)!: retire the facade; migration v7 purges the sidecar`
 
 ### Task 9: Wrap
 
-- [ ] One row in `documentation/sqlite-refactor-log.md` (bugs found, deviations, gate counts); tick this plan's checkboxes; PRD.md progress entry for Sprint 4A.
-- [ ] Commit: `docs(s4a): facade retirement wrap - checklists, log row`
+- [x] One row in `documentation/sqlite-refactor-log.md` (bugs found, deviations, gate counts); tick this plan's checkboxes; PRD.md progress entry for Sprint 4A.
+- [x] Commit: `docs(s4a): facade retirement wrap - checklists, log row`
