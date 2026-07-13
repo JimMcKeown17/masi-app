@@ -2,7 +2,7 @@ import React from 'react';
 import { fireEvent, render, waitFor } from '@testing-library/react-native';
 import ProfileScreen from '../src/screens/main/ProfileScreen';
 import { CAPTURE_MODES } from '../src/constants/egraConstants';
-import { storage } from '../src/utils/storage';
+import { deviceSettings } from '../src/services/deviceSettings';
 
 const mockSignOut = jest.fn();
 const mockUpdatePassword = jest.fn();
@@ -101,8 +101,8 @@ jest.mock('../src/utils/releaseMetadata', () => ({
   }),
 }));
 
-jest.mock('../src/utils/storage', () => ({
-  storage: {
+jest.mock('../src/services/deviceSettings', () => ({
+  deviceSettings: {
     getCaptureMode: jest.fn(),
     setCaptureMode: jest.fn(),
   },
@@ -113,12 +113,12 @@ const renderProfile = () => render(<ProfileScreen navigation={{ goBack: jest.fn(
 describe('ProfileScreen assessment capture mode toggle', () => {
   beforeEach(() => {
     jest.clearAllMocks();
-    storage.getCaptureMode.mockResolvedValue(CAPTURE_MODES.SEQUENTIAL);
-    storage.setCaptureMode.mockResolvedValue(undefined);
+    deviceSettings.getCaptureMode.mockResolvedValue(CAPTURE_MODES.SEQUENTIAL);
+    deviceSettings.setCaptureMode.mockResolvedValue(undefined);
   });
 
   test('loads and displays the stored grid capture mode', async () => {
-    storage.getCaptureMode.mockResolvedValue(CAPTURE_MODES.GRID);
+    deviceSettings.getCaptureMode.mockResolvedValue(CAPTURE_MODES.GRID);
 
     const screen = renderProfile();
 
@@ -131,7 +131,7 @@ describe('ProfileScreen assessment capture mode toggle', () => {
   });
 
   test('pressing Step-by-Step saves the new capture mode', async () => {
-    storage.getCaptureMode.mockResolvedValue(CAPTURE_MODES.GRID);
+    deviceSettings.getCaptureMode.mockResolvedValue(CAPTURE_MODES.GRID);
 
     const screen = renderProfile();
 
@@ -142,14 +142,14 @@ describe('ProfileScreen assessment capture mode toggle', () => {
     fireEvent.press(screen.getByText('Step-by-Step'));
 
     await waitFor(() => {
-      expect(storage.setCaptureMode).toHaveBeenCalledWith(CAPTURE_MODES.SEQUENTIAL);
+      expect(deviceSettings.setCaptureMode).toHaveBeenCalledWith(CAPTURE_MODES.SEQUENTIAL);
     });
   });
 
   test('reverts to the previous capture mode when saving fails', async () => {
     jest.spyOn(console, 'error').mockImplementation(() => {});
-    storage.getCaptureMode.mockResolvedValue(CAPTURE_MODES.GRID);
-    storage.setCaptureMode.mockRejectedValueOnce(new Error('write failed'));
+    deviceSettings.getCaptureMode.mockResolvedValue(CAPTURE_MODES.GRID);
+    deviceSettings.setCaptureMode.mockRejectedValueOnce(new Error('write failed'));
 
     const screen = renderProfile();
 
@@ -160,7 +160,7 @@ describe('ProfileScreen assessment capture mode toggle', () => {
     fireEvent.press(screen.getByText('Step-by-Step'));
 
     await waitFor(() => {
-      expect(storage.setCaptureMode).toHaveBeenCalledWith(CAPTURE_MODES.SEQUENTIAL);
+      expect(deviceSettings.setCaptureMode).toHaveBeenCalledWith(CAPTURE_MODES.SEQUENTIAL);
       expect(screen.getByTestId('capture-mode-grid').props.accessibilityState.selected).toBe(true);
     });
     expect(screen.getByTestId('capture-mode-sequential').props.accessibilityState.selected).toBe(false);

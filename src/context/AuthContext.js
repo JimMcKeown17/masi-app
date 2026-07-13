@@ -3,7 +3,7 @@ import { supabase } from '../services/supabaseClient';
 import { enqueueSupabaseRequest } from '../services/supabaseRequestQueue';
 import { pullReferenceData } from '../services/offlineSync';
 import { readPersistedSession, clearPersistedSession } from '../services/persistedAuthSession';
-import { storage } from '../utils/storage';
+import { deviceSettings } from '../services/deviceSettings';
 import { normalizeProfile } from '../utils/profileNormalizer';
 
 const AuthContext = createContext({});
@@ -105,7 +105,7 @@ export const AuthProvider = ({ children }) => {
           return;
         }
         localSignOutCommittedRef.current = true;
-        await storage.clearUserProfile();
+        await deviceSettings.clearUserProfile();
         await clearPersistedSession();
         commitSignedOutState('signed-out');
         return;
@@ -174,7 +174,7 @@ export const AuthProvider = ({ children }) => {
 
     try {
       // Try to load from local storage first
-      const localProfile = await storage.getUserProfile();
+      const localProfile = await deviceSettings.getUserProfile();
       if (!isCurrentProfileLoad(userId, profileLoadVersion)) {
         return;
       }
@@ -187,7 +187,7 @@ export const AuthProvider = ({ children }) => {
             setLoading(false);
           }
         } else {
-          await storage.clearUserProfile();
+          await deviceSettings.clearUserProfile();
         }
       }
 
@@ -209,7 +209,7 @@ export const AuthProvider = ({ children }) => {
       } else if (data) {
         const normalizedProfile = normalizeProfile(data);
         setProfile(normalizedProfile);
-        await storage.saveUserProfile(normalizedProfile);
+        await deviceSettings.saveUserProfile(normalizedProfile);
       }
     } catch (error) {
       console.error('Error in loadUserProfile:', error);
@@ -245,7 +245,7 @@ export const AuthProvider = ({ children }) => {
     setProfile(null);
     setLoading(false);
     try {
-      await storage.clearUserProfile();
+      await deviceSettings.clearUserProfile();
       await clearPersistedSession();
     } catch (error) {
       console.error('Sign out local cleanup error:', error);

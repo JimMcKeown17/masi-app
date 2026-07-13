@@ -4,7 +4,7 @@ import { Pressable } from 'react-native';
 import { AuthProvider, useAuth } from '../src/context/AuthContext';
 import { supabase } from '../src/services/supabaseClient';
 import { pullReferenceData } from '../src/services/offlineSync';
-import { storage } from '../src/utils/storage';
+import { deviceSettings } from '../src/services/deviceSettings';
 
 jest.mock('../src/services/supabaseClient', () => ({
   supabase: {
@@ -20,8 +20,8 @@ jest.mock('../src/services/supabaseClient', () => ({
   },
 }));
 
-jest.mock('../src/utils/storage', () => ({
-  storage: {
+jest.mock('../src/services/deviceSettings', () => ({
+  deviceSettings: {
     getUserProfile: jest.fn(),
     saveUserProfile: jest.fn(),
     clearUserProfile: jest.fn(),
@@ -77,9 +77,9 @@ describe('AuthContext Plan 5 startup discipline', () => {
       return { data: { subscription: { unsubscribe } } };
     });
     supabase.auth.signOut.mockResolvedValue({ error: null });
-    storage.getUserProfile.mockResolvedValue(null);
-    storage.saveUserProfile.mockResolvedValue(true);
-    storage.clearUserProfile.mockResolvedValue(true);
+    deviceSettings.getUserProfile.mockResolvedValue(null);
+    deviceSettings.saveUserProfile.mockResolvedValue(true);
+    deviceSettings.clearUserProfile.mockResolvedValue(true);
     pullReferenceData.mockResolvedValue({});
     mockProfileQuery(Promise.resolve({ data: profileRow, error: null }));
   });
@@ -97,7 +97,7 @@ describe('AuthContext Plan 5 startup discipline', () => {
       authCallback('SIGNED_IN', { user: { id: 'user-1', email: 'ea@example.org' } });
     });
 
-    expect(storage.getUserProfile).not.toHaveBeenCalled();
+    expect(deviceSettings.getUserProfile).not.toHaveBeenCalled();
     expect(supabase.from).not.toHaveBeenCalled();
 
     await act(async () => {
@@ -166,7 +166,7 @@ describe('AuthContext Plan 5 startup discipline', () => {
       ...profileRow,
       first_name: 'Cached Nomsa',
     };
-    storage.getUserProfile.mockResolvedValue(cachedProfile);
+    deviceSettings.getUserProfile.mockResolvedValue(cachedProfile);
     pullReferenceData.mockReturnValue(referencePull.promise);
     mockProfileQuery(profileFetch.promise);
 
@@ -230,7 +230,7 @@ describe('AuthContext Plan 5 startup discipline', () => {
     await waitFor(() => expect(result.current.user).toEqual(expect.objectContaining({ id: 'user-1' })));
 
     pullReferenceData.mockClear();
-    storage.getUserProfile.mockClear();
+    deviceSettings.getUserProfile.mockClear();
     supabase.from.mockClear();
 
     act(() => {
@@ -244,7 +244,7 @@ describe('AuthContext Plan 5 startup discipline', () => {
 
     expect(result.current.session).toEqual(expect.objectContaining({ access_token: 'new-token' }));
     expect(pullReferenceData).not.toHaveBeenCalled();
-    expect(storage.getUserProfile).not.toHaveBeenCalled();
+    expect(deviceSettings.getUserProfile).not.toHaveBeenCalled();
     expect(supabase.from).not.toHaveBeenCalled();
   });
 
@@ -276,7 +276,7 @@ describe('AuthContext Plan 5 startup discipline', () => {
 
     expect(result.current.user).toBeNull();
     expect(result.current.profile).toBeNull();
-    expect(storage.saveUserProfile).not.toHaveBeenCalledWith(expect.objectContaining({ id: 'user-1' }));
+    expect(deviceSettings.saveUserProfile).not.toHaveBeenCalledWith(expect.objectContaining({ id: 'user-1' }));
   });
 
   test('manual sign-out invalidates in-flight profile loads before Supabase emits SIGNED_OUT', async () => {
@@ -310,7 +310,7 @@ describe('AuthContext Plan 5 startup discipline', () => {
     });
 
     expect(result.current.profile).toBeNull();
-    expect(storage.saveUserProfile).not.toHaveBeenCalledWith(expect.objectContaining({ id: 'user-1' }));
+    expect(deviceSettings.saveUserProfile).not.toHaveBeenCalledWith(expect.objectContaining({ id: 'user-1' }));
 
     await act(async () => {
       signOutRequest.resolve({ error: null });
@@ -319,7 +319,7 @@ describe('AuthContext Plan 5 startup discipline', () => {
   });
 
   test('local cached profile is ignored when it belongs to another user', async () => {
-    storage.getUserProfile.mockResolvedValueOnce({
+    deviceSettings.getUserProfile.mockResolvedValueOnce({
       ...profileRow,
       id: 'other-user',
       first_name: 'Stale',
