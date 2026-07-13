@@ -137,7 +137,7 @@ describe('AuthContext Plan 5 startup discipline', () => {
     expect(authConsumerRenders).toBe(rendersAfterMount);
   });
 
-  test('authenticated startup pulls reference data before publishing user to child providers', async () => {
+  test('authenticated startup publishes the user without waiting for reference data', async () => {
     const referencePull = deferred();
     pullReferenceData.mockReturnValue(referencePull.promise);
 
@@ -154,17 +154,47 @@ describe('AuthContext Plan 5 startup discipline', () => {
     });
 
     expect(pullReferenceData).toHaveBeenCalledWith({ userId: 'user-1' });
-    expect(result.current.user).toBeNull();
-    expect(supabase.from).not.toHaveBeenCalled();
+    expect(pullReferenceData).toHaveBeenCalledTimes(1);
+    expect(result.current.user).toEqual(expect.objectContaining({ id: 'user-1' }));
+    expect(result.current.loading).toBe(false);
+  });
+
+  test('authenticated startup publishes a cached profile while background requests are pending', async () => {
+    const referencePull = deferred();
+    const profileFetch = deferred();
+    const cachedProfile = {
+      ...profileRow,
+      first_name: 'Cached Nomsa',
+    };
+    storage.getUserProfile.mockResolvedValue(cachedProfile);
+    pullReferenceData.mockReturnValue(referencePull.promise);
+    mockProfileQuery(profileFetch.promise);
+
+    const { result } = renderHook(() => useAuth(), { wrapper });
+    await waitFor(() => expect(authCallback).toEqual(expect.any(Function)));
+
+    act(() => {
+      authCallback('SIGNED_IN', { user: { id: 'user-1', email: 'ea@example.org' } });
+    });
 
     await act(async () => {
-      referencePull.resolve({});
-      await referencePull.promise;
+      jest.runOnlyPendingTimers();
+      await Promise.resolve();
       await Promise.resolve();
     });
 
-    await waitFor(() => expect(result.current.user).toEqual(expect.objectContaining({ id: 'user-1' })));
-    await waitFor(() => expect(supabase.from).toHaveBeenCalledWith('users'));
+    expect(pullReferenceData).toHaveBeenCalledWith({ userId: 'user-1' });
+    expect(supabase.from).toHaveBeenCalledWith('users');
+    expect(result.current.profile).toEqual(expect.objectContaining({
+      id: 'user-1',
+      first_name: 'Cached Nomsa',
+    }));
+
+    await act(async () => {
+      profileFetch.resolve({ data: profileRow, error: null });
+      await profileFetch.promise;
+      await Promise.resolve();
+    });
   });
 
   test('auth startup relies on INITIAL_SESSION event instead of a duplicate getSession call', async () => {

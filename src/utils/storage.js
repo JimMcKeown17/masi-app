@@ -11,6 +11,7 @@ import {
   schoolsRepository,
 } from '../db/repositories/referenceDataRepository';
 import { localStateRepository } from '../db/repositories/localStateRepository';
+import { syncOutboxRepository } from '../db/repositories/syncOutboxRepository';
 import { resolveCaptureMode, isValidCaptureMode } from '../constants/egraConstants';
 import { resolveDatabase, runRepositoryTransaction } from '../db/repositories/repositoryRuntime';
 import {
@@ -276,6 +277,10 @@ export const storage = {
 
   async getUnsyncedChildren() {
     return await childrenRepository.getUnsyncedChildren();
+  },
+
+  async getPendingHardDeleteIds(options) {
+    return await syncOutboxRepository.getPendingHardDeleteIds(options);
   },
 
   async getStaffChildren() {

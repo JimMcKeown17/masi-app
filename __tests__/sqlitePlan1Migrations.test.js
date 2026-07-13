@@ -281,6 +281,19 @@ describe('Plan 1 SQLite Supabase migrations', () => {
     expect(sql).toMatch(/delete from public\.children where id = p_child_id/i);
   });
 
+  test('idempotent child delete migration returns success for an absent child before authorization', () => {
+    const migration = readMigrations().find(({ filename }) => (
+      filename === '20260712202409_masi_idempotent_child_delete.sql'
+    ));
+    const sql = compactSql(migration?.sql || '');
+
+    expect(migration).toBeDefined();
+    expect(sql).toMatch(/language plpgsql[\s\S]+security definer[\s\S]+set search_path = ''/i);
+    expect(sql).toMatch(
+      /if not exists \( select 1 from public\.children c where c\.id = p_child_id \) then return true; end if;[\s\S]+if not exists \([\s\S]+c\.created_by = \(select auth\.uid\(\)\)[\s\S]+raise exception 'Not authorized to delete child %'/i
+    );
+  });
+
   test('class EA assignment policy supports admin-precreated classes in the actor school', () => {
     const alignment = latestMigrationMatching(/zazi_alignment_schema/);
     const policy = policyBlock(alignment.sql, 'class_ea_assignments_insert_self');

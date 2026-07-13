@@ -285,6 +285,42 @@ describe('SQLite sync outbox repository', () => {
     });
   });
 
+  test('getPendingHardDeleteIds returns active hard-deletes for the owner plus legacy rows', async () => {
+    const enqueueDelete = (recordId, ownerUserId) => outbox.enqueue({
+      tableName: 'children',
+      recordId,
+      operation: 'hard_delete',
+      payload: { id: recordId },
+      ownerUserId,
+    });
+    await enqueueDelete('legacy-child', null);
+    await enqueueDelete('pending-child', 'ea-a');
+    await enqueueDelete('failed-child', 'ea-a');
+    await enqueueDelete('in-flight-child', 'ea-a');
+    await enqueueDelete('other-owner-child', 'ea-b');
+    await enqueueDelete('terminal-child', 'ea-a');
+    await outbox.enqueue({
+      tableName: 'children',
+      recordId: 'updated-child',
+      operation: 'update',
+      payload: { id: 'updated-child' },
+      ownerUserId: 'ea-a',
+    });
+    await outbox.markRetriableFailure('children:failed-child:hard_delete', { errorMessage: 'offline' });
+    await outbox.markInFlight(['children:in-flight-child:hard_delete']);
+    await outbox.markTerminalFailure('children:terminal-child:hard_delete', { errorMessage: 'denied' });
+
+    expect(await outbox.getPendingHardDeleteIds({
+      tableName: 'children',
+      ownerUserId: 'ea-a',
+    })).toEqual(new Set([
+      'legacy-child',
+      'pending-child',
+      'failed-child',
+      'in-flight-child',
+    ]));
+  });
+
   test('getSyncStatus splits waiting, backed-off, and needs-attention counts in one snapshot', async () => {
     await outbox.enqueue({ tableName: 'children', recordId: 'pending-1', operation: 'insert', payload: { id: 'pending-1' } });
     await outbox.enqueue({ tableName: 'sessions', recordId: 'ready-failed-1', operation: 'insert', payload: { id: 'ready-failed-1' } });

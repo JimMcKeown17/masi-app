@@ -63,6 +63,7 @@ export const ChildrenProvider = ({ children }) => {
         unsyncedChildren,
         unsyncedGroups,
         unsyncedMemberships,
+        pendingChildDeleteIds,
       ] = await Promise.all([
         storage.getMyChildren(activeUserId),
         storage.getGroups({ userId: activeUserId }),
@@ -70,6 +71,10 @@ export const ChildrenProvider = ({ children }) => {
         storage.getUnsyncedChildren(),
         storage.getUnsyncedGroups(),
         storage.getUnsyncedChildrenGroups(),
+        storage.getPendingHardDeleteIds({
+          tableName: 'children',
+          ownerUserId: activeUserId,
+        }),
       ]);
       if (activeUserIdRef.current !== activeUserId) return;
       setChildrenList(cachedChildren);
@@ -80,17 +85,28 @@ export const ChildrenProvider = ({ children }) => {
         const pulled = await pullPreloadedChildData({ userId: activeUserId });
         const errors = pulled.errors || [];
         if (activeUserIdRef.current !== activeUserId) return;
+        const pulledChildren = (pulled.children || [])
+          .filter((row) => !pendingChildDeleteIds.has(row.id));
+        const pulledChildEaAssignments = (pulled.childEaAssignments || [])
+          .filter((row) => !pendingChildDeleteIds.has(row.child_id));
+        const pulledChildProgrammeEnrollments = (pulled.childProgrammeEnrollments || [])
+          .filter((row) => !pendingChildDeleteIds.has(row.child_id));
+        const pulledChildClassMemberships = (pulled.childClassMemberships || [])
+          .filter((row) => !pendingChildDeleteIds.has(row.child_id));
 
-        if (shouldApplyPulledRows(pulled.children, errors)) {
-          const merged = mergeServerRows(cachedChildren, pulled.children, { unpushedRows: unsyncedChildren });
-          await saveRows(pulled.children, storage.saveChild);
+        if (shouldApplyPulledRows(pulledChildren, errors)) {
+          const merged = mergeServerRows(cachedChildren, pulledChildren, {
+            unpushedRows: unsyncedChildren,
+            pendingDeleteIds: pendingChildDeleteIds,
+          });
+          await saveRows(pulledChildren, storage.saveChild);
           setChildrenList(merged);
         }
 
         await saveRows(pulled.classes, storage.saveClass);
-        await saveRows(pulled.childEaAssignments, storage.saveStaffChild);
-        await saveRows(pulled.childProgrammeEnrollments, storage.saveChildProgrammeEnrollment);
-        await saveRows(pulled.childClassMemberships, storage.saveChildClassMembership);
+        await saveRows(pulledChildEaAssignments, storage.saveStaffChild);
+        await saveRows(pulledChildProgrammeEnrollments, storage.saveChildProgrammeEnrollment);
+        await saveRows(pulledChildClassMemberships, storage.saveChildClassMembership);
 
         if (shouldApplyPulledRows(pulled.groups, errors)) {
           const merged = mergeServerRows(cachedGroups, pulled.groups, { unpushedRows: unsyncedGroups });

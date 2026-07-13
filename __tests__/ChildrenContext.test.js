@@ -30,6 +30,7 @@ jest.mock('../src/utils/storage', () => ({
     getUnsyncedChildren: jest.fn(),
     getUnsyncedGroups: jest.fn(),
     getUnsyncedChildrenGroups: jest.fn(),
+    getPendingHardDeleteIds: jest.fn(),
     saveChild: jest.fn(),
     createChild: jest.fn(),
     saveStaffChild: jest.fn(),
@@ -71,6 +72,7 @@ describe('ChildrenContext Plan 5 hydration', () => {
     storage.getUnsyncedChildren.mockResolvedValue([]);
     storage.getUnsyncedGroups.mockResolvedValue([]);
     storage.getUnsyncedChildrenGroups.mockResolvedValue([]);
+    storage.getPendingHardDeleteIds.mockResolvedValue(new Set());
     storage.saveChild.mockResolvedValue(true);
     storage.createChild.mockResolvedValue(true);
     storage.saveStaffChild.mockResolvedValue(true);
@@ -292,6 +294,38 @@ describe('ChildrenContext Plan 5 hydration', () => {
     await waitFor(() => expect(result.current.loading).toBe(false));
 
     expect(result.current.childrenGroups.map(row => row.id)).not.toContain('removed-membership');
+  });
+
+  test('a pending child hard-delete suppresses the child and its pulled relationships', async () => {
+    storage.getPendingHardDeleteIds.mockResolvedValueOnce(new Set(['child-9']));
+    pullPreloadedChildData.mockResolvedValueOnce({
+      children: [{ id: 'child-9', first_name: 'Deleted', synced: true }],
+      classes: [],
+      childEaAssignments: [{ id: 'cea-9', child_id: 'child-9', user_id: 'user-1', synced: true }],
+      childProgrammeEnrollments: [{ id: 'cpe-9', child_id: 'child-9', programme_id: 'programme-a', synced: true }],
+      childClassMemberships: [{ id: 'ccm-9', child_id: 'child-9', class_id: 'class-1', synced: true }],
+      groups: [],
+      childrenGroups: [],
+      errors: [],
+    });
+
+    const { result } = renderHook(() => useChildren(), { wrapper });
+
+    await waitFor(() => expect(storage.getPendingHardDeleteIds).toHaveBeenCalledWith({
+      tableName: 'children',
+      ownerUserId: 'user-1',
+    }));
+    await waitFor(() => expect(result.current.loading).toBe(false));
+
+    expect(result.current.children.map(row => row.id)).not.toContain('child-9');
+    expect(storage.saveChild).not.toHaveBeenCalledWith(expect.objectContaining({ id: 'child-9' }));
+    expect(storage.saveStaffChild).not.toHaveBeenCalledWith(expect.objectContaining({ child_id: 'child-9' }));
+    expect(storage.saveChildProgrammeEnrollment).not.toHaveBeenCalledWith(
+      expect.objectContaining({ child_id: 'child-9' })
+    );
+    expect(storage.saveChildClassMembership).not.toHaveBeenCalledWith(
+      expect.objectContaining({ child_id: 'child-9' })
+    );
   });
 
   test('deleteChild uses repository-backed delete/archive instead of hidden_at update', async () => {
