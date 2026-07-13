@@ -1,4 +1,8 @@
-import { resolveDatabase, runRepositoryTransaction } from './repositoryRuntime';
+import {
+  resolveDatabase,
+  runBatchWithPerRowFallback,
+  runRepositoryTransaction,
+} from './repositoryRuntime';
 import {
   assertRlsRequiredFields,
   enqueueDomainOutbox,
@@ -56,17 +60,11 @@ export const createClassEaAssignmentsRepository = ({ database } = {}) => {
     return rows.map(mapDomainRow);
   };
 
-  const saveServerRows = async (rows = []) => runRepositoryTransaction(database, async (txn) => {
-    let applied = 0;
-    let skipped = 0;
-    for (const row of rows) {
-      if (await save(row, { transaction: txn }) === false) {
-        skipped += 1;
-      } else {
-        applied += 1;
-      }
-    }
-    return { applied, skipped };
+  const saveServerRows = async (rows = []) => runBatchWithPerRowFallback({
+    database,
+    rows,
+    saveRow: save,
+    tableName: 'class_ea_assignments',
   });
 
   return { save, saveServerRows, getAll };

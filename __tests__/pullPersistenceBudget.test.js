@@ -138,6 +138,7 @@ describe('batched pull persistence budgets', () => {
       await expect(batchRepository.saveServerChildRows(rows)).resolves.toEqual({
         applied: 30,
         skipped: 0,
+        failed: 0,
       });
       expect(batchDb.getTransactionCount()).toBe(1);
 
@@ -170,6 +171,7 @@ describe('batched pull persistence budgets', () => {
       await expect(repository.saveServerChildRows([row])).resolves.toEqual({
         applied: 1,
         skipped: 0,
+        failed: 0,
       });
       expect(await db.getFirstAsync(
         'select id, class_id from children where id = ?',
@@ -199,6 +201,7 @@ describe('batched pull persistence budgets', () => {
       await expect(batchRepository.saveServerStaffChildRows(rows)).resolves.toEqual({
         applied: 30,
         skipped: 0,
+        failed: 0,
       });
       expect(batchDb.getTransactionCount()).toBe(1);
       for (const row of rows) {
@@ -229,6 +232,7 @@ describe('batched pull persistence budgets', () => {
       await expect(batchRepository.saveServerChildProgrammeEnrollmentRows(rows)).resolves.toEqual({
         applied: 30,
         skipped: 0,
+        failed: 0,
       });
       expect(batchDb.getTransactionCount()).toBe(1);
       for (const row of rows) {
@@ -259,6 +263,7 @@ describe('batched pull persistence budgets', () => {
       await expect(batchRepository.saveServerChildClassMembershipRows(rows)).resolves.toEqual({
         applied: 30,
         skipped: 0,
+        failed: 0,
       });
       expect(batchDb.getTransactionCount()).toBe(1);
       for (const row of rows) {
@@ -270,6 +275,46 @@ describe('batched pull persistence budgets', () => {
     } finally {
       await batchDb.closeAsync();
       await perRowDb.closeAsync();
+    }
+  });
+
+  test('saveServerChildClassMembershipRows isolates a row whose academic year is missing', async () => {
+    const db = await createDatabase();
+    const error = jest.spyOn(console, 'error').mockImplementation(() => {});
+    try {
+      const repository = createChildrenRepository({ database: db });
+      const children = childRows().slice(0, 3);
+      for (const child of children) {
+        await repository.saveChildRecord(child);
+      }
+      const rows = [
+        { ...classMembershipRows()[0], id: 'ccm-valid-a' },
+        {
+          ...classMembershipRows()[1],
+          id: 'ccm-missing-year',
+          academic_year_id: 'year-not-pulled',
+        },
+        { ...classMembershipRows()[2], id: 'ccm-valid-b' },
+      ];
+
+      await expect(repository.saveServerChildClassMembershipRows(rows)).resolves.toEqual({
+        applied: 2,
+        skipped: 0,
+        failed: 1,
+      });
+      expect(await db.getAllAsync(
+        "select id from child_class_memberships where id like 'ccm-valid-%' order by id"
+      )).toEqual([
+        { id: 'ccm-valid-a' },
+        { id: 'ccm-valid-b' },
+      ]);
+      expect(await db.getFirstAsync(
+        "select id from child_class_memberships where id = 'ccm-missing-year'"
+      )).toBeNull();
+      expect(error).toHaveBeenCalledWith(expect.stringContaining('ccm-missing-year'));
+    } finally {
+      error.mockRestore();
+      await db.closeAsync();
     }
   });
 
@@ -293,6 +338,7 @@ describe('batched pull persistence budgets', () => {
       await expect(repository.saveServerChildRows(rows)).resolves.toEqual({
         applied: 29,
         skipped: 1,
+        failed: 0,
       });
       expect(db.getTransactionCount()).toBe(1);
       expect(await db.getFirstAsync(
@@ -320,6 +366,7 @@ describe('batched pull persistence budgets', () => {
       await expect(batchRepository.saveServerClassRows(rows)).resolves.toEqual({
         applied: 30,
         skipped: 0,
+        failed: 0,
       });
       expect(batchDb.getTransactionCount()).toBe(1);
       for (const row of rows) {
@@ -331,6 +378,38 @@ describe('batched pull persistence budgets', () => {
     } finally {
       await batchDb.closeAsync();
       await perRowDb.closeAsync();
+    }
+  });
+
+  test('saveServerClassRows isolates a row whose teacher is missing', async () => {
+    const db = await createDatabase();
+    const error = jest.spyOn(console, 'error').mockImplementation(() => {});
+    try {
+      const repository = createClassesRepository({ database: db });
+      const rows = [
+        { ...classRows()[0], id: 'class-valid-a' },
+        { ...classRows()[1], id: 'class-missing-teacher', teacher_id: 'teacher-not-pulled' },
+        { ...classRows()[2], id: 'class-valid-b' },
+      ];
+
+      await expect(repository.saveServerClassRows(rows)).resolves.toEqual({
+        applied: 2,
+        skipped: 0,
+        failed: 1,
+      });
+      expect(await db.getAllAsync(
+        "select id from classes where id like 'class-valid-%' order by id"
+      )).toEqual([
+        { id: 'class-valid-a' },
+        { id: 'class-valid-b' },
+      ]);
+      expect(await db.getFirstAsync(
+        "select id from classes where id = 'class-missing-teacher'"
+      )).toBeNull();
+      expect(error).toHaveBeenCalledWith(expect.stringContaining('class-missing-teacher'));
+    } finally {
+      error.mockRestore();
+      await db.closeAsync();
     }
   });
 
@@ -352,6 +431,7 @@ describe('batched pull persistence budgets', () => {
       await expect(batchRepository.saveServerRows(rows)).resolves.toEqual({
         applied: 30,
         skipped: 0,
+        failed: 0,
       });
       expect(batchDb.getTransactionCount()).toBe(1);
       for (const row of rows) {
@@ -378,6 +458,7 @@ describe('batched pull persistence budgets', () => {
       await expect(batchRepository.saveServerGroupRows(rows)).resolves.toEqual({
         applied: 30,
         skipped: 0,
+        failed: 0,
       });
       expect(batchDb.getTransactionCount()).toBe(1);
       for (const row of rows) {
@@ -414,6 +495,7 @@ describe('batched pull persistence budgets', () => {
       await expect(batchRepository.saveServerChildrenGroupRows(rows)).resolves.toEqual({
         applied: 30,
         skipped: 0,
+        failed: 0,
       });
       expect(batchDb.getTransactionCount()).toBe(1);
       for (const row of rows) {

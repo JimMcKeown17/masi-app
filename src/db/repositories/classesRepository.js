@@ -1,4 +1,8 @@
-import { resolveDatabase, runRepositoryTransaction } from './repositoryRuntime';
+import {
+  resolveDatabase,
+  runBatchWithPerRowFallback,
+  runRepositoryTransaction,
+} from './repositoryRuntime';
 import {
   classEaAssignmentDomainId,
   enqueueDomainOutbox,
@@ -138,17 +142,11 @@ export const createClassesRepository = ({ database } = {}) => {
     return true;
   });
 
-  const saveServerClassRows = async (rows = []) => runRepositoryTransaction(database, async (txn) => {
-    let applied = 0;
-    let skipped = 0;
-    for (const row of rows) {
-      if (await saveClass(row, { transaction: txn }) === false) {
-        skipped += 1;
-      } else {
-        applied += 1;
-      }
-    }
-    return { applied, skipped };
+  const saveServerClassRows = async (rows = []) => runBatchWithPerRowFallback({
+    database,
+    rows,
+    saveRow: saveClass,
+    tableName: 'classes',
   });
 
   const updateClass = async (id, updates, { transaction } = {}) => runWrite(transaction, async (txn) => {

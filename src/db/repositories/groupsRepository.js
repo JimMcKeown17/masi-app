@@ -1,4 +1,8 @@
-import { resolveDatabase, runRepositoryTransaction } from './repositoryRuntime';
+import {
+  resolveDatabase,
+  runBatchWithPerRowFallback,
+  runRepositoryTransaction,
+} from './repositoryRuntime';
 import {
   enqueueDomainOutbox,
   getActiveProgrammeAssignment,
@@ -261,30 +265,18 @@ export const createGroupsRepository = ({ database } = {}) => {
     return true;
   });
 
-  const saveServerGroupRows = async (rows = []) => runRepositoryTransaction(database, async (txn) => {
-    let applied = 0;
-    let skipped = 0;
-    for (const row of rows) {
-      if (await saveGroup(row, { transaction: txn }) === false) {
-        skipped += 1;
-      } else {
-        applied += 1;
-      }
-    }
-    return { applied, skipped };
+  const saveServerGroupRows = async (rows = []) => runBatchWithPerRowFallback({
+    database,
+    rows,
+    saveRow: saveGroup,
+    tableName: 'groups',
   });
 
-  const saveServerChildrenGroupRows = async (rows = []) => runRepositoryTransaction(database, async (txn) => {
-    let applied = 0;
-    let skipped = 0;
-    for (const row of rows) {
-      if (await addChildToGroup(row, { transaction: txn }) === false) {
-        skipped += 1;
-      } else {
-        applied += 1;
-      }
-    }
-    return { applied, skipped };
+  const saveServerChildrenGroupRows = async (rows = []) => runBatchWithPerRowFallback({
+    database,
+    rows,
+    saveRow: addChildToGroup,
+    tableName: 'child_group_memberships',
   });
 
   const removeChildFromGroup = async (childId, groupId, {
