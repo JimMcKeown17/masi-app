@@ -207,7 +207,9 @@ export const createAssessmentsRepository = ({ database } = {}) => {
       jsonColumns: ['items_tested'],
     }, record);
     if (shouldEnqueueOutbox(record)) {
-      await enqueueDomainOutbox(txn, 'assessments', assessment.id, 'insert', record);
+      await enqueueDomainOutbox(txn, 'assessments', assessment.id, 'insert', record, {
+        ownerRow: record,
+      });
     }
 
     const itemRows = [
@@ -262,7 +264,9 @@ export const createAssessmentsRepository = ({ database } = {}) => {
         jsonColumns: ['metadata'],
       }, itemRecord);
       if (shouldEnqueueOutbox(itemRecord)) {
-        await enqueueDomainOutbox(txn, 'assessment_items', item.id, 'insert', itemRecord);
+        await enqueueDomainOutbox(txn, 'assessment_items', item.id, 'insert', itemRecord, {
+          ownerUserId: record.user_id,
+        });
       }
     }
 

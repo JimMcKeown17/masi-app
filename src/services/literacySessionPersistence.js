@@ -41,10 +41,12 @@ export async function persistLiteracySession({
       return;
     }
 
+    const changedChildIds = Object.keys(letterTrackerChanges);
     const allMastery = await masteryRepository.getLetterMastery({
       transaction,
       userId: programmeScopedSession.user_id,
       programmeId,
+      childIds: changedChildIds,
     });
 
     for (const [childId, changes] of Object.entries(letterTrackerChanges)) {

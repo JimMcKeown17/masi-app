@@ -3,6 +3,9 @@ const mockUseOffline = jest.fn();
 const mockUseClasses = jest.fn();
 const mockUseLookupsContext = jest.fn();
 const mockUseChildren = jest.fn();
+const mockPersistLiteracySession = jest.fn();
+const mockRefreshSyncStatus = jest.fn();
+const mockTriggerBackgroundSync = jest.fn();
 
 jest.mock('@expo/vector-icons', () => new Proxy({}, {
   get: (target, prop) => {
@@ -39,9 +42,12 @@ jest.mock('../src/context/OfflineContext', () => ({ useOffline: () => mockUseOff
 jest.mock('../src/context/ClassesContext', () => ({ useClasses: () => mockUseClasses() }));
 jest.mock('../src/context/LookupsContext', () => ({ useLookupsContext: () => mockUseLookupsContext() }));
 jest.mock('../src/context/ChildrenContext', () => ({ useChildren: () => mockUseChildren() }));
+jest.mock('../src/services/literacySessionPersistence', () => ({
+  persistLiteracySession: (...args) => mockPersistLiteracySession(...args),
+}));
 
 import React from 'react';
-import { render, fireEvent } from '@testing-library/react-native';
+import { render, fireEvent, waitFor } from '@testing-library/react-native';
 import { Alert } from 'react-native';
 import { PaperProvider } from 'react-native-paper';
 import LiteracySessionForm from '../src/screens/sessions/LiteracySessionForm';
@@ -81,17 +87,29 @@ describe('LiteracySessionForm', () => {
       profile: {},
     });
     mockUseOffline.mockReturnValue({
-      refreshSyncStatus: jest.fn(),
-      triggerBackgroundSync: jest.fn(),
+      refreshSyncStatus: mockRefreshSyncStatus,
+      triggerBackgroundSync: mockTriggerBackgroundSync,
     });
-    mockUseClasses.mockReturnValue({ classes: [] });
+    mockUseClasses.mockReturnValue({
+      classes: [{ id: 'class-1', name: 'Grade 1A', home_language: 'English' }],
+    });
     mockUseLookupsContext.mockReturnValue({ jobTitles: [] });
     mockUseChildren.mockReturnValue({
-      children: [],
+      children: [{ id: 'child-1', first_name: 'Amahle', last_name: 'Dlamini', class_id: 'class-1' }],
       groups: [],
       getChildrenInGroup: () => [],
     });
+    mockPersistLiteracySession.mockResolvedValue(true);
+    mockRefreshSyncStatus.mockResolvedValue({ unsyncedCount: 1 });
   });
+
+  const submitValidForm = (screen) => {
+    fireEvent.press(screen.getByText('Amahle Dlamini'));
+    fireEvent.press(screen.getByLabelText('A, not selected'));
+    fireEvent.press(screen.getByText('Select a level'));
+    fireEvent.press(screen.getByText(READING_LEVELS[0]));
+    fireEvent.press(screen.getByText('Submit Session'));
+  };
 
   test('renders the session-capture form scaffold', () => {
     const screen = renderForm();
@@ -125,6 +143,53 @@ describe('LiteracySessionForm', () => {
       const { navigation } = renderForm();
       const event = navigation.emitBeforeRemove();
       expect(event.preventDefault).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('completion ordering', () => {
+    test('does not navigate before persistence commits', async () => {
+      let resolvePersistence;
+      mockPersistLiteracySession.mockReturnValue(new Promise(resolve => {
+        resolvePersistence = resolve;
+      }));
+      const screen = renderForm();
+
+      submitValidForm(screen);
+      await waitFor(() => expect(mockPersistLiteracySession).toHaveBeenCalledTimes(1));
+      expect(screen.navigation.replace).not.toHaveBeenCalled();
+
+      resolvePersistence(true);
+      await waitFor(() => expect(screen.navigation.replace).toHaveBeenCalledTimes(1));
+    });
+
+    test('navigates on commit without waiting for refresh and preserves completion side effects', async () => {
+      mockRefreshSyncStatus.mockReturnValue(new Promise(() => {}));
+      const screen = renderForm();
+
+      submitValidForm(screen);
+
+      await waitFor(() => expect(screen.navigation.replace).toHaveBeenCalledWith(
+        'SessionComplete', { childCount: 1 }
+      ));
+      expect(mockRefreshSyncStatus).toHaveBeenCalledTimes(1);
+      expect(mockTriggerBackgroundSync).toHaveBeenCalledTimes(1);
+      expect(screen.navigation.emitBeforeRemove().preventDefault).not.toHaveBeenCalled();
+    });
+
+    test('keeps navigation successful when the non-blocking refresh rejects', async () => {
+      const refreshError = new Error('status refresh failed');
+      mockRefreshSyncStatus.mockRejectedValue(refreshError);
+      const errorSpy = jest.spyOn(console, 'error').mockImplementation(() => {});
+      const screen = renderForm();
+
+      submitValidForm(screen);
+
+      await waitFor(() => expect(screen.navigation.replace).toHaveBeenCalledTimes(1));
+      await waitFor(() => expect(errorSpy).toHaveBeenCalledWith(
+        'Error refreshing sync status after session save:', refreshError
+      ));
+      expect(mockTriggerBackgroundSync).toHaveBeenCalledTimes(1);
+      errorSpy.mockRestore();
     });
   });
 });

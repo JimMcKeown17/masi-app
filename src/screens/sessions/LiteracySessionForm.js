@@ -337,12 +337,16 @@ export default function LiteracySessionForm({ navigation }) {
         idFactory: uuidv4,
       });
 
-      await refreshSyncStatus();
-      triggerBackgroundSync?.();
       // Replace (not push) so Back can't return to the just-submitted form; the
       // completion screen confirms capture and shows updated daily progress.
       allowLeaveRef.current = true;
       navigation.replace('SessionComplete', { childCount: selectedChildIds.length });
+      triggerBackgroundSync?.();
+      Promise.resolve()
+        .then(() => refreshSyncStatus())
+        .catch((error) => {
+          console.error('Error refreshing sync status after session save:', error);
+        });
     } catch (error) {
       console.error('Error saving session:', error);
       showSnackbar('Failed to save session. Please try again.');
