@@ -1,6 +1,7 @@
 import {
   resolveDatabase,
   runBatchWithPerRowFallback,
+  runReconcileWithMassEndBreaker,
   runRepositoryTransaction,
 } from './repositoryRuntime';
 import {
@@ -151,6 +152,60 @@ export const createGroupsRepository = ({ database } = {}) => {
     transaction ? task(transaction) : runRepositoryTransaction(database, task)
   );
 
+  const buildMembershipReconcile = ({
+    acknowledgedIds,
+    acknowledgedGroupIds,
+    pulledAt,
+    bypassBreaker = false,
+  } = {}) => {
+    if (!Array.isArray(acknowledgedIds) || !Array.isArray(acknowledgedGroupIds) || !pulledAt) {
+      throw new Error(
+        'childrenGroups reconcile requires acknowledgedIds, acknowledgedGroupIds, and pulledAt'
+      );
+    }
+    const acknowledgedIdsJson = JSON.stringify(acknowledgedIds);
+    const acknowledgedGroupIdsJson = JSON.stringify(acknowledgedGroupIds);
+    const activeScopeSql = `
+      from child_group_memberships
+      where group_id in (select value from json_each(?))
+        and removed_at is null
+        and sync_status = 'synced'
+    `;
+    const absentSql = `${activeScopeSql}
+      and id not in (select value from json_each(?))
+    `;
+    return (transaction) => runReconcileWithMassEndBreaker({
+      transaction,
+      scope: 'childrenGroups',
+      pulledAt,
+      bypassBreaker,
+      countCandidates: async (txn) => (
+        await txn.getFirstAsync(
+          `select count(*) as count ${activeScopeSql}`,
+          acknowledgedGroupIdsJson
+        )
+      )?.count,
+      countWouldEnd: async (txn) => (
+        await txn.getFirstAsync(
+          `select count(*) as count ${absentSql}`,
+          acknowledgedGroupIdsJson,
+          acknowledgedIdsJson
+        )
+      )?.count,
+      apply: async (txn) => (
+        await txn.runAsync(`
+          update child_group_memberships
+          set removed_at = ?,
+              updated_at = ?
+          where group_id in (select value from json_each(?))
+            and removed_at is null
+            and sync_status = 'synced'
+            and id not in (select value from json_each(?))
+        `, pulledAt, pulledAt, acknowledgedGroupIdsJson, acknowledgedIdsJson)
+      ).changes,
+    });
+  };
+
   const getGroups = async ({ userId, programmeId } = {}) => {
     const db = await resolveDatabase(database);
     const activeProgrammeId = programmeId || (userId ? await getActiveProgrammeId(db, userId) : null);
@@ -272,11 +327,12 @@ export const createGroupsRepository = ({ database } = {}) => {
     tableName: 'groups',
   });
 
-  const saveServerChildrenGroupRows = async (rows = []) => runBatchWithPerRowFallback({
+  const saveServerChildrenGroupRows = async (rows = [], { reconcile } = {}) => runBatchWithPerRowFallback({
     database,
     rows,
     saveRow: addChildToGroup,
     tableName: 'child_group_memberships',
+    reconcile: reconcile ? buildMembershipReconcile(reconcile) : undefined,
   });
 
   const removeChildFromGroup = async (childId, groupId, {

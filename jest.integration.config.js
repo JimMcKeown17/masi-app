@@ -33,5 +33,6 @@ module.exports = {
     '<rootDir>/__tests__/serverPullGuard.test.js',
     '<rootDir>/__tests__/contextRowShape.test.js',
     '<rootDir>/__tests__/pullPersistenceBudget.test.js',
+    '<rootDir>/__tests__/pullReconcile.integration.test.js',
   ],
 };

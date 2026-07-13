@@ -1,6 +1,7 @@
 import {
   resolveDatabase,
   runBatchWithPerRowFallback,
+  runReconcileWithMassEndBreaker,
   runRepositoryTransaction,
 } from './repositoryRuntime';
 import {
@@ -32,6 +33,64 @@ const COLUMNS = [
 const REQUIRED_RLS_FIELDS = ['class_id', 'ea_user_id', 'programme_id', 'created_by'];
 
 export const createClassEaAssignmentsRepository = ({ database } = {}) => {
+  const buildReconcile = ({
+    acknowledgedClassIds,
+    userId,
+    programmeId,
+    pulledAt,
+    bypassBreaker = false,
+  } = {}) => {
+    if (!Array.isArray(acknowledgedClassIds) || !userId || !programmeId || !pulledAt) {
+      throw new Error(
+        'classEaAssignments reconcile requires acknowledgedClassIds, userId, programmeId, and pulledAt'
+      );
+    }
+    const acknowledgedClassIdsJson = JSON.stringify(acknowledgedClassIds);
+    const activeScopeSql = `
+      from class_ea_assignments
+      where ea_user_id = ?
+        and programme_id = ?
+        and unassigned_at is null
+        and sync_status = 'synced'
+    `;
+    const absentSql = `${activeScopeSql}
+      and class_id not in (select value from json_each(?))
+    `;
+    return (transaction) => runReconcileWithMassEndBreaker({
+      transaction,
+      scope: 'classEaAssignments',
+      pulledAt,
+      bypassBreaker,
+      countCandidates: async (txn) => (
+        await txn.getFirstAsync(
+          `select count(*) as count ${activeScopeSql}`,
+          userId,
+          programmeId
+        )
+      )?.count,
+      countWouldEnd: async (txn) => (
+        await txn.getFirstAsync(
+          `select count(*) as count ${absentSql}`,
+          userId,
+          programmeId,
+          acknowledgedClassIdsJson
+        )
+      )?.count,
+      apply: async (txn) => (
+        await txn.runAsync(`
+          update class_ea_assignments
+          set unassigned_at = ?,
+              updated_at = ?
+          where ea_user_id = ?
+            and programme_id = ?
+            and unassigned_at is null
+            and sync_status = 'synced'
+            and class_id not in (select value from json_each(?))
+        `, pulledAt, pulledAt, userId, programmeId, acknowledgedClassIdsJson)
+      ).changes,
+    });
+  };
+
   const save = async (assignment, { transaction } = {}) => {
     const write = async (txn) => {
       const record = normalizeSyncFields(assignment);
@@ -60,11 +119,12 @@ export const createClassEaAssignmentsRepository = ({ database } = {}) => {
     return rows.map(mapDomainRow);
   };
 
-  const saveServerRows = async (rows = []) => runBatchWithPerRowFallback({
+  const saveServerRows = async (rows = [], { reconcile } = {}) => runBatchWithPerRowFallback({
     database,
     rows,
     saveRow: save,
     tableName: 'class_ea_assignments',
+    reconcile: reconcile ? buildReconcile(reconcile) : undefined,
   });
 
   return { save, saveServerRows, getAll };

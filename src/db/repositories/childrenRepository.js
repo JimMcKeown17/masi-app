@@ -2,6 +2,7 @@ import { v4 as uuidv4 } from 'uuid';
 import {
   resolveDatabase,
   runBatchWithPerRowFallback,
+  runReconcileWithMassEndBreaker,
   runRepositoryTransaction,
 } from './repositoryRuntime';
 import {
@@ -95,12 +96,179 @@ export const createChildrenRepository = ({ database } = {}) => {
   const runWrite = (transaction, task) => (
     transaction ? task(transaction) : runRepositoryTransaction(database, task)
   );
-  const saveServerRows = async (rows, saveRow, tableName) => runBatchWithPerRowFallback({
+  const saveServerRows = async (rows, saveRow, tableName, { reconcile } = {}) => runBatchWithPerRowFallback({
     database,
     rows,
     saveRow,
     tableName,
+    reconcile,
   });
+
+  const buildChildEaReconcile = ({
+    acknowledgedIds,
+    pulledAt,
+    userId,
+    bypassBreaker = false,
+  } = {}) => {
+    if (!Array.isArray(acknowledgedIds) || !pulledAt || !userId) {
+      throw new Error('childEaAssignments reconcile requires acknowledgedIds, pulledAt, and userId');
+    }
+    const acknowledgedIdsJson = JSON.stringify(acknowledgedIds);
+    const activeScopeSql = `
+      from child_ea_assignments
+      where user_id = ?
+        and unassigned_at is null
+        and sync_status = 'synced'
+    `;
+    const absentSql = `${activeScopeSql}
+      and id not in (select value from json_each(?))
+    `;
+    return (transaction) => runReconcileWithMassEndBreaker({
+      transaction,
+      scope: 'childEaAssignments',
+      pulledAt,
+      bypassBreaker,
+      countCandidates: async (txn) => (
+        await txn.getFirstAsync(`select count(*) as count ${activeScopeSql}`, userId)
+      )?.count,
+      countWouldEnd: async (txn) => (
+        await txn.getFirstAsync(
+          `select count(*) as count ${absentSql}`,
+          userId,
+          acknowledgedIdsJson
+        )
+      )?.count,
+      apply: async (txn) => (
+        await txn.runAsync(`
+          update child_ea_assignments
+          set unassigned_at = ?,
+              updated_at = ?
+          where user_id = ?
+            and unassigned_at is null
+            and sync_status = 'synced'
+            and id not in (select value from json_each(?))
+        `, pulledAt, pulledAt, userId, acknowledgedIdsJson)
+      ).changes,
+    });
+  };
+
+  const buildProgrammeEnrollmentReconcile = ({
+    acknowledgedIds,
+    acknowledgedAssignedChildIds,
+    programmeId,
+    pulledAt,
+    bypassBreaker = false,
+  } = {}) => {
+    if (
+      !Array.isArray(acknowledgedIds)
+      || !Array.isArray(acknowledgedAssignedChildIds)
+      || !programmeId
+      || !pulledAt
+    ) {
+      throw new Error(
+        'childProgrammeEnrollments reconcile requires acknowledgedIds, acknowledgedAssignedChildIds, programmeId, and pulledAt'
+      );
+    }
+    const acknowledgedIdsJson = JSON.stringify(acknowledgedIds);
+    const acknowledgedChildIdsJson = JSON.stringify(acknowledgedAssignedChildIds);
+    const activeScopeSql = `
+      from child_programme_enrollments
+      where programme_id = ?
+        and child_id in (select value from json_each(?))
+        and ended_at is null
+        and sync_status = 'synced'
+    `;
+    const absentSql = `${activeScopeSql}
+      and id not in (select value from json_each(?))
+    `;
+    return (transaction) => runReconcileWithMassEndBreaker({
+      transaction,
+      scope: 'childProgrammeEnrollments',
+      pulledAt,
+      bypassBreaker,
+      countCandidates: async (txn) => (
+        await txn.getFirstAsync(
+          `select count(*) as count ${activeScopeSql}`,
+          programmeId,
+          acknowledgedChildIdsJson
+        )
+      )?.count,
+      countWouldEnd: async (txn) => (
+        await txn.getFirstAsync(
+          `select count(*) as count ${absentSql}`,
+          programmeId,
+          acknowledgedChildIdsJson,
+          acknowledgedIdsJson
+        )
+      )?.count,
+      apply: async (txn) => (
+        await txn.runAsync(`
+          update child_programme_enrollments
+          set ended_at = ?,
+              updated_at = ?
+          where programme_id = ?
+            and child_id in (select value from json_each(?))
+            and ended_at is null
+            and sync_status = 'synced'
+            and id not in (select value from json_each(?))
+        `, pulledAt, pulledAt, programmeId, acknowledgedChildIdsJson, acknowledgedIdsJson)
+      ).changes,
+    });
+  };
+
+  const buildClassMembershipReconcile = ({
+    acknowledgedIds,
+    acknowledgedChildIds,
+    pulledAt,
+    bypassBreaker = false,
+  } = {}) => {
+    if (!Array.isArray(acknowledgedIds) || !Array.isArray(acknowledgedChildIds) || !pulledAt) {
+      throw new Error(
+        'childClassMemberships reconcile requires acknowledgedIds, acknowledgedChildIds, and pulledAt'
+      );
+    }
+    const acknowledgedIdsJson = JSON.stringify(acknowledgedIds);
+    const acknowledgedChildIdsJson = JSON.stringify(acknowledgedChildIds);
+    const activeScopeSql = `
+      from child_class_memberships
+      where child_id in (select value from json_each(?))
+        and exited_at is null
+        and sync_status = 'synced'
+    `;
+    const absentSql = `${activeScopeSql}
+      and id not in (select value from json_each(?))
+    `;
+    return (transaction) => runReconcileWithMassEndBreaker({
+      transaction,
+      scope: 'childClassMemberships',
+      pulledAt,
+      bypassBreaker,
+      countCandidates: async (txn) => (
+        await txn.getFirstAsync(
+          `select count(*) as count ${activeScopeSql}`,
+          acknowledgedChildIdsJson
+        )
+      )?.count,
+      countWouldEnd: async (txn) => (
+        await txn.getFirstAsync(
+          `select count(*) as count ${absentSql}`,
+          acknowledgedChildIdsJson,
+          acknowledgedIdsJson
+        )
+      )?.count,
+      apply: async (txn) => (
+        await txn.runAsync(`
+          update child_class_memberships
+          set exited_at = ?,
+              updated_at = ?
+          where child_id in (select value from json_each(?))
+            and exited_at is null
+            and sync_status = 'synced'
+            and id not in (select value from json_each(?))
+        `, pulledAt, pulledAt, acknowledgedChildIdsJson, acknowledgedIdsJson)
+      ).changes,
+    });
+  };
 
   const getChildren = async () => {
     const db = await resolveDatabase(database);
@@ -450,14 +618,20 @@ export const createChildrenRepository = ({ database } = {}) => {
     saveServerRows(rows, saveServerChildRow, 'children')
   );
 
-  const saveServerStaffChildRows = async (rows = []) => (
-    saveServerRows(rows, saveStaffChild, 'child_ea_assignments')
+  const saveServerStaffChildRows = async (rows = [], { reconcile } = {}) => (
+    saveServerRows(rows, saveStaffChild, 'child_ea_assignments', {
+      reconcile: reconcile ? buildChildEaReconcile(reconcile) : undefined,
+    })
   );
-  const saveServerChildProgrammeEnrollmentRows = async (rows = []) => (
-    saveServerRows(rows, saveChildProgrammeEnrollment, 'child_programme_enrollments')
+  const saveServerChildProgrammeEnrollmentRows = async (rows = [], { reconcile } = {}) => (
+    saveServerRows(rows, saveChildProgrammeEnrollment, 'child_programme_enrollments', {
+      reconcile: reconcile ? buildProgrammeEnrollmentReconcile(reconcile) : undefined,
+    })
   );
-  const saveServerChildClassMembershipRows = async (rows = []) => (
-    saveServerRows(rows, saveChildClassMembership, 'child_class_memberships')
+  const saveServerChildClassMembershipRows = async (rows = [], { reconcile } = {}) => (
+    saveServerRows(rows, saveChildClassMembership, 'child_class_memberships', {
+      reconcile: reconcile ? buildClassMembershipReconcile(reconcile) : undefined,
+    })
   );
 
   const deleteStaffChild = async (staffId, childId, { transaction } = {}) => runWrite(transaction, async (txn) => {
