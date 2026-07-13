@@ -30,6 +30,9 @@ jest.mock('react-native-safe-area-context', () => {
 jest.mock('../src/components/children/GroupPickerBottomSheet', () => ({
   __esModule: true,
   default: () => null,
+}));
+
+jest.mock('../src/utils/groupHelpers', () => ({
   getGroupColor: () => ({ text: '#000000' }),
   compareGroups: (left, right) => (left.name || '').localeCompare(right.name || ''),
 }));

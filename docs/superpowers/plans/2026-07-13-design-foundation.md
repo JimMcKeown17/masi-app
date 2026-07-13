@@ -69,9 +69,9 @@ Convergence pass (verdict BUILD-WITH-FIXES; all applied to the text above on 202
 
 **Files:** create `src/utils/groupHelpers.js`; modify `src/components/children/GroupPickerBottomSheet.js`, `src/screens/children/EditChildScreen.js`, `src/screens/children/ClassDetailScreen.js`, `__tests__/groupHelpers.test.js`, `__tests__/EditChildScreen.test.js` (its module mock).
 
-- [ ] RED: point `__tests__/groupHelpers.test.js` at `src/utils/groupHelpers` (fails: module not found).
-- [ ] GREEN: move `nextGroupNumber`, `compareGroups`, `getGroupColor` (and `GROUP_COLORS` usage) verbatim; update the three import sites and the `EditChildScreen.test.js` mock in the SAME commit.
-- [ ] Full unit suite green. Commit: `refactor(groups): move group helpers out of the picker component`
+- [x] RED: point `__tests__/groupHelpers.test.js` at `src/utils/groupHelpers` (fails: module not found).
+- [x] GREEN: move `nextGroupNumber`, `compareGroups`, `getGroupColor` (and `GROUP_COLORS` usage) verbatim; update the three import sites and the `EditChildScreen.test.js` mock in the SAME commit.
+- [x] Full unit suite green. Commit: `refactor(groups): move group helpers out of the picker component`
 
 ### Task 2: The `BottomSheet` primitive
 

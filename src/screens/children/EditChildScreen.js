@@ -14,7 +14,8 @@ import SectionHeader from '../../components/common/SectionHeader';
 import { useChildren } from '../../context/ChildrenContext';
 import { useClasses } from '../../context/ClassesContext';
 import { GENDER_OPTIONS } from '../../constants/options';
-import GroupPickerBottomSheet, { getGroupColor, compareGroups } from '../../components/children/GroupPickerBottomSheet';
+import GroupPickerBottomSheet from '../../components/children/GroupPickerBottomSheet';
+import { compareGroups, getGroupColor } from '../../utils/groupHelpers';
 import { NO_TEXT_SUGGESTIONS } from '../../constants/textInputProps';
 import ChipSelector from '../../components/forms/ChipSelector';
 
