@@ -1214,3 +1214,7 @@ Key takeaways:
 
 **Last Updated**: 2026-07-12
 **Document Status**: Living document - updated as we build
+
+### Sprint 3 addendum: why local dates are pinned to Africa/Johannesburg
+
+`utils/localDate.js` fixes business-day attribution to SAST rather than the device timezone. This was a deliberate orchestrator decision, not a test convenience: Masi operates in one country, head office reads day totals in SAST, and low-end field devices sometimes carry wrong timezone settings, so device-local attribution is LESS reliable than programme-timezone attribution. A side benefit is determinism: date tests now assert hardcoded SAST expectations on any machine, including CI. The one seam to remember: capture-time date stamps (`session_date`, `date_assessed`) are still device-local calendar dates. On a correctly-set South African device the two are identical; a device set to another timezone would stamp capture dates in its own calendar while displays attribute by SAST. If Masi ever operates outside SAST, LOCAL_TIME_ZONE becomes a programme-level setting.
