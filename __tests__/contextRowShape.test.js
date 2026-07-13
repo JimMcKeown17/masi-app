@@ -1,8 +1,8 @@
 jest.mock('expo-sqlite', () => require('../test-support/expoSQLiteMock'));
 
 import { __reset, __setDatabaseFactory } from 'expo-sqlite';
-import { storage } from '../src/utils/storage';
 import { childrenRepository } from '../src/db/repositories/childrenRepository';
+import { classesRepository } from '../src/db/repositories/classesRepository';
 import { groupsRepository } from '../src/db/repositories/groupsRepository';
 import { getWriter, resetDatabaseConnectionForTests } from '../src/db/client';
 import { createBetterSqliteTestDatabase } from '../test-support/betterSqliteAdapter';
@@ -12,7 +12,7 @@ const readers = {
   children: () => childrenRepository.getMyChildren('user-1'),
   groups: () => groupsRepository.getGroups({ userId: 'user-1' }),
   memberships: () => groupsRepository.getChildrenGroups(),
-  classes: () => storage.getClasses({ userId: 'user-1' }),
+  classes: () => classesRepository.getClasses({ userId: 'user-1' }),
 };
 
 const selectFields = (row, fields) => Object.fromEntries(

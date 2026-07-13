@@ -6,12 +6,12 @@ import { ClassesProvider, useClasses } from '../src/context/ClassesContext';
 import { LookupsProvider, useLookupsContext } from '../src/context/LookupsContext';
 import { TimeTrackingProvider, useTimeTracking } from '../src/context/TimeTrackingContext';
 import { fetchAndCacheSchools, getSyncStatus } from '../src/services/offlineSync';
-import { storage } from '../src/utils/storage';
 import { pullPreloadedChildData } from '../src/services/preloadedChildData';
 import { enqueueSupabaseRequest } from '../src/services/supabaseRequestQueue';
 import { timeEntriesRepository } from '../src/db/repositories/timeEntriesRepository';
 import { childrenRepository } from '../src/db/repositories/childrenRepository';
 import { classesRepository } from '../src/db/repositories/classesRepository';
+import { classEaAssignmentsRepository } from '../src/db/repositories/classEaAssignmentsRepository';
 import { groupsRepository } from '../src/db/repositories/groupsRepository';
 import { syncOutboxRepository } from '../src/db/repositories/syncOutboxRepository';
 import {
@@ -47,17 +47,6 @@ jest.mock('../src/context/AuthContext', () => ({
   useAuth: jest.fn(() => ({ user: { id: 'user-1' } })),
 }));
 
-jest.mock('../src/utils/storage', () => ({
-  storage: {
-    getClasses: jest.fn(),
-    getUnsyncedClasses: jest.fn(),
-    saveClass: jest.fn(),
-    saveClassEaAssignment: jest.fn(),
-    updateClass: jest.fn(),
-    deleteClass: jest.fn(),
-  },
-}));
-
 jest.mock('../src/db/repositories/childrenRepository', () => ({
   childrenRepository: {
     getMyChildren: jest.fn(),
@@ -71,7 +60,18 @@ jest.mock('../src/db/repositories/childrenRepository', () => ({
 
 jest.mock('../src/db/repositories/classesRepository', () => ({
   classesRepository: {
+    getClasses: jest.fn(),
+    getUnsyncedClasses: jest.fn(),
     saveServerClassRows: jest.fn(),
+    saveClass: jest.fn(),
+    updateClass: jest.fn(),
+    deleteClass: jest.fn(),
+  },
+}));
+
+jest.mock('../src/db/repositories/classEaAssignmentsRepository', () => ({
+  classEaAssignmentsRepository: {
+    saveServerRows: jest.fn(),
   },
 }));
 
@@ -212,16 +212,16 @@ describe('context render isolation', () => {
     groupsRepository.getUnsyncedChildrenGroups.mockResolvedValue([]);
     syncOutboxRepository.getPendingHardDeleteIds.mockResolvedValue(new Set());
     schoolsRepository.getAll.mockResolvedValue([]);
-    storage.getClasses.mockResolvedValue([]);
-    storage.getUnsyncedClasses.mockResolvedValue([]);
+    classesRepository.getClasses.mockResolvedValue([]);
+    classesRepository.getUnsyncedClasses.mockResolvedValue([]);
     jobTitlesRepository.getAll.mockResolvedValue([]);
     classesRepository.saveServerClassRows.mockResolvedValue({ applied: 0, skipped: 0 });
+    classEaAssignmentsRepository.saveServerRows.mockResolvedValue({ applied: 0, skipped: 0 });
     childrenRepository.saveServerChildRows.mockResolvedValue({ applied: 0, skipped: 0 });
     childrenRepository.saveServerStaffChildRows.mockResolvedValue({ applied: 0, skipped: 0 });
     childrenRepository.saveServerChildProgrammeEnrollmentRows.mockResolvedValue({ applied: 0, skipped: 0 });
     childrenRepository.saveServerChildClassMembershipRows.mockResolvedValue({ applied: 0, skipped: 0 });
-    storage.saveClass.mockResolvedValue(true);
-    storage.saveClassEaAssignment.mockResolvedValue(true);
+    classesRepository.saveClass.mockResolvedValue(true);
     jobTitlesRepository.replaceFromServer.mockResolvedValue(true);
     groupsRepository.saveServerGroupRows.mockResolvedValue({ applied: 0, skipped: 0 });
     groupsRepository.saveServerChildrenGroupRows.mockResolvedValue({ applied: 0, skipped: 0 });
@@ -307,8 +307,8 @@ describe('context render isolation', () => {
     await waitFor(() => {
       expect(schoolsRepository.getAll).toHaveBeenCalled();
       expect(fetchAndCacheSchools).toHaveBeenCalled();
-      expect(storage.getClasses).toHaveBeenCalledWith({ userId: 'user-1' });
-      expect(storage.getUnsyncedClasses).toHaveBeenCalled();
+      expect(classesRepository.getClasses).toHaveBeenCalledWith({ userId: 'user-1' });
+      expect(classesRepository.getUnsyncedClasses).toHaveBeenCalled();
       expect(classesApi.loading).toBe(false);
     });
   });
@@ -329,8 +329,8 @@ describe('context render isolation', () => {
       expect(childrenRepository.getMyChildren).toHaveBeenCalledWith('user-1');
       expect(schoolsRepository.getAll).toHaveBeenCalled();
       expect(fetchAndCacheSchools).toHaveBeenCalled();
-      expect(storage.getClasses).toHaveBeenCalledWith({ userId: 'user-1' });
-      expect(storage.getUnsyncedClasses).toHaveBeenCalled();
+      expect(classesRepository.getClasses).toHaveBeenCalledWith({ userId: 'user-1' });
+      expect(classesRepository.getUnsyncedClasses).toHaveBeenCalled();
       expect(classesApi.loading).toBe(false);
     });
     const rendersAfterSettle = classesRenders;

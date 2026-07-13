@@ -1,13 +1,14 @@
 import React, { createContext, useState, useEffect, useContext, useRef, useCallback, useMemo } from 'react';
 import { supabase } from '../services/supabaseClient';
-import { storage } from '../utils/storage';
-import { fetchAndCacheSchools } from '../services/offlineSync';
+import { ensureReferenceData, fetchAndCacheSchools } from '../services/offlineSync';
 import { enqueueSupabaseRequest } from '../services/supabaseRequestQueue';
 import {
   academicYearsRepository,
   schoolsRepository,
 } from '../db/repositories/referenceDataRepository';
 import { getActiveProgrammeId } from '../db/repositories/domainRepositoryUtils';
+import { classesRepository } from '../db/repositories/classesRepository';
+import { classEaAssignmentsRepository } from '../db/repositories/classEaAssignmentsRepository';
 import { mergeServerRows } from '../utils/mergeServerRows';
 import { resolveDatabase } from '../db/repositories/repositoryRuntime';
 import { useAuth } from './AuthContext';
@@ -17,21 +18,30 @@ import { v4 as uuidv4 } from 'uuid';
 
 const ClassesContext = createContext({});
 
-const saveRows = async (rows, saveRow) => {
-  for (const row of rows || []) {
-    await saveRow(row);
-  }
-};
-
 export const ClassesProvider = ({ children: reactChildren }) => {
   const { user } = useAuth();
   const { isOnline, refreshSyncStatus, isSyncing } = useOffline();
-  const { children: childrenList } = useChildren();
+  const {
+    children: childrenList,
+    refreshFromCache: refreshChildrenFromCache,
+  } = useChildren();
 
   const [schools, setSchools] = useState([]);
   const [classes, setClasses] = useState([]);
   const [loading, setLoading] = useState(false);
   const activeUserIdRef = useRef(null);
+
+  const refreshFromCache = useCallback(async () => {
+    const activeUserId = user?.id;
+    if (!activeUserId) {
+      setClasses([]);
+      return;
+    }
+
+    const cached = await classesRepository.getClasses({ userId: activeUserId });
+    if (activeUserIdRef.current !== activeUserId) return;
+    setClasses(cached);
+  }, [user?.id]);
 
   /**
    * Load schools — cache-first, then always attempt a server fetch.
@@ -58,86 +68,88 @@ export const ClassesProvider = ({ children: reactChildren }) => {
     }
   }, [user?.id]);
 
-  /**
-   * Load classes for current user — cache-first, merge from server if online.
-   * Same pattern as loadGroups in ChildrenContext.
-   */
-  const loadClasses = useCallback(async () => {
+  const pullFromServer = useCallback(async () => {
+    const activeUserId = user?.id;
+    if (!activeUserId) {
+      setClasses([]);
+      setLoading(false);
+      return;
+    }
+
     try {
       setLoading(true);
-      const activeUserId = user?.id;
-      if (!activeUserId) {
-        setClasses([]);
+      await refreshFromCache();
+
+      const { data, error } = await enqueueSupabaseRequest(async () => {
+        const { data: assignments, error: assignmentError } = await supabase
+          .from('staff_programme_assignments')
+          .select('programme_id')
+          .eq('user_id', activeUserId)
+          .is('ended_at', null)
+          .order('assigned_at', { ascending: false })
+          .limit(1);
+
+        if (assignmentError || !assignments?.[0]?.programme_id) {
+          return {
+            data: [],
+            error: assignmentError || null,
+          };
+        }
+
+        return supabase
+          .from('classes')
+          .select(`
+            *,
+            class_ea_assignments!inner(*)
+          `)
+          .eq('class_ea_assignments.ea_user_id', activeUserId)
+          .eq('class_ea_assignments.programme_id', assignments[0].programme_id)
+          .is('class_ea_assignments.unassigned_at', null)
+          .order('name', { ascending: true });
+      });
+
+      if (activeUserIdRef.current !== activeUserId) return;
+      if (error) {
+        console.error('Error loading classes from server:', error);
         return;
       }
 
-      const [cached, unsyncedClasses] = await Promise.all([
-        storage.getClasses({ userId: activeUserId }),
-        storage.getUnsyncedClasses(),
+      const serverAssignments = (data || []).flatMap(({ class_ea_assignments }) => (
+        (class_ea_assignments || []).map(assignment => ({
+          ...assignment,
+          synced: true,
+          sync_status: assignment.sync_status || 'synced',
+        }))
+      ));
+      const serverClasses = (data || []).map(({ class_ea_assignments, ...classItem }) => ({
+        ...classItem,
+        synced: true,
+        sync_status: classItem.sync_status || 'synced',
+      }));
+
+      await ensureReferenceData({ userId: activeUserId });
+      if (activeUserIdRef.current !== activeUserId) return;
+      await classesRepository.saveServerClassRows(serverClasses);
+      await classEaAssignmentsRepository.saveServerRows(serverAssignments);
+
+      const [freshClasses, unsyncedClasses] = await Promise.all([
+        classesRepository.getClasses({ userId: activeUserId }),
+        classesRepository.getUnsyncedClasses(),
       ]);
       if (activeUserIdRef.current !== activeUserId) return;
-      setClasses(cached);
-
-      if (activeUserIdRef.current === activeUserId) {
-        const { data, error } = await enqueueSupabaseRequest(async () => {
-          const { data: assignments, error: assignmentError } = await supabase
-            .from('staff_programme_assignments')
-            .select('programme_id')
-            .eq('user_id', activeUserId)
-            .is('ended_at', null)
-            .order('assigned_at', { ascending: false })
-            .limit(1);
-
-          if (assignmentError || !assignments?.[0]?.programme_id) {
-            return {
-              data: [],
-              error: assignmentError || null,
-            };
-          }
-
-          return supabase
-            .from('classes')
-            .select(`
-              *,
-              class_ea_assignments!inner(*)
-            `)
-            .eq('class_ea_assignments.ea_user_id', activeUserId)
-            .eq('class_ea_assignments.programme_id', assignments[0].programme_id)
-            .is('class_ea_assignments.unassigned_at', null)
-            .order('name', { ascending: true });
-        });
-
-        if (error) {
-          console.error('Error loading classes from server:', error);
-        } else if (data && activeUserIdRef.current === activeUserId) {
-          const serverAssignments = data.flatMap(({ class_ea_assignments }) => (
-            (class_ea_assignments || []).map(assignment => ({
-              ...assignment,
-              synced: true,
-              sync_status: assignment.sync_status || 'synced',
-            }))
-          ));
-          const serverClasses = data.map(({ class_ea_assignments, ...classItem }) => ({
-            ...classItem,
-            synced: true,
-            sync_status: classItem.sync_status || 'synced',
-          }));
-          const merged = mergeServerRows(cached, serverClasses, { unpushedRows: unsyncedClasses });
-          // No caller-side dirty filtering: the repository pull guard decides,
-          // inside the write transaction, whether a server row may land.
-          await saveRows(serverClasses, storage.saveClass);
-          await saveRows(serverAssignments, storage.saveClassEaAssignment);
-          setClasses(merged);
-        }
-      }
+      setClasses(mergeServerRows(freshClasses, serverClasses, { unpushedRows: unsyncedClasses }));
     } catch (error) {
-      console.error('Error in loadClasses:', error);
+      console.error('Error in pullFromServer:', error);
     } finally {
-      if (activeUserIdRef.current === user?.id) {
+      if (activeUserIdRef.current === activeUserId) {
         setLoading(false);
       }
     }
-  }, [user?.id]);
+  }, [user?.id, refreshFromCache]);
+
+  const loadClasses = useCallback(async () => {
+    await pullFromServer();
+  }, [pullFromServer]);
 
   // Load data on mount when user is authenticated
   useEffect(() => {
@@ -161,14 +173,14 @@ export const ClassesProvider = ({ children: reactChildren }) => {
     prevOnlineRef.current = isOnline;
   }, [isOnline, user?.id, schools.length, loadSchools]);
 
-  // Reload from storage after sync completes to pick up updated synced flags
+  // Reload from SQLite after sync completes to pick up updated synced flags.
   const prevSyncingRef = useRef(isSyncing);
   useEffect(() => {
     if (prevSyncingRef.current && !isSyncing && user?.id) {
-      loadClasses();
+      refreshFromCache();
     }
     prevSyncingRef.current = isSyncing;
-  }, [isSyncing, user?.id, loadClasses]);
+  }, [isSyncing, user?.id, refreshFromCache]);
 
   /**
    * Add a new class
@@ -200,7 +212,7 @@ export const ClassesProvider = ({ children: reactChildren }) => {
         synced: false,
       };
 
-      await storage.saveClass(newClass);
+      await classesRepository.saveClass(newClass);
       setClasses(prev => [...prev, newClass]);
       await refreshSyncStatus();
 
@@ -222,7 +234,7 @@ export const ClassesProvider = ({ children: reactChildren }) => {
         synced: false,
       };
 
-      await storage.updateClass(classId, updated);
+      await classesRepository.updateClass(classId, updated);
       setClasses(prev =>
         prev.map(c => c.id === classId ? { ...c, ...updated } : c)
       );
@@ -236,13 +248,13 @@ export const ClassesProvider = ({ children: reactChildren }) => {
   }, [refreshSyncStatus]);
 
   /**
-   * Archive a class through the storage facade.
-   * Child membership/assignment side effects belong in the repository transaction,
-   * so the context should not double-write child rows here.
+   * Archive a class through the repository transaction, then publish its child
+   * assignment side effects from SQLite before returning.
    */
   const deleteClass = useCallback(async (classId) => {
     try {
-      await storage.deleteClass(classId);
+      await classesRepository.deleteClass(classId, { actorUserId: user.id });
+      await refreshChildrenFromCache();
       setClasses(prev => prev.filter(c => c.id !== classId));
       await refreshSyncStatus();
 
@@ -251,7 +263,7 @@ export const ClassesProvider = ({ children: reactChildren }) => {
       console.error('Error deleting class:', error);
       return { success: false, error };
     }
-  }, [refreshSyncStatus]);
+  }, [user?.id, refreshChildrenFromCache, refreshSyncStatus]);
 
   /**
    * Get children in a specific class

@@ -22,8 +22,20 @@ import { NO_TEXT_SUGGESTIONS } from '../../constants/textInputProps';
 
 export default function ChildrenListScreen({ navigation }) {
   const { user } = useAuth();
-  const { children, groups, childrenGroups, loading, loadChildren } = useChildren();
-  const { classes, schools, loading: classesLoading, loadClasses, getChildrenInClass } = useClasses();
+  const {
+    children,
+    groups,
+    childrenGroups,
+    loading,
+    loadChildren: pullChildrenFromServer,
+  } = useChildren();
+  const {
+    classes,
+    schools,
+    loading: classesLoading,
+    loadClasses: pullClassesFromServer,
+    getChildrenInClass,
+  } = useClasses();
   const { refreshSyncStatus, syncNow } = useOffline();
 
   const [searchTerm, setSearchTerm] = useState('');
@@ -97,11 +109,11 @@ export default function ChildrenListScreen({ navigation }) {
   const onRefresh = async () => {
     setRefreshing(true);
     // Pull-to-refresh is a manual gesture, so force a sync (bypass backoff) like Work History,
-    // then reload local data. autoTrigger:false on the status refresh avoids scheduling a second,
-    // non-forced background sync on top of the forced one.
+    // then run exactly one server pull per context. autoTrigger:false on the status refresh
+    // avoids scheduling another background sync on top of the forced one.
     await syncNow({ force: true });
-    await loadChildren();
-    await loadClasses();
+    await pullChildrenFromServer();
+    await pullClassesFromServer();
     await refreshSyncStatus({ autoTrigger: false });
     setRefreshing(false);
   };

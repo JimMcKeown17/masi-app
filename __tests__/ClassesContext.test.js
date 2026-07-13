@@ -1,12 +1,10 @@
-import React from 'react';
-import { renderHook, act } from '@testing-library/react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { childrenRepository } from '../src/db/repositories/childrenRepository';
+import { classesRepository } from '../src/db/repositories/classesRepository';
 import { schoolsRepository } from '../src/db/repositories/referenceDataRepository';
-import { storage } from '../src/utils/storage';
 import { resolveDatabase } from '../src/db/repositories/repositoryRuntime';
 
-// We test the storage-level operations that ClassesContext depends on,
+// We test the repository operations that ClassesContext depends on,
 // since the context itself requires multiple providers (Auth, Offline, Children).
 // Full integration tests would need a test wrapper with all providers.
 
@@ -18,6 +16,9 @@ const seedReferenceData = async () => {
   await db.runAsync(
     "insert into staff_programme_assignments (id, user_id, programme_id, assigned_at) values ('spa-user-1', 'user-1', 'programme-a', '2026-01-01T00:00:00.000Z')"
   );
+  await db.runAsync(
+    "insert into schools (id, name, sync_status) values ('school-1', 'School One', 'synced')"
+  );
 };
 
 beforeEach(async () => {
@@ -25,15 +26,15 @@ beforeEach(async () => {
   await seedReferenceData();
 });
 
-describe('ClassesContext storage operations', () => {
+describe('ClassesContext repository operations', () => {
   test('addClass creates a class with correct fields', async () => {
     const classData = {
       id: 'class-1',
       name: '1A',
+      school_id: 'school-1',
       grade: 'Grade 1',
       teacher: 'Ms. Smith',
       home_language: 'isiXhosa',
-      school_id: 'school-1',
       staff_id: 'user-1',
       created_by: 'user-1',
       programme_id: 'programme-a',
@@ -42,28 +43,32 @@ describe('ClassesContext storage operations', () => {
       updated_at: new Date().toISOString(),
     };
 
-    await storage.saveClass(classData);
+    await classesRepository.saveClass(classData);
 
-    const classes = await storage.getClasses();
+    const classes = await classesRepository.getClasses();
     expect(classes).toHaveLength(1);
     expect(classes[0].synced).toBe(false);
-    expect(classes[0].staff_id).toBe('user-1');
+    expect(classes[0].staff_id).toBeUndefined();
     expect(classes[0].created_by).toBe('user-1');
     expect(classes[0].school_id).toBe('school-1');
   });
 
-  test('deleteClass nulls out class_id on affected children in storage', async () => {
+  test('deleteClass nulls out class_id on affected children in SQLite', async () => {
     // Set up a class and two children — one in the class, one not
-    await storage.saveClass({
+    await classesRepository.saveClass({
       id: 'class-1',
       name: '1A',
+      school_id: 'school-1',
+      grade: '1',
       created_by: 'user-1',
       programme_id: 'programme-a',
       synced: false,
     });
-    await storage.saveClass({
+    await classesRepository.saveClass({
       id: 'other-class',
       name: '1B',
+      school_id: 'school-1',
+      grade: '1',
       created_by: 'user-1',
       programme_id: 'programme-a',
       synced: false,
@@ -87,7 +92,7 @@ describe('ClassesContext storage operations', () => {
     await childrenRepository.saveChildRecord(child2);
 
     // Delete the class
-    await storage.deleteClass('class-1');
+    await classesRepository.deleteClass('class-1', { actorUserId: 'user-1' });
 
     const children = await childrenRepository.getChildren();
     const alice = children.find(c => c.id === 'child-1');
@@ -107,28 +112,35 @@ describe('ClassesContext storage operations', () => {
     await schoolsRepository.replaceFromServer(schools);
 
     const cached = await schoolsRepository.getAll();
-    expect(cached.map(({ id, name }) => ({ id, name }))).toEqual(schools);
+    expect(cached.map(({ id, name }) => ({ id, name }))).toEqual([
+      ...schools,
+      { id: 'school-1', name: 'School One' },
+    ]);
   });
 
   test('classes list updates after saveClass', async () => {
-    await storage.saveClass({
+    await classesRepository.saveClass({
       id: 'c1',
       name: '1A',
+      school_id: 'school-1',
+      grade: '1',
       created_by: 'user-1',
       programme_id: 'programme-a',
       synced: false,
     });
-    let classes = await storage.getClasses();
+    let classes = await classesRepository.getClasses();
     expect(classes).toHaveLength(1);
 
-    await storage.saveClass({
+    await classesRepository.saveClass({
       id: 'c2',
       name: '2B',
+      school_id: 'school-1',
+      grade: '2',
       created_by: 'user-1',
       programme_id: 'programme-a',
       synced: false,
     });
-    classes = await storage.getClasses();
+    classes = await classesRepository.getClasses();
     expect(classes).toHaveLength(2);
     expect(classes.map(c => c.name)).toEqual(['1A', '2B']);
   });
