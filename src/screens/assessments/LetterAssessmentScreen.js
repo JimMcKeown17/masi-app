@@ -1,13 +1,16 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { View, StyleSheet, Alert } from 'react-native';
+import { View, StyleSheet } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Text, Button } from 'react-native-paper';
+import { Button } from 'react-native-paper';
 import { CAPTURE_MODES } from '../../constants/egraConstants';
 import EgraLetterGrid from '../../components/assessment/EgraLetterGrid';
-import CountdownTimer from '../../components/assessment/CountdownTimer';
+import AssessmentInstructions from '../../components/assessment/AssessmentInstructions';
+import CaptureHeader from '../../components/assessment/CaptureHeader';
+import EndAssessmentButton from '../../components/assessment/EndAssessmentButton';
 import LastAttemptedBottomSheet from '../../components/assessment/LastAttemptedBottomSheet';
+import { captureStyles } from '../../components/assessment/captureStyles';
 import { useAssessmentSession } from '../../hooks/useAssessmentSession';
-import { colors, spacing, borderRadius } from '../../constants/colors';
+import { colors, spacing } from '../../constants/colors';
 
 export default function LetterAssessmentScreen({ navigation, route }) {
   const {
@@ -93,17 +96,6 @@ export default function LetterAssessmentScreen({ navigation, route }) {
     });
   };
 
-  const handleEndAssessment = () => {
-    Alert.alert(
-      'End Assessment?',
-      'End the assessment now and record current results?',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        { text: 'End', style: 'destructive', onPress: handleFinish },
-      ]
-    );
-  };
-
   const startPage = currentPage * letterSet.lettersPerPage;
   const pageLetters = letterSet.letters.slice(startPage, startPage + letterSet.lettersPerPage);
   const isLastPage = currentPage === totalPages - 1;
@@ -111,78 +103,35 @@ export default function LetterAssessmentScreen({ navigation, route }) {
   // --- Instructions Phase ---
   if (phase === 'instructions') {
     return (
-      <View style={[styles.container, { paddingTop: insets.top }]}>
-        <View style={styles.instructionsContainer}>
-          <Text variant="headlineSmall" style={styles.instructionsTitle}>
-            {isWordAssessment ? 'Word Reading Assessment' : 'Letter Sound Assessment'}
-          </Text>
-          <Text variant="bodyLarge" style={styles.instructionsChild}>
-            {child.first_name} {child.last_name}
-          </Text>
-          <Text variant="bodyMedium" style={styles.instructionsLanguage}>
-            {letterSet.language} - Attempt #{attemptNumber}
-          </Text>
-
-          <View style={styles.instructionsBox}>
-            <Text variant="bodyMedium" style={styles.instructionsText}>
-              1. Tap "Start" to begin the 60-second timer
-            </Text>
-            <Text variant="bodyMedium" style={styles.instructionsText}>
-              2. Point to each {isWordAssessment ? 'word' : 'letter'} and ask the child to {isWordAssessment ? 'read the word' : 'say the sound'}
-            </Text>
-            <Text variant="bodyMedium" style={styles.instructionsText}>
-              3. Tap {isWordAssessment ? 'words' : 'letters'} the child gets CORRECT (they turn green)
-            </Text>
-            <Text variant="bodyMedium" style={styles.instructionsText}>
-              4. Skip incorrect {isWordAssessment ? 'words' : 'letters'} (leave them unmarked)
-            </Text>
-            <Text variant="bodyMedium" style={styles.instructionsText}>
-              5. Use Next/Prev to navigate pages
-            </Text>
-          </View>
-
-          <Button
-            mode="contained"
-            onPress={session.startActive}
-            style={styles.startButton}
-            contentStyle={styles.startButtonContent}
-          >
-            Start Assessment
-          </Button>
-          <Button
-            mode="outlined"
-            onPress={() => navigation.goBack()}
-            style={styles.cancelButton}
-          >
-            Cancel
-          </Button>
-        </View>
-      </View>
+      <AssessmentInstructions
+        title={isWordAssessment ? 'Word Reading Assessment' : 'Letter Sound Assessment'}
+        childName={`${child.first_name} ${child.last_name}`}
+        language={letterSet.language}
+        attemptNumber={attemptNumber}
+        steps={[
+          '1. Tap "Start" to begin the 60-second timer',
+          `2. Point to each ${isWordAssessment ? 'word' : 'letter'} and ask the child to ${isWordAssessment ? 'read the word' : 'say the sound'}`,
+          `3. Tap ${isWordAssessment ? 'words' : 'letters'} the child gets CORRECT (they turn green)`,
+          `4. Skip incorrect ${isWordAssessment ? 'words' : 'letters'} (leave them unmarked)`,
+          '5. Use Next/Prev to navigate pages',
+        ]}
+        onStart={session.startActive}
+        onCancel={() => navigation.goBack()}
+      />
     );
   }
 
   // --- Active / Finished Phase ---
   return (
-    <View style={[styles.container, { paddingTop: insets.top }]}>
-      <View style={styles.timerRow}>
-        <CountdownTimer getElapsedMs={getElapsedMs} />
-      </View>
+    <View style={[captureStyles.container, { paddingTop: insets.top }]}> 
+      <CaptureHeader
+        getElapsedMs={getElapsedMs}
+        pageLabel="Page"
+        currentPage={currentPage}
+        totalPages={totalPages}
+      />
 
-      <View style={styles.pageInfo}>
-        <Text variant="bodySmall" style={styles.pageText}>
-          Page {currentPage + 1} of {totalPages}
-        </Text>
-        <View style={styles.dots}>
-          {Array.from({ length: totalPages }).map((_, i) => (
-            <View
-              key={i}
-              style={[styles.dot, i === currentPage && styles.dotActive]}
-            />
-          ))}
-        </View>
-      </View>
-
-      <View style={styles.gridContainer}>
+      <View style={captureStyles.gridContainer}>
         <EgraLetterGrid
           letters={pageLetters}
           pageOffset={startPage}
@@ -207,14 +156,7 @@ export default function LetterAssessmentScreen({ navigation, route }) {
         </Button>
 
         {phase === 'active' && (
-          <Button
-            mode="text"
-            onPress={handleEndAssessment}
-            textColor={colors.emphasis}
-            compact
-          >
-            End Assessment
-          </Button>
+          <EndAssessmentButton onEnd={handleFinish} />
         )}
 
         {isLastPage && phase === 'active' ? (
@@ -247,81 +189,6 @@ export default function LetterAssessmentScreen({ navigation, route }) {
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: colors.background,
-  },
-  // Instructions
-  instructionsContainer: {
-    flex: 1,
-    padding: spacing.lg,
-    justifyContent: 'center',
-  },
-  instructionsTitle: {
-    textAlign: 'center',
-    color: colors.text,
-    marginBottom: spacing.sm,
-  },
-  instructionsChild: {
-    textAlign: 'center',
-    color: colors.primary,
-    fontWeight: '600',
-    marginBottom: spacing.xs,
-  },
-  instructionsLanguage: {
-    textAlign: 'center',
-    color: colors.textSecondary,
-    marginBottom: spacing.xl,
-  },
-  instructionsBox: {
-    backgroundColor: colors.surface,
-    borderRadius: borderRadius.md,
-    padding: spacing.lg,
-    marginBottom: spacing.xl,
-    gap: spacing.sm,
-  },
-  instructionsText: {
-    color: colors.text,
-  },
-  startButton: {
-    marginBottom: spacing.md,
-  },
-  startButtonContent: {
-    paddingVertical: spacing.sm,
-  },
-  cancelButton: {},
-  // Active phase
-  timerRow: {
-    paddingVertical: spacing.md,
-  },
-  pageInfo: {
-    alignItems: 'center',
-    marginBottom: spacing.sm,
-  },
-  pageText: {
-    color: colors.textSecondary,
-    marginBottom: spacing.xs,
-  },
-  dots: {
-    flexDirection: 'row',
-    gap: spacing.sm,
-  },
-  dot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    backgroundColor: colors.border,
-  },
-  dotActive: {
-    backgroundColor: colors.primary,
-  },
-  gridContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.sm,
-  },
   navRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',

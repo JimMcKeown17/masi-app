@@ -1,13 +1,16 @@
 import React, { useReducer, useEffect, useCallback, useRef } from 'react';
-import { View, StyleSheet, Alert } from 'react-native';
+import { View, StyleSheet } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Text, Button } from 'react-native-paper';
+import { Button } from 'react-native-paper';
 import { CAPTURE_MODES } from '../../constants/egraConstants';
 import EgraLetterGrid from '../../components/assessment/EgraLetterGrid';
-import CountdownTimer from '../../components/assessment/CountdownTimer';
+import AssessmentInstructions from '../../components/assessment/AssessmentInstructions';
+import CaptureHeader from '../../components/assessment/CaptureHeader';
+import EndAssessmentButton from '../../components/assessment/EndAssessmentButton';
+import { captureStyles } from '../../components/assessment/captureStyles';
 import { useAssessmentSession } from '../../hooks/useAssessmentSession';
 import { initSequentialState, sequentialReducer } from '../../utils/sequentialAssessmentReducer';
-import { colors, spacing, borderRadius } from '../../constants/colors';
+import { colors, spacing } from '../../constants/colors';
 
 export default function SequentialAssessmentScreen({ navigation, route }) {
   const {
@@ -61,10 +64,7 @@ export default function SequentialAssessmentScreen({ navigation, route }) {
   }, [isExpired, finishWith]);
 
   const handleEndAssessment = useCallback(() => {
-    Alert.alert('End Assessment?', 'End the assessment now and record current results?', [
-      { text: 'Cancel', style: 'cancel' },
-      { text: 'End', style: 'destructive', onPress: () => finishWith(stateRef.current) },
-    ]);
+    finishWith(stateRef.current);
   }, [finishWith]);
 
   // Clamp the display cursor: deciding the last item advances state.cursor past the final
@@ -76,37 +76,33 @@ export default function SequentialAssessmentScreen({ navigation, route }) {
 
   if (phase === 'instructions') {
     return (
-      <View style={[styles.container, { paddingTop: insets.top }]}>
-        <View style={styles.instructionsContainer}>
-          <Text variant="headlineSmall" style={styles.instructionsTitle}>
-            {isWordAssessment ? 'Word Reading Assessment' : 'Letter Sound Assessment'}
-          </Text>
-          <Text variant="bodyLarge" style={styles.instructionsChild}>{child.first_name} {child.last_name}</Text>
-          <Text variant="bodyMedium" style={styles.instructionsLanguage}>{letterSet.language} - Attempt #{attemptNumber}</Text>
-          <View style={styles.instructionsBox}>
-            <Text variant="bodyMedium" style={styles.instructionsText}>1. Tap "Start" to begin the 60-second timer</Text>
-            <Text variant="bodyMedium" style={styles.instructionsText}>2. The highlighted {isWordAssessment ? 'word' : 'letter'} is the one the child is reading</Text>
-            <Text variant="bodyMedium" style={styles.instructionsText}>3. Tap the green ✓ if correct or the red ✗ if incorrect — it moves to the next automatically</Text>
-            <Text variant="bodyMedium" style={styles.instructionsText}>4. Use the ← back button to fix a mistake</Text>
-          </View>
-          <Button mode="contained" onPress={session.startActive} style={styles.startButton} contentStyle={styles.startButtonContent}>Start Assessment</Button>
-          <Button mode="outlined" onPress={() => navigation.goBack()}>Cancel</Button>
-        </View>
-      </View>
+      <AssessmentInstructions
+        title={isWordAssessment ? 'Word Reading Assessment' : 'Letter Sound Assessment'}
+        childName={`${child.first_name} ${child.last_name}`}
+        language={letterSet.language}
+        attemptNumber={attemptNumber}
+        steps={[
+          '1. Tap "Start" to begin the 60-second timer',
+          `2. The highlighted ${isWordAssessment ? 'word' : 'letter'} is the one the child is reading`,
+          '3. Tap the green ✓ if correct or the red ✗ if incorrect — it moves to the next automatically',
+          '4. Use the ← back button to fix a mistake',
+        ]}
+        onStart={session.startActive}
+        onCancel={() => navigation.goBack()}
+      />
     );
   }
 
   const finished = phase === 'finished';
   return (
-    <View style={[styles.container, { paddingTop: insets.top }]}>
-      <View style={styles.timerRow}><CountdownTimer getElapsedMs={getElapsedMs} /></View>
-      <View style={styles.pageInfo}>
-        <Text variant="bodySmall" style={styles.pageText}>Grid {currentPage + 1} of {totalPages}</Text>
-        <View style={styles.dots}>
-          {Array.from({ length: totalPages }).map((_, i) => (<View key={i} style={[styles.dot, i === currentPage && styles.dotActive]} />))}
-        </View>
-      </View>
-      <View style={styles.gridContainer}>
+    <View style={[captureStyles.container, { paddingTop: insets.top }]}> 
+      <CaptureHeader
+        getElapsedMs={getElapsedMs}
+        pageLabel="Grid"
+        currentPage={currentPage}
+        totalPages={totalPages}
+      />
+      <View style={captureStyles.gridContainer}>
         <EgraLetterGrid
           letters={pageLetters} pageOffset={startPage} letterStates={state.letterStates}
           readOnly currentIndex={finished ? -1 : displayCursor} tileSize={tileSize}
@@ -119,29 +115,13 @@ export default function SequentialAssessmentScreen({ navigation, route }) {
           <Button mode="contained" buttonColor={colors.error} onPress={() => decide(false)} disabled={finished} style={styles.decisionButton} contentStyle={styles.decisionButtonContent} icon="close">Incorrect</Button>
         </View>
         <Button mode="outlined" onPress={goBack} disabled={finished || state.cursor === 0} textColor={colors.text} contentStyle={styles.backButtonContent} icon="arrow-left">Back</Button>
-        {phase === 'active' && (<Button mode="text" onPress={handleEndAssessment} textColor={colors.emphasis} compact>End Assessment</Button>)}
+        {phase === 'active' && <EndAssessmentButton onEnd={handleEndAssessment} />}
       </View>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: colors.background },
-  instructionsContainer: { flex: 1, padding: spacing.lg, justifyContent: 'center' },
-  instructionsTitle: { textAlign: 'center', color: colors.text, marginBottom: spacing.sm },
-  instructionsChild: { textAlign: 'center', color: colors.primary, fontWeight: '600', marginBottom: spacing.xs },
-  instructionsLanguage: { textAlign: 'center', color: colors.textSecondary, marginBottom: spacing.xl },
-  instructionsBox: { backgroundColor: colors.surface, borderRadius: borderRadius.md, padding: spacing.lg, marginBottom: spacing.xl, gap: spacing.sm },
-  instructionsText: { color: colors.text },
-  startButton: { marginBottom: spacing.md },
-  startButtonContent: { paddingVertical: spacing.sm },
-  timerRow: { paddingVertical: spacing.md },
-  pageInfo: { alignItems: 'center', marginBottom: spacing.sm },
-  pageText: { color: colors.textSecondary, marginBottom: spacing.xs },
-  dots: { flexDirection: 'row', gap: spacing.sm },
-  dot: { width: 8, height: 8, borderRadius: 4, backgroundColor: colors.border },
-  dotActive: { backgroundColor: colors.primary },
-  gridContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', paddingHorizontal: spacing.md, paddingVertical: spacing.sm },
   controls: { padding: spacing.md, backgroundColor: colors.surface, borderTopWidth: 1, borderTopColor: colors.border, gap: spacing.sm },
   decisionRow: { flexDirection: 'row', gap: spacing.md },
   decisionButton: { flex: 1 },
