@@ -61,6 +61,13 @@ describe('ClassesContext storage operations', () => {
       programme_id: 'programme-a',
       synced: false,
     });
+    await storage.saveClass({
+      id: 'other-class',
+      name: '1B',
+      created_by: 'user-1',
+      programme_id: 'programme-a',
+      synced: false,
+    });
 
     const child1 = {
       id: 'child-1',
@@ -76,19 +83,11 @@ describe('ClassesContext storage operations', () => {
       class_id: 'other-class',
       synced: true,
     };
-    await storage.saveChild(child1);
-    await storage.saveChild(child2);
+    await childrenRepository.saveChildRecord(child1);
+    await childrenRepository.saveChildRecord(child2);
 
     // Delete the class
     await storage.deleteClass('class-1');
-
-    // Manually null out class_id on affected children (mirrors ClassesContext logic)
-    const allChildren = await childrenRepository.getChildren();
-    for (const child of allChildren) {
-      if (child.class_id === 'class-1') {
-        await storage.updateChild(child.id, { class_id: null, synced: false });
-      }
-    }
 
     const children = await childrenRepository.getChildren();
     const alice = children.find(c => c.id === 'child-1');

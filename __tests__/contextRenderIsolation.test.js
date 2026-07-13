@@ -10,6 +10,10 @@ import { storage } from '../src/utils/storage';
 import { pullPreloadedChildData } from '../src/services/preloadedChildData';
 import { enqueueSupabaseRequest } from '../src/services/supabaseRequestQueue';
 import { timeEntriesRepository } from '../src/db/repositories/timeEntriesRepository';
+import { childrenRepository } from '../src/db/repositories/childrenRepository';
+import { classesRepository } from '../src/db/repositories/classesRepository';
+import { groupsRepository } from '../src/db/repositories/groupsRepository';
+import { syncOutboxRepository } from '../src/db/repositories/syncOutboxRepository';
 import {
   jobTitlesRepository,
   schoolsRepository,
@@ -18,6 +22,7 @@ import {
 jest.mock('../src/services/offlineSync', () => ({
   getSyncStatus: jest.fn(),
   fetchAndCacheSchools: jest.fn(async () => []),
+  ensureReferenceData: jest.fn(async () => ({})),
   requeueTerminalRlsFailures: jest.fn(async () => 0),
   syncAll: jest.fn(async () => ({ success: true, totalSynced: 0, totalFailed: 0 })),
 }));
@@ -44,31 +49,46 @@ jest.mock('../src/context/AuthContext', () => ({
 
 jest.mock('../src/utils/storage', () => ({
   storage: {
-    getMyChildren: jest.fn(),
-    getGroups: jest.fn(),
-    getChildrenGroups: jest.fn(),
-    getUnsyncedChildren: jest.fn(),
-    getUnsyncedGroups: jest.fn(),
-    getUnsyncedChildrenGroups: jest.fn(),
-    getPendingHardDeleteIds: jest.fn(),
     getClasses: jest.fn(),
     getUnsyncedClasses: jest.fn(),
-    saveChild: jest.fn(),
-    createChild: jest.fn(),
-    saveStaffChild: jest.fn(),
-    saveChildProgrammeEnrollment: jest.fn(),
-    saveChildClassMembership: jest.fn(),
     saveClass: jest.fn(),
     saveClassEaAssignment: jest.fn(),
     updateClass: jest.fn(),
     deleteClass: jest.fn(),
-    updateChild: jest.fn(),
-    deleteChild: jest.fn(),
-    saveGroup: jest.fn(),
-    updateGroup: jest.fn(),
-    deleteGroup: jest.fn(),
-    saveChildrenGroup: jest.fn(),
-    deleteChildrenGroup: jest.fn(),
+  },
+}));
+
+jest.mock('../src/db/repositories/childrenRepository', () => ({
+  childrenRepository: {
+    getMyChildren: jest.fn(),
+    getUnsyncedChildren: jest.fn(),
+    saveServerChildRows: jest.fn(),
+    saveServerStaffChildRows: jest.fn(),
+    saveServerChildProgrammeEnrollmentRows: jest.fn(),
+    saveServerChildClassMembershipRows: jest.fn(),
+  },
+}));
+
+jest.mock('../src/db/repositories/classesRepository', () => ({
+  classesRepository: {
+    saveServerClassRows: jest.fn(),
+  },
+}));
+
+jest.mock('../src/db/repositories/groupsRepository', () => ({
+  groupsRepository: {
+    getGroups: jest.fn(),
+    getChildrenGroups: jest.fn(),
+    getUnsyncedGroups: jest.fn(),
+    getUnsyncedChildrenGroups: jest.fn(),
+    saveServerGroupRows: jest.fn(),
+    saveServerChildrenGroupRows: jest.fn(),
+  },
+}));
+
+jest.mock('../src/db/repositories/syncOutboxRepository', () => ({
+  syncOutboxRepository: {
+    getPendingHardDeleteIds: jest.fn(),
   },
 }));
 
@@ -184,27 +204,27 @@ describe('context render isolation', () => {
     lookupsApi = null;
     timeTrackingApi = null;
     getSyncStatus.mockResolvedValue(statusWith());
-    storage.getMyChildren.mockResolvedValue([]);
-    storage.getGroups.mockResolvedValue([]);
-    storage.getChildrenGroups.mockResolvedValue([]);
-    storage.getUnsyncedChildren.mockResolvedValue([]);
-    storage.getUnsyncedGroups.mockResolvedValue([]);
-    storage.getUnsyncedChildrenGroups.mockResolvedValue([]);
-    storage.getPendingHardDeleteIds.mockResolvedValue(new Set());
+    childrenRepository.getMyChildren.mockResolvedValue([]);
+    childrenRepository.getUnsyncedChildren.mockResolvedValue([]);
+    groupsRepository.getGroups.mockResolvedValue([]);
+    groupsRepository.getChildrenGroups.mockResolvedValue([]);
+    groupsRepository.getUnsyncedGroups.mockResolvedValue([]);
+    groupsRepository.getUnsyncedChildrenGroups.mockResolvedValue([]);
+    syncOutboxRepository.getPendingHardDeleteIds.mockResolvedValue(new Set());
     schoolsRepository.getAll.mockResolvedValue([]);
     storage.getClasses.mockResolvedValue([]);
     storage.getUnsyncedClasses.mockResolvedValue([]);
     jobTitlesRepository.getAll.mockResolvedValue([]);
-    storage.saveChild.mockResolvedValue(true);
-    storage.createChild.mockResolvedValue(true);
-    storage.saveStaffChild.mockResolvedValue(true);
-    storage.saveChildProgrammeEnrollment.mockResolvedValue(true);
-    storage.saveChildClassMembership.mockResolvedValue(true);
+    classesRepository.saveServerClassRows.mockResolvedValue({ applied: 0, skipped: 0 });
+    childrenRepository.saveServerChildRows.mockResolvedValue({ applied: 0, skipped: 0 });
+    childrenRepository.saveServerStaffChildRows.mockResolvedValue({ applied: 0, skipped: 0 });
+    childrenRepository.saveServerChildProgrammeEnrollmentRows.mockResolvedValue({ applied: 0, skipped: 0 });
+    childrenRepository.saveServerChildClassMembershipRows.mockResolvedValue({ applied: 0, skipped: 0 });
     storage.saveClass.mockResolvedValue(true);
     storage.saveClassEaAssignment.mockResolvedValue(true);
     jobTitlesRepository.replaceFromServer.mockResolvedValue(true);
-    storage.saveGroup.mockResolvedValue(true);
-    storage.saveChildrenGroup.mockResolvedValue(true);
+    groupsRepository.saveServerGroupRows.mockResolvedValue({ applied: 0, skipped: 0 });
+    groupsRepository.saveServerChildrenGroupRows.mockResolvedValue({ applied: 0, skipped: 0 });
     fetchAndCacheSchools.mockResolvedValue([]);
     enqueueSupabaseRequest.mockResolvedValue({ data: [], error: null });
     timeEntriesRepository.getActiveTimeEntry.mockResolvedValue(null);
@@ -233,9 +253,9 @@ describe('context render isolation', () => {
     )).not.toThrow();
 
     await waitFor(() => {
-      expect(storage.getMyChildren).toHaveBeenCalledWith('user-1');
-      expect(storage.getGroups).toHaveBeenCalledWith({ userId: 'user-1' });
-      expect(storage.getChildrenGroups).toHaveBeenCalled();
+      expect(childrenRepository.getMyChildren).toHaveBeenCalledWith('user-1');
+      expect(groupsRepository.getGroups).toHaveBeenCalledWith({ userId: 'user-1' });
+      expect(groupsRepository.getChildrenGroups).toHaveBeenCalled();
       expect(pullPreloadedChildData).toHaveBeenCalledWith({ userId: 'user-1' });
       expect(childrenApi.loading).toBe(false);
     });
@@ -252,9 +272,9 @@ describe('context render isolation', () => {
     );
     await waitFor(() => {
       expect(getSyncStatus).toHaveBeenCalled();
-      expect(storage.getMyChildren).toHaveBeenCalledWith('user-1');
-      expect(storage.getGroups).toHaveBeenCalledWith({ userId: 'user-1' });
-      expect(storage.getChildrenGroups).toHaveBeenCalled();
+      expect(childrenRepository.getMyChildren).toHaveBeenCalledWith('user-1');
+      expect(groupsRepository.getGroups).toHaveBeenCalledWith({ userId: 'user-1' });
+      expect(groupsRepository.getChildrenGroups).toHaveBeenCalled();
       expect(pullPreloadedChildData).toHaveBeenCalledWith({ userId: 'user-1' });
       expect(childrenApi.loading).toBe(false);
     });
@@ -306,7 +326,7 @@ describe('context render isolation', () => {
     );
     await waitFor(() => {
       expect(getSyncStatus).toHaveBeenCalled();
-      expect(storage.getMyChildren).toHaveBeenCalledWith('user-1');
+      expect(childrenRepository.getMyChildren).toHaveBeenCalledWith('user-1');
       expect(schoolsRepository.getAll).toHaveBeenCalled();
       expect(fetchAndCacheSchools).toHaveBeenCalled();
       expect(storage.getClasses).toHaveBeenCalledWith({ userId: 'user-1' });

@@ -2,14 +2,16 @@ jest.mock('expo-sqlite', () => require('../test-support/expoSQLiteMock'));
 
 import { __reset, __setDatabaseFactory } from 'expo-sqlite';
 import { storage } from '../src/utils/storage';
+import { childrenRepository } from '../src/db/repositories/childrenRepository';
+import { groupsRepository } from '../src/db/repositories/groupsRepository';
 import { getWriter, resetDatabaseConnectionForTests } from '../src/db/client';
 import { createBetterSqliteTestDatabase } from '../test-support/betterSqliteAdapter';
 import { seedCoreData } from '../test-support/sqliteRepositoryTestUtils';
 
 const readers = {
-  children: () => storage.getMyChildren('user-1'),
-  groups: () => storage.getGroups({ userId: 'user-1' }),
-  memberships: () => storage.getChildrenGroups(),
+  children: () => childrenRepository.getMyChildren('user-1'),
+  groups: () => groupsRepository.getGroups({ userId: 'user-1' }),
+  memberships: () => groupsRepository.getChildrenGroups(),
   classes: () => storage.getClasses({ userId: 'user-1' }),
 };
 

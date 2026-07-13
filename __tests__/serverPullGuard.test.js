@@ -1,8 +1,8 @@
 jest.mock('expo-sqlite', () => require('../test-support/expoSQLiteMock'));
 
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { storage } from '../src/utils/storage';
 import { runMigrations } from '../src/db/migrations';
+import { getWriter } from '../src/db/client';
 import {
   childrenRepository,
   createChildrenRepository,
@@ -346,15 +346,20 @@ describe('server pull guard — pending-local-wins (issue #42, ZZ F7)', () => {
 describe('server pull guard repository reads stay consistent with SQLite', () => {
   beforeEach(async () => {
     await AsyncStorage.clear();
+    await seedCoreData(await getWriter());
   });
 
-  test('after a pull, reading children through storage still shows the pending local edit', async () => {
+  test('after a pull, repository reads still show the pending local edit', async () => {
     const serverRow = serverChild();
 
-    await storage.saveChild(serverRow);
-    await storage.updateChild('child-1', { first_name: 'Amahle-Edited', synced: false }, { actorUserId: 'user-1' });
+    await childrenRepository.saveChildRecord(serverRow);
+    await childrenRepository.updateChild(
+      'child-1',
+      { first_name: 'Amahle-Edited', synced: false },
+      { actorUserId: 'user-1' }
+    );
 
-    await storage.saveChild(serverRow);
+    await childrenRepository.saveChildRecord(serverRow);
 
     const children = await childrenRepository.getChildren();
     const child = children.find((row) => row.id === 'child-1');
@@ -363,8 +368,12 @@ describe('server pull guard repository reads stay consistent with SQLite', () =>
   });
 
   test('repository reads report the current sync_status', async () => {
-    await storage.saveChild(serverChild());
-    await storage.updateChild('child-1', { first_name: 'Amahle-Edited', synced: false }, { actorUserId: 'user-1' });
+    await childrenRepository.saveChildRecord(serverChild());
+    await childrenRepository.updateChild(
+      'child-1',
+      { first_name: 'Amahle-Edited', synced: false },
+      { actorUserId: 'user-1' }
+    );
 
     const children = await childrenRepository.getChildren();
     const child = children.find((row) => row.id === 'child-1');

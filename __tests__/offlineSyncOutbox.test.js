@@ -8,6 +8,7 @@ import { runMigrations } from '../src/db/migrations';
 import {
   AUTHENTICATED_DENIAL_MARKER,
   createOutboxSyncEngine,
+  ensureReferenceData,
   pullReferenceData,
   _testComputeEvidencePending,
 } from '../src/services/offlineSync';
@@ -2174,6 +2175,50 @@ describe('SQLite outbox offline sync', () => {
       teachers: 1,
       staff_programme_assignments: 1,
     });
+  });
+
+  test('ensureReferenceData runs one reference pull for concurrent callers on an empty cache', async () => {
+    const rowsByTable = {
+      schools: [{ id: 'school-1', name: 'Masi Primary' }],
+      job_titles: [],
+      programmes: [{ id: 'programme-1', code: 'literacy', name: 'Literacy' }],
+      academic_years: [{
+        id: 'year-2026',
+        label: '2026',
+        starts_on: '2026-01-01',
+        ends_on: '2026-12-31',
+      }],
+      assessment_windows: [],
+      teachers: [],
+      staff_programme_assignments: [],
+    };
+    const supabaseClient = {
+      from: jest.fn((tableName) => {
+        const query = {
+          select: jest.fn(() => query),
+          eq: jest.fn(() => query),
+          then: (resolve) => resolve({ data: rowsByTable[tableName], error: null }),
+        };
+        return query;
+      }),
+    };
+    const repositories = Object.fromEntries(Object.keys(rowsByTable).map((tableName) => [
+      tableName,
+      {
+        getAll: jest.fn(async () => []),
+        replaceFromServer: jest.fn(async () => true),
+      },
+    ]));
+
+    await Promise.all([
+      ensureReferenceData({ supabaseClient, repositories, userId: 'user-1' }),
+      ensureReferenceData({ supabaseClient, repositories, userId: 'user-1' }),
+    ]);
+
+    expect(supabaseClient.from).toHaveBeenCalledTimes(7);
+    expect(repositories.schools.replaceFromServer).toHaveBeenCalledTimes(1);
+    expect(repositories.programmes.replaceFromServer).toHaveBeenCalledTimes(1);
+    expect(repositories.academic_years.replaceFromServer).toHaveBeenCalledTimes(1);
   });
 
   test('pullReferenceData seeds the local active programme assignment used by offline writes', async () => {
