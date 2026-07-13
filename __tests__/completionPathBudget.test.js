@@ -56,7 +56,8 @@ describe('completion-path statement budgets', () => {
 
     const log = db.getQueryLog();
     expect(log.filter(query => query.method === 'runAsync')).toHaveLength(124);
-    expect(log.filter(query => query.method !== 'runAsync')).toHaveLength(0);
+    expect(log.filter(query => query.method === 'transaction')).toHaveLength(1);
+    expect(log.filter(query => !['runAsync', 'transaction'].includes(query.method))).toHaveLength(0);
     expect(log.some(query => /select .* from (assessment_items|assessments)/i.test(compactSql(query.sql))))
       .toBe(false);
 
@@ -85,7 +86,8 @@ describe('completion-path statement budgets', () => {
 
     const log = db.getQueryLog();
     expect(log.filter(query => query.method === 'runAsync')).toHaveLength(22);
-    expect(log.filter(query => query.method !== 'runAsync')).toHaveLength(0);
+    expect(log.filter(query => query.method === 'transaction')).toHaveLength(1);
+    expect(log.filter(query => !['runAsync', 'transaction'].includes(query.method))).toHaveLength(0);
     expect(log.some(query => /select .* from (session_attendees|sessions)/i.test(compactSql(query.sql))))
       .toBe(false);
 
