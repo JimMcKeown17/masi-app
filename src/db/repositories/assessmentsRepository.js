@@ -70,15 +70,9 @@ const buildSummary = (assessment) => ({
   device_info: assessment.device_info || {},
 });
 
-const mapAssessment = async (db, row) => {
+const mapAssessment = (row, summary = {}) => {
   if (!row) return null;
   const mapped = mapDomainRow(row, { jsonColumns: ['items_tested'] });
-  const summaryRow = await db.getFirstAsync(
-    'select metadata from assessment_items where assessment_id = ? and item_key = ?',
-    row.id,
-    SUMMARY_ITEM_KEY
-  );
-  const summary = decodeJson(summaryRow?.metadata, {});
 
   return {
     ...mapped,
@@ -87,14 +81,41 @@ const mapAssessment = async (db, row) => {
   };
 };
 
+const hydrateAssessments = async (db, rows) => {
+  if (rows.length === 0) return [];
+  const placeholders = rows.map(() => '?').join(', ');
+  const summaryRows = await db.getAllAsync(`
+    select assessment_id, metadata
+    from assessment_items
+    where item_key = ?
+      and assessment_id in (${placeholders})
+  `, SUMMARY_ITEM_KEY, ...rows.map(row => row.id));
+  const summaries = new Map(summaryRows.map(row => [
+    row.assessment_id,
+    decodeJson(row.metadata, {}),
+  ]));
+  return rows.map(row => mapAssessment(row, summaries.get(row.id) || {}));
+};
+
 export const createAssessmentsRepository = ({ database } = {}) => {
   const runWrite = (transaction, task) => (
     transaction ? task(transaction) : runRepositoryTransaction(database, task)
   );
 
-  const getAssessments = async ({ userId, programmeId, childId } = {}) => {
+  const resolveActiveProgrammeId = async (db, { userId, programmeId }) => (
+    programmeId || (userId ? await getActiveProgrammeId(db, userId) : null)
+  );
+
+  const getAssessments = async ({
+    userId,
+    programmeId,
+    childId,
+    recordedByUserId,
+    sinceDate,
+    order = 'asc',
+  } = {}) => {
     const db = await resolveDatabase(database);
-    const activeProgrammeId = programmeId || (userId ? await getActiveProgrammeId(db, userId) : null);
+    const activeProgrammeId = await resolveActiveProgrammeId(db, { userId, programmeId });
     if (userId && !activeProgrammeId) return [];
     const clauses = [];
     const params = [];
@@ -106,16 +127,46 @@ export const createAssessmentsRepository = ({ database } = {}) => {
       clauses.push('child_id = ?');
       params.push(childId);
     }
+    if (recordedByUserId) {
+      clauses.push('user_id = ?');
+      params.push(recordedByUserId);
+    }
+    if (sinceDate) {
+      clauses.push('assessment_date >= ?');
+      params.push(sinceDate);
+    }
     const where = clauses.length ? `where ${clauses.join(' and ')}` : '';
+    const direction = order === 'desc' ? 'desc' : 'asc';
     const rows = await db.getAllAsync(
-      `select * from assessments ${where} order by assessment_date, created_at`,
+      `select * from assessments ${where} order by assessment_date ${direction}, created_at ${direction}`,
       ...params
     );
-    const mapped = [];
-    for (const row of rows) {
-      mapped.push(await mapAssessment(db, row));
+    return hydrateAssessments(db, rows);
+  };
+
+  const getAssessmentCountsSince = async ({ userId, programmeId, sinceDate } = {}) => {
+    const db = await resolveDatabase(database);
+    const activeProgrammeId = await resolveActiveProgrammeId(db, { userId, programmeId });
+    if (userId && !activeProgrammeId) return [];
+    const clauses = [];
+    const params = [];
+    if (activeProgrammeId) {
+      clauses.push('programme_id = ?');
+      params.push(activeProgrammeId);
     }
-    return mapped;
+    if (sinceDate) {
+      clauses.push('assessment_date >= ?');
+      params.push(sinceDate);
+    }
+    const where = clauses.length ? `where ${clauses.join(' and ')}` : '';
+    const rows = await db.getAllAsync(`
+      select child_id, count(*) as count
+      from assessments
+      ${where}
+      group by child_id
+      order by child_id
+    `, ...params);
+    return rows.map(row => ({ ...row, count: Number(row.count) }));
   };
 
   const saveAssessment = async (assessment, { transaction } = {}) => runWrite(transaction, async (txn) => {
@@ -207,15 +258,12 @@ export const createAssessmentsRepository = ({ database } = {}) => {
   const getUnsyncedRecords = async () => {
     const db = await resolveDatabase(database);
     const rows = await db.getAllAsync("select * from assessments where sync_status <> 'synced' order by created_at");
-    const mapped = [];
-    for (const row of rows) {
-      mapped.push(await mapAssessment(db, row));
-    }
-    return mapped;
+    return hydrateAssessments(db, rows);
   };
 
   return {
     getAssessments,
+    getAssessmentCountsSince,
     saveAssessment,
     getUnsyncedRecords,
   };

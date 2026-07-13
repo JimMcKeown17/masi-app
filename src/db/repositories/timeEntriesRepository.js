@@ -71,20 +71,32 @@ export const createTimeEntriesRepository = ({ database } = {}) => {
     await enqueueDomainOutbox(txn, 'time_entries', record.id, existingInsert ? 'insert' : 'update', record);
   };
 
-  const getTimeEntries = async ({ userId } = {}) => {
+  const getTimeEntries = async ({ userId, sinceIso, limit, completedOnly = false } = {}) => {
     const db = await resolveDatabase(database);
-    const rows = userId
-      ? await db.getAllAsync(`
-        select *
-        from time_entries
-        where user_id = ?
-        order by sign_in_time, created_at
-      `, userId)
-      : await db.getAllAsync(`
-        select *
-        from time_entries
-        order by sign_in_time, created_at
-      `);
+    const clauses = [];
+    const params = [];
+    if (userId) {
+      clauses.push('user_id = ?');
+      params.push(userId);
+    }
+    if (sinceIso) {
+      clauses.push('sign_in_time >= ?');
+      params.push(sinceIso);
+    }
+    if (completedOnly) {
+      clauses.push('sign_out_time is not null');
+    }
+    const where = clauses.length ? `where ${clauses.join(' and ')}` : '';
+    const direction = limit ? 'desc' : 'asc';
+    const limitSql = limit ? 'limit ?' : '';
+    if (limit) params.push(limit);
+    const rows = await db.getAllAsync(`
+      select *
+      from time_entries
+      ${where}
+      order by sign_in_time ${direction}, created_at ${direction}
+      ${limitSql}
+    `, ...params);
     return rows.map(mapTimeEntry);
   };
 
