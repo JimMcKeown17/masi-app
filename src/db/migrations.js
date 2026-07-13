@@ -592,6 +592,14 @@ const MIGRATIONS = [
       alter table sync_outbox add column owner_user_id text;
     `,
   },
+  {
+    version: 7,
+    name: 'local_state_sidecar_cleanup',
+    sql: `
+      delete from local_state where key like 'storage_payload:%';
+      delete from local_state where key = 'sync_queue';
+    `,
+  },
 ];
 
 // Derived from the migration list so it never drifts when a migration is added.
