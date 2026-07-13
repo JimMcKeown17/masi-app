@@ -1,8 +1,13 @@
-import { resolveDatabase, runRepositoryTransaction } from './repositoryRuntime';
+import {
+  resolveDatabase,
+  runBatchWithPerRowFallback,
+  runRepositoryTransaction,
+} from './repositoryRuntime';
 import {
   enqueueDomainOutbox,
   mapDomainRow,
   normalizeSyncFields,
+  serverPullWouldClobberPendingLocal,
   shouldEnqueueOutbox,
   upsertDomainRecord,
 } from './domainRepositoryUtils';
@@ -27,6 +32,9 @@ export const createGroupEaAssignmentsRepository = ({ database } = {}) => {
   const save = async (assignment, { transaction } = {}) => {
     const write = async (txn) => {
       const record = normalizeSyncFields(assignment);
+      if (await serverPullWouldClobberPendingLocal(txn, 'group_ea_assignments', record)) {
+        return false;
+      }
       await upsertDomainRecord(txn, {
         tableName: 'group_ea_assignments',
         columns: COLUMNS,
@@ -46,7 +54,20 @@ export const createGroupEaAssignmentsRepository = ({ database } = {}) => {
     return rows.map(mapDomainRow);
   };
 
-  return { save, getAll };
+  const saveServerRow = async (row, { transaction } = {}) => save({
+    ...row,
+    synced: true,
+    sync_status: 'synced',
+  }, { transaction });
+
+  const saveServerRows = async (rows = []) => runBatchWithPerRowFallback({
+    database,
+    rows,
+    saveRow: saveServerRow,
+    tableName: 'group_ea_assignments',
+  });
+
+  return { save, saveServerRows, getAll };
 };
 
 export const groupEaAssignmentsRepository = createGroupEaAssignmentsRepository();

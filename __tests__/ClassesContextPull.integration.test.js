@@ -45,16 +45,31 @@ jest.mock('../src/services/supabaseClient', () => ({
   },
 }));
 
-const emptyChildBundle = {
-  children: [],
-  classes: [],
-  childEaAssignments: [],
-  childProgrammeEnrollments: [],
-  childClassMemberships: [],
-  groups: [],
-  childrenGroups: [],
-  errors: [],
+const childBundle = (overrides = {}) => {
+  const rows = {
+    programmeAssignment: [{ programme_id: 'programme-a' }],
+    children: [],
+    classes: [],
+    childEaAssignments: [],
+    childProgrammeEnrollments: [],
+    childClassMemberships: [],
+    groups: [],
+    groupEaAssignments: [],
+    childrenGroups: [],
+    ...overrides,
+  };
+  return {
+    activeProgrammeId: 'programme-a',
+    scopes: Object.fromEntries(Object.entries(rows).map(([name, scopeRows]) => [name, {
+      ok: true,
+      rows: scopeRows,
+      complete: true,
+      failureKind: null,
+    }])),
+  };
 };
+
+const emptyChildBundle = childBundle();
 
 const createDeferred = () => {
   let resolve;
@@ -205,8 +220,7 @@ test('archiving a class offline refreshes child assignment state without a serve
     )
   `);
 
-  mockPullPreloadedChildData.mockResolvedValue({
-    ...emptyChildBundle,
+  mockPullPreloadedChildData.mockResolvedValue(childBundle({
     children: [{
       id: 'child-1',
       first_name: 'Amahle',
@@ -246,7 +260,7 @@ test('archiving a class offline refreshes child assignment state without a serve
       created_by: 'user-1',
       synced: true,
     }],
-  });
+  }));
   mockSupabaseFrom.mockImplementation((tableName) => {
     if (tableName === 'staff_programme_assignments') {
       return queryResult({ data: [{ programme_id: 'programme-a' }], error: null });

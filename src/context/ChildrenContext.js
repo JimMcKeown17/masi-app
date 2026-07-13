@@ -4,6 +4,7 @@ import { ensureReferenceData } from '../services/offlineSync';
 import { childrenRepository } from '../db/repositories/childrenRepository';
 import { classesRepository } from '../db/repositories/classesRepository';
 import { groupsRepository } from '../db/repositories/groupsRepository';
+import { groupEaAssignmentsRepository } from '../db/repositories/groupEaAssignmentsRepository';
 import { syncOutboxRepository } from '../db/repositories/syncOutboxRepository';
 import { mergeServerRows } from '../utils/mergeServerRows';
 import { useAuth } from './AuthContext';
@@ -12,8 +13,8 @@ import { v4 as uuidv4 } from 'uuid';
 
 const ChildrenContext = createContext({});
 
-const shouldApplyPulledRows = (rows, errors) => (
-  Array.isArray(rows) && (rows.length > 0 || errors.length === 0)
+const shouldApplyPulledRows = (rows, scopes) => (
+  rows.length > 0 || !Object.values(scopes).some((scope) => scope.ok === false)
 );
 
 export const ChildrenProvider = ({ children }) => {
@@ -82,22 +83,32 @@ export const ChildrenProvider = ({ children }) => {
       await ensureReferenceData({ userId: activeUserId });
       if (activeUserIdRef.current !== activeUserId) return;
 
+      const { scopes } = pulled;
+
       const pendingChildDeleteIds = await syncOutboxRepository.getPendingHardDeleteIds({
         tableName: 'children',
         ownerUserId: activeUserId,
       });
-      const errors = pulled.errors || [];
-      const pulledChildren = (pulled.children || [])
+      const childrenById = new Map();
+      for (const child of [
+        ...scopes.children.rows,
+        ...scopes.childEaAssignments.rows.map((assignment) => assignment.children),
+      ]) {
+        if (child?.id && !childrenById.has(child.id)) {
+          childrenById.set(child.id, child);
+        }
+      }
+      const pulledChildren = [...childrenById.values()]
         .filter((row) => !pendingChildDeleteIds.has(row.id));
-      const pulledChildEaAssignments = (pulled.childEaAssignments || [])
+      const pulledChildEaAssignments = scopes.childEaAssignments.rows
         .filter((row) => !pendingChildDeleteIds.has(row.child_id));
-      const pulledChildProgrammeEnrollments = (pulled.childProgrammeEnrollments || [])
+      const pulledChildProgrammeEnrollments = scopes.childProgrammeEnrollments.rows
         .filter((row) => !pendingChildDeleteIds.has(row.child_id));
-      const pulledChildClassMemberships = (pulled.childClassMemberships || [])
+      const pulledChildClassMemberships = scopes.childClassMemberships.rows
         .filter((row) => !pendingChildDeleteIds.has(row.child_id));
 
-      await classesRepository.saveServerClassRows(pulled.classes || []);
-      if (shouldApplyPulledRows(pulledChildren, errors)) {
+      await classesRepository.saveServerClassRows(scopes.classes.rows);
+      if (shouldApplyPulledRows(pulledChildren, scopes)) {
         await childrenRepository.saveServerChildRows(pulledChildren);
       }
       await childrenRepository.saveServerStaffChildRows(pulledChildEaAssignments);
@@ -105,11 +116,12 @@ export const ChildrenProvider = ({ children }) => {
         pulledChildProgrammeEnrollments
       );
       await childrenRepository.saveServerChildClassMembershipRows(pulledChildClassMemberships);
-      if (shouldApplyPulledRows(pulled.groups, errors)) {
-        await groupsRepository.saveServerGroupRows(pulled.groups || []);
+      if (shouldApplyPulledRows(scopes.groups.rows, scopes)) {
+        await groupsRepository.saveServerGroupRows(scopes.groups.rows);
       }
-      if (shouldApplyPulledRows(pulled.childrenGroups, errors)) {
-        await groupsRepository.saveServerChildrenGroupRows(pulled.childrenGroups || []);
+      await groupEaAssignmentsRepository.saveServerRows(scopes.groupEaAssignments.rows);
+      if (shouldApplyPulledRows(scopes.childrenGroups.rows, scopes)) {
+        await groupsRepository.saveServerChildrenGroupRows(scopes.childrenGroups.rows);
       }
 
       const [
@@ -134,17 +146,17 @@ export const ChildrenProvider = ({ children }) => {
       ]);
       if (activeUserIdRef.current !== activeUserId) return;
 
-      const mergedChildren = shouldApplyPulledRows(pulledChildren, errors)
+      const mergedChildren = shouldApplyPulledRows(pulledChildren, scopes)
         ? mergeServerRows(freshChildren, pulledChildren, {
           unpushedRows: unsyncedChildren,
           pendingDeleteIds: freshPendingChildDeleteIds,
         })
         : freshChildren;
-      const mergedGroups = shouldApplyPulledRows(pulled.groups, errors)
-        ? mergeServerRows(freshGroups, pulled.groups || [], { unpushedRows: unsyncedGroups })
+      const mergedGroups = shouldApplyPulledRows(scopes.groups.rows, scopes)
+        ? mergeServerRows(freshGroups, scopes.groups.rows, { unpushedRows: unsyncedGroups })
         : freshGroups;
-      const mergedMemberships = shouldApplyPulledRows(pulled.childrenGroups, errors)
-        ? mergeServerRows(freshMemberships, pulled.childrenGroups || [], {
+      const mergedMemberships = shouldApplyPulledRows(scopes.childrenGroups.rows, scopes)
+        ? mergeServerRows(freshMemberships, scopes.childrenGroups.rows, {
           unpushedRows: unsyncedMemberships,
         })
         : freshMemberships;

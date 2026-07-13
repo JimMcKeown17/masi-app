@@ -13,6 +13,7 @@ import { childrenRepository } from '../src/db/repositories/childrenRepository';
 import { classesRepository } from '../src/db/repositories/classesRepository';
 import { classEaAssignmentsRepository } from '../src/db/repositories/classEaAssignmentsRepository';
 import { groupsRepository } from '../src/db/repositories/groupsRepository';
+import { groupEaAssignmentsRepository } from '../src/db/repositories/groupEaAssignmentsRepository';
 import { syncOutboxRepository } from '../src/db/repositories/syncOutboxRepository';
 import {
   jobTitlesRepository,
@@ -83,6 +84,12 @@ jest.mock('../src/db/repositories/groupsRepository', () => ({
     getUnsyncedChildrenGroups: jest.fn(),
     saveServerGroupRows: jest.fn(),
     saveServerChildrenGroupRows: jest.fn(),
+  },
+}));
+
+jest.mock('../src/db/repositories/groupEaAssignmentsRepository', () => ({
+  groupEaAssignmentsRepository: {
+    saveServerRows: jest.fn(),
   },
 }));
 
@@ -225,6 +232,7 @@ describe('context render isolation', () => {
     jobTitlesRepository.replaceFromServer.mockResolvedValue(true);
     groupsRepository.saveServerGroupRows.mockResolvedValue({ applied: 0, skipped: 0 });
     groupsRepository.saveServerChildrenGroupRows.mockResolvedValue({ applied: 0, skipped: 0 });
+    groupEaAssignmentsRepository.saveServerRows.mockResolvedValue({ applied: 0, skipped: 0 });
     fetchAndCacheSchools.mockResolvedValue([]);
     enqueueSupabaseRequest.mockResolvedValue({ data: [], error: null });
     timeEntriesRepository.getActiveTimeEntry.mockResolvedValue(null);
@@ -232,14 +240,23 @@ describe('context render isolation', () => {
     timeEntriesRepository.createOpenTimeEntry.mockResolvedValue(true);
     timeEntriesRepository.updateTimeEntry.mockResolvedValue(true);
     pullPreloadedChildData.mockResolvedValue({
-      children: [],
-      classes: [],
-      childEaAssignments: [],
-      childProgrammeEnrollments: [],
-      childClassMemberships: [],
-      groups: [],
-      childrenGroups: [],
-      errors: [],
+      activeProgrammeId: 'programme-a',
+      scopes: Object.fromEntries([
+        ['programmeAssignment', [{ programme_id: 'programme-a' }]],
+        ['children', []],
+        ['classes', []],
+        ['childEaAssignments', []],
+        ['childProgrammeEnrollments', []],
+        ['childClassMemberships', []],
+        ['groups', []],
+        ['groupEaAssignments', []],
+        ['childrenGroups', []],
+      ].map(([name, rows]) => [name, {
+        ok: true,
+        rows,
+        complete: true,
+        failureKind: null,
+      }])),
     });
   });
 

@@ -41,75 +41,118 @@ const wrapper = ({ children }) => (
   <ChildrenProvider>{children}</ChildrenProvider>
 );
 
-const pulledBundle = (overrides = {}) => ({
-  children: [{
-    id: 'child-1',
-    first_name: 'Stale Server Name',
-    last_name: 'Dlamini',
-    class_id: 'class-1',
-    created_by: 'user-1',
-    synced: true,
-    sync_status: 'synced',
-  }],
-  classes: [{
-    id: 'class-1',
-    school_id: 'school-1',
-    name: 'Grade 1A',
-    grade: '1',
-    academic_year_id: 'year-2026',
-    created_by: 'user-1',
-    synced: true,
-    sync_status: 'synced',
-  }],
-  childEaAssignments: [{
-    id: 'cea-child-1',
-    user_id: 'user-1',
-    child_id: 'child-1',
-    assigned_at: '2026-01-15T00:00:00.000Z',
-    created_by: 'user-1',
-    synced: true,
-    sync_status: 'synced',
-  }],
-  childProgrammeEnrollments: [{
-    id: 'cpe-child-1',
-    child_id: 'child-1',
-    programme_id: 'programme-a',
-    enrolled_at: '2026-01-15T00:00:00.000Z',
-    created_by: 'user-1',
-    synced: true,
-    sync_status: 'synced',
-  }],
-  childClassMemberships: [{
-    id: 'ccm-child-1',
-    child_id: 'child-1',
-    class_id: 'class-1',
-    academic_year_id: 'year-2026',
-    enrolled_at: '2026-01-15T00:00:00.000Z',
-    created_by: 'user-1',
-    synced: true,
-    sync_status: 'synced',
-  }],
-  groups: [{
-    id: 'group-1',
-    name: 'Stale Server Group',
-    programme_id: 'programme-a',
-    class_id: 'class-1',
-    created_by: 'user-1',
-    synced: true,
-    sync_status: 'synced',
-  }],
-  childrenGroups: [{
-    id: 'membership-1',
-    child_id: 'child-1',
-    group_id: 'group-1',
-    joined_at: '2026-02-01T00:00:00.000Z',
-    created_by: 'user-1',
-    synced: true,
-    sync_status: 'synced',
-  }],
-  errors: [],
-  ...overrides,
+const successfulScope = (rows) => ({
+  ok: true,
+  rows,
+  complete: true,
+  failureKind: null,
 });
+
+const pulledBundle = (overrides = {}) => {
+  const activeProgrammeId = overrides.activeProgrammeId || 'programme-a';
+  const rows = {
+    programmeAssignment: [{ programme_id: activeProgrammeId }],
+    children: [{
+      id: 'child-1',
+      first_name: 'Stale Server Name',
+      last_name: 'Dlamini',
+      class_id: 'class-1',
+      created_by: 'user-1',
+      synced: true,
+      sync_status: 'synced',
+    }],
+    classes: [{
+      id: 'class-1',
+      school_id: 'school-1',
+      name: 'Grade 1A',
+      grade: '1',
+      academic_year_id: 'year-2026',
+      created_by: 'user-1',
+      synced: true,
+      sync_status: 'synced',
+    }],
+    childEaAssignments: [{
+      id: 'cea-child-1',
+      user_id: 'user-1',
+      child_id: 'child-1',
+      assigned_at: '2026-01-15T00:00:00.000Z',
+      created_by: 'user-1',
+      synced: true,
+      sync_status: 'synced',
+      children: {
+        id: 'child-1',
+        first_name: 'Stale Server Name',
+        last_name: 'Dlamini',
+        class_id: 'class-1',
+        created_by: 'user-1',
+        synced: true,
+        sync_status: 'synced',
+      },
+    }],
+    childProgrammeEnrollments: [{
+      id: 'cpe-child-1',
+      child_id: 'child-1',
+      programme_id: 'programme-a',
+      enrolled_at: '2026-01-15T00:00:00.000Z',
+      created_by: 'user-1',
+      synced: true,
+      sync_status: 'synced',
+    }],
+    childClassMemberships: [{
+      id: 'ccm-child-1',
+      child_id: 'child-1',
+      class_id: 'class-1',
+      academic_year_id: 'year-2026',
+      enrolled_at: '2026-01-15T00:00:00.000Z',
+      created_by: 'user-1',
+      synced: true,
+      sync_status: 'synced',
+    }],
+    groups: [{
+      id: 'group-1',
+      name: 'Stale Server Group',
+      programme_id: 'programme-a',
+      class_id: 'class-1',
+      created_by: 'user-1',
+      synced: true,
+      sync_status: 'synced',
+    }],
+    groupEaAssignments: [{
+      id: 'gea-group-1',
+      group_id: 'group-1',
+      ea_user_id: 'user-1',
+      programme_id: 'programme-a',
+      assigned_at: '2026-01-15T00:00:00.000Z',
+      created_by: 'user-1',
+      synced: true,
+      sync_status: 'synced',
+    }],
+    childrenGroups: [{
+      id: 'membership-1',
+      child_id: 'child-1',
+      group_id: 'group-1',
+      joined_at: '2026-02-01T00:00:00.000Z',
+      created_by: 'user-1',
+      synced: true,
+      sync_status: 'synced',
+    }],
+    ...overrides,
+  };
+  return {
+    activeProgrammeId,
+    scopes: Object.fromEntries([
+      'programmeAssignment',
+      'children',
+      'classes',
+      'childEaAssignments',
+      'childProgrammeEnrollments',
+      'childClassMemberships',
+      'groups',
+      'groupEaAssignments',
+      'childrenGroups',
+    ].map((name) => [name, successfulScope(rows[name] || [])])),
+  };
+};
 
 const createDeferred = () => {
   let resolve;
@@ -304,6 +347,8 @@ test('a full context pull creates no storage facade sidecar rows', async () => {
 
 test('an empty cache pulls reference parents before persisting the domain bundle', async () => {
   mockPullPreloadedChildData.mockResolvedValue(pulledBundle({
+    activeProgrammeId: 'programme-server',
+    programmeAssignment: [{ programme_id: 'programme-server' }],
     children: [{
       id: 'child-server',
       first_name: 'Server',
@@ -348,6 +393,14 @@ test('an empty cache pulls reference parents before persisting the domain bundle
       name: 'Server Group',
       programme_id: 'programme-server',
       class_id: 'class-server',
+      created_by: 'user-1',
+      synced: true,
+    }],
+    groupEaAssignments: [{
+      id: 'gea-server',
+      group_id: 'group-server',
+      ea_user_id: 'user-1',
+      programme_id: 'programme-server',
       created_by: 'user-1',
       synced: true,
     }],
