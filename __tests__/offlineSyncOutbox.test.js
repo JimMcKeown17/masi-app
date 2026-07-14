@@ -1909,6 +1909,112 @@ describe('SQLite outbox offline sync', () => {
       .toEqual({ status: 'pending' });
   });
 
+  test('a failed parent blocks only dependents that reference that exact record', async () => {
+    for (const suffix of ['1', '2']) {
+      await db.runAsync(`
+        insert into children (id, first_name, last_name, sync_status)
+        values (?, ?, 'Dlamini', 'pending')
+      `, `child-${suffix}`, `Child ${suffix}`);
+      await db.runAsync(`
+        insert into child_ea_assignments (id, user_id, child_id, sync_status)
+        values (?, 'user-1', ?, 'pending')
+      `, `assignment-${suffix}`, `child-${suffix}`);
+      await enqueue(db, 'children', `child-${suffix}`, 'insert', {
+        id: `child-${suffix}`,
+        first_name: `Child ${suffix}`,
+        last_name: 'Dlamini',
+      });
+      await enqueue(db, 'child_ea_assignments', `assignment-${suffix}`, 'insert', {
+        id: `assignment-${suffix}`,
+        user_id: 'user-1',
+        child_id: `child-${suffix}`,
+      });
+    }
+
+    const { supabaseClient, calls } = createSupabaseMock({
+      upsertResults: {
+        'children:child-1': { error: { message: 'child 1 network failure' } },
+      },
+    });
+    const engine = createOutboxSyncEngine({ getAuthSession: liveTestSession, database: db, supabaseClient });
+
+    const result = await engine.syncAll();
+
+    expect(calls.map((call) => `${call.type}:${call.tableName}:${call.payload?.id || ''}`)).toEqual([
+      'upsert:children:child-1',
+      'upsert:children:child-2',
+      `upsert:child_ea_assignments:${childEaAssignmentDomainId({
+        userId: 'user-1',
+        childId: 'child-2',
+      })}`,
+    ]);
+    expect(result.tableResults.child_ea_assignments).toEqual(expect.objectContaining({
+      synced: 1,
+      skipped: true,
+      skippedDependency: 'children',
+      skippedDependencyRecordId: 'child-1',
+    }));
+    expect(await db.getFirstAsync(
+      'select status from sync_outbox where table_name = ? and record_id = ?',
+      'child_ea_assignments',
+      'assignment-1'
+    )).toEqual({ status: 'pending' });
+    expect(await db.getFirstAsync(
+      'select status from sync_outbox where table_name = ? and record_id = ?',
+      'child_ea_assignments',
+      'assignment-2'
+    )).toBeNull();
+  });
+
+  test('a failed archive cleanup blocks only the access-ending row for the same subject', async () => {
+    const ids = await seedChildArchiveGraph(db);
+    await db.runAsync(`
+      insert into children (id, first_name, last_name, created_by, sync_status)
+      values ('child-other', 'Other', 'Child', 'user-1', 'synced')
+    `);
+    await db.runAsync(`
+      insert into child_ea_assignments (
+        id, user_id, child_id, assigned_at, unassigned_at, created_by, sync_status
+      ) values (
+        'assignment-other', 'user-1', 'child-other',
+        '2026-05-01T00:00:00.000Z', ?, 'user-1', 'pending'
+      )
+    `, ids.archivedAt);
+    await db.runAsync(`
+      update child_programme_enrollments
+      set ended_at = ?, sync_status = 'pending'
+      where id = ?
+    `, ids.archivedAt, ids.enrollmentId);
+    await enqueue(db, 'child_programme_enrollments', ids.enrollmentId, 'archive', {
+      id: ids.enrollmentId,
+      ended_at: ids.archivedAt,
+    });
+    await enqueue(db, 'child_ea_assignments', 'assignment-other', 'archive', {
+      id: 'assignment-other',
+      unassigned_at: ids.archivedAt,
+    });
+
+    const { supabaseClient, calls } = createSupabaseMock({
+      upsertResults: {
+        child_programme_enrollments: { error: { message: 'cleanup network failure' } },
+      },
+    });
+    const engine = createOutboxSyncEngine({ getAuthSession: liveTestSession, database: db, supabaseClient });
+
+    const result = await engine.syncAll();
+
+    expect(calls.map((call) => `${call.type}:${call.tableName}:${call.payload?.id || ''}`)).toEqual([
+      `upsert:child_programme_enrollments:${ids.enrollmentId}`,
+      'upsert:child_ea_assignments:assignment-other',
+    ]);
+    expect(result.tableResults.child_ea_assignments.synced).toBe(1);
+    expect(await db.getFirstAsync(
+      'select status from sync_outbox where table_name = ? and record_id = ?',
+      'child_ea_assignments',
+      'assignment-other'
+    )).toBeNull();
+  });
+
   test('keeps foreign-key and RLS failures visible as terminal failed items', async () => {
     await db.runAsync(`
       insert into children (id, first_name, last_name, sync_status)

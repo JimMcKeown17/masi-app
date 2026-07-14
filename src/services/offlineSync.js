@@ -200,6 +200,23 @@ const ARCHIVE_TABLE_DEPENDENCIES = {
   group_ea_assignments: ['child_group_memberships'],
 };
 
+// Archive ordering uses inverse edges: an access-granting assignment must wait only for
+// cleanup rows about the same child/class/group, not every failed row in the dependency table.
+const ARCHIVE_DEPENDENCY_SUBJECT_COLUMNS = {
+  child_ea_assignments: {
+    child_programme_enrollments: 'child_id',
+    child_class_memberships: 'child_id',
+    child_group_memberships: 'child_id',
+  },
+  class_ea_assignments: {
+    children: 'class_id',
+    child_class_memberships: 'class_id',
+  },
+  group_ea_assignments: {
+    child_group_memberships: 'group_id',
+  },
+};
+
 // The payload/domain column holding each FK-parent's id, per child table. Covers 23503
 // and the "<parent>.created_by" half of 42501 write-grants. Explicit (not name-derived)
 // because class_grouping_state references grouping_versions via active_grouping_version_id.
@@ -250,7 +267,13 @@ const GRANT_SUBJECTS = {
   class_grouping_state: [{ grantTable: 'class_ea_assignments', subjectColumn: 'class_id' }],
 };
 
-export const _testEvidenceMaps = { TABLE_DEPENDENCIES, PARENT_FK_COLUMNS, GRANT_SUBJECTS };
+export const _testEvidenceMaps = {
+  TABLE_DEPENDENCIES,
+  ARCHIVE_TABLE_DEPENDENCIES,
+  ARCHIVE_DEPENDENCY_SUBJECT_COLUMNS,
+  PARENT_FK_COLUMNS,
+  GRANT_SUBJECTS,
+};
 
 const ARCHIVE_PUSH_ORDER = {
   time_entries: 0,
@@ -1175,7 +1198,94 @@ export const createOutboxSyncEngine = ({
       preflightErrors: [],
       durationMs: 0,
     };
-    const failedTables = new Set();
+    const failedRecordsByTable = new Map();
+    const fieldResolversByOutboxId = new Map();
+    const blockedSubjectIndexes = new Map();
+
+    const rememberBlockedRecord = (record) => {
+      const tableKey = normalizeTableName(record.table_name);
+      if (!failedRecordsByTable.has(tableKey)) {
+        failedRecordsByTable.set(tableKey, new Map());
+      }
+      failedRecordsByTable.get(tableKey).set(record.record_id, record);
+    };
+
+    const resolveRecordField = async (record, column) => {
+      if (!fieldResolversByOutboxId.has(record.id)) {
+        const resolvedDatabase = await resolveDatabase(database);
+        fieldResolversByOutboxId.set(
+          record.id,
+          makeFieldResolver(resolvedDatabase, record)
+        );
+      }
+      return fieldResolversByOutboxId.get(record.id)(column);
+    };
+
+    const findBlockedRecordBySubject = async (tableName, column, subjectId) => {
+      const tableKey = normalizeTableName(tableName);
+      const blockers = failedRecordsByTable.get(tableKey);
+      if (!blockers || subjectId == null) return null;
+      const indexKey = `${tableKey}:${column}`;
+      let cachedIndex = blockedSubjectIndexes.get(indexKey);
+      if (!cachedIndex || cachedIndex.blockerCount !== blockers.size) {
+        const bySubjectId = new Map();
+        for (const blocker of blockers.values()) {
+          const blockerSubjectId = await resolveRecordField(blocker, column);
+          if (blockerSubjectId != null && !bySubjectId.has(blockerSubjectId)) {
+            bySubjectId.set(blockerSubjectId, blocker);
+          }
+        }
+        cachedIndex = { blockerCount: blockers.size, bySubjectId };
+        blockedSubjectIndexes.set(indexKey, cachedIndex);
+      }
+      return cachedIndex.bySubjectId.get(subjectId) || null;
+    };
+
+    const findBlockingDependency = async (record) => {
+      const tableNameForRecord = normalizeTableName(record.table_name);
+      for (const dependency of dependenciesForRecord(record)) {
+        const blockers = failedRecordsByTable.get(normalizeTableName(dependency));
+        if (!blockers || blockers.size === 0) continue;
+
+        const parentColumn = PARENT_FK_COLUMNS[tableNameForRecord]?.[dependency];
+        if (parentColumn) {
+          const parentRecordId = await resolveRecordField(record, parentColumn);
+          if (parentRecordId != null) {
+            const exactParent = blockers.get(parentRecordId);
+            if (exactParent) {
+              return { tableName: dependency, recordId: exactParent.record_id };
+            }
+            continue;
+          }
+        }
+
+        const archiveSubjectColumn = record.operation === 'archive'
+          ? ARCHIVE_DEPENDENCY_SUBJECT_COLUMNS[tableNameForRecord]?.[dependency]
+          : null;
+        if (archiveSubjectColumn) {
+          const subjectId = await resolveRecordField(record, archiveSubjectColumn);
+          if (subjectId != null) {
+            const exactSubject = await findBlockedRecordBySubject(
+              dependency,
+              archiveSubjectColumn,
+              subjectId
+            );
+            if (exactSubject) {
+              return { tableName: dependency, recordId: exactSubject.record_id };
+            }
+            continue;
+          }
+        }
+
+        // A declared dependency without resolvable identity evidence is safer to block than to
+        // send out of order. Every current edge has a mapping; this fallback protects schema drift.
+        return {
+          tableName: dependency,
+          recordId: blockers.values().next().value.record_id,
+        };
+      }
+      return null;
+    };
 
     const applyRecordResult = (outboxRecord, config, recordResult) => {
       const tableKey = config?.tableName || outboxRecord.table_name;
@@ -1200,7 +1310,7 @@ export const createOutboxSyncEngine = ({
         result.tableResults[tableKey].success = false;
         result.tableResults[tableKey].failed += 1;
         result.failedRecords.push(recordResult.failedRecord);
-        failedTables.add(tableKey);
+        rememberBlockedRecord(outboxRecord);
       }
     };
 
@@ -1244,23 +1354,25 @@ export const createOutboxSyncEngine = ({
       for (let index = 0; index < filteredRecords.length; index += 1) {
         const outboxRecord = filteredRecords[index];
         const config = getConfig(outboxRecord.table_name);
-        const dependencies = dependenciesForRecord(outboxRecord);
-        const skippedDependency = dependencies.find((dependency) => failedTables.has(dependency));
+        const skippedDependency = await findBlockingDependency(outboxRecord);
         if (skippedDependency) {
           const tableResult = result.tableResults[outboxRecord.table_name] || {
             success: false,
             synced: 0,
             failed: 0,
             skipped: true,
-            skippedDependency,
+            skippedDependency: skippedDependency.tableName,
+            skippedDependencyRecordId: skippedDependency.recordId,
           };
+          tableResult.success = false;
           tableResult.skipped = true;
-          tableResult.skippedDependency = skippedDependency;
+          tableResult.skippedDependency = skippedDependency.tableName;
+          tableResult.skippedDependencyRecordId = skippedDependency.recordId;
           result.tableResults[outboxRecord.table_name] = tableResult;
           // Skipped rows stay pending for the next pass. Whether this pass "succeeded" is
           // decided by the blocking failure itself: terminal already flipped success in
           // applyRecordResult; a retriable block leaves the pass successful.
-          failedTables.add(outboxRecord.table_name);
+          rememberBlockedRecord(outboxRecord);
           continue;
         }
 
@@ -1282,8 +1394,7 @@ export const createOutboxSyncEngine = ({
               if (!canBatchRecord(candidate, candidateConfig) || candidateConfig.tableName !== config.tableName) {
                 break;
               }
-              const candidateDependencies = dependenciesForRecord(candidate);
-              if (candidateDependencies.some((dependency) => failedTables.has(dependency))) {
+              if (await findBlockingDependency(candidate)) {
                 break;
               }
               batchRecords.push(candidate);

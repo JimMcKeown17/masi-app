@@ -1234,7 +1234,7 @@ The outbox now keeps the original insert order for normal writes, but archive ro
 2. End dependent relationship rows.
 3. End the assignment row that grants the user access.
 
-It also treats skipped dependency tables as failed for the rest of the cycle, so an access-ending row does not run after a required cleanup table was skipped.
+It also treats each skipped dependency record as blocking evidence for the rest of the cycle, so an access-ending row does not run after required cleanup for the same child, class, or group was skipped. Unrelated subjects continue syncing.
 
 Key takeaways:
 
@@ -1342,3 +1342,13 @@ The broader mental model is capability separation. Give each data path only the 
 2. The privileged snapshot can authorize scoped absence, but cannot supply arbitrary caller-selected identities.
 3. SQLite repositories apply end-dates only to synced rows and retain the mass-end circuit breaker.
 4. React publishes a fresh SQLite read, so the durable local model remains the only screen authority.
+
+### Outbox dependency addendum: a graph edge connects records, not tables
+
+The first dependency gate used table names as a shortcut. If any `children` row failed during a pass, every later `child_ea_assignments`, assessment, mastery, and membership row was skipped. That preserved foreign-key order, but it treated "the children table" as one indivisible aggregate. One network or policy problem for Child A could therefore hold back unrelated work for Child B.
+
+The real graph is more precise. An assignment with `child_id = A` depends on the child row whose id is A. It does not depend on every child row. A session attendee depends on its exact session, child, and optional group. The sync engine now records failed nodes by table and record id, then compares each dependent's FK with that exact node. Fields are resolved from the outbox payload first and SQLite second, because archive payloads often contain only `{ id, ended_at }` or `{ id, unassigned_at }`.
+
+Archive ordering needs an inverse edge. Ending a child EA assignment must wait for programme, class, and group cleanup about the same child, even though those cleanup rows are not parents of the assignment. The same rule applies to class and group assignment endings. Explicit subject maps make those inverse edges testable: child-scoped cleanup compares `child_id`, class-scoped cleanup compares `class_id`, and group-scoped cleanup compares `group_id`.
+
+The important mental model is **failure containment**. Preserve the smallest boundary that makes the operation safe. A failed parent blocks its own descendants; a failed cleanup blocks the matching access-ending row; unrelated subgraphs keep moving. If identity cannot be resolved for a newly added edge, the engine still fails conservatively. Precision improves availability without weakening relational or RLS ordering.

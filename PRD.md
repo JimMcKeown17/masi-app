@@ -419,6 +419,13 @@ User Action → Local AsyncStorage → UI Update → Sync Queue → Supabase →
 - [x] Add the additive Supabase migration and exact service-role-versus-EA staging probe
 - [ ] Apply migration `20260714220000` to `masi-app-sqlite` and pass `npm run rls:probe`
 
+#### 2026-07-14 Record-scoped sync dependency follow-up
+- [x] Replace table-wide same-pass failure propagation with exact failed-record evidence
+- [x] Resolve direct dependency identity from FK payloads with a durable SQLite fallback
+- [x] Resolve inverse archive cleanup dependencies by child, class, or group subject
+- [x] Keep matching dependents pending while unrelated records on the same table continue
+- [x] Guard every declared direct and inverse dependency edge with tests
+
 ### Phase 7: Polish & Production Prep (Partially Complete)
 - [x] Error handling across all screens — Snackbar standardised across 6 screens; Alert reserved for destructive confirmations only
 - [x] Loading states — ActivityIndicator on SessionHistoryScreen; Create/Save button spinners on GroupManagementScreen

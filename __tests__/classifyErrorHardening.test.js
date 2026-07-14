@@ -45,6 +45,18 @@ describe('evidence maps (#48 part 2)', () => {
     }
   });
 
+  test('every inverse archive dependency declares its record-scoped subject column', () => {
+    const {
+      ARCHIVE_TABLE_DEPENDENCIES,
+      ARCHIVE_DEPENDENCY_SUBJECT_COLUMNS,
+    } = _testEvidenceMaps;
+    for (const [assignmentTable, dependencies] of Object.entries(ARCHIVE_TABLE_DEPENDENCIES)) {
+      for (const dependency of dependencies) {
+        expect(ARCHIVE_DEPENDENCY_SUBJECT_COLUMNS[assignmentTable]?.[dependency]).toBeDefined();
+      }
+    }
+  });
+
   test('PARENT_FK_COLUMNS includes the pushed grouping-version FK edges', () => {
     const { PARENT_FK_COLUMNS } = _testEvidenceMaps;
     expect(PARENT_FK_COLUMNS.groups.grouping_versions).toBe('grouping_version_id');

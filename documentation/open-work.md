@@ -31,7 +31,7 @@ This is the execution order, not a second backlog. The numbered sections below r
 
 1. **P0, validate what is already built:** execute the highest-signal physical-device gates (§0), beginning with G1, H3, I1, B1, and the new reading-level gate C6. This is the highest risk-reduction per hour because four completed sprints still have zero real-hardware passes.
 2. **P0, activation and device proof:** configure Sentry Cloud, then run the zero-class and observability device gates (§2/14a, §3). The class -> children onboarding, durable restart recovery, crash capture, and explicit sync-failure reporting are built and automated-green on the current branch; real-device behavior and live Sentry delivery remain unverified.
-3. **P1, structural data safety:** finish the live migration/probe gate for server-authoritative reconcile (§6; client and migration built 2026-07-14), then make dependency skipping record-scoped (§1/17), cap failed-batch fan-out (§1/16), and add a version-gated repair hook (§3).
+3. **P1, structural data safety:** finish the live migration/probe gate for server-authoritative reconcile (§6; client and migration built 2026-07-14), then cap failed-batch fan-out (§1/16) and add a version-gated repair hook (§3). Record-scoped dependency skipping was built 2026-07-14.
 4. **P1, high-frequency workflow payoff:** make child-row taps open Child Results and show last-session letters in the session form (§2/5). These are contained changes on daily EA paths.
 5. **P2, sync efficiency and recovery:** shorten the domain-pull queue monopoly, stop `created_at` perturbation/re-reads, expand safe batching, and add SQLite bootstrap recovery (§1, §2, §3).
 6. **P2, time-sensitive only when WelaPLUS resumes:** deliberately re-key `assessmentItemDomainId` before real SQLite-backend assessment data exists, but only as a standalone reviewed change (§7). Do not pull it forward merely because the current staging database is disposable.
@@ -127,15 +127,16 @@ they are not a source-to-target mapping.
 
 ## 1. Still open from the 2026-07-12 audit
 
-Sixteen of the 21 findings are closed (see the build log). These five are not:
+Seventeen of the 21 findings are closed (see the build log). These four are not:
 
 | # | Finding | Sev | Evidence on `main` |
 |---|---------|-----|--------------------|
 | 13 | SQLite bootstrap failure has no recovery surface | P2 | No bootstrap gate; only the generic `ErrorBoundary` "Try Again" (`App.js:17`). Export Database itself needs a working DB. |
 | 16 | A failed large batch fans out to up to 1,000 per-record attempts in one pass | P2 | `offlineSync.js:1234` loads `limit: 1000`; batch formation has no size ceiling; per-record fallback via `Promise.allSettled` (`:1059`). *(The `chunkArray(records, 200)` at `:798` bounds bookkeeping transactions — a different layer. Do not mistake it for this fix.)* |
-| 17 | Dependency skipping is table-scoped, not record-scoped | P2 | `offlineSync.js:1178` builds a `failedTables` Set; `:1248` skips by table name. One bad child blocks assessments/mastery/memberships for *all* children. |
 | 21 | No OTA-rollback schema guard | P3 | `src/db/migrations.js:606` defines `CURRENT_SCHEMA_VERSION` but nothing fails safe when `user_version` exceeds it. Latent while migrations stay additive. |
 | 11 | Force-quit loses the in-progress assessment | P2 | Open **by design** — deferred until WelaPLUS capture work, where the loss window grows from one 60s EGRA run to a long untimed Question. |
+
+**Closed 2026-07-14:** finding 17. Same-pass dependency gating now records the exact failed or skipped record, resolves each dependent's FK or archive subject from its payload and durable SQLite row, and skips only matching relationships. A failed Child A no longer blocks Child B's assignment, assessment, mastery, or membership work. Access-ending archive rows still wait for cleanup failures about the same child, class, or group, and unresolved mapping evidence falls back conservatively.
 
 ---
 
