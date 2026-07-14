@@ -163,6 +163,14 @@ A brand-new EA with no classes lands on a Home screen that shows nothing actiona
 `HomeScreen.js` has **zero** references to classes. The roadmap explicitly flags this as go-live
 blocking, not polish.
 
+### 5 — Child Results workflow remnants (Top-10 item 5, partial)
+The panel and the Children-tab stack shipped, but the two changes that were the *point* of item 5 did not:
+- **Row-tap still opens the edit form.** `ClassDetailScreen.js:89` navigates to `EditChild` on a child row tap. Item 5's headline UX change was for the row to open the child's **results** (`ChildResults` exists, but only behind a separate button at `:165`). Tapping a child should show how they are doing, not an edit form.
+- **Last-session letters never surface in the session form.** Item 5 #4 (show the letters a child last worked on, inside the capture form) was not built.
+
+### 5b — Reconciliation doc-drift (2026-07-14)
+A full item-by-item reconciliation of the June Top-10 and the ZZ port against the code (2026-07-14) found `improvements-2026-07.md:6`'s summary line **overstates completion**: it lists items "1, 2, 3, 4, 8 and most of 5 are done", but verified against the tree, **item 2 is missing 2c** (finding 17 below), **item 3 is missing its entire typography half** (item 15 below), and **item 5 is missing the row-tap flip** (above) that was its headline change. Treat this file, not that summary line, as the backlog. The reconciliation confirmed every other spot-checked claim in this file holds against the code.
+
 ### Other product items
 - **14b** — ring payoff navigation: `SessionCompleteScreen.js:46` is still a bare `navigation.goBack()`.
 - **14c** — staged ring colours: mapping is hardcoded in `SessionsTodayRing.js`; the `ringNeutral` / `ringStart` tokens in `colors.js:78-79` have **zero importers** (dead tokens).
@@ -211,6 +219,7 @@ These were the *only* record of the item. Their source docs are now in `document
 ## 4. Unbuilt features with a written spec
 
 - **Groups Workflow (§3) and Session Reliability (§4)** in `zazi-izandi-feature-port-roadmap.md` are **entirely unbuilt**, and that roadmap is their only spec. `sessions.group_id` and `sessions.state` exist as *forward-prep server columns only* — RLS pins them NULL/`completed` and the client never writes them. **Do not archive that roadmap.**
+  - **Sharpened 2026-07-14:** `group_id` is not merely unwritten — the client *does* write it locally (`sessionsRepository.js:233`) and the server then **strips it to NULL** (`offlineSync.js:67`). So a reader checking only `migrations.js:561` would wrongly conclude group-context capture shipped; it is inert end-to-end. The consequence is concrete: the ZZ PRD's user story 15 (longitudinal per-group dosage research) is **not satisfied**, because which group a session belonged to is discarded on upload. This must be resolved as part of the group-centric rebuild — capturing group context on the home screen is pointless while the server drops it.
 - **2026-cohort seed script** (`scripts/seed-2026-cohort.js`) — not built. The go-live PRD it belongs to treats seeded data as a *precondition* for the tranche it already shipped.
 - **`seed_data_plan.md` and `bulk_import_children_plan.md`** — both still unbuilt **and both plans are schema-dead**: they target `staff_children` / `children_groups` / `children.class` text columns, none of which exist under the SQLite backend. The *need* is real (bulk import is the onboarding rate-limiter); the *plans* need rewriting, not executing.
 - **Additional session forms** — Numeracy, ZZ Coach, Yeboneer (PRD Phase 5). Only Literacy exists.
