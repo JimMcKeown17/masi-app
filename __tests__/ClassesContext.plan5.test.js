@@ -19,6 +19,7 @@ import { classOnboardingRepository } from '../src/db/repositories/classOnboardin
 const mockSupabaseFrom = jest.fn();
 const mockSupabaseRpc = jest.fn();
 const mockCaptureOperationalError = jest.fn();
+const mockEnqueueSupabaseRequest = jest.fn((task) => task());
 const queryResult = (result) => {
   const builder = {
     select: jest.fn(() => builder),
@@ -36,6 +37,10 @@ jest.mock('../src/services/supabaseClient', () => ({
     from: (...args) => mockSupabaseFrom(...args),
     rpc: (...args) => mockSupabaseRpc(...args),
   },
+}));
+
+jest.mock('../src/services/supabaseRequestQueue', () => ({
+  enqueueSupabaseRequest: (...args) => mockEnqueueSupabaseRequest(...args),
 }));
 
 jest.mock('../src/context/AuthContext', () => ({
@@ -142,6 +147,8 @@ describe('ClassesContext Plan 5 behavior', () => {
   const refreshChildrenFromCache = jest.fn();
 
   beforeEach(() => {
+    mockEnqueueSupabaseRequest.mockClear();
+    mockEnqueueSupabaseRequest.mockImplementation((task) => task());
     useAuth.mockReturnValue({ user: { id: 'user-1' } });
     useChildren.mockReturnValue({
       children: [],
@@ -178,6 +185,15 @@ describe('ClassesContext Plan 5 behavior', () => {
       return queryResult({ data: [], error: null });
     });
     mockSupabaseRpc.mockResolvedValue({ data: reconcileSnapshot(), error: null });
+  });
+
+  test('leases the request queue separately for each class-pull request', async () => {
+    renderHook(() => useClasses(), { wrapper });
+
+    await waitFor(() => expect(mockSupabaseRpc).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(mockSupabaseFrom).toHaveBeenCalledWith('classes'));
+
+    expect(mockEnqueueSupabaseRequest).toHaveBeenCalledTimes(3);
   });
 
   test('sync completion refreshes classes from SQLite without querying the server', async () => {

@@ -1380,3 +1380,11 @@ The fix preserves queue identity while replacing mutation state. One outbox id s
 Batching has the same separation of concerns. The server needs a bounded payload, while SQLite needs an atomic claim and exact finalize tokens. Claiming 100 rows through 100 UPDATEs followed by 100 SELECTs preserves correctness but turns local bookkeeping into the dominant work. One set-based UPDATE plus one SELECT produces the same per-record tokens inside one writer transaction. Returning records in the caller's order keeps result mapping deterministic.
 
 The general mental model is **stable identity, mutable version**. Preserve the field that says when an obligation began, change the field that says which version is current, and make performance optimizations return the same concurrency evidence the safe path already depended on.
+
+### Request queue addendum: serialize resources, not business workflows
+
+The Supabase request queue exists because several consumers share one React Native client. Serial execution prevents auth-lock contention and makes request ordering easier to reason about. The first domain-pull implementation treated that as permission to reserve the queue for an entire business workflow: acknowledgment RPC, Programme lookup, roster queries, enrollment chunks, classes, groups, and memberships. On a weak connection, one refresh could keep every auth, profile, lookup, or push request waiting behind many round trips.
+
+The dependency graph does not require one giant lease. It requires only that query B starts after the result of query A when B needs A's ids. The pull can therefore await request A, release the queue, compute locally, then enqueue request B. Any request already waiting gets its turn in between. Network concurrency remains one, query order inside the pull remains correct, and the queue becomes fair.
+
+This is the difference between a **resource lock** and a **workflow lock**. Lock the smallest operation that uses the shared resource. Keep parsing, result classification, dependency decisions, and SQLite persistence outside that lock. A workflow may stay sequential without becoming monopolistic.

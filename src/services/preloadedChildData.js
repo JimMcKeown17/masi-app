@@ -84,9 +84,12 @@ const snapshotArray = (snapshot, key) => (
 export const pullReconcileAcknowledgments = async ({
   userId,
   supabaseClient = supabase,
+  enqueueRequest = enqueueSupabaseRequest,
 } = {}) => {
   try {
-    const { data, error } = await supabaseClient.rpc('get_reconcile_acknowledgments');
+    const { data, error } = await enqueueRequest(() => (
+      supabaseClient.rpc('get_reconcile_acknowledgments')
+    ));
     if (error) {
       return reconcileAcknowledgmentFailure(classifyPullFailureKind(error), error);
     }
@@ -184,6 +187,7 @@ const pullChildProgrammeEnrollments = async ({
   supabaseClient,
   activeProgrammeId,
   childEaAssignmentsScope,
+  queryScopeFn = queryScope,
 }) => {
   if (!childEaAssignmentsScope.ok) return dependencyScope();
 
@@ -194,7 +198,7 @@ const pullChildProgrammeEnrollments = async ({
 
   const aggregate = [];
   for (const childIds of chunkRows(assignedChildIds, CHILD_PROGRAMME_ENROLLMENT_CHUNK_SIZE)) {
-    const chunkScope = await queryScope(() => (
+    const chunkScope = await queryScopeFn(() => (
       supabaseClient
         .from('child_programme_enrollments')
         .select('*')
@@ -212,12 +216,15 @@ const pullChildProgrammeEnrollments = async ({
 export const pullPreloadedChildData = async ({
   userId,
   supabaseClient = supabase,
-} = {}) => enqueueSupabaseRequest(async () => {
+  enqueueRequest = enqueueSupabaseRequest,
+} = {}) => {
+  const queuedQueryScope = (task) => queryScope(() => enqueueRequest(task));
   const reconcileAcknowledgments = await pullReconcileAcknowledgments({
     userId,
     supabaseClient,
+    enqueueRequest,
   });
-  const queriedProgrammeAssignment = await queryScope(() => (
+  const queriedProgrammeAssignment = await queuedQueryScope(() => (
     supabaseClient
       .from('staff_programme_assignments')
       .select('programme_id')
@@ -248,7 +255,7 @@ export const pullPreloadedChildData = async ({
     };
   }
 
-  const rawChildEaAssignments = await queryScope(() => (
+  const rawChildEaAssignments = await queuedQueryScope(() => (
     supabaseClient
       .from('child_ea_assignments')
       .select('*, children(*)')
@@ -263,9 +270,10 @@ export const pullPreloadedChildData = async ({
     supabaseClient,
     activeProgrammeId,
     childEaAssignmentsScope: childEaAssignments,
+    queryScopeFn: queuedQueryScope,
   });
 
-  const rawChildren = await queryScope(() => (
+  const rawChildren = await queuedQueryScope(() => (
     supabaseClient
       .from('children')
       .select(`
@@ -292,7 +300,7 @@ export const pullPreloadedChildData = async ({
   } else if (rawChildren.rows.length === 0) {
     rawChildClassMemberships = successfulScope([]);
   } else {
-    rawChildClassMemberships = await queryScope(() => (
+    rawChildClassMemberships = await queuedQueryScope(() => (
       supabaseClient
         .from('child_class_memberships')
         .select('*, classes(*)')
@@ -313,7 +321,7 @@ export const pullPreloadedChildData = async ({
     ))
     : dependencyScope();
 
-  const rawGroups = await queryScope(() => (
+  const rawGroups = await queuedQueryScope(() => (
     supabaseClient
       .from('groups')
       .select(`
@@ -338,7 +346,7 @@ export const pullPreloadedChildData = async ({
   } else if (rawGroups.rows.length === 0) {
     rawChildrenGroups = successfulScope([]);
   } else {
-    rawChildrenGroups = await queryScope(() => (
+    rawChildrenGroups = await queuedQueryScope(() => (
       supabaseClient
         .from('child_group_memberships')
         .select('*')
@@ -365,4 +373,4 @@ export const pullPreloadedChildData = async ({
       childrenGroups,
     },
   };
-});
+};

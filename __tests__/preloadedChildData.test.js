@@ -7,8 +7,17 @@ import {
   pullReconcileAcknowledgments,
   pullPreloadedChildData,
 } from '../src/services/preloadedChildData';
+import { createSupabaseRequestQueue } from '../src/services/supabaseRequestQueue';
 
 const successful = (data = []) => ({ data, error: null });
+
+const deferred = () => {
+  let resolve;
+  const promise = new Promise((promiseResolve) => {
+    resolve = promiseResolve;
+  });
+  return { promise, resolve };
+};
 
 const queryResult = (result) => {
   const builder = {
@@ -94,6 +103,48 @@ const expectDependency = (scope) => {
 };
 
 describe('preloaded child-data pull', () => {
+  test('releases the request queue between dependent Supabase queries', async () => {
+    const queue = createSupabaseRequestQueue();
+    const rpcStarted = deferred();
+    const releaseRpc = deferred();
+    const events = [];
+    const supabaseClient = createSupabaseClient();
+    const originalFrom = supabaseClient.from;
+    supabaseClient.rpc = jest.fn(async () => {
+      events.push('rpc:start');
+      rpcStarted.resolve();
+      await releaseRpc.promise;
+      events.push('rpc:end');
+      return { data: defaultReconcileSnapshot, error: null };
+    });
+    supabaseClient.from = jest.fn((tableName) => {
+      events.push(`query:${tableName}`);
+      return originalFrom(tableName);
+    });
+
+    const pullPromise = pullPreloadedChildData({
+      userId: 'user-1',
+      supabaseClient,
+      enqueueRequest: queue.enqueue,
+    });
+    await rpcStarted.promise;
+
+    const unrelatedPromise = queue.enqueue(async () => {
+      events.push('unrelated');
+    });
+    await Promise.resolve();
+    releaseRpc.resolve();
+
+    await Promise.all([pullPromise, unrelatedPromise]);
+
+    expect(events.slice(0, 4)).toEqual([
+      'rpc:start',
+      'rpc:end',
+      'unrelated',
+      'query:staff_programme_assignments',
+    ]);
+  });
+
   test('loads and validates the authenticated server-authoritative reconcile snapshot', async () => {
     const supabaseClient = {
       rpc: jest.fn().mockResolvedValue({

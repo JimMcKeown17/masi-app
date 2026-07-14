@@ -447,6 +447,13 @@ User Action → Local AsyncStorage → UI Update → Sync Queue → Supabase →
 - [x] Claim a batch with one set-based UPDATE and return its CAS records with one SELECT
 - [x] Preserve stale-finalize, sibling-failure, user-switch, and bounded-fallback guarantees
 
+#### 2026-07-14 Domain-pull request-queue fairness follow-up
+- [x] Replace the whole-workflow child/group pull lease with one lease per Supabase request
+- [x] Replace the whole-workflow class pull lease with one lease per Supabase request
+- [x] Preserve serial dependency order, scope classification, and authoritative reconcile validation
+- [x] Prove a waiting unrelated request runs between dependent pull queries
+- [x] Preserve cache-first publication and stale-user result rejection in context tests
+
 ### Phase 7: Polish & Production Prep (Partially Complete)
 - [x] Error handling across all screens — Snackbar standardised across 6 screens; Alert reserved for destructive confirmations only
 - [x] Loading states — ActivityIndicator on SessionHistoryScreen; Create/Save button spinners on GroupManagementScreen

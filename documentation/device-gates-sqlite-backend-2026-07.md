@@ -122,6 +122,11 @@ sensitive auth token.
 - [ ] **P1. Repeated offline edits keep their original place.** In airplane mode, edit Child A, then edit Child B, then edit Child A again. Export the database and inspect the pending child operations: there is one row for Child A containing the latest payload, Child A's `created_at` remains earlier than Child B's, and Child A's `updated_at` is later. Reconnect and confirm both rows drain without a failure or duplicate.
 - [ ] **P2. Full assessment item batch drains cleanly.** Complete a 60-letter assessment offline, reconnect, and sync. The parent assessment and every item leave the outbox, no item remains `in_flight`, and Sync Status shows no failed or needs-attention assessment item. This is the physical-device check for the set-based batch claim; automated real-SQLite tests enforce one UPDATE plus one SELECT and all CAS recovery paths.
 
+## Q. Weak-network request queue fairness
+
+- [ ] **Q1. Pull does not starve pending push work.** Create one pending record offline, reconnect on a deliberately weak or throttled connection, and immediately foreground the app so child and class pulls begin. Press Sync Now while the roster refresh is still working. The pending record should drain between pull requests rather than waiting for every roster, enrollment, class, group, and membership request to finish. Home and the roster remain usable throughout.
+- [ ] **Q2. User switch overtakes the old roster workflow.** On a weak connection, begin a roster refresh as EA A, sign out, and sign in as EA B. EA B's auth/profile work must not wait for the whole EA A domain pull. When the old pull eventually returns, no EA A class, child, or group may appear under EA B.
+
 ---
 
 ## If something fails

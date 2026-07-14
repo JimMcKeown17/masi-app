@@ -148,89 +148,93 @@ export const ClassesProvider = ({ children: reactChildren }) => {
       setLoading(true);
       const cachedClasses = await refreshFromCache();
 
-      const pulled = await enqueueSupabaseRequest(async () => {
-        const reconcileAcknowledgments = await pullReconcileAcknowledgments({
-          userId: activeUserId,
-          supabaseClient: supabase,
-        });
-        const { data: assignments, error: assignmentError } = await supabase
+      const resolvedReconcileAcknowledgments = await pullReconcileAcknowledgments({
+        userId: activeUserId,
+        supabaseClient: supabase,
+        enqueueRequest: enqueueSupabaseRequest,
+      });
+      const { data: assignments, error: assignmentError } = await enqueueSupabaseRequest(() => (
+        supabase
           .from('staff_programme_assignments')
           .select('programme_id')
           .eq('user_id', activeUserId)
           .is('ended_at', null)
           .order('assigned_at', { ascending: false })
-          .limit(1);
+          .limit(1)
+      ));
 
-        const hasAuthoritativeProgramme = reconcileAcknowledgments.ok
-          && reconcileAcknowledgments.complete;
-        const queriedProgrammeAssignment = assignmentError
-          ? failedPullScope(classifyPullFailureKind(assignmentError), assignmentError)
-          : successfulPullScope(assignments || []);
-        const activeProgrammeId = hasAuthoritativeProgramme
-          ? reconcileAcknowledgments.data.activeProgrammeId
-          : assignments?.[0]?.programme_id || null;
-        const programmeAssignment = hasAuthoritativeProgramme
-          ? successfulPullScope(activeProgrammeId ? [{ programme_id: activeProgrammeId }] : [])
-          : queriedProgrammeAssignment;
-        if (!activeProgrammeId) {
-          return {
-            activeProgrammeId: null,
-            reconcileAcknowledgments,
-            scopes: {
-              programmeAssignment,
-              classes: dependencyPullScope(),
-              classEaAssignments: dependencyPullScope(),
-            },
-          };
-        }
-
-        const { data, error } = await supabase
-          .from('classes')
-          .select(`
-            *,
-            class_ea_assignments!inner(*)
-          `)
-          .eq('class_ea_assignments.ea_user_id', activeUserId)
-          .eq('class_ea_assignments.programme_id', activeProgrammeId)
-          .is('class_ea_assignments.unassigned_at', null)
-          .order('name', { ascending: true });
+      const hasAuthoritativeProgramme = resolvedReconcileAcknowledgments.ok
+        && resolvedReconcileAcknowledgments.complete;
+      const queriedProgrammeAssignment = assignmentError
+        ? failedPullScope(classifyPullFailureKind(assignmentError), assignmentError)
+        : successfulPullScope(assignments || []);
+      const resolvedProgrammeId = hasAuthoritativeProgramme
+        ? resolvedReconcileAcknowledgments.data.activeProgrammeId
+        : assignments?.[0]?.programme_id || null;
+      const programmeAssignment = hasAuthoritativeProgramme
+        ? successfulPullScope(resolvedProgrammeId ? [{ programme_id: resolvedProgrammeId }] : [])
+        : queriedProgrammeAssignment;
+      let pulled;
+      if (!resolvedProgrammeId) {
+        pulled = {
+          activeProgrammeId: null,
+          reconcileAcknowledgments: resolvedReconcileAcknowledgments,
+          scopes: {
+            programmeAssignment,
+            classes: dependencyPullScope(),
+            classEaAssignments: dependencyPullScope(),
+          },
+        };
+      } else {
+        const { data, error } = await enqueueSupabaseRequest(() => (
+          supabase
+            .from('classes')
+            .select(`
+              *,
+              class_ea_assignments!inner(*)
+            `)
+            .eq('class_ea_assignments.ea_user_id', activeUserId)
+            .eq('class_ea_assignments.programme_id', resolvedProgrammeId)
+            .is('class_ea_assignments.unassigned_at', null)
+            .order('name', { ascending: true })
+        ));
 
         if (error) {
-          return {
-            activeProgrammeId,
-            reconcileAcknowledgments,
+          pulled = {
+            activeProgrammeId: resolvedProgrammeId,
+            reconcileAcknowledgments: resolvedReconcileAcknowledgments,
             scopes: {
               programmeAssignment,
               classes: failedPullScope(classifyPullFailureKind(error), error),
               classEaAssignments: dependencyPullScope(),
             },
           };
-        }
-
-        const classRows = data || [];
-        const serverAssignments = classRows.flatMap(({ class_ea_assignments }) => (
-          (class_ea_assignments || []).map(assignment => ({
-            ...assignment,
+        } else {
+          const classRows = data || [];
+          const serverAssignments = classRows.flatMap(({ class_ea_assignments }) => (
+            (class_ea_assignments || []).map(assignment => ({
+              ...assignment,
+              synced: true,
+              sync_status: assignment.sync_status || 'synced',
+            }))
+          ));
+          const serverClasses = classRows.map(({ class_ea_assignments, ...classItem }) => ({
+            ...classItem,
             synced: true,
-            sync_status: assignment.sync_status || 'synced',
-          }))
-        ));
-        const serverClasses = classRows.map(({ class_ea_assignments, ...classItem }) => ({
-          ...classItem,
-          synced: true,
-          sync_status: classItem.sync_status || 'synced',
-        }));
+            sync_status: classItem.sync_status || 'synced',
+          }));
 
-        return {
-          activeProgrammeId,
-          reconcileAcknowledgments,
-          scopes: {
-            programmeAssignment,
-            classes: successfulPullScope(serverClasses),
-            classEaAssignments: successfulPullScope(serverAssignments),
-          },
-        };
-      });
+          pulled = {
+            activeProgrammeId: resolvedProgrammeId,
+            reconcileAcknowledgments: resolvedReconcileAcknowledgments,
+            scopes: {
+              programmeAssignment,
+              classes: successfulPullScope(serverClasses),
+              classEaAssignments: successfulPullScope(serverAssignments),
+            },
+          };
+        }
+      }
 
       if (activeUserIdRef.current !== activeUserId) return;
       const { activeProgrammeId, reconcileAcknowledgments, scopes } = pulled;
