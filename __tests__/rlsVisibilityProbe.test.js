@@ -1,5 +1,7 @@
 const {
   PROBE_RULES,
+  RECONCILE_SNAPSHOT_KEYS,
+  validateReconcileSnapshot,
   validateProbeEnv,
 } = require('../scripts/rls-visibility-probe.cjs');
 
@@ -19,6 +21,38 @@ describe('rls visibility probe helpers', () => {
       ['groups', 'groups_select_created_by'],
       ['sessions', 'sessions_select_own_or_assigned_child_history'],
     ]);
+  });
+
+  test('requires an exact complete authenticated reconcile snapshot', () => {
+    const expected = Object.fromEntries(
+      RECONCILE_SNAPSHOT_KEYS.map((key) => [key, [`${key}-1`]])
+    );
+    const snapshot = {
+      schema_version: 1,
+      complete: true,
+      user_id: 'user-1',
+      active_programme_id: 'programme-1',
+      ...expected,
+    };
+
+    expect(validateReconcileSnapshot({
+      snapshot,
+      expected,
+      userId: 'user-1',
+      programmeId: 'programme-1',
+    })).toBe(true);
+    expect(validateReconcileSnapshot({
+      snapshot: { ...snapshot, group_ids: [] },
+      expected,
+      userId: 'user-1',
+      programmeId: 'programme-1',
+    })).toBe(false);
+    expect(validateReconcileSnapshot({
+      snapshot: { ...snapshot, complete: false },
+      expected,
+      userId: 'user-1',
+      programmeId: 'programme-1',
+    })).toBe(false);
   });
 
   test('rejects the legacy Supabase project ref', () => {

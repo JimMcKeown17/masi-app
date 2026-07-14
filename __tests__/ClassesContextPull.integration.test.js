@@ -13,6 +13,7 @@ import { createBetterSqliteTestDatabase } from '../test-support/betterSqliteAdap
 import { seedCoreData } from '../test-support/sqliteRepositoryTestUtils';
 
 const mockPullPreloadedChildData = jest.fn();
+const mockPullReconcileAcknowledgments = jest.fn();
 const mockRefreshSyncStatus = jest.fn();
 const mockFetchAndCacheSchools = jest.fn();
 const mockEnsureReferenceData = jest.fn();
@@ -34,6 +35,7 @@ jest.mock('../src/services/preloadedChildData', () => ({
   PULL_SCOPE_COMPLETENESS_LIMIT: 1000,
   classifyPullFailureKind: jest.fn(() => 'query'),
   pullPreloadedChildData: (...args) => mockPullPreloadedChildData(...args),
+  pullReconcileAcknowledgments: (...args) => mockPullReconcileAcknowledgments(...args),
 }));
 
 jest.mock('../src/services/offlineSync', () => ({
@@ -72,6 +74,20 @@ const childBundle = (overrides = {}) => {
 };
 
 const emptyChildBundle = childBundle();
+
+const classAcknowledgments = (overrides = {}) => ({
+  ok: true,
+  complete: true,
+  failureKind: null,
+  data: {
+    schemaVersion: 1,
+    generatedAt: '2026-07-14T12:00:00.000Z',
+    activeProgrammeId: 'programme-a',
+    classEaAssignmentIds: ['class-assignment-1'],
+    classIds: ['class-1'],
+    ...overrides,
+  },
+});
 
 const createDeferred = () => {
   let resolve;
@@ -126,6 +142,7 @@ beforeEach(async () => {
   `);
 
   mockPullPreloadedChildData.mockResolvedValue(emptyChildBundle);
+  mockPullReconcileAcknowledgments.mockResolvedValue(classAcknowledgments());
   mockRefreshSyncStatus.mockResolvedValue(undefined);
   mockFetchAndCacheSchools.mockResolvedValue([]);
   mockEnsureReferenceData.mockResolvedValue(undefined);
@@ -190,6 +207,11 @@ test('a class edit made while the network pull is pending survives in React stat
 });
 
 test('no active programme leaves the existing active class assignment untouched', async () => {
+  mockPullReconcileAcknowledgments.mockResolvedValue(classAcknowledgments({
+    activeProgrammeId: null,
+    classEaAssignmentIds: [],
+    classIds: [],
+  }));
   mockSupabaseFrom.mockImplementation((tableName) => {
     if (tableName === 'staff_programme_assignments') {
       return queryResult({ data: [], error: null });
@@ -214,7 +236,34 @@ test('no active programme leaves the existing active class assignment untouched'
   ]);
 });
 
+test('the authoritative active programme survives an ordinary RLS under-return', async () => {
+  mockSupabaseFrom.mockImplementation((tableName) => {
+    if (tableName === 'staff_programme_assignments') {
+      return queryResult({ data: [], error: null });
+    }
+    if (tableName === 'classes') {
+      return queryResult({ data: [], error: null });
+    }
+    return queryResult({ data: [], error: null });
+  });
+
+  const { result } = renderHook(() => useContexts(), { wrapper });
+  await waitFor(() => expect(result.current.classesContext.loading).toBe(false));
+
+  expect(mockSupabaseFrom).toHaveBeenCalledWith('classes');
+  expect(await testDb.getFirstAsync(`
+    select unassigned_at
+    from class_ea_assignments
+    where id = 'class-assignment-1'
+  `)).toEqual({ unassigned_at: null });
+  expect(result.current.classesContext.classes.map((row) => row.id)).toEqual(['class-1']);
+});
+
 test('an active programme with zero classes ends the existing active class assignment', async () => {
+  mockPullReconcileAcknowledgments.mockResolvedValue(classAcknowledgments({
+    classEaAssignmentIds: [],
+    classIds: [],
+  }));
   mockSupabaseFrom.mockImplementation((tableName) => {
     if (tableName === 'staff_programme_assignments') {
       return queryResult({ data: [{ programme_id: 'programme-a' }], error: null });
@@ -238,6 +287,64 @@ test('an active programme with zero classes ends the existing active class assig
   const freshClasses = await classesRepository.getClasses({ userId: 'user-1' });
   expect(result.current.classesContext.classes).toEqual(freshClasses);
   expect(freshClasses).toEqual([]);
+});
+
+test('RLS-under-returned classes cannot override the server-authoritative acknowledgment set', async () => {
+  mockSupabaseFrom.mockImplementation((tableName) => {
+    if (tableName === 'staff_programme_assignments') {
+      return queryResult({ data: [{ programme_id: 'programme-a' }], error: null });
+    }
+    if (tableName === 'classes') {
+      return queryResult({ data: [], error: null });
+    }
+    return queryResult({ data: [], error: null });
+  });
+
+  const { result } = renderHook(() => useContexts(), { wrapper });
+  await waitFor(() => expect(result.current.classesContext.loading).toBe(false));
+
+  expect(mockPullReconcileAcknowledgments).toHaveBeenCalledWith(expect.objectContaining({
+    userId: 'user-1',
+  }));
+  expect(await testDb.getFirstAsync(`
+    select unassigned_at
+    from class_ea_assignments
+    where id = 'class-assignment-1'
+  `)).toEqual({ unassigned_at: null });
+  expect(result.current.classesContext.classes.map((row) => row.id)).toEqual(['class-1']);
+});
+
+test('an unavailable authoritative snapshot preserves class assignments and does not stamp the pull', async () => {
+  mockPullReconcileAcknowledgments.mockResolvedValue({
+    ok: false,
+    complete: false,
+    failureKind: 'query',
+    error: new Error('acknowledgment RPC unavailable'),
+  });
+  mockSupabaseFrom.mockImplementation((tableName) => {
+    if (tableName === 'staff_programme_assignments') {
+      return queryResult({ data: [{ programme_id: 'programme-a' }], error: null });
+    }
+    if (tableName === 'classes') {
+      return queryResult({ data: [], error: null });
+    }
+    return queryResult({ data: [], error: null });
+  });
+
+  const { result } = renderHook(() => useContexts(), { wrapper });
+  await waitFor(() => expect(result.current.classesContext.loading).toBe(false));
+
+  expect(await testDb.getFirstAsync(`
+    select unassigned_at
+    from class_ea_assignments
+    where id = 'class-assignment-1'
+  `)).toEqual({ unassigned_at: null });
+  expect(await testDb.getFirstAsync(`
+    select scope
+    from sync_state
+    where scope = 'classes_pull'
+  `)).toBeNull();
+  expect(result.current.classesContext.classes.map((row) => row.id)).toEqual(['class-1']);
 });
 
 test('archiving a class offline refreshes child assignment state without a server pull', async () => {

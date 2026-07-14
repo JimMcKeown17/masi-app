@@ -2,7 +2,8 @@
 /* eslint-disable no-console */
 
 /**
- * Opt-in staging probe for RLS SELECT visibility required by PostgREST upsert.
+ * Opt-in staging probe for RLS SELECT visibility required by PostgREST upsert
+ * and for the exact server-authoritative relationship acknowledgment snapshot.
  *
  * This script is intentionally not part of CI. It auto-loads .env / .env.local
  * and requires these masi-app-sqlite vars:
@@ -63,6 +64,37 @@ const PROBE_RULES = [
     assertion: 'user_id_self_select',
   },
 ];
+
+const RECONCILE_SNAPSHOT_KEYS = [
+  'child_ea_assignment_ids',
+  'assigned_child_ids',
+  'visible_child_ids',
+  'child_programme_enrollment_ids',
+  'child_class_membership_ids',
+  'class_ea_assignment_ids',
+  'class_ids',
+  'group_ea_assignment_ids',
+  'group_ids',
+  'child_group_membership_ids',
+];
+
+const sorted = (values) => [...values].sort();
+
+const validateReconcileSnapshot = ({ snapshot, expected, userId, programmeId }) => {
+  if (
+    snapshot?.schema_version !== 1
+    || snapshot?.complete !== true
+    || snapshot?.user_id !== userId
+    || snapshot?.active_programme_id !== programmeId
+  ) {
+    return false;
+  }
+
+  return RECONCILE_SNAPSHOT_KEYS.every((key) => (
+    Array.isArray(snapshot[key])
+    && JSON.stringify(sorted(snapshot[key])) === JSON.stringify(sorted(expected[key]))
+  ));
+};
 
 const validateProbeEnv = (env) => {
   for (const key of REQUIRED_ENV) {
@@ -186,6 +218,19 @@ const runRule = async ({ client, rule, context }) => {
 const cleanupProbeContext = async (admin, context) => {
   if (!context) return;
 
+  for (const table of [
+    'child_group_memberships',
+    'group_ea_assignments',
+    'class_ea_assignments',
+    'child_class_memberships',
+    'child_programme_enrollments',
+    'child_ea_assignments',
+  ]) {
+    if (context.createdIds?.[table]?.length) {
+      await admin.from(table).delete().in('id', context.createdIds[table]);
+    }
+  }
+
   for (const table of ['sessions', 'groups', 'children', 'classes']) {
     if (context.createdIds?.[table]?.length) {
       await admin.from(table).delete().in('id', context.createdIds[table]);
@@ -204,6 +249,9 @@ const cleanupProbeContext = async (admin, context) => {
   if (context.programmeId) {
     await admin.from('programmes').delete().eq('id', context.programmeId);
   }
+  if (context.academicYearId) {
+    await admin.from('academic_years').delete().eq('id', context.academicYearId);
+  }
   if (context.userId) {
     await admin.auth.admin.deleteUser(context.userId);
   }
@@ -215,6 +263,7 @@ const seedProbeContext = async ({ admin, anon, email, password }) => {
     schoolId: randomUUID(),
     programmeId: randomUUID(),
     assignmentId: randomUUID(),
+    academicYearId: randomUUID(),
   };
 
   try {
@@ -266,6 +315,115 @@ const seedProbeContext = async ({ admin, anon, email, password }) => {
   }
 };
 
+const seedReconcileRelationships = async ({ admin, context }) => {
+  const childId = context.createdIds.children[0];
+  const classId = context.createdIds.classes[0];
+  const groupId = context.createdIds.groups[0];
+  const ids = {
+    child_ea_assignments: [randomUUID()],
+    child_programme_enrollments: [randomUUID()],
+    child_class_memberships: [randomUUID()],
+    class_ea_assignments: [randomUUID()],
+    group_ea_assignments: [randomUUID()],
+    child_group_memberships: [randomUUID()],
+  };
+
+  context.createdIds = { ...context.createdIds, ...ids };
+  await expectNoError('academic year seed', admin.from('academic_years').insert({
+    id: context.academicYearId,
+    label: `RLS Probe ${context.academicYearId}`,
+    starts_on: '2099-01-01',
+    ends_on: '2099-12-31',
+    is_active: false,
+  }));
+  await expectNoError('child EA assignment seed', admin.from('child_ea_assignments').insert({
+    id: ids.child_ea_assignments[0],
+    user_id: context.userId,
+    child_id: childId,
+    created_by: context.userId,
+  }));
+  await expectNoError('child programme enrollment seed', admin
+    .from('child_programme_enrollments')
+    .insert({
+      id: ids.child_programme_enrollments[0],
+      child_id: childId,
+      programme_id: context.programmeId,
+      created_by: context.userId,
+    }));
+  await expectNoError('child class membership seed', admin
+    .from('child_class_memberships')
+    .insert({
+      id: ids.child_class_memberships[0],
+      child_id: childId,
+      class_id: classId,
+      academic_year_id: context.academicYearId,
+      created_by: context.userId,
+    }));
+  await expectNoError('class EA assignment seed', admin.from('class_ea_assignments').insert({
+    id: ids.class_ea_assignments[0],
+    class_id: classId,
+    ea_user_id: context.userId,
+    programme_id: context.programmeId,
+    created_by: context.userId,
+  }));
+  await expectNoError('group EA assignment seed', admin.from('group_ea_assignments').insert({
+    id: ids.group_ea_assignments[0],
+    group_id: groupId,
+    ea_user_id: context.userId,
+    programme_id: context.programmeId,
+    created_by: context.userId,
+  }));
+  await expectNoError('child group membership seed', admin
+    .from('child_group_memberships')
+    .insert({
+      id: ids.child_group_memberships[0],
+      child_id: childId,
+      group_id: groupId,
+      created_by: context.userId,
+    }));
+
+  return {
+    child_ea_assignment_ids: ids.child_ea_assignments,
+    assigned_child_ids: [childId],
+    visible_child_ids: [childId],
+    child_programme_enrollment_ids: ids.child_programme_enrollments,
+    child_class_membership_ids: ids.child_class_memberships,
+    class_ea_assignment_ids: ids.class_ea_assignments,
+    class_ids: [classId],
+    group_ea_assignment_ids: ids.group_ea_assignments,
+    group_ids: [groupId],
+    child_group_membership_ids: ids.child_group_memberships,
+  };
+};
+
+const runReconcileAcknowledgmentRule = async ({ admin, client, context }) => {
+  const expected = await seedReconcileRelationships({ admin, context });
+  const { data, error } = await client.rpc('get_reconcile_acknowledgments');
+  if (error) {
+    return {
+      ok: false,
+      table: 'reconcile_acknowledgments',
+      policy: 'security_definer_authenticated_snapshot',
+      assertion: 'complete_exact_relationship_sets',
+      error: error.message,
+    };
+  }
+
+  const ok = validateReconcileSnapshot({
+    snapshot: data,
+    expected,
+    userId: context.userId,
+    programmeId: context.programmeId,
+  });
+  return {
+    ok,
+    table: 'reconcile_acknowledgments',
+    policy: 'security_definer_authenticated_snapshot',
+    assertion: 'complete_exact_relationship_sets',
+    error: ok ? null : 'RPC snapshot did not exactly match the service-role relationship set',
+  };
+};
+
 const runProbe = async (env = loadEnvFiles()) => {
   const safeEnv = validateProbeEnv(env);
   const admin = makeClient(safeEnv.SUPABASE_PROJECT_URL_SQLITE, safeEnv.SUPABASE_SECRET_KEY_SQLITE);
@@ -285,6 +443,10 @@ const runProbe = async (env = loadEnvFiles()) => {
       results.push({ ...rule, ...result });
     }
 
+    if (results.every((result) => result.ok)) {
+      results.push(await runReconcileAcknowledgmentRule({ admin, client: anon, context }));
+    }
+
     return results;
   } finally {
     await cleanupProbeContext(admin, context);
@@ -293,6 +455,8 @@ const runProbe = async (env = loadEnvFiles()) => {
 
 module.exports = {
   PROBE_RULES,
+  RECONCILE_SNAPSHOT_KEYS,
+  validateReconcileSnapshot,
   validateProbeEnv,
 };
 

@@ -1325,3 +1325,20 @@ A reading level looked like one field, but it represents two different facts ove
 The write path also needs two boundaries. First, the submitted attendee ids are authoritative. UI state can retain a value briefly after a child is deselected, so persistence filters reading-level and letter-tracker maps through the final attendee set. Second, durable child updates are change-driven. Pre-filling ten attendees means the form contains ten values, but it does not mean ten child facts changed. Comparing each submitted value with SQLite before writing prevents an outbox row for every unchanged attendee and keeps sync work proportional to actual edits.
 
 The useful mental model is **state plus event**: write the event snapshot for every completed session, update current state only when it changes, and enforce the aggregate boundary in the persistence service rather than trusting transient screen state.
+
+### Reconcile authority addendum: hydration and absence are different permissions
+
+An authenticated SELECT can answer, "Which rows may this EA read?" It cannot always answer, "Which rows no longer exist?" PostgreSQL Row Level Security deliberately hides unauthorized rows without turning that hiding into an error. An empty successful response can therefore mean either that Head Office removed every relationship or that a policy stopped exposing them. Those meanings have opposite consequences, so one response cannot safely carry both.
+
+The reconcile design now separates two permissions. Ordinary RLS queries retain **hydration authority**: their returned content may refresh SQLite, subject to the pending-local guard. A dedicated authenticated RPC holds **absence authority**: a fixed-search-path private function derives the EA from `auth.uid()` and returns a versioned, complete set of active relationship ids. The client checks the version, completeness claim, user, Programme, and every required array before using it. The caller cannot submit another user id to widen the snapshot.
+
+This produces a simple fail-closed rule. If the RPC is missing, malformed, inconsistent, or unavailable, the app may still accept useful row content from ordinary queries, but it ends no relationships and does not mark the pull successful. Existing offline data remains visible. Operational observability records the failure so support can distinguish "the server returned zero classes" from "the app could not obtain safe removal authority."
+
+The old 1,000-row limit still matters, but for a different reason. A complete RPC id set prevents a truncated hydration query from falsely ending rows. It does not prove that every row's content was downloaded. The app may reconcile safely from the complete id set, while withholding the successful-pull timestamp and reporting the incomplete hydration scope. This is a useful general distinction: **safe deletion evidence is not the same as complete replication evidence**.
+
+The broader mental model is capability separation. Give each data path only the authority its evidence supports:
+
+1. Ordinary queries can refresh facts they actually returned.
+2. The privileged snapshot can authorize scoped absence, but cannot supply arbitrary caller-selected identities.
+3. SQLite repositories apply end-dates only to synced rows and retain the mass-end circuit breaker.
+4. React publishes a fresh SQLite read, so the durable local model remains the only screen authority.

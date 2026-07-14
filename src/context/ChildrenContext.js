@@ -113,7 +113,11 @@ export const ChildrenProvider = ({ children }) => {
       await ensureReferenceData({ userId: activeUserId });
       if (activeUserIdRef.current !== activeUserId) return;
 
-      const { activeProgrammeId, scopes } = pulled;
+      const { activeProgrammeId, scopes, reconcileAcknowledgments } = pulled;
+      const acknowledgmentData = reconcileAcknowledgments?.data;
+      const reconcileAuthorityComplete = reconcileAcknowledgments?.ok === true
+        && reconcileAcknowledgments?.complete === true
+        && acknowledgmentData?.activeProgrammeId === activeProgrammeId;
       const failedPullScopes = Object.entries(scopes)
         .filter(([, scope]) => !scope.ok && scope.failureKind !== 'dependency')
         .map(([name, scope]) => ({
@@ -121,6 +125,17 @@ export const ChildrenProvider = ({ children }) => {
           failureKind: scope.failureKind || 'unknown',
           message: scope.error?.message || String(scope.error || 'Pull failed'),
         }));
+      const incompletePullScopes = Object.entries(scopes)
+        .filter(([, scope]) => scope.ok && scope.complete === false)
+        .map(([name]) => name);
+      if (!reconcileAuthorityComplete && reconcileAcknowledgments?.error) {
+        failedPullScopes.push({
+          name: 'reconcileAcknowledgments',
+          failureKind: reconcileAcknowledgments.failureKind || 'query',
+          message: reconcileAcknowledgments.error.message
+            || String(reconcileAcknowledgments.error),
+        });
+      }
       if (failedPullScopes.length > 0) {
         captureOperationalError(new Error(failedPullScopes[0].message), {
           category: 'child_data_pull_failed',
@@ -131,6 +146,19 @@ export const ChildrenProvider = ({ children }) => {
           tags: {
             pull_failure_kind: failedPullScopes[0].failureKind,
             pull_scope: failedPullScopes[0].name,
+          },
+        });
+      }
+      if (incompletePullScopes.length > 0) {
+        captureOperationalError(new Error('Child data pull reached its completeness limit'), {
+          category: 'child_data_pull_incomplete',
+          context: {
+            activeProgrammeId,
+            incompleteScopes: incompletePullScopes,
+          },
+          tags: {
+            pull_failure_kind: 'query_limit',
+            pull_scope: incompletePullScopes[0],
           },
         });
       }
@@ -193,9 +221,9 @@ export const ChildrenProvider = ({ children }) => {
           'childEaAssignments',
           childrenRepository.saveServerStaffChildRows,
           pulledChildEaAssignments,
-          scopes.childEaAssignments.complete && programmeScopeOk
+          reconcileAuthorityComplete && programmeScopeOk
             ? {
-              acknowledgedIds: scopes.childEaAssignments.rows.map((row) => row.id),
+              acknowledgedIds: acknowledgmentData.childEaAssignmentIds,
               pulledAt,
               userId: activeUserId,
             }
@@ -207,13 +235,10 @@ export const ChildrenProvider = ({ children }) => {
           'childProgrammeEnrollments',
           childrenRepository.saveServerChildProgrammeEnrollmentRows,
           pulledChildProgrammeEnrollments,
-          scopes.childProgrammeEnrollments.complete
-            && programmeScopeOk
-            && scopes.childEaAssignments.ok
+          reconcileAuthorityComplete && programmeScopeOk
             ? {
-              acknowledgedIds: scopes.childProgrammeEnrollments.rows.map((row) => row.id),
-              acknowledgedAssignedChildIds: scopes.childEaAssignments.rows
-                .map((row) => row.child_id),
+              acknowledgedIds: acknowledgmentData.childProgrammeEnrollmentIds,
+              acknowledgedAssignedChildIds: acknowledgmentData.assignedChildIds,
               programmeId: activeProgrammeId,
               pulledAt,
             }
@@ -225,13 +250,10 @@ export const ChildrenProvider = ({ children }) => {
           'childClassMemberships',
           childrenRepository.saveServerChildClassMembershipRows,
           pulledChildClassMemberships,
-          scopes.childClassMemberships.complete
-            && programmeScopeOk
-            && scopes.children.ok
+          reconcileAuthorityComplete && programmeScopeOk
             ? {
-              acknowledgedIds: scopes.childClassMemberships.rows.map((row) => row.id),
-              acknowledgedChildIds: scopes.children.rows
-                .map((row) => row.id),
+              acknowledgedIds: acknowledgmentData.childClassMembershipIds,
+              acknowledgedChildIds: acknowledgmentData.visibleChildIds,
               pulledAt,
             }
             : undefined
@@ -245,11 +267,9 @@ export const ChildrenProvider = ({ children }) => {
           'groupEaAssignments',
           groupEaAssignmentsRepository.saveServerRows,
           scopes.groupEaAssignments.rows,
-          scopes.groupEaAssignments.complete
-            && programmeScopeOk
-            && scopes.groups.ok
+          reconcileAuthorityComplete && programmeScopeOk
             ? {
-              acknowledgedGroupIds: scopes.groups.rows.map((row) => row.id),
+              acknowledgedGroupIds: acknowledgmentData.groupIds,
               userId: activeUserId,
               programmeId: activeProgrammeId,
               pulledAt,
@@ -262,12 +282,10 @@ export const ChildrenProvider = ({ children }) => {
           'childrenGroups',
           groupsRepository.saveServerChildrenGroupRows,
           scopes.childrenGroups.rows,
-          scopes.childrenGroups.complete
-            && programmeScopeOk
-            && scopes.groups.ok
+          reconcileAuthorityComplete && programmeScopeOk
             ? {
-              acknowledgedIds: scopes.childrenGroups.rows.map((row) => row.id),
-              acknowledgedGroupIds: scopes.groups.rows.map((row) => row.id),
+              acknowledgedIds: acknowledgmentData.childGroupMembershipIds,
+              acknowledgedGroupIds: acknowledgmentData.groupIds,
               pulledAt,
             }
             : undefined
@@ -276,10 +294,16 @@ export const ChildrenProvider = ({ children }) => {
 
       if (activeUserIdRef.current !== activeUserId) return;
       const transportFailed = Object.values(scopes)
-        .some((scope) => scope.failureKind === 'transport');
+        .some((scope) => scope.failureKind === 'transport')
+        || reconcileAcknowledgments?.failureKind === 'transport';
       const reconcilesCompleted = reconcileResults
         .every((result) => result?.reconcileCompleted === true);
-      if (!transportFailed && reconcilesCompleted) {
+      if (
+        !transportFailed
+        && incompletePullScopes.length === 0
+        && reconcileAuthorityComplete
+        && reconcilesCompleted
+      ) {
         await syncStateRepository.setPullState('child_data_pull', { lastPulledAt: pulledAt });
       }
 

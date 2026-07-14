@@ -4,6 +4,7 @@ jest.mock('../src/services/supabaseClient', () => ({
 
 import {
   PULL_SCOPE_COMPLETENESS_LIMIT,
+  pullReconcileAcknowledgments,
   pullPreloadedChildData,
 } from '../src/services/preloadedChildData';
 
@@ -34,11 +35,31 @@ const defaultResults = {
   child_group_memberships: successful(),
 };
 
+const defaultReconcileSnapshot = {
+  schema_version: 1,
+  complete: true,
+  user_id: 'user-1',
+  generated_at: '2026-07-14T12:00:00.000Z',
+  active_programme_id: 'programme-a',
+  child_ea_assignment_ids: [],
+  assigned_child_ids: [],
+  visible_child_ids: [],
+  child_programme_enrollment_ids: [],
+  child_class_membership_ids: [],
+  class_ea_assignment_ids: [],
+  class_ids: [],
+  group_ea_assignment_ids: [],
+  group_ids: [],
+  child_group_membership_ids: [],
+};
+
 const createSupabaseClient = (overrides = {}) => {
-  const results = { ...defaultResults, ...overrides };
+  const { reconcileSnapshot = defaultReconcileSnapshot, ...tableOverrides } = overrides;
+  const results = { ...defaultResults, ...tableOverrides };
   const callCounts = {};
   const buildersByTable = {};
   const supabaseClient = {
+    rpc: jest.fn().mockResolvedValue({ data: reconcileSnapshot, error: null }),
     from: jest.fn((tableName) => {
       const callIndex = callCounts[tableName] || 0;
       callCounts[tableName] = callIndex + 1;
@@ -73,6 +94,100 @@ const expectDependency = (scope) => {
 };
 
 describe('preloaded child-data pull', () => {
+  test('loads and validates the authenticated server-authoritative reconcile snapshot', async () => {
+    const supabaseClient = {
+      rpc: jest.fn().mockResolvedValue({
+        data: {
+          schema_version: 1,
+          complete: true,
+          user_id: 'user-1',
+          generated_at: '2026-07-14T12:00:00.000Z',
+          active_programme_id: 'programme-a',
+          child_ea_assignment_ids: ['cea-1'],
+          assigned_child_ids: ['child-1'],
+          visible_child_ids: ['child-1'],
+          child_programme_enrollment_ids: ['cpe-1'],
+          child_class_membership_ids: ['ccm-1'],
+          class_ea_assignment_ids: ['class-ea-1'],
+          class_ids: ['class-1'],
+          group_ea_assignment_ids: ['group-ea-1'],
+          group_ids: ['group-1'],
+          child_group_membership_ids: ['cgm-1'],
+        },
+        error: null,
+      }),
+    };
+
+    const snapshot = await pullReconcileAcknowledgments({
+      userId: 'user-1',
+      supabaseClient,
+    });
+
+    expect(supabaseClient.rpc).toHaveBeenCalledWith('get_reconcile_acknowledgments');
+    expect(snapshot).toEqual({
+      ok: true,
+      complete: true,
+      failureKind: null,
+      data: {
+        schemaVersion: 1,
+        generatedAt: '2026-07-14T12:00:00.000Z',
+        activeProgrammeId: 'programme-a',
+        childEaAssignmentIds: ['cea-1'],
+        assignedChildIds: ['child-1'],
+        visibleChildIds: ['child-1'],
+        childProgrammeEnrollmentIds: ['cpe-1'],
+        childClassMembershipIds: ['ccm-1'],
+        classEaAssignmentIds: ['class-ea-1'],
+        classIds: ['class-1'],
+        groupEaAssignmentIds: ['group-ea-1'],
+        groupIds: ['group-1'],
+        childGroupMembershipIds: ['cgm-1'],
+      },
+    });
+  });
+
+  test('returns the authoritative reconcile snapshot alongside ordinary pull scopes', async () => {
+    const supabaseClient = createSupabaseClient({
+      reconcileSnapshot: {
+        ...defaultReconcileSnapshot,
+        child_ea_assignment_ids: ['cea-authoritative'],
+        assigned_child_ids: ['child-authoritative'],
+      },
+    });
+
+    const result = await pullPreloadedChildData({ userId: 'user-1', supabaseClient });
+
+    expect(result.reconcileAcknowledgments).toEqual(expect.objectContaining({
+      ok: true,
+      complete: true,
+      data: expect.objectContaining({
+        childEaAssignmentIds: ['cea-authoritative'],
+        assignedChildIds: ['child-authoritative'],
+      }),
+    }));
+  });
+
+  test('uses the authoritative active programme when the ordinary RLS query under-returns', async () => {
+    const supabaseClient = createSupabaseClient({
+      staff_programme_assignments: successful(),
+      reconcileSnapshot: {
+        ...defaultReconcileSnapshot,
+        active_programme_id: 'programme-authoritative',
+      },
+    });
+
+    const result = await pullPreloadedChildData({ userId: 'user-1', supabaseClient });
+
+    expect(result.activeProgrammeId).toBe('programme-authoritative');
+    expect(result.scopes.programmeAssignment).toEqual({
+      ok: true,
+      rows: [{ programme_id: 'programme-authoritative' }],
+      complete: true,
+      failureKind: null,
+    });
+    expect(supabaseClient.from).toHaveBeenCalledWith('child_ea_assignments');
+  });
+
   test('keeps successful empty group scopes distinct from a failed class-membership query', async () => {
     const supabaseClient = createSupabaseClient({
       children: successful([{ id: 'child-1' }]),
@@ -179,6 +294,7 @@ describe('preloaded child-data pull', () => {
   ])('classifies $label and dependency-skips domain scopes', async ({ programmeResult, failureKind }) => {
     const supabaseClient = createSupabaseClient({
       staff_programme_assignments: programmeResult,
+      reconcileSnapshot: null,
     });
 
     const result = await pullPreloadedChildData({ userId: 'user-1', supabaseClient });
@@ -199,6 +315,10 @@ describe('preloaded child-data pull', () => {
   test('returns an explicit no-programme result with every domain scope skipped', async () => {
     const supabaseClient = createSupabaseClient({
       staff_programme_assignments: successful(),
+      reconcileSnapshot: {
+        ...defaultReconcileSnapshot,
+        active_programme_id: null,
+      },
     });
 
     const result = await pullPreloadedChildData({ userId: 'user-1', supabaseClient });

@@ -17,6 +17,8 @@ import { syncStateRepository } from '../src/db/repositories/syncStateRepository'
 import { classOnboardingRepository } from '../src/db/repositories/classOnboardingRepository';
 
 const mockSupabaseFrom = jest.fn();
+const mockSupabaseRpc = jest.fn();
+const mockCaptureOperationalError = jest.fn();
 const queryResult = (result) => {
   const builder = {
     select: jest.fn(() => builder),
@@ -32,6 +34,7 @@ const queryResult = (result) => {
 jest.mock('../src/services/supabaseClient', () => ({
   supabase: {
     from: (...args) => mockSupabaseFrom(...args),
+    rpc: (...args) => mockSupabaseRpc(...args),
   },
 }));
 
@@ -55,6 +58,10 @@ jest.mock('../src/context/ChildrenContext', () => ({
 jest.mock('../src/services/offlineSync', () => ({
   fetchAndCacheSchools: jest.fn(),
   ensureReferenceData: jest.fn(),
+}));
+
+jest.mock('../src/services/observability', () => ({
+  captureOperationalError: (...args) => mockCaptureOperationalError(...args),
 }));
 
 jest.mock('../src/db/repositories/referenceDataRepository', () => ({
@@ -111,6 +118,25 @@ const wrapper = ({ children }) => (
   <ClassesProvider>{children}</ClassesProvider>
 );
 
+const reconcileSnapshot = (overrides = {}) => ({
+  schema_version: 1,
+  complete: true,
+  user_id: 'user-1',
+  generated_at: '2026-07-14T12:00:00.000Z',
+  active_programme_id: 'programme-a',
+  child_ea_assignment_ids: [],
+  assigned_child_ids: [],
+  visible_child_ids: [],
+  child_programme_enrollment_ids: [],
+  child_class_membership_ids: [],
+  class_ea_assignment_ids: ['assignment-1'],
+  class_ids: ['class-1'],
+  group_ea_assignment_ids: [],
+  group_ids: [],
+  child_group_membership_ids: [],
+  ...overrides,
+});
+
 describe('ClassesContext Plan 5 behavior', () => {
   const updateChild = jest.fn();
   const refreshChildrenFromCache = jest.fn();
@@ -151,6 +177,7 @@ describe('ClassesContext Plan 5 behavior', () => {
       }
       return queryResult({ data: [], error: null });
     });
+    mockSupabaseRpc.mockResolvedValue({ data: reconcileSnapshot(), error: null });
   });
 
   test('sync completion refreshes classes from SQLite without querying the server', async () => {
@@ -181,6 +208,7 @@ describe('ClassesContext Plan 5 behavior', () => {
     await waitFor(() => expect(mockSupabaseFrom).toHaveBeenCalledWith('staff_programme_assignments'));
     await waitFor(() => expect(classesRepository.getClasses).toHaveBeenCalled());
     mockSupabaseFrom.mockClear();
+    mockSupabaseRpc.mockClear();
 
     useOffline.mockReturnValue({
       isOnline: true,
@@ -190,15 +218,19 @@ describe('ClassesContext Plan 5 behavior', () => {
     });
     rerender();
 
-    await waitFor(() => expect(mockSupabaseFrom).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(mockSupabaseFrom).toHaveBeenCalledTimes(2));
     expect(mockSupabaseFrom).toHaveBeenCalledWith('staff_programme_assignments');
+    expect(mockSupabaseFrom).toHaveBeenCalledWith('classes');
+    expect(mockSupabaseRpc).toHaveBeenCalledTimes(1);
   });
 
   test('mount performs exactly one class network pull', async () => {
     renderHook(() => useClasses(), { wrapper });
 
     await waitFor(() => expect(mockSupabaseFrom).toHaveBeenCalledWith('staff_programme_assignments'));
-    expect(mockSupabaseFrom).toHaveBeenCalledTimes(1);
+    expect(mockSupabaseFrom).toHaveBeenCalledTimes(2);
+    expect(mockSupabaseFrom).toHaveBeenCalledWith('classes');
+    expect(mockSupabaseRpc).toHaveBeenCalledTimes(1);
   });
 
   test('reports confirmed zero classes only after the initial backend check succeeds', async () => {
@@ -268,6 +300,10 @@ describe('ClassesContext Plan 5 behavior', () => {
   });
 
   test('Apply arriving after an active class pull reconciles queues one authorized follow-up pull', async () => {
+    mockSupabaseRpc.mockResolvedValue({
+      data: reconcileSnapshot({ class_ea_assignment_ids: [], class_ids: [] }),
+      error: null,
+    });
     let authorized = false;
     const consumeReconcileBreakerAuthorization = jest.fn((scope) => {
       if (scope !== 'classEaAssignments' || !authorized) return false;
@@ -448,6 +484,13 @@ describe('ClassesContext Plan 5 behavior', () => {
       }
       return queryResult({ data: [], error: null });
     });
+    mockSupabaseRpc.mockResolvedValue({
+      data: reconcileSnapshot({
+        class_ea_assignment_ids: ['assignment-1'],
+        class_ids: ['server-class'],
+      }),
+      error: null,
+    });
 
     renderHook(() => useClasses(), { wrapper });
 
@@ -465,6 +508,10 @@ describe('ClassesContext Plan 5 behavior', () => {
   });
 
   test('an active programme with zero classes persists an empty assignment batch with reconcile', async () => {
+    mockSupabaseRpc.mockResolvedValue({
+      data: reconcileSnapshot({ class_ea_assignment_ids: [], class_ids: [] }),
+      error: null,
+    });
     mockSupabaseFrom.mockImplementation((tableName) => {
       if (tableName === 'staff_programme_assignments') {
         return queryResult({ data: [{ programme_id: 'programme-a' }], error: null });
@@ -489,7 +536,47 @@ describe('ClassesContext Plan 5 behavior', () => {
     });
   });
 
+  test('a malformed authoritative snapshot blocks reconcile and the successful-pull stamp', async () => {
+    mockSupabaseRpc.mockResolvedValue({
+      data: {
+        ...reconcileSnapshot({ class_ea_assignment_ids: [], class_ids: [] }),
+        complete: false,
+      },
+      error: null,
+    });
+    mockSupabaseFrom.mockImplementation((tableName) => {
+      if (tableName === 'staff_programme_assignments') {
+        return queryResult({ data: [{ programme_id: 'programme-a' }], error: null });
+      }
+      if (tableName === 'classes') {
+        return queryResult({ data: [], error: null });
+      }
+      return queryResult({ data: [], error: null });
+    });
+
+    renderHook(() => useClasses(), { wrapper });
+
+    await waitFor(() => expect(classEaAssignmentsRepository.saveServerRows).toHaveBeenCalled());
+    expect(classEaAssignmentsRepository.saveServerRows).toHaveBeenCalledWith([]);
+    expect(syncStateRepository.setPullState).not.toHaveBeenCalled();
+    expect(mockCaptureOperationalError).toHaveBeenCalledWith(
+      expect.objectContaining({ message: 'Malformed reconcile acknowledgment snapshot' }),
+      expect.objectContaining({
+        category: 'reconcile_acknowledgment_failed',
+        tags: expect.objectContaining({ pull_scope: 'classes' }),
+      })
+    );
+  });
+
   test('no active programme marks class scopes as dependencies and performs no persistence', async () => {
+    mockSupabaseRpc.mockResolvedValue({
+      data: reconcileSnapshot({
+        active_programme_id: null,
+        class_ea_assignment_ids: [],
+        class_ids: [],
+      }),
+      error: null,
+    });
     renderHook(() => useClasses(), { wrapper });
 
     await waitFor(() => expect(mockSupabaseFrom).toHaveBeenCalledWith('staff_programme_assignments'));
@@ -536,6 +623,10 @@ describe('ClassesContext Plan 5 behavior', () => {
   });
 
   test('a transport-failed classes pull does not stamp', async () => {
+    mockSupabaseRpc.mockResolvedValue({
+      data: null,
+      error: { message: 'network request failed' },
+    });
     mockSupabaseFrom.mockImplementation((tableName) => {
       if (tableName === 'staff_programme_assignments') {
         return queryResult({
@@ -633,7 +724,7 @@ describe('ClassesContext Plan 5 behavior', () => {
     expect(refreshSyncStatus).toHaveBeenCalledWith({ autoTrigger: false });
   });
 
-  test('an incomplete class-assignment scope persists rows without reconcile', async () => {
+  test('a complete authoritative snapshot permits reconcile when the ordinary class query reaches its limit', async () => {
     const serverClasses = Array.from({ length: 1000 }, (_, index) => ({
       id: `class-${index}`,
       name: `Class ${index}`,
@@ -653,12 +744,29 @@ describe('ClassesContext Plan 5 behavior', () => {
       }
       return queryResult({ data: [], error: null });
     });
+    mockSupabaseRpc.mockResolvedValue({
+      data: reconcileSnapshot({
+        class_ea_assignment_ids: serverClasses.map((row) => row.class_ea_assignments[0].id),
+        class_ids: serverClasses.map((row) => row.id),
+      }),
+      error: null,
+    });
 
     renderHook(() => useClasses(), { wrapper });
 
     await waitFor(() => expect(classEaAssignmentsRepository.saveServerRows).toHaveBeenCalled());
-    expect(classEaAssignmentsRepository.saveServerRows.mock.calls[0]).toHaveLength(1);
+    expect(classEaAssignmentsRepository.saveServerRows.mock.calls[0]).toHaveLength(2);
     expect(classEaAssignmentsRepository.saveServerRows.mock.calls[0][0]).toHaveLength(1000);
+    expect(classEaAssignmentsRepository.saveServerRows.mock.calls[0][1]).toEqual({
+      reconcile: expect.objectContaining({
+        acknowledgedClassIds: serverClasses.map((row) => row.id),
+      }),
+    });
+    expect(syncStateRepository.setPullState).not.toHaveBeenCalled();
+    expect(mockCaptureOperationalError).toHaveBeenCalledWith(
+      expect.objectContaining({ message: 'Classes pull reached its completeness limit' }),
+      expect.objectContaining({ category: 'class_pull_incomplete' })
+    );
   });
 
   afterEach(() => {

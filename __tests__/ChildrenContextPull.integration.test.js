@@ -57,9 +57,32 @@ const failedScope = (failureKind, error) => ({
   ...(error ? { error } : {}),
 });
 
+const successfulAcknowledgments = (overrides = {}) => ({
+  ok: true,
+  complete: true,
+  failureKind: null,
+  data: {
+    schemaVersion: 1,
+    generatedAt: '2026-07-14T12:00:00.000Z',
+    activeProgrammeId: 'programme-a',
+    childEaAssignmentIds: ['cea-child-1'],
+    assignedChildIds: ['child-1'],
+    visibleChildIds: ['child-1'],
+    childProgrammeEnrollmentIds: ['cpe-child-1'],
+    childClassMembershipIds: ['ccm-child-1'],
+    classEaAssignmentIds: ['class-assignment-1'],
+    classIds: ['class-1'],
+    groupEaAssignmentIds: ['gea-group-1'],
+    groupIds: ['group-1'],
+    childGroupMembershipIds: ['membership-1'],
+    ...overrides,
+  },
+});
+
 const pulledBundle = (overrides = {}) => {
   const {
     activeProgrammeId = 'programme-a',
+    reconcileAcknowledgments = successfulAcknowledgments({ activeProgrammeId }),
     scopeOverrides = {},
     ...rowOverrides
   } = overrides;
@@ -153,6 +176,7 @@ const pulledBundle = (overrides = {}) => {
   };
   return {
     activeProgrammeId,
+    reconcileAcknowledgments,
     scopes: {
       ...Object.fromEntries([
       'programmeAssignment',
@@ -392,6 +416,19 @@ test('a full context pull creates no storage facade sidecar rows', async () => {
 test('an empty cache pulls reference parents before persisting the domain bundle', async () => {
   mockPullPreloadedChildData.mockResolvedValue(pulledBundle({
     activeProgrammeId: 'programme-server',
+    reconcileAcknowledgments: successfulAcknowledgments({
+      activeProgrammeId: 'programme-server',
+      childEaAssignmentIds: ['cea-server'],
+      assignedChildIds: ['child-server'],
+      visibleChildIds: ['child-server'],
+      childProgrammeEnrollmentIds: ['cpe-server'],
+      childClassMembershipIds: ['ccm-server'],
+      classEaAssignmentIds: [],
+      classIds: [],
+      groupEaAssignmentIds: ['gea-server'],
+      groupIds: ['group-server'],
+      childGroupMembershipIds: ['membership-server'],
+    }),
     programmeAssignment: [{ programme_id: 'programme-server' }],
     children: [{
       id: 'child-server',
@@ -553,6 +590,11 @@ test('a failed membership scope does not block empty group reconcile and final s
     deferredPull.resolve(pulledBundle({
       groups: [],
       groupEaAssignments: [],
+      reconcileAcknowledgments: successfulAcknowledgments({
+        groupEaAssignmentIds: [],
+        groupIds: [],
+        childGroupMembershipIds: [],
+      }),
       scopeOverrides: {
         childrenGroups: failedScope('query', { message: 'membership query failed' }),
       },
@@ -577,4 +619,56 @@ test('a failed membership scope does not block empty group reconcile and final s
     from child_group_memberships
     where id = 'membership-1'
   `)).toEqual({ removed_at: null });
+});
+
+test('RLS-under-returned group rows cannot override the server-authoritative acknowledgment set', async () => {
+  await seedContextRows(testDb);
+  mockPullPreloadedChildData.mockResolvedValue(pulledBundle({
+    groups: [],
+    groupEaAssignments: [],
+    reconcileAcknowledgments: successfulAcknowledgments({
+      groupEaAssignmentIds: ['gea-group-1'],
+      groupIds: ['group-1'],
+      childGroupMembershipIds: ['membership-1'],
+    }),
+  }));
+
+  const { result } = renderHook(() => useChildren(), { wrapper });
+  await waitFor(() => expect(result.current.loading).toBe(false));
+
+  expect(await testDb.getFirstAsync(`
+    select unassigned_at
+    from group_ea_assignments
+    where id = 'gea-group-1'
+  `)).toEqual({ unassigned_at: null });
+  expect(result.current.groups.map((group) => group.id)).toEqual(['group-1']);
+});
+
+test('an unavailable authoritative snapshot preserves local relationships and does not stamp the pull', async () => {
+  await seedContextRows(testDb);
+  mockPullPreloadedChildData.mockResolvedValue(pulledBundle({
+    groups: [],
+    groupEaAssignments: [],
+    reconcileAcknowledgments: {
+      ok: false,
+      complete: false,
+      failureKind: 'query',
+      error: new Error('acknowledgment RPC unavailable'),
+    },
+  }));
+
+  const { result } = renderHook(() => useChildren(), { wrapper });
+  await waitFor(() => expect(result.current.loading).toBe(false));
+
+  expect(await testDb.getFirstAsync(`
+    select unassigned_at
+    from group_ea_assignments
+    where id = 'gea-group-1'
+  `)).toEqual({ unassigned_at: null });
+  expect(await testDb.getFirstAsync(`
+    select scope
+    from sync_state
+    where scope = 'child_data_pull'
+  `)).toBeNull();
+  expect(result.current.groups.map((group) => group.id)).toEqual(['group-1']);
 });

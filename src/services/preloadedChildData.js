@@ -2,6 +2,7 @@ import { supabase } from './supabaseClient';
 import { enqueueSupabaseRequest } from './supabaseRequestQueue';
 
 export const PULL_SCOPE_COMPLETENESS_LIMIT = 1000;
+export const RECONCILE_ACK_SCHEMA_VERSION = 1;
 
 const CHILD_PROGRAMME_ENROLLMENT_CHUNK_SIZE = 200;
 const DOMAIN_SCOPE_NAMES = [
@@ -68,6 +69,75 @@ const dependencyScope = () => failedScope('dependency');
 const dependencyScopes = () => Object.fromEntries(
   DOMAIN_SCOPE_NAMES.map((scopeName) => [scopeName, dependencyScope()]),
 );
+
+const reconcileAcknowledgmentFailure = (failureKind, error) => ({
+  ok: false,
+  complete: false,
+  failureKind,
+  ...(error ? { error } : {}),
+});
+
+const snapshotArray = (snapshot, key) => (
+  Array.isArray(snapshot?.[key]) ? snapshot[key] : null
+);
+
+export const pullReconcileAcknowledgments = async ({
+  userId,
+  supabaseClient = supabase,
+} = {}) => {
+  try {
+    const { data, error } = await supabaseClient.rpc('get_reconcile_acknowledgments');
+    if (error) {
+      return reconcileAcknowledgmentFailure(classifyPullFailureKind(error), error);
+    }
+
+    const arrayKeys = [
+      'child_ea_assignment_ids',
+      'assigned_child_ids',
+      'visible_child_ids',
+      'child_programme_enrollment_ids',
+      'child_class_membership_ids',
+      'class_ea_assignment_ids',
+      'class_ids',
+      'group_ea_assignment_ids',
+      'group_ids',
+      'child_group_membership_ids',
+    ];
+    const valid = data?.schema_version === RECONCILE_ACK_SCHEMA_VERSION
+      && data?.complete === true
+      && data?.user_id === userId
+      && arrayKeys.every((key) => snapshotArray(data, key));
+    if (!valid) {
+      return reconcileAcknowledgmentFailure(
+        'query',
+        new Error('Malformed reconcile acknowledgment snapshot')
+      );
+    }
+
+    return {
+      ok: true,
+      complete: true,
+      failureKind: null,
+      data: {
+        schemaVersion: data.schema_version,
+        generatedAt: data.generated_at || null,
+        activeProgrammeId: data.active_programme_id || null,
+        childEaAssignmentIds: data.child_ea_assignment_ids,
+        assignedChildIds: data.assigned_child_ids,
+        visibleChildIds: data.visible_child_ids,
+        childProgrammeEnrollmentIds: data.child_programme_enrollment_ids,
+        childClassMembershipIds: data.child_class_membership_ids,
+        classEaAssignmentIds: data.class_ea_assignment_ids,
+        classIds: data.class_ids,
+        groupEaAssignmentIds: data.group_ea_assignment_ids,
+        groupIds: data.group_ids,
+        childGroupMembershipIds: data.child_group_membership_ids,
+      },
+    };
+  } catch (error) {
+    return reconcileAcknowledgmentFailure('transport', error);
+  }
+};
 
 export const classifyPullFailureKind = (error) => {
   const code = String(error?.code || '');
@@ -143,7 +213,11 @@ export const pullPreloadedChildData = async ({
   userId,
   supabaseClient = supabase,
 } = {}) => enqueueSupabaseRequest(async () => {
-  const programmeAssignment = await queryScope(() => (
+  const reconcileAcknowledgments = await pullReconcileAcknowledgments({
+    userId,
+    supabaseClient,
+  });
+  const queriedProgrammeAssignment = await queryScope(() => (
     supabaseClient
       .from('staff_programme_assignments')
       .select('programme_id')
@@ -152,13 +226,21 @@ export const pullPreloadedChildData = async ({
       .order('assigned_at', { ascending: false })
       .limit(1)
   ));
-  const activeProgrammeId = programmeAssignment.ok
-    ? programmeAssignment.rows[0]?.programme_id || null
-    : null;
+  const hasAuthoritativeProgramme = reconcileAcknowledgments.ok
+    && reconcileAcknowledgments.complete;
+  const activeProgrammeId = hasAuthoritativeProgramme
+    ? reconcileAcknowledgments.data.activeProgrammeId
+    : queriedProgrammeAssignment.ok
+      ? queriedProgrammeAssignment.rows[0]?.programme_id || null
+      : null;
+  const programmeAssignment = hasAuthoritativeProgramme
+    ? successfulScope(activeProgrammeId ? [{ programme_id: activeProgrammeId }] : [])
+    : queriedProgrammeAssignment;
 
   if (!activeProgrammeId) {
     return {
       activeProgrammeId: null,
+      reconcileAcknowledgments,
       scopes: {
         programmeAssignment,
         ...dependencyScopes(),
@@ -270,6 +352,7 @@ export const pullPreloadedChildData = async ({
 
   return {
     activeProgrammeId,
+    reconcileAcknowledgments,
     scopes: {
       programmeAssignment,
       children,

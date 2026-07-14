@@ -14,6 +14,7 @@ import { syncStateRepository } from '../db/repositories/syncStateRepository';
 import {
   classifyPullFailureKind,
   PULL_SCOPE_COMPLETENESS_LIMIT,
+  pullReconcileAcknowledgments,
 } from '../services/preloadedChildData';
 import { resolveDatabase } from '../db/repositories/repositoryRuntime';
 import { useAuth } from './AuthContext';
@@ -148,6 +149,10 @@ export const ClassesProvider = ({ children: reactChildren }) => {
       const cachedClasses = await refreshFromCache();
 
       const pulled = await enqueueSupabaseRequest(async () => {
+        const reconcileAcknowledgments = await pullReconcileAcknowledgments({
+          userId: activeUserId,
+          supabaseClient: supabase,
+        });
         const { data: assignments, error: assignmentError } = await supabase
           .from('staff_programme_assignments')
           .select('programme_id')
@@ -156,22 +161,21 @@ export const ClassesProvider = ({ children: reactChildren }) => {
           .order('assigned_at', { ascending: false })
           .limit(1);
 
-        if (assignmentError) {
-          return {
-            activeProgrammeId: null,
-            scopes: {
-              programmeAssignment: failedPullScope(classifyPullFailureKind(assignmentError), assignmentError),
-              classes: dependencyPullScope(),
-              classEaAssignments: dependencyPullScope(),
-            },
-          };
-        }
-
-        const programmeAssignment = successfulPullScope(assignments || []);
-        const activeProgrammeId = assignments?.[0]?.programme_id || null;
+        const hasAuthoritativeProgramme = reconcileAcknowledgments.ok
+          && reconcileAcknowledgments.complete;
+        const queriedProgrammeAssignment = assignmentError
+          ? failedPullScope(classifyPullFailureKind(assignmentError), assignmentError)
+          : successfulPullScope(assignments || []);
+        const activeProgrammeId = hasAuthoritativeProgramme
+          ? reconcileAcknowledgments.data.activeProgrammeId
+          : assignments?.[0]?.programme_id || null;
+        const programmeAssignment = hasAuthoritativeProgramme
+          ? successfulPullScope(activeProgrammeId ? [{ programme_id: activeProgrammeId }] : [])
+          : queriedProgrammeAssignment;
         if (!activeProgrammeId) {
           return {
             activeProgrammeId: null,
+            reconcileAcknowledgments,
             scopes: {
               programmeAssignment,
               classes: dependencyPullScope(),
@@ -187,13 +191,14 @@ export const ClassesProvider = ({ children: reactChildren }) => {
             class_ea_assignments!inner(*)
           `)
           .eq('class_ea_assignments.ea_user_id', activeUserId)
-          .eq('class_ea_assignments.programme_id', assignments[0].programme_id)
+          .eq('class_ea_assignments.programme_id', activeProgrammeId)
           .is('class_ea_assignments.unassigned_at', null)
           .order('name', { ascending: true });
 
         if (error) {
           return {
             activeProgrammeId,
+            reconcileAcknowledgments,
             scopes: {
               programmeAssignment,
               classes: failedPullScope(classifyPullFailureKind(error), error),
@@ -218,6 +223,7 @@ export const ClassesProvider = ({ children: reactChildren }) => {
 
         return {
           activeProgrammeId,
+          reconcileAcknowledgments,
           scopes: {
             programmeAssignment,
             classes: successfulPullScope(serverClasses),
@@ -227,15 +233,57 @@ export const ClassesProvider = ({ children: reactChildren }) => {
       });
 
       if (activeUserIdRef.current !== activeUserId) return;
-      const { activeProgrammeId, scopes } = pulled;
+      const { activeProgrammeId, reconcileAcknowledgments, scopes } = pulled;
+      const acknowledgmentData = reconcileAcknowledgments?.data;
+      const reconcileAuthorityComplete = reconcileAcknowledgments?.ok === true
+        && reconcileAcknowledgments?.complete === true
+        && acknowledgmentData?.activeProgrammeId === activeProgrammeId;
+      if (!reconcileAuthorityComplete) {
+        const acknowledgmentError = reconcileAcknowledgments?.error
+          || new Error('Reconcile acknowledgment snapshot is unavailable or inconsistent');
+        captureOperationalError(acknowledgmentError, {
+          category: 'reconcile_acknowledgment_failed',
+          context: {
+            activeProgrammeId,
+            acknowledgedProgrammeId: acknowledgmentData?.activeProgrammeId || null,
+            complete: reconcileAcknowledgments?.complete === true,
+          },
+          tags: {
+            pull_scope: 'classes',
+            pull_failure_kind: reconcileAcknowledgments?.failureKind || 'query',
+          },
+        });
+      }
+      const incompletePullScopes = Object.entries(scopes)
+        .filter(([, scope]) => scope.ok && scope.complete === false)
+        .map(([name]) => name);
+      if (incompletePullScopes.length > 0) {
+        captureOperationalError(new Error('Classes pull reached its completeness limit'), {
+          category: 'class_pull_incomplete',
+          context: {
+            activeProgrammeId,
+            incompleteScopes: incompletePullScopes,
+          },
+          tags: {
+            pull_failure_kind: 'query_limit',
+            pull_scope: incompletePullScopes[0],
+          },
+        });
+      }
       const pulledAt = new Date().toISOString();
       const stampPullIfComplete = async (reconcileResults = []) => {
         if (activeUserIdRef.current !== activeUserId) return;
         const transportFailed = Object.values(scopes)
-          .some((scope) => scope.failureKind === 'transport');
+          .some((scope) => scope.failureKind === 'transport')
+          || reconcileAcknowledgments?.failureKind === 'transport';
         const reconcilesCompleted = reconcileResults
           .every((result) => result?.reconcileCompleted === true);
-        if (!transportFailed && reconcilesCompleted) {
+        if (
+          !transportFailed
+          && incompletePullScopes.length === 0
+          && reconcileAuthorityComplete
+          && reconcilesCompleted
+        ) {
           await syncStateRepository.setPullState('classes_pull', { lastPulledAt: pulledAt });
         }
       };
@@ -275,11 +323,11 @@ export const ClassesProvider = ({ children: reactChildren }) => {
       const shouldReconcileAssignments = Boolean(activeProgrammeId)
         && scopes.programmeAssignment.ok
         && scopes.classes.ok
-        && scopes.classEaAssignments.complete;
+        && reconcileAuthorityComplete;
       if (shouldReconcileAssignments) {
         const reconcileResult = await classEaAssignmentsRepository.saveServerRows(scopes.classEaAssignments.rows, {
           reconcile: {
-            acknowledgedClassIds: scopes.classes.rows.map((row) => row.id),
+            acknowledgedClassIds: acknowledgmentData.classIds,
             userId: activeUserId,
             programmeId: activeProgrammeId,
             pulledAt,

@@ -412,6 +412,13 @@ User Action → Local AsyncStorage → UI Update → Sync Queue → Supabase →
 - [x] Manual review marking for failed syncs (failed items persisted to `syncMeta.failedItems`; retry clears counter + re-queues)
 - [x] Network state detection
 
+#### 2026-07-14 Server-authoritative reconcile follow-up
+- [x] Separate ordinary row hydration from server-authoritative absence acknowledgment
+- [x] Fail closed when the versioned authenticated snapshot is missing, malformed, or inconsistent
+- [x] Cover RLS under-return and unavailable-RPC behavior with real SQLite integration tests
+- [x] Add the additive Supabase migration and exact service-role-versus-EA staging probe
+- [ ] Apply migration `20260714220000` to `masi-app-sqlite` and pass `npm run rls:probe`
+
 ### Phase 7: Polish & Production Prep (Partially Complete)
 - [x] Error handling across all screens — Snackbar standardised across 6 screens; Alert reserved for destructive confirmations only
 - [x] Loading states — ActivityIndicator on SessionHistoryScreen; Create/Save button spinners on GroupManagementScreen

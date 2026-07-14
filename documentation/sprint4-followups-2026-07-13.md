@@ -4,6 +4,8 @@ Items the Sprint 4B adversarial review surfaced and the sprint deliberately did 
 
 Sources: `docs/superpowers/specs/2026-07-13-sprint4-pull-correctness-design.md` (sections C/D), `docs/superpowers/plans/2026-07-13-sprint4b-pull-reconcile.md` (dispositions S3, S13), `documentation/rls-sync-contract-map.md` ("Pull Persistence & Reconcile").
 
+> **Status update, 2026-07-14:** Item 1 is implemented on branch `fix/server-authoritative-reconcile`: additive migration `20260714220000_server_authoritative_reconcile_acknowledgments.sql`, fail-closed client consumption, real-SQLite under-return and unavailable-RPC coverage, and an exact live probe are built. It is not operationally closed until the migration is applied to `masi-app-sqlite` and `npm run rls:probe` passes. The original review text below is retained as dated design evidence.
+
 ## 1. OPEN: server-authoritative acknowledgment RPC (closes the RLS under-return hazard)
 
 **The only structural gap left in reconcile.** Not urgent while the SQLite backend has no field users, but it must be settled before the head-office writer exists.

@@ -109,33 +109,57 @@ const failedScope = (failureKind, error) => ({
   ...(error ? { error } : {}),
 });
 
-const pulledBundle = ({
-  activeProgrammeId = 'programme-a',
-  programmeAssignment = [{ programme_id: activeProgrammeId }],
-  children = [],
-  childEaAssignments = [],
-  childProgrammeEnrollments = [],
-  childClassMemberships = [],
-  classes = [],
-  groups = [],
-  groupEaAssignments = [],
-  childrenGroups = [],
-  scopeOverrides = {},
-} = {}) => ({
-  activeProgrammeId,
-  scopes: {
-    programmeAssignment: successfulScope(programmeAssignment),
-    children: successfulScope(children),
-    childEaAssignments: successfulScope(childEaAssignments),
-    childProgrammeEnrollments: successfulScope(childProgrammeEnrollments),
-    childClassMemberships: successfulScope(childClassMemberships),
-    classes: successfulScope(classes),
-    groups: successfulScope(groups),
-    groupEaAssignments: successfulScope(groupEaAssignments),
-    childrenGroups: successfulScope(childrenGroups),
-    ...scopeOverrides,
-  },
-});
+const pulledBundle = (options = {}) => {
+  const {
+    activeProgrammeId = 'programme-a',
+    programmeAssignment = [{ programme_id: activeProgrammeId }],
+    children = [],
+    childEaAssignments = [],
+    childProgrammeEnrollments = [],
+    childClassMemberships = [],
+    classes = [],
+    groups = [],
+    groupEaAssignments = [],
+    childrenGroups = [],
+    scopeOverrides = {},
+    reconcileAcknowledgments = {
+      ok: true,
+      complete: true,
+      failureKind: null,
+      data: {
+        schemaVersion: 1,
+        generatedAt: '2026-07-14T12:00:00.000Z',
+        activeProgrammeId,
+        childEaAssignmentIds: childEaAssignments.map((row) => row.id),
+        assignedChildIds: childEaAssignments.map((row) => row.child_id),
+        visibleChildIds: children.map((row) => row.id),
+        childProgrammeEnrollmentIds: childProgrammeEnrollments.map((row) => row.id),
+        childClassMembershipIds: childClassMemberships.map((row) => row.id),
+        classEaAssignmentIds: [],
+        classIds: [],
+        groupEaAssignmentIds: groupEaAssignments.map((row) => row.id),
+        groupIds: groups.map((row) => row.id),
+        childGroupMembershipIds: childrenGroups.map((row) => row.id),
+      },
+    },
+  } = options;
+  return {
+    activeProgrammeId,
+    reconcileAcknowledgments,
+    scopes: {
+      programmeAssignment: successfulScope(programmeAssignment),
+      children: successfulScope(children),
+      childEaAssignments: successfulScope(childEaAssignments),
+      childProgrammeEnrollments: successfulScope(childProgrammeEnrollments),
+      childClassMemberships: successfulScope(childClassMemberships),
+      classes: successfulScope(classes),
+      groups: successfulScope(groups),
+      groupEaAssignments: successfulScope(groupEaAssignments),
+      childrenGroups: successfulScope(childrenGroups),
+      ...scopeOverrides,
+    },
+  };
+};
 
 describe('ChildrenContext Plan 5 hydration', () => {
   beforeEach(() => {
@@ -712,7 +736,7 @@ describe('ChildrenContext Plan 5 hydration', () => {
     expect(new Set(pulledAtValues)).toHaveProperty('size', 1);
   });
 
-  test('a failed assignment scope is not persisted and blocks reconcile on an empty enrollment scope', async () => {
+  test('authoritative assigned-child ids allow enrollment reconcile when the ordinary assignment query fails', async () => {
     pullPreloadedChildData.mockResolvedValueOnce(pulledBundle({
       childProgrammeEnrollments: [],
       scopeOverrides: {
@@ -726,7 +750,14 @@ describe('ChildrenContext Plan 5 hydration', () => {
       expect(childrenRepository.saveServerChildProgrammeEnrollmentRows).toHaveBeenCalled();
     });
     expect(childrenRepository.saveServerStaffChildRows).not.toHaveBeenCalled();
-    expect(childrenRepository.saveServerChildProgrammeEnrollmentRows).toHaveBeenCalledWith([]);
+    expect(childrenRepository.saveServerChildProgrammeEnrollmentRows).toHaveBeenCalledWith([], {
+      reconcile: {
+        acknowledgedAssignedChildIds: [],
+        acknowledgedIds: [],
+        programmeId: 'programme-a',
+        pulledAt: expect.any(String),
+      },
+    });
   });
 
   test('a failed membership scope does not block empty group-assignment reconcile', async () => {
@@ -753,7 +784,7 @@ describe('ChildrenContext Plan 5 hydration', () => {
     expect(groupsRepository.saveServerChildrenGroupRows).not.toHaveBeenCalled();
   });
 
-  test('an incomplete assignment scope persists rows without reconcile', async () => {
+  test('a complete authoritative snapshot permits reconcile when the ordinary assignment query is incomplete', async () => {
     const assignment = {
       id: 'cea-incomplete',
       child_id: 'server-child',
@@ -761,6 +792,7 @@ describe('ChildrenContext Plan 5 hydration', () => {
       children: { id: 'server-child', first_name: 'Server' },
     };
     pullPreloadedChildData.mockResolvedValueOnce(pulledBundle({
+      childEaAssignments: [assignment],
       scopeOverrides: {
         childEaAssignments: {
           ...successfulScope([assignment]),
@@ -772,7 +804,14 @@ describe('ChildrenContext Plan 5 hydration', () => {
     renderHook(() => useChildren(), { wrapper });
 
     await waitFor(() => expect(childrenRepository.saveServerStaffChildRows).toHaveBeenCalled());
-    expect(childrenRepository.saveServerStaffChildRows).toHaveBeenCalledWith([assignment]);
+    expect(childrenRepository.saveServerStaffChildRows).toHaveBeenCalledWith([assignment], {
+      reconcile: {
+        acknowledgedIds: ['cea-incomplete'],
+        pulledAt: expect.any(String),
+        userId: 'user-1',
+      },
+    });
+    expect(syncStateRepository.setPullState).not.toHaveBeenCalled();
   });
 
   test('a failed children scope leaves its cache visible while successful scopes still persist', async () => {
