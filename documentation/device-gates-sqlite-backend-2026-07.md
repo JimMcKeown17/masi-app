@@ -155,6 +155,7 @@ Run these alongside the list above. They cover the shared BottomSheet, the ten c
 - [ ] **I1. The one that matters.** On a LOW-END Android, open session capture with a real roster (ideally 40+ children). Scroll the child list. It must scroll smoothly, and the form should feel responsive from the moment it opens. Before this sprint the entire roster was laid out at once.
 - [ ] **I2. Typing.** Type a comment in the session form. Each keystroke must appear instantly, and the comment field must NOT lose focus mid-word. (Automated tests prove the re-render cascade is dead; only a device proves the scrolling.)
 - [ ] **I3. Selection.** Tap children on and off. Selection must feel immediate even near the bottom of a long roster.
+- [ ] **I4. Class-roster child actions.** In Class Details, tap the body of a child's row: Child Results opens and the bottom tab bar remains visible. Go back, tap the letter icon: Letter Tracker opens. Go back, tap the pencil: Edit Child opens. Tapping either nested icon must not also trigger the row's Child Results action.
 
 ## J. Every converted picker (all ten now slide up as bottom sheets)
 

@@ -86,10 +86,10 @@ export default function ClassDetailScreen({ route, navigation }) {
     return (
       <TouchableOpacity
         style={styles.childCard}
-        onPress={() => navigation.navigate('EditChild', { childId: item.id })}
+        onPress={() => navigation.navigate('ChildResults', { child: item, classItem })}
         activeOpacity={0.7}
         accessibilityRole="button"
-        accessibilityLabel={`Edit ${item.first_name} ${item.last_name}`}
+        accessibilityLabel={`View results for ${item.first_name} ${item.last_name}`}
       >
         {/* Left: name + details */}
         <View style={styles.childInfo}>
@@ -157,15 +157,12 @@ export default function ClassDetailScreen({ route, navigation }) {
             onPress={() => navigation.navigate('LetterTracker', { child: item, classItem })}
           />
           <IconButton
-            icon="chart-box-outline"
+            icon="pencil-outline"
             size={30}
             iconColor={colors.primary}
             style={styles.actionIcon}
-            accessibilityLabel={`Assessment summary for ${item.first_name} ${item.last_name}`}
-            onPress={() => navigation.navigate('ChildResults', {
-              child: item,
-              classItem,
-            })}
+            accessibilityLabel={`Edit ${item.first_name} ${item.last_name}`}
+            onPress={() => navigation.navigate('EditChild', { childId: item.id })}
           />
         </View>
       </TouchableOpacity>

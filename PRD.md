@@ -454,6 +454,7 @@ User Action → Local AsyncStorage → UI Update → Sync Queue → Supabase →
 - [x] Detect confirmed/unconfirmed zero-class bootstrap states and auto-enter onboarding from Home/My Children
 - [x] Require explicit duplicate-risk acknowledgement before offline local class creation
 - [x] Complete the settled class -> children handoff: require one child, persist and resume the incomplete step across restarts, loop additions, warn below 10, and finish without a group step
+- [x] Make a class-roster child row open Child Results while retaining explicit letter-tracker and edit actions
 - [ ] Security review
 - [ ] Testing on Android emulator
 - [ ] Testing on iOS simulator
