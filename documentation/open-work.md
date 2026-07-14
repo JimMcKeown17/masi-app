@@ -46,11 +46,6 @@ Sprints 1-4B are merged but *unverified on real hardware*. Highest-signal: G1 (f
 mode; a head-office removal must stay gone), H3 (outbox ownership across an EA handover), I1 (low-end
 Android roster scroll), B1 (indoor GPS 10s timeout).
 
-**And: 46 device gates in `device-gates-sqlite-backend-2026-07.md` are unchecked — 0 of 46 executed.**
-Sprints 1–4B are merged but *unverified on real hardware*. Highest-signal gates: G1 (force-quit +
-airplane mode; a head-office removal must stay gone), H3 (outbox ownership across an EA handover),
-I1 (low-end Android roster scroll), B1 (indoor GPS 10s timeout).
-
 ---
 
 ## 0b. Confirmed field bug — reading level does not persist
@@ -93,7 +88,7 @@ any fix.**
 ignore, and real data seeded before go-live. Nothing currently in the database will be used.**
 
 That makes the seed script a **hard go-live blocker**, and it does not exist. Both historical plans
-(`archive/seed_data_plan.md`, `bulk_import_children_plan.md`) are **schema-dead** — they target
+(`seed_data_plan.md`, `bulk_import_children_plan.md`) are **schema-dead** — they target
 `staff_children` / `children_groups` / `children.class` text columns, none of which exist.
 
 ### ⚠️ The requirement that will silently destroy go-live if missed

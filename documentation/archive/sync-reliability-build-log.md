@@ -6,8 +6,8 @@
 > **Dependency-skip redesign is descoped** to a later `dependency-ordering-and-orphan-prevention` slice.
 
 **Branch:** `fix/sync-reliability-writer-batch`
-**Spec:** [`docs/superpowers/specs/2026-06-16-sync-reliability-design.md`](../docs/superpowers/specs/2026-06-16-sync-reliability-design.md)
-**Plan:** [`docs/superpowers/plans/2026-06-16-sync-reliability.md`](../docs/superpowers/plans/2026-06-16-sync-reliability.md) — 12 TDD tasks, 5 phases
+**Spec:** [`docs/superpowers/specs/2026-06-16-sync-reliability-design.md`](../../docs/superpowers/specs/2026-06-16-sync-reliability-design.md)
+**Plan:** [`docs/superpowers/plans/2026-06-16-sync-reliability.md`](../../docs/superpowers/plans/2026-06-16-sync-reliability.md) — 12 TDD tasks, 5 phases
 **Execution mode:** subagent-driven-development (fresh implementer per task → spec review → code-quality review → `/codex:adversarial-review` → engage findings → commit).
 
 ---

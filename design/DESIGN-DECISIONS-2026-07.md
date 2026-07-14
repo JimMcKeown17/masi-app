@@ -73,7 +73,7 @@ These are **not** design-undecided; they are dependencies the rebuild owns. Capt
 
 ## Suggested next steps (for the fresh session)
 
-1. **Write the locked home as a spec** (`superpowers:brainstorming` is already done — the decisions above *are* the brainstorm output; go to `writing-plans`), then hand implementation to Codex via `codex-first`. Scope it to Home + the nav shell + the bottom-sheet guard. Leave the "Learners" tab as today's Children until the rebuild.
+1. **Write the locked home as a spec** (`superpowers:brainstorming` is already done; the decisions above *are* the brainstorm output, so go to `writing-plans`), then use the Codex plugin for implementation. Scope it to Home + the nav shell + the bottom-sheet guard. Leave the "Learners" tab as today's Children until the rebuild.
 2. **Or** tackle the `sessions.group_id` server discard first (open question 1), since it blocks the value of group context everywhere downstream.
 3. Draw the **zero-class empty state** for the C1 home before building — it is go-live blocking and currently unmocked.
 

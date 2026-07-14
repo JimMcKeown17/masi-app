@@ -1,9 +1,9 @@
 # PRD: Masi UX Port — Go-Live Tranche (2026 Season)
 
 **Date:** 2026-05-27
-**Source roadmap:** [`documentation/zazi-izandi-feature-port-roadmap.md`](./zazi-izandi-feature-port-roadmap.md)
-**Domain glossary:** [`CONTEXT.md`](../CONTEXT.md)
-**Architectural decisions:** [`docs/adr/0001-group-reconciliation-via-versioning-and-staging.md`](../docs/adr/0001-group-reconciliation-via-versioning-and-staging.md)
+**Source roadmap:** [`documentation/zazi-izandi-feature-port-roadmap.md`](../zazi-izandi-feature-port-roadmap.md)
+**Domain glossary:** [`CONTEXT.md`](../../CONTEXT.md)
+**Architectural decisions:** [`docs/adr/0001-group-reconciliation-via-versioning-and-staging.md`](../../docs/adr/0001-group-reconciliation-via-versioning-and-staging.md)
 **Branch:** `ui/zazi-feature-polish`
 **Status:** Ready for implementation. Outstanding open product questions are captured in `CONTEXT.md` and tracked in this PRD's *Further Notes*; they do not block this tranche.
 

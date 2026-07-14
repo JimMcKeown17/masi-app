@@ -7,7 +7,7 @@ A React Native mobile application for Masi, a nonprofit, to manage their field s
 
 ## When Building
 
-Default build workflow for Claude: Claude/Fable owns design, spec, review, and verification; delegate non-trivial implementation to Codex via `codex-first`, then inspect the diff and tests before ship. Use gpt-5.6-sol for most tasks.
+When using Claude or Claude Code, use the Codex plugin as the default build path for non-trivial implementation. Claude/Fable owns design, specification, review, and verification; Codex performs the scoped implementation through the plugin. Claude must inspect the resulting diff and tests before shipping. Use gpt-5.6-sol for most tasks.
 
 ## Agent skills
 
