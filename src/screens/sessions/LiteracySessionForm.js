@@ -1,15 +1,11 @@
-import React, { useState, useMemo, useRef, useEffect } from 'react';
-import { View, StyleSheet, ScrollView, Pressable, Alert } from 'react-native';
+import React, { useCallback, useState, useMemo, useRef, useEffect } from 'react';
+import { View, StyleSheet, Pressable, Alert } from 'react-native';
 import {
   Text,
   TextInput,
   Button,
   Card,
   Menu,
-  Portal,
-  Dialog,
-  RadioButton,
-  Divider,
   IconButton,
   Snackbar,
 } from 'react-native-paper';
@@ -27,6 +23,9 @@ import { buildSessionTypeFields } from '../../utils/sessionTypeResolver';
 import { persistLiteracySession } from '../../services/literacySessionPersistence';
 import { NO_TEXT_SUGGESTIONS } from '../../constants/textInputProps';
 import { v4 as uuidv4 } from 'uuid';
+import SelectSheet from '../../components/common/SelectSheet';
+
+const READING_LEVEL_OPTIONS = READING_LEVELS.map(level => ({ key: level, label: level }));
 
 // ---------------------------------------------------------------------------
 // Calendar helpers
@@ -184,6 +183,181 @@ function InlineCalendar({ selectedDate, onSelectDate }) {
   );
 }
 
+function FormHeader({
+  sessionDate,
+  dateMenuVisible,
+  onDismissDateMenu,
+  onOpenDateMenu,
+  onSelectDate,
+}) {
+  return (
+    <Card style={styles.card}>
+      <Card.Content>
+        <Text variant="titleSmall" style={styles.sectionLabel}>Session Date</Text>
+        <Menu
+          visible={dateMenuVisible}
+          onDismiss={onDismissDateMenu}
+          anchor={
+            <Button
+              mode="outlined"
+              onPress={onOpenDateMenu}
+              icon="calendar"
+              style={styles.dateButton}
+            >
+              {formatDateForDisplay(sessionDate)}
+            </Button>
+          }
+        >
+          <InlineCalendar selectedDate={sessionDate} onSelectDate={onSelectDate} />
+        </Menu>
+      </Card.Content>
+    </Card>
+  );
+}
+
+function FormFooter({
+  selectedLetters,
+  onToggleLetter,
+  validationErrors,
+  sessionReadingLevel,
+  onOpenReadingLevelMenu,
+  comments,
+  onCommentsChange,
+  selectedChildren,
+  childReadingLevels,
+  onOpenChildLevelMenu,
+  getTrackerChangeCount,
+  onOpenLetterTracker,
+  onSubmit,
+  submitting,
+}) {
+  return (
+    <>
+      <Card style={styles.card}>
+        <Card.Content>
+          <Text variant="titleSmall" style={styles.sectionLabel}>Letters Focused On</Text>
+          <Text variant="bodySmall" style={styles.helperText}>Tap letters to select</Text>
+          <LetterGrid
+            selectedLetters={selectedLetters}
+            onToggleLetter={onToggleLetter}
+          />
+          {validationErrors.letters && (
+            <Text variant="bodySmall" style={styles.errorText}>{validationErrors.letters}</Text>
+          )}
+        </Card.Content>
+      </Card>
+
+      <Card style={styles.card}>
+        <Card.Content>
+          <Text variant="titleSmall" style={styles.sectionLabel}>Session Reading Level</Text>
+          <Text variant="bodySmall" style={styles.helperText}>
+            What level did you focus on today?
+          </Text>
+          <Button
+            mode="outlined"
+            onPress={onOpenReadingLevelMenu}
+            style={styles.dropdownButton}
+          >
+            {sessionReadingLevel || 'Select a level'}
+          </Button>
+          {validationErrors.readingLevel && (
+            <Text variant="bodySmall" style={styles.errorText}>{validationErrors.readingLevel}</Text>
+          )}
+        </Card.Content>
+      </Card>
+
+      <Card style={styles.card}>
+        <Card.Content>
+          <Text variant="titleSmall" style={styles.sectionLabel}>Comments (Optional)</Text>
+          <TextInput
+            multiline
+            numberOfLines={4}
+            placeholder="Add session notes..."
+            value={comments}
+            onChangeText={onCommentsChange}
+            {...NO_TEXT_SUGGESTIONS}
+            mode="outlined"
+            style={styles.commentsInput}
+          />
+        </Card.Content>
+      </Card>
+
+      {selectedChildren.length > 0 && (
+        <>
+          <View style={styles.sectionDivider}>
+            <View style={styles.dividerLine} />
+            <Text variant="labelMedium" style={styles.dividerLabel}>
+              Update Child Progress (Optional)
+            </Text>
+            <View style={styles.dividerLine} />
+          </View>
+
+          <Card style={styles.card}>
+            <Card.Content>
+              <Text variant="titleSmall" style={styles.sectionLabel}>Reading Levels</Text>
+              <Text variant="bodySmall" style={styles.helperText}>
+                Record each child's current level
+              </Text>
+              {selectedChildren.map((child) => (
+                <View key={child.id} style={styles.childLevelRow}>
+                  <Text variant="bodyMedium" style={styles.childLevelName}>
+                    {child.first_name} {child.last_name}
+                  </Text>
+                  <Button
+                    mode="outlined"
+                    onPress={() => onOpenChildLevelMenu(child.id)}
+                    style={styles.childLevelButton}
+                  >
+                    {childReadingLevels[child.id] || 'Not set'}
+                  </Button>
+                </View>
+              ))}
+            </Card.Content>
+          </Card>
+
+          <Card style={styles.card}>
+            <Card.Content>
+              <Text variant="titleSmall" style={styles.sectionLabel}>Letter Tracker</Text>
+              <Text variant="bodySmall" style={styles.helperText}>
+                Update letters each child has mastered
+              </Text>
+              {selectedChildren.map((child) => {
+                const changeCount = getTrackerChangeCount(child.id);
+                return (
+                  <View key={child.id} style={styles.childLevelRow}>
+                    <Text variant="bodyMedium" style={styles.childLevelName}>
+                      {child.first_name} {child.last_name}
+                    </Text>
+                    <Button
+                      mode="outlined"
+                      onPress={() => onOpenLetterTracker(child)}
+                      style={styles.childLevelButton}
+                      icon="alpha-a-box-outline"
+                    >
+                      {changeCount > 0 ? `+${changeCount} new` : 'Update'}
+                    </Button>
+                  </View>
+                );
+              })}
+            </Card.Content>
+          </Card>
+        </>
+      )}
+
+      <Button
+        mode="contained"
+        onPress={onSubmit}
+        disabled={submitting}
+        loading={submitting}
+        style={styles.submitButton}
+        contentStyle={styles.submitButtonContent}
+      >
+        Submit Session
+      </Button>
+    </>
+  );
+}
+
 // ---------------------------------------------------------------------------
 // Main form
 // ---------------------------------------------------------------------------
@@ -256,12 +430,12 @@ export default function LiteracySessionForm({ navigation }) {
   // so we leave group_ids as an empty array — future enhancement).
   const selectedChildIds = useMemo(() => selectedChildren.map((c) => c.id), [selectedChildren]);
 
-  const handleChildrenChange = (newSelection) => {
+  const handleChildrenChange = useCallback((newSelection) => {
     setSelectedChildren(newSelection);
     if (newSelection.length > 0) {
       setValidationErrors((prev) => { const { children, ...rest } = prev; return rest; });
     }
-  };
+  }, []);
 
   const handleToggleLetter = (letter) => {
     setSelectedLetters((prev) => {
@@ -357,179 +531,43 @@ export default function LiteracySessionForm({ navigation }) {
 
   return (
     <View style={styles.outerContainer}>
-      <ScrollView style={styles.container} contentContainerStyle={styles.scrollContent}>
-      {/* ── Session Date ── */}
-      <Card style={styles.card}>
-        <Card.Content>
-          <Text variant="titleSmall" style={styles.sectionLabel}>Session Date</Text>
-          <Menu
-            visible={dateMenuVisible}
-            onDismiss={() => setDateMenuVisible(false)}
-            anchor={
-              <Button
-                mode="outlined"
-                onPress={() => setDateMenuVisible(true)}
-                icon="calendar"
-                style={styles.dateButton}
-              >
-                {formatDateForDisplay(sessionDate)}
-              </Button>
-            }
-          >
-            <InlineCalendar
-              selectedDate={sessionDate}
-              onSelectDate={(date) => {
-                setSessionDate(date);
-                setDateMenuVisible(false);
-              }}
-            />
-          </Menu>
-        </Card.Content>
-      </Card>
-
-      {/* ── Select Children ── */}
-      <Card style={styles.card}>
-        <Card.Content>
-          <Text variant="titleSmall" style={styles.sectionLabel}>Select Children</Text>
-          <ChildSelector
-            selectedChildren={selectedChildren}
-            onSelectionChange={handleChildrenChange}
+      <ChildSelector
+        selectedChildren={selectedChildren}
+        onSelectionChange={handleChildrenChange}
+        selectionError={validationErrors.children}
+        style={styles.container}
+        contentContainerStyle={styles.scrollContent}
+        ListHeaderComponent={
+          <FormHeader
+            sessionDate={sessionDate}
+            dateMenuVisible={dateMenuVisible}
+            onDismissDateMenu={() => setDateMenuVisible(false)}
+            onOpenDateMenu={() => setDateMenuVisible(true)}
+            onSelectDate={(date) => {
+              setSessionDate(date);
+              setDateMenuVisible(false);
+            }}
           />
-          {validationErrors.children && (
-            <Text variant="bodySmall" style={styles.errorText}>{validationErrors.children}</Text>
-          )}
-        </Card.Content>
-      </Card>
-
-      {/* ── Letters Focused On ── */}
-      <Card style={styles.card}>
-        <Card.Content>
-          <Text variant="titleSmall" style={styles.sectionLabel}>Letters Focused On</Text>
-          <Text variant="bodySmall" style={styles.helperText}>Tap letters to select</Text>
-          <LetterGrid
+        }
+        ListFooterComponent={
+          <FormFooter
             selectedLetters={selectedLetters}
             onToggleLetter={handleToggleLetter}
+            validationErrors={validationErrors}
+            sessionReadingLevel={sessionReadingLevel}
+            onOpenReadingLevelMenu={() => setReadingLevelMenuVisible(true)}
+            comments={comments}
+            onCommentsChange={setComments}
+            selectedChildren={selectedChildren}
+            childReadingLevels={childReadingLevels}
+            onOpenChildLevelMenu={setOpenChildLevelMenu}
+            getTrackerChangeCount={getTrackerChangeCount}
+            onOpenLetterTracker={setTrackerBottomSheetChild}
+            onSubmit={handleSubmit}
+            submitting={submitting}
           />
-          {validationErrors.letters && (
-            <Text variant="bodySmall" style={styles.errorText}>{validationErrors.letters}</Text>
-          )}
-        </Card.Content>
-      </Card>
-
-      {/* ── Session Reading Level ── */}
-      <Card style={styles.card}>
-        <Card.Content>
-          <Text variant="titleSmall" style={styles.sectionLabel}>Session Reading Level</Text>
-          <Text variant="bodySmall" style={styles.helperText}>
-            What level did you focus on today?
-          </Text>
-          <Button
-            mode="outlined"
-            onPress={() => setReadingLevelMenuVisible(true)}
-            style={styles.dropdownButton}
-          >
-            {sessionReadingLevel || 'Select a level'}
-          </Button>
-          {validationErrors.readingLevel && (
-            <Text variant="bodySmall" style={styles.errorText}>{validationErrors.readingLevel}</Text>
-          )}
-        </Card.Content>
-      </Card>
-
-      {/* ── Comments ── */}
-      <Card style={styles.card}>
-        <Card.Content>
-          <Text variant="titleSmall" style={styles.sectionLabel}>Comments (Optional)</Text>
-          <TextInput
-            multiline
-            numberOfLines={4}
-            placeholder="Add session notes..."
-            value={comments}
-            onChangeText={setComments}
-            {...NO_TEXT_SUGGESTIONS}
-            mode="outlined"
-            style={styles.commentsInput}
-          />
-        </Card.Content>
-      </Card>
-
-      {/* ── Per-Child Progress Updates ── */}
-      {selectedChildren.length > 0 && (
-        <>
-          <View style={styles.sectionDivider}>
-            <View style={styles.dividerLine} />
-            <Text variant="labelMedium" style={styles.dividerLabel}>
-              Update Child Progress (Optional)
-            </Text>
-            <View style={styles.dividerLine} />
-          </View>
-
-          {/* ── Child Reading Levels ── */}
-          <Card style={styles.card}>
-            <Card.Content>
-              <Text variant="titleSmall" style={styles.sectionLabel}>Reading Levels</Text>
-              <Text variant="bodySmall" style={styles.helperText}>
-                Record each child's current level
-              </Text>
-              {selectedChildren.map((child) => (
-                <View key={child.id} style={styles.childLevelRow}>
-                  <Text variant="bodyMedium" style={styles.childLevelName}>
-                    {child.first_name} {child.last_name}
-                  </Text>
-                  <Button
-                    mode="outlined"
-                    onPress={() => setOpenChildLevelMenu(child.id)}
-                    style={styles.childLevelButton}
-                  >
-                    {childReadingLevels[child.id] || 'Not set'}
-                  </Button>
-                </View>
-              ))}
-            </Card.Content>
-          </Card>
-
-          {/* ── Letter Tracker Updates ── */}
-          <Card style={styles.card}>
-            <Card.Content>
-              <Text variant="titleSmall" style={styles.sectionLabel}>Letter Tracker</Text>
-              <Text variant="bodySmall" style={styles.helperText}>
-                Update letters each child has mastered
-              </Text>
-              {selectedChildren.map((child) => {
-                const changeCount = getTrackerChangeCount(child.id);
-                return (
-                  <View key={child.id} style={styles.childLevelRow}>
-                    <Text variant="bodyMedium" style={styles.childLevelName}>
-                      {child.first_name} {child.last_name}
-                    </Text>
-                    <Button
-                      mode="outlined"
-                      onPress={() => setTrackerBottomSheetChild(child)}
-                      style={styles.childLevelButton}
-                      icon="alpha-a-box-outline"
-                    >
-                      {changeCount > 0 ? `+${changeCount} new` : 'Update'}
-                    </Button>
-                  </View>
-                );
-              })}
-            </Card.Content>
-          </Card>
-        </>
-      )}
-
-      {/* ── Submit ── */}
-      <Button
-        mode="contained"
-        onPress={handleSubmit}
-        disabled={submitting}
-        loading={submitting}
-        style={styles.submitButton}
-        contentStyle={styles.submitButtonContent}
-      >
-        Submit Session
-      </Button>
-      </ScrollView>
+        }
+      />
 
       {/* ── Letter Tracker Bottom Sheet ── */}
       <LetterTrackerBottomSheet
@@ -546,46 +584,29 @@ export default function LiteracySessionForm({ navigation }) {
         }}
       />
 
-      {/* ── Session Reading Level Dialog ── */}
-      <Portal>
-        <Dialog visible={readingLevelMenuVisible} onDismiss={() => setReadingLevelMenuVisible(false)}>
-          <Dialog.Title>Session Reading Level</Dialog.Title>
-          <Dialog.Content>
-            <RadioButton.Group
-              onValueChange={(value) => {
-                setSessionReadingLevel(value);
-                setReadingLevelMenuVisible(false);
-                setValidationErrors((prev) => { const { readingLevel, ...rest } = prev; return rest; });
-              }}
-              value={sessionReadingLevel || ''}
-            >
-              {READING_LEVELS.map((level) => (
-                <RadioButton.Item key={level} label={level} value={level} />
-              ))}
-            </RadioButton.Group>
-          </Dialog.Content>
-        </Dialog>
-      </Portal>
+      <SelectSheet
+        visible={readingLevelMenuVisible}
+        onDismiss={() => setReadingLevelMenuVisible(false)}
+        title="Session Reading Level"
+        dismissLabel="Dismiss session reading level picker"
+        options={READING_LEVEL_OPTIONS}
+        selectedKey={sessionReadingLevel}
+        onSelect={(value) => {
+          setSessionReadingLevel(value);
+          setValidationErrors((prev) => { const { readingLevel, ...rest } = prev; return rest; });
+        }}
+      />
 
-      {/* ── Child Reading Level Dialog ── */}
-      <Portal>
-        <Dialog visible={openChildLevelMenu !== null} onDismiss={() => setOpenChildLevelMenu(null)}>
-          <Dialog.Title>Reading Level</Dialog.Title>
-          <Dialog.Content>
-            <RadioButton.Group
-              onValueChange={(value) => handleSetChildReadingLevel(openChildLevelMenu, value)}
-              value={openChildLevelMenu ? (childReadingLevels[openChildLevelMenu] || '') : ''}
-            >
-              {READING_LEVELS.map((level) => (
-                <RadioButton.Item key={level} label={level} value={level} />
-              ))}
-            </RadioButton.Group>
-          </Dialog.Content>
-          <Dialog.Actions>
-            <Button onPress={() => setOpenChildLevelMenu(null)}>Cancel</Button>
-          </Dialog.Actions>
-        </Dialog>
-      </Portal>
+      <SelectSheet
+        visible={openChildLevelMenu !== null}
+        onDismiss={() => setOpenChildLevelMenu(null)}
+        title="Reading Level"
+        dismissLabel="Dismiss child reading level picker"
+        options={READING_LEVEL_OPTIONS}
+        selectedKey={openChildLevelMenu ? (childReadingLevels[openChildLevelMenu] || null) : null}
+        onSelect={(value) => handleSetChildReadingLevel(openChildLevelMenu, value)}
+        cancelLabel="Cancel"
+      />
 
       <Snackbar
         visible={snackbarVisible}

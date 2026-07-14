@@ -7,6 +7,8 @@ const mockUpdateChild = jest.fn();
 const mockDeleteChild = jest.fn();
 const mockNavigationGoBack = jest.fn();
 let mockChildren;
+let mockClasses;
+let mockSchools;
 
 const makeChild = (gender = 'female') => ({
   id: 'child-1',
@@ -30,6 +32,9 @@ jest.mock('react-native-safe-area-context', () => {
 jest.mock('../src/components/children/GroupPickerBottomSheet', () => ({
   __esModule: true,
   default: () => null,
+}));
+
+jest.mock('../src/utils/groupHelpers', () => ({
   getGroupColor: () => ({ text: '#000000' }),
   compareGroups: (left, right) => (left.name || '').localeCompare(right.name || ''),
 }));
@@ -46,15 +51,8 @@ jest.mock('../src/context/ChildrenContext', () => ({
 
 jest.mock('../src/context/ClassesContext', () => ({
   useClasses: () => ({
-    classes: [{
-      id: 'class-1',
-      school_id: 'school-1',
-      name: '1A',
-      grade: 'Grade 1',
-      teacher: 'Noluthando Mbeki',
-      home_language: 'isiXhosa',
-    }],
-    schools: [{ id: 'school-1', name: 'Sunrise Primary' }],
+    classes: mockClasses,
+    schools: mockSchools,
   }),
 }));
 
@@ -78,6 +76,28 @@ const collectNativeTextInputs = (node) => {
 beforeEach(() => {
   jest.clearAllMocks();
   mockChildren = [makeChild('female')];
+  mockClasses = [
+    {
+      id: 'class-1',
+      school_id: 'school-1',
+      name: '1A',
+      grade: 'Grade 1',
+      teacher: 'Noluthando Mbeki',
+      home_language: 'isiXhosa',
+    },
+    {
+      id: 'class-2',
+      school_id: 'school-2',
+      name: '2B',
+      grade: 'Grade 2',
+      teacher: 'Zanele Moyo',
+      home_language: 'English',
+    },
+  ];
+  mockSchools = [
+    { id: 'school-1', name: 'Sunrise Primary' },
+    { id: 'school-2', name: 'Hilltop School' },
+  ];
   mockUpdateChild.mockResolvedValue({ success: true });
 });
 
@@ -159,5 +179,28 @@ describe('EditChildScreen', () => {
     screen.rerender(screenElement());
 
     expect(screen.getByDisplayValue('Typed Name')).toBeTruthy();
+  });
+
+  test('updates the selected class for the correct child without adding Cancel', async () => {
+    const screen = renderScreen();
+
+    fireEvent.press(screen.getByLabelText('Choose class for Amahle Dlamini'));
+    expect(screen.getByLabelText('Dismiss class picker')).toBeTruthy();
+    expect(screen.queryByText('Cancel')).toBeNull();
+    fireEvent.press(screen.getByLabelText('Select class 2B'));
+
+    await waitFor(() => expect(mockUpdateChild).toHaveBeenCalledWith(
+      'child-1',
+      { class_id: 'class-2' },
+    ));
+  });
+
+  test('shows the class picker empty state when no classes are available', () => {
+    mockClasses = [];
+    const screen = renderScreen();
+
+    fireEvent.press(screen.getByLabelText('Choose class for Amahle Dlamini'));
+
+    expect(screen.getByText('No classes available. Create a class first.')).toBeTruthy();
   });
 });

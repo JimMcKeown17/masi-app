@@ -192,4 +192,39 @@ describe('LiteracySessionForm', () => {
       errorSpy.mockRestore();
     });
   });
+
+  test('sets a reading level for the child whose picker was opened', async () => {
+    mockUseChildren.mockReturnValue({
+      children: [
+        { id: 'child-1', first_name: 'Amahle', last_name: 'Dlamini', class_id: 'class-1' },
+        { id: 'child-2', first_name: 'Buhle', last_name: 'Moyo', class_id: 'class-1' },
+      ],
+      groups: [],
+      getChildrenInGroup: () => [],
+    });
+    const screen = renderForm();
+
+    fireEvent.press(screen.getByText('Amahle Dlamini'));
+    fireEvent.press(screen.getByText('Buhle Moyo'));
+    fireEvent.press(screen.getAllByText('Not set')[1]);
+
+    expect(screen.getByLabelText('Dismiss child reading level picker')).toBeTruthy();
+    expect(screen.getByText('Cancel')).toBeTruthy();
+    fireEvent.press(screen.getByText(READING_LEVELS[1]));
+
+    fireEvent.press(screen.getByLabelText('A, not selected'));
+    fireEvent.press(screen.getByText('Select a level'));
+    fireEvent.press(screen.getByText(READING_LEVELS[0]));
+    fireEvent.press(screen.getByText('Submit Session'));
+
+    await waitFor(() => expect(mockPersistLiteracySession).toHaveBeenCalledWith(
+      expect.objectContaining({
+        session: expect.objectContaining({
+          activities: expect.objectContaining({
+            child_reading_levels: { 'child-2': READING_LEVELS[1] },
+          }),
+        }),
+      }),
+    ));
+  });
 });

@@ -1232,3 +1232,11 @@ The fix is relationship-specific acknowledged scopes. The assignment query decid
 The same rule explains groups. A group missing from an EA-scoped query means the assignment ended; it does not mean the shared group entity was archived. The assignment is ended locally, the group and membership rows stay intact, and assignment-scoped repository reads stop publishing them. If the assignment returns, the same rows become visible again.
 
 The broader lesson is that a query result carries the semantics of its predicate. Never infer which relationship changed from an intersection. Persist the server fact inside the scope that actually acknowledged it, then let every screen derive from the durable local model.
+
+### Design foundation addendum: primitives and stable leaf props
+
+A shared UI primitive should own invariant mechanics and chrome while callers keep domain behavior. `BottomSheet` now owns the backdrop, hardware dismissal, safe-area padding, handle, header, and scroll shell. Each picker or tracker still owns its selection and cancel semantics. This makes visual changes consistent without flattening meaningful behavior differences.
+
+Large interactive collections need the same two-part recipe that already protects `LetterTile`. First, the virtualized list must be the only vertical scroller so native windowing can limit mounted work. Second, each row must be a memoized leaf with scalar props and a permanently stable callback. `ChildSelectorRow` receives only ids, strings, a boolean, and `onToggle`; the callback reads current selection data from refs, while `extraData` tells the list when scalar selection state changed. This separates event identity from current state, so selecting one child updates one row and typing comments updates none. Jest proves the render cascade is gone, while physical-device testing remains the proof for native windowing.
+
+One Paper dialog deliberately remains. `ClockInBeforeSessionDialog` is a three-way decision, not a picker. Consistency means using the same component for the same interaction semantics, not forcing every overlay into the same shape.

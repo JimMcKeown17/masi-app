@@ -1,5 +1,5 @@
 import React from 'react';
-import { render } from '@testing-library/react-native';
+import { fireEvent, render } from '@testing-library/react-native';
 import { PaperProvider } from 'react-native-paper';
 import GroupPickerBottomSheet from '../src/components/children/GroupPickerBottomSheet';
 
@@ -37,15 +37,16 @@ const contextDefaults = {
   getChildrenInGroup: () => [],
 };
 
-const renderPicker = () =>
+const renderPicker = (props = {}) =>
   render(
     <PaperProvider>
       <GroupPickerBottomSheet
         visible={true}
-        onDismiss={() => {}}
+        onDismiss={jest.fn()}
         childId="child-1"
         childName="Test Child"
         currentGroupId={null}
+        {...props}
       />
     </PaperProvider>
   );
@@ -85,7 +86,16 @@ describe('GroupPickerBottomSheet', () => {
     // matches inside the "+ Add Group 3" button label)
     expect(queryByText(/^Group 3$/)).toBeNull();
     expect(queryByText(/^Group 4$/)).toBeNull();
-    // "+ Add Group 3" button visible — allow one-or-more whitespace between + and Add
-    expect(getByText(/\+\s+Add Group 3/)).toBeTruthy();
+    expect(getByText('+  Add Group 3')).toBeTruthy();
+  });
+
+  test('keeps the labelled backdrop dismissal', () => {
+    mockUseChildren.mockReturnValue({ ...contextDefaults, groups: [] });
+    const onDismiss = jest.fn();
+    const { getByLabelText } = renderPicker({ onDismiss });
+
+    fireEvent.press(getByLabelText('Dismiss group picker'));
+
+    expect(onDismiss).toHaveBeenCalledTimes(1);
   });
 });

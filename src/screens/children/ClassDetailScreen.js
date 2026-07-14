@@ -11,7 +11,8 @@ import {
 import { colors, spacing, borderRadius } from '../../constants/colors';
 import { useClasses } from '../../context/ClassesContext';
 import { useChildren } from '../../context/ChildrenContext';
-import GroupPickerBottomSheet, { getGroupColor, compareGroups } from '../../components/children/GroupPickerBottomSheet';
+import GroupPickerBottomSheet from '../../components/children/GroupPickerBottomSheet';
+import { compareGroups, getGroupColor } from '../../utils/groupHelpers';
 
 export default function ClassDetailScreen({ route, navigation }) {
   const { classId } = route.params;

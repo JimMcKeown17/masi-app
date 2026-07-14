@@ -3,70 +3,23 @@ import {
   View,
   StyleSheet,
   TouchableOpacity,
-  TouchableWithoutFeedback,
-  ScrollView,
-  KeyboardAvoidingView,
-  Platform,
   Alert,
-  Modal,
 } from 'react-native';
 import {
   Text,
   IconButton,
   Divider,
 } from 'react-native-paper';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { colors, spacing, borderRadius } from '../../constants/colors';
-import { GROUP_COLORS } from '../../constants/groupColors';
 import { useChildren } from '../../context/ChildrenContext';
+import { compareGroups, getGroupColor, nextGroupNumber } from '../../utils/groupHelpers';
+import BottomSheet from '../common/BottomSheet';
 
 /**
  * Number of virtual preset rows to show when the user has zero groups.
  * Each tap creates the corresponding real group and assigns the current child.
  */
 const PRESET_VIRTUAL_COUNT = 4;
-
-/**
- * Get color for a group based on its index in the sorted groups array
- */
-export function getGroupColor(groupIndex) {
-  return GROUP_COLORS[groupIndex % GROUP_COLORS.length];
-}
-
-/**
- * Regex matching the preset "Group N" format (where N is a positive integer).
- * Used for numeric sorting and next-number computation.
- */
-const NUMBERED_GROUP = /^Group (\d+)$/;
-
-/**
- * Compute the next group number for the "+ Add Group N" button.
- * Returns max(existing numbered) + 1, or 1 if no numbered groups exist.
- * Monotonic — does not fill gaps from deleted groups.
- * Ignores legacy free-text names.
- */
-export function nextGroupNumber(groups) {
-  const nums = groups
-    .map((g) => g.name.match(NUMBERED_GROUP))
-    .filter(Boolean)
-    .map((m) => parseInt(m[1], 10));
-  return nums.length ? Math.max(...nums) + 1 : 1;
-}
-
-/**
- * Comparator for sorting groups:
- *   1. Numbered groups ("Group N") first, sorted numerically.
- *   2. Legacy free-text names after, sorted alphabetically.
- * Solves the "Group 10 before Group 2" lexicographic gotcha.
- */
-export function compareGroups(a, b) {
-  const ma = a.name.match(NUMBERED_GROUP);
-  const mb = b.name.match(NUMBERED_GROUP);
-  if (ma && mb) return parseInt(ma[1], 10) - parseInt(mb[1], 10);
-  if (ma) return -1;
-  if (mb) return 1;
-  return a.name.localeCompare(b.name);
-}
 
 /**
  * Bottom sheet for selecting/managing a child's group.
@@ -88,7 +41,6 @@ export default function GroupPickerBottomSheet({
   currentGroupId,
   onGroupChanged,
 }) {
-  const insets = useSafeAreaInsets();
   const {
     groups,
     addGroup,
@@ -263,34 +215,13 @@ export default function GroupPickerBottomSheet({
   };
 
   return (
-    <Modal
+    <BottomSheet
       visible={visible}
-      transparent
-      animationType="slide"
-      onRequestClose={handleDismiss}
+      onDismiss={handleDismiss}
+      title="Assign Group"
+      subtitle={childName}
+      dismissLabel="Dismiss group picker"
     >
-      <TouchableWithoutFeedback
-        onPress={handleDismiss}
-        accessibilityRole="button"
-        accessibilityLabel="Dismiss group picker"
-      >
-        <View style={styles.backdrop} />
-      </TouchableWithoutFeedback>
-      <KeyboardAvoidingView
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-        style={styles.sheetWrapper}
-      >
-        <View style={[styles.sheet, { paddingBottom: Math.max(insets.bottom, spacing.lg) }]}>
-            {/* Handle */}
-            <View style={styles.handleContainer}>
-              <View style={styles.handle} />
-            </View>
-
-            {/* Header */}
-            <Text variant="titleMedium" style={styles.title}>Assign Group</Text>
-            <Text variant="bodySmall" style={styles.subtitle}>{childName}</Text>
-
-            <ScrollView style={styles.scrollArea} bounces={false}>
               {/* Virtual preset rows — shown only when user has no groups yet */}
               {groups.length === 0 &&
                 Array.from({ length: PRESET_VIRTUAL_COUNT }, (_, i) => i + 1).map((n) => {
@@ -402,54 +333,11 @@ export default function GroupPickerBottomSheet({
                   </Text>
                 </TouchableOpacity>
               )}
-            </ScrollView>
-          </View>
-        </KeyboardAvoidingView>
-    </Modal>
+    </BottomSheet>
   );
 }
 
 const styles = StyleSheet.create({
-  backdrop: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
-  },
-  sheetWrapper: {
-    position: 'absolute',
-    bottom: 0,
-    left: 0,
-    right: 0,
-  },
-  sheet: {
-    backgroundColor: colors.surface,
-    borderTopLeftRadius: borderRadius.lg,
-    borderTopRightRadius: borderRadius.lg,
-    maxHeight: '80%',
-  },
-  handleContainer: {
-    alignItems: 'center',
-    paddingTop: spacing.sm,
-    paddingBottom: spacing.xs,
-  },
-  handle: {
-    width: 36,
-    height: 4,
-    backgroundColor: colors.border,
-    borderRadius: 2,
-  },
-  title: {
-    fontWeight: '700',
-    marginHorizontal: spacing.lg,
-    marginTop: spacing.sm,
-  },
-  subtitle: {
-    color: colors.textSecondary,
-    marginHorizontal: spacing.lg,
-    marginBottom: spacing.md,
-  },
-  scrollArea: {
-    paddingHorizontal: spacing.lg,
-  },
   groupRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
