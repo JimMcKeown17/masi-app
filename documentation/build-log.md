@@ -1,8 +1,32 @@
 # Masi App — Build Log
 
-> **Purpose:** one chronological record of what was built and in what order — the durable
-> "what was done, when, and why" history. This is the **master** log going forward; earlier
-> per-slice logs will be folded in here over time (see *Logs to merge*).
+> ## ⚠ STATUS (2026-07-13): SUPERSEDED. This log stops at 2026-06-20.
+>
+> This file is a **historical record of the June 2026 Top-10 tranche (Items 3, 4, 8, 5)** and nothing
+> after it. It is no longer the master log, and it is not maintained. Do not append to it.
+>
+> **Where the record actually lives now:**
+>
+> | What you want | Where it is |
+> |---|---|
+> | Everything built since 2026-06-20 (Sprints 1 to 4, the design-foundation sprint), with dated verification, gate counts, bugs and review findings | `documentation/sqlite-refactor-log.md` (the Verification Register) |
+> | Per-sprint scope, decisions and completion status | `PRD.md` → Development Progress |
+> | What is still open and why | `documentation/codebase-audit-2026-07-12.md` (21 ranked findings) and `documentation/sprint4-followups-2026-07-13.md` |
+> | What Jim still needs to verify on a device | `documentation/device-gates-sqlite-backend-2026-07.md` |
+>
+> **Two claims below are now false** and are left in place only because this is a dated record:
+> 1. It calls itself "the master log going forward". It is not; `sqlite-refactor-log.md` is.
+> 2. Its "Current tranche" table lists Items 6 (performance), 8 (testing) and 9 (architecture seams)
+>    as queued. All three are **done**, delivered through the July audit and sprint track rather than
+>    the Top-10 tranche: Item 6 by the audit's read-path and render-performance work plus the roster
+>    virtualization (audit finding #8), Item 8 by the field-critical-paths tranche (already logged
+>    below), and Item 9 by the storage-facade retirement in Sprint 4A.
+>
+> ---
+
+> **Original purpose (June 2026):** one chronological record of what was built and in what order — the durable
+> "what was done, when, and why" history. This was the master log for that tranche; earlier
+> per-slice logs were to be folded in here over time (see *Logs to merge*).
 
 ## How this log works
 

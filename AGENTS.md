@@ -30,19 +30,14 @@ Always consult these key documentation files:
 - **LEARNING.md** (in `documentation/`): Educational documentation of architectural decisions (**update regularly as you build**).
 - **documentation/DATABASE_SCHEMA_GUIDE.md**: Detailed database schema reference and design rationale.
 - **documentation/rls-sync-contract-map.md**: Table-by-table RLS/sync operation contract. Consult this before changing RLS policies, synced repositories, outbox ordering, Supabase migrations, or server payload columns.
-- **documentation/sqlite-refactor-log.md**: Durable running log for the clean-slate SQLite refactor decisions, bugs, assumptions, verification, and review findings.
+- **documentation/sqlite-refactor-log.md**: **The master build log.** Durable running record of decisions, bugs, assumptions, verification (with gate counts), device checks, and review findings. Append a dated row for every meaningful work session. Its Verification Register is the canonical answer to "what was built, when, and did it pass?".
+- **documentation/codebase-audit-2026-07-12.md**: The ranked open-findings list (21 findings, severity-scored). Read this before proposing new work, so you fix what is actually broken rather than what is merely visible. Closed items are recorded in the refactor log and PRD.
+- **documentation/device-gates-sqlite-backend-2026-07.md**: The on-device checklist Jim runs. Tests cannot model two SQLite connections, a real GPS chip, a force-quit, or native list virtualization. When you finish work that changes on-device behavior, add a gate here.
+- **documentation/sprint4-followups-2026-07-13.md**: Open follow-ups and Jim's domain rulings on them (no head-office deletes, use an ignore flag; schools are never closed).
+- **documentation/build-log.md**: **SUPERSEDED, do not append.** A historical record of the June 2026 Top-10 tranche only; it stops at 2026-06-20 and its "current tranche" table is stale. The refactor log above replaced it.
 - **docs/adr/** (if present): Architectural Decision Records for hard-to-reverse decisions with real trade-offs. Created lazily by the `grill-with-docs` skill.
 - **docs/agent-context/** (if present): Progressive-disclosure briefings for specific in-flight workstreams. Read the relevant file *before* picking up any task in that workstream. Current entries:
   - `wela-assessment-component-build.md` — the WelaPLUS Assessment Battery work (modular in-app battery, open-source Tool components). PRD at `documentation/wela-plus-battery-prd-2026.md` (~45% complete). Read this file before any work on assessments, batteries, runs, or tools.
-
-## Quick Reference
-
-### Navigation
-Bottom tabs: Home → My Children → Sessions → Assessments
-- Profile accessed via gear icon (⚙️) in Home tab header
-- Sign In / Sign Out lives on Home screen (not a dedicated tab)
-- Assessments tab contains EGRA Letter Sound Assessment feature
-See PRD.md for complete app structure.
 
 ## Cybersecurity
 Prefer pnpm instead of npm or yarn for JavaScript dependency management where practical.
@@ -77,32 +72,19 @@ Locked decisions from the cutover:
 
 The older "prefer backwards-compatible changes" guidance below applies to future production maintenance after the SQLite cutover. It does not require compatibility with the retired AsyncStorage domain store or old Supabase schema unless the user explicitly reopens that requirement.
 
-Current release gate status as of 2026-05-26:
-
-- `npm run test:release` has passed after the physical-device RLS fixes: 56 Jest suites / 296 tests, 13 file-backed SQLite integration suites / 113 tests, and SQLite staging guard for `sqlite-staging` / `segygjzpujphwvrubusm`.
-- SQLite staging migrations and dry run have passed; advisors have only known/recorded warnings.
-- A deeper Android emulator pass has covered fresh sign-in, offline cached restart, offline session and assessment writes, force-stop/reopen with pending outbox, reconnect-and-sync, and Supabase row verification.
-- A critical hardening pass has added SQLite WAL/busy-timeout pragmas, assessment-item sync batching/fallback, shared Supabase request queuing for sync uploads, 1000ms background-sync debounce, local-first screen completion without delayed navigation, domain input no-suggestion hardening, visible release/backend identity, and a soft clock-in warning before session capture.
-- `supabase db pull --linked --schema public` reached Supabase but was blocked because Docker was not running for the CLI shadow database. Fallback verification used plain `supabase db query --linked` against `masi-app-sqlite` to spot-check high-write public table columns.
-- User preview-build testing on an iPhone reported the new build working correctly after the final RLS/sync fixes. Keep testing future UI work against the SQLite backend.
+Release-gate and verification history lives in `documentation/sqlite-refactor-log.md` (Verification Register) — that log, not this file, is the dated record of suite counts, device passes, and deploy gates.
 
 ## Test Driven Development
 
 Use the local TDD skill for this refactor: `/Users/jimmckeown/Development/masi-app/.agents/skills/tdd`.
 
-Follow the skill's red-green-refactor loop:
-
-- write one behavior test first
-- run it and confirm it fails for the expected reason
-- implement the smallest change that makes it pass
-- refactor only while green
-- repeat in vertical slices, not by writing all tests first
+Follow the skill's red-green-refactor loop, in vertical slices.
 
 Prefer behavior/integration-style tests through public repository, context, service, or screen interfaces. Do not over-mock internals. SQLite migration, outbox, transaction, and PRAGMA behavior must include real SQLite or `better-sqlite3` integration coverage where mocks would hide device-only bugs.
 
 ## Deployment Status — Multiple App Versions in the Wild
 
-The app launched in early March 2026 and is in its **first two weeks of field testing**. Multiple versions are simultaneously deployed across iOS and Android devices. Users do not update immediately.
+The app launched in early March 2026 and has been in field testing since. Multiple versions are simultaneously deployed across iOS and Android devices. Users do not update immediately.
 
 **Rule: prefer backwards-compatible changes wherever possible.**
 
@@ -118,9 +100,9 @@ When dropping a column that an older app version still writes, sync will fail wi
 ## Key Implementation Patterns
 
 ### Offline Sync Strategy
-All writes save locally first (`synced: false`) → background sync upserts to Supabase when online → last-write-wins conflict resolution. See PRD.md and `src/services/offlineSync.js` for full details.
+**Write path:** a user-facing write persists its domain rows AND enqueues its `sync_outbox` row in ONE SQLite transaction. Background sync then pushes the outbox. Do not reintroduce `synced: false` table scanning for domain sync; the durable outbox replaced it.
 
-For current SQLite work, use durable `sync_outbox` processing as specified in the SQLite migration spec and plans. Multi-step domain writes plus outbox enqueue must be atomic. Do not reintroduce `synced: false` table scanning for domain sync.
+**Read path (as of Sprint 4, 2026-07-13):** React state is a pure function of SQLite. A pull persists server rows in one transaction per table, reconciles server-side removals into SQLite (so a head-office removal survives a force-quit and stays gone offline), then republishes state from a fresh SQLite read. There is no in-memory three-way merge; `mergeServerRows` was deleted. **Reconcile is destructive to local rows, so its safety rails are load-bearing:** it only ever ends `synced` rows, never `pending`/`failed`/`terminal` ones; it never reconciles from an errored or truncated scope; and a mass-end circuit breaker escalates any large removal to a needs-attention card instead of applying it silently. The rules live in `documentation/rls-sync-contract-map.md` ("Pull Persistence & Reconcile"). Read them before touching the pull path.
 
 For RLS-facing SQLite work, also update `documentation/rls-sync-contract-map.md`. Do not treat RLS policies, repository producers, Supabase payload columns, and outbox ordering as separate reviews; they are one contract.
 
@@ -168,29 +150,12 @@ Two Supabase projects exist:
 - **The app** → `config/supabaseProjectConfig.js` defaults to `sqlite-staging` with committed publishable-key fallbacks, so plain `npm start`, dev builds, and the `eas.json` preview and production profiles all target `masi-app-sqlite`. The legacy backend is reachable only behind an explicit `EXPO_PUBLIC_SUPABASE_TARGET=primary`. A URL that belongs to a different target than the selected one (e.g. a stale `.env.local` override) fails fast at startup with an actionable error instead of silently connecting to the wrong backend.
 - **The repo `supabase link`** → `masi-app-sqlite` ✅. So `supabase ... --linked` (and the `npm run sqlite:staging:*` scripts) hit the SQLite backend.
 - **`.env.local`** → `EXPO_PUBLIC_*` values now point at the sqlite backend (target, URL, publishable key), matching the code default. Legacy credentials remain available under `SUPABASE_PROJECT_URL` / `SUPABASE_ANON_KEY` / `MASI_SUPABASE_URL` for legacy-only tooling.
-- **The Supabase MCP server** → pinned to the **LEGACY** ref in its URL (`https://mcp.supabase.com/mcp?project_ref=jcqrlwetutnpuchjoyyd`) ⚠️. **Do NOT use the Supabase MCP for `masi-app-sqlite` work** — `execute_sql`/`apply_migration` through it hit the *legacy* backend. Verify the ref before authenticating/using it.
+- **The Supabase MCP server** → was pinned to the **LEGACY** ref in its URL (`project_ref=jcqrlwetutnpuchjoyyd`) ⚠️. **As of 2026-07-13 it is disabled for this project** (`disabledMcpServers`), and its four `mcp__supabase__*` pre-approvals (including `execute_sql`) were removed from `.claude/settings.local.json`, because a pre-approved `execute_sql` against the legacy backend would have run without prompting. **Do NOT re-enable it for `masi-app-sqlite` work.** If you ever need it for legacy maintenance, verify the ref first and approve each call deliberately. Use the `sqlite-staging-sql` skill for the SQLite backend instead.
 
-**How to run ad-hoc SQL against `masi-app-sqlite` (read-only preflights, verification, disposable-data cleanup — NOT DDL; schema changes go through migrations):**
-```
-npm run sqlite:staging:query -- "select count(*) from letter_mastery;"
-# or:  node scripts/sqlite-staging.cjs query "delete from letter_mastery;"
-```
-The `query` action (in `scripts/sqlite-staging.cjs`) reads the DB password from `.env`/`.env.local` and builds a clean command env that only ever targets `masi-app-sqlite` via `--linked`. It needs the CLI to be logged in (`supabase login`).
-
-**Auth gotchas behind a `401 Unauthorized` from `db query`/`projects list` (it's the access token, not the DB password):**
-- A **stale `SUPABASE_ACCESS_TOKEN` env var** (often exported from a shell profile) **silently overrides `supabase login`** — the CLI trusts the env var first, so a fresh login "doesn't take." Fix: `unset SUPABASE_ACCESS_TOKEN` (or refresh it to a valid token), then re-run.
-- A **non-interactive shell** (e.g. an agent's Bash, CI without a token) often **can't reach the keychain** where `supabase login` stores the token, so it 401s even when your own terminal works. Run `db query`/cleanup in the **same interactive terminal where you logged in**.
-- Always verify the target before a write: the command summary prints `project_ref=` — confirm `segygjzpujphwvrubusm` (sqlite), not `jcqrlwetutnpuchjoyyd` (legacy).
-- **Non-interactive fallback that works (verified 2026-07-12):** direct psql with the DB password from `.env.local`, bypassing CLI auth entirely. Read-only probes only: `PGPASSWORD=<SUPABASE_DB_PASSWORD_SQLITE> /opt/homebrew/opt/libpq/bin/psql -h db.segygjzpujphwvrubusm.supabase.co -U postgres -d postgres`. Never paste the password into output or docs.
-
-Trap: running the `supabase` CLI with `.env.local` injected into its environment (e.g. a `dotenv` wrapper) can make the CLI pick up the legacy connection and silently query the wrong backend even with `--linked`. Don't inject `.env.local` into `supabase` commands — use `--linked` (or the `sqlite:staging:query` helper, which does this correctly).
+**Ad-hoc SQL against `masi-app-sqlite`** (read-only preflights, verification, disposable-data cleanup — NOT DDL; schema changes go through migrations): use the `sqlite-staging-sql` skill (`.claude/skills/sqlite-staging-sql/`) for the runbook — the `sqlite:staging:query` helper, the 401 auth gotchas, and the non-interactive psql fallback. Two rules stay load-bearing everywhere: always verify the target before a write (the command summary prints `project_ref=` — confirm `segygjzpujphwvrubusm`, not `jcqrlwetutnpuchjoyyd`), and never inject `.env.local` into `supabase` CLI commands (it can silently retarget the legacy backend even with `--linked`).
 
 ### EAS Builds — Environment Variables Not in `.env.local`
-`process.env.EXPO_PUBLIC_*` variables from `.env.local` are NOT available in EAS cloud builds. Public values (Supabase URL, anon key) must also be available through Expo config `extra` with a fallback in the client. The SQLite app uses `app.config.js` with explicit Supabase target guardrails.
-```javascript
-const url = process.env.EXPO_PUBLIC_SUPABASE_URL
-  || Constants.expoConfig?.extra?.supabaseUrl || '';
-```
+`EXPO_PUBLIC_*` values from `.env.local` are NOT available in EAS cloud builds; public values must also come through Expo config `extra` with a client-side fallback (`app.config.js` carries the Supabase target guardrails). Fallback pattern and details: `expo-deployment` skill.
 
 ### Debugging Tools Available
 - **Profile → Export Logs**: captures all `console.log/error/warn` output to a shareable text file
