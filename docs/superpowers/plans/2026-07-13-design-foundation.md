@@ -130,12 +130,12 @@ Convergence pass (verdict BUILD-WITH-FIXES; all applied to the text above on 202
   - `LetterTrackerBottomSheet`, the picker sheets, and the Snackbar stay siblings OUTSIDE the list, exactly as they are outside the current ScrollView today.
 - **(b) The row callback gets permanently stable identity.** `ChildSelector` keeps the current selection, the children lookup, and `onSelectionChange` in refs; `onToggle` reads those refs at press time and never changes identity; selection reaches rows through the scalar `isSelected` plus an explicit `extraData` (R2). No memo comparator that ignores the callback.
 
-- [ ] RED (render counts, the instrument used for `LetterTile`): with a 60-child roster, selecting one child re-renders exactly ONE row; typing a character in the comment field re-renders ZERO rows. Both fail today, and (per R2) the one-row case will keep failing until `onToggle` is ref-backed. **Instrument `ChildSelectorRow`'s own render function, NOT `renderItem`** (FlatList may invoke `renderItem` without the memoized row actually re-rendering; counting those invocations would make the test lie).
-- [ ] RED (focus, per the convergence review): typing several characters into the comment field keeps focus and preserves the typed text. This fails if the header/footer are render-local component types.
-- [ ] GREEN: memoized `ChildSelectorRow` with scalar props only (`id`, `name`, `className`, `isSelected`, `onToggle`); class-name `Map` built once per render; ref-backed stable `onToggle`; `extraData`; `React.memo` on `ChildSelector`; the form restructured onto the FlatList root with header/footer components; `handleChildrenChange` wrapped in `useCallback`.
-- [ ] `LiteracySessionForm.test.js` must pass unmodified (selection, dirty state, letter chips, reading-level picker, save). Restructuring the form is exactly the kind of change that breaks these; if one fails, fix the restructure, not the test.
-- [ ] Report honestly: these tests prove the re-render cascade is dead. They do NOT prove native windowing. That is the device gate's job.
-- [ ] Commit: `perf(sessions): virtualize the roster and stop the keystroke re-render cascade`
+- [x] RED (render counts, the instrument used for `LetterTile`): with a 60-child roster, selecting one child re-renders exactly ONE row; typing a character in the comment field re-renders ZERO rows. Both fail today, and (per R2) the one-row case will keep failing until `onToggle` is ref-backed. **Instrument `ChildSelectorRow`'s own render function, NOT `renderItem`** (FlatList may invoke `renderItem` without the memoized row actually re-rendering; counting those invocations would make the test lie).
+- [x] RED (focus, per the convergence review): typing several characters into the comment field keeps focus and preserves the typed text. This fails if the header/footer are render-local component types.
+- [x] GREEN: memoized `ChildSelectorRow` with scalar props only (`id`, `name`, `className`, `isSelected`, `onToggle`); class-name `Map` built once per render; ref-backed stable `onToggle`; `extraData`; `React.memo` on `ChildSelector`; the form restructured onto the FlatList root with header/footer components; `handleChildrenChange` wrapped in `useCallback`.
+- [x] `LiteracySessionForm.test.js` must pass unmodified (selection, dirty state, letter chips, reading-level picker, save). Restructuring the form is exactly the kind of change that breaks these; if one fails, fix the restructure, not the test.
+- [x] Report honestly: these tests prove the re-render cascade is dead. They do NOT prove native windowing. That is the device gate's job.
+- [x] Commit: `perf(sessions): virtualize the roster and stop the keystroke re-render cascade`
 
 ### Task 8: Wrap
 

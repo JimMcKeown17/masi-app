@@ -779,7 +779,7 @@ Plan: `docs/superpowers/plans/2026-07-13-design-foundation.md`
 - [x] Task 4: Convert class and child pickers to SelectSheet
 - [x] Task 5: Convert session and assessment pickers to SelectSheet
 - [ ] Task 6: Extract shared assessment capture chrome
-- [ ] Task 7: Virtualize the session roster
+- [x] Task 7: Virtualize the session roster
 - [ ] Task 8: Close the sprint documentation and gates
 
 #### Improvements 2026-07 — Phase 1: Safety Net
