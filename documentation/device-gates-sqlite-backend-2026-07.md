@@ -98,3 +98,36 @@ npm run sqlite:staging:query -- "select u.id as ea_id, c.id as class_id, c.name 
 - [ ] Clean legacy `letter_mastery` rows on `masi-app-sqlite` (they were written with random ids before the deterministic-id fix, and they will collide).
 - [ ] Clean pre-fix random-id rows in the four active-pair tables (`child_ea_assignments`, `child_programme_enrollments`, `class_ea_assignments`, `group_ea_assignments`).
 - [ ] Field devices must start from a fresh install, not an upgrade over an old local database.
+
+---
+
+# Design Foundation Gates (added 2026-07-13, after the component sprint)
+
+Run these alongside the list above. They cover the shared BottomSheet, the ten converted pickers, the extracted capture chrome, and the roster virtualization.
+
+## I. The roster (the performance fix, audit #8)
+
+- [ ] **I1. The one that matters.** On a LOW-END Android, open session capture with a real roster (ideally 40+ children). Scroll the child list. It must scroll smoothly, and the form should feel responsive from the moment it opens. Before this sprint the entire roster was laid out at once.
+- [ ] **I2. Typing.** Type a comment in the session form. Each keystroke must appear instantly, and the comment field must NOT lose focus mid-word. (Automated tests prove the re-render cascade is dead; only a device proves the scrolling.)
+- [ ] **I3. Selection.** Tap children on and off. Selection must feel immediate even near the bottom of a long roster.
+
+## J. Every converted picker (all ten now slide up as bottom sheets)
+
+Open each one, confirm it looks like a sheet, has the same options, and produces the same result:
+
+- [ ] **J1.** Create Class: school, grade, home language. (School still has a visible Cancel.)
+- [ ] **J2.** Edit Class: school, grade, home language. Changing the school must still update the school NAME shown on the class.
+- [ ] **J3.** Edit Child: the class picker. It should show "No classes available. Create a class first." if you have no classes.
+- [ ] **J4.** Session form: the session reading level, and a per-child reading level. The per-child one must apply to the child you opened it for.
+- [ ] **J5.** Assessments: the language picker. This one is deliberately TWO-STEP (tap a language, then press Start), because tapping it launches a 60-second timed assessment.
+
+## K. The one dialog that deliberately survived
+
+- [ ] **K1.** Without clocking in, tap Record Session. You should still get the "Clock In First?" prompt as a DIALOG (not a sheet), offering Clock In Now, Continue Anyway, or dismiss. That is intentional: it is a decision, not a picker.
+
+## L. Assessment capture chrome
+
+- [ ] **L1.** Start a letter assessment: the instructions screen, timer, and page dots must look unchanged.
+- [ ] **L2.** Start a sequential assessment: same, and its header says "Grid N of M" where the letter one says "Page N of M".
+- [ ] **L3.** Press "End Assessment" in each mode: the confirmation must read "End the assessment now and record current results?" with Cancel and End.
+- [ ] **L4.** Watch the countdown for 10 seconds. It must tick smoothly without the screen flickering (the timer re-renders only itself).
