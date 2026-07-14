@@ -74,7 +74,8 @@ The lookup normalises grade input, so the stored class labels (`Grade R`,
 
 ## WelaPLUS Questions (post-go-live)
 
-These ship as WelaPLUS Questions land (~45% built). Each needs its own rows; comprehension/writing
+These ship as WelaPLUS Questions land. (WelaPLUS is **not on `main`** — the Question components are
+built on an unmerged worktree, `.claude/worktrees/feature+wela-plus-battery`.) Each needs its own rows; comprehension/writing
 Questions are expected to need **explicit per-language** cuts (not the `*` wildcard). Add a section
 per Question as it is built — e.g. `listening_comprehension`, `word_reading`, `sentence_reading`,
 `oral_reading_fluency`, `story_writing`. Numbers all TBD-pedagogy.

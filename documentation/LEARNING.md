@@ -11,7 +11,7 @@ This document chronicles the architectural decisions, engineering patterns, and 
 
 ## 2026 SQLite Clean-Slate Architecture
 
-The early chapters describe the original AsyncStorage design. That was the right first version for a smaller field app, but Masi now needs relational local data: children belong to classes, groups, programmes, academic years, and assignment relationships, and those relationships must survive offline writes and mid-year changes. The app is therefore moving domain data and sync metadata to SQLite.
+The early chapters describe the original AsyncStorage design. That was the right first version for a smaller field app, but Masi now needs relational local data: children belong to classes, groups, programmes, academic years, and assignment relationships, and those relationships must survive offline writes and mid-year changes. The app therefore moved domain data and sync metadata to SQLite; the cutover completed on 2026-05-26.
 
 The new rule is: domain writes go to SQLite first, then a `sync_outbox` row is enqueued in the same transaction. The outbox is the only push source. This matters because multi-step work such as "create child plus assignment plus programme enrollment plus class membership" either all lands locally or all rolls back. It also means retry metadata, terminal failures, and pending work are durable across app restarts.
 

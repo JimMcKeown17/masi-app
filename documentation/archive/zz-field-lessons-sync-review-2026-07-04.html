@@ -1,0 +1,714 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Field Lessons &amp; Sync Architecture Review — Zazi iZandi → Masi App</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,300;9..144,400;9..144,600;9..144,700;9..144,900&family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;0,6..72,600;1,6..72,400&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --paper:#faf6ef;
+    --paper-deep:#f3ecdf;
+    --ink:#221c14;
+    --ink-soft:#5c5346;
+    --ink-faint:#8b8071;
+    --rule:#d9cfbc;
+    --accent:#c2571b;         /* burnt orange — field / urgency */
+    --accent-deep:#8f3d0f;
+    --teal:#1e6b5c;           /* verified / healthy */
+    --teal-soft:#e2efe9;
+    --p0:#a8341a;
+    --p0-bg:#f7e3da;
+    --p1:#b07408;
+    --p1-bg:#f7ecd2;
+    --p2:#5a6472;
+    --p2-bg:#e8eaee;
+    --code-bg:#2b2318;
+    --code-ink:#f0e6d2;
+    --chip-bg:#efe7d6;
+    --serif-display:"Fraunces", Georgia, "Times New Roman", serif;
+    --serif-body:"Newsreader", Georgia, serif;
+    --mono:"JetBrains Mono", "SF Mono", Menlo, Consolas, monospace;
+  }
+  *{box-sizing:border-box; margin:0; padding:0;}
+  html{scroll-behavior:smooth;}
+  body{
+    background:var(--paper);
+    color:var(--ink);
+    font-family:var(--serif-body);
+    font-size:17px;
+    line-height:1.65;
+    -webkit-font-smoothing:antialiased;
+    background-image:
+      radial-gradient(ellipse 90% 40% at 50% -5%, rgba(194,87,27,.07), transparent 60%),
+      repeating-linear-gradient(0deg, transparent 0 31px, rgba(120,100,70,.045) 31px 32px);
+  }
+  main{max-width:880px; margin:0 auto; padding:0 28px 120px;}
+
+  /* ————— Masthead ————— */
+  header.masthead{
+    padding:64px 0 36px;
+    border-bottom:3px solid var(--ink);
+    position:relative;
+  }
+  .kicker{
+    font-family:var(--mono); font-size:12px; letter-spacing:.22em;
+    text-transform:uppercase; color:var(--accent-deep);
+    display:flex; align-items:center; gap:14px; margin-bottom:22px;
+  }
+  .kicker::before, .kicker::after{content:""; height:1px; background:var(--accent); flex:0 0 42px; opacity:.6;}
+  h1{
+    font-family:var(--serif-display);
+    font-weight:900; font-size:clamp(38px, 6vw, 62px);
+    line-height:1.04; letter-spacing:-.015em;
+  }
+  h1 .amp{color:var(--accent); font-style:italic; font-weight:400;}
+  .subtitle{
+    margin-top:18px; font-size:20px; color:var(--ink-soft);
+    font-style:italic; max-width:640px;
+  }
+  .meta-strip{
+    display:flex; flex-wrap:wrap; gap:10px 28px; margin-top:26px;
+    font-family:var(--mono); font-size:12.5px; color:var(--ink-faint);
+  }
+  .meta-strip b{color:var(--ink); font-weight:600;}
+
+  /* ————— Section frames ————— */
+  section{margin-top:72px;}
+  .section-head{
+    display:flex; align-items:baseline; gap:18px; margin-bottom:10px;
+  }
+  .section-num{
+    font-family:var(--serif-display); font-weight:300; font-size:64px;
+    color:var(--accent); line-height:.9; font-style:italic;
+  }
+  h2{
+    font-family:var(--serif-display); font-weight:700;
+    font-size:clamp(26px, 3.6vw, 36px); line-height:1.1; letter-spacing:-.01em;
+  }
+  .section-sub{color:var(--ink-soft); font-size:17px; margin:10px 0 30px; max-width:700px;}
+  h3{
+    font-family:var(--serif-display); font-weight:600; font-size:22px;
+    margin:44px 0 12px;
+  }
+  p{margin:0 0 16px;}
+  p:last-child{margin-bottom:0;}
+  em{font-style:italic;}
+  strong{font-weight:600;}
+  ul{margin:0 0 16px 22px;}
+  li{margin-bottom:8px;}
+
+  /* ————— TLDR panel ————— */
+  .tldr{
+    margin-top:44px;
+    background:var(--ink); color:var(--paper);
+    border-radius:6px; padding:36px 40px;
+    position:relative; overflow:hidden;
+  }
+  .tldr::before{
+    content:"TL;DR";
+    position:absolute; top:-14px; right:10px;
+    font-family:var(--serif-display); font-weight:900; font-style:italic;
+    font-size:110px; color:rgba(255,255,255,.05); letter-spacing:-.04em;
+    pointer-events:none;
+  }
+  .tldr .label{
+    font-family:var(--mono); font-size:11.5px; letter-spacing:.24em;
+    text-transform:uppercase; color:var(--accent); margin-bottom:16px;
+  }
+  .tldr p{font-size:19px; line-height:1.6; color:#efe9dd;}
+  .tldr .verdict-line{
+    margin-top:20px; padding-top:20px; border-top:1px solid rgba(255,255,255,.15);
+    display:grid; grid-template-columns:1fr 1fr; gap:20px; font-size:15.5px;
+  }
+  .tldr .verdict-line .good b{color:#7fd0b8;}
+  .tldr .verdict-line .bad b{color:#f0a179;}
+  @media(max-width:640px){.tldr .verdict-line{grid-template-columns:1fr;}}
+
+  /* ————— Context strip (how ZZ earned it) ————— */
+  .evidence-strip{
+    display:grid; grid-template-columns:repeat(4,1fr); gap:1px;
+    background:var(--rule); border:1px solid var(--rule); border-radius:6px;
+    overflow:hidden; margin:26px 0 8px;
+  }
+  .evidence-cell{background:var(--paper-deep); padding:18px 18px 16px;}
+  .evidence-cell .big{
+    font-family:var(--serif-display); font-weight:700; font-size:34px;
+    color:var(--accent-deep); line-height:1;
+  }
+  .evidence-cell .cap{font-size:13.5px; color:var(--ink-soft); margin-top:6px; line-height:1.4;}
+  @media(max-width:700px){.evidence-strip{grid-template-columns:repeat(2,1fr);}}
+
+  /* ————— Priority bands ————— */
+  .band{
+    display:flex; align-items:center; gap:14px; margin:52px 0 6px;
+  }
+  .band .tag{
+    font-family:var(--mono); font-weight:600; font-size:13px; letter-spacing:.12em;
+    padding:5px 12px; border-radius:3px; text-transform:uppercase;
+  }
+  .band.p0 .tag{background:var(--p0); color:#fff;}
+  .band.p1 .tag{background:var(--p1); color:#fff;}
+  .band.p2 .tag{background:var(--p2); color:#fff;}
+  .band .band-title{font-family:var(--serif-display); font-weight:600; font-size:20px;}
+  .band .band-line{flex:1; height:1px; background:var(--rule);}
+
+  /* ————— Finding cards ————— */
+  .finding{
+    border:1px solid var(--rule); border-left:5px solid var(--p0);
+    background:#fffdf8; border-radius:4px;
+    padding:28px 32px 26px; margin:22px 0;
+    position:relative;
+  }
+  .finding.p1{border-left-color:var(--p1);}
+  .finding.p2{border-left-color:var(--p2);}
+  .finding-head{display:flex; align-items:flex-start; gap:16px; margin-bottom:14px;}
+  .finding-num{
+    font-family:var(--serif-display); font-style:italic; font-weight:300;
+    font-size:44px; line-height:1; color:var(--p0); flex:0 0 auto; margin-top:2px;
+  }
+  .finding.p1 .finding-num{color:var(--p1);}
+  .finding.p2 .finding-num{color:var(--p2);}
+  .finding-title{font-family:var(--serif-display); font-weight:700; font-size:21.5px; line-height:1.25;}
+  .finding-zz{
+    font-family:var(--mono); font-size:12px; color:var(--ink-faint);
+    margin-top:5px; letter-spacing:.03em;
+  }
+  .finding p{font-size:16.5px;}
+
+  /* facts rows: ZZ hit / masi today / the port */
+  .facts{margin:18px 0 4px; border-top:1px dashed var(--rule);}
+  .fact{
+    display:grid; grid-template-columns:118px 1fr; gap:16px;
+    padding:12px 0; border-bottom:1px dashed var(--rule);
+    font-size:15.5px;
+  }
+  .fact .k{
+    font-family:var(--mono); font-size:11px; letter-spacing:.14em;
+    text-transform:uppercase; padding-top:4px;
+  }
+  .fact .k.zz{color:var(--p0);}
+  .fact .k.masi{color:var(--accent-deep);}
+  .fact .k.port{color:var(--teal);}
+  @media(max-width:560px){.fact{grid-template-columns:1fr;} .fact .k{padding-top:0;}}
+
+  /* ————— Flow diagrams (failure anatomy) ————— */
+  .flow{
+    display:flex; flex-wrap:wrap; align-items:stretch; gap:0;
+    margin:16px 0 6px; padding:16px 14px;
+    background:var(--paper-deep); border-radius:4px; border:1px solid var(--rule);
+  }
+  .flow .fnode{
+    background:#fff; border:1.5px solid var(--ink);
+    border-radius:3px; padding:7px 12px;
+    font-family:var(--mono); font-size:12.5px; line-height:1.4;
+    display:flex; align-items:center; text-align:center;
+    box-shadow:2px 2px 0 rgba(34,28,20,.14);
+    max-width:210px;
+  }
+  .flow .fnode.doom{background:var(--p0); border-color:var(--p0); color:#fff; box-shadow:2px 2px 0 rgba(168,52,26,.3);}
+  .flow .fnode.warn{background:#fdeeda; border-color:var(--p1);}
+  .flow .fnode.ok{background:var(--teal-soft); border-color:var(--teal);}
+  .flow .farr{
+    align-self:center; padding:0 9px; color:var(--accent-deep);
+    font-family:var(--mono); font-weight:600; font-size:15px;
+  }
+  .flow-caption{
+    font-size:13.5px; color:var(--ink-faint); font-style:italic; margin:6px 2px 14px;
+  }
+
+  /* ————— Mental model asides ————— */
+  .mental{
+    margin:26px 0; padding:22px 26px 20px;
+    background:var(--teal-soft);
+    border:1px solid #bcd8cd; border-radius:4px;
+    position:relative;
+  }
+  .mental .m-label{
+    font-family:var(--mono); font-size:11px; letter-spacing:.2em; text-transform:uppercase;
+    color:var(--teal); margin-bottom:10px; display:flex; align-items:center; gap:8px;
+  }
+  .mental .m-label::before{content:"◆"; font-size:10px;}
+  .mental p{font-size:15.5px; color:#23433a; margin-bottom:10px;}
+  .mental p:last-child{margin-bottom:0;}
+
+  /* ————— Code refs & inline code ————— */
+  code{
+    font-family:var(--mono); font-size:.82em;
+    background:var(--chip-bg); border:1px solid #e2d7bf;
+    border-radius:3px; padding:1px 6px 2px; white-space:nowrap;
+  }
+  .fileref{
+    font-family:var(--mono); font-size:.78em;
+    background:var(--code-bg); color:var(--code-ink);
+    border-radius:3px; padding:2px 8px 3px; white-space:nowrap;
+  }
+  .fileref .ln{color:#e8a06a;}
+
+  /* ————— Scorecard table ————— */
+  .scorecard{width:100%; border-collapse:collapse; margin:24px 0 8px; font-size:15px; background:#fffdf8;}
+  .scorecard th, .scorecard td{
+    border:1px solid var(--rule); padding:12px 16px; vertical-align:top; text-align:left;
+  }
+  .scorecard th{
+    font-family:var(--mono); font-size:11.5px; letter-spacing:.14em; text-transform:uppercase;
+    background:var(--ink); color:var(--paper); border-color:var(--ink); font-weight:600;
+  }
+  .scorecard td:first-child{font-weight:600; width:21%; font-size:14.5px;}
+  .scorecard .win{position:relative; background:linear-gradient(0deg, rgba(30,107,92,.08), rgba(30,107,92,.08));}
+  .scorecard .win::before{content:"✓"; color:var(--teal); font-weight:700; margin-right:7px;}
+  .scorecard .lag::before{content:"✗"; color:var(--p0); font-weight:700; margin-right:7px;}
+  .table-scroll{overflow-x:auto;}
+
+  /* ————— Two-engines diagram ————— */
+  .engines{
+    display:grid; grid-template-columns:1fr 1fr; gap:20px; margin:22px 0 10px;
+  }
+  @media(max-width:700px){.engines{grid-template-columns:1fr;}}
+  .engine{
+    border:1px solid var(--rule); border-radius:5px; background:#fffdf8;
+    padding:20px 20px 18px;
+  }
+  .engine.bad-e{border-top:4px solid var(--p0);}
+  .engine.good-e{border-top:4px solid var(--teal);}
+  .engine h4{
+    font-family:var(--mono); font-size:12px; letter-spacing:.14em; text-transform:uppercase;
+    margin-bottom:14px;
+  }
+  .engine.bad-e h4{color:var(--p0);}
+  .engine.good-e h4{color:var(--teal);}
+  .engine .lockrow{
+    display:flex; align-items:center; gap:6px; flex-wrap:wrap; margin-bottom:12px;
+  }
+  .conn{
+    font-family:var(--mono); font-size:11px; border-radius:3px; padding:4px 8px;
+    border:1.5px solid var(--ink);
+    background:#fff;
+  }
+  .conn.ghost{border-style:dashed; opacity:.75;}
+  .conn.locked{background:var(--p0); color:#fff; border-color:var(--p0);}
+  .conn.writer{background:var(--ink); color:var(--paper); border-color:var(--ink);}
+  .conn.reader{background:var(--teal-soft); border-color:var(--teal); color:var(--teal);}
+  .engine .verdict{font-size:14px; color:var(--ink-soft); font-style:italic; line-height:1.5;}
+
+  /* ————— Sequence footer ————— */
+  .sequence{
+    margin-top:34px; background:var(--ink); color:var(--paper);
+    border-radius:6px; padding:32px 36px;
+  }
+  .sequence .label{
+    font-family:var(--mono); font-size:11.5px; letter-spacing:.24em;
+    text-transform:uppercase; color:var(--accent); margin-bottom:20px;
+  }
+  .seq-steps{display:flex; flex-wrap:wrap; gap:0; align-items:center;}
+  .seq-step{
+    display:flex; align-items:center; gap:12px;
+    padding:10px 0;
+  }
+  .seq-step .n{
+    font-family:var(--serif-display); font-style:italic; font-weight:300; font-size:30px;
+    color:var(--accent); line-height:1;
+  }
+  .seq-step .t{font-size:15.5px; max-width:180px; line-height:1.35;}
+  .seq-arrow{color:rgba(255,255,255,.35); padding:0 18px; font-size:18px;}
+  .sequence .side-note{
+    margin-top:18px; padding-top:18px; border-top:1px solid rgba(255,255,255,.15);
+    font-size:14.5px; color:rgba(240,233,221,.8); font-style:italic;
+  }
+
+  /* ————— Sources ————— */
+  .sources{margin-top:56px; border-top:3px solid var(--ink); padding-top:22px;}
+  .sources h3{margin-top:0;}
+  .sources ul{list-style:none; margin-left:0;}
+  .sources li{
+    font-size:14px; padding:7px 0; border-bottom:1px dashed var(--rule);
+    display:flex; gap:12px; align-items:baseline;
+  }
+  .sources li .fileref{flex:0 0 auto;}
+  .sources li span.desc{color:var(--ink-soft);}
+
+  footer{
+    margin-top:60px; text-align:center;
+    font-family:var(--mono); font-size:12px; color:var(--ink-faint); letter-spacing:.08em;
+  }
+
+  /* print */
+  @media print{
+    body{background:#fff; font-size:12.5px;}
+    .tldr, .sequence{-webkit-print-color-adjust:exact; print-color-adjust:exact;}
+  }
+</style>
+</head>
+<body>
+<main>
+
+<header class="masthead">
+  <div class="kicker">Engineering field dossier · Masinyusane</div>
+  <h1>Field Lessons <span class="amp">&amp;</span> the Sync Contract</h1>
+  <p class="subtitle">What the Zazi iZandi field test taught us the hard way — and an honest, from-scratch verdict on masi-app's offline-sync architecture before it meets the field.</p>
+  <div class="meta-strip">
+    <span>Date <b>2026-07-04</b></span>
+    <span>Compared <b>zazi-izandi-app ⇄ masi-app</b></span>
+    <span>Method <b>docs + code + migration audit, file:line-verified</b></span>
+    <span>Author <b>Claude (Fable 5) for Jim McKeown</b></span>
+  </div>
+</header>
+
+<div class="tldr">
+  <div class="label">The short version</div>
+  <p>Masi's sync <strong>core</strong> is genuinely better than Zazi iZandi's — in three places it already implements fixes ZZ still has on its deferred list. Built from scratch, I would keep this architecture: atomic outbox, compare-and-swap finalization, single-writer SQLite, deterministic IDs. <strong>But masi is missing four specific defenses for failure modes ZZ actually hit in the field</strong> — and every one is a "quiet data quarantine," not a crash. All four are bounded fixes, not architecture surgery.</p>
+  <div class="verdict-line">
+    <div class="good"><b>Keep:</b> the engine. Outbox, CAS finalization, writer/reader split, deterministic IDs, contract-as-tests. This is the strongest version of this design across both codebases.</div>
+    <div class="bad"><b>Fix before launch:</b> auth-gate on sync · pull-side pending-local-wins · offline cold-start login · the ten server unique indexes <code style="background:rgba(255,255,255,.12); border:none; color:#f0a179;">onConflict:'id'</code> can't arbitrate.</div>
+  </div>
+</div>
+
+<!-- ═══════════════════ CONTEXT ═══════════════════ -->
+<section>
+  <div class="section-head">
+    <div class="section-num">0</div>
+    <h2>How these lessons were earned</h2>
+  </div>
+  <p class="section-sub">Zazi iZandi is two months ahead of masi in field exposure. Its June field test is the closest thing we have to a rehearsal of masi's launch — same EA population, same low-end Android devices, same school connectivity, shared sync ancestry.</p>
+
+  <div class="evidence-strip">
+    <div class="evidence-cell"><div class="big">14</div><div class="cap">tester devices, ~21 hours of exported logs each</div></div>
+    <div class="evidence-cell"><div class="big">F1–F11</div><div class="cap">root-caused findings, every one verified against code</div></div>
+    <div class="evidence-cell"><div class="big">2</div><div class="cap">separate incidents: SQLite lock-storms &amp; an auth-token death</div></div>
+    <div class="evidence-cell"><div class="big">100%</div><div class="cap">of sync cycles on one device skipped memberships for 9 hours — silently</div></div>
+  </div>
+  <p class="flow-caption">Sources: <code>tester-issue-log.md</code>, <code>tester-issue-remediation-plan.md</code>, <code>build-log.md</code>, <code>sqlite-lock-storm-handoff-for-masi.md</code> (written specifically for this repo).</p>
+
+  <div class="mental">
+    <div class="m-label">The master mental model</div>
+    <p>Across all of ZZ's field data, the sync <em>pipeline</em> almost never failed. What failed were the <strong>preconditions the pipeline trusts</strong>: a live auth session, server constraints the conflict-arbiter can see, a pull that tells the local store the truth, a login gate that lets an offline user in. Every finding below is a missing precondition-guard — which is why every fix is bounded.</p>
+  </div>
+</section>
+
+<!-- ═══════════════════ SECTION 1 ═══════════════════ -->
+<section>
+  <div class="section-head">
+    <div class="section-num">1</div>
+    <h2>What to port from Zazi iZandi</h2>
+  </div>
+  <p class="section-sub">Only the lessons masi is still exposed to. Masi is already immune to several of ZZ's worst failures (see §2) — these are the survivors, ranked by field risk.</p>
+
+  <!-- ——— P0 ——— -->
+  <div class="band p0"><span class="tag">P0 · Launch blockers</span><span class="band-title">Sync-blocking &amp; data-integrity</span><span class="band-line"></span></div>
+
+  <!-- Finding 1 -->
+  <div class="finding">
+    <div class="finding-head">
+      <div class="finding-num">1</div>
+      <div>
+        <div class="finding-title">Auth-gate sync, and heal quarantines when auth returns</div>
+        <div class="finding-zz">ZZ incident · 2026-06-09 · dead refresh token → total outbox quarantine</div>
+      </div>
+    </div>
+    <div class="flow">
+      <span class="fnode">EA's refresh token dies</span><span class="farr">→</span>
+      <span class="fnode warn">sync keeps running — anonymously</span><span class="farr">→</span>
+      <span class="fnode warn">RLS rejects every push: 42501</span><span class="farr">→</span>
+      <span class="fnode doom">every record marked TERMINAL</span><span class="farr">→</span>
+      <span class="fnode doom">auto-sync skips terminal rows forever</span>
+    </div>
+    <p class="flow-caption">The cruelest part: logging back in does <em>not</em> recover the data. The quarantine survives auth restore.</p>
+    <div class="facts">
+      <div class="fact"><span class="k zz">ZZ hit</span><span>One EA's device quarantined a full day's work. Their hotfix (OTA 1.1.0+4) took 9 commits and 4 adversarial review rounds.</span></div>
+      <div class="fact"><span class="k masi">Masi today</span><span><code>syncNow</code> gates only on <code>isOnline</code> <span class="fileref">src/context/OfflineContext.js:<span class="ln">84</span></span> · <code>classifyError</code> marks <code>42501</code> unconditionally terminal <span class="fileref">src/services/offlineSync.js:<span class="ln">277–286</span></span> · <strong>no auth-event listener exists anywhere in the sync layer</strong>. The only recovery is a manual forced "Sync Now."</span></div>
+      <div class="fact"><span class="k port">The port</span><span>Skip <code>syncAll</code> when there is no Supabase session. On <code>SIGNED_IN</code>/<code>TOKEN_REFRESHED</code>, requeue RLS-terminal rows — scoped to the signed-in user with per-table owner resolvers (ZZ's design), so <em>genuine</em> permission denials stay terminal.</span></div>
+    </div>
+  </div>
+
+  <!-- Finding 2 -->
+  <div class="finding">
+    <div class="finding-head">
+      <div class="finding-num">2</div>
+      <div>
+        <div class="finding-title">Pull-side pending-local-wins — masi has ZZ's F7 bug, in the same code shape</div>
+        <div class="finding-zz">ZZ F7 · 🔴 blocker · their #1 user-facing complaint: "groups vanished / appeared the next day / never"</div>
+      </div>
+    </div>
+    <p>This one startled me. Masi's <code>ChildrenContext.mergeServerRows</code> <span class="fileref">src/context/ChildrenContext.js:<span class="ln">10–20</span></span> is the <em>exact</em> pre-fix logic ZZ root-caused: a local row survives the pull only if it's unsynced <strong>and its id is absent from the server</strong> — so a pending <em>edit</em> to an already-synced row gets clobbered. And that merge only shapes React state; <code>saveRows(pulled.children, storage.saveChild)</code> <span class="fileref">ChildrenContext.js:<span class="ln">107–127</span></span> then writes every server row into SQLite through repositories that do blind upserts with no pending guard <span class="fileref">childrenRepository.js:<span class="ln">318–331</span></span>.</p>
+    <div class="flow">
+      <span class="fnode">EA edits a child offline<br>(sync_status = pending)</span><span class="farr">→</span>
+      <span class="fnode">app pulls from server<br>(row id already exists)</span><span class="farr">→</span>
+      <span class="fnode warn">stale server row overwrites the local edit, marked "synced"</span><span class="farr">→</span>
+      <span class="fnode doom">the EA watches their work revert on-screen</span>
+    </div>
+    <div class="facts">
+      <div class="fact"><span class="k masi">Why it's narrower here</span><span>Masi's atomic outbox still holds the edit's payload, so the push usually lands later and self-corrects — where ZZ's flag-derived outbox lost the pending intent entirely. But two harms remain: the visible UI revert (the trust-killer that generated ZZ's facilitator escalation), and a real loss window — a <em>second</em> edit rebuilds its payload from the clobbered row, and because outbox ids are <code>table:record:operation</code>, update #2 <strong>replaces</strong> update #1's payload. First edit: permanently reverted.</span></div>
+      <div class="fact"><span class="k port">The port</span><span>Bring ZZ's arbiter-aware <code>mergeServerRows.js</code> semantics into masi's <strong>SQLite write path</strong>, not just the state merge: a pull must never overwrite a row whose <code>sync_status ≠ 'synced'</code>.</span></div>
+    </div>
+    <div class="mental">
+      <div class="m-label">Mental model · pending-local-wins</div>
+      <p>Offline-first has exactly one sacred invariant on the pull side: <strong>the server is authoritative for everything except what the device hasn't told it yet.</strong> A pending local row is a promise in transit — until it's acknowledged, the pull must treat it as more true than the server. "Server has this id" is the wrong test; "device has unacknowledged intent for this row" is the right one.</p>
+    </div>
+  </div>
+
+  <!-- Finding 3 -->
+  <div class="finding">
+    <div class="finding-head">
+      <div class="finding-num">3</div>
+      <div>
+        <div class="finding-title">Offline cold-start must not bounce an onboarded EA to the login screen</div>
+        <div class="finding-zz">ZZ EA-survey priority #2 · fixed in OTA 1.1.0+10 · measured trigger: access token older than ~58.5 min, opened offline</div>
+      </div>
+    </div>
+    <div class="flow">
+      <span class="fnode">EA opens app offline at school<br>(token &gt; ~1 h old)</span><span class="farr">→</span>
+      <span class="fnode warn">token refresh unreachable →<br>INITIAL_SESSION arrives empty</span><span class="farr">→</span>
+      <span class="fnode doom">app commits signed-out →<br>login screen</span><span class="farr">→</span>
+      <span class="fnode doom">can't log in offline.<br>Stranded for the day.</span>
+    </div>
+    <div class="facts">
+      <div class="fact"><span class="k masi">Masi today</span><span>On a cold start, <code>currentUserIdRef</code> is null, so an empty <code>INITIAL_SESSION</code> goes straight to <code>commitSignedOutState('INITIAL_SESSION-no-active-user')</code> <span class="fileref">src/context/AuthContext.js:<span class="ln">82</span></span>. The 15-second grace period only protects a user who was already active <em>in this JS session</em> — it never fires on cold start.</span></div>
+      <div class="fact"><span class="k port">The port</span><span>ZZ's persisted-session restore: when the cold-start session is null/throws offline, restore the EA from auth-js's <em>own</em> persisted session; only a genuine <code>SIGNED_OUT</code> (or manual sign-out) clears state. The session heals itself on reconnect.</span></div>
+    </div>
+    <p>Given masi's EAs will routinely open the app offline inside schools, this is a launch blocker in the most literal sense: the app front door is locked exactly when they need it.</p>
+  </div>
+
+  <!-- Finding 4 -->
+  <div class="finding">
+    <div class="finding-head">
+      <div class="finding-num">4</div>
+      <div>
+        <div class="finding-title">Ten server unique indexes that <code>onConflict:&nbsp;'id'</code> cannot arbitrate</div>
+        <div class="finding-zz">ZZ F1 / F8 / F9 family · 🔴 · the dominant field failure — 23505 duplicate-key → TERMINAL → dependency cascade</div>
+      </div>
+    </div>
+    <div class="flow">
+      <span class="fnode">client mints a NEW id for a logical row that already exists server-side</span><span class="farr">→</span>
+      <span class="fnode warn">PK doesn't match → INSERT attempted</span><span class="farr">→</span>
+      <span class="fnode warn">secondary UNIQUE fires: 23505</span><span class="farr">→</span>
+      <span class="fnode doom">TERMINAL</span><span class="farr">→</span>
+      <span class="fnode doom">dependency skip poisons child tables every cycle</span>
+    </div>
+    <p class="flow-caption">On one ZZ device this exact chain skipped membership sync on 101 of 101 cycles for ~9 hours. The EA saw only: "sync failed."</p>
+    <p>A migration audit of <code>supabase/migrations/</code> found the exposure on: the three assignment tables' active-pair partial indexes, <code>child_programme_enrollments</code>, <code>child_class_memberships</code> (keyed on child + <strong>academic year</strong>, not class — moving a child without exiting the old membership collides), <code>group_ea_assignments</code> (bare <code>group_id</code>: at most <em>one</em> active EA per group), <code>grouping_versions</code> (×2), <code>class_grouping_state</code> (a one-row-per-class/year singleton with no deterministic id), and <code>groups.display_number</code>.</p>
+    <div class="facts">
+      <div class="fact"><span class="k masi">Why masi is <em>more</em> exposed than ZZ</span><span>Masi's repositories do deactivate-before-insert locally, and <code>ignoreDuplicates</code> protects the immutable-assignment inserts. But masi is more <em>multi-writer</em> than ZZ: the head-office grouping workflow assigns children to EAs centrally, so local and server disagreeing about "which row is active" is realistic — and Finding 2 can manufacture exactly that disagreement.</span></div>
+      <div class="fact"><span class="k port">The fix menu, in order of preference</span><span>① Extend the deterministic-id pattern already used for <code>letter_mastery</code> — which made its 23505 <em>impossible by construction</em>. ② Correct <code>onConflict</code> arbiters to match the real constraints. ③ ZZ's <code>beforeUpsert</code> server-reconciliation hook (their F9 fix) for tables where neither works.</span></div>
+      <div class="fact"><span class="k zz">Adjacent trap</span><span>The identity triggers raise <code>23514</code>, which <code>classifyError</code> treats as <em>retryable</em> — an archive re-push whose <code>created_at</code>/<code>assigned_at</code> drifted would retry forever with backoff.</span></div>
+    </div>
+    <div class="mental">
+      <div class="m-label">Mental model · deterministic identity</div>
+      <p>If a row's identity is really its <em>logical key</em> ("this child, in this group, in this grouping version"), then deriving the UUID from that key (UUIDv5) means every device, every install, every retry agrees on the id — and "insert the same thing twice" becomes an update instead of a collision. You eliminate the entire conflict class instead of arbitrating it. Masi already proved this pattern on three tables; this finding is about finishing the job.</p>
+    </div>
+  </div>
+
+  <!-- ——— P1 ——— -->
+  <div class="band p1"><span class="tag">P1 · Hardening</span><span class="band-title">Reliability &amp; performance before scale</span><span class="band-line"></span></div>
+
+  <!-- Finding 5 -->
+  <div class="finding p1">
+    <div class="finding-head">
+      <div class="finding-num">5</div>
+      <div>
+        <div class="finding-title">The assessment render-performance pack</div>
+        <div class="finding-zz">ZZ OTA 1.1.0+15 · measured tap-lag + countdown drift on Galaxy A03s-class devices</div>
+      </div>
+    </div>
+    <p>Masi's <code>useAssessmentSession</code> <span class="fileref">src/hooks/useAssessmentSession.js:<span class="ln">57–69</span></span> is ZZ's pre-fix design: a tick-counting <code>setInterval</code> (<code>elapsedRef += 1</code>) that <em>drifts</em> when low-end Android throttles ticks, no monotonic clock, no AppState background-pause (backgrounding silently stops the clock — background time is free), a per-second state update re-rendering the whole capture screen, and no memoized grid tiles. Masi has <em>more and longer</em> assessments coming with the WelaPLUS battery, so exposure grows from here.</p>
+    <div class="facts">
+      <div class="fact"><span class="k port">The port</span><span>ZZ's fix is a clean reference: monotonic <code>performance.now()</code> elapsed · an authoritative <code>isExpired()</code> hard-stop on every capture-mutation path · background-as-pause · an isolated 1 Hz countdown leaf component · <code>React.memo</code> tiles (26 → 1 repaints per tap). Masi already did the sibling fix — the ElapsedTime 1 Hz isolation (commit <code>3b5d507</code>). This is the same medicine for the assessment seam.</span></div>
+    </div>
+  </div>
+
+  <!-- Finding 6 -->
+  <div class="finding p1">
+    <div class="finding-head">
+      <div class="finding-num">6</div>
+      <div>
+        <div class="finding-title">Sync-status UX is a trust system — treat it like one</div>
+        <div class="finding-zz">ZZ F2 · 🟠 "trust-destroying" · 124 of 125 sync cycles read "failed" on one device</div>
+      </div>
+    </div>
+    <p>On ZZ devices, one stuck table poisoned the overall success flag, so EAs concluded "the app never syncs" even while 12 records uploaded cleanly in the same cycle. That narrative — more than the underlying bug — did the reputational damage. Masi's <code>result.success</code> also flips false on any single failed record.</p>
+    <div class="facts">
+      <div class="fact"><span class="k port">The port</span><span>Before launch, decide what the Home indicator and <code>SyncStatusScreen</code> say when only <em>retriable / backed-off</em> items remain vs. terminal ones. "Everything is saved on your phone — 3 items waiting for signal" and "2 items need attention" are different messages, and the field trusts you differently for each.</span></div>
+    </div>
+  </div>
+
+  <!-- Finding 7 -->
+  <div class="finding p1">
+    <div class="finding-head">
+      <div class="finding-num">7</div>
+      <div>
+        <div class="finding-title">Server pull-query capacity as data grows</div>
+        <div class="finding-zz">ZZ F4 · 🟠 · Postgres statement timeout 57014 on assessment_items — near-universal across devices</div>
+      </div>
+    </div>
+    <p>ZZ's <code>assessment_items</code> pull started timing out on <em>nearly every device</em> once real data volumes arrived. Good news from the audit: every masi pull-path foreign key is indexed. Watch items only: <code>sessions.class_id</code>/<code>group_id</code> and <code>session_attendees.group_id</code> lack indexes, and no synced table has an <code>updated_at</code> index — which matters the day you add delta pulls (§2).</p>
+  </div>
+
+  <!-- ——— P2 ——— -->
+  <div class="band p2"><span class="tag">P2 · Process</span><span class="band-title">Habits worth stealing</span><span class="band-line"></span></div>
+
+  <div class="finding p2">
+    <div class="finding-head">
+      <div class="finding-num">8</div>
+      <div><div class="finding-title">Four operational habits from ZZ's remediation campaign</div></div>
+    </div>
+    <ul>
+      <li><strong>The version-gated startup repair hook.</strong> ZZ learned that shipping a fix doesn't help rows <em>already quarantined</em> on devices — they needed an allowlisted, once-per-upgrade <code>requeueFrozen</code>. Masi has no such mechanism; build the hook once and every future field fix can carry its own recovery.</li>
+      <li><strong>Real-engine-first DB tests.</strong> The single most instructive ZZ datapoint: expanding their <code>better-sqlite3</code> allowlist from 8 to 26 suites <em>immediately</em> surfaced a production bug (an FK cascade wiping pending state on pull) that 1,830 passing mock tests could not see — plus an earlier device-only crash hidden by "wish-shaped" mocks. Their landing rule is worth adopting: <em>any suite that executes SQL runs on the real engine.</em> Masi is at 13 real-engine suites.</li>
+      <li><strong>OTA cohort discipline.</strong> ZZ stranded their 1.0.0 testers (OTAs can't cross a runtimeVersion), and once stranded iOS by building Android-only. Cheap rules: build both platforms every time, keep field fixes JS-only where possible, track which cohorts each release actually reaches.</li>
+      <li><strong>The field-diagnostics loop.</strong> Export Logs → capture in an issue log separating <em>observed evidence</em> from <em>interpretation</em> → triage into root-cause families → one remediation plan. That workflow found everything above. Masi already has Export Logs / Export Database — the loop is ready to run.</li>
+    </ul>
+  </div>
+
+  <div class="finding p2">
+    <div class="finding-head">
+      <div class="finding-num">9</div>
+      <div><div class="finding-title">Product signal from ZZ's EA surveys that transfers directly</div></div>
+    </div>
+    <ul>
+      <li><strong>"No photos" and fast clock-in/out are why EAs prefer ZZ over Teampact.</strong> Protect those properties in masi — they are competitive features, not gaps.</li>
+      <li><strong>Sort orders must reflect grouping everywhere</strong>, or EAs conclude grouping "didn't work" (ZZ's alphabetical rosters made testers believe auto-grouping had failed).</li>
+      <li><strong>The photo paradox is coming for masi too:</strong> 44/47 EAs said before/after photos "would help" accountability, while also citing the <em>absence</em> of photos as a top reason they prefer the app. Decide the accountability policy (photos vs. assessment-trail integrity) deliberately, before the field decides it for you.</li>
+    </ul>
+  </div>
+</section>
+
+<!-- ═══════════════════ SECTION 2 ═══════════════════ -->
+<section>
+  <div class="section-head">
+    <div class="section-num">2</div>
+    <h2>Is masi's sync contract built right?</h2>
+  </div>
+  <p class="section-sub"><strong>Verdict: yes at the core — and I mean that concretely, not politely.</strong> Masi's engine is the stronger of the two codebases in every structural dimension; ZZ's advantage is purely that it has been shot at in the field. A from-scratch rebuild would differ at the edges, not the center.</p>
+
+  <h3>The scorecard</h3>
+  <div class="table-scroll">
+  <table class="scorecard">
+    <thead><tr><th>Property</th><th>Masi App</th><th>Zazi iZandi</th></tr></thead>
+    <tbody>
+      <tr>
+        <td>Outbox</td>
+        <td class="win">True atomic queue — domain write + enqueue in <em>one</em> transaction</td>
+        <td class="lag">Derived lazily from <code>sync_status</code> flags at sync time</td>
+      </tr>
+      <tr>
+        <td>Edit-during-upload race</td>
+        <td class="win">Closed — CAS finalization on <code>updated_at</code> + stale-finalize restore</td>
+        <td class="lag">Open — on the deferred list ("Slice 2") since June</td>
+      </tr>
+      <tr>
+        <td>SQLite lock storms</td>
+        <td class="win">Structurally impossible — persistent writer behind a mutex, <code>BEGIN IMMEDIATE</code>, plus a <code>query_only</code> reader</td>
+        <td class="lag">Mitigated by batching; still on expo's transaction-per-new-connection model that caused the field incident</td>
+      </tr>
+      <tr>
+        <td>Duplicate-key (23505) prevention</td>
+        <td class="win">Deterministic UUIDv5 ids for 3 tables — collision impossible by construction (extend it: Finding 4)</td>
+        <td class="lag">Per-table <code>onConflict</code> arbiters, patched reactively after each field failure</td>
+      </tr>
+      <tr>
+        <td>Contract enforcement</td>
+        <td class="win"><code>SERVER_COLUMNS</code> test-guarded against <em>both</em> the local schema and server migrations; RLS policies pinned by a probe test</td>
+        <td class="lag">A prose contract doc; their improvements list's #1 wish is exactly what masi built</td>
+      </tr>
+      <tr>
+        <td>Failure state</td>
+        <td class="win">Structured <code>status</code> columns on the outbox</td>
+        <td class="lag">A <code>"TERMINAL:&lt;code&gt;:"</code> string grammar with three regex readers</td>
+      </tr>
+      <tr>
+        <td>Retry policy</td>
+        <td class="win">Exponential backoff to a 15-min cap, retries forever; forced sync resurrects terminal rows</td>
+        <td class="lag">5-attempt ceiling, then dead</td>
+      </tr>
+    </tbody>
+  </table>
+  </div>
+
+  <h3>Why the lock-storm class simply can't happen here</h3>
+  <p>This deserves its own picture, because it's the deepest structural difference — and it's the fix ZZ's own handoff document (<code>sqlite-lock-storm-handoff-for-masi.md</code>) called "Slice 2" and deferred. Masi already built it.</p>
+  <div class="engines">
+    <div class="engine bad-e">
+      <h4>ZZ's model — the storm</h4>
+      <div class="lockrow">
+        <span class="conn locked">🔒 WAL writer lock</span>
+      </div>
+      <div class="lockrow">
+        <span class="conn ghost">txn conn #1</span><span class="conn ghost">#2</span><span class="conn ghost">#3</span><span class="conn ghost">…</span><span class="conn ghost">#954</span>
+      </div>
+      <p class="verdict">expo-sqlite's <code>withExclusiveTransactionAsync</code> secretly opens a <em>new native connection per transaction</em>. Finalizing 954 records the per-record way spawned 954 throwaway connections fighting one writer lock — screens timed out with "database is locked" mid-lesson.</p>
+    </div>
+    <div class="engine good-e">
+      <h4>Masi's model — one writer, one reader</h4>
+      <div class="lockrow">
+        <span class="conn writer">writer · mutex queue · BEGIN IMMEDIATE</span>
+      </div>
+      <div class="lockrow">
+        <span class="conn reader">reader · query_only · never blocks</span>
+      </div>
+      <p class="verdict">One persistent writer behind a JS mutex <span class="fileref">src/db/client.js:<span class="ln">94–135</span></span>; all reads on a separate read-only connection. In WAL mode readers never wait on the writer — so screens stay responsive <em>during</em> a heavy sync. The failure class is absent by construction, not by tuning.</p>
+    </div>
+  </div>
+
+  <h3>Two design calls I'd defend explicitly</h3>
+  <p><strong>Row-granularity last-write-wins is correct for this domain.</strong> The data is single-writer by construction — an EA owns her children, sessions, and assessments — so CRDTs or field-level merging would be complexity with no payoff. The assignment model <em>is</em> the conflict-avoidance mechanism; that deserves to be stated as a named invariant in the contract map rather than left implicit.</p>
+  <p><strong>Skip PowerSync / WatermelonDB / ElectricSQL.</strong> ZZ ran this calculus and locked it until ~2,500 active users. Masi has now hand-built the hard parts (outbox, CAS, contract tests), so the payback is even weaker here.</p>
+
+  <h3>Where a from-scratch build would differ</h3>
+
+  <p><strong>The pull side is the one subsystem I would not have built this way — it's a generation older than the push side.</strong> The push engine got the clean-slate rebuild; the pull is still context-level code: React-state merging in <code>ChildrenContext</code>, per-row <code>saveRows</code> loops, no arbiter awareness, no pending-local-wins, and no tombstone semantics (pulls filter to active rows, so absence can't be distinguished from deletion — a membership removed by head office never disappears from an EA's SQLite). From scratch: pulling is a <em>repository</em> concern — one <code>applyServerRows(rows, { arbiter })</code> per table, pending-local-wins inside a single transaction, with ZZ's <code>mergeServerRows.js</code> as the field-validated reference. This is also where Finding 2 lives, so the fix and the redesign are the same work.</p>
+  <p>Relatedly, make the currently-implicit decision explicit: masi pulls only reference data plus child/group/membership scaffolding — <strong>sessions, assessments, and time entries are push-only</strong>, so a re-onboarded EA on a fresh device sees no history. That may be exactly right (the data is safe on the server; the dashboard is the history surface), but it should be a documented choice, not an accident of what got built.</p>
+
+  <p><strong>Batching is narrower than it should be for field connectivity.</strong> Only four tables batch (<code>BATCHABLE_UPSERT_TABLES</code>); everything else is one PostgREST round trip per record, serialized. A 300-row regroup backlog on a school's flaky 4G is 300 sequential HTTP requests. With the single-writer design the local transaction cost is fine — the <em>network</em> round trips are the cost. Extending batching to memberships and enrollments is a contained change with an outsized field payoff.</p>
+
+  <p><strong>The honest "would I do it differently" answer: the PostgREST-upsert-plus-RLS transport.</strong> The most complex artifact in the whole sync system — the contract map, the creator-SELECT fallback policies, the accepted advisor warnings, the upsert-visibility gotcha now documented in three places — exists <em>only</em> because the client writes through per-table upserts that RLS must authorize row-by-row mid-conflict-check. From scratch, I'd seriously weigh a single transactional <strong>ingest RPC</strong>: the outbox stays exactly as-is (offline behavior is a property of the outbox, not the transport — ZZ's "an RPC can't run offline" rejection conflates the two), but the client ships a batch of operations and one server function applies them in FK order, atomically, with authorization in one auditable place. That collapses <code>PUSH_ORDER</code>, the dependency-cascade skipping, <em>and</em> the visibility policies.</p>
+  <div class="mental">
+    <div class="m-label">Recommendation, not a rewrite</div>
+    <p>I am <strong>not</strong> recommending a migration now — the current approach works, the tests tame it, and go-live is close. Hold the ingest RPC as the pressure-relief valve: WelaPLUS adds tables, and if the RLS contract map keeps compounding, that's the signal to pull it.</p>
+  </div>
+
+  <p><strong>Small engine nits</strong> (performance, not correctness, thanks to the single writer): <code>finalizeManySuccess</code> runs three statements per record inside its chunk transactions where a bulk <code>UPDATE</code>/<code>DELETE … WHERE id IN</code> with a matched-count guard would do; and <code>getReadyRecords</code>' 1000-row cap leaves any remainder waiting for the next trigger — the 30-second status refresh covers it, but it deserves a comment.</p>
+
+  <h3>The bottom line</h3>
+  <p>The offline-sync failure point you're worried about has, in ZZ's field data, a very specific anatomy: it is almost never the push pipeline — it is the <strong>preconditions the pipeline trusts</strong>. A dead session. A server constraint the arbiter can't see. A pull that lies to the local store. An auth gate that bounces the user. Masi's engine core is the best version of this design across both codebases; the four P0 items are precisely the missing precondition-guards; all are bounded fixes; and ZZ has already paid the field-testing cost of designing each one.</p>
+
+  <div class="sequence">
+    <div class="label">Recommended sequence</div>
+    <div class="seq-steps">
+      <div class="seq-step"><span class="n">1</span><span class="t">F7 pull guard<br><em>(pending-local-wins)</em></span></div>
+      <span class="seq-arrow">→</span>
+      <div class="seq-step"><span class="n">2</span><span class="t">Auth gate<br>+ heal-on-restore</span></div>
+      <span class="seq-arrow">→</span>
+      <div class="seq-step"><span class="n">3</span><span class="t">Offline<br>cold-start login</span></div>
+      <span class="seq-arrow">→</span>
+      <div class="seq-step"><span class="n">4</span><span class="t">Server unique-<br>constraint audit</span></div>
+    </div>
+    <div class="side-note">The assessment render-perf pack (Finding 5) rides alongside — it shares no files with the sync work. Start with the F7 pull guard: ZZ's <code style="background:rgba(255,255,255,.1); border:none; color:#f0a179;">mergeServerRows.js</code> is a field-validated reference implementation.</div>
+  </div>
+</section>
+
+<!-- ═══════════════════ SOURCES ═══════════════════ -->
+<section class="sources">
+  <h3>Sources &amp; verification trail</h3>
+  <ul>
+    <li><span class="fileref">zazi-izandi-app/documentation/field-testing/tester-issue-log.md</span><span class="desc">F1–F11, evidence-vs-interpretation format, 14 devices</span></li>
+    <li><span class="fileref">zazi-izandi-app/documentation/field-testing/tester-issue-remediation-plan.md</span><span class="desc">the F1–F11 fix designs</span></li>
+    <li><span class="fileref">zazi-izandi-app/documentation/build-log.md</span><span class="desc">lock-storm + auth incidents, OTA history, render-perf fix</span></li>
+    <li><span class="fileref">zazi-izandi-app/documentation/archive/sqlite-lock-storm-handoff-for-masi.md</span><span class="desc">the handoff written for this repo — §8.5 (CAS) is already built here</span></li>
+    <li><span class="fileref">zazi-izandi-app/docs/agent-context/sync-contract.md</span><span class="desc">ZZ's per-table sync contract</span></li>
+    <li><span class="fileref">zazi-izandi-app/documentation/improvements.md · roadmap.md</span><span class="desc">ranked refactor survey; PowerSync calculus</span></li>
+    <li><span class="fileref">masi-app/src/services/offlineSync.js · src/db/client.js · syncOutboxRepository.js</span><span class="desc">push engine, CAS finalization, writer/reader split — read in full</span></li>
+    <li><span class="fileref">masi-app/src/context/{Offline,Auth,Children}Context.js · src/services/preloadedChildData.js</span><span class="desc">scheduling, auth gate, pull path — read in full</span></li>
+    <li><span class="fileref">masi-app/src/hooks/useAssessmentSession.js</span><span class="desc">assessment timer — read in full</span></li>
+    <li><span class="fileref">masi-app/supabase/migrations/ (7 files)</span><span class="desc">unique-constraint / trigger / index audit</span></li>
+    <li><span class="fileref">masi-app/documentation/rls-sync-contract-map.md</span><span class="desc">masi's operative table-by-table contract</span></li>
+  </ul>
+</section>
+
+<footer>
+  MASINYUSANE · ENGINEERING REVIEW · 2026-07-04 · PREPARED WITH CLAUDE CODE
+</footer>
+
+</main>
+</body>
+</html>

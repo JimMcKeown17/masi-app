@@ -1,6 +1,24 @@
 # EGRA Letter Assessment — Architecture & Engineering
 
-How the EGRA Letter Sound Assessment feature was wired into the existing Masi app architecture. Covers the data layer, component design, navigation integration, state management patterns, and the specific engineering problems we solved.
+> **⚠️ Status (2026-07-13): partially superseded. Read the caveats before trusting the code samples.**
+>
+> This chapter was written against the **AsyncStorage** architecture, which the 2026-05 SQLite cutover
+> retired. The *assessment-specific* engineering here is still accurate and worth reading — index-vs-character
+> grid tracking, digraph rendering, position-based EGRA scoring (`lastTappedIndex + 1`), the phase state
+> machine. But the **data-layer and sync sections are wrong**:
+>
+> - **§1 (Data Layer)** and **§7 (Offline Sync Path)** teach `storage.js`, `STORAGE_KEYS`, `SYNC_TABLES`,
+>   and `synced: false` scanning. **`src/utils/storage.js` was deleted in Sprint 4A.** The real path is
+>   a durable outbox (`src/services/offlineSync.js`, `PUSH_ORDER`). `AGENTS.md` explicitly forbids
+>   reintroducing `synced: false` table scanning — do not copy these samples.
+> - **§7's "cache-first merge"** describes a hand-rolled server/local merge. `mergeServerRows` was
+>   **deleted in Sprint 4B**; React state is now a pure function of SQLite.
+> - **§3/§4** locate the phase state machine inside `LetterAssessmentScreen`. It now lives in
+>   `src/hooks/useAssessmentSession.js`.
+> - **§8's file map** lists `src/utils/storage.js` and `supabase-migrations/05_add_assessments_table.sql`.
+>   Both are retired.
+>
+> For the current storage/sync contract, read `documentation/rls-sync-contract-map.md`.
 
 ---
 

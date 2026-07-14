@@ -1,6 +1,13 @@
 # Assessment Batteries — The Three-Level Hierarchy
 
-How Masi models multi-subtest literacy assessments (WelaPLUS, full EGRA, future Questions) as a clean three-level data model: **Battery Run → Question result → Item response**. This is the architectural shape behind every new assessment that goes beyond a single subtest.
+> **Status (2026-07-13): DESIGNED, NOT BUILT on `main`.** This chapter is written in the present tense,
+> but the tables it describes (`battery_runs`, `battery_run_artifacts`) **do not exist on `main`** — no
+> migration creates them and nothing in `src/` references them. It is forward design, filed under
+> `learning/` alongside shipped-code narratives, which is misleading without this header.
+>
+> The implementation is in flight on an unmerged worktree
+> (`.claude/worktrees/feature+wela-plus-battery`). Spec: `documentation/wela-plus-battery-prd-2026.md`.
+> Treat this chapter as "how it is meant to work", not "how it works today".
 
 ---
 

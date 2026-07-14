@@ -1,6 +1,10 @@
 # SQLite Supabase Setup
 
-This file records the non-secret setup for the SQLite Supabase backend that is now the app's forward path.
+**Standing doc.** Backend identity, env wiring, and helper commands for the SQLite Supabase backend.
+
+> For *running ad-hoc SQL* against this backend (the `query` helper, the 401 auth gotcha, the
+> non-interactive psql fallback), use the `sqlite-staging-sql` skill (`.claude/skills/sqlite-staging-sql/`).
+> This file covers **what the backend is and how it is wired**; the skill covers **how to query it**.
 
 ## Projects
 
@@ -43,6 +47,7 @@ npm run test:integration
 npm run test:release
 npm run sqlite:staging:check
 npm run sqlite:staging:link
+npm run sqlite:staging:query      # ad-hoc SQL — see the sqlite-staging-sql skill
 npm run sqlite:staging:migrations
 npm run sqlite:staging:dry-run
 npm run sqlite:staging:push
@@ -52,41 +57,34 @@ npm run sqlite:staging:ios
 npm run sqlite:staging:android
 ```
 
+Never inject `.env.local` into a `supabase` CLI command: it can silently retarget the legacy backend
+even with `--linked`. Every helper prints `project_ref=` in its summary — confirm
+`segygjzpujphwvrubusm` (SQLite), not `jcqrlwetutnpuchjoyyd` (legacy), before any write.
+
 `sqlite:staging:push` is non-interactive and passes `--yes` to the Supabase CLI.
 
 `test:release` runs the full Jest suite, a focused SQLite integration suite under a separate file-backed better-sqlite setup, and `sqlite:staging:check`. Run it before promoting a SQLite build to testers.
 
 ## SQLite Migration History
 
-The SQLite backend has these migrations applied locally and remotely:
+Canonical migrations live in `supabase/migrations/` on disk. **That directory is the inventory** —
+this file used to duplicate it as a hand-maintained list, which drifted (the list said 14 while disk
+had 18). Run `ls supabase/migrations/` or `npm run sqlite:staging:migrations` instead.
 
-- `20260521115412_masi_clean_base_schema.sql`
-- `20260521115416_masi_clean_rls_policies.sql`
-- `20260521115421_masi_seed_reference_data.sql`
-- `20260521120147_masi_rls_advisor_cleanup.sql`
-- `20260521135520_masi_staff_programme_assignment_uniqueness.sql`
-- `20260521140331_masi_rls_review_fixes.sql`
-- `20260521142324_masi_assignment_attendee_fixes.sql`
-- `20260521143346_masi_assignment_insert_recursion_fix.sql`
-- `20260521144901_masi_zazi_alignment_schema.sql`
-- `20260521153217_masi_child_delete_guard.sql`
-- `20260522103000_masi_session_upsert_visibility.sql`
-- `20260525231506_masi_rls_contract_cleanup.sql`
-- `20260525232108_masi_rls_grant_cleanup.sql`
-- `20260526151352_creator_select_upsert_visibility.sql`
+## Advisor Expectations
 
 `npm run sqlite:staging:advisors` is expected to report only:
 
 - `multiple_permissive_policies` warnings for `children`, `classes`, and `groups`. Those warnings are intentional: each table has one assignment/programme SELECT policy plus one `created_by = auth.uid()` fallback policy so mobile upserts remain visible before related join rows sync.
 - `auth_leaked_password_protection` until the hosted project plan/settings allow leaked-password protection to be enabled in Supabase Auth settings. Supabase documents leaked-password protection under Auth password security and notes that it is available on Pro Plan and above.
 
-## Current Status
+## Status
 
-`masi-app-sqlite` is the backend going forward as of 2026-05-26.
+`masi-app-sqlite` is the forward backend. All new feature and UI work targets it unless the user
+explicitly asks for legacy-backend maintenance.
 
-- `npm run test:release` passed on 2026-05-26 after the final RLS/sync fixes: 56 Jest suites / 296 tests, 13 file-backed SQLite integration suites / 113 tests, and SQLite staging guard for `sqlite-staging` / `segygjzpujphwvrubusm`.
-- `npm run sqlite:staging:migrations`, `dry-run`, and `advisors` show no unexpected issues. Status: migrations and dry run passed; advisors have only recorded known warnings.
-- Schema drift is checked before cutover. Status: `supabase db pull --linked --schema public` reached Supabase on 2026-05-25 but was blocked because Docker was not running for the CLI shadow database. Fallback `supabase db query --linked` spot-checked high-write public table columns on `masi-app-sqlite`.
-- Internal Android validation has covered offline writes, restart with pending outbox, sync, and support export. Status: emulator core path passed on 2026-05-22; corrected preview APK build `07d1c674-b06e-4d03-a611-4bf17c182a7b` launches to sign-in.
-- User iPhone preview-build testing on 2026-05-26 reported the new build working correctly after the RLS/sync fixes.
-- Future feature and UI work should target this backend unless the user explicitly asks for legacy-backend maintenance.
+**Dated verification results are not recorded here.** A frozen "as of 2026-05-26, 56 suites / 296
+tests" snapshot used to live in this file and went stale immediately. The live record of suite counts,
+device passes, and release gates is `documentation/build-log.md` (Verification Register); what remains
+open is `documentation/codebase-audit-2026-07-12.md` and
+`documentation/device-gates-sqlite-backend-2026-07.md`.
