@@ -1202,7 +1202,7 @@ The fix has three layers:
 
 1. Producers write server-required ownership fields at creation time.
 2. Creating a group also creates and queues the matching active `group_ea_assignments` row.
-3. Sync startup repairs older failed `groups` and `child_group_memberships` outbox payloads so tester devices can retry without a manual database wipe.
+3. Versioned startup repair v1 heals older failed `groups` and `child_group_memberships` rows and outbox payloads once, so tester devices can retry without a manual database wipe or a permanent per-sync scan.
 
 Weakening RLS would have made the immediate error disappear while preserving a worse data bug: mobile-created groups could sync without the relationship rows needed for later visibility. For every table protected by assignment-based RLS, the mobile write path must create the same relationship evidence that the read path depends on.
 
@@ -1360,3 +1360,13 @@ A queue limit, a payload limit, and a failure-work limit solve different problem
 The sync engine now treats per-record fallback as diagnostic isolation work. It may use up to 25 individual attempts to discover whether a batch failed because of one bad record or a systemic condition. Those attempts run five at a time, preserving the existing `allSettled` guarantee inside each wave. Once the budget is exhausted, more requests have diminishing information value and growing operational cost, so remaining rows return to pending for a later pass.
 
 Unattempted is not the same state as failed. A deferred row receives no retry increment, no backoff, and no error message because the server never evaluated it individually. It still blocks its exact descendants for the rest of the current pass, which preserves ordering. This is a general resilience principle: **make exceptional work finite, preserve semantic state, and expose the deferral explicitly rather than disguising load shedding as an error.**
+
+### Startup repair addendum: corrected code does not rewrite old state
+
+Fixing a producer or classifier changes future behavior, but a field device may already hold rows that the old build marked terminal or shaped incorrectly. Normal sync deliberately ignores some of those rows. Shipping the code fix alone therefore creates two populations: new rows recover, while the exact historical cohort that exposed the bug remains stuck.
+
+A versioned repair registry bridges that gap without turning startup into a permanent collection of compatibility scans. Each recipe names one proven cohort, is safe to run twice, and advances a durable monotonic marker only after success. The marker is a local migration ledger for data repair, separate from SQLite's schema migration ledger. Schema version answers, "Which tables and columns exist?" Repair version answers, "Which old data defects have been revisited on this device?"
+
+The ordering rule is intentionally asymmetric. Repair first, marker second. If the app dies between them, the recipe may repeat, which is why idempotence is mandatory. Marking first would be worse because a crash could permanently suppress unfinished repair. A failed recipe is observable and retries next launch, but it does not make the whole app unusable.
+
+Masi's first recipe also removes recurring work. The group ownership heal existed in every sync preflight even though current producers already write the correct ownership shape. Moving it to repair v1 means upgraded tester data is healed once and healthy devices never rescan it again. The general mental model is **migrations for structure, versioned repairs for historical data, and steady-state code for current behavior.**

@@ -113,6 +113,10 @@ sensitive auth token.
 - [ ] **N5. Reconcile breaker.** Trigger a disposable mass-end circuit breaker. Confirm the device still requires attention and Sentry receives one `sync_state=reconcile_breaker` issue with scope/candidate/end counts.
 - [ ] **N6. Local evidence remains independent.** Export Logs and Export Database. Both identify the same installed build, device, Expo Update, backend, and SQLite schema. The log contains recent console entries even if Sentry was unreachable.
 
+## O. Versioned startup repair
+
+- [ ] **O1. Upgrade repair runs once without delaying normal use.** Install this build over an existing SQLite tester build, cold-start online, and confirm Home remains usable and pending work syncs. Force-quit and reopen twice more. Export Logs: it contains one `Startup repair: advanced to v1 (group_ownership_cutover)` entry from the first upgraded launch, not one per launch or sync pass. If the test database contained one of the historical stale group-ownership rows, confirm its group, assignment, and membership outbox work drains after the upgrade.
+
 ---
 
 ## If something fails

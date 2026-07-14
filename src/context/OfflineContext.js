@@ -3,6 +3,7 @@ import NetInfo from '@react-native-community/netinfo';
 import { AppState } from 'react-native';
 import { supabase } from '../services/supabaseClient';
 import { syncAll, getSyncStatus, requeueTerminalRlsFailures } from '../services/offlineSync';
+import { runStartupRepairs } from '../services/startupRepairs';
 import { syncStateRepository } from '../db/repositories/syncStateRepository';
 import { captureOperationalError, reportSyncResult, reportSyncStatus } from '../services/observability';
 
@@ -54,11 +55,38 @@ export const OfflineProvider = ({ children }) => {
   const currentUserIdRef = useRef(null);
   const triggerBackgroundSyncRef = useRef(() => {});
   const reconcileBreakerAuthorizationsRef = useRef(new Set());
+  const startupRepairPromiseRef = useRef(null);
+  const startupRepairsReadyRef = useRef(false);
 
   // Keep ref in sync with state so event-listener closures always read current value
   useEffect(() => {
     isOnlineRef.current = isOnline;
   }, [isOnline]);
+
+  const ensureStartupRepairs = useCallback(() => {
+    if (!startupRepairPromiseRef.current) {
+      startupRepairPromiseRef.current = runStartupRepairs()
+        .catch((error) => {
+          console.error('Startup repair failed:', error);
+          captureOperationalError(error, {
+            category: 'startup_repair_failed',
+            context: {
+              repairVersion: error.repairVersion ?? null,
+              repairName: error.repairName || null,
+              completedVersion: error.completedVersion ?? null,
+            },
+          });
+          // Do not block the app for a best-effort data repair. Its durable marker was not
+          // advanced, so a fresh app launch retries before that launch's first sync.
+          return { success: false, error };
+        })
+        .then((result) => {
+          startupRepairsReadyRef.current = true;
+          return result;
+        });
+    }
+    return startupRepairPromiseRef.current;
+  }, []);
 
   /**
    * Update sync status (unsynced count, last sync time, etc.)
@@ -134,6 +162,9 @@ export const OfflineProvider = ({ children }) => {
     const syncPromise = (async () => {
       setIsSyncing(true);
       try {
+        if (!startupRepairsReadyRef.current) {
+          await ensureStartupRepairs();
+        }
         console.log('Starting sync...');
         const result = await syncAll({ force });
         setLastSyncResult(result);
@@ -166,7 +197,7 @@ export const OfflineProvider = ({ children }) => {
     activeSyncPromise.current = syncPromise;
     activeSyncIsForced.current = force;
     return syncPromise;
-  }, [refreshSyncStatus]);
+  }, [ensureStartupRepairs, refreshSyncStatus]);
 
   /**
    * Debounced, non-blocking background sync trigger for write paths and listeners.
@@ -307,6 +338,7 @@ export const OfflineProvider = ({ children }) => {
         || event === 'TOKEN_REFRESHED'
         || (event === 'INITIAL_SESSION' && Boolean(session));
       if (shouldHeal && userId) {
+        await ensureStartupRepairs();
         try {
           await requeueTerminalRlsFailures(userId);
         } catch (error) {
@@ -323,13 +355,14 @@ export const OfflineProvider = ({ children }) => {
       }
     });
     return () => subscription.unsubscribe();
-  }, [refreshSyncStatus]);
+  }, [ensureStartupRepairs, refreshSyncStatus]);
 
   /**
    * Initial load: check network state and sync status
    */
   useEffect(() => {
     const initialize = async () => {
+      await ensureStartupRepairs();
       // Check initial network state
       const netInfoState = await NetInfo.fetch();
       setIsOnline(Boolean(netInfoState.isConnected) && netInfoState.isInternetReachable !== false);
@@ -340,7 +373,7 @@ export const OfflineProvider = ({ children }) => {
     };
 
     initialize();
-  }, [refreshSyncStatus, triggerBackgroundSync]);
+  }, [ensureStartupRepairs, refreshSyncStatus, triggerBackgroundSync]);
 
   /**
    * Periodically refresh sync status while app is active

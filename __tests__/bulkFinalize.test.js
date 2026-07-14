@@ -81,8 +81,7 @@ it('finalizes a 250-row success batch in O(chunks) transactions (not O(N)), CAS 
 
   // seed references needed by offlineSync (school, programme, academic_year exist above for
   // the items' programme, but seedCoreData would add a duplicate 'programme-a' — seed the
-  // minimum the engine needs at startup: schools + the global school-1 school referenced by
-  // repairGroupOwnershipForSync).
+  // minimum the engine needs for the seeded assessment graph: the global school-1 row).
   await db.runAsync(`insert or ignore into schools (id, name) values ('school-1', 'Masi Primary')`);
 
   await seedAssessmentItemsBulk(db, 250);

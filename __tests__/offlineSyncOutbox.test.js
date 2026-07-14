@@ -31,6 +31,7 @@ import {
 import { createSessionsRepository } from '../src/db/repositories/sessionsRepository';
 import { createSyncOutboxRepository } from '../src/db/repositories/syncOutboxRepository';
 import { createTimeEntriesRepository } from '../src/db/repositories/timeEntriesRepository';
+import { repairGroupOwnershipForSync } from '../src/db/repositories/groupsRepository';
 
 const createSupabaseMock = ({ upsertResults = {}, rpcResults = {} } = {}) => {
   const calls = [];
@@ -480,7 +481,7 @@ describe('SQLite outbox offline sync', () => {
     }));
   });
 
-  test('repairs stale group ownership payloads before retrying failed sync', async () => {
+  test('syncs stale group ownership payloads after the versioned startup repair', async () => {
     await db.runAsync(`
       insert into staff_programme_assignments (
         id,
@@ -605,6 +606,7 @@ describe('SQLite outbox offline sync', () => {
         ),
       },
     });
+    await repairGroupOwnershipForSync({ database: db });
     const engine = createOutboxSyncEngine({ getAuthSession: liveTestSession, database: db, supabaseClient });
 
     const result = await engine.syncAll();
@@ -633,7 +635,7 @@ describe('SQLite outbox offline sync', () => {
     expect(await db.getFirstAsync('select count(*) as count from sync_outbox')).toEqual({ count: 0 });
   });
 
-  test('repairs missing group assignment before retrying stale membership sync', async () => {
+  test('syncs a stale membership after the versioned startup repair creates its assignment', async () => {
     await db.runAsync(`
       insert into staff_programme_assignments (
         id,
@@ -736,6 +738,7 @@ describe('SQLite outbox offline sync', () => {
     `);
 
     const { supabaseClient, calls } = createSupabaseMock();
+    await repairGroupOwnershipForSync({ database: db });
     const engine = createOutboxSyncEngine({ getAuthSession: liveTestSession, database: db, supabaseClient });
 
     const result = await engine.syncAll();

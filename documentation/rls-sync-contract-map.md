@@ -167,6 +167,16 @@ Resolved (issue #47): the pending-local guard keys on `id`, but the active-pair 
 
 Tests: `__tests__/serverPullGuard.test.js`, `__tests__/pullReconcile.integration.test.js`, `__tests__/pullReconcileOffline.integration.test.js`, `__tests__/ChildrenContextPull.integration.test.js`, `__tests__/ClassesContextPull.integration.test.js`, `__tests__/ChildrenContextPendingDelete.integration.test.js`, `__tests__/pullPersistenceBudget.test.js`, `__tests__/ChildrenContext.test.js`, `__tests__/ClassesContext.plan5.test.js`, `__tests__/preloadedChildData.test.js`, `__tests__/reconcileAcknowledgmentRpcMigration.test.js`, and `__tests__/rlsVisibilityProbe.test.js`.
 
+## Versioned Startup Repairs
+
+`src/services/startupRepairs.js` is the only standing hook for healing SQLite/outbox state already written by an older faulty build. Recipes have positive, strictly increasing versions and unique names. Each recipe must identify a proven, already-fixed failure cohort and be idempotent. A broad reset of terminal or failed rows is forbidden because terminal state can represent a genuine RLS or relational denial.
+
+The durable `local_state.startup_repair_version` marker advances after each recipe succeeds. Recipe work and the marker are intentionally separate commits: a kill between them may rerun an idempotent recipe, while the reverse order could permanently skip unfinished repair. A failed recipe leaves its version unapplied, is reported as `startup_repair_failed`, does not block the app, and retries on the next launch. A marker newer than the running code is never downgraded.
+
+`OfflineContext` creates one repair promise per provider lifetime. Initial status hydration, auth-restore healing, and every manual/background upload await that same promise, so sync cannot race a repair. Version 1 runs the former `repairGroupOwnershipForSync` cutover heal once, repairing stale `groups` and `child_group_memberships` rows/outbox payloads and creating missing `group_ea_assignments`. The sync engine no longer scans for this historical condition on every pass.
+
+Tests: `__tests__/startupRepairs.test.js`, `__tests__/OfflineContext.test.js`, `__tests__/groupsRepository.test.js`, and the repaired group/membership tracers in `__tests__/offlineSyncOutbox.test.js`.
+
 ## Auth-Restore RLS Heal
 
 Auth-loss `42501` failures are recoverable only when they were written without a live session marker. `OfflineContext` calls `offlineSync.requeueTerminalRlsFailures()` on `SIGNED_IN`, `TOKEN_REFRESHED`, and `INITIAL_SESSION` events that include a session. The engine resolves ownership against the restored user before requeueing, so a new user cannot revive another user's quarantined outbox rows.

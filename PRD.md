@@ -433,6 +433,13 @@ User Action → Local AsyncStorage → UI Update → Sync Queue → Supabase →
 - [x] Return unattempted rows to pending without incrementing retry or failure counters
 - [x] Surface deferred fallback work in sync results and operational observability
 
+#### 2026-07-14 Versioned startup repair follow-up
+- [x] Add a monotonic, durable startup repair registry with one marker per completed version
+- [x] Make every recipe idempotent and advance the marker only after it succeeds
+- [x] Gate manual, background, and auth-triggered sync behind one shared repair promise
+- [x] Move the cutover-only group ownership repair out of every sync pass and into repair version 1
+- [x] Report startup repair failures without blocking the app; retry them on the next launch
+
 ### Phase 7: Polish & Production Prep (Partially Complete)
 - [x] Error handling across all screens — Snackbar standardised across 6 screens; Alert reserved for destructive confirmations only
 - [x] Loading states — ActivityIndicator on SessionHistoryScreen; Create/Save button spinners on GroupManagementScreen

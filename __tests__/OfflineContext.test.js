@@ -5,8 +5,13 @@ import NetInfo from '@react-native-community/netinfo';
 import { OfflineProvider, useOffline } from '../src/context/OfflineContext';
 import { supabase } from '../src/services/supabaseClient';
 import { getSyncStatus, requeueTerminalRlsFailures, syncAll } from '../src/services/offlineSync';
+import { runStartupRepairs } from '../src/services/startupRepairs';
 import { syncStateRepository } from '../src/db/repositories/syncStateRepository';
-import { reportSyncResult, reportSyncStatus } from '../src/services/observability';
+import {
+  captureOperationalError,
+  reportSyncResult,
+  reportSyncStatus,
+} from '../src/services/observability';
 
 const appStateCurrentStateDescriptor = Object.getOwnPropertyDescriptor(AppState, 'currentState');
 
@@ -14,6 +19,15 @@ jest.mock('../src/services/offlineSync', () => ({
   getSyncStatus: jest.fn(),
   requeueTerminalRlsFailures: jest.fn(async () => 0),
   syncAll: jest.fn(),
+}));
+
+jest.mock('../src/services/startupRepairs', () => ({
+  runStartupRepairs: jest.fn(async () => ({
+    success: true,
+    fromVersion: 0,
+    toVersion: 1,
+    applied: [],
+  })),
 }));
 
 jest.mock('../src/services/supabaseClient', () => ({
@@ -81,6 +95,12 @@ describe('OfflineContext Plan 4 sync API', () => {
     });
     syncAll.mockResolvedValue({ success: true, totalSynced: 0, totalFailed: 0 });
     requeueTerminalRlsFailures.mockResolvedValue(0);
+    runStartupRepairs.mockResolvedValue({
+      success: true,
+      fromVersion: 0,
+      toVersion: 1,
+      applied: [],
+    });
     syncStateRepository.getPullState.mockResolvedValue(null);
     syncStateRepository.getReconcileBreakerNotes.mockResolvedValue([]);
   });
@@ -116,6 +136,61 @@ describe('OfflineContext Plan 4 sync API', () => {
     });
 
     expect(syncAll).toHaveBeenCalledTimes(1);
+  });
+
+  test('runs startup repairs once before the first status read', async () => {
+    renderHook(() => useOffline(), { wrapper });
+    await waitFor(() => expect(getSyncStatus).toHaveBeenCalled());
+
+    expect(runStartupRepairs).toHaveBeenCalledTimes(1);
+    expect(runStartupRepairs.mock.invocationCallOrder[0])
+      .toBeLessThan(getSyncStatus.mock.invocationCallOrder[0]);
+  });
+
+  test('manual sync waits for the shared startup repair before uploading', async () => {
+    let finishRepair;
+    runStartupRepairs.mockReturnValueOnce(new Promise((resolve) => {
+      finishRepair = resolve;
+    }));
+    const rendered = renderHook(() => useOffline(), { wrapper });
+
+    let syncPromise;
+    act(() => {
+      syncPromise = rendered.result.current.syncNow();
+    });
+    await act(async () => Promise.resolve());
+    expect(syncAll).not.toHaveBeenCalled();
+
+    await act(async () => {
+      finishRepair({ success: true, fromVersion: 0, toVersion: 1, applied: [] });
+      await syncPromise;
+    });
+    expect(syncAll).toHaveBeenCalledTimes(1);
+  });
+
+  test('a failed startup repair is reported, does not block the app, and is not retried this launch', async () => {
+    const repairError = Object.assign(new Error('repair failed'), {
+      repairVersion: 2,
+      repairName: 'repair-two',
+      completedVersion: 1,
+    });
+    runStartupRepairs.mockRejectedValueOnce(repairError);
+    renderHook(() => useOffline(), { wrapper });
+
+    await waitFor(() => expect(getSyncStatus).toHaveBeenCalled());
+
+    expect(runStartupRepairs).toHaveBeenCalledTimes(1);
+    expect(captureOperationalError).toHaveBeenCalledWith(
+      expect.objectContaining({ message: 'repair failed' }),
+      {
+        category: 'startup_repair_failed',
+        context: {
+          repairVersion: 2,
+          repairName: 'repair-two',
+          completedVersion: 1,
+        },
+      }
+    );
   });
 
   test('refreshSyncStatus surfaces persisted breaker notes as needs-attention state', async () => {

@@ -15,7 +15,6 @@ import {
   syncStateRepository,
 } from '../db/repositories/syncStateRepository';
 import { resolveRecordOwners } from '../db/repositories/outboxOwnership';
-import { repairGroupOwnershipForSync } from '../db/repositories/groupsRepository';
 import {
   academicYearsRepository,
   assessmentWindowsRepository,
@@ -1364,8 +1363,7 @@ export const createOutboxSyncEngine = ({
     try {
       await resolveDatabase(database);
 
-      // Recover rows left in_flight by a prior interrupted pass FIRST and best-effort, so a later
-      // preflight failure (e.g. repairGroupOwnershipForSync throwing) can't keep them stranded.
+      // Recover rows left in_flight by a prior interrupted pass FIRST and best-effort.
       if (typeof outboxRepository.resetInFlight === 'function') {
         try {
           await outboxRepository.resetInFlight({ ownerUserId: passUserId });
@@ -1374,16 +1372,6 @@ export const createOutboxSyncEngine = ({
           result.success = false;
           result.preflightErrors.push({ step: 'resetInFlight', error: errorMessage(resetError) });
         }
-      }
-
-      // Group-ownership repair is best-effort: its failure must NOT block unrelated tables from
-      // syncing, and must NOT reject the pass before resetInFlight/updateSyncMeta have run.
-      try {
-        await repairGroupOwnershipForSync({ database });
-      } catch (repairError) {
-        console.error('syncAll: repairGroupOwnershipForSync failed (continuing):', repairError);
-        result.success = false;
-        result.preflightErrors.push({ step: 'repairGroupOwnership', error: errorMessage(repairError) });
       }
 
       const readyRecords = sortByPushOrder(

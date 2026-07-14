@@ -28,6 +28,7 @@ module.exports = {
     '<rootDir>/__tests__/bulkFinalize.test.js',
     '<rootDir>/__tests__/batchFailureSemantics.test.js',
     '<rootDir>/__tests__/syncErrorGuard.test.js',
+    '<rootDir>/__tests__/startupRepairs.test.js',
     '<rootDir>/__tests__/syncContractCompleteness.test.js',
     '<rootDir>/__tests__/forceStopReopenOutbox.test.js',
     '<rootDir>/__tests__/serverPullGuard.test.js',
