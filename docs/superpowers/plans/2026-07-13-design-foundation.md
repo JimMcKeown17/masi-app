@@ -114,10 +114,10 @@ Convergence pass (verdict BUILD-WITH-FIXES; all applied to the text above on 202
 
 **Files:** create `src/components/assessment/AssessmentInstructions.js`, `CaptureHeader.js`, `EndAssessmentButton.js` (+ suites); modify `src/screens/assessments/LetterAssessmentScreen.js`, `SequentialAssessmentScreen.js`.
 
-- [ ] RED: `AssessmentInstructions` renders the title, child name, "language - Attempt #N", each step in order, and fires `onStart`/`onCancel`; `CaptureHeader` renders the countdown, `"{pageLabel} {n} of {total}"`, and `total` dots with the active one marked; `EndAssessmentButton` fires the Alert with the exact copy ("End Assessment?", "End the assessment now and record current results?", Cancel + destructive End) and calls `onEnd` only on End.
-- [ ] GREEN: extract; both capture screens consume the three components; the 16 duplicated style keys move with them.
-- [ ] The existing capture suites (`expiry`, `plan5`, `renderCount`, `renderIsolation` for Letter; `expiry`, `renderCount` for Sequential) must pass **unmodified**, including the timer's render isolation.
-- [ ] Commit: `refactor(assessment): extract shared capture chrome`
+- [x] RED: `AssessmentInstructions` renders the title, child name, "language - Attempt #N", each step in order, and fires `onStart`/`onCancel`; `CaptureHeader` renders the countdown, `"{pageLabel} {n} of {total}"`, and `total` dots with the active one marked; `EndAssessmentButton` fires the Alert with the exact copy ("End Assessment?", "End the assessment now and record current results?", Cancel + destructive End) and calls `onEnd` only on End.
+- [x] GREEN: extract; both capture screens consume the three components; the 16 duplicated style keys move with them.
+- [x] The existing capture suites (`expiry`, `plan5`, `renderCount`, `renderIsolation` for Letter; `expiry`, `renderCount` for Sequential) must pass **unmodified**, including the timer's render isolation.
+- [x] Commit: `refactor(assessment): extract shared capture chrome`
 
 ### Task 7: Roster virtualization (audit #8) — REVISED per R1 and R2
 
@@ -139,9 +139,9 @@ Convergence pass (verdict BUILD-WITH-FIXES; all applied to the text above on 202
 
 ### Task 8: Wrap
 
-- [ ] Full gates: unit and integration, exact counts reported.
-- [ ] `documentation/LEARNING.md`: a short addendum on why the primitive plus a memoized scalar-prop row is the recipe (tie it to `LetterTile`), and why one dialog deliberately survived.
-- [ ] PRD progress entry; tick this plan's checkboxes.
-- [ ] Commit: `docs(design-foundation): wrap - checklists, learning note`
+- [x] Full gates: unit and integration, exact counts reported.
+- [x] `documentation/LEARNING.md`: a short addendum on why the primitive plus a memoized scalar-prop row is the recipe (tie it to `LetterTile`), and why one dialog deliberately survived.
+- [x] PRD progress entry; tick this plan's checkboxes.
+- [x] Commit: `docs(design-foundation): wrap - checklists, learning note`
 
 **Device gate (Jim, after merge):** open session capture with a real roster on a low-end Android and feel the difference; open every converted picker (school, grade, language, reading level, class, assessment language) and confirm it slides up as a sheet with the same options and the same outcome; run one full assessment in each capture mode; confirm the clock-in prompt still offers all three choices.
