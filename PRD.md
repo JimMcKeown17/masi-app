@@ -759,282 +759,53 @@ Requirements to be gathered as we progress through development phases.
 
 ## Development Progress
 
-> Consolidated from PROGRESS.md on 2026-04-05.
+> **This document is NOT the progress ledger, and must not be used as one.**
+>
+> It drifted badly by trying to be: as of 2026-07-13 it was missing the entire June 2026
+> Top-10 tranche (design tokens, sequential capture, field critical paths, child results),
+> the GPS/logger hardening, collision proofing, the assessment render-perf pack, and the
+> sync-status trust UX. All of them were merged. A reader would have concluded they were
+> unbuilt.
+>
+> The per-sprint checklists that used to live here duplicated `documentation/build-log.md`
+> line for line, and the duplicate is what rotted. They have been removed rather than
+> hand-synced, because hand-syncing two ledgers guarantees a third drift.
+>
+> | Question | Read |
+> |---|---|
+> | What was built, when, and did it pass? | `documentation/build-log.md` (Verification Register) |
+> | What is still open? | `documentation/open-work.md` |
+> | What must be checked on a device? | `documentation/device-gates-sqlite-backend-2026-07.md` |
+> | What is the RLS/sync contract? | `documentation/rls-sync-contract-map.md` |
+>
+> **What belongs in this file:** product requirements, tech stack, feature specifications,
+> domain rules, and the phase model below. Not status.
 
-### Current Status
-**Phase**: Field Testing Bug Fixes — Round 1
+### Phase model
 
----
+The original phase plan, kept because the phase numbers are still referenced elsewhere.
+Status here is deliberately coarse; the build log is authoritative.
 
-### In Progress
+| Phase | Scope | Status |
+|---|---|---|
+| 0 | Project setup | Complete |
+| 1 | Authentication & foundation | Complete |
+| 2 | Time tracking | Complete |
+| 3 | Children & groups management | Complete |
+| 4 | Session recording (Literacy Coach) | Complete |
+| 5 | Additional session forms (Numeracy, ZZ Coach, Yeboneer) | **Not started** |
+| 6 | Offline sync refinement | Complete, then superseded by the SQLite rebuild |
+| 7 | Polish & production prep | Partial — see `open-work.md` |
+| 8 | EGRA Letter Sound Assessment | Complete |
+| 9 | Letter Tracker | Complete |
+| 10 | Dashboard redesign | Complete |
 
-#### Design Foundation Sprint
-Branch: `improvement/design-foundation`
-Plan: `docs/superpowers/plans/2026-07-13-design-foundation.md`
-
-- [x] Task 0: Add the PRD progress checklist
-- [x] Task 1: Move group helpers out of the picker component
-- [x] Task 2: Build the shared BottomSheet primitive
-- [x] Task 3: Render the three existing sheets through BottomSheet
-- [x] Task 4: Convert class and child pickers to SelectSheet
-- [x] Task 5: Convert session and assessment pickers to SelectSheet
-- [x] Task 6: Extract shared assessment capture chrome
-- [x] Task 7: Virtualize the session roster
-- [x] Task 8: Close the sprint documentation and gates
-
-Design Foundation implementation complete 2026-07-13. Local Node 20 gates passed: unit `172 suites / 1031 tests`; integration `30 suites / 257 tests`. Native windowing and converted-overlay behavior remain in Jim's post-merge device gate.
-
-#### Improvements 2026-07 — Phase 1: Safety Net
-Branch: `improvement/p1-safety-net`
-Roadmap: `documentation/improvements-2026-07-roadmap.md` · Plan: `docs/superpowers/plans/2026-07-03-improvements-phase1-safety-net.md`
-
-- [x] Task 1: Deflake LetterMasteryPanel toggle test (state-before-sync-refresh reorder) — `cdb640f`, reviewed PASS
-- [x] Task 2: Treat NetInfo unknown reachability as online — `4682615`, reviewed PASS
-- [x] Task 3: Unsaved-changes leave guard on the session form — `585ae74`, reviewed PASS
-- [x] Task 4: Hot-path covering indexes (schema v5) — `79edfe0`, reviewed PASS
-- [x] Task 5: CI workflow for unit + integration suites — `9e7f33b`; first run green on PR #40 (2m31s)
-
-Phase 1 complete 2026-07-04: PR #40 open, all commits reviewed PASS, CI green. Merge decision + optional required-status-check setting are Jim's.
-
-#### Improvements 2026-07 - Phase 2: Data Integrity
-Branch: `improvement/p2-data-integrity`
-Roadmap: `documentation/improvements-2026-07-roadmap.md` · Plan: `docs/superpowers/plans/2026-07-04-improvements-phase2-data-integrity.md`
-
-- [x] Task 1: Shared mastery-state loader; word assessments no longer wipe tracker mastery - `c909693`
-- [x] Task 2: LetterMasteryPanel reads through the shared mastery-state loader - `9875f6a`
-- [x] Task 3: Promote time tracking to a single-truth TimeTrackingContext - `c605452`
-- [x] Task 4: Repository guard prevents overlapping open time entries - `ee7a51a`
-- [x] Task 5: Clock-out re-resolves the active entry before closing - `2f48faf`
-- [x] Task 6: Leaf `ElapsedTime` ticker and 30s auto-clockout watchdog - `3bd5507`, reviewed PASS
-
-Phase 2 complete 2026-07-04: PR #41 open, all six task commits reviewed PASS, CI green (unit 120/664, integration 23/147). Merge + device gate are Jim's.
-
-Phase 2 local gates 2026-07-04: unit suite `120/664` and integration suite `23/147` green under Node 20. `documentation/rls-sync-contract-map.md` untouched. Local commit/push/PR gate pending because this sandbox cannot create `.git/index.lock`.
-
-#### Improvements 2026-07 - Phase 3: Amplifier
-Branch: `improvement/p3-amplifier`
-Roadmap: `documentation/improvements-2026-07-roadmap.md` · Plan: `docs/superpowers/plans/2026-07-04-improvements-phase3-amplifier.md`
-
-- [x] Task 1: Gate automatic sync on ready work instead of backed-off counts - `18b20b6`
-- [x] Task 2: Bail the 30-second status poll when the snapshot is unchanged - `9391b5c`
-- [x] Task 3: Stabilize NetInfo/AppState subscriptions and memoize OfflineContext - `238e133`
-- [x] Task 4: Memoize ChildrenContext and cut the Offline render cascade - `bfae863`
-- [x] Task 5: Memoize Classes, Lookups, Auth, and TimeTracking providers - `8b442bc`
-
-Phase 3 implementation complete 2026-07-12: unit suite `145/843` and integration suite `24/185` green under Node 20. No sync payload, RLS, outbox-ordering, or schema contract changed; `documentation/rls-sync-contract-map.md` remains untouched. Push, PR, CI, merge, and the post-merge device gate remain with the orchestrator and Jim.
-
-#### Sprint 2A: Outbox Ownership + Deterministic Error Budget
-Branch: `improvement/s2-outbox-ownership-and-error-budget`
-Plan: `docs/superpowers/plans/2026-07-12-sprint2-outbox-ownership-error-budget.md`
-
-- [x] Schema v6 adds local-only `sync_outbox.owner_user_id` - `6b38fb6`
-- [x] Shared ownership resolvers serve enqueue and auth-restore requeue - `7ec9a51`
-- [x] Every domain enqueue stamps ownership, including partial archives and hard deletes - `d47be76`
-- [x] Readiness, status, in-flight recovery, and upload passes are owner-scoped; mid-pass user changes abort before server requests - `f667c99`
-- [x] Deterministic server errors receive 8 attempts before needs-attention; forced Sync Now can recover them - `3a90baf`
-- [x] Contract map, plan checklist, and refactor log updated
-
-Sprint 2A implementation complete 2026-07-12: one EA's session cannot push or terminalize another EA's owned outbox rows; NULL-owner pre-v6 rows remain grandfathered. Final Node 20 gates: unit `149/873` and integration `24/187` green. Device handover and forced-error validation remain Jim-owned after merge.
-
-#### Sprint 2B: Publish-First Auth + Idempotent Child Delete
-Branch: `improvement/s2-auth-and-delete`
-Plan: `docs/superpowers/plans/2026-07-12-sprint2-auth-publish-first-idempotent-delete.md`
-
-- [x] Restored users publish immediately while profile and reference refreshes run independently in the background - `a78325d`
-- [x] Idempotent absent-child RPC replacement authored with a static migration guard; remote application remains orchestrator-owned - `5f83683`
-- [x] Owner-scoped pending hard deletes suppress pulled children and their FK relationships before merge or persistence - `4fa0457`
-- [x] Contract map, plan checklist, and refactor log updated
-
-Sprint 2B implementation complete 2026-07-12. Final Node 20 gates: unit `151/879` and integration `25/190` green. The migration is authored only and still needs orchestrator application and live verification; the airplane-mode cold-start and force-kill delete retry checks remain Jim-owned device gates.
-
-#### Sprint 3: Read-Path Efficiency and Local Dates
-Branch: `improvement/s3-read-path`
-Plan: `docs/superpowers/plans/2026-07-12-sprint3-read-path.md`
-
-- [x] Shared SAST local-date utility and both live UTC-day fixes - `d0a5b09`
-- [x] Default batched repository hydration, SQL bounds, and aggregate reads - `3c32107`
-- [x] Aggregate-backed Home stats, EA-scoped histories, and SectionList work history - `f38d62e`
-- [x] Launch-time assessment attempt counts independent of screen preload - `18c26af`
-- [x] Owner-resolution fast paths, changed-child mastery prefetch, and navigate-on-commit - `7599628`
-- [x] Plan checklist, learning note, and refactor log updated
-
-Sprint 3 implementation complete 2026-07-12. Query budgets are pinned at 3 reads for 30 sessions, 3 reads for 30 assessments, and 5 reads for the Home repository bundle. Completion writes remain intentionally row-based: 124 writes and 0 owner-resolution reads for a 61-item assessment; 22 writes and 0 owner-resolution reads for a 10-attendee session. Final Node 20 gates: unit `156/903` and integration `25/190` green. The device experience gate remains Jim-owned after merge.
-
-#### Sprint 4A: Storage Facade Retirement and Batched Pull Persistence
-Branch: `improvement/s4a-facade-retirement`
-Plan: `docs/superpowers/plans/2026-07-13-sprint4a-facade-retirement.md`
-
-- [x] Pin consumer-visible repository row shapes before facade removal
-- [x] Move device settings, reference data, children, groups, memberships, and classes onto repository-owned paths
-- [x] Persist each pulled table in one happy-path writer transaction with per-row fallback for constraint failures
-- [x] Split cache refresh from network pulls and remove duplicate refresh work
-- [x] Delete `src/utils/storage.js` and add local migration v7 for retired sidecar cleanup
-- [x] Update the pull merge contract, migration pins, and final unit and integration gates
-
-Sprint 4A implementation complete 2026-07-13 after the R1-R15 review loop. Final Node 20 gates: unit `161/929` and integration `28/210` green. Sprint 4A was intentionally not releasable on its own. That restriction is now lifted for the Sprint 4 tree because Sprint 4B has merged foreground and reconnect pull scheduling into the same tree.
-
-#### Sprint 4B: Server Removal Reconcile and Pull Scheduling
-Branch: `improvement/s4b-pull-reconcile`
-Plan: `docs/superpowers/plans/2026-07-13-sprint4b-pull-reconcile.md`
-
-- [x] Return relationship-specific pull scopes with completeness and failure classification
-- [x] Persist and reconcile acknowledged relationship removals without outbox writes
-- [x] Derive Children and Classes state from SQLite and remove `mergeServerRows`
-- [x] Add staleness-gated foreground and reconnect pulls with durable pull stamps
-- [x] Add mass-end breaker recovery and restart acceptance coverage
-- [x] Update the pull contract, learning note, refactor log, and final gates
-
-Sprint 4B implementation complete 2026-07-13 after the S1-S13 and convergence review loop. Final Node 20 gates: unit `162/995` and integration `30/257` green. The Sprint 4 tree is releasable again because remote roster changes now pull on foreground and reconnect, reconcile into SQLite, and remain correct across an offline restart.
-
-#### Sync auth hardening (#43-45)
-Branch: `fix/sync-auth-hardening`
-Plan: `docs/superpowers/plans/2026-07-06-sync-auth-hardening.md`
-Status: PR pending
-
-- [x] Task 1: Sessionless sync pass auth gate - `6a15e73`
-- [x] Task 2: Mid-cycle auth-loss downgrade and authenticated `42501` marker - `b64a9b9`
-- [x] Task 3: Auth-restore heal for terminal RLS outbox rows - `6335bd6`
-- [x] Task 4: OfflineContext auth-event wiring for restore heal - `7a3f7a2`
-- [x] Task 5: Persisted Supabase Auth session reader - `dbd780f`
-- [x] Task 6: AuthContext cold-start restore gate and echo-proof local sign-out - `83f14f1`
-
-Sync auth hardening complete 2026-07-07: PR pending; full local gates green under Node 20 (unit 125/712, integration 24/162). Contract map updated for issues #43/#44; #45 covered by the cold-start restore entry.
-
-#### SQLite RLS/App Contract Closeout
-Branch: `plan-5/context-screen-migration`
-
-Clean-slate SQLite backend/app wiring audit after physical-device group failures. Goal: close RLS policy drift and sync-order risks without weakening backend security. As of 2026-05-26, the engineering gate is closed and SQLite is the backend going forward.
-
-- [x] Audit live `masi-app-sqlite` policies, grants, triggers, RLS enablement, views, and staging row health
-- [x] Add RLS contract migration for assignment archive policies, immutable assignment identity triggers, class assigned-EA writes, and helper-aligned assessment/mastery reads
-- [x] Add operation-aware archive ordering and dependency propagation in the sync outbox
-- [x] Tighten table grants so app roles do not keep non-DML privileges such as `TRUNCATE`
-- [x] Push cleanup migrations to `masi-app-sqlite`
-- [x] Verify with migration contract tests, outbox behavior tests, staging advisors, live catalog queries, and a rollback-only authenticated RLS smoke test
-- [x] Restore creator SELECT upsert visibility and immutable assignment insert retry semantics after iPhone preview-build failures
-- [x] User iPhone preview-build validation reported the new build working correctly
-- [x] Adopt `masi-app-sqlite` as the forward backend for future documentation and feature work
-
-#### Schema Hardening — Lookups, Build B, and Destructive-Drop Gates
-Branches: `schema-hardening-build-a`, `schema-hardening-build-b`
-
-Rev 10 plan implementation for canonical schools/job titles and safe removal of legacy text columns. Build A is the compatibility release: it reads both legacy and lookup shapes, writes both `sessions.session_type` and `sessions.session_type_id` when resolvable, caches `job_titles`, and sanitizes old unsynced AsyncStorage records. Build B is the final-safe release: after `sessions.session_type` is nullable, it writes only `session_type_id`, strips leftover local `session_type`, and marks exports as `build-b`. Migration 17 remains gated on tester export evidence.
-
-- [x] Create migration 13 to capture `users.job_title` enum drift and nullable `children.age` drift
-- [x] Create migration 14 for `job_titles`, school metadata columns, FK columns, and user self-update RLS lockdown
-- [x] Create migration 15 for FK backfills and CHECK constraints
-- [x] Create future migration 16 for relaxing `sessions.session_type` before Build B
-- [x] Create future migration 17 for dropping legacy columns and `get_children_in_group`
-- [x] Add robust CSV parsing, school seed script, and FK-based tester import script
-- [x] Add `LookupsContext`, profile normalization, Build A session dual-write, sanitizer bootstrap, and export metadata
-- [x] Add Jest coverage for profile normalization, sync stripping, pending session enrichment, sanitizer idempotency, and session type resolution
-- [x] Apply migrations 13 and 14 in Supabase for Build A compatibility
-- [x] Ship Build A OTA on `production` runtime `1.1.0`
-- [x] Apply migration 16 to relax `sessions.session_type` before Build B
-- [x] Implement Build B app code: no legacy `session_type` writes, Build B sanitizer cleanup, export marker, and `app.json` `1.2.0`
-- [ ] Apply migration 15 after school seed/backfill preflight queries
-- [ ] Run `scripts/seedSchools.js --dry-run`, then seed schools with service-role credentials
-- [ ] Build and distribute Build B `1.2.0` native installs to every active tester
-- [ ] Collect Build B export JSON from every active install
-- [ ] Apply migration 17 only after the full destructive-drop gate and `pg_dump` snapshot
-
-#### Soft-Delete via `hidden_at` — "Deleted Children Reappear" Fix
-Branch: `fix/hide-children-soft-delete`
-
-Field testers report that tapping "Delete Child" disappears the child until next sync, then it reappears. Root cause: `deleteChild` only removed the row from local AsyncStorage; server still had it, so the next merge resurrected it. Fix: soft-delete via new `children.hidden_at` column, with the context filtering at the consumer boundary (not at the server) to preserve cross-device sync correctness.
-
-- [x] Migration 12: `ADD COLUMN IF NOT EXISTS hidden_at TIMESTAMPTZ NULL` on `children`
-- [x] `ChildrenContext`: derive `visibleChildren` (filtered) and expose alongside `allChildren` (full); add `getChildById`
-- [x] `ChildrenContext.deleteChild`: soft-delete with validation, functional setState, sync trigger
-- [x] `ChildrenContext.getChildrenInGroup`: filter against `visibleChildren` so hidden children can't leak into pickers
-- [x] `AssessmentHistoryScreen`: switch to `allChildren` for name resolution, render "(removed)" badge
-- [x] `dashboardStats.getAssessmentsTabStats`: filter assessments by active child IDs
-- [x] Remove dead `storage.deleteChild`
-- [x] DEPLOYMENT.md: un-hide recovery recipe + one-time-cleanup note for the OTA
-- [x] LEARNING.md: narrative chapter on filter-at-consumer-not-server lesson
-- [x] Tests: `__tests__/ChildrenContext.hiddenChildren.test.js`, `__tests__/dashboardStats.hiddenChildren.test.js`
-- [x] Run jest suite — 49/49 green (16 new + 33 existing)
-- [x] Apply migration 12 — applied via Supabase MCP on 2026-04-30, version `add_children_hidden_at`
-- [x] RLS preflight — confirmed `Users can update assigned children` policy via `pg_policy` query
-- [x] OTA shipped — update group `363f8141-3784-4833-99fe-14b97af2169e`, message: `fix: soft-delete children via hidden_at — universal hide stops resurrection on sync`. Field-tester smoke test will happen as devices pick up the OTA over the next ~24h.
-
-#### Sync Engine Bug Fixes — Ghost Children & Junction Errors
-Branch: `main` (direct fix — field-critical)
-
-Root cause: `loadChildren()` merge logic dropped locally synced children when their `staff_children` junction hadn't synced yet, causing cascading FK errors.
-
-- [x] Fix merge logic in `loadChildren()`, `loadChildrenGroups()`, `loadGroups()` — preserve all local records not in server response
-- [x] Apply same fix to `ClassesContext.js`, `TimeEntriesListScreen`, `SessionHistoryScreen`, `AssessmentHistoryScreen`
-- [x] Fix `onConflict` keys: `staff_children` → `staff_id,child_id`, `children_groups` → `child_id,group_id`, `classes` → `staff_id,name,school_id`
-- [x] Add terminal error classification (`classifyError`): 23505 → mark synced, 23503/42501 → quarantine immediately
-- [x] Enforce explicit sync order (`SYNC_ORDER` array) with dependency gating — skip junction tables when parent fails
-- [x] One-time orphan repair (`repairOrphanedJunctions`) — re-queues stuck children and junction records on upgrade
-- [ ] End-to-end device testing
-- [ ] Push update via EAS
-
-#### Field Testing Bug Fixes — Round 1
-Branch: `bugfix/field-testing-round-1`
-
-- [x] Bug 1: Last Letter Attempted — prevent selecting before last correct letter (added `minIndex` to bottom sheet)
-- [x] Bug 2: Auto-default last letter when child finishes entire test (skip bottom sheet if last letter correct)
-- [x] Bug 3: Assessment ranking sorted by total correct count, not percent
-- [x] Bug 4: Back button not working — added React-rendered `headerLeft` to all Stack screens
-- [x] Feature 5: Tappable rows on ranking screens — AssessmentRanking → AssessmentDetail, LetterMastery → LetterTracker
-- [x] Feature 6: "Unassessed" stat pill on Children tab navigates to Assessments tab
-- [x] Feature 7: Light red background on Clock card when not clocked in
-- [x] Bug 8: Letter Tracker header double-counts mastered letters (Set union dedup)
-- [x] Bug 9: Letter mastery sync 23505 duplicate key — changed `onConflict` to composite key + local dedup
-- [ ] End-to-end verification on device
-- [ ] Merge to main
-
-#### Phase 10: Dashboard Redesign
-- [x] Branch setup (`feature/dashboard-redesign`)
-- [x] Create directories (`src/screens/insights/`, `src/components/dashboard/`)
-- [x] Add `.superpowers/` to `.gitignore`
-- [x] Utility layer — `src/utils/dashboardStats.js`
-  - [x] `getDaysWorkedThisMonth`, `getWeekSessionCounts`, `getSessionsThisMonth`
-  - [x] `getAssessmentCoverage`, `getLetterMasteryRanking`, `getAssessmentRanking`
-  - [x] `getSessionCountRanking`, tab stat functions
-- [x] Reusable components
-  - [x] `StatBar` — 3-pill stat row component
-  - [x] `RankedBarRow` — ranked horizontal bar row
-- [x] Home screen redesign
-  - [x] Gradient header with inline monthly stats
-  - [x] Compact clock card
-  - [x] Sessions This Week card (day squares)
-  - [x] Assessment Coverage progress bar
-  - [x] Performance Insight drill-down buttons
-- [x] Navigation & ranking screens
-  - [x] Register 3 new screens in AppNavigator
-  - [x] LetterMasteryRankingScreen
-  - [x] AssessmentRankingScreen
-  - [x] SessionCountRankingScreen
-- [x] Tab stat bars
-  - [x] Children tab: # children, # classes, # unassessed
-  - [x] Sessions tab: this week, this month, avg/child + not-seen callout
-  - [x] Assessments tab: % assessed, total, avg accuracy
-- [x] Polish & end-to-end verification
-  - [x] Fixed context property naming (`children` not `childrenList`) in all 6 new screens
-  - [x] Fixed UTC→local timezone bug in date helpers (critical for UTC+2 South African users)
-  - [x] Fixed `created_at` tie-breaker missing in `getAssessmentsTabStats`
-  - [x] Fixed `letter_language` comparison to use `normalizeLanguageKey`
-  - [x] Fixed null accuracy handling in `getAssessmentRanking`
-  - [x] Expo dev server starts cleanly, zero IDE diagnostics
-
-#### Phase 9: Letter Tracker
-- [x] Supabase migration — `letter_mastery` table
-- [x] Pedagogical letter orders in egraConstants.js
-- [x] Mastery calculation utility (letterMastery.js)
-- [x] Storage CRUD methods for letter_mastery
-- [x] Sync integration with soft-delete support
-- [x] LetterTrackerScreen with grid UI
-- [x] Navigation route registration
-- [x] Entry point icon on ClassDetailScreen
-- [x] Documentation updates (egra_letter_sets.md, LEARNING.md)
-- [x] Session form integration — LetterTrackerBottomSheet + form restructure
-- [ ] End-to-end testing
+Since Phase 10 the work has been organised as sprints rather than phases (the SQLite
+cutover, the June Top-10 tranche, Improvements Phases 1-3, Sprints 1-4B, and the Design
+Foundation sprint). All of it is recorded in the build log.
 
 ---
+
 
 ### Completed Phases
 
@@ -1132,25 +903,35 @@ Branch: `bugfix/field-testing-round-1`
 ---
 
 ### Remaining Work
-- Phase 5: Additional session forms (Numeracy, ZZ Coach, Yeboneer)
-- Phase 7 remaining: security review, Android/iOS device testing, performance, deployment
-- Field testing bug fixes: end-to-end verification and merge
+
+**See `documentation/open-work.md`.** That is the single live backlog. This section used to
+list three bullets that had gone stale; keeping a second list here is how the drift started.
+
+The one item still worth naming at PRD level, because it is a *product* gap rather than an
+engineering one: **Phase 5, the additional session forms (Numeracy, ZZ Coach, Yeboneer),
+has not been started.** Only the Literacy Coach form exists, and the field requirements for
+the other three have never been gathered.
 
 ---
 
 ## Planned Admin Scripts
 
-These scripts are planned but not yet implemented. See the linked plan documents for full details.
+### 1. Seed Test Data Script — **not built**
+**Purpose**: Populate a test user account with realistic data (class, children, groups, sessions, assessments, time entries) for testing.
+**Plan**: [`documentation/seed_data_plan.md`](documentation/seed_data_plan.md) — ⚠️ **the plan is schema-dead.** It targets `staff_children`, `children_groups`, and the `children.class`/`teacher`/`school` text columns, none of which exist under the SQLite backend. It needs rewriting against the normalized schema, not executing.
 
-### 1. Seed Test Data Script
-**Purpose**: Quickly populate a test user account with fake but realistic data (class, children, groups, sessions, assessments, time entries) for testing the app.
-**Plan**: [`documentation/seed_data_plan.md`](documentation/seed_data_plan.md)
+### 2. Bulk Import Children & Groups — **not built**
+**Purpose**: Import real class lists (children + group assignments) for new users from spreadsheets. Most new users already have their children grouped; this wires up school, class, children, assignments, groups, and memberships in one run. **This is the onboarding rate-limiter and has the highest operational value of the three.**
+**Plan**: [`documentation/bulk_import_children_plan.md`](documentation/bulk_import_children_plan.md) — ⚠️ **also schema-dead**, same reason as above.
 
-### 2. Bulk Import Children & Groups
-**Purpose**: Import real class lists (children + group assignments) for new users from existing spreadsheets. Most new users already have their children grouped — this script wires up all the relationships (school, class, children, staff_children, groups, children_groups) in one run.
-**Plan**: [`documentation/bulk_import_children_plan.md`](documentation/bulk_import_children_plan.md)
+### 3. Staff User Creation Automation — **already built (this section is stale)**
 
-### 3. Staff User Creation Automation
+> `scripts/loadTestUsers.js` already does this: CSV → Supabase auth user + `public.users`
+> row, idempotent, with school and job-title lookup. The options analysis below is retained
+> only as the record of how the decision was reached. The remaining open question is whether
+> user creation ever needs to be delegated off Jim's laptop (option 3).
+
+#### Original analysis
 **Purpose**: Replace the manual multi-step workflow (Supabase Auth sign-up → copy UUID → Table Editor → insert `public.users` row with first_name/last_name/job_title/assigned_school) with a single command or form. Extend naturally to CSV bulk creation and pre-linking staff to their assigned children.
 
 **Problem today**: Creating one staff member requires ~8 clicks across two Supabase surfaces (Authentication + Table Editor) and manual UUID copy-paste. As the staff roster grows, this becomes the rate-limiter on onboarding.

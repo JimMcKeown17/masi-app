@@ -41,6 +41,40 @@ I1 (low-end Android roster scroll), B1 (indoor GPS 10s timeout).
 
 ---
 
+## 0b. Confirmed field bug — reading level does not persist
+
+**Reported by Jim, 2026-07-13. Root cause traced 2026-07-14. This is a spec gap, not a broken save.**
+
+A child's reading level, once set, is empty again in the next session.
+
+**It was never designed to persist.** There is no `reading_level` column on `children` — not in
+`src/db/migrations.js`, not in `supabase/migrations/`. The value is written only into the *session's*
+`activities` JSONB as `child_reading_levels` (`LiteracySessionForm.js:497`), and it is **never read
+back anywhere**. The form's state is `useState({})` (`:376`), so it starts empty every time.
+
+The PRD specified it that way: *"each selected child can have their current reading level recorded;
+stored as map in `activities.child_reading_levels`"* — i.e. a per-session observation, not child
+state. But the field mental model (and Jim's) is that a reading level is **a property of the child**
+that should pre-fill and only change when the child progresses. The spec is the bug.
+
+Note a previous commit (`d23853e`, "reading level dropdowns can't be changed after initial
+selection") fixed a *different*, UI-level bug — which is probably why this feels like a regression.
+
+**The fix requires a product decision first:** is reading level durable child state (pre-fills,
+editable, one current value) with the per-session value kept as history? That is almost certainly
+what is wanted, and it means an additive nullable `children.reading_level` column (local + server),
+a read-back into the form, and keeping the existing `activities` snapshot for the session record.
+
+**Related, unconfirmed:** Jim suspects letter-tracker mastery does not save when edited from the
+child screen. Investigation so far says it *should*: `LetterMasteryPanel` (rendered by both
+`ChildResultsScreen` and `LetterTrackerScreen`) writes immediately via
+`masteryRepository.saveLetterMasteryRecord` (`:144`). One plausible source of the *perception*:
+`getCellState` ranks `assessment` above `taught`, so toggling "taught" on a letter already mastered
+via assessment saves correctly but shows no visible change. **Needs a precise repro from Jim before
+any fix.**
+
+---
+
 ## 1. Still open from the 2026-07-12 audit
 
 Sixteen of the 21 findings are closed (see the build log). These five are not:
