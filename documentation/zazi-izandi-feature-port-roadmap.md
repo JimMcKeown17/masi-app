@@ -270,14 +270,14 @@ This is a feature family, not a single polish pass. Do not bundle it with Sessio
 
 ### 3.4 Group Picker Before Sessions
 
-- [ ] 🟡 Modify: decide whether sessions should start group-first.
+- [ ] 🟡 Modify: build sessions group-first after the access, identity, and authorization prerequisites are complete.
 
 | | |
 |---|---|
 | **Zazi behavior** | `GroupPickerScreen` auto-selects one group, shows cards for multiple groups, blocks if not clocked in, and has empty-state CTA. |
 | **Zazi source** | `src/screens/groups/GroupPickerScreen.js`, `src/utils/groupPickerPresentation.js` |
 | **Masi current state** | Masi session form lets the user select children directly; `group_ids` are currently left empty in `LiteracySessionForm`. |
-| **Recommendation** | Do not port this until Masi decides that sessions should store group context. If yes, do it before the completion screen. |
+| **Decision (Jim, 2026-07-14)** | Sessions will be group-first and store one durable `group_id`. The group's latest literacy-session letters, not per-child latest sessions, provide the "last time" context. Build this only after the access, identity, and authorization prerequisites in `open-work.md` §6 are complete. |
 | **Effort** | M-L |
 
 ### 3.5 Auto-Grouping CTAs and Preview
@@ -630,13 +630,12 @@ This section exists so future work does not rely on memory of "we checked Zazi."
 ## Open Product Decisions
 
 1. **Daily session goal:** What is Masi's target rule for the Sessions Today ring: global, role-based, programme-based, or user-configured?
-2. **Session group context:** Should Masi sessions be group-first and store `group_ids`, or remain child-first?
-3. **Today vs Sessions tab:** Keep current `Sessions` label, rename to `Today`, or create a hybrid?
-4. **Children auto-route:** Should staff land directly in their first class, or is the class list still the right root?
-5. **Session timer:** Does Masi need start/stop timing inside session capture, separate from clock-in/out?
-6. **Backfill:** Should field staff be allowed to log past sessions?
-7. **Login motif:** What Masi-specific visual should replace Zazi letter-rain if login gets redesigned?
-8. **Notification UX:** Is a Home inbox useful before push transport exists, or should notifications wait as one larger feature?
+2. **Today vs Sessions tab:** Keep current `Sessions` label, rename to `Today`, or create a hybrid?
+3. **Children auto-route:** Should staff land directly in their first class, or is the class list still the right root?
+4. **Session timer:** Does Masi need start/stop timing inside session capture, separate from clock-in/out?
+5. **Backfill:** Should field staff be allowed to log past sessions?
+6. **Login motif:** What Masi-specific visual should replace Zazi letter-rain if login gets redesigned?
+7. **Notification UX:** Is a Home inbox useful before push transport exists, or should notifications wait as one larger feature?
 
 ---
 

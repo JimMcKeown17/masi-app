@@ -32,11 +32,10 @@ This is the execution order, not a second backlog. The numbered sections below r
 1. **P0, validate what is already built:** execute the highest-signal physical-device gates (§0), beginning with G1, H3, I1, B1, and the new reading-level gate C6. This is the highest risk-reduction per hour because four completed sprints still have zero real-hardware passes.
 2. **P0, activation and device proof:** configure Sentry Cloud, then run the zero-class and observability device gates (§2/14a, §3). The class -> children onboarding, durable restart recovery, crash capture, and explicit sync-failure reporting are built and automated-green on the current branch; real-device behavior and live Sentry delivery remain unverified.
 3. **P1, structural data safety:** finish the live migration/probe gate for server-authoritative reconcile (§6; client and migration built 2026-07-14). Record-scoped dependency skipping, bounded failed-batch fallback, and the versioned startup repair registry were built 2026-07-14.
-4. **P1, high-frequency workflow payoff:** show last-session letters in the session form (§2/5). The child-row results navigation was built 2026-07-14; the remaining item is a contained change on a daily EA path.
-5. **P2, sync efficiency and recovery:** shorten the domain-pull queue monopoly, stop `created_at` perturbation/re-reads, expand safe batching, and add SQLite bootstrap recovery (§1, §2, §3).
-6. **P2, time-sensitive only when WelaPLUS resumes:** deliberately re-key `assessmentItemDomainId` before real SQLite-backend assessment data exists, but only as a standalone reviewed change (§7). Do not pull it forward merely because the current staging database is disposable.
-7. **P3, group-centred session model:** settle `GRANT_SUBJECTS`, group identity/collision rules, session `group_id` authorization, and then rebuild the group/session workflow in dependency order (§4, §6).
-8. **P4, latent correctness and polish:** fix attendee removal before any saved-session edit UI ships; then shared snackbars, picker clears, typography rollout, search/filter gaps, dependency cleanup, and diagnostics (§2, §3). The attendee bug is real at repository level, but no current screen edits a saved session, so it is not the highest-ROI immediate build.
+4. **P2, sync efficiency and recovery:** shorten the domain-pull queue monopoly, stop `created_at` perturbation/re-reads, expand safe batching, and add SQLite bootstrap recovery (§1, §2, §3).
+5. **P2, time-sensitive only when WelaPLUS resumes:** deliberately re-key `assessmentItemDomainId` before real SQLite-backend assessment data exists, but only as a standalone reviewed change (§7). Do not pull it forward merely because the current staging database is disposable.
+6. **P3, group-centred session model:** settle `GRANT_SUBJECTS`, group identity/collision rules, session `group_id` authorization, and then rebuild the group/session workflow in dependency order (§4, §6). The group's latest literacy-session letters belong in that workflow, not in the current child-first form.
+7. **P4, latent correctness and polish:** fix attendee removal before any saved-session edit UI ships; then shared snackbars, picker clears, typography rollout, search/filter gaps, dependency cleanup, and diagnostics (§2, §3). The attendee bug is real at repository level, but no current screen edits a saved session, so it is not the highest-ROI immediate build.
 
 The real-data seed/import work is deliberately **not in the active execution order**. Jim deferred it
 on 2026-07-14 because the source of truth is an existing Airtable/Postgres system whose table shape,
@@ -160,10 +159,10 @@ class creation, so Home and My Children resume it after a force-quit. Group crea
 this version. Automated verification: 178 unit suites / 1,074 tests, 30 SQLite integration suites /
 261 tests, and an Android production export are green; physical gates M1-M10 are still open.
 
-### 5 — Child Results workflow remnants (Top-10 item 5, partial)
-The panel and the Children-tab stack shipped, but one capture-flow change remains:
+### 5 — Child Results workflow (Top-10 item 5)
+The child-results work is complete. Its former capture-flow remainder now belongs to the group-centred session model:
 - [x] **Child row opens Child Results, built 2026-07-14.** The entire roster row now opens the child's results in the Children-tab stack. The old redundant chart shortcut became an explicit pencil edit action, so editing remains discoverable without making it the primary meaning of tapping a child. The letter-tracker action is unchanged.
-- **Last-session letters never surface in the session form.** Item 5 #4 (show the letters a child last worked on, inside the capture form) was not built.
+- [x] **Last-session-letters meaning settled 2026-07-14; implementation moved to §4.** Jim chose the group-based interpretation: show the assigned group's latest literacy-session letters when group-first capture is built. Do not add child-by-child latest-session summaries to the current form; selected children can have different histories, and that temporary model would contradict one session = one group-block.
 
 ### 5b — Reconciliation doc-drift (2026-07-14)
 A full item-by-item reconciliation of the June Top-10 and the ZZ port against the code (2026-07-14) found `improvements-2026-07.md:6`'s summary line **overstates completion**: it lists items "1, 2, 3, 4, 8 and most of 5 are done", but verified against the tree, **item 2 was missing 2c** (closed 2026-07-14), **item 3 is missing its entire typography half** (item 15 below), and **item 5 was missing the row-tap flip** (closed 2026-07-14). Treat this file, not that summary line, as the backlog. The reconciliation confirmed every other spot-checked claim in this file holds against the code.

@@ -40,6 +40,7 @@ The record spans two eras with two different shapes, both preserved as written:
 
 | Date | Command/Check | Result | Notes |
 | --- | --- | --- | --- |
+| 2026-07-14 | Last-session letters product decision recorded | Decision complete; no runtime change | Jim chose the group-based interpretation. Session capture will become group-first, and "last session letters" will show the assigned group's latest literacy-session letters. The current child-first form will not receive a temporary per-child history summary. Updated `CONTEXT.md`, `open-work.md`, and the Zazi feature-port roadmap so this is no longer incorrectly prioritized as a contained P1 form change. |
 | 2026-05-20 | `rg -n "clean-slate|sqlite-refactor-log|Test Driven Development|backwards-compatible|app.config.js|TDD skill|/Users/jimmckeown/Development/masi-app/.agents/skills/tdd" AGENTS.md CLAUDE.md` | Passed | Confirmed both agent context files mention the refactor, log, TDD skill, compatibility exception, and `app.config.js` direction. |
 | 2026-05-20 | `rg -n "[[:blank:]]$" AGENTS.md CLAUDE.md docs/superpowers/specs/2026-05-20-sqlite-migration-design.md docs/superpowers/plans/2026-05-20-sqlite-*.md documentation/sqlite-refactor-log.md` | Passed | No trailing whitespace in updated docs. |
 | 2026-05-21 | `supabase --version` | Passed | CLI version `2.95.4`. |
@@ -482,6 +483,7 @@ The record spans two eras with two different shapes, both preserved as written:
 
 | Date | Decision | Rationale | Revisit Trigger |
 | --- | --- | --- | --- |
+| 2026-07-14 | Make session capture group-first and derive "last session letters" from the group's latest literacy session. | One session is one group-block, `sessions.group_id` is the durable historical context, and per-child latest sessions can disagree inside one selection. A temporary child-by-child fold-in would encode the wrong unit of work and be discarded by the group-centred rebuild. | Masi changes the settled rule that one session represents one group-block of work. |
 | 2026-05-20 | Use a clean-slate SQLite cutover instead of migrating local AsyncStorage domain data. | Field users can install a fresh app and restart from the new backend, which removes the riskiest compatibility work. | User decides current field-test device data must be preserved. |
 | 2026-05-20 | Split the old monolithic plan into one spec plus six smaller implementation plans. | Zazi's refactor found many late review issues; smaller reviewable plans reduce conflict and make logs more useful. | A plan grows across unrelated ownership boundaries. |
 | 2026-05-20 | Keep npm for this refactor. | The repo currently uses npm and package-lock; changing package managers during storage replacement adds avoidable risk. | User explicitly asks for pnpm migration or dependency security work becomes the main task. |
