@@ -27,12 +27,24 @@ list. They are historical records — do not rewrite them; add new findings here
 
 ## 0. Blockers before any field build
 
-Three deploy gates, mandated by both `device-gates-sqlite-backend-2026-07.md` and
-`rls-sync-contract-map.md`. These are not optional.
+> **Go-live target: 1-2 weeks from 2026-07-14 (Jim).** That turns everything below from "sometime"
+> into a deadline, and it **closes the window on the `assessmentItemDomainId` rekey** (§7), which must
+> land while `masi-app-sqlite` still has no field users.
 
-- [ ] Clean legacy random-id `letter_mastery` rows on `masi-app-sqlite` — they will `23505`-collide with deterministic pushes.
-- [ ] Clean pre-fix random-id rows in the four active-pair tables (`child_ea_assignments`, `child_programme_enrollments`, `class_ea_assignments`, `group_ea_assignments`).
+- [x] **`letter_mastery` deterministic ids — already clean** (verified 2026-07-14; 13/13 current-formula v5).
+- [x] **Pre-fix ids in the four active-pair tables — fixed 2026-07-14.** 26 rows re-keyed in place (delete+reinsert inside one transaction, to get past the `prevent_assignment_identity_change` trigger). Test EA fixture preserved. 0 mismatches remain.
 - [ ] Field devices must start from a **fresh install**, not an upgrade over an old local DB.
+
+**Lesson from that fix, worth keeping:** the gate said to clean *"random-id"* rows. But all 7
+`group_ea_assignments` rows had valid **v5 deterministic** ids from a **superseded formula**. Filtering
+on "is the id random?" would have missed every one. With a deterministic-id scheme the derivation is
+part of the data contract; the only sound test is *"does the stored id equal what today's code would
+compute for this row's logical key?"*
+
+**Still owed: 46 device gates in `device-gates-sqlite-backend-2026-07.md`, 0 executed.**
+Sprints 1-4B are merged but *unverified on real hardware*. Highest-signal: G1 (force-quit + airplane
+mode; a head-office removal must stay gone), H3 (outbox ownership across an EA handover), I1 (low-end
+Android roster scroll), B1 (indoor GPS 10s timeout).
 
 **And: 46 device gates in `device-gates-sqlite-backend-2026-07.md` are unchecked — 0 of 46 executed.**
 Sprints 1–4B are merged but *unverified on real hardware*. Highest-signal gates: G1 (force-quit +
