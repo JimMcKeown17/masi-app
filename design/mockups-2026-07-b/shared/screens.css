@@ -1,0 +1,217 @@
+/* ═══════════════════════════════════════════════════════════════
+   screens.css: structure for the four main screens.
+
+   Every colour, radius, shadow and typeface here resolves to a CSS
+   variable. A "skin" (a1/a2/a3) is therefore just a :root block plus
+   a handful of shape overrides. If a skin ever needs to fight this
+   file to get its look, that is a real signal the skin is a
+   re-architecture rather than a re-skin, worth knowing before anyone
+   promises it can ship as a token change.
+   ═══════════════════════════════════════════════════════════════ */
+
+/* ── header ──────────────────────────────────────────────────── */
+.header{padding:10px 24px 0;}
+.header-top{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;}
+.greet{
+  font-size:30px;line-height:1.08;font-weight:var(--display-weight,700);
+  letter-spacing:var(--display-tracking,-.02em);color:var(--ink);
+}
+.greet .dot{color:var(--primary);}
+.role{font-size:13px;color:var(--ink-2);margin-top:7px;font-weight:500;}
+
+.sync-pill{
+  display:inline-flex;align-items:center;gap:6px;flex-shrink:0;
+  border:1px solid var(--pill-border,var(--line));
+  background:var(--pill-bg,var(--card));
+  border-radius:999px;padding:6px 12px;margin-top:5px;
+  font-size:12px;font-weight:650;color:var(--green);
+}
+
+section{margin-top:14px;}
+section.tail{margin-top:auto;padding-bottom:4px;}
+
+.sec-label{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:11px;}
+.sec-meta{font-size:12.5px;font-weight:600;color:var(--ink-2);}
+.sec-link{font-size:12.5px;font-weight:650;color:var(--primary);}
+
+.panel{
+  background:var(--card);
+  border:var(--panel-border,1px solid var(--line));
+  border-radius:var(--radius);
+  padding:15px 17px;
+  box-shadow:var(--panel-shadow,none);
+}
+
+/* ── clock ribbon ────────────────────────────────────────────── */
+.clock-ribbon{
+  display:flex;align-items:center;justify-content:space-between;
+  background:var(--clock-bg,var(--primary-t));
+  border:var(--clock-border,none);
+  border-radius:var(--radius);
+  padding:15px 18px;
+}
+.clock-ribbon .label{color:var(--clock-label,var(--primary-d));}
+.clock-elapsed{
+  font-size:31px;font-weight:var(--display-weight,700);line-height:1;margin-top:6px;
+  color:var(--clock-ink,var(--primary-d));letter-spacing:var(--display-tracking,-.02em);
+}
+.clock-since{font-size:12px;color:var(--clock-sub,var(--ink-2));margin-top:6px;font-weight:500;}
+.btn-out{
+  font-family:var(--ui);cursor:pointer;
+  border:1.5px solid var(--primary);color:var(--primary-d);
+  background:var(--btn-out-bg,transparent);
+  border-radius:999px;padding:12px 20px;font-size:14px;font-weight:650;
+}
+
+/* ── month stats ─────────────────────────────────────────────── */
+.stat-row{display:flex;}
+.stat{flex:1;}
+.stat + .stat{border-left:1px solid var(--line-soft);padding-left:18px;}
+.stat .v{
+  font-size:30px;font-weight:var(--display-weight,700);line-height:1;color:var(--ink);
+  letter-spacing:var(--display-tracking,-.02em);
+}
+.stat .k{font-size:12px;color:var(--ink-2);margin-top:6px;font-weight:500;}
+
+/* ── week strip ──────────────────────────────────────────────── */
+.week{display:flex;justify-content:space-between;}
+.day{display:flex;flex-direction:column;align-items:center;gap:8px;width:54px;}
+.day .d-label{font-size:10.5px;font-weight:700;color:var(--ink-3);letter-spacing:.07em;}
+.day .d-count{
+  width:46px;height:46px;border-radius:var(--day-radius,50%);
+  display:flex;align-items:center;justify-content:center;
+  font-size:17px;font-weight:var(--display-weight,700);
+  background:var(--line-soft);color:var(--ink-3);
+}
+.day.done .d-count{background:var(--green-t);color:var(--green-ink);}
+.day.today .d-count{
+  background:var(--primary);color:var(--on-primary);
+  box-shadow:0 0 0 2px var(--canvas),0 0 0 3.5px var(--primary);
+}
+.day.today .d-label{color:var(--primary);}
+
+/* ── coverage bar ────────────────────────────────────────────── */
+.cov-track{height:10px;border-radius:6px;background:var(--line-soft);overflow:hidden;}
+.cov-fill{height:100%;width:75%;background:var(--green);border-radius:6px;}
+.cov-caption{display:flex;justify-content:space-between;margin-top:10px;font-size:12.5px;}
+.cov-caption .left{color:var(--ink-2);font-weight:500;}
+.cov-caption .right{color:var(--primary);font-weight:650;}
+
+/* ── quiet list rows ─────────────────────────────────────────── */
+.list-row{
+  display:flex;align-items:center;gap:14px;
+  padding:11px 2px;border-bottom:1px solid var(--line-soft);
+}
+.list-row:last-child{border-bottom:none;}
+.list-ico{
+  width:36px;height:36px;border-radius:var(--radius-sm);flex-shrink:0;
+  display:flex;align-items:center;justify-content:center;
+  background:var(--gold-t);color:var(--gold-ink);
+}
+.list-t{flex:1;font-size:14.5px;font-weight:650;color:var(--ink);}
+.list-sub{display:block;font-size:12px;color:var(--ink-2);font-weight:400;margin-top:2px;}
+.chev{color:var(--ink-3);flex-shrink:0;}
+
+/* ── avatars ─────────────────────────────────────────────────── */
+.av{
+  width:38px;height:38px;border-radius:50%;flex-shrink:0;
+  display:inline-flex;align-items:center;justify-content:center;
+  font-size:12.5px;font-weight:700;
+  border:2px solid var(--card);
+}
+.av-stack{display:inline-flex;}
+.av-stack .av + .av{margin-left:-9px;}
+
+/* ── my children ─────────────────────────────────────────────── */
+.search{
+  display:flex;align-items:center;gap:10px;
+  background:var(--card);border:1px solid var(--line);border-radius:999px;
+  padding:13px 18px;color:var(--ink-3);font-size:14px;
+}
+.cc-top{display:flex;justify-content:space-between;align-items:baseline;}
+.cc-name{font-size:22px;font-weight:var(--display-weight,700);letter-spacing:var(--display-tracking,-.02em);}
+.cc-count{
+  font-size:12px;font-weight:650;color:var(--ink-2);
+  background:var(--sunk);border-radius:999px;padding:5px 11px;
+}
+.cc-meta{font-size:13px;color:var(--ink-2);margin-top:5px;}
+.pair-list{margin-top:11px;border-top:1px solid var(--line-soft);}
+.pair-row{display:flex;align-items:center;gap:12px;padding:8px 0;border-bottom:1px solid var(--line-soft);}
+.pair-row:last-child{border-bottom:none;padding-bottom:2px;}
+.pair-row .av{width:30px;height:30px;font-size:10.5px;border-width:1.5px;}
+.pair-row .av + .av{margin-left:-6px;}
+.pair-names{flex:1;font-size:13.5px;font-weight:650;}
+.pair-tag{font-size:10.5px;font-weight:700;color:var(--ink-3);letter-spacing:.06em;text-transform:uppercase;}
+.cc-bottom{margin-top:10px;}
+.cc-assessed{font-size:12.5px;font-weight:650;color:var(--green-ink);}
+.cc-assessed.warn{color:var(--primary-d);}
+.quiet-link{text-align:center;padding:12px;font-size:14px;font-weight:650;color:var(--primary);}
+
+/* ── sessions ────────────────────────────────────────────────── */
+.ring-wrap{display:flex;flex-direction:column;align-items:center;margin-top:14px;}
+.ring{position:relative;width:168px;height:168px;}
+.ring svg{transform:rotate(-90deg);}
+.ring-track{stroke:var(--line-soft);}
+.ring-fill{stroke:var(--primary);}
+.ring-center{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;}
+.ring-count{
+  font-size:54px;font-weight:var(--display-weight,700);line-height:1;color:var(--primary-d);
+  letter-spacing:var(--display-tracking,-.02em);
+}
+.ring-of{font-size:13px;color:var(--ink-2);font-weight:500;margin-top:4px;}
+.ring-caption{margin-top:14px;font-size:13px;color:var(--ink-2);font-weight:500;}
+
+.chip-row{display:flex;gap:8px;flex-wrap:wrap;}
+.chip{
+  display:inline-flex;align-items:center;gap:8px;
+  background:var(--card);border:1px solid var(--line);border-radius:999px;
+  padding:6px 14px 6px 6px;font-size:13px;font-weight:650;
+}
+.chip .av{width:28px;height:28px;font-size:10.5px;border:none;}
+
+.sess-row{display:flex;gap:14px;padding:12px 2px;border-bottom:1px solid var(--line-soft);}
+.sess-row:last-child{border-bottom:none;}
+.sess-time{width:62px;flex-shrink:0;}
+.sess-time .t1{font-size:13.5px;font-weight:650;font-variant-numeric:tabular-nums;}
+.sess-time .t2{font-size:11.5px;color:var(--ink-3);margin-top:2px;}
+.sess-body .who{font-size:14px;font-weight:650;}
+.sess-body .what{font-size:12.5px;color:var(--ink-2);margin-top:3px;}
+
+.btn-primary{
+  width:100%;font-family:var(--ui);cursor:pointer;border:var(--cta-border,none);
+  display:flex;align-items:center;justify-content:center;gap:10px;
+  background:var(--primary);color:var(--on-primary);
+  border-radius:var(--cta-radius,999px);
+  padding:17px;font-size:16px;font-weight:700;
+  box-shadow:var(--cta-shadow,none);
+}
+
+/* ── assessments ─────────────────────────────────────────────── */
+.bc-top{display:flex;align-items:center;justify-content:space-between;}
+.bc-name{font-size:20px;font-weight:var(--display-weight,700);letter-spacing:var(--display-tracking,-.02em);}
+.bc-timed{
+  display:inline-flex;align-items:center;gap:5px;
+  font-size:10.5px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;
+  color:var(--gold-ink);background:var(--gold-t);border-radius:999px;padding:5px 10px;
+}
+.bc-desc{font-size:13px;color:var(--ink-2);margin-top:6px;line-height:1.45;}
+.bc-actions{display:flex;align-items:center;justify-content:space-between;margin-top:12px;}
+.bc-last{font-size:12px;color:var(--ink-3);}
+.btn-start{
+  background:var(--start-bg,var(--ink));color:var(--start-ink,var(--canvas));
+  border-radius:999px;padding:11px 22px;font-size:13.5px;font-weight:650;
+}
+
+.result-row{display:flex;align-items:center;gap:12px;padding:11px 2px;border-bottom:1px solid var(--line-soft);}
+.result-row:last-child{border-bottom:none;}
+.result-row .av{border:none;}
+.res-name{flex:1;}
+.res-name .n{display:block;font-size:14px;font-weight:650;}
+.res-name .m{display:block;font-size:12px;color:var(--ink-2);margin-top:2px;}
+
+/* Score bands follow ADR-0003 / scoreBands.js:
+   green = above benchmark, amber = approaching, red = needs work. */
+.band{font-size:12px;font-weight:700;border-radius:999px;padding:6px 12px;}
+.band.good{background:var(--green-t);color:var(--green-ink);}
+.band.mid {background:var(--gold-t);color:var(--gold-ink);}
+.band.low {background:var(--low-t);color:var(--low-ink);}

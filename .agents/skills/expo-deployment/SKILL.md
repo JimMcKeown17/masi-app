@@ -188,3 +188,14 @@ eas build:view
 # View submission status
 eas submit:list
 ```
+
+## Gotcha: env vars are NOT available in EAS cloud builds (masi-app)
+
+`process.env.EXPO_PUBLIC_*` variables from `.env.local` are NOT available in EAS cloud builds. Public values (Supabase URL, publishable key) must ALSO be available through Expo config `extra` with a fallback in the client. The SQLite app uses `app.config.js` with explicit Supabase target guardrails.
+
+```javascript
+const url = process.env.EXPO_PUBLIC_SUPABASE_URL
+  || Constants.expoConfig?.extra?.supabaseUrl || '';
+```
+
+Secrets belong in Expo dashboard environment variables, never in `extra`.

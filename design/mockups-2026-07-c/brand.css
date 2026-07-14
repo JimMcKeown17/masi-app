@@ -1,0 +1,58 @@
+/* ═══════════════════════════════════════════════════════════════
+   brand.css
+
+   THESE ARE NOT NEW COLOURS. Every value below is copied verbatim
+   from src/constants/colors.js, which already passes the fail-closed
+   guard test in __tests__/colors.test.js.
+
+   That is the point of this round: charcoal + Masi red is not a
+   rebrand, it is the palette the app already ships. Nothing here
+   costs a token migration.
+   ═══════════════════════════════════════════════════════════════ */
+:root{
+  /* red ramp (colors.js RED) */
+  --red50:#FDECEF;  --red100:#FBD5DC; --red200:#F4A9B6; --red300:#EE7D90;
+  --red400:#EC5470; --red500:#E72D4D; --red600:#C81F3E; --red700:#A4182F;
+  --red800:#7C1223; --red900:#530B17;
+
+  --primary:#E72D4D;        /* colors.primary   */
+  --primary-light:#EC5470;  /* colors.primaryLight */
+  --primary-dark:#C81F3E;   /* colors.primaryDark  */
+
+  --ink:#221A1B;            /* colors.text          */
+  --muted:#76696B;          /* colors.textSecondary */
+  --line:#ECE5E4;           /* colors.border        */
+  --canvas:#F8F5F4;         /* colors.background    */
+  --surface:#FFFFFF;        /* colors.surface       */
+  --disabled:#B3A8A8;       /* colors.disabled      */
+
+  --hero:#1C1517;           /* colors.heroDark      */
+  --on-dark:#FFFFFF;        /* colors.onDark        */
+  --on-dark-muted:#C9BFC0;  /* colors.onDarkMuted   */
+
+  --success:#3FA535;        --success-bg:#E7F3E5;
+  --success-text:#2E7D27;   --success-border:#CDE8C9;
+  --warning:#B26A00;        --warning-bg:#FFF8E1;  --warning-text:#8A4B00;
+  --error:#B3261E;          --error-bg:#FCEAE8;
+
+  /* dark-surface equivalents: the ramp read against #1C1517 rather
+     than against canvas. Same hues, lifted for legibility on ink. */
+  --on-hero-line:#3A2F31;
+  --on-hero-sunk:#2A2224;
+  --on-hero-success:#6FD064;
+
+  --display:'Bricolage Grotesque',sans-serif;
+  --ui:'Work Sans',sans-serif;
+}
+
+*{margin:0;padding:0;box-sizing:border-box;}
+body{
+  background:#DCD6D5;
+  font-family:var(--ui);
+  -webkit-font-smoothing:antialiased;
+  color:var(--ink);
+  padding:44px;
+}
+.num{font-variant-numeric:tabular-nums;}
+h2.page{font-family:var(--display);font-size:26px;font-weight:700;letter-spacing:-.02em;margin-bottom:6px;}
+p.page{font-size:14px;color:#5F5557;max-width:820px;line-height:1.55;margin-bottom:30px;}

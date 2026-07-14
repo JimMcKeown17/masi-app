@@ -1,0 +1,107 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Masi A1: Ithemba Bold</title>
+<link rel="stylesheet" href="../fonts/fonts.css">
+<link rel="stylesheet" href="../shared/chrome.css">
+<link rel="stylesheet" href="../shared/screens.css">
+<style>
+/* ═══════════════════════════════════════════════════════════════
+   A1: ITHEMBA BOLD
+   The de-bookified Ithemba. Same editorial bones as the original,
+   but the literary serif is gone: Bricolage Grotesque is a warm,
+   characterful grotesque that keeps personality without the
+   "well-made book" association. Teal enters as the professional
+   note the serif used to carry.
+   ═══════════════════════════════════════════════════════════════ */
+:root{
+  /* type */
+  --display:'Bricolage Grotesque',sans-serif;
+  --ui:'Work Sans',sans-serif;
+  --display-weight:700;
+  --display-tracking:-.025em;
+
+  /* ground */
+  --canvas:#FBF6EF;
+  --sunk:#F2E7D9;
+  --card:#FFFDFA;
+  --ink:#241A14;
+  --ink-2:#6E5C4E;
+  --ink-3:#A3907E;
+  --line:#E8DACA;
+  --line-soft:#F2E9DC;
+
+  /* flame: the single action colour */
+  --primary:#D9480F;
+  --primary-d:#B23A0B;
+  --primary-t:#FBE3D6;
+  --on-primary:#FFFFFF;
+
+  /* teal: status, working, trustworthy */
+  --accent:#0E6B5C;
+  --accent-t:#DDEDE8;
+
+  /* gold: attention */
+  --gold:#EBA317;
+  --gold-t:#FBEDCF;
+  --gold-ink:#8A6110;
+
+  /* green: success */
+  --green:#3B8B57;
+  --green-t:#DFEFE0;
+  --green-ink:#2F6E45;
+
+  /* crimson: the "needs work" band. Deliberately NOT the flame, so
+     "this is our brand" and "this went wrong" never collide. */
+  --low-t:#F8DFE2;
+  --low-ink:#9B2233;
+
+  --radius:18px;
+  --radius-sm:12px;
+}
+
+/* The clock ribbon is teal, not flame: being on the clock is a
+   *state*, not an action. Flame stays reserved for "do something". */
+.clock-ribbon{--clock-bg:var(--accent-t);}
+.clock-ribbon .label{color:#42887B;}
+.clock-elapsed{color:#0B564A;}
+.clock-since{color:#4E8579;}
+.btn-out{border-color:var(--accent);color:#0B564A;}
+
+.sync-pill{color:var(--accent);}
+
+/* warm avatar set */
+.av.c1{background:#F3CDA2;color:#6B4A22;}
+.av.c2{background:#EFBFB3;color:#7A3F31;}
+.av.c3{background:#E4D5A6;color:#6A5A22;}
+.av.c4{background:#C6D9B6;color:#3F5A33;}
+.av.c5{background:#EEC6D3;color:#7A3B51;}
+.av.c6{background:#BFD6D3;color:#2F5250;}
+</style>
+</head>
+<body>
+<div class="rows"><div class="row">
+  <div class="slot">
+    <div class="cap"><b>Home</b><span>Serif gone. Teal clock ribbon separates “working” from “act”.</span></div>
+    <div class="phone" data-tab="home" data-screen="home" data-name="01-home"></div>
+  </div>
+  <div class="slot">
+    <div class="cap"><b>My Children</b><span>Pairs stay first-class: the real unit of Core Literacy work.</span></div>
+    <div class="phone" data-tab="children" data-screen="children" data-name="02-children"></div>
+  </div>
+  <div class="slot">
+    <div class="cap"><b>Sessions</b><span>The daily target ring, drawn in the one action colour.</span></div>
+    <div class="phone" data-tab="sessions" data-screen="sessions" data-name="03-sessions"></div>
+  </div>
+  <div class="slot">
+    <div class="cap"><b>Assessments</b><span>Bands read green / amber / crimson, per scoreBands.js.</span></div>
+    <div class="phone" data-tab="assessments" data-screen="assessments" data-name="04-assessments"></div>
+  </div>
+</div></div>
+
+<script src="../shared/screens.js"></script>
+<script src="../shared/chrome.js"></script>
+<script>renderScreens();renderChrome();</script>
+</body>
+</html>

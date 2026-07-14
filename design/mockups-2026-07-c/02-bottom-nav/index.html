@@ -1,0 +1,204 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Masi: bottom nav options</title>
+<link rel="stylesheet" href="../../mockups-2026-07-b/fonts/fonts.css">
+<link rel="stylesheet" href="../brand.css">
+<style>
+.grid{display:flex;flex-direction:column;gap:34px;max-width:1180px;}
+.opt{display:flex;gap:30px;align-items:flex-start;}
+.frame{
+  width:390px;flex:none;background:var(--canvas);
+  border-radius:0 0 20px 20px;padding-top:26px;
+  border:1px solid #CFC8C7;border-top:none;
+}
+.ghost{padding:0 24px 22px;opacity:.4;}
+.ghost .g1{height:11px;border-radius:6px;background:#D8D0CF;width:62%;}
+.ghost .g2{height:11px;border-radius:6px;background:#E2DBDA;width:88%;margin-top:9px;}
+
+.note{flex:1;padding-top:4px;}
+.note > b{display:block;font-family:var(--display);font-size:17px;font-weight:700;letter-spacing:-.015em;}
+.note .tabs{font-size:12px;color:var(--muted);margin-top:4px;font-weight:600;letter-spacing:.02em;}
+.note p{font-size:13.5px;color:#4E4547;margin-top:11px;line-height:1.6;max-width:560px;}
+.note .cost{
+  display:inline-block;margin-top:11px;padding:7px 13px;border-radius:8px;
+  font-size:12.5px;font-weight:650;
+}
+.cost.good{background:var(--success-bg);color:var(--success-text);}
+.cost.bad{background:var(--warning-bg);color:var(--warning-text);}
+
+/* ── the bar itself ── */
+.tabbar{
+  display:flex;align-items:flex-end;
+  background:var(--surface);border-top:1px solid var(--line);
+  padding:9px 6px 24px;
+}
+.tab{
+  flex:1;display:flex;flex-direction:column;align-items:center;gap:4px;
+  font-size:10px;font-weight:650;color:var(--muted);text-align:center;
+}
+.tab.on{color:var(--primary-dark);}
+.tab .dot{width:4px;height:4px;border-radius:2px;background:transparent;}
+.tab.on .dot{background:var(--primary-dark);}
+
+/* N2: the centre tab is simply bigger */
+.tab.big{transform:translateY(-3px);}
+.tab.big svg{width:32px;height:32px;}
+.tab.big{font-size:11.5px;font-weight:750;}
+
+/* N3: the centre slot is a raised ACTION, not a destination */
+.act{
+  flex:1;display:flex;flex-direction:column;align-items:center;gap:5px;
+}
+.act .fab{
+  width:58px;height:58px;border-radius:20px;margin-top:-24px;
+  display:flex;align-items:center;justify-content:center;
+  background:var(--primary);color:#fff;
+  box-shadow:0 6px 14px rgba(200,31,62,.30);
+  border:3px solid var(--surface);
+}
+.act .l{font-size:10px;font-weight:750;color:var(--primary-dark);}
+</style>
+</head>
+<body>
+<h2 class="page">Bottom navigation: three options</h2>
+<p class="page">
+  The constraint nobody escapes: <b>five slots.</b> Beyond that, targets get too narrow for
+  a thumb and labels start truncating. You have six candidate destinations
+  (Home, My Children, Groups, Sessions, Assess, Insights) plus Settings. Something has to give,
+  and the group-centric rebuild will only make that tighter.
+</p>
+
+<div class="grid">
+
+  <!-- ═══ N1 ═══ -->
+  <div class="opt">
+    <div class="frame">
+      <div class="ghost"><div class="g1"></div><div class="g2"></div></div>
+      <div class="tabbar">
+        <div class="tab on">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none"><path d="M4 10.5 12 4l8 6.5V19a1.5 1.5 0 0 1-1.5 1.5h-13A1.5 1.5 0 0 1 4 19v-8.5z" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/><path d="M9.5 20v-5.5h5V20" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/></svg>
+          Home<span class="dot"></span>
+        </div>
+        <div class="tab">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none"><circle cx="9" cy="8" r="3.2" stroke="currentColor" stroke-width="2"/><path d="M3.5 19c.6-3 2.8-4.6 5.5-4.6s4.9 1.6 5.5 4.6" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><circle cx="17" cy="9.5" r="2.4" stroke="currentColor" stroke-width="2"/><path d="M16.5 14.6c2.2.2 3.6 1.5 4 3.9" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+          My Children<span class="dot"></span>
+        </div>
+        <div class="tab">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none"><circle cx="7.5" cy="8" r="2.6" stroke="currentColor" stroke-width="1.9"/><circle cx="16.5" cy="8" r="2.6" stroke="currentColor" stroke-width="1.9"/><circle cx="12" cy="15.5" r="2.6" stroke="currentColor" stroke-width="1.9"/><path d="M3 14c.4-2 1.9-3.2 4-3.2M21 14c-.4-2-1.9-3.2-4-3.2M7 21c.5-2.1 2.2-3.4 5-3.4s4.5 1.3 5 3.4" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"/></svg>
+          Groups<span class="dot"></span>
+        </div>
+        <div class="tab">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none"><rect x="5" y="4" width="14" height="17" rx="2" stroke="currentColor" stroke-width="2"/><path d="M9 4.5V3h6v1.5" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/><path d="m8.8 13 2.2 2.2 4.2-4.4" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          Assess<span class="dot"></span>
+        </div>
+      </div>
+    </div>
+    <div class="note">
+      <b>N1 · Four tabs, nothing clever</b>
+      <div class="tabs">Home · My Children · Groups · Assess</div>
+      <p>
+        Sessions stops being a destination: recording is the Home CTA, and session history
+        lives under Home as “Recent, view all”. Insights sits behind a chart icon in the
+        Home header. Settings stays behind the gear.
+      </p>
+      <p>
+        Widest touch targets of any option, and it survives the group-centric rebuild without
+        a rethink. The boring answer, and probably the right one if you want to ship.
+      </p>
+      <span class="cost good">Record a session: 2 taps · Insights: 2 taps</span>
+    </div>
+  </div>
+
+  <!-- ═══ N2 ═══ -->
+  <div class="opt">
+    <div class="frame">
+      <div class="ghost"><div class="g1"></div><div class="g2"></div></div>
+      <div class="tabbar">
+        <div class="tab">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none"><circle cx="9" cy="8" r="3.2" stroke="currentColor" stroke-width="2"/><path d="M3.5 19c.6-3 2.8-4.6 5.5-4.6s4.9 1.6 5.5 4.6" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><circle cx="17" cy="9.5" r="2.4" stroke="currentColor" stroke-width="2"/><path d="M16.5 14.6c2.2.2 3.6 1.5 4 3.9" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+          My Children<span class="dot"></span>
+        </div>
+        <div class="tab">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none"><circle cx="7.5" cy="8" r="2.6" stroke="currentColor" stroke-width="1.9"/><circle cx="16.5" cy="8" r="2.6" stroke="currentColor" stroke-width="1.9"/><circle cx="12" cy="15.5" r="2.6" stroke="currentColor" stroke-width="1.9"/><path d="M3 14c.4-2 1.9-3.2 4-3.2M21 14c-.4-2-1.9-3.2-4-3.2M7 21c.5-2.1 2.2-3.4 5-3.4s4.5 1.3 5 3.4" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"/></svg>
+          Groups<span class="dot"></span>
+        </div>
+        <div class="tab on big">
+          <svg width="32" height="32" viewBox="0 0 24 24" fill="none"><path d="M4 10.5 12 4l8 6.5V19a1.5 1.5 0 0 1-1.5 1.5h-13A1.5 1.5 0 0 1 4 19v-8.5z" fill="currentColor" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/><rect x="10" y="13.5" width="4" height="7" rx="1" fill="#fff"/></svg>
+          Home<span class="dot"></span>
+        </div>
+        <div class="tab">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none"><rect x="5" y="4" width="14" height="17" rx="2" stroke="currentColor" stroke-width="2"/><path d="M9 4.5V3h6v1.5" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/><path d="m8.8 13 2.2 2.2 4.2-4.4" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          Assess<span class="dot"></span>
+        </div>
+        <div class="tab">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none"><path d="M5 20V11M12 20V5M19 20v-6" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/></svg>
+          Insights<span class="dot"></span>
+        </div>
+      </div>
+    </div>
+    <div class="note">
+      <b>N2 · Your sketch: five tabs, Home in the centre, largest</b>
+      <div class="tabs">My Children · Groups · <b>Home</b> · Assess · Insights</div>
+      <p>
+        This is the one you drew. Insights gets a proper home, which is exactly what you wanted:
+        the three performance rows come off the home page entirely. Sessions stops being a tab
+        and recording happens from Home.
+      </p>
+      <p>
+        It works. My one hesitation: a big centre button is a <b>very strong promise</b>, and here
+        it promises “go to a screen”. Users have been trained by every other app that the big
+        centre button <i>does the main thing</i>. Home is not a thing you do.
+      </p>
+      <span class="cost bad">Record a session: 2 taps · Insights: 1 tap</span>
+    </div>
+  </div>
+
+  <!-- ═══ N3 ═══ -->
+  <div class="opt">
+    <div class="frame">
+      <div class="ghost"><div class="g1"></div><div class="g2"></div></div>
+      <div class="tabbar">
+        <div class="tab on">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none"><path d="M4 10.5 12 4l8 6.5V19a1.5 1.5 0 0 1-1.5 1.5h-13A1.5 1.5 0 0 1 4 19v-8.5z" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/><path d="M9.5 20v-5.5h5V20" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/></svg>
+          Home<span class="dot"></span>
+        </div>
+        <div class="tab">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none"><circle cx="9" cy="8" r="3.2" stroke="currentColor" stroke-width="2"/><path d="M3.5 19c.6-3 2.8-4.6 5.5-4.6s4.9 1.6 5.5 4.6" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><circle cx="17" cy="9.5" r="2.4" stroke="currentColor" stroke-width="2"/><path d="M16.5 14.6c2.2.2 3.6 1.5 4 3.9" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+          Children<span class="dot"></span>
+        </div>
+        <div class="act">
+          <span class="fab"><svg width="28" height="28" viewBox="0 0 24 24" fill="none"><path d="M12 5v14M5 12h14" stroke="#fff" stroke-width="2.8" stroke-linecap="round"/></svg></span>
+          <span class="l">Record</span>
+        </div>
+        <div class="tab">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none"><circle cx="7.5" cy="8" r="2.6" stroke="currentColor" stroke-width="1.9"/><circle cx="16.5" cy="8" r="2.6" stroke="currentColor" stroke-width="1.9"/><circle cx="12" cy="15.5" r="2.6" stroke="currentColor" stroke-width="1.9"/><path d="M3 14c.4-2 1.9-3.2 4-3.2M21 14c-.4-2-1.9-3.2-4-3.2M7 21c.5-2.1 2.2-3.4 5-3.4s4.5 1.3 5 3.4" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"/></svg>
+          Groups<span class="dot"></span>
+        </div>
+        <div class="tab">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none"><rect x="5" y="4" width="14" height="17" rx="2" stroke="currentColor" stroke-width="2"/><path d="M9 4.5V3h6v1.5" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/><path d="m8.8 13 2.2 2.2 4.2-4.4" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          Assess<span class="dot"></span>
+        </div>
+      </div>
+    </div>
+    <div class="note">
+      <b>N3 · Same shape, but the centre button <i>does</i> something</b>
+      <div class="tabs">Home · Children · <b>[ + Record ]</b> · Groups · Assess</div>
+      <p>
+        Identical geometry to your sketch: one big centre target, two tabs each side. The only
+        change is what it means. It is not a destination, it is <b>the action</b>: record a session,
+        from anywhere in the app, in one tap.
+      </p>
+      <p>
+        An EA records 3 to 5 sessions a day, every working day. They look at Insights maybe weekly.
+        Optimise the path that is walked 20x more often. Insights moves to a chart icon in the Home
+        header, next to the gear, which is still a big improvement on cluttering the home page.
+      </p>
+      <span class="cost good">Record a session: 1 tap · Insights: 2 taps</span>
+    </div>
+  </div>
+
+</div>
+</body>
+</html>

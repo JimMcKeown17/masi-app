@@ -1,0 +1,43 @@
+{
+  "permissions": {
+    "allow": [
+      "mcp__context7__query-docs",
+      "mcp__supabase__list_tables",
+      "mcp__supabase__list_migrations",
+      "mcp__supabase__execute_sql",
+      "mcp__supabase__get_logs",
+      "mcp__ide__getDiagnostics",
+      "mcp__context7__resolve-library-id",
+      "Bash(else)",
+      "Bash(echo \"MISSING: $file\")",
+      "Bash(fi)",
+      "Bash(done)",
+      "WebSearch",
+      "Bash(ls:*)",
+      "Bash(git checkout:*)",
+      "Bash(npx expo:*)",
+      "Bash(npm test:*)",
+      "Bash(node:*)",
+      "Bash(grep -E \"\\\\.\\(js|ts\\)$\")",
+      "Bash(grep:*)",
+      "Bash(git fetch:*)",
+      "Bash(git branch:*)",
+      "Bash(npx --yes acorn --ecma2020 --module src/screens/assessments/AssessmentChildSelectScreen.js)",
+      "Bash(npx react-native-community_cli-platform-ios)",
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "Bash(git push:*)",
+      "Bash(find /Users/jimmckeown/Development/masi-app -path *supabase* -name *.sql)",
+      "Bash(grep -n \"v4\\(\\)\" /Users/jimmckeown/Development/masi-app/src/context/*.js)",
+      "Bash(find /Users/jimmckeown/Development/masi-app -name *.sql -type f)",
+      "Bash(npx react-native-community_cli doctor)"
+    ]
+  },
+  "outputStyle": "Explanatory",
+  "skillOverrides": {
+    "find-skills": "off",
+    "supabase-postgres-best-practices": "off",
+    "setup-matt-pocock-skills": "off",
+    "vercel-react-native-skills": "off"
+  }
+}
