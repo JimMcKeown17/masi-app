@@ -29,6 +29,83 @@ The Plan 6 emulator pass tested the refactor where SQLite bugs are most likely t
 
 ---
 
+## 2026-07-14: Observability Is a Three-Layer Reliability System
+
+A crash SDK is necessary, but it is not the same thing as an operational monitoring system. Sentry
+can automatically see native crashes, JavaScript exceptions, React render failures, app hangs, and
+failed network requests. It cannot infer that a durable outbox row has exhausted its retry budget,
+that a sync preflight returned an error as ordinary data, or that a pull reconcile circuit breaker
+correctly refused a suspicious mass removal. Those are domain states, not crashes.
+
+Masi therefore uses three complementary layers:
+
+1. **Automatic failure capture.** Sentry starts before the React application module loads. It wraps
+   the root, registers React Navigation, captures native and JavaScript failures, and retains
+   error-triggered replay, screenshots, and view hierarchy. A failure before the first screen is
+   still a production failure, so initialization timing is part of the reliability contract.
+2. **Explicit domain-health reporting.** The sync boundary translates returned failure states into
+   structured issues. Skipped no-session passes, preflight errors, retriable records, terminal
+   outbox rows, and reconcile breakers each carry counts, representative records, online state,
+   last attempt, and last success. Fifteen-minute rate limiting and stable fingerprints preserve
+   signal without turning a 30-second status poll into an alert storm.
+3. **Durable local forensics.** AsyncStorage retains one field-support week and up to 2,000 capped
+   entries. The log starts intercepting console output synchronously, then hydrates prior entries
+   before the first write so startup failures cannot overwrite the previous launch. This layer is
+   still useful when the device has no connectivity, Sentry credentials are absent, or event
+   delivery itself is the failing system.
+
+Runtime identity also has two independent versions. `expo-application` identifies the native binary
+actually installed, including the store build number. `expo-updates` identifies the JavaScript bundle
+currently running on top of that binary. Support needs both because two devices can have the same
+binary but different OTA updates, or the same app version label but different remotely incremented
+native builds. Events and exports also include device/OS, backend project, and SQLite schema so a
+report answers "what exact system failed?" before an engineer asks the EA for screenshots.
+
+Source maps complete the chain. A DSN makes events arrive, but it does not make minified production
+stacks readable. EAS Build uploads source maps automatically when the Sentry plugin and sensitive
+auth token are configured. EAS Update requires uploading the matching `dist/` maps after every OTA
+publish. A release with events but without matching maps is observability only in name.
+
+The Profile verification action intentionally captures a handled `Error` rather than crashing the
+app or sending a stackless message. This checks transport, tags, and source-map symbolication while
+leaving the EA's session intact.
+
+---
+
+## 2026-07-14: Onboarding Is a Durable State Machine
+
+The first version of the child step could have disabled Finish Setup while the roster was empty and
+looked correct in a screen test. That would not have made the rule true. Android hardware back can
+remove a route even when its header button is hidden, and force-quitting destroys React Navigation
+state entirely. After the class had been saved, the next launch would see one available class and
+conclude that onboarding was complete.
+
+The durable model separates three facts:
+
+1. The class and its EA assignment are synced domain state.
+2. The child rows are synced domain state.
+3. "This user still owes the first-child step for this locally created class" is device-local
+   workflow state.
+
+The third fact belongs in SQLite `local_state`, keyed by user, rather than in React state or on the
+server. `classOnboardingRepository.start` writes that marker inside the same transaction used to
+create the class, its assignment, and their outbox rows. Either the whole onboarding aggregate is
+durable or none of it is. A launch reads the marker and both Home and My Children route back to the
+same child step. Finishing after at least one child removes the marker before navigation exits. If
+that local write fails, the EA stays in setup and the already saved class and children remain safe.
+
+This is the difference between a screen condition and a workflow invariant. A screen condition is
+true only while one component is mounted. A workflow invariant can be reconstructed after process
+death from durable facts. For offline-first apps, any multi-screen rule that matters after a restart
+needs the second form.
+
+The ten-child threshold is intentionally not another invariant. It is a recommendation: counts one
+through nine show a warning and require explicit confirmation, while ten removes the warning. Keeping
+the mandatory minimum and the recommended target as separate states lets the app encourage a usable
+roster without blocking small legitimate classes.
+
+---
+
 ## Chapter 1: Foundation - Understanding the Problem Space
 
 ### The Challenge
@@ -1240,3 +1317,11 @@ A shared UI primitive should own invariant mechanics and chrome while callers ke
 Large interactive collections need the same two-part recipe that already protects `LetterTile`. First, the virtualized list must be the only vertical scroller so native windowing can limit mounted work. Second, each row must be a memoized leaf with scalar props and a permanently stable callback. `ChildSelectorRow` receives only ids, strings, a boolean, and `onToggle`; the callback reads current selection data from refs, while `extraData` tells the list when scalar selection state changed. This separates event identity from current state, so selecting one child updates one row and typing comments updates none. Jest proves the render cascade is gone, while physical-device testing remains the proof for native windowing.
 
 One Paper dialog deliberately remains. `ClockInBeforeSessionDialog` is a three-way decision, not a picker. Consistency means using the same component for the same interaction semantics, not forcing every overlay into the same shape.
+
+### Session integrity addendum: current state and historical snapshots are different facts
+
+A reading level looked like one field, but it represents two different facts over time. `children.reading_level` answers, "What level should the EA see when working with this child now?" The session's `activities.child_reading_levels` answers, "What level did the EA record for this child during this completed session?" Keeping both is not accidental duplication. It is a small temporal model: the child row holds mutable current state, while the session JSON holds an immutable event snapshot. Updating the child must never rewrite old sessions, and opening a new session must not search history to reconstruct current state.
+
+The write path also needs two boundaries. First, the submitted attendee ids are authoritative. UI state can retain a value briefly after a child is deselected, so persistence filters reading-level and letter-tracker maps through the final attendee set. Second, durable child updates are change-driven. Pre-filling ten attendees means the form contains ten values, but it does not mean ten child facts changed. Comparing each submitted value with SQLite before writing prevents an outbox row for every unchanged attendee and keeps sync work proportional to actual edits.
+
+The useful mental model is **state plus event**: write the event snapshot for every completed session, update current state only when it changes, and enforce the aggregate boundary in the persistence service rather than trusting transient screen state.

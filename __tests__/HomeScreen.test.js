@@ -1,6 +1,7 @@
 const mockUseAuth = jest.fn();
 const mockUseOffline = jest.fn();
 const mockUseChildren = jest.fn();
+const mockUseClasses = jest.fn();
 const mockUseTimeTracking = jest.fn();
 const mockUseSessionLaunchGuard = jest.fn();
 const mockGetTimeEntries = jest.fn();
@@ -28,6 +29,7 @@ jest.mock('@react-navigation/native', () => {
 jest.mock('../src/context/AuthContext', () => ({ useAuth: () => mockUseAuth() }));
 jest.mock('../src/context/OfflineContext', () => ({ useOffline: () => mockUseOffline() }));
 jest.mock('../src/context/ChildrenContext', () => ({ useChildren: () => mockUseChildren() }));
+jest.mock('../src/context/ClassesContext', () => ({ useClasses: () => mockUseClasses() }));
 jest.mock('../src/hooks/useTimeTracking', () => ({ useTimeTracking: () => mockUseTimeTracking() }));
 jest.mock('../src/hooks/useSessionLaunchGuard', () => ({
   useSessionLaunchGuard: (...args) => mockUseSessionLaunchGuard(...args),
@@ -53,9 +55,9 @@ import { render, waitFor } from '@testing-library/react-native';
 import { PaperProvider } from 'react-native-paper';
 import HomeScreen from '../src/screens/main/HomeScreen';
 
-const renderHome = () => render(
+const renderHome = (navigation = { navigate: jest.fn() }) => render(
   <PaperProvider>
-    <HomeScreen navigation={{ navigate: jest.fn() }} />
+    <HomeScreen navigation={navigation} />
   </PaperProvider>
 );
 
@@ -91,6 +93,10 @@ describe('HomeScreen', () => {
       syncStatus: { failedItems: [] },
     });
     mockUseChildren.mockReturnValue({ children: [] });
+    mockUseClasses.mockReturnValue({
+      classes: [{ id: 'class-1', name: 'Grade 1A' }],
+      classBootstrapStatus: 'available',
+    });
     mockUseTimeTracking.mockReturnValue(defaultTimeTracking);
     mockUseSessionLaunchGuard.mockReturnValue({
       launchSession: jest.fn(),
@@ -147,6 +153,38 @@ describe('HomeScreen', () => {
     const screen = renderHome();
 
     await waitFor(() => expect(screen.getByText('Record Session')).toBeTruthy());
+  });
+
+  test('automatically enters onboarding only after zero classes are confirmed', async () => {
+    const navigation = { navigate: jest.fn() };
+    mockUseClasses.mockReturnValue({
+      classes: [],
+      classBootstrapStatus: 'confirmed_empty',
+    });
+
+    renderHome(navigation);
+
+    await waitFor(() => {
+      expect(navigation.navigate).toHaveBeenCalledWith('ClassOnboarding');
+    });
+  });
+
+  test('resumes the durable child step when class creation was already completed', async () => {
+    const navigation = { navigate: jest.fn() };
+    mockUseClasses.mockReturnValue({
+      classes: [{ id: 'class-pending', name: 'Grade 1A' }],
+      classBootstrapStatus: 'available',
+      incompleteOnboardingClassId: 'class-pending',
+    });
+
+    renderHome(navigation);
+
+    await waitFor(() => {
+      expect(navigation.navigate).toHaveBeenCalledWith('ChildOnboarding', {
+        classId: 'class-pending',
+      });
+    });
+    expect(navigation.navigate).not.toHaveBeenCalledWith('ClassOnboarding');
   });
 
   test('renders Home stats from bounded and aggregate repository reads', async () => {

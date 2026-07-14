@@ -9,6 +9,8 @@ import { exportDatabase, exportLogs } from '../../utils/debugExport';
 import { getReleaseMetadata } from '../../utils/releaseMetadata';
 import { deviceSettings } from '../../services/deviceSettings';
 import { CAPTURE_MODES } from '../../constants/egraConstants';
+import { getRuntimeDiagnostics } from '../../utils/runtimeDiagnostics';
+import { sendObservabilityTest } from '../../services/observability';
 
 function CaptureModeFocusLoader({ loadCaptureMode }) {
   useFocusEffect(loadCaptureMode);
@@ -18,6 +20,7 @@ function CaptureModeFocusLoader({ loadCaptureMode }) {
 export default function ProfileScreen({ navigation }) {
   const { user, profile, updatePassword, signOut } = useAuth();
   const releaseMetadata = getReleaseMetadata();
+  const runtimeDiagnostics = getRuntimeDiagnostics();
   const navigationContext = useContext(NavigationContext);
 
   // Password form state
@@ -29,6 +32,7 @@ export default function ProfileScreen({ navigation }) {
 
   // Debug export state
   const [exportLoading, setExportLoading] = useState(false);
+  const [reportTestLoading, setReportTestLoading] = useState(false);
 
   // Feedback state
   const [snackbar, setSnackbar] = useState({ visible: false, message: '', type: 'success' });
@@ -106,6 +110,22 @@ export default function ProfileScreen({ navigation }) {
         },
       ]
     );
+  };
+
+  const handleSendObservabilityTest = async () => {
+    setReportTestLoading(true);
+    try {
+      const result = await sendObservabilityTest();
+      showMessage(
+        result.success ? 'Crash reporting test sent' : result.error,
+        result.success ? 'success' : 'error'
+      );
+    } catch (error) {
+      console.error('Crash reporting test error:', error);
+      showMessage('Could not send crash reporting test', 'error');
+    } finally {
+      setReportTestLoading(false);
+    }
   };
 
   const handleOpenTerms = async () => {
@@ -302,6 +322,17 @@ export default function ProfileScreen({ navigation }) {
             >
               Share Database (Contains Sensitive Data)
             </Button>
+
+            <Button
+              mode="outlined"
+              onPress={handleSendObservabilityTest}
+              loading={reportTestLoading}
+              disabled={reportTestLoading}
+              style={styles.button}
+              icon="bug-check-outline"
+            >
+              Test Crash Reporting
+            </Button>
           </Card.Content>
         </Card>
 
@@ -395,16 +426,20 @@ export default function ProfileScreen({ navigation }) {
 
         {/* App Version */}
         <Text variant="bodySmall" style={styles.versionText}>
-          Version {releaseMetadata.appVersion}
-          {' '}(Build {Platform.OS === 'ios'
-            ? releaseMetadata.iosBuildNumber || '?'
-            : releaseMetadata.androidVersionCode || '?'})
+          Version {runtimeDiagnostics.application.version}
+          {' '}(Build {runtimeDiagnostics.application.build || '?'})
         </Text>
         <Text variant="bodySmall" style={styles.versionText}>
           Backend {releaseMetadata.supabaseTarget}
         </Text>
         <Text variant="bodySmall" style={styles.versionText}>
           Project {releaseMetadata.supabaseProjectId}
+        </Text>
+        <Text variant="bodySmall" style={styles.versionText}>
+          Device {runtimeDiagnostics.device.modelName || 'Unknown'} · {runtimeDiagnostics.device.osName || Platform.OS} {runtimeDiagnostics.device.osVersion || Platform.Version}
+        </Text>
+        <Text variant="bodySmall" style={styles.versionText}>
+          Update {runtimeDiagnostics.update.id || 'Embedded'}
         </Text>
 
         {/* Sign Out */}

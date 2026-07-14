@@ -9,8 +9,11 @@ Quick reference for deploying updates to internal testers on iOS (TestFlight) an
 ### JS-Only Changes (most common)
 
 ```bash
-# Push an OTA update — ~30 seconds, no build needed
-npx eas-cli@latest update --channel production --message "describe what changed"
+# Push the OTA bundle using the production EAS environment
+npx eas-cli@latest update --channel production --environment production --message "describe what changed"
+
+# Upload the matching source maps. Treat failure as a failed release step.
+npx eas-cli@latest env:exec --environment production 'npm run sentry:sourcemaps'
 ```
 
 Testers get the update on their next app launch (no restart needed — it applies on the *following* launch).
@@ -64,8 +67,15 @@ OTA (over-the-air) updates let you push JS-only changes in ~30 seconds without a
 ### Pushing an OTA Update
 
 ```bash
-npx eas-cli@latest update --channel production --message "describe what changed"
+npx eas-cli@latest update --channel production --environment production --message "describe what changed"
+npx eas-cli@latest env:exec --environment production 'npm run sentry:sourcemaps'
 ```
+
+The first command leaves the exported bundle in `dist/`. The second uploads the
+matching source maps to Sentry using the sensitive `SENTRY_AUTH_TOKEN` stored in
+the production EAS environment. Do not consider the OTA release complete if the
+source-map upload fails: events would arrive, but production stack traces could
+remain minified and much less actionable.
 
 ### How Runtime Versions Work
 
@@ -83,6 +93,71 @@ For reference, here's what was configured:
 4. **Still needed:** One full native build per platform to bake in the update client (see next section)
 
 > **Important:** The first build after this setup MUST be a full native build (`eas build`). After that, JS-only changes can use `eas update`.
+
+---
+
+## Sentry Crash and Sync Observability
+
+Sentry is wired into native iOS/Android crashes, JavaScript exceptions, React
+render failures, app hangs/watchdog terminations, failed requests, and
+error-triggered session replay. Masi also reports domain failures which do not
+crash: skipped sync passes, sync preflight errors, retriable records, terminal
+outbox rows, and pull-reconcile circuit breakers.
+
+Every event is tagged with the installed app version/build, physical device and
+OS, Expo Update identity/channel/runtime, current backend target/project, SQLite
+schema version, signed-in user, and current navigation route where available.
+The seven-day local diagnostic log remains independent of Sentry and supplies
+breadcrumbs when cloud reporting is configured.
+
+### Required Sentry and EAS setup
+
+Create a Sentry React Native project, then record its organization slug, project
+slug, DSN, and organization auth token. In Expo project settings, add these four
+variables to both the `preview` and `production` environments:
+
+| Variable | EAS visibility | Purpose |
+|---|---|---|
+| `EXPO_PUBLIC_SENTRY_DSN` | Plain text | Public event-ingestion address bundled into the app |
+| `SENTRY_ORG` | Plain text | Sentry organization slug used by the Expo config plugin |
+| `SENTRY_PROJECT` | Plain text | Sentry project slug used by the Expo config plugin |
+| `SENTRY_AUTH_TOKEN` | Sensitive | Authenticates native and JavaScript source-map uploads |
+
+Do not commit `SENTRY_AUTH_TOKEN` or place it in `.env.local`. Prefer the EAS
+dashboard for creating it so the value does not enter shell history. The DSN is
+not a secret. `app.config.js` deliberately leaves Sentry disabled when the DSN
+is absent and omits the source-map plugin when the organization/project slugs
+are absent, so ordinary local development remains usable.
+
+Set alert rules in Sentry for at least:
+
+- every new issue and regression;
+- any issue tagged `sync_state=preflight_failed`, `terminal`, or
+  `reconcile_breaker`;
+- a rising count of `sync_state=retriable_failures`;
+- crash-free session degradation and app-hang regressions.
+
+The Sentry SDK is a new native dependency. The first release containing it must
+increment the app version/runtime and use a full iOS and Android build. It cannot
+be shipped safely as an OTA update to binaries which do not contain the SDK.
+
+### Release verification
+
+1. Confirm the build logs show successful Sentry source-map upload.
+2. Install the preview or production binary on a physical device.
+3. Open Profile, then choose **Test Crash Reporting** under Debug & Support.
+4. Confirm a handled `Masi observability test error` arrives in Sentry with
+   `observability_test=true`.
+5. Confirm the stack is symbolicated and the event contains app build, device,
+   Expo Update, backend, SQLite schema, user, and route context.
+6. Create or use a disposable failed sync row and confirm the corresponding
+   structured sync issue arrives without crashing the app.
+7. Export Logs and Export Database from Profile and confirm the same runtime
+   identity appears in the local support package.
+
+For EAS Build, source-map upload is automatic when the token and plugin values
+are present. For every EAS Update, run the separate `sentry:sourcemaps` command
+shown above against the generated `dist/` directory.
 
 ---
 

@@ -25,6 +25,24 @@ list. They are historical records — do not rewrite them; add new findings here
 
 ---
 
+## Priority order as of 2026-07-14
+
+This is the execution order, not a second backlog. The numbered sections below remain the detailed source.
+
+1. **P0, validate what is already built:** execute the highest-signal physical-device gates (§0), beginning with G1, H3, I1, B1, and the new reading-level gate C6. This is the highest risk-reduction per hour because four completed sprints still have zero real-hardware passes.
+2. **P0, activation and device proof:** configure Sentry Cloud, then run the zero-class and observability device gates (§2/14a, §3). The class -> children onboarding, durable restart recovery, crash capture, and explicit sync-failure reporting are built and automated-green on the current branch; real-device behavior and live Sentry delivery remain unverified.
+3. **P1, structural data safety:** make reconcile server-authoritative (§6), make dependency skipping record-scoped (§1/17), cap failed-batch fan-out (§1/16), and add a version-gated repair hook (§3).
+4. **P1, high-frequency workflow payoff:** make child-row taps open Child Results and show last-session letters in the session form (§2/5). These are contained changes on daily EA paths.
+5. **P2, sync efficiency and recovery:** shorten the domain-pull queue monopoly, stop `created_at` perturbation/re-reads, expand safe batching, and add SQLite bootstrap recovery (§1, §2, §3).
+6. **P2, time-sensitive only when WelaPLUS resumes:** deliberately re-key `assessmentItemDomainId` before real SQLite-backend assessment data exists, but only as a standalone reviewed change (§7). Do not pull it forward merely because the current staging database is disposable.
+7. **P3, group-centred session model:** settle `GRANT_SUBJECTS`, group identity/collision rules, session `group_id` authorization, and then rebuild the group/session workflow in dependency order (§4, §6).
+8. **P4, latent correctness and polish:** fix attendee removal before any saved-session edit UI ships; then shared snackbars, picker clears, typography rollout, search/filter gaps, dependency cleanup, and diagnostics (§2, §3). The attendee bug is real at repository level, but no current screen edits a saved session, so it is not the highest-ROI immediate build.
+
+The real-data seed/import work is deliberately **not in the active execution order**. Jim deferred it
+on 2026-07-14 because the source of truth is an existing Airtable/Postgres system whose table shape,
+identifiers, relationships, and data-quality rules have not yet been mapped into this repo. When it is
+resumed, the first step is read-only source-model discovery with Jim, not an assumed CSV/JSON contract.
+
 ## 0. Blockers before any field build
 
 > **Go-live target: 1-2 weeks from 2026-07-14 (Jim).** That turns everything below from "sometime"
@@ -41,53 +59,20 @@ on "is the id random?" would have missed every one. With a deterministic-id sche
 part of the data contract; the only sound test is *"does the stored id equal what today's code would
 compute for this row's logical key?"*
 
-**Still owed: 46 device gates in `device-gates-sqlite-backend-2026-07.md`, 0 executed.**
+**Still owed: 61 device gates in `device-gates-sqlite-backend-2026-07.md`, 0 executed.**
 Sprints 1-4B are merged but *unverified on real hardware*. Highest-signal: G1 (force-quit + airplane
 mode; a head-office removal must stay gone), H3 (outbox ownership across an EA handover), I1 (low-end
 Android roster scroll), B1 (indoor GPS 10s timeout).
 
 ---
 
-## 0b. Confirmed field bug — reading level does not persist
+## 0b. Deferred Head Office import, not a universal onboarding precondition
 
-**Reported by Jim, 2026-07-13. Root cause traced 2026-07-14. This is a spec gap, not a broken save.**
+**Decision (Jim, 2026-07-14): roughly half of EAs will receive class, child, and group data from Head
+Office; roughly half must create it locally through guided onboarding. The import path is deferred
+until Jim explains the existing Airtable/Postgres source model. Do not invent a source shape.**
 
-A child's reading level, once set, is empty again in the next session.
-
-**It was never designed to persist.** There is no `reading_level` column on `children` — not in
-`src/db/migrations.js`, not in `supabase/migrations/`. The value is written only into the *session's*
-`activities` JSONB as `child_reading_levels` (`LiteracySessionForm.js:497`), and it is **never read
-back anywhere**. The form's state is `useState({})` (`:376`), so it starts empty every time.
-
-The PRD specified it that way: *"each selected child can have their current reading level recorded;
-stored as map in `activities.child_reading_levels`"* — i.e. a per-session observation, not child
-state. But the field mental model (and Jim's) is that a reading level is **a property of the child**
-that should pre-fill and only change when the child progresses. The spec is the bug.
-
-Note a previous commit (`d23853e`, "reading level dropdowns can't be changed after initial
-selection") fixed a *different*, UI-level bug — which is probably why this feels like a regression.
-
-**The fix requires a product decision first:** is reading level durable child state (pre-fills,
-editable, one current value) with the per-session value kept as history? That is almost certainly
-what is wanted, and it means an additive nullable `children.reading_level` column (local + server),
-a read-back into the form, and keeping the existing `activities` snapshot for the session record.
-
-**Related, unconfirmed:** Jim suspects letter-tracker mastery does not save when edited from the
-child screen. Investigation so far says it *should*: `LetterMasteryPanel` (rendered by both
-`ChildResultsScreen` and `LetterTrackerScreen`) writes immediately via
-`masteryRepository.saveLetterMasteryRecord` (`:144`). One plausible source of the *perception*:
-`getCellState` ranks `assessment` above `taught`, so toggling "taught" on a letter already mastered
-via assessment saves correctly but shows no visible change. **Needs a precise repro from Jim before
-any fix.**
-
----
-
-## 0c. GO-LIVE BLOCKER — the real-data seed script
-
-**Decision (Jim, 2026-07-14): all current `masi-app-sqlite` data is disposable. It will be flagged to
-ignore, and real data seeded before go-live. Nothing currently in the database will be used.**
-
-That makes the seed script a **hard go-live blocker**, and it does not exist. Both historical plans
+The import script does not exist. Both historical plans
 (`seed_data_plan.md`, `bulk_import_children_plan.md`) are **schema-dead** — they target
 `staff_children` / `children_groups` / `children.class` text columns, none of which exist.
 
@@ -120,17 +105,23 @@ production scale at the worst possible moment.
 `import { childEaAssignmentDomainId, ... } from '../src/db/repositories/domainRepositoryUtils'`.
 One implementation, three writers (app, sync engine, seed), no possible drift.
 
-**Verification gate before go-live:** re-run the id diff (recompute `uuid_generate_v5` in SQL, compare
-to the stored id) against the seeded database. It must return **0 mismatches** on all four tables plus
-`letter_mastery`. The exact query is in the 2026-07-14 build-log row.
+**Verification gate before any Head Office import reaches field users:** re-run the id diff (recompute
+`uuid_generate_v5` in SQL, compare to the stored id) against the imported database. It must return
+**0 mismatches** on all four tables plus `letter_mastery`. The exact query is in the 2026-07-14
+build-log row.
 
 ### Other seed-script requirements
+
+**Deferred by Jim, 2026-07-14.** The programme has run in a separate Airtable/Postgres system to date.
+Do not design a seed manifest or importer until Jim has explained that source model and the relevant
+tables/data have been inspected read-only. The target-schema rules below remain valid constraints, but
+they are not a source-to-target mapping.
 
 - **It is the same thing as the bulk import.** `bulk_import_children_plan.md`'s purpose ("import real class lists — children + group assignments — from spreadsheets") *is* the go-live seed. **Do not build two scripts.** Build one, idempotent, re-runnable.
 - **Already exists, reuse:** `scripts/seedSchools.js` (325 schools from CSV), `scripts/loadTestUsers.js` (auth user + `public.users` profile from CSV). Reference data (`job_titles`, `programmes`, `assessment_tools`, `academic_years`, `assessment_windows`, `schools`) is seeded by migration.
 - **Still to seed:** `teachers`, `classes`, `children`, `child_class_memberships`, `staff_programme_assignments`, `groups`, `child_group_memberships`, plus the four deterministic-id assignment tables above.
 - **`child_class_memberships` does NOT use deterministic ids** (it recurs on class moves and needs distinct archived rows for audit). It uses reconcile-before-upsert. Random ids are correct there — see contract map §"Active-Pair Collision-Proofing".
-- **Check `child_group_memberships`** — it has a partial unique index on `(child_id, grouping_version_id)` where `removed_at is null`, but no deterministic-id function and no documented reconcile path. **Confirm how a seeded membership and a device-created membership avoid colliding before seeding any.**
+- **Check `child_group_memberships`:** it has a partial unique index on `(child_id, grouping_version_id)` where `removed_at is null`, but no deterministic-id function and no documented reconcile path. Confirm how an imported membership and a device-created membership avoid colliding before importing any source data.
 
 ---
 
@@ -154,9 +145,18 @@ Sixteen of the 21 findings are closed (see the build log). These five are not:
 items and silently dropped every product, design-system, and hygiene item. These are those items.
 
 ### 14a — Zero-class onboarding — **GO-LIVE BLOCKING**
-A brand-new EA with no classes lands on a Home screen that shows nothing actionable.
-`HomeScreen.js` has **zero** references to classes. The roadmap explicitly flags this as go-live
-blocking, not polish.
+**Built on the current branch; physical-device gates M1-M10 remain.** Class bootstrap distinguishes temporary loading,
+cached/seeded data, a backend-confirmed zero, a zero that could not be confirmed because the backend
+was unreachable, and a missing programme assignment. Home and My Children automatically enter the
+onboarding screen only for the two settled zero states. An unconfirmed zero requires the EA to choose
+"Create locally anyway" after a duplicate-data warning. Seeded EAs continue normally.
+
+After class creation, the app requires at least one child, loops child creation, warns until the class
+reaches 10 children, permits finishing from one child onward with confirmation, and ends after the
+child step. The incomplete child step is user-scoped durable SQLite state committed atomically with
+class creation, so Home and My Children resume it after a force-quit. Group creation is deferred from
+this version. Automated verification: 178 unit suites / 1,074 tests, 30 SQLite integration suites /
+261 tests, and an Android production export are green; physical gates M1-M10 are still open.
 
 ### 5 — Child Results workflow remnants (Top-10 item 5, partial)
 The panel and the Children-tab stack shipped, but the two changes that were the *point* of item 5 did not:
@@ -182,6 +182,7 @@ A full item-by-item reconciliation of the June Top-10 and the ZZ port against th
 
 ### 16 — Hygiene
 - Dead dependencies still shipped: `react-hook-form`, `expo-linear-gradient` (zero `src/` imports); `@testing-library/jest-native`; `jest-expo` sits in `dependencies` rather than `devDependencies`.
+- `npx expo install --check` reports `react-native-get-random-values@2.0.0` while Expo SDK 54 expects `~1.11.0`. The check ran with networking disabled and used Expo's local bundled-native-module map, so confirm online before changing this existing native dependency.
 - **No ESLint/Prettier config at all.**
 - `AssessmentChildSelectScreen.js` uses raw `home_language.toLowerCase()` instead of `normalizeLanguageKey`.
 - `ProfileScreen` reports "Current password is incorrect" for *any* sign-in error, including a network failure. Both exports share one `exportLoading` flag.
@@ -195,7 +196,7 @@ A full item-by-item reconciliation of the June Top-10 and the ZZ port against th
 
 These were the *only* record of the item. Their source docs are now in `documentation/archive/`.
 
-- **Crash reporting was never added.** No Sentry/Bugsnag/Crashlytics in `package.json` (the only `@sentry` string is a stale jest `transformIgnorePatterns` entry). A field crash currently leaves no trace beyond a manual log export. *(from the 2026-04-24 field-reliability review)*
+- [ ] **Activate and verify Sentry Cloud.** The current branch now includes `@sentry/react-native`, native/JavaScript crash and hang capture, source-map configuration, safe Profile verification, runtime/build/device/Expo Update/backend/SQLite context, local-log breadcrumbs, and explicit non-crashing sync issue reporting. Remaining external work: create/select the Sentry project, configure DSN/org/project/token in EAS preview and production environments, build both platforms, verify symbolication, connect alert rules, and pass the device gates. *(Original gap from the 2026-04-24 field-reliability review.)*
 - **Push notifications + message inbox** — no `expo-notifications`, no `NotificationsContext`. *(from the June Top-10, item 10 — its only spec)*
 - **`SnackbarContext` / `RootSnackbarHost` never ported** — **14 screens** still render their own `<Snackbar>`. *(from the June Top-10, item 9b; dropped entirely from the July review)*
 - **Version-gated startup repair hook (`requeueFrozen`)** — does not exist. Consequence: **a future field fix cannot heal rows already quarantined on devices.** *(from the ZZ field-lessons review)*

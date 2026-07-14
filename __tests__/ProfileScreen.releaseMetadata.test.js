@@ -17,6 +17,37 @@ jest.mock('expo-constants', () => ({
   },
 }), { virtual: true });
 
+jest.mock('expo-application', () => ({
+  applicationId: 'org.masinyusane.masi',
+  applicationName: 'Masi',
+  nativeApplicationVersion: '1.2.0',
+  nativeBuildVersion: '7',
+}));
+
+jest.mock('expo-device', () => ({
+  brand: 'Apple',
+  deviceName: 'Field iPhone',
+  deviceType: 1,
+  isDevice: true,
+  manufacturer: 'Apple',
+  modelId: 'iPhone-test',
+  modelName: 'iPhone',
+  osBuildId: 'test-build',
+  osName: 'iOS',
+  osVersion: '18.0',
+  platformApiLevel: null,
+  supportedCpuArchitectures: ['arm64'],
+  totalMemory: 4_000_000_000,
+}));
+
+jest.mock('expo-updates', () => ({
+  channel: 'preview',
+  isEmbeddedLaunch: true,
+  isEmergencyLaunch: false,
+  runtimeVersion: '1.2.0',
+  updateId: null,
+}));
+
 jest.mock('../src/context/AuthContext', () => ({
   useAuth: () => ({
     user: { email: 'test@masinyusane.org' },
@@ -42,6 +73,10 @@ jest.mock('../src/services/supabaseClient', () => ({
 jest.mock('../src/utils/debugExport', () => ({
   exportDatabase: jest.fn(),
   exportLogs: jest.fn(),
+}));
+
+jest.mock('../src/services/observability', () => ({
+  sendObservabilityTest: jest.fn(async () => ({ success: true })),
 }));
 
 describe('ProfileScreen release metadata', () => {

@@ -50,6 +50,23 @@ describe('offline sync payload stripping', () => {
     });
   });
 
+  test('keeps the durable current reading level in children sync payloads', () => {
+    const { _testBuildSyncPayload } = require('../src/services/offlineSync');
+
+    expect(_testBuildSyncPayload('children', {
+      id: 'child-1',
+      first_name: 'Amahle',
+      last_name: 'Dlamini',
+      reading_level: 'Word Reading',
+      sync_status: 'pending',
+    })).toEqual({
+      id: 'child-1',
+      first_name: 'Amahle',
+      last_name: 'Dlamini',
+      reading_level: 'Word Reading',
+    });
+  });
+
   test('strips local pending-session markers, legacy Build B session_type, and view-model arrays', () => {
     const { _testBuildSyncPayload } = require('../src/services/offlineSync');
 
@@ -144,4 +161,5 @@ describe('offline sync payload stripping', () => {
       metadata: { letters_attempted: 4 },
     }));
   });
+
 });

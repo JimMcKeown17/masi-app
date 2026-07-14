@@ -34,6 +34,7 @@
 - [ ] **C3. Force-quit with unsynced work.** After C2, force-quit the app, reopen (still offline). The session is still there, still pending.
 - [ ] **C4. Reconnect.** Turn the network back on. The session syncs without you doing anything. "Last Synced" updates.
 - [ ] **C5. Leave guard.** Start a session, select a child, then swipe back. You should be warned about unsaved changes.
+- [ ] **C6. Current reading level survives the real lifecycle.** Open a literacy session and confirm a child's previously saved level is pre-filled. Change it, save while offline, force-quit, reopen, and start another session for the same child: the new value must still be selected. Reconnect and sync, then confirm the child update leaves the outbox and the same level appears on Edit Child and Child Results. The completed session must retain its own per-child snapshot even after the current child level changes again.
 
 ## D. Assessment capture
 
@@ -84,6 +85,33 @@ npm run sqlite:staging:query -- "select u.id as ea_id, c.id as class_id, c.name 
 - [ ] **H1.** EA A signs in on the device, captures a session **offline**, then signs out without ever connecting.
 - [ ] **H2.** EA B signs in on the same device **with connectivity** and syncs. B's work syncs. A's pending session must **not** be pushed under B's account and must **not** land in "Needs Attention."
 - [ ] **H3.** A signs back in on that device with connectivity. A's session now syncs cleanly. *(Sprint 2A: outbox ownership. Without this fix, A's data was stranded and needed support to recover.)*
+
+## M. Zero-class bootstrap and duplicate safety
+
+Use two test EAs: one with Head Office-seeded data and one with no class assignment.
+
+- [ ] **M1. Seeded EA is never diverted.** Sign in as the seeded EA online, open Home, then open My Children. Both show the seeded class/roster and neither opens onboarding.
+- [ ] **M2. Confirmed zero enters automatically.** Sign in online as the zero-class EA. After the backend class check completes, Home automatically opens Setup Your Programme. Repeat from My Children.
+- [ ] **M3. Offline zero cannot silently create duplicates.** Fresh-install or clear the test EA's local data, make the backend unreachable, then sign in with a valid cached session. The onboarding screen must explain that Head Office data could exist and must not navigate to Create Class until **Create locally anyway** is pressed.
+- [ ] **M4. Retry can recover seeded data.** From the M3 warning, restore connectivity and choose Retry Backend Check after seeding a class for that EA. Onboarding closes and the seeded class appears; no local duplicate is created.
+- [ ] **M5. Missing programme is not mistaken for an empty roster.** An EA without an active programme assignment sees the Head Office assignment message and cannot create a local class under an undefined programme.
+- [ ] **M6. Class creation enters child setup.** Create a class from onboarding. The app opens Add Your Children for that exact class and says `STEP 2 OF 2`. It does not offer or promise a group step.
+- [ ] **M7. Zero children cannot escape.** With no child added, Finish Setup is disabled. Try the Android hardware back button and the iOS back gesture. The route stays open and explains that at least one child is required.
+- [ ] **M8. Force-quit resumes the requirement.** Create the class, add no child, force-quit, and reopen. Home resumes Add Your Children for the same class. Repeat by opening My Children. The app must not mistake the existing zero-child class for completed onboarding.
+- [ ] **M9. Child entry loops and under-10 stays explicit.** Add one child and save. The app returns to Add Your Children, shows `1 child added`, offers Add Another Child, and keeps the warning. Finish Setup asks for explicit confirmation while the count is 1 through 9.
+- [ ] **M10. Ten removes the warning, not the add path.** Add the tenth child. The warning becomes Recommended roster reached, Add Another Child remains available, and Finish Setup exits directly without a confirmation dialog.
+
+## N. Sentry and local support evidence
+
+Run these only after the preview EAS environment contains the Sentry DSN, organization, project, and
+sensitive auth token.
+
+- [ ] **N1. Build symbols upload.** The EAS preview build log shows a successful Sentry source-map upload. A build with a failed upload does not pass this gate.
+- [ ] **N2. Handled-error symbolication.** On the physical device, Profile -> Debug & Support -> Test Crash Reporting. Sentry receives `Masi observability test error` with `observability_test=true`, a readable source-mapped application frame, current route/user, installed build, device/OS, Expo Update, backend project, and SQLite schema.
+- [ ] **N3. Offline event delivery.** Repeat N2 in airplane mode, then restore connectivity. The event arrives after reconnect instead of being lost.
+- [ ] **N4. Non-crashing sync failure.** Using only disposable staging data, exercise a known retriable or terminal outbox failure. The app remains usable and Sentry receives the structured sync issue with table/operation/error code, counts, online state, last attempt, and last successful sync. Confirm repeated 30-second status polls do not create duplicate issues.
+- [ ] **N5. Reconcile breaker.** Trigger a disposable mass-end circuit breaker. Confirm the device still requires attention and Sentry receives one `sync_state=reconcile_breaker` issue with scope/candidate/end counts.
+- [ ] **N6. Local evidence remains independent.** Export Logs and Export Database. Both identify the same installed build, device, Expo Update, backend, and SQLite schema. The log contains recent console entries even if Sentry was unreachable.
 
 ---
 

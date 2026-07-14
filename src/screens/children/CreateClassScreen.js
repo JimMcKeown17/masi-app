@@ -15,7 +15,7 @@ import { GRADES, HOME_LANGUAGES } from '../../constants/options';
 import { NO_TEXT_SUGGESTIONS } from '../../constants/textInputProps';
 import SelectSheet from '../../components/common/SelectSheet';
 
-export default function CreateClassScreen({ navigation }) {
+export default function CreateClassScreen({ route, navigation }) {
   const { schools, addClass } = useClasses();
 
   const [schoolId, setSchoolId] = useState('');
@@ -49,16 +49,25 @@ export default function CreateClassScreen({ navigation }) {
 
     setLoading(true);
     try {
-      const result = await addClass({
+      const classData = {
         name: className.trim(),
         grade,
         teacher: teacher.trim(),
         home_language: homeLanguage,
         school_id: schoolId,
-      });
+      };
+      const result = route?.params?.onboarding
+        ? await addClass(classData, { onboarding: true })
+        : await addClass(classData);
 
       if (result.success) {
-        navigation.goBack();
+        if (route?.params?.onboarding) {
+          navigation.replace('ChildOnboarding', {
+            classId: result.classData.id,
+          });
+        } else {
+          navigation.goBack();
+        }
       } else {
         setSnackbar({ visible: true, message: 'Error creating class' });
       }

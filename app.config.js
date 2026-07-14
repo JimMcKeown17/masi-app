@@ -2,6 +2,18 @@ const { resolveSupabaseProjectConfig } = require('./config/supabaseProjectConfig
 
 module.exports = () => {
   const supabaseConfig = resolveSupabaseProjectConfig();
+  const sentryOrganization = process.env.SENTRY_ORG;
+  const sentryProject = process.env.SENTRY_PROJECT;
+  const sentryPlugin = sentryOrganization && sentryProject
+    ? [[
+      '@sentry/react-native/expo',
+      {
+        url: 'https://sentry.io/',
+        organization: sentryOrganization,
+        project: sentryProject,
+      },
+    ]]
+    : [];
 
   return {
     expo: {
@@ -48,12 +60,18 @@ module.exports = () => {
               'Masi needs your location to verify you are at the school when signing in and out for time tracking.',
           },
         ],
+        ...sentryPlugin,
       ],
       web: {
         favicon: './assets/favicon.png',
       },
       extra: {
         ...supabaseConfig,
+        sentryConfigured: Boolean(
+          process.env.EXPO_PUBLIC_SENTRY_DSN
+          && sentryOrganization
+          && sentryProject
+        ),
         eas: {
           projectId: '6a430b63-345e-4313-90ea-e332700295e9',
         },

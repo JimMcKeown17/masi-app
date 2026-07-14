@@ -31,6 +31,16 @@ jest.mock('expo-constants', () => ({
   },
 }), { virtual: true });
 
+jest.mock('../src/utils/runtimeDiagnostics', () => ({
+  getRuntimeDiagnostics: () => ({
+    application: { id: 'org.masinyusane.masi', version: '1.2.0', build: '47' },
+    device: { modelName: 'Pixel 8a', osName: 'Android', osVersion: '15' },
+    update: { id: 'update-123', channel: 'production', runtimeVersion: '1.2.0' },
+    backend: { target: 'sqlite-staging', projectId: 'segygjzpujphwvrubusm' },
+    sqlite: { schemaVersion: 8 },
+  }),
+}));
+
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { getDatabase } from '../src/db/client';
 import { debugDump } from '../src/db/debugDump';
@@ -78,6 +88,11 @@ describe('debug database export metadata', () => {
       appVersion: '1.2.0',
       supabaseTarget: 'sqlite-staging',
       supabaseProjectId: 'segygjzpujphwvrubusm',
+    }));
+    expect(exported.runtimeDiagnostics).toEqual(expect.objectContaining({
+      application: expect.objectContaining({ build: '47' }),
+      device: expect.objectContaining({ modelName: 'Pixel 8a', osVersion: '15' }),
+      update: expect.objectContaining({ id: 'update-123' }),
     }));
     expect(exported.database.database).toBe('sqlite');
     expect(exported.database.releaseMetadata).toEqual(expect.objectContaining({

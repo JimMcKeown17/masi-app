@@ -24,7 +24,7 @@ A React Native mobile application for Masi, a nonprofit organization, to manage 
 
 As of 2026-05-26, the app's forward architecture is normalized SQLite local storage plus the `masi-app-sqlite` Supabase backend (`segygjzpujphwvrubusm`). The migration was a clean-slate move from AsyncStorage domain storage; legacy local AsyncStorage domain data is not migrated.
 
-Domain writes now flow through SQLite repositories. A write updates normalized local tables first, enqueues a durable `sync_outbox` row in the same transaction, updates the UI from local state, then syncs to Supabase in dependency order when online. `sync_state` stores pull cursors/state; `local_state` stores small local metadata such as the cached user profile and temporary screen-shaped sidecar payloads.
+Domain writes now flow through SQLite repositories. A write updates normalized local tables first, enqueues a durable `sync_outbox` row in the same transaction, updates the UI from local state, then syncs to Supabase in dependency order when online. `sync_state` stores pull cursors/state; `local_state` stores small device-local metadata such as the cached user profile and a user-scoped marker for an incomplete first-class child-onboarding step.
 
 Programme is a first-class operational model, separate from job title. EAs have active `staff_programme_assignments`; children may have multiple concurrent `child_programme_enrollments`; user-facing reads are programme-scoped by default. Sessions, assessments, letter mastery, groups, and class assignments carry `programme_id` so each EA sees their current programme slice.
 
@@ -389,6 +389,13 @@ User Action → Local AsyncStorage → UI Update → Sync Queue → Supabase →
 - [x] **Fixed auto-sync**: refreshSyncStatus now triggers sync when unsynced items detected
 - [x] **Fixed uuid**: installed react-native-get-random-values polyfill in App.js entry point
 
+#### 2026-07-14 Session data-integrity follow-up
+- [x] Persist each child's current reading level locally and enqueue it with the session transaction
+- [x] Add the nullable `children.reading_level` column to SQLite and Supabase through migrations
+- [x] Pre-fill the next session from the child's saved current reading level
+- [x] Verify all Literacy session and tracker fields across form, SQLite, outbox, and Supabase payloads
+- [x] Record focused tests, integration tests, and required device/backend gates
+
 ### Phase 5: Additional Session Forms
 - [ ] Numeracy Coach form (get field requirements)
 - [ ] ZZ Coach form (get field requirements)
@@ -411,6 +418,14 @@ User Action → Local AsyncStorage → UI Update → Sync Queue → Supabase →
 - [x] Form validation (basic client-side) — inline red errors on LiteracySessionForm; email regex guard on LoginScreen
 - [x] User feedback (toasts, alerts) — Snackbar pattern applied consistently
 - [x] RLS policy tightening — `supabase-migrations/03_tighten_children_rls.sql` (adds `created_by` column, BEFORE INSERT trigger, replaces `WITH CHECK (TRUE)` policy)
+- [x] Add Sentry native/JavaScript crash, app-hang, failed-request, and React ErrorBoundary capture
+- [x] Report non-crashing sync failures: skipped passes, preflights, retries, terminal rows, and reconcile breakers
+- [x] Add installed build/device/Expo Update/backend/SQLite context to Sentry and local support exports
+- [x] Add a safe handled-error verification action and EAS Build/Update source-map configuration
+- [ ] Configure Sentry Cloud/EAS credentials and pass physical-device symbolication and sync-issue gates
+- [x] Detect confirmed/unconfirmed zero-class bootstrap states and auto-enter onboarding from Home/My Children
+- [x] Require explicit duplicate-risk acknowledgement before offline local class creation
+- [x] Complete the settled class -> children handoff: require one child, persist and resume the incomplete step across restarts, loop additions, warn below 10, and finish without a group step
 - [ ] Security review
 - [ ] Testing on Android emulator
 - [ ] Testing on iOS simulator

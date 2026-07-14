@@ -7,6 +7,7 @@ import {
   Card,
   Banner,
   List,
+  ActivityIndicator,
 } from 'react-native-paper';
 import { useFocusEffect } from '@react-navigation/native';
 import { useAuth } from '../../context/AuthContext';
@@ -33,6 +34,8 @@ export default function ChildrenListScreen({ navigation }) {
     classes,
     schools,
     loading: classesLoading,
+    classBootstrapStatus,
+    incompleteOnboardingClassId,
     loadClasses: pullClassesFromServer,
     getChildrenInClass,
   } = useClasses();
@@ -45,6 +48,25 @@ export default function ChildrenListScreen({ navigation }) {
   // their class on entry, but once that has happened (or they've reached the list
   // via Manage classes), the tab leaves them where they are.
   const hasAutoRouted = useRef(false);
+  const onboardingEntered = useRef(false);
+
+  useFocusEffect(
+    useCallback(() => {
+      const shouldEnterOnboarding = classBootstrapStatus === 'confirmed_empty'
+        || classBootstrapStatus === 'unconfirmed_empty';
+      if (incompleteOnboardingClassId && !onboardingEntered.current) {
+        onboardingEntered.current = true;
+        navigation.navigate('ChildOnboarding', {
+          classId: incompleteOnboardingClassId,
+        });
+      } else if (shouldEnterOnboarding && !onboardingEntered.current) {
+        onboardingEntered.current = true;
+        navigation.navigate('ClassOnboarding');
+      } else if (!incompleteOnboardingClassId && !shouldEnterOnboarding) {
+        onboardingEntered.current = false;
+      }
+    }, [classBootstrapStatus, incompleteOnboardingClassId, navigation])
+  );
 
   useFocusEffect(
     useCallback(() => {
@@ -211,6 +233,30 @@ export default function ChildrenListScreen({ navigation }) {
       );
     }
 
+    if (classBootstrapStatus === 'checking') {
+      return (
+        <View style={styles.emptyState}>
+          <ActivityIndicator size="large" color={colors.primary} />
+          <Text variant="bodyMedium" style={styles.loadingText}>
+            Checking for assigned classes...
+          </Text>
+        </View>
+      );
+    }
+
+    if (classBootstrapStatus === 'no_active_programme') {
+      return (
+        <View style={styles.emptyState}>
+          <Text variant="headlineSmall" style={styles.emptyTitle}>
+            Programme setup needed
+          </Text>
+          <Text variant="bodyMedium" style={styles.emptyText}>
+            Ask Head Office to assign your active programme before creating a class.
+          </Text>
+        </View>
+      );
+    }
+
     return (
       <View style={styles.emptyState}>
         <Text style={styles.emptyIcon}>📚</Text>
@@ -222,11 +268,11 @@ export default function ChildrenListScreen({ navigation }) {
         </Text>
         <Button
           mode="contained"
-          onPress={() => navigation.navigate('CreateClass')}
+          onPress={() => navigation.navigate('ClassOnboarding')}
           style={styles.emptyCreateButton}
           icon="plus"
         >
-          Create Class
+          Start Setup
         </Button>
       </View>
     );
@@ -391,5 +437,9 @@ const styles = StyleSheet.create({
   },
   emptyCreateButton: {
     paddingHorizontal: spacing.lg,
+  },
+  loadingText: {
+    color: colors.textSecondary,
+    marginTop: spacing.md,
   },
 });

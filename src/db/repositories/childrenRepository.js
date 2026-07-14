@@ -29,6 +29,7 @@ const CHILD_COLUMNS = [
   'date_of_birth',
   'age',
   'gender',
+  'reading_level',
   'class_id',
   'hidden_at',
   'archived_at',

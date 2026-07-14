@@ -4,6 +4,7 @@ import { AppState } from 'react-native';
 import { supabase } from '../services/supabaseClient';
 import { syncAll, getSyncStatus, requeueTerminalRlsFailures } from '../services/offlineSync';
 import { syncStateRepository } from '../db/repositories/syncStateRepository';
+import { captureOperationalError, reportSyncResult, reportSyncStatus } from '../services/observability';
 
 const BACKGROUND_SYNC_DEBOUNCE_MS = 1000;
 export const DOMAIN_PULL_STALENESS_MS = 15 * 60 * 1000;
@@ -79,6 +80,15 @@ export const OfflineProvider = ({ children }) => {
       inFlightCountRef.current = status.inFlightCount || 0;
       setSyncStatus(prev => (isSameSyncStatus(prev, status) ? prev : status));
 
+      try {
+        reportSyncStatus(status, {
+          source: 'status_refresh',
+          isOnline: isOnlineRef.current,
+        });
+      } catch (observabilityError) {
+        console.warn('Could not report sync status:', observabilityError);
+      }
+
       if (autoTrigger && ((status.readyCount || 0) > 0 || (status.inFlightCount || 0) > 0) && isOnlineRef.current) {
         triggerBackgroundSyncRef.current();
       }
@@ -86,6 +96,10 @@ export const OfflineProvider = ({ children }) => {
       return status;
     } catch (error) {
       console.error('Error refreshing sync status:', error);
+      captureOperationalError(error, {
+        category: 'sync_status_refresh',
+        context: { ownerUserId: currentUserIdRef.current },
+      });
       return null;
     }
   }, []);
@@ -123,11 +137,24 @@ export const OfflineProvider = ({ children }) => {
         console.log('Starting sync...');
         const result = await syncAll({ force });
         setLastSyncResult(result);
+        try {
+          reportSyncResult(result, {
+            source: 'sync_now',
+            force,
+            isOnline: isOnlineRef.current,
+          });
+        } catch (observabilityError) {
+          console.warn('Could not report sync result:', observabilityError);
+        }
         await refreshSyncStatus({ autoTrigger: false });
         console.log('Sync completed:', result);
         return result;
       } catch (error) {
         console.error('Sync failed:', error);
+        captureOperationalError(error, {
+          category: 'sync_pass_failed',
+          context: { force },
+        });
         return { success: false, error };
       } finally {
         activeSyncPromise.current = null;

@@ -5,6 +5,7 @@ import CreateClassScreen from '../src/screens/children/CreateClassScreen';
 
 const mockAddClass = jest.fn().mockResolvedValue({ success: true });
 const mockNavigationGoBack = jest.fn();
+const mockNavigationReplace = jest.fn();
 
 jest.mock('../src/context/ClassesContext', () => ({
   useClasses: () => ({
@@ -16,12 +17,15 @@ jest.mock('../src/context/ClassesContext', () => ({
   }),
 }));
 
-const navigation = { goBack: mockNavigationGoBack };
+const navigation = {
+  goBack: mockNavigationGoBack,
+  replace: mockNavigationReplace,
+};
 
-const renderScreen = () =>
+const renderScreen = (route) =>
   render(
     <PaperProvider>
-      <CreateClassScreen navigation={navigation} />
+      <CreateClassScreen navigation={navigation} route={route} />
     </PaperProvider>
   );
 
@@ -109,6 +113,28 @@ describe('CreateClassScreen', () => {
       home_language: 'isiXhosa',
     })));
     expect(mockNavigationGoBack).toHaveBeenCalledTimes(1);
+    expect(mockNavigationReplace).not.toHaveBeenCalled();
+  });
+
+  test('advances onboarding to the child step with the created class', async () => {
+    mockAddClass.mockResolvedValueOnce({
+      success: true,
+      classData: { id: 'class-new' },
+    });
+    const screen = renderScreen({ params: { onboarding: true } });
+    completeRequiredFields(screen);
+
+    fireEvent.press(screen.getByText('Create Class'));
+
+    await waitFor(() => expect(mockAddClass).toHaveBeenCalledWith(
+      expect.objectContaining({ name: '1A' }),
+      { onboarding: true }
+    ));
+    await waitFor(() => expect(mockNavigationReplace).toHaveBeenCalledWith(
+      'ChildOnboarding',
+      { classId: 'class-new' }
+    ));
+    expect(mockNavigationGoBack).not.toHaveBeenCalled();
   });
 
   test('stays on the form when local class create fails', async () => {

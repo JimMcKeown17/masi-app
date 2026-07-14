@@ -227,4 +227,24 @@ describe('LiteracySessionForm', () => {
       }),
     ));
   });
+
+  test('pre-fills a selected child from their saved current reading level', () => {
+    mockUseChildren.mockReturnValue({
+      children: [{
+        id: 'child-1',
+        first_name: 'Amahle',
+        last_name: 'Dlamini',
+        class_id: 'class-1',
+        reading_level: READING_LEVELS[4],
+      }],
+      groups: [],
+      getChildrenInGroup: () => [],
+    });
+    const screen = renderForm();
+
+    fireEvent.press(screen.getByText('Amahle Dlamini'));
+
+    expect(screen.getByText(READING_LEVELS[4])).toBeTruthy();
+    expect(screen.queryByText('Not set')).toBeNull();
+  });
 });

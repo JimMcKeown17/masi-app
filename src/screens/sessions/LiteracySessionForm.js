@@ -432,6 +432,14 @@ export default function LiteracySessionForm({ navigation }) {
 
   const handleChildrenChange = useCallback((newSelection) => {
     setSelectedChildren(newSelection);
+    setChildReadingLevels((previousLevels) => {
+      const nextLevels = {};
+      for (const child of newSelection) {
+        const readingLevel = previousLevels[child.id] || child.reading_level;
+        if (readingLevel) nextLevels[child.id] = readingLevel;
+      }
+      return nextLevels;
+    });
     if (newSelection.length > 0) {
       setValidationErrors((prev) => { const { children, ...rest } = prev; return rest; });
     }

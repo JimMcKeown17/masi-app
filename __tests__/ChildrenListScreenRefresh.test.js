@@ -52,6 +52,7 @@ describe('ChildrenListScreen pull to refresh', () => {
       classes: [],
       schools: [],
       loading: false,
+      classBootstrapStatus: 'available',
       loadClasses,
       getChildrenInClass: jest.fn(() => []),
     });
@@ -77,5 +78,51 @@ describe('ChildrenListScreen pull to refresh', () => {
       .toBeLessThan(loadChildren.mock.invocationCallOrder[0]);
     expect(syncNow.mock.invocationCallOrder[0])
       .toBeLessThan(loadClasses.mock.invocationCallOrder[0]);
+  });
+
+  test('automatically enters onboarding from My Children after zero classes are confirmed', () => {
+    mockUseFocusEffect.mockImplementation((callback) => callback());
+    mockUseClasses.mockReturnValue({
+      classes: [],
+      schools: [],
+      loading: false,
+      classBootstrapStatus: 'confirmed_empty',
+      loadClasses,
+      getChildrenInClass: jest.fn(() => []),
+    });
+    const navigation = { navigate: jest.fn() };
+
+    render(
+      <PaperProvider>
+        <ChildrenListScreen navigation={navigation} />
+      </PaperProvider>
+    );
+
+    expect(navigation.navigate).toHaveBeenCalledWith('ClassOnboarding');
+  });
+
+  test('resumes the durable child step from My Children after a restart', () => {
+    mockUseFocusEffect.mockImplementation((callback) => callback());
+    mockUseClasses.mockReturnValue({
+      classes: [{ id: 'class-pending', name: 'Grade 1A' }],
+      schools: [],
+      loading: false,
+      classBootstrapStatus: 'available',
+      incompleteOnboardingClassId: 'class-pending',
+      loadClasses,
+      getChildrenInClass: jest.fn(() => []),
+    });
+    const navigation = { navigate: jest.fn() };
+
+    render(
+      <PaperProvider>
+        <ChildrenListScreen navigation={navigation} />
+      </PaperProvider>
+    );
+
+    expect(navigation.navigate).toHaveBeenCalledWith('ChildOnboarding', {
+      classId: 'class-pending',
+    });
+    expect(navigation.navigate).not.toHaveBeenCalledWith('ClassOnboarding');
   });
 });

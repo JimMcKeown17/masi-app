@@ -1,5 +1,5 @@
-import React from 'react';
-import { NavigationContainer } from '@react-navigation/native';
+import React, { useEffect } from 'react';
+import { NavigationContainer, useNavigationContainerRef } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { useAuth } from '../context/AuthContext';
@@ -10,6 +10,10 @@ import { Text } from 'react-native-paper';
 import { colors } from '../constants/colors';
 import SyncIndicator from '../components/common/SyncIndicator';
 import ProfileGearButton from '../components/common/ProfileGearButton';
+import {
+  registerNavigationContainer,
+  setObservabilityUser,
+} from '../services/observability';
 
 // Auth screens
 import LoginScreen from '../screens/auth/LoginScreen';
@@ -30,6 +34,8 @@ import EditChildScreen from '../screens/children/EditChildScreen';
 import CreateClassScreen from '../screens/children/CreateClassScreen';
 import EditClassScreen from '../screens/children/EditClassScreen';
 import ClassDetailScreen from '../screens/children/ClassDetailScreen';
+import ClassOnboardingScreen from '../screens/onboarding/ClassOnboardingScreen';
+import ChildOnboardingScreen from '../screens/onboarding/ChildOnboardingScreen';
 
 // Session screens
 import SessionFormScreen from '../screens/sessions/SessionFormScreen';
@@ -224,11 +230,28 @@ function MainNavigator() {
         }}
       />
       <Stack.Screen
+        name="ClassOnboarding"
+        component={ClassOnboardingScreen}
+        options={{
+          title: 'Set Up Your Class',
+          headerBackTitle: 'Back',
+        }}
+      />
+      <Stack.Screen
         name="CreateClass"
         component={CreateClassScreen}
         options={{
           title: 'Create Class',
           headerBackTitle: 'Back',
+        }}
+      />
+      <Stack.Screen
+        name="ChildOnboarding"
+        component={ChildOnboardingScreen}
+        options={{
+          title: 'Add Your Children',
+          headerBackVisible: false,
+          gestureEnabled: false,
         }}
       />
       <Stack.Screen
@@ -367,6 +390,11 @@ function MainNavigator() {
 
 export default function AppNavigator() {
   const { user, loading } = useAuth();
+  const navigationRef = useNavigationContainerRef();
+
+  useEffect(() => {
+    setObservabilityUser(user || null);
+  }, [user?.id, user?.email]);
 
   if (loading) {
     return (
@@ -377,7 +405,10 @@ export default function AppNavigator() {
   }
 
   return (
-    <NavigationContainer>
+    <NavigationContainer
+      ref={navigationRef}
+      onReady={() => registerNavigationContainer(navigationRef)}
+    >
       {user ? <MainNavigator /> : <AuthNavigator />}
     </NavigationContainer>
   );

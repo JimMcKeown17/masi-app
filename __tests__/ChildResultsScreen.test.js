@@ -32,7 +32,12 @@ describe('ChildResultsScreen', () => {
     const navigation = { navigate: jest.fn() };
     const route = {
       params: {
-        child: { id: 'child-1', first_name: 'Amahle', last_name: 'Dlamini' },
+        child: {
+          id: 'child-1',
+          first_name: 'Amahle',
+          last_name: 'Dlamini',
+          reading_level: 'Word Reading',
+        },
         classItem: { id: 'class-1', home_language: 'English' },
       },
     };
@@ -43,6 +48,7 @@ describe('ChildResultsScreen', () => {
     );
 
     await waitFor(() => expect(getByText('Amahle Dlamini')).toBeTruthy());
+    expect(getByText('Current reading level: Word Reading')).toBeTruthy();
     expect(getByText('Letter Sound')).toBeTruthy();
     expect(getByText('MASTERY_PANEL')).toBeTruthy();
     expect(queryByText('View and manage letter mastery progress')).toBeNull();

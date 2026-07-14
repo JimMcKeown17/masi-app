@@ -14,6 +14,7 @@ import { useAuth } from '../src/context/AuthContext';
 import { classesRepository } from '../src/db/repositories/classesRepository';
 import { classEaAssignmentsRepository } from '../src/db/repositories/classEaAssignmentsRepository';
 import { syncStateRepository } from '../src/db/repositories/syncStateRepository';
+import { classOnboardingRepository } from '../src/db/repositories/classOnboardingRepository';
 
 const mockSupabaseFrom = jest.fn();
 const queryResult = (result) => {
@@ -98,6 +99,14 @@ jest.mock('../src/db/repositories/syncStateRepository', () => ({
   },
 }));
 
+jest.mock('../src/db/repositories/classOnboardingRepository', () => ({
+  classOnboardingRepository: {
+    start: jest.fn(),
+    getPendingClassId: jest.fn(),
+    complete: jest.fn(),
+  },
+}));
+
 const wrapper = ({ children }) => (
   <ClassesProvider>{children}</ClassesProvider>
 );
@@ -121,6 +130,9 @@ describe('ClassesContext Plan 5 behavior', () => {
     classesRepository.deleteClass.mockResolvedValue(true);
     classEaAssignmentsRepository.saveServerRows.mockResolvedValue({ applied: 0, skipped: 0 });
     syncStateRepository.setPullState.mockResolvedValue(true);
+    classOnboardingRepository.start.mockResolvedValue(true);
+    classOnboardingRepository.getPendingClassId.mockResolvedValue(null);
+    classOnboardingRepository.complete.mockResolvedValue(true);
     refreshChildrenFromCache.mockResolvedValue(undefined);
     fetchAndCacheSchools.mockResolvedValue([]);
     ensureReferenceData.mockResolvedValue({});
@@ -187,6 +199,34 @@ describe('ClassesContext Plan 5 behavior', () => {
 
     await waitFor(() => expect(mockSupabaseFrom).toHaveBeenCalledWith('staff_programme_assignments'));
     expect(mockSupabaseFrom).toHaveBeenCalledTimes(1);
+  });
+
+  test('reports confirmed zero classes only after the initial backend check succeeds', async () => {
+    let releaseClasses;
+    const heldClasses = new Promise((resolve) => {
+      releaseClasses = resolve;
+    });
+    mockSupabaseFrom.mockImplementation((tableName) => {
+      if (tableName === 'staff_programme_assignments') {
+        return queryResult({ data: [{ programme_id: 'programme-a' }], error: null });
+      }
+      const builder = queryResult({ data: [], error: null });
+      builder.order = jest.fn(() => heldClasses);
+      return builder;
+    });
+
+    const { result } = renderHook(() => useClasses(), { wrapper });
+
+    expect(result.current.classBootstrapStatus).toBe('checking');
+    await waitFor(() => expect(mockSupabaseFrom).toHaveBeenCalledWith('classes'));
+    expect(result.current.classBootstrapStatus).toBe('checking');
+
+    await act(async () => {
+      releaseClasses({ data: [], error: null });
+      await heldClasses;
+    });
+
+    await waitFor(() => expect(result.current.classBootstrapStatus).toBe('confirmed_empty'));
   });
 
   test('rapid same-user nonce increments join one in-flight class pull', async () => {
@@ -506,10 +546,20 @@ describe('ClassesContext Plan 5 behavior', () => {
       return queryResult({ data: [], error: null });
     });
 
-    renderHook(() => useClasses(), { wrapper });
+    const { result } = renderHook(() => useClasses(), { wrapper });
 
     await waitFor(() => expect(mockSupabaseFrom).toHaveBeenCalledWith('staff_programme_assignments'));
     expect(syncStateRepository.setPullState).not.toHaveBeenCalled();
+    await waitFor(() => expect(result.current.classBootstrapStatus).toBe('unconfirmed_empty'));
+  });
+
+  test('a local class-cache read failure settles bootstrap conservatively', async () => {
+    classesRepository.getClasses.mockRejectedValue(new Error('sqlite unavailable'));
+
+    const { result } = renderHook(() => useClasses(), { wrapper });
+
+    await waitFor(() => expect(result.current.classBootstrapStatus).toBe('unconfirmed_empty'));
+    expect(result.current.loading).toBe(false);
   });
 
   test('a classes pull with an incomplete reconcile does not stamp', async () => {
@@ -634,6 +684,51 @@ describe('ClassesContext Plan 5 behavior', () => {
       name: 'Grade 1A',
       academic_year_id: 'year-2026',
     }));
+  });
+
+  test('starts durable child onboarding in the same class-creation operation', async () => {
+    const { result } = renderHook(() => useClasses(), { wrapper });
+    await waitFor(() => expect(classesRepository.getClasses).toHaveBeenCalled());
+
+    await act(async () => {
+      await result.current.addClass({
+        school_id: 'school-1',
+        name: 'Grade 1A',
+        grade: '1',
+      }, { onboarding: true });
+    });
+
+    expect(classOnboardingRepository.start).toHaveBeenCalledWith({
+      userId: 'user-1',
+      classData: expect.objectContaining({
+        school_id: 'school-1',
+        name: 'Grade 1A',
+      }),
+    });
+    expect(classesRepository.saveClass).not.toHaveBeenCalled();
+    expect(result.current.incompleteOnboardingClassId).toEqual(expect.any(String));
+  });
+
+  test('restores and completes a pending child step for the active user', async () => {
+    classOnboardingRepository.getPendingClassId.mockResolvedValue('class-pending');
+    classesRepository.getClasses.mockResolvedValue([{
+      id: 'class-pending',
+      name: 'Grade 1A',
+    }]);
+    const { result } = renderHook(() => useClasses(), { wrapper });
+
+    await waitFor(() => {
+      expect(result.current.incompleteOnboardingClassId).toBe('class-pending');
+    });
+    await act(async () => {
+      await result.current.completeClassOnboarding('class-pending');
+    });
+
+    expect(classOnboardingRepository.complete).toHaveBeenCalledWith({
+      userId: 'user-1',
+      classId: 'class-pending',
+    });
+    expect(result.current.incompleteOnboardingClassId).toBeNull();
   });
 
   test('deleteClass archives in the repository and refreshes child cache without double writes', async () => {

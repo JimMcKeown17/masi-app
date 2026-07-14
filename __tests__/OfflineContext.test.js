@@ -6,6 +6,7 @@ import { OfflineProvider, useOffline } from '../src/context/OfflineContext';
 import { supabase } from '../src/services/supabaseClient';
 import { getSyncStatus, requeueTerminalRlsFailures, syncAll } from '../src/services/offlineSync';
 import { syncStateRepository } from '../src/db/repositories/syncStateRepository';
+import { reportSyncResult, reportSyncStatus } from '../src/services/observability';
 
 const appStateCurrentStateDescriptor = Object.getOwnPropertyDescriptor(AppState, 'currentState');
 
@@ -35,6 +36,12 @@ jest.mock('../src/db/repositories/syncStateRepository', () => ({
     getPullState: jest.fn(),
     getReconcileBreakerNotes: jest.fn(),
   },
+}));
+
+jest.mock('../src/services/observability', () => ({
+  reportSyncResult: jest.fn(),
+  reportSyncStatus: jest.fn(),
+  captureOperationalError: jest.fn(),
 }));
 
 const wrapper = ({ children }) => (
@@ -124,6 +131,33 @@ describe('OfflineContext Plan 4 sync API', () => {
 
     expect(result.current.needsAttentionCount).toBe(1);
     expect(result.current.syncStatus.reconcileBreakerNotes).toEqual([note]);
+    expect(reportSyncStatus).toHaveBeenCalledWith(expect.objectContaining({
+      reconcileBreakerNotes: [note],
+    }), { source: 'status_refresh', isOnline: true });
+  });
+
+  test('reports a returned sync result even when the sync engine does not throw', async () => {
+    const syncResult = {
+      success: true,
+      totalSynced: 0,
+      totalFailed: 2,
+      totalTerminal: 0,
+      totalRetriable: 2,
+      failedRecords: [{ table: 'sessions', reason: 'network request failed' }],
+      preflightErrors: [],
+    };
+    syncAll.mockResolvedValue(syncResult);
+    const { result } = await renderOfflineHook();
+
+    await act(async () => {
+      await result.current.syncNow({ force: true });
+    });
+
+    expect(reportSyncResult).toHaveBeenCalledWith(syncResult, {
+      source: 'sync_now',
+      force: true,
+      isOnline: true,
+    });
   });
 
   test('Apply authorizes one scope once and forces the next domain pull', async () => {

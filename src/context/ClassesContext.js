@@ -8,6 +8,7 @@ import {
 } from '../db/repositories/referenceDataRepository';
 import { getActiveProgrammeId } from '../db/repositories/domainRepositoryUtils';
 import { classesRepository } from '../db/repositories/classesRepository';
+import { classOnboardingRepository } from '../db/repositories/classOnboardingRepository';
 import { classEaAssignmentsRepository } from '../db/repositories/classEaAssignmentsRepository';
 import { syncStateRepository } from '../db/repositories/syncStateRepository';
 import {
@@ -19,6 +20,7 @@ import { useAuth } from './AuthContext';
 import { useOffline } from './OfflineContext';
 import { useChildren } from './ChildrenContext';
 import { v4 as uuidv4 } from 'uuid';
+import { captureOperationalError } from '../services/observability';
 
 const ClassesContext = createContext({});
 const denyReconcileBreakerAuthorization = () => false;
@@ -58,7 +60,12 @@ export const ClassesProvider = ({ children: reactChildren }) => {
 
   const [schools, setSchools] = useState([]);
   const [classes, setClasses] = useState([]);
+  const [incompleteOnboardingClassId, setIncompleteOnboardingClassId] = useState(null);
   const [loading, setLoading] = useState(false);
+  const [classBootstrap, setClassBootstrap] = useState({
+    userId: user?.id || null,
+    status: 'checking',
+  });
   const activeUserIdRef = useRef(null);
   const activePullRef = useRef(null);
   const previousDomainPullNonceRef = useRef(domainPullNonce);
@@ -70,17 +77,35 @@ export const ClassesProvider = ({ children: reactChildren }) => {
   hasReconcileBreakerAuthorizationRef.current = hasReconcileBreakerAuthorization;
   consumeReconcileBreakerAuthorizationRef.current = consumeReconcileBreakerAuthorization;
 
+  const publishClassBootstrapStatus = useCallback((userId, status) => {
+    if (activeUserIdRef.current !== userId) return;
+    setClassBootstrap({ userId, status });
+  }, []);
+
   const refreshFromCache = useCallback(async () => {
     const activeUserId = user?.id;
     if (!activeUserId) {
       setClasses([]);
-      return;
+      setIncompleteOnboardingClassId(null);
+      return [];
     }
 
-    const cached = await classesRepository.getClasses({ userId: activeUserId });
+    const [cached, pendingClassId] = await Promise.all([
+      classesRepository.getClasses({ userId: activeUserId }),
+      classOnboardingRepository.getPendingClassId(activeUserId),
+    ]);
     if (activeUserIdRef.current !== activeUserId) return;
     setClasses(cached);
-  }, [user?.id]);
+    setIncompleteOnboardingClassId(
+      pendingClassId && cached.some(classItem => classItem.id === pendingClassId)
+        ? pendingClassId
+        : null
+    );
+    if (cached.length > 0) {
+      publishClassBootstrapStatus(activeUserId, 'available');
+    }
+    return cached;
+  }, [user?.id, publishClassBootstrapStatus]);
 
   /**
    * Load schools — cache-first, then always attempt a server fetch.
@@ -120,7 +145,7 @@ export const ClassesProvider = ({ children: reactChildren }) => {
 
     try {
       setLoading(true);
-      await refreshFromCache();
+      const cachedClasses = await refreshFromCache();
 
       const pulled = await enqueueSupabaseRequest(async () => {
         const { data: assignments, error: assignmentError } = await supabase
@@ -218,8 +243,29 @@ export const ClassesProvider = ({ children: reactChildren }) => {
         const error = scopes.programmeAssignment.error || scopes.classes.error;
         if (error) {
           console.error('Error loading classes from server:', error);
+          captureOperationalError(new Error(error.message || 'Class pull failed'), {
+            category: 'class_pull_failed',
+            context: {
+              activeProgrammeId,
+              programmeAssignmentFailure: scopes.programmeAssignment.failureKind,
+              classesFailure: scopes.classes.failureKind,
+              classAssignmentsFailure: scopes.classEaAssignments.failureKind,
+            },
+            tags: {
+              pull_failure_kind: scopes.programmeAssignment.failureKind
+                || scopes.classes.failureKind
+                || 'unknown',
+            },
+          });
         }
         await stampPullIfComplete();
+        if ((cachedClasses || []).length === 0) {
+          const noActiveProgramme = scopes.programmeAssignment.ok && !activeProgrammeId;
+          publishClassBootstrapStatus(
+            activeUserId,
+            noActiveProgramme ? 'no_active_programme' : 'unconfirmed_empty'
+          );
+        }
         return;
       }
 
@@ -252,14 +298,37 @@ export const ClassesProvider = ({ children: reactChildren }) => {
       const freshClasses = await classesRepository.getClasses({ userId: activeUserId });
       if (activeUserIdRef.current !== activeUserId) return;
       setClasses(freshClasses);
+      publishClassBootstrapStatus(
+        activeUserId,
+        freshClasses.length > 0 ? 'available' : 'confirmed_empty'
+      );
     } catch (error) {
       console.error('Error in pullFromServer:', error);
+      captureOperationalError(error, {
+        category: 'class_pull_failed',
+        context: { phase: 'persist_or_publish' },
+      });
+      if (activeUserIdRef.current === activeUserId) {
+        let cachedClasses = [];
+        try {
+          cachedClasses = await classesRepository.getClasses({ userId: activeUserId });
+        } catch (cacheError) {
+          console.error('Could not inspect cached classes after pull failure:', cacheError);
+          captureOperationalError(cacheError, {
+            category: 'class_cache_read_failed',
+            context: { phase: 'pull_failure_recovery' },
+          });
+        }
+        if (activeUserIdRef.current === activeUserId && cachedClasses.length === 0) {
+          publishClassBootstrapStatus(activeUserId, 'unconfirmed_empty');
+        }
+      }
     } finally {
       if (activeUserIdRef.current === activeUserId) {
         setLoading(false);
       }
     }
-  }, [user?.id, refreshFromCache]);
+  }, [user?.id, refreshFromCache, publishClassBootstrapStatus]);
 
   const pullFromServer = useCallback(() => {
     const activeUserId = user?.id;
@@ -292,13 +361,16 @@ export const ClassesProvider = ({ children: reactChildren }) => {
   // Load data on mount when user is authenticated
   useEffect(() => {
     if (user?.id) {
+      setClassBootstrap({ userId: user.id, status: 'checking' });
       loadSchools();
       loadClasses();
       return;
     }
     setSchools([]);
     setClasses([]);
+    setIncompleteOnboardingClassId(null);
     setLoading(false);
+    setClassBootstrap({ userId: null, status: 'checking' });
   }, [user?.id, loadSchools, loadClasses]);
 
   useEffect(() => {
@@ -330,7 +402,7 @@ export const ClassesProvider = ({ children: reactChildren }) => {
   /**
    * Add a new class
    */
-  const addClass = useCallback(async (classData) => {
+  const addClass = useCallback(async (classData, { onboarding = false } = {}) => {
     try {
       const activeAcademicYear = classData.academic_year_id
         ? null
@@ -357,8 +429,17 @@ export const ClassesProvider = ({ children: reactChildren }) => {
         synced: false,
       };
 
-      await classesRepository.saveClass(newClass);
+      if (onboarding) {
+        await classOnboardingRepository.start({
+          userId: user.id,
+          classData: newClass,
+        });
+        setIncompleteOnboardingClassId(newClass.id);
+      } else {
+        await classesRepository.saveClass(newClass);
+      }
       setClasses(prev => [...prev, newClass]);
+      publishClassBootstrapStatus(user.id, 'available');
       await refreshSyncStatus();
 
       return { success: true, classData: newClass };
@@ -366,7 +447,21 @@ export const ClassesProvider = ({ children: reactChildren }) => {
       console.error('Error adding class:', error);
       return { success: false, error };
     }
-  }, [user?.id, refreshSyncStatus]);
+  }, [user?.id, refreshSyncStatus, publishClassBootstrapStatus]);
+
+  const completeClassOnboarding = useCallback(async (classId) => {
+    try {
+      const completed = await classOnboardingRepository.complete({
+        userId: user?.id,
+        classId,
+      });
+      if (completed) setIncompleteOnboardingClassId(null);
+      return { success: completed };
+    } catch (error) {
+      console.error('Error completing class onboarding:', error);
+      return { success: false, error };
+    }
+  }, [user?.id]);
 
   /**
    * Update a class
@@ -421,15 +516,20 @@ export const ClassesProvider = ({ children: reactChildren }) => {
     schools,
     classes,
     loading,
+    incompleteOnboardingClassId,
+    classBootstrapStatus: classBootstrap.userId === (user?.id || null)
+      ? classBootstrap.status
+      : 'checking',
     loadSchools,
     loadClasses,
     addClass,
+    completeClassOnboarding,
     updateClass,
     deleteClass,
     getChildrenInClass,
   }), [
-    schools, classes, loading, loadSchools, loadClasses, addClass,
-    updateClass, deleteClass, getChildrenInClass,
+    schools, classes, loading, incompleteOnboardingClassId, classBootstrap, user?.id, loadSchools,
+    loadClasses, addClass, completeClassOnboarding, updateClass, deleteClass, getChildrenInClass,
   ]);
 
   return (

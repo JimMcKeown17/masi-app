@@ -4,6 +4,7 @@ import * as Sharing from 'expo-sharing';
 import { logger } from './logger';
 import { debugDump } from '../db/debugDump';
 import { getReleaseMetadata } from './releaseMetadata';
+import { getRuntimeDiagnostics } from './runtimeDiagnostics';
 
 /**
  * Write content to a temp file and share it via the native share sheet.
@@ -29,6 +30,7 @@ const shareFile = async (filename, content, mimeType) => {
 export const exportDatabase = async () => {
   try {
     const releaseMetadata = getReleaseMetadata();
+    const runtimeDiagnostics = getRuntimeDiagnostics();
     const exportData = {
       exported_at: new Date().toISOString(),
       app_version: releaseMetadata.appVersion,
@@ -37,9 +39,15 @@ export const exportDatabase = async () => {
       android_version_code: releaseMetadata.androidVersionCode,
       runtime_version: releaseMetadata.runtimeVersion,
       releaseMetadata,
+      runtimeDiagnostics,
       device_info: {
         platform: Platform.OS,
         version: Platform.Version,
+        model: runtimeDiagnostics.device.modelName,
+        os_name: runtimeDiagnostics.device.osName,
+        os_version: runtimeDiagnostics.device.osVersion,
+        native_build: runtimeDiagnostics.application.build,
+        expo_update_id: runtimeDiagnostics.update.id,
       },
       database: await debugDump(),
     };

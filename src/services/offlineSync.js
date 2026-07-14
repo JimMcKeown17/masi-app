@@ -84,7 +84,7 @@ export const SERVER_COLUMNS = {
   ],
   children: [
     'id', 'first_name', 'last_name', 'preferred_name', 'date_of_birth', 'age',
-    'gender', 'class_id', 'hidden_at', 'archived_at', 'archived_by_user_id',
+    'gender', 'reading_level', 'class_id', 'hidden_at', 'archived_at', 'archived_by_user_id',
     'archive_reason', 'created_by', 'created_at', 'updated_at',
   ],
   child_ea_assignments: [

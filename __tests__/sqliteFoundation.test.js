@@ -154,6 +154,11 @@ describe('SQLite migration runner', () => {
       'txn:record-migration',
       'txn:set-user-version',
       'exit-migration-transaction',
+      'enter-migration-transaction',
+      'txn:exec-migration-sql',
+      'txn:record-migration',
+      'txn:set-user-version',
+      'exit-migration-transaction',
       // FK enforcement restored in finally.
       'exec:PRAGMA foreign_keys = ON',
     ]);
@@ -183,8 +188,10 @@ describe('SQLite migration runner', () => {
         { version: 5 },
         { version: 6 },
         { version: 7 },
+        { version: 8 },
       ]);
       expect(await getColumnNames(db, 'sync_outbox')).toContain('owner_user_id');
+      expect(await getColumnNames(db, 'children')).toContain('reading_level');
     } finally {
       await db.closeAsync();
     }
@@ -195,7 +202,8 @@ describe('SQLite migration runner', () => {
 
     try {
       await runMigrations(db);
-      await db.runAsync('delete from schema_migrations where version = 7');
+      await db.runAsync('delete from schema_migrations where version >= 7');
+      await db.execAsync('alter table children drop column reading_level');
       await db.execAsync('PRAGMA user_version = 6');
       await db.runAsync(`
         insert into local_state (key, value)
@@ -208,8 +216,8 @@ describe('SQLite migration runner', () => {
 
       await runMigrations(db);
 
-      expect(CURRENT_SCHEMA_VERSION).toBe(7);
-      expect(await getUserVersion(db)).toBe(7);
+      expect(CURRENT_SCHEMA_VERSION).toBe(8);
+      expect(await getUserVersion(db)).toBe(8);
       expect(await db.getAllAsync('select key, value from local_state order by key')).toEqual([
         { key: 'sync_meta', value: '{"lastSyncTime":"2026-07-13T12:00:00.000Z"}' },
         { key: 'user_profile', value: '{"id":"user-1"}' },
@@ -223,6 +231,7 @@ describe('SQLite migration runner', () => {
       expect(await db.getFirstAsync(
         'select count(*) as count from schema_migrations where version = 7'
       )).toEqual({ count: 1 });
+      expect(await getColumnNames(db, 'children')).toContain('reading_level');
     } finally {
       await db.closeAsync();
     }
@@ -554,10 +563,10 @@ describe('SQLite migration runner', () => {
     releaseFirstMigration.resolve();
     await Promise.all([first, second]);
 
-    // The first run applies all pending migrations (seven transactions); the second
+    // The first run applies all pending migrations (eight transactions); the second
     // run is serialized behind it, sees user_version already current, and does nothing.
-    expect(beginCount).toBe(7);
-    expect(userVersion).toBe(7);
+    expect(beginCount).toBe(8);
+    expect(userVersion).toBe(8);
   });
 
   test('a ROLLBACK failure does not mask the original migration error', async () => {
@@ -660,6 +669,7 @@ describe('SQLite debug dump', () => {
           { version: 5, name: 'hot_path_covering_indexes' },
           { version: 6, name: 'sync_outbox_owner_user_id' },
           { version: 7, name: 'local_state_sidecar_cleanup' },
+          { version: 8, name: 'children_current_reading_level' },
         ],
         tableCounts: expect.objectContaining({
           schools: 1,

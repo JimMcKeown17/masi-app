@@ -12,9 +12,16 @@ import { ChildrenProvider } from './src/context/ChildrenContext';
 import { ClassesProvider } from './src/context/ClassesContext';
 import AppNavigator from './src/navigation/AppNavigator';
 import { colors } from './src/constants/colors';
-import { logger } from './src/utils/logger';
+import {
+  captureOperationalError,
+  flushObservability,
+  initializeObservability,
+  wrapAppWithObservability,
+} from './src/services/observability';
 
-class ErrorBoundary extends React.Component {
+initializeObservability();
+
+export class ErrorBoundary extends React.Component {
   state = { hasError: false };
 
   static getDerivedStateFromError() {
@@ -22,7 +29,12 @@ class ErrorBoundary extends React.Component {
   }
 
   componentDidCatch(error, errorInfo) {
+    captureOperationalError(error, {
+      category: 'react_error_boundary',
+      context: { componentStack: errorInfo?.componentStack || null },
+    });
     console.error('App crashed:', error, errorInfo?.componentStack);
+    flushObservability();
   }
 
   render() {
@@ -88,9 +100,6 @@ const errorStyles = RNStyleSheet.create({
   },
 });
 
-// Initialize logger to capture console output
-logger.init();
-
 // Custom theme using Masinyusane brand colors
 const theme = {
   ...MD3LightTheme,
@@ -118,7 +127,7 @@ const theme = {
   },
 };
 
-export default function App() {
+export function App() {
   return (
     <ErrorBoundary>
       <SafeAreaProvider>
@@ -142,3 +151,5 @@ export default function App() {
     </ErrorBoundary>
   );
 }
+
+export default wrapAppWithObservability(App);

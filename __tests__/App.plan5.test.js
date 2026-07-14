@@ -7,6 +7,18 @@ jest.mock('../src/utils/logger', () => ({
   },
 }));
 
+const mockInitializeObservability = jest.fn(() => ({ enabled: true }));
+const mockCaptureOperationalError = jest.fn();
+const mockFlushObservability = jest.fn();
+const mockWrapAppWithObservability = jest.fn((component) => component);
+
+jest.mock('../src/services/observability', () => ({
+  initializeObservability: mockInitializeObservability,
+  captureOperationalError: mockCaptureOperationalError,
+  flushObservability: mockFlushObservability,
+  wrapAppWithObservability: mockWrapAppWithObservability,
+}));
+
 jest.mock('react-native-paper', () => {
   const React = require('react');
   return {
@@ -58,5 +70,21 @@ describe('App root', () => {
     const { getByText } = render(<App />);
 
     expect(getByText('Navigator')).toBeTruthy();
+  });
+
+  it('initializes observability before render and reports React boundary crashes', () => {
+    const { ErrorBoundary } = require('../App');
+    const error = new Error('render exploded');
+    const boundary = new ErrorBoundary({ children: null });
+
+    boundary.componentDidCatch(error, { componentStack: '\n    at BrokenScreen' });
+
+    expect(mockInitializeObservability).toHaveBeenCalledTimes(1);
+    expect(mockCaptureOperationalError).toHaveBeenCalledWith(error, {
+      category: 'react_error_boundary',
+      context: { componentStack: '\n    at BrokenScreen' },
+    });
+    expect(mockFlushObservability).toHaveBeenCalled();
+    expect(mockWrapAppWithObservability).toHaveBeenCalled();
   });
 });

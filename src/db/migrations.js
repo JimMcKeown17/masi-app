@@ -600,6 +600,13 @@ const MIGRATIONS = [
       delete from local_state where key = 'sync_queue';
     `,
   },
+  {
+    version: 8,
+    name: 'children_current_reading_level',
+    sql: `
+      alter table children add column reading_level text;
+    `,
+  },
 ];
 
 // Derived from the migration list so it never drifts when a migration is added.

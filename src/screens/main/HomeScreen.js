@@ -1,10 +1,11 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useRef } from 'react';
 import { View, StyleSheet, ScrollView, TouchableOpacity } from 'react-native';
 import { Text, Button, ActivityIndicator, Snackbar } from 'react-native-paper';
 import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect } from '@react-navigation/native';
 import { useAuth } from '../../context/AuthContext';
 import { useChildren } from '../../context/ChildrenContext';
+import { useClasses } from '../../context/ClassesContext';
 import { useTimeTracking } from '../../hooks/useTimeTracking';
 import { useSessionLaunchGuard } from '../../hooks/useSessionLaunchGuard';
 import { timeEntriesRepository } from '../../db/repositories/timeEntriesRepository';
@@ -27,6 +28,8 @@ import { colors, spacing, borderRadius, shadows } from '../../constants/colors';
 export default function HomeScreen({ navigation }) {
   const { user, profile } = useAuth();
   const { children: childrenList } = useChildren();
+  const { classBootstrapStatus, incompleteOnboardingClassId } = useClasses();
+  const onboardingEnteredRef = useRef(false);
   const {
     isSignedIn,
     activeEntry,
@@ -59,6 +62,24 @@ export default function HomeScreen({ navigation }) {
   const [weekCounts, setWeekCounts] = useState([]);
   const [weekTotal, setWeekTotal] = useState(0);
   const [coverage, setCoverage] = useState({ assessed: 0, total: 0, percent: 0 });
+
+  useFocusEffect(
+    useCallback(() => {
+      const shouldEnterOnboarding = classBootstrapStatus === 'confirmed_empty'
+        || classBootstrapStatus === 'unconfirmed_empty';
+      if (incompleteOnboardingClassId && !onboardingEnteredRef.current) {
+        onboardingEnteredRef.current = true;
+        navigation.navigate('ChildOnboarding', {
+          classId: incompleteOnboardingClassId,
+        });
+      } else if (shouldEnterOnboarding && !onboardingEnteredRef.current) {
+        onboardingEnteredRef.current = true;
+        navigation.navigate('ClassOnboarding');
+      } else if (!incompleteOnboardingClassId && !shouldEnterOnboarding) {
+        onboardingEnteredRef.current = false;
+      }
+    }, [classBootstrapStatus, incompleteOnboardingClassId, navigation])
+  );
 
   useFocusEffect(
     useCallback(() => {

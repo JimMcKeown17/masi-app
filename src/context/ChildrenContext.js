@@ -10,6 +10,7 @@ import { syncStateRepository } from '../db/repositories/syncStateRepository';
 import { useAuth } from './AuthContext';
 import { useOffline } from './OfflineContext';
 import { v4 as uuidv4 } from 'uuid';
+import { captureOperationalError } from '../services/observability';
 
 const ChildrenContext = createContext({});
 const denyReconcileBreakerAuthorization = () => false;
@@ -113,6 +114,26 @@ export const ChildrenProvider = ({ children }) => {
       if (activeUserIdRef.current !== activeUserId) return;
 
       const { activeProgrammeId, scopes } = pulled;
+      const failedPullScopes = Object.entries(scopes)
+        .filter(([, scope]) => !scope.ok && scope.failureKind !== 'dependency')
+        .map(([name, scope]) => ({
+          name,
+          failureKind: scope.failureKind || 'unknown',
+          message: scope.error?.message || String(scope.error || 'Pull failed'),
+        }));
+      if (failedPullScopes.length > 0) {
+        captureOperationalError(new Error(failedPullScopes[0].message), {
+          category: 'child_data_pull_failed',
+          context: {
+            activeProgrammeId,
+            failedScopes: failedPullScopes,
+          },
+          tags: {
+            pull_failure_kind: failedPullScopes[0].failureKind,
+            pull_scope: failedPullScopes[0].name,
+          },
+        });
+      }
       const pulledAt = new Date().toISOString();
       const programmeScopeOk = scopes.programmeAssignment.ok && Boolean(activeProgrammeId);
       const reconcileResults = [];
@@ -277,6 +298,10 @@ export const ChildrenProvider = ({ children }) => {
       }
     } catch (error) {
       console.error('Error in pullFromServer:', error);
+      captureOperationalError(error, {
+        category: 'child_data_pull_failed',
+        context: { phase: 'persist_or_publish' },
+      });
     } finally {
       if (activeUserIdRef.current === activeUserId) {
         setLoading(false);

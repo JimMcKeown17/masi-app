@@ -1,5 +1,6 @@
 import { LETTER_SETS } from '../constants/egraConstants';
 import { createSessionsRepository } from '../db/repositories/sessionsRepository';
+import { createChildrenRepository } from '../db/repositories/childrenRepository';
 import { createMasteryRepository } from '../db/repositories/masteryRepository';
 import { runRepositoryTransaction } from '../db/repositories/repositoryRuntime';
 import { resolveProgrammeId } from '../db/repositories/domainRepositoryUtils';
@@ -22,6 +23,7 @@ export async function persistLiteracySession({
   idFactory,
 }) {
   const sessionsRepository = createSessionsRepository({ database });
+  const childrenRepository = createChildrenRepository({ database });
   const masteryRepository = createMasteryRepository({ database });
   const letterSet = LETTER_SETS[trackerLanguageKey];
 
@@ -30,18 +32,48 @@ export async function persistLiteracySession({
       programmeId: session.programme_id,
       userId: session.user_id,
     });
+    const attendeeIds = new Set(session.children_ids || []);
+    const childReadingLevels = Object.fromEntries(
+      Object.entries(session.activities?.child_reading_levels || {})
+        .filter(([childId]) => attendeeIds.has(childId))
+    );
+    const attendeeTrackerChanges = Object.fromEntries(
+      Object.entries(letterTrackerChanges)
+        .filter(([childId]) => attendeeIds.has(childId))
+    );
     const programmeScopedSession = {
       ...session,
       programme_id: programmeId,
+      activities: {
+        ...(session.activities || {}),
+        child_reading_levels: childReadingLevels,
+      },
     };
 
     await sessionsRepository.saveSession(programmeScopedSession, { transaction });
 
-    if (!letterSet || Object.keys(letterTrackerChanges).length === 0) {
+    for (const [childId, readingLevel] of Object.entries(childReadingLevels)) {
+      if (!readingLevel) continue;
+      const existingChild = await transaction.getFirstAsync(
+        'select reading_level from children where id = ?',
+        childId
+      );
+      if (!existingChild || existingChild.reading_level === readingLevel) continue;
+      await childrenRepository.updateChild(childId, {
+        reading_level: readingLevel,
+        updated_at: nowIso,
+        synced: false,
+      }, {
+        actorUserId: programmeScopedSession.user_id,
+        transaction,
+      });
+    }
+
+    if (!letterSet || Object.keys(attendeeTrackerChanges).length === 0) {
       return;
     }
 
-    const changedChildIds = Object.keys(letterTrackerChanges);
+    const changedChildIds = Object.keys(attendeeTrackerChanges);
     const allMastery = await masteryRepository.getLetterMastery({
       transaction,
       userId: programmeScopedSession.user_id,
@@ -49,7 +81,7 @@ export async function persistLiteracySession({
       childIds: changedChildIds,
     });
 
-    for (const [childId, changes] of Object.entries(letterTrackerChanges)) {
+    for (const [childId, changes] of Object.entries(attendeeTrackerChanges)) {
       for (const [letter, value] of Object.entries(changes)) {
         if (value === true) {
           const existingDeleted = findMasteryRecord(allMastery, {

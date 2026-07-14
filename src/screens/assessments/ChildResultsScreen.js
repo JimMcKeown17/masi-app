@@ -92,6 +92,9 @@ export default function ChildResultsScreen({ navigation, route }) {
     <ScrollView style={styles.container} contentContainerStyle={styles.scrollContent}>
       <Text variant="titleLarge" style={styles.childName}>{childName}</Text>
       <Text variant="bodyMedium" style={styles.subtitle}>Assessment Summary</Text>
+      <Text variant="bodyMedium" style={styles.readingLevel}>
+        Current reading level: {child.reading_level || 'Not set'}
+      </Text>
 
       {ASSESSMENT_TYPES.map(({ key, label, description }) => {
         const assessment = latestByType[key];
@@ -180,6 +183,11 @@ const styles = StyleSheet.create({
   },
   subtitle: {
     color: colors.textSecondary,
+    marginBottom: spacing.xs,
+  },
+  readingLevel: {
+    color: colors.text,
+    fontWeight: '600',
     marginBottom: spacing.lg,
   },
   card: {

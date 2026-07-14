@@ -18,6 +18,9 @@ import { compareGroups, getGroupColor } from '../../utils/groupHelpers';
 import { NO_TEXT_SUGGESTIONS } from '../../constants/textInputProps';
 import ChipSelector from '../../components/forms/ChipSelector';
 import SelectSheet from '../../components/common/SelectSheet';
+import { READING_LEVELS } from '../../constants/literacyConstants';
+
+const READING_LEVEL_OPTIONS = READING_LEVELS.map(level => ({ key: level, label: level }));
 
 export default function EditChildScreen({ route, navigation }) {
   const { childId } = route.params;
@@ -32,8 +35,10 @@ export default function EditChildScreen({ route, navigation }) {
   const [lastName, setLastName] = useState('');
   const [age, setAge] = useState('');
   const [gender, setGender] = useState('');
+  const [readingLevel, setReadingLevel] = useState(null);
   const [groupPickerVisible, setGroupPickerVisible] = useState(false);
   const [classPickerVisible, setClassPickerVisible] = useState(false);
+  const [readingLevelPickerVisible, setReadingLevelPickerVisible] = useState(false);
   const [initialized, setInitialized] = useState(false);
 
   const [errors, setErrors] = useState({});
@@ -68,6 +73,7 @@ export default function EditChildScreen({ route, navigation }) {
       setLastName(child.last_name || '');
       setAge(child.age ? child.age.toString() : '');
       setGender(child.gender || '');
+      setReadingLevel(child.reading_level || null);
       setInitialized(true);
     } else {
       setSnackbar({ visible: true, message: 'Child not found' });
@@ -107,6 +113,7 @@ export default function EditChildScreen({ route, navigation }) {
         last_name: lastName.trim(),
         age: age ? parseInt(age) : null,
         gender: gender || null,
+        reading_level: readingLevel,
       });
 
       if (result.success) {
@@ -250,6 +257,19 @@ export default function EditChildScreen({ route, navigation }) {
               testID="edit-child-gender"
             />
 
+            <Text variant="labelLarge" style={styles.readingLevelLabel}>Current Reading Level</Text>
+            <Button
+              mode="outlined"
+              onPress={() => setReadingLevelPickerVisible(true)}
+              style={styles.readingLevelButton}
+              accessibilityLabel={`Choose current reading level for ${child.first_name} ${child.last_name}`}
+            >
+              {readingLevel || 'Not set'}
+            </Button>
+            <Text variant="bodySmall" style={styles.readingLevelHelper}>
+              This level pre-fills the next literacy session and changes when the child progresses.
+            </Text>
+
             {/* Group picker field */}
             <View style={styles.groupField}>
               <Text variant="labelSmall" style={styles.groupFieldLabel}>Group</Text>
@@ -335,6 +355,18 @@ export default function EditChildScreen({ route, navigation }) {
         maxHeight="60%"
       />
 
+      <SelectSheet
+        visible={readingLevelPickerVisible}
+        onDismiss={() => setReadingLevelPickerVisible(false)}
+        title="Current Reading Level"
+        subtitle={`${child.first_name} ${child.last_name}`}
+        dismissLabel="Dismiss reading level picker"
+        options={READING_LEVEL_OPTIONS}
+        selectedKey={readingLevel}
+        onSelect={setReadingLevel}
+        maxHeight="70%"
+      />
+
       <Snackbar
         visible={snackbar.visible}
         onDismiss={() => setSnackbar({ ...snackbar, visible: false })}
@@ -399,6 +431,19 @@ const styles = StyleSheet.create({
   fieldLabel: {
     color: colors.textSecondary,
     marginBottom: spacing.xs,
+  },
+  readingLevelLabel: {
+    color: colors.textSecondary,
+    marginTop: spacing.md,
+    marginBottom: spacing.xs,
+  },
+  readingLevelButton: {
+    borderColor: colors.primary,
+  },
+  readingLevelHelper: {
+    color: colors.textSecondary,
+    marginTop: spacing.xs,
+    marginBottom: spacing.md,
   },
   groupField: {
     marginBottom: spacing.sm,

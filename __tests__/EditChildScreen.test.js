@@ -2,6 +2,7 @@ import React from 'react';
 import { render, fireEvent, waitFor } from '@testing-library/react-native';
 import { PaperProvider } from 'react-native-paper';
 import EditChildScreen from '../src/screens/children/EditChildScreen';
+import { READING_LEVELS } from '../src/constants/literacyConstants';
 
 const mockUpdateChild = jest.fn();
 const mockDeleteChild = jest.fn();
@@ -16,6 +17,7 @@ const makeChild = (gender = 'female') => ({
   last_name: 'Dlamini',
   age: 7,
   gender,
+  reading_level: READING_LEVELS[4],
   class_id: 'class-1',
 });
 
@@ -126,6 +128,20 @@ describe('EditChildScreen', () => {
       gender: 'female',
     })));
     expect(mockNavigationGoBack).toHaveBeenCalledTimes(1);
+  });
+
+  test('shows and edits the child current reading level', async () => {
+    const screen = renderScreen();
+
+    fireEvent.press(screen.getByText(READING_LEVELS[4]));
+    expect(screen.getByLabelText('Dismiss reading level picker')).toBeTruthy();
+    fireEvent.press(screen.getByText(READING_LEVELS[5]));
+    fireEvent.press(screen.getByText('Save Changes'));
+
+    await waitFor(() => expect(mockUpdateChild).toHaveBeenCalledWith(
+      'child-1',
+      expect.objectContaining({ reading_level: READING_LEVELS[5] }),
+    ));
   });
 
   test('stays on the form when local child update fails', async () => {

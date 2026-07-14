@@ -117,6 +117,7 @@ const buildPayload = (rule, context) => {
       id,
       first_name: 'RLS',
       last_name: 'Probe',
+      reading_level: 'Word Reading',
       created_by: context.userId,
     };
   }
@@ -159,7 +160,7 @@ const runRule = async ({ client, rule, context }) => {
   const { data, error } = await client
     .from(rule.table)
     .upsert(payload, { onConflict: 'id' })
-    .select('id')
+    .select(rule.table === 'children' ? 'id, reading_level' : 'id')
     .single();
 
   if (error) {
@@ -170,10 +171,15 @@ const runRule = async ({ client, rule, context }) => {
     };
   }
 
+  const idRoundTrips = data?.id === payload.id;
+  const readingLevelRoundTrips = rule.table !== 'children'
+    || data?.reading_level === payload.reading_level;
   return {
-    ok: data?.id === payload.id,
+    ok: idRoundTrips && readingLevelRoundTrips,
     id: payload.id,
-    error: data?.id === payload.id ? null : 'upsert returned a different row id',
+    error: idRoundTrips && readingLevelRoundTrips
+      ? null
+      : 'upsert did not round-trip the expected id and reading level',
   };
 };
 
