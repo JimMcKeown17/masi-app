@@ -1,0 +1,667 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Masi Direction B: Instrument</title>
+<link rel="stylesheet" href="../fonts/fonts.css">
+<style>
+  :root{
+    --bg:#EEF1F4;
+    --card:#FFFFFF;
+    --ink:#10151C;
+    --ink-2:#3D4754;
+    --ink-3:#6B7787;
+    --ink-4:#9AA5B1;
+    --line:#D9DFE7;
+    --line-2:#E8ECF1;
+    --blue:#1F4FC4;
+    --blue-dark:#173B94;
+    --blue-tint:#E8EEFB;
+    --green:#177E42;
+    --green-tint:#E2F2E8;
+    --amber:#9A6700;
+    --amber-tint:#FCF0D6;
+    --red:#BE3145;
+    --red-tint:#FBE7EA;
+  }
+  *{margin:0;padding:0;box-sizing:border-box;}
+  body{
+    background:#CBD2D9;
+    font-family:'IBM Plex Sans',sans-serif;
+    -webkit-font-smoothing:antialiased;
+    padding:40px;
+  }
+  .row{display:flex;gap:36px;}
+  .phone{
+    width:390px;height:844px;flex:0 0 390px;
+    background:var(--bg);
+    overflow:hidden;position:relative;
+    display:flex;flex-direction:column;
+    color:var(--ink);
+  }
+  .screen{flex:1;overflow:hidden;display:flex;flex-direction:column;}
+
+  .sg{font-family:'Space Grotesk',sans-serif;}
+  .num{font-variant-numeric:tabular-nums;}
+  .microlabel{
+    font-size:10px;font-weight:600;letter-spacing:.11em;text-transform:uppercase;
+    color:var(--ink-3);
+  }
+
+  /* ── system strip: statusbar + sync readout ── */
+  .strip{
+    background:var(--ink);color:#fff;flex-shrink:0;
+    padding:0 20px;
+  }
+  .strip .os{
+    height:40px;display:flex;align-items:center;justify-content:space-between;
+  }
+  .strip .os .time{font-weight:600;font-size:13.5px;font-variant-numeric:tabular-nums;}
+  .strip .sync{
+    height:32px;display:flex;align-items:center;gap:8px;
+    border-top:1px solid rgba(255,255,255,.14);
+    font-size:10.5px;font-weight:600;letter-spacing:.12em;text-transform:uppercase;
+  }
+  .strip .sync .dot{width:7px;height:7px;border-radius:50%;background:#33C270;}
+  .strip .sync .right{margin-left:auto;color:rgba(255,255,255,.55);letter-spacing:.08em;}
+
+  /* ── header ── */
+  .header{padding:13px 20px 0;}
+  .h-date{font-size:11px;font-weight:600;letter-spacing:.11em;text-transform:uppercase;color:var(--ink-3);}
+  .h-name{font-family:'Space Grotesk';font-size:23px;font-weight:700;letter-spacing:-0.015em;margin-top:4px;}
+  .h-role{font-size:12.5px;color:var(--ink-3);margin-top:3px;}
+
+  .content{flex:1;overflow:hidden;padding:0 20px;}
+
+  /* ── modules ── */
+  .mod{
+    background:var(--card);
+    border:1px solid var(--line);
+    border-radius:10px;
+    margin-top:11px;
+    overflow:hidden;
+  }
+  .mod-head{
+    display:flex;align-items:center;justify-content:space-between;
+    padding:10px 16px;border-bottom:1px solid var(--line-2);
+  }
+  .mod-body{padding:12px 16px 14px;}
+
+  /* ── clock ── */
+  .clock-grid{display:flex;align-items:center;}
+  .clock-left{flex:1;}
+  .clock-time{font-family:'Space Grotesk';font-size:32px;font-weight:700;letter-spacing:-0.01em;line-height:1;font-variant-numeric:tabular-nums;}
+  .clock-meta{display:flex;gap:14px;margin-top:7px;font-size:11.5px;color:var(--ink-3);}
+  .clock-meta b{color:var(--ink-2);font-weight:600;}
+  .btn-dark{
+    background:var(--ink);color:#fff;border-radius:8px;
+    padding:14px 18px;font-size:12px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;
+    font-family:'IBM Plex Sans';
+  }
+
+  /* ── stats band ── */
+  .band3{display:flex;background:var(--card);border:1px solid var(--line);border-radius:10px;margin-top:11px;}
+  .band3 .cell{flex:1;padding:11px 16px 12px;}
+  .band3 .cell + .cell{border-left:1px solid var(--line-2);}
+  .band3 .v{font-family:'Space Grotesk';font-size:22px;font-weight:700;line-height:1;font-variant-numeric:tabular-nums;}
+  .band3 .k{font-size:10px;font-weight:600;letter-spacing:.09em;text-transform:uppercase;color:var(--ink-3);margin-top:5px;}
+
+  /* ── week bar chart ── */
+  .chart{position:relative;height:88px;display:flex;align-items:flex-end;gap:10px;padding-top:12px;}
+  .target-line{
+    position:absolute;left:0;right:0;border-top:1.5px dashed var(--ink-4);
+    top:calc(12px + (88px - 12px) * (1 - 3/5));
+  }
+  .target-tag{
+    position:absolute;right:0;transform:translateY(-115%);
+    font-size:9.5px;font-weight:600;letter-spacing:.08em;color:var(--ink-4);text-transform:uppercase;
+  }
+  .bar-col{flex:1;display:flex;flex-direction:column;align-items:center;gap:6px;height:100%;justify-content:flex-end;}
+  .bar{width:100%;max-width:40px;background:var(--blue);border-radius:4px 4px 0 0;}
+  .bar.today{background:var(--ink);}
+  .bar.empty{background:var(--line);height:3px !important;border-radius:2px;}
+  .bar-v{font-family:'Space Grotesk';font-size:12px;font-weight:700;color:var(--ink-2);font-variant-numeric:tabular-nums;}
+  .bar-d{font-size:9.5px;font-weight:600;letter-spacing:.08em;color:var(--ink-4);}
+  .bar-col.today .bar-d{color:var(--ink);}
+
+  /* ── segmented coverage ── */
+  .seg-row{display:flex;gap:3px;margin-top:2px;}
+  .seg{flex:1;height:12px;border-radius:3px;background:var(--line);}
+  .seg.on{background:var(--green);}
+  .seg-caption{display:flex;justify-content:space-between;margin-top:8px;font-size:11.5px;color:var(--ink-3);}
+  .seg-caption b{color:var(--ink);font-weight:600;}
+  .frac{font-family:'Space Grotesk';font-weight:700;font-size:15px;font-variant-numeric:tabular-nums;}
+  .frac .of{color:var(--ink-4);font-weight:500;}
+
+  /* ── link rows ── */
+  .rows .r{
+    display:flex;align-items:center;gap:12px;
+    padding:10px 16px;border-bottom:1px solid var(--line-2);
+    background:var(--card);
+  }
+  .rows .r:last-child{border-bottom:none;}
+  .r-t{flex:1;font-size:13.5px;font-weight:600;color:var(--ink);}
+  .r-v{font-family:'Space Grotesk';font-size:13px;font-weight:700;color:var(--blue);font-variant-numeric:tabular-nums;}
+  .chev{flex-shrink:0;}
+
+  /* ── table rows (children / results) ── */
+  .trow{
+    display:flex;align-items:center;gap:12px;
+    padding:9px 16px;border-bottom:1px solid var(--line-2);
+  }
+  .trow:last-child{border-bottom:none;}
+  .idx{
+    font-family:'Space Grotesk';font-size:11px;font-weight:700;color:var(--ink-4);
+    width:16px;flex-shrink:0;font-variant-numeric:tabular-nums;
+  }
+  .t-main{flex:1;min-width:0;}
+  .t-name{font-size:13.5px;font-weight:600;}
+  .t-sub{font-size:11px;color:var(--ink-3);margin-top:2px;}
+  .status-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0;}
+  .status-dot.ok{background:var(--green);}
+  .status-dot.no{background:var(--line);border:1.5px solid var(--ink-4);}
+
+  /* ── search ── */
+  .search{
+    display:flex;align-items:center;gap:10px;margin-top:11px;
+    background:var(--card);border:1px solid var(--line);border-radius:10px;
+    padding:11px 14px;color:var(--ink-4);font-size:13px;
+  }
+
+  /* ── score bars ── */
+  .score{width:104px;flex-shrink:0;}
+  .score-top{display:flex;justify-content:space-between;align-items:baseline;}
+  .score-v{font-family:'Space Grotesk';font-size:14px;font-weight:700;font-variant-numeric:tabular-nums;}
+  .score-u{font-size:9px;font-weight:600;color:var(--ink-4);letter-spacing:.05em;text-transform:uppercase;}
+  .score-track{height:5px;border-radius:3px;background:var(--line-2);margin-top:5px;overflow:hidden;}
+  .score-fill{height:100%;border-radius:3px;}
+  .good .score-v{color:var(--green);} .good .score-fill{background:var(--green);}
+  .mid .score-v{color:var(--amber);} .mid .score-fill{background:var(--amber);}
+  .low .score-v{color:var(--red);} .low .score-fill{background:var(--red);}
+
+  /* ── big progress (sessions today) ── */
+  .today-top{display:flex;align-items:flex-end;justify-content:space-between;}
+  .today-big{font-family:'Space Grotesk';font-size:46px;font-weight:700;line-height:.95;letter-spacing:-0.02em;font-variant-numeric:tabular-nums;}
+  .today-big .of{font-size:20px;color:var(--ink-4);font-weight:600;letter-spacing:0;}
+  .today-note{font-size:11.5px;color:var(--ink-3);text-align:right;line-height:1.5;}
+  .today-note b{color:var(--ink);font-weight:600;}
+  .today-track{display:flex;gap:4px;margin-top:12px;}
+  .today-seg{flex:1;height:10px;border-radius:3px;background:var(--line);}
+  .today-seg.on{background:var(--blue);}
+
+  .btn-primary{
+    display:flex;align-items:center;justify-content:center;gap:10px;
+    background:var(--blue);color:#fff;border-radius:10px;
+    padding:15px;font-size:13px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;
+    margin-top:11px;
+  }
+  .btn-secondary{
+    display:flex;align-items:center;justify-content:center;
+    padding:13px;font-size:12px;font-weight:600;color:var(--ink-2);
+    border:1px solid var(--line);border-radius:10px;background:var(--card);margin-top:10px;
+  }
+
+  /* ── assessment modules ── */
+  .egra-tag{
+    display:inline-flex;align-items:center;gap:6px;
+    font-family:'Space Grotesk';font-size:10.5px;font-weight:700;letter-spacing:.1em;
+    color:var(--blue);background:var(--blue-tint);border-radius:4px;padding:4px 8px;
+  }
+  .a-name{font-family:'Space Grotesk';font-size:18px;font-weight:700;letter-spacing:-0.01em;margin-top:8px;}
+  .a-desc{font-size:12px;color:var(--ink-3);margin-top:5px;line-height:1.55;}
+  .a-foot{display:flex;align-items:center;justify-content:space-between;margin-top:11px;}
+  .a-last{font-size:11px;color:var(--ink-4);}
+  .btn-start{
+    background:var(--ink);color:#fff;border-radius:8px;
+    padding:11px 20px;font-size:11.5px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;
+  }
+
+  /* ── chips ── */
+  .chips{display:flex;gap:8px;flex-wrap:wrap;}
+  .chip{
+    display:inline-flex;align-items:center;gap:6px;
+    border:1px solid var(--line);background:var(--card);border-radius:6px;
+    padding:8px 12px;font-size:12px;font-weight:600;color:var(--ink-2);
+  }
+  .chip .warn-dot{width:7px;height:7px;border-radius:50%;background:var(--amber);}
+
+  /* ── tab bar ── */
+  .tabbar{
+    flex-shrink:0;display:flex;
+    border-top:1px solid var(--line);background:var(--card);
+    padding:9px 8px 24px;
+  }
+  .tab{
+    flex:1;display:flex;flex-direction:column;align-items:center;gap:4px;
+    font-size:10px;font-weight:600;color:var(--ink-4);letter-spacing:.02em;
+    position:relative;
+  }
+  .tab.on{color:var(--blue);}
+  .tab.on
+</style>
+</head>
+<body>
+<div class="row">
+
+<!-- ════════════════ HOME ════════════════ -->
+<div class="phone" data-name="01-home">
+  <div class="strip">
+    <div class="os">
+      <span class="time">09:41</span>
+      <svg width="58" height="11" viewBox="0 0 58 11" fill="none">
+        <rect x="0" y="6.5" width="2.6" height="4.5" rx=".8" fill="#fff"/><rect x="4.4" y="4.5" width="2.6" height="6.5" rx=".8" fill="#fff"/><rect x="8.8" y="2.5" width="2.6" height="8.5" rx=".8" fill="#fff"/><rect x="13.2" y=".5" width="2.6" height="10.5" rx=".8" fill="#fff" opacity=".35"/>
+        <path d="M25 4a7 7 0 0 1 8.4 0M26.7 6.3a4.5 4.5 0 0 1 5 0M28.4 8.5a1.9 1.9 0 0 1 1.6 0" stroke="#fff" stroke-width="1.5" stroke-linecap="round"/><circle cx="29.2" cy="10" r=".9" fill="#fff"/>
+        <rect x="41" y="1" width="15" height="8.5" rx="2.2" stroke="#fff" stroke-opacity=".4"/><rect x="42.4" y="2.4" width="10" height="5.7" rx="1.1" fill="#fff"/><path d="M57.4 3.8v3a1.6 1.6 0 0 0 0-3z" fill="#fff" fill-opacity=".4"/>
+      </svg>
+    </div>
+    <div class="sync">
+      <span class="dot"></span> Synced
+      <span class="right num">Last upload 09:37</span>
+    </div>
+  </div>
+
+  <div class="screen">
+    <div class="header">
+      <div class="h-date num">Thu 04 July</div>
+      <div class="h-name">Asanda Mnyanda</div>
+      <div class="h-role">Core Literacy · Charles Duna Primary</div>
+    </div>
+
+    <div class="content">
+      <div class="mod">
+        <div class="mod-head">
+          <span class="microlabel">Time on site</span>
+          <span class="microlabel" style="color:var(--green);">● Clocked in</span>
+        </div>
+        <div class="mod-body clock-grid">
+          <div class="clock-left">
+            <div class="clock-time">3:24<span style="font-size:19px;color:var(--ink-4);">:07</span></div>
+            <div class="clock-meta"><span>In <b class="num">07:42</b></span><span>GPS <b>locked</b></span></div>
+          </div>
+          <div class="btn-dark">Clock out</div>
+        </div>
+      </div>
+
+      <div class="band3">
+        <div class="cell"><div class="v num">14</div><div class="k">Days worked</div></div>
+        <div class="cell"><div class="v num">42</div><div class="k">Sessions</div></div>
+        <div class="cell"><div class="v num">12</div><div class="k">Children</div></div>
+      </div>
+
+      <div class="mod">
+        <div class="mod-head">
+          <span class="microlabel">Sessions this week</span>
+          <span class="frac num">12</span>
+        </div>
+        <div class="mod-body" style="padding-top:4px;">
+          <div class="chart">
+            <div class="target-line"><span class="target-tag">Target 3/day</span></div>
+            <div class="bar-col"><span class="bar-v num">3</span><div class="bar" style="height:46px;"></div><span class="bar-d">MON</span></div>
+            <div class="bar-col"><span class="bar-v num">4</span><div class="bar" style="height:61px;"></div><span class="bar-d">TUE</span></div>
+            <div class="bar-col"><span class="bar-v num">3</span><div class="bar" style="height:46px;"></div><span class="bar-d">WED</span></div>
+            <div class="bar-col today"><span class="bar-v num">2</span><div class="bar today" style="height:30px;"></div><span class="bar-d">THU</span></div>
+            <div class="bar-col"><span class="bar-v num">0</span><div class="bar empty"></div><span class="bar-d">FRI</span></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="mod">
+        <div class="mod-head">
+          <span class="microlabel">Assessment coverage</span>
+          <span class="frac num">9<span class="of">/12</span></span>
+        </div>
+        <div class="mod-body">
+          <div class="seg-row">
+            <div class="seg on"></div><div class="seg on"></div><div class="seg on"></div><div class="seg on"></div><div class="seg on"></div><div class="seg on"></div><div class="seg on"></div><div class="seg on"></div><div class="seg on"></div><div class="seg"></div><div class="seg"></div><div class="seg"></div>
+          </div>
+          <div class="seg-caption"><span>One block per child</span><span><b>3 remaining</b></span></div>
+        </div>
+      </div>
+
+      <div class="mod rows">
+        <div class="r">
+          <span class="r-t">Letter mastery</span>
+          <span class="r-v num">17.2 avg letters</span>
+          <svg class="chev" width="14" height="14" viewBox="0 0 24 24" fill="none"><path d="m9 6 6 6-6 6" stroke="#9AA5B1" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </div>
+        <div class="r">
+          <span class="r-t">Assessment scores</span>
+          <span class="r-v num">64% avg</span>
+          <svg class="chev" width="14" height="14" viewBox="0 0 24 24" fill="none"><path d="m9 6 6 6-6 6" stroke="#9AA5B1" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </div>
+        <div class="r">
+          <span class="r-t">Sessions per child</span>
+          <span class="r-v num">3.5 avg</span>
+          <svg class="chev" width="14" height="14" viewBox="0 0 24 24" fill="none"><path d="m9 6 6 6-6 6" stroke="#9AA5B1" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="tabbar">
+    <div class="tab on">      <svg width="21" height="21" viewBox="0 0 24 24" fill="none"><path d="M4 10.5 12 4l8 6.5V19a1.5 1.5 0 0 1-1.5 1.5h-13A1.5 1.5 0 0 1 4 19v-8.5z" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/><path d="M9.5 20v-5.5h5V20" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/></svg>
+      Home
+    </div>
+    <div class="tab">      <svg width="21" height="21" viewBox="0 0 24 24" fill="none"><circle cx="9" cy="8" r="3.2" stroke="currentColor" stroke-width="2"/><path d="M3.5 19c.6-3 2.8-4.6 5.5-4.6s4.9 1.6 5.5 4.6" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><circle cx="17" cy="9.5" r="2.4" stroke="currentColor" stroke-width="2"/><path d="M16.5 14.6c2.2.2 3.6 1.5 4 3.9" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+      Children
+    </div>
+    <div class="tab">      <svg width="21" height="21" viewBox="0 0 24 24" fill="none"><path d="M4 19V5.5A1.5 1.5 0 0 1 5.5 4H12v15H5.5A1.5 1.5 0 0 0 4 20.5" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/><path d="M20 19V5.5A1.5 1.5 0 0 0 18.5 4H12v15h6.5a1.5 1.5 0 0 1 1.5 1.5" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/></svg>
+      Sessions
+    </div>
+    <div class="tab">      <svg width="21" height="21" viewBox="0 0 24 24" fill="none"><rect x="5" y="4" width="14" height="17" rx="2" stroke="currentColor" stroke-width="2"/><path d="M9 4.5V3h6v1.5" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/><path d="m8.8 13 2.2 2.2 4.2-4.4" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      Assessments
+    </div>
+  </div>
+</div>
+
+<!-- ════════════════ MY CHILDREN ════════════════ -->
+<div class="phone" data-name="02-children">
+  <div class="strip">
+    <div class="os">
+      <span class="time">09:41</span>
+      <svg width="58" height="11" viewBox="0 0 58 11" fill="none">
+        <rect x="0" y="6.5" width="2.6" height="4.5" rx=".8" fill="#fff"/><rect x="4.4" y="4.5" width="2.6" height="6.5" rx=".8" fill="#fff"/><rect x="8.8" y="2.5" width="2.6" height="8.5" rx=".8" fill="#fff"/><rect x="13.2" y=".5" width="2.6" height="10.5" rx=".8" fill="#fff" opacity=".35"/>
+        <path d="M25 4a7 7 0 0 1 8.4 0M26.7 6.3a4.5 4.5 0 0 1 5 0M28.4 8.5a1.9 1.9 0 0 1 1.6 0" stroke="#fff" stroke-width="1.5" stroke-linecap="round"/><circle cx="29.2" cy="10" r=".9" fill="#fff"/>
+        <rect x="41" y="1" width="15" height="8.5" rx="2.2" stroke="#fff" stroke-opacity=".4"/><rect x="42.4" y="2.4" width="10" height="5.7" rx="1.1" fill="#fff"/><path d="M57.4 3.8v3a1.6 1.6 0 0 0 0-3z" fill="#fff" fill-opacity=".4"/>
+      </svg>
+    </div>
+    <div class="sync">
+      <span class="dot" style="background:#F5B83D;"></span> 2 queued
+      <span class="right num">Will sync when online</span>
+    </div>
+  </div>
+
+  <div class="screen">
+    <div class="header">
+      <div class="h-date num">12 children · 2 classes</div>
+      <div class="h-name">My Children</div>
+    </div>
+
+    <div class="content">
+      <div class="search">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none"><circle cx="11" cy="11" r="6.5" stroke="#9AA5B1" stroke-width="2"/><path d="m16 16 4.5 4.5" stroke="#9AA5B1" stroke-width="2" stroke-linecap="round"/></svg>
+        Search children or classes
+      </div>
+
+      <div class="mod">
+        <div class="mod-head">
+          <div>
+            <div style="font-family:'Space Grotesk';font-size:16px;font-weight:700;">Grade 1A</div>
+            <div style="font-size:11px;color:var(--ink-3);margin-top:2px;">Mrs Nogaya · isiXhosa</div>
+          </div>
+          <span class="frac num">6<span class="of"> children</span></span>
+        </div>
+        <div class="trow">
+          <span class="idx num">P1</span>
+          <div class="t-main"><div class="t-name">Sinovuyo Booi &amp; Lithemba Jantjies</div><div class="t-sub num">Last session today 10:15</div></div>
+          <span class="status-dot ok"></span><span class="status-dot ok"></span>
+        </div>
+        <div class="trow">
+          <span class="idx num">P2</span>
+          <div class="t-main"><div class="t-name">Anelisa Mtwa &amp; Owethu Nkohla</div><div class="t-sub num">Last session today 08:30</div></div>
+          <span class="status-dot ok"></span><span class="status-dot ok"></span>
+        </div>
+        <div class="trow">
+          <span class="idx num">P3</span>
+          <div class="t-main"><div class="t-name">Esona Tshume &amp; Iminathi Gxowa</div><div class="t-sub num">Last session Wed 11:05</div></div>
+          <span class="status-dot ok"></span><span class="status-dot ok"></span>
+        </div>
+      </div>
+
+      <div class="mod">
+        <div class="mod-head">
+          <div>
+            <div style="font-family:'Space Grotesk';font-size:16px;font-weight:700;">Grade 1B</div>
+            <div style="font-size:11px;color:var(--ink-3);margin-top:2px;">Ms Botman · isiXhosa</div>
+          </div>
+          <span class="frac num">6<span class="of"> children</span></span>
+        </div>
+        <div class="trow">
+          <span class="idx num">P1</span>
+          <div class="t-main"><div class="t-name">Khanya Faltein &amp; Amahle Peters</div><div class="t-sub num">Last session Tue 09:20</div></div>
+          <span class="status-dot no"></span><span class="status-dot ok"></span>
+        </div>
+        <div class="trow">
+          <span class="idx num">P2</span>
+          <div class="t-main"><div class="t-name">Milani Sithole &amp; Lonwabo Dlamini</div><div class="t-sub num">Last session Wed 09:50</div></div>
+          <span class="status-dot no"></span><span class="status-dot ok"></span>
+        </div>
+        <div class="trow">
+          <span class="idx num">P3</span>
+          <div class="t-main"><div class="t-name">Sibabalwe Mbeki &amp; Buhle Nogaya</div><div class="t-sub num">No session yet this week</div></div>
+          <span class="status-dot ok"></span><span class="status-dot no"></span>
+        </div>
+      </div>
+
+      <div style="display:flex;gap:12px;align-items:center;margin-top:12px;padding:0 2px;">
+        <span style="display:inline-flex;align-items:center;gap:6px;font-size:10.5px;color:var(--ink-3);"><span class="status-dot ok"></span> Assessed</span>
+        <span style="display:inline-flex;align-items:center;gap:6px;font-size:10.5px;color:var(--ink-3);"><span class="status-dot no"></span> Not yet assessed</span>
+        <span style="margin-left:auto;font-size:11.5px;font-weight:600;color:var(--blue);">+ Add class</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="tabbar">
+    <div class="tab">      <svg width="21" height="21" viewBox="0 0 24 24" fill="none"><path d="M4 10.5 12 4l8 6.5V19a1.5 1.5 0 0 1-1.5 1.5h-13A1.5 1.5 0 0 1 4 19v-8.5z" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/><path d="M9.5 20v-5.5h5V20" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/></svg>
+      Home
+    </div>
+    <div class="tab on">      <svg width="21" height="21" viewBox="0 0 24 24" fill="none"><circle cx="9" cy="8" r="3.2" stroke="currentColor" stroke-width="2"/><path d="M3.5 19c.6-3 2.8-4.6 5.5-4.6s4.9 1.6 5.5 4.6" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><circle cx="17" cy="9.5" r="2.4" stroke="currentColor" stroke-width="2"/><path d="M16.5 14.6c2.2.2 3.6 1.5 4 3.9" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+      Children
+    </div>
+    <div class="tab">      <svg width="21" height="21" viewBox="0 0 24 24" fill="none"><path d="M4 19V5.5A1.5 1.5 0 0 1 5.5 4H12v15H5.5A1.5 1.5 0 0 0 4 20.5" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/><path d="M20 19V5.5A1.5 1.5 0 0 0 18.5 4H12v15h6.5a1.5 1.5 0 0 1 1.5 1.5" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/></svg>
+      Sessions
+    </div>
+    <div class="tab">      <svg width="21" height="21" viewBox="0 0 24 24" fill="none"><rect x="5" y="4" width="14" height="17" rx="2" stroke="currentColor" stroke-width="2"/><path d="M9 4.5V3h6v1.5" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/><path d="m8.8 13 2.2 2.2 4.2-4.4" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      Assessments
+    </div>
+  </div>
+</div>
+
+<!-- ════════════════ SESSIONS ════════════════ -->
+<div class="phone" data-name="03-sessions">
+  <div class="strip">
+    <div class="os">
+      <span class="time">09:41</span>
+      <svg width="58" height="11" viewBox="0 0 58 11" fill="none">
+        <rect x="0" y="6.5" width="2.6" height="4.5" rx=".8" fill="#fff"/><rect x="4.4" y="4.5" width="2.6" height="6.5" rx=".8" fill="#fff"/><rect x="8.8" y="2.5" width="2.6" height="8.5" rx=".8" fill="#fff"/><rect x="13.2" y=".5" width="2.6" height="10.5" rx=".8" fill="#fff" opacity=".35"/>
+        <path d="M25 4a7 7 0 0 1 8.4 0M26.7 6.3a4.5 4.5 0 0 1 5 0M28.4 8.5a1.9 1.9 0 0 1 1.6 0" stroke="#fff" stroke-width="1.5" stroke-linecap="round"/><circle cx="29.2" cy="10" r=".9" fill="#fff"/>
+        <rect x="41" y="1" width="15" height="8.5" rx="2.2" stroke="#fff" stroke-opacity=".4"/><rect x="42.4" y="2.4" width="10" height="5.7" rx="1.1" fill="#fff"/><path d="M57.4 3.8v3a1.6 1.6 0 0 0 0-3z" fill="#fff" fill-opacity=".4"/>
+      </svg>
+    </div>
+    <div class="sync">
+      <span class="dot"></span> Synced
+      <span class="right num">Last upload 09:37</span>
+    </div>
+  </div>
+
+  <div class="screen">
+    <div class="header">
+      <div class="h-date num">Thu 04 July</div>
+      <div class="h-name">Sessions</div>
+    </div>
+
+    <div class="content">
+      <div class="mod">
+        <div class="mod-head">
+          <span class="microlabel">Today · Core Literacy</span>
+          <span class="microlabel num" style="color:var(--ink-4);">Target 3 · Max 5</span>
+        </div>
+        <div class="mod-body">
+          <div class="today-top">
+            <div class="today-big num">2<span class="of"> / 3</span></div>
+            <div class="today-note">One more pair<br><b>reaches today's target</b></div>
+          </div>
+          <div class="today-track">
+            <div class="today-seg on"></div>
+            <div class="today-seg on"></div>
+            <div class="today-seg"></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="band3">
+        <div class="cell"><div class="v num">11</div><div class="k">This week</div></div>
+        <div class="cell"><div class="v num">42</div><div class="k">This month</div></div>
+        <div class="cell"><div class="v num">3.5</div><div class="k">Avg / child</div></div>
+      </div>
+
+      <div class="mod">
+        <div class="mod-head">
+          <span class="microlabel">Not seen this week</span>
+          <span class="frac num">3</span>
+        </div>
+        <div class="mod-body">
+          <div class="chips">
+            <span class="chip"><span class="warn-dot"></span>Owethu N.</span>
+            <span class="chip"><span class="warn-dot"></span>Esona T.</span>
+            <span class="chip"><span class="warn-dot"></span>Buhle N.</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="mod">
+        <div class="mod-head">
+          <span class="microlabel">Recent sessions</span>
+          <span style="font-size:11.5px;font-weight:600;color:var(--blue);">History</span>
+        </div>
+        <div class="trow">
+          <span class="idx num" style="width:38px;">10:15</span>
+          <div class="t-main"><div class="t-name">Sinovuyo &amp; Lithemba</div><div class="t-sub">Letter sounds · Shared reading</div></div>
+          <span class="microlabel num" style="color:var(--ink-4);">Today</span>
+        </div>
+        <div class="trow">
+          <span class="idx num" style="width:38px;">08:30</span>
+          <div class="t-main"><div class="t-name">Anelisa &amp; Owethu</div><div class="t-sub">Phonics game · Writing practice</div></div>
+          <span class="microlabel num" style="color:var(--ink-4);">Today</span>
+        </div>
+        <div class="trow">
+          <span class="idx num" style="width:38px;">12:40</span>
+          <div class="t-main"><div class="t-name">Esona &amp; Iminathi</div><div class="t-sub">Letter sounds · Story time</div></div>
+          <span class="microlabel num" style="color:var(--ink-4);">Wed</span>
+        </div>
+      </div>
+
+      <div class="btn-primary">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M12 5v14M5 12h14" stroke="#fff" stroke-width="2.6" stroke-linecap="round"/></svg>
+        Record session
+      </div>
+    </div>
+  </div>
+
+  <div class="tabbar">
+    <div class="tab">      <svg width="21" height="21" viewBox="0 0 24 24" fill="none"><path d="M4 10.5 12 4l8 6.5V19a1.5 1.5 0 0 1-1.5 1.5h-13A1.5 1.5 0 0 1 4 19v-8.5z" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/><path d="M9.5 20v-5.5h5V20" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/></svg>
+      Home
+    </div>
+    <div class="tab">      <svg width="21" height="21" viewBox="0 0 24 24" fill="none"><circle cx="9" cy="8" r="3.2" stroke="currentColor" stroke-width="2"/><path d="M3.5 19c.6-3 2.8-4.6 5.5-4.6s4.9 1.6 5.5 4.6" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><circle cx="17" cy="9.5" r="2.4" stroke="currentColor" stroke-width="2"/><path d="M16.5 14.6c2.2.2 3.6 1.5 4 3.9" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+      Children
+    </div>
+    <div class="tab on">      <svg width="21" height="21" viewBox="0 0 24 24" fill="none"><path d="M4 19V5.5A1.5 1.5 0 0 1 5.5 4H12v15H5.5A1.5 1.5 0 0 0 4 20.5" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/><path d="M20 19V5.5A1.5 1.5 0 0 0 18.5 4H12v15h6.5a1.5 1.5 0 0 1 1.5 1.5" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/></svg>
+      Sessions
+    </div>
+    <div class="tab">      <svg width="21" height="21" viewBox="0 0 24 24" fill="none"><rect x="5" y="4" width="14" height="17" rx="2" stroke="currentColor" stroke-width="2"/><path d="M9 4.5V3h6v1.5" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/><path d="m8.8 13 2.2 2.2 4.2-4.4" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      Assessments
+    </div>
+  </div>
+</div>
+
+<!-- ════════════════ ASSESSMENTS ════════════════ -->
+<div class="phone" data-name="04-assessments">
+  <div class="strip">
+    <div class="os">
+      <span class="time">09:41</span>
+      <svg width="58" height="11" viewBox="0 0 58 11" fill="none">
+        <rect x="0" y="6.5" width="2.6" height="4.5" rx=".8" fill="#fff"/><rect x="4.4" y="4.5" width="2.6" height="6.5" rx=".8" fill="#fff"/><rect x="8.8" y="2.5" width="2.6" height="8.5" rx=".8" fill="#fff"/><rect x="13.2" y=".5" width="2.6" height="10.5" rx=".8" fill="#fff" opacity=".35"/>
+        <path d="M25 4a7 7 0 0 1 8.4 0M26.7 6.3a4.5 4.5 0 0 1 5 0M28.4 8.5a1.9 1.9 0 0 1 1.6 0" stroke="#fff" stroke-width="1.5" stroke-linecap="round"/><circle cx="29.2" cy="10" r=".9" fill="#fff"/>
+        <rect x="41" y="1" width="15" height="8.5" rx="2.2" stroke="#fff" stroke-opacity=".4"/><rect x="42.4" y="2.4" width="10" height="5.7" rx="1.1" fill="#fff"/><path d="M57.4 3.8v3a1.6 1.6 0 0 0 0-3z" fill="#fff" fill-opacity=".4"/>
+      </svg>
+    </div>
+    <div class="sync">
+      <span class="dot"></span> Synced
+      <span class="right num">Last upload 09:37</span>
+    </div>
+  </div>
+
+  <div class="screen">
+    <div class="header">
+      <div class="h-date num">9 of 12 assessed · 28 results</div>
+      <div class="h-name">Assessments</div>
+    </div>
+
+    <div class="content">
+      <div class="mod">
+        <div class="mod-body" style="padding:14px 16px;">
+          <div style="display:flex;justify-content:space-between;align-items:flex-start;">
+            <span class="egra-tag">EGRA · TIMED 60s</span>
+          </div>
+          <div class="a-name">Letter sounds</div>
+          <div class="a-desc">Child reads letters aloud for 60 seconds. Tap each correct letter; score is letters correct per minute.</div>
+          <div class="a-foot">
+            <span class="a-last num">Last run today 08:05</span>
+            <span class="btn-start">Start</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="mod">
+        <div class="mod-body" style="padding:14px 16px;">
+          <div style="display:flex;justify-content:space-between;align-items:flex-start;">
+            <span class="egra-tag">EGRA · TIMED 60s</span>
+          </div>
+          <div class="a-name">Word reading</div>
+          <div class="a-desc">Child reads real words for 60 seconds. Mark each word as they go; score is words correct per minute.</div>
+          <div class="a-foot">
+            <span class="a-last num">Last run Tue 11:40</span>
+            <span class="btn-start">Start</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="mod">
+        <div class="mod-head">
+          <span class="microlabel">Latest results</span>
+          <span style="font-size:11.5px;font-weight:600;color:var(--blue);">All results</span>
+        </div>
+        <div class="trow good">
+          <div class="t-main"><div class="t-name">Sinovuyo Booi</div><div class="t-sub num">Letter sounds · today</div></div>
+          <div class="score good">
+            <div class="score-top"><span class="score-v num">38</span><span class="score-u">letters/min</span></div>
+            <div class="score-track"><div class="score-fill" style="width:63%;"></div></div>
+          </div>
+        </div>
+        <div class="trow">
+          <div class="t-main"><div class="t-name">Owethu Nkohla</div><div class="t-sub num">Letter sounds · today</div></div>
+          <div class="score mid">
+            <div class="score-top"><span class="score-v num">21</span><span class="score-u">letters/min</span></div>
+            <div class="score-track"><div class="score-fill" style="width:35%;"></div></div>
+          </div>
+        </div>
+        <div class="trow">
+          <div class="t-main"><div class="t-name">Lithemba Jantjies</div><div class="t-sub num">Word reading · Tue</div></div>
+          <div class="score low">
+            <div class="score-top"><span class="score-v num">12</span><span class="score-u">words/min</span></div>
+            <div class="score-track"><div class="score-fill" style="width:24%;"></div></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="tabbar">
+    <div class="tab">      <svg width="21" height="21" viewBox="0 0 24 24" fill="none"><path d="M4 10.5 12 4l8 6.5V19a1.5 1.5 0 0 1-1.5 1.5h-13A1.5 1.5 0 0 1 4 19v-8.5z" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/><path d="M9.5 20v-5.5h5V20" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/></svg>
+      Home
+    </div>
+    <div class="tab">      <svg width="21" height="21" viewBox="0 0 24 24" fill="none"><circle cx="9" cy="8" r="3.2" stroke="currentColor" stroke-width="2"/><path d="M3.5 19c.6-3 2.8-4.6 5.5-4.6s4.9 1.6 5.5 4.6" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><circle cx="17" cy="9.5" r="2.4" stroke="currentColor" stroke-width="2"/><path d="M16.5 14.6c2.2.2 3.6 1.5 4 3.9" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+      Children
+    </div>
+    <div class="tab">      <svg width="21" height="21" viewBox="0 0 24 24" fill="none"><path d="M4 19V5.5A1.5 1.5 0 0 1 5.5 4H12v15H5.5A1.5 1.5 0 0 0 4 20.5" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/><path d="M20 19V5.5A1.5 1.5 0 0 0 18.5 4H12v15h6.5a1.5 1.5 0 0 1 1.5 1.5" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/></svg>
+      Sessions
+    </div>
+    <div class="tab on">      <svg width="21" height="21" viewBox="0 0 24 24" fill="none"><rect x="5" y="4" width="14" height="17" rx="2" stroke="currentColor" stroke-width="2"/><path d="M9 4.5V3h6v1.5" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/><path d="m8.8 13 2.2 2.2 4.2-4.4" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      Assessments
+    </div>
+  </div>
+</div>
+
+</div>
+</body>
+</html>

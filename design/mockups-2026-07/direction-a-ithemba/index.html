@@ -1,0 +1,667 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Masi Direction A: Ithemba</title>
+<link rel="stylesheet" href="../fonts/fonts.css">
+<style>
+  :root{
+    --paper:#FAF5EC;
+    --card:#FFFDF8;
+    --ink:#2E2318;
+    --ink-soft:#8A7A66;
+    --ink-faint:#B3A48F;
+    --clay:#BC4B26;
+    --clay-deep:#9E3C1D;
+    --clay-tint:#F6E4D9;
+    --sage:#5F7F55;
+    --sage-tint:#E7EDDD;
+    --sun:#E0A33B;
+    --sun-tint:#F7EBD2;
+    --line:#EAE0CD;
+    --line-soft:#F0E8D8;
+  }
+  *{margin:0;padding:0;box-sizing:border-box;}
+  body{
+    background:#DEDAD2;
+    font-family:'Work Sans',sans-serif;
+    -webkit-font-smoothing:antialiased;
+    padding:40px;
+  }
+  .row{display:flex;gap:36px;}
+  .phone{
+    width:390px;height:844px;flex:0 0 390px;
+    background:var(--paper);
+    overflow:hidden;position:relative;
+    display:flex;flex-direction:column;
+    color:var(--ink);
+  }
+  .screen{flex:1;overflow:hidden;display:flex;flex-direction:column;}
+
+  /* ── status bar ── */
+  .statusbar{
+    height:44px;display:flex;align-items:center;justify-content:space-between;
+    padding:0 24px 0 28px;flex-shrink:0;
+  }
+  .statusbar .time{font-weight:600;font-size:14px;letter-spacing:.02em;}
+  .statusbar svg{display:block;}
+
+  /* ── type ── */
+  .display{font-family:'Fraunces',serif;font-weight:600;letter-spacing:-0.01em;}
+  .label{
+    font-size:11px;font-weight:600;letter-spacing:.12em;text-transform:uppercase;
+    color:var(--ink-soft);
+  }
+  .num{font-variant-numeric:tabular-nums;}
+
+  /* ── header ── */
+  .header{padding:10px 24px 0;}
+  .header-top{display:flex;align-items:flex-start;justify-content:space-between;}
+  .greet{font-size:30px;line-height:1.1;}
+  .greet .dot{color:var(--clay);}
+  .role{font-size:13px;color:var(--ink-soft);margin-top:8px;font-weight:500;}
+  .sync-pill{
+    display:inline-flex;align-items:center;gap:6px;
+    border:1px solid var(--line);border-radius:999px;
+    padding:6px 12px;font-size:12px;font-weight:600;color:var(--sage);
+    background:var(--card);margin-top:6px;
+  }
+
+  .content{flex:1;overflow:hidden;padding:0 24px;}
+
+  .panel{
+    background:var(--card);
+    border:1px solid var(--line);
+    border-radius:18px;
+    padding:16px 18px;
+  }
+
+  .hr{height:1px;background:var(--line-soft);margin:0 24px;}
+
+  section{margin-top:17px;}
+  .sec-label{margin-bottom:12px;display:flex;justify-content:space-between;align-items:baseline;}
+  .sec-link{font-size:12px;font-weight:600;color:var(--clay);letter-spacing:0;text-transform:none;}
+
+  /* ── clock panel ── */
+  .clock-panel{background:var(--clay-tint);border:none;display:flex;align-items:center;justify-content:space-between;}
+  .clock-elapsed{font-family:'Fraunces',serif;font-size:32px;font-weight:600;line-height:1;margin-top:6px;color:var(--clay-deep);}
+  .clock-since{font-size:12px;color:#A06B51;margin-top:6px;font-weight:500;}
+  .btn-out{
+    border:1.5px solid var(--clay);color:var(--clay);border-radius:999px;
+    padding:12px 20px;font-size:14px;font-weight:600;background:transparent;
+    font-family:'Work Sans';
+  }
+
+  /* ── month stats ── */
+  .stat-row{display:flex;}
+  .stat{flex:1;}
+  .stat + .stat{border-left:1px solid var(--line-soft);padding-left:18px;}
+  .stat .v{font-family:'Fraunces',serif;font-size:30px;font-weight:600;line-height:1;}
+  .stat .k{font-size:12px;color:var(--ink-soft);margin-top:6px;font-weight:500;}
+
+  /* ── week dots ── */
+  .week{display:flex;justify-content:space-between;align-items:flex-start;}
+  .day{display:flex;flex-direction:column;align-items:center;gap:8px;width:52px;}
+  .day .d-label{font-size:11px;font-weight:600;color:var(--ink-faint);letter-spacing:.05em;}
+  .day .d-count{
+    width:44px;height:44px;border-radius:50%;
+    display:flex;align-items:center;justify-content:center;
+    font-family:'Fraunces',serif;font-size:17px;font-weight:600;
+    background:var(--line-soft);color:var(--ink-faint);
+  }
+  .day.active .d-count{background:var(--sage-tint);color:var(--sage);}
+  .day.today .d-count{background:var(--clay);color:#fff;box-shadow:0 0 0 2px var(--paper),0 0 0 3.5px var(--clay);}
+  .day.today .d-label{color:var(--clay);}
+
+  /* ── coverage ── */
+  .cov-track{height:10px;border-radius:6px;background:var(--line-soft);overflow:hidden;margin-top:14px;}
+  .cov-fill{height:100%;width:75%;background:var(--sage);border-radius:6px;}
+  .cov-caption{display:flex;justify-content:space-between;margin-top:10px;font-size:12.5px;}
+  .cov-caption .left{color:var(--ink-soft);font-weight:500;}
+  .cov-caption .right{color:var(--clay);font-weight:600;}
+
+  /* ── quiet list rows ── */
+  .list-row{
+    display:flex;align-items:center;gap:14px;
+    padding:12px 2px;border-bottom:1px solid var(--line-soft);
+  }
+  .list-row:last-child{border-bottom:none;}
+  .list-ico{
+    width:36px;height:36px;border-radius:12px;background:var(--sun-tint);
+    display:flex;align-items:center;justify-content:center;flex-shrink:0;
+  }
+  .list-t{flex:1;font-size:14.5px;font-weight:600;}
+  .list-sub{font-size:12px;color:var(--ink-soft);font-weight:400;margin-top:2px;}
+
+  /* ── avatars ── */
+  .av{
+    width:38px;height:38px;border-radius:50%;
+    display:flex;align-items:center;justify-content:center;
+    font-size:13px;font-weight:600;color:#5D4327;
+    border:2px solid var(--card);flex-shrink:0;
+  }
+  .av.c1{background:#F0CBA4;}
+  .av.c2{background:#E5B8B0;}
+  .av.c3{background:#D9C99A;}
+  .av.c4{background:#C9D4B4;}
+  .av.c5{background:#E8C2CF;color:#6B3B4E;}
+  .av.c6{background:#BFD3D2;color:#345251;}
+  .av-stack{display:flex;}
+  .av-stack .av + .av{margin-left:-10px;}
+
+  /* ── children screen ── */
+  .search{
+    display:flex;align-items:center;gap:10px;
+    background:var(--card);border:1px solid var(--line);border-radius:999px;
+    padding:13px 18px;color:var(--ink-faint);font-size:14px;
+  }
+  .class-card .cc-top{display:flex;justify-content:space-between;align-items:baseline;}
+  .cc-name{font-family:'Fraunces',serif;font-size:22px;font-weight:600;}
+  .cc-pair{font-size:12px;font-weight:600;color:var(--ink-soft);background:var(--line-soft);border-radius:999px;padding:5px 11px;}
+  .cc-meta{font-size:13px;color:var(--ink-soft);margin-top:5px;}
+  .cc-bottom{display:flex;justify-content:space-between;align-items:center;margin-top:16px;}
+  .cc-assessed{font-size:12.5px;font-weight:600;color:var(--sage);}
+  .cc-assessed.warn{color:var(--clay);}
+  .pair-list{margin-top:14px;border-top:1px solid var(--line-soft);}
+  .pair-row{display:flex;align-items:center;gap:12px;padding:9px 0;border-bottom:1px solid var(--line-soft);}
+  .pair-row:last-child{border-bottom:none;padding-bottom:2px;}
+  .pair-row .av{width:30px;height:30px;font-size:11px;border-width:1.5px;}
+  .pair-row .av + .av{margin-left:-5px;}
+  .pair-names{flex:1;font-size:13.5px;font-weight:600;}
+  .pair-tag{font-size:11px;font-weight:600;color:var(--ink-faint);letter-spacing:.06em;text-transform:uppercase;}
+  .callout{
+    display:flex;align-items:center;gap:12px;
+    background:var(--sun-tint);border-radius:16px;padding:15px 18px;
+  }
+  .callout .txt{flex:1;font-size:13.5px;font-weight:600;color:#8A6420;}
+  .quiet-link{
+    text-align:center;padding:16px;font-size:14px;font-weight:600;color:var(--clay);
+  }
+
+  /* ── sessions screen ── */
+  .ring-wrap{display:flex;flex-direction:column;align-items:center;padding:6px 0 0;}
+  .ring{position:relative;width:170px;height:170px;}
+  .ring svg{transform:rotate(-90deg);}
+  .ring-center{
+    position:absolute;inset:0;display:flex;flex-direction:column;
+    align-items:center;justify-content:center;
+  }
+  .ring-count{font-family:'Fraunces',serif;font-size:52px;font-weight:600;line-height:1;color:var(--clay-deep);}
+  .ring-of{font-size:13px;color:var(--ink-soft);font-weight:500;margin-top:4px;}
+  .ring-caption{margin-top:14px;font-size:13px;color:var(--ink-soft);font-weight:500;}
+  .ring-caption b{color:var(--ink);font-weight:600;}
+
+  .chip-row{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px;}
+  .chip{
+    display:inline-flex;align-items:center;gap:8px;
+    background:var(--card);border:1px solid var(--line);border-radius:999px;
+    padding:6px 14px 6px 6px;font-size:13px;font-weight:600;
+  }
+  .chip .av{width:28px;height:28px;font-size:11px;border:none;}
+
+  .sess-row{display:flex;gap:14px;padding:14px 2px;border-bottom:1px solid var(--line-soft);}
+  .sess-row:last-child{border-bottom:none;}
+  .sess-time{width:64px;flex-shrink:0;}
+  .sess-time .t1{font-size:13.5px;font-weight:600;}
+  .sess-time .t2{font-size:11.5px;color:var(--ink-faint);margin-top:2px;}
+  .sess-body .who{font-size:14px;font-weight:600;}
+  .sess-body .what{font-size:12.5px;color:var(--ink-soft);margin-top:3px;}
+
+  .btn-primary{
+    display:flex;align-items:center;justify-content:center;gap:10px;
+    background:var(--clay);color:#fff;border-radius:999px;
+    padding:17px;font-size:16px;font-weight:600;
+    box-shadow:0 6px 16px rgba(158,60,29,.22);
+  }
+  .btn-ghost{
+    display:flex;align-items:center;justify-content:center;
+    padding:14px;font-size:14px;font-weight:600;color:var(--ink-soft);
+  }
+
+  /* ── assessments ── */
+  .batt-card .bc-top{display:flex;align-items:center;justify-content:space-between;}
+  .bc-name{font-family:'Fraunces',serif;font-size:20px;font-weight:600;}
+  .bc-timed{
+    display:inline-flex;align-items:center;gap:5px;
+    font-size:11px;font-weight:700;letter-spacing:.06em;color:#8A6420;
+    background:var(--sun-tint);border-radius:999px;padding:5px 10px;text-transform:uppercase;
+  }
+  .bc-desc{font-size:13px;color:var(--ink-soft);margin-top:6px;line-height:1.45;}
+  .bc-actions{display:flex;align-items:center;justify-content:space-between;margin-top:14px;}
+  .bc-last{font-size:12px;color:var(--ink-faint);}
+  .btn-start{
+    background:var(--ink);color:var(--paper);border-radius:999px;
+    padding:11px 22px;font-size:13.5px;font-weight:600;
+  }
+  .result-row{display:flex;align-items:center;gap:12px;padding:12px 2px;border-bottom:1px solid var(--line-soft);}
+  .result-row:last-child{border-bottom:none;}
+  .result-row .av{border:none;}
+  .res-name{flex:1;}
+  .res-name .n{font-size:14px;font-weight:600;}
+  .res-name .m{font-size:12px;color:var(--ink-soft);margin-top:2px;}
+  .band{
+    font-size:12px;font-weight:700;border-radius:999px;padding:6px 12px;
+    font-variant-numeric:tabular-nums;
+  }
+  .band.good{background:var(--sage-tint);color:#48663F;}
+  .band.mid{background:var(--sun-tint);color:#8A6420;}
+  .band.low{background:var(--clay-tint);color:var(--clay-deep);}
+
+  /* ── tab bar ── */
+  .tabbar{
+    flex-shrink:0;display:flex;align-items:stretch;
+    border-top:1px solid var(--line);background:var(--card);
+    padding:10px 8px 26px;
+  }
+  .tab{
+    flex:1;display:flex;flex-direction:column;align-items:center;gap:5px;
+    font-size:10.5px;font-weight:600;color:var(--ink-faint);
+  }
+  .tab.on{color:var(--clay);}
+  .tab .t-dot{width:4px;height:4px;border-radius:2px;background:transparent;}
+  .tab.on .t-dot{background:var(--clay);}
+</style>
+</head>
+<body>
+<div class="row">
+
+<!-- ════════════════ HOME ════════════════ -->
+<div class="phone" data-name="01-home">
+  <div class="statusbar">
+    <span class="time num">09:41</span>
+    <svg width="62" height="12" viewBox="0 0 62 12" fill="none">
+      <rect x="0" y="7" width="3" height="5" rx="1" fill="#2E2318"/><rect x="5" y="5" width="3" height="7" rx="1" fill="#2E2318"/><rect x="10" y="3" width="3" height="9" rx="1" fill="#2E2318"/><rect x="15" y="1" width="3" height="11" rx="1" fill="#2E2318" opacity=".35"/>
+      <path d="M28 4.5a7.5 7.5 0 0 1 9 0M29.8 7a4.8 4.8 0 0 1 5.4 0M31.6 9.4a2 2 0 0 1 1.8 0" stroke="#2E2318" stroke-width="1.6" stroke-linecap="round"/><circle cx="32.5" cy="11" r="1" fill="#2E2318"/>
+      <rect x="44" y="1.5" width="16" height="9" rx="2.5" stroke="#2E2318" stroke-opacity=".4"/><rect x="45.5" y="3" width="11" height="6" rx="1.2" fill="#2E2318"/><path d="M61.5 4.5v3a1.7 1.7 0 0 0 0-3z" fill="#2E2318" fill-opacity=".4"/>
+    </svg>
+  </div>
+  <div class="screen">
+    <div class="header">
+      <div class="header-top">
+        <div>
+          <div class="display greet">Molo, Asanda<span class="dot">.</span></div>
+          <div class="role">Core Literacy · Charles Duna Primary</div>
+        </div>
+        <div class="sync-pill">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none"><path d="M7 18a5 5 0 1 1 .8-9.9A6 6 0 0 1 19.5 10 4 4 0 0 1 18 18H7z" stroke="#5F7F55" stroke-width="2" stroke-linejoin="round"/><path d="m9.5 13.5 2 2 3.5-3.8" stroke="#5F7F55" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          Synced
+        </div>
+      </div>
+    </div>
+
+    <div class="content">
+      <section>
+        <div class="panel clock-panel">
+          <div>
+            <div class="label" style="color:#A06B51;">On the clock</div>
+            <div class="clock-elapsed num">3h 24m</div>
+            <div class="clock-since num">Clocked in at 07:42</div>
+          </div>
+          <button class="btn-out">Clock out</button>
+        </div>
+      </section>
+
+      <section>
+        <div class="sec-label"><span class="label">July so far</span></div>
+        <div class="stat-row">
+          <div class="stat"><div class="v num">14</div><div class="k">days worked</div></div>
+          <div class="stat"><div class="v num">42</div><div class="k">sessions</div></div>
+          <div class="stat"><div class="v num">12</div><div class="k">children</div></div>
+        </div>
+      </section>
+
+      <section>
+        <div class="sec-label">
+          <span class="label">This week</span>
+          <span class="sec-link num" style="color:var(--ink-soft);">12 total</span>
+        </div>
+        <div class="week">
+          <div class="day active"><span class="d-label">MON</span><span class="d-count num">3</span></div>
+          <div class="day active"><span class="d-label">TUE</span><span class="d-count num">4</span></div>
+          <div class="day active"><span class="d-label">WED</span><span class="d-count num">3</span></div>
+          <div class="day today"><span class="d-label">THU</span><span class="d-count num">2</span></div>
+          <div class="day"><span class="d-label">FRI</span><span class="d-count num">–</span></div>
+        </div>
+      </section>
+
+      <section>
+        <div class="sec-label"><span class="label">Assessment coverage</span></div>
+        <div class="cov-track"><div class="cov-fill"></div></div>
+        <div class="cov-caption">
+          <span class="left num">9 of 12 children assessed</span>
+          <span class="right">3 to go →</span>
+        </div>
+      </section>
+
+      <section>
+        <div class="sec-label"><span class="label">Your impact</span></div>
+        <div class="list-row">
+          <div class="list-ico"><svg width="18" height="18" viewBox="0 0 24 24" fill="none"><path d="M4 19V5.5A1.5 1.5 0 0 1 5.5 4H12v15H5.5A1.5 1.5 0 0 0 4 20.5" stroke="#B07E28" stroke-width="2" stroke-linejoin="round"/><path d="M20 19V5.5A1.5 1.5 0 0 0 18.5 4H12v15h6.5a1.5 1.5 0 0 1 1.5 1.5" stroke="#B07E28" stroke-width="2" stroke-linejoin="round"/></svg></div>
+          <div class="list-t">Letter mastery<div class="list-sub">Which letters your children know</div></div>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="m9 6 6 6-6 6" stroke="#B3A48F" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </div>
+        <div class="list-row">
+          <div class="list-ico"><svg width="18" height="18" viewBox="0 0 24 24" fill="none"><path d="M4 20 10 13l4 3.5L20 9" stroke="#B07E28" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/><path d="M15.5 9H20v4.5" stroke="#B07E28" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+          <div class="list-t">Assessment scores<div class="list-sub">Every child, ranked and banded</div></div>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="m9 6 6 6-6 6" stroke="#B3A48F" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </div>
+        <div class="list-row">
+          <div class="list-ico"><svg width="18" height="18" viewBox="0 0 24 24" fill="none"><circle cx="9" cy="8" r="3.2" stroke="#B07E28" stroke-width="2"/><path d="M3.5 19c.6-3 2.8-4.6 5.5-4.6s4.9 1.6 5.5 4.6" stroke="#B07E28" stroke-width="2" stroke-linecap="round"/><circle cx="17" cy="9.5" r="2.4" stroke="#B07E28" stroke-width="2"/><path d="M16.5 14.6c2.2.2 3.6 1.5 4 3.9" stroke="#B07E28" stroke-width="2" stroke-linecap="round"/></svg></div>
+          <div class="list-t">Sessions per child<div class="list-sub">Who's had the most time with you</div></div>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="m9 6 6 6-6 6" stroke="#B3A48F" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </div>
+      </section>
+    </div>
+  </div>
+
+  <div class="tabbar">
+    <div class="tab on">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none"><path d="M4 10.5 12 4l8 6.5V19a1.5 1.5 0 0 1-1.5 1.5h-13A1.5 1.5 0 0 1 4 19v-8.5z" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/><path d="M9.5 20v-5.5h5V20" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/></svg>
+      Home<span class="t-dot"></span>
+    </div>
+    <div class="tab">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none"><circle cx="9" cy="8" r="3.2" stroke="currentColor" stroke-width="2"/><path d="M3.5 19c.6-3 2.8-4.6 5.5-4.6s4.9 1.6 5.5 4.6" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><circle cx="17" cy="9.5" r="2.4" stroke="currentColor" stroke-width="2"/><path d="M16.5 14.6c2.2.2 3.6 1.5 4 3.9" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+      My Children<span class="t-dot"></span>
+    </div>
+    <div class="tab">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none"><path d="M4 19V5.5A1.5 1.5 0 0 1 5.5 4H12v15H5.5A1.5 1.5 0 0 0 4 20.5" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/><path d="M20 19V5.5A1.5 1.5 0 0 0 18.5 4H12v15h6.5a1.5 1.5 0 0 1 1.5 1.5" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/></svg>
+      Sessions<span class="t-dot"></span>
+    </div>
+    <div class="tab">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none"><rect x="5" y="4" width="14" height="17" rx="2" stroke="currentColor" stroke-width="2"/><path d="M9 4.5V3h6v1.5" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/><path d="m8.8 13 2.2 2.2 4.2-4.4" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      Assessments<span class="t-dot"></span>
+    </div>
+  </div>
+</div>
+
+<!-- ════════════════ MY CHILDREN ════════════════ -->
+<div class="phone" data-name="02-children">
+  <div class="statusbar">
+    <span class="time num">09:41</span>
+    <svg width="62" height="12" viewBox="0 0 62 12" fill="none">
+      <rect x="0" y="7" width="3" height="5" rx="1" fill="#2E2318"/><rect x="5" y="5" width="3" height="7" rx="1" fill="#2E2318"/><rect x="10" y="3" width="3" height="9" rx="1" fill="#2E2318"/><rect x="15" y="1" width="3" height="11" rx="1" fill="#2E2318" opacity=".35"/>
+      <path d="M28 4.5a7.5 7.5 0 0 1 9 0M29.8 7a4.8 4.8 0 0 1 5.4 0M31.6 9.4a2 2 0 0 1 1.8 0" stroke="#2E2318" stroke-width="1.6" stroke-linecap="round"/><circle cx="32.5" cy="11" r="1" fill="#2E2318"/>
+      <rect x="44" y="1.5" width="16" height="9" rx="2.5" stroke="#2E2318" stroke-opacity=".4"/><rect x="45.5" y="3" width="11" height="6" rx="1.2" fill="#2E2318"/><path d="M61.5 4.5v3a1.7 1.7 0 0 0 0-3z" fill="#2E2318" fill-opacity=".4"/>
+    </svg>
+  </div>
+  <div class="screen">
+    <div class="header">
+      <div class="display greet">My children<span class="dot">.</span></div>
+      <div class="role num">12 children across 2 classes</div>
+    </div>
+
+    <div class="content">
+      <section>
+        <div class="search">
+          <svg width="17" height="17" viewBox="0 0 24 24" fill="none"><circle cx="11" cy="11" r="6.5" stroke="#B3A48F" stroke-width="2"/><path d="m16 16 4.5 4.5" stroke="#B3A48F" stroke-width="2" stroke-linecap="round"/></svg>
+          Search children or classes…
+        </div>
+      </section>
+
+      <section>
+        <div class="panel class-card">
+          <div class="cc-top">
+            <span class="cc-name">Grade 1A</span>
+            <span class="cc-pair num">6 children</span>
+          </div>
+          <div class="cc-meta">Mrs Nogaya · isiXhosa · Charles Duna</div>
+          <div class="pair-list">
+            <div class="pair-row"><span style="display:flex;"><span class="av c1">SB</span><span class="av c2">LJ</span></span><span class="pair-names">Sinovuyo &amp; Lithemba</span><span class="pair-tag">Pair 1</span></div>
+            <div class="pair-row"><span style="display:flex;"><span class="av c3">AM</span><span class="av c4">ON</span></span><span class="pair-names">Anelisa &amp; Owethu</span><span class="pair-tag">Pair 2</span></div>
+            <div class="pair-row"><span style="display:flex;"><span class="av c2">ET</span><span class="av c3">IG</span></span><span class="pair-names">Esona &amp; Iminathi</span><span class="pair-tag">Pair 3</span></div>
+          </div>
+          <div class="cc-bottom" style="margin-top:12px;">
+            <span class="cc-assessed num">6 of 6 assessed ✓</span>
+          </div>
+        </div>
+      </section>
+
+      <section style="margin-top:14px;">
+        <div class="panel class-card">
+          <div class="cc-top">
+            <span class="cc-name">Grade 1B</span>
+            <span class="cc-pair num">6 children</span>
+          </div>
+          <div class="cc-meta">Ms Botman · isiXhosa · Charles Duna</div>
+          <div class="pair-list">
+            <div class="pair-row"><span style="display:flex;"><span class="av c4">KF</span><span class="av c1">AP</span></span><span class="pair-names">Khanya &amp; Amahle</span><span class="pair-tag">Pair 1</span></div>
+            <div class="pair-row"><span style="display:flex;"><span class="av c2">MS</span><span class="av c3">LD</span></span><span class="pair-names">Milani &amp; Lonwabo</span><span class="pair-tag">Pair 2</span></div>
+            <div class="pair-row"><span style="display:flex;"><span class="av c1">SM</span><span class="av c4">BN</span></span><span class="pair-names">Sibabalwe &amp; Buhle</span><span class="pair-tag">Pair 3</span></div>
+          </div>
+          <div class="cc-bottom" style="margin-top:12px;">
+            <span class="cc-assessed warn num">3 of 6 assessed · Khanya, Milani &amp; Buhle to go</span>
+          </div>
+        </div>
+      </section>
+
+      <section style="margin-top:8px;">
+        <div class="quiet-link">＋ Add another class</div>
+      </section>
+    </div>
+  </div>
+
+  <div class="tabbar">
+    <div class="tab">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none"><path d="M4 10.5 12 4l8 6.5V19a1.5 1.5 0 0 1-1.5 1.5h-13A1.5 1.5 0 0 1 4 19v-8.5z" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/><path d="M9.5 20v-5.5h5V20" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/></svg>
+      Home<span class="t-dot"></span>
+    </div>
+    <div class="tab on">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none"><circle cx="9" cy="8" r="3.2" stroke="currentColor" stroke-width="2"/><path d="M3.5 19c.6-3 2.8-4.6 5.5-4.6s4.9 1.6 5.5 4.6" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><circle cx="17" cy="9.5" r="2.4" stroke="currentColor" stroke-width="2"/><path d="M16.5 14.6c2.2.2 3.6 1.5 4 3.9" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+      My Children<span class="t-dot"></span>
+    </div>
+    <div class="tab">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none"><path d="M4 19V5.5A1.5 1.5 0 0 1 5.5 4H12v15H5.5A1.5 1.5 0 0 0 4 20.5" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/><path d="M20 19V5.5A1.5 1.5 0 0 0 18.5 4H12v15h6.5a1.5 1.5 0 0 1 1.5 1.5" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/></svg>
+      Sessions<span class="t-dot"></span>
+    </div>
+    <div class="tab">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none"><rect x="5" y="4" width="14" height="17" rx="2" stroke="currentColor" stroke-width="2"/><path d="M9 4.5V3h6v1.5" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/><path d="m8.8 13 2.2 2.2 4.2-4.4" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      Assessments<span class="t-dot"></span>
+    </div>
+  </div>
+</div>
+
+<!-- ════════════════ SESSIONS ════════════════ -->
+<div class="phone" data-name="03-sessions">
+  <div class="statusbar">
+    <span class="time num">09:41</span>
+    <svg width="62" height="12" viewBox="0 0 62 12" fill="none">
+      <rect x="0" y="7" width="3" height="5" rx="1" fill="#2E2318"/><rect x="5" y="5" width="3" height="7" rx="1" fill="#2E2318"/><rect x="10" y="3" width="3" height="9" rx="1" fill="#2E2318"/><rect x="15" y="1" width="3" height="11" rx="1" fill="#2E2318" opacity=".35"/>
+      <path d="M28 4.5a7.5 7.5 0 0 1 9 0M29.8 7a4.8 4.8 0 0 1 5.4 0M31.6 9.4a2 2 0 0 1 1.8 0" stroke="#2E2318" stroke-width="1.6" stroke-linecap="round"/><circle cx="32.5" cy="11" r="1" fill="#2E2318"/>
+      <rect x="44" y="1.5" width="16" height="9" rx="2.5" stroke="#2E2318" stroke-opacity=".4"/><rect x="45.5" y="3" width="11" height="6" rx="1.2" fill="#2E2318"/><path d="M61.5 4.5v3a1.7 1.7 0 0 0 0-3z" fill="#2E2318" fill-opacity=".4"/>
+    </svg>
+  </div>
+  <div class="screen">
+    <div class="header">
+      <div class="display greet">Sessions<span class="dot">.</span></div>
+    </div>
+
+    <div class="content">
+      <section style="margin-top:12px;">
+        <div class="ring-wrap">
+          <div class="ring">
+            <svg width="170" height="170" viewBox="0 0 170 170">
+              <circle cx="85" cy="85" r="76" fill="none" stroke="#F0E8D8" stroke-width="13"/>
+              <circle cx="85" cy="85" r="76" fill="none" stroke="#BC4B26" stroke-width="13"
+                stroke-linecap="round" stroke-dasharray="477.5" stroke-dashoffset="159.2"/>
+            </svg>
+            <div class="ring-center">
+              <span class="ring-count num">2</span>
+              <span class="ring-of num">of 3 today</span>
+            </div>
+          </div>
+          <div class="ring-caption">One more pair reaches today&rsquo;s target</div>
+        </div>
+      </section>
+
+      <section>
+        <div class="stat-row">
+          <div class="stat"><div class="v num">11</div><div class="k">this week</div></div>
+          <div class="stat"><div class="v num">42</div><div class="k">this month</div></div>
+          <div class="stat"><div class="v num">3.5</div><div class="k">avg / child</div></div>
+        </div>
+      </section>
+
+      <section>
+        <div class="sec-label"><span class="label">Not seen this week</span></div>
+        <div class="chip-row" style="margin-top:0;">
+          <span class="chip"><span class="av c4">ON</span>Owethu</span>
+          <span class="chip"><span class="av c5">ET</span>Esona</span>
+          <span class="chip"><span class="av c3">BN</span>Buhle</span>
+        </div>
+      </section>
+
+      <section>
+        <div class="sec-label">
+          <span class="label">Recent</span>
+          <span class="sec-link">View history →</span>
+        </div>
+        <div class="sess-row">
+          <div class="sess-time"><div class="t1 num">10:15</div><div class="t2">Today</div></div>
+          <div class="sess-body">
+            <div class="who">Sinovuyo &amp; Lithemba</div>
+            <div class="what">Letter sounds · Shared reading</div>
+          </div>
+        </div>
+        <div class="sess-row">
+          <div class="sess-time"><div class="t1 num">08:30</div><div class="t2">Today</div></div>
+          <div class="sess-body">
+            <div class="who">Anelisa &amp; Owethu</div>
+            <div class="what">Phonics game · Writing practice</div>
+          </div>
+        </div>
+        <div class="sess-row">
+          <div class="sess-time"><div class="t1 num">12:40</div><div class="t2">Wed</div></div>
+          <div class="sess-body">
+            <div class="who">Esona &amp; Iminathi</div>
+            <div class="what">Letter sounds · Story time</div>
+          </div>
+        </div>
+      </section>
+
+      <section style="margin-top:auto;">
+        <div class="btn-primary">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none"><path d="M12 5v14M5 12h14" stroke="#fff" stroke-width="2.4" stroke-linecap="round"/></svg>
+          Record a session
+        </div>
+      </section>
+    </div>
+  </div>
+
+  <div class="tabbar">
+    <div class="tab">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none"><path d="M4 10.5 12 4l8 6.5V19a1.5 1.5 0 0 1-1.5 1.5h-13A1.5 1.5 0 0 1 4 19v-8.5z" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/><path d="M9.5 20v-5.5h5V20" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/></svg>
+      Home<span class="t-dot"></span>
+    </div>
+    <div class="tab">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none"><circle cx="9" cy="8" r="3.2" stroke="currentColor" stroke-width="2"/><path d="M3.5 19c.6-3 2.8-4.6 5.5-4.6s4.9 1.6 5.5 4.6" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><circle cx="17" cy="9.5" r="2.4" stroke="currentColor" stroke-width="2"/><path d="M16.5 14.6c2.2.2 3.6 1.5 4 3.9" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+      My Children<span class="t-dot"></span>
+    </div>
+    <div class="tab on">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none"><path d="M4 19V5.5A1.5 1.5 0 0 1 5.5 4H12v15H5.5A1.5 1.5 0 0 0 4 20.5" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/><path d="M20 19V5.5A1.5 1.5 0 0 0 18.5 4H12v15h6.5a1.5 1.5 0 0 1 1.5 1.5" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/></svg>
+      Sessions<span class="t-dot"></span>
+    </div>
+    <div class="tab">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none"><rect x="5" y="4" width="14" height="17" rx="2" stroke="currentColor" stroke-width="2"/><path d="M9 4.5V3h6v1.5" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/><path d="m8.8 13 2.2 2.2 4.2-4.4" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      Assessments<span class="t-dot"></span>
+    </div>
+  </div>
+</div>
+
+<!-- ════════════════ ASSESSMENTS ════════════════ -->
+<div class="phone" data-name="04-assessments">
+  <div class="statusbar">
+    <span class="time num">09:41</span>
+    <svg width="62" height="12" viewBox="0 0 62 12" fill="none">
+      <rect x="0" y="7" width="3" height="5" rx="1" fill="#2E2318"/><rect x="5" y="5" width="3" height="7" rx="1" fill="#2E2318"/><rect x="10" y="3" width="3" height="9" rx="1" fill="#2E2318"/><rect x="15" y="1" width="3" height="11" rx="1" fill="#2E2318" opacity=".35"/>
+      <path d="M28 4.5a7.5 7.5 0 0 1 9 0M29.8 7a4.8 4.8 0 0 1 5.4 0M31.6 9.4a2 2 0 0 1 1.8 0" stroke="#2E2318" stroke-width="1.6" stroke-linecap="round"/><circle cx="32.5" cy="11" r="1" fill="#2E2318"/>
+      <rect x="44" y="1.5" width="16" height="9" rx="2.5" stroke="#2E2318" stroke-opacity=".4"/><rect x="45.5" y="3" width="11" height="6" rx="1.2" fill="#2E2318"/><path d="M61.5 4.5v3a1.7 1.7 0 0 0 0-3z" fill="#2E2318" fill-opacity=".4"/>
+    </svg>
+  </div>
+  <div class="screen">
+    <div class="header">
+      <div class="display greet">Assessments<span class="dot">.</span></div>
+      <div class="role num">9 of 12 children assessed · 28 results</div>
+    </div>
+
+    <div class="content">
+      <section>
+        <div class="panel batt-card">
+          <div class="bc-top">
+            <span class="bc-name">Letter sounds</span>
+            <span class="bc-timed">
+              <svg width="11" height="11" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="13" r="8" stroke="#8A6420" stroke-width="2.4"/><path d="M12 9.5V13l2.5 2" stroke="#8A6420" stroke-width="2.4" stroke-linecap="round"/><path d="M9.5 2.5h5" stroke="#8A6420" stroke-width="2.4" stroke-linecap="round"/></svg>
+              60 sec
+            </span>
+          </div>
+          <div class="bc-desc">EGRA timed letter-sound recognition. The child reads letters aloud; tap the ones they get right.</div>
+          <div class="bc-actions">
+            <span class="bc-last num">Last run today, 08:05</span>
+            <span class="btn-start">Start →</span>
+          </div>
+        </div>
+      </section>
+
+      <section style="margin-top:14px;">
+        <div class="panel batt-card">
+          <div class="bc-top">
+            <span class="bc-name">Word reading</span>
+            <span class="bc-timed">
+              <svg width="11" height="11" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="13" r="8" stroke="#8A6420" stroke-width="2.4"/><path d="M12 9.5V13l2.5 2" stroke="#8A6420" stroke-width="2.4" stroke-linecap="round"/><path d="M9.5 2.5h5" stroke="#8A6420" stroke-width="2.4" stroke-linecap="round"/></svg>
+              60 sec
+            </span>
+          </div>
+          <div class="bc-desc">EGRA timed word-reading fluency. The child reads real words; mark each one as they go.</div>
+          <div class="bc-actions">
+            <span class="bc-last num">Last run Tue, 11:40</span>
+            <span class="btn-start">Start →</span>
+          </div>
+        </div>
+      </section>
+
+      <section>
+        <div class="sec-label">
+          <span class="label">Latest results</span>
+          <span class="sec-link">All results →</span>
+        </div>
+        <div class="result-row">
+          <div class="av c1">SB</div>
+          <div class="res-name"><div class="n">Sinovuyo Booi</div><div class="m">Letter sounds · today</div></div>
+          <span class="band good num">38 / min</span>
+        </div>
+        <div class="result-row">
+          <div class="av c4">ON</div>
+          <div class="res-name"><div class="n">Owethu Nkohla</div><div class="m">Letter sounds · today</div></div>
+          <span class="band mid num">21 / min</span>
+        </div>
+        <div class="result-row">
+          <div class="av c2">LJ</div>
+          <div class="res-name"><div class="n">Lithemba Jantjies</div><div class="m">Word reading · Tue</div></div>
+          <span class="band low num">12 / min</span>
+        </div>
+      </section>
+    </div>
+  </div>
+
+  <div class="tabbar">
+    <div class="tab">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none"><path d="M4 10.5 12 4l8 6.5V19a1.5 1.5 0 0 1-1.5 1.5h-13A1.5 1.5 0 0 1 4 19v-8.5z" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/><path d="M9.5 20v-5.5h5V20" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/></svg>
+      Home<span class="t-dot"></span>
+    </div>
+    <div class="tab">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none"><circle cx="9" cy="8" r="3.2" stroke="currentColor" stroke-width="2"/><path d="M3.5 19c.6-3 2.8-4.6 5.5-4.6s4.9 1.6 5.5 4.6" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><circle cx="17" cy="9.5" r="2.4" stroke="currentColor" stroke-width="2"/><path d="M16.5 14.6c2.2.2 3.6 1.5 4 3.9" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+      My Children<span class="t-dot"></span>
+    </div>
+    <div class="tab">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none"><path d="M4 19V5.5A1.5 1.5 0 0 1 5.5 4H12v15H5.5A1.5 1.5 0 0 0 4 20.5" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/><path d="M20 19V5.5A1.5 1.5 0 0 0 18.5 4H12v15h6.5a1.5 1.5 0 0 1 1.5 1.5" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/></svg>
+      Sessions<span class="t-dot"></span>
+    </div>
+    <div class="tab on">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none"><rect x="5" y="4" width="14" height="17" rx="2" stroke="currentColor" stroke-width="2"/><path d="M9 4.5V3h6v1.5" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/><path d="m8.8 13 2.2 2.2 4.2-4.4" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      Assessments<span class="t-dot"></span>
+    </div>
+  </div>
+</div>
+
+</div>
+</body>
+</html>
