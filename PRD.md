@@ -440,6 +440,13 @@ User Action → Local AsyncStorage → UI Update → Sync Queue → Supabase →
 - [x] Move the cutover-only group ownership repair out of every sync pass and into repair version 1
 - [x] Report startup repair failures without blocking the app; retry them on the next launch
 
+#### 2026-07-14 Outbox queue stability and batch-claim follow-up
+- [x] Preserve the first-enqueue `created_at` when one logical outbox operation is refreshed
+- [x] Refresh payload, owner, status, retry metadata, and `updated_at` in one conflict upsert
+- [x] Remove the redundant second UPDATE from `syncOutboxRepository.enqueue`
+- [x] Claim a batch with one set-based UPDATE and return its CAS records with one SELECT
+- [x] Preserve stale-finalize, sibling-failure, user-switch, and bounded-fallback guarantees
+
 ### Phase 7: Polish & Production Prep (Partially Complete)
 - [x] Error handling across all screens — Snackbar standardised across 6 screens; Alert reserved for destructive confirmations only
 - [x] Loading states — ActivityIndicator on SessionHistoryScreen; Create/Save button spinners on GroupManagementScreen

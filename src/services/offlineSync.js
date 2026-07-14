@@ -1133,12 +1133,9 @@ export const createOutboxSyncEngine = ({
 
   const processBatch = async (outboxRecords, config, passUserId, fallbackBudget) => {
     const ids = outboxRecords.map((record) => record.id);
-    await outboxRepository.markInFlight(ids);
     let inFlightRecords = null;
     try {
-      inFlightRecords = (await Promise.all(
-        ids.map((id) => outboxRepository.getById(id))
-      )).filter(Boolean);
+      inFlightRecords = await outboxRepository.markInFlightAndGet(ids);
 
       if (inFlightRecords.length !== outboxRecords.length) {
         return await processBatchFallback(outboxRecords, passUserId, fallbackBudget);

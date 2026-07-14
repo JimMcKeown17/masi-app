@@ -117,6 +117,11 @@ sensitive auth token.
 
 - [ ] **O1. Upgrade repair runs once without delaying normal use.** Install this build over an existing SQLite tester build, cold-start online, and confirm Home remains usable and pending work syncs. Force-quit and reopen twice more. Export Logs: it contains one `Startup repair: advanced to v1 (group_ownership_cutover)` entry from the first upgraded launch, not one per launch or sync pass. If the test database contained one of the historical stale group-ownership rows, confirm its group, assignment, and membership outbox work drains after the upgrade.
 
+## P. Outbox queue stability and batch claim
+
+- [ ] **P1. Repeated offline edits keep their original place.** In airplane mode, edit Child A, then edit Child B, then edit Child A again. Export the database and inspect the pending child operations: there is one row for Child A containing the latest payload, Child A's `created_at` remains earlier than Child B's, and Child A's `updated_at` is later. Reconnect and confirm both rows drain without a failure or duplicate.
+- [ ] **P2. Full assessment item batch drains cleanly.** Complete a 60-letter assessment offline, reconnect, and sync. The parent assessment and every item leave the outbox, no item remains `in_flight`, and Sync Status shows no failed or needs-attention assessment item. This is the physical-device check for the set-based batch claim; automated real-SQLite tests enforce one UPDATE plus one SELECT and all CAS recovery paths.
+
 ---
 
 ## If something fails

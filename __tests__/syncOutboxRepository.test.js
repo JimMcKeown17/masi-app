@@ -49,6 +49,47 @@ describe('SQLite sync outbox repository', () => {
     expect(JSON.parse(rows[0].payload)).toEqual({ id: 'child-1', first_name: 'Updated' });
   });
 
+  test('re-enqueue refreshes pending work without changing its original queue age', async () => {
+    jest.useFakeTimers();
+    try {
+      jest.setSystemTime(new Date('2026-07-14T08:00:00.000Z'));
+      await outbox.enqueue({
+        tableName: 'children',
+        recordId: 'child-queue-age',
+        operation: 'insert',
+        payload: { id: 'child-queue-age', first_name: 'Old' },
+      });
+      await outbox.markRetriableFailure('children:child-queue-age:insert', {
+        errorMessage: 'offline',
+        nextRetryAt: '2099-01-01T00:00:00.000Z',
+      });
+
+      jest.setSystemTime(new Date('2026-07-14T09:00:00.000Z'));
+      await outbox.enqueue({
+        tableName: 'children',
+        recordId: 'child-queue-age',
+        operation: 'insert',
+        payload: { id: 'child-queue-age', first_name: 'Fresh' },
+      });
+
+      const row = await db.getFirstAsync(
+        'select * from sync_outbox where id = ?',
+        'children:child-queue-age:insert'
+      );
+      expect(row.created_at).toBe('2026-07-14T08:00:00.000Z');
+      expect(row.updated_at).toBe('2026-07-14T09:00:00.000Z');
+      expect(row).toEqual(expect.objectContaining({
+        status: 'pending',
+        retry_count: 0,
+        last_error: null,
+        next_retry_at: null,
+      }));
+      expect(JSON.parse(row.payload)).toEqual({ id: 'child-queue-age', first_name: 'Fresh' });
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+
   test('retry attempts and next retry readiness persist across repository instances', async () => {
     await outbox.enqueue({
       tableName: 'children',
@@ -185,6 +226,31 @@ describe('SQLite sync outbox repository', () => {
       { record_id: 'b-row', status: 'pending' },
       { record_id: 'null-row', status: 'pending' },
     ]);
+  });
+
+  test('claims a batch and returns its compare-and-swap records with bounded SQLite work', async () => {
+    const ids = [];
+    for (const recordId of ['item-a', 'item-b', 'item-c']) {
+      const id = await outbox.enqueue({
+        tableName: 'assessment_items',
+        recordId,
+        operation: 'insert',
+        payload: { id: recordId },
+      });
+      ids.push(id);
+    }
+
+    const runSpy = jest.spyOn(db, 'runAsync');
+    const getAllSpy = jest.spyOn(db, 'getAllAsync');
+    const requestedOrder = [ids[2], ids[0], ids[1]];
+
+    const records = await outbox.markInFlightAndGet(requestedOrder);
+
+    expect(records.map((record) => record.id)).toEqual(requestedOrder);
+    expect(records.every((record) => record.status === 'in_flight')).toBe(true);
+    expect(new Set(records.map((record) => record.updated_at))).toHaveProperty('size', 1);
+    expect(runSpy).toHaveBeenCalledTimes(1);
+    expect(getAllSpy).toHaveBeenCalledTimes(1);
   });
 
   test('failed and terminal rows are visible while in-flight rows do not inflate unsynced count', async () => {

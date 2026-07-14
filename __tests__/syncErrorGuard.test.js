@@ -260,23 +260,13 @@ it('Fix 2 (Test A): a fallback processRecord markInFlight throw is owned by proc
     rpc: async () => ({ data: true, error: null }),
   };
 
-  // Wrap outboxRepository: markInFlight throws for the batch that includes badOutboxId.
-  // processBatch calls markInFlight([id1, id2, id3]) for the whole batch at once (before the try).
-  // We want to test the fallback path where processRecord is called per-item and one of those
-  // individual processRecord calls has its markInFlight throw.
-  // To isolate: make markInFlight throw when called with a single-element array containing badOutboxId
-  // (which is how processRecord calls it in the fallback).
+  // The batch uses markInFlightAndGet. Per-record fallback uses markInFlight with one id, so inject
+  // the error only at that public fallback boundary.
   const real = createSyncOutboxRepository({ database: db });
-  let markInFlightCallCount = 0;
   const wrapped = {
     ...real,
     markInFlight: async (ids) => {
-      markInFlightCallCount += 1;
-      // First call is processBatch's initial markInFlight for all ids — let it through so the batch
-      // reaches the server error and triggers the fallback.
-      // Subsequent single-id calls are from individual processRecord calls in the fallback.
-      // Throw for the specific bad item on the per-record call.
-      if (markInFlightCallCount > 1 && ids.length === 1 && ids[0] === badOutboxId) {
+      if (ids.length === 1 && ids[0] === badOutboxId) {
         throw new Error('markInFlight boom for bad item');
       }
       return real.markInFlight(ids);
@@ -408,15 +398,11 @@ it('Task 9 (allSettled race): sibling B synced even when A markInFlight throws b
   };
 
   const real = createSyncOutboxRepository({ database: db });
-  let markInFlightCallCount = 0;
   const wrapped = {
     ...real,
     markInFlight: async (ids) => {
-      markInFlightCallCount += 1;
-      // Call 1: processBatch's whole-batch markInFlight — let through so batch reaches server.
-      // Subsequent single-id calls: per-record fallback markInFlight calls.
-      // Throw only for A's per-record call so A fails before reaching the server.
-      if (markInFlightCallCount > 1 && ids.length === 1 && ids[0] === aOutboxId) {
+      // Batch claiming uses markInFlightAndGet. This single-id call is A's fallback processRecord.
+      if (ids.length === 1 && ids[0] === aOutboxId) {
         throw new Error('markInFlight boom for A task9');
       }
       return real.markInFlight(ids);

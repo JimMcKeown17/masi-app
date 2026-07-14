@@ -1370,3 +1370,13 @@ A versioned repair registry bridges that gap without turning startup into a perm
 The ordering rule is intentionally asymmetric. Repair first, marker second. If the app dies between them, the recipe may repeat, which is why idempotence is mandatory. Marking first would be worse because a crash could permanently suppress unfinished repair. A failed recipe is observable and retries next launch, but it does not make the whole app unusable.
 
 Masi's first recipe also removes recurring work. The group ownership heal existed in every sync preflight even though current producers already write the correct ownership shape. Moving it to repair v1 means upgraded tester data is healed once and healthy devices never rescan it again. The general mental model is **migrations for structure, versioned repairs for historical data, and steady-state code for current behavior.**
+
+### Outbox queue addendum: identity time and mutation time are different clocks
+
+An outbox row has two useful notions of time. `created_at` answers, "When did this logical operation first become owed?" `updated_at` answers, "Which exact payload version is being processed now?" Treating both as ordinary upsert columns collapsed those meanings. Every edit refreshed `created_at`, so a frequently edited old record could move behind newer work even though the server had been waiting for it longer.
+
+The fix preserves queue identity while replacing mutation state. One outbox id still receives the latest payload, owner, and retry reset, but it keeps the first `created_at`. Its new `updated_at` becomes the compare-and-swap token. If an EA edits the row while an older payload is uploading, finalization sees that the token changed and leaves the newer work pending. Fair ordering and stale-write safety therefore use different clocks instead of fighting over one timestamp.
+
+Batching has the same separation of concerns. The server needs a bounded payload, while SQLite needs an atomic claim and exact finalize tokens. Claiming 100 rows through 100 UPDATEs followed by 100 SELECTs preserves correctness but turns local bookkeeping into the dominant work. One set-based UPDATE plus one SELECT produces the same per-record tokens inside one writer transaction. Returning records in the caller's order keeps result mapping deterministic.
+
+The general mental model is **stable identity, mutable version**. Preserve the field that says when an obligation began, change the field that says which version is current, and make performance optimizations return the same concurrency evidence the safe path already depended on.

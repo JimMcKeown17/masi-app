@@ -129,6 +129,7 @@ export const upsertRecord = async (db, {
   primaryKey = 'id',
   conflictColumns = [primaryKey],
   updatePrimaryKeyOnConflict = false,
+  preserveOnConflictColumns = [],
   booleanColumns = [],
   jsonColumns = [],
 }) => {
@@ -152,8 +153,10 @@ export const upsertRecord = async (db, {
   const quotedColumns = insertColumns.map(quoteIdentifier);
   const placeholders = insertColumns.map(() => '?').join(', ');
   const values = insertColumns.map((column) => filtered[column]);
+  const preservedColumnSet = new Set(preserveOnConflictColumns);
   const updateColumns = insertColumns.filter((column) => (
-    updatePrimaryKeyOnConflict || column !== primaryKey
+    (updatePrimaryKeyOnConflict || column !== primaryKey)
+    && !preservedColumnSet.has(column)
   ));
   const conflictTarget = conflictColumns.map(quoteIdentifier).join(', ');
   const updateClause = updateColumns.length > 0
@@ -258,5 +261,6 @@ export const insertOutboxRecord = async (db, {
     created_at: createdAt,
     updated_at: createdAt,
   },
+  preserveOnConflictColumns: ['created_at'],
   jsonColumns: ['payload'],
 });

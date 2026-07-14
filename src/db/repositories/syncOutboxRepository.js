@@ -2,6 +2,7 @@ import { resolveDatabase, runRepositoryTransaction } from './repositoryRuntime';
 import {
   decodeJson,
   insertOutboxRecord,
+  sqlPlaceholders,
   timestamp,
 } from './sqliteRepositoryUtils';
 
@@ -52,15 +53,6 @@ export const createSyncOutboxRepository = ({ database } = {}) => {
       status: 'pending',
       ownerUserId,
     });
-    await txn.runAsync(`
-      update sync_outbox
-      set retry_count = 0,
-          last_error = null,
-          next_retry_at = null,
-          status = 'pending',
-          updated_at = ?
-      where id = ?
-    `, timestamp(), id);
     return id;
   });
 
@@ -139,19 +131,32 @@ export const createSyncOutboxRepository = ({ database } = {}) => {
     return rows.map(toOutboxRecord);
   };
 
+  const updateInFlight = async (txn, ids, now) => txn.runAsync(`
+    update sync_outbox
+    set status = 'in_flight',
+        updated_at = ?
+    where id in (${sqlPlaceholders(ids.length)})
+  `, now, ...ids);
+
   const markInFlight = async (ids, { transaction } = {}) => {
     if (!ids || ids.length === 0) return true;
     return runWrite(transaction, async (txn) => {
-      const now = timestamp();
-      for (const id of ids) {
-        await txn.runAsync(`
-          update sync_outbox
-          set status = 'in_flight',
-              updated_at = ?
-          where id = ?
-        `, now, id);
-      }
+      await updateInFlight(txn, ids, timestamp());
       return true;
+    });
+  };
+
+  const markInFlightAndGet = async (ids, { transaction } = {}) => {
+    if (!ids || ids.length === 0) return [];
+    return runWrite(transaction, async (txn) => {
+      await updateInFlight(txn, ids, timestamp());
+      const rows = await txn.getAllAsync(`
+        select *
+        from sync_outbox
+        where id in (${sqlPlaceholders(ids.length)})
+      `, ...ids);
+      const rowsById = new Map(rows.map((row) => [row.id, toOutboxRecord(row)]));
+      return ids.map((id) => rowsById.get(id)).filter(Boolean);
     });
   };
 
@@ -356,6 +361,7 @@ export const createSyncOutboxRepository = ({ database } = {}) => {
     getPendingHardDeleteIds,
     getTerminalRecords,
     markInFlight,
+    markInFlightAndGet,
     resetInFlight,
     markReady,
     markReadyMany,

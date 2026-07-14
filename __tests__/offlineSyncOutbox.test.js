@@ -1351,7 +1351,15 @@ describe('SQLite outbox offline sync', () => {
   test('batches ready assessment item upserts and finalizes each local item', async () => {
     const itemIds = await seedAssessmentItems(db);
     const { supabaseClient, calls } = createSupabaseMock();
-    const engine = createOutboxSyncEngine({ getAuthSession: liveTestSession, database: db, supabaseClient });
+    const outboxRepository = createSyncOutboxRepository({ database: db });
+    const markInFlightAndGetSpy = jest.spyOn(outboxRepository, 'markInFlightAndGet');
+    const getByIdSpy = jest.spyOn(outboxRepository, 'getById');
+    const engine = createOutboxSyncEngine({
+      getAuthSession: liveTestSession,
+      database: db,
+      supabaseClient,
+      outboxRepository,
+    });
 
     const result = await engine.syncAll();
 
@@ -1378,6 +1386,11 @@ describe('SQLite outbox offline sync', () => {
       where sync_status = 'synced'
     `)).toEqual({ count: itemIds.length });
     expect(await db.getFirstAsync('select count(*) as count from sync_outbox')).toEqual({ count: 0 });
+    expect(markInFlightAndGetSpy).toHaveBeenCalledTimes(1);
+    expect(markInFlightAndGetSpy).toHaveBeenCalledWith(itemIds.map(
+      (itemId) => `assessment_items:${itemId}:insert`
+    ));
+    expect(getByIdSpy).not.toHaveBeenCalled();
   });
 
   test('falls back to per-record assessment item sync when the batch upsert fails', async () => {

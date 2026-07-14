@@ -32,7 +32,7 @@ This is the execution order, not a second backlog. The numbered sections below r
 1. **P0, validate what is already built:** execute the highest-signal physical-device gates (§0), beginning with G1, H3, I1, B1, and the new reading-level gate C6. This is the highest risk-reduction per hour because four completed sprints still have zero real-hardware passes.
 2. **P0, activation and device proof:** configure Sentry Cloud, then run the zero-class and observability device gates (§2/14a, §3). The class -> children onboarding, durable restart recovery, crash capture, and explicit sync-failure reporting are built and automated-green on the current branch; real-device behavior and live Sentry delivery remain unverified.
 3. **P1, structural data safety:** finish the live migration/probe gate for server-authoritative reconcile (§6; client and migration built 2026-07-14). Record-scoped dependency skipping, bounded failed-batch fallback, and the versioned startup repair registry were built 2026-07-14.
-4. **P2, sync efficiency and recovery:** shorten the domain-pull queue monopoly, stop `created_at` perturbation/re-reads, expand safe batching, and add SQLite bootstrap recovery (§1, §2, §3).
+4. **P2, sync efficiency and recovery:** shorten the domain-pull queue monopoly, expand safe batching, and add SQLite bootstrap recovery (§1, §2, §3). Outbox `created_at` stability, redundant enqueue writes, and batch claim rereads were closed 2026-07-14.
 5. **P2, time-sensitive only when WelaPLUS resumes:** deliberately re-key `assessmentItemDomainId` before real SQLite-backend assessment data exists, but only as a standalone reviewed change (§7). Do not pull it forward merely because the current staging database is disposable.
 6. **P3, group-centred session model:** settle `GRANT_SUBJECTS`, group identity/collision rules, session `group_id` authorization, and then rebuild the group/session workflow in dependency order (§4, §6). The group's latest literacy-session letters belong in that workflow, not in the current child-first form.
 7. **P4, latent correctness and polish:** fix attendee removal before any saved-session edit UI ships; then shared snackbars, picker clears, typography rollout, search/filter gaps, dependency cleanup, and diagnostics (§2, §3). The attendee bug is real at repository level, but no current screen edits a saved session, so it is not the highest-ROI immediate build.
@@ -175,7 +175,7 @@ A full item-by-item reconciliation of the June Top-10 and the ZZ port against th
 
 ### Sync items the audit missed
 - **11c** — the domain pull monopolizes the concurrency-1 Supabase queue: `preloadedChildData.js` wraps its whole multi-query body in one `enqueueSupabaseRequest`.
-- **11d** — `created_at` perturbation: the upsert update-clause includes every non-PK column, and `created_at` is the **outbox ordering key**. Plus a redundant second UPDATE in `syncOutboxRepository.js`, and `processBatch` re-reading rows one-by-one.
+- [x] **11d, closed 2026-07-14** — outbox queue age and batch-claim efficiency. Re-enqueue now refreshes payload, owner, status, and retry metadata without changing the logical operation's original `created_at`, so repeated edits cannot move old work behind newer work. The redundant second enqueue UPDATE is gone. Batch claim now uses one set-based UPDATE and one SELECT, returns fresh CAS records in caller order, and replaces the prior per-row mark plus N `getById` reads.
 
 ### 15 — Typography rollout
 `src/constants/typography.js` has **one** importer against **82** raw `fontSize:` declarations in
