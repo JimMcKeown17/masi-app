@@ -1,0 +1,140 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Masi A2: Ithemba Sun</title>
+<link rel="stylesheet" href="../fonts/fonts.css">
+<link rel="stylesheet" href="../shared/chrome.css">
+<link rel="stylesheet" href="../shared/screens.css">
+<style>
+/* ═══════════════════════════════════════════════════════════════
+   A2: ITHEMBA SUN
+   The warm end of the range. Gabarito is round, sunny and confident;
+   Lexend is the UI face (designed specifically to improve reading
+   proficiency, a real resonance for a literacy NPO, not a cute one).
+
+   Two craft decisions worth naming:
+   • Shadows are HARD OFFSETS, zero blur. Blurred shadows dissolve on
+     cheap Android panels at low brightness; a crisp offset edge
+     survives. Same reasoning as direction C.
+   • "Today" is GOLD WITH INK TEXT, not flame with white. Dark-on-
+     yellow is the highest-contrast pairing available in direct
+     sunlight, which is where this app is actually used.
+   ═══════════════════════════════════════════════════════════════ */
+:root{
+  --display:'Gabarito',sans-serif;
+  --ui:'Lexend',sans-serif;
+  --display-weight:800;
+  --display-tracking:-.015em;
+
+  /* sunnier, more saturated ground than A1 */
+  --canvas:#FDF4E6;
+  --sunk:#F6E5C9;
+  --card:#FFFFFF;
+  --ink:#2A1C10;
+  --ink-2:#7A6448;
+  --ink-3:#AE9877;
+  --line:#E7D3B2;
+  --line-soft:#F2E4CB;
+
+  --primary:#E24F16;
+  --primary-d:#B93C08;
+  --primary-t:#FDE0D0;
+  --on-primary:#FFFFFF;
+
+  --accent:#0F7C69;
+  --accent-t:#D8EDE7;
+
+  --gold:#F2AE1C;
+  --gold-t:#FCE9BE;
+  --gold-ink:#7E5806;
+
+  --green:#3D9459;
+  --green-t:#DCEFDC;
+  --green-ink:#2C6B41;
+
+  --low-t:#FADDE0;
+  --low-ink:#9B2233;
+
+  --radius:22px;
+  --radius-sm:14px;
+
+  /* chunky + tactile: 1.5px ink outline, hard offset shadow */
+  --panel-border:1.5px solid #E0C99F;
+  --panel-shadow:3px 3px 0 rgba(42,28,16,.07);
+  --day-radius:15px;
+  --cta-radius:20px;
+  --cta-shadow:4px 4px 0 var(--primary-d);
+}
+
+/* A whisper of pattern in the ground: a fine diagonal weave, the
+   kind of texture printed cloth has. It should be almost subliminal:
+   if you can name it at arm's length, it's too strong. */
+.phone{
+  background-image:
+    repeating-linear-gradient(45deg,  rgba(226,79,22,.020) 0 1px, transparent 1px 17px),
+    repeating-linear-gradient(-45deg, rgba(15,124,105,.016) 0 1px, transparent 1px 17px);
+}
+
+/* Clock ribbon: a solid gold slab. Loud, but it is the one thing an
+   EA must never be wrong about. */
+.clock-ribbon{
+  --clock-bg:var(--gold-t);
+  border:1.5px solid #EDCF8C;
+  box-shadow:3px 3px 0 rgba(42,28,16,.07);
+}
+.clock-ribbon .label{color:#8A6110;}
+.clock-elapsed{color:#6E4A04;font-size:33px;}
+.clock-since{color:#96712C;}
+.btn-out{border-color:#B08213;color:#6E4A04;background:#FFF9EA;}
+
+.sync-pill{color:var(--green-ink);border-color:#CFE3CB;background:#F3FAF2;}
+
+/* Sunlight rule: dark ink on gold beats white on flame outdoors. */
+.day.today .d-count{
+  background:var(--gold);color:#3A2704;
+  box-shadow:0 0 0 2px var(--canvas),0 0 0 3.5px #B0800E;
+}
+.day.today .d-label{color:#8A6110;}
+.day .d-count{border:1.5px solid transparent;}
+.day.done .d-count{border-color:#BFDCBF;}
+
+.search{border-width:1.5px;border-color:#E0C99F;box-shadow:3px 3px 0 rgba(42,28,16,.05);}
+.chip{border-width:1.5px;border-color:#E0C99F;}
+.list-ico{border:1.5px solid #EDCF8C;}
+.btn-start{--start-bg:var(--accent);--start-ink:#FFFFFF;}
+
+.av{border-width:2.5px;}
+.av.c1{background:#F8C98F;color:#6B4310;}
+.av.c2{background:#F4B7A4;color:#7C3720;}
+.av.c3{background:#EBD79B;color:#68551A;}
+.av.c4{background:#BCDCA9;color:#37582B;}
+.av.c5{background:#F3C2D0;color:#7A3550;}
+.av.c6{background:#B4D8D3;color:#26514D;}
+</style>
+</head>
+<body>
+<div class="rows"><div class="row">
+  <div class="slot">
+    <div class="cap"><b>Home</b><span>Gold clock slab, stamped week blocks, hard-edged shadows.</span></div>
+    <div class="phone" data-tab="home" data-screen="home" data-name="01-home"></div>
+  </div>
+  <div class="slot">
+    <div class="cap"><b>My Children</b><span>Chunkier outlines and rounder forms. Same content as A1.</span></div>
+    <div class="phone" data-tab="children" data-screen="children" data-name="02-children"></div>
+  </div>
+  <div class="slot">
+    <div class="cap"><b>Sessions</b><span>The CTA carries a hard offset shadow, crisp at low brightness.</span></div>
+    <div class="phone" data-tab="sessions" data-screen="sessions" data-name="03-sessions"></div>
+  </div>
+  <div class="slot">
+    <div class="cap"><b>Assessments</b><span>Teal “Start” keeps assessment distinct from session recording.</span></div>
+    <div class="phone" data-tab="assessments" data-screen="assessments" data-name="04-assessments"></div>
+  </div>
+</div></div>
+
+<script src="../shared/screens.js"></script>
+<script src="../shared/chrome.js"></script>
+<script>renderScreens();renderChrome();</script>
+</body>
+</html>

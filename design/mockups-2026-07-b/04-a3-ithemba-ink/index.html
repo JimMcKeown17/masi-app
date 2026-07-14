@@ -1,0 +1,178 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Masi A3: Ithemba Ink</title>
+<link rel="stylesheet" href="../fonts/fonts.css">
+<link rel="stylesheet" href="../shared/chrome.css">
+<link rel="stylesheet" href="../shared/screens.css">
+<style>
+/* ═══════════════════════════════════════════════════════════════
+   A3: ITHEMBA INK
+   The most grown-up of the three, for the version of Masi that HQ
+   and funders also look at. Archivo is a tight, news-desk grotesque;
+   Plus Jakarta Sans keeps the UI humane rather than corporate.
+
+   The move: a deep espresso hero band at the top of every screen,
+   with the first card lifted to overlap its edge. This reuses a
+   structure the codebase ALREADY has tokens for: heroDark / onDark /
+   onDarkMuted in src/constants/colors.js, so it is the cheapest of
+   the three to adopt.
+
+   Deliberately NOT a dark theme. The body stays bone: field staff use
+   this phone outdoors, and a dark UI is exactly wrong in direct sun.
+   The dark band is a header, not a mode.
+   ═══════════════════════════════════════════════════════════════ */
+:root{
+  --display:'Archivo',sans-serif;
+  --ui:'Plus Jakarta Sans',sans-serif;
+  --display-weight:700;
+  --display-tracking:-.035em;
+
+  --canvas:#FAF6F0;
+  --sunk:#F0E8DD;
+  --card:#FFFFFF;
+  --ink:#211A15;
+  --ink-2:#6B5C50;
+  --ink-3:#A0917F;
+  --line:#E5DACC;
+  --line-soft:#F0E9DF;
+
+  --primary:#D9480F;
+  --primary-d:#B23A0B;
+  --primary-t:#FBE3D6;
+  --on-primary:#FFFFFF;
+
+  --accent:#0E6B5C;
+  --accent-t:#DDEDE8;
+
+  --gold:#E8A21B;
+  --gold-t:#FAEACC;
+  --gold-ink:#82600F;
+
+  --green:#3B8B57;
+  --green-t:#DFEFE0;
+  --green-ink:#2F6E45;
+
+  --low-t:#F8DFE2;
+  --low-ink:#9B2233;
+
+  /* the dark band: same idea as the existing heroDark token */
+  --hero:#231A14;
+  --on-dark:#F6EEE3;
+  --on-dark-muted:#A6968A;
+
+  --radius:12px;
+  --radius-sm:10px;
+  --day-radius:12px;
+  --cta-radius:12px;
+  --panel-shadow:0 2px 10px rgba(35,26,20,.06);
+}
+
+/* ── the hero band ───────────────────────────────────────────── */
+.statusbar{background:var(--hero);}
+/* CONSTRAINT: the band's bottom padding must exceed the card's overlap
+   (26px) plus breathing room, or the card lands on top of the role line.
+   The band is justify-end, so its text sits at the bottom edge, exactly
+   where the card is coming up. Change one of these numbers, change both. */
+.header{
+  background:var(--hero);
+  min-height:112px;
+  display:flex;flex-direction:column;justify-content:flex-end;
+  padding:12px 24px 40px;
+  border-bottom:2px solid var(--gold);
+  /* a faint constellation, barely there: texture, not decoration */
+  background-image:radial-gradient(circle at 88% 22%, rgba(232,162,27,.16) 0 1.5px, transparent 1.6px),
+                   radial-gradient(circle at 70% 68%, rgba(217,72,15,.14) 0 1.5px, transparent 1.6px),
+                   radial-gradient(circle at 94% 76%, rgba(246,238,227,.10) 0 1.5px, transparent 1.6px);
+}
+.greet{color:var(--on-dark);}
+.greet .dot{color:var(--gold);}
+.role{color:var(--on-dark-muted);}
+.sync-pill{
+  background:rgba(246,238,227,.08);
+  border-color:rgba(246,238,227,.18);
+  color:#7CC49A;
+}
+
+/* first card lifts onto the band's edge: the one structural flourish.
+   .content must not clip, or the negative margin is eaten by its own
+   parent's overflow:hidden and the card gets guillotined. The phone
+   frame is still safe: .screen clips. */
+.content{overflow:visible;}
+.phone[data-screen="home"] .clock-ribbon{margin-top:-26px;position:relative;}
+.phone[data-screen="children"] .content > section:first-child{margin-top:-26px;position:relative;}
+.phone[data-screen="assessments"] .content > section:first-child{margin-top:-26px;position:relative;}
+/* Sessions carries a one-word title, so its band needs less room,
+   and the screen is the tallest of the four (ring + stats + chips +
+   history + CTA), so it is the one that has to give. */
+/* Sessions has no overlapping card and only a one-word title, so it
+   needs neither the extra padding nor the height. It is also the tallest
+   screen of the four, so it is the one that has to give. */
+.phone[data-screen="sessions"] .header{min-height:88px;padding-bottom:20px;}
+.phone[data-screen="sessions"] .ring-wrap{margin-top:4px;}
+
+/* clock ribbon is a proper white card here, since it overlaps the band */
+.clock-ribbon{
+  --clock-bg:var(--card);
+  border:1px solid var(--line);
+  box-shadow:0 6px 18px rgba(35,26,20,.12);
+}
+.clock-ribbon .label{color:var(--accent);}
+.clock-elapsed{color:var(--ink);}
+.clock-since{color:var(--ink-2);}
+.btn-out{border-color:var(--primary);color:var(--primary-d);}
+
+.search{box-shadow:0 6px 18px rgba(35,26,20,.10);}
+.phone[data-screen="assessments"] .content > section:first-child .panel{
+  box-shadow:0 6px 18px rgba(35,26,20,.10);
+}
+
+/* A3's band is the tallest of the three skins, so its two densest screens
+   need a few px back. Verified by shot.mjs's clip check, not by eye. */
+/* :not(.tail) matters, because an attribute selector out-specifies
+   `section.tail{margin-top:auto}` and would silently replace the auto
+   margin that pins the footer, making the screen TALLER, not shorter. */
+.phone[data-screen="children"] section:not(.tail){margin-top:12px;}
+.phone[data-screen="children"] .quiet-link{padding:8px;}
+.phone[data-screen="sessions"] .sess-row{padding:11px 2px;}
+
+/* squared week blocks read as a record, not as bubbles */
+.day .d-count{border:1px solid var(--line);}
+.day.done .d-count{border-color:#C3DEC6;}
+.btn-start{--start-bg:var(--ink);--start-ink:var(--canvas);}
+
+.av{border-width:2px;}
+.av.c1{background:#EFC9A2;color:#67451F;}
+.av.c2{background:#EBBAAE;color:#763A2C;}
+.av.c3{background:#DFD2A6;color:#655622;}
+.av.c4{background:#C2D6B2;color:#3B5630;}
+.av.c5{background:#E9C2CE;color:#75374C;}
+.av.c6{background:#BAD2CF;color:#2B4E4B;}
+</style>
+</head>
+<body>
+<div class="rows"><div class="row">
+  <div class="slot">
+    <div class="cap"><b>Home</b><span>Espresso band + gold rule; the clock card lifts onto its edge.</span></div>
+    <div class="phone on-dark" data-tab="home" data-screen="home" data-name="01-home"></div>
+  </div>
+  <div class="slot">
+    <div class="cap"><b>My Children</b><span>Squared corners, tighter type. Reads as a record.</span></div>
+    <div class="phone on-dark" data-tab="children" data-screen="children" data-name="02-children"></div>
+  </div>
+  <div class="slot">
+    <div class="cap"><b>Sessions</b><span>Same ring, sharper frame. Body stays bone for sunlight.</span></div>
+    <div class="phone on-dark" data-tab="sessions" data-screen="sessions" data-name="03-sessions"></div>
+  </div>
+  <div class="slot">
+    <div class="cap"><b>Assessments</b><span>The version a funder can look at without translation.</span></div>
+    <div class="phone on-dark" data-tab="assessments" data-screen="assessments" data-name="04-assessments"></div>
+  </div>
+</div></div>
+
+<script src="../shared/screens.js"></script>
+<script src="../shared/chrome.js"></script>
+<script>renderScreens();renderChrome();</script>
+</body>
+</html>

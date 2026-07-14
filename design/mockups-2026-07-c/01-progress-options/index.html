@@ -1,0 +1,218 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Masi: alternatives to the ring</title>
+<link rel="stylesheet" href="../../mockups-2026-07-b/fonts/fonts.css">
+<link rel="stylesheet" href="../brand.css">
+<style>
+/* Six ways to say "2 of 3 sessions today, target 3, ceiling 5".
+   All drawn at REAL SIZE on the dark hero, because that is where this
+   widget will actually live. A progress display that looks great in a
+   spec deck and dies on #1C1517 is not a candidate. */
+.grid{display:flex;flex-wrap:wrap;gap:26px;max-width:1180px;}
+.card{width:366px;}
+.hero{
+  background:var(--hero);border-radius:18px;
+  height:200px;padding:22px 24px;
+  display:flex;align-items:center;gap:22px;
+  color:var(--on-dark);
+}
+.hero.col{flex-direction:column;align-items:flex-start;justify-content:center;gap:16px;}
+.say .big{font-family:var(--display);font-weight:700;font-size:19px;letter-spacing:-.02em;line-height:1.2;}
+.say .small{font-size:13px;color:var(--on-dark-muted);margin-top:5px;line-height:1.4;}
+
+.cap{margin-top:12px;}
+.cap > b{display:block;font-family:var(--display);font-size:15px;font-weight:700;letter-spacing:-.01em;}
+.cap span{display:block;font-size:12.5px;color:#5F5557;margin-top:3px;line-height:1.5;}
+.cap .verdict{display:block;font-size:12.5px;margin-top:6px;font-weight:600;color:var(--primary-dark);}
+
+/* ring / gauge shared */
+.rc{position:relative;flex-shrink:0;}
+.rc-mid{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;}
+.rc-n{font-family:var(--display);font-weight:700;font-size:24px;letter-spacing:-.02em;line-height:1;}
+.rc-n .of{color:var(--on-dark-muted);font-size:17px;}
+.track{stroke:#3A2F31;}
+.fill{stroke:var(--primary);}
+.bonus{stroke:#2A2224;}
+
+/* segmented bar */
+.bar{display:flex;gap:10px;}
+.blk{width:52px;height:14px;border-radius:7px;background:#2A2224;}
+.blk.tgt{background:#3A2F31;}
+.blk.on{background:var(--primary);}
+.tick-row{position:relative;height:20px;width:300px;margin-top:7px;}
+.tick{position:absolute;top:0;width:1.5px;height:7px;background:var(--warning);}
+.tick-l{
+  position:absolute;top:9px;font-size:9px;font-weight:700;letter-spacing:.09em;
+  color:var(--warning);transform:translateX(-50%);
+}
+
+/* stones */
+.stones{display:flex;align-items:center;gap:11px;}
+.stone{width:34px;height:34px;border-radius:50%;border:2px solid #3A2F31;background:transparent;}
+.stone.on{background:var(--primary);border-color:var(--primary);}
+.sep{width:1px;height:24px;background:#3A2F31;margin:0 4px;}
+.bonus-stone{width:20px;height:20px;border-radius:50%;border:2px dashed #3A2F31;}
+
+/* typographic */
+.typ .n{font-family:var(--display);font-weight:700;font-size:56px;line-height:.95;letter-spacing:-.035em;}
+.typ .n .of{font-size:28px;color:var(--on-dark-muted);}
+.rule{width:280px;height:5px;border-radius:3px;background:#3A2F31;margin-top:14px;overflow:hidden;}
+.rule i{display:block;height:100%;width:66.6%;background:var(--primary);border-radius:3px;}
+</style>
+</head>
+<body>
+<h2 class="page">Six ways to draw “2 of 3 sessions today”</h2>
+<p class="page">
+  Same data every time: target 3, ceiling 5, two done. All shown at real size on the
+  dark hero (<code>colors.heroDark #1C1517</code>) in Masi red (<code>colors.primary #E72D4D</code>),
+  because that is where the widget will actually sit. The question is not which looks
+  best in isolation, it is which survives a header, a glance, and bright sunlight.
+</p>
+
+<div class="grid">
+
+  <!-- R1 -->
+  <div class="card">
+    <div class="hero">
+      <div class="rc" style="width:116px;height:116px;">
+        <svg width="116" height="116" viewBox="0 0 116 116" style="transform:rotate(-90deg)">
+          <circle class="track" cx="58" cy="58" r="48" fill="none" stroke-width="10"/>
+          <circle class="fill" cx="58" cy="58" r="48" fill="none" stroke-width="10" stroke-linecap="round"
+                  stroke-dasharray="301.6" stroke-dashoffset="100.5"/>
+        </svg>
+        <div class="rc-mid"><span class="rc-n num">2<span class="of">/3</span></span></div>
+      </div>
+      <div class="say">
+        <div class="big">2 of 3 sessions</div>
+        <div class="small">today. One more to go.</div>
+      </div>
+    </div>
+    <div class="cap">
+      <b>R1 · The plain ring</b>
+      <span>What the red preview already uses. Instantly readable, universally understood, zero learning cost.</span>
+      <span class="verdict">Says nothing about the ceiling of 5. A 4th session has nowhere to go.</span>
+    </div>
+  </div>
+
+  <!-- R2 -->
+  <div class="card">
+    <div class="hero">
+      <div class="rc" style="width:116px;height:116px;">
+        <svg width="116" height="116" viewBox="0 0 116 116">
+          <g transform="rotate(-90 58 58)">
+            <circle class="track" cx="58" cy="58" r="48" fill="none" stroke-width="10" stroke-linecap="round" stroke-dasharray="41.3 260.3" stroke-dashoffset="0"/>
+            <circle class="track" cx="58" cy="58" r="48" fill="none" stroke-width="10" stroke-linecap="round" stroke-dasharray="41.3 260.3" stroke-dashoffset="-60.3"/>
+            <circle class="track" cx="58" cy="58" r="48" fill="none" stroke-width="10" stroke-linecap="round" stroke-dasharray="41.3 260.3" stroke-dashoffset="-120.6"/>
+            <circle class="bonus" cx="58" cy="58" r="48" fill="none" stroke-width="10" stroke-linecap="round" stroke-dasharray="41.3 260.3" stroke-dashoffset="-181.0"/>
+            <circle class="bonus" cx="58" cy="58" r="48" fill="none" stroke-width="10" stroke-linecap="round" stroke-dasharray="41.3 260.3" stroke-dashoffset="-241.3"/>
+            <circle class="fill"  cx="58" cy="58" r="48" fill="none" stroke-width="10" stroke-linecap="round" stroke-dasharray="41.3 260.3" stroke-dashoffset="0"/>
+            <circle class="fill"  cx="58" cy="58" r="48" fill="none" stroke-width="10" stroke-linecap="round" stroke-dasharray="41.3 260.3" stroke-dashoffset="-60.3"/>
+          </g>
+          <circle cx="29.8" cy="96.8" r="4" fill="#B26A00"/>
+        </svg>
+        <div class="rc-mid"><span class="rc-n num">2<span class="of">/3</span></span></div>
+      </div>
+      <div class="say">
+        <div class="big">2 of 3 sessions</div>
+        <div class="small">Amber tick is your target. The last two segments are bonus, up to 5.</div>
+      </div>
+    </div>
+    <div class="cap">
+      <b>R2 · The segmented ring</b>
+      <span>Five segments: three to target, two bonus to the ceiling. Every number in it is data <code>sessionGoal.js</code> already holds.</span>
+      <span class="verdict">Richest, but needs explaining once. A 5th session fills the circle exactly.</span>
+    </div>
+  </div>
+
+  <!-- R3 -->
+  <div class="card">
+    <div class="hero">
+      <div class="rc" style="width:150px;height:92px;">
+        <svg width="150" height="92" viewBox="0 0 150 92">
+          <path d="M 13 78 A 62 62 0 0 1 137 78" fill="none" stroke="#3A2F31" stroke-width="11" stroke-linecap="round"/>
+          <path d="M 13 78 A 62 62 0 0 1 137 78" fill="none" stroke="#E72D4D" stroke-width="11" stroke-linecap="round"
+                stroke-dasharray="129.9 194.8"/>
+        </svg>
+        <div class="rc-mid" style="justify-content:flex-end;padding-bottom:2px;">
+          <span class="rc-n num">2<span class="of">/3</span></span>
+        </div>
+      </div>
+      <div class="say">
+        <div class="big">2 of 3 sessions</div>
+        <div class="small">today. One more to go.</div>
+      </div>
+    </div>
+    <div class="cap">
+      <b>R3 · The half gauge</b>
+      <span>Same ring, cut in half. Uses roughly <b>40% less vertical space</b>, which is the scarcest resource in a header.</span>
+      <span class="verdict">Best space-to-clarity ratio here. Reads like a dial, which people already know.</span>
+    </div>
+  </div>
+
+  <!-- R4 -->
+  <div class="card">
+    <div class="hero col">
+      <div class="say">
+        <div class="big">2 of 3 sessions today</div>
+      </div>
+      <div>
+        <div class="bar">
+          <span class="blk on"></span><span class="blk on"></span><span class="blk tgt"></span>
+          <span class="blk"></span><span class="blk"></span>
+        </div>
+        <div class="tick-row">
+          <span class="tick" style="left:181px;"></span>
+          <span class="tick-l" style="left:181px;">TARGET</span>
+        </div>
+      </div>
+    </div>
+    <div class="cap">
+      <b>R4 · The segmented bar</b>
+      <span>The ring unrolled. One block per session, an amber notch at the target, two faint blocks for the bonus zone.</span>
+      <span class="verdict">The most compact and the most scannable. Also the only one that would fit in a list row.</span>
+    </div>
+  </div>
+
+  <!-- R5 -->
+  <div class="card">
+    <div class="hero col">
+      <div class="say">
+        <div class="big">2 of 3 sessions today</div>
+        <div class="small">Two more possible after your target.</div>
+      </div>
+      <div class="stones">
+        <span class="stone on"></span><span class="stone on"></span><span class="stone"></span>
+        <span class="sep"></span>
+        <span class="bonus-stone"></span><span class="bonus-stone"></span>
+      </div>
+    </div>
+    <div class="cap">
+      <b>R5 · The stones</b>
+      <span>Three you must fill, then a divider, then two you may. Physical and countable: you can see “one left” without reading a number.</span>
+      <span class="verdict">The friendliest. Breaks down if a programme ever has a target above ~6.</span>
+    </div>
+  </div>
+
+  <!-- R6 -->
+  <div class="card">
+    <div class="hero col typ">
+      <div>
+        <div class="n num">2<span class="of"> / 3</span></div>
+        <div class="rule"><i></i></div>
+      </div>
+      <div class="say">
+        <div class="small" style="margin:0;">sessions today. One more reaches your target.</div>
+      </div>
+    </div>
+    <div class="cap">
+      <b>R6 · Typographic</b>
+      <span>No widget at all. A big honest numeral and a thin rule. The most restrained, the most “professional”, the cheapest to build.</span>
+      <span class="verdict">Loses the at-a-glance quality. You have to read it, not just see it.</span>
+    </div>
+  </div>
+
+</div>
+</body>
+</html>

@@ -1,0 +1,674 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Masi: Simplified Home explorations</title>
+<link rel="stylesheet" href="../fonts/fonts.css">
+<link rel="stylesheet" href="../shared/chrome.css">
+<style>
+/* ═══════════════════════════════════════════════════════════════
+   SIMPLIFIED HOME. Three layouts, each in both clock states.
+
+   The premise, and it comes from the code, not from taste:
+   HomeScreen.js already has a "Record Session" button, and
+   useSessionLaunchGuard.js already blocks it until you are clocked
+   in. So Home is ALREADY a single stateful CTA wearing six cards as
+   a disguise:
+
+        not clocked in  →  Clock In
+        clocked in      →  Record a session
+
+   All three layouts render that one state machine. They differ only
+   in what they put AROUND it.
+
+   The daily target (3, ceiling 5) is real: sessionGoal.js knows it,
+   but today it is only drawn on the Sessions tab. Every layout here
+   promotes it to Home, which is where the decision actually happens.
+
+   Type is held constant across all three (Gabarito + Figtree) on
+   purpose: this is a LAYOUT study, so the type must not be a
+   confounding variable. Any of the A1/A2/A3 skins can wear any of
+   these three layouts.
+   ═══════════════════════════════════════════════════════════════ */
+:root{
+  --display:'Gabarito',sans-serif;
+  --ui:'Figtree',sans-serif;
+
+  --canvas:#FBF6EF;
+  --sunk:#F2E7D9;
+  --card:#FFFDFA;
+  --ink:#241A14;
+  --ink-2:#6E5C4E;
+  --ink-3:#A3907E;
+  --line:#E8DACA;
+  --line-soft:#F2E9DC;
+
+  --primary:#D9480F;      /* flame: the one action colour */
+  --primary-lit:#F2682C;
+  --primary-d:#B23A0B;
+  --primary-t:#FBE3D6;
+  --on-primary:#FFFFFF;
+
+  --accent:#0E6B5C;       /* teal: status, working, trustworthy */
+  --accent-d:#0A5347;
+  --accent-t:#DDEDE8;
+
+  --gold:#EBA317;
+  --gold-t:#FBEDCF;
+  --gold-ink:#8A6110;
+
+  --green:#3B8B57;
+  --green-t:#DFEFE0;
+  --green-ink:#2F6E45;
+
+  --on-dark:#F6EEE3;
+  --on-dark-muted:#9FB8B1;
+}
+
+/* ── shared home furniture ───────────────────────────────────── */
+.h-top{
+  display:flex;align-items:center;justify-content:space-between;
+  padding:2px 24px 0;flex-shrink:0;
+}
+.me{
+  width:38px;height:38px;border-radius:50%;
+  display:flex;align-items:center;justify-content:center;
+  background:var(--sunk);color:var(--ink);
+  font-family:var(--display);font-weight:800;font-size:16px;
+  border:1.5px solid var(--line);
+}
+.sync{
+  display:inline-flex;align-items:center;gap:6px;
+  border:1px solid var(--line);background:var(--card);
+  border-radius:999px;padding:6px 12px;
+  font-size:12px;font-weight:650;color:var(--green-ink);
+}
+
+.hi{padding:14px 24px 0;flex-shrink:0;}
+.hi h1{
+  font-family:var(--display);font-weight:800;font-size:31px;line-height:1.05;
+  letter-spacing:-.02em;color:var(--ink);
+}
+.hi h1 .dot{color:var(--primary);}
+.hi p{font-size:13px;color:var(--ink-2);margin-top:6px;font-weight:500;}
+
+.state{
+  display:flex;align-items:center;gap:8px;
+  padding:12px 24px 0;font-size:13.5px;font-weight:650;flex-shrink:0;
+}
+.state .led{width:9px;height:9px;border-radius:50%;flex-shrink:0;}
+.state.on{color:var(--accent-d);}
+.state.on .led{background:var(--accent);box-shadow:0 0 0 3px var(--accent-t);}
+.state.off{color:var(--ink-3);}
+.state.off .led{background:transparent;border:2px solid var(--ink-3);}
+
+.foot{
+  flex-shrink:0;display:flex;align-items:center;justify-content:center;gap:7px;
+  padding:22px 24px 16px;font-size:14px;font-weight:700;color:var(--primary);
+}
+.foot.quiet{color:var(--ink-2);}
+
+/* ═══ H1: QALA (“begin”). The one button. ═══════════════════════
+   Everything that is not the button whispers. This is the closest
+   to Zazi iZandi: a single unmissable target, and the day's state
+   stated in one line beneath it. */
+.cta-field{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;}
+.orb{
+  width:234px;height:234px;border-radius:50%;
+  display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;
+  color:#fff;text-align:center;
+  background:radial-gradient(circle at 50% 28%, var(--primary-lit) 0%, var(--primary) 58%, var(--primary-d) 100%);
+  box-shadow:0 0 0 15px var(--primary-t), 0 18px 36px rgba(178,58,11,.26);
+}
+.orb .ico{margin-bottom:9px;}
+.orb .lbl{font-family:var(--display);font-weight:800;font-size:25px;letter-spacing:-.015em;line-height:1.1;}
+.orb .sub{font-size:13.5px;font-weight:600;color:rgba(255,255,255,.84);margin-top:3px;}
+
+.beneath{
+  flex-shrink:0;display:flex;flex-direction:column;align-items:center;gap:10px;
+  padding:0 24px;margin-top:26px;
+}
+.pips{display:flex;gap:9px;}
+.pip{width:11px;height:11px;border-radius:50%;background:var(--line);}
+.pip.done{background:var(--primary);}
+.beneath .say{font-size:14px;font-weight:600;color:var(--ink-2);text-align:center;line-height:1.45;}
+.beneath .say b{color:var(--ink);font-weight:700;}
+
+.week{display:flex;justify-content:space-between;padding:0 24px;flex-shrink:0;margin-top:24px;}
+.week .wk-head{display:flex;justify-content:space-between;align-items:baseline;width:100%;}
+.wk-strip{display:flex;justify-content:space-between;padding:0 24px;flex-shrink:0;margin-top:11px;}
+.wk-title{
+  display:flex;justify-content:space-between;align-items:baseline;
+  padding:0 24px;flex-shrink:0;margin-top:22px;
+}
+.wk-title .l{font-size:11px;font-weight:750;letter-spacing:.11em;text-transform:uppercase;color:var(--ink-2);}
+.wk-title .r{font-size:12.5px;font-weight:650;color:var(--ink-2);font-variant-numeric:tabular-nums;}
+.d{display:flex;flex-direction:column;align-items:center;gap:7px;width:52px;}
+.d .dl{font-size:10.5px;font-weight:750;letter-spacing:.06em;color:var(--ink-3);}
+.d .dv{
+  width:44px;height:44px;border-radius:50%;
+  display:flex;align-items:center;justify-content:center;
+  font-family:var(--display);font-weight:800;font-size:16px;
+  background:var(--line-soft);color:var(--ink-3);
+}
+.d.done .dv{background:var(--green-t);color:var(--green-ink);}
+.d.today .dv{
+  background:var(--primary);color:#fff;
+  box-shadow:0 0 0 2px var(--canvas),0 0 0 3.5px var(--primary);
+}
+.d.today .dl{color:var(--primary);}
+
+/* ═══ H2: DAY ARC. The ring IS the button. ══════════════════════
+   Five segments: the first three are the target, the last two the
+   bonus zone up to the ceiling of 5. The gold tick is the target
+   line. All of it is data sessionGoal.js already holds. */
+.clockbar{
+  flex-shrink:0;margin:14px 24px 0;
+  display:flex;align-items:center;justify-content:space-between;
+  background:var(--accent-t);border-radius:16px;padding:12px 8px 12px 16px;
+}
+.clockbar .cb-l{display:flex;align-items:center;gap:9px;font-size:13.5px;font-weight:650;color:var(--accent-d);}
+.clockbar .cb-l .led{width:9px;height:9px;border-radius:50%;background:var(--accent);}
+.clockbar .cb-l .num{font-variant-numeric:tabular-nums;}
+.clockbar .cb-b{
+  font-family:var(--ui);font-weight:700;font-size:13.5px;
+  color:var(--accent-d);background:rgba(255,255,255,.72);
+  border:none;border-radius:999px;padding:9px 15px;cursor:pointer;
+}
+.clockbar.out{background:var(--sunk);}
+.clockbar.out .cb-l{color:var(--ink-2);}
+.clockbar.out .cb-l .led{background:transparent;border:2px solid var(--ink-3);}
+.clockbar.out .cb-b{color:var(--primary-d);background:#fff;}
+
+.arc-field{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:0;}
+.arc{position:relative;width:264px;height:264px;}
+/* Round caps add HALF THE STROKE WIDTH to each end of every dash. With a
+   14px stroke that is +14px of paint per segment, which is what swallowed
+   the gaps on the first pass. So the dash is shrunk by one stroke-width
+   (140.7 slot − 16.7 gap − 14 cap = 110) and the caps put it back.
+   r=112 → circumference 703.72 → five slots of 140.744. */
+.arc-seg{fill:none;stroke-width:14;stroke-linecap:round;}
+.arc-seg.target-track{stroke:#E3D2BB;}   /* the 3 that count toward target */
+.arc-seg.bonus-track{stroke:#F4EBE0;}    /* the 2 bonus, up to the ceiling */
+.arc-seg.filled{stroke:var(--primary);}
+.tick-lbl{
+  position:absolute;left:0;top:236px;
+  font-size:9px;font-weight:750;letter-spacing:.1em;color:var(--gold-ink);
+}
+.arc-core{
+  position:absolute;top:48px;left:48px;width:168px;height:168px;border-radius:50%;
+  display:flex;flex-direction:column;align-items:center;justify-content:center;
+  color:#fff;text-align:center;
+  background:radial-gradient(circle at 50% 28%, var(--primary-lit) 0%, var(--primary) 60%, var(--primary-d) 100%);
+  box-shadow:0 12px 26px rgba(178,58,11,.24);
+}
+.arc-core .ico{margin-bottom:6px;}
+.arc-core .lbl{font-family:var(--display);font-weight:800;font-size:21px;line-height:1.08;letter-spacing:-.015em;}
+.arc-say{flex-shrink:0;text-align:center;padding:0 24px;margin-top:18px;}
+.arc-say .big{font-family:var(--display);font-weight:800;font-size:19px;color:var(--ink);letter-spacing:-.01em;}
+.arc-say .small{font-size:13.5px;font-weight:550;color:var(--ink-2);margin-top:5px;}
+
+.bars{display:flex;justify-content:space-between;align-items:flex-end;padding:0 24px 14px;flex-shrink:0;margin-top:14px;height:88px;}
+.bar{display:flex;flex-direction:column;align-items:center;gap:6px;width:52px;justify-content:flex-end;}
+.bar .bv{font-size:11.5px;font-weight:700;color:var(--ink-2);font-variant-numeric:tabular-nums;}
+.bar .bb{width:34px;border-radius:6px 6px 3px 3px;background:var(--green-t);}
+.bar.today .bb{background:var(--primary);}
+.bar.none .bb{background:var(--line-soft);height:5px;}
+.bar .bl{font-size:10.5px;font-weight:750;color:var(--ink-3);letter-spacing:.06em;}
+.bar.today .bl{color:var(--primary);}
+
+/* ═══ H3: UKUSA (“dawn”). Band + thumb-zone slab. ═══════════════
+   The CTA is a full-width slab in the bottom third, which is the
+   only part of a 6" phone a thumb reaches without a regrip. A
+   centred circle is prettier; a slab is kinder. */
+/* the status bar must sit ON the band, or the band reads as a floating
+   card rather than as the top of the screen */
+.phone.on-dark .statusbar{background:var(--accent-d);}
+.band{
+  flex-shrink:0;position:relative;overflow:hidden;
+  background:var(--accent-d);
+  padding:4px 24px 22px;
+}
+/* The sun. Concentric rings, not a filled disc: a disc large enough to
+   read as a sun also washes out everything it sits behind, and the first
+   pass had it bleeding straight through the clock chip. Rings give the
+   same motif and stay out of the way of the type. Clipped by the band's
+   right edge, so it rises out of frame. */
+.band .sun{
+  position:absolute;right:-58px;top:36px;
+  width:176px;height:176px;border-radius:50%;
+  background:rgba(235,163,23,.07);
+  border:2px solid rgba(235,163,23,.26);
+}
+.band .sun-2{
+  position:absolute;right:-22px;top:74px;
+  width:100px;height:100px;border-radius:50%;
+  border:2px solid rgba(235,163,23,.15);
+}
+.band .b-top{display:flex;align-items:center;justify-content:space-between;position:relative;}
+.band .me{background:rgba(246,238,227,.12);border-color:rgba(246,238,227,.22);color:var(--on-dark);}
+.band .sync{background:rgba(246,238,227,.10);border-color:rgba(246,238,227,.20);color:#8FD3AE;}
+.band h1{
+  font-family:var(--display);font-weight:800;font-size:30px;line-height:1.05;
+  letter-spacing:-.02em;color:var(--on-dark);margin-top:18px;position:relative;
+}
+.band h1 .dot{color:var(--gold);}
+.band p{font-size:13px;color:var(--on-dark-muted);margin-top:6px;font-weight:500;position:relative;}
+/* solid, not translucent: the sun must never show through the one row
+   an EA has to trust */
+.chip-clock{
+  position:relative;margin-top:16px;
+  display:flex;align-items:center;justify-content:space-between;
+  background:#0C5B4E;border:1px solid rgba(246,238,227,.14);
+  border-radius:14px;padding:11px 6px 11px 14px;
+}
+.chip-clock .cl{display:flex;align-items:center;gap:9px;font-size:13.5px;font-weight:650;color:var(--on-dark);}
+.chip-clock .cl .led{width:9px;height:9px;border-radius:50%;background:#4FD1A5;}
+.chip-clock.out .cl .led{background:transparent;border:2px solid var(--on-dark-muted);}
+.chip-clock.out .cl{color:var(--on-dark-muted);}
+.chip-clock .cr{
+  font-family:var(--ui);font-size:13px;font-weight:700;color:var(--accent-d);
+  background:var(--on-dark);border:none;border-radius:999px;padding:8px 14px;cursor:pointer;
+}
+.chip-clock .num{font-variant-numeric:tabular-nums;}
+
+.today-block{padding:22px 24px 0;flex-shrink:0;}
+.today-block .tl{font-size:11px;font-weight:750;letter-spacing:.11em;text-transform:uppercase;color:var(--ink-2);}
+.today-row{display:flex;align-items:center;justify-content:space-between;margin-top:10px;}
+.today-row .count{
+  font-family:var(--display);font-weight:800;font-size:46px;line-height:1;
+  letter-spacing:-.03em;color:var(--ink);font-variant-numeric:tabular-nums;
+}
+.today-row .count .of{font-size:24px;color:var(--ink-3);}
+.stones{display:flex;gap:10px;}
+.stone{width:32px;height:32px;border-radius:50%;background:var(--line-soft);border:2px solid var(--line);}
+.stone.done{background:var(--primary);border-color:var(--primary);}
+.today-say{font-size:13.5px;font-weight:550;color:var(--ink-2);margin-top:12px;}
+
+.stamp-row{display:flex;justify-content:space-between;padding:20px 24px 0;flex-shrink:0;}
+.stamp{
+  width:60px;height:56px;border-radius:14px;
+  display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;
+  background:var(--card);border:1.5px solid var(--line);
+}
+.stamp .sv{font-family:var(--display);font-weight:800;font-size:17px;color:var(--ink);}
+.stamp .sl{font-size:9.5px;font-weight:750;letter-spacing:.06em;color:var(--ink-3);}
+.stamp.done{background:var(--green-t);border-color:#C3DEC6;}
+.stamp.done .sv{color:var(--green-ink);}
+.stamp.today{background:var(--gold-t);border-color:var(--gold);}
+.stamp.today .sv{color:var(--gold-ink);}
+.stamp.today .sl{color:var(--gold-ink);}
+.stamp.none .sv{color:var(--ink-3);}
+
+.cov-line{
+  display:flex;align-items:center;justify-content:space-between;
+  margin:18px 24px 0;padding:14px 16px;flex-shrink:0;
+  background:var(--card);border:1px solid var(--line);border-radius:14px;
+  font-size:13.5px;font-weight:600;color:var(--ink-2);
+}
+.cov-line b{color:var(--ink);font-weight:750;}
+.cov-line .go{color:var(--primary);font-weight:750;}
+
+/* Not decoration filling a gap. This is dashboardStats.js's
+   notSeenThisWeek, which today only appears on the Sessions tab. It is
+   the one thing that tells an EA WHO to pull next, so it belongs on the
+   screen where they decide. */
+.miss{padding:20px 24px 0;flex-shrink:0;}
+.miss .tl{font-size:11px;font-weight:750;letter-spacing:.11em;text-transform:uppercase;color:var(--ink-2);}
+.miss-chips{display:flex;gap:8px;margin-top:11px;}
+.mchip{
+  display:inline-flex;align-items:center;gap:7px;
+  background:var(--card);border:1px solid var(--line);border-radius:999px;
+  padding:5px 13px 5px 5px;font-size:13px;font-weight:650;color:var(--ink);
+}
+.mav{
+  width:26px;height:26px;border-radius:50%;
+  display:inline-flex;align-items:center;justify-content:center;
+  font-size:10px;font-weight:700;
+}
+.mav.c1{background:#C6D9B6;color:#3F5A33;}
+.mav.c2{background:#EEC6D3;color:#7A3B51;}
+.mav.c3{background:#E4D5A6;color:#6A5A22;}
+
+.slab{
+  flex-shrink:0;margin:auto 24px 18px;
+  display:flex;align-items:center;justify-content:center;gap:11px;
+  height:66px;border:none;cursor:pointer;
+  background:var(--primary);color:#fff;border-radius:18px;
+  font-family:var(--display);font-weight:800;font-size:19px;letter-spacing:-.01em;
+  box-shadow:0 4px 0 var(--primary-d);
+}
+</style>
+</head>
+<body>
+<div class="rows">
+
+<!-- ══════════ H1: QALA ══════════ -->
+<div class="row">
+  <div class="slot">
+    <div class="cap"><b>H1 · Qala, clocked in</b><span>One button, one line of truth beneath it. Everything else whispers.</span></div>
+    <div class="phone" data-tab="home" data-name="h1-qala-clocked-in">
+      <div class="screen">
+        <div class="h-top">
+          <span class="me">A</span>
+          <span class="sync"><svg width="14" height="14" viewBox="0 0 24 24" fill="none"><path d="M7 18a5 5 0 1 1 .8-9.9A6 6 0 0 1 19.5 10 4 4 0 0 1 18 18H7z" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/><path d="m9.5 13.5 2 2 3.5-3.8" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>Synced</span>
+        </div>
+        <div class="hi">
+          <h1>Molo, Asanda<span class="dot">.</span></h1>
+          <p>Core Literacy · Charles Duna Primary</p>
+        </div>
+        <div class="state on"><span class="led"></span>On the clock · 3h 24m</div>
+
+        <div class="cta-field">
+          <div class="orb">
+            <span class="ico"><svg width="34" height="34" viewBox="0 0 24 24" fill="none"><path d="M12 5v14M5 12h14" stroke="#fff" stroke-width="2.6" stroke-linecap="round"/></svg></span>
+            <span class="lbl">Record session</span>
+            <span class="sub">tap to begin</span>
+          </div>
+        </div>
+
+        <div class="beneath">
+          <div class="pips"><span class="pip done"></span><span class="pip done"></span><span class="pip"></span></div>
+          <div class="say"><b>2 of 3 sessions</b> done today</div>
+        </div>
+
+        <div class="wk-title"><span class="l">This week</span><span class="r">12 sessions</span></div>
+        <div class="wk-strip">
+          <div class="d done"><span class="dl">MON</span><span class="dv">3</span></div>
+          <div class="d done"><span class="dl">TUE</span><span class="dv">4</span></div>
+          <div class="d done"><span class="dl">WED</span><span class="dv">3</span></div>
+          <div class="d today"><span class="dl">THU</span><span class="dv">2</span></div>
+          <div class="d"><span class="dl">FRI</span><span class="dv">–</span></div>
+        </div>
+
+        <div class="foot">
+          <svg width="17" height="17" viewBox="0 0 24 24" fill="none"><path d="M14 4h4.5A1.5 1.5 0 0 1 20 5.5v13a1.5 1.5 0 0 1-1.5 1.5H14" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><path d="M9 8.5 4.5 12 9 15.5M5 12h9" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          Clock out
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="slot">
+    <div class="cap"><b>H1 · Qala, not clocked in</b><span>Same button, different job. The state machine the app already runs.</span></div>
+    <div class="phone" data-tab="home" data-name="h1-qala-clocked-out">
+      <div class="screen">
+        <div class="h-top">
+          <span class="me">A</span>
+          <span class="sync"><svg width="14" height="14" viewBox="0 0 24 24" fill="none"><path d="M7 18a5 5 0 1 1 .8-9.9A6 6 0 0 1 19.5 10 4 4 0 0 1 18 18H7z" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/><path d="m9.5 13.5 2 2 3.5-3.8" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>Synced</span>
+        </div>
+        <div class="hi">
+          <h1>Molo, Asanda<span class="dot">.</span></h1>
+          <p>Core Literacy · Charles Duna Primary</p>
+        </div>
+        <div class="state off"><span class="led"></span>Not clocked in</div>
+
+        <div class="cta-field">
+          <div class="orb">
+            <span class="ico"><svg width="34" height="34" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="13" r="8" stroke="#fff" stroke-width="2.1"/><path d="M12 9.6V13l2.4 1.9" stroke="#fff" stroke-width="2.1" stroke-linecap="round"/><path d="M9.6 2.8h4.8" stroke="#fff" stroke-width="2.1" stroke-linecap="round"/></svg></span>
+            <span class="lbl">Clock in</span>
+            <span class="sub">start your day</span>
+          </div>
+        </div>
+
+        <div class="beneath">
+          <div class="say">Clock in first. Your <b>sessions</b> begin after that.</div>
+        </div>
+
+        <div class="wk-title"><span class="l">This week</span><span class="r">12 sessions</span></div>
+        <div class="wk-strip">
+          <div class="d done"><span class="dl">MON</span><span class="dv">3</span></div>
+          <div class="d done"><span class="dl">TUE</span><span class="dv">4</span></div>
+          <div class="d done"><span class="dl">WED</span><span class="dv">3</span></div>
+          <div class="d today"><span class="dl">THU</span><span class="dv">2</span></div>
+          <div class="d"><span class="dl">FRI</span><span class="dv">–</span></div>
+        </div>
+
+        <div class="foot quiet">
+          <svg width="17" height="17" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="8.5" stroke="currentColor" stroke-width="2"/><path d="M12 7.5V12l3 2" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+          View work history →
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════ H2: DAY ARC ══════════ -->
+<div class="row">
+  <div class="slot">
+    <div class="cap"><b>H2 · Day Arc, clocked in</b><span>The ring is the button. Five segments = target 3, ceiling 5. Gold tick = the target line.</span></div>
+    <div class="phone" data-tab="home" data-name="h2-dayarc-clocked-in">
+      <div class="screen">
+        <div class="h-top">
+          <span class="me">A</span>
+          <span class="sync"><svg width="14" height="14" viewBox="0 0 24 24" fill="none"><path d="M7 18a5 5 0 1 1 .8-9.9A6 6 0 0 1 19.5 10 4 4 0 0 1 18 18H7z" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/><path d="m9.5 13.5 2 2 3.5-3.8" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>Synced</span>
+        </div>
+        <div class="hi">
+          <h1>Molo, Asanda<span class="dot">.</span></h1>
+          <p>Core Literacy · Charles Duna Primary</p>
+        </div>
+
+        <div class="clockbar">
+          <span class="cb-l"><span class="led"></span>On the clock · <span class="num">3h 24m</span></span>
+          <button class="cb-b">Clock out</button>
+        </div>
+
+        <div class="arc-field">
+          <div class="arc">
+            <svg width="264" height="264" viewBox="0 0 264 264">
+              <!-- ONLY the arcs rotate. Rotating the whole <svg> would carry the
+                   gold tick with it and land it in the wrong place. -->
+              <g transform="rotate(-90 132 132)">
+                <circle class="arc-seg target-track" cx="132" cy="132" r="112" stroke-dasharray="110 593.7" stroke-dashoffset="0"/>
+                <circle class="arc-seg target-track" cx="132" cy="132" r="112" stroke-dasharray="110 593.7" stroke-dashoffset="-140.7"/>
+                <circle class="arc-seg target-track" cx="132" cy="132" r="112" stroke-dasharray="110 593.7" stroke-dashoffset="-281.5"/>
+                <circle class="arc-seg bonus-track"  cx="132" cy="132" r="112" stroke-dasharray="110 593.7" stroke-dashoffset="-422.2"/>
+                <circle class="arc-seg bonus-track"  cx="132" cy="132" r="112" stroke-dasharray="110 593.7" stroke-dashoffset="-563.0"/>
+                <circle class="arc-seg filled" cx="132" cy="132" r="112" stroke-dasharray="110 593.7" stroke-dashoffset="0"/>
+                <circle class="arc-seg filled" cx="132" cy="132" r="112" stroke-dasharray="110 593.7" stroke-dashoffset="-140.7"/>
+              </g>
+              <!-- the target line: the gap between session 3 and session 4 -->
+              <circle cx="79" cy="231" r="5" fill="#EBA317"/>
+            </svg>
+            <div class="arc-core">
+              <span class="ico"><svg width="26" height="26" viewBox="0 0 24 24" fill="none"><path d="M12 5v14M5 12h14" stroke="#fff" stroke-width="2.6" stroke-linecap="round"/></svg></span>
+              <span class="lbl">Record<br>session</span>
+            </div>
+            <div class="tick-lbl">TARGET</div>
+          </div>
+
+          <div class="arc-say">
+          <div class="big">2 of 3 sessions today</div>
+            <div class="small">One more pair reaches today’s target.</div>
+          </div>
+        </div>
+
+        <div class="bars">
+          <div class="bar"><span class="bv">3</span><span class="bb" style="height:30px"></span><span class="bl">MON</span></div>
+          <div class="bar"><span class="bv">4</span><span class="bb" style="height:40px"></span><span class="bl">TUE</span></div>
+          <div class="bar"><span class="bv">3</span><span class="bb" style="height:30px"></span><span class="bl">WED</span></div>
+          <div class="bar today"><span class="bv">2</span><span class="bb" style="height:20px"></span><span class="bl">THU</span></div>
+          <div class="bar none"><span class="bv">–</span><span class="bb"></span><span class="bl">FRI</span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="slot">
+    <div class="cap"><b>H2 · Day Arc, not clocked in</b><span>Empty ring, and the clock bar goes quiet. The day hasn’t started.</span></div>
+    <div class="phone" data-tab="home" data-name="h2-dayarc-clocked-out">
+      <div class="screen">
+        <div class="h-top">
+          <span class="me">A</span>
+          <span class="sync"><svg width="14" height="14" viewBox="0 0 24 24" fill="none"><path d="M7 18a5 5 0 1 1 .8-9.9A6 6 0 0 1 19.5 10 4 4 0 0 1 18 18H7z" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/><path d="m9.5 13.5 2 2 3.5-3.8" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>Synced</span>
+        </div>
+        <div class="hi">
+          <h1>Molo, Asanda<span class="dot">.</span></h1>
+          <p>Core Literacy · Charles Duna Primary</p>
+        </div>
+
+        <div class="clockbar out">
+          <span class="cb-l"><span class="led"></span>Not clocked in</span>
+          <button class="cb-b">Clock in</button>
+        </div>
+
+        <div class="arc-field">
+          <div class="arc">
+            <svg width="264" height="264" viewBox="0 0 264 264">
+              <g transform="rotate(-90 132 132)">
+                <circle class="arc-seg target-track" cx="132" cy="132" r="112" stroke-dasharray="110 593.7" stroke-dashoffset="0"/>
+                <circle class="arc-seg target-track" cx="132" cy="132" r="112" stroke-dasharray="110 593.7" stroke-dashoffset="-140.7"/>
+                <circle class="arc-seg target-track" cx="132" cy="132" r="112" stroke-dasharray="110 593.7" stroke-dashoffset="-281.5"/>
+                <circle class="arc-seg bonus-track"  cx="132" cy="132" r="112" stroke-dasharray="110 593.7" stroke-dashoffset="-422.2"/>
+                <circle class="arc-seg bonus-track"  cx="132" cy="132" r="112" stroke-dasharray="110 593.7" stroke-dashoffset="-563.0"/>
+              </g>
+              <circle cx="79" cy="231" r="5" fill="#EBA317"/>
+            </svg>
+            <div class="arc-core">
+              <span class="ico"><svg width="26" height="26" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="13" r="8" stroke="#fff" stroke-width="2.1"/><path d="M12 9.6V13l2.4 1.9" stroke="#fff" stroke-width="2.1" stroke-linecap="round"/><path d="M9.6 2.8h4.8" stroke="#fff" stroke-width="2.1" stroke-linecap="round"/></svg></span>
+              <span class="lbl">Clock<br>in</span>
+            </div>
+            <div class="tick-lbl">TARGET</div>
+          </div>
+
+          <div class="arc-say">
+          <div class="big">No sessions yet today</div>
+            <div class="small">Clock in, and the ring starts filling.</div>
+          </div>
+        </div>
+
+        <div class="bars">
+          <div class="bar"><span class="bv">3</span><span class="bb" style="height:30px"></span><span class="bl">MON</span></div>
+          <div class="bar"><span class="bv">4</span><span class="bb" style="height:40px"></span><span class="bl">TUE</span></div>
+          <div class="bar"><span class="bv">3</span><span class="bb" style="height:30px"></span><span class="bl">WED</span></div>
+          <div class="bar today"><span class="bv">2</span><span class="bb" style="height:20px"></span><span class="bl">THU</span></div>
+          <div class="bar none"><span class="bv">–</span><span class="bb"></span><span class="bl">FRI</span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════ H3: UKUSA ══════════ -->
+<div class="row">
+  <div class="slot">
+    <div class="cap"><b>H3 · Ukusa, clocked in</b><span>Identity in the band, action in the thumb zone. The sun sits on the horizon.</span></div>
+    <div class="phone on-dark" data-tab="home" data-name="h3-ukusa-clocked-in">
+      <div class="screen">
+        <div class="band">
+          <span class="sun"></span><span class="sun-2"></span>
+          <div class="b-top">
+            <span class="me">A</span>
+            <span class="sync"><svg width="14" height="14" viewBox="0 0 24 24" fill="none"><path d="M7 18a5 5 0 1 1 .8-9.9A6 6 0 0 1 19.5 10 4 4 0 0 1 18 18H7z" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/><path d="m9.5 13.5 2 2 3.5-3.8" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>Synced</span>
+          </div>
+          <h1>Molo, Asanda<span class="dot">.</span></h1>
+          <p>Core Literacy · Charles Duna Primary</p>
+          <div class="chip-clock">
+            <span class="cl"><span class="led"></span>On the clock · <span class="num">3h 24m</span></span>
+            <button class="cr">Clock out</button>
+          </div>
+        </div>
+
+        <div class="today-block">
+          <div class="tl">Today</div>
+          <div class="today-row">
+            <div class="count">2<span class="of"> / 3</span></div>
+            <div class="stones"><span class="stone done"></span><span class="stone done"></span><span class="stone"></span></div>
+          </div>
+          <div class="today-say">One more pair reaches today’s target.</div>
+        </div>
+
+        <div class="stamp-row">
+          <div class="stamp done"><span class="sv">3</span><span class="sl">MON</span></div>
+          <div class="stamp done"><span class="sv">4</span><span class="sl">TUE</span></div>
+          <div class="stamp done"><span class="sv">3</span><span class="sl">WED</span></div>
+          <div class="stamp today"><span class="sv">2</span><span class="sl">THU</span></div>
+          <div class="stamp none"><span class="sv">–</span><span class="sl">FRI</span></div>
+        </div>
+
+        <div class="cov-line">
+          <span><b>9 of 12</b> children assessed</span>
+          <span class="go">3 to go →</span>
+        </div>
+
+        <div class="miss">
+          <div class="tl">Not seen this week</div>
+          <div class="miss-chips">
+            <span class="mchip"><span class="mav c1">ON</span>Owethu</span>
+            <span class="mchip"><span class="mav c2">ET</span>Esona</span>
+            <span class="mchip"><span class="mav c3">BN</span>Buhle</span>
+          </div>
+        </div>
+
+        <button class="slab">
+          <svg width="21" height="21" viewBox="0 0 24 24" fill="none"><path d="M12 5v14M5 12h14" stroke="#fff" stroke-width="2.6" stroke-linecap="round"/></svg>
+          Record a session
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <div class="slot">
+    <div class="cap"><b>H3 · Ukusa, not clocked in</b><span>The slab changes job; the stones stay empty until the day starts.</span></div>
+    <div class="phone on-dark" data-tab="home" data-name="h3-ukusa-clocked-out">
+      <div class="screen">
+        <div class="band">
+          <span class="sun"></span><span class="sun-2"></span>
+          <div class="b-top">
+            <span class="me">A</span>
+            <span class="sync"><svg width="14" height="14" viewBox="0 0 24 24" fill="none"><path d="M7 18a5 5 0 1 1 .8-9.9A6 6 0 0 1 19.5 10 4 4 0 0 1 18 18H7z" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/><path d="m9.5 13.5 2 2 3.5-3.8" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>Synced</span>
+          </div>
+          <h1>Molo, Asanda<span class="dot">.</span></h1>
+          <p>Core Literacy · Charles Duna Primary</p>
+          <div class="chip-clock out">
+            <span class="cl"><span class="led"></span>Not clocked in</span>
+            <button class="cr">Clock in</button>
+          </div>
+        </div>
+
+        <div class="today-block">
+          <div class="tl">Today</div>
+          <div class="today-row">
+            <div class="count">0<span class="of"> / 3</span></div>
+            <div class="stones"><span class="stone"></span><span class="stone"></span><span class="stone"></span></div>
+          </div>
+          <div class="today-say">Clock in first. Sessions are recorded after that.</div>
+        </div>
+
+        <div class="stamp-row">
+          <div class="stamp done"><span class="sv">3</span><span class="sl">MON</span></div>
+          <div class="stamp done"><span class="sv">4</span><span class="sl">TUE</span></div>
+          <div class="stamp done"><span class="sv">3</span><span class="sl">WED</span></div>
+          <div class="stamp today"><span class="sv">2</span><span class="sl">THU</span></div>
+          <div class="stamp none"><span class="sv">–</span><span class="sl">FRI</span></div>
+        </div>
+
+        <div class="cov-line">
+          <span><b>9 of 12</b> children assessed</span>
+          <span class="go">3 to go →</span>
+        </div>
+
+        <div class="miss">
+          <div class="tl">Not seen this week</div>
+          <div class="miss-chips">
+            <span class="mchip"><span class="mav c1">ON</span>Owethu</span>
+            <span class="mchip"><span class="mav c2">ET</span>Esona</span>
+            <span class="mchip"><span class="mav c3">BN</span>Buhle</span>
+          </div>
+        </div>
+
+        <button class="slab">
+          <svg width="21" height="21" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="13" r="8" stroke="#fff" stroke-width="2.1"/><path d="M12 9.6V13l2.4 1.9" stroke="#fff" stroke-width="2.1" stroke-linecap="round"/><path d="M9.6 2.8h4.8" stroke="#fff" stroke-width="2.1" stroke-linecap="round"/></svg>
+          Clock in to start your day
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+</div>
+
+<script src="../shared/chrome.js"></script>
+<script>renderChrome();</script>
+</body>
+</html>

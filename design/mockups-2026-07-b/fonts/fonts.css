@@ -1,0 +1,14 @@
+/* Self-hosted latin-subset variable fonts (all OFL, all from Google Fonts).
+   Self-hosted on purpose: the mockups must render identically offline,
+   in CI, and inside a headless screenshot run with no network. */
+@font-face{font-family:'Bricolage Grotesque';font-style:normal;font-weight:200 800;src:url(bricolage-var.woff2) format('woff2');}
+@font-face{font-family:'Gabarito';font-style:normal;font-weight:400 900;src:url(gabarito-var.woff2) format('woff2');}
+@font-face{font-family:'Archivo';font-style:normal;font-weight:100 900;src:url(archivo-var.woff2) format('woff2');}
+@font-face{font-family:'Epilogue';font-style:normal;font-weight:100 900;src:url(epilogue-var.woff2) format('woff2');}
+@font-face{font-family:'Outfit';font-style:normal;font-weight:100 900;src:url(outfit-var.woff2) format('woff2');}
+@font-face{font-family:'Work Sans';font-style:normal;font-weight:100 900;src:url(worksans-var.woff2) format('woff2');}
+@font-face{font-family:'Lexend';font-style:normal;font-weight:100 900;src:url(lexend-var.woff2) format('woff2');}
+@font-face{font-family:'Figtree';font-style:normal;font-weight:300 900;src:url(figtree-var.woff2) format('woff2');}
+@font-face{font-family:'Plus Jakarta Sans';font-style:normal;font-weight:200 800;src:url(jakarta-var.woff2) format('woff2');}
+@font-face{font-family:'Instrument Sans';font-style:normal;font-weight:400 700;src:url(instrumentsans-var.woff2) format('woff2');}
+@font-face{font-family:'Onest';font-style:normal;font-weight:100 900;src:url(onest-var.woff2) format('woff2');}
