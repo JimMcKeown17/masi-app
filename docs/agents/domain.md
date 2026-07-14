@@ -10,7 +10,7 @@ How the engineering skills should consume this repo's domain documentation when 
   - `0002-thousand-stories-synthetic-whole-class-group.md`
   - `0003-assessment-score-bands.md`
 - **`documentation/open-decisions-backlog.md`** — open/deferred decisions not yet settled (do not assume these are decided).
-- The wider doc set in `AGENTS.md` (DATABASE_SCHEMA_GUIDE, rls-sync-contract-map, sqlite-refactor-log, docs/agent-context/) for schema, sync, and in-flight workstream context.
+- The wider doc set in `AGENTS.md` (DATABASE_SCHEMA_GUIDE, rls-sync-contract-map, build-log, docs/agent-context/) for schema, sync, and in-flight workstream context.
 
 If any of these files don't exist, **proceed silently**. Don't flag their absence; don't suggest creating them upfront. The producer skill (`/grill-with-docs`) creates them lazily when terms or decisions actually get resolved.
 

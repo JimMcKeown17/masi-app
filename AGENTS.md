@@ -30,11 +30,10 @@ Always consult these key documentation files:
 - **LEARNING.md** (in `documentation/`): Educational documentation of architectural decisions (**update regularly as you build**).
 - **documentation/DATABASE_SCHEMA_GUIDE.md**: Detailed database schema reference and design rationale.
 - **documentation/rls-sync-contract-map.md**: Table-by-table RLS/sync operation contract. Consult this before changing RLS policies, synced repositories, outbox ordering, Supabase migrations, or server payload columns.
-- **documentation/sqlite-refactor-log.md**: **The master build log.** Durable running record of decisions, bugs, assumptions, verification (with gate counts), device checks, and review findings. Append a dated row for every meaningful work session. Its Verification Register is the canonical answer to "what was built, when, and did it pass?".
-- **documentation/codebase-audit-2026-07-12.md**: The ranked open-findings list (21 findings, severity-scored). Read this before proposing new work, so you fix what is actually broken rather than what is merely visible. Closed items are recorded in the refactor log and PRD.
+- **documentation/build-log.md**: **The master build log.** One file, the whole history: what was built, when, why, what broke, what was decided, what was verified. Append a dated row to its Verification Register for every meaningful work session; put durable decisions in the Decision Register and defects in the Bug and Gap Register. It is the canonical answer to "what was built, when, and did it pass?". (It absorbed the old `sqlite-refactor-log.md` on 2026-07-13; that filename is now a redirect stub.)
+- **documentation/codebase-audit-2026-07-12.md**: The ranked open-findings list (21 findings, severity-scored). Read this before proposing new work, so you fix what is actually broken rather than what is merely visible. Closed items are recorded in the build log and PRD.
 - **documentation/device-gates-sqlite-backend-2026-07.md**: The on-device checklist Jim runs. Tests cannot model two SQLite connections, a real GPS chip, a force-quit, or native list virtualization. When you finish work that changes on-device behavior, add a gate here.
 - **documentation/sprint4-followups-2026-07-13.md**: Open follow-ups and Jim's domain rulings on them (no head-office deletes, use an ignore flag; schools are never closed).
-- **documentation/build-log.md**: **SUPERSEDED, do not append.** A historical record of the June 2026 Top-10 tranche only; it stops at 2026-06-20 and its "current tranche" table is stale. The refactor log above replaced it.
 - **docs/adr/** (if present): Architectural Decision Records for hard-to-reverse decisions with real trade-offs. Created lazily by the `grill-with-docs` skill.
 - **docs/agent-context/** (if present): Progressive-disclosure briefings for specific in-flight workstreams. Read the relevant file *before* picking up any task in that workstream. Current entries:
   - `wela-assessment-component-build.md` — the WelaPLUS Assessment Battery work (modular in-app battery, open-source Tool components). PRD at `documentation/wela-plus-battery-prd-2026.md` (~45% complete). Read this file before any work on assessments, batteries, runs, or tools.
@@ -57,7 +56,7 @@ The SQLite refactor plans are historical implementation evidence; the active for
 - Architecture/spec history: `docs/superpowers/specs/2026-05-20-sqlite-migration-design.md`
 - Implementation plan history: `docs/superpowers/plans/2026-05-20-sqlite-*.md`
 - RLS/sync contract map: `documentation/rls-sync-contract-map.md`
-- Shared log: `documentation/sqlite-refactor-log.md`
+- Shared log: `documentation/build-log.md`
 
 Locked decisions from the cutover:
 
@@ -72,7 +71,7 @@ Locked decisions from the cutover:
 
 The older "prefer backwards-compatible changes" guidance below applies to future production maintenance after the SQLite cutover. It does not require compatibility with the retired AsyncStorage domain store or old Supabase schema unless the user explicitly reopens that requirement.
 
-Release-gate and verification history lives in `documentation/sqlite-refactor-log.md` (Verification Register) — that log, not this file, is the dated record of suite counts, device passes, and deploy gates.
+Release-gate and verification history lives in `documentation/build-log.md` (Verification Register). That log, not this file, is the dated record of suite counts, device passes, and deploy gates.
 
 ## Test Driven Development
 
@@ -178,6 +177,6 @@ The 2026-07-12 audit (`documentation/codebase-audit-2026-07-12.md`) found four s
 
 - **PRD.md → Development Progress**: Add a `- [ ]` checklist when starting multi-step work. Check off items as you go.
 - **LEARNING.md** (`documentation/`): After significant architectural decisions or tricky bug fixes, add a narrative section explaining the "why" — written like teaching a junior developer.
-- **documentation/sqlite-refactor-log.md**: For SQLite/backend/sync work, update this after every task or meaningful work session. Always log bugs/problems, important assumptions, design decisions, review findings, verification commands, device checks, and anything surprising.
+- **documentation/build-log.md**: Update after every task or meaningful work session, not just database work. Always log bugs and problems, important assumptions, design decisions, review findings, verification commands with their results, device checks, and anything surprising. A dead end recorded is worth as much as a success.
 - **documentation/rls-sync-contract-map.md**: Update this whenever a synced table, repository write path, RLS policy, migration, server payload allowlist, or outbox ordering changes.
 - **Always branch** off to a new git branch for features or bug fixes.

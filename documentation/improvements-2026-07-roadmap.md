@@ -91,6 +91,6 @@ Dead deps (`react-hook-form`, `expo-linear-gradient`, `@testing-library/jest-nat
 - Branch per phase or per item: `improvement/p<phase>-<slug>` (e.g. `improvement/p1-safety-net`).
 - TDD skill loop for all code tasks; red before green; frequent commits.
 - Two-LLM plan review (codex) on each phase plan before building; engage findings substantively.
-- `documentation/sqlite-refactor-log.md` entry per work session for anything touching db/sync; `documentation/rls-sync-contract-map.md` whenever a synced table, payload, policy, or outbox ordering changes (Phase 5 item 11 is the only phase expected to touch it).
+- `documentation/build-log.md` entry per work session for anything touching db/sync; `documentation/rls-sync-contract-map.md` whenever a synced table, payload, policy, or outbox ordering changes (Phase 5 item 11 is the only phase expected to touch it).
 - Device gates recorded in the build log with date + device, per the Item 4/5 convention.
 - PRD.md Development Progress checklist entry when a phase starts.
