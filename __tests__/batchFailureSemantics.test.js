@@ -4,7 +4,10 @@ jest.mock('../src/services/supabaseClient', () => ({ supabase: {} }));
 import { createBetterSqliteTestDatabase } from '../test-support/betterSqliteAdapter';
 import { runMigrations } from '../src/db/migrations';
 import { createSyncOutboxRepository } from '../src/db/repositories/syncOutboxRepository';
-import { createOutboxSyncEngine } from '../src/services/offlineSync';
+import {
+  createOutboxSyncEngine,
+  SYNC_BATCH_LIMITS,
+} from '../src/services/offlineSync';
 import { seedCoreData } from '../test-support/sqliteRepositoryTestUtils';
 
 const liveTestSession = async () => ({
@@ -161,6 +164,83 @@ it('a thrown batch error finalizes EVERY member as retriable failed with last_er
   expect(rows.every((r) => r.last_error && r.last_error.length > 0)).toBe(true);
   expect(rows.some((r) => r.status === 'in_flight')).toBe(false);
   expect(result.totalFailed).toBe(3);
+
+  await db.closeAsync();
+});
+
+it('bounds failed-batch fan-out across the whole pass and leaves unattempted rows pending', async () => {
+  const db = createBetterSqliteTestDatabase(':memory:');
+  await runMigrations(db);
+  await seedCoreData(db);
+  await seedAssessmentItemsForThrowTest(db, 150);
+
+  const payloadSizes = [];
+  let individualCalls = 0;
+  let activeIndividualCalls = 0;
+  let maxConcurrentIndividualCalls = 0;
+  const batchFailsPerRowSucceeds = {
+    from: () => ({
+      upsert: async (payload) => {
+        if (Array.isArray(payload)) {
+          payloadSizes.push(payload.length);
+          return { data: null, error: { message: 'systemic batch rejection' } };
+        }
+        individualCalls += 1;
+        activeIndividualCalls += 1;
+        maxConcurrentIndividualCalls = Math.max(
+          maxConcurrentIndividualCalls,
+          activeIndividualCalls
+        );
+        await new Promise((resolve) => setTimeout(resolve, 1));
+        activeIndividualCalls -= 1;
+        return { data: [{}], error: null };
+      },
+      delete: () => ({
+        eq: async () => ({ error: null }),
+      }),
+    }),
+    rpc: async () => ({ data: true, error: null }),
+  };
+
+  const engine = createOutboxSyncEngine({
+    getAuthSession: liveTestSession,
+    database: db,
+    supabaseClient: batchFailsPerRowSucceeds,
+  });
+  const result = await engine.syncAll();
+
+  expect(SYNC_BATCH_LIMITS).toEqual({
+    maxBatchRecords: 100,
+    maxFallbackRecordsPerPass: 25,
+    maxFallbackConcurrency: 5,
+  });
+  expect(payloadSizes).toEqual([100, 50]);
+  expect(individualCalls).toBe(SYNC_BATCH_LIMITS.maxFallbackRecordsPerPass);
+  expect(maxConcurrentIndividualCalls).toBeLessThanOrEqual(
+    SYNC_BATCH_LIMITS.maxFallbackConcurrency
+  );
+  expect(result).toEqual(expect.objectContaining({
+    success: true,
+    totalSynced: SYNC_BATCH_LIMITS.maxFallbackRecordsPerPass,
+    totalFailed: 0,
+    totalRetriable: 0,
+    totalDeferred: 150 - SYNC_BATCH_LIMITS.maxFallbackRecordsPerPass,
+  }));
+  expect(result.tableResults.assessment_items).toEqual(expect.objectContaining({
+    synced: SYNC_BATCH_LIMITS.maxFallbackRecordsPerPass,
+    failed: 0,
+    deferred: 150 - SYNC_BATCH_LIMITS.maxFallbackRecordsPerPass,
+  }));
+
+  const remaining = await db.getAllAsync(`
+    select status, retry_count, last_error
+    from sync_outbox
+    order by record_id
+  `);
+  expect(remaining).toHaveLength(150 - SYNC_BATCH_LIMITS.maxFallbackRecordsPerPass);
+  expect(remaining.every((row) => row.status === 'pending')).toBe(true);
+  expect(remaining.every((row) => row.retry_count === 0)).toBe(true);
+  expect(remaining.every((row) => row.last_error == null)).toBe(true);
 
   await db.closeAsync();
 });

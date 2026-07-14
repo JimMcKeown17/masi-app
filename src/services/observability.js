@@ -155,6 +155,7 @@ const syncPassContext = (result, { source, force, isOnline }) => ({
   totalFailed: result.totalFailed || 0,
   totalTerminal: result.totalTerminal || 0,
   totalRetriable: result.totalRetriable || 0,
+  totalDeferred: result.totalDeferred || 0,
   durationMs: result.durationMs || 0,
   preflightErrors: result.preflightErrors || [],
   failedRecords: (result.failedRecords || []).slice(0, 20),
@@ -199,6 +200,12 @@ export const reportSyncResult = (
   if ((result.totalRetriable || 0) > 0) {
     report('Sync pass completed with retriable failures', {
       sync_state: 'retriable_failures',
+    });
+  }
+
+  if ((result.totalDeferred || 0) > 0) {
+    report('Sync batch fallback budget exhausted', {
+      sync_state: 'batch_fallback_deferred',
     });
   }
 

@@ -294,6 +294,11 @@ const BATCHABLE_UPSERT_TABLES = new Set([
   'session_attendees',
   'time_entries',
 ]);
+export const SYNC_BATCH_LIMITS = Object.freeze({
+  maxBatchRecords: 100,
+  maxFallbackRecordsPerPass: 25,
+  maxFallbackConcurrency: 5,
+});
 const IMMUTABLE_ASSIGNMENT_TABLES = new Set([
   'child_ea_assignments',
   'class_ea_assignments',
@@ -1073,31 +1078,61 @@ export const createOutboxSyncEngine = ({
     }
   };
 
-  // Per-record fallback for a batch (used when the batch can't/ didn't upsert as a unit). Each
-  // processRecord self-cleans its own row; we wait for ALL to settle (Promise.allSettled, NOT
-  // fail-fast Promise.all) so one rejecting record can't trigger a whole-batch finalize that
-  // reverts a sibling whose upload already succeeded. A rejected fallback (e.g. markInFlight threw
-  // before processRecord's own try) gets a plain per-id markReady — siblings are left untouched.
-  const processBatchFallback = async (outboxRecords, passUserId) => {
-    const settled = await Promise.allSettled(
-      outboxRecords.map((record) => processRecord(record, passUserId))
+  // Per-record fallback for a batch (used when the batch can't/didn't upsert as a unit). The shared
+  // budget bounds the whole pass, while small allSettled waves preserve sibling-safe cleanup.
+  const processBatchFallback = async (outboxRecords, passUserId, fallbackBudget) => {
+    const attemptCount = Math.min(
+      outboxRecords.length,
+      Math.max(0, fallbackBudget.remaining)
     );
+    fallbackBudget.remaining -= attemptCount;
+    const attemptedRecords = outboxRecords.slice(0, attemptCount);
+    const deferredRecords = outboxRecords.slice(attemptCount);
     const results = [];
-    for (let index = 0; index < settled.length; index += 1) {
-      const outcome = settled[index];
-      if (outcome.status === 'fulfilled') {
-        results.push(outcome.value);
-        continue;
+
+    // Bound both total fallback work and concurrent requests. allSettled remains important inside
+    // each wave: one record rejecting must not let batch cleanup overwrite a sibling that synced.
+    for (const wave of chunkArray(attemptedRecords, SYNC_BATCH_LIMITS.maxFallbackConcurrency)) {
+      const settled = await Promise.allSettled(
+        wave.map((record) => processRecord(record, passUserId))
+      );
+      for (let index = 0; index < settled.length; index += 1) {
+        const outcome = settled[index];
+        if (outcome.status === 'fulfilled') {
+          results.push(outcome.value);
+          continue;
+        }
+        const record = wave[index];
+        const reason = errorMessage(outcome.reason) || 'Fallback record processing threw';
+        try { await outboxRepository.markReady(record.id); } catch (_) { /* resetInFlight recovers next pass */ }
+        results.push({ success: false, terminal: false, failedRecord: makeFailedRecord(record, reason) });
       }
-      const record = outboxRecords[index];
-      const reason = errorMessage(outcome.reason) || 'Fallback record processing threw';
-      try { await outboxRepository.markReady(record.id); } catch (_) { /* resetInFlight recovers next pass */ }
-      results.push({ success: false, terminal: false, failedRecord: makeFailedRecord(record, reason) });
+    }
+
+    if (deferredRecords.length > 0) {
+      const deferredIds = deferredRecords.map((record) => record.id);
+      try {
+        if (typeof outboxRepository.markReadyMany === 'function') {
+          await outboxRepository.markReadyMany(deferredIds);
+        } else {
+          for (const id of deferredIds) await outboxRepository.markReady(id);
+        }
+      } catch (_) {
+        // Keep sibling outcomes intact. Best-effort per-row cleanup may recover a partial bulk
+        // reset; resetInFlight is the cross-pass backstop for any row that remains in_flight.
+        for (const id of deferredIds) {
+          try { await outboxRepository.markReady(id); } catch (_2) { /* resetInFlight recovers */ }
+        }
+      }
+      results.push(...deferredRecords.map(() => ({
+        success: false,
+        deferredBatchFallback: true,
+      })));
     }
     return results;
   };
 
-  const processBatch = async (outboxRecords, config, passUserId) => {
+  const processBatch = async (outboxRecords, config, passUserId, fallbackBudget) => {
     const ids = outboxRecords.map((record) => record.id);
     await outboxRepository.markInFlight(ids);
     let inFlightRecords = null;
@@ -1107,7 +1142,7 @@ export const createOutboxSyncEngine = ({
       )).filter(Boolean);
 
       if (inFlightRecords.length !== outboxRecords.length) {
-        return await processBatchFallback(outboxRecords, passUserId);
+        return await processBatchFallback(outboxRecords, passUserId, fallbackBudget);
       }
 
       if (!await getMatchingPassSession(passUserId)) {
@@ -1124,11 +1159,11 @@ export const createOutboxSyncEngine = ({
         // A THROWN batch request (timeout / abort / oversized payload) — degrade to per-record so a
         // deterministic batch-level failure isolates per row (smaller payloads make progress) instead
         // of re-forming the same failing batch forever. processBatchFallback is allSettled-safe.
-        return await processBatchFallback(outboxRecords, passUserId);
+        return await processBatchFallback(outboxRecords, passUserId, fallbackBudget);
       }
 
       if (!serverResult.success) {
-        return await processBatchFallback(outboxRecords, passUserId);
+        return await processBatchFallback(outboxRecords, passUserId, fallbackBudget);
       }
 
       await finalizeManySuccess({ database, records: inFlightRecords, tableName: config.tableName });
@@ -1178,6 +1213,7 @@ export const createOutboxSyncEngine = ({
         totalFailed: 0,
         totalTerminal: 0,
         totalRetriable: 0,
+        totalDeferred: 0,
         failedRecords: [],
         tableResults: {},
         preflightErrors: [],
@@ -1193,6 +1229,7 @@ export const createOutboxSyncEngine = ({
       totalFailed: 0,
       totalTerminal: 0,
       totalRetriable: 0,
+      totalDeferred: 0,
       failedRecords: [],
       tableResults: {},
       preflightErrors: [],
@@ -1296,6 +1333,13 @@ export const createOutboxSyncEngine = ({
       if (recordResult.success) {
         result.totalSynced += 1;
         result.tableResults[tableKey].synced += 1;
+      } else if (recordResult.deferredBatchFallback) {
+        result.totalDeferred += 1;
+        result.tableResults[tableKey].success = false;
+        result.tableResults[tableKey].deferred = (result.tableResults[tableKey].deferred || 0) + 1;
+        // Deferred means not attempted, not failed. Preserve ordering by preventing any exact
+        // dependent from running later in this pass while leaving retry/failure counters untouched.
+        rememberBlockedRecord(outboxRecord);
       } else {
         // Trust semantics (Finding 6): only a terminal record makes the pass unsuccessful.
         // A retriable/backed-off record is safe on the device and will retry; it must not
@@ -1312,6 +1356,9 @@ export const createOutboxSyncEngine = ({
         result.failedRecords.push(recordResult.failedRecord);
         rememberBlockedRecord(outboxRecord);
       }
+    };
+    const fallbackBudget = {
+      remaining: SYNC_BATCH_LIMITS.maxFallbackRecordsPerPass,
     };
 
     try {
@@ -1398,10 +1445,18 @@ export const createOutboxSyncEngine = ({
                 break;
               }
               batchRecords.push(candidate);
+              if (batchRecords.length >= SYNC_BATCH_LIMITS.maxBatchRecords) {
+                break;
+              }
             }
 
             if (batchRecords.length > 1) {
-              const batchResults = await processBatch(batchRecords, config, passUserId);
+              const batchResults = await processBatch(
+                batchRecords,
+                config,
+                passUserId,
+                fallbackBudget
+              );
               if (batchResults.some((batchResult) => batchResult.abortedUserSwitch)) {
                 break;
               }

@@ -178,6 +178,23 @@ export const createSyncOutboxRepository = ({ database } = {}) => {
     return true;
   });
 
+  const markReadyMany = async (ids, { transaction } = {}) => {
+    if (!ids || ids.length === 0) return true;
+    return runWrite(transaction, async (txn) => {
+      const now = timestamp();
+      for (const id of ids) {
+        await txn.runAsync(`
+          update sync_outbox
+          set status = 'pending',
+              next_retry_at = null,
+              updated_at = ?
+          where id = ?
+        `, now, id);
+      }
+      return true;
+    });
+  };
+
   const requeueTerminalRows = async (ids, { transaction } = {}) => {
     if (!ids || ids.length === 0) return 0;
     return runWrite(transaction, async (txn) => {
@@ -341,6 +358,7 @@ export const createSyncOutboxRepository = ({ database } = {}) => {
     markInFlight,
     resetInFlight,
     markReady,
+    markReadyMany,
     requeueTerminalRows,
     markRetriableFailure,
     markTerminalFailure,

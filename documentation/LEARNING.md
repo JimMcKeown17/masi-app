@@ -1352,3 +1352,11 @@ The real graph is more precise. An assignment with `child_id = A` depends on the
 Archive ordering needs an inverse edge. Ending a child EA assignment must wait for programme, class, and group cleanup about the same child, even though those cleanup rows are not parents of the assignment. The same rule applies to class and group assignment endings. Explicit subject maps make those inverse edges testable: child-scoped cleanup compares `child_id`, class-scoped cleanup compares `class_id`, and group-scoped cleanup compares `group_id`.
 
 The important mental model is **failure containment**. Preserve the smallest boundary that makes the operation safe. A failed parent blocks its own descendants; a failed cleanup blocks the matching access-ending row; unrelated subgraphs keep moving. If identity cannot be resolved for a newly added edge, the engine still fails conservatively. Precision improves availability without weakening relational or RLS ordering.
+
+### Failed-batch addendum: bound work, not only data
+
+A queue limit, a payload limit, and a failure-work limit solve different problems. Loading at most 1,000 outbox rows bounds memory and pass duration under normal operation. It does not stop those rows becoming one oversized HTTP request. A 100-row payload cap bounds request size, but it still does not stop ten failed batches from expanding into 1,000 individual retries. The failure path needs its own pass-wide budget.
+
+The sync engine now treats per-record fallback as diagnostic isolation work. It may use up to 25 individual attempts to discover whether a batch failed because of one bad record or a systemic condition. Those attempts run five at a time, preserving the existing `allSettled` guarantee inside each wave. Once the budget is exhausted, more requests have diminishing information value and growing operational cost, so remaining rows return to pending for a later pass.
+
+Unattempted is not the same state as failed. A deferred row receives no retry increment, no backoff, and no error message because the server never evaluated it individually. It still blocks its exact descendants for the rest of the current pass, which preserves ordering. This is a general resilience principle: **make exceptional work finite, preserve semantic state, and expose the deferral explicitly rather than disguising load shedding as an error.**

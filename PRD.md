@@ -426,6 +426,13 @@ User Action → Local AsyncStorage → UI Update → Sync Queue → Supabase →
 - [x] Keep matching dependents pending while unrelated records on the same table continue
 - [x] Guard every declared direct and inverse dependency edge with tests
 
+#### 2026-07-14 Bounded failed-batch fallback follow-up
+- [x] Cap batchable Supabase payloads at 100 records
+- [x] Cap per-record fallback attempts at 25 across the entire sync pass
+- [x] Limit per-record fallback concurrency to five requests
+- [x] Return unattempted rows to pending without incrementing retry or failure counters
+- [x] Surface deferred fallback work in sync results and operational observability
+
 ### Phase 7: Polish & Production Prep (Partially Complete)
 - [x] Error handling across all screens — Snackbar standardised across 6 screens; Alert reserved for destructive confirmations only
 - [x] Loading states — ActivityIndicator on SessionHistoryScreen; Create/Save button spinners on GroupManagementScreen

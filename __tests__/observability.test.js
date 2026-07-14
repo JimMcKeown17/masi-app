@@ -171,6 +171,7 @@ describe('observability initialization', () => {
       totalFailed: 3,
       totalTerminal: 1,
       totalRetriable: 2,
+      totalDeferred: 7,
       durationMs: 425,
       preflightErrors: [{ step: 'resetInFlight', error: 'database is locked' }],
       failedRecords: [{
@@ -184,13 +185,14 @@ describe('observability initialization', () => {
     reportSyncResult(result, { source: 'manual', force: true, isOnline: true });
     reportSyncResult(result, { source: 'background', force: true, isOnline: true });
 
-    expect(mockCaptureException).toHaveBeenCalledTimes(3);
+    expect(mockCaptureException).toHaveBeenCalledTimes(4);
     expect(mockScope.setContext).toHaveBeenCalledWith('sync_pass', expect.objectContaining({
       source: 'manual',
       force: true,
       isOnline: true,
       totalFailed: 3,
       totalRetriable: 2,
+      totalDeferred: 7,
       preflightErrors: [{ step: 'resetInFlight', error: 'database is locked' }],
       failedRecords: [expect.objectContaining({ table: 'sessions' })],
     }));
