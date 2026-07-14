@@ -87,6 +87,58 @@ any fix.**
 
 ---
 
+## 0c. GO-LIVE BLOCKER — the real-data seed script
+
+**Decision (Jim, 2026-07-14): all current `masi-app-sqlite` data is disposable. It will be flagged to
+ignore, and real data seeded before go-live. Nothing currently in the database will be used.**
+
+That makes the seed script a **hard go-live blocker**, and it does not exist. Both historical plans
+(`archive/seed_data_plan.md`, `bulk_import_children_plan.md`) are **schema-dead** — they target
+`staff_children` / `children_groups` / `children.class` text columns, none of which exist.
+
+### ⚠️ The requirement that will silently destroy go-live if missed
+
+**The seed script MUST derive row ids with the app's own deterministic-id functions.** Not random
+UUIDs. This is not a style preference; it is a correctness contract, and it is already mandated by
+`rls-sync-contract-map.md:32`: *"Every writer (device **or the future head-office seed**) that means
+the same active pair derives the same id."*
+
+Four tables have a **partial unique index whose columns are exactly the deterministic-id derivation**:
+
+| Table | Partial unique index | Must use |
+|---|---|---|
+| `child_ea_assignments` | `(user_id, child_id)` where `unassigned_at is null` | `childEaAssignmentDomainId({ userId, childId })` |
+| `child_programme_enrollments` | `(child_id, programme_id)` where `ended_at is null` | `childProgrammeEnrollmentDomainId({ childId, programmeId })` |
+| `class_ea_assignments` | `(class_id, ea_user_id, programme_id)` where `unassigned_at is null` | `classEaAssignmentDomainId({ classId, eaUserId, programmeId })` |
+| `group_ea_assignments` | `(group_id)` where `unassigned_at is null` | `groupEaAssignmentDomainId({ groupId })` |
+
+**If the seed writes these with random UUIDs**, then when a field device later means the same logical
+pair it computes deterministic id `D`, upserts `onConflict: 'id'`, finds no id match, attempts an
+INSERT, and violates the partial unique index → `23505`. The server already holds that pair under a
+different id. **The device can never push it. The row is stuck permanently — on a live field device,
+with real children's data, and with no ability to wipe.**
+
+This is exactly the defect that was cleaned off staging on 2026-07-14 (26 rows), reintroduced at
+production scale at the worst possible moment.
+
+**The fix is structural, not vigilance:** the seed script lives in this repo and must
+`import { childEaAssignmentDomainId, ... } from '../src/db/repositories/domainRepositoryUtils'`.
+One implementation, three writers (app, sync engine, seed), no possible drift.
+
+**Verification gate before go-live:** re-run the id diff (recompute `uuid_generate_v5` in SQL, compare
+to the stored id) against the seeded database. It must return **0 mismatches** on all four tables plus
+`letter_mastery`. The exact query is in the 2026-07-14 build-log row.
+
+### Other seed-script requirements
+
+- **It is the same thing as the bulk import.** `bulk_import_children_plan.md`'s purpose ("import real class lists — children + group assignments — from spreadsheets") *is* the go-live seed. **Do not build two scripts.** Build one, idempotent, re-runnable.
+- **Already exists, reuse:** `scripts/seedSchools.js` (325 schools from CSV), `scripts/loadTestUsers.js` (auth user + `public.users` profile from CSV). Reference data (`job_titles`, `programmes`, `assessment_tools`, `academic_years`, `assessment_windows`, `schools`) is seeded by migration.
+- **Still to seed:** `teachers`, `classes`, `children`, `child_class_memberships`, `staff_programme_assignments`, `groups`, `child_group_memberships`, plus the four deterministic-id assignment tables above.
+- **`child_class_memberships` does NOT use deterministic ids** (it recurs on class moves and needs distinct archived rows for audit). It uses reconcile-before-upsert. Random ids are correct there — see contract map §"Active-Pair Collision-Proofing".
+- **Check `child_group_memberships`** — it has a partial unique index on `(child_id, grouping_version_id)` where `removed_at is null`, but no deterministic-id function and no documented reconcile path. **Confirm how a seeded membership and a device-created membership avoid colliding before seeding any.**
+
+---
+
 ## 1. Still open from the 2026-07-12 audit
 
 Sixteen of the 21 findings are closed (see the build log). These five are not:
