@@ -461,6 +461,15 @@ User Action → Local AsyncStorage → UI Update → Sync Queue → Supabase →
 - [x] Keep hard deletes, membership collision handling, and immutable assignment inserts outside the generic batch path
 - [ ] Design table-specific batching for remaining memberships and immutable assignments before enabling them
 
+#### 2026-07-14 SQLite bootstrap recovery follow-up
+- [x] Open and migrate SQLite before mounting any app context provider
+- [x] Keep the user on a dedicated recovery surface when bootstrap fails
+- [x] Retry through the real initializer after half-open database handles are disposed
+- [x] Report bootstrap failures with attempt and SQLite error context
+- [x] Share AsyncStorage-backed error logs without requiring a working SQLite database
+- [x] Keep retry usable when the native share operation also fails
+- [x] Avoid destructive database reset or wipe controls
+
 ### Phase 7: Polish & Production Prep (Partially Complete)
 - [x] Error handling across all screens — Snackbar standardised across 6 screens; Alert reserved for destructive confirmations only
 - [x] Loading states — ActivityIndicator on SessionHistoryScreen; Create/Save button spinners on GroupManagementScreen

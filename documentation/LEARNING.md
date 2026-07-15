@@ -1396,3 +1396,13 @@ The Supabase request queue exists because several consumers share one React Nati
 The dependency graph does not require one giant lease. It requires only that query B starts after the result of query A when B needs A's ids. The pull can therefore await request A, release the queue, compute locally, then enqueue request B. Any request already waiting gets its turn in between. Network concurrency remains one, query order inside the pull remains correct, and the queue becomes fair.
 
 This is the difference between a **resource lock** and a **workflow lock**. Lock the smallest operation that uses the shared resource. Keep parsing, result classification, dependency decisions, and SQLite persistence outside that lock. A workflow may stay sequential without becoming monopolistic.
+
+### Bootstrap recovery addendum: readiness is a root invariant
+
+Before the bootstrap gate, each provider discovered SQLite readiness independently through its first repository call. Most of those calls caught errors because a roster or sync-status refresh should not crash the app. That local resilience produced a globally unsafe state: the navigation tree could mount even though the database had never opened or migrated, and every later feature failed in a different place. A generic React error boundary could not reliably help because asynchronous provider errors were intentionally caught.
+
+SQLite readiness is now a root invariant. `DatabaseBootstrapGate` opens the writer, runs migrations, enables foreign keys, opens the read-only reader, and only then mounts Offline, Auth, Time Tracking, Lookups, Children, Classes, and navigation. One boundary therefore decides whether the entire local-first application is safe to enter.
+
+Recovery reuses the database client's existing failure contract. If writer setup, migration, or reader setup throws, the client closes every handle it opened and clears the shared initialization promise. “Try Again” calls the same initializer and receives a clean attempt. It does not merely hide the error component, and it never deletes the database. Preserving user data is the default because an open failure is not proof of corruption.
+
+Support evidence must not depend on the failed subsystem. Export Database necessarily needs SQLite, so it is the wrong escape hatch on this screen. Export Logs is backed by AsyncStorage, already contains build/device/backend context, and captures the bootstrap error through the console interceptor. The mental model is **gate entry on the core invariant, retry through a resettable initializer, and keep diagnostics outside the failing dependency**.

@@ -32,7 +32,7 @@ This is the execution order, not a second backlog. The numbered sections below r
 1. **P0, validate what is already built:** execute the highest-signal physical-device gates (§0), beginning with G1, H3, I1, B1, and the new reading-level gate C6. This is the highest risk-reduction per hour because four completed sprints still have zero real-hardware passes.
 2. **P0, activation and device proof:** configure Sentry Cloud, then run the zero-class and observability device gates (§2/14a, §3). The class -> children onboarding, durable restart recovery, crash capture, and explicit sync-failure reporting are built and automated-green on the current branch; real-device behavior and live Sentry delivery remain unverified.
 3. **P1, structural data safety:** finish the live migration/probe gate for server-authoritative reconcile (§6; client and migration built 2026-07-14). Record-scoped dependency skipping, bounded failed-batch fallback, and the versioned startup repair registry were built 2026-07-14.
-4. **P2, sync efficiency and recovery:** add SQLite bootstrap recovery and continue table-specific batching (§1, §2, §3). Child and programme-enrollment upserts, domain-pull queue monopolies, outbox `created_at` stability, redundant enqueue writes, and batch claim rereads were closed 2026-07-14. Membership and immutable-assignment batching still require their own collision-safe operation designs.
+4. **P2, sync efficiency and recovery:** continue table-specific batching and address the proven index gaps (§1, §2, §3). SQLite bootstrap recovery, child and programme-enrollment upserts, domain-pull queue monopolies, outbox `created_at` stability, redundant enqueue writes, and batch claim rereads were closed 2026-07-14. Membership and immutable-assignment batching still require their own collision-safe operation designs.
 5. **P2, time-sensitive only when WelaPLUS resumes:** deliberately re-key `assessmentItemDomainId` before real SQLite-backend assessment data exists, but only as a standalone reviewed change (§7). Do not pull it forward merely because the current staging database is disposable.
 6. **P3, group-centred session model:** settle `GRANT_SUBJECTS`, group identity/collision rules, session `group_id` authorization, and then rebuild the group/session workflow in dependency order (§4, §6). The group's latest literacy-session letters belong in that workflow, not in the current child-first form.
 7. **P4, latent correctness and polish:** fix attendee removal before any saved-session edit UI ships; then shared snackbars, picker clears, typography rollout, search/filter gaps, dependency cleanup, and diagnostics (§2, §3). The attendee bug is real at repository level, but no current screen edits a saved session, so it is not the highest-ROI immediate build.
@@ -126,13 +126,14 @@ they are not a source-to-target mapping.
 
 ## 1. Still open from the 2026-07-12 audit
 
-Eighteen of the 21 findings are closed (see the build log). These three are not:
+Nineteen of the 21 findings are closed (see the build log). These two are not:
 
 | # | Finding | Sev | Evidence on `main` |
 |---|---------|-----|--------------------|
-| 13 | SQLite bootstrap failure has no recovery surface | P2 | No bootstrap gate; only the generic `ErrorBoundary` "Try Again" (`App.js:17`). Export Database itself needs a working DB. |
 | 21 | No OTA-rollback schema guard | P3 | `src/db/migrations.js:606` defines `CURRENT_SCHEMA_VERSION` but nothing fails safe when `user_version` exceeds it. Latent while migrations stay additive. |
 | 11 | Force-quit loses the in-progress assessment | P2 | Open **by design** — deferred until WelaPLUS capture work, where the loss window grows from one 60s EGRA run to a long untimed Question. |
+
+**Closed 2026-07-14:** finding 13. `DatabaseBootstrapGate` now opens and migrates SQLite before any app provider mounts. A failed bootstrap stays on a dedicated non-destructive recovery surface, reports `sqlite_bootstrap_failed` with attempt/error context, and offers a real clean retry backed by the client's existing half-open connection disposal. Error-log sharing uses the AsyncStorage logger and does not require SQLite; a failed share action leaves retry usable. No database wipe action is exposed.
 
 **Closed 2026-07-14:** finding 17. Same-pass dependency gating now records the exact failed or skipped record, resolves each dependent's FK or archive subject from its payload and durable SQLite row, and skips only matching relationships. A failed Child A no longer blocks Child B's assignment, assessment, mastery, or membership work. Access-ending archive rows still wait for cleanup failures about the same child, class, or group, and unresolved mapping evidence falls back conservatively.
 

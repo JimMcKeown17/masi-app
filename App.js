@@ -1,6 +1,6 @@
 import 'react-native-get-random-values';
 import React from 'react';
-import { View, Text, TouchableOpacity, StyleSheet as RNStyleSheet } from 'react-native';
+import { View, Text, StyleSheet as RNStyleSheet } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { PaperProvider, MD3LightTheme } from 'react-native-paper';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
@@ -11,6 +11,8 @@ import { LookupsProvider } from './src/context/LookupsContext';
 import { ChildrenProvider } from './src/context/ChildrenContext';
 import { ClassesProvider } from './src/context/ClassesContext';
 import AppNavigator from './src/navigation/AppNavigator';
+import BrandButton from './src/components/common/BrandButton';
+import DatabaseBootstrapGate from './src/components/bootstrap/DatabaseBootstrapGate';
 import { colors } from './src/constants/colors';
 import {
   captureOperationalError,
@@ -46,12 +48,11 @@ export class ErrorBoundary extends React.Component {
           <Text style={errorStyles.message}>
             The app ran into an unexpected error. Please try again.
           </Text>
-          <TouchableOpacity
-            style={errorStyles.button}
+          <BrandButton
+            label="Try Again"
             onPress={() => this.setState({ hasError: false })}
-          >
-            <Text style={errorStyles.buttonText}>Try Again</Text>
-          </TouchableOpacity>
+            style={errorStyles.button}
+          />
         </View>
       );
     }
@@ -88,15 +89,7 @@ const errorStyles = RNStyleSheet.create({
     lineHeight: 22,
   },
   button: {
-    backgroundColor: colors.primary,
-    paddingHorizontal: 32,
-    paddingVertical: 14,
-    borderRadius: 8,
-  },
-  buttonText: {
-    color: '#FFFFFF',
-    fontSize: 16,
-    fontWeight: '600',
+    minWidth: 180,
   },
 });
 
@@ -132,20 +125,22 @@ export function App() {
     <ErrorBoundary>
       <SafeAreaProvider>
         <PaperProvider theme={theme}>
-          <OfflineProvider>
-            <AuthProvider>
-              <TimeTrackingProvider>
-                <LookupsProvider>
-                  <ChildrenProvider>
-                    <ClassesProvider>
-                      <AppNavigator />
-                      <StatusBar style="auto" />
-                    </ClassesProvider>
-                  </ChildrenProvider>
-                </LookupsProvider>
-              </TimeTrackingProvider>
-            </AuthProvider>
-          </OfflineProvider>
+          <DatabaseBootstrapGate>
+            <OfflineProvider>
+              <AuthProvider>
+                <TimeTrackingProvider>
+                  <LookupsProvider>
+                    <ChildrenProvider>
+                      <ClassesProvider>
+                        <AppNavigator />
+                      </ClassesProvider>
+                    </ChildrenProvider>
+                  </LookupsProvider>
+                </TimeTrackingProvider>
+              </AuthProvider>
+            </OfflineProvider>
+          </DatabaseBootstrapGate>
+          <StatusBar style="auto" />
         </PaperProvider>
       </SafeAreaProvider>
     </ErrorBoundary>

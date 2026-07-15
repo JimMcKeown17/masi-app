@@ -127,6 +127,12 @@ sensitive auth token.
 - [ ] **Q1. Pull does not starve pending push work.** Create one pending record offline, reconnect on a deliberately weak or throttled connection, and immediately foreground the app so child and class pulls begin. Press Sync Now while the roster refresh is still working. The pending record should drain between pull requests rather than waiting for every roster, enrollment, class, group, and membership request to finish. Home and the roster remain usable throughout.
 - [ ] **Q2. User switch overtakes the old roster workflow.** On a weak connection, begin a roster refresh as EA A, sign out, and sign in as EA B. EA B's auth/profile work must not wait for the whole EA A domain pull. When the old pull eventually returns, no EA A class, child, or group may appear under EA B.
 
+## R. SQLite bootstrap recovery
+
+- [ ] **R1. Normal cold start remains clean.** Force-quit a preview build that already has pending offline work, reopen it, and confirm the short `Preparing your offline data` state transitions to the app without a blank frame, provider error, or lost pending row.
+- [ ] **R2. Preserve evidence if a real bootstrap failure occurs.** Do not deliberately corrupt or delete a field database. If the recovery screen appears naturally, confirm it says saved work was not deleted, record the support code, use Share Error Logs before retrying, and verify the shared file contains the SQLite bootstrap error plus the installed build/device/backend context.
+- [ ] **R3. Retry is non-destructive.** From a naturally occurring or controlled QA bootstrap failure, press Try Again after the underlying transient condition is gone. The app opens without reinstalling, and previously saved/pending work remains present. Automated tests inject the first-attempt failure; device testing must not manufacture it by damaging a real database.
+
 ---
 
 ## If something fails

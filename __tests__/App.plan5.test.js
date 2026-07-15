@@ -12,6 +12,10 @@ const mockCaptureOperationalError = jest.fn();
 const mockFlushObservability = jest.fn();
 const mockWrapAppWithObservability = jest.fn((component) => component);
 
+jest.mock('@expo/vector-icons', () => ({
+  Ionicons: () => null,
+}), { virtual: true });
+
 jest.mock('../src/services/observability', () => ({
   initializeObservability: mockInitializeObservability,
   captureOperationalError: mockCaptureOperationalError,
@@ -57,6 +61,17 @@ jest.mock('../src/context/ClassesContext', () => ({
   ClassesProvider: ({ children }) => <>{children}</>,
 }));
 
+jest.mock('../src/components/bootstrap/DatabaseBootstrapGate', () => {
+  const React = require('react');
+  const { Text } = require('react-native');
+  return ({ children }) => (
+    <>
+      <Text>Database bootstrap gate</Text>
+      {children}
+    </>
+  );
+});
+
 jest.mock('../src/navigation/AppNavigator', () => {
   const React = require('react');
   const { Text } = require('react-native');
@@ -69,6 +84,7 @@ describe('App root', () => {
 
     const { getByText } = render(<App />);
 
+    expect(getByText('Database bootstrap gate')).toBeTruthy();
     expect(getByText('Navigator')).toBeTruthy();
   });
 
