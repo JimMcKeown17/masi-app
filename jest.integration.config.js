@@ -24,6 +24,7 @@ module.exports = {
     // Sync-reliability slice — file-backed SQLite (better-sqlite3) integration tests.
     '<rootDir>/__tests__/migrationsForeignKeysOff.test.js',
     '<rootDir>/__tests__/foreignKeyEnforcement.test.js',
+    '<rootDir>/__tests__/hotPathIndexes.test.js',
     '<rootDir>/__tests__/clientReadOnlyReader.test.js',
     '<rootDir>/__tests__/bulkFinalize.test.js',
     '<rootDir>/__tests__/batchFailureSemantics.test.js',

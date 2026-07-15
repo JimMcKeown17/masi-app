@@ -472,6 +472,13 @@ User Action → Local AsyncStorage → UI Update → Sync Queue → Supabase →
 - [x] Keep retry usable when the native share operation also fails
 - [x] Avoid destructive database reset or wipe controls
 
+#### 2026-07-14 Sync relationship index follow-up
+- [x] Add sparse SQLite indexes for `sessions.class_id`, `sessions.group_id`, and `session_attendees.group_id`
+- [x] Add matching additive indexes in a canonical Supabase migration
+- [x] Prove the SQLite planner uses all three indexes
+- [x] Keep the query-plan suite in the real-SQLite integration tier
+- [ ] Design `updated_at` indexes with the eventual delta-pull predicates instead of indexing every synced write speculatively
+
 ### Phase 7: Polish & Production Prep (Partially Complete)
 - [x] Error handling across all screens — Snackbar standardised across 6 screens; Alert reserved for destructive confirmations only
 - [x] Loading states — ActivityIndicator on SessionHistoryScreen; Create/Save button spinners on GroupManagementScreen

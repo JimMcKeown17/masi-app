@@ -1408,3 +1408,11 @@ SQLite readiness is now a root invariant. `DatabaseBootstrapGate` opens the writ
 Recovery reuses the database client's existing failure contract. If writer setup, migration, or reader setup throws, the client closes every handle it opened and clears the shared initialization promise. “Try Again” calls the same initializer and receives a clean attempt. It does not merely hide the error component, and it never deletes the database. Preserving user data is the default because an open failure is not proof of corruption.
 
 Support evidence must not depend on the failed subsystem. Export Database necessarily needs SQLite, so it is the wrong escape hatch on this screen. Export Logs is backed by AsyncStorage, already contains build/device/backend context, and captures the bootstrap error through the console interceptor. The mental model is **gate entry on the core invariant, retry through a resettable initializer, and keep diagnostics outside the failing dependency**.
+
+### Indexing addendum: index the query, not the column inventory
+
+An index is not free metadata. It speeds selected reads by adding storage and work to every insert, update, and delete that touches its keys. That makes “this column may be queried one day” a weak reason to index it, especially in an offline-first system where the same logical write is paid locally and on the server.
+
+The three session relationship gaps have a concrete shape. `sessions.class_id`, `sessions.group_id`, and `session_attendees.group_id` are nullable foreign-key paths. Sparse indexes restricted to non-null rows support equality probes and parent-key maintenance without indexing the dominant null case while group-first sessions remain forward-prep. Real SQLite query plans verify that the planner chooses each index; merely finding the index name in `sqlite_master` would prove existence, not usefulness.
+
+The proposed `updated_at` indexes are different because delta pulls do not exist yet. A future query may filter by both owner scope and timestamp, in which case `(user_id, updated_at)` or another scope-specific composite can be much better than a standalone `updated_at` index. Adding one timestamp index to every synced table now would spend write performance before the read contract is known. The mental model is **derive indexes from predicates and ordering, then prove the planner uses them**.

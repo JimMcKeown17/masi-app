@@ -607,6 +607,21 @@ const MIGRATIONS = [
       alter table children add column reading_level text;
     `,
   },
+  {
+    version: 9,
+    name: 'sync_relationship_indexes',
+    sql: `
+      create index if not exists idx_sessions_class_id
+        on sessions(class_id)
+        where class_id is not null;
+      create index if not exists idx_sessions_group_id
+        on sessions(group_id)
+        where group_id is not null;
+      create index if not exists idx_session_attendees_group_id
+        on session_attendees(group_id)
+        where group_id is not null;
+    `,
+  },
 ];
 
 // Derived from the migration list so it never drifts when a migration is added.

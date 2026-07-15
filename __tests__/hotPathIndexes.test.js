@@ -12,9 +12,12 @@ const EXPECTED_INDEXES = [
   'idx_child_group_memberships_group',  // getChildrenInGroup group lookups
   'idx_sync_outbox_ready',              // getReadyRecords: where status in (...) and next_retry_at <= ?
   'idx_time_entries_user_signin',       // getActiveTimeEntry: where user_id = ? order by sign_in_time desc
+  'idx_sessions_class_id',              // class relationship and FK maintenance
+  'idx_sessions_group_id',              // group relationship and FK maintenance
+  'idx_session_attendees_group_id',     // attendee group relationship and FK maintenance
 ];
 
-describe('hot-path covering indexes (migration v5)', () => {
+describe('hot-path covering indexes (migrations v5 and v9)', () => {
   let db;
 
   beforeEach(async () => {
@@ -26,8 +29,8 @@ describe('hot-path covering indexes (migration v5)', () => {
     await db.closeAsync();
   });
 
-  test('schema version is 8', () => {
-    expect(CURRENT_SCHEMA_VERSION).toBe(8);
+  test('schema version is 9', () => {
+    expect(CURRENT_SCHEMA_VERSION).toBe(9);
   });
 
   test('all covering indexes exist after migration', async () => {
@@ -57,5 +60,16 @@ describe('hot-path covering indexes (migration v5)', () => {
       "explain query plan select * from letter_mastery where user_id = 'u-1' and child_id = 'c-1'"
     );
     expect(JSON.stringify(plan)).toContain('idx_letter_mastery_user_child');
+  });
+
+  test.each([
+    ['sessions', 'class_id', 'idx_sessions_class_id'],
+    ['sessions', 'group_id', 'idx_sessions_group_id'],
+    ['session_attendees', 'group_id', 'idx_session_attendees_group_id'],
+  ])('the %s.%s relationship probe uses %s', async (table, column, indexName) => {
+    const plan = await db.getAllAsync(
+      `explain query plan select id from ${table} where ${column} = 'relationship-1'`
+    );
+    expect(JSON.stringify(plan)).toContain(indexName);
   });
 });
