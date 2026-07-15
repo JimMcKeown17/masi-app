@@ -454,6 +454,13 @@ User Action → Local AsyncStorage → UI Update → Sync Queue → Supabase →
 - [x] Prove a waiting unrelated request runs between dependent pull queries
 - [x] Preserve cache-first publication and stale-user result rejection in context tests
 
+#### 2026-07-14 Safe child-graph batching follow-up
+- [x] Batch ordinary child insert/update payloads, including multiple reading-level changes
+- [x] Batch programme enrollments after deterministic active-pair id normalization
+- [x] Preserve bounded batch fallback and exact failed-record dependency containment
+- [x] Keep hard deletes, membership collision handling, and immutable assignment inserts outside the generic batch path
+- [ ] Design table-specific batching for remaining memberships and immutable assignments before enabling them
+
 ### Phase 7: Polish & Production Prep (Partially Complete)
 - [x] Error handling across all screens — Snackbar standardised across 6 screens; Alert reserved for destructive confirmations only
 - [x] Loading states — ActivityIndicator on SessionHistoryScreen; Create/Save button spinners on GroupManagementScreen

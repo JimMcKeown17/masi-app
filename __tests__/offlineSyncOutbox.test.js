@@ -1348,6 +1348,110 @@ describe('SQLite outbox offline sync', () => {
     ]);
   });
 
+  test('batches ready child inserts and updates into one upsert', async () => {
+    const children = [
+      { id: 'child-batch-1', first_name: 'Amahle', last_name: 'Dlamini', reading_level: 'letters' },
+      { id: 'child-batch-2', first_name: 'Lebo', last_name: 'Mokoena', reading_level: 'words' },
+      { id: 'child-batch-3', first_name: 'Zola', last_name: 'Ndlovu', reading_level: 'sentences' },
+    ];
+
+    for (const [index, child] of children.entries()) {
+      await db.runAsync(`
+        insert into children (
+          id, first_name, last_name, reading_level, created_by, sync_status
+        )
+        values (?, ?, ?, ?, 'user-1', 'pending')
+      `, child.id, child.first_name, child.last_name, child.reading_level);
+      await enqueue(db, 'children', child.id, index === 0 ? 'insert' : 'update', {
+        ...child,
+        created_by: 'user-1',
+      });
+    }
+
+    const { supabaseClient, calls } = createSupabaseMock();
+    const engine = createOutboxSyncEngine({ getAuthSession: liveTestSession, database: db, supabaseClient });
+
+    const result = await engine.syncAll();
+
+    const childCalls = calls.filter(call => call.tableName === 'children');
+    expect(childCalls).toHaveLength(1);
+    expect(childCalls[0]).toEqual(expect.objectContaining({
+      type: 'upsert',
+      tableName: 'children',
+      payload: expect.arrayContaining(children.map(child => expect.objectContaining(child))),
+      options: expect.objectContaining({ onConflict: 'id', ignoreDuplicates: false }),
+    }));
+    expect(result).toEqual(expect.objectContaining({
+      success: true,
+      totalSynced: children.length,
+      totalFailed: 0,
+    }));
+    expect(await db.getFirstAsync(`
+      select count(*) as count
+      from children
+      where sync_status = 'synced'
+    `)).toEqual({ count: children.length });
+    expect(await db.getFirstAsync('select count(*) as count from sync_outbox')).toEqual({ count: 0 });
+  });
+
+  test('batches programme enrollments while preserving deterministic active-pair ids', async () => {
+    const enrollments = [];
+    for (let index = 1; index <= 3; index += 1) {
+      const childId = `child-enrollment-batch-${index}`;
+      const localId = `local-enrollment-batch-${index}`;
+      await db.runAsync(`
+        insert into children (id, first_name, last_name, created_by, sync_status)
+        values (?, ?, 'Dlamini', 'user-1', 'synced')
+      `, childId, `Child ${index}`);
+      await db.runAsync(`
+        insert into child_programme_enrollments (
+          id, child_id, programme_id, enrolled_at, created_by, sync_status
+        )
+        values (?, ?, 'programme-1', '2026-07-14T10:00:00.000Z', 'user-1', 'pending')
+      `, localId, childId);
+      const enrollment = {
+        id: localId,
+        child_id: childId,
+        programme_id: 'programme-1',
+        enrolled_at: '2026-07-14T10:00:00.000Z',
+        created_by: 'user-1',
+      };
+      enrollments.push(enrollment);
+      await enqueue(db, 'child_programme_enrollments', localId, 'insert', enrollment);
+    }
+
+    const { supabaseClient, calls } = createSupabaseMock();
+    const engine = createOutboxSyncEngine({ getAuthSession: liveTestSession, database: db, supabaseClient });
+
+    const result = await engine.syncAll();
+
+    const enrollmentCalls = calls.filter(call => call.tableName === 'child_programme_enrollments');
+    expect(enrollmentCalls).toHaveLength(1);
+    expect(enrollmentCalls[0]).toEqual(expect.objectContaining({
+      type: 'upsert',
+      tableName: 'child_programme_enrollments',
+      payload: enrollments.map(enrollment => expect.objectContaining({
+        ...enrollment,
+        id: childProgrammeEnrollmentDomainId({
+          childId: enrollment.child_id,
+          programmeId: enrollment.programme_id,
+        }),
+      })),
+      options: expect.objectContaining({ onConflict: 'id', ignoreDuplicates: false }),
+    }));
+    expect(result).toEqual(expect.objectContaining({
+      success: true,
+      totalSynced: enrollments.length,
+      totalFailed: 0,
+    }));
+    expect(await db.getFirstAsync(`
+      select count(*) as count
+      from child_programme_enrollments
+      where sync_status = 'synced'
+    `)).toEqual({ count: enrollments.length });
+    expect(await db.getFirstAsync('select count(*) as count from sync_outbox')).toEqual({ count: 0 });
+  });
+
   test('batches ready assessment item upserts and finalizes each local item', async () => {
     const itemIds = await seedAssessmentItems(db);
     const { supabaseClient, calls } = createSupabaseMock();
@@ -1949,6 +2053,7 @@ describe('SQLite outbox offline sync', () => {
 
     const { supabaseClient, calls } = createSupabaseMock({
       upsertResults: {
+        'children:batch': { error: { message: 'child batch rejected' } },
         'children:child-1': { error: { message: 'child 1 network failure' } },
       },
     });
@@ -1956,7 +2061,12 @@ describe('SQLite outbox offline sync', () => {
 
     const result = await engine.syncAll();
 
-    expect(calls.map((call) => `${call.type}:${call.tableName}:${call.payload?.id || ''}`)).toEqual([
+    expect(calls.map((call) => (
+      Array.isArray(call.payload)
+        ? `${call.type}:${call.tableName}:batch(${call.payload.map(row => row.id).join(',')})`
+        : `${call.type}:${call.tableName}:${call.payload?.id || ''}`
+    ))).toEqual([
+      'upsert:children:batch(child-1,child-2)',
       'upsert:children:child-1',
       'upsert:children:child-2',
       `upsert:child_ea_assignments:${childEaAssignmentDomainId({

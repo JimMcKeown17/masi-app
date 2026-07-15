@@ -289,6 +289,8 @@ const ARCHIVE_PUSH_ORDER = {
 
 const BATCHABLE_UPSERT_TABLES = new Set([
   'assessment_items',
+  'child_programme_enrollments',
+  'children',
   'letter_mastery',
   'session_attendees',
   'time_entries',

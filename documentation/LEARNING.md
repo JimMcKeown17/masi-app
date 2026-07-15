@@ -1381,6 +1381,14 @@ Batching has the same separation of concerns. The server needs a bounded payload
 
 The general mental model is **stable identity, mutable version**. Preserve the field that says when an obligation began, change the field that says which version is current, and make performance optimizations return the same concurrency evidence the safe path already depended on.
 
+### Safe batching addendum: batch by operation semantics, not table shape
+
+Two tables can both look like ordinary rows with an `id`, yet require different server operations. A child insert or update is a normal upsert. A child class membership insert first checks the server for an active membership under the same child and academic year, then archives a conflicting row. An immutable assignment insert must ignore an existing deterministic id instead of trying to update identity columns. Putting all three through the same array upsert would reduce request count while silently deleting load-bearing behavior.
+
+The first safe expansion therefore follows the operation contract. `children` can batch because insert and update already share one ordinary ID upsert, while hard delete remains a separate RPC and is excluded by operation type. `child_programme_enrollments` can batch because every full payload is normalized to the deterministic `(child_id, programme_id)` id before dispatch. That makes a mixed Head Office and device write idempotent by construction, even inside an array request.
+
+Array upserts also change failure granularity. Postgres treats the request atomically: one rejected row rejects the batch. The existing bounded fallback then diagnoses individual rows, records the exact failed child or enrollment, and lets unrelated dependency subgraphs continue. The mental model is **batch only operations with the same semantics, then preserve record-level truth on failure**. Similar column lists are not evidence of equivalent write contracts.
+
 ### Request queue addendum: serialize resources, not business workflows
 
 The Supabase request queue exists because several consumers share one React Native client. Serial execution prevents auth-lock contention and makes request ordering easier to reason about. The first domain-pull implementation treated that as permission to reserve the queue for an entire business workflow: acknowledgment RPC, Programme lookup, roster queries, enrollment chunks, classes, groups, and memberships. On a weak connection, one refresh could keep every auth, profile, lookup, or push request waiting behind many round trips.
