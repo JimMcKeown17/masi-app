@@ -289,8 +289,11 @@ const ARCHIVE_PUSH_ORDER = {
 
 const BATCHABLE_UPSERT_TABLES = new Set([
   'assessment_items',
+  'child_ea_assignments',
   'child_programme_enrollments',
   'children',
+  'class_ea_assignments',
+  'group_ea_assignments',
   'letter_mastery',
   'session_attendees',
   'time_entries',
@@ -675,7 +678,9 @@ const runBatchServerOperation = async (supabaseClient, config, outboxRecords) =>
     .from(config.tableName)
     .upsert(payloads, {
       onConflict: config.onConflict || 'id',
-      ignoreDuplicates: false,
+      ignoreDuplicates:
+        IMMUTABLE_ASSIGNMENT_TABLES.has(config.tableName)
+        && outboxRecords.every((record) => record.operation === 'insert'),
     });
 
   return error ? { success: false, error } : { success: true };
@@ -899,6 +904,7 @@ const canBatchRecord = (record, config) => (
   Boolean(config)
   && BATCHABLE_UPSERT_TABLES.has(config.tableName)
   && (record.operation === 'insert' || record.operation === 'update')
+  && (!IMMUTABLE_ASSIGNMENT_TABLES.has(config.tableName) || record.operation === 'insert')
   && record.payload != null
 );
 

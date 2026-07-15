@@ -1452,6 +1452,189 @@ describe('SQLite outbox offline sync', () => {
     expect(await db.getFirstAsync('select count(*) as count from sync_outbox')).toEqual({ count: 0 });
   });
 
+  test('batches immutable child assignment inserts with insert-or-ignore semantics', async () => {
+    const assignments = [];
+    for (let index = 1; index <= 3; index += 1) {
+      const childId = `child-assignment-batch-${index}`;
+      const localId = `local-assignment-batch-${index}`;
+      await db.runAsync(`
+        insert into children (id, first_name, last_name, created_by, sync_status)
+        values (?, ?, 'Dlamini', 'user-1', 'synced')
+      `, childId, `Child ${index}`);
+      await db.runAsync(`
+        insert into child_ea_assignments (
+          id, user_id, child_id, assigned_at, created_by, sync_status
+        )
+        values (?, 'user-1', ?, '2026-07-14T10:00:00.000Z', 'user-1', 'pending')
+      `, localId, childId);
+      const assignment = {
+        id: localId,
+        user_id: 'user-1',
+        child_id: childId,
+        assigned_at: '2026-07-14T10:00:00.000Z',
+        created_by: 'user-1',
+      };
+      assignments.push(assignment);
+      await enqueue(db, 'child_ea_assignments', localId, 'insert', assignment);
+    }
+
+    const { supabaseClient, calls } = createSupabaseMock();
+    const engine = createOutboxSyncEngine({ getAuthSession: liveTestSession, database: db, supabaseClient });
+
+    const result = await engine.syncAll();
+
+    const assignmentCalls = calls.filter(call => call.tableName === 'child_ea_assignments');
+    expect(assignmentCalls).toHaveLength(1);
+    expect(assignmentCalls[0]).toEqual(expect.objectContaining({
+      type: 'upsert',
+      tableName: 'child_ea_assignments',
+      payload: assignments.map(assignment => expect.objectContaining({
+        ...assignment,
+        id: childEaAssignmentDomainId({
+          userId: assignment.user_id,
+          childId: assignment.child_id,
+        }),
+      })),
+      options: expect.objectContaining({ onConflict: 'id', ignoreDuplicates: true }),
+    }));
+    expect(result).toEqual(expect.objectContaining({
+      success: true,
+      totalSynced: assignments.length,
+      totalFailed: 0,
+    }));
+    expect(await db.getFirstAsync(`
+      select count(*) as count
+      from child_ea_assignments
+      where sync_status = 'synced'
+    `)).toEqual({ count: assignments.length });
+    expect(await db.getFirstAsync('select count(*) as count from sync_outbox')).toEqual({ count: 0 });
+  });
+
+  test('batches class and group assignment inserts with the same immutable contract', async () => {
+    const classAssignments = [];
+    const groupAssignments = [];
+
+    for (let index = 1; index <= 2; index += 1) {
+      const classId = `class-assignment-batch-${index}`;
+      const groupId = `group-assignment-batch-${index}`;
+      const classAssignmentId = `local-class-assignment-batch-${index}`;
+      const groupAssignmentId = `local-group-assignment-batch-${index}`;
+      await db.runAsync(`
+        insert into classes (id, school_id, name, grade, created_by, sync_status)
+        values (?, 'school-1', ?, '1', 'user-1', 'synced')
+      `, classId, `Grade 1-${index}`);
+      await db.runAsync(`
+        insert into groups (id, name, programme_id, class_id, created_by, sync_status)
+        values (?, ?, 'programme-1', ?, 'user-1', 'synced')
+      `, groupId, `Group ${index}`, classId);
+
+      const classAssignment = {
+        id: classAssignmentId,
+        class_id: classId,
+        ea_user_id: 'user-1',
+        programme_id: 'programme-1',
+        assigned_at: '2026-07-14T10:00:00.000Z',
+        created_by: 'user-1',
+      };
+      const groupAssignment = {
+        id: groupAssignmentId,
+        group_id: groupId,
+        ea_user_id: 'user-1',
+        programme_id: 'programme-1',
+        assigned_at: '2026-07-14T10:00:00.000Z',
+        created_by: 'user-1',
+      };
+      classAssignments.push(classAssignment);
+      groupAssignments.push(groupAssignment);
+
+      await db.runAsync(`
+        insert into class_ea_assignments (
+          id, class_id, ea_user_id, programme_id, assigned_at, created_by, sync_status
+        ) values (?, ?, 'user-1', 'programme-1', ?, 'user-1', 'pending')
+      `, classAssignmentId, classId, classAssignment.assigned_at);
+      await db.runAsync(`
+        insert into group_ea_assignments (
+          id, group_id, ea_user_id, programme_id, assigned_at, created_by, sync_status
+        ) values (?, ?, 'user-1', 'programme-1', ?, 'user-1', 'pending')
+      `, groupAssignmentId, groupId, groupAssignment.assigned_at);
+      await enqueue(db, 'class_ea_assignments', classAssignmentId, 'insert', classAssignment);
+      await enqueue(db, 'group_ea_assignments', groupAssignmentId, 'insert', groupAssignment);
+    }
+
+    const { supabaseClient, calls } = createSupabaseMock();
+    const engine = createOutboxSyncEngine({ getAuthSession: liveTestSession, database: db, supabaseClient });
+
+    const result = await engine.syncAll();
+
+    const classCalls = calls.filter(call => call.tableName === 'class_ea_assignments');
+    const groupCalls = calls.filter(call => call.tableName === 'group_ea_assignments');
+    expect(classCalls).toHaveLength(1);
+    expect(groupCalls).toHaveLength(1);
+    expect(classCalls[0]).toEqual(expect.objectContaining({
+      payload: classAssignments.map(assignment => expect.objectContaining({
+        id: classEaAssignmentDomainId({
+          classId: assignment.class_id,
+          eaUserId: assignment.ea_user_id,
+          programmeId: assignment.programme_id,
+        }),
+      })),
+      options: expect.objectContaining({ onConflict: 'id', ignoreDuplicates: true }),
+    }));
+    expect(groupCalls[0]).toEqual(expect.objectContaining({
+      payload: groupAssignments.map(assignment => expect.objectContaining({
+        id: groupEaAssignmentDomainId({ groupId: assignment.group_id }),
+      })),
+      options: expect.objectContaining({ onConflict: 'id', ignoreDuplicates: true }),
+    }));
+    expect(result).toEqual(expect.objectContaining({
+      success: true,
+      totalSynced: classAssignments.length + groupAssignments.length,
+      totalFailed: 0,
+    }));
+  });
+
+  test('keeps immutable assignment lifecycle updates out of insert-or-ignore batches', async () => {
+    const unassignedAt = '2026-07-14T12:00:00.000Z';
+    for (let index = 1; index <= 2; index += 1) {
+      const childId = `child-assignment-update-${index}`;
+      const assignmentId = `assignment-update-${index}`;
+      await db.runAsync(`
+        insert into children (id, first_name, last_name, created_by, sync_status)
+        values (?, ?, 'Dlamini', 'user-1', 'synced')
+      `, childId, `Child ${index}`);
+      await db.runAsync(`
+        insert into child_ea_assignments (
+          id, user_id, child_id, assigned_at, unassigned_at, created_by, sync_status
+        ) values (
+          ?, 'user-1', ?, '2026-07-14T10:00:00.000Z', ?, 'user-1', 'pending'
+        )
+      `, assignmentId, childId, unassignedAt);
+      await enqueue(db, 'child_ea_assignments', assignmentId, 'update', {
+        id: assignmentId,
+        user_id: 'user-1',
+        child_id: childId,
+        assigned_at: '2026-07-14T10:00:00.000Z',
+        unassigned_at: unassignedAt,
+        created_by: 'user-1',
+      });
+    }
+
+    const { supabaseClient, calls } = createSupabaseMock();
+    const engine = createOutboxSyncEngine({ getAuthSession: liveTestSession, database: db, supabaseClient });
+
+    const result = await engine.syncAll();
+
+    const assignmentCalls = calls.filter(call => call.tableName === 'child_ea_assignments');
+    expect(assignmentCalls).toHaveLength(2);
+    expect(assignmentCalls.every(call => !Array.isArray(call.payload))).toBe(true);
+    expect(assignmentCalls.every(call => call.options.ignoreDuplicates === false)).toBe(true);
+    expect(result).toEqual(expect.objectContaining({
+      success: true,
+      totalSynced: 2,
+      totalFailed: 0,
+    }));
+  });
+
   test('batches ready assessment item upserts and finalizes each local item', async () => {
     const itemIds = await seedAssessmentItems(db);
     const { supabaseClient, calls } = createSupabaseMock();

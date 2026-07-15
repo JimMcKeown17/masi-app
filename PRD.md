@@ -459,7 +459,9 @@ User Action → Local AsyncStorage → UI Update → Sync Queue → Supabase →
 - [x] Batch programme enrollments after deterministic active-pair id normalization
 - [x] Preserve bounded batch fallback and exact failed-record dependency containment
 - [x] Keep hard deletes, membership collision handling, and immutable assignment inserts outside the generic batch path
-- [ ] Design table-specific batching for remaining memberships and immutable assignments before enabling them
+- [x] Batch immutable assignment inserts with deterministic ids and insert-or-ignore semantics
+- [x] Keep immutable assignment lifecycle updates per-record and update-capable
+- [ ] Design collision-safe table-specific batching for class and group memberships before enabling them
 
 #### 2026-07-14 SQLite bootstrap recovery follow-up
 - [x] Open and migrate SQLite before mounting any app context provider
