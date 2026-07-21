@@ -1,6 +1,7 @@
 const mockInit = jest.fn();
 const mockSetContext = jest.fn();
 const mockSetTags = jest.fn();
+const mockSetUser = jest.fn();
 const mockAddBreadcrumb = jest.fn();
 const mockCaptureException = jest.fn();
 const mockCaptureMessage = jest.fn();
@@ -22,6 +23,7 @@ jest.mock('@sentry/react-native', () => ({
   init: mockInit,
   setContext: mockSetContext,
   setTags: mockSetTags,
+  setUser: mockSetUser,
   addBreadcrumb: mockAddBreadcrumb,
   captureException: mockCaptureException,
   captureMessage: mockCaptureMessage,
@@ -62,7 +64,7 @@ describe('observability initialization', () => {
     delete process.env.EXPO_PUBLIC_SENTRY_DSN;
   });
 
-  test('starts native crash reporting and connects local logs as Sentry breadcrumbs', () => {
+  test('starts privacy-preserving native crash reporting while keeping diagnostic logs local', () => {
     const { initializeObservability } = require('../src/services/observability');
 
     const result = initializeObservability();
@@ -72,8 +74,15 @@ describe('observability initialization', () => {
       dsn: 'https://public@example.ingest.sentry.io/123',
       enableNative: true,
       enableNativeCrashHandling: true,
-      replaysOnErrorSampleRate: 1,
+      attachScreenshot: false,
+      attachViewHierarchy: false,
+      sendDefaultPii: false,
     }));
+    expect(mockInit).toHaveBeenCalledWith(expect.not.objectContaining({
+      replaysSessionSampleRate: expect.anything(),
+      replaysOnErrorSampleRate: expect.anything(),
+    }));
+    expect(mockMobileReplayIntegration).not.toHaveBeenCalled();
     expect(mockSetContext).toHaveBeenCalledWith('runtime', runtimeContext);
     expect(mockSetTags).toHaveBeenCalledWith(expect.objectContaining({
       app_build: '47',
@@ -82,22 +91,24 @@ describe('observability initialization', () => {
       supabase_project: 'segygjzpujphwvrubusm',
       sqlite_schema: '8',
     }));
-    expect(mockLoggerInit).toHaveBeenCalledWith(expect.objectContaining({
-      runtimeContext,
-      breadcrumbSink: expect.any(Function),
-    }));
+    expect(mockLoggerInit).toHaveBeenCalledWith({ runtimeContext });
+    expect(mockAddBreadcrumb).not.toHaveBeenCalled();
+  });
 
-    const { breadcrumbSink } = mockLoggerInit.mock.calls[0][0];
-    breadcrumbSink({
-      timestamp: '2026-07-14T12:00:00.000Z',
-      level: 'WARN',
-      message: 'sync stalled',
+  test('associates events with an internal user id without sending email or profile data', () => {
+    const {
+      initializeObservability,
+      setObservabilityUser,
+    } = require('../src/services/observability');
+    initializeObservability();
+
+    setObservabilityUser({
+      id: 'staff-123',
+      email: 'ea@example.org',
+      fullName: 'Example EA',
     });
-    expect(mockAddBreadcrumb).toHaveBeenCalledWith(expect.objectContaining({
-      category: 'app.log',
-      level: 'warning',
-      message: 'sync stalled',
-    }));
+
+    expect(mockSetUser).toHaveBeenCalledWith({ id: 'staff-123' });
   });
 
   test('reports terminal sync rows and reconcile breakers once per distinct issue', () => {

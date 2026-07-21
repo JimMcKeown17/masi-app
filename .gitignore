@@ -56,3 +56,5 @@ scripts/testers.*.csv
 
 # Local-only Claude linked worktrees (carry a .git gitlink; would break clones)
 .claude/worktrees/
+
+.env.local

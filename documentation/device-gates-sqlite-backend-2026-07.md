@@ -107,11 +107,12 @@ Run these only after the preview EAS environment contains the Sentry DSN, organi
 sensitive auth token.
 
 - [ ] **N1. Build symbols upload.** The EAS preview build log shows a successful Sentry source-map upload. A build with a failed upload does not pass this gate.
-- [ ] **N2. Handled-error symbolication.** On the physical device, Profile -> Debug & Support -> Test Crash Reporting. Sentry receives `Masi observability test error` with `observability_test=true`, a readable source-mapped application frame, current route/user, installed build, device/OS, Expo Update, backend project, and SQLite schema.
+- [ ] **N2. Handled-error symbolication.** On the physical device, Profile -> Debug & Support -> Test Crash Reporting. Sentry receives `Masi observability test error` with `observability_test=true`, a readable source-mapped application frame, the correct preview/production environment, current route/internal user UUID, installed build, device/OS, Expo Update, backend project, and SQLite schema.
 - [ ] **N3. Offline event delivery.** Repeat N2 in airplane mode, then restore connectivity. The event arrives after reconnect instead of being lost.
 - [ ] **N4. Non-crashing sync failure.** Using only disposable staging data, exercise a known retriable or terminal outbox failure. The app remains usable and Sentry receives the structured sync issue with table/operation/error code, counts, online state, last attempt, and last successful sync. Confirm repeated 30-second status polls do not create duplicate issues.
 - [ ] **N5. Reconcile breaker.** Trigger a disposable mass-end circuit breaker. Confirm the device still requires attention and Sentry receives one `sync_state=reconcile_breaker` issue with scope/candidate/end counts.
 - [ ] **N6. Local evidence remains independent.** Export Logs and Export Database. Both identify the same installed build, device, Expo Update, backend, and SQLite schema. The log contains recent console entries even if Sentry was unreachable.
+- [ ] **N7. Telemetry privacy.** Inspect the N2 event in Sentry. It contains no staff email or profile name, child data, screenshot, view-hierarchy attachment, Session Replay, or arbitrary local console-log breadcrumb. Repeat after navigating through a child and session screen before sending the test event.
 
 ## O. Versioned startup repair
 

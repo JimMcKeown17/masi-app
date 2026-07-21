@@ -40,9 +40,11 @@ correctly refused a suspicious mass removal. Those are domain states, not crashe
 Masi therefore uses three complementary layers:
 
 1. **Automatic failure capture.** Sentry starts before the React application module loads. It wraps
-   the root, registers React Navigation, captures native and JavaScript failures, and retains
-   error-triggered replay, screenshots, and view hierarchy. A failure before the first screen is
-   still a production failure, so initialization timing is part of the reliability contract.
+   the root, registers React Navigation, and captures native and JavaScript failures. A failure
+   before the first screen is still a production failure, so initialization timing is part of the
+   reliability contract. Session Replay, screenshots, view-hierarchy attachments, and default PII
+   collection stay disabled for the initial field release because the app handles child, staff,
+   assessment, attendance, and location data.
 2. **Explicit domain-health reporting.** The sync boundary translates returned failure states into
    structured issues. Skipped no-session passes, preflight errors, retriable records, terminal
    outbox rows, and reconcile breakers each carry counts, representative records, online state,
@@ -52,7 +54,16 @@ Masi therefore uses three complementary layers:
    entries. The log starts intercepting console output synchronously, then hydrates prior entries
    before the first write so startup failures cannot overwrite the previous launch. This layer is
    still useful when the device has no connectivity, Sentry credentials are absent, or event
-   delivery itself is the failing system.
+   delivery itself is the failing system. Console output remains local-only rather than becoming
+   automatic cloud breadcrumbs. Local logs can contain richer diagnostic detail, so sharing them
+   stays an explicit user action instead of a background upload.
+
+The cloud boundary is allowlist-shaped. Sentry receives release and runtime identity, structured
+sync health, bounded record UUIDs, and an internal staff UUID. It does not receive the staff email,
+profile name, arbitrary console output, Replay frames, screenshots, or view-hierarchy snapshots.
+SDK-level `sendDefaultPii: false` is necessary but not sufficient: application code can still attach
+sensitive data explicitly, which is why every new observability context needs the same review as a
+new API payload.
 
 Runtime identity also has two independent versions. `expo-application` identifies the native binary
 actually installed, including the store build number. `expo-updates` identifies the JavaScript bundle

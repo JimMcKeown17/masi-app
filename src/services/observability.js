@@ -2,12 +2,6 @@ import * as Sentry from '@sentry/react-native';
 import { getRuntimeDiagnostics } from '../utils/runtimeDiagnostics';
 import { logger } from '../utils/logger';
 
-const LEVEL_MAP = {
-  LOG: 'info',
-  WARN: 'warning',
-  ERROR: 'error',
-};
-
 let initialized = false;
 let enabled = false;
 let runtimeContext = null;
@@ -32,16 +26,6 @@ const compactTags = (context) => ({
   sqlite_schema: String(context.sqlite.schemaVersion || 'unknown'),
 });
 
-const logBreadcrumb = (entry) => {
-  if (!enabled) return;
-  Sentry.addBreadcrumb({
-    category: 'app.log',
-    level: LEVEL_MAP[entry.level] || 'info',
-    message: entry.message,
-    timestamp: Date.parse(entry.timestamp) / 1000,
-  });
-};
-
 const rememberSyncIssue = (key) => {
   if (reportedSyncIssueKeys.has(key)) return false;
   reportedSyncIssueKeys.add(key);
@@ -60,9 +44,9 @@ const syncErrorCode = (reason = '') => {
 };
 
 /**
- * Start crash reporting before the React tree mounts, then connect the local
- * diagnostic logger to Sentry breadcrumbs. The logger remains active when no
- * DSN is configured, so support exports never depend on cloud connectivity.
+ * Start crash reporting before the React tree mounts. Diagnostic console logs
+ * remain local-only so arbitrary field data is not forwarded to Sentry as
+ * breadcrumbs. Support exports remain available without cloud connectivity.
  */
 export const initializeObservability = () => {
   if (initialized) return { enabled, runtimeContext };
@@ -73,11 +57,6 @@ export const initializeObservability = () => {
   if (enabled) {
     navigationIntegration = Sentry.reactNavigationIntegration({
       enableTimeToInitialDisplay: true,
-    });
-    const replayIntegration = Sentry.mobileReplayIntegration({
-      maskAllText: false,
-      maskAllImages: false,
-      maskAllVectors: false,
     });
 
     Sentry.init({
@@ -91,25 +70,19 @@ export const initializeObservability = () => {
       enableWatchdogTerminationTracking: true,
       enableAppHangTracking: true,
       enableCaptureFailedRequests: true,
-      attachScreenshot: true,
-      attachViewHierarchy: true,
-      sendDefaultPii: true,
+      attachScreenshot: false,
+      attachViewHierarchy: false,
+      sendDefaultPii: false,
       maxBreadcrumbs: 100,
       tracesSampleRate: 0.1,
       profilesSampleRate: 0,
-      replaysSessionSampleRate: 0,
-      replaysOnErrorSampleRate: 1,
-      replaysSessionQuality: 'low',
-      integrations: [navigationIntegration, replayIntegration],
+      integrations: [navigationIntegration],
     });
     Sentry.setContext('runtime', runtimeContext);
     Sentry.setTags(compactTags(runtimeContext));
   }
 
-  logger.init({
-    runtimeContext,
-    breadcrumbSink: logBreadcrumb,
-  });
+  logger.init({ runtimeContext });
   initialized = true;
 
   return { enabled, runtimeContext };
@@ -125,7 +98,7 @@ export const wrapAppWithObservability = (AppComponent) => (
 
 export const setObservabilityUser = (user) => {
   if (!enabled) return;
-  Sentry.setUser(user ? { id: user.id, email: user.email } : null);
+  Sentry.setUser(user ? { id: user.id } : null);
 };
 
 export const captureOperationalError = (error, { category, context, tags } = {}) => {

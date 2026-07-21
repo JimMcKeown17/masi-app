@@ -99,26 +99,34 @@ For reference, here's what was configured:
 ## Sentry Crash and Sync Observability
 
 Sentry is wired into native iOS/Android crashes, JavaScript exceptions, React
-render failures, app hangs/watchdog terminations, failed requests, and
-error-triggered session replay. Masi also reports domain failures which do not
-crash: skipped sync passes, sync preflight errors, retriable records, terminal
-outbox rows, and pull-reconcile circuit breakers.
+render failures, app hangs/watchdog terminations, and failed requests. Masi also
+reports domain failures which do not crash: skipped sync passes, sync preflight
+errors, retriable records, terminal outbox rows, and pull-reconcile circuit
+breakers.
 
 Every event is tagged with the installed app version/build, physical device and
 OS, Expo Update identity/channel/runtime, current backend target/project, SQLite
 schema version, signed-in user, and current navigation route where available.
-The seven-day local diagnostic log remains independent of Sentry and supplies
-breadcrumbs when cloud reporting is configured.
+The seven-day local diagnostic log remains independent of Sentry and is never
+forwarded as cloud breadcrumbs. This preserves detailed, user-controlled support
+exports without uploading arbitrary console output from a field device.
+
+The initial field-release privacy posture is deliberately strict: Session Replay,
+automatic screenshots, view-hierarchy attachments, and default PII collection are
+disabled. Sentry user correlation contains only the internal staff UUID, never an
+email address or profile name. Relaxing any of these settings requires a separate
+privacy review and physical-device redaction test.
 
 ### Required Sentry and EAS setup
 
 Create a Sentry React Native project, then record its organization slug, project
-slug, DSN, and organization auth token. In Expo project settings, add these four
+slug, DSN, and organization auth token. In Expo project settings, add these five
 variables to both the `preview` and `production` environments:
 
 | Variable | EAS visibility | Purpose |
 |---|---|---|
 | `EXPO_PUBLIC_SENTRY_DSN` | Plain text | Public event-ingestion address bundled into the app |
+| `EXPO_PUBLIC_SENTRY_ENVIRONMENT` | Plain text | `preview` or `production`, keeping release-candidate and field events separate |
 | `SENTRY_ORG` | Plain text | Sentry organization slug used by the Expo config plugin |
 | `SENTRY_PROJECT` | Plain text | Sentry project slug used by the Expo config plugin |
 | `SENTRY_AUTH_TOKEN` | Sensitive | Authenticates native and JavaScript source-map uploads |

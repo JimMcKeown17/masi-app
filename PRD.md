@@ -489,7 +489,10 @@ User Action → Local AsyncStorage → UI Update → Sync Queue → Supabase →
 - [x] Report non-crashing sync failures: skipped passes, preflights, retries, terminal rows, and reconcile breakers
 - [x] Add installed build/device/Expo Update/backend/SQLite context to Sentry and local support exports
 - [x] Add a safe handled-error verification action and EAS Build/Update source-map configuration
-- [ ] Configure Sentry Cloud/EAS credentials and pass physical-device symbolication and sync-issue gates
+- [x] Create the `masinyusane/react-native` Sentry project and record its DSN, organization, and project slugs
+- [x] Harden field telemetry: disable Replay, screenshots, view hierarchy, default PII, email identity, and automatic console-log breadcrumbs
+- [x] Configure the public Sentry DSN, environment, organization, and project values in EAS preview and production
+- [ ] Add the sensitive Sentry auth token to EAS and pass physical-device privacy, symbolication, and sync-issue gates
 - [x] Detect confirmed/unconfirmed zero-class bootstrap states and auto-enter onboarding from Home/My Children
 - [x] Require explicit duplicate-risk acknowledgement before offline local class creation
 - [x] Complete the settled class -> children handoff: require one child, persist and resume the incomplete step across restarts, loop additions, warn below 10, and finish without a group step
