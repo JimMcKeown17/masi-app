@@ -2,25 +2,34 @@
 /* eslint-disable no-console */
 
 const path = require('path');
+const { randomUUID } = require('crypto');
 const { createClient } = require('@supabase/supabase-js');
 const { parseCsvFile } = require('./lib/parseCsv');
+const { loadEnvFiles } = require('./sqlite-staging.cjs');
+const {
+  SQLITE_PROJECT_ID,
+  ZERO_CLASS_ASSIGNMENT_TABLES,
+  normalizeTesterRows,
+  validateActiveProgrammeAssignments,
+  validateZeroClassAssignments,
+  validateTesterProvisioningEnv,
+} = require('./lib/testerProvisioning');
 
-const SUPABASE_URL = process.env.SUPABASE_URL || process.env.EXPO_PUBLIC_SUPABASE_URL;
-const SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
+const safeEnv = validateTesterProvisioningEnv({
+  ...loadEnvFiles(),
+  ...process.env,
+});
+const SUPABASE_URL = safeEnv.SUPABASE_PROJECT_URL_SQLITE;
+const SERVICE_ROLE_KEY = safeEnv.SUPABASE_SECRET_KEY_SQLITE;
 
 const args = process.argv.slice(2);
-const modeArg = args.find(arg => arg.startsWith('--mode='));
 const dryRun = args.includes('--dry-run');
-const csvArg = args.find(arg => !arg.startsWith('--mode=') && arg !== '--dry-run');
-const mode = modeArg?.split('=')[1];
+const csvArg = args.find(arg => arg !== '--dry-run');
 
-if (!SUPABASE_URL || !SERVICE_ROLE_KEY) {
-  console.error('Missing env vars: SUPABASE_URL (or EXPO_PUBLIC_SUPABASE_URL) and SUPABASE_SERVICE_ROLE_KEY');
-  process.exit(1);
-}
-
-if (!csvArg || !['transition', 'final'].includes(mode)) {
-  console.error('Usage: node scripts/createTesters.js --mode=transition|final [--dry-run] <path-to-csv>');
+if (!csvArg || csvArg.startsWith('--')) {
+  console.error('Usage: node scripts/createTesters.js [--dry-run] <path-to-csv>');
+  console.error('CSV: email,password,first_name,last_name,job_title_code,school_uid,programme_code,tester_type');
+  console.error('tester_type must be zero_class; seeded rosters use the future Head Office importer.');
   process.exit(1);
 }
 
@@ -29,47 +38,10 @@ const admin = createClient(SUPABASE_URL, SERVICE_ROLE_KEY, {
   auth: { autoRefreshToken: false, persistSession: false },
 });
 
-async function legacyUserColumnsExist() {
-  const { error } = await admin
-    .from('users')
-    .select('assigned_school,job_title')
-    .limit(0);
-
-  if (!error) return true;
-  if (error.code === 'PGRST204' || /assigned_school|job_title/i.test(error.message || '')) {
-    return false;
-  }
-  throw error;
-}
-
-function required(value, field, rowNumber) {
-  if (!value) throw new Error(`Line ${rowNumber}: missing ${field}`);
-}
-
-function normalizeRows(rows) {
-  return rows.map((row, index) => {
-    const rowNumber = index + 2;
-    const normalized = {
-      email: row.email,
-      password: row.password,
-      first_name: row.first_name,
-      last_name: row.last_name,
-      job_title_code: row.job_title_code,
-      school_uid: row.school_uid,
-      __line: rowNumber,
-    };
-
-    ['email', 'password', 'first_name', 'last_name', 'job_title_code', 'school_uid'].forEach(field => {
-      required(normalized[field], field, rowNumber);
-    });
-
-    return normalized;
-  });
-}
-
 async function loadLookupMaps(rows) {
   const jobTitleCodes = [...new Set(rows.map(row => row.job_title_code))];
   const schoolUids = [...new Set(rows.map(row => row.school_uid))];
+  const programmeCodes = [...new Set(rows.map(row => row.programme_code))];
 
   const { data: jobTitles, error: jobError } = await admin
     .from('job_titles')
@@ -83,19 +55,30 @@ async function loadLookupMaps(rows) {
     .in('school_uid', schoolUids);
   if (schoolError) throw schoolError;
 
+  const { data: programmes, error: programmeError } = await admin
+    .from('programmes')
+    .select('id,code,name')
+    .in('code', programmeCodes);
+  if (programmeError) throw programmeError;
+
   const jobTitlesByCode = new Map((jobTitles || []).map(row => [row.code, row]));
   const schoolsByUid = new Map((schools || []).map(row => [row.school_uid, row]));
+  const programmesByCode = new Map((programmes || []).map(row => [row.code, row]));
 
   const missingJobTitles = jobTitleCodes.filter(code => !jobTitlesByCode.has(code));
   const missingSchools = schoolUids.filter(uid => !schoolsByUid.has(uid));
-  if (missingJobTitles.length > 0 || missingSchools.length > 0) {
+  const missingProgrammes = programmeCodes.filter(code => !programmesByCode.has(code));
+  if (missingJobTitles.length > 0 || missingSchools.length > 0 || missingProgrammes.length > 0) {
     throw new Error([
       missingJobTitles.length > 0 ? `Unknown job_title_code(s): ${missingJobTitles.join(', ')}` : null,
       missingSchools.length > 0 ? `Unknown school_uid(s): ${missingSchools.join(', ')}` : null,
+      missingProgrammes.length > 0
+        ? `Unknown programme_code(s): ${missingProgrammes.join(', ')}`
+        : null,
     ].filter(Boolean).join('\n'));
   }
 
-  return { jobTitlesByCode, schoolsByUid };
+  return { jobTitlesByCode, schoolsByUid, programmesByCode };
 }
 
 async function findUserByEmail(email) {
@@ -119,45 +102,112 @@ function buildProfile(row, lookupMaps, userId) {
     id: userId,
     first_name: row.first_name,
     last_name: row.last_name,
+    email: row.email,
     job_title_id: jobTitle.id,
     school_id: school.id,
   };
-
-  if (mode === 'transition') {
-    return {
-      ...base,
-      job_title: jobTitle.name,
-      assigned_school: school.name,
-    };
-  }
-
   return base;
 }
 
-async function processRow(row, lookupMaps) {
-  if (dryRun) {
-    return { status: 'dry-run', userId: '(not created)' };
+async function loadZeroClassAssignments(userId) {
+  const assignmentsByTable = {};
+  for (const { table, userColumn } of ZERO_CLASS_ASSIGNMENT_TABLES) {
+    const { data, error } = await admin
+      .from(table)
+      .select('id')
+      .eq(userColumn, userId)
+      .is('unassigned_at', null);
+    if (error) throw error;
+    assignmentsByTable[table] = data || [];
+  }
+  return assignmentsByTable;
+}
+
+async function loadActiveProgrammeAssignments(userId) {
+  const { data, error } = await admin
+    .from('staff_programme_assignments')
+    .select('id,programme_id,school_id')
+    .eq('user_id', userId)
+    .is('ended_at', null);
+  if (error) throw error;
+  return data || [];
+}
+
+async function preflightExistingTester(row, lookupMaps, userId) {
+  const programme = lookupMaps.programmesByCode.get(row.programme_code);
+  const school = lookupMaps.schoolsByUid.get(row.school_uid);
+  const [zeroClassAssignments, programmeAssignments] = await Promise.all([
+    loadZeroClassAssignments(userId),
+    loadActiveProgrammeAssignments(userId),
+  ]);
+
+  validateZeroClassAssignments(zeroClassAssignments);
+  return validateActiveProgrammeAssignments(programmeAssignments, {
+    programmeId: programme.id,
+    schoolId: school.id,
+  });
+}
+
+async function ensureActiveProgrammeAssignment(row, lookupMaps, userId, existing) {
+  if (existing) {
+    return 'reused';
   }
 
-  let userId;
-  const { data: created, error: createErr } = await admin.auth.admin.createUser({
-    email: row.email,
-    password: row.password,
-    email_confirm: true,
-  });
+  const programme = lookupMaps.programmesByCode.get(row.programme_code);
+  const school = lookupMaps.schoolsByUid.get(row.school_uid);
+  const { error: insertError } = await admin
+    .from('staff_programme_assignments')
+    .insert({
+      id: randomUUID(),
+      user_id: userId,
+      programme_id: programme.id,
+      school_id: school.id,
+    });
+  if (insertError) throw insertError;
+  return 'created';
+}
 
-  if (createErr) {
-    const alreadyExists = /already.*registered|already exists|duplicate/i.test(createErr.message);
-    if (!alreadyExists) {
-      return { status: 'error', reason: `auth create failed: ${createErr.message}` };
+async function processRow(row, lookupMaps) {
+  let existingUser;
+  try {
+    existingUser = await findUserByEmail(row.email);
+  } catch (error) {
+    return { status: 'error', reason: `auth preflight failed: ${error.message}` };
+  }
+
+  let existingProgrammeAssignment = null;
+  if (existingUser) {
+    try {
+      existingProgrammeAssignment = await preflightExistingTester(
+        row,
+        lookupMaps,
+        existingUser.id
+      );
+    } catch (error) {
+      return { status: 'error', reason: `existing-account preflight failed: ${error.message}` };
     }
-    const existing = await findUserByEmail(row.email);
-    if (!existing) {
-      return { status: 'error', reason: 'create said duplicate but user not found by listUsers' };
+  }
+
+  if (dryRun) {
+    return {
+      status: 'dry-run',
+      detail: existingUser ? 'would reuse compatible account' : 'would create account',
+    };
+  }
+
+  let userId = existingUser?.id;
+  let createdNow = false;
+  if (!existingUser) {
+    const { data: created, error: createError } = await admin.auth.admin.createUser({
+      email: row.email,
+      password: row.password,
+      email_confirm: true,
+    });
+    if (createError) {
+      return { status: 'error', reason: `auth create failed: ${createError.message}` };
     }
-    userId = existing.id;
-  } else {
     userId = created.user.id;
+    createdNow = true;
   }
 
   const { error: profileErr } = await admin
@@ -165,25 +215,31 @@ async function processRow(row, lookupMaps) {
     .upsert(buildProfile(row, lookupMaps, userId), { onConflict: 'id' });
 
   if (profileErr) {
-    return { status: 'error', reason: `profile upsert failed: ${profileErr.message}`, userId };
+    if (createdNow) await admin.auth.admin.deleteUser(userId);
+    return { status: 'error', reason: `profile upsert failed: ${profileErr.message}` };
   }
 
-  return { status: createErr ? 'reused' : 'created', userId };
+  try {
+    await ensureActiveProgrammeAssignment(
+      row,
+      lookupMaps,
+      userId,
+      existingProgrammeAssignment
+    );
+  } catch (error) {
+    if (createdNow) await admin.auth.admin.deleteUser(userId);
+    return { status: 'error', reason: `programme assignment failed: ${error.message}` };
+  }
+
+  return { status: createdNow ? 'created' : 'reused' };
 }
 
 (async () => {
-  const legacyColumnsExist = await legacyUserColumnsExist();
-  if (mode === 'transition' && !legacyColumnsExist) {
-    throw new Error('Mode transition refused: users.assigned_school/job_title no longer exist.');
-  }
-  if (mode === 'final' && legacyColumnsExist) {
-    throw new Error('Mode final refused: legacy users.assigned_school/job_title still exist.');
-  }
-
-  const rows = normalizeRows(parseCsvFile(csvPath));
+  const rows = normalizeTesterRows(parseCsvFile(csvPath));
   const lookupMaps = await loadLookupMaps(rows);
+  console.log(`Target: masi-app-sqlite (${SQLITE_PROJECT_ID})`);
   console.log(`Processing ${rows.length} row(s) from ${csvPath}`);
-  console.log(`Mode: ${mode}${dryRun ? ' (dry run)' : ''}\n`);
+  console.log(`Mode: zero-class tester provisioning${dryRun ? ' (dry run)' : ''}\n`);
 
   const summary = { created: 0, reused: 0, 'dry-run': 0, error: 0 };
 
@@ -193,8 +249,10 @@ async function processRow(row, lookupMaps) {
     const line = `line ${row.__line} ${row.email}`;
     if (result.status === 'error') {
       console.log(`[ERROR] ${line} :: ${result.reason}`);
+    } else if (result.detail) {
+      console.log(`[${result.status.toUpperCase()}] ${line} :: ${result.detail}`);
     } else {
-      console.log(`[${result.status.toUpperCase()}] ${line} -> ${result.userId}`);
+      console.log(`[${result.status.toUpperCase()}] ${line}`);
     }
   }
 

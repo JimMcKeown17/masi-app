@@ -19,7 +19,7 @@ module.exports = () => {
     expo: {
       name: 'Masi',
       slug: 'masi-mobile-app',
-      version: '1.2.0',
+      version: '1.3.0',
       orientation: 'portrait',
       scheme: 'masi-app',
       icon: './assets/masi-mobile-icon.png',

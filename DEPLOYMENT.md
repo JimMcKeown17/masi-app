@@ -61,7 +61,7 @@ OTA (over-the-air) updates let you push JS-only changes in ~30 seconds without a
 
 - `expo-updates` is installed and configured in `app.json`
 - The production build profile in `eas.json` has `channel: "production"`
-- The `runtimeVersion` uses the `appVersion` policy — OTA updates only apply to builds with a matching `expo.version` (currently `1.2.0` on the Build B branch)
+- The `runtimeVersion` uses the `appVersion` policy — OTA updates only apply to builds with a matching `expo.version` (currently `1.3.0` on the field-pilot release branch)
 - Updates are checked on app launch and applied on the *next* launch (users don't see a loading screen)
 
 ### Pushing an OTA Update
@@ -240,7 +240,7 @@ This uses the service account key at `./google-play-service-account.json` and su
 
 ### What you control
 
-- **Marketing version** (`expo.version` in `app.json`): Currently `1.2.0` on the Build B branch. Bump this when you want users to see a new version number.
+- **Marketing version** (`expo.version` in `app.config.js`): Currently `1.3.0` on the field-pilot release branch. Bump this when you want users to see a new version number.
 
 ```bash
 # Check current remote versions

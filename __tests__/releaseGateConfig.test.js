@@ -72,4 +72,11 @@ describe('Plan 6 release gate configuration', () => {
     }));
     expect(previewEnv.EXPO_PUBLIC_SUPABASE_ANON_KEY).toEqual(expect.stringMatching(/^sb_publishable_/));
   });
+
+  test('release 1.3.0 advances the app-version runtime boundary', () => {
+    const config = require('../app.config')().expo;
+
+    expect(config.version).toBe('1.3.0');
+    expect(config.runtimeVersion).toEqual({ policy: 'appVersion' });
+  });
 });

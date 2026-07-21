@@ -417,7 +417,7 @@ User Action → Local AsyncStorage → UI Update → Sync Queue → Supabase →
 - [x] Fail closed when the versioned authenticated snapshot is missing, malformed, or inconsistent
 - [x] Cover RLS under-return and unavailable-RPC behavior with real SQLite integration tests
 - [x] Add the additive Supabase migration and exact service-role-versus-EA staging probe
-- [ ] Apply migration `20260714220000` to `masi-app-sqlite` and pass `npm run rls:probe`
+- [x] Apply migrations `20260714220000` and `20260714233000` to `masi-app-sqlite` and pass `npm run rls:probe`
 
 #### 2026-07-14 Record-scoped sync dependency follow-up
 - [x] Replace table-wide same-pass failure propagation with exact failed-record evidence
@@ -492,7 +492,10 @@ User Action → Local AsyncStorage → UI Update → Sync Queue → Supabase →
 - [x] Create the `masinyusane/react-native` Sentry project and record its DSN, organization, and project slugs
 - [x] Harden field telemetry: disable Replay, screenshots, view hierarchy, default PII, email identity, and automatic console-log breadcrumbs
 - [x] Configure the public Sentry DSN, environment, organization, and project values in EAS preview and production
-- [ ] Add the sensitive Sentry auth token to EAS and pass physical-device privacy, symbolication, and sync-issue gates
+- [x] Add the sensitive Sentry auth token to EAS preview and production with sensitive visibility
+- [x] Bump the first Sentry-native release to app/runtime `1.3.0`
+- [x] Add an exact-project, zero-class tester provisioner and disable the unsafe legacy loader
+- [ ] Pass physical-device privacy, symbolication, sync-issue, and local-export gates N1, N2, N4, N6, and N7
 - [x] Detect confirmed/unconfirmed zero-class bootstrap states and auto-enter onboarding from Home/My Children
 - [x] Require explicit duplicate-risk acknowledgement before offline local class creation
 - [x] Complete the settled class -> children handoff: require one child, persist and resume the incomplete step across restarts, loop additions, warn below 10, and finish without a group step
