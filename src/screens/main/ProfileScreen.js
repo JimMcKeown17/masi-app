@@ -12,6 +12,23 @@ import { CAPTURE_MODES } from '../../constants/egraConstants';
 import { getRuntimeDiagnostics } from '../../utils/runtimeDiagnostics';
 import { sendObservabilityTest } from '../../services/observability';
 
+const PASSWORD_VERIFICATION_FAILED_MESSAGE =
+  'Could not verify your current password. Check your connection and try again.';
+
+function isInvalidCredentialsError(error) {
+  if (error?.code === 'invalid_credentials') return true;
+  if (error?.status !== 400) return false;
+
+  const message = typeof error?.message === 'string' ? error.message.trim().toLowerCase() : '';
+  return [
+    'invalid login credentials',
+    'invalid credentials',
+    'invalid email or password',
+    'incorrect email or password',
+    'email or password is incorrect',
+  ].includes(message);
+}
+
 function CaptureModeFocusLoader({ loadCaptureMode }) {
   useFocusEffect(loadCaptureMode);
   return null;
@@ -31,7 +48,8 @@ export default function ProfileScreen({ navigation }) {
   const [passwordLoading, setPasswordLoading] = useState(false);
 
   // Debug export state
-  const [exportLoading, setExportLoading] = useState(false);
+  const [logsExportLoading, setLogsExportLoading] = useState(false);
+  const [databaseExportLoading, setDatabaseExportLoading] = useState(false);
   const [reportTestLoading, setReportTestLoading] = useState(false);
 
   // Feedback state
@@ -65,7 +83,7 @@ export default function ProfileScreen({ navigation }) {
   };
 
   const handleShareLogs = async () => {
-    setExportLoading(true);
+    setLogsExportLoading(true);
     try {
       const result = await exportLogs();
       if (result.success) {
@@ -77,7 +95,7 @@ export default function ProfileScreen({ navigation }) {
       console.error('Share logs error:', error);
       showMessage('Failed to export logs', 'error');
     } finally {
-      setExportLoading(false);
+      setLogsExportLoading(false);
     }
   };
 
@@ -92,7 +110,7 @@ export default function ProfileScreen({ navigation }) {
           text: 'Export',
           style: 'destructive',
           onPress: async () => {
-            setExportLoading(true);
+            setDatabaseExportLoading(true);
             try {
               const result = await exportDatabase();
               if (result.success) {
@@ -104,7 +122,7 @@ export default function ProfileScreen({ navigation }) {
               console.error('Share database error:', error);
               showMessage('Failed to export database', 'error');
             } finally {
-              setExportLoading(false);
+              setDatabaseExportLoading(false);
             }
           },
         },
@@ -180,13 +198,26 @@ export default function ProfileScreen({ navigation }) {
     setPasswordLoading(true);
     try {
       // Verify current password by attempting to sign in
-      const { error: signInError } = await supabase.auth.signInWithPassword({
-        email: user.email,
-        password: currentPassword,
-      });
+      let signInError;
+      try {
+        const result = await supabase.auth.signInWithPassword({
+          email: user.email,
+          password: currentPassword,
+        });
+        signInError = result.error;
+      } catch (error) {
+        signInError = error;
+      }
 
       if (signInError) {
-        throw new Error('Current password is incorrect');
+        console.error('Password verification error:', signInError);
+        showMessage(
+          isInvalidCredentialsError(signInError)
+            ? 'Current password is incorrect'
+            : PASSWORD_VERIFICATION_FAILED_MESSAGE,
+          'error'
+        );
+        return;
       }
 
       // Update password
@@ -304,8 +335,8 @@ export default function ProfileScreen({ navigation }) {
             <Button
               mode="outlined"
               onPress={handleShareLogs}
-              loading={exportLoading}
-              disabled={exportLoading}
+              loading={logsExportLoading}
+              disabled={logsExportLoading}
               style={styles.button}
               icon="file-document-outline"
             >
@@ -315,8 +346,8 @@ export default function ProfileScreen({ navigation }) {
             <Button
               mode="outlined"
               onPress={handleShareDatabase}
-              loading={exportLoading}
-              disabled={exportLoading}
+              loading={databaseExportLoading}
+              disabled={databaseExportLoading}
               style={styles.button}
               icon="database-export"
             >

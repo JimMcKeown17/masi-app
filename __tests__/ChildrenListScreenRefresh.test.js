@@ -125,4 +125,44 @@ describe('ChildrenListScreen pull to refresh', () => {
     });
     expect(navigation.navigate).not.toHaveBeenCalledWith('ClassOnboarding');
   });
+
+  test('shows a neutral loading state instead of the empty setup prompt while children load', () => {
+    mockUseChildren.mockReturnValue({
+      children: [],
+      groups: [],
+      childrenGroups: [],
+      loading: true,
+      loadChildren,
+    });
+
+    const screen = render(
+      <PaperProvider>
+        <ChildrenListScreen navigation={{ navigate: jest.fn() }} />
+      </PaperProvider>
+    );
+
+    expect(screen.getByText('Loading classes and children...')).toBeTruthy();
+    expect(screen.queryByText('No classes yet')).toBeNull();
+    expect(screen.queryByText('Start Setup')).toBeNull();
+  });
+
+  test('shows the same neutral loading state while classes load', () => {
+    mockUseClasses.mockReturnValue({
+      classes: [],
+      schools: [],
+      loading: true,
+      classBootstrapStatus: 'available',
+      loadClasses,
+      getChildrenInClass: jest.fn(() => []),
+    });
+
+    const screen = render(
+      <PaperProvider>
+        <ChildrenListScreen navigation={{ navigate: jest.fn() }} />
+      </PaperProvider>
+    );
+
+    expect(screen.getByText('Loading classes and children...')).toBeTruthy();
+    expect(screen.queryByText('No classes yet')).toBeNull();
+  });
 });

@@ -77,6 +77,20 @@ describe('ClassDetailScreen', () => {
     expect(screen.getByText('Class not found.')).toBeTruthy();
   });
 
+  test('shows a neutral loading state before deciding the class is missing', () => {
+    mockUseClasses.mockReturnValue({
+      classes: [],
+      schools: [],
+      loading: true,
+      getChildrenInClass: jest.fn(() => []),
+    });
+
+    const screen = renderClassDetail();
+
+    expect(screen.getByText('Loading class...')).toBeTruthy();
+    expect(screen.queryByText('Class not found.')).toBeNull();
+  });
+
   test('opens child results from the row and keeps editing as an explicit action', () => {
     const classItem = {
       id: 'class-1',

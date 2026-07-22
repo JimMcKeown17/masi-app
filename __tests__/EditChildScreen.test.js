@@ -24,10 +24,17 @@ const makeChild = (gender = 'female') => ({
 jest.mock('react-native-safe-area-context', () => {
   const ReactForMock = require('react');
   const insets = { top: 0, right: 0, bottom: 0, left: 0 };
+  const frame = { x: 0, y: 0, width: 320, height: 640 };
+  const SafeAreaInsetsContext = ReactForMock.createContext(insets);
+  const SafeAreaFrameContext = ReactForMock.createContext(frame);
   return {
     useSafeAreaInsets: () => insets,
-    SafeAreaInsetsContext: ReactForMock.createContext(insets),
-    SafeAreaProvider: ({ children }) => <>{children}</>,
+    useSafeAreaFrame: () => frame,
+    SafeAreaInsetsContext,
+    SafeAreaFrameContext,
+    SafeAreaProvider: ({ children }) => children,
+    SafeAreaConsumer: SafeAreaInsetsContext.Consumer,
+    initialWindowMetrics: { insets, frame },
   };
 });
 
@@ -211,12 +218,25 @@ describe('EditChildScreen', () => {
     ));
   });
 
-  test('shows the class picker empty state when no classes are available', () => {
+  test('clears the current class through the explicit No class option', async () => {
+    const screen = renderScreen();
+
+    fireEvent.press(screen.getByLabelText('Choose class for Amahle Dlamini'));
+    fireEvent.press(screen.getByLabelText('Select no class'));
+
+    await waitFor(() => expect(mockUpdateChild).toHaveBeenCalledWith(
+      'child-1',
+      { class_id: null },
+    ));
+  });
+
+  test('still offers No class when no assignable classes are available', () => {
     mockClasses = [];
     const screen = renderScreen();
 
     fireEvent.press(screen.getByLabelText('Choose class for Amahle Dlamini'));
 
-    expect(screen.getByText('No classes available. Create a class first.')).toBeTruthy();
+    expect(screen.getByLabelText('Select no class')).toBeTruthy();
+    expect(screen.queryByText('No classes available. Create a class first.')).toBeNull();
   });
 });

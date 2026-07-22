@@ -7,6 +7,7 @@ import {
   List,
   IconButton,
   Button,
+  ActivityIndicator,
 } from 'react-native-paper';
 import { colors, spacing, borderRadius } from '../../constants/colors';
 import { useClasses } from '../../context/ClassesContext';
@@ -16,7 +17,7 @@ import { compareGroups, getGroupColor } from '../../utils/groupHelpers';
 
 export default function ClassDetailScreen({ route, navigation }) {
   const { classId } = route.params;
-  const { classes, schools, getChildrenInClass } = useClasses();
+  const { classes, schools, loading, getChildrenInClass } = useClasses();
   const { groups, childrenGroups } = useChildren();
 
   const classItem = classes.find(c => c.id === classId);
@@ -70,6 +71,17 @@ export default function ClassDetailScreen({ route, navigation }) {
     setSelectedChild(child);
     setPickerVisible(true);
   };
+
+  if (loading) {
+    return (
+      <View style={styles.container}>
+        <View style={styles.emptyState}>
+          <ActivityIndicator size="large" color={colors.primary} />
+          <Text variant="bodyMedium" style={styles.emptyText}>Loading class...</Text>
+        </View>
+      </View>
+    );
+  }
 
   if (!classItem) {
     return (

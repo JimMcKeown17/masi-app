@@ -222,6 +222,17 @@ export default function ChildrenListScreen({ navigation }) {
   };
 
   const renderEmptyState = () => {
+    if (loading || classesLoading) {
+      return (
+        <View style={styles.emptyState}>
+          <ActivityIndicator size="large" color={colors.primary} />
+          <Text variant="bodyMedium" style={styles.loadingText}>
+            Loading classes and children...
+          </Text>
+        </View>
+      );
+    }
+
     // Distinguish "no classes exist" from "search returned nothing"
     if (searchTerm && classes.length > 0) {
       return (

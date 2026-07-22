@@ -263,9 +263,9 @@ A full item-by-item reconciliation of the June Top-10 and the ZZ port against th
 - Dead dependencies still shipped: `react-hook-form`, `expo-linear-gradient` (zero `src/` imports); `@testing-library/jest-native`; `jest-expo` sits in `dependencies` rather than `devDependencies`.
 - `npx expo install --check` reports `react-native-get-random-values@2.0.0` while Expo SDK 54 expects `~1.11.0`. The check ran with networking disabled and used Expo's local bundled-native-module map, so confirm online before changing this existing native dependency.
 - **No ESLint/Prettier config at all.**
-- `AssessmentChildSelectScreen.js` uses raw `home_language.toLowerCase()` instead of `normalizeLanguageKey`.
-- `ProfileScreen` reports "Current password is incorrect" for *any* sign-in error, including a network failure. Both exports share one `exportLoading` flag.
-- `HomeScreen.loadStats` has no `try/catch`.
+- ~~`AssessmentChildSelectScreen.js` uses raw `home_language.toLowerCase()` instead of `normalizeLanguageKey`.~~ **Fixed 2026-07-22** (pilot polish pack).
+- ~~`ProfileScreen` reports "Current password is incorrect" for *any* sign-in error, including a network failure. Both exports share one `exportLoading` flag.~~ **Fixed 2026-07-22**: credential message requires explicit credential evidence; exports have independent flags.
+- ~~`HomeScreen.loadStats` has no `try/catch`.~~ **Fixed 2026-07-22**: try/catch/finally, loading indicator, stats keep prior values on failure.
 - **`sessionsRepository` has no `delete from session_attendees`** — editing a session to *remove* an attendee leaves the row. A live data-integrity landmine.
 - No `test:coverage` script; 9 `.plan5.test.js` suites still named after a retired plan.
 
@@ -285,10 +285,10 @@ These were the *only* record of the item. Their source docs are now in `document
 - [x] **Time-box `repairGroupOwnershipForSync()`, completed 2026-07-14.** The function remains as idempotent repair version 1 for upgraded tester databases, but it is no longer called by every sync preflight. Once marker version 1 is durable, healthy launches and sync passes pay no repeated scan/write cost.
 - **Unanswered product question: pull-to-refresh now force-pushes.** My Children pull-to-refresh triggers a *push*, not just a reload. Jim never chose between force-push and reload-only. *(from the sync-reliability build log)*
 - **Four UX gaps** *(from the 2026-03-25 children/classes/groups review)*:
-  - `ChildrenListScreen` destructures `loading` / `classesLoading` and **never uses them**; `ClassDetailScreen` renders "Class not found." with no loading check. Empty states flash during load.
-  - `EditChildScreen` has no explicit "No class" / clear option in the class picker.
+  - ~~`ChildrenListScreen` destructures `loading` / `classesLoading` and **never uses them**; `ClassDetailScreen` renders "Class not found." with no loading check. Empty states flash during load.~~ **Fixed 2026-07-22** (pilot polish pack).
+  - ~~`EditChildScreen` has no explicit "No class" / clear option in the class picker.~~ **Fixed 2026-07-22**; cosmetic nit: the "No class" row is not check-marked when already unassigned.
   - Assessment child rows show name + last-assessed only — no class/group context.
-  - Session history shows an attendee **count**, not names.
+  - Session history shows an attendee **count**, not names. (Product question pending with Jim: full names vs truncated "Amahle +3" style.)
 
 ---
 

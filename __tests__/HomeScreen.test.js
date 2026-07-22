@@ -51,7 +51,7 @@ jest.mock('../src/db/repositories/assessmentsRepository', () => ({
 }));
 
 import React from 'react';
-import { render, waitFor } from '@testing-library/react-native';
+import { act, render, waitFor } from '@testing-library/react-native';
 import { PaperProvider } from 'react-native-paper';
 import HomeScreen from '../src/screens/main/HomeScreen';
 
@@ -225,5 +225,32 @@ describe('HomeScreen', () => {
     expect(mockGetSessions).not.toHaveBeenCalled();
     expect(mockGetAssessments).not.toHaveBeenCalled();
     jest.useRealTimers();
+  });
+
+  test('keeps existing stats usable and clears loading when a stats read fails', async () => {
+    let rejectTimeEntries;
+    mockGetTimeEntries.mockImplementationOnce(() => new Promise((resolve, reject) => {
+      rejectTimeEntries = reject;
+    }));
+    const consoleError = jest.spyOn(console, 'error').mockImplementation(() => {});
+
+    const screen = renderHome();
+
+    expect(screen.getByLabelText('Loading statistics')).toBeTruthy();
+
+    await act(async () => {
+      rejectTimeEntries(new Error('stats database unavailable'));
+    });
+
+    await waitFor(() => {
+      expect(consoleError).toHaveBeenCalledWith(
+        'Error loading Home statistics:',
+        expect.objectContaining({ message: 'stats database unavailable' }),
+      );
+    });
+    expect(screen.queryByLabelText('Loading statistics')).toBeNull();
+    expect(screen.getAllByText('0').length).toBeGreaterThanOrEqual(2);
+
+    consoleError.mockRestore();
   });
 });

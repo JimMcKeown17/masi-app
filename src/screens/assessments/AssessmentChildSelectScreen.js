@@ -11,6 +11,7 @@ import { assessmentsRepository } from '../../db/repositories/assessmentsReposito
 import { NO_TEXT_SUGGESTIONS } from '../../constants/textInputProps';
 import { resolveAssessmentRoute } from '../../utils/assessmentRouting';
 import { buildAssessmentMap } from '../../utils/assessmentHistoryMap';
+import { normalizeLanguageKey } from '../../utils/letterMastery';
 import SelectSheet from '../../components/common/SelectSheet';
 
 const LANGUAGE_OPTIONS = [
@@ -94,7 +95,7 @@ export default function AssessmentChildSelectScreen({ navigation, route }) {
     if (child.class_id) {
       const childClass = classes.find((c) => c.id === child.class_id);
       if (childClass?.home_language) {
-        const key = childClass.home_language.toLowerCase();
+        const key = normalizeLanguageKey(childClass.home_language);
         if (itemSets[key]) {
           navigateToAssessment(child, itemSets[key]);
           return;

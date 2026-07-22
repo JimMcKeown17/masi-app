@@ -74,7 +74,7 @@ describe('AssessmentChildSelectScreen language picker', () => {
       }],
     });
     mockUseClasses.mockReturnValue({
-      classes: [{ id: 'class-1', name: 'Grade 1A', home_language: 'Afrikaans' }],
+      classes: [{ id: 'class-1', name: 'Grade 1A', home_language: null }],
     });
     mockGetAssessments.mockResolvedValue([]);
     mockCountAssessments.mockResolvedValue(0);
@@ -114,5 +114,32 @@ describe('AssessmentChildSelectScreen language picker', () => {
         captureMode: 'sequential',
       }),
     ));
+  });
+
+  test('normalizes a Xhosa class language and starts with the isiXhosa item set', async () => {
+    mockUseClasses.mockReturnValue({
+      classes: [{ id: 'class-1', name: 'Grade 1A', home_language: 'Xhosa' }],
+    });
+    const navigation = { navigate: jest.fn() };
+    const screen = render(
+      <PaperProvider settings={{ icon: () => null }}>
+        <AssessmentChildSelectScreen
+          navigation={navigation}
+          route={{ params: { assessmentType: 'letter_egra' } }}
+        />
+      </PaperProvider>,
+    );
+
+    await waitFor(() => expect(screen.getByText('Amahle Dlamini')).toBeTruthy());
+    fireEvent.press(screen.getByText('Amahle Dlamini'));
+
+    await waitFor(() => expect(navigation.navigate).toHaveBeenCalledWith(
+      'SequentialAssessment',
+      expect.objectContaining({
+        letterSet: ISIXHOSA_LETTER_SET,
+        captureMode: 'sequential',
+      }),
+    ));
+    expect(screen.queryByLabelText('Dismiss assessment language picker')).toBeNull();
   });
 });

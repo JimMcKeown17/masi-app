@@ -62,6 +62,8 @@ export default function HomeScreen({ navigation }) {
   const [weekCounts, setWeekCounts] = useState([]);
   const [weekTotal, setWeekTotal] = useState(0);
   const [coverage, setCoverage] = useState({ assessed: 0, total: 0, percent: 0 });
+  const [statsLoading, setStatsLoading] = useState(true);
+  const statsLoadStartedRef = useRef(false);
 
   useFocusEffect(
     useCallback(() => {
@@ -83,33 +85,47 @@ export default function HomeScreen({ navigation }) {
 
   useFocusEffect(
     useCallback(() => {
+      if (statsLoadStartedRef.current) return undefined;
+      statsLoadStartedRef.current = true;
+
       const loadStats = async () => {
-        const monthStart = `${toLocalDateString(new Date()).slice(0, 7)}-01`;
-        const monthStartIso = new Date(`${monthStart}T00:00:00+02:00`).toISOString();
-        const [timeEntries, sessionCounts, assessmentCounts] = await Promise.all([
-          timeEntriesRepository.getTimeEntries({
-            userId: user.id,
-            sinceIso: monthStartIso,
-            completedOnly: true,
-          }),
-          sessionsRepository.getSessionCountsSince({ userId: user.id, sinceDate: monthStart }),
-          assessmentsRepository.getAssessmentCountsSince({ userId: user.id, sinceDate: monthStart }),
-        ]);
+        setStatsLoading(true);
+        try {
+          const monthStart = `${toLocalDateString(new Date()).slice(0, 7)}-01`;
+          const monthStartIso = new Date(`${monthStart}T00:00:00+02:00`).toISOString();
+          const [timeEntries, sessionCounts, assessmentCounts] = await Promise.all([
+            timeEntriesRepository.getTimeEntries({
+              userId: user.id,
+              sinceIso: monthStartIso,
+              completedOnly: true,
+            }),
+            sessionsRepository.getSessionCountsSince({ userId: user.id, sinceDate: monthStart }),
+            assessmentsRepository.getAssessmentCountsSince({ userId: user.id, sinceDate: monthStart }),
+          ]);
 
-        setDaysWorked(getDaysWorkedThisMonth(timeEntries));
+          setDaysWorked(getDaysWorkedThisMonth(timeEntries));
 
-        const monthCount = getSessionsThisMonth(sessionCounts);
-        setSessionsThisMonth(monthCount);
-        // Same load moment as the counts above — keeps the period label in sync.
-        setStatsFootnote(getMonthlyStatsFootnote());
+          const monthCount = getSessionsThisMonth(sessionCounts);
+          setSessionsThisMonth(monthCount);
+          // Same load moment as the counts above — keeps the period label in sync.
+          setStatsFootnote(getMonthlyStatsFootnote());
 
-        const week = getWeekSessionCounts(sessionCounts);
-        setWeekCounts(week);
-        setWeekTotal(week.reduce((sum, d) => sum + d.count, 0));
+          const week = getWeekSessionCounts(sessionCounts);
+          setWeekCounts(week);
+          setWeekTotal(week.reduce((sum, d) => sum + d.count, 0));
 
-        setCoverage(getAssessmentCoverage(childrenList, assessmentCounts));
+          setCoverage(getAssessmentCoverage(childrenList, assessmentCounts));
+        } catch (error) {
+          console.error('Error loading Home statistics:', error);
+        } finally {
+          setStatsLoading(false);
+        }
       };
       loadStats();
+
+      return () => {
+        statsLoadStartedRef.current = false;
+      };
     }, [childrenList, user.id])
   );
 
@@ -143,6 +159,13 @@ export default function HomeScreen({ navigation }) {
               <Text style={styles.headerStatLabel}>children</Text>
             </View>
           </View>
+          {statsLoading ? (
+            <ActivityIndicator
+              size="small"
+              color={colors.onDark}
+              accessibilityLabel="Loading statistics"
+            />
+          ) : null}
           {statsFootnote ? <Text style={styles.statsFootnote}>{statsFootnote}</Text> : null}
         </View>
 
