@@ -107,6 +107,8 @@ Run these only after the preview EAS environment contains the Sentry DSN, organi
 sensitive auth token.
 
 - [ ] **N1. Build symbols upload.** The EAS preview build log shows a successful Sentry source-map upload. A build with a failed upload does not pass this gate.
+  - 2026-07-21 Android preview build `6b0fef99-5796-4502-b2e8-df62272acb53` passed: the Gradle log records `Uploaded files to Sentry` for release `org.masinyusane.masi@1.3.0+4`, distribution 4, with a source-map upload report and Debug ID.
+  - 2026-07-21 iOS preview build `83f42fbf-6403-4c41-b010-365da178ff89` finished successfully, but the inspected EAS and Xcode logs did not expose an equivalent successful source-map upload line. Keep N1 open until iOS upload or symbolication is proved.
 - [ ] **N2. Handled-error symbolication.** On the physical device, Profile -> Debug & Support -> Test Crash Reporting. Sentry receives `Masi observability test error` with `observability_test=true`, a readable source-mapped application frame, the correct preview/production environment, current route/internal user UUID, installed build, device/OS, Expo Update, backend project, and SQLite schema.
 - [ ] **N3. Offline event delivery.** Repeat N2 in airplane mode, then restore connectivity. The event arrives after reconnect instead of being lost.
 - [ ] **N4. Non-crashing sync failure.** Using only disposable staging data, exercise a known retriable or terminal outbox failure. The app remains usable and Sentry receives the structured sync issue with table/operation/error code, counts, online state, last attempt, and last successful sync. Confirm repeated 30-second status polls do not create duplicate issues.
