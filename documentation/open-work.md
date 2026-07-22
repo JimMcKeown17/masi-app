@@ -135,7 +135,15 @@ Three defects observed by Jim on a real device. Status as of later that day: §0
 deliberately not built yet; §0c.2 fixed and device-verified; §0c.3 root-caused, residual check moved
 to device gate J6.
 
-### 1. P1 — Pull persistence cannot converge when a server row's id changes under an unchanged active pair
+### 1. ~~P1 — Pull persistence cannot converge when a server row's id changes under an unchanged active pair~~ **FIXED 2026-07-22 (branch `fix/pull-supersede`)**
+
+**Resolution:** `supersedeStaleActivePairRow` in the four deterministic-id save paths ends a
+same-pair different-id local ACTIVE `synced` row before the upsert (skipping the incoming row when
+the local row is pending/failed/terminal). One pull now converges the re-key scenario; twelve
+real-SQLite tests in `pullReconcile.integration.test.js` reproduce the exact device wedge RED and
+prove convergence, idempotency, and every rail. Contract recorded in `rls-sync-contract-map.md`
+("Stale active-pair supersede"). Deterministic ids remain the primary contract; §0b's seed
+requirement is unchanged. Original record below.
 
 **Symptom:** signing into `test@masinyusane.org` on a dev device whose local DB predates 2026-07-14
 produced 26 LogBox errors on every pull, forever: `Error code 19: UNIQUE constraint failed` on the four

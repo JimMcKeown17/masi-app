@@ -11,6 +11,7 @@ import {
   normalizeSyncFields,
   serverPullWouldClobberPendingLocal,
   shouldEnqueueOutbox,
+  supersedeStaleActivePairRow,
   upsertDomainRecord,
 } from './domainRepositoryUtils';
 
@@ -95,6 +96,15 @@ export const createClassEaAssignmentsRepository = ({ database } = {}) => {
     const write = async (txn) => {
       const record = normalizeSyncFields(assignment);
       if (await serverPullWouldClobberPendingLocal(txn, 'class_ea_assignments', record)) {
+        return false;
+      }
+      const supersede = await supersedeStaleActivePairRow(txn, {
+        tableName: 'class_ea_assignments',
+        pairColumns: ['class_id', 'ea_user_id', 'programme_id'],
+        endColumn: 'unassigned_at',
+        record,
+      });
+      if (supersede.action === 'skip') {
         return false;
       }
       if (shouldEnqueueOutbox(record)) {

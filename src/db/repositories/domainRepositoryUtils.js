@@ -162,6 +162,48 @@ export const serverPullWouldClobberPendingLocal = async (db, tableName, record) 
   return Boolean(existing && PENDING_LOCAL_SYNC_STATUSES.includes(existing.sync_status));
 };
 
+export const supersedeStaleActivePairRow = async (
+  db,
+  { tableName, pairColumns, endColumn, record }
+) => {
+  if (
+    record?.sync_status !== 'synced'
+    || (record?.[endColumn] !== null && record?.[endColumn] !== undefined)
+  ) {
+    return { action: 'proceed' };
+  }
+
+  const quotedTableName = quoteIdentifier(tableName);
+  const quotedEndColumn = quoteIdentifier(endColumn);
+  const pairPredicate = pairColumns
+    .map((column) => `${quoteIdentifier(column)} = ?`)
+    .join(' and ');
+  const existing = await db.getFirstAsync(`
+    select id, sync_status
+    from ${quotedTableName}
+    where ${pairPredicate}
+      and ${quotedEndColumn} is null
+      and id != ?
+    limit 1
+  `, ...pairColumns.map((column) => record[column]), record.id);
+
+  if (!existing) return { action: 'proceed' };
+  if (existing.sync_status !== 'synced') return { action: 'skip' };
+
+  const supersededAt = timestamp();
+  await db.runAsync(`
+    update ${quotedTableName}
+    set ${quotedEndColumn} = ?,
+        updated_at = ?,
+        sync_status = 'synced'
+    where id = ?
+      and ${quotedEndColumn} is null
+      and sync_status = 'synced'
+  `, supersededAt, supersededAt, existing.id);
+
+  return { action: 'proceed', supersededId: existing.id };
+};
+
 export const getActiveProgrammeAssignment = async (db, userId) => db.getFirstAsync(`
   select *
   from staff_programme_assignments

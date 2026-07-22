@@ -10,6 +10,7 @@ import {
   normalizeSyncFields,
   serverPullWouldClobberPendingLocal,
   shouldEnqueueOutbox,
+  supersedeStaleActivePairRow,
   upsertDomainRecord,
 } from './domainRepositoryUtils';
 
@@ -92,6 +93,15 @@ export const createGroupEaAssignmentsRepository = ({ database } = {}) => {
     const write = async (txn) => {
       const record = normalizeSyncFields(assignment);
       if (await serverPullWouldClobberPendingLocal(txn, 'group_ea_assignments', record)) {
+        return false;
+      }
+      const supersede = await supersedeStaleActivePairRow(txn, {
+        tableName: 'group_ea_assignments',
+        pairColumns: ['group_id'],
+        endColumn: 'unassigned_at',
+        record,
+      });
+      if (supersede.action === 'skip') {
         return false;
       }
       await upsertDomainRecord(txn, {

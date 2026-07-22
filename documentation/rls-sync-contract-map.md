@@ -146,6 +146,41 @@ A pull first persists returned server rows, then reconciles acknowledged relatio
 
 A pulled row is stamped `sync_status: 'synced'` before it reaches a repository save function. `serverPullWouldClobberPendingLocal` runs in the same transaction as the upsert and skips a server row when the local row is `pending` or `failed`. `synced` and `terminal` local rows may be replaced by an acknowledged server copy. Owner-scoped pending hard-delete ids are filtered out before child and relationship persistence. A skipped row never changes its queued outbox payload and never enqueues new work.
 
+### Stale active-pair supersede (2026-07-22)
+
+Deterministic active-pair ids remain the **primary** convergence contract: every writer derives the
+same id for the same logical pair. But when stored ids violate that contract — a server-side re-key
+(as on 2026-07-14), a superseded derivation formula, or a wrong-id seed — a pulled ACTIVE row can
+carry a different id than the device's local ACTIVE row for the same pair. The id-keyed upsert then
+hits the partial unique active-pair index before reconcile can run, the batch rolls back, the
+per-row fallback (which never reconciles) fails identically, and every later pull repeats forever
+(open-work §0c.1, device-reproduced 2026-07-22).
+
+`supersedeStaleActivePairRow` (`domainRepositoryUtils.js`) closes that gap inside the four
+deterministic-id save paths — `child_ea_assignments`, `child_programme_enrollments`,
+`class_ea_assignments`, `group_ea_assignments` — between the pending-local-wins guard and the
+upsert, in the same transaction:
+
+- It runs only for an incoming ACTIVE row stamped `sync_status: 'synced'` (server-sourced saves).
+- A same-pair, different-id local ACTIVE row with `sync_status: 'synced'` is ended: its end column
+  (`unassigned_at` / `ended_at`) and `updated_at` are stamped with one timestamp, `sync_status`
+  stays `'synced'`, and no outbox row is enqueued — the server already owns the removal. The
+  incoming row then persists, so one pull converges and a second identical pull is a no-op. The
+  partial unique index guarantees at most one such stale row per pair.
+- A same-pair local ACTIVE row in any other status (`pending`, `failed`, `terminal`, or anything
+  unexpected) is never touched: the incoming row is skipped instead, mirroring the reconcile rail
+  ("pending, failed, and terminal rows are never ended by pull reconcile") and the
+  `serverPullWouldClobberPendingLocal` posture.
+- `child_class_memberships` (random ids, reconcile-before-upsert by design) and
+  `child_group_memberships` (collision contract deliberately deferred) are excluded.
+
+This is a recovery rail, not a replacement contract. §0b's seed requirement (derive ids with the
+app's own deterministic-id functions) still stands in full force, because the push-side wedge — the
+device computing id `D` for a pair the server holds under a different id, `23505` forever — has no
+equivalent rail. Real-SQLite coverage lives in `__tests__/pullReconcile.integration.test.js`
+(twelve supersede tests: four convergence, four pending-collision, failed, terminal,
+inactive-incoming, and local-create cases).
+
 ### Server-authoritative relationship acknowledgment
 
 Ordinary authenticated SELECTs hydrate row content, but they do not authorize absence. PostgreSQL RLS can suppress a row while returning `{ data: [], error: null }`, so treating an ordinary empty result as proof of removal is unsafe. Migration `20260714220000_server_authoritative_reconcile_acknowledgments.sql` adds `public.get_reconcile_acknowledgments()`, backed by a fixed-search-path `SECURITY DEFINER` function in `private`. It accepts no caller-supplied identity, derives the EA from `auth.uid()`, and returns schema version 1, `complete: true`, the active Programme id, and every relationship-specific id set from one PostgreSQL statement snapshot.

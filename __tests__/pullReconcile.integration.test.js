@@ -900,3 +900,790 @@ describe('relationship-scoped pull reconcile', () => {
     }
   });
 });
+
+describe('server pull active-pair supersede recovery', () => {
+  const SUPERSEDED_AT = '2026-07-22T15:30:00.000Z';
+
+  test('child EA pull converges a same-pair active server row under a new id in one batch', async () => {
+    const db = await createDatabase();
+    try {
+      const repository = createChildrenRepository({ database: db });
+      const child = childRow('child-ea-supersede');
+      const stale = childEaAssignmentRow({
+        id: 'cea-stale-id',
+        childId: child.id,
+      });
+      const incoming = childEaAssignmentRow({
+        id: 'cea-server-id',
+        childId: child.id,
+      });
+      await repository.saveServerChildRows([child]);
+      await repository.saveServerStaffChildRows([stale]);
+
+      jest.useFakeTimers({ doNotFake: ['nextTick', 'setImmediate'] });
+      jest.setSystemTime(new Date(SUPERSEDED_AT));
+
+      const reconcile = {
+        acknowledgedIds: ['cea-server-id'],
+        pulledAt: SUPERSEDED_AT,
+        userId: 'user-1',
+      };
+      await expect(repository.saveServerStaffChildRows([incoming], { reconcile }))
+        .resolves.toEqual({
+          applied: 1,
+          skipped: 0,
+          failed: 0,
+          ended: 0,
+          fallbackUsed: false,
+          reconcileCompleted: true,
+        });
+      expect(await db.getAllAsync(`
+        select id, unassigned_at, updated_at, sync_status
+        from child_ea_assignments
+        where child_id = 'child-ea-supersede'
+        order by id
+      `)).toEqual([
+        {
+          id: 'cea-server-id',
+          unassigned_at: null,
+          updated_at: SUPERSEDED_AT,
+          sync_status: 'synced',
+        },
+        {
+          id: 'cea-stale-id',
+          unassigned_at: SUPERSEDED_AT,
+          updated_at: SUPERSEDED_AT,
+          sync_status: 'synced',
+        },
+      ]);
+      expect(await db.getFirstAsync('select count(*) as count from sync_outbox'))
+        .toEqual({ count: 0 });
+
+      await expect(repository.saveServerStaffChildRows([incoming], { reconcile }))
+        .resolves.toEqual({
+          applied: 1,
+          skipped: 0,
+          failed: 0,
+          ended: 0,
+          fallbackUsed: false,
+          reconcileCompleted: true,
+        });
+      expect(await db.getAllAsync(`
+        select id, unassigned_at, updated_at, sync_status
+        from child_ea_assignments
+        where child_id = 'child-ea-supersede'
+        order by id
+      `)).toEqual([
+        {
+          id: 'cea-server-id',
+          unassigned_at: null,
+          updated_at: SUPERSEDED_AT,
+          sync_status: 'synced',
+        },
+        {
+          id: 'cea-stale-id',
+          unassigned_at: SUPERSEDED_AT,
+          updated_at: SUPERSEDED_AT,
+          sync_status: 'synced',
+        },
+      ]);
+      expect(await db.getFirstAsync('select count(*) as count from sync_outbox'))
+        .toEqual({ count: 0 });
+    } finally {
+      jest.useRealTimers();
+      await db.closeAsync();
+    }
+  });
+
+  test('programme enrollment pull converges a same-pair active server row under a new id in one batch', async () => {
+    const db = await createDatabase();
+    try {
+      const repository = createChildrenRepository({ database: db });
+      const child = childRow('child-programme-supersede');
+      const stale = programmeEnrollmentRow({
+        id: 'cpe-stale-id',
+        childId: child.id,
+      });
+      const incoming = programmeEnrollmentRow({
+        id: 'cpe-server-id',
+        childId: child.id,
+      });
+      await repository.saveServerChildRows([child]);
+      await repository.saveServerChildProgrammeEnrollmentRows([stale]);
+
+      jest.useFakeTimers({ doNotFake: ['nextTick', 'setImmediate'] });
+      jest.setSystemTime(new Date(SUPERSEDED_AT));
+
+      const reconcile = {
+        acknowledgedIds: ['cpe-server-id'],
+        acknowledgedAssignedChildIds: ['child-programme-supersede'],
+        programmeId: 'programme-a',
+        pulledAt: SUPERSEDED_AT,
+      };
+      await expect(repository.saveServerChildProgrammeEnrollmentRows([incoming], { reconcile }))
+        .resolves.toEqual({
+          applied: 1,
+          skipped: 0,
+          failed: 0,
+          ended: 0,
+          fallbackUsed: false,
+          reconcileCompleted: true,
+        });
+      expect(await db.getAllAsync(`
+        select id, ended_at, updated_at, sync_status
+        from child_programme_enrollments
+        where child_id = 'child-programme-supersede'
+        order by id
+      `)).toEqual([
+        {
+          id: 'cpe-server-id',
+          ended_at: null,
+          updated_at: CREATED_AT,
+          sync_status: 'synced',
+        },
+        {
+          id: 'cpe-stale-id',
+          ended_at: SUPERSEDED_AT,
+          updated_at: SUPERSEDED_AT,
+          sync_status: 'synced',
+        },
+      ]);
+      expect(await db.getFirstAsync('select count(*) as count from sync_outbox'))
+        .toEqual({ count: 0 });
+
+      await expect(repository.saveServerChildProgrammeEnrollmentRows([incoming], { reconcile }))
+        .resolves.toEqual({
+          applied: 1,
+          skipped: 0,
+          failed: 0,
+          ended: 0,
+          fallbackUsed: false,
+          reconcileCompleted: true,
+        });
+      expect(await db.getAllAsync(`
+        select id, ended_at, updated_at, sync_status
+        from child_programme_enrollments
+        where child_id = 'child-programme-supersede'
+        order by id
+      `)).toEqual([
+        {
+          id: 'cpe-server-id',
+          ended_at: null,
+          updated_at: CREATED_AT,
+          sync_status: 'synced',
+        },
+        {
+          id: 'cpe-stale-id',
+          ended_at: SUPERSEDED_AT,
+          updated_at: SUPERSEDED_AT,
+          sync_status: 'synced',
+        },
+      ]);
+      expect(await db.getFirstAsync('select count(*) as count from sync_outbox'))
+        .toEqual({ count: 0 });
+    } finally {
+      jest.useRealTimers();
+      await db.closeAsync();
+    }
+  });
+
+  test('class EA pull converges a same-pair active server row under a new id in one batch', async () => {
+    const db = await createDatabase();
+    try {
+      const repository = createClassEaAssignmentsRepository({ database: db });
+      const stale = classEaAssignmentRow({
+        id: 'class-ea-stale-id',
+        classId: 'class-1',
+      });
+      const incoming = classEaAssignmentRow({
+        id: 'class-ea-server-id',
+        classId: 'class-1',
+      });
+      await repository.saveServerRows([stale]);
+
+      jest.useFakeTimers({ doNotFake: ['nextTick', 'setImmediate'] });
+      jest.setSystemTime(new Date(SUPERSEDED_AT));
+
+      const reconcile = {
+        acknowledgedClassIds: ['class-1'],
+        userId: 'user-1',
+        programmeId: 'programme-a',
+        pulledAt: SUPERSEDED_AT,
+      };
+      await expect(repository.saveServerRows([incoming], { reconcile }))
+        .resolves.toEqual({
+          applied: 1,
+          skipped: 0,
+          failed: 0,
+          ended: 0,
+          fallbackUsed: false,
+          reconcileCompleted: true,
+        });
+      expect(await db.getAllAsync(`
+        select id, unassigned_at, updated_at, sync_status
+        from class_ea_assignments
+        where class_id = 'class-1'
+          and ea_user_id = 'user-1'
+          and programme_id = 'programme-a'
+        order by id
+      `)).toEqual([
+        {
+          id: 'class-ea-server-id',
+          unassigned_at: null,
+          updated_at: CREATED_AT,
+          sync_status: 'synced',
+        },
+        {
+          id: 'class-ea-stale-id',
+          unassigned_at: SUPERSEDED_AT,
+          updated_at: SUPERSEDED_AT,
+          sync_status: 'synced',
+        },
+      ]);
+      expect(await db.getFirstAsync('select count(*) as count from sync_outbox'))
+        .toEqual({ count: 0 });
+
+      await expect(repository.saveServerRows([incoming], { reconcile }))
+        .resolves.toEqual({
+          applied: 1,
+          skipped: 0,
+          failed: 0,
+          ended: 0,
+          fallbackUsed: false,
+          reconcileCompleted: true,
+        });
+      expect(await db.getAllAsync(`
+        select id, unassigned_at, updated_at, sync_status
+        from class_ea_assignments
+        where class_id = 'class-1'
+          and ea_user_id = 'user-1'
+          and programme_id = 'programme-a'
+        order by id
+      `)).toEqual([
+        {
+          id: 'class-ea-server-id',
+          unassigned_at: null,
+          updated_at: CREATED_AT,
+          sync_status: 'synced',
+        },
+        {
+          id: 'class-ea-stale-id',
+          unassigned_at: SUPERSEDED_AT,
+          updated_at: SUPERSEDED_AT,
+          sync_status: 'synced',
+        },
+      ]);
+      expect(await db.getFirstAsync('select count(*) as count from sync_outbox'))
+        .toEqual({ count: 0 });
+    } finally {
+      jest.useRealTimers();
+      await db.closeAsync();
+    }
+  });
+
+  test('group EA pull converges a same-pair active server row under a new id in one batch', async () => {
+    const db = await createDatabase();
+    try {
+      const groupsRepository = createGroupsRepository({ database: db });
+      const repository = createGroupEaAssignmentsRepository({ database: db });
+      const group = groupRow({ id: 'group-ea-supersede' });
+      const stale = groupEaAssignmentRow({
+        id: 'group-ea-stale-id',
+        groupId: group.id,
+      });
+      const incoming = groupEaAssignmentRow({
+        id: 'group-ea-server-id',
+        groupId: group.id,
+      });
+      await groupsRepository.saveServerGroupRows([group]);
+      await repository.saveServerRows([stale]);
+
+      jest.useFakeTimers({ doNotFake: ['nextTick', 'setImmediate'] });
+      jest.setSystemTime(new Date(SUPERSEDED_AT));
+
+      const reconcile = {
+        acknowledgedGroupIds: ['group-ea-supersede'],
+        userId: 'user-1',
+        programmeId: 'programme-a',
+        pulledAt: SUPERSEDED_AT,
+      };
+      await expect(repository.saveServerRows([incoming], { reconcile }))
+        .resolves.toEqual({
+          applied: 1,
+          skipped: 0,
+          failed: 0,
+          ended: 0,
+          fallbackUsed: false,
+          reconcileCompleted: true,
+        });
+      expect(await db.getAllAsync(`
+        select id, unassigned_at, updated_at, sync_status
+        from group_ea_assignments
+        where group_id = 'group-ea-supersede'
+        order by id
+      `)).toEqual([
+        {
+          id: 'group-ea-server-id',
+          unassigned_at: null,
+          updated_at: CREATED_AT,
+          sync_status: 'synced',
+        },
+        {
+          id: 'group-ea-stale-id',
+          unassigned_at: SUPERSEDED_AT,
+          updated_at: SUPERSEDED_AT,
+          sync_status: 'synced',
+        },
+      ]);
+      expect(await db.getFirstAsync('select count(*) as count from sync_outbox'))
+        .toEqual({ count: 0 });
+
+      await expect(repository.saveServerRows([incoming], { reconcile }))
+        .resolves.toEqual({
+          applied: 1,
+          skipped: 0,
+          failed: 0,
+          ended: 0,
+          fallbackUsed: false,
+          reconcileCompleted: true,
+        });
+      expect(await db.getAllAsync(`
+        select id, unassigned_at, updated_at, sync_status
+        from group_ea_assignments
+        where group_id = 'group-ea-supersede'
+        order by id
+      `)).toEqual([
+        {
+          id: 'group-ea-server-id',
+          unassigned_at: null,
+          updated_at: CREATED_AT,
+          sync_status: 'synced',
+        },
+        {
+          id: 'group-ea-stale-id',
+          unassigned_at: SUPERSEDED_AT,
+          updated_at: SUPERSEDED_AT,
+          sync_status: 'synced',
+        },
+      ]);
+      expect(await db.getFirstAsync('select count(*) as count from sync_outbox'))
+        .toEqual({ count: 0 });
+    } finally {
+      jest.useRealTimers();
+      await db.closeAsync();
+    }
+  });
+
+  test('child EA pull skips a different-id collision with an active pending local row', async () => {
+    const db = await createDatabase();
+    try {
+      jest.useFakeTimers({ doNotFake: ['nextTick', 'setImmediate'] });
+      jest.setSystemTime(new Date(SUPERSEDED_AT));
+      const repository = createChildrenRepository({ database: db });
+      const child = childRow('child-ea-pending');
+      const local = childEaAssignmentRow({
+        id: 'cea-local-pending',
+        childId: child.id,
+        syncStatus: 'pending',
+      });
+      const incoming = childEaAssignmentRow({
+        id: 'cea-server-pending-collision',
+        childId: child.id,
+      });
+      await repository.saveServerChildRows([child]);
+      await repository.saveStaffChild(local);
+
+      await expect(repository.saveServerStaffChildRows([incoming])).resolves.toEqual({
+        applied: 0,
+        skipped: 1,
+        failed: 0,
+        ended: 0,
+        fallbackUsed: false,
+        reconcileCompleted: false,
+      });
+      expect(await db.getAllAsync(`
+        select id, unassigned_at, updated_at, sync_status
+        from child_ea_assignments
+        where child_id = 'child-ea-pending'
+      `)).toEqual([{
+        id: 'cea-local-pending',
+        unassigned_at: null,
+        updated_at: SUPERSEDED_AT,
+        sync_status: 'pending',
+      }]);
+      expect(await db.getAllAsync(`
+        select id, table_name, record_id, operation, status
+        from sync_outbox
+        order by id
+      `)).toEqual([{
+        id: 'child_ea_assignments:cea-local-pending:insert',
+        table_name: 'child_ea_assignments',
+        record_id: 'cea-local-pending',
+        operation: 'insert',
+        status: 'pending',
+      }]);
+    } finally {
+      jest.useRealTimers();
+      await db.closeAsync();
+    }
+  });
+
+  test('programme enrollment pull skips a different-id collision with an active pending local row', async () => {
+    const db = await createDatabase();
+    try {
+      const repository = createChildrenRepository({ database: db });
+      const child = childRow('child-programme-pending');
+      const local = programmeEnrollmentRow({
+        id: 'cpe-local-pending',
+        childId: child.id,
+        syncStatus: 'pending',
+      });
+      const incoming = programmeEnrollmentRow({
+        id: 'cpe-server-pending-collision',
+        childId: child.id,
+      });
+      await repository.saveServerChildRows([child]);
+      await repository.saveChildProgrammeEnrollment(local);
+
+      await expect(repository.saveServerChildProgrammeEnrollmentRows([incoming]))
+        .resolves.toEqual({
+          applied: 0,
+          skipped: 1,
+          failed: 0,
+          ended: 0,
+          fallbackUsed: false,
+          reconcileCompleted: false,
+        });
+      expect(await db.getAllAsync(`
+        select id, ended_at, updated_at, sync_status
+        from child_programme_enrollments
+        where child_id = 'child-programme-pending'
+      `)).toEqual([{
+        id: 'cpe-local-pending',
+        ended_at: null,
+        updated_at: CREATED_AT,
+        sync_status: 'pending',
+      }]);
+      expect(await db.getAllAsync(`
+        select id, table_name, record_id, operation, status
+        from sync_outbox
+        order by id
+      `)).toEqual([{
+        id: 'child_programme_enrollments:cpe-local-pending:insert',
+        table_name: 'child_programme_enrollments',
+        record_id: 'cpe-local-pending',
+        operation: 'insert',
+        status: 'pending',
+      }]);
+    } finally {
+      await db.closeAsync();
+    }
+  });
+
+  test('class EA pull skips a different-id collision with an active pending local row', async () => {
+    const db = await createDatabase();
+    try {
+      const repository = createClassEaAssignmentsRepository({ database: db });
+      const local = {
+        ...classEaAssignmentRow({ id: 'class-ea-local-pending', classId: 'class-1' }),
+        sync_status: 'pending',
+        synced: false,
+      };
+      const incoming = classEaAssignmentRow({
+        id: 'class-ea-server-pending-collision',
+        classId: 'class-1',
+      });
+      await repository.save(local);
+
+      await expect(repository.saveServerRows([incoming])).resolves.toEqual({
+        applied: 0,
+        skipped: 1,
+        failed: 0,
+        ended: 0,
+        fallbackUsed: false,
+        reconcileCompleted: false,
+      });
+      expect(await db.getAllAsync(`
+        select id, unassigned_at, updated_at, sync_status
+        from class_ea_assignments
+        where class_id = 'class-1'
+          and ea_user_id = 'user-1'
+          and programme_id = 'programme-a'
+      `)).toEqual([{
+        id: 'class-ea-local-pending',
+        unassigned_at: null,
+        updated_at: CREATED_AT,
+        sync_status: 'pending',
+      }]);
+      expect(await db.getAllAsync(`
+        select id, table_name, record_id, operation, status
+        from sync_outbox
+        order by id
+      `)).toEqual([{
+        id: 'class_ea_assignments:class-ea-local-pending:insert',
+        table_name: 'class_ea_assignments',
+        record_id: 'class-ea-local-pending',
+        operation: 'insert',
+        status: 'pending',
+      }]);
+    } finally {
+      await db.closeAsync();
+    }
+  });
+
+  test('group EA pull skips a different-id collision with an active pending local row', async () => {
+    const db = await createDatabase();
+    try {
+      const groupsRepository = createGroupsRepository({ database: db });
+      const repository = createGroupEaAssignmentsRepository({ database: db });
+      const group = groupRow({ id: 'group-ea-pending' });
+      const local = {
+        ...groupEaAssignmentRow({ id: 'group-ea-local-pending', groupId: group.id }),
+        sync_status: 'pending',
+        synced: false,
+      };
+      const incoming = groupEaAssignmentRow({
+        id: 'group-ea-server-pending-collision',
+        groupId: group.id,
+      });
+      await groupsRepository.saveServerGroupRows([group]);
+      await repository.save(local);
+
+      await expect(repository.saveServerRows([incoming])).resolves.toEqual({
+        applied: 0,
+        skipped: 1,
+        failed: 0,
+        ended: 0,
+        fallbackUsed: false,
+        reconcileCompleted: false,
+      });
+      expect(await db.getAllAsync(`
+        select id, unassigned_at, updated_at, sync_status
+        from group_ea_assignments
+        where group_id = 'group-ea-pending'
+      `)).toEqual([{
+        id: 'group-ea-local-pending',
+        unassigned_at: null,
+        updated_at: CREATED_AT,
+        sync_status: 'pending',
+      }]);
+      expect(await db.getAllAsync(`
+        select id, table_name, record_id, operation, status
+        from sync_outbox
+        order by id
+      `)).toEqual([{
+        id: 'group_ea_assignments:group-ea-local-pending:insert',
+        table_name: 'group_ea_assignments',
+        record_id: 'group-ea-local-pending',
+        operation: 'insert',
+        status: 'pending',
+      }]);
+    } finally {
+      await db.closeAsync();
+    }
+  });
+
+  test('programme enrollment pull skips a different-id collision with an active failed local row', async () => {
+    const db = await createDatabase();
+    try {
+      const repository = createChildrenRepository({ database: db });
+      const child = childRow('child-programme-failed');
+      const local = programmeEnrollmentRow({
+        id: 'cpe-local-failed',
+        childId: child.id,
+        syncStatus: 'failed',
+      });
+      const incoming = programmeEnrollmentRow({
+        id: 'cpe-server-failed-collision',
+        childId: child.id,
+      });
+      await repository.saveServerChildRows([child]);
+      await repository.saveChildProgrammeEnrollment(local);
+
+      await expect(repository.saveServerChildProgrammeEnrollmentRows([incoming]))
+        .resolves.toEqual({
+          applied: 0,
+          skipped: 1,
+          failed: 0,
+          ended: 0,
+          fallbackUsed: false,
+          reconcileCompleted: false,
+        });
+      expect(await db.getAllAsync(`
+        select id, ended_at, updated_at, sync_status
+        from child_programme_enrollments
+        where child_id = 'child-programme-failed'
+      `)).toEqual([{
+        id: 'cpe-local-failed',
+        ended_at: null,
+        updated_at: CREATED_AT,
+        sync_status: 'failed',
+      }]);
+      expect(await db.getAllAsync(`
+        select id, table_name, record_id, operation, status
+        from sync_outbox
+        order by id
+      `)).toEqual([{
+        id: 'child_programme_enrollments:cpe-local-failed:insert',
+        table_name: 'child_programme_enrollments',
+        record_id: 'cpe-local-failed',
+        operation: 'insert',
+        status: 'pending',
+      }]);
+    } finally {
+      await db.closeAsync();
+    }
+  });
+
+  test('group EA pull skips a different-id collision with an active terminal local row', async () => {
+    const db = await createDatabase();
+    try {
+      const groupsRepository = createGroupsRepository({ database: db });
+      const repository = createGroupEaAssignmentsRepository({ database: db });
+      const group = groupRow({ id: 'group-ea-terminal' });
+      const local = {
+        ...groupEaAssignmentRow({ id: 'group-ea-local-terminal', groupId: group.id }),
+        sync_status: 'terminal',
+        synced: false,
+      };
+      const incoming = groupEaAssignmentRow({
+        id: 'group-ea-server-terminal-collision',
+        groupId: group.id,
+      });
+      await groupsRepository.saveServerGroupRows([group]);
+      await repository.save(local);
+
+      await expect(repository.saveServerRows([incoming])).resolves.toEqual({
+        applied: 0,
+        skipped: 1,
+        failed: 0,
+        ended: 0,
+        fallbackUsed: false,
+        reconcileCompleted: false,
+      });
+      expect(await db.getAllAsync(`
+        select id, unassigned_at, updated_at, sync_status
+        from group_ea_assignments
+        where group_id = 'group-ea-terminal'
+      `)).toEqual([{
+        id: 'group-ea-local-terminal',
+        unassigned_at: null,
+        updated_at: CREATED_AT,
+        sync_status: 'terminal',
+      }]);
+      expect(await db.getFirstAsync('select count(*) as count from sync_outbox'))
+        .toEqual({ count: 0 });
+    } finally {
+      await db.closeAsync();
+    }
+  });
+
+  test('an inactive incoming enrollment does not supersede the same-pair active local row', async () => {
+    const db = await createDatabase();
+    try {
+      const repository = createChildrenRepository({ database: db });
+      const child = childRow('child-programme-inactive-incoming');
+      const active = programmeEnrollmentRow({
+        id: 'cpe-active-local',
+        childId: child.id,
+      });
+      const inactiveIncoming = {
+        ...programmeEnrollmentRow({
+          id: 'cpe-inactive-server',
+          childId: child.id,
+        }),
+        ended_at: PULLED_AT,
+        updated_at: PULLED_AT,
+      };
+      await repository.saveServerChildRows([child]);
+      await repository.saveServerChildProgrammeEnrollmentRows([active]);
+
+      await expect(repository.saveServerChildProgrammeEnrollmentRows([inactiveIncoming]))
+        .resolves.toEqual({
+          applied: 1,
+          skipped: 0,
+          failed: 0,
+          ended: 0,
+          fallbackUsed: false,
+          reconcileCompleted: false,
+        });
+      expect(await db.getAllAsync(`
+        select id, ended_at, updated_at, sync_status
+        from child_programme_enrollments
+        where child_id = 'child-programme-inactive-incoming'
+        order by id
+      `)).toEqual([
+        {
+          id: 'cpe-active-local',
+          ended_at: null,
+          updated_at: CREATED_AT,
+          sync_status: 'synced',
+        },
+        {
+          id: 'cpe-inactive-server',
+          ended_at: PULLED_AT,
+          updated_at: PULLED_AT,
+          sync_status: 'synced',
+        },
+      ]);
+      expect(await db.getFirstAsync('select count(*) as count from sync_outbox'))
+        .toEqual({ count: 0 });
+    } finally {
+      await db.closeAsync();
+    }
+  });
+
+  test('a pending local create stays on the normal path and never supersedes an active synced row', async () => {
+    const db = await createDatabase();
+    try {
+      const classesRepository = createClassesRepository({ database: db });
+      const repository = createClassEaAssignmentsRepository({ database: db });
+      const active = classEaAssignmentRow({
+        id: 'class-ea-active-synced',
+        classId: 'class-1',
+      });
+      const pendingLocalCreate = {
+        ...classEaAssignmentRow({
+          id: 'class-ea-pending-local-create',
+          classId: 'class-local-create',
+        }),
+        sync_status: 'pending',
+        synced: false,
+      };
+      await classesRepository.saveServerClassRows([classRow('class-local-create')]);
+      await repository.saveServerRows([active]);
+
+      await expect(repository.save(pendingLocalCreate)).resolves.toBe(true);
+      expect(await db.getAllAsync(`
+        select id, unassigned_at, updated_at, sync_status
+        from class_ea_assignments
+        where ea_user_id = 'user-1'
+          and programme_id = 'programme-a'
+        order by id
+      `)).toEqual([{
+        id: 'class-ea-active-synced',
+        unassigned_at: null,
+        updated_at: CREATED_AT,
+        sync_status: 'synced',
+      }, {
+        id: 'class-ea-pending-local-create',
+        unassigned_at: null,
+        updated_at: CREATED_AT,
+        sync_status: 'pending',
+      }]);
+      expect(await db.getAllAsync(`
+        select id, table_name, record_id, operation, status
+        from sync_outbox
+        order by id
+      `)).toEqual([{
+        id: 'class_ea_assignments:class-ea-pending-local-create:insert',
+        table_name: 'class_ea_assignments',
+        record_id: 'class-ea-pending-local-create',
+        operation: 'insert',
+        status: 'pending',
+      }]);
+    } finally {
+      await db.closeAsync();
+    }
+  });
+});

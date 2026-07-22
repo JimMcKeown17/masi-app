@@ -16,6 +16,7 @@ import {
   resolveProgrammeId,
   serverPullWouldClobberPendingLocal,
   shouldEnqueueOutbox,
+  supersedeStaleActivePairRow,
   upsertDomainRecord,
 } from './domainRepositoryUtils';
 import { syncStatusFromSynced } from './sqliteRepositoryUtils';
@@ -546,6 +547,15 @@ export const createChildrenRepository = ({ database } = {}) => {
     if (await serverPullWouldClobberPendingLocal(txn, 'child_ea_assignments', record)) {
       return false;
     }
+    const supersede = await supersedeStaleActivePairRow(txn, {
+      tableName: 'child_ea_assignments',
+      pairColumns: ['user_id', 'child_id'],
+      endColumn: 'unassigned_at',
+      record,
+    });
+    if (supersede.action === 'skip') {
+      return false;
+    }
     if (shouldEnqueueOutbox(record)) {
       assertRlsRequiredFields('child_ea_assignments', record, ['user_id', 'child_id', 'created_by']);
     }
@@ -566,6 +576,15 @@ export const createChildrenRepository = ({ database } = {}) => {
       sync_status: enrollment.sync_status || syncStatusFromSynced(enrollment.synced),
     });
     if (await serverPullWouldClobberPendingLocal(txn, 'child_programme_enrollments', record)) {
+      return false;
+    }
+    const supersede = await supersedeStaleActivePairRow(txn, {
+      tableName: 'child_programme_enrollments',
+      pairColumns: ['child_id', 'programme_id'],
+      endColumn: 'ended_at',
+      record,
+    });
+    if (supersede.action === 'skip') {
       return false;
     }
     if (shouldEnqueueOutbox(record)) {
