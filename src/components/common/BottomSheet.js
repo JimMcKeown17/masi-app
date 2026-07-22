@@ -1,14 +1,14 @@
 import React from 'react';
 import {
+  BackHandler,
   KeyboardAvoidingView,
-  Modal,
   Platform,
   Pressable,
   ScrollView,
   StyleSheet,
   View,
 } from 'react-native';
-import { Text } from 'react-native-paper';
+import { Portal, Text } from 'react-native-paper';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { borderRadius, colors, spacing } from '../../constants/colors';
 
@@ -32,6 +32,17 @@ export default function BottomSheet({
     contentContainerStyle: scrollContentStyle,
     ...remainingScrollViewProps
   } = scrollViewProps;
+
+  // Portal has no equivalent of Modal's onRequestClose, so the Android
+  // hardware back button must dismiss the sheet explicitly.
+  React.useEffect(() => {
+    if (!visible) return undefined;
+    const subscription = BackHandler.addEventListener('hardwareBackPress', () => {
+      onDismiss?.();
+      return true;
+    });
+    return () => subscription.remove();
+  }, [visible, onDismiss]);
 
   if (!visible) return null;
 
@@ -82,14 +93,14 @@ export default function BottomSheet({
     </View>
   );
 
+  // Rendered through Paper's Portal (hosted by the root PaperProvider) instead
+  // of React Native's <Modal>: the native transparent modal positions its
+  // content off-screen under the new architecture in this environment
+  // (open-work §0c.2), and Portal keeps the sheet in the ordinary view
+  // hierarchy where layout is reliable.
   return (
-    <Modal
-      visible={visible}
-      transparent
-      animationType="slide"
-      onRequestClose={onDismiss}
-    >
-      <View style={styles.modalRoot}>
+    <Portal>
+      <View style={styles.overlay} pointerEvents="box-none">
         <Pressable
           onPress={onDismiss}
           accessibilityRole="button"
@@ -110,23 +121,24 @@ export default function BottomSheet({
           </View>
         )}
       </View>
-    </Modal>
+    </Portal>
   );
 }
 
 const styles = StyleSheet.create({
-  modalRoot: {
-    flex: 1,
+  overlay: {
+    ...StyleSheet.absoluteFillObject,
+    zIndex: 1000,
+    // Flexbox pins the sheet to the bottom; absolute bottom-anchoring
+    // mispositions under the new architecture here (open-work §0c.2).
+    justifyContent: 'flex-end',
   },
   backdrop: {
     ...StyleSheet.absoluteFillObject,
     backgroundColor: 'rgba(0, 0, 0, 0.5)',
   },
   sheetWrapper: {
-    position: 'absolute',
-    right: 0,
-    bottom: 0,
-    left: 0,
+    width: '100%',
   },
   sheet: {
     backgroundColor: colors.surface,

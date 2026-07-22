@@ -1,8 +1,11 @@
-import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { Pressable, StyleSheet, View } from 'react-native';
-import { Button, Text } from 'react-native-paper';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { FlatList, Pressable, StyleSheet, View } from 'react-native';
+import { Button, Text, TextInput } from 'react-native-paper';
 import { borderRadius, colors, spacing } from '../../constants/colors';
+import { NO_TEXT_SUGGESTIONS } from '../../constants/textInputProps';
 import BottomSheet from './BottomSheet';
+
+const getOptionKey = option => option.key;
 
 const SelectSheetRow = React.memo(function SelectSheetRow({
   optionKey,
@@ -48,8 +51,11 @@ export default function SelectSheet({
   cancelLabel,
   emptyMessage,
   maxHeight,
+  searchable = false,
+  keyboardAvoiding = true,
 }) {
   const [draftKey, setDraftKey] = useState(selectedKey);
+  const [searchText, setSearchText] = useState('');
   const onDismissRef = useRef(onDismiss);
   const onSelectRef = useRef(onSelect);
   onDismissRef.current = onDismiss;
@@ -58,6 +64,10 @@ export default function SelectSheet({
   useEffect(() => {
     setDraftKey(selectedKey);
   }, [selectedKey]);
+
+  useEffect(() => {
+    setSearchText('');
+  }, [visible]);
 
   const handleSelect = useCallback((key) => {
     if (confirmLabel) {
@@ -72,6 +82,26 @@ export default function SelectSheet({
     onSelect(draftKey);
     onDismiss();
   }, [draftKey, onDismiss, onSelect]);
+
+  const filteredOptions = useMemo(() => {
+    const normalizedSearch = searchText.trim().toLowerCase();
+    if (!searchable || !normalizedSearch) return options;
+    return options.filter(option => option.label.toLowerCase().includes(normalizedSearch));
+  }, [options, searchText, searchable]);
+  const listEmptyMessage = searchable && searchText.trim() && options.length > 0
+    ? 'No matches found.'
+    : emptyMessage;
+
+  const renderOption = useCallback(({ item: option }) => (
+    <SelectSheetRow
+      optionKey={option.key}
+      label={option.label}
+      description={option.description}
+      accessibilityLabel={option.accessibilityLabel}
+      selected={(confirmLabel ? draftKey : selectedKey) === option.key}
+      onSelect={handleSelect}
+    />
+  ), [confirmLabel, draftKey, handleSelect, selectedKey]);
 
   const footer = confirmLabel || cancelLabel ? (
     <View style={styles.actions}>
@@ -91,21 +121,34 @@ export default function SelectSheet({
       dismissLabel={dismissLabel}
       footer={footer}
       maxHeight={maxHeight}
+      scrollable={false}
+      keyboardAvoiding={keyboardAvoiding}
+      bodyContentStyle={styles.body}
     >
-      {options.length === 0 && emptyMessage ? (
-        <Text variant="bodyMedium" style={styles.empty}>{emptyMessage}</Text>
-      ) : null}
-      {options.map(option => (
-        <SelectSheetRow
-          key={option.key}
-          optionKey={option.key}
-          label={option.label}
-          description={option.description}
-          accessibilityLabel={option.accessibilityLabel}
-          selected={(confirmLabel ? draftKey : selectedKey) === option.key}
-          onSelect={handleSelect}
+      {searchable ? (
+        <TextInput
+          label="Search"
+          accessibilityLabel="Search options"
+          value={searchText}
+          onChangeText={setSearchText}
+          {...NO_TEXT_SUGGESTIONS}
+          mode="outlined"
+          style={styles.search}
         />
-      ))}
+      ) : null}
+      <FlatList
+        data={filteredOptions}
+        renderItem={renderOption}
+        keyExtractor={getOptionKey}
+        initialNumToRender={12}
+        maxToRenderPerBatch={12}
+        windowSize={5}
+        keyboardShouldPersistTaps="handled"
+        style={styles.list}
+        ListEmptyComponent={listEmptyMessage ? (
+          <Text variant="bodyMedium" style={styles.empty}>{listEmptyMessage}</Text>
+        ) : null}
+      />
     </BottomSheet>
   );
 }
@@ -149,6 +192,17 @@ const styles = StyleSheet.create({
   actions: {
     flexDirection: 'row',
     justifyContent: 'flex-end',
+  },
+  body: {
+    flexShrink: 1,
+    minHeight: 0,
+  },
+  list: {
+    flexShrink: 1,
+  },
+  search: {
+    marginBottom: spacing.md,
+    backgroundColor: colors.surface,
   },
   empty: {
     color: colors.textSecondary,

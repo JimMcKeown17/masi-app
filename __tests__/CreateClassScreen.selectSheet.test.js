@@ -21,3 +21,18 @@ test('CreateClassScreen keeps the visible Cancel action on the school picker', (
 
   expect(screen.getByText('Cancel')).toBeTruthy();
 });
+
+test('CreateClassScreen enables search only for the school picker', () => {
+  const screen = render(
+    <PaperProvider>
+      <CreateClassScreen navigation={{ goBack: jest.fn() }} />
+    </PaperProvider>,
+  );
+
+  fireEvent.press(screen.getAllByTestId('right-icon-adornment')[0]);
+  expect(screen.getByLabelText('Search options')).toBeTruthy();
+
+  fireEvent.press(screen.getByText('Cancel'));
+  fireEvent.press(screen.getAllByTestId('right-icon-adornment')[1]);
+  expect(screen.queryByLabelText('Search options')).toBeNull();
+});

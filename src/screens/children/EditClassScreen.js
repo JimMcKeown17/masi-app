@@ -227,6 +227,7 @@ export default function EditClassScreen({ route, navigation }) {
         onDismiss={() => setSchoolPickerVisible(false)}
         title="Select School"
         dismissLabel="Dismiss school picker"
+        searchable
         options={schools.map(school => ({ key: school.id, label: school.name }))}
         selectedKey={schoolId}
         onSelect={(value) => {

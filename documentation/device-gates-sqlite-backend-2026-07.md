@@ -185,6 +185,7 @@ Open each one, confirm it looks like a sheet, has the same options, and produces
 - [ ] **J3.** Edit Child: the class picker. It should show "No classes available. Create a class first." if you have no classes.
 - [ ] **J4.** Session form: the session reading level, and a per-child reading level. The per-child one must apply to the child you opened it for.
 - [ ] **J5.** Assessments: the language picker. This one is deliberately TWO-STEP (tap a language, then press Start), because tapping it launches a 60-second timed assessment.
+- [ ] **J6. Portal sheet geometry on a real build (2026-07-22).** On the preview/pilot BUILD (not Expo Go), open the School picker (now searchable, 325 real schools) and the Grade picker. Both must render fully, sit flush against the bottom edge of the screen, and dismiss from the backdrop and Android hardware back. Context: sheets moved from RN `Modal` to Paper `Portal` after the modal parked content off-screen under Expo Go's new-arch runtime (open-work §0c.2/§0c.3); Expo Go still shows imperfect flushness, believed to be an Expo Go-only artifact. This gate decides whether §0c.3 closes or becomes real work. Also type into the School search with the keyboard up and confirm the list stays usable.
 
 ## K. The one dialog that deliberately survived
 

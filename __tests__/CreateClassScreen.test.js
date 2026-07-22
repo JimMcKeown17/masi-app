@@ -6,6 +6,11 @@ import CreateClassScreen from '../src/screens/children/CreateClassScreen';
 const mockAddClass = jest.fn().mockResolvedValue({ success: true });
 const mockNavigationGoBack = jest.fn();
 const mockNavigationReplace = jest.fn();
+let mockProfile;
+
+jest.mock('../src/context/AuthContext', () => ({
+  useAuth: () => ({ profile: mockProfile }),
+}));
 
 jest.mock('../src/context/ClassesContext', () => ({
   useClasses: () => ({
@@ -22,12 +27,13 @@ const navigation = {
   replace: mockNavigationReplace,
 };
 
-const renderScreen = (route) =>
-  render(
-    <PaperProvider>
-      <CreateClassScreen navigation={navigation} route={route} />
-    </PaperProvider>
-  );
+const screenElement = (route) => (
+  <PaperProvider>
+    <CreateClassScreen navigation={navigation} route={route} />
+  </PaperProvider>
+);
+
+const renderScreen = (route) => render(screenElement(route));
 
 const collectNativeTextInputs = (node) => {
   if (!node) return [];
@@ -37,13 +43,11 @@ const collectNativeTextInputs = (node) => {
 
 beforeEach(() => {
   jest.clearAllMocks();
+  mockProfile = null;
   mockAddClass.mockResolvedValue({ success: true });
 });
 
-const completeRequiredFields = ({ getAllByDisplayValue, getAllByTestId, getByText }) => {
-  fireEvent.press(getAllByTestId('right-icon-adornment')[0]);
-  fireEvent.press(getByText('Sunrise Primary'));
-
+const completeNonSchoolRequiredFields = ({ getAllByDisplayValue, getAllByTestId, getByText }) => {
   fireEvent.press(getAllByTestId('right-icon-adornment')[1]);
   fireEvent.press(getByText('Grade 1'));
 
@@ -55,7 +59,61 @@ const completeRequiredFields = ({ getAllByDisplayValue, getAllByTestId, getByTex
   fireEvent.press(getByText('isiXhosa'));
 };
 
+const completeRequiredFields = (screen) => {
+  fireEvent.press(screen.getAllByTestId('right-icon-adornment')[0]);
+  fireEvent.press(screen.getByText('Sunrise Primary'));
+  completeNonSchoolRequiredFields(screen);
+};
+
 describe('CreateClassScreen', () => {
+  test('preloads the profile school and submits its school id', async () => {
+    mockProfile = { schoolId: 'school-2', schoolName: 'Hilltop School' };
+    const screen = renderScreen();
+
+    expect(screen.getByDisplayValue('Hilltop School')).toBeTruthy();
+    completeNonSchoolRequiredFields(screen);
+    fireEvent.press(screen.getByText('Create Class'));
+
+    await waitFor(() => expect(mockAddClass).toHaveBeenCalledWith(expect.objectContaining({
+      school_id: 'school-2',
+    })));
+  });
+
+  test('fills an untouched school field when the profile arrives asynchronously', () => {
+    const screen = renderScreen();
+    expect(screen.getAllByTestId('text-input-outlined')[0].props.value).toBe('');
+
+    mockProfile = { schoolId: 'school-2', schoolName: 'Hilltop School' };
+    screen.rerender(screenElement());
+
+    expect(screen.getByDisplayValue('Hilltop School')).toBeTruthy();
+  });
+
+  test('keeps and submits a user-selected school after the profile refreshes', async () => {
+    mockProfile = { schoolId: 'school-2', schoolName: 'Hilltop School' };
+    const screen = renderScreen();
+
+    fireEvent.press(screen.getAllByTestId('right-icon-adornment')[0]);
+    fireEvent.press(screen.getByText('Sunrise Primary'));
+    mockProfile = { schoolId: 'school-2', schoolName: 'Hilltop School' };
+    screen.rerender(screenElement());
+
+    expect(screen.getByDisplayValue('Sunrise Primary')).toBeTruthy();
+    completeNonSchoolRequiredFields(screen);
+    fireEvent.press(screen.getByText('Create Class'));
+
+    await waitFor(() => expect(mockAddClass).toHaveBeenCalledWith(expect.objectContaining({
+      school_id: 'school-1',
+    })));
+  });
+
+  test('keeps the school field empty when the profile has no school', () => {
+    mockProfile = { schoolId: null, schoolName: null };
+    const screen = renderScreen();
+
+    expect(screen.getAllByTestId('text-input-outlined')[0].props.value).toBe('');
+  });
+
   test('renders all form fields', () => {
     const { getAllByText } = renderScreen();
     expect(getAllByText('School *').length).toBeGreaterThan(0);

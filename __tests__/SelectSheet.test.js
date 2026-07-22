@@ -18,7 +18,7 @@ jest.mock('react', () => {
 });
 
 import React from 'react';
-import { StyleSheet, View } from 'react-native';
+import { FlatList, StyleSheet, View } from 'react-native';
 import { fireEvent, render } from '@testing-library/react-native';
 import { PaperProvider } from 'react-native-paper';
 import SelectSheet from '../src/components/common/SelectSheet';
@@ -54,6 +54,76 @@ const renderSheet = (props = {}) => render(
 );
 
 describe('SelectSheet', () => {
+  test('keeps a large option set virtualized and bounded with the footer visible', () => {
+    const largeOptions = Array.from({ length: 325 }, (_, index) => ({
+      key: `school-${index}`,
+      label: `School ${index}`,
+    }));
+    const sheet = renderSheet({
+      options: largeOptions,
+      confirmLabel: 'Confirm',
+      cancelLabel: 'Cancel',
+    });
+
+    const list = sheet.UNSAFE_getByType(FlatList);
+    expect(list.props.data).toBe(largeOptions);
+    expect(list.props.children).toBeUndefined();
+    expect(StyleSheet.flatten(list.props.style).flexShrink).toBe(1);
+    expect(sheet.getByText('Confirm')).toBeTruthy();
+    expect(sheet.getByText('Cancel')).toBeTruthy();
+  });
+
+  test('filters option labels case-insensitively and clearing restores all options', () => {
+    const sheet = renderSheet({ searchable: true });
+    const searchInput = sheet.getByLabelText('Search options');
+
+    fireEvent.changeText(searchInput, 'HILL');
+
+    expect(sheet.queryByText('Sunrise Primary')).toBeNull();
+    expect(sheet.getByText('Hilltop School')).toBeTruthy();
+
+    fireEvent.changeText(searchInput, '');
+
+    expect(sheet.getByText('Sunrise Primary')).toBeTruthy();
+    expect(sheet.getByText('Hilltop School')).toBeTruthy();
+  });
+
+  test('shows a no-matches message when search filters out every option', () => {
+    const sheet = renderSheet({ searchable: true });
+
+    fireEvent.changeText(sheet.getByLabelText('Search options'), 'missing school');
+
+    expect(sheet.getByText('No matches found.')).toBeTruthy();
+  });
+
+  test('resets a stale search whenever the sheet closes and reopens', () => {
+    const onDismiss = jest.fn();
+    const onSelect = jest.fn();
+    const element = visible => (
+      <PaperProvider>
+        <SelectSheet
+          visible={visible}
+          onDismiss={onDismiss}
+          title="Select School"
+          dismissLabel="Dismiss school picker"
+          options={options}
+          selectedKey={null}
+          onSelect={onSelect}
+          searchable
+        />
+      </PaperProvider>
+    );
+    const sheet = render(element(true));
+    fireEvent.changeText(sheet.getByLabelText('Search options'), 'Hilltop');
+    expect(sheet.queryByText('Sunrise Primary')).toBeNull();
+
+    sheet.rerender(element(false));
+    sheet.rerender(element(true));
+
+    expect(sheet.getByLabelText('Search options').props.value).toBe('');
+    expect(sheet.getByText('Sunrise Primary')).toBeTruthy();
+  });
+
   test('renders one row per option with optional descriptions', () => {
     const sheet = renderSheet();
 

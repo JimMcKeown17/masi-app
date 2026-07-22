@@ -130,4 +130,15 @@ describe('EditClassScreen', () => {
 
     expect(screen.getByText('Cancel')).toBeTruthy();
   });
+
+  test('enables search only for the school picker', () => {
+    const screen = renderScreen();
+
+    fireEvent.press(screen.getAllByTestId('right-icon-adornment')[0]);
+    expect(screen.getByLabelText('Search options')).toBeTruthy();
+
+    fireEvent.press(screen.getByText('Cancel'));
+    fireEvent.press(screen.getAllByTestId('right-icon-adornment')[1]);
+    expect(screen.queryByLabelText('Search options')).toBeNull();
+  });
 });

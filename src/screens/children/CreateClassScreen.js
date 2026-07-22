@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { View, StyleSheet, ScrollView, KeyboardAvoidingView, Platform } from 'react-native';
 import {
   Text,
@@ -10,12 +10,14 @@ import {
 } from 'react-native-paper';
 import { colors, spacing } from '../../constants/colors';
 import SectionHeader from '../../components/common/SectionHeader';
+import { useAuth } from '../../context/AuthContext';
 import { useClasses } from '../../context/ClassesContext';
 import { GRADES, HOME_LANGUAGES } from '../../constants/options';
 import { NO_TEXT_SUGGESTIONS } from '../../constants/textInputProps';
 import SelectSheet from '../../components/common/SelectSheet';
 
 export default function CreateClassScreen({ route, navigation }) {
+  const { profile } = useAuth();
   const { schools, addClass } = useClasses();
 
   const [schoolId, setSchoolId] = useState('');
@@ -32,6 +34,18 @@ export default function CreateClassScreen({ route, navigation }) {
   const [errors, setErrors] = useState({});
   const [loading, setLoading] = useState(false);
   const [snackbar, setSnackbar] = useState({ visible: false, message: '' });
+  const schoolTouchedRef = useRef(false);
+
+  useEffect(() => {
+    if (schoolTouchedRef.current || schoolId || schoolName || !profile?.schoolId) return;
+
+    const profileSchoolName = profile.schoolName
+      || schools.find(school => school.id === profile.schoolId)?.name;
+    if (!profileSchoolName) return;
+
+    setSchoolId(profile.schoolId);
+    setSchoolName(profileSchoolName);
+  }, [profile?.schoolId, profile?.schoolName, schoolId, schoolName, schools]);
 
   const validate = () => {
     const newErrors = {};
@@ -184,10 +198,12 @@ export default function CreateClassScreen({ route, navigation }) {
         onDismiss={() => setSchoolPickerVisible(false)}
         title="Select School"
         dismissLabel="Dismiss school picker"
+        searchable
         options={schools.map(school => ({ key: school.id, label: school.name }))}
         selectedKey={schoolId}
         onSelect={(value) => {
           const school = schools.find(item => item.id === value);
+          schoolTouchedRef.current = true;
           setSchoolId(value);
           setSchoolName(school?.name || '');
         }}

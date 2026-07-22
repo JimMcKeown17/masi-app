@@ -37,6 +37,11 @@ This is the execution order, not a second backlog. The numbered sections below r
 6. **P3, group-centred session model:** settle `GRANT_SUBJECTS`, group identity/collision rules, session `group_id` authorization, and then rebuild the group/session workflow in dependency order (§4, §6). The group's latest literacy-session letters belong in that workflow, not in the current child-first form.
 7. **P4, latent correctness and polish:** fix attendee removal before any saved-session edit UI ships; then shared snackbars, picker clears, typography rollout, search/filter gaps, dependency cleanup, and diagnostics (§2, §3). The attendee bug is real at repository level, but no current screen edits a saved session, so it is not the highest-ROI immediate build.
 
+**2026-07-22 addendum:** §0c records three defects from the first blank-onboarding smoke test. The
+pull-convergence fix (§0c.1) belongs in item 4's sync-recovery slice and must land before field data
+accumulates; the school picker (§0c.2) blocks the onboarding flow for any tester who reaches Create
+Class, so it effectively joins item 2's device-proof work.
+
 The real-data seed/import work is deliberately **not in the active execution order**. Jim deferred it
 on 2026-07-14 because the source of truth is an existing Airtable/Postgres system whose table shape,
 identifiers, relationships, and data-quality rules have not yet been mapped into this repo. When it is
@@ -121,6 +126,78 @@ they are not a source-to-target mapping.
 - **Still to seed:** `teachers`, `classes`, `children`, `child_class_memberships`, `staff_programme_assignments`, `groups`, `child_group_memberships`, plus the four deterministic-id assignment tables above.
 - **`child_class_memberships` does NOT use deterministic ids** (it recurs on class moves and needs distinct archived rows for audit). It uses reconcile-before-upsert. Random ids are correct there — see contract map §"Active-Pair Collision-Proofing".
 - **Check `child_group_memberships`:** it has a partial unique index on `(child_id, grouping_version_id)` where `removed_at is null`, but no deterministic-id function and no documented reconcile path. Confirm how an imported membership and a device-created membership avoid colliding before importing any source data.
+
+---
+
+## 0c. Found 2026-07-22 during the first blank-onboarding smoke test (Expo Go, iOS)
+
+Three defects observed by Jim on a real device. Status as of later that day: §0c.1 noted and
+deliberately not built yet; §0c.2 fixed and device-verified; §0c.3 root-caused, residual check moved
+to device gate J6.
+
+### 1. P1 — Pull persistence cannot converge when a server row's id changes under an unchanged active pair
+
+**Symptom:** signing into `test@masinyusane.org` on a dev device whose local DB predates 2026-07-14
+produced 26 LogBox errors on every pull, forever: `Error code 19: UNIQUE constraint failed` on the four
+active-pair partial unique indexes (`class_ea_assignments`, `child_ea_assignments`,
+`child_programme_enrollments`, `group_ea_assignments`).
+
+**Root cause (verified in code):** pulled rows are upserted `on conflict(id) do update`
+(`domainRepositoryUtils.js:183`); reconcile runs *after* all row saves inside the batch transaction
+(`repositoryRuntime.js:77-98`); and the per-row fallback retries explicitly *without* reconcile
+(`repositoryRuntime.js:104-121`). So when the server holds the same active pair under a different id
+than the device, the insert violates the partial unique index before anything can end the stale local
+row, the whole batch rolls back, and every later pull repeats identically. The pull can never converge.
+
+**Trigger:** the 2026-07-14 staging re-key (§0, "26 rows re-keyed in place") changed ids under active
+pairs the device had already pulled. This is the **pull-side mirror of §0b's push-side warning** ("the
+row is stuck permanently"): any id/natural-key disagreement — a superseded deterministic-id formula
+(see the §0 lesson and §7's `assessmentItemDomainId` BLOCKER), a wrong-id seed, or a future re-key —
+wedges sync, in both directions.
+
+**Server verified healthy** (2026-07-22, read-only psql): zero duplicate active pairs in all four tables.
+
+**Agreed direction (Jim, 2026-07-22 — noted, deliberately not built yet):** natural-key supersede in
+the pull save path, respecting the existing rails: when persisting an *active* server row, first end
+any *active* local row holding the same natural key under a different id **iff** that local row is
+`sync_status='synced'`; if it is pending/failed, skip the incoming row instead (same posture as
+`serverPullWouldClobberPendingLocal`). Build TDD with real-SQLite integration coverage and update
+`rls-sync-contract-map.md` ("Pull Persistence & Reconcile") in the same branch.
+
+**Why the pilot is safe day-one:** fresh installs + blank accounts cannot hit this (§0 already mandates
+fresh installs). Fix before field data accumulates, and certainly before any future server-side re-key
+or the Head Office importer.
+
+### 2. ~~P2 — School picker unusable with the real 325-school list~~ **FIXED 2026-07-22, device-verified**
+
+Blank onboarding → Create Class → School showed a dimmed screen with no visible sheet content, ever.
+Backend was verified healthy the same morning (325 active schools; `schools_read` RLS for
+`authenticated`; plain `select * order by name` fetch).
+
+**Root cause (established by simulator bisection with fresh-launch trials and `measureInWindow`):**
+not the picker, the list size, the search input, or the keyboard handling — four hypotheses each
+disproven experimentally. React Native's transparent `<Modal>` positions its content off-screen under
+the new architecture in Expo Go on iOS 26: the sheet panel laid out correctly (402x699) but measured a
+full window-height above the viewport (y = -844/-1001) regardless of content, animation type, or
+KeyboardAvoidingView state, and absolute `bottom: 0` anchoring failed identically inside a Portal.
+
+**Fix (branch `fix/school-picker-search-preload`):** `BottomSheet` now renders through
+react-native-paper's `Portal` (hosted by the root `PaperProvider`) instead of RN `Modal`, pins the
+sheet with flexbox `justifyContent: 'flex-end'` instead of absolute bottom anchoring, and dismisses on
+Android hardware back via a `BackHandler` subscription (replacing Modal `onRequestClose`). Alongside
+it, `SelectSheet` was virtualized (`FlatList`, no eager mounting), the school pickers gained
+case-insensitive search, and Create Class preloads the signed-in EA's school from the profile
+(override still allowed). Jim verified on device: school list renders, class created. Every sheet in
+the app inherits the Portal fix since all go through `BottomSheet`.
+
+### 3. P4 — BottomSheet panel not flush with the screen bottom → **device gate J6**
+
+Same underlying pathology family as §0c.2: the modal/host container mis-sizing under Expo Go's
+new-architecture runtime (one captured frame showed the modal backdrop stopping ~91pt above the
+screen bottom with the tab bar exposed). After the Portal fix the sheet renders and is usable, but
+Jim reports residual imperfect flushness in Expo Go. Deliberately parked: verify on the real preview
+build (gate J6 in `device-gates-sqlite-backend-2026-07.md`) before spending more time on what is
+likely an Expo Go-only artifact.
 
 ---
 

@@ -1,6 +1,6 @@
 import React from 'react';
-import { Modal, StyleSheet } from 'react-native';
-import { fireEvent, render } from '@testing-library/react-native';
+import { BackHandler, StyleSheet } from 'react-native';
+import { act, fireEvent, render } from '@testing-library/react-native';
 import { PaperProvider } from 'react-native-paper';
 import LastAttemptedBottomSheet from '../src/components/assessment/LastAttemptedBottomSheet';
 
@@ -28,6 +28,7 @@ const renderSheet = (props = {}) => render(
 
 describe('LastAttemptedBottomSheet', () => {
   test('uses the canonical backdrop and preserves both cancel paths', () => {
+    const backSpy = jest.spyOn(BackHandler, 'addEventListener');
     const onCancel = jest.fn();
     const sheet = renderSheet({ onCancel });
     const backdrop = sheet.getByLabelText('Dismiss last attempted selector');
@@ -36,9 +37,17 @@ describe('LastAttemptedBottomSheet', () => {
       .toBe('rgba(0, 0, 0, 0.5)');
 
     fireEvent.press(backdrop);
-    sheet.UNSAFE_getByType(Modal).props.onRequestClose();
+
+    // BottomSheet renders through Portal now; hardware back dismissal goes
+    // through the BackHandler subscription instead of Modal onRequestClose.
+    const backCall = backSpy.mock.calls.find(([event]) => event === 'hardwareBackPress');
+    expect(backCall).toBeTruthy();
+    act(() => {
+      backCall[1]();
+    });
 
     expect(onCancel).toHaveBeenCalledTimes(2);
+    backSpy.mockRestore();
   });
 
   test('confirms the selected index without adding a visible Cancel button', () => {
