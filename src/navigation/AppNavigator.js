@@ -5,11 +5,10 @@ import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { useAuth } from '../context/AuthContext';
 import { ActivityIndicator, View, Pressable, Platform } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import BottomTabIcon from '../components/navigation/BottomTabIcon';
+import LockedBottomTabBar from '../components/navigation/LockedBottomTabBar';
 import { Text } from 'react-native-paper';
 import { colors } from '../constants/colors';
 import SyncIndicator from '../components/common/SyncIndicator';
-import ProfileGearButton from '../components/common/ProfileGearButton';
 import {
   registerNavigationContainer,
   setObservabilityUser,
@@ -24,8 +23,8 @@ import HomeScreen from '../screens/main/HomeScreen';
 import TimeTrackingScreen from '../screens/main/TimeTrackingScreen';
 import TimeEntriesListScreen from '../screens/main/TimeEntriesListScreen';
 import ChildrenListScreen from '../screens/main/ChildrenListScreen';
-import SessionsScreen from '../screens/main/SessionsScreen';
 import AssessmentsScreen from '../screens/main/AssessmentsScreen';
+import InsightsScreen from '../screens/main/InsightsScreen';
 import ProfileScreen from '../screens/main/ProfileScreen';
 
 // Children screens
@@ -127,54 +126,41 @@ function ChildrenStackNavigator() {
   );
 }
 
-function MainTabNavigator() {
+export function MainTabNavigator() {
   return (
     <Tab.Navigator
-      screenOptions={({ route, navigation }) => ({
-        tabBarIcon: ({ focused, color, size }) => (
-          <BottomTabIcon routeName={route.name} focused={focused} color={color} size={size} />
-        ),
+      tabBar={(props) => <LockedBottomTabBar {...props} />}
+      screenOptions={({ navigation }) => ({
         headerRight: () => (
           <View style={{ marginRight: 16 }}>
             <SyncIndicator onPress={() => navigation.navigate('SyncStatus')} />
           </View>
         ),
-        tabBarActiveTintColor: colors.tabActive,      // active brand tab
-        tabBarInactiveTintColor: colors.tabInactive,  // muted tab
-        tabBarStyle: {
-          backgroundColor: colors.surface,            // White background
-          borderTopColor: colors.border,
-          borderTopWidth: 1,
-        },
       })}
     >
       <Tab.Screen
         name="Home"
         component={HomeScreen}
-        options={({ navigation }) => ({
+        options={{
           title: 'Home',
-          headerRight: () => (
-            <View style={{ flexDirection: 'row', alignItems: 'center', marginRight: 16, gap: 8 }}>
-              <SyncIndicator onPress={() => navigation.navigate('SyncStatus')} />
-              <ProfileGearButton onPress={() => navigation.navigate('Profile')} />
-            </View>
-          ),
-        })}
+          tabBarLabel: 'Home',
+          headerShown: false,
+        }}
       />
       <Tab.Screen
         name="Children"
         component={ChildrenStackNavigator}
-        options={{ title: 'My Children', headerShown: false }}
+        options={{ title: 'My Children', tabBarLabel: 'Children', headerShown: false }}
       />
       <Tab.Screen
-        name="Sessions"
-        component={SessionsScreen}
-        options={{ title: 'Sessions' }}
+        name="Insights"
+        component={InsightsScreen}
+        options={{ title: 'Insights', tabBarLabel: 'Insights' }}
       />
       <Tab.Screen
         name="Assessments"
         component={AssessmentsScreen}
-        options={{ title: 'Assessments' }}
+        options={{ title: 'Assessments', tabBarLabel: 'Assess' }}
       />
     </Tab.Navigator>
   );

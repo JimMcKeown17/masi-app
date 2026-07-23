@@ -71,6 +71,8 @@ export const colors = {
 
   // Dark hero band
   heroDark: '#1C1517',
+  heroSurface: '#2A2224',
+  heroBorder: '#3A2F31',
   onDark: '#FFFFFF',
   onDarkMuted: '#C9BFC0',
 

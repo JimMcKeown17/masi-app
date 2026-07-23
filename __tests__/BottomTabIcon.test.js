@@ -20,13 +20,13 @@ describe('getTabIconName — one place for the route→icon mapping', () => {
     expect(getTabIconName('Home', false)).toBe('home-outline');
   });
 
-  test('maps all four tabs to their glyphs (Sessions stays the third tab)', () => {
+  test('maps the four locked destinations around the Record command', () => {
     expect(getTabIconName('Children', true)).toBe('people');
-    expect(getTabIconName('Sessions', true)).toBe('document-text');
+    expect(getTabIconName('Insights', true)).toBe('bar-chart');
     expect(getTabIconName('Assessments', true)).toBe('clipboard');
     // outline variants
     expect(getTabIconName('Children', false)).toBe('people-outline');
-    expect(getTabIconName('Sessions', false)).toBe('document-text-outline');
+    expect(getTabIconName('Insights', false)).toBe('bar-chart-outline');
     expect(getTabIconName('Assessments', false)).toBe('clipboard-outline');
   });
 

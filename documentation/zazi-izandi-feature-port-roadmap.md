@@ -80,7 +80,7 @@ Avoid starting group/session lifecycle work in the first fresh session unless th
 ### 0. Already Shipped / Verify Only
 
 - [x] Clock-in session launch guard shipped as a **soft warning**.
-  - Masi evidence: `src/hooks/useSessionLaunchGuard.js`, `src/components/sessions/ClockInBeforeSessionDialog.js`, `src/screens/main/HomeScreen.js`, `src/screens/main/SessionsScreen.js`
+  - Masi evidence: `src/hooks/useSessionLaunchGuard.js`, `src/components/sessions/ClockInBeforeSessionSheet.js`, `src/components/navigation/LockedBottomTabBar.js`
   - Remaining follow-up: test on physical devices with actual GPS clock-in/out.
 
 - [x] Gender chips shipped as **Male/Female only**.

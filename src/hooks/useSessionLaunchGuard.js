@@ -4,7 +4,10 @@ import { CLOCK_IN_STATUS, getClockInStatusForUser } from '../utils/timeEntryStat
 import { getActiveProgrammeGate } from '../services/activeProgrammeGate';
 
 export const SESSION_CLOCK_WARNING =
-  "You're not clocked in. Clock in now or continue anyway?";
+  'You are not clocked in.';
+export const SESSION_CLOCK_WARNING_COST =
+  'If you record without clocking in, your hours for this session will not be counted. '
+  + 'Only do this if your GPS will not lock.';
 
 export const SESSION_NO_PROGRAMME_TITLE = 'No active programme';
 export const SESSION_NO_PROGRAMME_MESSAGE =

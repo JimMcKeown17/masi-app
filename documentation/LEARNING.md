@@ -1327,7 +1327,7 @@ A shared UI primitive should own invariant mechanics and chrome while callers ke
 
 Large interactive collections need the same two-part recipe that already protects `LetterTile`. First, the virtualized list must be the only vertical scroller so native windowing can limit mounted work. Second, each row must be a memoized leaf with scalar props and a permanently stable callback. `ChildSelectorRow` receives only ids, strings, a boolean, and `onToggle`; the callback reads current selection data from refs, while `extraData` tells the list when scalar selection state changed. This separates event identity from current state, so selecting one child updates one row and typing comments updates none. Jest proves the render cascade is gone, while physical-device testing remains the proof for native windowing.
 
-One Paper dialog deliberately remains. `ClockInBeforeSessionDialog` is a three-way decision, not a picker. Consistency means using the same component for the same interaction semantics, not forcing every overlay into the same shape.
+At the July 13 design-foundation boundary, one Paper dialog deliberately remained: `ClockInBeforeSessionDialog` was a three-way decision, not a picker. The locked July 22 navigation design superseded that presentation decision and moved the same three-way semantics into `ClockInBeforeSessionSheet`. The important invariant was the decision and its escape hatch, not the overlay technology.
 
 ### Session integrity addendum: current state and historical snapshots are different facts
 
@@ -1443,3 +1443,44 @@ A calendar date is not merely a formatted timestamp. Masi's work is attributed t
 Database verbs also carry meaning. `upsert` is useful for “make this row exist in this state,” but archive means “transition this existing row's lifecycle.” PostgreSQL evaluates the INSERT side of an upsert even when the intended outcome is a conflict update. A partial `{ id, removed_at }` membership archive therefore encountered INSERT RLS checks for fields it intentionally did not contain. The authenticated tester owned the child, group, and existing membership, yet the operation still failed because the verb was wrong.
 
 The sync engine now sends archives as lifecycle-only `UPDATE ... WHERE id = ...` operations. It narrows legacy full-snapshot payloads so identity columns cannot be rewritten, requests the updated id back, and finalizes local sync only when exactly that id is acknowledged. This last check matters because an RLS-filtered update can otherwise affect zero rows without returning an error. The mental model is **choose the server operation that matches the domain transition, then require positive evidence before declaring distributed state converged**.
+
+### Navigation commands are not destinations
+
+A destination owns durable navigation state: it can be selected, revisited, deep-linked, and restored. A command asks the application to do something now. The locked centre Record action looks like a tab for reachability, but recording is a command. Making it a real route would create a false selected state, duplicate the capture entry point, and make the clock-in decision belong to whichever screen happened to host the button.
+
+The custom bottom bar therefore renders four real destinations around one command. Home, Children, Insights, and Assess participate in tab state. Record invokes the shared session-launch guard directly, so the same Programme and clock-in rules apply from every tab. The warning sheet also lives at the bar boundary, which is where the command is globally available. The mental model is **navigation state describes where the user is; a command describes what the user wants to do**.
+
+Home follows a second boundary rule: it presents status but does not own status. Daily progress, who-next ordering, assessment coverage, recent sessions, time tracking, and sync health still come from their existing services, repositories, contexts, and presenters. The screen performs bounded SQLite reads when focused and derives one view model from those results. It does not introduce a parallel store or a second definition of programme-day time. Recent timestamps use the same fixed `Africa/Johannesburg` clock as business-date attribution, with `created_at` as the truthful fallback because current capture does not populate `started_at`. The mental model is **a dashboard is a projection of domain truth, not another source of truth**.
+
+### Assessment visibility has two independent scopes
+
+The assessment discrepancy exposed two independent questions that had been collapsed into one word:
+“history.” The first is the product time scope. Home counted only the current calendar month,
+Assessment History counted only 30 days, and the Assessments tab counted every locally stored row.
+All three queries were correct according to their own hidden filters, but the resulting interface was
+contradictory. Until formal Assessment Windows are wired into current EGRA capture, the app now uses
+complete active-roster coverage consistently and makes History genuinely all-time.
+
+The second scope is sync direction. A drained outbox proves that this device's writes reached the
+server. It does not prove that server rows reached this device. Assessments and assessment items have
+an outbound producer but no inbound pull, so a second or reinstalled device can truthfully say “All
+saved and synced” while holding incomplete history. Display consistency cannot repair missing local
+rows. That requires a separate Programme-scoped pull, transactional parent/item persistence,
+pagination completeness, pending-local collision rails, and explicit RLS/reconcile documentation.
+The mental model is **query scope explains which local rows count; sync direction explains which rows
+exist locally at all**.
+
+### Group selection can be a view over child selection without becoming group-first persistence
+
+The current literacy form still persists a final child roster and leaves `group_ids` empty. Replacing
+the old group dropdown with a Groups mode therefore must not imply that durable group-first sessions
+have shipped. The compact picker treats a group as a selection shortcut: choosing a group replaces the
+current roster with exactly that group's children, and switching back to Children permits field
+adjustments before save. The form still has one source of truth, `selectedChildren`, so the two modes
+cannot drift.
+
+This also removes duplicated state from the interface. Selection is visible on each row and in one
+count, so a second chip list adds height without adding information. The mental model is **multiple
+views, one selection model**. When the later group-centric rebuild gives `sessions.group_id` a durable
+server contract, this shortcut can evolve into real group identity rather than pretending that the
+current payload already has it.

@@ -25,7 +25,7 @@
 - [ ] **B1. Clock in indoors** (concrete building, poor GPS). The button must **not** spin forever. Within about 10 seconds it either records a location or records the entry **without** a location. *(Sprint 1: the "10s GPS timeout" previously did not exist.)*
 - [ ] **B2. Clock out** in the same conditions. Same expectation. The shift must close.
 - [ ] **B3. Deny location permission permanently**, then clock in. You should get a path to Settings, not a repeating alert loop.
-- [ ] **B4. Clock in via Home > Record Session > "Clock In Now"**, then go back to Home. Home must show you as clocked in, and there must be exactly one open entry.
+- [ ] **B4. Clock in via the centre Record action > "Clock in now"**, then go back to Home. Home must show "On the clock" with a running elapsed time, and there must be exactly one open entry.
 
 ## C. Session capture (the highest-traffic flow)
 
@@ -35,6 +35,8 @@
 - [ ] **C4. Reconnect.** Turn the network back on. The session syncs without you doing anything. "Last Synced" updates.
 - [ ] **C5. Leave guard.** Start a session, select a child, then swipe back. You should be warned about unsaved changes.
 - [ ] **C6. Current reading level survives the real lifecycle.** Open a literacy session and confirm a child's previously saved level is pre-filled. Change it, save while offline, force-quit, reopen, and start another session for the same child: the new value must still be selected. Reconnect and sync, then confirm the child update leaves the outbox and the same level appears on Edit Child and Child Results. The completed session must retain its own per-child snapshot even after the current child level changes again.
+- [x] **C7. Compact child picker.** Open New Session with a real roster. The picker shows compact child rows with Select/Selected pills, a visible selected count, and no duplicate selected-child chip list. Search still filters the roster, tapping a row updates immediately, and the rest of the form remains reachable without layout overlap. *(Passed by Jim in Expo Go on 2026-07-23.)*
+- [x] **C8. Children/Groups toggle.** Switch to Groups. Group names and child counts replace the child rows without a dropdown. Select one group, confirm its exact roster is selected, switch back to Children, remove or add one child, and save. The saved session contains the final individually adjusted roster, not stale group membership or children from a previously selected group. *(Passed by Jim in Expo Go on 2026-07-23.)*
 
 ## D. Assessment capture
 
@@ -42,12 +44,14 @@
 - [ ] **D2. Background mid-assessment** (switch apps for 20 seconds), come back. The clock pauses and resumes rather than running down.
 - [ ] **D3. Attempt number.** Assess the same child twice in a row, quickly, tapping the child immediately without waiting. The second assessment must be recorded as attempt 2, not attempt 1. *(Sprint 3: attempt number resolved at launch.)*
 - [ ] **D4. Capture mode still persists.** Profile > switch capture mode (grid vs sequential), leave Profile, launch an assessment. It uses the mode you chose. *(Sprint 4A: this moved to a new deviceSettings module.)*
+- [x] **D5. History and Home use the same locally available lifetime scope.** With an assessment older than 30 days and outside the current month, Assessment History still shows it and Home counts that child in active-roster coverage. The Assessments tab percentage and Home assessed-child count agree. This gate does not prove cross-device history until the deferred inbound assessment pull in `open-work.md` §0d is built. *(Passed by Jim in Expo Go on 2026-07-23.)*
 
 ## E. Dates (South Africa is UTC+2, so the bug window is 00:00 to 01:59)
 
 - [ ] **E1.** Set the device clock to about 00:30, clock in, and check Work History. The entry must appear under **today**, not yesterday. Set the clock back afterwards.
 - [ ] **E2.** Home "days worked this month" counts that entry in the current month.
 - [ ] **E3. Programme-day consistency with a wrong/overseas device timezone.** Temporarily set the device timezone to America/New_York and choose an instant after 18:00 there, when South Africa is already on the next date. Open a new session: its default Session Date must be the South African date. Save it and confirm the completion ring increments, Home shows it in the matching Sessions This Week day, and Session History uses that same date. Restore the device timezone afterwards.
+- [ ] **E4. Assessment programme day.** During the same wrong-timezone window as E3, complete an assessment. Assessment History and its detail must attribute it to the South African date, including across a month boundary. Restore the device timezone afterwards.
 
 ## F. Sync status and trust
 
@@ -189,9 +193,9 @@ Open each one, confirm it looks like a sheet, has the same options, and produces
 - [ ] **J5.** Assessments: the language picker. This one is deliberately TWO-STEP (tap a language, then press Start), because tapping it launches a 60-second timed assessment.
 - [ ] **J6. Portal sheet geometry on a real build (2026-07-22).** On the preview/pilot BUILD (not Expo Go), open the School picker (now searchable, 325 real schools) and the Grade picker. Both must render fully, sit flush against the bottom edge of the screen, and dismiss from the backdrop and Android hardware back. Context: sheets moved from RN `Modal` to Paper `Portal` after the modal parked content off-screen under Expo Go's new-arch runtime (open-work §0c.2/§0c.3); Expo Go still shows imperfect flushness, believed to be an Expo Go-only artifact. This gate decides whether §0c.3 closes or becomes real work. Also type into the School search with the keyboard up and confirm the list stays usable.
 
-## K. The one dialog that deliberately survived
+## K. Record-without-clock-in decision sheet
 
-- [ ] **K1.** Without clocking in, tap Record Session. You should still get the "Clock In First?" prompt as a DIALOG (not a sheet), offering Clock In Now, Continue Anyway, or dismiss. That is intentional: it is a decision, not a picker.
+- [ ] **K1.** Without clocking in, tap the centre Record action from Home and from one other tab. A bottom sheet must say "You are not clocked in.", offer "Clock in now", explain that recording without clocking in means the hours will not be counted, offer "Record without clocking in", and allow Cancel/backdrop dismissal. The escape hatch stays live because GPS can fail in the field.
 
 ## L. Assessment capture chrome
 
@@ -199,3 +203,13 @@ Open each one, confirm it looks like a sheet, has the same options, and produces
 - [ ] **L2.** Start a sequential assessment: same, and its header says "Grid N of M" where the letter one says "Page N of M".
 - [ ] **L3.** Press "End Assessment" in each mode: the confirmation must read "End the assessment now and record current results?" with Cancel and End.
 - [ ] **L4.** Watch the countdown for 10 seconds. It must tick smoothly without the screen flickering (the timer re-renders only itself).
+
+## S. Locked Home and five-slot navigation (2026-07-22)
+
+- [ ] **S1. Home, clocked out.** Compare against `design/mockups-2026-07-c/04-locked/preview.png`. Confirm the charcoal status hero, greeting, Programme and school, full sync label, "Not clocked in" pill, 0/target half gauge, and "Clock in to start your day." fit without clipping.
+- [ ] **S2. Home, clocked in.** Confirm the pill changes to "On the clock" with a live elapsed time and Clock Out. The R3 half gauge and status copy must remain aligned at 0, 1, target, and above ceiling.
+- [ ] **S3. Body truth.** Confirm Home shows at most three "Who to see next" children, Monday to Friday counts, current-month assessment coverage, and the two newest signed-in-EA sessions. "View all" opens Session History and the coverage row opens Assess.
+- [ ] **S4. Navigation geometry.** On iPhone and low-end Android, confirm exactly five visual slots in this order: Home, Children, Record, Insights, Assess. The centre Record button must sit above the bar without clipping or colliding with the home indicator. It is a command, never a selected destination.
+- [ ] **S5. Insights.** Open all three cards and confirm Letter Mastery, Assessment Scores, and Session Count reach their existing ranking screens. Back navigation must return to Insights with the bottom bar intact.
+- [ ] **S6. Zero-class route.** Sign in with a blank tester. Home must route into the existing class/child onboarding flow instead of showing a misleading empty dashboard. Do not expect the future Learners group toggle in this build.
+- [ ] **S7. Offline and pending sync.** Reopen Home offline with cached data. The screen must remain usable, preserve its last SQLite-derived content, and show the correct full sync status rather than green success.

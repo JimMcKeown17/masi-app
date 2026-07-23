@@ -31,7 +31,8 @@ describe('Masi red-dominant design tokens', () => {
       'primary','primaryLight','primaryDark','emphasis','accent','success',
       'error','errorBg','warning','warningBg','warningText','info','successBg','successText','successBorder',
       'background','surface','cardBackground','text','textSecondary','border','disabled','placeholder',
-      'tabActive','tabInactive','heroDark','onDark','onDarkMuted','ringNeutral','ringStart',
+      'tabActive','tabInactive','heroDark','heroSurface','heroBorder','onDark','onDarkMuted',
+      'ringNeutral','ringStart',
     ];
     REQUIRED_KEYS.forEach((key) => expect(Object.keys(colors)).toContain(key));
     // Exact set: also fails if an unexpected extra token key is added (even with an approved value).
@@ -99,7 +100,7 @@ describe('Masi red-dominant design tokens', () => {
       '#e72d4d', '#c81f3e', '#a4182f', '#7c1223', '#530b17',
       // warm neutrals and dark-band tokens
       '#221a1b', '#76696b', '#ece5e4', '#f8f5f4', '#ffffff',
-      '#b3a8a8', '#1c1517', '#c9bfc0', '#9aa3ab', '#8a939c',
+      '#b3a8a8', '#1c1517', '#2a2224', '#3a2f31', '#c9bfc0', '#9aa3ab', '#8a939c',
       // semantic tokens
       '#3fa535', '#e7f3e5', '#2e7d27', '#cde8c9', '#b3261e',
       '#fceae8', '#b26a00', '#fff8e1', '#8a4b00',

@@ -11,7 +11,7 @@ import { toLocalDateString } from '../utils/localDate';
  * This is the wiring layer for the Sessions Today ring: it resolves the active
  * programme, loads its sessions, narrows them to today, and runs the pure
  * `getSessionGoal`. The screen calls this on focus and hands the result
- * straight to <SessionsTodayRing goal={...} />.
+ * straight to either daily-progress presenter.
  *
  * Returns `null` when there is no active programme to measure against (e.g. an
  * EA with no open programme assignment) — the caller hides the ring.

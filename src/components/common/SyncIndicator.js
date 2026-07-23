@@ -1,9 +1,9 @@
 import React from 'react';
-import { TouchableOpacity, StyleSheet } from 'react-native';
-import { Badge, ActivityIndicator } from 'react-native-paper';
+import { Pressable, StyleSheet } from 'react-native';
+import { Badge, ActivityIndicator, Text } from 'react-native-paper';
 import { Ionicons } from '@expo/vector-icons';
 import { useOffline } from '../../context/OfflineContext';
-import { spacing } from '../../constants/colors';
+import { colors, spacing } from '../../constants/colors';
 import { deriveSyncState, describeSyncState } from '../../utils/syncStatusPresenter';
 
 /**
@@ -13,17 +13,20 @@ import { deriveSyncState, describeSyncState } from '../../utils/syncStatusPresen
  * - Amber alert: terminal items that need attention (never hidden behind green)
  * - Spinner: a sync pass is running
  */
-export default function SyncIndicator({ onPress }) {
+export default function SyncIndicator({ onPress, showLabel = false, dark = false }) {
   const { isOnline, isSyncing, waitingCount, needsAttentionCount } = useOffline();
 
   const state = deriveSyncState({ isOnline, isSyncing, waitingCount, needsAttentionCount });
   const view = describeSyncState(state, { waitingCount, needsAttentionCount });
 
   return (
-    <TouchableOpacity
+    <Pressable
       onPress={onPress}
-      style={[styles.container, { backgroundColor: view.backgroundColor }]}
-      activeOpacity={0.7}
+      style={[
+        styles.container,
+        showLabel ? styles.labelContainer : null,
+        dark ? styles.darkContainer : { backgroundColor: view.backgroundColor },
+      ]}
       accessibilityRole="button"
       accessibilityLabel={`Open sync status, ${view.accessibilityLabel}`}
       hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
@@ -34,12 +37,16 @@ export default function SyncIndicator({ onPress }) {
         <Ionicons name={view.icon} size={20} color={view.color} />
       )}
 
-      {view.badgeCount > 0 && (
+      {showLabel ? (
+        <Text style={[styles.message, { color: view.color }]}>{view.message}</Text>
+      ) : null}
+
+      {!showLabel && view.badgeCount > 0 ? (
         <Badge style={[styles.badge, { backgroundColor: view.color }]} size={16}>
           {view.badgeCount > 99 ? '99+' : view.badgeCount}
         </Badge>
-      )}
-    </TouchableOpacity>
+      ) : null}
+    </Pressable>
   );
 }
 
@@ -54,6 +61,21 @@ const styles = StyleSheet.create({
     minWidth: 40,
     height: 32,
     position: 'relative',
+  },
+  labelContainer: {
+    gap: spacing.xs + 2,
+    minWidth: 0,
+    height: 34,
+    paddingHorizontal: spacing.sm + 3,
+  },
+  darkContainer: {
+    borderWidth: 1,
+    borderColor: colors.heroBorder,
+    backgroundColor: colors.heroSurface,
+  },
+  message: {
+    fontSize: 11,
+    fontWeight: '700',
   },
   badge: {
     position: 'absolute',

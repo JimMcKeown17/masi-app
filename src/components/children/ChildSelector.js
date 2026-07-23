@@ -1,10 +1,7 @@
 import React, { useCallback, useMemo, useRef, useState } from 'react';
-import { FlatList, StyleSheet, View } from 'react-native';
+import { FlatList, Pressable, StyleSheet, View } from 'react-native';
 import {
-  Button,
-  Chip,
   List,
-  Menu,
   Searchbar,
   Text,
 } from 'react-native-paper';
@@ -13,12 +10,20 @@ import { useChildren } from '../../context/ChildrenContext';
 import { useClasses } from '../../context/ClassesContext';
 import { NO_TEXT_SUGGESTIONS } from '../../constants/textInputProps';
 
-// Paper List.Item measures 72px for a title plus description. The existing
-// spacing.xs vertical margins make each roster row 80px tall.
-const ROSTER_ROW_HEIGHT = 80;
+const ROSTER_ROW_HEIGHT = 64;
 const INITIAL_ROSTER_ROWS = 8;
 const ROSTER_WINDOW_SIZE = 5;
 const PAPER_CARD_RADIUS = 12;
+
+function SelectionPill({ selected }) {
+  return (
+    <View style={[styles.selectionPill, selected && styles.selectionPillSelected]}>
+      <Text style={[styles.selectionPillText, selected && styles.selectionPillTextSelected]}>
+        {selected ? 'Selected' : 'Select'}
+      </Text>
+    </View>
+  );
+}
 
 const ChildSelectorRow = React.memo(function ChildSelectorRow({
   id,
@@ -33,11 +38,31 @@ const ChildSelectorRow = React.memo(function ChildSelectorRow({
         title={name}
         description={className}
         onPress={() => onToggle(id)}
-        right={(props) => (
-          isSelected
-            ? <List.Icon {...props} icon="check" color={colors.primary} />
-            : null
-        )}
+        right={() => <SelectionPill selected={isSelected} />}
+        accessibilityLabel={`${name}, ${isSelected ? 'selected' : 'not selected'}`}
+        accessibilityState={{ selected: isSelected }}
+        style={[styles.listItem, isSelected && styles.listItemSelected]}
+      />
+    </View>
+  );
+});
+
+const GroupSelectorRow = React.memo(function GroupSelectorRow({
+  id,
+  name,
+  childCount,
+  isSelected,
+  onSelect,
+}) {
+  return (
+    <View style={styles.listItemChrome}>
+      <List.Item
+        title={name}
+        description={`${childCount} ${childCount === 1 ? 'child' : 'children'}`}
+        onPress={() => onSelect(id)}
+        right={() => <SelectionPill selected={isSelected} />}
+        accessibilityLabel={`${name}, ${childCount} ${childCount === 1 ? 'child' : 'children'}, ${isSelected ? 'selected' : 'not selected'}`}
+        accessibilityState={{ selected: isSelected }}
         style={[styles.listItem, isSelected && styles.listItemSelected]}
       />
     </View>
@@ -48,52 +73,51 @@ function ChildSelectorHeader({
   formHeader,
   searchTerm,
   onSearchTermChange,
-  groupMenuVisible,
-  onOpenGroupMenu,
-  onDismissGroupMenu,
-  groups,
-  onSelectGroup,
+  selectionMode,
+  onSelectionModeChange,
+  searchPlaceholder,
+  selectedCount,
 }) {
   return (
     <>
       {formHeader}
       <View style={styles.cardTop}>
-        <Text variant="titleSmall" style={styles.sectionLabel}>Select Children</Text>
+        <View style={styles.sectionHeading}>
+          <Text variant="titleSmall" style={styles.sectionLabel}>Select Children</Text>
+          <Text variant="bodySmall" style={styles.selectedCount}>
+            {selectedCount} selected
+          </Text>
+        </View>
+        <View style={styles.modeToggle}>
+          {[
+            { key: 'children', label: 'Children' },
+            { key: 'groups', label: 'Groups' },
+          ].map((option) => {
+            const selected = selectionMode === option.key;
+            return (
+              <Pressable
+                key={option.key}
+                onPress={() => onSelectionModeChange(option.key)}
+                accessibilityRole="button"
+                accessibilityLabel={`Show ${option.label.toLowerCase()}`}
+                accessibilityState={{ selected }}
+                style={[styles.modeOption, selected && styles.modeOptionSelected]}
+              >
+                <Text style={[styles.modeOptionText, selected && styles.modeOptionTextSelected]}>
+                  {option.label}
+                </Text>
+              </Pressable>
+            );
+          })}
+        </View>
         <Searchbar
-          placeholder="Search children..."
+          placeholder={searchPlaceholder}
           value={searchTerm}
           onChangeText={onSearchTermChange}
           style={styles.searchBar}
           elevation={0}
           {...NO_TEXT_SUGGESTIONS}
         />
-
-        <Menu
-          visible={groupMenuVisible}
-          onDismiss={onDismissGroupMenu}
-          anchor={
-            <Button
-              mode="outlined"
-              onPress={onOpenGroupMenu}
-              icon="folder-open"
-              style={styles.groupButton}
-            >
-              Select by Group
-            </Button>
-          }
-        >
-          {groups.length === 0 ? (
-            <Menu.Item title="No groups available" disabled />
-          ) : (
-            groups.map((group) => (
-              <Menu.Item
-                key={group.id}
-                title={group.name}
-                onPress={() => onSelectGroup(group.id)}
-              />
-            ))
-          )}
-        </Menu>
       </View>
     </>
   );
@@ -101,31 +125,11 @@ function ChildSelectorHeader({
 
 function ChildSelectorFooter({
   formFooter,
-  selectedChildren,
-  onRemoveChild,
   selectionError,
 }) {
   return (
     <>
       <View style={styles.cardBottom}>
-        {selectedChildren.length > 0 && (
-          <View style={styles.chipsSection}>
-            <Text variant="bodySmall" style={styles.chipsSectionLabel}>
-              Selected Children
-            </Text>
-            <View style={styles.chipsRow}>
-              {selectedChildren.map((child) => (
-                <Chip
-                  key={child.id}
-                  onDelete={() => onRemoveChild(child.id)}
-                  style={styles.chip}
-                >
-                  {child.first_name} {child.last_name}
-                </Chip>
-              ))}
-            </View>
-          </View>
-        )}
         {selectionError && (
           <Text variant="bodySmall" style={styles.errorText}>{selectionError}</Text>
         )}
@@ -147,7 +151,7 @@ function ChildSelector({
   const { children, groups, getChildrenInGroup } = useChildren();
   const { classes } = useClasses();
   const [searchTerm, setSearchTerm] = useState('');
-  const [groupMenuVisible, setGroupMenuVisible] = useState(false);
+  const [selectionMode, setSelectionMode] = useState('children');
 
   const selectedIds = useMemo(
     () => new Set(selectedChildren.map((child) => child.id)),
@@ -160,6 +164,10 @@ function ChildSelector({
   const classNamesById = useMemo(
     () => new Map(classes.map((childClass) => [childClass.id, childClass.name])),
     [classes],
+  );
+  const groupChildrenById = useMemo(
+    () => new Map(groups.map((group) => [group.id, getChildrenInGroup(group.id)])),
+    [getChildrenInGroup, groups],
   );
 
   const selectedChildrenRef = useRef(selectedChildren);
@@ -178,6 +186,11 @@ function ChildSelector({
         child.last_name.toLowerCase().includes(lower),
     );
   }, [children, searchTerm]);
+  const filteredGroups = useMemo(() => {
+    if (!searchTerm) return groups;
+    const lower = searchTerm.toLowerCase();
+    return groups.filter((group) => group.name.toLowerCase().includes(lower));
+  }, [groups, searchTerm]);
 
   const onToggle = useCallback((childId) => {
     const currentSelection = selectedChildrenRef.current;
@@ -189,50 +202,69 @@ function ChildSelector({
   }, []);
 
   const handleSelectGroup = useCallback((groupId) => {
+    const groupChildren = getChildrenInGroup(groupId);
     const currentSelection = selectedChildrenRef.current;
-    const currentIds = new Set(currentSelection.map((child) => child.id));
-    const merged = [...currentSelection];
-    getChildrenInGroup(groupId).forEach((child) => {
-      if (!currentIds.has(child.id)) merged.push(child);
-    });
-    onSelectionChangeRef.current(merged);
-    setGroupMenuVisible(false);
+    const isExactSelection = groupChildren.length > 0
+      && groupChildren.length === currentSelection.length
+      && groupChildren.every((child) => currentSelection.some(
+        (selected) => selected.id === child.id
+      ));
+    onSelectionChangeRef.current(isExactSelection ? [] : groupChildren);
   }, [getChildrenInGroup]);
 
-  const handleRemoveChild = useCallback((childId) => {
-    onSelectionChangeRef.current(
-      selectedChildrenRef.current.filter((child) => child.id !== childId),
-    );
+  const handleSelectionModeChange = useCallback((mode) => {
+    setSearchTerm('');
+    setSelectionMode(mode);
   }, []);
 
   const renderItem = useCallback(({ item }) => (
-    <ChildSelectorRow
-      id={item.id}
-      name={`${item.first_name} ${item.last_name}`}
-      className={classNamesById.get(item.class_id) || 'No class'}
-      isSelected={selectedIds.has(item.id)}
-      onToggle={onToggle}
-    />
-  ), [classNamesById, onToggle, selectedIds]);
+    selectionMode === 'groups'
+      ? (
+        <GroupSelectorRow
+          id={item.id}
+          name={item.name}
+          childCount={groupChildrenById.get(item.id)?.length || 0}
+          isSelected={(
+            groupChildrenById.get(item.id)?.length > 0
+            && groupChildrenById.get(item.id).length === selectedIds.size
+            && groupChildrenById.get(item.id).every((child) => selectedIds.has(child.id))
+          )}
+          onSelect={handleSelectGroup}
+        />
+      )
+      : (
+        <ChildSelectorRow
+          id={item.id}
+          name={`${item.first_name} ${item.last_name}`}
+          className={classNamesById.get(item.class_id) || 'No class'}
+          isSelected={selectedIds.has(item.id)}
+          onToggle={onToggle}
+        />
+      )
+  ), [
+    classNamesById,
+    groupChildrenById,
+    handleSelectGroup,
+    onToggle,
+    selectedIds,
+    selectionMode,
+  ]);
 
   const listHeader = (
     <ChildSelectorHeader
       formHeader={ListHeaderComponent}
       searchTerm={searchTerm}
       onSearchTermChange={setSearchTerm}
-      groupMenuVisible={groupMenuVisible}
-      onOpenGroupMenu={() => setGroupMenuVisible(true)}
-      onDismissGroupMenu={() => setGroupMenuVisible(false)}
-      groups={groups}
-      onSelectGroup={handleSelectGroup}
+      selectionMode={selectionMode}
+      onSelectionModeChange={handleSelectionModeChange}
+      searchPlaceholder={selectionMode === 'groups' ? 'Search groups...' : 'Search children...'}
+      selectedCount={selectedChildren.length}
     />
   );
 
   const listFooter = (
     <ChildSelectorFooter
       formFooter={ListFooterComponent}
-      selectedChildren={selectedChildren}
-      onRemoveChild={handleRemoveChild}
       selectionError={selectionError}
     />
   );
@@ -241,7 +273,7 @@ function ChildSelector({
     <FlatList
       style={style}
       contentContainerStyle={contentContainerStyle}
-      data={filteredChildren}
+      data={selectionMode === 'groups' ? filteredGroups : filteredChildren}
       keyExtractor={(item) => item.id}
       renderItem={renderItem}
       extraData={selectedIds}
@@ -250,7 +282,9 @@ function ChildSelector({
       ListEmptyComponent={
         <View style={styles.listItemChrome}>
           <Text variant="bodySmall" style={styles.emptyText}>
-            {searchTerm ? 'No children match your search' : 'No children available'}
+            {selectionMode === 'groups'
+              ? (searchTerm ? 'No groups match your search' : 'No groups available')
+              : (searchTerm ? 'No children match your search' : 'No children available')}
           </Text>
         </View>
       }
@@ -287,15 +321,48 @@ const styles = StyleSheet.create({
   },
   sectionLabel: {
     color: colors.primary,
-    marginBottom: spacing.sm,
     fontWeight: '600',
+  },
+  sectionHeading: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  selectedCount: {
+    color: colors.textSecondary,
+    fontWeight: '600',
+  },
+  modeToggle: {
+    flexDirection: 'row',
+    backgroundColor: colors.background,
+    borderRadius: borderRadius.md,
+    borderCurve: 'continuous',
+    padding: spacing.xs,
+    marginVertical: spacing.sm,
+    gap: spacing.xs,
+  },
+  modeOption: {
+    flex: 1,
+    minHeight: 44,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: borderRadius.sm,
+    borderCurve: 'continuous',
+  },
+  modeOptionSelected: {
+    backgroundColor: colors.surface,
+    ...shadows.card,
+  },
+  modeOptionText: {
+    color: colors.textSecondary,
+    fontWeight: '600',
+  },
+  modeOptionTextSelected: {
+    color: colors.primary,
   },
   searchBar: {
     marginBottom: spacing.sm,
     backgroundColor: colors.surface,
-  },
-  groupButton: {
-    marginBottom: spacing.md,
   },
   listItemChrome: {
     backgroundColor: colors.surface,
@@ -303,31 +370,38 @@ const styles = StyleSheet.create({
   },
   listItem: {
     backgroundColor: colors.surface,
-    marginVertical: spacing.xs,
-    borderRadius: borderRadius.sm,
+    minHeight: ROSTER_ROW_HEIGHT,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: colors.border,
   },
   listItemSelected: {
     backgroundColor: colors.red50,
+  },
+  selectionPill: {
+    alignSelf: 'center',
+    minWidth: 84,
+    minHeight: 38,
+    paddingHorizontal: spacing.sm,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.background,
+    borderRadius: borderRadius.xl,
+    borderCurve: 'continuous',
+  },
+  selectionPillSelected: {
+    backgroundColor: colors.red50,
+  },
+  selectionPillText: {
+    color: colors.textSecondary,
+    fontWeight: '600',
+  },
+  selectionPillTextSelected: {
+    color: colors.primary,
   },
   emptyText: {
     color: colors.textSecondary,
     textAlign: 'center',
     paddingVertical: spacing.md,
-  },
-  chipsSection: {
-    marginTop: spacing.md,
-  },
-  chipsSectionLabel: {
-    color: colors.textSecondary,
-    marginBottom: spacing.sm,
-  },
-  chipsRow: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: spacing.sm,
-  },
-  chip: {
-    backgroundColor: colors.red50,
   },
   errorText: {
     color: colors.error,

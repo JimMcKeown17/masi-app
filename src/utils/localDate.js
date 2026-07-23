@@ -39,3 +39,18 @@ export function formatDisplayDate(value, options = {}) {
     ...options,
   });
 }
+
+export function formatDisplayTime(value) {
+  if (!value) return '';
+  const date = asDate(value);
+  if (Number.isNaN(date.getTime())) return '';
+
+  const parts = new Intl.DateTimeFormat('en-ZA', {
+    timeZone: LOCAL_TIME_ZONE,
+    hour: '2-digit',
+    minute: '2-digit',
+    hourCycle: 'h23',
+  }).formatToParts(date);
+  const byType = Object.fromEntries(parts.map(part => [part.type, part.value]));
+  return `${byType.hour}:${byType.minute}`;
+}

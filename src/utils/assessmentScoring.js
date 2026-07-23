@@ -2,6 +2,8 @@
 // Keeping this here (not in a screen) guarantees grid and sequential modes
 // produce identically shaped records — the foundation of a valid A/B comparison.
 
+import { toLocalDateString } from './localDate';
+
 export function computeAssessmentResult(letterStates, lastTappedIndex, letters) {
   if (lastTappedIndex < 0) {
     return { lettersAttempted: 0, correctResponses: 0, incorrectLetters: [], correctLetters: [], accuracy: 0 };
@@ -40,7 +42,7 @@ export function buildAssessmentRecord({
   captureMode, correctionCount = 0, elapsedSeconds, finalLastIndex, letterStates, now,
 }) {
   const result = computeAssessmentResult(letterStates, finalLastIndex, letterSet.letters);
-  const dateAssessed = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+  const dateAssessed = toLocalDateString(now);
 
   return {
     id,

@@ -39,7 +39,7 @@ Green (`#3FA535`) carries success.
 - **Neutrals** — `background`, `surface`, `cardBackground`, `text`, `textSecondary`, `border`,
   `disabled`, `placeholder`.
 - **Component** — `tabActive` (red600), `tabInactive`.
-- **Dark hero band** — `heroDark`, `onDark`, `onDarkMuted`.
+- **Dark hero band** - `heroDark`, `heroSurface`, `heroBorder`, `onDark`, `onDarkMuted`.
 - **Session ring stages** — `ringNeutral`, `ringStart`.
 
 Spacing `4 / 8 / 16 / 24 / 32 / 48`. Radii `sm 9 / md 14 / lg 18 / xl 22`. Two warm shadows
@@ -78,5 +78,5 @@ document that tells you to use them, that document is stale — this one, and th
   **one** importer against **82** raw `fontSize:` declarations across `src/`. Roadmap item 15
   (`documentation/improvements-2026-07.md`) calls for the token rollout plus a fail-closed size-floor
   guard test. Until that lands, typography is a token file that nothing uses.
-- `ringNeutral` and `ringStart` are defined but have **zero importers** — dead tokens pending the
-  staged ring-colour work (roadmap item 14c).
+- The locked Home R3 half gauge uses `ringNeutral` at zero/no-target, `ringStart` at one session,
+  primary red while progressing, success green at target, and amber above the usual ceiling.

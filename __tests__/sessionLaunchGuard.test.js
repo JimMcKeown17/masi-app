@@ -1,7 +1,6 @@
 import React from 'react';
 import { render, fireEvent, waitFor } from '@testing-library/react-native';
 import { PaperProvider } from 'react-native-paper';
-import HomeScreen from '../src/screens/main/HomeScreen';
 import SessionsScreen from '../src/screens/main/SessionsScreen';
 import { getActiveProgrammeGate } from '../src/services/activeProgrammeGate';
 
@@ -121,27 +120,27 @@ beforeEach(() => {
 });
 
 describe('session launch clock-in warning', () => {
-  test('Home record session shows a soft warning when the user is not clocked in', async () => {
-    const screen = renderWithPaper(<HomeScreen navigation={navigation} />);
+  test('recording while clocked out preserves the explicit continue escape hatch', async () => {
+    const screen = renderWithPaper(<SessionsScreen navigation={navigation} />);
 
-    fireEvent.press(screen.getByText('Record Session'));
+    fireEvent.press(await screen.findByText('Record New Session'));
 
-    await waitFor(() => expect(screen.getByText("You're not clocked in. Clock in now or continue anyway?")).toBeTruthy());
+    await waitFor(() => expect(screen.getByText('You are not clocked in.')).toBeTruthy());
     expect(mockNavigate).not.toHaveBeenCalledWith('SessionForm');
 
-    fireEvent.press(screen.getByText('Continue Anyway'));
+    fireEvent.press(screen.getByText('Record without clocking in'));
 
     expect(mockNavigate).toHaveBeenCalledWith('SessionForm');
   });
 
-  test('Sessions tab record button can send the user to clock in', async () => {
+  test('record action can send the user to clock in', async () => {
     const screen = renderWithPaper(<SessionsScreen navigation={navigation} />);
 
     // findByText waits past the gate's loading spinner for the capture UI.
     fireEvent.press(await screen.findByText('Record New Session'));
 
-    await waitFor(() => expect(screen.getByText("You're not clocked in. Clock in now or continue anyway?")).toBeTruthy());
-    fireEvent.press(screen.getByText('Clock In Now'));
+    await waitFor(() => expect(screen.getByText('You are not clocked in.')).toBeTruthy());
+    fireEvent.press(screen.getByText('Clock in now'));
 
     expect(mockNavigate).toHaveBeenCalledWith('TimeTracking');
   });
@@ -169,6 +168,6 @@ describe('session launch clock-in warning', () => {
     fireEvent.press(await screen.findByText('Record New Session'));
 
     await waitFor(() => expect(mockNavigate).toHaveBeenCalledWith('SessionForm'));
-    expect(screen.queryByText("You're not clocked in. Clock in now or continue anyway?")).toBeNull();
+    expect(screen.queryByText('You are not clocked in.')).toBeNull();
   });
 });

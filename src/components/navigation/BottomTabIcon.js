@@ -10,7 +10,7 @@ import { colors } from '../../constants/colors';
 const TAB_ICONS = {
   Home: 'home',
   Children: 'people',
-  Sessions: 'document-text', // the third tab stays "Sessions" — do not rename
+  Insights: 'bar-chart',
   Assessments: 'clipboard',
 };
 

@@ -71,7 +71,7 @@ describe('AssessmentHistoryScreen Plan 5 behavior', () => {
     jest.clearAllMocks();
   });
 
-  test('loads recent assessment history from SQLite without screen-owned Supabase or storage pulls', async () => {
+  test('loads complete assessment history from SQLite without a hidden date cutoff', async () => {
     const navigation = { navigate: jest.fn() };
     const { getByText, queryByText } = render(<AssessmentHistoryScreen navigation={navigation} />);
 
@@ -84,7 +84,6 @@ describe('AssessmentHistoryScreen Plan 5 behavior', () => {
     expect(assessmentsRepository.getAssessments).toHaveBeenCalledWith({
       userId: 'user-1',
       recordedByUserId: 'user-1',
-      sinceDate: '2026-04-21',
       order: 'desc',
     });
     expect(supabase.from).not.toHaveBeenCalled();

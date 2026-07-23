@@ -1,4 +1,4 @@
-import { formatDisplayDate, toLocalDateString } from '../src/utils/localDate';
+import { formatDisplayDate, formatDisplayTime, toLocalDateString } from '../src/utils/localDate';
 
 describe('localDate', () => {
   test.each([
@@ -17,5 +17,9 @@ describe('localDate', () => {
       month: 'short',
       day: 'numeric',
     })).toBe('Sunday, Jul 12, 2026');
+  });
+
+  test('formats a display time in the programme timezone', () => {
+    expect(formatDisplayTime('2026-07-22T06:15:00.000Z')).toBe('08:15');
   });
 });

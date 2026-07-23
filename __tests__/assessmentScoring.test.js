@@ -53,4 +53,14 @@ describe('buildAssessmentRecord', () => {
     expect(rec.last_letter_attempted).toBeNull();
     expect(rec.letters_attempted).toBe(0);
   });
+
+  test('attributes an assessment to the South African programme day', () => {
+    const rec = buildAssessmentRecord({
+      ...base,
+      captureMode: 'sequential',
+      now: new Date('2026-06-30T22:30:00.000Z'),
+    });
+
+    expect(rec.date_assessed).toBe('2026-07-01');
+  });
 });

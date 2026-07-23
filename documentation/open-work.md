@@ -36,6 +36,7 @@ This is the execution order, not a second backlog. The numbered sections below r
 5. **P2, time-sensitive only when WelaPLUS resumes:** deliberately re-key `assessmentItemDomainId` before real SQLite-backend assessment data exists, but only as a standalone reviewed change (§7). Do not pull it forward merely because the current staging database is disposable.
 6. **P3, group-centred session model:** settle `GRANT_SUBJECTS`, group identity/collision rules, session `group_id` authorization, and then rebuild the group/session workflow in dependency order (§4, §6). The group's latest literacy-session letters belong in that workflow, not in the current child-first form.
 7. **P4, latent correctness and polish:** fix attendee removal before any saved-session edit UI ships; then shared snackbars, picker clears, typography rollout, search/filter gaps, dependency cleanup, and diagnostics (§2, §3). The attendee bug is real at repository level, but no current screen edits a saved session, so it is not the highest-ROI immediate build.
+8. **P2, assessment history convergence:** add inbound pull and SQLite persistence for `assessments` and `assessment_items` so a fresh or second device can recover server history (§0d). The 2026-07-23 UI correction makes every locally available assessment visible and aligns Home coverage, but it does not make an outbound-only domain bidirectional.
 
 **2026-07-22 addendum:** §0c records three defects from the first blank-onboarding smoke test. The
 pull-convergence fix (§0c.1) and school-picker fix (§0c.2) are built and automated-green; the picker
@@ -208,6 +209,35 @@ likely an Expo Go-only artifact.
 
 ---
 
+## 0d. Deferred 2026-07-23: assessments upload but do not pull back to SQLite
+
+**Observed on a real iOS device:** the Assessments landing screen showed 7 locally stored assessments
+while the `masi-app-sqlite` backend held 22 assessments for the same EA and active Programme. The
+device correctly reported `All saved and synced` because its outbound outbox was drained, but
+Assessment History could only read the incomplete local SQLite cache.
+
+The immediate display defects are fixed on the locked Home/navigation branch: History now reads all
+locally available assessments instead of silently truncating at 30 days; Home and the Assessments tab
+both use complete active-roster coverage; and new assessment dates use the South African Programme
+day. These changes do **not** repair the missing 15 rows on that device.
+
+- [ ] Add an authenticated, Programme-scoped server pull for `assessments` and `assessment_items`.
+- [ ] Persist each parent and its items transactionally through the typed SQLite repositories.
+- [ ] Preserve local pending, failed, and terminal rows when server data overlaps.
+- [ ] Define pagination and completeness evidence before any absence-based reconcile. Do not infer
+  deletion from an ordinary RLS-filtered or truncated query.
+- [ ] Update `rls-sync-contract-map.md` with the inbound producer, authorization, ordering, conflict,
+  and reconcile contract.
+- [ ] Cover first-device, second-device, reinstall, offline restart, pending-local collision, and
+  parent-before-item ordering in real-SQLite integration tests.
+- [ ] Add a physical two-device gate proving that an assessment captured and synced on device A
+  becomes visible in History and Home coverage on device B.
+
+Until this lands, the green sync label means **all local writes reached the server**, not that the
+device holds a complete server assessment history.
+
+---
+
 ## 1. Still open from the 2026-07-12 audit
 
 Nineteen of the 21 findings are closed (see the build log). These two are not:
@@ -254,7 +284,10 @@ A full item-by-item reconciliation of the June Top-10 and the ZZ port against th
 
 ### Other product items
 - **14b** — ring payoff navigation: `SessionCompleteScreen.js:46` is still a bare `navigation.goBack()`.
-- **14c** — staged ring colours: mapping is hardcoded in `SessionsTodayRing.js`; the `ringNeutral` / `ringStart` tokens in `colors.js:78-79` have **zero importers** (dead tokens).
+- [x] **14c, closed 2026-07-22** - staged ring colours. The locked Home R3 half gauge consumes
+  `ringNeutral` and `ringStart`, then advances through primary, success, and accent according to the
+  existing daily-goal states. `SessionsTodayGauge.test.js` preserves every goal-state semantic and
+  the exact locked SVG geometry.
 - **14d** — no `deviceTier` utility exists; needed before any animation work on low-end Android.
 - **12** — session-type machinery undecided: the `__legacySession` envelope and `sessionTypeResolver.js` are still live, and `session_type_id` **never reaches the server**. Decide: promote it to a real column, or delete the machinery.
 

@@ -513,7 +513,7 @@ User Action → Local AsyncStorage → UI Update → Sync Queue → Supabase →
 - [x] Paginated letter grid (20 per page, 5 columns × 4 rows) — tap to mark correct
 - [x] "Last Letter Attempted" bottom sheet — assessor confirms where child stopped after timer/manual finish
 - [x] Assessment results screen — accuracy ring, feedback message, stat cards (Attempted, Correct, Incorrect), letter-by-letter detail grid
-- [x] Assessment history screen — filterable list of past assessments (last 30 days), tappable cards
+- [x] Assessment history screen: complete locally available history, newest first, with tappable cards
 - [x] Assessment detail screen — standalone view of past assessment with full stats and color-coded letter grid
 - [x] Auto-detect language from child's class — skips manual language selection dialog when `class.home_language` maps to an available letter set
 - [x] Assessment icon on Class Details child rows — quick access to most recent assessment
@@ -847,6 +847,19 @@ Requirements to be gathered as we progress through development phases.
 ---
 
 ## Development Progress
+
+### Locked Home and navigation implementation, 2026-07-22
+
+- [x] Verify the locked design and domain assumptions against the live Home, navigation, SQLite repositories, clock-in guard, and sync presenter.
+- [x] Replace the old dashboard with the locked status hero, exact R3 half gauge, who-next, weekday, coverage, and recent-session composition.
+- [x] Ship Home, Children, centre Record command, Insights, and Assess as the five visual navigation slots without beginning the group-centric rebuild.
+- [x] Convert the clock-in decision to the shared bottom-sheet pattern while preserving the explicit record-without-hours escape hatch.
+- [x] Cover the vertical slices with RED/GREEN behavior tests and an Android production export.
+- [x] Make Assessment History all-time locally, align Home and Assessments to complete active-roster coverage, and use the South African Programme day at assessment creation.
+- [x] Replace the New Session group dropdown and duplicate selection chips with a compact Children/Groups roster toggle while preserving the existing child-based session payload.
+- [x] Record the missing inbound assessment pull as deferred sync-contract work in `documentation/open-work.md` §0d.
+- [ ] Complete the physical visual gates in `documentation/device-gates-sqlite-backend-2026-07.md` section S.
+- [ ] Complete the added physical behavior gates C7, C8, D5, and E4.
 
 > **This document is NOT the progress ledger, and must not be used as one.**
 >

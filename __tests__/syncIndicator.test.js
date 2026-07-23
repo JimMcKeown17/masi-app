@@ -73,3 +73,13 @@ test('syncing shows the spinner and suppresses the badge', () => {
   expect(mockIconCalls).toHaveLength(0);
   expect(queryByText('5')).toBeNull();
 });
+
+test('Home treatment can show the full sync message instead of an icon-only badge', () => {
+  mockUseOffline.mockReturnValue(offline({ waitingCount: 2 }));
+  const { getByText, queryByText } = render(
+    <SyncIndicator onPress={() => {}} showLabel dark />
+  );
+
+  expect(getByText('Saved on your phone · 2 waiting to sync')).toBeTruthy();
+  expect(queryByText('2')).toBeNull();
+});

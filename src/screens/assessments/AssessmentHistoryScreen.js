@@ -6,9 +6,6 @@ import { useAuth } from '../../context/AuthContext';
 import { useChildren } from '../../context/ChildrenContext';
 import { colors, spacing, borderRadius, shadows } from '../../constants/colors';
 import { assessmentsRepository } from '../../db/repositories/assessmentsRepository';
-import { toLocalDateString } from '../../utils/localDate';
-
-const THIRTY_DAYS_MS = 30 * 24 * 60 * 60 * 1000;
 
 function formatDate(dateString) {
   const [year, month, day] = dateString.split('-').map(Number);
@@ -48,7 +45,6 @@ export default function AssessmentHistoryScreen({ navigation }) {
           const cached = await assessmentsRepository.getAssessments({
             userId: user.id,
             recordedByUserId: user.id,
-            sinceDate: toLocalDateString(new Date(Date.now() - THIRTY_DAYS_MS)),
             order: 'desc',
           });
           if (active) {

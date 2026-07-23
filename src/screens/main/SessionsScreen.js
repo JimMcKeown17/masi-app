@@ -12,7 +12,7 @@ import StatBar from '../../components/dashboard/StatBar';
 import SessionsTodayRing from '../../components/sessions/SessionsTodayRing';
 import { getSessionsTodayGoal } from '../../services/sessionsTodayGoal';
 import { useSessionLaunchGuard } from '../../hooks/useSessionLaunchGuard';
-import ClockInBeforeSessionDialog from '../../components/sessions/ClockInBeforeSessionDialog';
+import ClockInBeforeSessionSheet from '../../components/sessions/ClockInBeforeSessionSheet';
 import { getActiveProgrammeGate } from '../../services/activeProgrammeGate';
 import NoActiveProgrammeNotice from '../../components/common/NoActiveProgrammeNotice';
 import SectionHeader from '../../components/common/SectionHeader';
@@ -149,7 +149,7 @@ export default function SessionsScreen({ navigation }) {
         </Button>
       </View>
       </ScrollView>
-      <ClockInBeforeSessionDialog
+      <ClockInBeforeSessionSheet
         visible={warningVisible}
         onDismiss={dismissWarning}
         onClockInNow={clockInNow}

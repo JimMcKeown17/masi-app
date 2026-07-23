@@ -123,8 +123,68 @@ describe('LiteracySessionForm', () => {
 
     expect(screen.getByText('Session Date')).toBeTruthy();
     expect(screen.getByText('Select Children')).toBeTruthy();
+    expect(screen.getByLabelText('Show children').props.accessibilityState).toEqual({ selected: true });
+    expect(screen.getByLabelText('Show groups').props.accessibilityState).toEqual({ selected: false });
+    expect(screen.queryByText('Select by Group')).toBeNull();
     expect(screen.getByText('Letters Focused On')).toBeTruthy();
     expect(screen.getByText('Submit Session')).toBeTruthy();
+  });
+
+  test('switches the compact picker from child rows to group rows', () => {
+    const groupChildren = [
+      { id: 'child-1', first_name: 'Amahle', last_name: 'Dlamini', class_id: 'class-1' },
+      { id: 'child-2', first_name: 'Buhle', last_name: 'Moyo', class_id: 'class-1' },
+    ];
+    mockUseChildren.mockReturnValue({
+      children: groupChildren,
+      groups: [{ id: 'group-4', name: 'Group 4' }],
+      getChildrenInGroup: (groupId) => (groupId === 'group-4' ? groupChildren : []),
+    });
+    const screen = renderForm();
+
+    fireEvent.press(screen.getByLabelText('Show groups'));
+
+    expect(screen.getByText('Group 4')).toBeTruthy();
+    expect(screen.getByText('2 children')).toBeTruthy();
+    expect(screen.getByPlaceholderText('Search groups...')).toBeTruthy();
+    expect(screen.queryByText('Amahle Dlamini')).toBeNull();
+    expect(screen.getByLabelText('Show groups').props.accessibilityState).toEqual({ selected: true });
+  });
+
+  test('selecting a group chooses its children and keeps them editable in Children mode', async () => {
+    const groupChildren = [
+      { id: 'child-1', first_name: 'Amahle', last_name: 'Dlamini', class_id: 'class-1' },
+      { id: 'child-2', first_name: 'Buhle', last_name: 'Moyo', class_id: 'class-1' },
+    ];
+    mockUseChildren.mockReturnValue({
+      children: groupChildren,
+      groups: [{ id: 'group-4', name: 'Group 4' }],
+      getChildrenInGroup: (groupId) => (groupId === 'group-4' ? groupChildren : []),
+    });
+    const screen = renderForm();
+
+    fireEvent.press(screen.getByLabelText('Show groups'));
+    fireEvent.press(screen.getByText('Group 4'));
+
+    expect(screen.getByText('2 selected')).toBeTruthy();
+    expect(screen.getByLabelText('Group 4, 2 children, selected')).toBeTruthy();
+
+    fireEvent.press(screen.getByLabelText('Show children'));
+    expect(screen.getByLabelText('Amahle Dlamini, selected')).toBeTruthy();
+    expect(screen.getByLabelText('Buhle Moyo, selected')).toBeTruthy();
+
+    fireEvent.press(screen.getByLabelText('A, not selected'));
+    fireEvent.press(screen.getByText('Select a level'));
+    fireEvent.press(screen.getByText(READING_LEVELS[0]));
+    fireEvent.press(screen.getByText('Submit Session'));
+
+    await waitFor(() => expect(mockPersistLiteracySession).toHaveBeenCalledWith(
+      expect.objectContaining({
+        session: expect.objectContaining({
+          children_ids: ['child-1', 'child-2'],
+        }),
+      }),
+    ));
   });
 
   describe('unsaved-changes leave guard', () => {
