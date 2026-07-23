@@ -25,18 +25,18 @@ list. They are historical records — do not rewrite them; add new findings here
 
 ---
 
-## Priority order as of 2026-07-21
+## Priority order as of 2026-07-23
 
 This is the execution order, not a second backlog. The numbered sections below remain the detailed source.
 
 1. **P0, validate what is already built:** execute the highest-signal physical-device gates (§0), beginning with G1, H3, I1, B1, and the new reading-level gate C6. This is the highest risk-reduction per hour because four completed sprints still have zero real-hardware passes.
 2. **P0, activation and device proof:** build the app/runtime 1.3.0 preview binaries, confirm Sentry source-map upload, and run the zero-class and observability device gates (§2/14a, §3). The public Sentry variables and sensitive source-map token are configured in both EAS environments. The class -> children onboarding, durable restart recovery, privacy-hardened crash capture, and explicit sync-failure reporting are built and automated-green; real-device behavior and live release-event delivery remain unverified.
-3. **Closed 2026-07-21, structural data safety:** the two pending canonical migrations are deployed to `segygjzpujphwvrubusm`, remote migration history matches local history, and the live RLS/reconcile probe passes all five assertions. Record-scoped dependency skipping, bounded failed-batch fallback, and the versioned startup repair registry were built 2026-07-14.
-4. **P2, sync efficiency and recovery:** finish membership-specific batching and design delta-pull indexes with the actual future predicates (§1, §2, §3). SQLite bootstrap recovery, child/programme-enrollment upserts, immutable assignment inserts, domain-pull queue monopolies, outbox `created_at` stability, redundant enqueue writes, batch claim rereads, and the three nullable session-relationship indexes were closed 2026-07-14. Class and group memberships still require their own collision-safe operation designs.
-5. **P2, time-sensitive only when WelaPLUS resumes:** deliberately re-key `assessmentItemDomainId` before real SQLite-backend assessment data exists, but only as a standalone reviewed change (§7). Do not pull it forward merely because the current staging database is disposable.
-6. **P3, group-centred session model:** settle `GRANT_SUBJECTS`, group identity/collision rules, session `group_id` authorization, and then rebuild the group/session workflow in dependency order (§4, §6). The group's latest literacy-session letters belong in that workflow, not in the current child-first form.
-7. **P4, latent correctness and polish:** fix attendee removal before any saved-session edit UI ships; then shared snackbars, picker clears, typography rollout, search/filter gaps, dependency cleanup, and diagnostics (§2, §3). The attendee bug is real at repository level, but no current screen edits a saved session, so it is not the highest-ROI immediate build.
-8. **P2, assessment history convergence:** add inbound pull and SQLite persistence for `assessments` and `assessment_items` so a fresh or second device can recover server history (§0d). The 2026-07-23 UI correction makes every locally available assessment visible and aligns Home coverage, but it does not make an outbound-only domain bidirectional.
+3. **P1, next sync slice: bidirectional session and assessment history convergence:** after the current pilot activation/device checks, add authenticated inbound pull and SQLite persistence for the two parent-child families `sessions` -> `session_attendees` and `assessments` -> `assessment_items` (§0d). This is ahead of cosmetic improvements. A blank-account pilot may continue on one installation, but reinstall, second-device, and seeded-history continuity are not trustworthy until this lands.
+4. **Closed 2026-07-21, structural data safety:** the two pending canonical migrations are deployed to `segygjzpujphwvrubusm`, remote migration history matches local history, and the live RLS/reconcile probe passes all five assertions. Record-scoped dependency skipping, bounded failed-batch fallback, and the versioned startup repair registry were built 2026-07-14.
+5. **P2, sync efficiency and recovery:** finish membership-specific batching and design delta-pull indexes with the actual future predicates (§1, §2, §3). SQLite bootstrap recovery, child/programme-enrollment upserts, immutable assignment inserts, domain-pull queue monopolies, outbox `created_at` stability, redundant enqueue writes, batch claim rereads, and the three nullable session-relationship indexes were closed 2026-07-14. Class and group memberships still require their own collision-safe operation designs.
+6. **P2, time-sensitive only when WelaPLUS resumes:** deliberately re-key `assessmentItemDomainId` before real SQLite-backend assessment data exists, but only as a standalone reviewed change (§7). Do not pull it forward merely because the current staging database is disposable.
+7. **P3, group-centred session model:** settle `GRANT_SUBJECTS`, group identity/collision rules, session `group_id` authorization, and then rebuild the group/session workflow in dependency order (§4, §6). The group's latest literacy-session letters belong in that workflow, not in the current child-first form.
+8. **P4, latent correctness and polish:** fix attendee removal before any saved-session edit UI ships; then shared snackbars, picker clears, typography rollout, search/filter gaps, dependency cleanup, and diagnostics (§2, §3). The attendee bug is real at repository level, but no current screen edits a saved session, so it is not the highest-ROI immediate build.
 
 **2026-07-22 addendum:** §0c records three defects from the first blank-onboarding smoke test. The
 pull-convergence fix (§0c.1) and school-picker fix (§0c.2) are built and automated-green; the picker
@@ -209,32 +209,53 @@ likely an Expo Go-only artifact.
 
 ---
 
-## 0d. Deferred 2026-07-23: assessments upload but do not pull back to SQLite
+## 0d. Next sync slice: sessions and assessments upload but do not pull back to SQLite
 
 **Observed on a real iOS device:** the Assessments landing screen showed 7 locally stored assessments
 while the `masi-app-sqlite` backend held 22 assessments for the same EA and active Programme. The
 device correctly reported `All saved and synced` because its outbound outbox was drained, but
 Assessment History could only read the incomplete local SQLite cache.
 
+**Confirmed again on the TestFlight 1.3.0 fresh installation:** signing in as
+`test@masinyusane.org` showed no historical sessions or assessments. A read-only live query against
+the correct SQLite backend (`segygjzpujphwvrubusm`) proved that the server safely holds 20 sessions,
+40 session attendees, 22 assessments, and 604 assessment items for that account. Nine sessions fall
+inside the app's 30-day History window and the latest is dated 2026-07-23, so the empty TestFlight
+history is not a date-filter artifact or an outbound-sync failure. Expo Go and the standalone app
+have separate local SQLite databases; source inspection confirmed that both History families render
+only the local cache and neither family has an inbound server pull.
+
 The immediate display defects are fixed on the locked Home/navigation branch: History now reads all
 locally available assessments instead of silently truncating at 30 days; Home and the Assessments tab
 both use complete active-roster coverage; and new assessment dates use the South African Programme
 day. These changes do **not** repair the missing 15 rows on that device.
 
-- [ ] Add an authenticated, Programme-scoped server pull for `assessments` and `assessment_items`.
-- [ ] Persist each parent and its items transactionally through the typed SQLite repositories.
+- [ ] Add an authenticated, EA-and-Programme-scoped server pull for the session family:
+  - `sessions`
+  - `session_attendees`
+- [ ] Add an authenticated, EA-and-Programme-scoped server pull for the assessment family:
+  - `assessments`
+  - `assessment_items`
+- [ ] Persist each parent and its children transactionally through the typed SQLite repositories,
+  with parents applied before dependent rows.
 - [ ] Preserve local pending, failed, and terminal rows when server data overlaps.
 - [ ] Define pagination and completeness evidence before any absence-based reconcile. Do not infer
   deletion from an ordinary RLS-filtered or truncated query.
 - [ ] Update `rls-sync-contract-map.md` with the inbound producer, authorization, ordering, conflict,
   and reconcile contract.
 - [ ] Cover first-device, second-device, reinstall, offline restart, pending-local collision, and
-  parent-before-item ordering in real-SQLite integration tests.
-- [ ] Add a physical two-device gate proving that an assessment captured and synced on device A
-  becomes visible in History and Home coverage on device B.
+  parent-before-child ordering for both families in real-SQLite integration tests.
+- [ ] Add physical two-device gates proving that:
+  - a session and its attendees captured and synced on device A become visible in History and Home
+    on device B;
+  - an assessment and its items captured and synced on device A become visible in History and Home
+    coverage on device B.
+- [ ] Make sync status distinguish outbound completion from inbound-history hydration, so
+  `All saved and synced` cannot be interpreted as proof of a complete local history.
 
 Until this lands, the green sync label means **all local writes reached the server**, not that the
-device holds a complete server assessment history.
+device holds a complete server session or assessment history. This is the next sync slice after the
+current pilot activation/device checks and is ahead of cosmetic improvements.
 
 ---
 
