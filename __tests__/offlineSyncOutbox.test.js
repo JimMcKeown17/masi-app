@@ -33,7 +33,7 @@ import { createSyncOutboxRepository } from '../src/db/repositories/syncOutboxRep
 import { createTimeEntriesRepository } from '../src/db/repositories/timeEntriesRepository';
 import { repairGroupOwnershipForSync } from '../src/db/repositories/groupsRepository';
 
-const createSupabaseMock = ({ upsertResults = {}, rpcResults = {} } = {}) => {
+const createSupabaseMock = ({ upsertResults = {}, updateResults = {}, rpcResults = {} } = {}) => {
   const calls = [];
   const supabaseClient = {
     from: jest.fn((tableName) => ({
@@ -48,6 +48,18 @@ const createSupabaseMock = ({ upsertResults = {}, rpcResults = {} } = {}) => {
         }
         return result || { error: null };
       }),
+      update: jest.fn((payload) => ({
+        eq: jest.fn((column, value) => ({
+          select: jest.fn(async () => {
+            calls.push({ type: 'update', tableName, payload, column, value });
+            const result = updateResults[`${tableName}:${value}`] || updateResults[tableName];
+            if (typeof result === 'function') {
+              return result({ tableName, payload, column, value, calls });
+            }
+            return result || { data: [{ id: value }], error: null };
+          }),
+        })),
+      })),
       delete: jest.fn(() => ({
         eq: jest.fn(async (column, value) => {
           calls.push({ type: 'delete', tableName, column, value });
@@ -466,19 +478,116 @@ describe('SQLite outbox offline sync', () => {
     const result = await engine.syncAll({ tableName: 'child_ea_assignments' });
 
     expect(result.success).toBe(true);
-    const upserts = calls.filter(call => (
-      call.type === 'upsert' && call.tableName === 'child_ea_assignments'
+    const updates = calls.filter(call => (
+      call.type === 'update' && call.tableName === 'child_ea_assignments'
     ));
-    expect(upserts).toHaveLength(1);
-    expect(upserts[0].payload).toEqual({
-      id: 'random-1',
-      unassigned_at: archivedAt,
-    });
-    expect(upserts[0].payload.id).not.toBe(deterministicDomainId('child_ea_assignments', undefined));
-    expect(upserts[0].payload.id).not.toBe(childEaAssignmentDomainId({
+    expect(updates).toHaveLength(1);
+    expect(updates[0]).toEqual(expect.objectContaining({
+      column: 'id',
+      value: 'random-1',
+      payload: {
+        unassigned_at: archivedAt,
+      },
+    }));
+    expect(updates[0].value).not.toBe(deterministicDomainId('child_ea_assignments', undefined));
+    expect(updates[0].value).not.toBe(childEaAssignmentDomainId({
       userId: undefined,
       childId: undefined,
     }));
+  });
+
+  test('archives a child group membership with UPDATE instead of a partial UPSERT', async () => {
+    const removedAt = '2026-07-23T01:02:22.981Z';
+    await db.runAsync(`
+      insert into children (id, first_name, last_name, created_by, sync_status)
+      values ('child-membership-archive', 'Amahle', 'Dlamini', 'user-1', 'synced')
+    `);
+    await db.runAsync(`
+      insert into groups (id, name, programme_id, created_by, sync_status)
+      values ('group-membership-archive-target', 'Group 1', 'programme-1', 'user-1', 'synced')
+    `);
+    await db.runAsync(`
+      insert into child_group_memberships (
+        id, child_id, group_id, joined_at, removed_at, created_by, sync_status
+      ) values (
+        'membership-archive-target',
+        'child-membership-archive',
+        'group-membership-archive-target',
+        '2026-07-22T17:52:33.200Z',
+        ?,
+        'user-1',
+        'pending'
+      )
+    `, removedAt);
+    await enqueue(db, 'child_group_memberships', 'membership-archive-target', 'archive', {
+      id: 'membership-archive-target',
+      removed_at: removedAt,
+    });
+
+    const { supabaseClient, calls } = createSupabaseMock();
+    const engine = createOutboxSyncEngine({ getAuthSession: liveTestSession, database: db, supabaseClient });
+
+    const result = await engine.syncAll({ tableName: 'child_group_memberships' });
+
+    expect(result.success).toBe(true);
+    expect(calls).toEqual([{
+      type: 'update',
+      tableName: 'child_group_memberships',
+      payload: { removed_at: removedAt },
+      column: 'id',
+      value: 'membership-archive-target',
+    }]);
+    expect(await db.getFirstAsync(`
+      select sync_status, last_sync_error
+      from child_group_memberships
+      where id = 'membership-archive-target'
+    `)).toEqual({ sync_status: 'synced', last_sync_error: null });
+  });
+
+  test('does not mark an archive synced when the server acknowledges zero updated rows', async () => {
+    const removedAt = '2026-07-23T01:02:22.981Z';
+    await db.runAsync(`
+      insert into children (id, first_name, last_name, created_by, sync_status)
+      values ('child-unacknowledged-archive', 'Amahle', 'Dlamini', 'user-1', 'synced')
+    `);
+    await db.runAsync(`
+      insert into groups (id, name, programme_id, created_by, sync_status)
+      values ('group-unacknowledged-archive', 'Group 1', 'programme-1', 'user-1', 'synced')
+    `);
+    await db.runAsync(`
+      insert into child_group_memberships (
+        id, child_id, group_id, joined_at, removed_at, created_by, sync_status
+      ) values (
+        'membership-unacknowledged-archive',
+        'child-unacknowledged-archive',
+        'group-unacknowledged-archive',
+        '2026-07-22T17:52:33.200Z',
+        ?,
+        'user-1',
+        'pending'
+      )
+    `, removedAt);
+    await enqueue(db, 'child_group_memberships', 'membership-unacknowledged-archive', 'archive', {
+      id: 'membership-unacknowledged-archive',
+      removed_at: removedAt,
+    });
+
+    const { supabaseClient } = createSupabaseMock({
+      updateResults: {
+        child_group_memberships: { data: [], error: null },
+      },
+    });
+    const engine = createOutboxSyncEngine({ getAuthSession: liveTestSession, database: db, supabaseClient });
+
+    const result = await engine.syncAll({ tableName: 'child_group_memberships' });
+
+    expect(result.success).toBe(false);
+    expect(result.totalTerminal).toBe(1);
+    expect(result.failedRecords).toEqual([expect.objectContaining({
+      id: 'membership-unacknowledged-archive',
+      operation: 'archive',
+      reason: expect.stringContaining('did not acknowledge'),
+    })]);
   });
 
   test('syncs stale group ownership payloads after the versioned startup repair', async () => {
@@ -833,7 +942,7 @@ describe('SQLite outbox offline sync', () => {
     `)).toEqual({ sync_status: 'synced', last_sync_error: null });
   });
 
-  test('a 23514 identity-trigger rejection on an archive re-push is terminal, not infinite retry (#48)', async () => {
+  test('a legacy full assignment archive updates lifecycle only and cannot rewrite identity (#48)', async () => {
     await db.runAsync(`
       insert into groups (id, name, programme_id, created_by, sync_status)
       values ('g-1', 'G', 'programme-1', 'user-1', 'synced')
@@ -847,32 +956,19 @@ describe('SQLite outbox offline sync', () => {
       unassigned_at: '2026-07-08T00:00:00.000Z',
     });
 
-    const { supabaseClient } = createSupabaseMock({
-      upsertResults: {
-        group_ea_assignments: ({ options }) => (
-          options.ignoreDuplicates === true
-            ? { error: null }
-            : {
-              error: {
-                code: '23514',
-                message: 'group_ea_assignments identity columns cannot be changed after insert',
-              },
-            }
-        ),
-      },
-    });
+    const { supabaseClient, calls } = createSupabaseMock();
     const engine = createOutboxSyncEngine({ getAuthSession: liveTestSession, database: db, supabaseClient });
 
-    await engine.syncAll();
+    const result = await engine.syncAll();
 
-    const outboxRow = await db.getFirstAsync(`
-      select status, last_error
-      from sync_outbox
-      where table_name = 'group_ea_assignments'
-        and record_id = 'gea-1'
-    `);
-    expect(outboxRow.status).toBe('terminal');
-    expect(outboxRow.last_error).toMatch(/identity/i);
+    expect(result.success).toBe(true);
+    expect(calls).toEqual([{
+      type: 'update',
+      tableName: 'group_ea_assignments',
+      payload: { unassigned_at: '2026-07-08T00:00:00.000Z' },
+      column: 'id',
+      value: 'gea-1',
+    }]);
   });
 
   describe('computeEvidencePending (#48)', () => {
@@ -1929,7 +2025,7 @@ describe('SQLite outbox offline sync', () => {
       });
   });
 
-  test('archive and restore operations upsert their normalized payloads', async () => {
+  test('archive operations update lifecycle fields while restore operations still upsert', async () => {
     await db.runAsync(`
       insert into classes (id, school_id, name, grade, archived_at, sync_status)
       values ('class-1', 'school-1', 'Grade 1A', '1', '2026-05-21T09:00:00.000Z', 'pending')
@@ -1959,14 +2055,15 @@ describe('SQLite outbox offline sync', () => {
 
     expect(result.success).toBe(true);
     expect(calls).toEqual([
-      expect.objectContaining({
-        type: 'upsert',
+      {
+        type: 'update',
         tableName: 'classes',
-        payload: expect.objectContaining({
-          id: 'class-1',
+        payload: {
           archived_at: '2026-05-21T09:00:00.000Z',
-        }),
-      }),
+        },
+        column: 'id',
+        value: 'class-1',
+      },
       expect.objectContaining({
         type: 'upsert',
         tableName: 'children',
@@ -2013,11 +2110,11 @@ describe('SQLite outbox offline sync', () => {
 
     expect(result.success).toBe(true);
     expect(calls.map(call => `${call.type}:${call.tableName}`)).toEqual([
-      'upsert:children',
-      'upsert:child_programme_enrollments',
-      'upsert:child_class_memberships',
-      'upsert:child_group_memberships',
-      'upsert:child_ea_assignments',
+      'update:children',
+      'update:child_programme_enrollments',
+      'update:child_class_memberships',
+      'update:child_group_memberships',
+      'update:child_ea_assignments',
     ]);
   });
 
@@ -2045,7 +2142,7 @@ describe('SQLite outbox offline sync', () => {
     });
 
     const { supabaseClient, calls } = createSupabaseMock({
-      upsertResults: {
+      updateResults: {
         child_group_memberships: {
           error: {
             code: '42501',
@@ -2064,10 +2161,10 @@ describe('SQLite outbox offline sync', () => {
     expect(result.totalRetriable).toBe(1);
     expect(result.totalTerminal).toBe(0);
     expect(calls.map(call => `${call.type}:${call.tableName}`)).toEqual([
-      'upsert:children',
-      'upsert:child_programme_enrollments',
-      'upsert:child_class_memberships',
-      'upsert:child_group_memberships',
+      'update:children',
+      'update:child_programme_enrollments',
+      'update:child_class_memberships',
+      'update:child_group_memberships',
     ]);
     expect(result.tableResults.child_ea_assignments).toEqual(expect.objectContaining({
       skipped: true,
@@ -2160,9 +2257,9 @@ describe('SQLite outbox offline sync', () => {
 
     expect(result.success).toBe(true);
     expect(calls.map(call => `${call.type}:${call.tableName}`)).toEqual([
-      'upsert:groups',
-      'upsert:child_group_memberships',
-      'upsert:group_ea_assignments',
+      'update:groups',
+      'update:child_group_memberships',
+      'update:group_ea_assignments',
     ]);
   });
 
@@ -2304,7 +2401,7 @@ describe('SQLite outbox offline sync', () => {
     });
 
     const { supabaseClient, calls } = createSupabaseMock({
-      upsertResults: {
+      updateResults: {
         child_programme_enrollments: { error: { message: 'cleanup network failure' } },
       },
     });
@@ -2312,9 +2409,9 @@ describe('SQLite outbox offline sync', () => {
 
     const result = await engine.syncAll();
 
-    expect(calls.map((call) => `${call.type}:${call.tableName}:${call.payload?.id || ''}`)).toEqual([
-      `upsert:child_programme_enrollments:${ids.enrollmentId}`,
-      'upsert:child_ea_assignments:assignment-other',
+    expect(calls.map((call) => `${call.type}:${call.tableName}:${call.value || ''}`)).toEqual([
+      `update:child_programme_enrollments:${ids.enrollmentId}`,
+      'update:child_ea_assignments:assignment-other',
     ]);
     expect(result.tableResults.child_ea_assignments.synced).toBe(1);
     expect(await db.getFirstAsync(

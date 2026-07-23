@@ -38,9 +38,9 @@ This is the execution order, not a second backlog. The numbered sections below r
 7. **P4, latent correctness and polish:** fix attendee removal before any saved-session edit UI ships; then shared snackbars, picker clears, typography rollout, search/filter gaps, dependency cleanup, and diagnostics (§2, §3). The attendee bug is real at repository level, but no current screen edits a saved session, so it is not the highest-ROI immediate build.
 
 **2026-07-22 addendum:** §0c records three defects from the first blank-onboarding smoke test. The
-pull-convergence fix (§0c.1) belongs in item 4's sync-recovery slice and must land before field data
-accumulates; the school picker (§0c.2) blocks the onboarding flow for any tester who reaches Create
-Class, so it effectively joins item 2's device-proof work.
+pull-convergence fix (§0c.1) and school-picker fix (§0c.2) are built and automated-green; the picker
+was also device-verified. The remaining work from that smoke test is the bottom-sheet flushness check
+in device gate J6.
 
 The real-data seed/import work is deliberately **not in the active execution order**. Jim deferred it
 on 2026-07-14 because the source of truth is an existing Airtable/Postgres system whose table shape,
@@ -131,9 +131,8 @@ they are not a source-to-target mapping.
 
 ## 0c. Found 2026-07-22 during the first blank-onboarding smoke test (Expo Go, iOS)
 
-Three defects observed by Jim on a real device. Status as of later that day: §0c.1 noted and
-deliberately not built yet; §0c.2 fixed and device-verified; §0c.3 root-caused, residual check moved
-to device gate J6.
+Three defects observed by Jim on a real device. Status as of later that day: §0c.1 and §0c.2 fixed,
+with §0c.2 device-verified; §0c.3 root-caused, residual check moved to device gate J6.
 
 ### 1. ~~P1 — Pull persistence cannot converge when a server row's id changes under an unchanged active pair~~ **FIXED 2026-07-22 (branch `fix/pull-supersede`)**
 
@@ -165,12 +164,12 @@ wedges sync, in both directions.
 
 **Server verified healthy** (2026-07-22, read-only psql): zero duplicate active pairs in all four tables.
 
-**Agreed direction (Jim, 2026-07-22 — noted, deliberately not built yet):** natural-key supersede in
-the pull save path, respecting the existing rails: when persisting an *active* server row, first end
-any *active* local row holding the same natural key under a different id **iff** that local row is
-`sync_status='synced'`; if it is pending/failed, skip the incoming row instead (same posture as
-`serverPullWouldClobberPendingLocal`). Build TDD with real-SQLite integration coverage and update
-`rls-sync-contract-map.md` ("Pull Persistence & Reconcile") in the same branch.
+**Implemented direction (Jim, 2026-07-22):** natural-key supersede in the pull save path respects the
+existing rails: when persisting an *active* server row, first end any *active* local row holding the
+same natural key under a different id **iff** that local row is `sync_status='synced'`; if it is
+pending/failed/terminal, skip the incoming row instead (same posture as
+`serverPullWouldClobberPendingLocal`). Real-SQLite integration coverage and the
+`rls-sync-contract-map.md` pull contract shipped in branch `fix/pull-supersede`.
 
 **Why the pilot is safe day-one:** fresh installs + blank accounts cannot hit this (§0 already mandates
 fresh installs). Fix before field data accumulates, and certainly before any future server-side re-key

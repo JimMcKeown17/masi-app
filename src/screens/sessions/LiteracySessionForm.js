@@ -22,6 +22,7 @@ import { useLookupsContext } from '../../context/LookupsContext';
 import { buildSessionTypeFields } from '../../utils/sessionTypeResolver';
 import { persistLiteracySession } from '../../services/literacySessionPersistence';
 import { NO_TEXT_SUGGESTIONS } from '../../constants/textInputProps';
+import { toLocalDateString } from '../../utils/localDate';
 import { v4 as uuidv4 } from 'uuid';
 import SelectSheet from '../../components/common/SelectSheet';
 
@@ -58,11 +59,16 @@ function formatDateForStorage(date) {
   return `${y}-${m}-${d}`;
 }
 
+function getProgrammeCalendarDate(value = new Date()) {
+  const [year, month, day] = toLocalDateString(value).split('-').map(Number);
+  return new Date(year, month - 1, day);
+}
+
 // ---------------------------------------------------------------------------
 // InlineCalendar — renders month grid, disables future dates
 // ---------------------------------------------------------------------------
 function InlineCalendar({ selectedDate, onSelectDate }) {
-  const today = new Date();
+  const today = getProgrammeCalendarDate();
   const [viewYear, setViewYear] = useState(selectedDate.getFullYear());
   const [viewMonth, setViewMonth] = useState(selectedDate.getMonth());
 
@@ -367,7 +373,7 @@ export default function LiteracySessionForm({ navigation }) {
   const { classes } = useClasses();
   const { jobTitles } = useLookupsContext();
 
-  const [sessionDate, setSessionDate] = useState(new Date());
+  const [sessionDate, setSessionDate] = useState(() => getProgrammeCalendarDate());
   const [dateMenuVisible, setDateMenuVisible] = useState(false);
   const [selectedChildren, setSelectedChildren] = useState([]);
   const [selectedLetters, setSelectedLetters] = useState([]);

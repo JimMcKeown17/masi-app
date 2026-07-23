@@ -2,8 +2,10 @@
 // not the device's. All Masi field operations run in South Africa; pinning
 // SAST keeps day grouping and "days worked" correct even on devices with a
 // misconfigured timezone, and keeps date tests deterministic on any machine.
-// Capture-time date stamps (session_date, date_assessed) remain device-local;
-// they only diverge from this attribution on a device set outside SAST.
+// Capture flows that contribute to these business-day summaries must also use
+// this attribution for their default date. Otherwise an overseas or
+// misconfigured device can save a row under a different day than the dashboard
+// immediately queries.
 const LOCAL_TIME_ZONE = 'Africa/Johannesburg';
 
 function asDate(value) {

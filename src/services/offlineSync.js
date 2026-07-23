@@ -309,6 +309,24 @@ const IMMUTABLE_ASSIGNMENT_TABLES = new Set([
   'group_ea_assignments',
 ]);
 
+// Archive is a lifecycle transition, never a row creation or identity rewrite.
+// Older outbox rows can contain a full domain snapshot, so narrow every archive
+// to the lifecycle columns the operation is allowed to change before issuing
+// UPDATE. This avoids INSERT-policy checks and immutable-identity triggers.
+const ARCHIVE_SERVER_COLUMNS = {
+  classes: ['archived_at', 'archived_by_user_id', 'archive_reason'],
+  children: ['archived_at', 'archived_by_user_id', 'archive_reason'],
+  child_ea_assignments: ['unassigned_at'],
+  child_programme_enrollments: ['ended_at'],
+  child_class_memberships: ['exited_at'],
+  class_ea_assignments: ['unassigned_at', 'handover_reason'],
+  grouping_versions: ['status', 'archived_at', 'archived_by_user_id', 'archive_reason'],
+  groups: ['archived_at', 'archived_by_user_id', 'archive_reason'],
+  group_ea_assignments: ['unassigned_at', 'handover_reason'],
+  child_group_memberships: ['removed_at'],
+  letter_mastery: ['deleted_at'],
+};
+
 const dependenciesForRecord = (outboxRecord) => {
   const dependencies = new Set(TABLE_DEPENDENCIES[outboxRecord.table_name] || []);
   if (outboxRecord.operation === 'archive') {
@@ -453,6 +471,7 @@ const classifyError = (
 
   if (
     code === 'ARCHIVE_REQUIRED'
+    || code === 'ARCHIVE_NOT_APPLIED'
     || code === 'LOCAL_ONLY_REFERENCE'
     || code === 'MISSING_OUTBOX_PAYLOAD'
   ) {
@@ -651,6 +670,31 @@ const runServerOperation = async (supabaseClient, config, outboxRecord) => {
       .delete()
       .eq('id', outboxRecord.record_id);
     return error ? { success: false, error } : { success: true };
+  }
+
+  if (outboxRecord.operation === 'archive') {
+    const archiveColumns = ARCHIVE_SERVER_COLUMNS[config.tableName] || [];
+    const archivePatch = Object.fromEntries(
+      archiveColumns
+        .filter((column) => Object.prototype.hasOwnProperty.call(payload, column))
+        .map((column) => [column, payload[column]])
+    );
+    const { data, error } = await supabaseClient
+      .from(config.tableName)
+      .update(archivePatch)
+      .eq('id', outboxRecord.record_id)
+      .select('id');
+    if (error) return { success: false, error };
+    if (!Array.isArray(data) || data.length !== 1 || data[0]?.id !== outboxRecord.record_id) {
+      return {
+        success: false,
+        error: {
+          code: 'ARCHIVE_NOT_APPLIED',
+          message: `${config.tableName} archive did not acknowledge exactly one updated row`,
+        },
+      };
+    }
+    return { success: true };
   }
 
   if (config.tableName === 'child_class_memberships' && outboxRecord.operation === 'insert') {

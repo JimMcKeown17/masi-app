@@ -47,12 +47,14 @@
 
 - [ ] **E1.** Set the device clock to about 00:30, clock in, and check Work History. The entry must appear under **today**, not yesterday. Set the clock back afterwards.
 - [ ] **E2.** Home "days worked this month" counts that entry in the current month.
+- [ ] **E3. Programme-day consistency with a wrong/overseas device timezone.** Temporarily set the device timezone to America/New_York and choose an instant after 18:00 there, when South Africa is already on the next date. Open a new session: its default Session Date must be the South African date. Save it and confirm the completion ring increments, Home shows it in the matching Sessions This Week day, and Session History uses that same date. Restore the device timezone afterwards.
 
 ## F. Sync status and trust
 
 - [ ] **F1.** With pending work, Home and the Sync Status screen say "waiting to sync," calmly. Not red, not "failed."
 - [ ] **F2.** Force "Sync Now." It syncs, including anything backed off.
 - [ ] **F3.** Idle behavior. Leave the app open and idle for a few minutes with nothing pending. It should feel still. No repeated spinner flicker, no battery burn. *(Sprint 1: the 30-second amplifier.)*
+- [ ] **F4. Group reassignment archive.** Reassign a synced child from one group to another, then sync. The old `child_group_memberships` row must update `removed_at`, the new membership must sync, and Sync Status must show neither `42501` nor Needs Attention. If testing on a database that already contains the pre-fix terminal row, press Retry once after installing the fixed build and confirm it drains.
 
 ## G. Head-office changes and the reconcile gate (the important new one)
 

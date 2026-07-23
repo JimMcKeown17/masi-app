@@ -47,7 +47,7 @@ jest.mock('../src/services/literacySessionPersistence', () => ({
 }));
 
 import React from 'react';
-import { render, fireEvent, waitFor } from '@testing-library/react-native';
+import { act, render, fireEvent, waitFor } from '@testing-library/react-native';
 import { Alert } from 'react-native';
 import { PaperProvider } from 'react-native-paper';
 import LiteracySessionForm from '../src/screens/sessions/LiteracySessionForm';
@@ -80,6 +80,8 @@ const renderForm = (navigation = buildNavigation()) => {
 };
 
 describe('LiteracySessionForm', () => {
+  const originalTimeZone = process.env.TZ;
+
   beforeEach(() => {
     jest.clearAllMocks();
     mockUseAuth.mockReturnValue({
@@ -101,6 +103,11 @@ describe('LiteracySessionForm', () => {
     });
     mockPersistLiteracySession.mockResolvedValue(true);
     mockRefreshSyncStatus.mockResolvedValue({ unsyncedCount: 1 });
+  });
+
+  afterEach(() => {
+    jest.useRealTimers();
+    process.env.TZ = originalTimeZone;
   });
 
   const submitValidForm = (screen) => {
@@ -147,6 +154,26 @@ describe('LiteracySessionForm', () => {
   });
 
   describe('completion ordering', () => {
+    test('attributes a new session to the South African programme day outside South Africa', async () => {
+      process.env.TZ = 'America/New_York';
+      jest.useFakeTimers();
+      jest.setSystemTime(new Date('2026-07-23T01:03:00.000Z'));
+      const screen = renderForm();
+
+      submitValidForm(screen);
+
+      await waitFor(() => expect(mockPersistLiteracySession).toHaveBeenCalledWith(
+        expect.objectContaining({
+          session: expect.objectContaining({
+            session_date: '2026-07-23',
+          }),
+        }),
+      ));
+      await act(async () => {
+        jest.runOnlyPendingTimers();
+      });
+    });
+
     test('does not navigate before persistence commits', async () => {
       let resolvePersistence;
       mockPersistLiteracySession.mockReturnValue(new Promise(resolve => {
