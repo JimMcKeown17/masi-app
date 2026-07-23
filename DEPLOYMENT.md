@@ -1,41 +1,68 @@
-# Masi App — Deployment Guide
+# Masi App: Deployment Guide
 
-Quick reference for deploying updates to internal testers on iOS (TestFlight) and Android (Google Play Internal Testing).
+Quick reference for deploying the SQLite pilot to an isolated tester cohort.
 
 ---
 
-## TL;DR — Deploy to Testers
+## Current Release Path: SQLite Pilot Only
 
-### JS-Only Changes (most common)
+Do not use the old `production --submit` workflow while the legacy field cohort
+and SQLite pilot coexist. The `production` submit profile has deliberately been
+removed from `eas.json`, so the repository cannot automatically send an Android
+build to the field cohort's existing Play internal track.
 
-```bash
-# Push the OTA bundle using the production EAS environment
-npx eas-cli@latest update --channel production --environment production --message "describe what changed"
-
-# Upload the matching source maps. Treat failure as a failed release step.
-npx eas-cli@latest env:exec --environment production 'npm run sentry:sourcemaps'
-```
-
-Testers get the update on their next app launch (no restart needed — it applies on the *following* launch).
-
-### Native Changes (new packages, permissions, plugins)
+Build the two store artifacts without auto-submission:
 
 ```bash
-# 1. Build + submit iOS to TestFlight
-npx eas-cli@latest build -p ios --profile production --submit
-
-# 2. Build + submit Android to Play Store internal track
-npx eas-cli@latest build -p android --profile production --submit
-
-# Or build both at once, then submit
-npx eas-cli@latest build --profile production
-npx eas-cli@latest submit -p ios --latest
-npx eas-cli@latest submit -p android --latest
+npx eas-cli@latest build -p android --profile pilot
+npx eas-cli@latest build -p ios --profile pilot
 ```
 
-After submission:
-- **iOS**: Testers get a TestFlight notification within ~15 minutes (no review for internal testers)
-- **Android**: Testers see the update on internal track within ~1 hour
+Then distribute each exact artifact:
+
+- Android: download the AAB for that build and manually upload it to a new
+  closed Play testing track, such as `SQLite pilot`. Never use the existing
+  internal track.
+- iOS: submit the exact iOS build ID with the pilot submit profile:
+
+```bash
+npx eas-cli@latest submit -p ios --profile pilot --id <IOS_BUILD_ID>
+```
+
+Before the iOS upload, confirm the existing field TestFlight group does not
+have automatic distribution enabled. After processing, add the build only to a
+new SQLite pilot group. Do not use `--latest`: selecting the build by ID avoids
+submitting the wrong artifact when preview and pilot builds coexist.
+
+---
+
+## SQLite Pilot (1.3.0): Keep It Away From the Field Cohort
+
+The field cohort still runs the legacy AsyncStorage app, delivered through the
+**Play internal testing track** and the **existing TestFlight group**. Depending
+on their Play and TestFlight settings, those testers may receive newly released
+builds automatically. Until the deliberate cutover, the SQLite build must never
+be released into either audience. There is no legacy-data migration: a field
+device that updates to the SQLite build loses its unsynced data and switches
+backends.
+
+Rules while the pilot and the field cohort coexist:
+
+- **Never** upload the 1.3.0 SQLite build to the Play **internal testing**
+  track, and never build or submit the SQLite pilot with `--profile production`.
+- Android pilot: build with `--profile pilot` (AAB, preview/SQLite environment),
+  then upload **manually** in Play Console to a **new closed testing track**
+  (for example, "SQLite pilot") whose tester list contains only pilot testers.
+- iOS pilot: build with `--profile pilot` (store-signed), submit the exact build
+  ID with `--profile pilot`, then in App Store Connect add the build **only** to
+  a new pilot TestFlight group. First confirm the field cohort's existing group
+  does not automatically receive new builds.
+- OTA isolation: pilot builds are on update channel `preview`
+  (`eas update --channel preview --environment preview`). The field cohort's
+  channel `production` at runtime 1.1.x/1.2.x is untouched; runtime `1.3.0`
+  cannot land on legacy binaries either way.
+- Sentry: pilot builds report `environment=preview`, keeping pilot noise out of
+  the future production stream.
 
 ---
 
@@ -169,7 +196,7 @@ shown above against the generated `dist/` directory.
 
 ---
 
-## Step-by-Step: Full Build + Submit
+## Step-by-Step: Build and Distribute the SQLite Pilot
 
 ### Prerequisites (one-time setup)
 
@@ -185,49 +212,34 @@ eas credentials -p ios
 eas credentials -p android
 ```
 
-### iOS — Build and Submit to TestFlight
+### iOS: Build and Upload to TestFlight
 
 ```bash
-# Option A: Build and submit in one command
-npx eas-cli@latest build -p ios --profile production --submit
-
-# Option B: Build first, submit after
-npx eas-cli@latest build -p ios --profile production
-npx eas-cli@latest submit -p ios --latest
+npx eas-cli@latest build -p ios --profile pilot
+npx eas-cli@latest submit -p ios --profile pilot --id <IOS_BUILD_ID>
 ```
 
-The first time you run `--submit` for iOS, EAS will ask for:
-- **Apple ID**: Your Apple Developer account email
-- **ASC App ID**: Found in App Store Connect → App Information → Apple ID (it's a number like `6741893072`)
+The pilot submit profile already contains the Apple ID and App Store Connect app
+ID. Selecting the exact build ID is mandatory. After App Store Connect finishes
+processing the build, add it only to the SQLite pilot TestFlight group.
 
-These get cached after the first run. To avoid prompts, set environment variables:
-```bash
-export EXPO_APPLE_ID=your@email.com
-export EXPO_APPLE_TEAM_ID=XXXXXXXXXX   # printed during first build
-```
+Apple can automatically add uploaded builds to internal groups that have
+automatic distribution enabled. Confirm that the existing field group has that
+setting disabled before uploading this pilot build.
 
-Or add to `eas.json` under `submit.production.ios`:
-```json
-"ios": {
-  "appleId": "your@email.com",
-  "ascAppId": "YOUR_ASC_APP_ID"
-}
-```
-
-### Android — Build and Submit to Internal Track
+### Android: Build and Manually Upload to a Closed Track
 
 ```bash
-# Option A: Build and submit in one command
-npx eas-cli@latest build -p android --profile production --submit
-
-# Option B: Build first, submit after
-npx eas-cli@latest build -p android --profile production
-npx eas-cli@latest submit -p android --latest
+npx eas-cli@latest build -p android --profile pilot
 ```
 
-This uses the service account key at `./google-play-service-account.json` and submits to the `internal` track (configured in `eas.json`).
+Download that build's AAB from EAS. In Play Console, create or select a new
+closed testing track dedicated to the SQLite pilot, verify its tester list, and
+upload the AAB manually. Do not use EAS Submit for Android during the pilot.
 
-> **Note:** The service account key is in `.gitignore`. If you're building from a new machine, you'll need to copy this file over.
+There is intentionally no Android submit profile in `eas.json`. This prevents a
+pilot artifact from inheriting the old field cohort's internal-track submission
+settings.
 
 ---
 
@@ -314,14 +326,16 @@ Any child a tester "deleted" on a pre-fix build still exists in Supabase with no
 
 ---
 
-## Current State (as of March 2026)
+## Current State (as of July 2026)
 
-| Platform | Last Build | Version | OTA Enabled | Distribution |
+| Audience | App | Version | Backend | Distribution |
 |---|---|---|---|---|
-| iOS | March 28, 2026 | 1.1.0 | Yes | TestFlight (internal) |
-| Android | March 28, 2026 | 1.1.0 | Yes | Play Store (internal track) |
+| Field cohort | Legacy AsyncStorage app | 1.2.x | `masi-app` (legacy) | TestFlight group + Play internal track (do not touch) |
+| SQLite pilot cohort | SQLite app (`release/1.3.0-preview`) | 1.3.0 | `masi-app-sqlite` | `pilot` profile → new closed Play track + new TestFlight group |
 
-OTA updates are live. JS-only changes can be pushed with `eas update` — no rebuild needed.
+OTA updates are live per channel: `production` serves the legacy field builds,
+`preview` serves the SQLite pilot store builds. Runtime versions (1.2.x vs
+1.3.0) prevent cross-delivery even on a mistaken channel.
 
 ---
 
@@ -340,11 +354,16 @@ The app must exist in Google Play Console with package `org.masinyusane.masi`.
 Check Play Console → Setup → API access → verify the service account has "Release to production" or at minimum "Release to testing tracks" permission.
 
 ### Build succeeds but submit fails
-Run submit separately to see the specific error:
+For iOS, rerun the pilot submission against the exact build ID to see the
+specific error:
 ```bash
-npx eas-cli@latest submit -p ios --latest
-npx eas-cli@latest submit -p android --latest
+npx eas-cli@latest submit -p ios --profile pilot --id <IOS_BUILD_ID>
 ```
 
+Android pilot uploads are manual in Play Console. Do not substitute an EAS
+Submit command.
+
 ### Environment variables missing in build
-Public values (Supabase URL, anon key) must be in `app.json → extra`, not just `.env.local`. EAS cloud builds don't read `.env.local`. See CLAUDE.md "EAS Builds" section.
+Public values (Supabase URL and publishable key) are selected through the pilot
+profile and exposed through `app.config.js`; `.env.local` is not available to
+EAS cloud builds. See AGENTS.md "EAS Builds" section.
