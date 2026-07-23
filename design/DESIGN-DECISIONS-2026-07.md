@@ -64,10 +64,10 @@ These are the real behaviours the mockups are built on. A build should confirm e
 
 These are **not** design-undecided; they are dependencies the rebuild owns. Captured so they aren't lost.
 
-1. **`sessions.group_id` is discarded on the server.** The client writes it locally (`sessionsRepository.js:233`); the server RLS strips it to NULL (`offlineSync.js:67`). Capturing group context on the home screen is pointless while the server drops it. **Fix this as part of the rebuild.** (Now recorded in `documentation/open-work.md` §4.)
-2. **`GRANT_SUBJECTS` does not model membership-mediated grants** — a live tripwire that "must be extended before group-centric (whole-class) access ships" (`rls-sync-contract-map.md`, and `open-work.md` §6). Whole-class access is the rebuild.
+1. **`sessions.group_id` is discarded on the server.** The client writes it locally (`sessionsRepository.js:233`); the server RLS strips it to NULL (`offlineSync.js:67`). Capturing group context on the home screen is pointless while the server drops it. **Fix this as part of the rebuild.** (Now recorded in `documentation/ROADMAP.md` §4.)
+2. **`GRANT_SUBJECTS` does not model membership-mediated grants** — a live tripwire that "must be extended before group-centric (whole-class) access ships" (`rls-sync-contract-map.md`, and `ROADMAP.md` §6). Whole-class access is the rebuild.
 3. **The "Learners" toggle needs a data answer:** one roster query filtered two ways, or two queries? Decide alongside the rebuild's repository work.
-4. **Zero-class / zero-group onboarding** (`open-work.md` §2, 14a) is go-live blocking and interacts with this home screen: on a fresh backend every EA is the empty-state EA on day one. The C1 home needs an explicit empty state, not yet drawn.
+4. **Zero-class / zero-group onboarding** (`ROADMAP.md` §2, 14a) is go-live blocking and interacts with this home screen: on a fresh backend every EA is the empty-state EA on day one. The C1 home needs an explicit empty state, not yet drawn.
 
 ---
 
@@ -78,5 +78,5 @@ These are **not** design-undecided; they are dependencies the rebuild owns. Capt
 3. Draw the **zero-class empty state** for the C1 home before building — it is go-live blocking and currently unmocked.
 
 Jim's stated go-live target is **1–2 weeks from 2026-07-14**, which makes the device-gate backlog
-(`open-work.md` §0, 46 gates / 0 executed) and the seed script (`open-work.md` §0c) the true critical
+(`ROADMAP.md` §0, 46 gates / 0 executed) and the seed script (`ROADMAP.md` §0c) the true critical
 path — the redesign should not crowd them out.

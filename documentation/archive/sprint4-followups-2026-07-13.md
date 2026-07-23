@@ -1,3 +1,8 @@
+> **Archived 2026-07-23.** The reconcile acknowledgment RPC is deployed and
+> live-probed. Jim's no-delete and ignore-flag rulings, plus the remaining Head
+> Office visibility work, are consolidated in
+> [`documentation/ROADMAP.md`](../ROADMAP.md).
+
 # Sprint 4 Follow-Ups (2026-07-13)
 
 Items the Sprint 4B adversarial review surfaced and the sprint deliberately did NOT close. Jim's domain rulings (2026-07-13) are recorded inline; two of the three original items are now closed.

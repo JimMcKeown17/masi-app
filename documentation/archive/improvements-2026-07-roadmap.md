@@ -1,7 +1,12 @@
+> **Archived 2026-07-23.** Phases 1 through 5 and most of Phase 6 shipped.
+> Completed work is in [`documentation/build-log.md`](../build-log.md); remaining
+> work is in [`documentation/ROADMAP.md`](../ROADMAP.md). Do not use the phase
+> status below as a current execution plan.
+
 # Improvements 2026-07: Phased Implementation Roadmap
 
 **Date:** 2026-07-03
-**Source:** [`documentation/improvements-2026-07.md`](./improvements-2026-07.md) (the ranked 16-item review). Item numbers below refer to that document.
+**Source:** [`documentation/archive/improvements-2026-07.md`](./improvements-2026-07.md) (the ranked 16-item review). Item numbers below refer to that document.
 **Status:** Roadmap approved-pending-review. Phase 1 has a detailed TDD plan at `docs/superpowers/plans/2026-07-03-improvements-phase1-safety-net.md`.
 
 ## Process decision: spec first, or plan first?

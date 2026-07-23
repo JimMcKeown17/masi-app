@@ -1,7 +1,7 @@
 # Sprint 2 Design Spec: Data Edges (audit findings #2, #6, #7, #14)
 
 **Date:** 2026-07-12
-**Source:** `documentation/codebase-audit-2026-07-12.md`, Sprint 2 of the suggested sequencing.
+**Source:** `documentation/archive/codebase-audit-2026-07-12.md`, Sprint 2 of the suggested sequencing.
 **Status:** decisions locked; TDD plan to be written just-in-time against the post-Sprint-1 tree (Sprint 1 touches `OfflineContext.js`, `syncOutboxRepository.js`, and `AuthContext.js`, so plan anchors written today would go stale on merge).
 **Scope:** close every data-stranding path the audit found. Four items, four decisions below. Contract-map updates are part of the definition of done for A, B, and D.
 

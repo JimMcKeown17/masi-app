@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Land the five Phase 1 items from `documentation/improvements-2026-07-roadmap.md`: deflake the release gate, fix the two one-liner field-data bugs (NetInfo reachability, session-form leave guard), add the hot-path covering indexes, and put the test suites in CI.
+**Goal:** Land the five Phase 1 items from `documentation/archive/improvements-2026-07-roadmap.md`: deflake the release gate, fix the two one-liner field-data bugs (NetInfo reachability, session-form leave guard), add the hot-path covering indexes, and put the test suites in CI.
 
 **Architecture:** Five independent, individually-committable tasks on one branch. Task 1 (deflake) must precede Task 5 (CI) so CI turns on green. Tasks 2-4 are order-independent. No Supabase schema, RLS, or sync-contract changes anywhere in this phase; the only DDL is a device-local SQLite migration (v5).
 

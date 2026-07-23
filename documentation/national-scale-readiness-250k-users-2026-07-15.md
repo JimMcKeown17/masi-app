@@ -4,6 +4,14 @@
 **Status:** Dated architecture and scale-readiness assessment, not a current progress ledger
 **Scope:** Masi React Native app, offline-first SQLite client, and Supabase backend
 
+> **Status update, 2026-07-23:** preserve the cost model, POPIA analysis, target architecture,
+> staffing model, staged-scale recommendations, and government wording. Several pilot findings below
+> have since closed: the reconcile acknowledgment RPC is deployed and live-probed; Sentry capture was
+> privacy-hardened; the unsafe generic loader was disabled and replaced by a narrow exact-project
+> pilot provisioner; and several device gates passed. Every still-open implementation and operations
+> item from this assessment is consolidated in [`ROADMAP.md`](./ROADMAP.md) section 9. Do not use the
+> dated "next two weeks" checklist below as current status.
+
 ## Executive summary
 
 Yes, this can be realistic. Supabase itself is not the reason to panic.
@@ -92,7 +100,7 @@ The current live backlog is unusually honest, which is good. It also makes clear
 
 ### 1. Sixty-one physical-device gates are still unexecuted
 
-The standing backlog says that 61 real-device gates remain and none has been executed. The highest-risk gates cover force-quit recovery, account handover, low-end Android performance, and GPS timeout behavior. See [open-work.md](open-work.md#L61).
+The standing backlog says that 61 real-device gates remain and none has been executed. The highest-risk gates cover force-quit recovery, account handover, low-end Android performance, and GPS timeout behavior. See [ROADMAP.md](ROADMAP.md#L61).
 
 Automated tests are strong evidence, but they do not simulate:
 
@@ -127,7 +135,7 @@ If 10% of 250,000 devices reconnect after a regional mobile-network interruption
 
 The fact that each device serializes its requests helps the phone, but the fleet is still synchronized.
 
-The backlog already correctly says delta-pull indexes should be designed alongside the actual delta queries, rather than adding speculative updated-at indexes everywhere. See [open-work.md](open-work.md#L207).
+The backlog already correctly says delta-pull indexes should be designed alongside the actual delta queries, rather than adding speculative updated-at indexes everywhere. See [ROADMAP.md](ROADMAP.md#L207).
 
 Versioned delta pulls, randomized scheduling, and a server-configurable minimum pull interval should be mandatory before tens of thousands of daily-active users.
 
@@ -141,7 +149,7 @@ Before national rollout, there should be explicit product-enforced maximums and 
 
 ### 5. The server-authoritative reconcile change is not yet live-verified
 
-The migration and client code exist, but the standing backlog says the migration still needs to be applied to the current SQLite backend and the live RLS probe must pass. See [open-work.md](open-work.md#L246).
+The migration and client code exist, but the standing backlog says the migration still needs to be applied to the current SQLite backend and the live RLS probe must pass. See [ROADMAP.md](ROADMAP.md#L246).
 
 That is a national-scale data-integrity gate, not a cosmetic cleanup.
 
@@ -600,7 +608,7 @@ Supabase asks Team or Enterprise customers to give at least two weeks' notice be
 - Key and secret rotation rehearsal.
 - Test expired sessions, password-reset spikes, and account handovers.
 - Test upgrades from multiple app versions.
-- Close the still-open OTA rollback schema guard in [open-work.md](open-work.md#L127).
+- Close the still-open OTA rollback schema guard in [ROADMAP.md](ROADMAP.md#L127).
 
 ### Month 5: staged scale
 

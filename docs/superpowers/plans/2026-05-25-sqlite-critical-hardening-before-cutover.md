@@ -6,7 +6,7 @@
 
 **Source evidence:**
 
-- `documentation/zazi-izandi-feature-port-roadmap.md`
+- `documentation/archive/zazi-izandi-feature-port-roadmap.md`
 - `/Users/jimmckeown/Development/zazi-izandi-app/documentation/sqlite-refactor-log.md`
 - `/Users/jimmckeown/Development/zazi-izandi-app/documentation/build-log.md`
 - Current Masi device findings from 2026-05-25 physical iPhone/Expo Go testing

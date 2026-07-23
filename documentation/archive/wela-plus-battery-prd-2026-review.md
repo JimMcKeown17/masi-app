@@ -1,3 +1,8 @@
+> **Archived 2026-07-23.** This pre-implementation review's 18 findings were
+> incorporated into [`documentation/wela-plus-battery-prd-2026.md`](../wela-plus-battery-prd-2026.md).
+> The PRD and Wela merge-debt section in
+> [`documentation/ROADMAP.md`](../ROADMAP.md) are the current sources.
+
 # Review: WelaPLUS Battery PRD
 
 Reviewed plan: `documentation/wela-plus-battery-prd-2026.md`

@@ -21,7 +21,7 @@
   - [src/db/repositories/syncOutboxRepository.js:71](/Users/jimmckeown/Development/masi-app/src/db/repositories/syncOutboxRepository.js:71) selects failed rows again once `next_retry_at` expires.
   - Retriable failures do not make the pass unsuccessful at [src/services/offlineSync.js:1195](/Users/jimmckeown/Development/masi-app/src/services/offlineSync.js:1195), so `lastSuccessfulSyncTime` can still advance at [line 1323](/Users/jimmckeown/Development/masi-app/src/services/offlineSync.js:1323).
   - The UI itemizes only terminal rows at [src/screens/main/SyncStatusScreen.js:146](/Users/jimmckeown/Development/masi-app/src/screens/main/SyncStatusScreen.js:146). Retriable rows appear only as an aggregate “waiting to sync” count.
-  - The roadmap itself confirms `PGRST204`, `42703`, `22P02`, `23502`, and generic `23514` remain open at [documentation/improvements-2026-07.md:182](/Users/jimmckeown/Development/masi-app/documentation/improvements-2026-07.md:182).
+  - The roadmap itself confirms `PGRST204`, `42703`, `22P02`, `23502`, and generic `23514` remain open at [documentation/archive/improvements-2026-07.md:182](/Users/jimmckeown/Development/masi-app/documentation/archive/improvements-2026-07.md:182).
 - Failure scenario: an app release sends a column missing from the live Supabase schema, producing `PGRST204`. A Session or Assessment remains safe locally but never reaches Head Office. It retries every 15 minutes forever, the EA sees calm “waiting” language rather than an actionable error, and “Last Synced” may continue advancing.
 - Fix sketch: add an explicit deterministic-error policy for `PGRST204`, `42703`, `22P02`, `23502`, and non-assignment `23514`. Either quarantine them as terminal immediately or move them to a clearly visible long-cap state after a small bounded number of attempts. Keep errors with no code, timeouts, connection failures, and 5xx responses retriable.
 
@@ -33,7 +33,7 @@
   - [src/context/OfflineContext.js:241](/Users/jimmckeown/Development/masi-app/src/context/OfflineContext.js:241) repeats that status refresh every 30 seconds.
   - The sync pass then excludes the backed-off row through the `next_retry_at` condition at [src/db/repositories/syncOutboxRepository.js:78](/Users/jimmckeown/Development/masi-app/src/db/repositories/syncOutboxRepository.js:78).
   - Even with no ready records, the pass runs the writer transaction for group-ownership repair at [src/services/offlineSync.js:1227](/Users/jimmckeown/Development/masi-app/src/services/offlineSync.js:1227) and writes sync metadata at [line 1320](/Users/jimmckeown/Development/masi-app/src/services/offlineSync.js:1320).
-  - The roadmap still lists ready-record gating as open at [documentation/improvements-2026-07-roadmap.md:49](/Users/jimmckeown/Development/masi-app/documentation/improvements-2026-07-roadmap.md:49).
+  - The roadmap still lists ready-record gating as open at [documentation/archive/improvements-2026-07-roadmap.md:49](/Users/jimmckeown/Development/masi-app/documentation/archive/improvements-2026-07-roadmap.md:49).
 - Failure scenario: one Assessment item hits a temporary server error and receives a 15-minute backoff. During those 15 minutes, a low-end Android phone starts a pointless writer-side sync pass every 30 seconds. This adds battery use and SQLite contention during normal capture even though the row is not eligible for retry.
 - Fix sketch: expose `readyCount` or `hasReadyRecords` from the outbox snapshot and auto-trigger only when a pending or failed row is currently eligible. Continue showing backed-off rows in `waitingCount`.
 
@@ -66,7 +66,7 @@
   - Any failed record adds its entire table at [src/services/offlineSync.js:1204](/Users/jimmckeown/Development/masi-app/src/services/offlineSync.js:1204).
   - Later rows skip if any dependency table appears in that set at [src/services/offlineSync.js:1244](/Users/jimmckeown/Development/masi-app/src/services/offlineSync.js:1244), without comparing the actual parent ID.
   - Batch candidates use the same table-level check at [src/services/offlineSync.js:1285](/Users/jimmckeown/Development/masi-app/src/services/offlineSync.js:1285).
-  - The roadmap confirms record-scoped dependency tracking remains open at [documentation/improvements-2026-07.md:190](/Users/jimmckeown/Development/masi-app/documentation/improvements-2026-07.md:190).
+  - The roadmap confirms record-scoped dependency tracking remains open at [documentation/archive/improvements-2026-07.md:190](/Users/jimmckeown/Development/masi-app/documentation/archive/improvements-2026-07.md:190).
 - Failure scenario: one child row fails retriably. Assessments, mastery, and memberships for every other child are skipped for the rest of that connection window because all depend on the `children` table. They normally progress on a later pass once the bad row is backed off, but an EA with intermittent connectivity may lose the opportunity before that pass occurs.
 - Fix sketch: track failed `(table_name, record_id)` pairs. Use the existing payload/domain-row FK resolution to skip only rows that depend on the specific failed parent.
 

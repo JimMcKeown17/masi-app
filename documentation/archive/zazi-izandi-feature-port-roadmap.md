@@ -1,3 +1,9 @@
+> **Archived 2026-07-23.** Most port items shipped or were superseded. The
+> still-unbuilt group-centred workflow and session-draft requirements were
+> extracted to [`documentation/group-session-workflow.md`](../group-session-workflow.md);
+> smaller survivors are consolidated in
+> [`documentation/ROADMAP.md`](../ROADMAP.md).
+
 # Zazi iZandi -> Masi Feature Port Roadmap
 
 **Updated:** 2026-05-26
@@ -277,7 +283,7 @@ This is a feature family, not a single polish pass. Do not bundle it with Sessio
 | **Zazi behavior** | `GroupPickerScreen` auto-selects one group, shows cards for multiple groups, blocks if not clocked in, and has empty-state CTA. |
 | **Zazi source** | `src/screens/groups/GroupPickerScreen.js`, `src/utils/groupPickerPresentation.js` |
 | **Masi current state** | Masi session form lets the user select children directly; `group_ids` are currently left empty in `LiteracySessionForm`. |
-| **Decision (Jim, 2026-07-14)** | Sessions will be group-first and store one durable `group_id`. The group's latest literacy-session letters, not per-child latest sessions, provide the "last time" context. Build this only after the access, identity, and authorization prerequisites in `open-work.md` §6 are complete. |
+| **Decision (Jim, 2026-07-14)** | Sessions will be group-first and store one durable `group_id`. The group's latest literacy-session letters, not per-child latest sessions, provide the "last time" context. Build this only after the access, identity, and authorization prerequisites in `ROADMAP.md` §6 are complete. |
 | **Effort** | M-L |
 
 ### 3.5 Auto-Grouping CTAs and Preview

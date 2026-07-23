@@ -1,3 +1,8 @@
+> **Archived 2026-07-23.** This unimplemented plan targets the retired pre-SQLite schema
+> and obsolete ad-hoc SQL workflow. Current pilot provisioning and the deferred canonical
+> Head Office importer are tracked in [`documentation/ROADMAP.md`](../ROADMAP.md).
+> Do not implement this plan as written.
+
 # Seed Data Script for Test Users
 
 > **Status:** Plan only — not yet implemented. Saved 2026-04-02.

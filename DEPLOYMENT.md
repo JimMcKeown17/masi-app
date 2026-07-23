@@ -109,7 +109,7 @@ remain minified and much less actionable.
 When you bump `expo.version` (e.g., `1.1.0` → `1.2.0`), the runtime version changes too. This means:
 - OTA updates pushed for `1.2.0` will NOT apply to builds made at `1.1.0`
 - You need a full native build after bumping the marketing version
-- This is a safety feature, but a partial one: it separates *marketing versions*, not native fingerprints. Two binaries built at the same `expo.version` share a runtime even if their native modules differ, so every native dependency/config change MUST come with a version bump or OTA can deliver JS that assumes native code the installed binary lacks. There is also no guard yet for an OTA *rollback* landing an older bundle on a device whose local SQLite schema is newer (`user_version` > the bundle's `CURRENT_SCHEMA_VERSION`); harmless while migrations stay additive, tracked as audit finding #21 in `documentation/codebase-audit-2026-07-12.md`
+- This is a safety feature, but a partial one: it separates *marketing versions*, not native fingerprints. Two binaries built at the same `expo.version` share a runtime even if their native modules differ, so every native dependency/config change MUST come with a version bump or OTA can deliver JS that assumes native code the installed binary lacks. There is also no guard yet for an OTA *rollback* landing an older bundle on a device whose local SQLite schema is newer (`user_version` > the bundle's `CURRENT_SCHEMA_VERSION`); harmless while migrations stay additive, tracked as audit finding #21 in `documentation/archive/codebase-audit-2026-07-12.md`
 
 ### First Time Setup (already done)
 

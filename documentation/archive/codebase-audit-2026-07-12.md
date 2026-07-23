@@ -1,9 +1,14 @@
+> **Archived 2026-07-23.** This is a dated 21-finding audit. Nineteen findings are
+> closed; the two survivors and later discoveries are tracked in
+> [`documentation/ROADMAP.md`](../ROADMAP.md). Keep this as historical evidence,
+> not as a current backlog.
+
 # Masi App Deep Audit: Offline Sync + Low-End Devices (2026-07-12)
 
 **Date:** 2026-07-12
 **Goal:** the app must "just work" for 95% of users. Every user must be able to login/logout, run sessions, and run assessments without lag or errors, on low-end Android devices with intermittent connectivity. This audit deliberately does not chase exotic edge cases.
 **Method:** four parallel Codex (gpt-5.6-sol, high reasoning effort) read-only auditors, each owning one dimension: (1) sync push engine, (2) pull side + React contexts, (3) assessment capture + screen performance, (4) app shell + diagnostics + auth lifecycle. Each was required to verify documentation claims against today's tree with file:line evidence and to separate "verified fixed" from open findings. Claude (Fable) orchestrated, then independently re-verified every load-bearing claim in the top-ranked findings against the code before writing this document. No tests were run and no files were modified during the audit.
-**Relationship to prior work:** builds on `documentation/improvements-2026-07.md` (the ranked 16-item review) and its roadmap. Since that review, 79 commits landed: Phase 1 (safety net, PR #40), Phase 2 (data integrity, PR #41), sync auth hardening (PR #50), classifyError hardening (PR #51), pull-clobber guard (PR #49), collision proofing (PRs #52/#53), the assessment render-perf pack, and the sync-status trust UX. This audit confirmed all of those in code, found that Phase 3 (the amplifier) has not landed, and surfaced eight findings the July 2 review did not have.
+**Relationship to prior work:** builds on `documentation/archive/improvements-2026-07.md` (the ranked 16-item review) and its roadmap. Since that review, 79 commits landed: Phase 1 (safety net, PR #40), Phase 2 (data integrity, PR #41), sync auth hardening (PR #50), classifyError hardening (PR #51), pull-clobber guard (PR #49), collision proofing (PRs #52/#53), the assessment render-perf pack, and the sync-status trust UX. This audit confirmed all of those in code, found that Phase 3 (the amplifier) has not landed, and surfaced eight findings the July 2 review did not have.
 
 ---
 

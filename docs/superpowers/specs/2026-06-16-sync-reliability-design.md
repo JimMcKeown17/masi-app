@@ -2,7 +2,7 @@
 
 **Date:** 2026-06-16
 **Branch:** `fix/sync-reliability-writer-batch`
-**Source:** [`documentation/top-10-improvements-2026-06.md`](../../../documentation/top-10-improvements-2026-06.md) items 1 and 2.
+**Source:** [`documentation/archive/top-10-improvements-2026-06.md`](../../../documentation/archive/top-10-improvements-2026-06.md) items 1 and 2.
 **Companion handoff:** `zazi-izandi-app/documentation/sqlite-lock-storm-handoff-for-masi.md`
 **Contract map to update:** [`documentation/rls-sync-contract-map.md`](../../../documentation/rls-sync-contract-map.md)
 **Status:** Design — pending adversarial review + user approval before `writing-plans`.

@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Cut the write→sync→re-render amplifier from `documentation/improvements-2026-07.md` item 6 (sub-items 6a and 6b): the 30-second poll re-renders the whole app even when nothing changed, one backed-off failed record drives a no-op full sync pass every 30 seconds, the NetInfo/AppState listeners re-subscribe on every count change, and none of the five context providers memoize their values, so any Offline tick cascades to every consumer of every context.
+**Goal:** Cut the write→sync→re-render amplifier from `documentation/archive/improvements-2026-07.md` item 6 (sub-items 6a and 6b): the 30-second poll re-renders the whole app even when nothing changed, one backed-off failed record drives a no-op full sync pass every 30 seconds, the NetInfo/AppState listeners re-subscribe on every count change, and none of the five context providers memoize their values, so any Offline tick cascades to every consumer of every context.
 
 **Architecture:** Six tasks, one branch, all in `src/context/` plus one repository query. Order matters within Tasks 1-3 (all edit OfflineContext) and they precede Tasks 4-5 (the cascade-cut test in Task 4 needs Task 3's stable Offline behavior to be meaningful). Explicitly OUT of scope (deferred to Phase 5 with the facade work): the post-sync full re-pull in ChildrenContext/ClassesContext (item 6c) — the `isSyncing` reload effects must NOT be touched.
 

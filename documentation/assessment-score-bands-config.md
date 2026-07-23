@@ -2,15 +2,17 @@
 
 > **Status:** Scaffold for pedagogy fill-in (created 2026-05-29 in a grill-with-docs session).
 > The *structure* is settled (see `docs/adr/0003-assessment-score-bands.md` and CONTEXT.md). The
-> *numbers* below are pedagogy-team input. Cells marked `TBD` block nothing structural — drop
-> integers in and the colour bands work, no code change.
+> *numbers* below are pedagogy-team input. Current runtime rows are hard-coded in
+> `src/utils/scoreBands.js`, so changing or adding thresholds requires a code change, tests, and an
+> app release until the planned synced reference-table path exists.
 
 ## What this is
 
-The lookup `getScoreBand({ toolCode, grade, language, rawScore }) → 'good' | 'okay' | 'needs_work'`
-reads its cut points from this table. For go-live it is materialised as a **bundled host-app
-constant**; later it may be promoted to a synced `assessment_score_bands` reference table. Either
-way, the rows below are the source of truth for the cuts.
+The lookup `getScoreBand({ toolCode, grade, language, rawScore })` returns
+`great | good | okay | needs_work | unknown`. For the current release it reads a **bundled
+host-app constant** in `src/utils/scoreBands.js`; later it may be promoted to a synced
+`assessment_score_bands` reference table. This document is the human-readable threshold contract,
+but runtime code remains the executable source until that promotion happens.
 
 ## Key shape
 
@@ -74,8 +76,8 @@ The lookup normalises grade input, so the stored class labels (`Grade R`,
 
 ## WelaPLUS Questions (post-go-live)
 
-These ship as WelaPLUS Questions land. (WelaPLUS is **not on `main`** — the Question components are
-built on an unmerged worktree, `.claude/worktrees/feature+wela-plus-battery`.) Each needs its own rows; comprehension/writing
+These ship as WelaPLUS Questions land. WelaPLUS is **not on `main`**. The Question components are
+on the unmerged `feature/wela-plus-battery-merge` branch. Each needs its own rows; comprehension/writing
 Questions are expected to need **explicit per-language** cuts (not the `*` wildcard). Add a section
 per Question as it is built — e.g. `listening_comprehension`, `word_reading`, `sentence_reading`,
 `oral_reading_fluency`, `story_writing`. Numbers all TBD-pedagogy.
@@ -84,8 +86,9 @@ per Question as it is built — e.g. `listening_comprehension`, `word_reading`, 
 > **Letters / Words** toggle (added 2026-05-30). Letters mode uses `letter_sounds`
 > (the rows above); Words mode passes `tool_code = word_reading`, which has **no
 > rows yet**, so every word bar degrades to neutral grey ("No benchmark") and the
-> screen says so. Dropping `word_reading` rows here (great/good/okay per grade,
-> likely per-language) lights up Words-mode colours with **no code change**.
+> screen says so. Define the `word_reading` rows here, then add the same tested rows to
+> `src/utils/scoreBands.js` and ship the app. A future synced-table implementation can remove that
+> release requirement.
 
 ## Related: prerequisite-gate thresholds (separate config)
 

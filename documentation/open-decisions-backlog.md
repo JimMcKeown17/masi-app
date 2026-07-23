@@ -1,9 +1,9 @@
 # Open Decisions Backlog
 
-> Decisions that are **not** settled and **not** in the May 2026 go-live scope. Moved out of
-> `CONTEXT.md` on 2026-05-29 so the glossary stays a glossary. None of these block go-live.
-> When one is resolved, record the outcome in `CONTEXT.md` (settled decisions) and/or an ADR, and
-> remove it from here.
+> Decisions that are **not** settled and are not required for the current SQLite pilot. Moved out of
+> `CONTEXT.md` on 2026-05-29 so the glossary stays a glossary. Current execution work belongs in
+> `ROADMAP.md`; this file contains product choices that require Jim or pedagogy input. When one is
+> resolved, record the outcome in `CONTEXT.md` and/or an ADR, then remove it from here.
 
 ## Deferred to next academic year
 

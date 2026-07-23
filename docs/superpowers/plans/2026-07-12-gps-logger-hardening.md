@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Fix two field-reliability defects from `documentation/codebase-audit-2026-07-12.md` (findings #5 and #12, both item 13 of `documentation/improvements-2026-07.md`):
+**Goal:** Fix two field-reliability defects from `documentation/archive/codebase-audit-2026-07-12.md` (findings #5 and #12, both item 13 of `documentation/archive/improvements-2026-07.md`):
 
 1. The advertised "10s GPS timeout" does not exist. `getCurrentPosition` passes `timeInterval` to `Location.getCurrentPositionAsync` (`src/services/locationService.js:98-101`), which is a watch-mode spacing option, not a timeout. On weak GPS the promise hangs forever, wedging clock-in and clock-out (`TimeTrackingContext` awaits it before writing). The permission prompt also recurses without checking `canAskAgain`, producing an alert loop on permanently-denied Android.
 2. The logger destroys Error payloads and can itself throw. `logger.addLog` (`src/utils/logger.js:67`) serializes objects with bare `JSON.stringify`: an `Error`'s non-enumerable properties vanish (crash exports read `App crashed: {}`), and a circular argument throws synchronously inside the intercepted `console.log/error/warn`.

@@ -1,16 +1,16 @@
 # PRD: WelaPLUS Assessment Battery — In-App, Modular, Open-Source
 
 **Date:** 2026-05-27
-**Status:** **Final draft — fourth Codex review revisions applied 2026-05-29.** All six capture Patterns (A, B, C, D, E, F) are decided; the OSS package release plan, additive migrations + RLS shape (Postgres + SQLite + Storage), Run lifecycle, and Settings UX are locked. The content licensing decision (CC-BY 4.0 for bundled item sets / picture cards / story scripts / rubric anchors) is **subject to Masi leadership ratification** before the first public OSS release. ADR-0004 (`docs/adr/0004-q11-calibration-column-shape.md`) captures the Q11 EA-vs-HQ calibration shape, including the load-bearing `ea:` / `hq:` `item_key` prefix for collision-free EA/HQ row storage.
+**Status:** **Design complete; implementation remains off `main`.** Fourth Codex review revisions applied 2026-05-29. The 11 Question components and tests now exist on `feature/wela-plus-battery-merge` at `fed3175` (34 commits behind `main`, 19 ahead as of 2026-07-23), but host schema, sync, Run lifecycle, packaging/publication, content, and field testing remain open. The old `.claude` worktree no longer exists. Content licensing (CC-BY 4.0 for bundled item sets, picture cards, story scripts, and rubric anchors) remains subject to Masi leadership ratification.
 
-Four adversarial Codex reviews on 2026-05-29 surfaced 35 findings total — 18 in the first pass (`documentation/wela-plus-battery-prd-2026-review.md`: 8 critical, 6 high-priority, 4 medium-priority), 8 in the second pass after the first-pass fixes landed (3 high-priority, 5 medium-priority), 5 in the third pass (2 high-priority, 2 medium-priority, 1 low-priority) focused on the mobile/local sync surface and Storage RLS, and 4 in the fourth pass (2 high-priority, 1 medium-priority, 1 low-priority) on the Storage RLS spec the third pass had just produced. All 35 are addressed in this revision (four changelog tables in *Implementation handoff* below).
+Four adversarial Codex reviews on 2026-05-29 surfaced 35 findings total — 18 in the first pass (`documentation/archive/wela-plus-battery-prd-2026-review.md`: 8 critical, 6 high-priority, 4 medium-priority), 8 in the second pass after the first-pass fixes landed (3 high-priority, 5 medium-priority), 5 in the third pass (2 high-priority, 2 medium-priority, 1 low-priority) focused on the mobile/local sync surface and Storage RLS, and 4 in the fourth pass (2 high-priority, 1 medium-priority, 1 low-priority) on the Storage RLS spec the third pass had just produced. All 35 are addressed in this revision (four changelog tables in *Implementation handoff* below).
 
-Remaining work is **implementation** (writing-plans → executing-plans → EAS builds → field testing) and **pedagogy content** (off-team: item sets, story scripts, picture cards, rubric anchors). See *Implementation handoff* at the bottom of this document.
+Remaining work is **safe branch integration, host implementation, package publication, and pedagogy content**. See *Implementation handoff* and `documentation/ROADMAP.md`.
 **Domain glossary:** [`CONTEXT.md`](../CONTEXT.md) — terms **Assessment Question**, **Assessment Battery**, **Battery Run**, **Assessment Window**, **Progress check**, **Marking mode** are first-class and used throughout this PRD.
 **Architecture explainer:** [`documentation/learning/assessment_battery_architecture.md`](./learning/assessment_battery_architecture.md) — the three-level Run → Question result → Item hierarchy.
 **Agent context for continuation:** [`docs/agent-context/wela-assessment-component-build.md`](../docs/agent-context/wela-assessment-component-build.md) — pointers, decisions log, open questions, and the suggested resumption point.
 **Source material:** Masi Wela+ Literacy Assessment 2024 (English) PDF — supplied to the grilling session that produced this draft.
-**Branch:** TBD (new branch off `main`, *not* the `ui/zazi-feature-polish` branch which has unrelated UX work).
+**Implementation branch:** `feature/wela-plus-battery-merge` at `fed3175`; nothing from it is on `main`.
 
 ---
 
@@ -459,7 +459,7 @@ The PRD design is complete. This section is the handoff to implementation — it
 
 ### Codex review revisions (2026-05-29 — first pass)
 
-A Codex adversarial review (`documentation/wela-plus-battery-prd-2026-review.md`) identified 18 findings before implementation begins. All are addressed in this revision:
+A Codex adversarial review (`documentation/archive/wela-plus-battery-prd-2026-review.md`) identified 18 findings before implementation begins. All are addressed in this revision:
 
 | # | Finding | Section addressing it |
 |---|---|---|
@@ -534,7 +534,10 @@ A fourth Codex pass focused on the Storage RLS spec the third pass had just prod
 ### What was deferred (implementation work, not design)
 
 - **Actual `.sql` migration files** under `supabase/migrations/`. The PRD specifies the shape; implementation produces the files via `/writing-plans` followed by `/executing-plans`. Filenames follow the `YYYYMMDDHHMMSS_description.sql` convention against the `masi-app-sqlite` backend.
-- **The OSS package implementation itself** in the new `masinyusane/assessment-questions` repo: the 11 Question components, the bundled item sets (stubs initially, content per pedagogy below), the `useToggleMark` hook, the design-token system, the TypeScript types, the README + setup guide + LLM-prompt template content.
+- **Safe integration and publication of the existing Question island.** The 11 components, hooks,
+  item-set stubs, types, and tests exist on `feature/wela-plus-battery-merge`, but they require a
+  current-main reconciliation, design/chrome review, typecheck gate, package-boundary decision,
+  documentation, and public release.
 - **The Run lifecycle UI in the Masi app**: Battery overview screen, Run-start primary entry from Child profile, secondary entry from Assessments tab, Run-completion screen with photo-capture queue, score summary.
 - **The Settings screen implementation** (the two rows described in section 3 below).
 - **HQ NextJS dashboard** — its own PRD; consumes the Battery Run data this PRD produces.
@@ -553,9 +556,12 @@ A fourth Codex pass focused on the Storage RLS spec the third pass had just prod
 ### Suggested handoff sequence
 
 1. **Pedagogy team begins item-set authoring** in parallel — bilingual content, picture asset commissioning, rubric anchor wording. No engineering dependency.
-2. **`/writing-plans`** session produces the concrete `supabase/migrations/*.sql` files from section 2 below. Plan reviewed.
-3. **`/executing-plans`** applies the migration to `masi-app-sqlite`, runs the EGRA backfill, mirrors the schema to the SQLite local store, updates `documentation/rls-sync-contract-map.md`. Verification: `npm run test:release` green; physical-device smoke test.
-4. **OSS package implementation** in the new `masinyusane/assessment-questions` repo — Phase 1: package skeleton + types + Patterns A/B/C components + bundled EGRA Letter Sounds item set. Phase 2: Patterns D/E/F components + bundled WelaPLUS content (stub until pedagogy lands). `0.1.0` to npm.
+2. **Reconcile and review `feature/wela-plus-battery-merge`** against current `main`; verify the
+   identity rekey remains defused and complete the design/chrome/typecheck pass.
+3. **Write and execute the host schema plan** against `masi-app-sqlite`, including EGRA backfill,
+   SQLite mirror, RLS/sync contract update, release tests, and physical smoke.
+4. **Extract or publish the reviewed Question island** as `@masinyusane/assessment-questions@0.1.0`
+   with the locked package docs and licensing.
 5. **Masi app integration**: Run lifecycle UI, Settings screen, photo capture queue. EAS preview build for stakeholder testing. Production build pinned to OSS package `0.1.x`.
 6. **Field test Window 1 (Baseline 2026)**: 50 Runs as the calibration data point per section 2's field-testing plan. Iterate on photo quality, RLS surprises, sync failures.
 7. **Promote OSS package to `1.0.0`** after one Window of clean field data.

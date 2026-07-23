@@ -200,7 +200,7 @@
 - `documentation/auth-session-resilience-2026-04-24.md:54-77` says a non-manual null-session event waits 15 seconds. Current code treats `SIGNED_OUT` specially and commits immediately unless persisted auth proves it stale (`src/context/AuthContext.js:96-111`). The 15-second grace applies only to other null-session events (`:119-129`).
 - The auth document’s example log spelling at `documentation/auth-session-resilience-2026-04-24.md:89-94` uses `[Auth] INITIAL_SESSION...`; current code logs `[Auth] Event=INITIAL_SESSION...` at `src/context/AuthContext.js:77-78`.
 - `documentation/sqlite-refactor-log.md:179` says direct AsyncStorage is limited to Supabase auth and logger paths. `src/services/persistedAuthSession.js:1,37,66-72` is now a third direct importer. This is still an allowed auth path, but the literal file inventory is stale.
-- `documentation/improvements-2026-07.md:220` says the GPS hang gates session capture. It gates clock-in/out, but session capture has an explicit “Continue Anyway” path at `src/hooks/useSessionLaunchGuard.js:56-64`.
+- `documentation/archive/improvements-2026-07.md:220` says the GPS hang gates session capture. It gates clock-in/out, but session capture has an explicit “Continue Anyway” path at `src/hooks/useSessionLaunchGuard.js:56-64`.
 - `DEPLOYMENT.md:61-75` describes `appVersion` runtime policy as preventing incompatible native code. It only does so if every native change also receives a marketing-version bump; the configuration itself is not a native fingerprint.
 - The July improvements claims about logger serialization, GPS timeout, facade status, and UTC dates remain accurate and open in the live code. They should not be marked completed.
 

@@ -24,7 +24,7 @@ Evidence:
 - [src/context/ChildrenContext.js](/Users/jimmckeown/Development/masi-app/src/context/ChildrenContext.js:271) deletes a group by removing it and its memberships from local state/storage only.
 - [src/context/ChildrenContext.js](/Users/jimmckeown/Development/masi-app/src/context/ChildrenContext.js:368) removes a child from a group by deleting the local `children_groups` record only.
 - [src/context/ClassesContext.js](/Users/jimmckeown/Development/masi-app/src/context/ClassesContext.js:159) deletes a class locally and marks affected children unsynced, but does not create a server-side class delete operation.
-- [src/utils/storage.js](/Users/jimmckeown/Development/masi-app/src/utils/storage.js:114), [src/utils/storage.js](/Users/jimmckeown/Development/masi-app/src/utils/storage.js:170), [src/utils/storage.js](/Users/jimmckeown/Development/masi-app/src/utils/storage.js:192), and [src/utils/storage.js](/Users/jimmckeown/Development/masi-app/src/utils/storage.js:235) hard-remove records from local arrays.
+- The now-deleted `src/utils/storage.js` lines 114, 170, 192, and 235 hard-removed records from local arrays at the time of this review.
 - [src/services/offlineSync.js](/Users/jimmckeown/Development/masi-app/src/services/offlineSync.js:193) only has `_deleted` handling for records that remain in the unsynced list. In practice that path currently works for `letter_mastery`, not for children, classes, groups, or junction tables.
 
 Field scenario:
@@ -201,4 +201,3 @@ Use a small manual test matrix before the next field release:
 - Poor GPS test: disable location services, deny permission, indoor weak signal, and verify clock-in/out feedback is bounded and actionable.
 - Sync failure simulation: force a known RLS/FK error, verify failed item appears, Retry actually retries after the server-side issue is fixed.
 - Multi-version compatibility check before any migration: older app can still write, newer app can still sync, and no `PGRST204` path is introduced.
-

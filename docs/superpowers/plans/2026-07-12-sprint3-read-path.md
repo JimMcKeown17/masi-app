@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:executing-plans (or the repo TDD skill) to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax.
 
-**Goal:** implement Sprint 3 of `documentation/codebase-audit-2026-07-12.md` (its findings #3, #15, #10, #18; roadmap items 8 and 10):
+**Goal:** implement Sprint 3 of `documentation/archive/codebase-audit-2026-07-12.md` (its findings #3, #15, #10, #18; roadmap items 8 and 10):
 
 - **#18 localDate:** one shared local-day util; fix the two live UTC bugs (time-entry day grouping/today, Home "days worked"). South Africa is UTC+2; the failure window is 00:00-01:59 local.
 - **#3 read-path N+1s:** batched hydration, aggregate COUNT queries, SQL-side date cutoffs, bounded history reads. A year-end Home focus currently costs ~365 sequential SQLite queries; the gate is query-count regression tests.

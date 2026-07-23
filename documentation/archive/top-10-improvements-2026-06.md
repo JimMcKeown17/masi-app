@@ -3,7 +3,7 @@
 **Date:** 2026-06-14
 **Status:** Review complete. Ready to convert into an implementation plan.
 **Companion source:** `/Users/jimmckeown/Development/zazi-izandi-app` (a fork of this app that has had ~6 weeks of field-tested design + workflow + reliability work since divergence).
-**Related artifacts:** [`documentation/zazi-izandi-feature-port-prd-2026-go-live.md`](./zazi-izandi-feature-port-prd-2026-go-live.md), [`documentation/zazi-izandi-feature-port-roadmap.md`](../zazi-izandi-feature-port-roadmap.md), [`AGENTS.md`](../../AGENTS.md), `zazi-izandi-app/documentation/sqlite-lock-storm-handoff-for-masi.md`.
+**Related artifacts:** [`zazi-izandi-feature-port-prd-2026-go-live.md`](./zazi-izandi-feature-port-prd-2026-go-live.md), [`zazi-izandi-feature-port-roadmap.md`](./zazi-izandi-feature-port-roadmap.md), [`AGENTS.md`](../../AGENTS.md), `zazi-izandi-app/documentation/sqlite-lock-storm-handoff-for-masi.md`.
 
 ---
 

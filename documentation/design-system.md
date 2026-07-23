@@ -62,9 +62,9 @@ one spread rather than reassembled per screen.
   used on more than one screen) gets a token, not a fresh hex. Note the guard test's exact-key-set
   assertion means adding a token is a deliberate act that must update the test.
 
-Status colour is semantically aligned with the assessment score bands (ADR-0003, `src/utils/scoreBands.js`):
-green = above benchmark, amber = approaching, red = needs work, grey = no benchmark. Status colour
-app-wide should read the same way.
+Status colour is semantically aligned with the assessment score bands (ADR-0003,
+`src/utils/scoreBands.js`): dark green = `great`, success green = `good`, yellow = `okay`, red =
+`needs_work`, and grey = `unknown`. Status colour app-wide should read the same way.
 
 ## Retired values
 
@@ -74,9 +74,9 @@ document that tells you to use them, that document is stale — this one, and th
 
 ## Open work
 
-- **Typography has no guard test and effectively no adoption.** `src/constants/typography.js` has
-  **one** importer against **82** raw `fontSize:` declarations across `src/`. Roadmap item 15
-  (`documentation/improvements-2026-07.md`) calls for the token rollout plus a fail-closed size-floor
-  guard test. Until that lands, typography is a token file that nothing uses.
+- **Typography has no guard test and almost no adoption.** As of 2026-07-23,
+  `src/constants/typography.js` has **two** importers against **97** raw `fontSize:` declarations
+  across `src/`. [`ROADMAP.md`](./ROADMAP.md) calls for the token rollout plus a fail-closed
+  size-floor guard test. Until that lands, typography is not a meaningful system.
 - The locked Home R3 half gauge uses `ringNeutral` at zero/no-target, `ringStart` at one session,
   primary red while progressing, success green at target, and amber above the usual ceiling.

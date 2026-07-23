@@ -190,7 +190,7 @@ An RLS under-return would remove rows from current React state via `mergeServerR
   - `git log --all --follow --` for that path returns no commit.
   - All task checkboxes remain unchecked.
   - Live code has no `readyCount`, no unchanged-status equality guard, no memoized Offline value, no stable count refs, and no context isolation test.
-- `documentation/improvements-2026-07.md:106-119` remains substantially accurate about the amplifier, although its line numbers are stale.
+- `documentation/archive/improvements-2026-07.md:106-119` remains substantially accurate about the amplifier, although its line numbers are stale.
 - Its “five provider values” description is now incomplete. Phase 2 added TimeTrackingContext. The current idle Offline tick republishes Offline plus four dependent contexts: TimeTracking, Lookups, Children, and Classes.
 - `documentation/sqlite-refactor-log.md` records Phase 1, Phase 2, F7, auth, and later sync work, but contains no phase-3 completion entry.
 - `documentation/rls-sync-contract-map.md:116` is accurate that missing synced rows are dropped only from React state, not SQLite. The user-facing offline-resurrection consequence is not highlighted there.

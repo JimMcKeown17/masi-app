@@ -1,1051 +1,413 @@
-# Masi App - Product Requirements Document
-
-## Project Overview
-A React Native mobile application for Masi, a nonprofit organization, to manage field staff's work with children, track time, and record educational sessions. The app is designed to work offline-first, as staff may be without connectivity for days at a time.
-
----
-
-## Tech Stack
-
-### Core Technologies
-- **Framework**: React Native with Expo
-- **Language**: JavaScript (no TypeScript)
-- **UI Library**: React Native Paper (Material Design)
-- **Backend**: Supabase (Authentication + PostgreSQL)
-- **Offline Storage**: expo-sqlite for domain data and sync state; AsyncStorage only for Supabase auth session storage and app logs
-- **Navigation**: React Navigation (Bottom Tabs)
-- **Forms**: React Hook Form
-- **Location**: expo-location
-- **State Management**: React Context API
-
----
-
-## Current SQLite Architecture
-
-As of 2026-05-26, the app's forward architecture is normalized SQLite local storage plus the `masi-app-sqlite` Supabase backend (`segygjzpujphwvrubusm`). The migration was a clean-slate move from AsyncStorage domain storage; legacy local AsyncStorage domain data is not migrated.
-
-Domain writes now flow through SQLite repositories. A write updates normalized local tables first, enqueues a durable `sync_outbox` row in the same transaction, updates the UI from local state, then syncs to Supabase in dependency order when online. `sync_state` stores pull cursors/state; `local_state` stores small device-local metadata such as the cached user profile and a user-scoped marker for an incomplete first-class child-onboarding step.
-
-Programme is a first-class operational model, separate from job title. EAs have active `staff_programme_assignments`; children may have multiple concurrent `child_programme_enrollments`; user-facing reads are programme-scoped by default. Sessions, assessments, letter mastery, groups, and class assignments carry `programme_id` so each EA sees their current programme slice.
-
-The clean schema also includes first-class `academic_years`, `assessment_windows`, `teachers`, `child_class_memberships`, `class_ea_assignments`, `group_ea_assignments`, `grouping_versions`, and `class_grouping_state`. These tables preserve year-over-year reporting, formal baseline/midline/endline windows, class-change history, multi-level assignment, and regrouping history.
-
-Support export now writes a SQLite diagnostic JSON: schema version, migration list, table counts, sync state, and failed/terminal outbox rows, plus app/build metadata. Log export still uses AsyncStorage-backed logger output.
-
-Validation status as of 2026-05-26: the SQLite implementation has passed the automated release gate, file-backed SQLite integration tests, staging backend checks, RLS/sync rollback probes, Android emulator offline/reconnect validation, and user iPhone preview-build testing after the final RLS/sync fixes. New feature and UX work should be built and tested against this SQLite backend.
-
-## Database Schema
-
-The current clean-slate schema uses normalized relationship tables such as `child_ea_assignments`, `child_programme_enrollments`, `child_class_memberships`, `child_group_memberships`, `session_attendees`, and `assessment_items`. The detailed operational RLS/sync contract lives in `documentation/rls-sync-contract-map.md`, and the schema guide lives in `documentation/DATABASE_SCHEMA_GUIDE.md`.
-
-Some older sections below still document legacy table names used earlier in the product history, such as `staff_children` and `children_groups`. Treat those as historical context unless they are explicitly marked as part of the current SQLite schema.
-
-### users
-```sql
-- id (uuid, FK to auth.users)
-- first_name (text)
-- last_name (text)
-- school_id (uuid, FK to schools)
-- job_title_id (uuid, FK to job_titles)
-- job_title (text, transitional legacy column until schema hardening Phase 6)
-- assigned_school (text, transitional legacy column until schema hardening Phase 6)
-- created_at (timestamp)
-- updated_at (timestamp)
-```
-
-### job_titles
-```sql
-- id (uuid)
-- code (text, unique: literacy_coach, numeracy_coach, zz_coach, yeboneer, one_thousand_stories)
-- name (text, unique display name)
-- sort_order (integer)
-- is_active (boolean)
-```
-
-### children
-```sql
-- id (uuid)
-- first_name (text)
-- last_name (text)
-- class_id (uuid, FK to classes)
-- age (integer, nullable)
-- gender (text, canonical lowercase values; UI offers `female`/`male`; SQLite/Supabase still tolerate historic `non_binary`/`unknown` rows)
-- teacher/class/school (transitional legacy text columns until schema hardening Phase 6)
-- assigned_staff_id (uuid, FK to users) -- DEPRECATED: Use staff_children junction instead
-- created_at (timestamp)
-- updated_at (timestamp)
-```
-
-### staff_children (many-to-many junction)
-```sql
-- id (uuid)
-- staff_id (uuid, FK to users)
-- child_id (uuid, FK to children)
-- assigned_at (timestamp)
-- synced (boolean, default false)
-- created_at (timestamp)
-```
-**Purpose**: Enables many-to-many relationships - one child can have multiple coaches (e.g., both literacy and numeracy coach).
-
-### groups
-```sql
-- id (uuid)
-- name (text) -- e.g., "Group 2", "Advanced Reading Group"
-- staff_id (uuid, FK to users)
-- created_at (timestamp)
-- updated_at (timestamp)
-- synced (boolean, default false)
-```
-
-### children_groups (junction table for many-to-many)
-```sql
-- id (uuid)
-- child_id (uuid, FK to children)
-- group_id (uuid, FK to groups)
-- created_at (timestamp)
-```
-
-### time_entries
-```sql
-- id (uuid)
-- user_id (uuid, FK to users)
-- sign_in_time (timestamp)
-- sign_in_lat (decimal)
-- sign_in_lon (decimal)
-- sign_out_time (timestamp, nullable)
-- sign_out_lat (decimal, nullable)
-- sign_out_lon (decimal, nullable)
-- synced (boolean, default false)
-- created_at (timestamp)
-```
-
-### sessions
-```sql
-- id (uuid)
-- user_id (uuid, FK to users)
-- session_type_id (uuid, FK to job_titles)
-- session_type (text, transitional legacy text column retained until Phase 6; Build B no longer writes it)
-- session_date (date)
-- children_ids (uuid[], array of child IDs)
-- group_ids (uuid[], array of group IDs used, nullable)
-- activities (jsonb, flexible structure based on job_title)
-- notes (text)
-- synced (boolean, default false)
-- created_at (timestamp)
-- updated_at (timestamp)
-```
-
----
-
-## Core Features & Requirements
-
-### 1. Authentication
-**Requirements:**
-- Email/password login
-- Password reset functionality
-- Profile management (name and password editable by user)
-- Job title and assigned school: read-only (admin-managed)
-
-**Technical Decisions:**
-- Start with lenient RLS policies during development
-- Tighten RLS before production deployment
-- **User Onboarding (MVP)**: Manual user creation via Supabase dashboard
-  - Admin creates user account in Supabase Auth
-  - Admin creates profile entry in public.users table
-  - Admin communicates credentials to staff
-  - Staff logs in and changes password immediately
-- **Future Enhancement**: Automated invitation system with email links (post-MVP)
-
-### 1b. Home Screen (Redesigned)
-The Home screen is the primary daily-use screen for field coaches.
-
-**Layout (top to bottom):**
-1. **Identity header** — blue→red brand gradient, Welcome + role • school
-2. **Conditional sync banner** — only shown when needed:
-   - Failed items (red): `{n} items failed to sync — needs attention`
-   - Offline (gray): `Offline — data will sync when connected`
-   - Unsynced (yellow): `{n} items waiting to sync`
-   - Taps to SyncStatusScreen
-3. **Today card** — Work Status:
-   - State A: "Not signed in" + gradient Sign In button
-   - State B: "Signed in at {time}", live elapsed timer, red Sign Out button
-   - GPS location captured on both sign in and sign out
-   - "🕒 View Work History ›" text link → TimeEntriesListScreen
-4. **Sessions card** — Record a Session:
-   - Shows count of sessions recorded today (`{n} today` badge)
-   - Gradient-outline "Record a Session" button → SessionFormScreen
-
-**Shared hook**: `src/hooks/useTimeTracking.js` — encapsulates all sign in/out state, GPS, AsyncStorage, and elapsed timer logic. Used by both HomeScreen and TimeTrackingScreen.
-
-### 2. Time Tracking
-**Requirements:**
-- Sign in/out with geolocation capture
-- View daily/weekly work hours
-- Cannot sign in twice without signing out
-- Offline-first: saves locally, syncs when online
-
-**Technical Decisions:**
-- **Location accuracy**: Medium (50-100m) - balanced approach
-- **Location permissions**: Persistent prompts until granted (required for sign-in)
-- **Time display**: Static sign-in time with manual refresh button
-- Sign-in blocked if location permission denied
-- Store coordinates with medium accuracy settings
-
-**Workflow:**
-1. User taps "Sign In"
-2. Request location permission (if not granted, show persistent prompt)
-3. Capture coordinates with medium accuracy
-4. Save to AsyncStorage with `synced: false`
-5. Update UI to show "Signed In" state
-6. Show sign-in time with refresh button for elapsed time
-7. On sign-out: capture coordinates, update entry, calculate hours
-
-### 3. Children Management
-**Requirements:**
-- View assigned children list
-- Add new children (with sync to backend)
-- View child details (name, teacher, class, age, school, group)
-- Search and filter children
-- Must add children to list before using in sessions (no ad-hoc addition during session recording)
-
-**NEW: Group Management**
-- **Hybrid approach**: Staff can create groups, admin can override in Supabase
-- Staff can assign children to groups
-- Quick group selection: selecting "Group 2" automatically selects all children in that group
-- Groups sync to Supabase when online
-- Groups stored locally when offline
-
-**Technical Decisions:**
-- Children must be in assigned list before session recording
-- Groups are many-to-many with children (junction table)
-- Group creation syncs with offline-first pattern
-
-### 4. Session Recording
-**Requirements:**
-- Dynamic forms based on user's job title:
-  - **Literacy Coach** (first to implement)
-  - Numeracy Coach
-  - ZZ Coach
-  - Yeboneer
-- Forms have significantly different structures per job title
-- Select multiple children per session
-- Group-based selection: select a group to add all children in that group
-- Record activities and notes
-- Track date of session
-- View-only history of past sessions
-
-**Technical Decisions:**
-- Separate form components for each job title
-- Child selection: Multi-step (search → add to list)
-- Can also select by group (adds all children in group)
-- Session history: last 30 days, newest first, read-only
-- No editing after submission
-- Basic client-side validation, Supabase handles comprehensive validation
-
-**Child Selection Workflow:**
-1. Search bar to filter children
-2. Tap child or group to add to selected list
-3. Selected children appear as removable items
-4. Submit session with selected children IDs and group IDs (if applicable)
-
-### 5. Offline Functionality & Sync
-**Requirements:**
-- All operations work offline
-- Automatic sync when connection restored
-- Visual sync status indicators
-- Queue-based sync with retry logic
-- Staff may be offline for days at a time
-
-**Technical Decisions:**
-- **Sync strategy**: Last-write-wins (staff edit always overwrites server)
-- **Sync triggers**: On app foreground/background
-- **Conflict resolution**: No conflict UI, always prefer staff's offline changes
-- **Sync feedback**:
-  - Persistent indicator in header showing unsynced items count
-  - Dedicated sync status screen accessible from header
-- **Sync failures**: Retry with limit (3-5 attempts), then mark for manual review
-- Don't give up on network errors - mark for admin investigation
-
-**Offline Sync Architecture:**
-```
-User Action → Local AsyncStorage → UI Update → Sync Queue → Supabase → Update synced flag
-```
-
-**Sync Queue Logic:**
-1. All write operations save to AsyncStorage immediately
-2. Mark records with `synced: false` flag
-3. On app foreground/background, check network state
-4. If online, process sync queue (unsynced items)
-5. Retry failed syncs with exponential backoff
-6. After retry limit, mark for manual review
-7. Update `synced: true` on successful upload
-
----
-
-## UI/UX Specifications
-
-### Navigation Structure
-- **Bottom Tab Navigation** with 4 tabs:
-  1. Home
-  2. My Children
-  3. Sessions
-  4. Assessments (EGRA Letter Sound Assessment)
-
-**Tab changes from original design:**
-- Time Tracking tab removed — sign in/out promoted to Home screen as the primary daily action
-- Assessments tab now contains EGRA Letter Sound Assessment feature (see Phase 8 below)
-- Tabs reordered: Home → My Children → Sessions → Assessments
-
-**Profile access**: gear icon (⚙️) in Home tab header → ProfileScreen (stack navigation). Sign Out button lives at the bottom of ProfileScreen. Profile is not a tab — used infrequently, keeping the tab bar clean.
-
-### Theme
-- **Light mode only** (for now)
-- React Native Paper Material Design
-- Clean, simple, mobile-first design
-- Large tap targets for field use
-
-### Sync Status Indicator
-- Persistent badge/icon in app header
-- Shows count of unsynced items
-- Tappable to open dedicated sync status screen
-- Sync status screen shows:
-  - Network state
-  - Unsynced items by type (time entries, children, sessions, groups)
-  - Last sync attempt time
-  - Failed items marked for review
-
----
-
-## Development Phases
-
-### Phase 0: Project Setup ✓ (Complete)
-- [x] Create PRD.md
-- [x] Create PROGRESS.md
-- [x] Initialize Expo project
-- [x] Install core dependencies
-- [x] Set up Supabase project
-- [x] Configure environment variables
-- [x] Set up navigation structure (bottom tabs)
-- [x] Create placeholder screens (Home, Time, Children, Sessions)
-- [x] Establish brand colors and styling guidelines
-
-### Phase 1: Authentication & Foundation ✓ (Complete)
-- [x] Supabase client configuration
-- [x] Auth context setup
-- [x] Login screen
-- [x] Password reset flow
-- [x] Profile screen (name & password editable)
-- [x] Basic navigation flow (4 bottom tabs)
-- [x] Offline storage setup (AsyncStorage)
-- [x] OfflineContext for sync management
-- [ ] Invitation system (email links) - **DEFERRED to post-MVP** (using manual Supabase creation)
-
-### Phase 2: Time Tracking (First Complete Workflow) ✓ (Ready for Testing)
-- [x] Location service setup (expo-location wrapper)
-- [x] Location permission handling (request on mount, persistent prompts)
-- [x] Configure medium accuracy (50-100m)
-- [x] Time tracking screen UI
-  - [x] Check for active time entry on load
-  - [x] "Sign In" button (when not signed in)
-  - [x] "Sign Out" button (when signed in)
-  - [x] Display current sign-in time and elapsed duration
-  - [x] Real-time elapsed timer (updates every second)
-- [x] Sign in functionality
-  - [x] Block if location permission denied
-  - [x] Capture GPS coordinates (medium accuracy)
-  - [x] Save to AsyncStorage with `synced: false`
-  - [x] Update UI immediately
-- [x] Sign out functionality
-  - [x] Capture GPS coordinates
-  - [x] Calculate total hours worked
-  - [x] Update time entry in AsyncStorage
-  - [x] Trigger background sync
-- [x] Time entries list view (daily/weekly grouping)
-- [ ] Test offline sync with time entries (user testing required)
-
-### Phase 3: Children Management ✓ (Complete)
-- [x] Children list screen with search and filter
-- [x] Add child form with validation
-- [x] Edit child screen with group memberships display
-- [x] Delete child functionality
-- [x] Local storage for children with offline sync
-- [x] Children sync service (with staff_children junction)
-- [x] **Group creation UI**
-- [x] **Group management screen (create/rename/delete)**
-- [x] **Group assignment to children (many-to-many)**
-- [x] **Add children to group screen**
-- [x] **Many-to-many staff-children relationships**
-- [x] **Pull-to-refresh and sync status indicators**
-
-### Phase 4: Session Recording (Literacy Coach) ✓ (Complete)
-- [x] Literacy Coach session form design (field requirements gathered from website + field team)
-- [x] Session form screen with job title routing
-- [x] Child selection component (search + add)
-- [x] **Group-based child selection**
-- [x] Session data capture (date, children, letters, reading levels, comments → activities JSONB)
-- [x] Local storage for sessions (offline-first, synced flag)
-- [x] Session sync service (already wired in offlineSync.js)
-- [x] Session history screen (last 30 days, newest first)
-- [x] **Fixed auto-sync**: refreshSyncStatus now triggers sync when unsynced items detected
-- [x] **Fixed uuid**: installed react-native-get-random-values polyfill in App.js entry point
-
-#### 2026-07-14 Session data-integrity follow-up
-- [x] Persist each child's current reading level locally and enqueue it with the session transaction
-- [x] Add the nullable `children.reading_level` column to SQLite and Supabase through migrations
-- [x] Pre-fill the next session from the child's saved current reading level
-- [x] Verify all Literacy session and tracker fields across form, SQLite, outbox, and Supabase payloads
-- [x] Record focused tests, integration tests, and required device/backend gates
-
-### Phase 5: Additional Session Forms
-- [ ] Numeracy Coach form (get field requirements)
-- [ ] ZZ Coach form (get field requirements)
-- [ ] Yeboneer form (get field requirements)
-- [ ] Test all form types
-
-### Phase 6: Offline Sync Refinement ✓ (Complete)
-- [x] Queue-based sync system
-- [x] Retry logic with exponential backoff
-- [x] Last-write-wins implementation
-- [x] Sync on app foreground/background
-- [x] Persistent header sync indicator
-- [x] Dedicated sync status screen (`SyncStatusScreen.js` — network badge, last synced, per-table breakdown, failed items with per-item retry)
-- [x] Manual review marking for failed syncs (failed items persisted to `syncMeta.failedItems`; retry clears counter + re-queues)
-- [x] Network state detection
-
-#### 2026-07-14 Server-authoritative reconcile follow-up
-- [x] Separate ordinary row hydration from server-authoritative absence acknowledgment
-- [x] Fail closed when the versioned authenticated snapshot is missing, malformed, or inconsistent
-- [x] Cover RLS under-return and unavailable-RPC behavior with real SQLite integration tests
-- [x] Add the additive Supabase migration and exact service-role-versus-EA staging probe
-- [x] Apply migrations `20260714220000` and `20260714233000` to `masi-app-sqlite` and pass `npm run rls:probe`
-
-#### 2026-07-14 Record-scoped sync dependency follow-up
-- [x] Replace table-wide same-pass failure propagation with exact failed-record evidence
-- [x] Resolve direct dependency identity from FK payloads with a durable SQLite fallback
-- [x] Resolve inverse archive cleanup dependencies by child, class, or group subject
-- [x] Keep matching dependents pending while unrelated records on the same table continue
-- [x] Guard every declared direct and inverse dependency edge with tests
-
-#### 2026-07-14 Bounded failed-batch fallback follow-up
-- [x] Cap batchable Supabase payloads at 100 records
-- [x] Cap per-record fallback attempts at 25 across the entire sync pass
-- [x] Limit per-record fallback concurrency to five requests
-- [x] Return unattempted rows to pending without incrementing retry or failure counters
-- [x] Surface deferred fallback work in sync results and operational observability
-
-#### 2026-07-14 Versioned startup repair follow-up
-- [x] Add a monotonic, durable startup repair registry with one marker per completed version
-- [x] Make every recipe idempotent and advance the marker only after it succeeds
-- [x] Gate manual, background, and auth-triggered sync behind one shared repair promise
-- [x] Move the cutover-only group ownership repair out of every sync pass and into repair version 1
-- [x] Report startup repair failures without blocking the app; retry them on the next launch
-
-#### 2026-07-14 Outbox queue stability and batch-claim follow-up
-- [x] Preserve the first-enqueue `created_at` when one logical outbox operation is refreshed
-- [x] Refresh payload, owner, status, retry metadata, and `updated_at` in one conflict upsert
-- [x] Remove the redundant second UPDATE from `syncOutboxRepository.enqueue`
-- [x] Claim a batch with one set-based UPDATE and return its CAS records with one SELECT
-- [x] Preserve stale-finalize, sibling-failure, user-switch, and bounded-fallback guarantees
-
-#### 2026-07-14 Domain-pull request-queue fairness follow-up
-- [x] Replace the whole-workflow child/group pull lease with one lease per Supabase request
-- [x] Replace the whole-workflow class pull lease with one lease per Supabase request
-- [x] Preserve serial dependency order, scope classification, and authoritative reconcile validation
-- [x] Prove a waiting unrelated request runs between dependent pull queries
-- [x] Preserve cache-first publication and stale-user result rejection in context tests
-
-#### 2026-07-14 Safe child-graph batching follow-up
-- [x] Batch ordinary child insert/update payloads, including multiple reading-level changes
-- [x] Batch programme enrollments after deterministic active-pair id normalization
-- [x] Preserve bounded batch fallback and exact failed-record dependency containment
-- [x] Keep hard deletes, membership collision handling, and immutable assignment inserts outside the generic batch path
-- [x] Batch immutable assignment inserts with deterministic ids and insert-or-ignore semantics
-- [x] Keep immutable assignment lifecycle updates per-record and update-capable
-- [ ] Design collision-safe table-specific batching for class and group memberships before enabling them
-
-#### 2026-07-14 SQLite bootstrap recovery follow-up
-- [x] Open and migrate SQLite before mounting any app context provider
-- [x] Keep the user on a dedicated recovery surface when bootstrap fails
-- [x] Retry through the real initializer after half-open database handles are disposed
-- [x] Report bootstrap failures with attempt and SQLite error context
-- [x] Share AsyncStorage-backed error logs without requiring a working SQLite database
-- [x] Keep retry usable when the native share operation also fails
-- [x] Avoid destructive database reset or wipe controls
-
-#### 2026-07-14 Sync relationship index follow-up
-- [x] Add sparse SQLite indexes for `sessions.class_id`, `sessions.group_id`, and `session_attendees.group_id`
-- [x] Add matching additive indexes in a canonical Supabase migration
-- [x] Prove the SQLite planner uses all three indexes
-- [x] Keep the query-plan suite in the real-SQLite integration tier
-- [ ] Design `updated_at` indexes with the eventual delta-pull predicates instead of indexing every synced write speculatively
-
-### Phase 7: Polish & Production Prep (Partially Complete)
-- [x] Error handling across all screens — Snackbar standardised across 6 screens; Alert reserved for destructive confirmations only
-- [x] Loading states — ActivityIndicator on SessionHistoryScreen; Create/Save button spinners on GroupManagementScreen
-- [x] Form validation (basic client-side) — inline red errors on LiteracySessionForm; email regex guard on LoginScreen
-- [x] User feedback (toasts, alerts) — Snackbar pattern applied consistently
-- [x] RLS policy tightening — `supabase-migrations/03_tighten_children_rls.sql` (adds `created_by` column, BEFORE INSERT trigger, replaces `WITH CHECK (TRUE)` policy)
-- [x] Add Sentry native/JavaScript crash, app-hang, failed-request, and React ErrorBoundary capture
-- [x] Report non-crashing sync failures: skipped passes, preflights, retries, terminal rows, and reconcile breakers
-- [x] Add installed build/device/Expo Update/backend/SQLite context to Sentry and local support exports
-- [x] Add a safe handled-error verification action and EAS Build/Update source-map configuration
-- [x] Create the `masinyusane/react-native` Sentry project and record its DSN, organization, and project slugs
-- [x] Harden field telemetry: disable Replay, screenshots, view hierarchy, default PII, email identity, and automatic console-log breadcrumbs
-- [x] Configure the public Sentry DSN, environment, organization, and project values in EAS preview and production
-- [x] Add the sensitive Sentry auth token to EAS preview and production with sensitive visibility
-- [x] Bump the first Sentry-native release to app/runtime `1.3.0`
-- [x] Add an exact-project, zero-class tester provisioner and disable the unsafe legacy loader
-- [ ] Pass physical-device privacy, symbolication, sync-issue, and local-export gates N1, N2, N4, N6, and N7
-- [x] Detect confirmed/unconfirmed zero-class bootstrap states and auto-enter onboarding from Home/My Children
-- [x] Require explicit duplicate-risk acknowledgement before offline local class creation
-- [x] Complete the settled class -> children handoff: require one child, persist and resume the incomplete step across restarts, loop additions, warn below 10, and finish without a group step
-- [x] Make a class-roster child row open Child Results while retaining explicit letter-tracker and edit actions
-- [ ] Security review
-- [ ] Testing on Android emulator
-- [ ] Testing on iOS simulator
-- [ ] Performance optimization
-- [ ] Production deployment
-
-### Phase 8: EGRA Letter Sound Assessment ✓ (Complete)
-- [x] Assessment child selection screen with search and sort (last assessed date, accuracy)
-- [x] EGRA letter grids — English (60 letters, mixed case) and isiXhosa (60 letters with digraphs)
-- [x] Timed 60-second assessment with color-coded countdown timer
-- [x] Paginated letter grid (20 per page, 5 columns × 4 rows) — tap to mark correct
-- [x] "Last Letter Attempted" bottom sheet — assessor confirms where child stopped after timer/manual finish
-- [x] Assessment results screen — accuracy ring, feedback message, stat cards (Attempted, Correct, Incorrect), letter-by-letter detail grid
-- [x] Assessment history screen: complete locally available history, newest first, with tappable cards
-- [x] Assessment detail screen — standalone view of past assessment with full stats and color-coded letter grid
-- [x] Auto-detect language from child's class — skips manual language selection dialog when `class.home_language` maps to an available letter set
-- [x] Assessment icon on Class Details child rows — quick access to most recent assessment
-- [x] Offline-first storage and sync for assessments (same pattern as other entities)
-- [x] Schools and classes data model — `schools`, `classes` tables with `home_language` field; children linked via `class_id`
-- [x] Supabase migration for assessments table with RLS policies
-
----
-
-## App Structure
-```
-/src
-  /components
-    /common
-      - Button.js
-      - Input.js
-      - Card.js
-      - LoadingSpinner.js
-      - SyncIndicator.js (header badge)
-      - LocationPermissionPrompt.js
-    /session-forms
-      - LiteracySessionForm.js (first to implement)
-      - NumeracySessionForm.js
-      - ZZCoachSessionForm.js
-      - YeboneerSessionForm.js
-      - BaseSessionForm.js
-    /children
-      - ChildCard.js
-      - ChildSelector.js (multi-step: search → add)
-      - GroupSelector.js (NEW)
-      - ChildForm.js
-      - GroupForm.js (NEW)
-      - GroupPickerBottomSheet.js
-    /assessment
-      - EgraLetterGrid.js (paginated letter tile grid)
-      - AssessmentTimer.js (countdown bar)
-      - LastAttemptedBottomSheet.js (post-assessment prompt)
-      - AssessmentDetailGrid.js (color-coded results grid)
-  /screens
-    /auth
-      - LoginScreen.js
-      - ForgotPasswordScreen.js
-      - InvitationScreen.js (NEW)
-    /main
-      - HomeScreen.js
-      - TimeTrackingScreen.js
-      - ChildrenListScreen.js
-      - ChildDetailScreen.js
-      - AddChildScreen.js
-      - GroupManagementScreen.js (NEW)
-      - SessionFormScreen.js
-      - SessionHistoryScreen.js
-      - ProfileScreen.js
-      - SyncStatusScreen.js (NEW)
-    /assessments
-      - AssessmentChildSelectScreen.js (child picker with auto-language)
-      - LetterAssessmentScreen.js (timed EGRA assessment)
-      - AssessmentResultsScreen.js (post-assessment results)
-      - AssessmentHistoryScreen.js (past assessments list)
-      - AssessmentDetailScreen.js (detailed view of past assessment)
-    /children
-      - ClassDetailScreen.js
-      - EditChildScreen.js
-      - CreateClassScreen.js
-      - EditClassScreen.js
-  /services
-    - supabaseClient.js
-    - offlineSync.js
-    - locationService.js (medium accuracy config)
-    - authService.js
-    - invitationService.js (NEW)
-  /context
-    - AuthContext.js
-    - OfflineContext.js
-    - ChildrenContext.js
-    - ClassesContext.js
-    - GroupsContext.js (NEW)
-  /utils
-    - storage.js
-    - validators.js
-    - dateHelpers.js
-  /navigation
-    - AppNavigator.js
-    - AuthNavigator.js
-    - MainNavigator.js (bottom tabs)
-  /constants
-    - colors.js
-    - jobTitles.js
-    - egraConstants.js (letter sets, duration, helpers)
-```
-
----
-
-## Environment Variables
-```
-SUPABASE_URL=your_supabase_url
-SUPABASE_ANON_KEY=your_supabase_anon_key
-SUPABASE_SERVICE_ROLE_KEY=your_service_role_key (dev only, remove before production)
-```
-
----
-
-## Design Principles
-- **Offline-first**: Every action works offline, syncs later
-- **Simple & Clean**: Minimal UI, clear actions, easy navigation
-- **Functional Components**: Use hooks, avoid class components
-- **Mobile-first**: Touch-friendly, large tap targets
-- **Clear Feedback**: Loading states, success/error messages, sync indicators
-- **Field-tested**: Designed for low-tech environments and intermittent connectivity
-
----
-
-## Debug & Support Features (Implemented)
-
-### Overview
-Field staff often work in remote areas with limited connectivity. When issues occur, support teams need detailed diagnostic information to help troubleshoot problems.
-
-### Requirements
-- Export app logs for debugging
-- Export local database for support team analysis
-- Terms & Conditions access
-- Privacy-conscious user data handling
-
-### Technical Decisions
-
-**Log Capture**: Rolling buffer of last 1000 entries
-- Intercepts console.log, console.error, console.warn
-- Stores in AsyncStorage with timestamp and severity level
-- Automatically rotates to prevent excessive storage use
-- Captures all app activity including sync operations, errors, and user actions
-
-**Export Method**: React Native Share API (native share sheet)
-- Uses native OS sharing capabilities (WhatsApp, Email, etc.)
-- No external dependencies or file system complexity
-- Works on both iOS and Android
-- User controls where data is sent
-
-**Database Export**: SQLite diagnostic dump with schema version, table counts, sync state, failed/terminal outbox rows, and app/build metadata
-- Exports support diagnostics in JSON format rather than a full raw database dump
-- Failed/terminal outbox payloads may still include child/session/assessment PII because those rows are needed to debug stuck sync work
-- Includes export timestamp, app version, and device info
-- Contains sensitive data warning (confirmation dialog required)
-- Useful for debugging sync issues and data recovery
-
-**Terms & Conditions**: External URL link
-- Configurable URL (no app update needed to change terms)
-- Opens in default browser
-- App store compliant
-- Current URL: https://masinyusane.org/terms
-
-### Use Cases
-1. **Field staff reports issue**: Share logs via WhatsApp to support team
-2. **Sync debugging**: Export database to analyze unsynced records
-3. **Data recovery**: Database export helps recover lost data if sync fails
-4. **App store compliance**: Terms link required for Apple/Google app stores
-5. **Performance issues**: Logs show timing and error patterns
-
-### Profile Screen Structure
-1. **Profile Information** (read-only display)
-   - Name, Email, Job Title, Assigned School
-   - Removed editable fields to simplify UI
-
-2. **Debug & Support**
-   - Share Logs button
-   - Share Database button (with sensitive data warning)
-
-3. **Change Password**
-   - Existing password change functionality
-
-4. **Legal**
-   - Terms & Conditions link
-
-### Privacy & Security
-- Database export requires confirmation (contains sensitive data)
-- No automatic uploads - user explicitly shares via native OS
-- Logs stored locally only (not sent to external services)
-- Clear labeling of sensitive data warnings
-
----
-
-## Improvements Backlog (Field Testing Feedback)
-
-Items discovered during the first weeks of field testing (March 2026). Prioritise these ahead of post-MVP features since they affect active testers.
-
-### Sync UX: "Retry All Failed" Button
-**Problem**: When multiple records hit `MAX_RETRY_ATTEMPTS` (5), each one is moved to the Failed Items list and must be retried individually. During the March 2026 schema incident, one tester had 9 permanently-failed records (children, staff_children, children_groups) — each requiring a separate tap. The "Unsynced Items" section shows them as "pending" with no visual distinction from records that are still actively retrying, so the user keeps tapping "Sync Now" expecting progress.
-
-**Proposed fix:**
-1. Add a **"Retry All"** button at the top of the Failed Items section that clears retry counters for all failed records and triggers a sync in one tap.
-2. Visually distinguish "waiting to sync" items from "permanently failed" items in the Unsynced Items section — e.g., show failed items in red/orange with an error icon instead of the upload icon.
-3. Consider surfacing the Failed Items section more prominently (above the Sync Now button, or as a warning banner) so users don't miss it.
-
-**Affected files:** `SyncStatusScreen.js`, `offlineSync.js` (add `retryAllFailed` export)
-
----
-
-## Security Advisor Backlog
-
-Captured from the Supabase security advisor on 2026-04-30 after applying migration 12. **None of these were introduced by the soft-delete work** — they all pre-existed in the project. Listed here so they don't get lost.
-
-### 1–5: Functions with mutable `search_path` (5 lints)
-
-Postgres functions without `SET search_path = ...` are theoretically vulnerable to search-path injection if a hostile schema is added to the database. Low severity for these specific functions (they're trigger/utility functions touching fully-qualified `public.*` tables only), but worth fixing for hygiene and to keep the advisor clean.
-
-- `public.set_children_created_by`
-- `public.set_class_created_by`
-- `public.update_class_timestamp`
-- `public.get_children_in_group`
-- `public.update_groups_updated_at`
-
-**Resolution**: in a follow-up migration, redefine each function with `SET search_path = public, pg_temp` (or `= ''` and fully qualify every reference). Mass-fixable in one migration.
-
-[Reference](https://supabase.com/docs/guides/database/database-linter?lint=0011_function_search_path_mutable)
-
-### 6–9: `SECURITY DEFINER` functions exposed as RPC (4 lints, 2 functions)
-
-Both functions are callable as RPC by `anon` and `authenticated` roles, bypassing RLS because `SECURITY DEFINER` runs with the function-owner's privileges (typically `postgres`).
-
-- **`public.set_class_created_by()`** — trigger function; should never be exposed as an RPC endpoint. **Resolution**: `REVOKE EXECUTE ON FUNCTION public.set_class_created_by() FROM anon, authenticated;` (and consider moving trigger functions to a non-public schema).
-- **`public.get_children_in_group(group_uuid uuid)`** — likely intended as a helper, but `SECURITY DEFINER` here is a **privacy risk**: any signed-in user can query *any* group's children regardless of who owns the group. **Resolution**: switch to `SECURITY INVOKER` so the existing RLS on `staff_children` / `children_groups` applies, OR keep `SECURITY DEFINER` and add an explicit `EXISTS (... groups WHERE id = group_uuid AND staff_id = auth.uid())` guard inside the function body.
-
-Schema hardening migration 17 drops `public.get_children_in_group(uuid)` after confirming app code has no callers, resolving this specific exposed helper. The mutable `search_path` function findings and `public.set_class_created_by()` RPC exposure remain out of scope.
-
-[Reference: anon](https://supabase.com/docs/guides/database/database-linter?lint=0028_anon_security_definer_function_executable) · [Reference: authenticated](https://supabase.com/docs/guides/database/database-linter?lint=0029_authenticated_security_definer_function_executable)
-
-### 10: Auth — leaked-password protection disabled
-
-Supabase Auth can check submitted passwords against HaveIBeenPwned.org so users can't pick passwords known to be in public breach corpuses. Currently off.
-
-**Resolution**: Supabase Dashboard → Authentication → Policies (or "Password Settings") → enable "Leaked Password Protection". No code or migration change required.
-
-[Reference](https://supabase.com/docs/guides/auth/password-security#password-strength-and-leaked-password-protection)
-
----
-
-## Future Enhancements (Post-MVP)
-- **OTA Updates (expo-updates)**: Install `expo-updates` and configure `runtimeVersion` in `app.json` to enable over-the-air JS bundle updates without full store submissions. Critical for pushing bug fixes quickly to field staff.
-- Dark mode
-- Streaks and awards system
-- Admin portal for user management
-- Advanced reporting and analytics
-- Photo capture for sessions
-- Push notifications
-- Multi-language support
-- Curriculum progress tracking integration
-- Offline map caching for location context
-- Clear Logs button in debug section
-- ~~App version/build info in debug section~~ (Done - shown on Profile screen)
-
-### Coach Alerts (Post-MVP)
-A lightweight flagging system that surfaces important messages to coaches without requiring a dedicated notification infrastructure.
-
-**How it works:**
-1. Backend Python scripts (run by Masi staff or scheduled jobs) analyse session data and write flag records to a `coach_alerts` Supabase table.
-2. The app pulls new alerts from `coach_alerts` through the existing offline sync loop — no new network layer or WebSocket connection is needed.
-3. Alerts are surfaced to the user as in-app messages (e.g. a banner or card on the Home screen) and dismissed once read.
-
-**`coach_alerts` table (indicative schema):**
-```sql
-- id (uuid)
-- user_id (uuid, FK to users)       -- which coach the alert is for
-- message (text)                     -- human-readable alert text
-- alert_type (text)                  -- category/severity (e.g. 'info', 'warning')
-- created_at (timestamp)
-- read_at (timestamp, nullable)      -- null until the coach dismisses the alert
-```
-
-**Design rationale:**
-- Reuses the existing sync queue so no additional background service is required in the app.
-- Python scripts decouple alert generation from the mobile app; Masi's data team can add or change alert logic without an app release.
-- Read state (`read_at`) is stored on the server so alerts don't reappear if the app is reinstalled or the cache is cleared.
-
----
-
-## Notes & Constraints
-- Staff can work offline for days
-- No concurrent editing of same child record (one staff per child assignment)
-- Sessions cannot be edited after submission (view-only history)
-- Geolocation is approximate (school vicinity is sufficient)
-- Priority on stability and offline reliability over features
-- Testing with Android emulator + iOS simulator
-- Keep Supabase usage efficient (mindful of free tier limits)
-
----
-
-## Session Form Requirements
-
-### Literacy Coach Form
-
-**Fields recorded per session:**
-1. **Session Date** — date picker, defaults to today
-2. **Children** — multi-select via search or group selection; stored as `children_ids` array + `group_ids` if selected via group
-3. **Letters Focused On** — tap-to-toggle grid displayed in curriculum teaching order (not alphabetical); stored as array in `activities.letters_focused`
-4. **Session Reading Level** — single dropdown for the session target (what level the coach focused on); stored in `activities.session_reading_level`
-5. **Child Reading Levels** — optional per-child dropdown; each selected child can have their current reading level recorded; stored as map in `activities.child_reading_levels` (keyed by child UUID)
-6. **Comments** — optional free-text notes; stored in `activities.comments`
-
-**Reading level options (in progression order):**
-- Cannot blend
-- 2 Letter Blends
-- 3 Letter Blends
-- 4 Letter Blends
-- Word Reading
-- Sentence Reading
-- Paragraph Reading
-
-**Letter order:** Matches the paper tracker — read vertically down each column, left to right across columns. Stored in `src/constants/literacyConstants.js`.
-- Column 1: a, e, i, o, u, m, l, n, s
-- Column 2: d, k, t, f, g, y, w, b, p
-- Column 3: c, x, j, h, v, z, q
-- Note: `r` is not on the paper tracker and is intentionally excluded.
-
-**Letter Tracker Feature (to be implemented after session form):**
-- A per-child mastery grid showing all letters in teaching order
-- Staff shade/check a box when a child has mastered each letter
-- Children move at their own pace — progress fills in left to right over days/weeks
-- Visually similar to the paper tracker sheets used in the field
-- Accessible from child detail screen
-- Mastery data stored locally with offline sync
-- This is a progress-tracking tool, separate from session recording (session form records "letters focused on today"; letter tracker records "has this child mastered this letter")
-
-### Other Forms
-Requirements to be gathered as we progress through development phases.
-
----
-
-**Document Version**: 1.2
-**Last Updated**: 2026-05-26
-**Status**: SQLite backend adopted as forward architecture; field testing continues on the SQLite build
-
----
-
-## Development Progress
-
-### Locked Home and navigation implementation, 2026-07-22
-
-- [x] Verify the locked design and domain assumptions against the live Home, navigation, SQLite repositories, clock-in guard, and sync presenter.
-- [x] Replace the old dashboard with the locked status hero, exact R3 half gauge, who-next, weekday, coverage, and recent-session composition.
-- [x] Ship Home, Children, centre Record command, Insights, and Assess as the five visual navigation slots without beginning the group-centric rebuild.
-- [x] Convert the clock-in decision to the shared bottom-sheet pattern while preserving the explicit record-without-hours escape hatch.
-- [x] Cover the vertical slices with RED/GREEN behavior tests and an Android production export.
-- [x] Make Assessment History all-time locally, align Home and Assessments to complete active-roster coverage, and use the South African Programme day at assessment creation.
-- [x] Replace the New Session group dropdown and duplicate selection chips with a compact Children/Groups roster toggle while preserving the existing child-based session payload.
-- [x] Record the missing inbound assessment pull as deferred sync-contract work in `documentation/open-work.md` §0d.
-- [ ] Complete the physical visual gates in `documentation/device-gates-sqlite-backend-2026-07.md` section S.
-- [ ] Complete the added physical behavior gates C7, C8, D5, and E4.
-
-> **This document is NOT the progress ledger, and must not be used as one.**
->
-> It drifted badly by trying to be: as of 2026-07-13 it was missing the entire June 2026
-> Top-10 tranche (design tokens, sequential capture, field critical paths, child results),
-> the GPS/logger hardening, collision proofing, the assessment render-perf pack, and the
-> sync-status trust UX. All of them were merged. A reader would have concluded they were
-> unbuilt.
->
-> The per-sprint checklists that used to live here duplicated `documentation/build-log.md`
-> line for line, and the duplicate is what rotted. They have been removed rather than
-> hand-synced, because hand-syncing two ledgers guarantees a third drift.
->
-> | Question | Read |
-> |---|---|
-> | What was built, when, and did it pass? | `documentation/build-log.md` (Verification Register) |
-> | What is still open? | `documentation/open-work.md` |
-> | What must be checked on a device? | `documentation/device-gates-sqlite-backend-2026-07.md` |
-> | What is the RLS/sync contract? | `documentation/rls-sync-contract-map.md` |
->
-> **What belongs in this file:** product requirements, tech stack, feature specifications,
-> domain rules, and the phase model below. Not status.
-
-### Phase model
-
-The original phase plan, kept because the phase numbers are still referenced elsewhere.
-Status here is deliberately coarse; the build log is authoritative.
-
-| Phase | Scope | Status |
+# Masi App Product Requirements
+
+**Document role:** current product, domain, and architecture requirements.
+
+**Updated:** 2026-07-23
+
+This file is not a progress ledger. Use:
+
+| Question | Source |
+|---|---|
+| What is still open? | [`documentation/ROADMAP.md`](documentation/ROADMAP.md) |
+| What was built and verified? | [`documentation/build-log.md`](documentation/build-log.md) |
+| What needs physical-device proof? | [`documentation/device-gates-sqlite-backend-2026-07.md`](documentation/device-gates-sqlite-backend-2026-07.md) |
+| What product decisions are unresolved? | [`documentation/open-decisions-backlog.md`](documentation/open-decisions-backlog.md) |
+| What is the current RLS/sync contract? | [`documentation/rls-sync-contract-map.md`](documentation/rls-sync-contract-map.md) |
+
+## 1. Product purpose
+
+Masi App is an offline-first React Native application for Masinyusane field staff. It supports
+daily work with children, time tracking, classes and groups, literacy sessions, assessments,
+letter mastery, and field support diagnostics.
+
+The product must remain usable when a staff member has no connectivity for days. A successful local
+save is therefore a real commit, not a temporary UI state. Supabase provides authentication,
+cross-device continuity, Head Office access, and durable server history once synchronization
+completes.
+
+## 2. Product principles
+
+- **Offline-first:** every field-critical write commits to local SQLite before network work.
+- **Truthful status:** the UI must distinguish locally saved, waiting, retrying, terminal, outbound
+  complete, and inbound-history-complete states.
+- **One operational vocabulary:** Programme, class, group, session, assessment, and EA mean what
+  [`CONTEXT.md`](CONTEXT.md) defines.
+- **History is evidence:** sessions, assessments, assignments, memberships, and changes are ended or
+  ignored with audit metadata, not casually hard-deleted.
+- **Field reliability over novelty:** low-end Android, poor GPS, weak connectivity, process death,
+  and delayed updates are normal operating conditions.
+- **Simple interfaces:** large tap targets, clear next actions, minimal hidden state, and explicit
+  recovery paths.
+- **Privacy by default:** the app handles child, staff, attendance, assessment, and location data.
+  Cloud telemetry must be allowlisted and local support exports must warn before sharing PII.
+
+## 3. Users and domain
+
+### 3.1 Field user
+
+The primary user is an Education Assistant or coach. The user:
+
+- signs in with a Head Office-provisioned account;
+- works under one active Programme assignment at a time;
+- clocks in and out;
+- sees the classes, children, and groups authorized for that Programme;
+- records sessions and assessments offline;
+- reviews locally available history and progress;
+- monitors sync and shares diagnostics when support is needed.
+
+### 3.2 Programme is not job title
+
+Job title is an HR/profile label. Programme is the operational scope for class assignments,
+children, groups, sessions, assessments, and reporting.
+
+- An EA has an active `staff_programme_assignment`.
+- A child may have more than one concurrent Programme enrollment.
+- User-facing reads are active-Programme-scoped by default.
+- Sessions, assessments, letter mastery, groups, and assignments retain `programme_id`.
+
+### 3.3 Class, group, and session
+
+- A class is the broader school roster and assessment scope.
+- A group is the delivery unit within a class.
+- One completed session represents one group block of work.
+- The current app still has a transitional child-oriented capture contract. The required
+  group-centred end state is specified in
+  [`documentation/group-session-workflow.md`](documentation/group-session-workflow.md).
+- Session attendees are a historical snapshot. Later group membership changes must not rewrite
+  who attended an earlier session.
+
+### 3.4 Assessment
+
+- Field assessment is capture performed by an EA in the mobile app.
+- In-app assessment is an instrument delivered through the app.
+- Assessment results keep the raw item evidence needed to explain and recompute summaries.
+- Assessment Windows are first-class in the data model, but the current UI does not yet implement
+  formal Window selection. Until it does, Home and Assess use complete locally available
+  active-roster lifetime coverage.
+
+## 4. Technology and current architecture
+
+### 4.1 Stack
+
+- React Native 0.81 with Expo SDK 54
+- JavaScript application code
+- React Navigation
+- React Native Paper plus `react-native-svg`
+- Expo SQLite for domain data, local state, and sync state
+- AsyncStorage only for Supabase Auth session storage and app logs
+- Supabase Auth and PostgreSQL
+- Sentry React Native for allowlisted operational telemetry
+- Jest plus `better-sqlite3` integration tests
+
+The repository currently uses npm and `package-lock.json`. Package-manager migration is separate
+work.
+
+### 4.2 Backend identity
+
+New work targets `masi-app-sqlite`, project ref `segygjzpujphwvrubusm`. The legacy pre-SQLite
+backend is not the default and must not be used for forward mobile work without an explicit legacy
+maintenance request.
+
+The app fails fast when the selected backend target and supplied URL do not match. EAS preview and
+production profiles carry the public target values through Expo config rather than relying on
+`.env.local`.
+
+### 4.3 Local persistence
+
+The current SQLite schema is defined by `src/db/migrations.js`. It includes:
+
+- reference and scope: `schools`, `job_titles`, `programmes`,
+  `staff_programme_assignments`, `academic_years`, `assessment_windows`,
+  `assessment_tools`;
+- roster and assignment: `teachers`, `classes`, `children`, `child_ea_assignments`,
+  `child_programme_enrollments`, `class_ea_assignments`, `child_class_memberships`;
+- grouping: `groups`, `group_ea_assignments`, `grouping_versions`,
+  `class_grouping_state`, `child_group_memberships`;
+- work records: `time_entries`, `sessions`, `session_attendees`, `assessments`,
+  `assessment_items`, `letter_mastery`;
+- device and sync: `local_state`, `sync_state`, `sync_outbox`, `schema_migrations`.
+
+`documentation/DATABASE_SCHEMA_GUIDE.md` is a relational-modelling primer, not a current schema
+reference. The RLS and synchronization behavior is authoritative only in
+`documentation/rls-sync-contract-map.md`, current repository code, canonical Supabase migrations,
+and live schema verification.
+
+### 4.4 Write contract
+
+A user-facing write:
+
+1. validates the domain action;
+2. writes normalized domain rows to SQLite;
+3. enqueues or refreshes the durable `sync_outbox` operation in the same SQLite transaction;
+4. publishes UI state from SQLite;
+5. pushes ready work to Supabase in dependency order when online.
+
+No domain feature may reintroduce AsyncStorage records with `synced: false` or table scanning as the
+sync mechanism.
+
+### 4.5 Read contract
+
+React state is a function of SQLite.
+
+- Server pulls persist rows transactionally through typed repositories.
+- Server-authoritative removals are reconciled into SQLite only from verified complete scopes.
+- Reconcile never ends pending, failed, or terminal local work.
+- Errored or truncated scopes cannot authorize absence-based removal.
+- A mass-end circuit breaker requires human confirmation.
+- UI state is republished from a fresh SQLite read after persistence.
+
+There is no in-memory three-way merge.
+
+## 5. Navigation and core surfaces
+
+The locked bottom navigation has five visual slots:
+
+1. Home
+2. Children
+3. centre Record command
+4. Insights
+5. Assess
+
+The centre Record item is an action, not a selected destination. Profile and Sync Status are reached
+through stack navigation. The tab bar remains visible through child, class, results, assessment, and
+insight flows where specified by the locked navigation contract.
+
+## 6. Functional requirements
+
+### 6.1 Authentication and profile
+
+- Email/password sign-in and password reset.
+- Publish a refreshable persisted same-user session quickly enough for offline cold start.
+- Reject stale auth events from an older session attempt.
+- Keep job title, school, Programme assignment, release identity, and backend identity visible.
+- Allow password change and explicit sign-out.
+- Never let one EA's pending outbox work push under another EA's session.
+- Zero-class onboarding must distinguish confirmed empty, unconfirmed empty, available data, and no
+  active Programme assignment.
+
+Pilot provisioning uses `scripts/createTesters.js` for explicit zero-class testers on the exact
+SQLite backend. The generic legacy loader is disabled.
+
+### 6.2 Home
+
+Home is the primary daily-use surface. It must show:
+
+- identity, Programme, and school;
+- full sync status, not only a green/grey icon;
+- clocked-in or clocked-out state with elapsed time and safe actions;
+- the locked sessions-today half gauge;
+- a short "who to see next" list;
+- Monday-to-Friday session activity;
+- active-roster assessment coverage;
+- recent sessions;
+- correct zero-class onboarding routing.
+
+All Home domain data comes from SQLite. Network activity may refresh SQLite, but must not be a
+render-time dependency.
+
+### 6.3 Time tracking
+
+- Clock in and out with approximate geolocation when available.
+- Prevent overlapping open time entries at the repository boundary.
+- Use one shared time-tracking state across screens.
+- A GPS request must resolve or fall back within about ten seconds.
+- Permanent permission denial offers a path to device Settings.
+- Record-without-hours remains an explicit escape hatch for session capture.
+- Attribute work-day grouping to the South African Programme day.
+
+### 6.4 Classes, children, and onboarding
+
+- Show active-Programme classes and children authorized for the EA.
+- Search and filter the roster.
+- Create and edit local classes and children offline.
+- A confirmed zero-class EA enters guided class then child onboarding.
+- Offline creation after an unconfirmed zero requires explicit duplicate-risk acknowledgement.
+- Class creation starts a durable incomplete child-onboarding step.
+- At least one child is required; fewer than ten requires confirmation; adding more remains possible.
+- A child row opens Child Results while explicit letter-tracker and edit actions remain available.
+- Head Office and local creation paths must converge without duplicate active relationships.
+
+### 6.5 Groups
+
+Current group management supports normalized groups and memberships. The target group-centred
+workflow must additionally provide group cards, Group Detail, durable group identity on sessions,
+group-first capture, and historical membership correctness. See the dedicated active specification.
+
+### 6.6 Literacy sessions
+
+The current Literacy form records:
+
+- South African Programme session date;
+- selected children and the resolved roster source;
+- letters focused on, in the paper-tracker teaching order;
+- one session reading level;
+- optional per-child current reading levels;
+- comments;
+- current letter-mastery changes.
+
+The same transaction persists:
+
+- the session;
+- its attendee rows;
+- the historical per-session reading-level snapshot;
+- changed durable `children.reading_level` values for final attendees only;
+- letter-mastery changes for final attendees only;
+- all corresponding outbox operations.
+
+Submitted history is currently view-only. Saved-session editing may not ship until attendee removal
+is correct.
+
+### 6.7 Assessments
+
+- Select an authorized child and infer language from normalized class data when possible.
+- Support grid and sequential EGRA capture modes.
+- Preserve wall-clock-accurate timing, background pause/resume, hard stop, and last-attempted
+  confirmation.
+- Store parent assessment and item evidence atomically before navigation.
+- Show complete locally available Assessment History for the signed-in EA and Programme.
+- Show raw correct count as the hero result and configured score-band meaning where available.
+- Keep unknown or unconfigured score bands neutral rather than inventing thresholds.
+- Retain direct paths to assessment, result detail, and letter mastery.
+
+Inbound history hydration remains required before a fresh installation is a complete recovery
+surface.
+
+### 6.8 Letter mastery
+
+- Use the curriculum letter order in `src/constants/literacyConstants.js`.
+- Distinguish assessment-derived evidence from EA-taught/mastered state.
+- Preserve deterministic logical identity and soft-delete/reactivation behavior.
+- Keep the child screen and session tracker on one shared mastery-state contract.
+
+### 6.9 Insights
+
+Insights provides:
+
+- Letter Mastery ranking
+- Assessment Scores ranking
+- Session Count ranking
+
+Ranking semantics must name their population, time window, assessment type, grade, language, and
+configured threshold source. Missing pedagogy thresholds render as unknown, not as guessed meaning.
+
+### 6.10 Sync Status
+
+The user must be able to understand:
+
+- online/offline state;
+- ready and backed-off waiting work;
+- in-flight work;
+- retryable failures;
+- terminal needs-attention work;
+- last attempted and last successful sync;
+- per-record failure context;
+- safe manual retry.
+
+The product must not claim complete local history merely because the outbound queue is empty.
+
+### 6.11 Support and observability
+
+Profile support tools must:
+
+- export rolling local logs;
+- export SQLite-aware support diagnostics with schema, counts, sync state, release, device, Expo
+  Update, backend, and representative failed/terminal operations;
+- warn that exports can contain sensitive child/session/assessment data;
+- provide a safe handled-error Sentry verification action;
+- preserve local evidence when cloud telemetry is unavailable.
+
+Initial Sentry posture:
+
+- no Session Replay;
+- no screenshots or view hierarchy;
+- no default PII or staff email identity;
+- no automatic cloud forwarding of arbitrary console-log arguments;
+- structured, rate-limited crash, hang, sync, reconcile, and bootstrap signals only.
+
+## 7. Product workstreams not yet complete
+
+### 7.1 Additional session forms
+
+Numeracy Coach, ZZ Coach, and Yeboneer requirements have not been gathered or implemented. Each form
+needs its own domain specification and persistence contract. Do not clone the Literacy form and
+rename fields.
+
+### 7.2 Group-centred sessions
+
+The active specification is
+[`documentation/group-session-workflow.md`](documentation/group-session-workflow.md). This is a
+cross-layer architecture change, not a UI-only port.
+
+### 7.3 WelaPLUS
+
+The active PRD is
+[`documentation/wela-plus-battery-prd-2026.md`](documentation/wela-plus-battery-prd-2026.md).
+Question components exist only on the unmerged `feature/wela-plus-battery-merge` branch. Host
+schema, sync, Run lifecycle, package publication, content, calibration, and field validation remain
+open.
+
+### 7.4 Head Office importer
+
+The old seed and bulk-import plans are archived because they target retired tables. The future
+canonical importer:
+
+- begins with read-only discovery of the real Airtable/Postgres source model;
+- is idempotent and rerunnable;
+- uses the app's deterministic active-pair ID functions;
+- preserves class-membership history;
+- validates zero identity mismatches after import;
+- produces dry-run, reconciliation, and operator-audit evidence.
+
+Detailed constraints live in `documentation/ROADMAP.md`.
+
+## 8. Later product opportunities
+
+These are product opportunities, not committed implementation order:
+
+- push notifications and a durable in-app message inbox;
+- coach alerts produced by data-team jobs;
+- delegated admin/provisioning portal;
+- advanced analytics and reporting;
+- session photos where the domain need is clear;
+- multi-language UI;
+- curriculum integration;
+- offline map context;
+- dark mode;
+- motivation and recognition features that respect low-end-device and reduced-motion constraints.
+
+National-scale architecture, cost, operations, POPIA, and government-readiness considerations are
+covered in
+[`documentation/national-scale-readiness-250k-users-2026-07-15.md`](documentation/national-scale-readiness-250k-users-2026-07-15.md).
+
+## 9. Historical phase vocabulary
+
+Older plans and build-log entries use these phase numbers:
+
+| Phase | Scope | Coarse status |
 |---|---|---|
 | 0 | Project setup | Complete |
-| 1 | Authentication & foundation | Complete |
+| 1 | Authentication and foundation | Complete |
 | 2 | Time tracking | Complete |
-| 3 | Children & groups management | Complete |
-| 4 | Session recording (Literacy Coach) | Complete |
-| 5 | Additional session forms (Numeracy, ZZ Coach, Yeboneer) | **Not started** |
-| 6 | Offline sync refinement | Complete, then superseded by the SQLite rebuild |
-| 7 | Polish & production prep | Partial — see `open-work.md` |
-| 8 | EGRA Letter Sound Assessment | Complete |
+| 3 | Children and groups management | Complete for the current child-oriented model |
+| 4 | Literacy session recording | Complete for the current model |
+| 5 | Additional session forms | Not started |
+| 6 | Offline sync refinement | Superseded by the SQLite/outbox architecture |
+| 7 | Polish and production preparation | Partial; see the roadmap |
+| 8 | EGRA Letter Sound Assessment | Complete for current capture, with open hydration/draft work |
 | 9 | Letter Tracker | Complete |
-| 10 | Dashboard redesign | Complete |
+| 10 | Earlier dashboard redesign | Superseded by the locked 2026-07-22 Home/navigation design |
 
-Since Phase 10 the work has been organised as sprints rather than phases (the SQLite
-cutover, the June Top-10 tranche, Improvements Phases 1-3, Sprints 1-4B, and the Design
-Foundation sprint). All of it is recorded in the build log.
+Since Phase 10, implementation has been organized through the SQLite cutover, June Top-10 tranche,
+July improvements, sync hardening sprints, design foundation, pilot onboarding/observability, and
+the locked Home/navigation work. The build log is authoritative for all of them.
 
----
+## 10. Documentation contract
 
-
-### Completed Phases
-
-#### Phase 0: Project Setup ✓
-- Expo project initialized, all core dependencies installed
-- Supabase project created with base schema and RLS
-- Environment variables configured, navigation structure set up
-- Documentation created (PRD, PROGRESS, LEARNING, DATABASE_SCHEMA_GUIDE)
-
-#### Phase 1: Authentication & Foundation ✓
-- Supabase client config, AuthContext, LoginScreen, ForgotPasswordScreen
-- ProfileScreen with password change, profile refresh
-- Offline storage setup (AsyncStorage), OfflineContext
-
-#### Phase 1.5: Profile Improvements & Debug Tools ✓
-- Logger utility (rolling 1000-entry buffer), debug export via Share API
-- ProfileScreen refactored to 4-section layout (info, debug, password, legal)
-
-#### Phase 2: Time Tracking ✓
-- Sign in/out with geolocation (medium accuracy), time entries list
-- Daily hours calculation, offline sync with exponential backoff
-
-#### Phase 3: Children & Groups Management ✓
-- staff_children many-to-many junction, ChildrenContext with CRUD
-- Group management (create/rename/delete), children-groups assignment
-- Search, filter, pull-to-refresh, sync indicators
-
-#### Phase 4: Session Recording — Literacy Coach ✓
-- LiteracySessionForm (calendar, child selector, letter grid, reading levels)
-- SessionHistoryScreen (last 30 days), uuid polyfill fix, auto-sync fix
-
-#### Phase 6: Offline Sync Refinement ✓
-- Failed items persistence with retry, SyncStatusScreen
-- Per-table unsynced breakdown, manual retry per failed item
-
-#### Phase 7: Polish & Production Prep (Partial) ✓
-- Snackbar standardization, loading states, inline form validation
-- RLS tightening (created_by trigger), .env.example fix
-- **Remaining**: security review, device testing, performance, deployment
-
-#### Phase 8: EGRA Letter Sound Assessment ✓
-- Schools/classes data model, assessment table with RLS
-- Timed 60-second EGRA grid, last-letter-attempted bottom sheet
-- Results screen, history, detail view, auto-language detection
-- Assessment icon on class detail rows
-
----
-
-### Decisions Made
-
-#### Architecture
-- **Sync Strategy**: Last-write-wins (staff changes always overwrite server)
-- **Sync Triggers**: App foreground/background
-- **Navigation**: Bottom tab navigation — Home → My Children → Sessions → Assessments
-- **Theme**: Light mode only (initially)
-- **Validation**: Basic client-side, comprehensive server-side
-
-#### Features
-- **Groups**: Hybrid management (staff can create, admin can override)
-- **Child Selection**: Multi-step (search → add to list) + group-based selection
-- **Time Tracking**: Medium accuracy location (50-100m), static display with manual refresh
-- **Session History**: Last 30 days, newest first, read-only
-- **Profile Editing**: Name and password only (job details admin-only)
-
----
-
-### Recent Activity Log
-
-#### 2026-04-23 (Preset Numbered Groups)
-- [x] Preset numbered groups — virtual Group 1..4 for new users, one-tap "+ Add Group N" for growth, rename removed, existing free-text groups preserved. Spec: `docs/superpowers/specs/2026-04-23-preset-numbered-groups-design.md`, Plan: `docs/superpowers/plans/2026-04-23-preset-numbered-groups.md`.
-
-#### 2026-03-26 (EGRA Assessment v2 — Last Attempted, Detail Grid, Auto-Language)
-- "Last Letter Attempted" bottom sheet, assessment detail grid, history cards tappable
-- Auto-detect language from class, assessment icon on Class Details
-- Branch: `feature/letter-assessment-v2` merged to main
-
-#### 2026-02-13 (Home Redesign & Navigation Restructure)
-- Extracted `useTimeTracking` hook, redesigned HomeScreen with gradient header
-- Time tab removed, Assessments tab added, gear icon for profile access
-- Branches: `redesign/home-tab` and `redesign/assessments-tab` merged to main
-
-#### 2026-02-04 (Phase 7 Polish & Phase 6 Sync Refinement)
-- Feedback standardization (Alert → Snackbar), loading states, inline validation
-- RLS migration, SyncStatusScreen, failed items persistence
-- Phases 6 & 7 (partial) complete
-
-#### 2026-02-03 (Session Recording — Literacy Coach)
-- LiteracySessionForm, LetterGrid, ChildSelector, SessionHistoryScreen
-- uuid polyfill fix, auto-sync bug fix, test data loaded
-
-#### 2026-01-30 (Children & Groups Management)
-- staff_children junction, ChildrenContext, GroupManagementScreen
-- Full CRUD with offline-first architecture, Phase 3 complete
-
----
-
-### Remaining Work
-
-**See `documentation/open-work.md`.** That is the single live backlog. This section used to
-list three bullets that had gone stale; keeping a second list here is how the drift started.
-
-The one item still worth naming at PRD level, because it is a *product* gap rather than an
-engineering one: **Phase 5, the additional session forms (Numeracy, ZZ Coach, Yeboneer),
-has not been started.** Only the Literacy Coach form exists, and the field requirements for
-the other three have never been gathered.
-
----
-
-## Planned Admin Scripts
-
-### 1. Seed Test Data Script — **not built**
-**Purpose**: Populate a test user account with realistic data (class, children, groups, sessions, assessments, time entries) for testing.
-**Plan**: [`documentation/seed_data_plan.md`](documentation/seed_data_plan.md) — ⚠️ **the plan is schema-dead.** It targets `staff_children`, `children_groups`, and the `children.class`/`teacher`/`school` text columns, none of which exist under the SQLite backend. It needs rewriting against the normalized schema, not executing.
-
-### 2. Bulk Import Children & Groups — **not built**
-**Purpose**: Import real class lists (children + group assignments) for new users from spreadsheets. Most new users already have their children grouped; this wires up school, class, children, assignments, groups, and memberships in one run. **This is the onboarding rate-limiter and has the highest operational value of the three.**
-**Plan**: [`documentation/bulk_import_children_plan.md`](documentation/bulk_import_children_plan.md) — ⚠️ **also schema-dead**, same reason as above.
-
-### 3. Staff User Creation Automation — **already built (this section is stale)**
-
-> `scripts/loadTestUsers.js` already does this: CSV → Supabase auth user + `public.users`
-> row, idempotent, with school and job-title lookup. The options analysis below is retained
-> only as the record of how the decision was reached. The remaining open question is whether
-> user creation ever needs to be delegated off Jim's laptop (option 3).
-
-#### Original analysis
-**Purpose**: Replace the manual multi-step workflow (Supabase Auth sign-up → copy UUID → Table Editor → insert `public.users` row with first_name/last_name/job_title/assigned_school) with a single command or form. Extend naturally to CSV bulk creation and pre-linking staff to their assigned children.
-
-**Problem today**: Creating one staff member requires ~8 clicks across two Supabase surfaces (Authentication + Table Editor) and manual UUID copy-paste. As the staff roster grows, this becomes the rate-limiter on onboarding.
-
-**Options considered (no plan doc yet):**
-1. **Postgres trigger** (`handle_new_user`) on `auth.users` that auto-creates the matching `public.users` row from `raw_user_meta_data` passed at sign-up. Canonical Supabase pattern; one-time setup; benefits every creation path thereafter.
-2. **Local Node script** using the service-role key to call `auth.admin.createUser({ email, password, user_metadata })` and insert the profile row (and eventually `staff_children`) in one command. Fast to build; extends linearly to CSV bulk.
-3. **Supabase Edge Function + small admin UI** so non-technical admins can create users without touching code. Higher setup cost; right answer when delegation is needed.
-4. **Dashboard CSV import** for profile rows only — limited value since it can't create auth records.
-
-**Leaning**: combine **#1 + #2** — add the trigger now (permanent good citizen, works regardless of creation path), plus a Node script for single-command staff creation that scales to CSV bulk and child pre-linking. Promote to **#3** if user creation ever needs to be delegated off Jim's laptop.
-
-**Related**: Should compose with [`documentation/bulk_import_children_plan.md`](documentation/bulk_import_children_plan.md) — the child pre-linking step of this script is exactly the relationship wiring that plan already describes. Consider whether staff creation runs as "step 0" of the bulk import, or as a separate script that the import reuses.
-
-**Security note**: service-role key must remain local/server-side only — never bundled into the mobile app.
+- Present-tense product and architecture requirements belong here, in `CONTEXT.md`, or in a focused
+  active specification.
+- Current open work belongs only in `documentation/ROADMAP.md`.
+- Verification, decisions, defects, and dead ends belong in `documentation/build-log.md`.
+- Physical checks belong in the device-gate checklist.
+- Table-by-table sync/RLS behavior belongs in the contract map.
+- Completed and superseded plans belong in `documentation/archive/`, after surviving work is
+  rescued.

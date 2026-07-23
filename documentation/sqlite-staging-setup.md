@@ -85,6 +85,6 @@ explicitly asks for legacy-backend maintenance.
 
 **Dated verification results are not recorded here.** A frozen "as of 2026-05-26, 56 suites / 296
 tests" snapshot used to live in this file and went stale immediately. The live record of suite counts,
-device passes, and release gates is `documentation/build-log.md` (Verification Register); what remains
-open is `documentation/codebase-audit-2026-07-12.md` and
+device passes, and release gates is `documentation/build-log.md` (Verification Register). Current
+work is `documentation/ROADMAP.md`; physical checks are
 `documentation/device-gates-sqlite-backend-2026-07.md`.

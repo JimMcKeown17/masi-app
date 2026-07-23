@@ -1,7 +1,7 @@
 # Sprint 4 Design Spec: Pull Correctness + Facade Retirement (audit findings #4, #9, #19, #20 + #1 link d)
 
 **Date:** 2026-07-13
-**Source:** `documentation/codebase-audit-2026-07-12.md` (Sprint 4 of the suggested sequencing), `documentation/improvements-2026-07-roadmap.md` Phase 5 (this is the facade mini-spec that phase requires), handoff `/tmp/masi-app-sprint4-handoff.md`.
+**Source:** `documentation/archive/codebase-audit-2026-07-12.md` (Sprint 4 of the suggested sequencing), `documentation/archive/improvements-2026-07-roadmap.md` Phase 5 (this is the facade mini-spec that phase requires), handoff `/tmp/masi-app-sprint4-handoff.md`.
 **Status:** decisions locked; two TDD plans, one per branch. Plan 4A written now; plan 4B written just-in-time after 4A merges (4A rewrites the exact lines 4B touches).
 **Scope:** server removals reconciled into SQLite (#4), per-scope pull errors (#20), domain pull on foreground/reconnect (#9), storage facade retirement + batched pull persistence + re-pull decoupling (#19, roadmap item 9, audit #1 link d). Explicitly NOT: #8 roster virtualization, #11 draft persistence, #13 bootstrap recovery, #16 chunking, #17 record-scoped skipping, #21 OTA guard, pagination, WelaPLUS.
 

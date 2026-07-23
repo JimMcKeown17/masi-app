@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Close the two remaining data-corruption paths from `documentation/improvements-2026-07.md`: item 2 (the session-form letter tracker silently loses assessment mastery once a child's latest assessment is a word assessment) and item 1 (two independent `useTimeTracking` instances can create overlapping/corrupted time entries).
+**Goal:** Close the two remaining data-corruption paths from `documentation/archive/improvements-2026-07.md`: item 2 (the session-form letter tracker silently loses assessment mastery once a child's latest assessment is a word assessment) and item 1 (two independent `useTimeTracking` instances can create overlapping/corrupted time entries).
 
 **Architecture:** Six tasks, one branch. Tasks 1-2 extract one shared mastery-state loader (`src/utils/masteryState.js`) and fix the `assessment_type` filter bug in it, then point both consumers at it. Tasks 3-6 promote time tracking to a single-truth `TimeTrackingContext` (compat shim keeps every import path and screen test unchanged), add an atomic repository guard against a second open entry, make clock-out re-resolve the active entry, and isolate the 1Hz elapsed ticker into a leaf component. Tasks 1-2 must run in order; tasks 3-6 must run in order; the two groups are independent of each other.
 

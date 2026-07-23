@@ -26,7 +26,8 @@
    - In [`/Users/jimmckeown/Development/masi-app/src/services/offlineSync.js`](/Users/jimmckeown/Development/masi-app/src/services/offlineSync.js), detect non-retriable DB codes/messages (`23503`, `23505`) for junction tables.
    - Move these directly to failed/manual-review state without exponential backoff loops.
 3. **Fix local referential integrity and deletion semantics**
-   - In [`/Users/jimmckeown/Development/masi-app/src/context/ChildrenContext.js`](/Users/jimmckeown/Development/masi-app/src/context/ChildrenContext.js) + [`/Users/jimmckeown/Development/masi-app/src/utils/storage.js`](/Users/jimmckeown/Development/masi-app/src/utils/storage.js):
+   - In [`src/context/ChildrenContext.js`](./src/context/ChildrenContext.js) plus the now-deleted
+     historical `src/utils/storage.js`:
      - Cascade local cleanup when deleting a child (remove/mark related `staff_children` and `children_groups` rows).
      - Convert group-membership removal to tombstone-based sync deletion (`_deleted`) instead of hard local removal.
 4. **Add lightweight orphan guard before junction sync**

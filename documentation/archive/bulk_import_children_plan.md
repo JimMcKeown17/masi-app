@@ -1,3 +1,7 @@
+> **Archived 2026-07-23.** This unimplemented plan targets the retired pre-SQLite schema.
+> The still-valid need is consolidated in [`documentation/ROADMAP.md`](../ROADMAP.md)
+> under the deferred Head Office importer. Do not implement this plan as written.
+
 # Bulk Import Children & Groups for New Users
 
 > **Status:** Plan only — not yet implemented. Saved 2026-04-02.
@@ -95,5 +99,5 @@ Or more practically, as a series of INSERT statements generated from the spreads
 `scripts/bulk_import_children.sql` (to be created alongside `scripts/seed_test_data.sql`)
 
 ## Related
-- See `documentation/seed_data_plan.md` for the fake/test data seed script (similar approach, different purpose)
+- See [`seed_data_plan.md`](./seed_data_plan.md) for the equally historical fake/test-data plan.
 # HISTORICAL - predates 2026-05 schema hardening. Field names and schema assumptions may be stale.

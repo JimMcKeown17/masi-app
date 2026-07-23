@@ -1,8 +1,14 @@
+> **Archived 2026-07-23.** Implemented work is recorded in
+> [`documentation/build-log.md`](../build-log.md); every surviving product, design,
+> sync, and hygiene item is consolidated in
+> [`documentation/ROADMAP.md`](../ROADMAP.md). This review is point-in-time
+> rationale, not a current backlog.
+
 # Masi App: Ranked Code Improvements (2026-07-02)
 
 **Date:** 2026-07-02
 **Status:** Fresh review complete. Ready to convert into implementation plans.
-**Status note (2026-07-12):** superseded for current state by `documentation/codebase-audit-2026-07-12.md`, which re-verified every remaining item against the tree. Landed since this review: items 1-5, 7 (Phases 1-2), the ZZ launch-blockers, the assessment render-perf pack, and the sync-status trust UX. Known-stale claims in this document (do not act on them): item 8's `LetterMasteryPanel` no longer loads all assessments (it passes `childId`); item 6's "five provider values" is now six (TimeTrackingContext); item 13b's GPS hang gates clock-in/out only, not session capture (which has "Continue Anyway"); item 16.3's dev-backend default flip landed 2026-07-12.
+**Status note (2026-07-12):** superseded for current state by `documentation/archive/codebase-audit-2026-07-12.md`, which re-verified every remaining item against the tree. Landed since this review: items 1-5, 7 (Phases 1-2), the ZZ launch-blockers, the assessment render-perf pack, and the sync-status trust UX. Known-stale claims in this document (do not act on them): item 8's `LetterMasteryPanel` no longer loads all assessments (it passes `childId`); item 6's "five provider values" is now six (TimeTrackingContext); item 13b's GPS hang gates clock-in/out only, not session capture (which has "Continue Anyway"); item 16.3's dev-backend default flip landed 2026-07-12.
 **Relationship to prior work:** This supersedes the open remainder of `documentation/archive/top-10-improvements-2026-06.md`. Since that review (2026-06-14), ~111 commits landed and June items 1, 2, 3, 4, 8 and most of 5 are done (sync-reliability slice, design tokens + colour guard, sequential capture spine, Child Results + Children-tab stack, test-coverage tranche). This document re-verifies the still-open June items against today's tree and adds what the new code introduced.
 
 ## How this was produced

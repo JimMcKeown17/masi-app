@@ -116,7 +116,7 @@ Do not leave the test plan depending on an unexported helper unless implementati
 
 - The manual legacy-profile smoke test says to clear the app, sign in online, kill the app, go offline, then open New Session. After the new `AuthContext` ships, that sign-in will cache the normalized profile, not a true legacy string-only profile. Keep the manual smoke test, but cover the true legacy cache case with the planned `normalizeProfile.test.js` fixture or by importing a pre-change `@user_profile` export.
 - The export gate says to inspect per-table sources for `assigned_school` / `job_title`, but there is no `@users` sync source in `src/utils/storage.js`. Clarify that `@user_profile` is display/cache data, not a sync source, and that the sync-source inspection is about `@children` and `@sessions`.
-- Add stale-document cleanup for `documentation/bulk_import_children_plan.md`, `documentation/seed_data_plan.md`, and `documentation/COMPONENT_TREE.md`, or explicitly mark them historical. They still reference `assigned_school`, `job_title`, legacy child text fields, or `session_type` and could mislead the next onboarding/import task.
+- Add stale-document cleanup for `documentation/archive/bulk_import_children_plan.md`, `documentation/archive/seed_data_plan.md`, and `documentation/COMPONENT_TREE.md`, or explicitly mark them historical. They still reference `assigned_school`, `job_title`, legacy child text fields, or `session_type` and could mislead the next onboarding/import task.
 
 ## What Looks Good Now
 

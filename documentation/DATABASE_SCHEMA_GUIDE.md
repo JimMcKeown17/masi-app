@@ -321,9 +321,12 @@ Junction tables enable:
 
 ---
 
-## Part 4: The Masi App Schema - Complete Walkthrough
+## Part 4: Historical Masi Schema Worked Example
 
-Now let's explore our actual schema, understanding **why** each table exists and how they relate.
+This section preserves the original pre-SQLite Masi schema as a teaching example. Tables such as
+`staff_children` and `children_groups`, arrays on sessions, and `synced` flags are **not** the
+current implementation. Use them to learn relationship modelling, then consult
+`src/db/migrations.js`, `supabase/migrations/`, and `rls-sync-contract-map.md` for the live system.
 
 ### The Entity-Relationship Diagram (Conceptual)
 
@@ -1442,7 +1445,7 @@ Database schema is not just "storage" - it's a fundamental design decision that 
 - Uses constraints to prevent bugs
 - Evolves gracefully
 
-**The Masi app schema demonstrates**:
+**This historical Masi worked example demonstrates**:
 - One-to-many relationships (users → children)
 - Many-to-many relationships (children ↔ groups)
 - Appropriate use of constraints
@@ -1460,5 +1463,5 @@ Database schema is not just "storage" - it's a fundamental design decision that 
 
 ---
 
-**Last Updated**: 2026-01-20
+**Last Reviewed**: 2026-07-23
 **Author**: Claude, your database professor 🎓

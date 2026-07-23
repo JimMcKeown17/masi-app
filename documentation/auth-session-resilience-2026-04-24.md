@@ -22,8 +22,8 @@ Four distinct paths. The important thing to understand is that **`SIGNED_OUT` is
 
 | Trigger | Behavior |
 |---|---|
-| **Manual sign-out** (Profile → Sign Out) | Immediate. Commits with reason `manual-sign-out`. |
-| **`SIGNED_OUT` event** | Checks persisted auth first. If a valid persisted session exists **for the same user**, the event is treated as stale and **ignored entirely**. Otherwise clears the profile cache + persisted session and commits immediately with reason `signed-out`. |
+| **Manual sign-out** (Profile → Sign Out) | Immediately clears React user state, cached profile, and persisted local auth before starting the Supabase sign-out request. The current path does **not** reliably emit a distinct `manual-sign-out` clearing reason; this diagnostic gap is tracked in `ROADMAP.md`. |
+| **`SIGNED_OUT` event** | Checks persisted auth first. If a refreshable persisted session exists **for the same user**, the event is treated as stale and **ignored entirely**. Otherwise clears the profile cache + persisted session and commits immediately with reason `signed-out`. |
 | **`INITIAL_SESSION` with no active user** (cold start) | Consults persisted auth. Persisted session present and no current user → **restores it offline** rather than bouncing to login. No persisted session → commits with reason `INITIAL_SESSION-no-active-user`. |
 | **Any other event with an empty session** | Waits `AUTH_SIGN_OUT_GRACE_PERIOD_MS` (15s). If the session recovers in that window the user stays signed in; otherwise commits with reason `<EVENT>-grace-timeout`. |
 
@@ -37,7 +37,7 @@ Two supporting behaviors:
 
 ## How to read the logs
 
-Available via Profile → Debug & Support → Share Logs. These are the **only** auth lines the app emits:
+Available via Profile → Debug & Support → Share Logs. The auth subsystem emits these lines:
 
 ```
 [Auth] Event=<EVENT_NAME> hasSession=true|false
@@ -45,10 +45,12 @@ Available via Profile → Debug & Support → Share Logs. These are the **only**
 [Auth] Ignoring stale SIGNED_OUT; a valid session for the current user persists
 [Auth] <EVENT> with empty session, waiting 15000ms before logout
 [Auth] Cleared local auth state (<reason>)
+[Auth] Background Supabase sign-out failed
 ```
 
-`<reason>` is one of exactly: `manual-sign-out`, `signed-out`, `<EVENT>-grace-timeout`,
-`<EVENT>-no-active-user`, or `<EVENT>-no-active-user-after-local-sign-out`.
+`<reason>` is `signed-out`, `<EVENT>-grace-timeout`, `<EVENT>-no-active-user`, or
+`<EVENT>-no-active-user-after-local-sign-out`. A future implementation may restore an explicit
+`manual-sign-out` reason, but operators must not rely on it today.
 
 > There is no `initial-session-null` reason. A pre-2026-07 version of this document told operators to
 > look for one. If you are working from an older copy, discard it.
@@ -66,15 +68,16 @@ a force-quit? network changed? password changed? signed in on another device?
 
 **3. Find the `[Auth]` lines in time order**, then classify:
 
-### A) Explicit sign-out
-`Cleared local auth state (manual-sign-out)`
-→ Intentional. Confirm the button was pressed; if the user denies it, treat as an accidental-tap UX issue.
+### A) Possible explicit sign-out
+The current manual path clears local state directly and may be followed by
+`Cleared local auth state (signed-out)` or no distinct clearing-reason line. Correlate the timestamp
+with user actions. The log cannot currently prove a manual tap by itself.
 
-### B) Real sign-out, not manual
+### B) `SIGNED_OUT` committed
 `Cleared local auth state (signed-out)`
-→ Supabase emitted `SIGNED_OUT` **and** persisted auth did not vouch for the session. Genuine
-server-side or credential-level sign-out. Check the Supabase Auth session controls in step 4, and
-whether the user signed in elsewhere near that time.
+→ Supabase emitted `SIGNED_OUT` **and** persisted auth did not vouch for the session. This can follow
+manual sign-out or a genuine server-side/credential-level sign-out. Use surrounding timestamps and
+user report, then check the Supabase Auth controls in step 4 when manual action is not established.
 
 ### C) Transient drop that recovered (not a sign-out)
 `<EVENT> with empty session, waiting 15000ms before logout`, later followed by

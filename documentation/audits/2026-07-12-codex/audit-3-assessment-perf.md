@@ -27,7 +27,7 @@ No P0 was confirmed. The render-perf pack materially fixed the timed-tap hot pat
   - `src/screens/assessments/AssessmentHistoryScreen.js:34-45,59-64` loads all assessments and applies its 30-day cutoff in JavaScript.
   - `src/screens/sessions/SessionHistoryScreen.js:37-51,69-73` does the same for sessions.
   - `src/screens/assessments/AssessmentChildSelectScreen.js:37-51` loads all assessment details to display latest status and attempt counts.
-  - `documentation/improvements-2026-07.md:133-148` and `documentation/improvements-2026-07-roadmap.md:58-65` describe this work as still pending. That claim remains accurate.
+  - `documentation/archive/improvements-2026-07.md:133-148` and `documentation/archive/improvements-2026-07-roadmap.md:58-65` describe this work as still pending. That claim remains accurate.
 
   Query count:
 
@@ -130,7 +130,7 @@ No P0 was confirmed. The render-perf pack materially fixed the timed-tap hot pat
 ## Docs-vs-code drift
 
 - The render-perf plan’s task checkboxes remain unchecked throughout `docs/superpowers/plans/2026-07-09-assessment-render-perf.md`, but every implementation task landed and the spec status correctly says implemented at `docs/superpowers/specs/2026-07-09-assessment-render-perf-design.md:1-6`.
-- `documentation/improvements-2026-07.md:143` says `LetterMasteryPanel` loads all assessments for the user and filters to one child. That specific claim is stale: the panel now calls the shared loader with `childId` at `LetterMasteryPanel.js:43-51`, and `masteryState.js:32` passes the filter into the repository.
+- `documentation/archive/improvements-2026-07.md:143` says `LetterMasteryPanel` loads all assessments for the user and filters to one child. That specific claim is stale: the panel now calls the shared loader with `childId` at `LetterMasteryPanel.js:43-51`, and `masteryState.js:32` passes the filter into the repository.
 - The broader Item 8 claims about assessment/session hydration, unbounded history loads, `AssessmentChildSelectScreen`’s quadratic counting, and full mastery prefetch remain accurate.
 - The WelaPLUS briefing correctly states that no source code has yet been integrated at `docs/agent-context/wela-assessment-component-build.md:197-204`. No unbuilt Question component was audited. The main forward risk is that its explicit no-mid-Question-resume decision perpetuates Finding 4.
 
