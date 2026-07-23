@@ -328,6 +328,10 @@ These were the *only* record of the item. Their source docs are now in `document
   - ~~`ChildrenListScreen` destructures `loading` / `classesLoading` and **never uses them**; `ClassDetailScreen` renders "Class not found." with no loading check. Empty states flash during load.~~ **Fixed 2026-07-22** (pilot polish pack).
   - ~~`EditChildScreen` has no explicit "No class" / clear option in the class picker.~~ **Fixed 2026-07-22**; cosmetic nit: the "No class" row is not check-marked when already unassigned.
   - Assessment child rows show name + last-assessed only — no class/group context.
+- **`date_assessed` still stamps the device-local date** (found 2026-07-22 while reviewing the
+  session-date alignment fix): assessment capture has the same latent out-of-SAST business-day
+  mismatch that `session_date` had before `38eebf9`. Harmless for SA-based devices; align it with
+  `toLocalDateString` attribution in a small follow-up before any out-of-country capture matters.
   - Session history shows an attendee **count**, not names. (Product question pending with Jim: full names vs truncated "Amahle +3" style.)
 
 ---

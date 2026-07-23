@@ -73,6 +73,34 @@ describe('Plan 6 release gate configuration', () => {
     expect(previewEnv.EXPO_PUBLIC_SUPABASE_ANON_KEY).toEqual(expect.stringMatching(/^sb_publishable_/));
   });
 
+  test('pilot store builds are isolated from the legacy field submission path', () => {
+    const pilotBuild = easConfig.build.pilot;
+
+    expect(pilotBuild).toEqual(expect.objectContaining({
+      environment: 'preview',
+      distribution: 'store',
+      autoIncrement: true,
+      channel: 'preview',
+      android: { buildType: 'app-bundle' },
+    }));
+    expect(pilotBuild.env).toEqual(expect.objectContaining({
+      EXPO_PUBLIC_SUPABASE_TARGET: 'sqlite-staging',
+      EXPO_PUBLIC_SUPABASE_PROJECT_ID: 'segygjzpujphwvrubusm',
+      EXPO_PUBLIC_SUPABASE_URL: 'https://segygjzpujphwvrubusm.supabase.co',
+      EXPO_PUBLIC_SENTRY_ENVIRONMENT: 'preview',
+    }));
+    expect(pilotBuild.env.EXPO_PUBLIC_SUPABASE_ANON_KEY).toEqual(
+      expect.stringMatching(/^sb_publishable_/),
+    );
+
+    expect(easConfig.submit.pilot.ios).toEqual({
+      ascAppId: '6760048185',
+      appleId: 'mckeown.james@gmail.com',
+    });
+    expect(easConfig.submit.pilot.android).toBeUndefined();
+    expect(easConfig.submit.production).toBeUndefined();
+  });
+
   test('release 1.3.0 advances the app-version runtime boundary', () => {
     const config = require('../app.config')().expo;
 
