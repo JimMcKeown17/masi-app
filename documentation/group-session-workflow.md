@@ -19,13 +19,25 @@ persistence, sync payloads, session lifecycle, and reporting. The dependency ord
 
 - One completed session represents one group block of work.
 - EAs need whole-class visibility for control-group assessment and replacing a child who leaves a
-  delivery group. Assessment scope can therefore be wider than delivery scope.
+  delivery group. Assessment scope can therefore be wider than delivery scope. The access model that
+  makes this coexist with assignment-scoped delivery is settled in
+  [ADR-0005](../docs/adr/0005-assessment-delivery-scope-two-tier-access.md): class assignment =
+  assessment scope, delivery assignment = delivery scope, group assignment = composition-edit scope;
+  assessment history follows class scope (current year), session history follows delivery scope.
 - Group membership and class membership retain history. Head Office does not hard-delete captured
   records merely to change the current operational view.
 - The latest letters shown for a group come from that group's latest literacy session, not from a
   temporary per-child summary.
 - Programme remains a first-class scope. Group, session, assignment, and reporting behavior must
   not silently fall back to job title.
+- **The group-first shell is driven by programme *delivery mode*, not job title.** Every session
+  carries a `group_id` *uniformly* — whole-class programmes use their synthetic one-row-per-class
+  group (ADR-0002) — so the **data spine is universal**. The **capture UX adapts** to delivery mode:
+  multi-group programmes (Core Literacy pairs, Numeracy/Zazi bands) show a group picker; whole-class
+  programmes (1000 Stories, whole-class Yebo) auto-select the single synthetic group with no picker.
+  Group size is configurable per programme, never hardcoded to 2 (Masi is already experimenting with
+  4). This is what lets a new programme slot in by *configuration* (the future per-programme grouping
+  matrix) rather than a new capture screen — maximum flexibility with one shell.
 
 ## Prerequisites
 
@@ -36,7 +48,11 @@ Do not start the group-first UI before these contracts are settled:
 2. Define collision-proof identity and lifecycle rules for `grouping_versions`,
    `groups.display_number`, and `child_group_memberships`.
 3. Define server authorization for non-null `sessions.group_id`, including creator visibility,
-   active Programme scope, assignment changes, history reads, and archive behavior.
+   active Programme scope, assignment changes, history reads, and archive behavior. **The
+   assessment/delivery/group access model, wider-scope history split, replacement authorization,
+   and turnover behavior are now settled in [ADR-0005](../docs/adr/0005-assessment-delivery-scope-two-tier-access.md)
+   and the `CONTEXT.md` settled decisions.** What remains here is the session-specific slice:
+   authorization for a non-null `sessions.group_id` write and its archive behavior.
 4. Update `rls-sync-contract-map.md`, canonical Supabase migrations, local migrations, repository
    producers, server-column allowlists, outbox ordering, and real-SQLite/RLS tests as one contract.
 
