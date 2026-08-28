@@ -1,6 +1,6 @@
 # Product and Engineering Roadmap
 
-**Standing document. Updated 2026-07-23. This is the single in-repository answer to
+**Standing document. Updated 2026-08-27. This is the single in-repository answer to
 "what is still outstanding?"**
 
 This file contains open work only. Its priority section is the roadmap; the numbered sections are
@@ -11,12 +11,24 @@ unsettled product choices belong in
 [`open-decisions-backlog.md`](./open-decisions-backlog.md). Dated plans and reviews are evidence,
 not status.
 
+## Pre-live hardening window
+
+Jim confirmed on 2026-08-27 that no staff are currently using the Masi app, while staff want to go
+live soon. Use this window for root-cause schema, identity, authorization, sync, and operational
+changes that would become much more expensive after trusted work accumulates on phones. "No active
+users" does not prove that no old binaries, test records, credentials, or legacy-backend automation
+exist; the first gate is an exact estate and live-contract inventory.
+
+The governing portfolio strategy and reusable safety contract are
+[`masi-zazi-portfolio-audit-2026-08-27.md`](./masi-zazi-portfolio-audit-2026-08-27.md) and
+[`field-app-portfolio-invariants.md`](./field-app-portfolio-invariants.md).
+
 ## Roadmap view
 
 | Horizon | Outcome |
 |---|---|
-| **Now** | Activate the 1.3.0 pilot, prove the release and observability gates, and hydrate session and assessment history onto fresh or second devices. |
-| **Next** | Close reachable correctness risks, finish sync/fleet controls, and settle the access and identity contracts required by group-centred delivery. |
+| **Now** | Establish exact pre-live ground truth, verify live data/authorization contracts, build bidirectional session then assessment history, and add minimum incident/release provenance. |
+| **Next** | Close reachable correctness risks, finish pagination/deadline/fleet controls, and settle Programme/group authority and identity before group-centred delivery. |
 | **Later** | Build the group workflow and durable drafts, resume WelaPLUS on the current architecture, prepare the Head Office control plane, and validate national-scale operations. |
 | **Ongoing** | Product polish, assessment content, dependency hygiene, teaching documentation, and evidence in the build log. |
 
@@ -24,31 +36,53 @@ These horizons summarize the ordered register below. They are not a second backl
 
 ## Priority order
 
-1. **P0: activate and validate the 1.3.0 pilot.** Build the preview binaries, prove Sentry
-   source-map upload and privacy, and execute the highest-signal physical gates.
-2. **P1: make session and assessment history bidirectional.** A fresh install currently uploads
+1. **P0: establish pre-live ground truth and the next release baseline.** Inventory installed/build
+   expectations, both Supabase projects, current configuration and automation; probe the live
+   SQLite-backend schema/RLS/query cost; settle history retention and row-limit assumptions.
+2. **P0: make session and assessment history bidirectional.** Start with sessions/attendees, then
+   assessments/items. A fresh install currently uploads
    new work but cannot hydrate existing `sessions`/`session_attendees` or
    `assessments`/`assessment_items`.
-3. **P2: close reachable correctness gaps.** Fix session-attendee removal before saved-session
+3. **P0: add minimum incident and release provenance before expanding the pilot.** Durable,
+   idempotent, privacy-safe incidents need stable causal identity, a reader, an action, and exact
+   backend/app/runtime/protocol provenance.
+4. **P1: close reachable correctness gaps.** Fix session-attendee removal before saved-session
    editing ships, add the newer-schema fail-safe, and resolve the remaining auth-diagnostic
    ambiguity.
-4. **P2: finish sync efficiency and fleet controls.** Membership-specific batching, delta pulls,
-   pagination, randomized retry/reconnect scheduling, and proven query-specific indexes.
-5. **P3: build the group-centred session model in contract order.** Access grants and identity,
+5. **P1: finish sync efficiency and fleet controls.** Membership-specific batching, delta pulls,
+   keyset pagination, request deadlines, randomized retry/reconnect scheduling, remote controls,
+   and proven query-specific indexes.
+6. **P2: settle Programme/group authority, then build group-centred sessions in contract order.**
+   Access grants and identity,
    then RLS/sync, then UI and durable session drafts.
-6. **P3: resume WelaPLUS deliberately.** Integrate the off-main Question island without importing
+7. **P3: resume WelaPLUS deliberately.** Integrate the off-main Question island without importing
    stale design or identity contracts.
-7. **P4: polish, hygiene, and longer-horizon scale work.**
+8. **P4: polish, hygiene, and longer-horizon scale work.**
 
 The deferred Head Office importer is not in the active execution order. It begins with read-only
 discovery of the existing Airtable/Postgres source model with Jim, not with an invented CSV or JSON
 shape.
 
-## 0. Pilot activation and physical proof
+## 0. Pre-live ground truth, observability, and pilot activation
+
+### Exact estate and contract inventory
+
+- [ ] Inventory current Masi branches, preview/production build artifacts, runtime/channel identity,
+  and any old installed-device expectations.
+- [ ] Verify which Supabase project every current app profile, local environment, script, and
+  connected backend targets; explicitly check both the SQLite and legacy projects.
+- [ ] Probe the live SQLite-backend schema, migration ledger, RLS, functions, indexes, row counts,
+  and disposable/test data before schema-facing design.
+- [ ] Measure the planned history-pull predicates against real RLS and query plans; confirm
+  PostgREST row limits, keyset order, and maximum supported scope.
+- [ ] Decide history retention, what constitutes positive completeness, and whether any existing
+  test/pilot records must survive the pre-live changes.
+- [ ] Choose the immutable app/runtime/build/backend/protocol identity for the next internal pilot.
 
 ### Release and observability
 
-- [ ] Build iOS and Android preview binaries for app/runtime 1.3.0.
+- [x] Build iOS and Android preview binaries for app/runtime 1.3.0. Those July artifacts are
+  historical evidence; source has moved and the post-hardening pilot will require a new build.
 - [ ] Confirm the EAS build logs contain successful Sentry source-map uploads.
 - [ ] Pass device gates N1, N2, N4, N6, and N7 for symbolication, structured sync reporting, local
   evidence, and telemetry privacy.
@@ -59,6 +93,17 @@ shape.
 Sentry native/JavaScript capture, privacy hardening, runtime diagnostics, structured sync events,
 safe verification, EAS environment values, and the sensitive upload token are built. The remaining
 work is external release and device proof.
+
+### Minimum incident and provenance lane
+
+- [ ] Define a stable incident identity and preserve first/last-seen evidence without minting one
+  record per sync cycle.
+- [ ] Add a durable local incident queue and an authenticated idempotent server-acceptance path
+  outside the serialized domain outbox.
+- [ ] Carry privacy-safe actor, backend/project, app/runtime/build, protocol, capability/scope, and
+  normalized-disposition provenance.
+- [ ] Give every incident/support state a named reader, bounded diagnostic view, safe action, and
+  retention rule. Sentry is telemetry, not the durable sync-state ledger.
 
 ### Highest-signal device gates
 
@@ -77,7 +122,7 @@ checks are recorded in the build log. The remaining checklist is still substanti
 
 ## 1. Bidirectional session and assessment history
 
-**P1. Next sync slice.**
+**P0. First implementation slices: sessions/attendees, then assessments/items.**
 
 A fresh TestFlight 1.3.0 installation showed no historical sessions or assessments even though the
 correct SQLite backend safely held 20 sessions, 40 attendees, 22 assessments, and 604 assessment

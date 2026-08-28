@@ -1,3 +1,11 @@
+> **Status note — 2026-08-27:** This is historical design input. The current portfolio decision
+> baseline is [`masi-zazi-portfolio-audit-2026-08-27.md`](./masi-zazi-portfolio-audit-2026-08-27.md)
+> and the standing contract is
+> [`field-app-portfolio-invariants.md`](./field-app-portfolio-invariants.md). The selective-port
+> conclusion below remains useful, but the claims that Zazi protocol v2 is flag-off and pre-field
+> are stale: current Zazi `origin/main` authorizes v2 in production profiles and the app has real
+> field use. Do not use this document as a current status ledger.
+
 ## Bottom line
 
   Yes, Masi should adopt most of the safety guarantees being built in Zazi Wave 2A.
