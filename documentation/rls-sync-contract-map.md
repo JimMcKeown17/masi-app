@@ -17,6 +17,29 @@ Use this map before changing any synced table, repository producer, outbox opera
 - Insert order: `PUSH_ORDER` in `src/services/offlineSync.js`
 - Archive order: `ARCHIVE_PUSH_ORDER` plus `ARCHIVE_TABLE_DEPENDENCIES` in `src/services/offlineSync.js`
 
+## Pre-Live History Authorization Drift — Open P0
+
+Read-only Gate 0 inspection on 2026-08-27 verified the live policies and helper bodies on
+`segygjzpujphwvrubusm`. The current implementation does not faithfully implement accepted ADR-0005:
+
+| Family | Current live SELECT authority | Accepted target | Required before inbound hydration |
+|---|---|---|---|
+| `sessions` / `session_attendees` | Owner or parent/session authority delegated through `private.can_read_session`, which reaches `private.current_user_can_read_child`; attendee policy also reaches broad child visibility. The child helper grants creator, historical direct delivery, active class, and active group paths | Capturer-or-delivery-history only; class-only assessors and group-only editors do not receive the delivery diary | Add an activity-specific delivery-history predicate and apply the same parent authority to attendees |
+| `assessments` / `assessment_items` | Owner or the same general child-read helper | Current-academic-year class scope, including co-EA/turnover assessment history | Add an assessment-specific class/year predicate; do not expose arbitrary prior-year history |
+
+This is not merely documentation wording. A live authenticated Programme-scoped session plan over
+25 rows took 8.985 ms and 886 shared-buffer hits; five non-owned candidates caused 875 helper hits.
+The owner-constrained plan returned 20 rows in 0.819 ms with 13 buffer hits. The authorization
+correction and its query shape therefore precede history-pull implementation. See
+[`pre-live-gate0-audit-2026-08-27.md`](./pre-live-gate0-audit-2026-08-27.md).
+
+Until the corrective migration and behavior probes land:
+
+- do not add a mobile pull that makes the current overly broad history visibility durable locally;
+- do not describe session history as delivery-only in implementation-status claims;
+- do not treat the assessment policy's class arm as current-year bounded;
+- ordinary empty/short RLS queries remain non-authoritative for deletion.
+
 ## Global Contracts
 
 1. Domain writes are local-first. A user-facing write must persist the domain row and enqueue the matching `sync_outbox` row in the same SQLite transaction.
@@ -287,7 +310,7 @@ Tests: `__tests__/offlineSyncAuthGate.test.js`, `__tests__/requeueTerminalRlsFai
 | `assessment_items` | `assessmentsRepository.saveAssessment` item producer | `assessment_id`, `item_key`, `position` / generated UUID `id` | Batched upsert with per-record fallback | Parent assessment visibility/write access | After `assessments` | `offlineSyncOutbox.test.js` batch and fallback coverage |
 | `letter_mastery` | `masteryRepository.saveLetterMasteryRecord` | `user_id`, `child_id`, `programme_id`, `letter`, `language`, `source` | Batched upsert (onConflict=id) with per-record fallback on batch failure. **Prevention, not reconciliation.** New rows get a **deterministic logical-key id** (`letterMasteryDomainId`), and `buildSyncPayload` maps **every** `letter_mastery` push to that id. Same record means the same id on every device/install, so insert-by-id is idempotent. `saveLetterMasteryRecord` returns the canonical id so callers track the persisted row; toggling off is also resolved by logical key. A soft-delete/edit whose insert is still queued coalesces into that insert; once synced, soft-delete uses an acknowledged lifecycle UPDATE carrying only `deleted_at`. **Gate completed 2026-07-14:** all 13 staging rows already matched today's deterministic formula. The enduring rollout rule is that no active old build may mint obsolete identities. | Direct owner plus `private.current_user_can_read_child`; writes require active child/programme access | After `children` | `masteryRepository.test.js`; `letterMasterySync.test.js`; `sqlitePlan1Migrations.test.js`; `offlineSyncOutbox.test.js` batch coverage |
 
-> **`sessions` forward-prep columns are not end-to-end active.** SQLite migration v3 and Supabase migration `20260529214500_masi_sessions_forward_prep_columns` add `sessions.group_id` and `sessions.state`. The current repository can store local `group_id`, but the server payload allowlist strips it and RLS pins server rows to `group_id IS NULL` and `state = 'completed'`. Therefore group identity is not durable across sync. The group-centred session slice must activate local producer, payload, RLS, ordering, pull, and reporting behavior together.
+> **`sessions` forward-prep columns are not end-to-end active.** SQLite migration v3 and Supabase migration `20260529214500_masi_sessions_forward_prep_columns` add `sessions.group_id` and `sessions.state`. The local schema can store them, but `sessionsRepository.SESSION_COLUMNS` currently omits both, the server payload allowlist strips both, and RLS pins server rows to `group_id IS NULL` and `state = 'completed'`. Therefore session-level group identity/state is not currently durable even locally through the typed repository, and it cannot cross sync. (`session_attendees.group_id` is a separate per-attendee field and is active.) The group-centred session slice must activate the session producer, payload, RLS, ordering, pull, and reporting behavior together.
 >
 > Because the existing permissive session policies (`sessions_insert_active_programme`, `sessions_update_own`) only validate `user_id`/active programme — not these columns — the Supabase migration also adds two **RESTRICTIVE** guard policies (`sessions_forward_prep_pin_defaults_insert` / `_update`) that pin `state = 'completed' AND group_id IS NULL` at the write boundary. This prevents a direct/raw client from writing a non-default state or an unauthorized group before the feature exists. Submit-and-go writes (which omit both columns) pass the guard via the server defaults.
 >

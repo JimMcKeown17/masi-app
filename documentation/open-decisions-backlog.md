@@ -5,6 +5,16 @@
 > `ROADMAP.md`; this file contains product choices that require Jim or pedagogy input. When one is
 > resolved, record the outcome in `CONTEXT.md` and/or an ADR, then remove it from here.
 
+## Required before assessment-history hydration
+
+- **Assessment item correction identity.** The current deterministic item id incorporates whether
+  the answer was correct, while the server also enforces one non-null item per
+  `(assessment_id, position)`. Correcting an answer can therefore produce a new id that conflicts
+  with the old row at the same position. Settle whether a submitted assessment is an immutable
+  attempt that must be superseded by a new attempt, or whether each position is mutable and keeps
+  a stable identity independent of its answer. Do not widen assessment hydration or add correction
+  UI until this semantic choice is reflected in SQLite, Supabase, repository, and outbox contracts.
+
 ## Deferred to next academic year
 
 - **Gap UX at the start of a new academic year, before office grouping data exists.** For ECD the
