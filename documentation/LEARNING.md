@@ -1484,3 +1484,52 @@ count, so a second chip list adds height without adding information. The mental 
 views, one selection model**. When the later group-centric rebuild gives `sessions.group_id` a durable
 server contract, this shortcut can evolve into real group identity rather than pretending that the
 current payload already has it.
+
+### History authorization: start from positive grants, not a broad candidate set
+
+Row Level Security answers whether each row may be returned. It does not guarantee that the server
+can find the permitted rows cheaply. Masi's first session-history policy was also semantically too
+broad: it reused a general “can read this child” helper whose creator, class, and group branches were
+appropriate for roster projections but not for a private delivery diary. A working-branch candidate
+narrows session authority to owner or historical direct delivery. It is locally proven but
+uncommitted and unapplied; the coattendee aggregate-privacy boundary still requires Jim's decision.
+Even with the narrower predicate, a raw Programme-scoped query has to test every candidate session
+one by one.
+
+The disposable PostgreSQL tracer made the distinction visible. A current delivery EA had one
+authorized session behind 2,000 newer unauthorized sessions. The corrected raw RLS query eventually
+returned the right row, but visibly filtered 2,003 candidates. Its root plan reported 14,311 shared
+blocks, while an actor-derived RPC's opaque `Function Scan` root reported 803 blocks and returned the
+same row. PostgreSQL parent buffer counts are inclusive, so summing buffers across every plan node
+would double-count work. The root-only comparison is a local regression tripwire, not proof of the
+RPC's inner index selection or a hosted latency guarantee.
+
+This is an authorization form of the **inverted-index mental model**. If the question is “show me
+what this actor may see,” begin from the relationships naming the actor rather than scanning the
+whole domain and asking a permission function about every row. The query then keyset-pages the
+authorized set using `(session_date, created_at, id)`, so same-time rows have a deterministic final
+tie-breaker. The harness proves exhaustion across 2,000 rows sharing the same date and timestamp,
+plus two cursors that differ only below JavaScript's millisecond precision. The mobile client must
+therefore forward the raw PostgreSQL timestamp string rather than round-tripping it through `Date`.
+Page size is bounded in PostgreSQL; request deadlines and full-family completeness stay client
+responsibilities.
+
+The actor matrix deliberately covers both fresh connections and repeated JWT-claim changes on one
+connection. This models PostgREST's pooled backend reuse and catches a helper that accidentally
+captures an earlier actor. The current candidate follows each switched claim correctly; routing
+around a pooled-connection failure with isolated probes alone would have hidden a production-shaped
+risk.
+
+Keyset exhaustion is also not a transaction-wide snapshot: every page is a separate request, and a
+concurrent write may appear only on the next pull. A successful traversal means bounded convergence
+for one Programme, not proof that the server stood still. Because history absence never deletes
+local history, a later traversal safely converges additions or corrections without inventing
+absence authority.
+
+Finally, the candidate treats a session as one historical aggregate. Once its parent is authorized,
+attendee rows follow the same parent authority. Returning a visible parent with only a subset of
+attendees would be misleading because the parent activities JSON may already contain child-keyed
+facts. But complete-family access also exposes coattendee notes, grade snapshots, and attendance
+status. The alternative is a real redacted projection/data-placement redesign, not a one-line RLS
+filter. The reusable principle is: **define the privacy and consistency boundary explicitly, then
+hydrate that boundary completely—or fail closed.**

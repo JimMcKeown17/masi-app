@@ -18,6 +18,7 @@
     "sqlite:staging:ios": "node scripts/sqlite-staging.cjs ios",
     "sqlite:staging:android": "node scripts/sqlite-staging.cjs android",
     "rls:probe": "node scripts/rls-visibility-probe.cjs",
+    "verify:history-authorization:postgres": "node scripts/history-authorization-postgres-harness.cjs",
     "testers:provision": "node scripts/createTesters.js",
     "sentry:sourcemaps": "sentry-expo-upload-sourcemaps dist",
     "test": "jest",

@@ -5,13 +5,16 @@ date: 2026-07-24
 
 # Assessment vs delivery access: a class/delivery/group tiered scope model
 
-> **Implementation status — 2026-08-27:** The accepted tier model below remains the target, but
-> Gate 0 live inspection found that current RLS does not implement it faithfully. Both session and
-> assessment SELECT policies reuse `private.current_user_can_read_child`, whose class and group
-> branches make session history broader than delivery scope; assessment reads also lack the
-> current-academic-year bound. See
+> **Implementation status — 2026-08-27 follow-up:** Gate 0 found that hosted RLS did not implement
+> this decision faithfully. Working-branch migrations narrow session reads to owner or historical
+> direct delivery and expose an actor-derived keyset page RPC; a disposable PostgreSQL matrix proves
+> the candidate behavior. Whether that grant returns the complete session/coattendee aggregate or a
+> child-redacted projection remains an explicit product decision. The candidate migrations are
+> uncommitted and not hosted; no mobile hydration exists. Assessment reads still lack the
+> current-academic-year predicate, whose mid-year class-move semantics remain unsettled. See
 > [`../../documentation/pre-live-gate0-audit-2026-08-27.md`](../../documentation/pre-live-gate0-audit-2026-08-27.md).
-> Align and behavior-prove the live predicates before history hydration.
+> Resolve the aggregate boundary, then commit, apply, and behavior-prove each hosted predicate
+> before its history family hydrates.
 
 ## Context
 

@@ -181,4 +181,32 @@ describe('sessionsRepository', () => {
       await db.closeAsync();
     }
   });
+
+  test('session reads use id as the deterministic final ordering key', async () => {
+    const db = await createMigratedDatabase(runMigrations);
+
+    try {
+      await seedCoreData(db);
+      const repository = createSessionsRepository({ database: db });
+      const sharedTuple = {
+        user_id: 'user-1',
+        programme_id: 'programme-a',
+        session_date: '2026-08-27',
+        created_at: '2026-08-27T10:00:00.123Z',
+        updated_at: '2026-08-27T10:00:00.123Z',
+        children_ids: [],
+        synced: false,
+      };
+
+      await repository.saveSession({ ...sharedTuple, id: 'session-b' });
+      await repository.saveSession({ ...sharedTuple, id: 'session-a' });
+
+      expect((await repository.getSessions({ order: 'asc' })).map(({ id }) => id))
+        .toEqual(['session-a', 'session-b']);
+      expect((await repository.getSessions({ order: 'desc' })).map(({ id }) => id))
+        .toEqual(['session-b', 'session-a']);
+    } finally {
+      await db.closeAsync();
+    }
+  });
 });
