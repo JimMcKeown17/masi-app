@@ -53,6 +53,7 @@ For status questions, do not infer progress from a plan:
 | [`group-session-workflow.md`](./group-session-workflow.md) | Unbuilt group-centred session and durable-draft product contract |
 | [`wela-plus-battery-prd-2026.md`](./wela-plus-battery-prd-2026.md) | WelaPLUS product and architecture contract; implementation remains off `main` |
 | [`national-scale-readiness-250k-users-2026-07-15.md`](./national-scale-readiness-250k-users-2026-07-15.md) | Dated but still-useful scale, cost, POPIA, staffing, and target-architecture assessment |
+| [`next-steps-2026-08-28.md`](./next-steps-2026-08-28.md) | The pre-live plan in plain English: the nine steps to a small pilot, the five decisions Jim owes, and what we will not build. `ROADMAP.md` stays the detailed register |
 
 [`zazi-architecture-backend-july-24-consideration.md`](./zazi-architecture-backend-july-24-consideration.md)
 is preserved historical design input. Its selective-port argument informed the portfolio audit, but
