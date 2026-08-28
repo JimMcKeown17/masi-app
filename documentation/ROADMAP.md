@@ -27,8 +27,8 @@ The governing portfolio strategy and reusable safety contract are
 
 | Horizon | Outcome |
 |---|---|
-| **Now** | Establish exact pre-live ground truth, verify live data/authorization contracts, build bidirectional session then assessment history, and add minimum incident/release provenance. |
-| **Next** | Close reachable correctness risks, finish pagination/deadline/fleet controls, and settle Programme/group authority and identity before group-centred delivery. |
+| **Now** | Finish exact pre-live ground truth, align history authorization with ADR-0005, build bounded bidirectional session then assessment history, and add minimum incident/release provenance. |
+| **Next** | Close reachable correctness risks, finish reconnect/fleet admission controls, and settle Programme/group authority and identity before group-centred delivery. |
 | **Later** | Build the group workflow and durable drafts, resume WelaPLUS on the current architecture, prepare the Head Office control plane, and validate national-scale operations. |
 | **Ongoing** | Product polish, assessment content, dependency hygiene, teaching documentation, and evidence in the build log. |
 
@@ -39,25 +39,29 @@ These horizons summarize the ordered register below. They are not a second backl
 1. **P0: establish pre-live ground truth and the next release baseline.** Inventory installed/build
    expectations, both Supabase projects, current configuration and automation; probe the live
    SQLite-backend schema/RLS/query cost; settle history retention and row-limit assumptions.
-2. **P0: make session and assessment history bidirectional.** Start with sessions/attendees, then
+2. **P0: align history authorization before hydrating it.** Live policies currently reuse a broad
+   child-read helper: session history can inherit class/group scope contrary to ADR-0005, while
+   assessment history is not bounded to the current academic year. Add activity-specific predicates
+   and authenticated behavior/plan proof first.
+3. **P0: make session and assessment history bidirectional.** Start with sessions/attendees, then
    assessments/items. A fresh install currently uploads
    new work but cannot hydrate existing `sessions`/`session_attendees` or
-   `assessments`/`assessment_items`.
-3. **P0: add minimum incident and release provenance before expanding the pilot.** Durable,
+   `assessments`/`assessment_items`. Bounded keyset pagination and request deadlines are part of the
+   first implementation, not a later optimization.
+4. **P0: add minimum incident and release provenance before expanding the pilot.** Durable,
    idempotent, privacy-safe incidents need stable causal identity, a reader, an action, and exact
    backend/app/runtime/protocol provenance.
-4. **P1: close reachable correctness gaps.** Fix session-attendee removal before saved-session
+5. **P1: close reachable correctness gaps.** Fix session-attendee removal before saved-session
    editing ships, add the newer-schema fail-safe, and resolve the remaining auth-diagnostic
    ambiguity.
-5. **P1: finish sync efficiency and fleet controls.** Membership-specific batching, delta pulls,
-   keyset pagination, request deadlines, randomized retry/reconnect scheduling, remote controls,
-   and proven query-specific indexes.
-6. **P2: settle Programme/group authority, then build group-centred sessions in contract order.**
+6. **P1: finish sync efficiency and fleet controls.** Membership-specific batching, delta pulls,
+   randomized retry/reconnect scheduling, remote controls, and proven query-specific indexes.
+7. **P2: settle Programme/group authority, then build group-centred sessions in contract order.**
    Access grants and identity,
    then RLS/sync, then UI and durable session drafts.
-7. **P3: resume WelaPLUS deliberately.** Integrate the off-main Question island without importing
+8. **P3: resume WelaPLUS deliberately.** Integrate the off-main Question island without importing
    stale design or identity contracts.
-8. **P4: polish, hygiene, and longer-horizon scale work.**
+9. **P4: polish, hygiene, and longer-horizon scale work.**
 
 The deferred Head Office importer is not in the active execution order. It begins with read-only
 discovery of the existing Airtable/Postgres source model with Jim, not with an invented CSV or JSON
@@ -67,16 +71,23 @@ shape.
 
 ### Exact estate and contract inventory
 
-- [ ] Inventory current Masi branches, preview/production build artifacts, runtime/channel identity,
-  and any old installed-device expectations.
+- [x] Inventory current Masi branches, EAS build artifacts, runtime/channel/update identity, and
+  source release profiles. App Store Connect, Play delivery, and installed devices remain open.
 - [ ] Verify which Supabase project every current app profile, local environment, script, and
-  connected backend targets; explicitly check both the SQLite and legacy projects.
-- [ ] Probe the live SQLite-backend schema, migration ledger, RLS, functions, indexes, row counts,
-  and disposable/test data before schema-facing design.
-- [ ] Measure the planned history-pull predicates against real RLS and query plans; confirm
-  PostgREST row limits, keyset order, and maximum supported scope.
-- [ ] Decide history retention, what constitutes positive completeness, and whether any existing
-  test/pilot records must survive the pre-live changes.
+  connected backend targets. The forward SQLite project is verified; the legacy project requires
+  explicit authorization before a counts-only probe.
+- [x] Probe the live SQLite-backend schema, migration ledger, RLS, functions, indexes, row counts,
+  and unclassified forward data before schema-facing design. The data appears to be test/pilot
+  data, but classification and disposition remain unsettled.
+- [ ] Measure the final corrected history predicates against authenticated RLS/query plans. The
+  current broad session plan has been measured and rejected; the hosted PostgREST cap is still
+  unverified.
+- [x] **Decision locked:** history event families (`sessions`/attendees and
+  `assessments`/items) are retained truth and are never absence-deleted from an incomplete or
+  ordinary empty page. Implementation proof remains open in §1. Active assignment/membership
+  relationships retain their separate complete-snapshot reconcile contract.
+- [ ] Decide whether the existing forward-backend test/pilot records are retained, snapshotted and
+  reset, or left untouched until the history slices pass.
 - [ ] Choose the immutable app/runtime/build/backend/protocol identity for the next internal pilot.
 
 ### Release and observability
@@ -124,20 +135,33 @@ checks are recorded in the build log. The remaining checklist is still substanti
 
 **P0. First implementation slices: sessions/attendees, then assessments/items.**
 
-A fresh TestFlight 1.3.0 installation showed no historical sessions or assessments even though the
-correct SQLite backend safely held 20 sessions, 40 attendees, 22 assessments, and 604 assessment
-items for that EA. Current history screens read SQLite correctly; the missing contract is inbound
-hydration.
+On 2026-07-23, a fresh TestFlight 1.3.0 installation showed no historical sessions or assessments
+even though the correct SQLite backend then held 20 sessions, 40 attendees, 22 assessments, and
+604 assessment items for that EA. Those are dated diagnosis figures, not the current total estate;
+the 2026-08-27 Gate 0 counts are recorded separately. Current history screens read SQLite
+correctly; the missing contract is inbound hydration.
 
-- [ ] Add authenticated, EA-and-Programme-scoped pull for `sessions` and
-  `session_attendees`.
-- [ ] Add authenticated, EA-and-Programme-scoped pull for `assessments` and
+- [ ] Correct and behavior-test activity-specific RLS before pulling: sessions are
+  capturer-or-delivery-history scoped; assessments are current-academic-year class scoped. Do not
+  reuse every arm of `current_user_can_read_child` for both.
+- [ ] Verify and reuse the existing `ClassesContext`/SQLite `class_ea_assignments` hydration for
+  assessment scope. Define one canonical SQLite-derived assessment-eligibility query, including
+  inactive/revoked and current-year behavior; do not couple correctness to React context arrival
+  order.
+- [ ] Prove that a server class-assignment row flows through `ClassesContext` into SQLite, survives
+  a fresh read, and is consumed by the canonical assessment-scope query; prove an inactive/revoked
+  assignment does not grant current scope.
+- [ ] Add authenticated, Programme-scoped pull for `sessions` and `session_attendees` through the
+  corrected delivery-history predicate.
+- [ ] Add authenticated, Programme/current-year-class-scoped pull for `assessments` and
   `assessment_items`.
+- [ ] Use bounded keyset pagination with an `id` tie-breaker and request deadline for every parent
+  and child page from the first implementation. Do not ship an unpaginated intermediate path.
 - [ ] Persist each parent and its children transactionally through typed repositories, with parents
   applied before dependents.
 - [ ] Preserve pending, failed, and terminal local work when server rows overlap.
-- [ ] Define pagination and positive completeness evidence before any absence-based reconcile.
-  Ordinary RLS-filtered or truncated queries may not authorize deletion.
+- [ ] Define positive parent/child completeness evidence. Ordinary RLS-filtered, expired, errored,
+  or truncated queries may not mark hydration complete and never authorize history deletion.
 - [ ] Update `rls-sync-contract-map.md` with producer, authorization, ordering, identity, conflict,
   and reconcile rules.
 - [ ] Cover first install, reinstall, second device, offline restart, pending-local collision, and

@@ -97,7 +97,9 @@ observed mutation/claim/generation state. A stale response or repair cannot fina
 
 When partial acceptance would create an invalid or user-misleading aggregate, the server accepts or
 rejects the family atomically. Parent/child ordering alone is not a substitute for atomicity where
-the business invariant spans the family.
+the business invariant spans the family. A second writer, shared mutable aggregate, side-effecting
+RPC, or unsafe partial family must explicitly prove stable-ID upsert is sufficient or adopt a
+narrower causal command; field loss is not a prerequisite for this review.
 
 ### P-15 — Server outcomes are typed and replayable
 

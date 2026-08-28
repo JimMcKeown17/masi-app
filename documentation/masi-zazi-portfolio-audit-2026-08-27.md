@@ -346,6 +346,12 @@ shadow tracer is acceptable if it gives low-risk evidence, but sessions are the 
 aggregate because duplicates and partial attendee acceptance have meaningful user impact.
 Assessments follow only after the Battery/Run boundary is settled.
 
+This is not a rule to wait for a field failure. Any second writer, shared mutable aggregate,
+side-effecting RPC, or family whose partial server acceptance is unsafe triggers an explicit design
+gate: prove why stable-ID upsert is sufficient for its concurrency/idempotency model, or adopt a
+narrower causal command for that boundary. The rejected option is a speculative wholesale protocol
+port, not advance reasoning about known multi-writer risk.
+
 ## Retry and recovery model
 
 The current vocabulary should evolve toward four operator-meaningful outcomes:

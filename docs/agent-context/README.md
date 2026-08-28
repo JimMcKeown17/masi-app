@@ -28,7 +28,8 @@ For every non-trivial task:
 | Assessment score meaning/content | `CONTEXT.md`, `documentation/assessment-score-bands-config.md` | `documentation/egra_letter_sets.md`, pedagogy decisions |
 | WelaPLUS | [`wela-assessment-component-build.md`](./wela-assessment-component-build.md) | Wela PRD, assessment-battery learning chapter, relevant ADRs |
 | Group-centred sessions | `documentation/group-session-workflow.md` | contract map, CONTEXT, open decisions, relevant ADRs |
-| Masi/Zazi comparison or shared field-app infrastructure | `documentation/field-app-portfolio-invariants.md`, `documentation/masi-zazi-portfolio-audit-2026-08-27.md` | current app contract maps, source, tests, live probes, and relevant ADRs |
+| Masi/Zazi comparison or shared field-app infrastructure | `documentation/field-app-capability-ledger.md`, `documentation/field-app-portfolio-invariants.md`, `documentation/masi-zazi-portfolio-audit-2026-08-27.md` | current app contract maps, source, tests, live probes, and relevant ADRs |
+| Pre-live estate, history hydration, or history authorization | `CONTEXT.md`, `documentation/pre-live-gate0-audit-2026-08-27.md`, `documentation/rls-sync-contract-map.md`, `docs/adr/0005-assessment-delivery-scope-two-tier-access.md` | `documentation/field-app-capability-ledger.md`, canonical migrations, live authenticated probes, release/device gates |
 | Documentation cleanup or status reconciliation | [`documentation-system.md`](./documentation-system.md) | `documentation/README.md`, archive index, build log |
 | National scale or government readiness | `documentation/national-scale-readiness-250k-users-2026-07-15.md` | roadmap sections for still-open execution work |
 

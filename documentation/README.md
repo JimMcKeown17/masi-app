@@ -27,6 +27,7 @@ For status questions, do not infer progress from a plan:
 | What product decisions remain unsettled? | [`open-decisions-backlog.md`](./open-decisions-backlog.md) |
 | What is the current SQLite, sync, and RLS contract? | [`rls-sync-contract-map.md`](./rls-sync-contract-map.md) |
 | What safety properties should Masi share with Zazi and future apps? | [`field-app-portfolio-invariants.md`](./field-app-portfolio-invariants.md) |
+| Which portfolio capabilities exist, and what evidence do they actually have? | [`field-app-capability-ledger.md`](./field-app-capability-ledger.md) |
 | What are the current visual tokens and rules? | [`design-system.md`](./design-system.md) |
 
 ## Current standing references
@@ -38,6 +39,7 @@ For status questions, do not infer progress from a plan:
 | [`auth-session-resilience-2026-04-24.md`](./auth-session-resilience-2026-04-24.md) | Current auth restoration and support-triage runbook |
 | [`DATABASE_SCHEMA_GUIDE.md`](./DATABASE_SCHEMA_GUIDE.md) | Relational-modelling primer; its worked schema is historical, not authoritative |
 | [`egra_letter_sets.md`](./egra_letter_sets.md) | Human-readable EGRA letter-set reference |
+| [`field-app-capability-ledger.md`](./field-app-capability-ledger.md) | Maintained capability, evidence-level, known-limit, and next-verifier ledger |
 | [`field-app-portfolio-invariants.md`](./field-app-portfolio-invariants.md) | Maintained cross-app safety, evidence, and package-graduation contract |
 | [`sqlite-staging-setup.md`](./sqlite-staging-setup.md) | Current SQLite-backend CLI and environment runbook |
 | [`sqlite-refactor-log.md`](./sqlite-refactor-log.md) | Compatibility redirect for historical links; new entries belong in the build log |
@@ -46,6 +48,7 @@ For status questions, do not infer progress from a plan:
 
 | File | Why it remains active |
 |---|---|
+| [`pre-live-gate0-audit-2026-08-27.md`](./pre-live-gate0-audit-2026-08-27.md) | Read-only forward-backend, release-estate, live-RLS, data-volume, and query-plan evidence that gates the first implementation slices |
 | [`masi-zazi-portfolio-audit-2026-08-27.md`](./masi-zazi-portfolio-audit-2026-08-27.md) | Dated source/evidence baseline, capability matrix, port decisions, and staged modernization strategy |
 | [`group-session-workflow.md`](./group-session-workflow.md) | Unbuilt group-centred session and durable-draft product contract |
 | [`wela-plus-battery-prd-2026.md`](./wela-plus-battery-prd-2026.md) | WelaPLUS product and architecture contract; implementation remains off `main` |
