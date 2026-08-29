@@ -1,6 +1,6 @@
 # Product and Engineering Roadmap
 
-**Standing document. Updated 2026-08-27 after the session-history authorization tracer. This is the single in-repository answer to
+**Standing document. Updated 2026-08-29 after ratifying the complete session aggregate. This is the single in-repository answer to
 "what is still outstanding?"**
 
 This file contains open work only. Its priority section is the roadmap; the numbered sections are
@@ -39,10 +39,10 @@ These horizons summarize the ordered register below. They are not a second backl
 1. **P0: establish pre-live ground truth and the next release baseline.** Inventory installed/build
    expectations, both Supabase projects, current configuration and automation; probe the live
    SQLite-backend schema/RLS/query cost; settle history retention and row-limit assumptions.
-2. **P0: finish history authorization before hydrating it.** A working branch now has
+2. **P0: finish history authorization before hydrating it.** Committed source now has
    activity-specific session predicates and an actor-derived keyset RPC with disposable-PostgreSQL
-   behavior and plan proof. The complete-aggregate versus child-redacted privacy boundary must be
-   chosen before commit; neither migration is hosted. Assessment history still needs its exact
+   behavior and plan proof. The complete session aggregate is ratified; neither migration is
+   hosted. Assessment history still needs its exact
    current-year class-membership semantics settled and implemented.
 3. **P0: make session and assessment history bidirectional.** Start with sessions/attendees, then
    assessments/items. A fresh install currently uploads
@@ -80,8 +80,8 @@ shape.
 - [x] Probe the live SQLite-backend schema, migration ledger, RLS, functions, indexes, row counts,
   and unclassified forward data before schema-facing design. The data appears to be test/pilot
   data, but classification and disposition remain unsettled.
-- [ ] After the aggregate-privacy decision, commit/apply and re-measure the working-branch session
-  predicates/RPC against authenticated hosted RLS/PostgREST. Disposable PostgreSQL proves the actor
+- [ ] Apply and re-measure the committed source session predicates/RPC against authenticated hosted
+  RLS/PostgREST. Disposable PostgreSQL proves the actor
   matrix and a 2,000-row hostile plan gate, but no hosted migration has been applied; the hosted
   PostgREST cap is also still unverified.
 - [x] **Decision locked:** history event families (`sessions`/attendees and
@@ -143,11 +143,12 @@ even though the correct SQLite backend then held 20 sessions, 40 attendees, 22 a
 the 2026-08-27 Gate 0 counts are recorded separately. Current history screens read SQLite
 correctly; the missing contract is inbound hydration.
 
-- [ ] Decide whether one delivery relationship grants a complete session/coattendee aggregate or a
-  child-redacted projection. The current working branch proves the complete-family candidate; the
-  alternative requires parent projection/data-placement redesign, not only attendee filtering.
-- [ ] After that decision, commit, apply, and hosted-behavior-test the session authorization
-  migrations before the mobile pull calls them. Local disposable PostgreSQL already proves owner,
+- [x] **Decision locked:** one qualifying delivery relationship grants the complete
+  session/coattendee aggregate. The parent activities JSON already contains child-keyed facts and a
+  partial attendee list would misrepresent the event. Future restricted per-child facts require a
+  separately authorized projection or table.
+- [ ] Apply and hosted-behavior-test the committed session authorization migrations before the
+  mobile pull calls them. Local disposable PostgreSQL already proves owner,
   current/former direct delivery, class-only, group-only, unrelated, same-connection actor
   switching, complete-family, microsecond cursor, and same-tuple exhaustion behavior for the
   current candidate; this is not evidence that `masi-app-sqlite` has the functions yet.

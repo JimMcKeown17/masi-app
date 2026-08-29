@@ -2,11 +2,11 @@
 
 **Point-in-time evidence dossier. Probed 2026-08-27.**
 
-> **Follow-up status — 2026-08-27:** The findings below remain the hosted-state baseline. A working
-> branch now provides candidate delivery-history authority and a positively authorized keyset RPC,
-> with disposable-PostgreSQL actor and 2,000-session plan proof. The complete-attendee versus
-> child-redacted boundary remains open; the candidate is uncommitted and has not been applied to
-> hosted Supabase. Assessment authorization also remains open. Current status lives in
+> **Follow-up status — 2026-08-29:** The findings below remain the hosted-state baseline. Committed
+> source now provides delivery-history authority and a positively authorized keyset RPC, with
+> disposable-PostgreSQL actor and 2,000-session plan proof. Jim accepted the complete session
+> aggregate: one qualifying attendee grants the complete parent-and-attendee family. The source has
+> not been applied to hosted Supabase. Assessment authorization also remains open. Current status lives in
 > [`rls-sync-contract-map.md`](./rls-sync-contract-map.md) and [`ROADMAP.md`](./ROADMAP.md).
 
 This is the first execution artifact from the

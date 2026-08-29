@@ -5,18 +5,6 @@
 > `ROADMAP.md`; this file contains product choices that require Jim or pedagogy input. When one is
 > resolved, record the outcome in `CONTEXT.md` and/or an ADR, then remove it from here.
 
-## Required before session-history authorization is committed or deployed
-
-- **Complete session aggregate versus child-sliced privacy.** The working-branch migration treats a
-  session as one aggregate: owning the session or having a historical direct delivery assignment
-  to any attendee grants the parent plus every attendee row. This avoids a misleading partial
-  session because `sessions.activities.child_reading_levels` can contain facts keyed by every
-  attendee child, but it also exposes coattendee `notes`, `grade_snapshot`, and attendance status to
-  an EA whose delivery relationship may cover only one attendee. The alternative is not merely an
-  attendee-policy change: it requires a redacted parent projection or moving per-child facts out of
-  the parent JSON, plus child-filtered attendee hydration. Decide the aggregate privacy boundary
-  explicitly before the candidate migration is committed or applied.
-
 ## Required before assessment-history hydration
 
 - **Current-year class scope across a mid-year child move.** ADR-0005 says assessment history is

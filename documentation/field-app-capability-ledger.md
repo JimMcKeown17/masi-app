@@ -1,6 +1,6 @@
 # Field-App Capability Ledger
 
-**Standing capability-and-evidence ledger. Updated 2026-08-27 after the session-history authorization tracer.**
+**Standing capability-and-evidence ledger. Updated 2026-08-29 after ratifying the complete session aggregate.**
 
 This ledger answers whether a narrowly defined field-app capability exists, which invariants govern
 it, where its implementation lives, what evidence has actually been earned, and what one verifier
@@ -45,12 +45,12 @@ and E5 does not imply recovery or field behavior.
 | ID | Capability | Invariants | Status | Capability evidence | Decision | Known limit | Next independent verifier |
 |---|---|---|---|---|---|---|---|
 | CAP-001 | Exact estate, backend, and release identity | P-09, P-24, P-25 | partial | E4 current; historical E5 `needs-refresh` | verify-first | Forward backend/EAS known; production profile is cutover-sensitive; legacy and installed-device/store estate incomplete | Authorized legacy count probe plus App Store/Play/device inventory |
-| CAP-002 | Actor attribution and positive authority | P-01–P-05 | partial | E4 disposable candidate; hosted session gate open | harden | Session branch candidate is locally proven but uncommitted pending aggregate-privacy choice; assessment current-year semantics/predicate remain open | Decide session aggregate boundary, then commit/apply and run hosted actor/RPC matrix |
+| CAP-002 | Actor attribution and positive authority | P-01–P-05 | partial | E4 disposable source; hosted session gate open | harden | Complete session aggregate is ratified and source is committed but not hosted; assessment current-year semantics/predicate remain open | Apply source and run hosted actor/RPC matrix |
 | CAP-003 | Session/assessment atomic local aggregate plus durable outbox | P-06, P-07, P-10, P-13 | implemented | E3 | preserve | Does not claim every repository republishes through a fresh SQLite read; server-family atomicity and physical force-stop are not universal | Device force-stop at parent/child/outbox boundaries |
-| CAP-004 | Session/attendee history hydration | P-16–P-21, P-27, P-28 | planned | E1 hydration; prerequisite branch candidate has E4 disposable evidence | adapt | Aggregate boundary undecided; parent page/RLS uncommitted and not hosted; no deadline, attendee pager, SQLite persistence, completeness state, or mobile pull | Privacy decision and hosted RPC gate, then populated two-device vertical slice |
+| CAP-004 | Session/attendee history hydration | P-16–P-21, P-27, P-28 | planned | E1 hydration; prerequisite source has E4 disposable evidence | adapt | Parent page/RLS source is committed but not hosted; no deadline, attendee pager, SQLite persistence, completeness state, or mobile pull | Hosted RPC gate, then populated two-device vertical slice |
 | CAP-005 | Assessment/item history hydration | P-16–P-21, P-27, P-29 | planned | E1; E4 current/nonconforming policy inspection | adapt | No inbound pull; year scope, existing class-assignment integration, and item correction identity unresolved | Hosted current-year class-scope family test |
 | CAP-006 | Durable incidents and release provenance | P-22–P-25 | partial | E2 | harden | Sentry/local export exist; no durable causal incident ledger/read-action loop | Repeated incident across force-stop yields one support-actionable record |
-| CAP-007 | Bounded, complete, fleet-safe pulls | P-16, P-18–P-21, P-25 | partial | E3 roster rails; E4 disposable session-page candidate | harden | Candidate RPC keyset-pages parents, but no mobile page loop/deadline, attendee pager, jitter, or kill switch | >cap hosted fixture plus hung-request recovery |
+| CAP-007 | Bounded, complete, fleet-safe pulls | P-16, P-18–P-21, P-25 | partial | E3 roster rails; E4 disposable session-page source | harden | Source RPC keyset-pages parents, but is not hosted and has no mobile page loop/deadline, attendee pager, jitter, or kill switch | >cap hosted fixture plus hung-request recovery |
 | CAP-008 | Programme/group identity and concurrency policy | P-03–P-05, P-27, P-28 | partial | E3 | blocked-on-ADR | Programme model exists; group generation/two-writer semantics and session group persistence incomplete | Two-writer ADR and PostgreSQL/SQLite conflict matrix |
 
 ## CAP-001 — Exact estate, backend, and release identity
@@ -97,13 +97,13 @@ Evidence:
   `20260828004500_history_session_authorization_scope.sql` and
   `20260828010000_delivery_history_session_page.sql` earned E4 against a disposable PostgreSQL 17
   database: owner, current/former delivery, class-only, group-only, unrelated, complete-family,
-  same-connection actor switching, microsecond cursor, and same-tuple exhaustion cases pass. The
-  aggregate boundary still needs Jim's decision. This is working-branch/disposable evidence, not
-  committed or hosted evidence.
+  same-connection actor switching, microsecond cursor, and same-tuple exhaustion cases pass. Jim
+  accepted the complete aggregate on 2026-08-29. This is committed-source/disposable evidence, not
+  hosted evidence.
 - Grandfathered null-owner outbox rows remain a documented pre-v6 compatibility exception.
 
-Next verifier: decide the aggregate boundary, commit and apply the resulting session migrations to
-the exact forward backend, then repeat the actor, RPC, privilege, and plan matrix through
+Next verifier: apply the session migrations to the exact forward backend, then repeat the actor,
+RPC, privilege, and plan matrix through
 authenticated hosted paths. Assessment still requires its class-move/year decision, implementation,
 and prior-year matrix. Review whenever an assignment,
 RLS helper, lifecycle command, or actor source changes.
@@ -140,8 +140,8 @@ Source ownership/prerequisites:
 
 Local aggregate capture, outbound ordering, and server schema exist. No Supabase-to-SQLite pull
 exists for either family. The live 2026-08-27 RLS/plan probe exposed the prerequisite defect; the
-working-branch correction and parent-page RPC now have E4 disposable PostgreSQL evidence. They are
-uncommitted pending the aggregate-privacy decision, neither migration is hosted, and prerequisite
+committed source correction and parent-page RPC now have E4 disposable PostgreSQL evidence. The
+complete session aggregate was accepted on 2026-08-29, neither migration is hosted, and prerequisite
 E4 is not evidence of hydration.
 
 The intended scope is Programme plus delivery-history authority, not capturer-only and not broad
@@ -210,7 +210,7 @@ Source ownership:
 Current claim: existing roster scopes treat 1,000 returned rows as possibly truncated, withhold
 successful pull stamps, protect unsynced local rows, and refuse unsafe reconcile. These current
 rails have real-SQLite E3 evidence in the July build-log records and the 2026-08-27 full integration
-run. A working-branch session-parent RPC now has disposable E4 evidence for bounded keyset traversal
+run. The committed source session-parent RPC now has disposable E4 evidence for bounded keyset traversal
 through 2,004 rows sharing hostile cursor boundaries, but there is no mobile page loop, structural
 request deadline, dependent attendee pager, full jitter, or remote kill switch. Traversal
 completeness is per Programme and is not a cross-request database snapshot. The live PostgREST cap
