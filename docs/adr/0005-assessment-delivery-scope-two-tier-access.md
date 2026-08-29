@@ -5,13 +5,14 @@ date: 2026-07-24
 
 # Assessment vs delivery access: a class/delivery/group tiered scope model
 
-> **Implementation status — 2026-08-27:** The accepted tier model below remains the target, but
-> Gate 0 live inspection found that current RLS does not implement it faithfully. Both session and
-> assessment SELECT policies reuse `private.current_user_can_read_child`, whose class and group
-> branches make session history broader than delivery scope; assessment reads also lack the
-> current-academic-year bound. See
+> **Implementation status — 2026-08-29 follow-up:** Gate 0 found that hosted RLS did not implement
+> this decision faithfully. Source migrations narrow session reads to owner or historical direct
+> delivery and expose an actor-derived keyset page RPC; a disposable PostgreSQL matrix proves the
+> source behavior. Jim accepted the complete session/coattendee aggregate boundary described below.
+> The migrations are committed but not hosted; no mobile hydration exists. Assessment reads still lack the
+> current-academic-year predicate, whose mid-year class-move semantics remain unsettled. See
 > [`../../documentation/pre-live-gate0-audit-2026-08-27.md`](../../documentation/pre-live-gate0-audit-2026-08-27.md).
-> Align and behavior-prove the live predicates before history hydration.
+> Apply and behavior-prove each hosted predicate before its history family hydrates.
 
 ## Context
 
@@ -44,6 +45,15 @@ Wider-scope visibility is **split by activity type**:
 - **Assessment history, current academic year only** → class scope. Serves turnover, control-group comparison, and co-EA divvy coordination. Bounded to the current year through the `child_class_memberships.academic_year_id` window. The current broad helper already has a class arm, but the assessment date/year bound is missing and must be explicit in the assessment-specific predicate.
 - **Session / delivery history** → delivery scope only, and **capturer-agnostic**. Holding (or having held) a delivery assignment on a child shows every session that child attended, including sessions captured by the previous EA. The current live policy incorrectly reaches class/group arms through the general child-read helper and must be narrowed to an activity-specific delivery-history predicate. A handover therefore transfers delivery assignments, not just the class assignment; a pure-assessor takeover deliberately does not gain session history.
 
+  A session is an **indivisible delivery-history aggregate**. Owning the session or qualifying
+  through any attendee grants the complete parent and every attendee row, including coattendee
+  `child_id`, `group_id`, attendance, grade snapshot, notes, and child-keyed facts in the parent
+  activities JSON. This is deliberate: returning only selected attendee rows while the parent JSON
+  still describes every child would be a misleading projection, not a privacy boundary, and a
+  partial attendance list would misrepresent the delivery event. If a future field is genuinely
+  restricted per child, it must not be added to this aggregate without a separately authorized
+  table or redacted projection. Jim ratified this boundary on 2026-08-29.
+
 The **assessment divvy between co-EAs is soft coordination the app permits but never enforces.** Both EAs are authorized over the whole shared class; who assesses whom lives in human agreement (optionally a soft UI hint), never in RLS.
 
 A child leaving a delivery group requires a **structured removal reason** (`child_group_memberships.removal_reason` enum + `removed_by`), distinct from the child-level `archive_reason`, retained for Head Office impact reporting. The child-archive cascade that auto-ends memberships must stamp a reason too.
@@ -58,6 +68,8 @@ A child leaving a delivery group requires a **structured removal reason** (`chil
 - **`getChildrenInClass` is a misnomer today** — it returns delivery children filtered by class, not the class. The wider class roster is a new read; the assignment-scoped delivery list (`getMyChildren`) is preserved unchanged alongside it.
 - **`GRANT_SUBJECTS` single-hop error map** in `offlineSync.js` already flags that child writes granted *only* via class/group membership can false-terminal; that limitation must be resolved before class-mediated writes ship.
 - **Cross-EA assessment visibility within a shared class is intentional** — it is how co-EAs avoid double-assessing. Session diaries stay private to the delivering EA.
+- **Complete coattendee visibility within an authorized session is intentional.** The privacy
+  boundary is admission to the session aggregate, not row-by-row redaction after admission.
 - Most of the write side already exists: local class creation auto-emits the class assignment, HO already seeds at class grain, and group-scoped edit authority is already in RLS. The work is concentrated in class-assignment integration/verification, activity-specific history predicates, history hydration, and the additive removal-reason columns.
 - This is **next-year (group-centred) workstream** scope, not May 2026 go-live. Go-live groups remain seeded and static.
 

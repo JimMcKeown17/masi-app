@@ -83,6 +83,69 @@ describe('Plan 1 SQLite Supabase migrations', () => {
       .not.toMatch(/from public\.session_attendees/i);
   });
 
+  test('session history uses delivery-specific authority and keeps each visible family complete', () => {
+    const fix = latestMigrationMatching(/history_session_authorization_scope/);
+    const sql = compactSql(fix?.sql || '');
+
+    expect(fix).toBeDefined();
+    expect(sql).not.toMatch(/current_user_can_read_delivery_history_child/i);
+    expect(sql).toMatch(
+      /create or replace function private\.can_read_session\(p_session_id uuid\)[\s\S]+security definer[\s\S]+set search_path = ''[\s\S]+s\.user_id = \(select auth\.uid\(\)\)[\s\S]+from public\.session_attendees sa join public\.child_ea_assignments cea on cea\.child_id = sa\.child_id[\s\S]+cea\.user_id = \(select auth\.uid\(\)\)/i
+    );
+    expect(sql).not.toMatch(/from public\.(class_ea_assignments|group_ea_assignments)/i);
+    expect(sql).not.toMatch(/staff_programme_assignments/i);
+    expect(sql).not.toMatch(/unassigned_at is null/i);
+    expect(sql).not.toMatch(/current_user_can_read_child/i);
+    expect(sql).toMatch(
+      /create or replace function private\.can_read_session_attendee\([\s\S]+select private\.can_read_session\(p_session_id\)/i
+    );
+    expect(sql).not.toMatch(
+      /create or replace function private\.can_read_session_attendee\([\s\S]+current_user_can_read_child[\s\S]+revoke execute/i
+    );
+
+    expect(policyBlock(fix.sql, 'sessions_select_own_or_assigned_child_history'))
+      .toMatch(/user_id = \(select auth\.uid\(\)\)[\s\S]+private\.can_read_session\(id\)/i);
+    expect(policyBlock(fix.sql, 'session_attendees_select_assigned_child_history'))
+      .toMatch(/private\.can_read_session_attendee\(session_id, child_id\)/i);
+    expect(sql).toMatch(/revoke execute on function private\.can_read_session\(uuid\) from public, anon/i);
+    expect(sql).toMatch(/grant execute on function private\.can_read_session\(uuid\) to authenticated/i);
+  });
+
+  test('delivery history RPC derives positive authority before bounded keyset pagination', () => {
+    const page = latestMigrationMatching(/delivery_history_session_page/);
+    const sql = compactSql(page?.sql || '');
+
+    expect(page).toBeDefined();
+    expect(sql).toMatch(
+      /create index if not exists idx_sessions_owner_programme_history_cursor on public\.sessions\( user_id, programme_id, session_date desc, created_at desc, id desc \)/i
+    );
+    expect(sql).toMatch(
+      /create or replace function public\.get_delivery_history_session_page\([\s\S]+returns setof public\.sessions[\s\S]+security definer[\s\S]+set search_path = ''/i
+    );
+    expect(sql).not.toMatch(/staff_programme_assignments/i);
+    expect(sql).toMatch(
+      /p_page_size is null or p_page_size < 1 or p_page_size > 200/i
+    );
+    expect(sql).toMatch(
+      /session history cursor must be wholly null or wholly populated/i
+    );
+    expect(sql).toMatch(
+      /with authorized_session_ids as \( select s\.id from public\.sessions s where s\.programme_id = p_programme_id and s\.user_id = v_actor_id[\s\S]+union select s\.id from public\.child_ea_assignments cea join public\.session_attendees sa on sa\.child_id = cea\.child_id join public\.sessions s on s\.id = sa\.session_id where cea\.user_id = v_actor_id and s\.programme_id = p_programme_id/i
+    );
+    expect(sql.match(
+      /\(s\.session_date, s\.created_at, s\.id\) < \( p_before_session_date, p_before_created_at, p_before_id \)/gi
+    )).toHaveLength(2);
+    expect(sql).toMatch(
+      /from authorized_session_ids authorized join public\.sessions s on s\.id = authorized\.id order by s\.session_date desc, s\.created_at desc, s\.id desc limit p_page_size/i
+    );
+    expect(sql).toMatch(
+      /revoke execute on function public\.get_delivery_history_session_page\( uuid, integer, date, timestamptz, uuid \) from public, anon/i
+    );
+    expect(sql).toMatch(
+      /grant execute on function public\.get_delivery_history_session_page\( uuid, integer, date, timestamptz, uuid \) to authenticated/i
+    );
+  });
+
   test('RLS review fixes enforce handover-sensitive writes', () => {
     const fix = latestMigrationMatching(/rls_review_fixes/);
 

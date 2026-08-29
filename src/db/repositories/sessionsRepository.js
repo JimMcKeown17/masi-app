@@ -147,7 +147,7 @@ export const createSessionsRepository = ({ database } = {}) => {
     const where = clauses.length ? `where ${clauses.join(' and ')}` : '';
     const direction = order === 'desc' ? 'desc' : 'asc';
     const rows = await db.getAllAsync(
-      `select * from sessions ${where} order by session_date ${direction}, created_at ${direction}`,
+      `select * from sessions ${where} order by session_date ${direction}, created_at ${direction}, id ${direction}`,
       ...params
     );
     return hydrateSessions(db, rows);

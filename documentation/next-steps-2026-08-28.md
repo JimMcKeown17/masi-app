@@ -18,9 +18,9 @@ duplicate, or leak an EA's work, and that we can see and fix it when something d
   starts empty even though the server has everything.
 - The server's rule about *who may see whose past sessions* is looser than we decided. Harmless
   today (nothing downloads); dangerous the moment downloading starts.
-- A fix for that rule is written and tested on a throwaway database. It is saved on a side branch
-  (`fix/history-authorization-scope-20260827`) and is waiting on one decision from Jim before it
-  goes into the main code.
+- A fix for that rule is written, committed, and tested on a throwaway PostgreSQL database. Jim
+  chose the complete-session boundary on 2026-08-29. The source is now part of `main`, but the
+  migration has not been applied to the real backend and no phone downloads history yet.
 - The test database on the new backend holds 5 accounts, 25 sessions and 31 assessments of
   practice data.
 
@@ -28,13 +28,15 @@ duplicate, or leak an EA's work, and that we can see and fix it when something d
 
 Each step says what it is, why it comes where it does, and how we know it is done.
 
-### Step 0 — Jim answers five questions
+### Step 0 — Jim answers the remaining four questions
 
-Nothing in Step 1 can be merged until these are answered. Suggested answers are in brackets.
+The session-aggregate question is settled; the assessment half of Step 1 still depends on the
+remaining assessment decisions. Suggested answers are in brackets.
 
-1. When an EA may see a past session, do they see the **whole session** (every child in it,
-   including other children's notes) or only **their own children's part**?
-   *(Whole session. Sessions are 2–3 children, all in the same Programme and school.)*
+1. **Settled 2026-08-29:** when an EA may see a past session, they see the **whole session** (every
+   child in it, including other children's notes). A session is one delivery event; the parent JSON
+   already contains child-keyed facts, so showing a partial attendee list would not be a real privacy
+   boundary.
 2. "This year's assessments for a child in my class" — does that mean the class the child is in
    **now**, **any** class they were in this year, or the class they were in **on the day** of the
    assessment? *(Any class this year — simplest to check and explain.)*

@@ -8,6 +8,18 @@ on:
 jobs:
   test:
     runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd="pg_isready -U postgres -d postgres"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=5
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -15,7 +27,15 @@ jobs:
           node-version-file: '.nvmrc'
           cache: npm
       - run: npm ci
+      - name: Verify PostgreSQL client
+        run: psql --version
       - name: Unit suite
         run: npm test -- --silent --maxWorkers=2
+      - name: PostgreSQL history-authorization suite
+        env:
+          HISTORY_RLS_ADMIN_DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/postgres
+          HISTORY_RLS_DATABASE_NAME: masi_history_rls_ci
+          HISTORY_RLS_DISPOSABLE_CONFIRM: I_UNDERSTAND_THIS_IS_DISPOSABLE
+        run: npm run verify:history-authorization:postgres
       - name: Integration suite (file-backed SQLite)
         run: npm run test:integration
