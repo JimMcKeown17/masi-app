@@ -52,17 +52,20 @@ These horizons summarize the ordered register below. They are not a second backl
 4. **P0: add minimum incident and release provenance before expanding the pilot.** Durable,
    idempotent, privacy-safe incidents need stable causal identity, a reader, an action, and exact
    backend/app/runtime/protocol provenance.
-5. **P1: close reachable correctness gaps.** Fix session-attendee removal before saved-session
+5. **P0: settle field-continuity contracts before the candidate build.** Make location fallback
+   truthful, decide auto-clock-out authority and Android backup behavior, complete the
+   credential/PII and provisioning preflight, and explicitly accept or remove unfinished-form loss.
+6. **P1: close reachable correctness gaps.** Fix session-attendee removal before saved-session
    editing ships, add the newer-schema fail-safe, and resolve the remaining auth-diagnostic
    ambiguity.
-6. **P1: finish sync efficiency and fleet controls.** Membership-specific batching, delta pulls,
+7. **P1: finish sync efficiency and fleet controls.** Membership-specific batching, delta pulls,
    randomized retry/reconnect scheduling, remote controls, and proven query-specific indexes.
-7. **P2: settle Programme/group authority, then build group-centred sessions in contract order.**
+8. **P2: settle Programme/group authority, then build group-centred sessions in contract order.**
    Access grants and identity,
    then RLS/sync, then UI and durable session drafts.
-8. **P3: resume WelaPLUS deliberately.** Integrate the off-main Question island without importing
+9. **P3: resume WelaPLUS deliberately.** Integrate the off-main Question island without importing
    stale design or identity contracts.
-9. **P4: polish, hygiene, and longer-horizon scale work.**
+10. **P4: polish, hygiene, and longer-horizon scale work.**
 
 The deferred Head Office importer is not in the active execution order. It begins with read-only
 discovery of the existing Airtable/Postgres source model with Jim, not with an invented CSV or JSON
@@ -91,6 +94,13 @@ shape.
 - [ ] Decide whether the existing forward-backend test/pilot records are retained, snapshotted and
   reset, or left untouched until the history slices pass.
 - [ ] Choose the immutable app/runtime/build/backend/protocol identity for the next internal pilot.
+- [ ] Scan current files plus full Git history, issues, fixtures, screenshots, logs, and release
+  artifacts for credentials, private service URLs, tokens, staff PII, and child data without
+  printing discovered values. Disable or rotate every exposed credential; do not assume editing the
+  current file removes a historical leak.
+- [ ] Verify required schools, Programmes, and other first-login reference values before creating
+  the field roster. Provision unique temporary credentials privately and prove each account through
+  real password sign-in plus the same authenticated RLS reads the app requires.
 
 ### Release and observability
 
@@ -102,6 +112,9 @@ shape.
 - [ ] Connect and test the agreed Sentry alert rules.
 - [ ] Confirm every field device starts from a fresh installation, not an upgrade over the retired
   local data model.
+- [ ] Decide the Android Auto Backup/data-extraction policy for actor-scoped SQLite, domain rows,
+  outbox, incidents, and safe preferences. Test uninstall/reinstall and Google restore; a reinstall
+  may not be called “fresh” until the resulting database identity and contents prove it.
 
 Sentry native/JavaScript capture, privacy hardening, runtime diagnostics, structured sync events,
 safe verification, EAS environment values, and the sensitive upload token are built. The remaining
@@ -186,12 +199,27 @@ Until this lands, a green sync label proves outbound completion only.
 
 ### Data and lifecycle
 
+- [ ] **Truthful no-location behavior:** the PRD says approximate location is used “when available”
+  with a roughly ten-second fallback, but `locationService` and `TimeTrackingContext` currently
+  return before writing when services, permission, current fix, and acceptable last-known fix are
+  unavailable. Choose capture-and-flag, explicit supervisor override, or a deliberate hard gate;
+  align PRD/runtime/schema/reporting and pass Android/iOS denial, services-off, indoor-timeout,
+  stale-cache, offline, and successful-fix device scenarios.
+- [ ] **Auto-clock-out authority:** the ten-hour close is currently device-owned and runs only while
+  the app is active or when the open entry is next loaded. Decide whether hosted rows may remain
+  open until that phone returns, or add a fenced server/hybrid authority that a stale offline write
+  cannot reopen. Reports must label overdue open rows honestly rather than fabricating closure.
 - [ ] **Newer-schema fail-safe:** when SQLite `user_version` exceeds the bundle's
   `CURRENT_SCHEMA_VERSION`, stop safely instead of running an older OTA bundle against a newer
   schema.
 - [ ] **Assessment draft persistence:** force-quit currently loses an in-progress assessment.
   Address this with the longer WelaPLUS/durable-draft lifecycle rather than a one-off 60-second EGRA
   patch.
+- [ ] **Session form draft persistence or explicit launch acceptance:** navigate-away or process
+  death currently loses an unfinished submit-and-go session. Re-demonstrate that consequence on the
+  exact candidate and obtain explicit field acceptance, or ship the one SQLite-backed draft/run
+  lifecycle already assigned to the group-centred workstream. Do not add a second temporary draft
+  mechanism or imply autosave before it exists.
 - [ ] **Removed session attendees:** `sessionsRepository` does not delete
   `session_attendees` removed by a later save. No current screen edits submitted sessions, but this
   must be fixed and behavior-tested before edit UI ships.

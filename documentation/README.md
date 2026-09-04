@@ -48,6 +48,7 @@ For status questions, do not infer progress from a plan:
 
 | File | Why it remains active |
 |---|---|
+| [`zazi-field-lessons-for-masi-go-live-2026-08-27.md`](./zazi-field-lessons-for-masi-go-live-2026-08-27.md) | Practical past-month Zazi field retrospective translated into Masi stop-ship gates, adversarial scenarios, operating rules, and explicit non-ports |
 | [`pre-live-gate0-audit-2026-08-27.md`](./pre-live-gate0-audit-2026-08-27.md) | Read-only forward-backend, release-estate, live-RLS, data-volume, and query-plan evidence that gates the first implementation slices |
 | [`masi-zazi-portfolio-audit-2026-08-27.md`](./masi-zazi-portfolio-audit-2026-08-27.md) | Dated source/evidence baseline, capability matrix, port decisions, and staged modernization strategy |
 | [`group-session-workflow.md`](./group-session-workflow.md) | Unbuilt group-centred session and durable-draft product contract |
