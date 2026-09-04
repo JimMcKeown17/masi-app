@@ -19,8 +19,9 @@ duplicate, or leak an EA's work, and that we can see and fix it when something d
 - The server's rule about *who may see whose past sessions* is looser than we decided. Harmless
   today (nothing downloads); dangerous the moment downloading starts.
 - A fix for that rule is written, committed, and tested on a throwaway PostgreSQL database. Jim
-  chose the complete-session boundary on 2026-08-29. The source is now part of `main`, but the
-  migration has not been applied to the real backend and no phone downloads history yet.
+  chose the complete-session boundary on 2026-08-29. The source is part of `main`; on 2026-09-04
+  the migrations were applied to the real backend and passed the hosted authorization gate. No
+  phone downloads history yet.
 - The test database on the new backend holds 5 accounts, 25 sessions and 31 assessments of
   practice data.
 

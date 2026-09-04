@@ -39,10 +39,9 @@ These horizons summarize the ordered register below. They are not a second backl
 1. **P0: establish pre-live ground truth and the next release baseline.** Inventory installed/build
    expectations, both Supabase projects, current configuration and automation; probe the live
    SQLite-backend schema/RLS/query cost; settle history retention and row-limit assumptions.
-2. **P0: finish history authorization before hydrating it.** Committed source now has
-   activity-specific session predicates and an actor-derived keyset RPC with disposable-PostgreSQL
-   behavior and plan proof. The complete session aggregate is ratified; neither migration is
-   hosted. Assessment history still needs its exact
+2. **P0: finish history authorization before hydrating it.** Hosted session predicates and the
+   actor-derived keyset RPC passed the six-actor PostgreSQL/PostgREST gate on 2026-09-04. The
+   complete session aggregate is ratified. Assessment history still needs its exact
    current-year class-membership semantics settled and implemented.
 3. **P0: make session and assessment history bidirectional.** Start with sessions/attendees, then
    assessments/items. A fresh install currently uploads
@@ -83,10 +82,11 @@ shape.
 - [x] Probe the live SQLite-backend schema, migration ledger, RLS, functions, indexes, row counts,
   and unclassified forward data before schema-facing design. The data appears to be test/pilot
   data, but classification and disposition remain unsettled.
-- [ ] Apply and re-measure the committed source session predicates/RPC against authenticated hosted
-  RLS/PostgREST. Disposable PostgreSQL proves the actor
-  matrix and a 2,000-row hostile plan gate, but no hosted migration has been applied; the hosted
-  PostgREST cap is also still unverified.
+- [x] Applied and re-measured the session predicates/RPC against hosted PostgreSQL and PostgREST on
+  2026-09-04. The six-actor matrix, RPC grants, anonymous denial, current-data plans, and canonical
+  no-op rerun passed. A 1,205-row disposable HTTP fixture proved the PostgREST cap is 1,000 and was
+  removed with zero residue. The earlier 2,000-row hostile plan remains disposable-local evidence,
+  not a hosted scale benchmark.
 - [x] **Decision locked:** history event families (`sessions`/attendees and
   `assessments`/items) are retained truth and are never absence-deleted from an incomplete or
   ordinary empty page. Implementation proof remains open in §1. Active assignment/membership
@@ -165,11 +165,11 @@ correctly; the missing contract is inbound hydration.
   session/coattendee aggregate. The parent activities JSON already contains child-keyed facts and a
   partial attendee list would misrepresent the event. Future restricted per-child facts require a
   separately authorized projection or table.
-- [ ] Apply and hosted-behavior-test the committed session authorization migrations before the
-  mobile pull calls them. Local disposable PostgreSQL already proves owner,
-  current/former direct delivery, class-only, group-only, unrelated, same-connection actor
-  switching, complete-family, microsecond cursor, and same-tuple exhaustion behavior for the
-  current candidate; this is not evidence that `masi-app-sqlite` has the functions yet.
+- [x] Applied and hosted-behavior-tested the committed session authorization migrations. Hosted
+  PostgreSQL proves owner, current/former direct delivery, class-only, group-only, unrelated, and
+  complete-family behavior; authenticated PostgREST proves the RPC and anonymous denial. Local
+  PostgreSQL retains the deeper same-connection, microsecond-cursor, 2,004-row exhaustion, and
+  hostile-plan evidence.
 - [ ] Settle and implement the assessment-specific current-year class predicate. Do not reuse every
   arm of `current_user_can_read_child`, and do not guess whether a mid-year class move grants the
   old class EA, the new class EA, or both access to that assessment history.

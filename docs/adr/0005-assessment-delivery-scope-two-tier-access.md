@@ -5,14 +5,15 @@ date: 2026-07-24
 
 # Assessment vs delivery access: a class/delivery/group tiered scope model
 
-> **Implementation status — 2026-08-29 follow-up:** Gate 0 found that hosted RLS did not implement
-> this decision faithfully. Source migrations narrow session reads to owner or historical direct
-> delivery and expose an actor-derived keyset page RPC; a disposable PostgreSQL matrix proves the
-> source behavior. Jim accepted the complete session/coattendee aggregate boundary described below.
-> The migrations are committed but not hosted; no mobile hydration exists. Assessment reads still lack the
+> **Implementation status — 2026-09-04 follow-up:** Gate 0 found that hosted RLS did not implement
+> this decision faithfully. The session migrations are now applied to `masi-app-sqlite`: a
+> rollback-only hosted PostgreSQL matrix proved owner, current/former delivery, class-only,
+> group-only, unrelated, and complete-family behavior; authenticated PostgREST returned the bounded
+> RPC and anonymous PostgREST was denied. Jim accepted the complete session/coattendee aggregate
+> boundary described below. No mobile hydration exists. Assessment reads still lack the
 > current-academic-year predicate, whose mid-year class-move semantics remain unsettled. See
 > [`../../documentation/pre-live-gate0-audit-2026-08-27.md`](../../documentation/pre-live-gate0-audit-2026-08-27.md).
-> Apply and behavior-prove each hosted predicate before its history family hydrates.
+> The assessment predicate must still be implemented and behavior-proven before that family hydrates.
 
 ## Context
 

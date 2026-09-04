@@ -17,24 +17,24 @@ Use this map before changing any synced table, repository producer, outbox opera
 - Insert order: `PUSH_ORDER` in `src/services/offlineSync.js`
 - Archive order: `ARCHIVE_PUSH_ORDER` plus `ARCHIVE_TABLE_DEPENDENCIES` in `src/services/offlineSync.js`
 
-## Pre-Live History Authorization — Session Source Committed, Hosted And Assessment Gates Open
+## Pre-Live History Authorization — Hosted Session Gate Passed; Assessment Gate Open
 
 Read-only Gate 0 inspection on 2026-08-27 verified the live policies and helper bodies on
-`segygjzpujphwvrubusm`. Hosted behavior does not yet faithfully implement accepted ADR-0005.
-Two committed source migrations are locally behavior-proven but remain unapplied to hosted
-Supabase. Jim accepted the complete session aggregate on 2026-08-29:
+`segygjzpujphwvrubusm`. Jim accepted the complete session aggregate on 2026-08-29. The following
+two migrations were behavior-proven in disposable PostgreSQL, applied through the canonical
+Supabase migration path on 2026-09-04, and then behavior-proven against hosted PostgreSQL and real
+PostgREST:
 
 - `20260828004500_history_session_authorization_scope.sql` replaces the general child projection
   with direct delivery-history authority for session parents and makes attendee visibility follow
   the authorized parent aggregate.
 - `20260828010000_delivery_history_session_page.sql` adds a bounded
   `get_delivery_history_session_page` RPC and an owner/Programme/keyset index intended to support
-  its owner branch. The top-level `Function Scan` plan does not expose the function's inner index
-  choices, so hosted inner-plan verification remains open.
+  its owner branch.
 
 | Family | Current live SELECT authority | Accepted target | Required before inbound hydration |
 |---|---|---|---|
-| `sessions` / `session_attendees` | Owner or parent/session authority delegated through `private.can_read_session`, which reaches `private.current_user_can_read_child`; attendee policy also reaches broad child visibility. The child helper grants creator, historical direct delivery, active class, and active group paths | Capturer-or-delivery-history only; class-only assessors and group-only editors do not receive the delivery diary. One qualifying attendee grants the complete parent-and-attendee aggregate | **Hosted gate open:** apply the committed source migrations, run the authenticated hosted actor/RPC matrix, verify the inner plan, and only then wire mobile hydration |
+| `sessions` / `session_attendees` | Capturer-or-historical-direct-delivery only. `private.can_read_session` grants the owner or an actor with any historical `child_ea_assignments` row for an attendee; attendee visibility follows the authorized parent. Class-only, group-only, and unrelated actors are denied | Same as live: one qualifying attendee grants the complete parent-and-attendee aggregate | **Hosted prerequisite passed. Mobile work remains:** bounded parent and attendee paging, deadlines, atomic SQLite publication, incomplete-family handling, and two-device proof |
 | `assessments` / `assessment_items` | Owner or the same general child-read helper | Current-academic-year class scope, including co-EA/turnover assessment history | Add an assessment-specific class/year predicate; do not expose arbitrary prior-year history |
 
 ### Session aggregate boundary — accepted 2026-08-29
@@ -67,10 +67,15 @@ plan used a particular index. It supports deriving positive authority before key
 instead of treating an ordering index as an authorization optimization. See
 [`pre-live-gate0-audit-2026-08-27.md`](./pre-live-gate0-audit-2026-08-27.md).
 
-Until the migrations and hosted behavior probes land:
+Before a mobile session-history pull can ship:
 
-- do not call the new RPC from a mobile build or make current broad hosted visibility durable;
-- distinguish committed-source delivery-only session authority from current hosted behavior;
+- page parents and attendees independently with bounded requests and request deadlines;
+- publish a family only after the parent and its complete attendee set are durable in SQLite;
+- withhold completeness and successful-pull metadata after any timeout, error, truncation, or
+  partial family;
+- preserve the raw PostgreSQL `created_at` cursor string instead of round-tripping it through a
+  millisecond-only JavaScript `Date`;
+- prove cold-open/reconnect behavior and populated two-device convergence before field release;
 - do not treat the assessment policy's class arm as current-year bounded;
 - ordinary empty/short RLS queries remain non-authoritative for deletion.
 
@@ -101,7 +106,7 @@ Until the migrations and hosted behavior probes land:
 | Immutable assignment insert push | `child_ea_assignments`, `class_ea_assignments`, `group_ea_assignments` when `operation === 'insert'` | One ready row uses `upsert(payload, { onConflict: 'id', ignoreDuplicates: true })`; consecutive ready rows use the same operation with `payloads`, bounded batch size, and bounded per-record fallback. | Duplicate insert retry must be insert-or-ignore, not update-capable upsert, because identity triggers reject changed identity/timestamp columns. Full payloads are normalized to deterministic active-pair ids before dispatch. |
 | Assignment archive/update | Same assignment tables | Archive uses the lifecycle-update contract above; non-archive update-like operations continue through the default upsert path. | Archive patches can contain only `unassigned_at` / `handover_reason`; identity columns remain immutable. |
 | No-history child delete | `children` hard delete | RPC `delete_child_if_no_history(p_child_id)` | Direct mobile child DELETE is blocked; history rows require archive instead. `20260712202409_masi_idempotent_child_delete.sql` makes a wholly absent child return `true` before authorization, so a retry after server success and pre-finalization crash is idempotent. Present but unauthorized children still raise `42501`; history-blocked children still return `false`. The migration was applied and verified against `masi-app-sqlite` on 2026-07-12. |
-| Delivery-history parent page | Inbound `sessions` history (committed source; not hosted and not called by mobile) | `get_delivery_history_session_page(programme, page_size, before_session_date, before_created_at, before_id)`; page size 1–200; cursor wholly null or wholly populated; descending `(session_date, created_at, id)` keyset | `SECURITY DEFINER` RPC admits only direct owner rows plus sessions joined from any historical `child_ea_assignments` row for the actor. Class/group/creator projection arms are absent. The client must add a per-request deadline, preserve the returned `created_at` ISO string without converting it through millisecond-only JavaScript `Date`, page that Programme to exhaustion, then fetch bounded attendee pages by returned parent ids before claiming hydration completeness. |
+| Delivery-history parent page | Inbound `sessions` history (hosted contract; not yet called by mobile) | `get_delivery_history_session_page(programme, page_size, before_session_date, before_created_at, before_id)`; page size 1–200; cursor wholly null or wholly populated; descending `(session_date, created_at, id)` keyset | `SECURITY DEFINER` RPC admits only direct owner rows plus sessions joined from any historical `child_ea_assignments` row for the actor. Class/group/creator projection arms are absent. The client must add a per-request deadline, preserve the returned `created_at` ISO string without converting it through millisecond-only JavaScript `Date`, page that Programme to exhaustion, then fetch bounded attendee pages by returned parent ids before claiming hydration completeness. |
 
 Parent-page exhaustion is a **bounded convergence traversal**, not a transaction-wide snapshot.
 Each request is a separate database statement, so concurrent inserts or updates may appear on a
@@ -216,20 +221,29 @@ SQLite migration v9 (`sync_relationship_indexes`) and Supabase migration `202607
 
 No current pull filters by `updated_at`, so this contract does not require a blanket timestamp index on every synced table. Delta-pull work must define its actual scope predicate first and add a matching table-specific index, commonly a composite `(scope_column, updated_at)` rather than an unscoped timestamp index. This preserves the rule that index cost is justified by a real query shape. The Supabase relationship-index migration and the earlier reconcile migration were both applied to `segygjzpujphwvrubusm` on 2026-07-21; remote migration history matches the canonical files.
 
-The committed source session-history RPC has a different intended query shape. Migration
+The hosted session-history RPC has a different intended query shape. Migration
 `20260828010000_delivery_history_session_page.sql` adds
 `idx_sessions_owner_programme_history_cursor (user_id, programme_id, session_date DESC,
 created_at DESC, id DESC)`. Its leading owner/Programme keys are intended to serve the positive
 owner branch, and the remaining tuple mirrors the descending keyset. The `UNION`-of-ids and final
 join can require a re-sort, so use of the ordering tail is unproven. The direct-delivery branch starts from
 `child_ea_assignments(user_id)`, reaches `session_attendees(child_id)`, and joins the session by
-primary key. The migration and index are not hosted yet. The disposable PostgreSQL plan gate in
+primary key. The disposable PostgreSQL plan gate in
 `scripts/history-authorization-postgres-harness.cjs` compares root-node buffers for this
 actor-derived RPC with the raw Programme/RLS shape over 2,000 unrelated fixtures and requires the
 RPC root to use less than half the raw root's block work. The RPC appears only as an opaque
 `Function Scan`, so this gate does not prove its inner index selection or turn local timing into a
-hosted latency claim. The dependent attendee query is still unbuilt and must receive its own
-set-wise plan measurement before the mobile hydration slice is considered scale-ready.
+hosted latency claim.
+
+The 2026-09-04 hosted current-data probe returned 20 rows. Its opaque RPC root completed in
+1.458 ms with 109 shared-buffer blocks; a separate `EXPLAIN (ANALYZE, BUFFERS, FORMAT JSON)` of the
+RPC's exact inner query completed in 0.337 ms with 105 root blocks and used
+`idx_child_ea_assignments_child`. PostgreSQL also chose sequential scans and a sort for parts of the
+plan at this tiny estate. The current-data plan proves that the deployed query executes and exposes
+its present shape; it is not a scale benchmark, a latency SLO, or proof that the
+owner/Programme/cursor index's ordering tail wins at field volume. The dependent attendee query is
+still unbuilt and must receive its own set-wise plan measurement before the mobile hydration slice
+is considered scale-ready.
 
 ### Disposable PostgreSQL history-authorization verifier
 
@@ -252,6 +266,31 @@ cluster the harness idempotently creates Supabase's four compatibility roles as 
 `NOLOGIN` roles. Dropping the disposable database does not drop those roles; subsequent runs reuse
 them. The workflow must be committed and complete a named remote Actions run before CI evidence is
 claimed.
+
+### Hosted session-authorization verifier — passed 2026-09-04
+
+The canonical migration ledger initially showed exactly two pending versions,
+`20260828004500` and `20260828010000`. `supabase db push --linked --dry-run` named only those two
+files; the canonical linked push applied them, and both a dry-run and real rerun subsequently
+reported `Remote database is up to date`.
+
+The post-apply rollback-only actor matrix proved the accepted aggregate boundary:
+
+- owner: one parent, both attendee rows, one owner-only parent, and four RPC parents;
+- former direct-delivery EA: one parent, both attendee rows, no owner-only parent, and one RPC row;
+- current direct-delivery EA: the same complete-family result as the former EA;
+- class-only, group-only, and unrelated actors: zero parents, attendee rows, owner-only parents, and
+  RPC rows.
+
+The RPC and both private session helpers retain `EXECUTE` for `authenticated` and deny it to
+`anon`. Authenticated PostgREST returned HTTP 200; anonymous PostgREST was denied with HTTP 401 and
+PostgreSQL code `42501`. A namespaced 1,205-row HTTP fixture returned exactly 1,000 rows with
+`Content-Range: 0-999/1205` and HTTP 206, proving the hosted PostgREST row cap is 1,000. All 1,205
+cap rows were deleted with zero residue, and the actor fixture rolled back with zero residue.
+
+This closes the hosted session-policy/RPC prerequisite only. It does not implement or verify the
+mobile parent pager, attendee pager, request deadlines, SQLite publication, hydration completeness,
+reconnect behavior, release uptake, or field behavior.
 
 ## Pull Persistence & Reconcile
 
@@ -392,8 +431,8 @@ Tests: `__tests__/offlineSyncAuthGate.test.js`, `__tests__/requeueTerminalRlsFai
 | `groups` | `groupsRepository.saveGroup`; `ChildrenContext.addGroup`; Children pull persistence | `id`, `name`, `programme_id`, `created_by`; `class_id` when class-scoped | Default upsert for insert/update; archive uses acknowledged lifecycle UPDATE by id. Pulled tombstones persist, while entity absence never archives the local row. `getGroups` is assignment-scoped through an active `group_ea_assignments` join. | `groups_select_created_by`; group access helper via class/group EA assignment | After `classes` when `class_id` exists; before `group_ea_assignments` and memberships | `offlineSyncOutbox.test.js`; `pullReconcile.integration.test.js`; `pullReconcileOffline.integration.test.js`; `ChildrenContextPull.integration.test.js`; `sqlitePlan1Migrations.test.js`; live rollback group probes |
 | `group_ea_assignments` | `groupsRepository.saveGroup`; `groupEaAssignmentsRepository`; Children pull persistence and reconcile | `group_id`, `ea_user_id`, `programme_id`, `created_by` | Consecutive inserts batch with insert-or-ignore; archive uses acknowledged lifecycle UPDATE by id and non-archive updates use default upsert; full embedded server rows are pulled, persisted, and reconciled by acknowledged group ids | EA self assignment and group ownership/access; identity trigger blocks reassignment by update | Pull persistence follows `groups`; insert after `groups`; archive after `child_group_memberships` cleanup | `offlineSyncOutbox.test.js` immutable assignment batching, lifecycle exclusion, and group archive ordering; `pullReconcile.integration.test.js`; `pullReconcileOffline.integration.test.js`; `ChildrenContextPull.integration.test.js` |
 | `child_group_memberships` | `groupsRepository.addChildToGroup`; removal/archive flows in `groupsRepository` and `childrenRepository` | Insert requires `child_id`, `group_id`, `grouping_version_id`, `created_by`; archive carries `id`, `removed_at` locally and sends only `removed_at` | Insert uses default upsert. Archive uses acknowledged lifecycle UPDATE by id, avoiding the INSERT-policy check that rejects partial archive upserts. | Active child write access plus group write/access | After `children`, `groups`, and group EA access evidence; archive before ending group EA assignment | `offlineSyncOutbox.test.js` exact RLS regression, acknowledged-update guard, ordering, and group ownership repair tests |
-| `sessions` | `sessionsRepository.saveSession`; future history pull through `get_delivery_history_session_page` after the hosted gate | `user_id`, `programme_id` | Outbound default upsert. Committed-source inbound parent pages are bounded to 1–200 rows and use descending `(session_date, created_at, id)` keysets; no mobile consumer yet | Direct `user_id = auth.uid()` SELECT fallback plus session read/write helpers. Source read authority is owner or any historical direct child delivery assignment; class/group/creator child visibility does not grant the diary | Outbound before `session_attendees`; after `classes` only when `class_id` exists. Inbound parents persist before dependent attendee pages; no history absence reconcile | `sessionsRepository.test.js`; `offlineSyncOutbox.test.js` session-before-attendees lock; `sqlitePlan1Migrations.test.js`; `historyAuthorizationPostgresHarness.test.js`; disposable PostgreSQL actor/page/plan harness |
-| `session_attendees` | `sessionsRepository.saveSession`; future bounded history pages by authorized parent ids | `session_id`, `child_id`, `attendance_status` | Outbound batched upsert (onConflict=id) with per-record fallback. Inbound not implemented | Writes require parent session ownership plus active child/group/class access. Source historical SELECT follows the authorized parent; the accepted aggregate returns the complete attendee family | Outbound after `sessions`, `children`, and `groups` when `group_id` exists. Inbound after durable parent page; no history absence reconcile | `sessionsRepository.test.js`; `offlineSyncOutbox.test.js`; `sqlitePlan1Migrations.test.js`; disposable PostgreSQL complete-family actor matrix |
+| `sessions` | `sessionsRepository.saveSession`; future history pull through hosted `get_delivery_history_session_page` | `user_id`, `programme_id` | Outbound default upsert. Hosted inbound parent pages are bounded to 1–200 rows and use descending `(session_date, created_at, id)` keysets; no mobile consumer yet | Direct `user_id = auth.uid()` SELECT fallback plus session read/write helpers. Hosted read authority is owner or any historical direct child delivery assignment; class/group/creator child visibility does not grant the diary | Outbound before `session_attendees`; after `classes` only when `class_id` exists. Inbound parents persist before dependent attendee pages; no history absence reconcile | `sessionsRepository.test.js`; `offlineSyncOutbox.test.js` session-before-attendees lock; `sqlitePlan1Migrations.test.js`; `historyAuthorizationPostgresHarness.test.js`; disposable and hosted PostgreSQL actor/page/plan probes; authenticated/anonymous PostgREST probes |
+| `session_attendees` | `sessionsRepository.saveSession`; future bounded history pages by authorized parent ids | `session_id`, `child_id`, `attendance_status` | Outbound batched upsert (onConflict=id) with per-record fallback. Inbound not implemented | Writes require parent session ownership plus active child/group/class access. Hosted historical SELECT follows the authorized parent; the accepted aggregate returns the complete attendee family | Outbound after `sessions`, `children`, and `groups` when `group_id` exists. Inbound after durable parent page; no history absence reconcile | `sessionsRepository.test.js`; `offlineSyncOutbox.test.js`; `sqlitePlan1Migrations.test.js`; disposable and hosted PostgreSQL complete-family actor matrices |
 | `assessments` | `assessmentsRepository.saveAssessment` | `user_id`, `child_id`, `programme_id` | Default upsert | Direct owner plus `private.current_user_can_read_child`; writes require active child/programme access | After `children`; before `assessment_items` | `assessmentsRepository.test.js`; `sqlitePlan1Migrations.test.js`; `captureModeMigration.test.js` (nullable `capture_mode` — see note below) |
 | `assessment_items` | `assessmentsRepository.saveAssessment` item producer | `assessment_id`, `item_key`, `position` / generated UUID `id` | Batched upsert with per-record fallback | Parent assessment visibility/write access | After `assessments` | `offlineSyncOutbox.test.js` batch and fallback coverage |
 | `letter_mastery` | `masteryRepository.saveLetterMasteryRecord` | `user_id`, `child_id`, `programme_id`, `letter`, `language`, `source` | Batched upsert (onConflict=id) with per-record fallback on batch failure. **Prevention, not reconciliation.** New rows get a **deterministic logical-key id** (`letterMasteryDomainId`), and `buildSyncPayload` maps **every** `letter_mastery` push to that id. Same record means the same id on every device/install, so insert-by-id is idempotent. `saveLetterMasteryRecord` returns the canonical id so callers track the persisted row; toggling off is also resolved by logical key. A soft-delete/edit whose insert is still queued coalesces into that insert; once synced, soft-delete uses an acknowledged lifecycle UPDATE carrying only `deleted_at`. **Gate completed 2026-07-14:** all 13 staging rows already matched today's deterministic formula. The enduring rollout rule is that no active old build may mint obsolete identities. | Direct owner plus `private.current_user_can_read_child`; writes require active child/programme access | After `children` | `masteryRepository.test.js`; `letterMasterySync.test.js`; `sqlitePlan1Migrations.test.js`; `offlineSyncOutbox.test.js` batch coverage |
