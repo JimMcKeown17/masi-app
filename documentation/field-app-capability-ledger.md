@@ -1,6 +1,6 @@
 # Field-App Capability Ledger
 
-**Standing capability-and-evidence ledger. Updated 2026-08-29 after ratifying the complete session aggregate.**
+**Standing capability-and-evidence ledger. Updated 2026-09-04 after the hosted session-authorization gate.**
 
 This ledger answers whether a narrowly defined field-app capability exists, which invariants govern
 it, where its implementation lives, what evidence has actually been earned, and what one verifier
@@ -45,12 +45,12 @@ and E5 does not imply recovery or field behavior.
 | ID | Capability | Invariants | Status | Capability evidence | Decision | Known limit | Next independent verifier |
 |---|---|---|---|---|---|---|---|
 | CAP-001 | Exact estate, backend, and release identity | P-09, P-24, P-25 | partial | E4 current; historical E5 `needs-refresh` | verify-first | Forward backend/EAS known; production profile is cutover-sensitive; legacy and installed-device/store estate incomplete | Authorized legacy count probe plus App Store/Play/device inventory |
-| CAP-002 | Actor attribution and positive authority | P-01–P-05 | partial | E4 disposable source; hosted session gate open | harden | Complete session aggregate is ratified and source is committed but not hosted; assessment current-year semantics/predicate remain open | Apply source and run hosted actor/RPC matrix |
+| CAP-002 | Actor attribution and positive authority | P-01–P-05 | partial | E4 hosted for sessions | harden | Session actor/RPC gate passed; assessment current-year semantics/predicate remain open | Hosted assessment authority matrix after its decisions |
 | CAP-003 | Session/assessment atomic local aggregate plus durable outbox | P-06, P-07, P-10, P-13 | implemented | E3 | preserve | Does not claim every repository republishes through a fresh SQLite read; server-family atomicity and physical force-stop are not universal | Device force-stop at parent/child/outbox boundaries |
-| CAP-004 | Session/attendee history hydration | P-16–P-21, P-27, P-28 | planned | E1 hydration; prerequisite source has E4 disposable evidence | adapt | Parent page/RLS source is committed but not hosted; no deadline, attendee pager, SQLite persistence, completeness state, or mobile pull | Hosted RPC gate, then populated two-device vertical slice |
+| CAP-004 | Session/attendee history hydration | P-16–P-21, P-27, P-28 | planned | E1 hydration; prerequisite RLS/RPC has E4 hosted evidence | adapt | No deadline, attendee pager, SQLite persistence, completeness state, or mobile pull | Populated two-device vertical slice after bounded attendee paging |
 | CAP-005 | Assessment/item history hydration | P-16–P-21, P-27, P-29 | planned | E1; E4 current/nonconforming policy inspection | adapt | No inbound pull; year scope, existing class-assignment integration, and item correction identity unresolved | Hosted current-year class-scope family test |
 | CAP-006 | Durable incidents and release provenance | P-22–P-25 | partial | E2 | harden | Sentry/local export exist; no durable causal incident ledger/read-action loop | Repeated incident across force-stop yields one support-actionable record |
-| CAP-007 | Bounded, complete, fleet-safe pulls | P-16, P-18–P-21, P-25 | partial | E3 roster rails; E4 disposable session-page source | harden | Source RPC keyset-pages parents, but is not hosted and has no mobile page loop/deadline, attendee pager, jitter, or kill switch | >cap hosted fixture plus hung-request recovery |
+| CAP-007 | Bounded, complete, fleet-safe pulls | P-16, P-18–P-21, P-25 | partial | E3 roster rails; E4 hosted session parent and cap evidence | harden | Hosted RPC keyset-pages parents and PostgREST caps at 1,000, but no mobile page loop/deadline, attendee pager, jitter, or kill switch | >page-size hydrated family plus hung-request recovery |
 | CAP-008 | Programme/group identity and concurrency policy | P-03–P-05, P-27, P-28 | partial | E3 | blocked-on-ADR | Programme model exists; group generation/two-writer semantics and session group persistence incomplete | Two-writer ADR and PostgreSQL/SQLite conflict matrix |
 
 ## CAP-001 — Exact estate, backend, and release identity
@@ -93,20 +93,22 @@ Evidence:
   exposed a conformance failure:
   session and assessment parent/child policies reuse a general child-read helper whose class/group
   arms do not match the accepted per-activity scopes.
-- On the current authorization branch, migrations
+- Migrations
   `20260828004500_history_session_authorization_scope.sql` and
   `20260828010000_delivery_history_session_page.sql` earned E4 against a disposable PostgreSQL 17
   database: owner, current/former delivery, class-only, group-only, unrelated, complete-family,
   same-connection actor switching, microsecond cursor, and same-tuple exhaustion cases pass. Jim
-  accepted the complete aggregate on 2026-08-29. This is committed-source/disposable evidence, not
-  hosted evidence.
+  accepted the complete aggregate on 2026-08-29.
+- On 2026-09-04 the same migrations were applied to `segygjzpujphwvrubusm`. A rollback-only hosted
+  PostgreSQL fixture passed owner, current/former delivery, class-only, group-only, unrelated,
+  complete-family, and bounded-RPC assertions with zero fixture residue. Function grants allow
+  `authenticated` and deny `anon`; real PostgREST returned 200 for the authenticated RPC and
+  401/`42501` for anonymous access.
 - Grandfathered null-owner outbox rows remain a documented pre-v6 compatibility exception.
 
-Next verifier: apply the session migrations to the exact forward backend, then repeat the actor,
-RPC, privilege, and plan matrix through
-authenticated hosted paths. Assessment still requires its class-move/year decision, implementation,
-and prior-year matrix. Review whenever an assignment,
-RLS helper, lifecycle command, or actor source changes.
+Next verifier: assessment still requires its class-move/year decision, implementation, and
+prior-year matrix. Review whenever an assignment, RLS helper, lifecycle command, or actor source
+changes.
 
 ## CAP-003 — Session/assessment atomic local aggregate and durable outbox
 
@@ -140,9 +142,9 @@ Source ownership/prerequisites:
 
 Local aggregate capture, outbound ordering, and server schema exist. No Supabase-to-SQLite pull
 exists for either family. The live 2026-08-27 RLS/plan probe exposed the prerequisite defect; the
-committed source correction and parent-page RPC now have E4 disposable PostgreSQL evidence. The
-complete session aggregate was accepted on 2026-08-29, neither migration is hosted, and prerequisite
-E4 is not evidence of hydration.
+session correction and parent-page RPC now have both disposable and hosted PostgreSQL evidence. The
+complete session aggregate was accepted on 2026-08-29 and the hosted gate passed on 2026-09-04.
+Prerequisite E4 is not evidence of hydration.
 
 The intended scope is Programme plus delivery-history authority, not capturer-only and not broad
 class/group child visibility. Absence must not delete history. The source RPC now defines a bounded
@@ -154,8 +156,8 @@ of the RPC's inner index plan or a hosted latency SLO. Mobile deadlines, set-wis
 family completeness, and persistence remain undefined/unbuilt. Cursor timestamps must remain raw
 server ISO strings so JavaScript millisecond conversion cannot erase PostgreSQL microseconds.
 
-Next verifier: hosted apply plus authenticated RPC/privilege/plan proof, then bounded attendee
-pages, request deadlines, pending-local-wins, no absence reconcile, fresh-SQLite publication,
+Next verifier: bounded attendee pages, request deadlines, pending-local-wins, no absence reconcile,
+fresh-SQLite publication,
 reinstall, second device, force-stop, prior capturer, and revocation.
 
 ## CAP-005 — Assessment and item history hydration
@@ -210,11 +212,12 @@ Source ownership:
 Current claim: existing roster scopes treat 1,000 returned rows as possibly truncated, withhold
 successful pull stamps, protect unsynced local rows, and refuse unsafe reconcile. These current
 rails have real-SQLite E3 evidence in the July build-log records and the 2026-08-27 full integration
-run. The committed source session-parent RPC now has disposable E4 evidence for bounded keyset traversal
-through 2,004 rows sharing hostile cursor boundaries, but there is no mobile page loop, structural
-request deadline, dependent attendee pager, full jitter, or remote kill switch. Traversal
-completeness is per Programme and is not a cross-request database snapshot. The live PostgREST cap
-was not exposed by its database GUC and remains unverified.
+run. The session-parent RPC has disposable E4 evidence for bounded keyset traversal through 2,004
+rows sharing hostile cursor boundaries and hosted E4 evidence for current data. A real PostgREST
+cap-plus-one probe on 2026-09-04 returned 1,000 of 1,205 rows with exact `Content-Range`, proving the
+hosted cap is 1,000; all 1,205 probe rows were deleted with zero residue. There is no mobile page
+loop, structural request deadline, dependent attendee pager, full jitter, or remote kill switch. Traversal
+completeness is per Programme and is not a cross-request database snapshot.
 
 Next verifier: a disposable hosted scope larger than the configured page size plus a deliberately
 hung request; prove every page exactly once, incomplete/expired scopes never reconcile, fair request

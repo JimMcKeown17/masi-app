@@ -1490,9 +1490,10 @@ current payload already has it.
 Row Level Security answers whether each row may be returned. It does not guarantee that the server
 can find the permitted rows cheaply. Masi's first session-history policy was also semantically too
 broad: it reused a general “can read this child” helper whose creator, class, and group branches were
-appropriate for roster projections but not for a private delivery diary. Committed source narrows
-session authority to owner or historical direct delivery. It is locally proven but unapplied to
-hosted Supabase. Jim accepted the complete coattendee aggregate on 2026-08-29 because the parent JSON
+appropriate for roster projections but not for a private delivery diary. Hosted session authority
+now narrows reads to owner or historical direct delivery; a rollback-only six-actor matrix and real
+PostgREST grant/denial probes passed on 2026-09-04. Jim accepted the complete coattendee aggregate on
+2026-08-29 because the parent JSON
 already contains all-child facts and a partial attendee list would misrepresent the event. This
 creates a load-bearing data-placement rule: future restricted per-child facts need a separately
 authorized projection or table, not a hidden addition to the shared session aggregate.
