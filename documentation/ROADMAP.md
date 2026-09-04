@@ -115,6 +115,11 @@ shape.
 - [ ] Decide the Android Auto Backup/data-extraction policy for actor-scoped SQLite, domain rows,
   outbox, incidents, and safe preferences. Test uninstall/reinstall and Google restore; a reinstall
   may not be called “fresh” until the resulting database identity and contents prove it.
+- [ ] Confirm `masi-app-sqlite` is on a Supabase plan that cannot auto-pause, and record the plan.
+  On 2026-09-04 the project was found paused after about seven idle days; while restoring, it
+  accepted connections with an empty `public` schema for roughly four minutes. Pilot automation,
+  migration scripts, and support tooling must treat an empty or missing migration ledger as
+  "restoring", never as a clean slate.
 
 Sentry native/JavaScript capture, privacy hardening, runtime diagnostics, structured sync events,
 safe verification, EAS environment values, and the sensitive upload token are built. The remaining

@@ -182,5 +182,5 @@ gate ("after these checks pass"), not a date.
 | What the live backend actually looks like | [`pre-live-gate0-audit-2026-08-27.md`](./pre-live-gate0-audit-2026-08-27.md) |
 | What Masi should and should not take from Zazi | [`masi-zazi-portfolio-audit-2026-08-27.md`](./masi-zazi-portfolio-audit-2026-08-27.md) |
 | The safety rules both apps follow | [`field-app-portfolio-invariants.md`](./field-app-portfolio-invariants.md) |
-| Zazi's month of field failures, lesson by lesson | `zazi-field-lessons-for-masi-go-live-2026-08-27.md` (on branch `docs/zazi-field-lessons-20260827` until merged) |
-| The written-and-tested permissions fix | branch `fix/history-authorization-scope-20260827` |
+| Zazi's month of field failures, lesson by lesson | [`zazi-field-lessons-for-masi-go-live-2026-08-27.md`](./zazi-field-lessons-for-masi-go-live-2026-08-27.md) |
+| The written-and-tested permissions fix | merged to `main` on 2026-08-29 (`b3ba977`); not yet applied to the hosted backend |
