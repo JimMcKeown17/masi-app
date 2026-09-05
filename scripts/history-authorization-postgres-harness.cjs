@@ -10,6 +10,18 @@ const MIGRATIONS_DIR = path.join(REPO_ROOT, 'supabase', 'migrations');
 const DISPOSABLE_CONFIRMATION = 'I_UNDERSTAND_THIS_IS_DISPOSABLE';
 const DISPOSABLE_DATABASE_PREFIX = 'masi_history_rls_';
 const LOCAL_HOSTS = new Set(['127.0.0.1', 'localhost', '[::1]', '::1']);
+const NON_ROUTING_QUERY_KEYS = new Set(['sslmode', 'connect_timeout', 'application_name']);
+const LIBPQ_ROUTING_ENV_KEYS = [
+  'PGHOST',
+  'PGHOSTADDR',
+  'PGPORT',
+  'PGDATABASE',
+  'PGSERVICE',
+  'PGSERVICEFILE',
+  'PGSYSCONFDIR',
+  'PGOPTIONS',
+  'PGTARGETSESSIONATTRS',
+];
 const PLAN_FIXTURE_SESSION_COUNT = 2_000;
 
 const quoteIdentifier = (identifier) => `"${identifier.replaceAll('"', '""')}"`;
@@ -35,6 +47,11 @@ const assertDisposableAdminTarget = ({ adminDatabaseUrl, databaseName, confirmat
   if (parsed.pathname.replace(/^\/+/, '') !== 'postgres') {
     throw new Error('History RLS harness admin database must be postgres');
   }
+  for (const key of parsed.searchParams.keys()) {
+    if (!NON_ROUTING_QUERY_KEYS.has(key)) {
+      throw new Error(`History RLS harness rejects query parameter "${key}"`);
+    }
+  }
   if (
     typeof databaseName !== 'string'
     || !databaseName.startsWith(DISPOSABLE_DATABASE_PREFIX)
@@ -55,6 +72,27 @@ const assertDisposableAdminTarget = ({ adminDatabaseUrl, databaseName, confirmat
   return parsed;
 };
 
+// Use only components checked by assertDisposableAdminTarget. Even allowlisted
+// query parameters are deliberately omitted from both psql connection URLs.
+const buildDatabaseUrl = (adminUrl, databaseName) => {
+  const target = new URL(`${adminUrl.protocol}//${adminUrl.hostname}`);
+  target.username = adminUrl.username;
+  target.password = adminUrl.password;
+  target.port = adminUrl.port;
+  target.pathname = `/${databaseName}`;
+  return target;
+};
+
+const buildPsqlEnv = (label) => {
+  const env = { ...process.env, PGAPPNAME: `masi-history-rls-${label}` };
+  // A component-only URI cannot override every libpq environment parameter
+  // (notably PGHOSTADDR). Keep authentication, but remove alternate routing.
+  for (const key of LIBPQ_ROUTING_ENV_KEYS) {
+    delete env[key];
+  }
+  return env;
+};
+
 const runPsql = ({ databaseUrl, sql, file, label }) => {
   const args = [
     '-X',
@@ -66,7 +104,7 @@ const runPsql = ({ databaseUrl, sql, file, label }) => {
   ];
   const result = spawnSync('psql', args, {
     encoding: 'utf8',
-    env: { ...process.env, PGAPPNAME: `masi-history-rls-${label}` },
+    env: buildPsqlEnv(label),
     timeout: 180_000,
   });
 
@@ -549,16 +587,15 @@ const parseJsonObjects = (output) => {
 };
 
 const main = () => {
-  const adminDatabaseUrl = process.env.HISTORY_RLS_ADMIN_DATABASE_URL;
   const databaseName = process.env.HISTORY_RLS_DATABASE_NAME;
   const confirmation = process.env.HISTORY_RLS_DISPOSABLE_CONFIRM;
   const adminUrl = assertDisposableAdminTarget({
-    adminDatabaseUrl,
+    adminDatabaseUrl: process.env.HISTORY_RLS_ADMIN_DATABASE_URL,
     databaseName,
     confirmation,
   });
-  const databaseUrl = new URL(adminUrl);
-  databaseUrl.pathname = `/${databaseName}`;
+  const adminDatabaseUrl = buildDatabaseUrl(adminUrl, 'postgres').href;
+  const databaseUrl = buildDatabaseUrl(adminUrl, databaseName);
   const quotedDatabase = quoteIdentifier(databaseName);
 
   runPsql({
@@ -914,6 +951,8 @@ module.exports = {
   DISPOSABLE_DATABASE_PREFIX,
   PLAN_FIXTURE_SESSION_COUNT,
   assertDisposableAdminTarget,
+  buildDatabaseUrl,
+  buildPsqlEnv,
   bootstrapSql,
   collectPlanMetrics,
 };

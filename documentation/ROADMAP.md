@@ -182,6 +182,15 @@ correctly; the missing contract is inbound hydration.
   assignment does not grant current scope.
 - [ ] Add authenticated, Programme-scoped pull for `sessions` and `session_attendees` through the
   corrected delivery-history predicate.
+- [ ] Define an authorized history-reference projection for coattendee children (identity and
+  display fields only, no roster or write authority) so a fresh device can persist a complete
+  session family with SQLite foreign keys enabled; prove it PostgreSQL-to-fresh-SQLite before any
+  hydration-complete result. Surfaced by the 2026-09-04 adversarial review: session authority
+  follows any historical direct assignment, child-read authority does not.
+- [ ] Reshape `get_delivery_history_session_page` so each grant arm yields ordered, bounded
+  candidates before the merge (bounded work, not only bounded output), and extend the PostgreSQL
+  harness with dense-owner, dense-delivery, and deep-page fixtures at 100k+ sessions that measure
+  inner plans. Surfaced by the same review; no field impact today.
 - [ ] Add authenticated, Programme/current-year-class-scoped pull for `assessments` and
   `assessment_items`.
 - [ ] Use bounded keyset pagination with an `id` tie-breaker and request deadline for every parent
