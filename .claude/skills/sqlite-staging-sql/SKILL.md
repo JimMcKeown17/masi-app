@@ -16,14 +16,24 @@ npm run sqlite:staging:query -- "select count(*) from letter_mastery;"
 # or:  node scripts/sqlite-staging.cjs query "delete from letter_mastery;"
 ```
 
-The `query` action (in `scripts/sqlite-staging.cjs`) reads the DB password from `.env`/`.env.local` and builds a clean command env that only ever targets `masi-app-sqlite` via `--linked`. It needs the CLI to be logged in (`supabase login`).
+The `query` action (in `scripts/sqlite-staging.cjs`) reads `.env` then `.env.local`, validates the SQLite project ID/URL, and maps only the staging values into its command environment. It uses `--linked`, so verify the checkout's link as well as the printed target before operational work. It never sources the files or injects their unrelated values, legacy connection settings, or file-stored access tokens. Shell environment variables are inherited, including `SUPABASE_ACCESS_TOKEN`; do not invoke the helper through a dotenv wrapper.
+
+The parser accepts dotenv `KEY=value` and `KEY: value`, optional `export`, whitespace, comments, quoted/multiline values, embedded equals signs, and CRLF. Quotes preserve literal `#` characters; unquoted `#` starts a comment. There is no shell execution or variable expansion. Malformed records fail before a subprocess with the filename, line number, and key (or preceding assignment when a line has no key), without showing values.
+
+The 2026-09-04 investigation found that the installed Supabase CLI, rather than the helper, emitted `LegacyDbConfigLoadError`: the old helper silently skipped unsupported lines. In the parent checkout's `.env.local`, `EXPO_PUBLIC_SENTRY_DSN` at line 70 used valid colon syntax, followed by malformed indented bullets at lines 71–73. The first CLI parser rejection was line 71. Correct or comment such prose with `#`; do not bypass the parser, silently ignore it, or print the file to diagnose it. The helper now reports that location before CLI launch. Other CLI config-loading errors remain separate from this dotenv diagnostic.
 
 ## Auth gotchas behind a `401 Unauthorized` from `db query`/`projects list`
 
-It's the access token, not the DB password:
+Before **every Supabase CLI launch** (`link`, migrations, dry run, push, advisors, query), the helper prints one of:
 
-- A **stale `SUPABASE_ACCESS_TOKEN` env var** (often exported from a shell profile) **silently overrides `supabase login`** — the CLI trusts the env var first, so a fresh login "doesn't take." Fix: `unset SUPABASE_ACCESS_TOKEN` (or `env -u SUPABASE_ACCESS_TOKEN <cmd>`), then re-run.
-- A **non-interactive shell** (e.g. an agent's Bash, CI without a token) often **can't reach the keychain** where `supabase login` stores the token, so it 401s even when your own terminal works. Run `db query`/cleanup in the **same interactive terminal where you logged in**.
+- `auth_path=environment-token`: a nonempty inherited `SUPABASE_ACCESS_TOKEN` is in effect and overrides stored login. The preflight reports the source only; it does not validate freshness or print the token, a fragment, or its length.
+- `auth_path=keychain`: no nonempty inherited token; the CLI will use its stored login. An empty inherited token is removed from the child environment. This label is not proof that credentials are available: the CLI can use native credential storage or its own fallback file. See the [Supabase CLI login reference](https://supabase.com/docs/reference/cli/supabase-login).
+
+An unsuccessful CLI result containing `Unauthorized` or `401` now fails with explicit recovery instructions, whether the diagnostic arrives on stdout, stderr, or a process error. The helper does not retry, refresh credentials, launch login, or change the parent shell's environment. Auth error details are replaced with the safe recovery message; other CLI output is buffered until exit and known credentials are redacted. Successful query rows containing the words `Unauthorized` or `401` remain ordinary output. Expo launchers keep their interactive streams.
+
+- A **stale environment token** (often exported from a shell profile) overrides stored login. Use `unset SUPABASE_ACCESS_TOKEN` (or `env -u SUPABASE_ACCESS_TOKEN <cmd>`) to choose stored auth, or refresh the variable with a valid personal access token through your normal secure process. Running `supabase login` while the stale override remains can also return Unauthorized; unset it first.
+- A **non-interactive shell** (e.g. an agent shell or CI without a token) may not have access to the stored login. Unsetting a stale token alone does not establish authentication. In an interactive terminal, unset the variable, run `supabase login`, then run the helper in that same terminal. For non-interactive operation, provide a refreshed `SUPABASE_ACCESS_TOKEN` securely.
+- Treat a Management API `401` as an access-token/login issue. PostgreSQL password or connection errors are separate; do not rotate the database password to repair a stale CLI token. Never paste credentials into output, command arguments, or documentation.
 
 ## Non-interactive fallback (verified 2026-07-12)
 

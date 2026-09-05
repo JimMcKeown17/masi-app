@@ -4,6 +4,7 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const { spawnSync } = require('child_process');
+const { parse: parseDotenv } = require('dotenv');
 const { KNOWN_SUPABASE_PROJECTS } = require('../config/supabaseProjectConfig');
 
 const SQLITE_PROJECT_ID = KNOWN_SUPABASE_PROJECTS['sqlite-staging'];
@@ -29,26 +30,49 @@ const ACTIONS = new Set([
   'android',
 ]);
 
-const parseEnvContent = (content) => {
+const parseEnvContent = (content, { filename = '.env' } = {}) => {
   const parsed = {};
+  const lines = content.replace(/\r\n?/g, '\n').split('\n');
+  let previousKey;
+  let previousLine;
+  const fail = (line, key, detail) => {
+    const error = new Error(`Cannot parse ${filename}:${line} (key ${key || '[unknown]'}): ${detail}. Values are not shown.`);
+    error.name = 'EnvConfigParseError';
+    throw error;
+  };
 
-  for (const rawLine of content.split(/\r?\n/)) {
-    const trimmed = rawLine.trim();
-    if (!trimmed || trimmed.startsWith('#')) continue;
+  for (let index = 0; index < lines.length; index++) {
+    const line = lines[index].trimStart();
+    if (!line || line.startsWith('#')) continue;
 
-    const line = trimmed.startsWith('export ') ? trimmed.slice('export '.length).trim() : trimmed;
-    const match = line.match(/^([A-Za-z_][A-Za-z0-9_]*)=(.*)$/);
-    if (!match) continue;
-
-    let value = match[2].trim();
-    if (
-      (value.startsWith('"') && value.endsWith('"')) ||
-      (value.startsWith("'") && value.endsWith("'"))
-    ) {
-      value = value.slice(1, -1);
+    const match = line.match(/^(?:export[ \t]+)?([\w.-]+)[ \t]*(?:=[ \t]*|:[ \t]+)(.*)$/);
+    if (!match) {
+      fail(index + 1, previousKey, `expected KEY=value or KEY: value${previousKey ? ` after the assignment at line ${previousLine}` : ''}; comment prose with #`);
     }
 
-    parsed[match[1]] = value;
+    const key = match[1];
+    const startLine = index + 1;
+    let value = match[2];
+    // dotenv.parse deliberately ignores malformed lines. Validate the complete record
+    // first so skipped prose/unclosed quotes cannot reach the CLI's own dotenv loader.
+    if (/^["'`]/.test(value)) {
+      let quoted;
+      while (!(quoted = value.match(/^("(?:\\"|[^"])*"|'(?:\\'|[^'])*'|`(?:\\`|[^`])*`)(.*)$/s))) {
+        if (++index >= lines.length) fail(startLine, key, 'unterminated quoted value');
+        value += `\n${lines[index]}`;
+      }
+      if (!/^[ \t]*(?:#.*)?$/.test(quoted[2])) {
+        fail(index + 1, key, 'expected end of line or # comment after the closing quote');
+      }
+    }
+
+    // Parse data only: never source the file, expand variables, or populate process.env.
+    const record = parseDotenv(`VALUE=${value}`);
+    Object.defineProperty(parsed, key, {
+      value: record.VALUE, enumerable: true, writable: true, configurable: true,
+    });
+    previousKey = key;
+    previousLine = startLine;
   }
 
   return parsed;
@@ -59,7 +83,7 @@ const loadEnvFiles = (cwd = process.cwd()) => {
   for (const filename of ['.env', '.env.local']) {
     const filePath = path.join(cwd, filename);
     if (fs.existsSync(filePath)) {
-      Object.assign(env, parseEnvContent(fs.readFileSync(filePath, 'utf8')));
+      Object.assign(env, parseEnvContent(fs.readFileSync(filePath, 'utf8'), { filename }));
     }
   }
   return env;
@@ -241,20 +265,45 @@ const runAction = (action, { cwd = process.cwd(), sql } = {}) => {
   const plan = buildCommandPlan(action, env, { sql });
   console.log(plan.safeSummary.join('\n'));
 
-  const result = spawnSync(plan.command, plan.args, {
-    cwd,
-    env: {
-      ...process.env,
-      ...plan.env,
-    },
-    stdio: 'inherit',
-  });
-
-  if (result.error) {
-    throw result.error;
+  const isSupabase = plan.command === 'supabase';
+  const accessToken = process.env.SUPABASE_ACCESS_TOKEN;
+  const childEnv = { ...process.env, ...plan.env };
+  if (isSupabase) {
+    console.log(accessToken
+      ? 'auth_path=environment-token (inherited SUPABASE_ACCESS_TOKEN; overrides stored login)'
+      : 'auth_path=keychain (stored CLI login; may be unavailable non-interactively)');
+    // An empty inherited value must not mask stored CLI credentials.
+    if (!accessToken) delete childEnv.SUPABASE_ACCESS_TOKEN;
   }
 
-  return result.status ?? 0;
+  const result = spawnSync(plan.command, plan.args, {
+    cwd,
+    env: childEnv,
+    // Inspect CLI diagnostics before displaying them. Expo keeps its interactive streams.
+    stdio: isSupabase ? ['inherit', 'pipe', 'pipe'] : 'inherit',
+    ...(isSupabase ? { encoding: 'utf8', maxBuffer: 16 * 1024 * 1024 } : {}),
+  });
+
+  const redact = (text) => [accessToken, env.SUPABASE_DB_PASSWORD_SQLITE, env.SUPABASE_PUBLISHABLE_KEY_SQLITE]
+    .filter(Boolean).reduce((safe, secret) => safe.split(secret).join('[redacted]'), String(text || ''));
+  if (isSupabase) {
+    const diagnostics = `${result.stdout || ''}\n${result.stderr || ''}\n${result.error?.message || ''}`;
+    if (/\bUnauthorized\b|\b401\b/i.test(diagnostics) && (result.status !== 0 || result.error)) {
+      throw new Error('Supabase CLI Unauthorized (401). '
+        + (accessToken
+          ? 'The inherited environment token overrides stored login. Run unset SUPABASE_ACCESS_TOKEN to use keychain auth, or refresh SUPABASE_ACCESS_TOKEN with a valid access token. '
+          : 'The keychain/stored CLI login was rejected or is unavailable in this non-interactive shell. ')
+        + 'Run an interactive supabase login with SUPABASE_ACCESS_TOKEN unset, then retry in that same terminal; for non-interactive use, supply a refreshed SUPABASE_ACCESS_TOKEN. No automatic retry was attempted.');
+    }
+    if (result.stdout) process.stdout.write(redact(result.stdout));
+    if (result.stderr) process.stderr.write(redact(result.stderr));
+  }
+
+  if (result.error) {
+    throw isSupabase ? new Error(redact(result.error.message)) : result.error;
+  }
+
+  return result.status ?? 1;
 };
 
 if (require.main === module) {
