@@ -196,6 +196,8 @@ describe('sqlite staging command execution (offline)', () => {
   let output;
   beforeEach(() => {
     cwd = fs.mkdtempSync(path.join(os.tmpdir(), 'sqlite-staging-test-'));
+    fs.mkdirSync(path.join(cwd, 'supabase'));
+    fs.writeFileSync(path.join(cwd, 'supabase', 'checkout-marker'), 'preserve-checkout');
     fs.writeFileSync(path.join(cwd, '.env.local'), [
       'SUPABASE_PROJECT_ID_SQLITE=segygjzpujphwvrubusm',
       'SUPABASE_PROJECT_URL_SQLITE=https://segygjzpujphwvrubusm.supabase.co',
@@ -220,6 +222,147 @@ describe('sqlite staging command execution (offline)', () => {
     fs.rmSync(cwd, { recursive: true, force: true });
   });
 
+  test.each(['link', 'migration-list', 'db-push-dry-run', 'db-push', 'advisors', 'query'])(
+    '%s isolates CLI cwd to one checkout symlink and removes only the temporary directory', (action) => {
+      let cliCwd;
+      spawnSync.mockImplementation((command, args, options) => {
+        cliCwd = options.cwd;
+        expect(command).toBe('supabase');
+        expect(cliCwd).not.toBe(cwd);
+        expect(fs.realpathSync(path.dirname(cliCwd))).toBe(fs.realpathSync(os.tmpdir()));
+        expect(fs.readdirSync(cliCwd)).toEqual(['supabase']);
+        const link = path.join(cliCwd, 'supabase');
+        expect(fs.lstatSync(link).isSymbolicLink()).toBe(true);
+        expect(fs.realpathSync(link)).toBe(fs.realpathSync(path.join(cwd, 'supabase')));
+        expect(output).toContain('cli_cwd=isolated (symlink supabase -> <repo>/supabase; no env files)');
+        return { status: 0, stdout: '', stderr: '' };
+      });
+      expect(runAction(action, { cwd, sql: 'select 1' })).toBe(0);
+      expect(fs.existsSync(cliCwd)).toBe(false);
+      expect(fs.readFileSync(path.join(cwd, 'supabase', 'checkout-marker'), 'utf8')).toBe('preserve-checkout');
+    }
+  );
+
+  test.each(['link', 'migration-list', 'db-push-dry-run', 'db-push', 'advisors', 'query'])(
+    '%s passes exactly the allowed inherited variables and staging mappings', (action) => {
+      const allowed = {
+        PATH: '/usr/bin', HOME: '/fixture/home', USER: 'fixture-user', LOGNAME: 'fixture-user',
+        SHELL: '/bin/sh', TMPDIR: os.tmpdir(), TERM: 'xterm', LANG: 'en_US.UTF-8',
+        LC_ALL: '', LC_CTYPE: 'UTF-8', HTTP_PROXY: 'http://fixture-proxy',
+        HTTPS_PROXY: 'http://fixture-proxy', NO_PROXY: 'localhost',
+        http_proxy: 'http://fixture-proxy', https_proxy: 'http://fixture-proxy',
+        no_proxy: 'localhost', CI: 'true', SUPABASE_ACCESS_TOKEN: 'fixture-token',
+      };
+      const sdkRoot = path.join(cwd, 'android-sdk');
+      fs.mkdirSync(path.join(sdkRoot, 'emulator'), { recursive: true });
+      fs.mkdirSync(path.join(sdkRoot, 'platform-tools'));
+      fs.writeFileSync(path.join(sdkRoot, 'emulator', 'emulator'), 'fixture');
+      fs.writeFileSync(path.join(sdkRoot, 'platform-tools', 'adb'), 'fixture');
+      process.env = {
+        ...allowed,
+        SUPABASE_PROJECT_ID: 'jcqrlwetutnpuchjoyyd', SUPABASE_PROJECT_REF: 'fixture-ref',
+        SUPABASE_DB_URL: 'fixture-db-url', SUPABASE_URL: 'fixture-url',
+        SUPABASE_ANON_KEY: 'fixture-anon', SUPABASE_SERVICE_ROLE_KEY: 'fixture-service-role',
+        SUPABASE_SECRET_KEY: 'fixture-secret', SUPABASE_ENV: 'fixture-env',
+        SUPABASE_WORKDIR: '/fixture/wrong-checkout', SUPABASE_DB_PASSWORD: 'fixture-wrong-password',
+        ANDROID_HOME: sdkRoot, ANDROID_SDK_ROOT: sdkRoot,
+        NODE_OPTIONS: '--fixture-option', UNRELATED_VARIABLE: 'fixture-unrelated',
+      };
+      fs.appendFileSync(path.join(cwd, '.env.local'), '\nSUPABASE_PROJECT_ID=jcqrlwetutnpuchjoyyd');
+      spawnSync.mockImplementation((command, args, options) => {
+        expect(options.env).toEqual({
+          ...allowed,
+          SUPABASE_DB_PASSWORD: 'fixture-db-password',
+          EXPO_PUBLIC_SUPABASE_TARGET: 'sqlite-staging',
+          EXPO_PUBLIC_SUPABASE_PROJECT_ID: 'segygjzpujphwvrubusm',
+          EXPO_PUBLIC_SUPABASE_URL: 'https://segygjzpujphwvrubusm.supabase.co',
+          EXPO_PUBLIC_SUPABASE_ANON_KEY: 'fixture-publishable-key',
+        });
+        expect(output).toContain('cli_env=allowlist (inherited SUPABASE_* dropped except SUPABASE_ACCESS_TOKEN)');
+        return { status: 0, stdout: '', stderr: '' };
+      });
+      expect(runAction(action, { cwd, sql: 'select 1' })).toBe(0);
+      expect(process.env.SUPABASE_PROJECT_ID).toBe('jcqrlwetutnpuchjoyyd');
+      expect(output.join('\n')).not.toMatch(/fixture-token|fixture-secret|fixture-proxy|fixture-user|fixture-db-password/);
+    }
+  );
+
+  test.each(['link', 'migration-list', 'db-push-dry-run', 'db-push', 'advisors', 'query'])(
+    '%s cleans up its isolated cwd even when spawn throws', (action) => {
+      let cliCwd;
+      spawnSync.mockImplementation((command, args, options) => {
+        cliCwd = options.cwd;
+        expect(cliCwd).not.toBe(cwd);
+        expect(fs.readdirSync(cliCwd)).toEqual(['supabase']);
+        expect(fs.lstatSync(path.join(cliCwd, 'supabase')).isSymbolicLink()).toBe(true);
+        expect(fs.realpathSync(path.join(cliCwd, 'supabase'))).toBe(fs.realpathSync(path.join(cwd, 'supabase')));
+        throw new Error('fixture spawn failure');
+      });
+      expect(() => runAction(action, { cwd, sql: 'select 1' })).toThrow('fixture spawn failure');
+      expect(fs.existsSync(cliCwd)).toBe(false);
+      expect(fs.readFileSync(path.join(cwd, 'supabase', 'checkout-marker'), 'utf8')).toBe('preserve-checkout');
+    }
+  );
+
+  test.each(['link', 'migration-list', 'db-push-dry-run', 'db-push', 'advisors', 'query'])(
+    '%s omits empty tokens and missing allowlisted variables', (action) => {
+      process.env.SUPABASE_ACCESS_TOKEN = '';
+      expect(runAction(action, { cwd, sql: 'select 1' })).toBe(0);
+      expect(spawnSync.mock.calls[0][2].env).toEqual({
+        PATH: '/usr/bin', SUPABASE_DB_PASSWORD: 'fixture-db-password',
+        EXPO_PUBLIC_SUPABASE_TARGET: 'sqlite-staging',
+        EXPO_PUBLIC_SUPABASE_PROJECT_ID: 'segygjzpujphwvrubusm',
+        EXPO_PUBLIC_SUPABASE_URL: 'https://segygjzpujphwvrubusm.supabase.co',
+        EXPO_PUBLIC_SUPABASE_ANON_KEY: 'fixture-publishable-key',
+      });
+    }
+  );
+
+  test('each invocation creates a fresh temporary directory', () => {
+    expect(runAction('migration-list', { cwd })).toBe(0);
+    expect(runAction('migration-list', { cwd })).toBe(0);
+    const directories = spawnSync.mock.calls.map((call) => call[2].cwd);
+    expect(new Set(directories).size).toBe(2);
+    directories.forEach((directory) => expect(fs.existsSync(directory)).toBe(false));
+  });
+
+  test('removes the temporary directory if symlink creation fails before spawn', () => {
+    const mkdir = jest.spyOn(fs, 'mkdtempSync');
+    jest.spyOn(fs, 'symlinkSync').mockImplementation(() => { throw new Error('fixture symlink failure'); });
+    expect(() => runAction('migration-list', { cwd })).toThrow('fixture symlink failure');
+    expect(spawnSync).not.toHaveBeenCalled();
+    expect(mkdir).toHaveBeenCalledTimes(1);
+    expect(fs.existsSync(mkdir.mock.results[0].value)).toBe(false);
+    expect(fs.readFileSync(path.join(cwd, 'supabase', 'checkout-marker'), 'utf8')).toBe('preserve-checkout');
+  });
+
+  test('a relative invoking cwd still links to the correct checkout', () => {
+    spawnSync.mockImplementation((command, args, options) => {
+      expect(fs.realpathSync(path.join(options.cwd, 'supabase'))).toBe(fs.realpathSync(path.join(cwd, 'supabase')));
+      return { status: 0, stdout: '', stderr: '' };
+    });
+    expect(runAction('migration-list', { cwd: path.relative(process.cwd(), cwd) })).toBe(0);
+    expect(fs.existsSync(spawnSync.mock.calls[0][2].cwd)).toBe(false);
+  });
+
+  test.each(['start', 'ios', 'android'])('%s preserves the invoking cwd and inherited Expo environment', (action) => {
+    process.env.SUPABASE_PROJECT_ID = 'fixture-inherited-project';
+    process.env.SUPABASE_SECRET_KEY = 'fixture-inherited-secret';
+    process.env.SUPABASE_ACCESS_TOKEN = '';
+    process.env.EXPO_CUSTOM_SETTING = 'fixture-expo-setting';
+    const { PATH: inheritedPath, ...inheritedEnv } = process.env;
+    expect(runAction(action, { cwd })).toBe(0);
+    expect(spawnSync.mock.calls[0][2]).toMatchObject({
+      cwd, stdio: 'inherit', env: {
+        ...inheritedEnv, EXPO_PUBLIC_SUPABASE_TARGET: 'sqlite-staging',
+        SUPABASE_DB_PASSWORD: 'fixture-db-password',
+      },
+    });
+    // Existing Expo SDK setup may prepend tool paths, but must retain the inherited PATH.
+    expect(spawnSync.mock.calls[0][2].env.PATH.split(path.delimiter)).toContain(inheritedPath);
+    expect(output.join('\n')).not.toMatch(/cli_cwd=|cli_env=/);
+  });
+
   test('announces inherited token auth before link and explains Unauthorized recovery', () => {
     process.env.SUPABASE_ACCESS_TOKEN = 'fixture-stale-token';
     spawnSync.mockImplementation(() => {
@@ -242,6 +385,7 @@ describe('sqlite staging command execution (offline)', () => {
       });
       expect(() => runAction(action, { cwd, sql: 'select 1' })).toThrow(/Unauthorized.*unset SUPABASE_ACCESS_TOKEN/s);
       expect(spawnSync).toHaveBeenCalledTimes(1);
+      expect(fs.existsSync(spawnSync.mock.calls[0][2].cwd)).toBe(false);
       expect(spawnSync.mock.calls[0][2].env).toMatchObject({
         SUPABASE_ACCESS_TOKEN: 'fixture-stale-token', SUPABASE_DB_PASSWORD: 'fixture-db-password',
       });
@@ -288,6 +432,7 @@ describe('sqlite staging command execution (offline)', () => {
   test('a terminated child cannot be reported as success', () => {
     spawnSync.mockReturnValue({ status: null, signal: 'SIGTERM' });
     expect(runAction('migration-list', { cwd })).toBe(1);
+    expect(fs.existsSync(spawnSync.mock.calls[0][2].cwd)).toBe(false);
   });
 
   test.each(['link', 'migration-list', 'db-push-dry-run', 'db-push', 'advisors', 'query'])(
@@ -318,6 +463,7 @@ describe('sqlite staging command execution (offline)', () => {
     process.env.SUPABASE_ACCESS_TOKEN = 'fixture-stale-token';
     spawnSync.mockReturnValue({ status: null, error: new Error('spawn ENOENT fixture-stale-token') });
     expect(() => runAction('link', { cwd })).toThrow('spawn ENOENT [redacted]');
+    expect(fs.existsSync(spawnSync.mock.calls[0][2].cwd)).toBe(false);
   });
 
   test('check validates configuration without launching any process or announcing CLI auth', () => {

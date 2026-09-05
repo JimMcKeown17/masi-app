@@ -10,6 +10,11 @@ const { KNOWN_SUPABASE_PROJECTS } = require('../config/supabaseProjectConfig');
 const SQLITE_PROJECT_ID = KNOWN_SUPABASE_PROJECTS['sqlite-staging'];
 const SQLITE_STAGING_METRO_PORT = '8082';
 
+const SUPABASE_INHERITED_ENV_ALLOWLIST = [
+  'PATH', 'HOME', 'USER', 'LOGNAME', 'SHELL', 'TMPDIR', 'TERM', 'LANG', 'LC_ALL', 'LC_CTYPE',
+  'HTTP_PROXY', 'HTTPS_PROXY', 'NO_PROXY', 'http_proxy', 'https_proxy', 'no_proxy', 'CI',
+];
+
 const REQUIRED_ENV = [
   'SUPABASE_PROJECT_ID_SQLITE',
   'SUPABASE_PROJECT_URL_SQLITE',
@@ -151,12 +156,14 @@ const buildCommandEnv = (env) => ({
   EXPO_PUBLIC_SUPABASE_PROJECT_ID: env.SUPABASE_PROJECT_ID_SQLITE,
   EXPO_PUBLIC_SUPABASE_URL: env.SUPABASE_PROJECT_URL_SQLITE,
   EXPO_PUBLIC_SUPABASE_ANON_KEY: env.SUPABASE_PUBLISHABLE_KEY_SQLITE,
-  ...buildAndroidSdkEnv(),
 });
 
 const buildCommandPlan = (action, env, options = {}) => {
   validateSqliteEnv(env);
   const commandEnv = buildCommandEnv(env);
+  if (['start', 'ios', 'android'].includes(action)) {
+    Object.assign(commandEnv, buildAndroidSdkEnv());
+  }
   const safeSummary = [
     `target=sqlite-staging`,
     `project_ref=${env.SUPABASE_PROJECT_ID_SQLITE}`,
@@ -267,8 +274,16 @@ const runAction = (action, { cwd = process.cwd(), sql } = {}) => {
 
   const isSupabase = plan.command === 'supabase';
   const accessToken = process.env.SUPABASE_ACCESS_TOKEN;
-  const childEnv = { ...process.env, ...plan.env };
+  const childEnv = isSupabase ? {
+    ...Object.fromEntries(SUPABASE_INHERITED_ENV_ALLOWLIST
+      .filter((key) => process.env[key] !== undefined)
+      .map((key) => [key, process.env[key]])),
+    ...(accessToken ? { SUPABASE_ACCESS_TOKEN: accessToken } : {}),
+    ...plan.env,
+  } : { ...process.env, ...plan.env };
   if (isSupabase) {
+    console.log('cli_cwd=isolated (symlink supabase -> <repo>/supabase; no env files)');
+    console.log('cli_env=allowlist (inherited SUPABASE_* dropped except SUPABASE_ACCESS_TOKEN)');
     console.log(accessToken
       ? 'auth_path=environment-token (inherited SUPABASE_ACCESS_TOKEN; overrides stored login)'
       : 'auth_path=keychain (stored CLI login; may be unavailable non-interactively)');
@@ -276,13 +291,26 @@ const runAction = (action, { cwd = process.cwd(), sql } = {}) => {
     if (!accessToken) delete childEnv.SUPABASE_ACCESS_TOKEN;
   }
 
-  const result = spawnSync(plan.command, plan.args, {
-    cwd,
-    env: childEnv,
-    // Inspect CLI diagnostics before displaying them. Expo keeps its interactive streams.
-    stdio: isSupabase ? ['inherit', 'pipe', 'pipe'] : 'inherit',
-    ...(isSupabase ? { encoding: 'utf8', maxBuffer: 16 * 1024 * 1024 } : {}),
-  });
+  let cliCwd;
+  let result;
+  try {
+    if (isSupabase) {
+      // The CLI loads dotenv files from its cwd even when --linked/--workdir is used.
+      // Expose only the invoking checkout's Supabase project, never its root env files.
+      cliCwd = fs.mkdtempSync(path.join(os.tmpdir(), 'masi-sqlite-staging-'));
+      fs.symlinkSync(path.resolve(cwd, 'supabase'), path.join(cliCwd, 'supabase'), 'dir');
+    }
+    result = spawnSync(plan.command, plan.args, {
+      cwd: cliCwd || cwd,
+      env: childEnv,
+      // Inspect CLI diagnostics before displaying them. Expo keeps its interactive streams.
+      stdio: isSupabase ? ['inherit', 'pipe', 'pipe'] : 'inherit',
+      ...(isSupabase ? { encoding: 'utf8', maxBuffer: 16 * 1024 * 1024 } : {}),
+    });
+  } finally {
+    // rmSync removes the symlink itself; it does not traverse its checkout target.
+    if (cliCwd) fs.rmSync(cliCwd, { recursive: true, force: true });
+  }
 
   const redact = (text) => [accessToken, env.SUPABASE_DB_PASSWORD_SQLITE, env.SUPABASE_PUBLISHABLE_KEY_SQLITE]
     .filter(Boolean).reduce((safe, secret) => safe.split(secret).join('[redacted]'), String(text || ''));
