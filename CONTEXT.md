@@ -65,6 +65,10 @@ _Avoid_: treating class assignment as "the class I currently deliver in" — it 
 The grant naming the **subset of children an EA runs the intervention with** (e.g. the 12 Core Literacy children in 6 pairs). It defines the EA's **delivery scope** and drives "My Children," session attendee pickers, and daily session targets. Delivery scope is a subset of assessment scope: an EA delivers to some of the children in a class they assess.
 _Avoid_: using the delivery roster ("My Children") as if it were the class roster — the class is wider.
 
+**History reference child**:
+A child record a phone holds only because the child attended a session the EA is authorized to read; it carries identity and display name and nothing else.
+_Avoid_: treating a history reference child as roster, enrollment, assessment scope, or write authority; "phantom child", "stub child", "ghost row".
+
 **Assessment scope vs delivery scope** (the two-tier access model):
 An EA holds **one class assignment per class** and, within it, a **delivery assignment over a subset**. Assessment/replacement access is class-scoped; delivery access is subset-scoped. When two or more EAs share a class and split the assessing between them ("each does half a class"), that split is **soft coordination the app permits but never enforces** — both EAs are authorized over the whole shared class, and the app must not encode the labour split as a permission boundary. See ADR-0005.
 
@@ -121,6 +125,7 @@ _Avoid_: conflating **capture mode** (which UI mechanic) with **marking mode** (
 - A **Child** has many **Programme Enrollments** (a child may be in Core Literacy *and* Numeracy at once).
 - A **Session** belongs to exactly one **Programme** and optionally one **Class**.
 - An **EA** holds a **Class assignment** (assessment scope) and, within it, a **Delivery assignment** over a subset of that class (delivery scope). A **Class** may have several active **Class assignments** — one per co-EA sharing it.
+- A **Session** hydrated onto a phone may carry **History reference children** for coattendees outside the EA's scopes; the reference grants neither **Delivery** nor **Assessment scope** and is never uploaded.
 
 ## Example dialogue
 
