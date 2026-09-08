@@ -155,6 +155,14 @@ checks are recorded in the build log. The remaining checklist is still substanti
 
 **P0. First implementation slices: sessions/attendees, then assessments/items.**
 
+**Active spec (sessions/attendees):**
+[`docs/superpowers/specs/2026-09-08-cap-004-session-history-hydration-design.md`](../docs/superpowers/specs/2026-09-08-cap-004-session-history-hydration-design.md),
+design approved 2026-09-08 with [ADR-0006](../docs/adr/0006-session-history-converges-on-server-stamped-family-timestamp.md).
+Locked there: current-academic-year window; coattendees outside scope become **history reference
+children**; convergence is a delta on the parent session's server-stamped `updated_at`; the
+descending session-date RPC is dropped. Agent handoff:
+[`docs/agent-context/cap-004-session-history-hydration.md`](../docs/agent-context/cap-004-session-history-hydration.md).
+
 On 2026-07-23, a fresh TestFlight 1.3.0 installation showed no historical sessions or assessments
 even though the correct SQLite backend then held 20 sessions, 40 attendees, 22 assessments, and
 604 assessment items for that EA. Those are dated diagnosis figures, not the current total estate;
