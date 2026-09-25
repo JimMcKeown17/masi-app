@@ -77,8 +77,10 @@ shape.
 - [x] Inventory current Masi branches, EAS build artifacts, runtime/channel/update identity, and
   source release profiles. App Store Connect, Play delivery, and installed devices remain open.
 - [ ] Verify which Supabase project every current app profile, local environment, script, and
-  connected backend targets. The forward SQLite project is verified. Jim authorized a read-only,
-  counts-only probe of the legacy project on 2026-09-23; it has not run yet.
+  connected backend targets. The forward SQLite project is verified. The legacy counts-only probe
+  ran on 2026-09-23 (build log): session capture stopped by 26 Aug, but **legacy clock-ins
+  continue** (4 since 22 Sep). Jim to identify who is still clocking in through an old build, and
+  decide their cutover and field communication before the 1.4.0 pilot.
 - [x] Probe the live SQLite-backend schema, migration ledger, RLS, functions, indexes, row counts,
   and unclassified forward data before schema-facing design. The data appears to be test/pilot
   data. Disposition decided 2026-09-23: wipe it after the assessment-history slice passes (below).
@@ -120,8 +122,8 @@ shape.
   may not be called “fresh” until the resulting database identity and contents prove it.
 - [ ] Prove `masi-app-sqlite` is healthy after its restore onto the Pro plan. Jim moved the project
   to Pro on 2026-09-23 so it cannot auto-pause (it was found paused on 2026-09-04 and again on
-  2026-09-23). The dashboard shows Nano compute; confirm the intended compute size. Run the
-  read-only schema probe against the 2026-09-04 baseline. While restoring on 2026-09-04 it
+  2026-09-23). The dashboard shows Nano compute; confirm the intended compute size. The
+  post-restore read-only probe matched the 2026-09-04 baseline on 2026-09-23 (build log). While restoring on 2026-09-04 it
   accepted connections with an empty `public` schema for roughly four minutes, so pilot
   automation, migration scripts, and support tooling must treat an empty or missing migration
   ledger as "restoring", never as a clean slate.

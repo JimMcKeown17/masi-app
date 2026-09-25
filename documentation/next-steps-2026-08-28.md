@@ -12,7 +12,9 @@ duplicate, or leak an EA's work, and that we can see and fix it when something d
 
 ## Where we are today
 
-- Nobody is using the app right now. Staff want to start soon. This is the cheapest possible
+- Nobody is capturing sessions right now. A counts-only check of the old backend on 2026-09-23
+  found no new sessions since 26 August, **but someone is still clocking in and out through an old
+  app build** (four clock-ins since 22 September). Staff want to start soon. This is the cheapest possible
   moment to fix deep things, because no real data is on any phone yet.
 - The app **uploads** work to the server but never **downloads** past work back. A new phone
   starts empty even though the server has everything.
