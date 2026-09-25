@@ -1,7 +1,9 @@
 # CAP-004 Design Spec: Session and Attendee History Hydration
 
-**Status:** design approved by Jim on 2026-09-08 through a grill-with-docs session; awaiting Jim's
-review of this document before an implementation plan is written. Companion decision record:
+**Status:** design approved by Jim on 2026-09-08 through a grill-with-docs session; document
+walked through with Jim and approved on 2026-09-25. Plan-time corrections are recorded in §12 and
+take precedence over the sections they amend. Implementation plan:
+[`2026-09-25-cap-004-session-history-hydration.md`](../plans/2026-09-25-cap-004-session-history-hydration.md). Companion decision record:
 [ADR-0006](../../adr/0006-session-history-converges-on-server-stamped-family-timestamp.md).
 
 **Owner of build:** Codex, through the plugin, task by task from the implementation plan that
@@ -308,3 +310,40 @@ any other table; newest-first ordering during first hydration; activating `sessi
 - Measure and record the attendee-keyset and delivery-arm index decisions.
 - Decide where the run is orchestrated (extension of `OfflineContext`'s domain-pull trigger vs a
   small `SessionHistoryContext`) so screens can re-read SQLite when a page lands.
+
+## 12. Plan-time corrections (2026-09-25)
+
+Found while writing the implementation plan against current code. Each supersedes the named text.
+
+1. **Server stamping on insert (amends §4.1).** `sessions_set_updated_at` and
+   `session_attendees_set_updated_at` run `before update` only
+   (`20260521115412_masi_clean_base_schema.sql`), and the push payload carries the phone's
+   `updated_at` (`src/services/offlineSync.js` `SERVER_COLUMNS`). A fresh insert therefore keeps
+   the phone clock, so a phone with a wrong clock could place a new session behind another
+   device's cursor. The CAP-004 migration recreates both triggers as `before insert or update`.
+2. **Cursor scope is per user and Programme (amends §5.1).** SQLite is one shared database for
+   every EA who signs in on the phone (`src/db/client.js`), so the scope is
+   `session_history_pull:<userId>:<programmeId>`.
+3. **No "incomplete family" stop (replaces §5.4 and step 4c of §5.2).** The outbox pushes a parent
+   before its attendees, so a server parent legitimately has zero attendees for as long as the
+   capturing phone is offline. Stopping the cursor there would stall every later family behind
+   another EA's connectivity. Each returned parent is persisted with whatever attendees the
+   attendee RPC returns, and the cursor advances. Late attendees re-surface the family through the
+   §4.1 family timestamp. The attendee RPC is all-or-nothing per session (`can_read_session`), so
+   a partial attendee set cannot occur. Only an attendee *request* failure abandons the page.
+4. **Missing local references (amends §6.2).** A hydrated session's `class_id` or an attendee's
+   `group_id` can name a class or group this phone never pulled (for example the previous EA's
+   group). SQLite enforces those foreign keys, so the page would fail on every run. Such
+   references are stored as `null`, the pattern `childrenRepository.saveServerChildRow` already
+   uses for a missing class.
+5. **Overlap mechanism (settles §5.2 step 3 and §11).** `get_delivery_history_page` takes
+   `p_overlap_seconds` (0..600), applied as `p_after_updated_at - make_interval(secs => ...)`.
+   The client passes 120 only on the first page of a run that starts from a completed cursor, so
+   the client performs no timestamp arithmetic and no page after the first can rewind (a rewind
+   on every page would never terminate).
+6. **Orchestration (settles §11).** The run starts from `ChildrenContext` after the roster and
+   reference pulls, is single-flight per user, and publishes progress through a small in-memory
+   status store read with `useSyncExternalStore`; no new React provider.
+7. **Reader intent (settles §6.4, Jim 2026-09-25).** History, Home, the Sessions tab, and the
+   daily goal stay "sessions I recorded". The session-count ranking counts every session each of
+   the EA's current children attended, whoever recorded it.

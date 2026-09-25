@@ -41,3 +41,11 @@ the 2026-09-04 hosted gate is dropped because no phone ever called it.
 - Revisit when a session edit UI ships (confirm attendee edits surface), when an EA's yearly volume
   exceeds a handful of 200-row pages, or if a less-trusted reader class appears and the aggregate
   boundary itself must change.
+
+## Follow-up — 2026-09-25
+
+The premise that the server "already forces `updated_at` to its own clock on every write" was true
+for updates only; inserts kept the phone-sent value. The CAP-004 migration makes both session
+triggers `before insert or update`, which restores the premise. The overlap rewind is performed
+by the server through `p_overlap_seconds` on the first page of a run, not by the client. See
+spec §12.
