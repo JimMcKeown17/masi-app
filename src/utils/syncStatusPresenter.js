@@ -92,3 +92,14 @@ export const describeReconcileBreakerNote = ({ scope } = {}) => ({
   actionLabel: 'Apply',
   accessibilityLabel: 'Large roster change from Head Office is waiting. Apply',
 });
+
+export const describeHistoryState = ({ running, pullState } = {}) => {
+  if (running) return { label: 'Downloading', detail: 'Downloading history from Head Office…' };
+  if (!pullState) return { label: 'Not downloaded yet', detail: null };
+  const cursor = (() => { try { return JSON.parse(pullState.cursor || '{}'); } catch { return {}; } })();
+  const failedSinceSuccess = Boolean(cursor.lastFailureAt);
+  if (cursor.complete && pullState.lastPulledAt && !failedSinceSuccess) return { label: 'Up to date', detail: null };
+  const since = cursor.lastFailureAt || pullState.updatedAt || pullState.lastPulledAt;
+  const time = since ? new Date(since).toLocaleString([], { day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' }) : 'the last attempt';
+  return { label: `Incomplete since ${time}`, detail: 'History not fully downloaded yet' };
+};

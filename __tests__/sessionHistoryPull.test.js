@@ -403,8 +403,7 @@ describe('runSessionHistoryPull', () => {
     expect(await cursorOf()).toBeNull();
   });
 
-  // Task 6 supplies the presenter and un-skips these two UI completeness checks.
-  test.skip('a budget stop during a due re-walk stays incomplete and resumes', async () => {
+  test('a budget stop during a due re-walk stays incomplete and resumes', async () => {
     const { describeHistoryState } = require('../src/utils/syncStatusPresenter');
     const parents = Array.from({ length: 450 }, (_, i) => parent(i + 1));
     await runSessionHistoryPull({ userId: 'user-1', deps: deps({ client: fakeServer({ parents }).client }) });
@@ -426,7 +425,7 @@ describe('runSessionHistoryPull', () => {
     expect(await cursorOf()).toMatchObject({ complete: true, rescanAfter: null, rescanChildIds: ['child-new'] });
   });
 
-  test.skip('a budget stop before a due re-walk starts also stays incomplete', async () => {
+  test('a budget stop before a due re-walk starts also stays incomplete', async () => {
     await runSessionHistoryPull({ userId: 'user-1', deps: deps({ client: fakeServer({ parents: [parent(1)] }).client }) });
     await addDeliveryChild('child-new');
     let saved = 0;

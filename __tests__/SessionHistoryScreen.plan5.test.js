@@ -1,11 +1,17 @@
 import React from 'react';
-import { render, waitFor } from '@testing-library/react-native';
+import { render, waitFor, act } from '@testing-library/react-native';
+import { FlatList } from 'react-native';
+import { useSessionHistoryStatus, getSessionHistoryPullState, startSessionHistoryPull } from '../src/services/sessionHistoryStatus';
 import SessionHistoryScreen from '../src/screens/sessions/SessionHistoryScreen';
 import { useAuth } from '../src/context/AuthContext';
 import { useOffline } from '../src/context/OfflineContext';
 import { useLookupsContext } from '../src/context/LookupsContext';
 import { sessionsRepository } from '../src/db/repositories/sessionsRepository';
 import { supabase } from '../src/services/supabaseClient';
+
+jest.mock('../src/services/sessionHistoryStatus', () => ({
+  useSessionHistoryStatus: jest.fn(), getSessionHistoryPullState: jest.fn(), startSessionHistoryPull: jest.fn(),
+}));
 
 jest.mock('@react-navigation/native', () => ({
   useFocusEffect: (callback) => {
@@ -48,6 +54,8 @@ describe('SessionHistoryScreen Plan 5 behavior', () => {
     jest.setSystemTime(new Date('2026-05-21T12:00:00.000Z'));
 
     useAuth.mockReturnValue({ user: { id: 'user-1' } });
+    useSessionHistoryStatus.mockReturnValue({ running: false, pageVersion: 0, runVersion: 0, lastResult: null });
+    getSessionHistoryPullState.mockResolvedValue(null);
     useOffline.mockReturnValue({ isOnline: true });
     useLookupsContext.mockReturnValue({
       jobTitles: [{ id: 'job-title-1', name: 'Literacy session' }],
@@ -99,5 +107,37 @@ describe('SessionHistoryScreen Plan 5 behavior', () => {
       order: 'desc',
     });
     expect(supabase.from).not.toHaveBeenCalled();
+  });
+
+  test('shows the downloading line', async () => {
+    useSessionHistoryStatus.mockReturnValue({ running: true, pageVersion: 0, runVersion: 0 });
+    const screen = render(<SessionHistoryScreen />);
+    await waitFor(() => expect(screen.getByText('Downloading history from Head Office…')).toBeTruthy());
+  });
+
+  test('shows the incomplete line', async () => {
+    getSessionHistoryPullState.mockResolvedValue({ cursor: '{"complete":false}', lastPulledAt: null });
+    const screen = render(<SessionHistoryScreen />);
+    await waitFor(() => expect(screen.getByText('History not fully downloaded yet')).toBeTruthy());
+  });
+
+  test('pull-to-refresh forces a history run for the signed-in user', async () => {
+    const screen = render(<SessionHistoryScreen />);
+    await waitFor(() => expect(screen.getByText('Literacy session')).toBeTruthy());
+    const control = screen.UNSAFE_getByType(FlatList).props.refreshControl;
+    expect(control).toBeDefined();
+    act(() => { control.props.onRefresh(); });
+    expect(startSessionHistoryPull).toHaveBeenCalledWith({ userId: 'user-1', force: true });
+  });
+
+  test.each(['pageVersion', 'runVersion'])('%s reloads SQLite sessions and persisted history status', async (version) => {
+    const screen = render(<SessionHistoryScreen />);
+    await waitFor(() => expect(screen.getByText('Literacy session')).toBeTruthy());
+    getSessionHistoryPullState.mockResolvedValue({ cursor: '{"complete":false}', lastPulledAt: null });
+    useSessionHistoryStatus.mockReturnValue({ running: false, pageVersion: 0, runVersion: 0, [version]: 1 });
+    screen.rerender(<SessionHistoryScreen />);
+    await waitFor(() => expect(screen.getByText('History not fully downloaded yet')).toBeTruthy());
+    expect(sessionsRepository.getSessions).toHaveBeenCalledTimes(2);
+    expect(getSessionHistoryPullState).toHaveBeenCalledTimes(2);
   });
 });
