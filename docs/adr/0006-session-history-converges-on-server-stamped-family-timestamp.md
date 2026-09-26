@@ -54,7 +54,8 @@ spec §12.
 
 The delta alone cannot converge. A new delivery assignment authorizes older sessions behind the
 cursor, and `now()` is transaction-start time, so a slow write can commit behind it. Jim accepted a
-**daily re-walk of the academic year**, also triggered when the phone gains a delivery child, as the
-convergence backstop. The delta keeps the common case to one small request. The re-walk bounds
-correctness to about a day, at the cost of one year of one EA's families per day. Revisit if yearly
+**re-walk of the academic year**, triggered immediately when the phone gains a delivery child
+(the common case, a handover) and weekly as a backstop (6–8 days, randomized per phone). The delta
+keeps the common case to one small request. The backstop bounds the rare commit-behind-cursor case
+to about a week, at the cost of one year of one EA's families per week. Revisit if yearly
 volume per EA grows past a handful of pages. See spec §12 items 8–10.

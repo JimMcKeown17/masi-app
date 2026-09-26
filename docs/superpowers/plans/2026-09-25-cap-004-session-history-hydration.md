@@ -14,7 +14,7 @@ half-writes a session family.
 the whole family (insert and update stamping plus an attendee-to-parent touch trigger). It also
 replaces the unused date-ordered page RPC with an ascending `(updated_at, id)` delta RPC plus an
 attendee page RPC that returns display names for coattendees. On the phone:
-- a new pull service pages parents and attendees under deadlines and a run budget. It runs a cheap delta over the family timestamp, plus a re-walk of the academic year once a day and whenever the phone gains a delivery child. The re-walk catches newly authorized older history and the rare cases a timestamp cursor cannot prove it saw (Jim, 2026-09-26);
+- a new pull service pages parents and attendees under deadlines and a run budget. It runs a cheap delta over the family timestamp, plus a re-walk of the academic year whenever the phone gains a delivery child and as a weekly backstop. The re-walk catches newly authorized older history and the rare cases a timestamp cursor cannot prove it saw (Jim, 2026-09-26);
 - each page is persisted in one SQLite transaction together with the cursor;
 - coattendees outside the EA's scopes become flagged **history reference children**;
 - a small status store drives one inline History line and a Sync Status row.
@@ -43,10 +43,10 @@ including its §12 plan-time corrections, which take precedence. Decision record
   cursor.
 - Cursor scope: `session_history_pull:<userId>:<programmeId>`; the cursor JSON shape is defined in
   Task 5. `updatedAt` is replayed exactly as PostgREST returned it and is never parsed into a `Date`.
-- Re-walk: after a per-phone random interval of 20–28 hours (jitter, so a fleet that opens the app
-  at the same hour does not re-walk in one burst; Jim 2026-09-26), immediately when the phone has an
-  active delivery child absent at the last completed re-walk, and resumed while part-way; the first
-  hydration counts as that day's re-walk.
+- Re-walk: **immediately** when the phone has an active delivery child absent at the last completed
+  re-walk (the common case: a handover), and resumed while part-way. The **weekly** backstop is a
+  per-phone random interval of 6–8 days, for the rare commit-behind-cursor case (Jim 2026-09-26,
+  revised from daily the same day). The first hydration counts as a completed re-walk.
 - Actor fencing: a change of signed-in user invalidates every in-flight run. No queued request
   starts, and no page commits, for a stale run.
 - Safety rails: pending/failed local rows win; synced/terminal rows are replaced; absence never
@@ -1068,17 +1068,17 @@ git commit -m "feat(cap-004): exclude history reference children from reads and 
     - `complete` means **overall** hydration is complete: the delta is exhausted **and** no re-walk is due or part-way. `last_pulled_at` is stamped only when `complete` becomes true. Freshness admission and the UI read `complete`, never `deltaComplete` (Codex round 2);
     - `firstWalk` is `true` while the first hydration, a delta from an empty cursor, is unfinished;
     - `rescanAfter` is `{ updatedAt, id }` while a re-walk is part-way, otherwise `null`;
-    - `nextRewalkAt` is the ISO time the next daily re-walk falls due. It is set when a walk completes, to the completion time plus 20 hours plus a random 0–8 hours;
+    - `nextRewalkAt` is the ISO time the weekly backstop re-walk falls due. It is set when a walk completes, to the completion time plus 6 days plus a random 0–2 days;
     - `*ChildIds` are the sorted active delivery child ids captured when that walk **started**. A child assigned during a walk is caught by the next one.
 
-**Convergence rule (Jim, 2026-09-26; spec §12 items 8–10):**
+**Convergence rule (Jim, 2026-09-26, timer revised to weekly the same day; spec §12 items 8–10):**
 - **Delta.** Each run first advances the delta: pages after the stored `(updatedAt, id)`, with a server-side 120-second overlap on its first page when resuming from a completed cursor.
 - **Re-walk triggers.** The run then re-walks the whole academic year from the start when any of these holds:
-  - no re-walk has completed in the last 24 hours;
+  - the weekly backstop is due (6–8 days after the last completed walk, randomized per phone);
   - the phone now has an active delivery child that was absent at the last completed re-walk;
   - a re-walk is part-way.
 - **What the re-walk catches.** A newly assigned child's older sessions, which are behind the delta cursor (Codex finding 1), plus the rare cases: a transaction that started early but committed late, and authority lost between attendee pages.
-- **First hydration counts as that day's re-walk.** A delta that started from an empty cursor *is* a full walk, so no double download happens on a new phone.
+- **First hydration counts as a completed re-walk.** A delta that started from an empty cursor *is* a full walk, so no double download happens on a new phone.
 
 - [ ] **Step 1: Write the failing tests**
 
@@ -1147,7 +1147,7 @@ describe('runSessionHistoryPull', () => {
   let wall;
   const deps = (extra) => ({
     database: db, enqueueRequest: (task) => task(), requestTimeoutMs: 50, runBudgetMs: 60_000,
-    wallNow: () => wall, random: () => 0.5, ...extra, // 0.5 => exactly 24 h between re-walks
+    wallNow: () => wall, random: () => 0.5, ...extra, // 0.5 => exactly 7 days between re-walks
   });
   const cursorOf = async (userId = 'user-1', programmeId = 'programme-a') => {
     const row = await db.getFirstAsync('select cursor, last_pulled_at from sync_state where scope = ?', sessionHistoryScope(userId, programmeId));
@@ -1166,7 +1166,7 @@ describe('runSessionHistoryPull', () => {
   });
   afterEach(async () => { await db.closeAsync(); });
 
-  test('first hydration pages to exhaustion, replays raw cursor strings, and counts as the day\'s re-walk', async () => {
+  test('first hydration pages to exhaustion, replays raw cursor strings, and counts as a completed re-walk', async () => {
     const server = fakeServer({ parents: Array.from({ length: 450 }, (_, i) => parent(i + 1)) });
     expect(await runSessionHistoryPull({ userId: 'user-1', deps: deps({ client: server.client }) })).toEqual({ status: 'complete', pages: 3 });
     const calls = server.parentCalls();
@@ -1203,27 +1203,26 @@ describe('runSessionHistoryPull', () => {
     expect((await cursorOf()).rescanChildIds).toEqual(['child-new']);
   });
 
-  test('the re-walk interval is jittered between 20 and 28 hours per phone', async () => {
-    const HOUR = 60 * 60 * 1000;
+  test('the backstop re-walk interval is jittered between 6 and 8 days per phone', async () => {
     await runSessionHistoryPull({ userId: 'user-1', deps: deps({ client: fakeServer({ parents: [parent(1)] }).client, random: () => 0 }) });
-    expect(Date.parse((await cursorOf()).nextRewalkAt) - wall).toBe(20 * HOUR);
-    wall += 19 * HOUR;
+    expect(Date.parse((await cursorOf()).nextRewalkAt) - wall).toBe(6 * DAY);
+    wall += 5 * DAY + 23 * 60 * 60 * 1000;
     const early = fakeServer({ parents: [parent(1)] });
     await runSessionHistoryPull({ userId: 'user-1', force: true, deps: deps({ client: early.client }) });
     expect(early.parentCalls().some((c) => c.args.p_after_updated_at === null)).toBe(false);
-    wall += 2 * HOUR;
+    wall += 2 * 60 * 60 * 1000;
     const due = fakeServer({ parents: [parent(1)] });
     await runSessionHistoryPull({ userId: 'user-1', force: true, deps: deps({ client: due.client, random: () => 0.999999 }) });
     expect(due.parentCalls().some((c) => c.args.p_after_updated_at === null)).toBe(true);
     const next = Date.parse((await cursorOf()).nextRewalkAt) - wall;
-    expect(next).toBeGreaterThan(27.9 * HOUR);
-    expect(next).toBeLessThanOrEqual(28 * HOUR);
+    expect(next).toBeGreaterThan(7.99 * DAY);
+    expect(next).toBeLessThanOrEqual(8 * DAY);
   });
 
-  test('the re-walk runs again after 24 hours even with nothing new', async () => {
+  test('the backstop re-walk runs again after a week even with nothing new', async () => {
     const server = fakeServer({ parents: [parent(1)] });
     await runSessionHistoryPull({ userId: 'user-1', deps: deps({ client: server.client }) });
-    wall += DAY + 1;
+    wall += 7 * DAY + 1;
     const later = fakeServer({ parents: [parent(1)] });
     await runSessionHistoryPull({ userId: 'user-1', deps: deps({ client: later.client }) });
     expect(later.parentCalls().some((c) => c.args.p_after_updated_at === null)).toBe(true);
@@ -1243,7 +1242,7 @@ describe('runSessionHistoryPull', () => {
     expect(await cursorOf()).toMatchObject({ updatedAt: iso(400), deltaComplete: false, complete: false, lastPulledAt: null, firstWalk: true });
     const resumed = fakeServer({ parents });
     expect((await runSessionHistoryPull({ userId: 'user-1', deps: deps({ client: resumed.client }) })).status).toBe('complete');
-    expect(resumed.parentCalls()).toHaveLength(1); // the resumed first walk still counts as the day's re-walk
+    expect(resumed.parentCalls()).toHaveLength(1); // the resumed first walk still counts as a completed re-walk
     expect(resumed.parentCalls()[0].args).toMatchObject({ p_after_updated_at: iso(400), p_overlap_seconds: 0 });
     expect((await db.getFirstAsync('select count(*) as n from sessions')).n).toBe(450);
   });
@@ -1491,8 +1490,8 @@ Expected: FAIL with `Cannot find module '../src/services/sessionHistoryPull'`.
 ```js
 // src/services/sessionHistoryPull.js
 // CAP-004 session history hydration (spec §5 and §12; ADR-0006 and its follow-ups).
-// A cheap delta over the server's family timestamp, plus a daily (and new-delivery-child)
-// re-walk of the academic year that catches what a timestamp cursor cannot see. Each page is
+// A cheap delta over the server's family timestamp, plus a re-walk of the academic year when
+// the phone gains a delivery child (a handover) and as a weekly backstop, that catches what a timestamp cursor cannot see. Each page is
 // persisted atomically with its cursor; absence never deletes; updatedAt is the raw PostgREST
 // string and is never parsed into a Date.
 import { supabase } from './supabaseClient';
@@ -1510,9 +1509,9 @@ export const SESSION_HISTORY_REQUEST_TIMEOUT_MS = 15_000;
 export const SESSION_HISTORY_RUN_BUDGET_MS = 60_000;
 export const SESSION_HISTORY_OVERLAP_SECONDS = 120;
 export const SESSION_HISTORY_STALENESS_MS = 15 * 60 * 1000;
-const HOUR_MS = 60 * 60 * 1000;
-export const SESSION_HISTORY_REWALK_MIN_MS = 20 * HOUR_MS;
-export const SESSION_HISTORY_REWALK_JITTER_MS = 8 * HOUR_MS;
+const DAY_MS = 24 * 60 * 60 * 1000;
+export const SESSION_HISTORY_REWALK_MIN_MS = 6 * DAY_MS;
+export const SESSION_HISTORY_REWALK_JITTER_MS = 2 * DAY_MS;
 
 export const sessionHistoryScope = (userId, programmeId) => `session_history_pull:${userId}:${programmeId}`;
 
@@ -1596,8 +1595,8 @@ const runOnce = async ({ userId, force, deps }) => {
     order by child_id
   `, userId)).map((row) => row.child_id);
   const wallIso = () => new Date(wallNow()).toISOString();
-  // Jittered (20-28 h per phone) so a fleet that all opens the app at the same hour does not
-  // re-walk in one burst against the server.
+  // Weekly backstop, jittered 6-8 days per phone so a fleet does not re-walk in one burst.
+  // The common case (a handover) is the immediate new-delivery-child trigger below.
   const nextRewalkIso = () => new Date(
     wallNow() + SESSION_HISTORY_REWALK_MIN_MS + Math.floor(random() * SESSION_HISTORY_REWALK_JITTER_MS)
   ).toISOString();
@@ -1697,7 +1696,7 @@ const runOnce = async ({ userId, force, deps }) => {
   let pages = 0;
   try {
     // 1. Delta. The first hydration (from an empty cursor) is a full walk of the year, so its
-    //    completion also counts as the day's re-walk, even if it spanned several runs.
+    //    completion also counts as a completed re-walk, even if it spanned several runs.
     if (state.firstWalk && !state.firstWalkChildIds) state = { ...state, firstWalkChildIds: currentChildIds };
     await walk({
       from: state.updatedAt ? { updatedAt: state.updatedAt, id: state.id } : null,
@@ -1724,7 +1723,7 @@ const runOnce = async ({ userId, force, deps }) => {
       }),
     });
 
-    // 2. Re-walk of the academic year when due (daily, a new delivery child, or unfinished).
+    // 2. Re-walk of the academic year when due (a new delivery child, unfinished, or the weekly backstop).
     if (rewalkDue()) {
       if (!state.rescanAfter) state = { ...state, rewalkChildIds: currentChildIds };
       await walk({
@@ -1793,7 +1792,7 @@ Expected: PASS, 22 tests. (The two re-walk budget tests import `describeHistoryS
 
 ```bash
 git add src/services/sessionHistoryPull.js jest.integration.config.js __tests__/sessionHistoryPull.test.js __tests__/sessionHistoryPullProductionRouting.test.js
-git commit -m "feat(cap-004): bounded session history delta with daily re-walk, actor fencing, and queue-aware deadlines"
+git commit -m "feat(cap-004): bounded session history delta with re-walk, actor fencing, and queue-aware deadlines"
 ```
 
 ---

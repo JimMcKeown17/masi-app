@@ -348,17 +348,18 @@ Found while writing the implementation plan against current code. Each supersede
 7. **Reader intent (settles §6.4, Jim 2026-09-25).** History, Home, the Sessions tab, and the
    daily goal stay "sessions I recorded". The session-count ranking counts every session each of
    the EA's current children attended, whoever recorded it.
-8. **Daily and new-child re-walk (Jim, 2026-09-26; Codex review 2026-09-26).** A timestamp cursor
+8. **New-child and weekly re-walk (Jim, 2026-09-26; Codex review 2026-09-26).** A timestamp cursor
    watches session writes, not authorization. A new delivery assignment authorizes older sessions
    that sit behind the cursor and would never be downloaded. `now()` is transaction-start time, so
    a slow transaction can also commit behind the cursor. Each run therefore follows its delta with
    a full walk of the academic year when:
-   - the phone's next re-walk time has passed (20–28 hours after the last walk, randomized per
-     phone so a fleet does not re-walk in one burst; Jim 2026-09-26);
+   - the weekly backstop is due (6–8 days after the last walk, randomized per phone so a fleet
+     does not re-walk in one burst; Jim 2026-09-26, revised from daily the same day because the
+     common case, a handover, is caught immediately by the new-delivery-child trigger);
    - the phone has an active delivery child absent at the last completed walk; or
    - a walk is part-way.
 
-   The first hydration counts as the day's walk. Cost is one year of one EA's families per day
+   The first hydration counts as a completed walk. Cost is one year of one EA's families per week
    (a handful of pages), which Jim accepted against the 2026-09-05 "traffic must not grow with
    history" constraint.
 9. **Existing future timestamps (amends §4).** The migration normalizes any `updated_at` already
