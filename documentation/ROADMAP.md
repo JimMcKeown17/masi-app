@@ -188,17 +188,17 @@ correctly; the missing contract is inbound hydration.
 - [ ] Prove that a server class-assignment row flows through `ClassesContext` into SQLite, survives
   a fresh read, and is consumed by the canonical assessment-scope query; prove an inactive/revoked
   assignment does not grant current scope.
-- [ ] Add authenticated, Programme-scoped pull for `sessions` and `session_attendees` through the
-  corrected delivery-history predicate.
-- [ ] Define an authorized history-reference projection for coattendee children (identity and
+- [x] Add authenticated, Programme-scoped pull for `sessions` and `session_attendees` through the
+  corrected delivery-history predicate. Built on `feat/cap-004-session-history-hydration`
+  (2026-09-26). Hosted apply and device gates are the remaining items below.
+- [x] Define an authorized history-reference projection for coattendee children (identity and
   display fields only, no roster or write authority) so a fresh device can persist a complete
-  session family with SQLite foreign keys enabled; prove it PostgreSQL-to-fresh-SQLite before any
-  hydration-complete result. Surfaced by the 2026-09-04 adversarial review: session authority
+  session family with SQLite foreign keys enabled. Built with CAP-004
+  (`get_delivery_history_attendee_page`, `children.history_reference`). Surfaced by the 2026-09-04 adversarial review: session authority
   follows any historical direct assignment, child-read authority does not.
-- [ ] Reshape `get_delivery_history_session_page` so each grant arm yields ordered, bounded
-  candidates before the merge (bounded work, not only bounded output), and extend the PostgreSQL
-  harness with dense-owner, dense-delivery, and deep-page fixtures at 100k+ sessions that measure
-  inner plans. Surfaced by the same review; no field impact today.
+- [x] Reshape the parent page RPC so each grant arm yields ordered, bounded candidates before the
+  merge, and extend the PostgreSQL harness with dense fixtures. `get_delivery_history_page`
+  replaces it; with 125,007 sessions, pages read about 0.1% of a full scan. Surfaced by the same review; no field impact today.
 - [ ] Add authenticated, Programme/current-year-class-scoped pull for `assessments` and
   `assessment_items`.
 - [ ] Use bounded keyset pagination with an `id` tie-breaker and request deadline for every parent
@@ -213,7 +213,12 @@ correctly; the missing contract is inbound hydration.
 - [ ] Cover first install, reinstall, second device, offline restart, pending-local collision, and
   parent-before-child ordering in real-SQLite tests.
 - [ ] Add two-device physical gates proving device A history appears on device B.
-- [ ] Make sync status distinguish "all local writes uploaded" from "local history fully hydrated."
+- [x] Make sync status distinguish "all local writes uploaded" from "local history fully hydrated."
+  Sessions done (CAP-004 History row); assessments follow with their slice.
+- [ ] **CAP-004 remaining gates:** apply `20260925120000` to hosted `masi-app-sqlite` through the
+  isolated helper, run the hosted six-actor matrix and a >1,000-attendee HTTP walk, then device
+  gates (new phone within a minute on iPhone and low-end Android; two-device convergence with a
+  backdated session; force-stop and offline mid-download).
 
 Until this lands, a green sync label proves outbound completion only.
 
@@ -269,6 +274,9 @@ Until this lands, a green sync label proves outbound completion only.
   composite indexes. Do not add blanket `updated_at` indexes to every table.
 - [ ] Add pagination to every potentially unbounded pull and define an enforced maximum where a
   scope is operationally expected to remain bounded.
+- [ ] Give every roster/reference pull request a deadline. Today a hung request blocks the shared
+  `supabaseRequestQueue` for all later pulls (found by the 2026-09-26 Codex review of CAP-004).
+  Session history is protected by its queue-aware deadline; the roster pull is not.
 - [ ] Add full-jitter backoff and randomized foreground/reconnect pull scheduling so a national
   fleet does not retry in synchronized waves.
 - [ ] Add remotely configurable pull intervals and a sync kill switch before large staged rollout.
