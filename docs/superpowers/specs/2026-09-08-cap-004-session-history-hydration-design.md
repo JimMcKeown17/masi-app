@@ -329,8 +329,9 @@ Found while writing the implementation plan against current code. Each supersede
    capturing phone is offline. Stopping the cursor there would stall every later family behind
    another EA's connectivity. Each returned parent is persisted with whatever attendees the
    attendee RPC returns, and the cursor advances. Late attendees re-surface the family through the
-   §4.1 family timestamp. The attendee RPC is all-or-nothing per session (`can_read_session`), so
-   a partial attendee set cannot occur. Only an attendee *request* failure abandons the page.
+   §4.1 family timestamp. Only an attendee *request* failure abandons the page. (Corrected
+   2026-09-26: authorization is re-derived per attendee *request*, so losing access between two
+   attendee pages can leave a partial set. This is rare, and item 8's re-walk bounds it.)
 4. **Missing local references (amends §6.2).** A hydrated session's `class_id` or an attendee's
    `group_id` can name a class or group this phone never pulled (for example the previous EA's
    group). SQLite enforces those foreign keys, so the page would fail on every run. Such
@@ -347,3 +348,24 @@ Found while writing the implementation plan against current code. Each supersede
 7. **Reader intent (settles §6.4, Jim 2026-09-25).** History, Home, the Sessions tab, and the
    daily goal stay "sessions I recorded". The session-count ranking counts every session each of
    the EA's current children attended, whoever recorded it.
+8. **Daily and new-child re-walk (Jim, 2026-09-26; Codex review 2026-09-26).** A timestamp cursor
+   watches session writes, not authorization. A new delivery assignment authorizes older sessions
+   that sit behind the cursor and would never be downloaded. `now()` is transaction-start time, so
+   a slow transaction can also commit behind the cursor. Each run therefore follows its delta with
+   a full walk of the academic year when:
+   - no walk has completed in 24 hours;
+   - the phone has an active delivery child absent at the last completed walk; or
+   - a walk is part-way.
+
+   The first hydration counts as the day's walk. Cost is one year of one EA's families per day
+   (a handful of pages), which Jim accepted against the 2026-09-05 "traffic must not grow with
+   history" constraint.
+9. **Existing future timestamps (amends §4).** The migration normalizes any `updated_at` already
+   in the future (a pre-fix phone clock) to `now()`, so one bad row cannot pin every cursor ahead
+   of real writes.
+10. **Actor fencing, queue-aware deadlines, and failure memory (amends §5.3 and §7).**
+    - A change of signed-in user invalidates in-flight runs, and page commits check admission
+      inside the SQLite transaction.
+    - Request deadlines start at enqueue time, so a hung request ahead in the shared queue cannot
+      hold the history run.
+    - A failed run records `lastFailureAt`, so an earlier success is never shown as "Up to date".

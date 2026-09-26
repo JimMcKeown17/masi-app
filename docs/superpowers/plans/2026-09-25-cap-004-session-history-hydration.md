@@ -14,7 +14,7 @@ half-writes a session family.
 the whole family (insert and update stamping plus an attendee-to-parent touch trigger). It also
 replaces the unused date-ordered page RPC with an ascending `(updated_at, id)` delta RPC plus an
 attendee page RPC that returns display names for coattendees. On the phone:
-- a new pull service pages parents and attendees under deadlines and a run budget;
+- a new pull service pages parents and attendees under deadlines and a run budget. It runs a cheap delta over the family timestamp, plus a re-walk of the academic year once a day and whenever the phone gains a delivery child. The re-walk catches newly authorized older history and the rare cases a timestamp cursor cannot prove it saw (Jim, 2026-09-26);
 - each page is persisted in one SQLite transaction together with the cursor;
 - coattendees outside the EA's scopes become flagged **history reference children**;
 - a small status store drives one inline History line and a Sync Status row.
@@ -41,9 +41,13 @@ including its §12 plan-time corrections, which take precedence. Decision record
   per run; stop after the current page transaction when the budget is spent.
 - Overlap: `p_overlap_seconds = 120`, only on the first page of a run that starts from a completed
   cursor.
-- Cursor scope: `session_history_pull:<userId>:<programmeId>`; cursor JSON
-  `{ "updatedAt": <raw server string|null>, "id": <uuid|null>, "windowStart": "YYYY-MM-DD", "complete": boolean }`.
-  `updatedAt` is replayed exactly as PostgREST returned it and is never parsed into a `Date`.
+- Cursor scope: `session_history_pull:<userId>:<programmeId>`; the cursor JSON shape is defined in
+  Task 5. `updatedAt` is replayed exactly as PostgREST returned it and is never parsed into a `Date`.
+- Re-walk: once per 24 hours, immediately when the phone has an active delivery child absent at the
+  last completed re-walk, and resumed while part-way; the first hydration counts as that day's
+  re-walk.
+- Actor fencing: a change of signed-in user invalidates every in-flight run. No queued request
+  starts, and no page commits, for a stale run.
 - Safety rails: pending/failed local rows win; synced/terminal rows are replaced; absence never
   deletes; only a run that reaches exhaustion stamps `last_pulled_at`.
 - History reference children: `children.history_reference = 1`, identity and display name only,
@@ -61,7 +65,7 @@ including its §12 plan-time corrections, which take precedence. Decision record
 ## Review Focus
 
 These are inputs the spec implies but no happy-path test would exercise. Each has a pinned test in
-the named task.
+the named task. The 2026-09-26 Codex adversarial review added items 6–9.
 
 1. **A second EA signs in on the same phone.** Their first run must start from an empty cursor,
    not the first EA's, and must hydrate only their own authorized families. Pinned in Task 5
@@ -76,6 +80,15 @@ the named task.
    fresh first hydration; a new academic year resets the cursor's window. Pinned in Task 5.
 5. **Pull-to-refresh while a run is already in flight.** It must join the running promise rather
    than start a second traversal that races the cursor. Pinned in Task 5.
+6. **A handover gives the EA a child with older sessions behind the cursor.** The next run must
+   re-walk the year and download them. Pinned in Task 5 ("a new delivery child triggers a
+   re-walk").
+7. **A hung roster request is ahead in the shared request queue.** History must give up at its own
+   deadline instead of waiting forever, and a retry must start fresh. Pinned in Task 5.
+8. **The EA signs out and another signs in while a download is queued or mid-response.** Nothing
+   commits for the old EA. Pinned in Tasks 3, 5 and 6.
+9. **A refresh fails after an earlier success.** The screen must not keep saying "Up to date", and
+   the next check must retry. Pinned in Tasks 5 and 6.
 
 ---
 
@@ -390,7 +403,13 @@ grant execute on function public.get_delivery_history_attendee_page(
   uuid[], integer, uuid, uuid
 ) to authenticated;
 
--- 6. One contract: drop the date-ordered RPC that no phone ever called, and its index.
+-- 6. One-time clean-up: before this migration, inserts kept the phone's clock, so an existing
+--    row can carry a future updated_at that would pin a delta cursor ahead of every correctly
+--    stamped later write (Codex review 2026-09-26). Idempotent; a no-op once clean.
+update public.session_attendees set updated_at = now() where updated_at > now();
+update public.sessions set updated_at = now() where updated_at > now();
+
+-- 7. One contract: drop the date-ordered RPC that no phone ever called, and its index.
 drop function if exists public.get_delivery_history_session_page(
   uuid, integer, date, timestamptz, uuid
 );
@@ -467,6 +486,7 @@ const expectSqlState = ({ databaseUrl, sql, label, sqlState }) => {
 - **One session through both arms appears once.** Session `...0001` qualifies for the owner and, after adding an assignment for the owner on child `...000001`, also through delivery. Assert it appears exactly once on the owner's page.
 - **Window.** A `session_date = '2025-12-31'` owner session is excluded with window `2026-01-01` and included with window `2025-01-01`.
 - **Overlap.** Using the cursor at session `81...3`, a page with `overlap = 0` returns `[4,5]`, and with `overlap = 120` it also returns `[1,2,3]`, because all share the timestamp inside the two-minute window.
+- **Future timestamps normalized.** Under `session_replication_role = replica`, set session `...0003`'s `updated_at` to `TIMESTAMPTZ '2099-01-01 00:00:00+00'`. Re-apply the migration file with `runPsql({ file })`; it is idempotent. Assert `updated_at <= now()`.
 - **Old objects absent.** `to_regprocedure('public.get_delivery_history_session_page(uuid,integer,date,timestamptz,uuid)') IS NULL` and `to_regclass('public.idx_sessions_owner_programme_history_cursor') IS NULL`.
 - **Dense plans (bounded work, spec §8).** Under `session_replication_role = replica`, use `generate_series` to insert 120,000 literacy sessions owned by a noise user `1f000000-...-000000000001`, spread over 2026 dates with distinct `updated_at`. Then add:
   - 5,000 sessions owned by a dense owner `1f000000-...-000000000002`;
@@ -522,7 +542,7 @@ jest.mock('expo-sqlite', () => require('../test-support/expoSQLiteMock'));
 
 import { runMigrations, CURRENT_SCHEMA_VERSION } from '../src/db/migrations';
 import { createChildrenRepository } from '../src/db/repositories/childrenRepository';
-import { buildSyncPayload } from '../src/services/offlineSync';
+import { _testBuildSyncPayload as buildSyncPayload } from '../src/services/offlineSync';
 import { createMigratedDatabase, seedCoreData } from '../test-support/sqliteRepositoryTestUtils';
 
 const insertReference = (db, id = 'child-ref') => db.runAsync(`
@@ -567,6 +587,26 @@ describe('history reference children', () => {
     } catch (error) { caught = error; }
     expect(caught?.message).toBe('History reference children are read-only');
     expect((await db.getFirstAsync("select count(*) as n from sync_outbox where record_id = 'child-ref'")).n).toBe(0);
+  });
+
+  test('every local mutation path refuses a reference row and enqueues nothing; a later roster save still promotes it', async () => {
+    await insertReference(db);
+    const repository = createChildrenRepository({ database: db });
+    const attempts = {
+      updateChild: () => repository.updateChild('child-ref', { first_name: 'X' }, { actorUserId: 'user-1' }),
+      archiveChild: () => repository.archiveChild('child-ref', { actorUserId: 'user-1', archiveReason: 'left_school' }),
+      deleteIfNoHistory: () => repository.deleteIfNoHistory('child-ref'),
+    };
+    for (const [name, attempt] of Object.entries(attempts)) {
+      let caught;
+      try { await attempt(); } catch (error) { caught = error; }
+      expect([name, caught?.message]).toEqual([name, 'History reference children are read-only']);
+    }
+    expect(await db.getFirstAsync("select first_name, history_reference, sync_status, archived_at from children where id = 'child-ref'"))
+      .toEqual({ first_name: 'Lindiwe', history_reference: 1, sync_status: 'synced', archived_at: null });
+    expect((await db.getFirstAsync("select count(*) as n from sync_outbox where record_id = 'child-ref'")).n).toBe(0);
+    await repository.saveChildRecord({ id: 'child-ref', first_name: 'Lindiwe', last_name: 'Mbeki', class_id: 'class-1', synced: true, sync_status: 'synced' });
+    expect((await db.getFirstAsync("select history_reference from children where id = 'child-ref'")).history_reference).toBe(0);
   });
 
   test('history_reference never reaches a push payload', () => {
@@ -632,6 +672,19 @@ In `childrenRepository.js`, add `'history_reference'` to `CHILD_COLUMNS` after `
   });
 ```
 
+Add one shared guard in `childrenRepository.js`, and call it first inside the write transaction of `updateChild` (`:393`), `archiveChild` (`:719`) and `deleteIfNoHistory` (`:765`):
+
+```js
+const assertNotHistoryReference = async (txn, childId) => {
+  const row = await txn.getFirstAsync('select history_reference from children where id = ?', childId);
+  if (row?.history_reference === 1) {
+    throw new Error('History reference children are read-only');
+  }
+};
+```
+
+This leaves promotion to trusted roster ingestion: `saveChildRecord` with `sync_status = 'synced'`, as used by `saveServerChildRow`. Also add `and children.history_reference = 0` to `getMyChildren`'s `where` clause (`:712`). That makes the exclusion explicit, instead of relying only on the missing assignment and enrollment rows.
+
 If the push-payload test fails, add `'history_reference'` to `LOCAL_ONLY_KEYS_TO_STRIP` in `src/services/offlineSync.js:42`. Run `__tests__/syncContractCompleteness.test.js`; if it reports the new local column, add `'history_reference'` to `LOCAL_ONLY_COLUMNS` (`offlineSync.js:72`).
 
 - [ ] **Step 4: Run the new tests plus the neighbouring suites**
@@ -656,7 +709,7 @@ git commit -m "feat(cap-004): flag history reference children in SQLite and upgr
 
 **Interfaces:**
 - Consumes: Task 2's `children.history_reference`; `syncStateRepository.setPullState(scope, { lastPulledAt, cursor }, { transaction })`.
-- Produces: `sessionsRepository.saveHistoryPage(families, { scope, pullState })` → `{ savedFamilies: number }`, where `families = [{ session: <server sessions row>, attendees: [<attendee RPC row>] }]` and `pullState = { lastPulledAt: string|null, cursor: string }` (the cursor JSON already encoded). It runs as one transaction; any throw persists nothing.
+- Produces: `sessionsRepository.saveHistoryPage(families, { scope, pullState, admit })` → `{ savedFamilies: number }`, where `families = [{ session: <server sessions row>, attendees: [<attendee RPC row>] }]` and `pullState = { lastPulledAt: string|null, cursor: string }` (the cursor JSON already encoded). `admit` is an optional `() => boolean`, checked first inside the transaction; `false` throws an error with `kind: 'cancelled'`, so a run that belongs to a signed-out EA commits nothing. It runs as one transaction; any throw persists nothing.
 
 - [ ] **Step 1: Write the failing tests**
 
@@ -756,6 +809,16 @@ describe('sessionsRepository.saveHistoryPage', () => {
     expect((await db.getFirstAsync("select count(*) as n from session_attendees where session_id = 's-1'")).n).toBe(1);
   });
 
+  test('an admission check that fails inside the transaction commits nothing', async () => {
+    let caught;
+    try {
+      await repo.saveHistoryPage([{ session: serverSession(), attendees: [serverAttendee()] }], { scope: SCOPE, pullState: pullState(), admit: () => false });
+    } catch (error) { caught = error; }
+    expect(caught?.kind).toBe('cancelled');
+    expect((await db.getFirstAsync('select count(*) as n from sessions')).n).toBe(0);
+    expect(await db.getFirstAsync('select * from sync_state where scope = ?', SCOPE)).toBeNull();
+  });
+
   test('lastPulledAt is written only when the caller passes it', async () => {
     await repo.saveHistoryPage([], { scope: SCOPE, pullState: { lastPulledAt: '2026-09-25T10:00:00.000Z', cursor: pullState().cursor } });
     expect((await db.getFirstAsync('select last_pulled_at from sync_state where scope = ?', SCOPE)).last_pulled_at)
@@ -786,7 +849,12 @@ In `sessionsRepository.js`, extend the `domainRepositoryUtils` import with `serv
 
   // CAP-004: persist one parent page of hydrated session families and the traversal cursor
   // in a single transaction (spec §6.2, §12). Absence never deletes; pending local rows win.
-  const saveHistoryPage = async (families, { scope, pullState }) => runRepositoryTransaction(database, async (txn) => {
+  const saveHistoryPage = async (families, { scope, pullState, admit }) => runRepositoryTransaction(database, async (txn) => {
+    // Admission is checked inside the transaction, after the writer lock is held, so a run
+    // for an EA who signed out while this page waited for the writer commits nothing.
+    if (admit && !admit()) {
+      throw Object.assign(new Error('Session history run cancelled'), { kind: 'cancelled' });
+    }
     let savedFamilies = 0;
     for (const { session, attendees } of families) {
       const parent = {
@@ -964,38 +1032,57 @@ git commit -m "feat(cap-004): exclude history reference children from reads and 
 
 **Files:**
 - Create: `src/services/sessionHistoryPull.js`
-- Test: `__tests__/sessionHistoryPull.test.js` (add to `jest.integration.config.js`; it uses real SQLite and a fake RPC client)
+- Test: `__tests__/sessionHistoryPull.test.js` (add to `jest.integration.config.js`; real SQLite, fake RPC client, and the real `createSupabaseRequestQueue`)
 
 **Interfaces:**
-- Consumes: Task 1's RPC names and arguments; Task 3's `saveHistoryPage`; `getActiveProgrammeId`, `getActiveAcademicYear` (`domainRepositoryUtils`); `classifyPullFailureKind` (`preloadedChildData`); `enqueueSupabaseRequest`.
+- Consumes: Task 1's RPC names and arguments; Task 3's `saveHistoryPage(families, { scope, pullState, admit })`; `getActiveProgrammeId` and `getActiveAcademicYear` (`domainRepositoryUtils`); `classifyPullFailureKind` (`preloadedChildData`); `enqueueSupabaseRequest` and `createSupabaseRequestQueue` (`supabaseRequestQueue`).
 - Produces:
   - `sessionHistoryScope(userId, programmeId) → string`.
-  - `runSessionHistoryPull({ userId, force = false, deps }) → Promise<{ status: 'complete'|'partial'|'fresh'|'dependency'|'transport'|'query', pages: number }>`.
-    - `deps` (all optional, for tests): `{ database, client, enqueueRequest, now, requestTimeoutMs, runBudgetMs, sessionsRepo, onPageSaved }`.
-    - It is single-flight per `userId`: a concurrent call returns the in-flight promise.
+  - `resetSessionHistoryForActorChange()`: invalidates every in-flight run (it is called when the signed-in user changes, Task 6).
+  - `runSessionHistoryPull({ userId, force = false, deps }) → Promise<{ status, pages }>`, where `status ∈ 'complete' | 'partial' | 'fresh' | 'dependency' | 'transport' | 'query' | 'cancelled'`.
+    - `deps` (optional, for tests): `{ database, client, enqueueRequest, now, wallNow, requestTimeoutMs, runBudgetMs, onPageSaved }`. `now` is the budget clock; `wallNow` is epoch milliseconds for stamps and the daily re-walk.
+    - It is single-flight per `userId`.
+  - The persisted cursor JSON is `{ windowStart, updatedAt, id, complete, firstWalk, firstWalkChildIds, rescanAfter, rewalkChildIds, rescanCompletedAt, rescanChildIds, lastFailureAt }`:
+    - `updatedAt`/`id`/`complete` are the delta position;
+    - `firstWalk` is `true` while the first hydration, a delta from an empty cursor, is unfinished;
+    - `rescanAfter` is `{ updatedAt, id }` while a re-walk is part-way, otherwise `null`;
+    - `*ChildIds` are the sorted active delivery child ids captured when that walk **started**. A child assigned during a walk is caught by the next one.
+
+**Convergence rule (Jim, 2026-09-26; spec §12 items 8–10):**
+- **Delta.** Each run first advances the delta: pages after the stored `(updatedAt, id)`, with a server-side 120-second overlap on its first page when resuming from a completed cursor.
+- **Re-walk triggers.** The run then re-walks the whole academic year from the start when any of these holds:
+  - no re-walk has completed in the last 24 hours;
+  - the phone now has an active delivery child that was absent at the last completed re-walk;
+  - a re-walk is part-way.
+- **What the re-walk catches.** A newly assigned child's older sessions, which are behind the delta cursor (Codex finding 1), plus the rare cases: a transaction that started early but committed late, and authority lost between attendee pages.
+- **First hydration counts as that day's re-walk.** A delta that started from an empty cursor *is* a full walk, so no double download happens on a new phone.
 
 - [ ] **Step 1: Write the failing tests**
-
-Build a fake client whose `rpc(name, args)` returns a builder with `abortSignal(signal)` resolving to `{ data, error }` from a scripted server:
 
 ```js
 // __tests__/sessionHistoryPull.test.js
 jest.mock('expo-sqlite', () => require('../test-support/expoSQLiteMock'));
 
 import { runMigrations } from '../src/db/migrations';
-import { createSessionsRepository } from '../src/db/repositories/sessionsRepository';
-import { runSessionHistoryPull, sessionHistoryScope } from '../src/services/sessionHistoryPull';
+import {
+  runSessionHistoryPull,
+  resetSessionHistoryForActorChange,
+  sessionHistoryScope,
+} from '../src/services/sessionHistoryPull';
+import { createSupabaseRequestQueue } from '../src/services/supabaseRequestQueue';
 import { createMigratedDatabase, seedCoreData } from '../test-support/sqliteRepositoryTestUtils';
 
+const DAY = 24 * 60 * 60 * 1000;
 const iso = (n) => `2026-09-01T08:00:00.${String(n).padStart(6, '0')}+00:00`; // microsecond strings
+const uuid = (n) => `00000000-0000-4000-8000-${String(n).padStart(12, '0')}`;
 const parent = (n, extra = {}) => ({
-  id: `00000000-0000-4000-8000-${String(n).padStart(12, '0')}`, user_id: 'user-1', programme_id: 'programme-a',
-  class_id: null, session_date: '2026-09-01', activities: {}, notes: null,
-  created_at: iso(n), updated_at: iso(n), ...extra,
+  id: uuid(n), user_id: 'user-1', programme_id: 'programme-a', class_id: null,
+  session_date: '2026-09-01', activities: {}, notes: null, created_at: iso(n), updated_at: iso(n), ...extra,
 });
 
-// A scripted server: `parents` sorted by (updated_at, id); attendees keyed by session id.
-const fakeServer = ({ parents, attendeesBySession = {}, failParentAt = null, hangParentAt = null } = {}) => {
+// Scripted server. `parents()` is read on every call so a test can change the visible set
+// between runs. Rows are sorted by (updated_at, id), as the real RPC returns them.
+const fakeServer = ({ parents, attendeesBySession = {}, failParentAt = null, hangParentAt = null, onParentCall = () => {} }) => {
   const calls = [];
   let parentCalls = 0;
   const client = {
@@ -1004,13 +1091,22 @@ const fakeServer = ({ parents, attendeesBySession = {}, failParentAt = null, han
         calls.push({ name, args });
         if (name === 'get_delivery_history_page') {
           parentCalls += 1;
+          onParentCall(parentCalls);
           if (failParentAt === parentCalls) return Promise.resolve({ data: null, error: { message: 'boom', code: 'XX000' } });
           if (hangParentAt === parentCalls) {
             return new Promise((_, reject) => signal.addEventListener('abort', () => reject(Object.assign(new Error('Aborted'), { name: 'AbortError' }))));
           }
-          const after = args.p_after_updated_at ? [args.p_after_updated_at, args.p_after_id] : null;
-          const rows = parents
-            .filter((p) => !after || p.updated_at > after[0] || (p.updated_at === after[0] && p.id > after[1]) || args.p_overlap_seconds > 0)
+          const list = typeof parents === 'function' ? parents() : parents;
+          const seconds = (value) => Date.parse(`${value.slice(0, 19)}Z`) / 1000; // test fixtures are UTC
+          const rows = list
+            .filter((p) => {
+              if (!args.p_after_updated_at) return true;
+              if (args.p_overlap_seconds > 0) {
+                return seconds(p.updated_at) > seconds(args.p_after_updated_at) - args.p_overlap_seconds;
+              }
+              return p.updated_at > args.p_after_updated_at
+                || (p.updated_at === args.p_after_updated_at && p.id > args.p_after_id);
+            })
             .slice(0, args.p_page_size);
           return Promise.resolve({ data: rows, error: null });
         }
@@ -1019,137 +1115,201 @@ const fakeServer = ({ parents, attendeesBySession = {}, failParentAt = null, han
       },
     }),
   };
-  return { client, calls };
+  return { client, calls, parentCalls: () => calls.filter((c) => c.name === 'get_delivery_history_page') };
 };
 
 describe('runSessionHistoryPull', () => {
   let db;
-  const deps = (extra) => ({ database: db, enqueueRequest: (task) => task(), requestTimeoutMs: 50, runBudgetMs: 60_000, ...extra });
+  let wall;
+  const deps = (extra) => ({
+    database: db, enqueueRequest: (task) => task(), requestTimeoutMs: 50, runBudgetMs: 60_000,
+    wallNow: () => wall, ...extra,
+  });
+  const cursorOf = async (userId = 'user-1', programmeId = 'programme-a') => {
+    const row = await db.getFirstAsync('select cursor, last_pulled_at from sync_state where scope = ?', sessionHistoryScope(userId, programmeId));
+    return row && { ...JSON.parse(row.cursor), lastPulledAt: row.last_pulled_at };
+  };
+  const addDeliveryChild = async (childId) => {
+    await db.runAsync("insert into children (id, first_name, last_name, class_id, sync_status) values (?, 'New', 'Child', 'class-1', 'synced')", childId);
+    await db.runAsync("insert into child_ea_assignments (id, user_id, child_id, sync_status) values (?, 'user-1', ?, 'synced')", `cea-${childId}`, childId);
+  };
+
   beforeEach(async () => {
+    wall = Date.parse('2026-09-26T08:00:00.000Z');
+    resetSessionHistoryForActorChange();
     db = await createMigratedDatabase(runMigrations);
     await seedCoreData(db);
   });
   afterEach(async () => { await db.closeAsync(); });
 
-  const cursorOf = async (userId = 'user-1') => {
-    const row = await db.getFirstAsync('select cursor, last_pulled_at from sync_state where scope = ?', sessionHistoryScope(userId, 'programme-a'));
-    return row && { ...JSON.parse(row.cursor), lastPulledAt: row.last_pulled_at };
-  };
-
-  test('pages to exhaustion, replays raw cursor strings byte-identical, and stamps completion', async () => {
-    const parents = Array.from({ length: 450 }, (_, i) => parent(i + 1));
-    const { client, calls } = fakeServer({ parents });
-    const result = await runSessionHistoryPull({ userId: 'user-1', deps: deps({ client }) });
-    expect(result).toEqual({ status: 'complete', pages: 3 });
-    const parentCalls = calls.filter((c) => c.name === 'get_delivery_history_page');
-    expect(parentCalls[1].args.p_after_updated_at).toBe(iso(200));
-    expect(parentCalls.every((c) => c.args.p_overlap_seconds === 0)).toBe(true);
-    expect(parentCalls[0].args.p_window_start).toBe('2026-01-15');
-    const cursor = await cursorOf();
-    expect(cursor).toMatchObject({ updatedAt: iso(450), complete: true, windowStart: '2026-01-15' });
-    expect(cursor.lastPulledAt).not.toBeNull();
+  test('first hydration pages to exhaustion, replays raw cursor strings, and counts as the day\'s re-walk', async () => {
+    const server = fakeServer({ parents: Array.from({ length: 450 }, (_, i) => parent(i + 1)) });
+    expect(await runSessionHistoryPull({ userId: 'user-1', deps: deps({ client: server.client }) })).toEqual({ status: 'complete', pages: 3 });
+    const calls = server.parentCalls();
+    expect(calls).toHaveLength(3); // no second walk on a new phone
+    expect(calls[1].args.p_after_updated_at).toBe(iso(200));
+    expect(calls.every((c) => c.args.p_overlap_seconds === 0 && c.args.p_window_start === '2026-01-15')).toBe(true);
+    expect(await cursorOf()).toMatchObject({
+      updatedAt: iso(450), complete: true, windowStart: '2026-01-15', rescanAfter: null, firstWalk: false,
+      rescanCompletedAt: new Date(wall).toISOString(), rescanChildIds: [],
+    });
     expect((await db.getFirstAsync('select count(*) as n from sessions')).n).toBe(450);
   });
 
-  test('a completed cursor starts the next run with a two-minute server-side overlap on the first page only', async () => {
-    const { client } = fakeServer({ parents: [parent(1)] });
-    await runSessionHistoryPull({ userId: 'user-1', deps: deps({ client }) });
+  test('a later forced run uses the two-minute overlap on its first page only', async () => {
+    await runSessionHistoryPull({ userId: 'user-1', deps: deps({ client: fakeServer({ parents: [parent(1)] }).client }) });
     const second = fakeServer({ parents: [parent(1), parent(2)] });
     await runSessionHistoryPull({ userId: 'user-1', force: true, deps: deps({ client: second.client }) });
-    const overlaps = second.calls.filter((c) => c.name === 'get_delivery_history_page').map((c) => c.args.p_overlap_seconds);
+    const overlaps = second.parentCalls().map((c) => c.args.p_overlap_seconds);
     expect(overlaps[0]).toBe(120);
     expect(overlaps.slice(1).every((o) => o === 0)).toBe(true);
   });
 
-  test('a request deadline ends the run as transport without stamping, keeping earlier pages', async () => {
-    const parents = Array.from({ length: 300 }, (_, i) => parent(i + 1));
-    const { client } = fakeServer({ parents, hangParentAt: 2 });
-    const result = await runSessionHistoryPull({ userId: 'user-1', deps: deps({ client }) });
-    expect(result.status).toBe('transport');
-    const cursor = await cursorOf();
-    expect(cursor).toMatchObject({ updatedAt: iso(200), complete: false });
-    expect(cursor.lastPulledAt).toBeNull();
+  test('a new delivery child triggers a re-walk that brings its older sessions down', async () => {
+    const visible = [parent(5)];
+    const server = fakeServer({ parents: () => visible });
+    await runSessionHistoryPull({ userId: 'user-1', deps: deps({ client: server.client }) });
+    // Handover: a child whose older session (updated long before the cursor) becomes authorized.
+    await addDeliveryChild('child-new');
+    visible.unshift(parent(1, { updated_at: '2026-03-01T08:00:00.000001+00:00' }));
+    const after = fakeServer({ parents: () => visible });
+    expect((await runSessionHistoryPull({ userId: 'user-1', deps: deps({ client: after.client }) })).status).toBe('complete');
+    expect(after.parentCalls().some((c) => c.args.p_after_updated_at === null && c.args.p_overlap_seconds === 0)).toBe(true);
+    expect(await db.getFirstAsync('select id from sessions where id = ?', uuid(1))).toEqual({ id: uuid(1) });
+    expect((await cursorOf()).rescanChildIds).toEqual(['child-new']);
   });
 
-  test('a query error ends the run as query without advancing past the last saved page', async () => {
-    const { client } = fakeServer({ parents: [parent(1)], failParentAt: 1 });
-    expect((await runSessionHistoryPull({ userId: 'user-1', deps: deps({ client }) })).status).toBe('query');
-    expect(await cursorOf()).toBeNull();
+  test('the re-walk runs again after 24 hours even with nothing new', async () => {
+    const server = fakeServer({ parents: [parent(1)] });
+    await runSessionHistoryPull({ userId: 'user-1', deps: deps({ client: server.client }) });
+    wall += DAY + 1;
+    const later = fakeServer({ parents: [parent(1)] });
+    await runSessionHistoryPull({ userId: 'user-1', deps: deps({ client: later.client }) });
+    expect(later.parentCalls().some((c) => c.args.p_after_updated_at === null)).toBe(true);
+    expect((await cursorOf()).rescanCompletedAt).toBe(new Date(wall).toISOString());
   });
 
-  test('the run budget stops after a page and the next run resumes from the cursor', async () => {
+  test('a budget-cut run resumes from its saved position on the next run', async () => {
     const parents = Array.from({ length: 450 }, (_, i) => parent(i + 1));
-    let clock = 0;
-    const { client } = fakeServer({ parents });
-    const first = await runSessionHistoryPull({ userId: 'user-1', deps: deps({ client, runBudgetMs: 10, now: () => { clock += 6; return clock; } }) });
+    let saved = 0;
+    const first = await runSessionHistoryPull({ userId: 'user-1', deps: deps({
+      client: fakeServer({ parents }).client,
+      runBudgetMs: 1000,
+      onPageSaved: () => { saved += 1; },
+      now: () => (saved >= 2 ? 1e9 : 0), // the budget is spent once two pages are saved
+    }) });
     expect(first).toEqual({ status: 'partial', pages: 2 });
-    const saved = await cursorOf();
-    expect(saved).toMatchObject({ updatedAt: iso(400), complete: false, lastPulledAt: null });
+    expect(await cursorOf()).toMatchObject({ updatedAt: iso(400), complete: false, lastPulledAt: null, firstWalk: true });
     const resumed = fakeServer({ parents });
-    const second = await runSessionHistoryPull({ userId: 'user-1', deps: deps({ client: resumed.client }) });
-    expect(second.status).toBe('complete');
-    expect(resumed.calls[0].args).toMatchObject({ p_after_updated_at: iso(400), p_overlap_seconds: 0 });
+    expect((await runSessionHistoryPull({ userId: 'user-1', deps: deps({ client: resumed.client }) })).status).toBe('complete');
+    expect(resumed.parentCalls()).toHaveLength(1); // the resumed first walk still counts as the day's re-walk
+    expect(resumed.parentCalls()[0].args).toMatchObject({ p_after_updated_at: iso(400), p_overlap_seconds: 0 });
     expect((await db.getFirstAsync('select count(*) as n from sessions')).n).toBe(450);
   });
 
+  test('a request deadline ends the run as transport, keeps earlier pages, and records the failure', async () => {
+    const server = fakeServer({ parents: Array.from({ length: 300 }, (_, i) => parent(i + 1)), hangParentAt: 2 });
+    expect((await runSessionHistoryPull({ userId: 'user-1', deps: deps({ client: server.client }) })).status).toBe('transport');
+    expect(await cursorOf()).toMatchObject({ updatedAt: iso(200), complete: false, lastPulledAt: null, lastFailureAt: new Date(wall).toISOString() });
+  });
+
+  test('a hung predecessor in the shared queue cannot hold the run past its deadline', async () => {
+    const queue = createSupabaseRequestQueue();
+    queue.enqueue(() => new Promise(() => {})); // a roster request that never settles
+    const server = fakeServer({ parents: [parent(1)] });
+    const result = await runSessionHistoryPull({ userId: 'user-1', deps: deps({ client: server.client, enqueueRequest: queue.enqueue, requestTimeoutMs: 20 }) });
+    expect(result.status).toBe('transport');
+    expect(server.calls).toHaveLength(0); // expired while queued, never started
+    // Single flight was released: a new run starts rather than rejoining a stuck promise.
+    const retry = fakeServer({ parents: [parent(1)] });
+    await runSessionHistoryPull({ userId: 'user-1', force: true, deps: deps({ client: retry.client }) });
+    expect(retry.calls.length).toBeGreaterThan(0);
+  });
+
+  test('a failed refresh after a successful run is not reported fresh and is retried', async () => {
+    await runSessionHistoryPull({ userId: 'user-1', deps: deps({ client: fakeServer({ parents: [parent(1)] }).client }) });
+    wall += 1000;
+    const failing = fakeServer({ parents: [parent(1)], failParentAt: 1 });
+    expect((await runSessionHistoryPull({ userId: 'user-1', force: true, deps: deps({ client: failing.client }) })).status).toBe('query');
+    expect((await cursorOf()).lastFailureAt).toBe(new Date(wall).toISOString());
+    const retry = fakeServer({ parents: [parent(1)] });
+    expect((await runSessionHistoryPull({ userId: 'user-1', deps: deps({ client: retry.client }) })).status).toBe('complete');
+    expect((await cursorOf()).lastFailureAt).toBeNull();
+  });
+
+  test('an actor change while a request is queued cancels the run before it starts', async () => {
+    const queue = createSupabaseRequestQueue();
+    let release;
+    queue.enqueue(() => new Promise((resolve) => { release = resolve; }));
+    const server = fakeServer({ parents: [parent(1)] });
+    const run = runSessionHistoryPull({ userId: 'user-1', deps: deps({ client: server.client, enqueueRequest: queue.enqueue, requestTimeoutMs: 1000 }) });
+    resetSessionHistoryForActorChange();
+    release();
+    expect((await run).status).toBe('cancelled');
+    expect(server.calls).toHaveLength(0);
+    expect(await cursorOf()).toBeNull();
+  });
+
+  test('an actor change after a response arrives commits nothing', async () => {
+    const server = fakeServer({ parents: [parent(1)], onParentCall: () => resetSessionHistoryForActorChange() });
+    expect((await runSessionHistoryPull({ userId: 'user-1', deps: deps({ client: server.client }) })).status).toBe('cancelled');
+    expect((await db.getFirstAsync('select count(*) as n from sessions')).n).toBe(0);
+    expect(await cursorOf()).toBeNull();
+  });
+
   test('a parent with zero attendees does not stall the cursor', async () => {
-    const { client } = fakeServer({ parents: [parent(1), parent(2)], attendeesBySession: {} });
-    expect((await runSessionHistoryPull({ userId: 'user-1', deps: deps({ client }) })).status).toBe('complete');
+    await runSessionHistoryPull({ userId: 'user-1', deps: deps({ client: fakeServer({ parents: [parent(1), parent(2)] }).client }) });
     expect((await cursorOf()).updatedAt).toBe(iso(2));
   });
 
   test('a new academic year resets the window and the cursor', async () => {
-    const { client } = fakeServer({ parents: [parent(1)] });
-    await runSessionHistoryPull({ userId: 'user-1', deps: deps({ client }) });
-    await db.runAsync("update academic_years set is_active = 0");
+    await runSessionHistoryPull({ userId: 'user-1', deps: deps({ client: fakeServer({ parents: [parent(1)] }).client }) });
+    await db.runAsync('update academic_years set is_active = 0');
     await db.runAsync("insert into academic_years (id, label, starts_on, ends_on, is_active) values ('year-2027', '2027', '2027-01-14', '2027-12-10', 1)");
     const next = fakeServer({ parents: [] });
     await runSessionHistoryPull({ userId: 'user-1', force: true, deps: deps({ client: next.client }) });
-    expect(next.calls[0].args).toMatchObject({ p_window_start: '2027-01-14', p_after_updated_at: null, p_overlap_seconds: 0 });
+    expect(next.parentCalls()[0].args).toMatchObject({ p_window_start: '2027-01-14', p_after_updated_at: null, p_overlap_seconds: 0 });
   });
 
   test('a second user on the same device starts fresh', async () => {
-    const { client } = fakeServer({ parents: [parent(1)] });
-    await runSessionHistoryPull({ userId: 'user-1', deps: deps({ client }) });
+    await runSessionHistoryPull({ userId: 'user-1', deps: deps({ client: fakeServer({ parents: [parent(1)] }).client }) });
     await db.runAsync("insert into staff_programme_assignments (id, user_id, programme_id, school_id, assigned_at) values ('spa-user-2', 'user-2', 'programme-a', 'school-1', '2026-01-15T00:00:00.000Z')");
     const other = fakeServer({ parents: [] });
     await runSessionHistoryPull({ userId: 'user-2', deps: deps({ client: other.client }) });
-    expect(other.calls[0].args.p_after_updated_at).toBeNull();
+    expect(other.parentCalls()[0].args.p_after_updated_at).toBeNull();
   });
 
   test('a Programme change is a new scope with a fresh first hydration', async () => {
-    const { client } = fakeServer({ parents: [parent(1)] });
-    await runSessionHistoryPull({ userId: 'user-1', deps: deps({ client }) });
+    await runSessionHistoryPull({ userId: 'user-1', deps: deps({ client: fakeServer({ parents: [parent(1)] }).client }) });
     await db.runAsync("update staff_programme_assignments set ended_at = '2026-09-02T00:00:00.000Z' where id = 'spa-user-1'");
     await db.runAsync("insert into staff_programme_assignments (id, user_id, programme_id, school_id, assigned_at) values ('spa-user-1b', 'user-1', 'programme-b', 'school-1', '2026-09-02T00:00:00.000Z')");
     const next = fakeServer({ parents: [] });
     await runSessionHistoryPull({ userId: 'user-1', deps: deps({ client: next.client }) });
-    expect(next.calls[0].args).toMatchObject({ p_programme_id: 'programme-b', p_after_updated_at: null });
+    expect(next.parentCalls()[0].args).toMatchObject({ p_programme_id: 'programme-b', p_after_updated_at: null });
   });
 
   test('missing Programme or academic year reports dependency without a request or stamp', async () => {
     await db.runAsync('update academic_years set is_active = 0');
-    const { client, calls } = fakeServer({ parents: [parent(1)] });
-    expect((await runSessionHistoryPull({ userId: 'user-1', deps: deps({ client }) })).status).toBe('dependency');
-    expect(calls).toHaveLength(0);
+    const server = fakeServer({ parents: [parent(1)] });
+    expect((await runSessionHistoryPull({ userId: 'user-1', deps: deps({ client: server.client }) })).status).toBe('dependency');
+    expect(server.calls).toHaveLength(0);
   });
 
   test('a fresh completed scope is skipped unless forced', async () => {
-    const { client } = fakeServer({ parents: [parent(1)] });
-    await runSessionHistoryPull({ userId: 'user-1', deps: deps({ client }) });
+    await runSessionHistoryPull({ userId: 'user-1', deps: deps({ client: fakeServer({ parents: [parent(1)] }).client }) });
     const again = fakeServer({ parents: [parent(1)] });
     expect((await runSessionHistoryPull({ userId: 'user-1', deps: deps({ client: again.client }) })).status).toBe('fresh');
     expect(again.calls).toHaveLength(0);
   });
 
   test('a concurrent call joins the in-flight run instead of starting a second traversal', async () => {
-    const { client, calls } = fakeServer({ parents: [parent(1)] });
+    const server = fakeServer({ parents: [parent(1)] });
     const [a, b] = await Promise.all([
-      runSessionHistoryPull({ userId: 'user-1', deps: deps({ client }) }),
-      runSessionHistoryPull({ userId: 'user-1', force: true, deps: deps({ client }) }),
+      runSessionHistoryPull({ userId: 'user-1', deps: deps({ client: server.client }) }),
+      runSessionHistoryPull({ userId: 'user-1', force: true, deps: deps({ client: server.client }) }),
     ]);
     expect(a).toBe(b);
-    expect(calls.filter((c) => c.name === 'get_delivery_history_page')).toHaveLength(1);
+    expect(server.parentCalls()).toHaveLength(1);
   });
 
   test('attendees beyond one attendee page are fetched with the attendee cursor', async () => {
@@ -1184,15 +1344,18 @@ Expected: FAIL with `Cannot find module '../src/services/sessionHistoryPull'`.
 
 ```js
 // src/services/sessionHistoryPull.js
-// CAP-004 session history hydration (spec §5 and §12; ADR-0006). Pages authorized session
-// families oldest-first by the server's family timestamp, persists each page atomically with
-// its cursor, and never deletes on absence. The cursor's updatedAt is the raw PostgREST string.
+// CAP-004 session history hydration (spec §5 and §12; ADR-0006 and its follow-ups).
+// A cheap delta over the server's family timestamp, plus a daily (and new-delivery-child)
+// re-walk of the academic year that catches what a timestamp cursor cannot see. Each page is
+// persisted atomically with its cursor; absence never deletes; updatedAt is the raw PostgREST
+// string and is never parsed into a Date.
 import { supabase } from './supabaseClient';
 import { enqueueSupabaseRequest } from './supabaseRequestQueue';
 import { classifyPullFailureKind } from './preloadedChildData';
 import { resolveDatabase } from '../db/repositories/repositoryRuntime';
 import { getActiveAcademicYear, getActiveProgrammeId } from '../db/repositories/domainRepositoryUtils';
 import { createSessionsRepository, sessionsRepository } from '../db/repositories/sessionsRepository';
+import { syncStateRepository } from '../db/repositories/syncStateRepository';
 import { decodeJson } from '../db/repositories/sqliteRepositoryUtils';
 
 export const SESSION_HISTORY_PAGE_SIZE = 200;
@@ -1200,44 +1363,46 @@ export const SESSION_HISTORY_REQUEST_TIMEOUT_MS = 15_000;
 export const SESSION_HISTORY_RUN_BUDGET_MS = 60_000;
 export const SESSION_HISTORY_OVERLAP_SECONDS = 120;
 export const SESSION_HISTORY_STALENESS_MS = 15 * 60 * 1000;
+export const SESSION_HISTORY_REWALK_INTERVAL_MS = 24 * 60 * 60 * 1000;
 
 export const sessionHistoryScope = (userId, programmeId) => `session_history_pull:${userId}:${programmeId}`;
 
+let actorGeneration = 0;
 const inFlight = new Map();
 
-class DeadlineError extends Error {
-  constructor() { super('Session history request deadline exceeded'); this.name = 'AbortError'; }
+export const resetSessionHistoryForActorChange = () => {
+  actorGeneration += 1;
+  inFlight.clear();
+};
+
+class HistoryRunStop extends Error {
+  constructor(kind, message) {
+    super(message);
+    this.kind = kind; // 'transport' | 'query' | 'cancelled' | 'budget'
+  }
 }
 
-// Deadline inside the queued task, so a hung request releases the shared request queue.
-const withDeadline = (enqueueRequest, timeoutMs, start) => enqueueRequest(() => {
+// The deadline starts when the request is enqueued, so a hung predecessor in the shared
+// queue cannot hold this run. Work that reaches the front after expiry or after an actor
+// change never starts.
+const withDeadline = ({ enqueueRequest, timeoutMs, isStale, start }) => {
   const controller = new AbortController();
+  let expired = false;
   let timer;
   const deadline = new Promise((_, reject) => {
-    timer = setTimeout(() => { controller.abort(); reject(new DeadlineError()); }, timeoutMs);
+    timer = setTimeout(() => {
+      expired = true;
+      controller.abort();
+      reject(new HistoryRunStop('transport', 'Session history request deadline exceeded'));
+    }, timeoutMs);
   });
-  return Promise.race([start(controller.signal), deadline]).finally(() => clearTimeout(timer));
-});
-
-const failureStatus = (error) => classifyPullFailureKind(error);
-
-const fetchAttendees = async ({ client, enqueueRequest, timeoutMs, sessionIds }) => {
-  const rows = [];
-  let after = null;
-  for (;;) {
-    const { data, error } = await withDeadline(enqueueRequest, timeoutMs, (signal) => (
-      client.rpc('get_delivery_history_attendee_page', {
-        p_session_ids: sessionIds,
-        p_page_size: SESSION_HISTORY_PAGE_SIZE,
-        p_after_session_id: after?.session_id ?? null,
-        p_after_attendee_id: after?.id ?? null,
-      }).abortSignal(signal)
-    ));
-    if (error) throw Object.assign(new Error(error.message || 'Attendee page failed'), { pullError: error });
-    rows.push(...(data || []));
-    if (!data || data.length < SESSION_HISTORY_PAGE_SIZE) return rows;
-    after = data[data.length - 1];
-  }
+  const queued = enqueueRequest(() => {
+    if (expired) throw new HistoryRunStop('transport', 'Expired while queued');
+    if (isStale()) throw new HistoryRunStop('cancelled', 'Signed-in user changed');
+    return start(controller.signal);
+  });
+  queued.catch(() => {});
+  return Promise.race([queued, deadline]).finally(() => clearTimeout(timer));
 };
 
 const runOnce = async ({ userId, force, deps }) => {
@@ -1246,10 +1411,13 @@ const runOnce = async ({ userId, force, deps }) => {
     client = supabase,
     enqueueRequest = enqueueSupabaseRequest,
     now = () => Date.now(),
+    wallNow = () => Date.now(),
     requestTimeoutMs = SESSION_HISTORY_REQUEST_TIMEOUT_MS,
     runBudgetMs = SESSION_HISTORY_RUN_BUDGET_MS,
     onPageSaved = () => {},
   } = deps;
+  const generation = actorGeneration;
+  const isStale = () => generation !== actorGeneration;
   const repo = database ? createSessionsRepository({ database }) : sessionsRepository;
   const db = await resolveDatabase(database);
 
@@ -1259,90 +1427,191 @@ const runOnce = async ({ userId, force, deps }) => {
 
   const scope = sessionHistoryScope(userId, programmeId);
   const stateRow = await db.getFirstAsync('select last_pulled_at, cursor from sync_state where scope = ?', scope);
-  let cursor = decodeJson(stateRow?.cursor, null);
-  if (!cursor || cursor.windowStart !== year.starts_on) {
-    cursor = { updatedAt: null, id: null, windowStart: year.starts_on, complete: false };
+  const emptyState = {
+    windowStart: year.starts_on, updatedAt: null, id: null, complete: false,
+    firstWalk: true, firstWalkChildIds: null,
+    rescanAfter: null, rewalkChildIds: null, rescanCompletedAt: null, rescanChildIds: [],
+    lastFailureAt: null,
+  };
+  let state = { ...emptyState, ...(decodeJson(stateRow?.cursor, {}) || {}) };
+  let lastPulledAt = stateRow?.last_pulled_at || null;
+  if (state.windowStart !== year.starts_on) {
+    state = emptyState;
+    lastPulledAt = null;
   }
 
-  const lastPulledMs = Date.parse(stateRow?.last_pulled_at || '');
-  if (!force && cursor.complete && Number.isFinite(lastPulledMs)
-    && Date.now() - lastPulledMs < SESSION_HISTORY_STALENESS_MS) {
+  const currentChildIds = (await db.getAllAsync(`
+    select distinct child_id from child_ea_assignments
+    where user_id = ? and unassigned_at is null
+    order by child_id
+  `, userId)).map((row) => row.child_id);
+  const wallIso = () => new Date(wallNow()).toISOString();
+  const rewalkDue = () => Boolean(state.rescanAfter)
+    || !state.rescanCompletedAt
+    || wallNow() - Date.parse(state.rescanCompletedAt) >= SESSION_HISTORY_REWALK_INTERVAL_MS
+    || currentChildIds.some((id) => !state.rescanChildIds.includes(id));
+
+  const failedSinceSuccess = state.lastFailureAt
+    && (!lastPulledAt || Date.parse(state.lastFailureAt) > Date.parse(lastPulledAt));
+  const lastPulledMs = Date.parse(lastPulledAt || '');
+  if (!force && state.complete && !failedSinceSuccess && !rewalkDue()
+    && Number.isFinite(lastPulledMs) && wallNow() - lastPulledMs < SESSION_HISTORY_STALENESS_MS) {
     return { status: 'fresh', pages: 0 };
   }
 
   const startedAt = now();
-  let overlapSeconds = cursor.complete && cursor.updatedAt ? SESSION_HISTORY_OVERLAP_SECONDS : 0;
-  let pages = 0;
+  const remaining = () => runBudgetMs - (now() - startedAt);
+  const request = (rpcName, args) => {
+    const budget = remaining();
+    if (budget <= 0) throw new HistoryRunStop('budget', 'Run budget spent');
+    return withDeadline({
+      enqueueRequest,
+      timeoutMs: Math.min(requestTimeoutMs, budget),
+      isStale,
+      start: (signal) => client.rpc(rpcName, args).abortSignal(signal),
+    }).then(({ data, error }) => {
+      if (error) throw new HistoryRunStop(classifyPullFailureKind(error), error.message || 'RPC failed');
+      if (isStale()) throw new HistoryRunStop('cancelled', 'Signed-in user changed');
+      return data || [];
+    });
+  };
 
-  for (;;) {
-    let parents;
-    let attendees;
-    try {
-      const { data, error } = await withDeadline(enqueueRequest, requestTimeoutMs, (signal) => (
-        client.rpc('get_delivery_history_page', {
-          p_programme_id: programmeId,
-          p_window_start: year.starts_on,
-          p_page_size: SESSION_HISTORY_PAGE_SIZE,
-          p_after_updated_at: cursor.updatedAt,
-          p_after_id: cursor.id,
-          p_overlap_seconds: overlapSeconds,
-        }).abortSignal(signal)
-      ));
-      if (error) return { status: failureStatus(error), pages };
-      parents = data || [];
-      attendees = parents.length
-        ? await fetchAttendees({ client, enqueueRequest, timeoutMs: requestTimeoutMs, sessionIds: parents.map((p) => p.id) })
-        : [];
-    } catch (error) {
-      return { status: error?.pullError ? failureStatus(error.pullError) : 'transport', pages };
+  const fetchAttendees = async (sessionIds) => {
+    const rows = [];
+    let after = null;
+    for (;;) {
+      const page = await request('get_delivery_history_attendee_page', {
+        p_session_ids: sessionIds,
+        p_page_size: SESSION_HISTORY_PAGE_SIZE,
+        p_after_session_id: after?.session_id ?? null,
+        p_after_attendee_id: after?.id ?? null,
+      });
+      rows.push(...page);
+      if (page.length < SESSION_HISTORY_PAGE_SIZE) return rows;
+      after = page[page.length - 1];
     }
-    overlapSeconds = 0;
+  };
 
+  const persist = async (parents, attendees, patch, { stamp = false } = {}) => {
     const byParent = new Map(parents.map((p) => [p.id, []]));
     for (const attendee of attendees) byParent.get(attendee.session_id)?.push(attendee);
-    const exhausted = parents.length < SESSION_HISTORY_PAGE_SIZE;
-    const last = parents[parents.length - 1];
-    cursor = {
-      updatedAt: last ? last.updated_at : cursor.updatedAt,
-      id: last ? last.id : cursor.id,
-      windowStart: year.starts_on,
-      complete: exhausted,
-    };
+    const nextState = { ...state, ...patch, lastFailureAt: null };
+    const nextLastPulledAt = stamp ? wallIso() : lastPulledAt;
     await repo.saveHistoryPage(
       parents.map((session) => ({ session, attendees: byParent.get(session.id) })),
-      { scope, pullState: { lastPulledAt: exhausted ? new Date().toISOString() : null, cursor: JSON.stringify(cursor) } }
+      {
+        scope,
+        pullState: { lastPulledAt: nextLastPulledAt, cursor: JSON.stringify(nextState) },
+        admit: () => !isStale(),
+      }
     );
+    state = nextState;
+    lastPulledAt = nextLastPulledAt;
     pages += 1;
     onPageSaved({ scope, pages });
+  };
 
-    if (exhausted) return { status: 'complete', pages };
-    if (now() - startedAt >= runBudgetMs) return { status: 'partial', pages };
+  // Pages from `from` to exhaustion. onPage returns the state patch for that page.
+  const walk = async ({ from, firstOverlap, onPage }) => {
+    let position = from;
+    let overlap = firstOverlap;
+    for (;;) {
+      const parents = await request('get_delivery_history_page', {
+        p_programme_id: programmeId,
+        p_window_start: year.starts_on,
+        p_page_size: SESSION_HISTORY_PAGE_SIZE,
+        p_after_updated_at: position?.updatedAt ?? null,
+        p_after_id: position?.id ?? null,
+        p_overlap_seconds: overlap,
+      });
+      overlap = 0;
+      const attendees = parents.length ? await fetchAttendees(parents.map((p) => p.id)) : [];
+      const last = parents[parents.length - 1];
+      position = last ? { updatedAt: last.updated_at, id: last.id } : position;
+      const exhausted = parents.length < SESSION_HISTORY_PAGE_SIZE;
+      await onPage({ parents, attendees, position, exhausted });
+      if (exhausted) return;
+      if (remaining() <= 0) throw new HistoryRunStop('budget', 'Run budget spent');
+    }
+  };
+
+  let pages = 0;
+  try {
+    // 1. Delta. The first hydration (from an empty cursor) is a full walk of the year, so its
+    //    completion also counts as the day's re-walk, even if it spanned several runs.
+    if (state.firstWalk && !state.firstWalkChildIds) state = { ...state, firstWalkChildIds: currentChildIds };
+    await walk({
+      from: state.updatedAt ? { updatedAt: state.updatedAt, id: state.id } : null,
+      firstOverlap: state.complete && state.updatedAt ? SESSION_HISTORY_OVERLAP_SECONDS : 0,
+      onPage: ({ parents, attendees, position, exhausted }) => persist(parents, attendees, {
+        updatedAt: position?.updatedAt ?? state.updatedAt,
+        id: position?.id ?? state.id,
+        complete: exhausted,
+        ...(exhausted && state.firstWalk
+          ? {
+            firstWalk: false,
+            rescanAfter: null,
+            rescanCompletedAt: wallIso(),
+            rescanChildIds: state.firstWalkChildIds,
+            firstWalkChildIds: null,
+          }
+          : {}),
+      }, { stamp: exhausted }),
+    });
+
+    // 2. Re-walk of the academic year when due (daily, a new delivery child, or unfinished).
+    if (rewalkDue()) {
+      if (!state.rescanAfter) state = { ...state, rewalkChildIds: currentChildIds };
+      await walk({
+        from: state.rescanAfter,
+        firstOverlap: 0,
+        onPage: ({ parents, attendees, position, exhausted }) => persist(parents, attendees, exhausted
+          ? { rescanAfter: null, rescanCompletedAt: wallIso(), rescanChildIds: state.rewalkChildIds, rewalkChildIds: null }
+          : { rescanAfter: position }),
+      });
+    }
+    return { status: 'complete', pages };
+  } catch (error) {
+    const kind = error instanceof HistoryRunStop ? error.kind
+      : error?.kind === 'cancelled' ? 'cancelled'
+        : 'transport';
+    if (kind === 'budget') return { status: 'partial', pages };
+    if (kind !== 'cancelled' && !isStale()) {
+      // Remember the failure so a previous success is never presented as current.
+      state = { ...state, lastFailureAt: wallIso() };
+      await syncStateRepository.setPullState(scope, { lastPulledAt, cursor: JSON.stringify(state) }, { transaction: db });
+    }
+    return { status: kind, pages };
   }
 };
 
 export const runSessionHistoryPull = ({ userId, force = false, deps = {} } = {}) => {
   const existing = inFlight.get(userId);
   if (existing) return existing;
-  const run = runOnce({ userId, force, deps }).finally(() => inFlight.delete(userId));
+  const run = runOnce({ userId, force, deps }).finally(() => {
+    if (inFlight.get(userId) === run) inFlight.delete(userId);
+  });
   inFlight.set(userId, run);
   return run;
 };
 ```
 
-Two notes for the implementer:
-- **Overlap resets the keyset.** With overlap, `(updated_at, id) > (t - 120 s, id)` re-reads rows at and just before the cursor; the idempotent upserts make that harmless. After the first page the cursor moves forward normally.
-- **An empty final page is still recorded.** It writes the cursor with `complete: true` and a `lastPulledAt`, which is how an up-to-date delta run stamps.
+Notes for the implementer:
+- `pages` is declared before `persist` runs (both closures see the same `let`). Keep that order when refactoring; it is written this way so `persist` can increment it.
+- **The failure write.** It passes the resolved handle as `{ transaction: db }`. `setPullState`'s `runWrite` runs a single statement directly on whatever handle it is given (`syncStateRepository.js`), so the same line writes to the injected test database or the app database.
+- **Removal lag.** A child's delivery assignment ending does not remove their sessions from the phone, which matches "absence never deletes" and the capturer-agnostic history rule.
+- **Overlap re-reads a little.** `(updated_at, id) > (t − 120 s, id)` re-reads rows at and just before the cursor, and the idempotent upserts make that harmless.
 
 - [ ] **Step 4: Run and confirm pass**
 
 Run: `PATH=$HOME/.nvm/versions/node/v20.19.4/bin:$PATH npx jest --config jest.integration.config.js __tests__/sessionHistoryPull.test.js`
-Expected: PASS, 13 tests.
+Expected: PASS, 18 tests.
 
 - [ ] **Step 5: Commit**
 
 ```bash
 git add src/services/sessionHistoryPull.js jest.integration.config.js __tests__/sessionHistoryPull.test.js
-git commit -m "feat(cap-004): bounded, resumable session history traversal"
+git commit -m "feat(cap-004): bounded session history delta with daily re-walk, actor fencing, and queue-aware deadlines"
 ```
 
 ---
@@ -1359,8 +1628,9 @@ git commit -m "feat(cap-004): bounded, resumable session history traversal"
 **Interfaces:**
 - Consumes: Task 5's `runSessionHistoryPull`, `sessionHistoryScope`.
 - Produces:
-  - `startSessionHistoryPull({ userId, force })`: wraps `runSessionHistoryPull`, sets `running`, and bumps `pageVersion` on each saved page.
-  - `useSessionHistoryStatus() → { running: boolean, pageVersion: number, lastResult: object|null }`.
+  - `startSessionHistoryPull({ userId, force })`: wraps `runSessionHistoryPull`, sets `running`, bumps `pageVersion` on each saved page, and bumps `runVersion` when a run finishes, even one that saved nothing.
+  - `resetSessionHistoryStatusForActorChange()`: calls `resetSessionHistoryForActorChange()` and clears the published state.
+  - `useSessionHistoryStatus() → { running: boolean, pageVersion: number, runVersion: number, lastResult: object|null }`.
   - `getSessionHistoryPullState(userId) → Promise<{ scope, lastPulledAt, cursor, updatedAt } | null>` (resolves the active Programme; `null` without one).
   - `describeHistoryState({ running, pullState }) → { label, detail }`, where `pullState = { lastPulledAt, cursor }` from `syncStateRepository.getPullState`.
 
@@ -1385,6 +1655,14 @@ describe('describeHistoryState', () => {
     const { label } = describeHistoryState({ running: false, pullState: { lastPulledAt: null, cursor: JSON.stringify({ complete: false }), updatedAt: '2026-09-25T10:00:00.000Z' } });
     expect(label).toMatch(/^Incomplete since /);
   });
+  test('a failure after an earlier success is not reported as up to date', () => {
+    const { label, detail } = describeHistoryState({ running: false, pullState: {
+      lastPulledAt: '2026-09-25T10:00:00.000Z',
+      cursor: JSON.stringify({ complete: true, lastFailureAt: '2026-09-26T08:00:00.000Z' }),
+    } });
+    expect(label).toMatch(/^Incomplete since /);
+    expect(detail).toBe('History not fully downloaded yet');
+  });
 });
 ```
 
@@ -1406,12 +1684,16 @@ Expected: FAIL (`describeHistoryState` is not exported; the new strings are not 
 
 ```js
 import { useSyncExternalStore } from 'react';
-import { runSessionHistoryPull, sessionHistoryScope } from './sessionHistoryPull';
+import {
+  resetSessionHistoryForActorChange,
+  runSessionHistoryPull,
+  sessionHistoryScope,
+} from './sessionHistoryPull';
 import { resolveDatabase } from '../db/repositories/repositoryRuntime';
 import { getActiveProgrammeId } from '../db/repositories/domainRepositoryUtils';
 import { syncStateRepository } from '../db/repositories/syncStateRepository';
 
-let snapshot = { running: false, pageVersion: 0, lastResult: null };
+let snapshot = { running: false, pageVersion: 0, runVersion: 0, lastResult: null };
 const listeners = new Set();
 const publish = (next) => { snapshot = { ...snapshot, ...next }; listeners.forEach((listener) => listener()); };
 
@@ -1430,8 +1712,13 @@ export const startSessionHistoryPull = async ({ userId, force = false } = {}) =>
     publish({ lastResult: { status: 'transport', pages: 0 } });
     return null;
   } finally {
-    publish({ running: false });
+    publish({ running: false, runVersion: snapshot.runVersion + 1 });
   }
+};
+
+export const resetSessionHistoryStatusForActorChange = () => {
+  resetSessionHistoryForActorChange();
+  publish({ running: false, lastResult: null, runVersion: snapshot.runVersion + 1 });
 };
 
 const subscribe = (listener) => { listeners.add(listener); return () => listeners.delete(listener); };
@@ -1453,8 +1740,10 @@ export const describeHistoryState = ({ running, pullState } = {}) => {
   if (running) return { label: 'Downloading', detail: 'Downloading history from Head Office…' };
   if (!pullState) return { label: 'Not downloaded yet', detail: null };
   const cursor = (() => { try { return JSON.parse(pullState.cursor || '{}'); } catch { return {}; } })();
-  if (cursor.complete && pullState.lastPulledAt) return { label: 'Up to date', detail: null };
-  const since = pullState.updatedAt || pullState.lastPulledAt;
+  const failedSinceSuccess = cursor.lastFailureAt
+    && (!pullState.lastPulledAt || Date.parse(cursor.lastFailureAt) > Date.parse(pullState.lastPulledAt));
+  if (cursor.complete && pullState.lastPulledAt && !failedSinceSuccess) return { label: 'Up to date', detail: null };
+  const since = cursor.lastFailureAt || pullState.updatedAt || pullState.lastPulledAt;
   const time = since ? new Date(since).toLocaleString([], { day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' }) : 'the last attempt';
   return { label: `Incomplete since ${time}`, detail: 'History not fully downloaded yet' };
 };
@@ -1462,7 +1751,22 @@ export const describeHistoryState = ({ running, pullState } = {}) => {
 
 `syncStateRepository.getPullState` returns `{ scope, lastPulledAt, cursor }` today. Extend `mapPullState` to also return `updatedAt: row.updated_at`, which gives the "Incomplete since" time.
 
-In `ChildrenContext.js`, right after the successful `await ensureReferenceData({ userId: activeUserId });` and its `activeUserIdRef` guard, add a non-awaited start so the roster publish is never delayed:
+In `ChildrenContext.js`, first fence account changes. Next to `activeUserIdRef` (`:51`), add an effect that invalidates any in-flight history run whenever the signed-in user id changes, including to `null` on sign-out or session expiry:
+
+```js
+  const historyActorRef = useRef(user?.id || null);
+  useEffect(() => {
+    const nextActor = user?.id || null;
+    if (historyActorRef.current !== nextActor) {
+      historyActorRef.current = nextActor;
+      resetSessionHistoryStatusForActorChange();
+    }
+  }, [user?.id]);
+```
+
+Add a `ChildrenContext` test: render with user A, start a history run (mock `runSessionHistoryPull` to return a never-settling promise), re-render with user B, and assert `resetSessionHistoryForActorChange` was called once.
+
+Then, right after the successful `await ensureReferenceData({ userId: activeUserId });` and its `activeUserIdRef` guard, add a non-awaited start so the roster publish is never delayed:
 
 ```js
       // CAP-004: session history follows the roster and reference pulls (academic year and most
@@ -1472,11 +1776,11 @@ In `ChildrenContext.js`, right after the successful `await ensureReferenceData({
 
 In `SessionHistoryScreen.js`:
 - read `const { running, pageVersion } = useSessionHistoryStatus();` and, in the existing focus-effect loader, `const pullState = await getSessionHistoryPullState(user.id);` kept in component state;
-- add `pageVersion` to the reload dependencies, so a landed page re-reads SQLite;
+- add `pageVersion` and `runVersion` to the reload dependencies, so a landed page, or a finished run that saved nothing, re-reads SQLite and the pull state;
 - render `describeHistoryState(...).detail`, when non-null, as one thin `Text` line above the list, styled with `colors.textSecondary` and `spacing.sm` per `documentation/design-system.md`;
 - give the `FlatList` a `refreshControl={<RefreshControl refreshing={running} onRefresh={() => startSessionHistoryPull({ userId: user.id, force: true })} />}`.
 
-In `SyncStatusScreen.js`, load `getSessionHistoryPullState(user.id)` on focus and whenever `pageVersion` changes, and add a "History" `Card` after the existing status card. Its title is "History"; its body is `describeHistoryState({ running, pullState }).label`, plus the detail when present. Reuse the screen's existing `styles.card` and `styles.sectionTitle`. The existing upload card and its "All saved and synced" copy stay unchanged.
+In `SyncStatusScreen.js`, load `getSessionHistoryPullState(user.id)` on focus and whenever `pageVersion` or `runVersion` changes, and add a "History" `Card` after the existing status card. Its title is "History"; its body is `describeHistoryState({ running, pullState }).label`, plus the detail when present. Reuse the screen's existing `styles.card` and `styles.sectionTitle`. The existing upload card and its "All saved and synced" copy stay unchanged.
 
 - [ ] **Step 4: Run and confirm pass, plus neighbouring UI suites**
 
@@ -1542,9 +1846,15 @@ Push needs Jim's yes, which Claude requests. Record the Actions run id.
   - Verification rows for Tasks 1–7, with exact commands and counts.
   - A Bug-and-Gap row for the insert-stamping defect found at plan time.
   - A Decision row for the §12 corrections.
+- [ ] **Step 4b: Roadmap follow-up outside this slice.** Under §3, add an item: "Give every roster/reference pull request a deadline; today a hung request blocks the shared `supabaseRequestQueue` for all later pulls (found by the 2026-09-26 Codex review of CAP-004). History is protected by its queue-aware deadline; the roster pull is not."
 - [ ] **Step 5: Handoff and LEARNING**
   - Update the handoff's safe resumption point.
-  - Add a LEARNING section, "A delta sync is only as honest as its clock", covering insert stamping, the transaction-start overlap, the cursor in the same transaction, and why "incomplete family" would have wedged.
+  - Add a LEARNING section, "A delta sync is only as honest as its clock", covering:
+    - insert stamping;
+    - the transaction-start overlap;
+    - the cursor in the same transaction;
+    - why "incomplete family" would have wedged;
+    - why permission changes need a re-walk: a timestamp watches rows, not who may see them.
 - [ ] **Step 6: Link check and commit**
 
 Run the Node relative-link walker used in the 2026-09-23 build-log row, then `git diff --check`.

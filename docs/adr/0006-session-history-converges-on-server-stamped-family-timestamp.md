@@ -49,3 +49,12 @@ for updates only; inserts kept the phone-sent value. The CAP-004 migration makes
 triggers `before insert or update`, which restores the premise. The overlap rewind is performed
 by the server through `p_overlap_seconds` on the first page of a run, not by the client. See
 spec §12.
+
+## Follow-up — 2026-09-26
+
+The delta alone cannot converge. A new delivery assignment authorizes older sessions behind the
+cursor, and `now()` is transaction-start time, so a slow write can commit behind it. Jim accepted a
+**daily re-walk of the academic year**, also triggered when the phone gains a delivery child, as the
+convergence backstop. The delta keeps the common case to one small request. The re-walk bounds
+correctness to about a day, at the cost of one year of one EA's families per day. Revisit if yearly
+volume per EA grows past a handful of pages. See spec §12 items 8–10.
