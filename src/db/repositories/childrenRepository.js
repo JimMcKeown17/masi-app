@@ -282,7 +282,9 @@ export const createChildrenRepository = ({ database } = {}) => {
 
   const getChildren = async () => {
     const db = await resolveDatabase(database);
-    const rows = await db.getAllAsync('select * from children order by first_name, last_name');
+    const rows = await db.getAllAsync(
+      'select * from children where history_reference = 0 order by first_name, last_name'
+    );
     return rows.map(mapChild);
   };
 

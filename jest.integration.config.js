@@ -14,6 +14,7 @@ module.exports = {
     '<rootDir>/__tests__/classesRepository.test.js',
     '<rootDir>/__tests__/sessionsRepository.test.js',
     '<rootDir>/__tests__/sessionsHistoryPage.test.js',
+    '<rootDir>/__tests__/sessionHistoryReaders.test.js',
     '<rootDir>/__tests__/assessmentsRepository.test.js',
     '<rootDir>/__tests__/timeEntriesRepository.test.js',
     '<rootDir>/__tests__/useTimeTracking.integration.test.js',
