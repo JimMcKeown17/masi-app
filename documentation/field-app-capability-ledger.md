@@ -1,6 +1,6 @@
 # Field-App Capability Ledger
 
-**Standing capability-and-evidence ledger. Updated 2026-09-23 after Jim's assessment-history decisions (2026-09-21).**
+**Standing capability-and-evidence ledger. Updated 2026-09-26 after the CAP-004 session-history build.**
 
 This ledger answers whether a narrowly defined field-app capability exists, which invariants govern
 it, where its implementation lives, what evidence has actually been earned, and what one verifier

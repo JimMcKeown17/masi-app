@@ -1,7 +1,7 @@
 # Product and Engineering Roadmap
 
-**Standing document. Updated 2026-09-23 after Jim's 2026-09-21 assessment-history decisions and the
-Pro-plan move. This is the single in-repository answer to "what is still outstanding?"**
+**Standing document. Updated 2026-09-26 after the CAP-004 session-history build (branch, pre-hosted)
+and Jim's 2026-09-21/23 decisions. This is the single in-repository answer to "what is still outstanding?"**
 
 This file contains open work only. Its priority section is the roadmap; the numbered sections are
 the detailed work register behind that roadmap. Completed implementation and verification belong in
