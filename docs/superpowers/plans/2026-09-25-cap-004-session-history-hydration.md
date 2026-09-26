@@ -43,9 +43,10 @@ including its §12 plan-time corrections, which take precedence. Decision record
   cursor.
 - Cursor scope: `session_history_pull:<userId>:<programmeId>`; the cursor JSON shape is defined in
   Task 5. `updatedAt` is replayed exactly as PostgREST returned it and is never parsed into a `Date`.
-- Re-walk: once per 24 hours, immediately when the phone has an active delivery child absent at the
-  last completed re-walk, and resumed while part-way; the first hydration counts as that day's
-  re-walk.
+- Re-walk: after a per-phone random interval of 20–28 hours (jitter, so a fleet that opens the app
+  at the same hour does not re-walk in one burst; Jim 2026-09-26), immediately when the phone has an
+  active delivery child absent at the last completed re-walk, and resumed while part-way; the first
+  hydration counts as that day's re-walk.
 - Actor fencing: a change of signed-in user invalidates every in-flight run. No queued request
   starts, and no page commits, for a stale run.
 - Safety rails: pending/failed local rows win; synced/terminal rows are replaced; absence never
@@ -1060,13 +1061,14 @@ git commit -m "feat(cap-004): exclude history reference children from reads and 
   - `sessionHistoryScope(userId, programmeId) → string`.
   - `resetSessionHistoryForActorChange()`: invalidates every in-flight run (it is called when the signed-in user changes, Task 6).
   - `runSessionHistoryPull({ userId, force = false, deps }) → Promise<{ status, pages }>`, where `status ∈ 'complete' | 'partial' | 'fresh' | 'dependency' | 'transport' | 'query' | 'cancelled'`.
-    - `deps` (optional, for tests): `{ database, client, enqueueRequest, now, wallNow, requestTimeoutMs, runBudgetMs, onPageSaved }`. `now` is the budget clock; `wallNow` is epoch milliseconds for stamps and the daily re-walk.
+    - `deps` (optional, for tests): `{ database, client, enqueueRequest, now, wallNow, random, requestTimeoutMs, runBudgetMs, onPageSaved }`. `random` defaults to `Math.random` and sets the re-walk jitter. `now` is the budget clock; `wallNow` is epoch milliseconds for stamps and the daily re-walk.
     - It is single-flight per `userId`.
-  - The persisted cursor JSON is `{ windowStart, updatedAt, id, deltaComplete, complete, firstWalk, firstWalkChildIds, rescanAfter, rewalkChildIds, rescanCompletedAt, rescanChildIds, lastFailureAt }`:
+  - The persisted cursor JSON is `{ windowStart, updatedAt, id, deltaComplete, complete, firstWalk, firstWalkChildIds, rescanAfter, rewalkChildIds, rescanCompletedAt, nextRewalkAt, rescanChildIds, lastFailureAt }`:
     - `updatedAt`/`id`/`deltaComplete` are the delta position; `deltaComplete` only decides whether the next delta starts with the overlap;
     - `complete` means **overall** hydration is complete: the delta is exhausted **and** no re-walk is due or part-way. `last_pulled_at` is stamped only when `complete` becomes true. Freshness admission and the UI read `complete`, never `deltaComplete` (Codex round 2);
     - `firstWalk` is `true` while the first hydration, a delta from an empty cursor, is unfinished;
     - `rescanAfter` is `{ updatedAt, id }` while a re-walk is part-way, otherwise `null`;
+    - `nextRewalkAt` is the ISO time the next daily re-walk falls due. It is set when a walk completes, to the completion time plus 20 hours plus a random 0–8 hours;
     - `*ChildIds` are the sorted active delivery child ids captured when that walk **started**. A child assigned during a walk is caught by the next one.
 
 **Convergence rule (Jim, 2026-09-26; spec §12 items 8–10):**
@@ -1145,7 +1147,7 @@ describe('runSessionHistoryPull', () => {
   let wall;
   const deps = (extra) => ({
     database: db, enqueueRequest: (task) => task(), requestTimeoutMs: 50, runBudgetMs: 60_000,
-    wallNow: () => wall, ...extra,
+    wallNow: () => wall, random: () => 0.5, ...extra, // 0.5 => exactly 24 h between re-walks
   });
   const cursorOf = async (userId = 'user-1', programmeId = 'programme-a') => {
     const row = await db.getFirstAsync('select cursor, last_pulled_at from sync_state where scope = ?', sessionHistoryScope(userId, programmeId));
@@ -1199,6 +1201,23 @@ describe('runSessionHistoryPull', () => {
     expect(after.parentCalls().some((c) => c.args.p_after_updated_at === null && c.args.p_overlap_seconds === 0)).toBe(true);
     expect(await db.getFirstAsync('select id from sessions where id = ?', uuid(1))).toEqual({ id: uuid(1) });
     expect((await cursorOf()).rescanChildIds).toEqual(['child-new']);
+  });
+
+  test('the re-walk interval is jittered between 20 and 28 hours per phone', async () => {
+    const HOUR = 60 * 60 * 1000;
+    await runSessionHistoryPull({ userId: 'user-1', deps: deps({ client: fakeServer({ parents: [parent(1)] }).client, random: () => 0 }) });
+    expect(Date.parse((await cursorOf()).nextRewalkAt) - wall).toBe(20 * HOUR);
+    wall += 19 * HOUR;
+    const early = fakeServer({ parents: [parent(1)] });
+    await runSessionHistoryPull({ userId: 'user-1', force: true, deps: deps({ client: early.client }) });
+    expect(early.parentCalls().some((c) => c.args.p_after_updated_at === null)).toBe(false);
+    wall += 2 * HOUR;
+    const due = fakeServer({ parents: [parent(1)] });
+    await runSessionHistoryPull({ userId: 'user-1', force: true, deps: deps({ client: due.client, random: () => 0.999999 }) });
+    expect(due.parentCalls().some((c) => c.args.p_after_updated_at === null)).toBe(true);
+    const next = Date.parse((await cursorOf()).nextRewalkAt) - wall;
+    expect(next).toBeGreaterThan(27.9 * HOUR);
+    expect(next).toBeLessThanOrEqual(28 * HOUR);
   });
 
   test('the re-walk runs again after 24 hours even with nothing new', async () => {
@@ -1491,7 +1510,9 @@ export const SESSION_HISTORY_REQUEST_TIMEOUT_MS = 15_000;
 export const SESSION_HISTORY_RUN_BUDGET_MS = 60_000;
 export const SESSION_HISTORY_OVERLAP_SECONDS = 120;
 export const SESSION_HISTORY_STALENESS_MS = 15 * 60 * 1000;
-export const SESSION_HISTORY_REWALK_INTERVAL_MS = 24 * 60 * 60 * 1000;
+const HOUR_MS = 60 * 60 * 1000;
+export const SESSION_HISTORY_REWALK_MIN_MS = 20 * HOUR_MS;
+export const SESSION_HISTORY_REWALK_JITTER_MS = 8 * HOUR_MS;
 
 export const sessionHistoryScope = (userId, programmeId) => `session_history_pull:${userId}:${programmeId}`;
 
@@ -1540,6 +1561,7 @@ const runOnce = async ({ userId, force, deps }) => {
     enqueueRequest = enqueueSupabaseRequest,
     now = () => Date.now(),
     wallNow = () => Date.now(),
+    random = Math.random,
     requestTimeoutMs = SESSION_HISTORY_REQUEST_TIMEOUT_MS,
     runBudgetMs = SESSION_HISTORY_RUN_BUDGET_MS,
     onPageSaved = () => {},
@@ -1558,7 +1580,7 @@ const runOnce = async ({ userId, force, deps }) => {
   const emptyState = {
     windowStart: year.starts_on, updatedAt: null, id: null, deltaComplete: false, complete: false,
     firstWalk: true, firstWalkChildIds: null,
-    rescanAfter: null, rewalkChildIds: null, rescanCompletedAt: null, rescanChildIds: [],
+    rescanAfter: null, rewalkChildIds: null, rescanCompletedAt: null, nextRewalkAt: null, rescanChildIds: [],
     lastFailureAt: null,
   };
   let state = { ...emptyState, ...(decodeJson(stateRow?.cursor, {}) || {}) };
@@ -1574,9 +1596,14 @@ const runOnce = async ({ userId, force, deps }) => {
     order by child_id
   `, userId)).map((row) => row.child_id);
   const wallIso = () => new Date(wallNow()).toISOString();
+  // Jittered (20-28 h per phone) so a fleet that all opens the app at the same hour does not
+  // re-walk in one burst against the server.
+  const nextRewalkIso = () => new Date(
+    wallNow() + SESSION_HISTORY_REWALK_MIN_MS + Math.floor(random() * SESSION_HISTORY_REWALK_JITTER_MS)
+  ).toISOString();
   const rewalkDueFor = (candidate) => Boolean(candidate.rescanAfter)
-    || !candidate.rescanCompletedAt
-    || wallNow() - Date.parse(candidate.rescanCompletedAt) >= SESSION_HISTORY_REWALK_INTERVAL_MS
+    || !candidate.nextRewalkAt
+    || wallNow() >= Date.parse(candidate.nextRewalkAt)
     || currentChildIds.some((id) => !(candidate.rescanChildIds || []).includes(id));
   const rewalkDue = () => rewalkDueFor(state);
 
@@ -1686,6 +1713,7 @@ const runOnce = async ({ userId, force, deps }) => {
               firstWalk: false,
               rescanAfter: null,
               rescanCompletedAt: wallIso(),
+              nextRewalkAt: nextRewalkIso(),
               rescanChildIds: current.firstWalkChildIds,
               firstWalkChildIds: null,
             }
@@ -1706,6 +1734,7 @@ const runOnce = async ({ userId, force, deps }) => {
           ? {
             rescanAfter: null,
             rescanCompletedAt: wallIso(),
+            nextRewalkAt: nextRewalkIso(),
             rescanChildIds: current.rewalkChildIds,
             rewalkChildIds: null,
             complete: current.deltaComplete,
@@ -1758,7 +1787,7 @@ Notes for the implementer:
 - [ ] **Step 4: Run and confirm pass**
 
 Run: `PATH=$HOME/.nvm/versions/node/v20.19.4/bin:$PATH npx jest --config jest.integration.config.js __tests__/sessionHistoryPull.test.js`
-Expected: PASS, 21 tests. (The two re-walk budget tests import `describeHistoryState`, so run them after Task 6's presenter exists. Until then, keep them skipped with `test.skip` and un-skip them in Task 6 Step 4.)
+Expected: PASS, 22 tests. (The two re-walk budget tests import `describeHistoryState`, so run them after Task 6's presenter exists. Until then, keep them skipped with `test.skip` and un-skip them in Task 6 Step 4.)
 
 - [ ] **Step 5: Commit**
 

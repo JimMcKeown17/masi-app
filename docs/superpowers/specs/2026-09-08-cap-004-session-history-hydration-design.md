@@ -353,7 +353,8 @@ Found while writing the implementation plan against current code. Each supersede
    that sit behind the cursor and would never be downloaded. `now()` is transaction-start time, so
    a slow transaction can also commit behind the cursor. Each run therefore follows its delta with
    a full walk of the academic year when:
-   - no walk has completed in 24 hours;
+   - the phone's next re-walk time has passed (20–28 hours after the last walk, randomized per
+     phone so a fleet does not re-walk in one burst; Jim 2026-09-26);
    - the phone has an active delivery child absent at the last completed walk; or
    - a walk is part-way.
 
