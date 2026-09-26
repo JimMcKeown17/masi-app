@@ -819,6 +819,21 @@ describe('sessionsRepository.saveHistoryPage', () => {
     expect(await db.getFirstAsync('select * from sync_state where scope = ?', SCOPE)).toBeNull();
   });
 
+  test('an actor change after admission but before COMMIT rolls the whole page back', async () => {
+    let checks = 0;
+    let caught;
+    try {
+      await repo.saveHistoryPage([{ session: serverSession(), attendees: [serverAttendee()] }], {
+        scope: SCOPE, pullState: pullState(), admit: () => { checks += 1; return checks === 1; },
+      });
+    } catch (error) { caught = error; }
+    expect(checks).toBe(2);
+    expect(caught?.kind).toBe('cancelled');
+    expect((await db.getFirstAsync('select count(*) as n from sessions')).n).toBe(0);
+    expect((await db.getFirstAsync('select count(*) as n from children')).n).toBe(0);
+    expect(await db.getFirstAsync('select * from sync_state where scope = ?', SCOPE)).toBeNull();
+  });
+
   test('lastPulledAt is written only when the caller passes it', async () => {
     await repo.saveHistoryPage([], { scope: SCOPE, pullState: { lastPulledAt: '2026-09-25T10:00:00.000Z', cursor: pullState().cursor } });
     expect((await db.getFirstAsync('select last_pulled_at from sync_state where scope = ?', SCOPE)).last_pulled_at)
@@ -901,6 +916,11 @@ In `sessionsRepository.js`, extend the `domainRepositoryUtils` import with `serv
         await upsertDomainRecord(txn, { tableName: 'session_attendees', columns: ATTENDEE_COLUMNS }, row);
       }
       savedFamilies += 1;
+    }
+    // Re-check after every awaited write, immediately before the cursor and COMMIT: the actor
+    // can change while this transaction is in flight.
+    if (admit && !admit()) {
+      throw Object.assign(new Error('Session history run cancelled'), { kind: 'cancelled' });
     }
     await syncStateRepository.setPullState(scope, pullState, { transaction: txn });
     return { savedFamilies };
@@ -1042,8 +1062,9 @@ git commit -m "feat(cap-004): exclude history reference children from reads and 
   - `runSessionHistoryPull({ userId, force = false, deps }) → Promise<{ status, pages }>`, where `status ∈ 'complete' | 'partial' | 'fresh' | 'dependency' | 'transport' | 'query' | 'cancelled'`.
     - `deps` (optional, for tests): `{ database, client, enqueueRequest, now, wallNow, requestTimeoutMs, runBudgetMs, onPageSaved }`. `now` is the budget clock; `wallNow` is epoch milliseconds for stamps and the daily re-walk.
     - It is single-flight per `userId`.
-  - The persisted cursor JSON is `{ windowStart, updatedAt, id, complete, firstWalk, firstWalkChildIds, rescanAfter, rewalkChildIds, rescanCompletedAt, rescanChildIds, lastFailureAt }`:
-    - `updatedAt`/`id`/`complete` are the delta position;
+  - The persisted cursor JSON is `{ windowStart, updatedAt, id, deltaComplete, complete, firstWalk, firstWalkChildIds, rescanAfter, rewalkChildIds, rescanCompletedAt, rescanChildIds, lastFailureAt }`:
+    - `updatedAt`/`id`/`deltaComplete` are the delta position; `deltaComplete` only decides whether the next delta starts with the overlap;
+    - `complete` means **overall** hydration is complete: the delta is exhausted **and** no re-walk is due or part-way. `last_pulled_at` is stamped only when `complete` becomes true. Freshness admission and the UI read `complete`, never `deltaComplete` (Codex round 2);
     - `firstWalk` is `true` while the first hydration, a delta from an empty cursor, is unfinished;
     - `rescanAfter` is `{ updatedAt, id }` while a re-walk is part-way, otherwise `null`;
     - `*ChildIds` are the sorted active delivery child ids captured when that walk **started**. A child assigned during a walk is caught by the next one.
@@ -1070,6 +1091,7 @@ import {
   sessionHistoryScope,
 } from '../src/services/sessionHistoryPull';
 import { createSupabaseRequestQueue } from '../src/services/supabaseRequestQueue';
+import { describeHistoryState } from '../src/utils/syncStatusPresenter';
 import { createMigratedDatabase, seedCoreData } from '../test-support/sqliteRepositoryTestUtils';
 
 const DAY = 24 * 60 * 60 * 1000;
@@ -1150,7 +1172,7 @@ describe('runSessionHistoryPull', () => {
     expect(calls[1].args.p_after_updated_at).toBe(iso(200));
     expect(calls.every((c) => c.args.p_overlap_seconds === 0 && c.args.p_window_start === '2026-01-15')).toBe(true);
     expect(await cursorOf()).toMatchObject({
-      updatedAt: iso(450), complete: true, windowStart: '2026-01-15', rescanAfter: null, firstWalk: false,
+      updatedAt: iso(450), deltaComplete: true, complete: true, windowStart: '2026-01-15', rescanAfter: null, firstWalk: false,
       rescanCompletedAt: new Date(wall).toISOString(), rescanChildIds: [],
     });
     expect((await db.getFirstAsync('select count(*) as n from sessions')).n).toBe(450);
@@ -1199,7 +1221,7 @@ describe('runSessionHistoryPull', () => {
       now: () => (saved >= 2 ? 1e9 : 0), // the budget is spent once two pages are saved
     }) });
     expect(first).toEqual({ status: 'partial', pages: 2 });
-    expect(await cursorOf()).toMatchObject({ updatedAt: iso(400), complete: false, lastPulledAt: null, firstWalk: true });
+    expect(await cursorOf()).toMatchObject({ updatedAt: iso(400), deltaComplete: false, complete: false, lastPulledAt: null, firstWalk: true });
     const resumed = fakeServer({ parents });
     expect((await runSessionHistoryPull({ userId: 'user-1', deps: deps({ client: resumed.client }) })).status).toBe('complete');
     expect(resumed.parentCalls()).toHaveLength(1); // the resumed first walk still counts as the day's re-walk
@@ -1215,11 +1237,18 @@ describe('runSessionHistoryPull', () => {
 
   test('a hung predecessor in the shared queue cannot hold the run past its deadline', async () => {
     const queue = createSupabaseRequestQueue();
-    queue.enqueue(() => new Promise(() => {})); // a roster request that never settles
+    let releasePredecessor;
+    const predecessorStarted = new Promise((started) => {
+      queue.enqueue(() => new Promise((resolve) => { releasePredecessor = resolve; started(); }));
+    });
+    await predecessorStarted; // a roster request that is now blocking the queue
     const server = fakeServer({ parents: [parent(1)] });
     const result = await runSessionHistoryPull({ userId: 'user-1', deps: deps({ client: server.client, enqueueRequest: queue.enqueue, requestTimeoutMs: 20 }) });
     expect(result.status).toBe('transport');
-    expect(server.calls).toHaveLength(0); // expired while queued, never started
+    // Drain the queue: the expired history task must still never start.
+    releasePredecessor();
+    await queue.enqueue(() => null);
+    expect(server.calls).toHaveLength(0);
     // Single flight was released: a new run starts rather than rejoining a stuck promise.
     const retry = fakeServer({ parents: [parent(1)] });
     await runSessionHistoryPull({ userId: 'user-1', force: true, deps: deps({ client: retry.client }) });
@@ -1239,15 +1268,58 @@ describe('runSessionHistoryPull', () => {
 
   test('an actor change while a request is queued cancels the run before it starts', async () => {
     const queue = createSupabaseRequestQueue();
-    let release;
-    queue.enqueue(() => new Promise((resolve) => { release = resolve; }));
+    let releasePredecessor;
+    const predecessorStarted = new Promise((started) => {
+      queue.enqueue(() => new Promise((resolve) => { releasePredecessor = resolve; started(); }));
+    });
+    await predecessorStarted;
+    let markEnqueued;
+    const historyEnqueued = new Promise((resolve) => { markEnqueued = resolve; });
+    const enqueueRequest = (task) => { const queued = queue.enqueue(task); markEnqueued(); return queued; };
     const server = fakeServer({ parents: [parent(1)] });
-    const run = runSessionHistoryPull({ userId: 'user-1', deps: deps({ client: server.client, enqueueRequest: queue.enqueue, requestTimeoutMs: 1000 }) });
+    const run = runSessionHistoryPull({ userId: 'user-1', deps: deps({ client: server.client, enqueueRequest, requestTimeoutMs: 5000 }) });
+    await historyEnqueued; // the history request is genuinely waiting in the queue
     resetSessionHistoryForActorChange();
-    release();
+    releasePredecessor();
     expect((await run).status).toBe('cancelled');
+    await queue.enqueue(() => null);
     expect(server.calls).toHaveLength(0);
     expect(await cursorOf()).toBeNull();
+  });
+
+  test('a budget stop during a due re-walk stays incomplete and resumes', async () => {
+    const parents = Array.from({ length: 450 }, (_, i) => parent(i + 1));
+    await runSessionHistoryPull({ userId: 'user-1', deps: deps({ client: fakeServer({ parents }).client }) });
+    await addDeliveryChild('child-new');
+    let saved = 0;
+    const cut = await runSessionHistoryPull({ userId: 'user-1', deps: deps({
+      client: fakeServer({ parents }).client,
+      runBudgetMs: 1000,
+      onPageSaved: () => { saved += 1; },
+      now: () => (saved >= 4 ? 1e9 : 0), // three delta pages (overlap re-reads all), then one re-walk page
+    }) });
+    expect(cut.status).toBe('partial');
+    const midway = await cursorOf();
+    expect(midway).toMatchObject({ deltaComplete: true, complete: false, updatedAt: iso(450) });
+    expect(midway.rescanAfter).toEqual({ updatedAt: iso(200), id: uuid(200) });
+    expect(describeHistoryState({ running: false, pullState: { lastPulledAt: midway.lastPulledAt, cursor: JSON.stringify(midway) } }).label)
+      .not.toBe('Up to date');
+    expect((await runSessionHistoryPull({ userId: 'user-1', deps: deps({ client: fakeServer({ parents }).client }) })).status).toBe('complete');
+    expect(await cursorOf()).toMatchObject({ complete: true, rescanAfter: null, rescanChildIds: ['child-new'] });
+  });
+
+  test('a budget stop before a due re-walk starts also stays incomplete', async () => {
+    await runSessionHistoryPull({ userId: 'user-1', deps: deps({ client: fakeServer({ parents: [parent(1)] }).client }) });
+    await addDeliveryChild('child-new');
+    let saved = 0;
+    const cut = await runSessionHistoryPull({ userId: 'user-1', deps: deps({
+      client: fakeServer({ parents: [parent(1)] }).client,
+      runBudgetMs: 1000,
+      onPageSaved: () => { saved += 1; },
+      now: () => (saved >= 1 ? 1e9 : 0), // budget spent right after the delta page
+    }) });
+    expect(cut.status).toBe('partial');
+    expect(await cursorOf()).toMatchObject({ deltaComplete: true, complete: false, rescanAfter: null });
   });
 
   test('an actor change after a response arrives commits nothing', async () => {
@@ -1295,6 +1367,13 @@ describe('runSessionHistoryPull', () => {
     expect(server.calls).toHaveLength(0);
   });
 
+  test('a routine up-to-date check refreshes last_pulled_at', async () => {
+    await runSessionHistoryPull({ userId: 'user-1', deps: deps({ client: fakeServer({ parents: [parent(1)] }).client }) });
+    wall += 20 * 60 * 1000; // past the 15-minute staleness, inside the 24-hour re-walk interval
+    expect((await runSessionHistoryPull({ userId: 'user-1', deps: deps({ client: fakeServer({ parents: [parent(1)] }).client }) })).status).toBe('complete');
+    expect((await cursorOf()).lastPulledAt).toBe(new Date(wall).toISOString());
+  });
+
   test('a fresh completed scope is skipped unless forced', async () => {
     await runSessionHistoryPull({ userId: 'user-1', deps: deps({ client: fakeServer({ parents: [parent(1)] }).client }) });
     const again = fakeServer({ parents: [parent(1)] });
@@ -1335,9 +1414,57 @@ describe('runSessionHistoryPull', () => {
 });
 ```
 
+Add `__tests__/sessionHistoryPullProductionRouting.test.js`, and list it in `jest.integration.config.js`. The shared adapter ignores `PRAGMA query_only`, so this test builds production's two-handle routing explicitly: reads go through a handle whose writes throw, and writes go through the writer transaction.
+
+```js
+// __tests__/sessionHistoryPullProductionRouting.test.js
+jest.mock('expo-sqlite', () => require('../test-support/expoSQLiteMock'));
+jest.mock('../src/services/supabaseClient', () => ({ supabase: {} }));
+
+const os = require('os');
+const path = require('path');
+const { createBetterSqliteTestDatabase } = require('../test-support/betterSqliteAdapter');
+const { runWithTransaction } = require('../src/db/repositories/sqliteRepositoryUtils');
+
+const file = path.join(os.tmpdir(), `masi-history-routing-${process.pid}-${Date.now()}.db`);
+let writer;
+let readerBase;
+const readOnly = (base) => ({
+  getFirstAsync: (...args) => base.getFirstAsync(...args),
+  getAllAsync: (...args) => base.getAllAsync(...args),
+  runAsync: () => { throw new Error('attempt to write a readonly database'); },
+  execAsync: () => { throw new Error('attempt to write a readonly database'); },
+});
+jest.mock('../src/db/client', () => ({
+  getDatabase: async () => readOnly(readerBase),
+  getWriter: async () => writer,
+  withTransaction: async (task) => runWithTransaction(writer, task),
+}));
+
+const { runMigrations } = require('../src/db/migrations');
+const { runSessionHistoryPull, sessionHistoryScope } = require('../src/services/sessionHistoryPull');
+const { seedCoreData } = require('../test-support/sqliteRepositoryTestUtils');
+
+test('a failed run records lastFailureAt through the writer, never the read-only reader', async () => {
+  writer = createBetterSqliteTestDatabase(file);
+  await runMigrations(writer);
+  await seedCoreData(writer);
+  readerBase = createBetterSqliteTestDatabase(file);
+  const client = { rpc: () => ({ abortSignal: () => Promise.resolve({ data: null, error: { message: 'boom', code: 'XX000' } }) }) };
+  const result = await runSessionHistoryPull({ userId: 'user-1', deps: { client, enqueueRequest: (task) => task() } });
+  expect(result.status).toBe('query');
+  const row = await writer.getFirstAsync('select cursor from sync_state where scope = ?', sessionHistoryScope('user-1', 'programme-a'));
+  expect(JSON.parse(row.cursor).lastFailureAt).toEqual(expect.any(String));
+  await writer.closeAsync();
+  await readerBase.closeAsync();
+});
+```
+
+Before the fix, the failure write goes through the reader and throws `readonly`. The run then either rejects or records nothing, so this test fails.
+
 - [ ] **Step 2: Run and confirm failure**
 
-Run: `PATH=$HOME/.nvm/versions/node/v20.19.4/bin:$PATH npx jest --config jest.integration.config.js __tests__/sessionHistoryPull.test.js`
+Run: `PATH=$HOME/.nvm/versions/node/v20.19.4/bin:$PATH npx jest --config jest.integration.config.js __tests__/sessionHistoryPull.test.js __tests__/sessionHistoryPullProductionRouting.test.js`
 Expected: FAIL with `Cannot find module '../src/services/sessionHistoryPull'`.
 
 - [ ] **Step 3: Implement**
@@ -1354,6 +1481,7 @@ import { enqueueSupabaseRequest } from './supabaseRequestQueue';
 import { classifyPullFailureKind } from './preloadedChildData';
 import { resolveDatabase } from '../db/repositories/repositoryRuntime';
 import { getActiveAcademicYear, getActiveProgrammeId } from '../db/repositories/domainRepositoryUtils';
+import { runRepositoryTransaction } from '../db/repositories/repositoryRuntime';
 import { createSessionsRepository, sessionsRepository } from '../db/repositories/sessionsRepository';
 import { syncStateRepository } from '../db/repositories/syncStateRepository';
 import { decodeJson } from '../db/repositories/sqliteRepositoryUtils';
@@ -1428,7 +1556,7 @@ const runOnce = async ({ userId, force, deps }) => {
   const scope = sessionHistoryScope(userId, programmeId);
   const stateRow = await db.getFirstAsync('select last_pulled_at, cursor from sync_state where scope = ?', scope);
   const emptyState = {
-    windowStart: year.starts_on, updatedAt: null, id: null, complete: false,
+    windowStart: year.starts_on, updatedAt: null, id: null, deltaComplete: false, complete: false,
     firstWalk: true, firstWalkChildIds: null,
     rescanAfter: null, rewalkChildIds: null, rescanCompletedAt: null, rescanChildIds: [],
     lastFailureAt: null,
@@ -1446,10 +1574,11 @@ const runOnce = async ({ userId, force, deps }) => {
     order by child_id
   `, userId)).map((row) => row.child_id);
   const wallIso = () => new Date(wallNow()).toISOString();
-  const rewalkDue = () => Boolean(state.rescanAfter)
-    || !state.rescanCompletedAt
-    || wallNow() - Date.parse(state.rescanCompletedAt) >= SESSION_HISTORY_REWALK_INTERVAL_MS
-    || currentChildIds.some((id) => !state.rescanChildIds.includes(id));
+  const rewalkDueFor = (candidate) => Boolean(candidate.rescanAfter)
+    || !candidate.rescanCompletedAt
+    || wallNow() - Date.parse(candidate.rescanCompletedAt) >= SESSION_HISTORY_REWALK_INTERVAL_MS
+    || currentChildIds.some((id) => !(candidate.rescanChildIds || []).includes(id));
+  const rewalkDue = () => rewalkDueFor(state);
 
   const failedSinceSuccess = state.lastFailureAt
     && (!lastPulledAt || Date.parse(state.lastFailureAt) > Date.parse(lastPulledAt));
@@ -1492,11 +1621,14 @@ const runOnce = async ({ userId, force, deps }) => {
     }
   };
 
-  const persist = async (parents, attendees, patch, { stamp = false } = {}) => {
+  // The patch is a function of the current state so completeness can be computed from the
+  // state as it will be after this page. last_pulled_at is stamped on every page that leaves
+  // overall hydration complete (so a routine up-to-date check refreshes it), never otherwise.
+  const persist = async (parents, attendees, makePatch) => {
     const byParent = new Map(parents.map((p) => [p.id, []]));
     for (const attendee of attendees) byParent.get(attendee.session_id)?.push(attendee);
-    const nextState = { ...state, ...patch, lastFailureAt: null };
-    const nextLastPulledAt = stamp ? wallIso() : lastPulledAt;
+    const nextState = { ...state, ...makePatch(state), lastFailureAt: null };
+    const nextLastPulledAt = nextState.complete ? wallIso() : lastPulledAt;
     await repo.saveHistoryPage(
       parents.map((session) => ({ session, attendees: byParent.get(session.id) })),
       {
@@ -1542,21 +1674,26 @@ const runOnce = async ({ userId, force, deps }) => {
     if (state.firstWalk && !state.firstWalkChildIds) state = { ...state, firstWalkChildIds: currentChildIds };
     await walk({
       from: state.updatedAt ? { updatedAt: state.updatedAt, id: state.id } : null,
-      firstOverlap: state.complete && state.updatedAt ? SESSION_HISTORY_OVERLAP_SECONDS : 0,
-      onPage: ({ parents, attendees, position, exhausted }) => persist(parents, attendees, {
-        updatedAt: position?.updatedAt ?? state.updatedAt,
-        id: position?.id ?? state.id,
-        complete: exhausted,
-        ...(exhausted && state.firstWalk
-          ? {
-            firstWalk: false,
-            rescanAfter: null,
-            rescanCompletedAt: wallIso(),
-            rescanChildIds: state.firstWalkChildIds,
-            firstWalkChildIds: null,
-          }
-          : {}),
-      }, { stamp: exhausted }),
+      firstOverlap: state.deltaComplete && state.updatedAt ? SESSION_HISTORY_OVERLAP_SECONDS : 0,
+      onPage: ({ parents, attendees, position, exhausted }) => persist(parents, attendees, (current) => {
+        const patch = {
+          updatedAt: position?.updatedAt ?? current.updatedAt,
+          id: position?.id ?? current.id,
+          deltaComplete: exhausted,
+          complete: false,
+          ...(exhausted && current.firstWalk
+            ? {
+              firstWalk: false,
+              rescanAfter: null,
+              rescanCompletedAt: wallIso(),
+              rescanChildIds: current.firstWalkChildIds,
+              firstWalkChildIds: null,
+            }
+            : {}),
+        };
+        // Complete only if no re-walk remains due once this page is applied.
+        return { ...patch, complete: exhausted && !rewalkDueFor({ ...current, ...patch }) };
+      }),
     });
 
     // 2. Re-walk of the academic year when due (daily, a new delivery child, or unfinished).
@@ -1565,9 +1702,15 @@ const runOnce = async ({ userId, force, deps }) => {
       await walk({
         from: state.rescanAfter,
         firstOverlap: 0,
-        onPage: ({ parents, attendees, position, exhausted }) => persist(parents, attendees, exhausted
-          ? { rescanAfter: null, rescanCompletedAt: wallIso(), rescanChildIds: state.rewalkChildIds, rewalkChildIds: null }
-          : { rescanAfter: position }),
+        onPage: ({ parents, attendees, position, exhausted }) => persist(parents, attendees, (current) => (exhausted
+          ? {
+            rescanAfter: null,
+            rescanCompletedAt: wallIso(),
+            rescanChildIds: current.rewalkChildIds,
+            rewalkChildIds: null,
+            complete: current.deltaComplete,
+          }
+          : { rescanAfter: position, complete: false })),
       });
     }
     return { status: 'complete', pages };
@@ -1577,9 +1720,19 @@ const runOnce = async ({ userId, force, deps }) => {
         : 'transport';
     if (kind === 'budget') return { status: 'partial', pages };
     if (kind !== 'cancelled' && !isStale()) {
-      // Remember the failure so a previous success is never presented as current.
-      state = { ...state, lastFailureAt: wallIso() };
-      await syncStateRepository.setPullState(scope, { lastPulledAt, cursor: JSON.stringify(state) }, { transaction: db });
+      // Remember the failure so a previous success is never presented as current. Written
+      // through the writer transaction (the resolved handle is the read-only reader in
+      // production), with admission re-checked inside it.
+      const failed = { ...state, lastFailureAt: wallIso() };
+      try {
+        await runRepositoryTransaction(database, async (txn) => {
+          if (isStale()) return;
+          await syncStateRepository.setPullState(scope, { lastPulledAt, cursor: JSON.stringify(failed) }, { transaction: txn });
+        });
+        state = failed;
+      } catch (writeError) {
+        console.warn('[sessionHistoryPull] could not record failure:', writeError?.message);
+      }
     }
     return { status: kind, pages };
   }
@@ -1598,19 +1751,19 @@ export const runSessionHistoryPull = ({ userId, force = false, deps = {} } = {})
 
 Notes for the implementer:
 - `pages` is declared before `persist` runs (both closures see the same `let`). Keep that order when refactoring; it is written this way so `persist` can increment it.
-- **The failure write.** It passes the resolved handle as `{ transaction: db }`. `setPullState`'s `runWrite` runs a single statement directly on whatever handle it is given (`syncStateRepository.js`), so the same line writes to the injected test database or the app database.
+- **The failure write goes through `runRepositoryTransaction`.** In production `resolveDatabase()` returns the `query_only` reader (`repositoryRuntime.js:11-14`, `client.js:82-85`), so every write must use the writer path. The production-routing test below pins this.
 - **Removal lag.** A child's delivery assignment ending does not remove their sessions from the phone, which matches "absence never deletes" and the capturer-agnostic history rule.
 - **Overlap re-reads a little.** `(updated_at, id) > (t − 120 s, id)` re-reads rows at and just before the cursor, and the idempotent upserts make that harmless.
 
 - [ ] **Step 4: Run and confirm pass**
 
 Run: `PATH=$HOME/.nvm/versions/node/v20.19.4/bin:$PATH npx jest --config jest.integration.config.js __tests__/sessionHistoryPull.test.js`
-Expected: PASS, 18 tests.
+Expected: PASS, 21 tests. (The two re-walk budget tests import `describeHistoryState`, so run them after Task 6's presenter exists. Until then, keep them skipped with `test.skip` and un-skip them in Task 6 Step 4.)
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add src/services/sessionHistoryPull.js jest.integration.config.js __tests__/sessionHistoryPull.test.js
+git add src/services/sessionHistoryPull.js jest.integration.config.js __tests__/sessionHistoryPull.test.js __tests__/sessionHistoryPullProductionRouting.test.js
 git commit -m "feat(cap-004): bounded session history delta with daily re-walk, actor fencing, and queue-aware deadlines"
 ```
 
@@ -1666,6 +1819,14 @@ describe('describeHistoryState', () => {
 });
 ```
 
+Add a store test to `__tests__/sessionHistoryStatus.test.js`. Mock `../src/services/sessionHistoryPull`, so `runSessionHistoryPull` returns deferred promises and `resetSessionHistoryForActorChange` is a jest function. Then:
+- start A;
+- call `resetSessionHistoryStatusForActorChange()`;
+- start B;
+- resolve A with `{ status: 'cancelled' }`.
+
+Assert that the snapshot still shows `running: true` and `lastResult: null`, and that `pageVersion` and `runVersion` are unchanged by A. Then resolve B, and assert `running: false` with B's result.
+
 In `SessionHistoryScreen.plan5.test.js`, add three tests:
 - **Downloading line:** when `useSessionHistoryStatus` reports `running: true`, the text "Downloading history from Head Office…" renders.
 - **Incomplete line:** when not running and the pull state is incomplete, "History not fully downloaded yet" renders.
@@ -1697,26 +1858,32 @@ let snapshot = { running: false, pageVersion: 0, runVersion: 0, lastResult: null
 const listeners = new Set();
 const publish = (next) => { snapshot = { ...snapshot, ...next }; listeners.forEach((listener) => listener()); };
 
+// A run started for a signed-out EA must never publish into the next EA's status.
+let statusGeneration = 0;
+
 export const startSessionHistoryPull = async ({ userId, force = false } = {}) => {
   if (!userId) return null;
-  publish({ running: true });
+  const token = statusGeneration;
+  const publishIfCurrent = (next) => { if (token === statusGeneration) publish(next); };
+  publishIfCurrent({ running: true });
   try {
     const result = await runSessionHistoryPull({
       userId,
       force,
-      deps: { onPageSaved: () => publish({ pageVersion: snapshot.pageVersion + 1 }) },
+      deps: { onPageSaved: () => publishIfCurrent({ pageVersion: snapshot.pageVersion + 1 }) },
     });
-    publish({ lastResult: result });
+    publishIfCurrent({ lastResult: result });
     return result;
   } catch (error) {
-    publish({ lastResult: { status: 'transport', pages: 0 } });
+    publishIfCurrent({ lastResult: { status: 'transport', pages: 0 } });
     return null;
   } finally {
-    publish({ running: false, runVersion: snapshot.runVersion + 1 });
+    publishIfCurrent({ running: false, runVersion: snapshot.runVersion + 1 });
   }
 };
 
 export const resetSessionHistoryStatusForActorChange = () => {
+  statusGeneration += 1;
   resetSessionHistoryForActorChange();
   publish({ running: false, lastResult: null, runVersion: snapshot.runVersion + 1 });
 };
@@ -1782,7 +1949,7 @@ In `SessionHistoryScreen.js`:
 
 In `SyncStatusScreen.js`, load `getSessionHistoryPullState(user.id)` on focus and whenever `pageVersion` or `runVersion` changes, and add a "History" `Card` after the existing status card. Its title is "History"; its body is `describeHistoryState({ running, pullState }).label`, plus the detail when present. Reuse the screen's existing `styles.card` and `styles.sectionTitle`. The existing upload card and its "All saved and synced" copy stay unchanged.
 
-- [ ] **Step 4: Run and confirm pass, plus neighbouring UI suites**
+- [ ] **Step 4: Un-skip Task 5's two re-walk budget tests (they need `describeHistoryState`), then run and confirm pass, plus neighbouring UI suites**
 
 Run: `PATH=$HOME/.nvm/versions/node/v20.19.4/bin:$PATH npx jest __tests__/sessionHistoryStatus.test.js __tests__/SessionHistoryScreen.plan5.test.js __tests__/ChildrenContext.test.js` and `PATH=$HOME/.nvm/versions/node/v20.19.4/bin:$PATH npx jest --config jest.integration.config.js __tests__/ChildrenContextPull.integration.test.js`
 Expected: PASS. In the ChildrenContext tests, mock `../src/services/sessionHistoryStatus` so no real traversal runs.
