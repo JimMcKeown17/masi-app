@@ -1,6 +1,6 @@
 # Field-App Capability Ledger
 
-**Standing capability-and-evidence ledger. Updated 2026-09-04 after the hosted session-authorization gate.**
+**Standing capability-and-evidence ledger. Updated 2026-09-23 after Jim's assessment-history decisions (2026-09-21).**
 
 This ledger answers whether a narrowly defined field-app capability exists, which invariants govern
 it, where its implementation lives, what evidence has actually been earned, and what one verifier
@@ -45,10 +45,10 @@ and E5 does not imply recovery or field behavior.
 | ID | Capability | Invariants | Status | Capability evidence | Decision | Known limit | Next independent verifier |
 |---|---|---|---|---|---|---|---|
 | CAP-001 | Exact estate, backend, and release identity | P-09, P-24, P-25 | partial | E4 current; historical E5 `needs-refresh` | verify-first | Forward backend/EAS known; production profile is cutover-sensitive; legacy and installed-device/store estate incomplete | Authorized legacy count probe plus App Store/Play/device inventory |
-| CAP-002 | Actor attribution and positive authority | P-01–P-05 | partial | E4 hosted for sessions | harden | Session actor/RPC gate passed; assessment current-year semantics/predicate remain open | Hosted assessment authority matrix after its decisions |
+| CAP-002 | Actor attribution and positive authority | P-01–P-05 | partial | E4 hosted for sessions | harden | Session actor/RPC gate passed; assessment semantics settled 2026-09-21 (any class this year), predicate not implemented | Hosted assessment authority matrix for the settled rule |
 | CAP-003 | Session/assessment atomic local aggregate plus durable outbox | P-06, P-07, P-10, P-13 | implemented | E3 | preserve | Does not claim every repository republishes through a fresh SQLite read; server-family atomicity and physical force-stop are not universal | Device force-stop at parent/child/outbox boundaries |
 | CAP-004 | Session/attendee history hydration | P-16–P-21, P-27, P-28 | implemented (branch `feat/cap-004-session-history-hydration`, unmerged) | E3 real-SQLite traversal and persistence; E4 disposable PostgreSQL 17 for the new migration; hosted CAP-004 apply not done | adapt | Hosted apply, hosted six-actor matrix, and device/two-device gates outstanding | Hosted matrix after the Task 9 apply, then a two-device physical vertical slice |
-| CAP-005 | Assessment/item history hydration | P-16–P-21, P-27, P-29 | planned | E1; E4 current/nonconforming policy inspection | adapt | No inbound pull; year scope, existing class-assignment integration, and item correction identity unresolved | Hosted current-year class-scope family test |
+| CAP-005 | Assessment/item history hydration | P-16–P-21, P-27, P-29 | planned | E1; E4 current/nonconforming policy inspection | adapt | No inbound pull; year-scope predicate, class-assignment integration, and ADR-0007 immutability enforcement not built | Hosted current-year class-scope family test |
 | CAP-006 | Durable incidents and release provenance | P-22–P-25 | partial | E2 | harden | Sentry/local export exist; no durable causal incident ledger/read-action loop | Repeated incident across force-stop yields one support-actionable record |
 | CAP-007 | Bounded, complete, fleet-safe pulls | P-16, P-18–P-21, P-25 | partial | E3 roster rails and CAP-004 history traversal; E4 hosted cap evidence | harden | Session history has a page loop, queue-aware deadlines, and a jittered re-walk; roster pulls still have no request deadline (a hung roster request blocks the shared queue); no remote kill switch | Roster request deadlines plus hosted >page-size walk |
 | CAP-008 | Programme/group identity and concurrency policy | P-03–P-05, P-27, P-28 | partial | E3 | blocked-on-ADR | Programme model exists; group generation/two-writer semantics and session group persistence incomplete | Two-writer ADR and PostgreSQL/SQLite conflict matrix |
@@ -106,8 +106,8 @@ Evidence:
   401/`42501` for anonymous access.
 - Grandfathered null-owner outbox rows remain a documented pre-v6 compatibility exception.
 
-Next verifier: assessment still requires its class-move/year decision, implementation, and
-prior-year matrix. Review whenever an assignment, RLS helper, lifecycle command, or actor source
+Next verifier: assessment requires the implementation of its settled class-move/year rule (2026-09-21)
+and a prior-year matrix. Review whenever an assignment, RLS helper, lifecycle command, or actor source
 changes.
 
 ## CAP-003 — Session/assessment atomic local aggregate and durable outbox
@@ -192,11 +192,15 @@ scope. Current RLS is not year-bounded. `ClassesContext` already hydrates active
 but the assessment-capable wider-roster/history path does not yet consume that durable state
 through one canonical SQLite scope query.
 
-Assessment item deterministic identity currently includes correctness while PostgreSQL permits
-only one non-null position per assessment. This is coherent only if submitted attempt evidence is
-immutable. Correction/resume behavior needs an ADR before a generic Battery/Run or shared package.
+Assessment item deterministic identity includes correctness while PostgreSQL permits only one
+non-null position per assessment. That is coherent because submitted assessments are immutable
+(ADR-0007, Jim 2026-09-21), so the id stays as it is. Enforcement is not built yet: hosted RLS still
+allows EA update/delete, and the outbox still pushes this family as update-capable upserts. The
+year-scope rule is settled: any class the child belonged to in the current academic year
+(ADR-0005 2026-09-21 follow-up). `letter_mastery` is no longer part of this family; it is current
+state with its own delivery-scoped rule.
 
-Next verifier: after the authority and identity decisions, hydrate a complete parent/item family
+Next verifier: hydrate a complete parent/item family
 through bounded keyset pages with request deadlines, real SQLite, and hosted RLS; prove incomplete
 items cannot present a complete assessment or establish mastery.
 

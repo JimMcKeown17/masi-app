@@ -5,28 +5,6 @@
 > `ROADMAP.md`; this file contains product choices that require Jim or pedagogy input. When one is
 > resolved, record the outcome in `CONTEXT.md` and/or an ADR, then remove it from here.
 
-## Required before assessment-history hydration
-
-- **Current-year class scope across a mid-year child move.** ADR-0005 says assessment history is
-  current-academic-year class-scoped, but three non-equivalent grants fit those words: only the
-  child's currently active class; any class-membership history in the current academic year; or the
-  class that contained the child at `assessment_date`. Choose deliberately, including the timezone and
-  same-day rule for the assessment-date option. This decision controls both RLS and the canonical
-  SQLite assessment-scope query.
-- **Whether `letter_mastery` is year-scoped history or current derived state.** ADR-0005 currently
-  groups it with assessment reads, but `letter_mastery` has no academic-year or event-date key that
-  can faithfully enforce current-year class history. Decide whether it stays a cross-year current
-  projection, derives visibility through source assessment evidence, or receives an explicit year
-  dimension. Do not pretend the assessment predicate can be copied onto it unchanged.
-
-- **Assessment item correction identity.** The current deterministic item id incorporates whether
-  the answer was correct, while the server also enforces one non-null item per
-  `(assessment_id, position)`. Correcting an answer can therefore produce a new id that conflicts
-  with the old row at the same position. Settle whether a submitted assessment is an immutable
-  attempt that must be superseded by a new attempt, or whether each position is mutable and keeps
-  a stable identity independent of its answer. Do not widen assessment hydration or add correction
-  UI until this semantic choice is reflected in SQLite, Supabase, repository, and outbox contracts.
-
 ## Deferred to next academic year
 
 - **Gap UX at the start of a new academic year, before office grouping data exists.** For ECD the

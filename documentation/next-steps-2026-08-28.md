@@ -12,16 +12,19 @@ duplicate, or leak an EA's work, and that we can see and fix it when something d
 
 ## Where we are today
 
-- Nobody is using the app right now. Staff want to start soon. This is the cheapest possible
+- Nobody is capturing sessions right now. A counts-only check of the old backend on 2026-09-23
+  found no new sessions since 26 August, **but someone is still clocking in and out through an old
+  app build** (four clock-ins since 22 September). Staff want to start soon. This is the cheapest possible
   moment to fix deep things, because no real data is on any phone yet.
 - The app **uploads** work to the server but never **downloads** past work back. A new phone
   starts empty even though the server has everything.
-- The server's rule about *who may see whose past sessions* is looser than we decided. Harmless
-  today (nothing downloads); dangerous the moment downloading starts.
-- A fix for that rule is written, committed, and tested on a throwaway PostgreSQL database. Jim
-  chose the complete-session boundary on 2026-08-29. The source is part of `main`; on 2026-09-04
-  the migrations were applied to the real backend and passed the hosted authorization gate. No
-  phone downloads history yet.
+- The server's rule about *who may see whose past sessions* is now the one we decided. Jim chose
+  the complete-session boundary on 2026-08-29; on 2026-09-04 the fix was applied to the real
+  backend and passed the hosted authorization gate. No phone downloads history yet.
+- The design for downloading past sessions (Step 2) was settled with Jim on 2026-09-08 and is
+  waiting to be merged (PR #57).
+- The new backend moved to a paid Supabase plan on 2026-09-23 so it can no longer fall asleep
+  after a week without use. It had fallen asleep twice (found on 2026-09-04 and 2026-09-23).
 - The test database on the new backend holds 5 accounts, 25 sessions and 31 assessments of
   practice data.
 
@@ -29,29 +32,34 @@ duplicate, or leak an EA's work, and that we can see and fix it when something d
 
 Each step says what it is, why it comes where it does, and how we know it is done.
 
-### Step 0 — Jim answers the remaining four questions
+### Step 0 — Jim answers the open questions (done 2026-09-21 to 2026-09-23)
 
-The session-aggregate question is settled; the assessment half of Step 1 still depends on the
-remaining assessment decisions. Suggested answers are in brackets.
+All of the questions are answered. The records live in `CONTEXT.md` and ADR-0005's 2026-09-21
+follow-up.
 
 1. **Settled 2026-08-29:** when an EA may see a past session, they see the **whole session** (every
    child in it, including other children's notes). A session is one delivery event; the parent JSON
    already contains child-keyed facts, so showing a partial attendee list would not be a real privacy
    boundary.
-2. "This year's assessments for a child in my class" — does that mean the class the child is in
-   **now**, **any** class they were in this year, or the class they were in **on the day** of the
-   assessment? *(Any class this year — simplest to check and explain.)*
-3. Is a child's letter-mastery record part of "this year's history", or is it just "what the child
-   can do today"? *(What the child can do today.)*
-4. If an EA corrects an answer in an assessment, is that an **edit** or a **new attempt**?
-   *(Edit until the assessment is submitted; locked after.)*
-5. Confirm: an EA who *used to* deliver to a child keeps seeing that child's past sessions after a
-   handover. *(Yes — an incoming EA needs the history.)*
+2. **Settled 2026-09-21:** "this year's assessments for a child in my class" means **any class the
+   child was in during this academic year**. After a mid-year move, both the old-class and the
+   new-class EA see that year's assessments.
+3. **Settled 2026-09-21/23:** a child's **letter mastery** is "what the child knows today", not this
+   year's history. It is visible to the EA who recorded it and to whoever delivers to the child
+   **now**, with no year limit. The child's current EA may update or correct it, whoever recorded
+   it.
+4. **Settled 2026-09-21/23:** correcting an answer is an **edit until the assessment is submitted,
+   and locked after**. EAs may add assessments and answers but never change or delete them; a later
+   correction is a new attempt.
+5. **Settled 2026-09-23:** an EA who *used to* deliver to a child keeps seeing that child's past
+   sessions after a handover. This is already how the live rule behaves.
 
-Three smaller ones can wait a week but should not be forgotten: may we peek (read-only, counts
-only) at the old backend to confirm nothing important is there; do we wipe the practice data
-before the first real account; and do we call the next version 1.4.0 to mark the switch to the
-new backend. *(Yes; wipe after Step 3 passes; yes.)*
+The three smaller ones are also answered (2026-09-23): yes, a read-only, counts-only look at the
+old backend; wipe the practice data after Step 3 passes (with Jim's yes at the time); and call the
+next version **1.4.0**.
+
+Also settled on 2026-09-23: the first pilot is **Literacy-only**. The Numeracy and 1000 Stories
+session forms are finalized in parallel (see "Alongside Steps 2–4" below); Yebo waits.
 
 ### Step 1 — Finish the "who can see what" fix
 
@@ -81,13 +89,27 @@ leaves a half-state; nothing that is not theirs appears.
 
 ### Step 3 — Download past assessments the same way
 
-**What:** the same for assessments and their individual answers.
+**What:** the same for assessments and their individual answers, plus each child's letter
+mastery ("what the child knows"). This step also locks submitted assessments on the server and
+turns letter mastery into one current record per child that the child's current EA can correct.
 
 **Why after sessions:** assessments are bigger (up to 61 answers each; 900 already in the practice
 data) and depend on questions 2–4 above.
 
 **Done when:** same test as Step 2, plus a correction to an answer behaves the way question 4
 decided.
+
+### Alongside Steps 2–4 — Numeracy and 1000 Stories session forms
+
+**What:** finalize and build the session forms for Numeracy and 1000 Stories. Today only Literacy
+has a form, so EAs in those programmes cannot record a session at all.
+
+**Why in parallel, not first:** the first pilot is Literacy-only, so these forms do not block it. Jim
+wants them finalized now so every programme can move forward. The work needs Jim's requirements
+first; the earlier numeracy comparison draft was lost and must be redone.
+
+**Done when:** each form's requirements are written down and agreed, and the form saves, uploads
+and shows in History like a Literacy session. Yebo's form waits until later.
 
 ### Step 4 — Give support a trail
 
@@ -146,7 +168,9 @@ One week of deliberately doing the bad things, on a real iPhone and a real cheap
 
 ### Step 8 — Small pilot
 
-About five EAs Jim can phone directly, on fresh phones, for two weeks. Daily: look at every EA, not
+Literacy EAs only, on fresh phones, for two weeks. Size: Jim is setting it with the team
+(between 5 and 20 as of 2026-09-23); whatever the number, every pilot EA must be someone Jim or a
+named supporter can phone directly. Daily: look at every EA, not
 just the ones who complained; a quiet phone is "unknown", not "fine". Rule for the pilot: before
 anyone reinstalls, signs out, or clears storage, export the phone's logs and database first.
 
