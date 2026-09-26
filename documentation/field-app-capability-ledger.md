@@ -47,7 +47,7 @@ and E5 does not imply recovery or field behavior.
 | CAP-001 | Exact estate, backend, and release identity | P-09, P-24, P-25 | partial | E4 current; historical E5 `needs-refresh` | verify-first | Forward backend/EAS known; production profile is cutover-sensitive; legacy and installed-device/store estate incomplete | Authorized legacy count probe plus App Store/Play/device inventory |
 | CAP-002 | Actor attribution and positive authority | P-01–P-05 | partial | E4 hosted for sessions | harden | Session actor/RPC gate passed; assessment semantics settled 2026-09-21 (any class this year), predicate not implemented | Hosted assessment authority matrix for the settled rule |
 | CAP-003 | Session/assessment atomic local aggregate plus durable outbox | P-06, P-07, P-10, P-13 | implemented | E3 | preserve | Does not claim every repository republishes through a fresh SQLite read; server-family atomicity and physical force-stop are not universal | Device force-stop at parent/child/outbox boundaries |
-| CAP-004 | Session/attendee history hydration | P-16–P-21, P-27, P-28 | implemented (branch `feat/cap-004-session-history-hydration`, unmerged) | E3 real-SQLite traversal and persistence; E4 disposable PostgreSQL 17 for the new migration; hosted CAP-004 apply not done | adapt | Hosted apply, hosted six-actor matrix, and device/two-device gates outstanding | Hosted matrix after the Task 9 apply, then a two-device physical vertical slice |
+| CAP-004 | Session/attendee history hydration | P-16–P-21, P-27, P-28 | implemented (branch `feat/cap-004-session-history-hydration`, unmerged) | E3 real-SQLite traversal and persistence; E4 disposable PostgreSQL 17 and hosted (applied 2026-09-26: six-actor matrix, 1,205-attendee PostgREST walk) | adapt | Device and two-device gates outstanding | Two-device physical vertical slice on a preview build |
 | CAP-005 | Assessment/item history hydration | P-16–P-21, P-27, P-29 | planned | E1; E4 current/nonconforming policy inspection | adapt | No inbound pull; year-scope predicate, class-assignment integration, and ADR-0007 immutability enforcement not built | Hosted current-year class-scope family test |
 | CAP-006 | Durable incidents and release provenance | P-22–P-25 | partial | E2 | harden | Sentry/local export exist; no durable causal incident ledger/read-action loop | Repeated incident across force-stop yields one support-actionable record |
 | CAP-007 | Bounded, complete, fleet-safe pulls | P-16, P-18–P-21, P-25 | partial | E3 roster rails and CAP-004 history traversal; E4 hosted cap evidence | harden | Session history has a page loop, queue-aware deadlines, and a jittered re-walk; roster pulls still have no request deadline (a hung roster request blocks the shared queue); no remote kill switch | Roster request deadlines plus hosted >page-size walk |
@@ -174,8 +174,10 @@ Evidence:
 - **E3, real SQLite:** unit 196 suites / 1,369 tests; integration 37 suites / 362 tests.
 - **Reviews:** two Codex plan reviews and one code review, all findings adopted.
 
-Next verifier: hosted apply and hosted six-actor matrix, then a physical new-phone,
-second-device, backdated-session, force-stop, and offline-mid-download slice.
+Hosted E4 (2026-09-26): the migration was applied through the isolated helper (ledger 24); a
+rollback-only six-actor matrix returned exactly the owner, delivery and denial results with zero
+residue; an authenticated PostgREST walk returned 1,205 attendees in seven pages. Next verifier: a
+physical new-phone, second-device, backdated-session, force-stop, and offline-mid-download slice.
 
 ## CAP-005 — Assessment and item history hydration
 

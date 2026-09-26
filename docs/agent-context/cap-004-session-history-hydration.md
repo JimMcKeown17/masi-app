@@ -132,8 +132,5 @@ Tasks 1–8, commits `a33c1f2`..HEAD, local only and not pushed.
   memory.
 - **Next, each needing Jim's explicit yes:**
   1. push the branch and open a PR (CI);
-  2. plan Task 9: dry-run, then apply `20260925120000` to hosted `masi-app-sqlite` through the
-     isolated staging helper, then the hosted matrix;
+  2. ~~plan Task 9 hosted steps~~: done 2026-09-26 (applied; hosted matrix and HTTP walk passed);
   3. an EAS preview build and the device gates.
-
-  Until the hosted apply, the mobile pull reports `query` and History shows "Incomplete".

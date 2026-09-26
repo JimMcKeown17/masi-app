@@ -237,9 +237,9 @@ correctly; the missing contract is inbound hydration.
 - [ ] Add two-device physical gates proving device A history appears on device B.
 - [x] Make sync status distinguish "all local writes uploaded" from "local history fully hydrated."
   Sessions done (CAP-004 History row); assessments follow with their slice.
-- [ ] **CAP-004 remaining gates:** apply `20260925120000` to hosted `masi-app-sqlite` through the
-  isolated helper, run the hosted six-actor matrix and a >1,000-attendee HTTP walk, then device
-  gates (new phone within a minute on iPhone and low-end Android; two-device convergence with a
+- [x] CAP-004 hosted gate: `20260925120000` applied to `masi-app-sqlite` on 2026-09-26 through the
+  isolated helper; hosted six-actor matrix and 1,205-attendee HTTP walk passed.
+- [ ] **CAP-004 device gates (new phone within a minute on iPhone and low-end Android; two-device convergence with a
   backdated session; force-stop and offline mid-download).
 
 Until this lands, a green sync label proves outbound completion only.

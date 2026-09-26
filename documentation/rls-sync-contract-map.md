@@ -32,8 +32,7 @@ PostgREST:
   `get_delivery_history_session_page` RPC and an owner/Programme/keyset index intended to support
   its owner branch.
 
-**CAP-004 (source on `feat/cap-004-session-history-hydration`, 2026-09-26; not yet applied to
-hosted).** `20260925120000_session_history_family_delta.sql` has four parts:
+**CAP-004 (applied to hosted `masi-app-sqlite` on 2026-09-26; hosted gate passed).** `20260925120000_session_history_family_delta.sql` has four parts:
 - it makes the server own the session-family timestamp. The `sessions` and `session_attendees`
   `updated_at` triggers become `before insert or update`, and `private.touch_session_family()`
   re-stamps the parent on any attendee write;
@@ -43,12 +42,18 @@ hosted).** `20260925120000_session_history_family_delta.sql` has four parts:
 - it drops `get_delivery_history_session_page` and its index.
 
 It passed the disposable PostgreSQL 17 harness (six-actor matrices, keyset, overlap, triggers, and
-dense-plan gates). Until the hosted apply (plan Task 9), hosted still carries the 2026-09-04
-contract, and the mobile history pull fails closed as `query` with an "Incomplete" History status.
+dense-plan gates) and, after the canonical isolated-helper apply, the hosted gate:
+- ledger at 24, with triggers `before insert or update`;
+- a rollback-only six-actor matrix for both RPCs with zero residue, including insert stamping of a
+  2001 phone timestamp to 2026;
+- an authenticated PostgREST walk of 1,205 attendees in seven 200-row pages, with no duplicates and
+  microsecond `updated_at` strings;
+- anonymous callers denied (HTTP 401 / `42501`);
+- zero fixture residue.
 
 | Family | Current live SELECT authority | Accepted target | Required before inbound hydration |
 |---|---|---|---|
-| `sessions` / `session_attendees` | Capturer-or-historical-direct-delivery only. `private.can_read_session` grants the owner or an actor with any historical `child_ea_assignments` row for an attendee; attendee visibility follows the authorized parent. Class-only, group-only, and unrelated actors are denied | Same as live: one qualifying attendee grants the complete parent-and-attendee aggregate | **Built (CAP-004 branch):** bounded parent and attendee paging, deadlines, atomic SQLite publication, re-walk convergence. **Remaining:** hosted apply of `20260925120000`, the hosted matrix, and two-device/device gates |
+| `sessions` / `session_attendees` | Capturer-or-historical-direct-delivery only. `private.can_read_session` grants the owner or an actor with any historical `child_ea_assignments` row for an attendee; attendee visibility follows the authorized parent. Class-only, group-only, and unrelated actors are denied | Same as live: one qualifying attendee grants the complete parent-and-attendee aggregate | **Built (CAP-004 branch):** bounded parent and attendee paging, deadlines, atomic SQLite publication, re-walk convergence. **Hosted gate passed 2026-09-26. Remaining:** device and two-device gates |
 | `assessments` / `assessment_items` | Owner or the same general child-read helper | Current-academic-year class scope, including co-EA/turnover assessment history | Add an assessment-specific class/year predicate; do not expose arbitrary prior-year history |
 
 ### Session aggregate boundary — accepted 2026-08-29
