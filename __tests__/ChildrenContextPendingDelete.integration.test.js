@@ -1,3 +1,7 @@
+jest.mock('../src/services/sessionHistoryStatus', () => ({
+  startSessionHistoryPull: jest.fn(), resetSessionHistoryStatusForActorChange: jest.fn(),
+}));
+
 jest.mock('expo-sqlite', () => require('../test-support/expoSQLiteMock'));
 
 import React from 'react';

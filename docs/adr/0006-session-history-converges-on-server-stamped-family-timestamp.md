@@ -41,3 +41,21 @@ the 2026-09-04 hosted gate is dropped because no phone ever called it.
 - Revisit when a session edit UI ships (confirm attendee edits surface), when an EA's yearly volume
   exceeds a handful of 200-row pages, or if a less-trusted reader class appears and the aggregate
   boundary itself must change.
+
+## Follow-up — 2026-09-25
+
+The premise that the server "already forces `updated_at` to its own clock on every write" was true
+for updates only; inserts kept the phone-sent value. The CAP-004 migration makes both session
+triggers `before insert or update`, which restores the premise. The overlap rewind is performed
+by the server through `p_overlap_seconds` on the first page of a run, not by the client. See
+spec §12.
+
+## Follow-up — 2026-09-26
+
+The delta alone cannot converge. A new delivery assignment authorizes older sessions behind the
+cursor, and `now()` is transaction-start time, so a slow write can commit behind it. Jim accepted a
+**re-walk of the academic year**, triggered immediately when the phone gains a delivery child
+(the common case, a handover) and weekly as a backstop (6–8 days, randomized per phone). The delta
+keeps the common case to one small request. The backstop bounds the rare commit-behind-cursor case
+to about a week, at the cost of one year of one EA's families per week. Revisit if yearly
+volume per EA grows past a handful of pages. See spec §12 items 8–10.

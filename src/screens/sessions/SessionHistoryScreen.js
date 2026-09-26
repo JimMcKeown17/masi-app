@@ -1,11 +1,13 @@
 import React, { useState, useCallback } from 'react';
-import { View, StyleSheet, FlatList } from 'react-native';
+import { View, StyleSheet, FlatList, RefreshControl } from 'react-native';
 import { Text, Card, ActivityIndicator, Snackbar } from 'react-native-paper';
 import { useFocusEffect } from '@react-navigation/native';
 import { useAuth } from '../../context/AuthContext';
 import { colors, spacing, borderRadius, shadows } from '../../constants/colors';
 import { sessionsRepository } from '../../db/repositories/sessionsRepository';
 import { useLookupsContext } from '../../context/LookupsContext';
+import { useSessionHistoryStatus, getSessionHistoryPullState, startSessionHistoryPull } from '../../services/sessionHistoryStatus';
+import { describeHistoryState } from '../../utils/syncStatusPresenter';
 
 import { toLocalDateString } from '../../utils/localDate';
 
@@ -26,6 +28,9 @@ function formatSessionDate(dateString) {
 export default function SessionHistoryScreen() {
   const { user } = useAuth();
   const { jobTitles } = useLookupsContext();
+  const { running, pageVersion, runVersion } = useSessionHistoryStatus();
+  const [pullState, setPullState] = useState(null);
+  const history = describeHistoryState({ running, pullState });
   const [sessions, setSessions] = useState([]);
   const [loading, setLoading] = useState(true);
   const [snackbarMessage, setSnackbarMessage] = useState('');
@@ -47,6 +52,7 @@ export default function SessionHistoryScreen() {
       const loadSessions = async () => {
         if (!user?.id) {
           setSessions([]);
+          setPullState(null);
           setLoading(false);
           return;
         }
@@ -59,8 +65,10 @@ export default function SessionHistoryScreen() {
             sinceDate: toLocalDateString(new Date(Date.now() - THIRTY_DAYS_MS)),
             order: 'desc',
           });
+          const persistedHistory = await getSessionHistoryPullState(user.id);
           if (active) {
             setSessions(cached);
+            setPullState(persistedHistory);
           }
         } catch (error) {
           console.error('Error loading sessions:', error);
@@ -78,7 +86,7 @@ export default function SessionHistoryScreen() {
       return () => {
         active = false;
       };
-    }, [user?.id])
+    }, [user?.id, pageVersion, runVersion])
   );
 
   const renderItem = ({ item }) => {
@@ -141,6 +149,7 @@ export default function SessionHistoryScreen() {
   if (loading) {
     return (
       <View style={styles.container}>
+        {history.detail && <Text variant="bodySmall" style={styles.historyDetail}>{history.detail}</Text>}
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color={colors.primary} />
           <Text variant="bodyMedium" style={styles.emptyText}>Loading...</Text>
@@ -151,7 +160,9 @@ export default function SessionHistoryScreen() {
 
   return (
     <View style={styles.container}>
+      {history.detail && <Text variant="bodySmall" style={styles.historyDetail}>{history.detail}</Text>}
       <FlatList
+        refreshControl={<RefreshControl refreshing={running} onRefresh={() => startSessionHistoryPull({ userId: user?.id, force: true })} />}
         data={sessions}
         keyExtractor={(item) => item.id}
         renderItem={renderItem}
@@ -183,6 +194,10 @@ const styles = StyleSheet.create({
   },
   listContent: {
     padding: spacing.md,
+  },
+  historyDetail: {
+    color: colors.textSecondary,
+    margin: spacing.sm,
   },
   card: {
     backgroundColor: colors.surface,
