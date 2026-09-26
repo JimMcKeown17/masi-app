@@ -11,7 +11,8 @@ date: 2026-07-24
 > group-only, unrelated, and complete-family behavior; authenticated PostgREST returned the bounded
 > RPC and anonymous PostgREST was denied. Jim accepted the complete session/coattendee aggregate
 > boundary described below. No mobile hydration exists. Assessment reads still lack the
-> current-academic-year predicate, whose mid-year class-move semantics remain unsettled. See
+> current-academic-year predicate; its mid-year class-move semantics were settled on 2026-09-21
+> (see the follow-up at the end of this record). See
 > [`../../documentation/pre-live-gate0-audit-2026-08-27.md`](../../documentation/pre-live-gate0-audit-2026-08-27.md).
 > The assessment predicate must still be implemented and behavior-proven before that family hydrates.
 
@@ -82,3 +83,34 @@ A child leaving a delivery group requires a **structured removal reason** (`chil
 - **Widen session reads to class scope.** Rejected: leaks every EA's full delivery diary to any co-EA sharing the classroom, even for children they never touch. The capturer-agnostic delivery-scoped policy already gives an incoming EA the previous EA's sessions once delivery transfers.
 - **Encode the co-EA assessment divvy as a permission boundary.** Rejected: it is a labour-splitting agreement, not an authorization rule; enforcing it would block an EA from covering a sick colleague's half.
 - **Reuse `archive_reason` for group removal.** Rejected: a child can leave a delivery group while staying enrolled in the class (becoming a control child); that is a membership event, not a child archive, and needs its own narrower taxonomy.
+
+## Follow-up — 2026-09-21 (Jim), recorded 2026-09-23
+
+These decisions refine the Decision above without rewriting it. Where they conflict with the body,
+this follow-up wins.
+
+1. **Assessment history across a mid-year class move.** An EA with an active class assignment sees
+   a child's current-academic-year assessments if the child was a member of that class at *any*
+   point in the current academic year. After a move, both the old-class and the new-class EA see
+   that year's assessments. Rejected: only the child's current class (the old-class EA would lose
+   the baseline they captured) and the class on the assessment date (harder to check and explain,
+   and it needs a timezone/same-day rule). This defines both the assessment RLS predicate and the
+   canonical SQLite assessment-scope query.
+2. **`letter_mastery` leaves the assessment-history family.** The Consequences bullet that groups
+   `letter_mastery` with `assessments`/`assessment_items` under current-year class scope is
+   superseded. Letter mastery is **current state** ("what the child knows", see `CONTEXT.md`), not
+   year-scoped history. It is readable by the EA who recorded it and by every EA who currently
+   delivers to the child (an active `child_ea_assignments` row), with no academic-year bound. Former
+   deliverers and class-only assessors do not read it. A child's current delivering EA may update or
+   correct it, whoever recorded it. The assessment-evidence half of mastery is still computed from
+   assessments, so it follows decision 1. A letter is mastered if either source says so, and an EA
+   cannot un-mark assessment evidence (re-assessment changes it). **Identity consequence (Jim,
+   2026-09-23):** today's `letter_mastery` rows are keyed per EA (`user_id` is in the deterministic id
+   and the unique index), and hosted RLS lets only the author update or delete. That cannot express
+   "the current EA corrects another EA's mark". The stored EA confirmation therefore becomes one
+   current record per `(child, letter, language)`, with the last writer recorded, update rights for
+   current deliverers, and latest-server-write-wins. It is built with the assessment-history slice
+   before any mastery pull ships. The Zazi app has the same per-EA shape; converging it is separate
+   Zazi work because Zazi has field users.
+3. **Submitted assessments are immutable.** See ADR-0007. This does not change who may *read*
+   assessments; it removes EA update and delete rights after submission.

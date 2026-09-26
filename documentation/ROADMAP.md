@@ -1,7 +1,7 @@
 # Product and Engineering Roadmap
 
-**Standing document. Updated 2026-08-29 after ratifying the complete session aggregate. This is the single in-repository answer to
-"what is still outstanding?"**
+**Standing document. Updated 2026-09-23 after Jim's 2026-09-21 assessment-history decisions and the
+Pro-plan move. This is the single in-repository answer to "what is still outstanding?"**
 
 This file contains open work only. Its priority section is the roadmap; the numbered sections are
 the detailed work register behind that roadmap. Completed implementation and verification belong in
@@ -41,8 +41,8 @@ These horizons summarize the ordered register below. They are not a second backl
    SQLite-backend schema/RLS/query cost; settle history retention and row-limit assumptions.
 2. **P0: finish history authorization before hydrating it.** Hosted session predicates and the
    actor-derived keyset RPC passed the six-actor PostgreSQL/PostgREST gate on 2026-09-04. The
-   complete session aggregate is ratified. Assessment history still needs its exact
-   current-year class-membership semantics settled and implemented.
+   complete session aggregate is ratified. Assessment-history semantics were settled on 2026-09-21
+   (any class the child was in this academic year); the predicate is still to be implemented.
 3. **P0: make session and assessment history bidirectional.** Start with sessions/attendees, then
    assessments/items. A fresh install currently uploads
    new work but cannot hydrate existing `sessions`/`session_attendees` or
@@ -77,11 +77,13 @@ shape.
 - [x] Inventory current Masi branches, EAS build artifacts, runtime/channel/update identity, and
   source release profiles. App Store Connect, Play delivery, and installed devices remain open.
 - [ ] Verify which Supabase project every current app profile, local environment, script, and
-  connected backend targets. The forward SQLite project is verified; the legacy project requires
-  explicit authorization before a counts-only probe.
+  connected backend targets. The forward SQLite project is verified. The legacy counts-only probe
+  ran on 2026-09-23 (build log): session capture stopped by 26 Aug, but **legacy clock-ins
+  continue** (4 since 22 Sep). Jim to identify who is still clocking in through an old build, and
+  decide their cutover and field communication before the 1.4.0 pilot.
 - [x] Probe the live SQLite-backend schema, migration ledger, RLS, functions, indexes, row counts,
   and unclassified forward data before schema-facing design. The data appears to be test/pilot
-  data, but classification and disposition remain unsettled.
+  data. Disposition decided 2026-09-23: wipe it after the assessment-history slice passes (below).
 - [x] Applied and re-measured the session predicates/RPC against hosted PostgreSQL and PostgREST on
   2026-09-04. The six-actor matrix, RPC grants, anonymous denial, current-data plans, and canonical
   no-op rerun passed. A 1,205-row disposable HTTP fixture proved the PostgREST cap is 1,000 and was
@@ -91,9 +93,12 @@ shape.
   `assessments`/items) are retained truth and are never absence-deleted from an incomplete or
   ordinary empty page. Implementation proof remains open in §1. Active assignment/membership
   relationships retain their separate complete-snapshot reconcile contract.
-- [ ] Decide whether the existing forward-backend test/pilot records are retained, snapshotted and
-  reset, or left untouched until the history slices pass.
+- [ ] Wipe the forward-backend practice data (5 accounts, 25 sessions, 31 assessments at the
+  2026-08-27 count) after the assessment-history slice passes. **Decided by Jim 2026-09-23;** the
+  wipe itself still needs his explicit yes at the time.
 - [ ] Choose the immutable app/runtime/build/backend/protocol identity for the next internal pilot.
+  The app version is decided: **1.4.0** marks the switch to the SQLite backend (Jim, 2026-09-23);
+  runtime, build, and protocol identity remain open.
 - [ ] Scan current files plus full Git history, issues, fixtures, screenshots, logs, and release
   artifacts for credentials, private service URLs, tokens, staff PII, and child data without
   printing discovered values. Disable or rotate every exposed credential; do not assume editing the
@@ -115,11 +120,13 @@ shape.
 - [ ] Decide the Android Auto Backup/data-extraction policy for actor-scoped SQLite, domain rows,
   outbox, incidents, and safe preferences. Test uninstall/reinstall and Google restore; a reinstall
   may not be called “fresh” until the resulting database identity and contents prove it.
-- [ ] Confirm `masi-app-sqlite` is on a Supabase plan that cannot auto-pause, and record the plan.
-  On 2026-09-04 the project was found paused after about seven idle days; while restoring, it
-  accepted connections with an empty `public` schema for roughly four minutes. Pilot automation,
-  migration scripts, and support tooling must treat an empty or missing migration ledger as
-  "restoring", never as a clean slate.
+- [ ] Prove `masi-app-sqlite` is healthy after its restore onto the Pro plan. Jim moved the project
+  to Pro on 2026-09-23 so it cannot auto-pause (it was found paused on 2026-09-04 and again on
+  2026-09-23). The dashboard shows Nano compute; confirm the intended compute size. The
+  post-restore read-only probe matched the 2026-09-04 baseline on 2026-09-23 (build log). While restoring on 2026-09-04 it
+  accepted connections with an empty `public` schema for roughly four minutes, so pilot
+  automation, migration scripts, and support tooling must treat an empty or missing migration
+  ledger as "restoring", never as a clean slate.
 
 Sentry native/JavaScript capture, privacy hardening, runtime diagnostics, structured sync events,
 safe verification, EAS environment values, and the sensitive upload token are built. The remaining
@@ -178,9 +185,11 @@ correctly; the missing contract is inbound hydration.
   complete-family behavior; authenticated PostgREST proves the RPC and anonymous denial. Local
   PostgreSQL retains the deeper same-connection, microsecond-cursor, 2,004-row exhaustion, and
   hostile-plan evidence.
-- [ ] Settle and implement the assessment-specific current-year class predicate. Do not reuse every
-  arm of `current_user_can_read_child`, and do not guess whether a mid-year class move grants the
-  old class EA, the new class EA, or both access to that assessment history.
+- [ ] Implement the assessment-specific current-year class predicate. **Settled 2026-09-21:** an EA
+  with an active class assignment sees a child's assessments from the current academic year if
+  the child was a member of that class at any point in the current academic year. After a mid-year
+  move, the old-class EA and the new-class EA both see that year's assessments. Do not reuse every
+  arm of `current_user_can_read_child`. See ADR-0005's 2026-09-21 follow-up.
 - [ ] Verify and reuse the existing `ClassesContext`/SQLite `class_ea_assignments` hydration for
   assessment scope. Define one canonical SQLite-derived assessment-eligibility query, including
   inactive/revoked and current-year behavior; do not couple correctness to React context arrival
@@ -201,6 +210,19 @@ correctly; the missing contract is inbound hydration.
   inner plans. Surfaced by the same review; no field impact today.
 - [ ] Add authenticated, Programme/current-year-class-scoped pull for `assessments` and
   `assessment_items`.
+- [ ] **Enforce submitted-assessment immutability (ADR-0007) in the same slice.** Remove EA
+  `UPDATE`/`DELETE` RLS on `assessments` and `assessment_items`, push this family as
+  insert-or-ignore by `id`, and make `saveAssessment` refuse an already-saved assessment id, with
+  real-SQLite and disposable-PostgreSQL tests. Keep the current answer id; do not rekey.
+- [ ] **Letter mastery as current state (ADR-0005 2026-09-21 follow-up).** Re-key the stored EA
+  confirmation to one current record per `(child, letter, language)`, recording the last writer.
+  Narrow hosted read to the last writer plus current deliverers, and let current deliverers
+  insert/update/soft-delete. Latest server write wins. Resolve the natural key inside the write
+  transaction; Zazi's production crash ZZ-BUG-20260813-006 is the regression case to test. Then
+  add the mastery pull. Change the mastery loader so "most recent letter assessment" means the
+  child's most recent assessment the EA may read, not only the EA's own
+  (`src/utils/masteryState.js` currently passes `userId` to both reads). Practice data is wiped
+  after this slice, so the re-key needs no field-data migration.
 - [ ] Use bounded keyset pagination with an `id` tie-breaker and request deadline for every parent
   and child page from the first implementation. Do not ship an unpaginated intermediate path.
 - [ ] Persist each parent and its children transactionally through typed repositories, with parents
@@ -216,6 +238,11 @@ correctly; the missing contract is inbound hydration.
 - [ ] Make sync status distinguish "all local writes uploaded" from "local history fully hydrated."
 
 Until this lands, a green sync label proves outbound completion only.
+
+Zazi parity: Zazi's letter tracker has the same per-EA identity and author-only correction, and
+its mobile pulls fetch only the EA's own mastery and sessions. Converging Zazi on the same rule is
+separate Zazi work (it has field users). Masi's per-child `children.reading_level` already matches
+the current-state model better than Zazi's per-session carry-forward.
 
 ## 2. Correctness and safety
 
@@ -251,6 +278,11 @@ Until this lands, a green sync label proves outbound completion only.
   `manual-sign-out` clearing category, but the current manual path clears state directly and the
   later auth event may be recorded only as `signed-out`. Either restore reliable provenance or
   explicitly adopt the simpler diagnostic contract.
+
+- [ ] **Literacy form forces a letter selection (issue #54):** a letters-mastered group has no
+  letters to pick, so the EA taps an arbitrary letter and corrupts `activities.letters_focused`.
+  Add a truthful "no letters taught this session" state. The first pilot is Literacy-only, so fix
+  this before the pilot candidate build.
 
 ### Deliberate tripwires
 
@@ -345,8 +377,12 @@ against the exact SQLite backend. `scripts/loadTestUsers.js` is deliberately dis
 
 ## 7. Assessment content and additional forms
 
-- [ ] Gather requirements and build the Numeracy Coach, ZZ Coach, and Yeboneer session forms. Only
-  Literacy exists.
+- [ ] **Finalize and build the Numeracy and 1000 Stories session forms** (Jim, 2026-09-23: a
+  deliberate push in parallel with the history work, not a pilot gate). Only Literacy exists. The
+  first pilot stays Literacy-only. Jim supplies the form requirements; the earlier numeracy
+  comparison draft was lost with its temporary folder and must be redone.
+- [ ] Yebo (Yeboneer) session form: deferred by Jim on 2026-09-23. Zazi iZandi sessions belong to
+  the separate Zazi app, not Masi.
 - [ ] Replace placeholder EGRA word lists with authoritative English and isiXhosa content.
 - [ ] Configure Word Reading score bands. Until then the Words ranking remains neutral.
 - [ ] Keep score thresholds explicit in `assessment-score-bands-config.md` and runtime code until a
@@ -355,8 +391,8 @@ against the exact SQLite backend. `scripts/loadTestUsers.js` is deliberately dis
 ## 8. WelaPLUS
 
 WelaPLUS is not on `main`. The 11 Question components and their tests are on
-`feature/wela-plus-battery-merge` at `fed3175`, currently 34 commits behind `main` and 19 commits
-ahead. The old `.claude` worktree no longer exists.
+`feature/wela-plus-battery-merge` at `fed3175`, 54 commits behind `main` and 19 commits ahead as of
+2026-09-23. The old `.claude` worktree no longer exists.
 
 ### Integration and contract work
 
