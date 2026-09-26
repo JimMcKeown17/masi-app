@@ -119,51 +119,13 @@ describe('SQLite migration runner', () => {
       'exec:PRAGMA foreign_keys = OFF',
       // Per pending migration: BEGIN IMMEDIATE, exec SQL, record it, bump user_version, COMMIT.
       // The db connection itself is passed as txn, so txn.execAsync === db.execAsync.
-      'enter-migration-transaction',
-      'txn:exec-migration-sql',
-      'txn:record-migration',
-      'txn:set-user-version',
-      'exit-migration-transaction',
-      'enter-migration-transaction',
-      'txn:exec-migration-sql',
-      'txn:record-migration',
-      'txn:set-user-version',
-      'exit-migration-transaction',
-      'enter-migration-transaction',
-      'txn:exec-migration-sql',
-      'txn:record-migration',
-      'txn:set-user-version',
-      'exit-migration-transaction',
-      'enter-migration-transaction',
-      'txn:exec-migration-sql',
-      'txn:record-migration',
-      'txn:set-user-version',
-      'exit-migration-transaction',
-      'enter-migration-transaction',
-      'txn:exec-migration-sql',
-      'txn:record-migration',
-      'txn:set-user-version',
-      'exit-migration-transaction',
-      'enter-migration-transaction',
-      'txn:exec-migration-sql',
-      'txn:record-migration',
-      'txn:set-user-version',
-      'exit-migration-transaction',
-      'enter-migration-transaction',
-      'txn:exec-migration-sql',
-      'txn:record-migration',
-      'txn:set-user-version',
-      'exit-migration-transaction',
-      'enter-migration-transaction',
-      'txn:exec-migration-sql',
-      'txn:record-migration',
-      'txn:set-user-version',
-      'exit-migration-transaction',
-      'enter-migration-transaction',
-      'txn:exec-migration-sql',
-      'txn:record-migration',
-      'txn:set-user-version',
-      'exit-migration-transaction',
+      ...Array.from({ length: CURRENT_SCHEMA_VERSION }, () => [
+        'enter-migration-transaction',
+        'txn:exec-migration-sql',
+        'txn:record-migration',
+        'txn:set-user-version',
+        'exit-migration-transaction',
+      ]).flat(),
       // FK enforcement restored in finally.
       'exec:PRAGMA foreign_keys = ON',
     ]);
@@ -185,17 +147,10 @@ describe('SQLite migration runner', () => {
       ]));
 
       const migrations = await db.getAllAsync('select version from schema_migrations');
-      expect(migrations).toEqual([
-        { version: 1 },
-        { version: 2 },
-        { version: 3 },
-        { version: 4 },
-        { version: 5 },
-        { version: 6 },
-        { version: 7 },
-        { version: 8 },
-        { version: 9 },
-      ]);
+      expect(migrations).toEqual(Array.from(
+        { length: CURRENT_SCHEMA_VERSION },
+        (_, index) => ({ version: index + 1 })
+      ));
       expect(await getColumnNames(db, 'sync_outbox')).toContain('owner_user_id');
       expect(await getColumnNames(db, 'children')).toContain('reading_level');
     } finally {
@@ -210,6 +165,7 @@ describe('SQLite migration runner', () => {
       await runMigrations(db);
       await db.runAsync('delete from schema_migrations where version >= 7');
       await db.execAsync('alter table children drop column reading_level');
+      await db.execAsync('alter table children drop column history_reference');
       await db.execAsync('PRAGMA user_version = 6');
       await db.runAsync(`
         insert into local_state (key, value)
@@ -222,8 +178,7 @@ describe('SQLite migration runner', () => {
 
       await runMigrations(db);
 
-      expect(CURRENT_SCHEMA_VERSION).toBe(9);
-      expect(await getUserVersion(db)).toBe(9);
+      expect(await getUserVersion(db)).toBe(CURRENT_SCHEMA_VERSION);
       expect(await db.getAllAsync('select key, value from local_state order by key')).toEqual([
         { key: 'sync_meta', value: '{"lastSyncTime":"2026-07-13T12:00:00.000Z"}' },
         { key: 'user_profile', value: '{"id":"user-1"}' },
@@ -569,10 +524,10 @@ describe('SQLite migration runner', () => {
     releaseFirstMigration.resolve();
     await Promise.all([first, second]);
 
-    // The first run applies all pending migrations (nine transactions); the second
+    // The first run applies all pending migrations (one transaction each); the second
     // run is serialized behind it, sees user_version already current, and does nothing.
-    expect(beginCount).toBe(9);
-    expect(userVersion).toBe(9);
+    expect(beginCount).toBe(CURRENT_SCHEMA_VERSION);
+    expect(userVersion).toBe(CURRENT_SCHEMA_VERSION);
   });
 
   test('a ROLLBACK failure does not mask the original migration error', async () => {
@@ -677,6 +632,7 @@ describe('SQLite debug dump', () => {
           { version: 7, name: 'local_state_sidecar_cleanup' },
           { version: 8, name: 'children_current_reading_level' },
           { version: 9, name: 'sync_relationship_indexes' },
+          { version: 10, name: 'children_history_reference' },
         ],
         tableCounts: expect.objectContaining({
           schools: 1,

@@ -69,7 +69,7 @@ const INTENTIONALLY_UNSYNCED = {
 };
 
 // Local-only bookkeeping columns the engine strips before push — never sent to the server.
-const LOCAL_ONLY_COLUMNS = ['synced', 'sync_status', 'last_sync_error', 'server_updated_at'];
+const LOCAL_ONLY_COLUMNS = ['synced', 'sync_status', 'last_sync_error', 'server_updated_at', 'history_reference'];
 
 export const SERVER_COLUMNS = {
   time_entries: [
