@@ -8,6 +8,7 @@ import {
   sessionHistoryScope,
 } from '../src/services/sessionHistoryPull';
 import { createSupabaseRequestQueue } from '../src/services/supabaseRequestQueue';
+import { syncStateRepository } from '../src/db/repositories/syncStateRepository';
 import { createMigratedDatabase, seedCoreData } from '../test-support/sqliteRepositoryTestUtils';
 
 const DAY = 24 * 60 * 60 * 1000;
@@ -79,6 +80,82 @@ describe('runSessionHistoryPull', () => {
     await seedCoreData(db);
   });
   afterEach(async () => { await db.closeAsync(); });
+
+  test('slow attendee pagination saves a durable page past the run budget and subsequent runs complete', async () => {
+    const parents = Array.from({ length: 200 }, (_, i) => parent(i + 1));
+    const attendees = parents.flatMap((session, i) => Array.from({ length: 4 }, (_, child) => ({
+      id: uuid(1000 + i * 4 + child), session_id: session.id, child_id: `child-${child}`,
+      group_id: null, attendance_status: 'present', grade_snapshot: null, notes: null,
+      created_at: iso(1), updated_at: iso(1),
+      child_first_name: 'Child', child_last_name: String(child), child_preferred_name: null,
+    })));
+    let clock = 0;
+    const calls = [];
+    const client = { rpc: (name, args) => ({ abortSignal: () => {
+      calls.push({ name, args });
+      clock += 12_000;
+      const rows = name === 'get_delivery_history_page'
+        ? parents.filter((row) => !args.p_after_updated_at || row.updated_at > args.p_after_updated_at
+          || (row.updated_at === args.p_after_updated_at && row.id > args.p_after_id))
+        : attendees.filter((row) => args.p_session_ids.includes(row.session_id)
+          && (!args.p_after_session_id || row.session_id > args.p_after_session_id
+            || (row.session_id === args.p_after_session_id && row.id > args.p_after_attendee_id)));
+      return Promise.resolve({ data: rows.slice(0, args.p_page_size), error: null });
+    } }) };
+
+    const runs = [];
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      const result = await runSessionHistoryPull({ userId: 'user-1', deps: deps({
+        client, now: () => clock, runBudgetMs: 60_000, requestTimeoutMs: 15_000,
+      }) });
+      runs.push({ result, cursor: await cursorOf(),
+        sessions: (await db.getFirstAsync('select count(*) as n from sessions')).n,
+        attendees: (await db.getFirstAsync('select count(*) as n from session_attendees')).n,
+      });
+      if (result.status === 'complete') break;
+    }
+
+    let previousCursor = null;
+    for (const run of runs) {
+      expect(run.result.pages).toBeGreaterThanOrEqual(1);
+      expect(run.cursor).not.toEqual(previousCursor);
+      expect(run.cursor.updatedAt).toBe(iso(200));
+      expect(run.sessions).toBe(200);
+      expect(run.attendees).toBe(800);
+      previousCursor = run.cursor;
+    }
+    expect(runs.map(({ result }) => result.status)).toEqual(['partial', 'complete']);
+    expect(runs[0].cursor.deltaComplete).toBe(false);
+    expect(runs[1].cursor.complete).toBe(true);
+    expect(calls.filter(({ name }) => name === 'get_delivery_history_attendee_page')).toHaveLength(5);
+    expect(clock).toBe(84_000); // parent + five attendee requests, then the next run's empty parent page
+  });
+
+  test('an actor change during the cursor write cancels the service and rolls back the whole page', async () => {
+    const session = parent(1);
+    const server = fakeServer({ parents: [session], attendeesBySession: { [session.id]: [{
+      id: uuid(1001), session_id: session.id, child_id: 'reference-child', group_id: null,
+      attendance_status: 'present', grade_snapshot: null, notes: null,
+      created_at: iso(1), updated_at: iso(1),
+      child_first_name: 'Reference', child_last_name: 'Child', child_preferred_name: null,
+    }] } });
+    const setPullState = syncStateRepository.setPullState;
+    const cursorWrite = jest.spyOn(syncStateRepository, 'setPullState').mockImplementation(async (...args) => {
+      resetSessionHistoryForActorChange();
+      return setPullState(...args);
+    });
+    let result;
+    try {
+      result = await runSessionHistoryPull({ userId: 'user-1', deps: deps({ client: server.client }) });
+      expect(cursorWrite).toHaveBeenCalledTimes(1);
+    } finally {
+      cursorWrite.mockRestore();
+    }
+    expect(result).toEqual({ status: 'cancelled', pages: 0 });
+    for (const table of ['sessions', 'session_attendees', 'children', 'sync_state']) {
+      expect((await db.getFirstAsync(`select count(*) as n from ${table}`)).n).toBe(0);
+    }
+  });
 
   test('a failed refresh in the same millisecond as success is retried', async () => {
     await runSessionHistoryPull({ userId: 'user-1', deps: deps({ client: fakeServer({ parents: [parent(1)] }).client }) });

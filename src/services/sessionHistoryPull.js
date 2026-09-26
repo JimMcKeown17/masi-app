@@ -128,11 +128,9 @@ const runOnce = async ({ userId, force, deps }) => {
   const startedAt = now();
   const remaining = () => runBudgetMs - (now() - startedAt);
   const request = (rpcName, args) => {
-    const budget = remaining();
-    if (budget <= 0) throw new HistoryRunStop('budget', 'Run budget spent');
     return withDeadline({
       enqueueRequest,
-      timeoutMs: Math.min(requestTimeoutMs, budget),
+      timeoutMs: requestTimeoutMs,
       isStale,
       start: (signal) => client.rpc(rpcName, args).abortSignal(signal),
     }).then(({ data, error }) => {
@@ -185,6 +183,9 @@ const runOnce = async ({ userId, force, deps }) => {
     let position = from;
     let overlap = firstOverlap;
     for (;;) {
+      // Budget admission is between durable pages. Once admitted, finish all attendee
+      // requests and save this page so slow connections can make forward progress.
+      if (remaining() <= 0) throw new HistoryRunStop('budget', 'Run budget spent');
       const parents = await request('get_delivery_history_page', {
         p_programme_id: programmeId,
         p_window_start: year.starts_on,
@@ -200,7 +201,6 @@ const runOnce = async ({ userId, force, deps }) => {
       const exhausted = parents.length < SESSION_HISTORY_PAGE_SIZE;
       await onPage({ parents, attendees, position, exhausted });
       if (exhausted) return;
-      if (remaining() <= 0) throw new HistoryRunStop('budget', 'Run budget spent');
     }
   };
 

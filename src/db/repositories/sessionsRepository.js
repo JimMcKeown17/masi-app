@@ -315,12 +315,12 @@ export const createSessionsRepository = ({ database } = {}) => {
       }
       savedFamilies += 1;
     }
-    // Re-check after every awaited write, immediately before the cursor and COMMIT: the actor
-    // can change while this transaction is in flight.
+    await syncStateRepository.setPullState(scope, pullState, { transaction: txn });
+    // Re-check after every awaited write, including the cursor. No await may follow this
+    // check inside the transaction callback: an actor change must roll back the whole page.
     if (admit && !admit()) {
       throw Object.assign(new Error('Session history run cancelled'), { kind: 'cancelled' });
     }
-    await syncStateRepository.setPullState(scope, pullState, { transaction: txn });
     return { savedFamilies };
   });
 

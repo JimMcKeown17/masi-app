@@ -4,6 +4,7 @@ jest.mock('expo-sqlite', () => require('../test-support/expoSQLiteMock'));
 import { runMigrations } from '../src/db/migrations';
 import { createSessionsRepository } from '../src/db/repositories/sessionsRepository';
 import { createChildrenRepository } from '../src/db/repositories/childrenRepository';
+import { syncStateRepository } from '../src/db/repositories/syncStateRepository';
 import { createMigratedDatabase, seedCoreData } from '../test-support/sqliteRepositoryTestUtils';
 
 const SCOPE = 'session_history_pull:user-1:programme-a';
@@ -35,6 +36,35 @@ describe('sessionsRepository.saveHistoryPage', () => {
     repo = createSessionsRepository({ database: db });
   });
   afterEach(async () => { await db.closeAsync(); });
+
+  test('an actor change during the cursor write rolls back the session, attendee, reference child, and cursor', async () => {
+    let admitted = true;
+    const admit = jest.fn(() => admitted);
+    const setPullState = syncStateRepository.setPullState;
+    const cursorWrite = jest.spyOn(syncStateRepository, 'setPullState').mockImplementation(async (...args) => {
+      admitted = false;
+      await setPullState(...args);
+      // The cursor really was written inside the transaction before admission is rechecked.
+      expect(await args[2].transaction.getFirstAsync('select scope from sync_state where scope = ?', SCOPE))
+        .toEqual({ scope: SCOPE });
+    });
+    let caught;
+    try {
+      try {
+        await repo.saveHistoryPage([{ session: serverSession(), attendees: [serverAttendee()] }], {
+          scope: SCOPE, pullState: pullState(), admit,
+        });
+      } catch (error) { caught = error; }
+      expect(cursorWrite).toHaveBeenCalledTimes(1);
+    } finally {
+      cursorWrite.mockRestore();
+    }
+    expect(admit).toHaveBeenCalledTimes(2);
+    expect(caught?.kind).toBe('cancelled');
+    for (const table of ['sessions', 'session_attendees', 'children', 'sync_state']) {
+      expect((await db.getFirstAsync(`select count(*) as n from ${table}`)).n).toBe(0);
+    }
+  });
 
   test('persists parent, attendees, a reference child, and the cursor atomically without outbox rows', async () => {
     const result = await repo.saveHistoryPage([{ session: serverSession(), attendees: [serverAttendee()] }], { scope: SCOPE, pullState: pullState() });
