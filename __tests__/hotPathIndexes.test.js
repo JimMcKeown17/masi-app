@@ -29,8 +29,9 @@ describe('hot-path covering indexes (migrations v5 and v9)', () => {
     await db.closeAsync();
   });
 
-  test('schema version is 9', () => {
-    expect(CURRENT_SCHEMA_VERSION).toBe(9);
+  test('migrates to the current schema version', async () => {
+    const row = await db.getFirstAsync('PRAGMA user_version');
+    expect(row.user_version).toBe(CURRENT_SCHEMA_VERSION);
   });
 
   test('all covering indexes exist after migration', async () => {

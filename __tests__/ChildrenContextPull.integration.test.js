@@ -1,4 +1,7 @@
 jest.mock('expo-sqlite', () => require('../test-support/expoSQLiteMock'));
+jest.mock('../src/services/sessionHistoryStatus', () => ({
+  startSessionHistoryPull: jest.fn(), resetSessionHistoryStatusForActorChange: jest.fn(),
+}));
 
 import React from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';

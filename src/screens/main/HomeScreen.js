@@ -15,6 +15,7 @@ import SyncIndicator from '../../components/common/SyncIndicator';
 import SessionsTodayGauge from '../../components/sessions/SessionsTodayGauge';
 import { getSessionsTodayGoal } from '../../services/sessionsTodayGoal';
 import { getActiveProgrammeGate } from '../../services/activeProgrammeGate';
+import { useSessionHistoryStatus } from '../../services/sessionHistoryStatus';
 import {
   getAssessmentCoverage,
   getSessionsTabStats,
@@ -77,6 +78,7 @@ const getGoalCopy = (goal, isSignedIn) => {
 export default function HomeScreen({ navigation }) {
   const { user, profile } = useAuth();
   const { children: childrenList } = useChildren();
+  const { pageVersion, runVersion } = useSessionHistoryStatus();
   const { classBootstrapStatus, incompleteOnboardingClassId } = useClasses();
   const onboardingEnteredRef = useRef(false);
   const {
@@ -120,8 +122,9 @@ export default function HomeScreen({ navigation }) {
       if (statsLoadStartedRef.current) return undefined;
       statsLoadStartedRef.current = true;
 
+      // statsLoading starts true and covers only the first load. Later reloads, including one per
+      // history page landed, update in place instead of flashing a spinner over the hero.
       const loadStats = async () => {
-        setStatsLoading(true);
         try {
           const recentCutoff = toLocalDateString(new Date(Date.now() - THIRTY_DAYS_MS));
           const [assessmentCounts, dailyGoal, sessions, programmeGate] = await Promise.all([
@@ -157,7 +160,7 @@ export default function HomeScreen({ navigation }) {
       return () => {
         statsLoadStartedRef.current = false;
       };
-    }, [childrenList, user.id])
+    }, [childrenList, user.id, pageVersion, runVersion])
   );
 
   const goalCopy = getGoalCopy(sessionGoal, isSignedIn);

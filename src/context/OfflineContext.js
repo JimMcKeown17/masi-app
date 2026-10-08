@@ -4,6 +4,7 @@ import { AppState } from 'react-native';
 import { supabase } from '../services/supabaseClient';
 import { syncAll, getSyncStatus, requeueTerminalRlsFailures } from '../services/offlineSync';
 import { runStartupRepairs } from '../services/startupRepairs';
+import { startSessionHistoryPull } from '../services/sessionHistoryStatus';
 import { syncStateRepository } from '../db/repositories/syncStateRepository';
 import { captureOperationalError, reportSyncResult, reportSyncStatus } from '../services/observability';
 
@@ -243,6 +244,18 @@ export const OfflineProvider = ({ children }) => {
     }
   }, []);
 
+  const requestDomainPullOrResumeHistory = useCallback(async (reason) => {
+    // The roster staleness check runs exactly as before (online or not); only the new
+    // history resume is gated on connectivity.
+    const userId = currentUserIdRef.current;
+    const rosterPullRequested = await requestDomainPull(reason);
+    // A requested roster pull starts history after persisting delivery assignments.
+    // Otherwise let history's own admission and single flight decide whether to run.
+    if (!rosterPullRequested && userId && isOnlineRef.current && currentUserIdRef.current === userId) {
+      startSessionHistoryPull({ userId });
+    }
+  }, [requestDomainPull]);
+
   const authorizeReconcileBreaker = useCallback((scope) => {
     if (!scope) return false;
     reconcileBreakerAuthorizationsRef.current.add(scope);
@@ -284,12 +297,12 @@ export const OfflineProvider = ({ children }) => {
         triggerBackgroundSyncRef.current();
       }
       if (online && wasOffline) {
-        requestDomainPull('reconnect');
+        requestDomainPullOrResumeHistory('reconnect');
       }
     });
 
     return () => unsubscribe();
-  }, [requestDomainPull]);
+  }, [requestDomainPullOrResumeHistory]);
 
   /**
    * App state listener
@@ -301,7 +314,7 @@ export const OfflineProvider = ({ children }) => {
       if (appState.current.match(/inactive|background/) && nextAppState === 'active') {
         console.log('App came to foreground');
         refreshSyncStatus();
-        requestDomainPull('foreground');
+        requestDomainPullOrResumeHistory('foreground');
 
         // Auto-sync if online and have ready or in_flight data
         if (isOnlineRef.current && (readyCountRef.current > 0 || inFlightCountRef.current > 0)) {
@@ -322,7 +335,7 @@ export const OfflineProvider = ({ children }) => {
     });
 
     return () => subscription.remove();
-  }, [refreshSyncStatus, requestDomainPull]);
+  }, [refreshSyncStatus, requestDomainPullOrResumeHistory]);
 
   /**
    * Auth-restore heal: rows RLS-quarantined while the session was dead requeue

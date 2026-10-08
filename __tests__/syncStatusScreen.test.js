@@ -1,9 +1,22 @@
 jest.mock('@expo/vector-icons', () => ({ Ionicons: () => null }), { virtual: true });
 
-import { render, fireEvent } from '@testing-library/react-native';
+import { render, fireEvent, waitFor } from '@testing-library/react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import SyncStatusScreen from '../src/screens/main/SyncStatusScreen';
 import { retryFailedItem } from '../src/services/offlineSync';
+import { useSessionHistoryStatus, getSessionHistoryPullState } from '../src/services/sessionHistoryStatus';
+
+jest.mock('../src/context/AuthContext', () => ({ useAuth: () => ({ user: { id: 'user-1' } }) }));
+jest.mock('@react-navigation/native', () => ({
+  useFocusEffect: (callback) => require('react').useEffect(callback, [callback]),
+}));
+jest.mock('../src/services/sessionHistoryStatus', () => ({
+  useSessionHistoryStatus: jest.fn(), getSessionHistoryPullState: jest.fn(),
+}));
+beforeEach(() => {
+  useSessionHistoryStatus.mockReturnValue({ running: false, pageVersion: 0, runVersion: 0 });
+  getSessionHistoryPullState.mockResolvedValue(null);
+});
 
 jest.mock('../src/services/offlineSync', () => ({ retryFailedItem: jest.fn() }));
 
@@ -39,6 +52,35 @@ const renderScreen = () => render(
 );
 
 afterEach(() => jest.clearAllMocks());
+
+test.each([
+  ['not downloaded', false, null, 'Not downloaded yet', null],
+  ['downloading', true, null, 'Downloading', 'Downloading history from Head Office…'],
+  ['up to date', false, { lastPulledAt: '2026-09-25T10:00:00Z', cursor: '{"complete":true}' }, 'Up to date', null],
+  ['incomplete', false, { lastPulledAt: null, cursor: '{"complete":false}' }, /^Incomplete since /, 'History not fully downloaded yet'],
+  ['failed after success', false, { lastPulledAt: '2026-09-25T10:00:00Z', cursor: '{"complete":true,"lastFailureAt":"2026-09-25T10:00:00Z"}' }, /^Incomplete since /, 'History not fully downloaded yet'],
+])('History shows %s independently of the upload summary', async (_state, running, pullState, label, detail) => {
+  mockUseOffline.mockReturnValue(offline());
+  useSessionHistoryStatus.mockReturnValue({ running, pageVersion: 0, runVersion: 0 });
+  getSessionHistoryPullState.mockResolvedValue(pullState);
+  const screen = renderScreen();
+  await waitFor(() => expect(screen.getByText('History')).toBeTruthy());
+  await waitFor(() => expect(screen.getByText(label)).toBeTruthy());
+  if (detail) expect(screen.getByText(detail)).toBeTruthy();
+  expect(screen.getByText('All saved and synced')).toBeTruthy();
+  expect(getSessionHistoryPullState).toHaveBeenCalledWith('user-1');
+});
+
+test.each(['pageVersion', 'runVersion'])('History reloads on %s', async (version) => {
+  mockUseOffline.mockReturnValue(offline());
+  const screen = renderScreen();
+  await waitFor(() => expect(getSessionHistoryPullState).toHaveBeenCalledTimes(1));
+  useSessionHistoryStatus.mockReturnValue({ running: false, pageVersion: 0, runVersion: 0, [version]: 1 });
+  getSessionHistoryPullState.mockResolvedValue({ lastPulledAt: null, cursor: '{"complete":false}' });
+  screen.rerender(<SafeAreaProvider initialMetrics={metrics}><SyncStatusScreen /></SafeAreaProvider>);
+  await waitFor(() => expect(screen.getByText('History not fully downloaded yet')).toBeTruthy());
+  expect(getSessionHistoryPullState).toHaveBeenCalledTimes(2);
+});
 
 test('terminal-only backlog reads needs-attention and itemizes with Retry (regression: never claims all synced)', () => {
   mockUseOffline.mockReturnValue(offline({
