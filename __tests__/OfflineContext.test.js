@@ -828,7 +828,7 @@ describe('OfflineContext Plan 4 sync API', () => {
     }
   });
 
-  test('foreground while offline does not start history or request a roster pull', async () => {
+  test('foreground while offline does not start history (the roster staleness check still runs, as before)', async () => {
     const { result } = await renderOfflineHook();
     await emitAuthEvent('INITIAL_SESSION', { user: { id: 'user-1' } });
     const networkListener = NetInfo.addEventListener.mock.calls[0][0];
@@ -841,8 +841,8 @@ describe('OfflineContext Plan 4 sync API', () => {
     });
 
     expect(startSessionHistoryPull).not.toHaveBeenCalled();
-    expect(syncStateRepository.getPullState).not.toHaveBeenCalled();
-    expect(result.current.domainPullNonce).toBe(0);
+    // Pre-existing behaviour is preserved: foreground always evaluates roster staleness.
+    expect(syncStateRepository.getPullState).toHaveBeenCalledWith('child_data_pull');
   });
 
   test.each(['foreground', 'reconnect'])('%s without a signed-in user does not start history', async (reason) => {

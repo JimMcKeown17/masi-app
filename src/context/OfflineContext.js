@@ -245,7 +245,8 @@ export const OfflineProvider = ({ children }) => {
   }, []);
 
   const requestDomainPullOrResumeHistory = useCallback(async (reason) => {
-    if (!isOnlineRef.current) return;
+    // The roster staleness check runs exactly as before (online or not); only the new
+    // history resume is gated on connectivity.
     const userId = currentUserIdRef.current;
     const rosterPullRequested = await requestDomainPull(reason);
     // A requested roster pull starts history after persisting delivery assignments.

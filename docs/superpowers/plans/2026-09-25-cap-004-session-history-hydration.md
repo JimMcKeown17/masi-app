@@ -2087,7 +2087,7 @@ existence lookups, a pending-local check, and an upsert per attendee inside one 
 The 2026-10-08 Codex adversarial review of these additions (verdict needs-attention) added Step 4-0,
 tightened 4a–4d, and is recorded in the build log.
 
-- [ ] **Step 4-0: History continuation independent of roster freshness (TDD; a defect, fix before
+- [x] **Step 4-0 (done 2026-10-08, `0782da4` plus a follow-up keeping the roster check unconditional): History continuation independent of roster freshness (TDD; a defect, fix before
   device steps 2–5).**
   - **Problem:** history starts only after a roster pull (`src/context/ChildrenContext.js:331`), and
     `requestDomainPull` returns early while the `child_data_pull` and `classes_pull` stamps are
