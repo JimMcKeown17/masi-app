@@ -2072,3 +2072,102 @@ git commit -m "docs(cap-004): contract map, ledger, roadmap, build log, handoff,
   - force-stop and offline mid-download leave no half-state.
 
   Record each result in the build log and in `device-gates-sqlite-backend-2026-07.md`.
+
+#### Task 9 additions from the Zazi field evidence (2026-10-08)
+
+Source: `documentation/zazi-sync-lessons-for-masi-2026-10-08.md` (on branch `docs/zazi-foundations-review-20261008` until it merges)
+(Z2, Z3, Z5). Zazi measured on the same reference phone that, on a Galaxy A03s, **saving** dominates a
+history download (about 95% of a delta; a busy account's first download took 300 s, of which only 6 s
+was the RPC). The 2026-10-08 step-1 device test used 20 sessions and 40 attendee lines. That proves
+correctness, not the "within a minute" budget. `saveHistoryPage` currently runs up to two
+existence lookups, a pending-local check, and an upsert per attendee inside one writer transaction
+(`src/db/repositories/sessionsRepository.js:265`), and every user write queues behind it
+(`src/db/client.js:93-101`).
+
+The 2026-10-08 Codex adversarial review of these additions (verdict needs-attention) added Step 4-0,
+tightened 4a–4d, and is recorded in the build log.
+
+- [ ] **Step 4-0: History continuation independent of roster freshness (TDD; a defect, fix before
+  device steps 2–5).**
+  - **Problem:** history starts only after a roster pull (`src/context/ChildrenContext.js:331`), and
+    `requestDomainPull` returns early while the `child_data_pull` and `classes_pull` stamps are
+    younger than `DOMAIN_PULL_STALENESS_MS` (`src/context/OfflineContext.js:224-239`). So a run that
+    stopped on its budget or failed on transport is not resumed by a foreground or reconnect within
+    15 minutes. The offline-mid-download device step would pass only by waiting or pulling to
+    refresh.
+  - **Fix:** on foreground and reconnect, admit a history run whenever the history scope is
+    incomplete, has `lastFailureAt` after its last success, or is stale. Do this whatever the roster
+    stamps say, through the existing single-flight `startSessionHistoryPull`. Keep the
+    after-roster start, which handover re-walks need.
+  - **Tests:** provider-level tests for two cases, each followed by a foreground and a reconnect
+    with fresh roster stamps: a budget-exhausted run, and a transport-failed run. Both must start a
+    history run. Add a test that a complete, fresh, unfailed scope starts nothing.
+- [ ] **Step 4a: Split the run timing and log the durable position (TDD, before the remaining
+  device steps).** Extend the
+  `[SessionHistory] end` line with `rpcMs` (time awaiting parent and attendee RPCs, including
+  queue wait) and `saveMs` (time inside `saveHistoryPage` transactions), plus `families` and
+  `attendees` counts. Pin the format in `__tests__/sessionHistoryPull.test.js`; no row contents.
+  Without this split, an exported log cannot say whether a slow phone was slow on the network or
+  on SQLite.
+  - The `start` and `end` lines also carry the durable position: the cursor's `updatedAt` string,
+    the first 8 characters of its `id`, `complete`, and a pages-committed count. These are
+    privacy-safe. Without them, Step 4d cannot show "advanced, not restarted".
+  - Add writer-queue timing: `[TxnQueue] tag enqueuedMs startedMs endedMs` in `src/db/client.js`,
+    tagged with the active history run when the write was queued. Step 4c needs these lines to prove
+    a tap overlapped a page transaction.
+- [ ] **Step 4b: A realistic-volume device run (Jim's yes for the hosted fixture).** Seed one
+  namespaced test EA on `segygjzpujphwvrubusm` through the isolated helper. Give it a busy EA's
+  academic year, and record each dimension with its derivation:
+  - session count;
+  - attendees per family;
+  - distinct children;
+  - how many children are outside the EA's roster (which become history reference children).
+
+  Run both cold (fresh install) and warm (a delta after a small server change). The 2026-09-26
+  1,205-attendee HTTP fixture is too small. Include sessions from the last 30 days so History has
+  something to show. Mark the account `app_metadata.is_test_account = true`. Run a fresh install on
+  the Galaxy A03s and on the iPhone, and record:
+  - time to the first **durable** page commit, on an unthrottled network and on a throttled one
+    (about 500 ms RPC latency);
+  - time to `complete=true`;
+  - `rpcMs`/`saveMs`;
+  - page count.
+
+  Remove the fixture afterwards and record a zero-residue query.
+- [ ] **Step 4c: User writes during a download.** While Step 4b's download runs on the A03s, save a
+  session, start the next one, and clock in. Each tap counts only if the `[TxnQueue]` lines show it
+  was queued while a history page transaction held the writer; a tap made during an RPC wait
+  proves nothing. Measure two things for each counted tap:
+  - **queue wait** (`startedMs − enqueuedMs`), which must be at most 1 s;
+  - **tap to confirmation**, by screen recording, which must be at most 2 s. Do not use
+    `uiautomator dump`, which waits for idle.
+
+  Any counted tap over either limit fails this step.
+- [ ] **Step 4d: Interrupted first download resumes forward.** Clear app data. Sign in, let it
+  run for about 5 s, then force-stop. Repeat three times with the throttled network, then let it
+  finish. Each `[SessionHistory]` start line must show the durable position advanced, not
+  restarted. Zazi's equivalent bug stranded 5 of 20 EAs (ZZ-BUG-20261006-006).
+  - **Why page atomicity alone is not enough:** the run fetches every attendee page for up to 200
+    parents before its first commit (`src/services/sessionHistoryPull.js:144-157, 190-203`). Codex
+    probed 200 parents with 10 attendees each at 500 ms per RPC, against real SQLite repositories,
+    and the first commit landed at 6.0 s. Repeated 5 s opens would never commit.
+  - **Pass criterion:** the first durable commit lands within 3 s of the run starting on the A03s
+    with the throttled network.
+  - **On failure:** separate the parent commit-page size from the attendee transport-page size.
+    Today `SESSION_HISTORY_PAGE_SIZE` drives both (`sessionHistoryPull.js:150, 193`). Codex round 2
+    probed sizes 200 and 20 with 10 attendees per parent: both needed 12 RPCs and 6,000 ms before
+    the first commit. Reduce *parents per commit* and keep large attendee pages. Pin the
+    first-commit RPC count in a test, and keep the page and its cursor in one transaction. This
+    remedy does not depend on Step 4c.
+- [ ] **Step 4e (conditional on 4b, 4c or 4d failing; mandatory before Step 3 copies the pattern):
+  cheap page apply.** Keep one transaction per page with the cursor, because that is the atomicity contract. Inside it:
+  - resolve the page's existing `classes`, `groups`, `children`, and pending-local rows with one
+    `IN (...)` query per table instead of per-row awaits;
+  - skip any parent or attendee whose stored columns equal the incoming row;
+  - reuse one prepared statement per table for the page.
+
+  Prove this with the real-SQLite suite, and with an added test that counts statements per page
+  (`test-support/countingSqliteAdapter.js`) and pins a per-page bound. If 4c still fails with a
+  cheap page, reduce `SESSION_HISTORY_PAGE_SIZE`, so each page holds the writer lock for less time
+  and is still one transaction with its cursor. Do not split a page across transactions, because
+  that gives up cursor atomicity.
