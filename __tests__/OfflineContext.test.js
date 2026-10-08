@@ -6,7 +6,11 @@ import { OfflineProvider, useOffline } from '../src/context/OfflineContext';
 import { supabase } from '../src/services/supabaseClient';
 import { getSyncStatus, requeueTerminalRlsFailures, syncAll } from '../src/services/offlineSync';
 import { runStartupRepairs } from '../src/services/startupRepairs';
-import { syncStateRepository } from '../src/db/repositories/syncStateRepository';
+import { createSyncStateRepository, syncStateRepository } from '../src/db/repositories/syncStateRepository';
+import { startSessionHistoryPull } from '../src/services/sessionHistoryStatus';
+import { runSessionHistoryPull, resetSessionHistoryForActorChange, sessionHistoryScope } from '../src/services/sessionHistoryPull';
+import { runMigrations } from '../src/db/migrations';
+import { createMigratedDatabase, seedCoreData } from '../test-support/sqliteRepositoryTestUtils';
 import {
   captureOperationalError,
   reportSyncResult,
@@ -14,6 +18,11 @@ import {
 } from '../src/services/observability';
 
 const appStateCurrentStateDescriptor = Object.getOwnPropertyDescriptor(AppState, 'currentState');
+
+jest.mock('expo-sqlite', () => require('../test-support/expoSQLiteMock'));
+jest.mock('../src/services/sessionHistoryStatus', () => ({
+  startSessionHistoryPull: jest.fn(),
+}));
 
 jest.mock('../src/services/offlineSync', () => ({
   getSyncStatus: jest.fn(),
@@ -46,7 +55,9 @@ jest.mock('@react-native-community/netinfo', () => ({
 }));
 
 jest.mock('../src/db/repositories/syncStateRepository', () => ({
+  ...jest.requireActual('../src/db/repositories/syncStateRepository'),
   syncStateRepository: {
+    ...jest.requireActual('../src/db/repositories/syncStateRepository').syncStateRepository,
     getPullState: jest.fn(),
     getReconcileBreakerNotes: jest.fn(),
   },
@@ -68,6 +79,40 @@ const renderOfflineHook = async () => {
   getSyncStatus.mockClear();
   syncAll.mockClear();
   return rendered;
+};
+
+const emitAuthEvent = async (event, session) => {
+  const callback = supabase.auth.onAuthStateChange.mock.calls[0][0];
+  await act(async () => {
+    await callback(event, session);
+  });
+};
+
+// Use the real history runner and SQLite cursor to reproduce a stopped download,
+// while observing the provider's public service call separately from admission.
+const createHistoryHarness = async () => {
+  const database = await createMigratedDatabase(runMigrations);
+  await seedCoreData(database);
+  const repository = createSyncStateRepository({ database });
+  const scope = sessionHistoryScope('user-1', 'programme-a');
+  const parents = Array.from({ length: 200 }, (_, i) => ({
+    id: `session-${String(i).padStart(3, '0')}`, user_id: 'user-1', programme_id: 'programme-a', class_id: null,
+    session_date: '2026-09-01', activities: {},
+    created_at: '2026-09-01T08:00:00.000Z', updated_at: '2026-09-01T08:00:00.000Z',
+  }));
+  const client = { rpc: jest.fn((name, args) => ({
+    abortSignal: () => Promise.resolve({
+      data: name === 'get_delivery_history_page' && !args.p_after_id ? parents : [],
+      error: null,
+    }),
+  })) };
+  const run = ({ force = false, ...extra } = {}) => runSessionHistoryPull({
+    userId: 'user-1',
+    force,
+    deps: { database, client, enqueueRequest: (task) => task(), ...extra },
+  });
+  const readCursor = async () => JSON.parse((await repository.getPullState(scope)).cursor);
+  return { database, client, run, readCursor };
 };
 
 describe('OfflineContext Plan 4 sync API', () => {
@@ -103,6 +148,8 @@ describe('OfflineContext Plan 4 sync API', () => {
     });
     syncStateRepository.getPullState.mockResolvedValue(null);
     syncStateRepository.getReconcileBreakerNotes.mockResolvedValue([]);
+    startSessionHistoryPull.mockReset();
+    resetSessionHistoryForActorChange();
   });
 
   afterEach(() => {
@@ -686,6 +733,7 @@ describe('OfflineContext Plan 4 sync API', () => {
       .mockResolvedValueOnce(freshState)
       .mockResolvedValueOnce(staleState);
     const { result } = await renderOfflineHook();
+    await emitAuthEvent('INITIAL_SESSION', { user: { id: 'user-1' } });
     const listener = AppState.addEventListener.mock.calls.at(-1)[1];
 
     await act(async () => {
@@ -695,6 +743,7 @@ describe('OfflineContext Plan 4 sync API', () => {
     });
 
     expect(result.current.domainPullNonce).toBe(1);
+    expect(startSessionHistoryPull).not.toHaveBeenCalled();
   });
 
   test('foregrounding does not request a domain pull when both stamps are fresh', async () => {
@@ -711,6 +760,141 @@ describe('OfflineContext Plan 4 sync API', () => {
 
     expect(result.current.domainPullNonce).toBe(0);
   });
+
+  test('foreground resumes budget-stopped history once for the signed-in user when the roster is fresh', async () => {
+    const history = await createHistoryHarness();
+    try {
+      let clock = 0;
+      expect(await history.run({
+        now: () => clock,
+        onPageSaved: () => { clock = 60_000; },
+      })).toEqual({ status: 'partial', pages: 1 });
+      expect(await history.readCursor()).toMatchObject({ complete: false, deltaComplete: false });
+      syncStateRepository.getPullState.mockResolvedValue({ lastPulledAt: new Date().toISOString() });
+      startSessionHistoryPull.mockImplementation(() => history.run());
+      const { result } = await renderOfflineHook();
+      await emitAuthEvent('INITIAL_SESSION', { user: { id: 'user-1' } });
+      const listener = AppState.addEventListener.mock.calls.at(-1)[1];
+
+      await act(async () => {
+        listener('background');
+        listener('active');
+      });
+
+      expect(startSessionHistoryPull).toHaveBeenCalledTimes(1);
+      expect(startSessionHistoryPull).toHaveBeenCalledWith({ userId: 'user-1' });
+      await startSessionHistoryPull.mock.results[0].value;
+      expect(await history.readCursor()).toMatchObject({ complete: true });
+      expect(result.current.domainPullNonce).toBe(0);
+    } finally {
+      await history.database.closeAsync();
+    }
+  });
+
+  test('reconnect retries transport-failed history once for the signed-in user when the roster is fresh', async () => {
+    const history = await createHistoryHarness();
+    try {
+      expect((await history.run()).status).toBe('complete');
+      history.client.rpc.mockImplementationOnce(() => ({
+        abortSignal: () => Promise.resolve({
+          data: null, error: { message: 'Network request failed', code: 'NETWORK' },
+        }),
+      }));
+      expect(await history.run({ force: true })).toEqual({ status: 'transport', pages: 0 });
+      expect(await history.readCursor()).toMatchObject({
+        complete: true, lastFailureAt: expect.any(String),
+      });
+      syncStateRepository.getPullState.mockResolvedValue({ lastPulledAt: new Date().toISOString() });
+      startSessionHistoryPull.mockImplementation(() => history.run());
+      const { result } = await renderOfflineHook();
+      await emitAuthEvent('INITIAL_SESSION', { user: { id: 'user-1' } });
+      const listener = NetInfo.addEventListener.mock.calls[0][0];
+
+      await act(async () => {
+        listener({ isConnected: false, isInternetReachable: false });
+      });
+      expect(startSessionHistoryPull).not.toHaveBeenCalled();
+      await act(async () => {
+        listener({ isConnected: true, isInternetReachable: true });
+      });
+
+      expect(startSessionHistoryPull).toHaveBeenCalledTimes(1);
+      expect(startSessionHistoryPull).toHaveBeenCalledWith({ userId: 'user-1' });
+      await startSessionHistoryPull.mock.results[0].value;
+      expect(await history.readCursor()).toMatchObject({ complete: true, lastFailureAt: null });
+      expect(result.current.domainPullNonce).toBe(0);
+    } finally {
+      await history.database.closeAsync();
+    }
+  });
+
+  test('foreground while offline does not start history or request a roster pull', async () => {
+    const { result } = await renderOfflineHook();
+    await emitAuthEvent('INITIAL_SESSION', { user: { id: 'user-1' } });
+    const networkListener = NetInfo.addEventListener.mock.calls[0][0];
+    const foregroundListener = AppState.addEventListener.mock.calls.at(-1)[1];
+
+    await act(async () => {
+      networkListener({ isConnected: false, isInternetReachable: false });
+      foregroundListener('background');
+      foregroundListener('active');
+    });
+
+    expect(startSessionHistoryPull).not.toHaveBeenCalled();
+    expect(syncStateRepository.getPullState).not.toHaveBeenCalled();
+    expect(result.current.domainPullNonce).toBe(0);
+  });
+
+  test.each(['foreground', 'reconnect'])('%s without a signed-in user does not start history', async (reason) => {
+    syncStateRepository.getPullState.mockResolvedValue({ lastPulledAt: new Date().toISOString() });
+    await renderOfflineHook();
+    await emitAuthEvent('INITIAL_SESSION', { user: { id: 'user-1' } });
+    await emitAuthEvent('SIGNED_OUT', null);
+
+    await act(async () => {
+      if (reason === 'foreground') {
+        const listener = AppState.addEventListener.mock.calls.at(-1)[1];
+        listener('background');
+        listener('active');
+      } else {
+        const listener = NetInfo.addEventListener.mock.calls[0][0];
+        listener({ isConnected: false, isInternetReachable: false });
+        listener({ isConnected: true, isInternetReachable: true });
+      }
+    });
+
+    expect(startSessionHistoryPull).not.toHaveBeenCalled();
+  });
+
+  test.each(['offline', 'signed out', 'different user'])(
+    'a fresh-roster decision does not start history if the device becomes %s during the stamp read',
+    async (change) => {
+      const freshState = { lastPulledAt: new Date().toISOString() };
+      let releaseStamp;
+      syncStateRepository.getPullState
+        .mockReturnValueOnce(new Promise((resolve) => { releaseStamp = resolve; }))
+        .mockResolvedValueOnce(freshState);
+      await renderOfflineHook();
+      await emitAuthEvent('INITIAL_SESSION', { user: { id: 'user-1' } });
+      const listener = AppState.addEventListener.mock.calls.at(-1)[1];
+      act(() => {
+        listener('background');
+        listener('active');
+      });
+
+      if (change === 'offline') {
+        act(() => {
+          NetInfo.addEventListener.mock.calls[0][0]({ isConnected: false, isInternetReachable: false });
+        });
+      } else {
+        await emitAuthEvent(change === 'signed out' ? 'SIGNED_OUT' : 'SIGNED_IN',
+          change === 'signed out' ? null : { user: { id: 'user-2' } });
+      }
+      await act(async () => { releaseStamp(freshState); });
+
+      expect(startSessionHistoryPull).not.toHaveBeenCalled();
+    }
+  );
 
   test('reconnecting with only backed-off work does not schedule a background sync', async () => {
     const { result } = await renderOfflineHook();
@@ -800,13 +984,6 @@ describe('OfflineContext Plan 4 sync API', () => {
   });
 
   describe('auth-restore heal wiring', () => {
-    const emitAuthEvent = async (event, session) => {
-      const callback = supabase.auth.onAuthStateChange.mock.calls[0][0];
-      await act(async () => {
-        await callback(event, session);
-      });
-    };
-
     test.each([
       ['SIGNED_IN'],
       ['TOKEN_REFRESHED'],

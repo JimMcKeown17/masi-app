@@ -109,16 +109,34 @@ describe('SessionHistoryScreen Plan 5 behavior', () => {
     expect(supabase.from).not.toHaveBeenCalled();
   });
 
+  test('explains the recorded-by-me 30-day window while loading and with an empty list', async () => {
+    sessionsRepository.getSessions.mockResolvedValue([]);
+    const screen = render(<SessionHistoryScreen />);
+
+    expect(screen.getByText('Showing sessions you recorded in the last 30 days.')).toBeTruthy();
+    await waitFor(() => expect(screen.getByText('No sessions yet. Record your first session!')).toBeTruthy());
+    expect(screen.getByText('Showing sessions you recorded in the last 30 days.')).toBeTruthy();
+  });
+
+  test('explains the recorded-by-me 30-day window with a populated list', async () => {
+    const screen = render(<SessionHistoryScreen />);
+
+    await waitFor(() => expect(screen.getByText('Literacy session')).toBeTruthy());
+    expect(screen.getByText('Showing sessions you recorded in the last 30 days.')).toBeTruthy();
+  });
+
   test('shows the downloading line', async () => {
     useSessionHistoryStatus.mockReturnValue({ running: true, pageVersion: 0, runVersion: 0 });
     const screen = render(<SessionHistoryScreen />);
     await waitFor(() => expect(screen.getByText('Downloading history from Head Office…')).toBeTruthy());
+    expect(screen.getByText('Showing sessions you recorded in the last 30 days.')).toBeTruthy();
   });
 
   test('shows the incomplete line', async () => {
     getSessionHistoryPullState.mockResolvedValue({ cursor: '{"complete":false}', lastPulledAt: null });
     const screen = render(<SessionHistoryScreen />);
     await waitFor(() => expect(screen.getByText('History not fully downloaded yet')).toBeTruthy());
+    expect(screen.getByText('Showing sessions you recorded in the last 30 days.')).toBeTruthy();
   });
 
   test('pull-to-refresh forces a history run for the signed-in user', async () => {

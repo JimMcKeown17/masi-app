@@ -150,6 +150,7 @@ export default function SessionHistoryScreen() {
     return (
       <View style={styles.container}>
         {history.detail && <Text variant="bodySmall" style={styles.historyDetail}>{history.detail}</Text>}
+        <Text variant="bodySmall" style={styles.historyDetail}>Showing sessions you recorded in the last 30 days.</Text>
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color={colors.primary} />
           <Text variant="bodyMedium" style={styles.emptyText}>Loading...</Text>
@@ -161,6 +162,7 @@ export default function SessionHistoryScreen() {
   return (
     <View style={styles.container}>
       {history.detail && <Text variant="bodySmall" style={styles.historyDetail}>{history.detail}</Text>}
+      <Text variant="bodySmall" style={styles.historyDetail}>Showing sessions you recorded in the last 30 days.</Text>
       <FlatList
         refreshControl={<RefreshControl refreshing={running} onRefresh={() => startSessionHistoryPull({ userId: user?.id, force: true })} />}
         data={sessions}
