@@ -1,8 +1,10 @@
 import React from 'react';
-import { render, fireEvent, waitFor } from '@testing-library/react-native';
+import { render, fireEvent, waitFor, within } from '@testing-library/react-native';
 import { PaperProvider } from 'react-native-paper';
 import SessionsScreen from '../src/screens/main/SessionsScreen';
 import { getActiveProgrammeGate } from '../src/services/activeProgrammeGate';
+import { getSessionsTodayGoal } from '../src/services/sessionsTodayGoal';
+import { useSessionHistoryStatus } from '../src/services/sessionHistoryStatus';
 
 const mockNavigate = jest.fn();
 const mockGetActiveTimeEntry = jest.fn();
@@ -17,8 +19,13 @@ const mockUseOffline = jest.fn();
 const mockUseChildren = jest.fn();
 
 jest.mock('@react-navigation/native', () => ({
-  useFocusEffect: (callback) => callback(),
+  useFocusEffect: (callback) => {
+    const React = require('react');
+    React.useEffect(() => callback(), [callback]);
+  },
 }));
+jest.mock('../src/services/sessionHistoryStatus', () => ({ useSessionHistoryStatus: jest.fn() }));
+jest.mock('../src/services/sessionsTodayGoal', () => ({ getSessionsTodayGoal: jest.fn() }));
 
 jest.mock('../src/context/AuthContext', () => ({
   useAuth: () => mockUseAuth(),
@@ -96,6 +103,8 @@ const defaultTimeTracking = {
 
 beforeEach(() => {
   jest.clearAllMocks();
+  useSessionHistoryStatus.mockReturnValue({ pageVersion: 0, runVersion: 0 });
+  getSessionsTodayGoal.mockResolvedValue({ target: 3, ceiling: 5, count: 0, state: 'below' });
   mockUseAuth.mockReturnValue({
     user: { id: 'user-1', email: 'test@masinyusane.org' },
     profile: {
@@ -117,6 +126,43 @@ beforeEach(() => {
   mockGetAssessments.mockResolvedValue([]);
   mockGetSessionCountsSince.mockResolvedValue([]);
   mockGetAssessmentCountsSince.mockResolvedValue([]);
+});
+
+const statPill = (screen, label) => {
+  let node = screen.getByText(label).parent;
+  while (node.type !== 'View') node = node.parent;
+  return within(node);
+};
+
+describe('SessionsScreen history hydration', () => {
+  afterEach(() => jest.useRealTimers());
+
+  test.each(['pageVersion', 'runVersion'])('%s refreshes recorded-session stats without leaving', async (version) => {
+    jest.useFakeTimers();
+    jest.setSystemTime(new Date('2026-07-22T08:00:00.000Z'));
+    mockUseChildren.mockReturnValue({ children: [{ id: 'child-1' }, { id: 'child-2' }] });
+    const screen = renderWithPaper(<SessionsScreen navigation={navigation} />);
+    await screen.findByText('This Week');
+    expect(statPill(screen, 'This Week').getByText('0')).toBeTruthy();
+    expect(mockGetSessions).toHaveBeenCalledTimes(1);
+
+    mockGetSessions.mockResolvedValue([
+      { id: 's-1', user_id: 'user-1', session_date: '2026-07-22', children_ids: ['child-1'] },
+      { id: 's-2', user_id: 'user-1', session_date: '2026-07-22', children_ids: ['child-2'] },
+      { id: 's-other', user_id: 'user-2', session_date: '2026-07-22', children_ids: ['child-1'] },
+    ]);
+    getSessionsTodayGoal.mockResolvedValue({ target: 3, ceiling: 5, count: 2, state: 'below' });
+    useSessionHistoryStatus.mockReturnValue({ pageVersion: 0, runVersion: 0, [version]: 1 });
+    screen.rerender(<PaperProvider><SessionsScreen navigation={navigation} /></PaperProvider>);
+
+    await waitFor(() => expect(mockGetSessions).toHaveBeenCalledTimes(2));
+    expect(statPill(screen, 'This Week').getByText('2')).toBeTruthy();
+    expect(statPill(screen, 'This Month').getByText('2')).toBeTruthy();
+    expect(screen.queryByText('2 children not seen this week')).toBeNull();
+    expect(mockGetSessions).toHaveBeenLastCalledWith({
+      userId: 'user-1', recordedByUserId: 'user-1', sinceDate: '2026-07-01',
+    });
+  });
 });
 
 describe('session launch clock-in warning', () => {

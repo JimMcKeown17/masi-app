@@ -11,6 +11,7 @@ import { getSessionsTabStats } from '../../utils/dashboardStats';
 import StatBar from '../../components/dashboard/StatBar';
 import SessionsTodayRing from '../../components/sessions/SessionsTodayRing';
 import { getSessionsTodayGoal } from '../../services/sessionsTodayGoal';
+import { useSessionHistoryStatus } from '../../services/sessionHistoryStatus';
 import { useSessionLaunchGuard } from '../../hooks/useSessionLaunchGuard';
 import ClockInBeforeSessionSheet from '../../components/sessions/ClockInBeforeSessionSheet';
 import { getActiveProgrammeGate } from '../../services/activeProgrammeGate';
@@ -31,6 +32,7 @@ const getStatsCutoff = () => {
 export default function SessionsScreen({ navigation }) {
   const { user } = useAuth();
   const { children: childrenList } = useChildren();
+  const { pageVersion, runVersion } = useSessionHistoryStatus();
   const [stats, setStats] = useState(null);
   const [goal, setGoal] = useState(null);
   const [programmeGate, setProgrammeGate] = useState(null);
@@ -67,7 +69,7 @@ export default function SessionsScreen({ navigation }) {
         setGoal(await getSessionsTodayGoal({ userId: user.id }));
       };
       loadStats();
-    }, [childrenList, user.id])
+    }, [childrenList, user.id, pageVersion, runVersion])
   );
 
   // Hold the capture UI until the programme check resolves, so an unassigned EA

@@ -126,6 +126,7 @@ const runOnce = async ({ userId, force, deps }) => {
   }
 
   const startedAt = now();
+  console.log(`[SessionHistory] start forced=${force} mode=${rewalkDue() ? 'rewalk_due' : 'delta'} firstWalk=${state.firstWalk}`);
   const remaining = () => runBudgetMs - (now() - startedAt);
   const request = (rpcName, args) => {
     return withDeadline({
@@ -205,6 +206,17 @@ const runOnce = async ({ userId, force, deps }) => {
   };
 
   let pages = 0;
+  const finish = (status, error) => {
+    const complete = Boolean(state.complete && !state.lastFailureAt && !error);
+    const line = `[SessionHistory] end status=${status} pages=${pages} durationMs=${now() - startedAt} complete=${complete}`;
+    if (error) {
+      // Only the message, never the RPC arguments, response, details, or row contents.
+      console.warn(`${line} failureKind=${status} error=${JSON.stringify(error.message || 'Unknown error')}`);
+    } else {
+      console.log(line);
+    }
+    return { status, pages };
+  };
   try {
     // 1. Delta. The first hydration (from an empty cursor) is a full walk of the year, so its
     //    completion also counts as a completed re-walk, even if it spanned several runs.
@@ -255,12 +267,12 @@ const runOnce = async ({ userId, force, deps }) => {
         }),
       });
     }
-    return { status: state.complete ? 'complete' : 'partial', pages };
+    return finish(state.complete ? 'complete' : 'partial');
   } catch (error) {
     const kind = error instanceof HistoryRunStop ? error.kind
       : error?.kind === 'cancelled' ? 'cancelled'
         : 'transport';
-    if (kind === 'budget') return { status: 'partial', pages };
+    if (kind === 'budget') return finish('partial');
     if (kind !== 'cancelled' && !isStale()) {
       // Remember the failure so a previous success is never presented as current. Written
       // through the writer transaction (the resolved handle is the read-only reader in
@@ -273,10 +285,10 @@ const runOnce = async ({ userId, force, deps }) => {
         });
         state = failed;
       } catch (writeError) {
-        console.warn('[sessionHistoryPull] could not record failure:', writeError?.message);
+        console.warn('[SessionHistory] could not record failure:', writeError?.message);
       }
     }
-    return { status: kind, pages };
+    return finish(kind, error);
   }
 };
 

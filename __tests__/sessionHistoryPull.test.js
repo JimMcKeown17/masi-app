@@ -21,7 +21,7 @@ const parent = (n, extra = {}) => ({
 
 // Scripted server. `parents()` is read on every call so a test can change the visible set
 // between runs. Rows are sorted by (updated_at, id), as the real RPC returns them.
-const fakeServer = ({ parents, attendeesBySession = {}, failParentAt = null, hangParentAt = null, onParentCall = () => {} }) => {
+const fakeServer = ({ parents, attendeesBySession = {}, failParentAt = null, parentError = { message: 'boom', code: 'XX000' }, hangParentAt = null, onParentCall = () => {} }) => {
   const calls = [];
   let parentCalls = 0;
   const client = {
@@ -31,7 +31,7 @@ const fakeServer = ({ parents, attendeesBySession = {}, failParentAt = null, han
         if (name === 'get_delivery_history_page') {
           parentCalls += 1;
           onParentCall(parentCalls);
-          if (failParentAt === parentCalls) return Promise.resolve({ data: null, error: { message: 'boom', code: 'XX000' } });
+          if (failParentAt === parentCalls) return Promise.resolve({ data: null, error: parentError });
           if (hangParentAt === parentCalls) {
             return new Promise((_, reject) => signal.addEventListener('abort', () => reject(Object.assign(new Error('Aborted'), { name: 'AbortError' }))));
           }
@@ -80,6 +80,78 @@ describe('runSessionHistoryPull', () => {
     await seedCoreData(db);
   });
   afterEach(async () => { await db.closeAsync(); });
+
+  test('a complete run logs its start and end without session contents or child identity', async () => {
+    const log = jest.spyOn(console, 'log').mockImplementation(() => {});
+    const warn = jest.spyOn(console, 'warn').mockImplementation(() => {});
+    const session = parent(1, { notes: 'private-session-note', activities: { private: 'private-activity' } });
+    const server = fakeServer({ parents: [session], attendeesBySession: { [session.id]: [{
+      id: uuid(1001), session_id: session.id, child_id: 'child-private', group_id: null,
+      attendance_status: 'present', grade_snapshot: null, notes: 'private-attendee-note',
+      created_at: iso(1), updated_at: iso(1),
+      child_first_name: 'Onwethu', child_last_name: 'Private', child_preferred_name: null,
+    }] } });
+    let clock = 0;
+    try {
+      const result = await runSessionHistoryPull({ userId: 'user-1', deps: deps({
+        client: server.client, now: () => clock, onPageSaved: () => { clock = 125; },
+      }) });
+      expect(result).toEqual({ status: 'complete', pages: 1 });
+      expect(log.mock.calls).toEqual([
+        ['[SessionHistory] start forced=false mode=rewalk_due firstWalk=true'],
+        ['[SessionHistory] end status=complete pages=1 durationMs=125 complete=true'],
+      ]);
+      expect(warn).not.toHaveBeenCalled();
+      const lines = log.mock.calls.flat().join('\n');
+      for (const privateValue of ['Onwethu', 'user-1', 'child-private', session.id,
+        'private-session-note', 'private-activity', 'private-attendee-note']) {
+        expect(lines).not.toContain(privateValue);
+      }
+    } finally {
+      log.mockRestore();
+      warn.mockRestore();
+    }
+  });
+
+  test('a transport failure logs a forced delta start and warning end without child identity', async () => {
+    const log = jest.spyOn(console, 'log').mockImplementation(() => {});
+    const warn = jest.spyOn(console, 'warn').mockImplementation(() => {});
+    const session = parent(1);
+    const attendeesBySession = { [session.id]: [{
+      id: uuid(1001), session_id: session.id, child_id: 'child-private', group_id: null,
+      attendance_status: 'present', grade_snapshot: null, notes: null,
+      created_at: iso(1), updated_at: iso(1),
+      child_first_name: 'Onwethu', child_last_name: 'Private', child_preferred_name: null,
+    }] };
+    try {
+      await runSessionHistoryPull({ userId: 'user-1', deps: deps({
+        client: fakeServer({ parents: [session], attendeesBySession }).client,
+      }) });
+      log.mockClear();
+      warn.mockClear();
+      let clock = 0;
+      const server = fakeServer({ parents: [session], failParentAt: 1,
+        parentError: { message: 'Network request failed', code: 'NETWORK' },
+        onParentCall: () => { clock = 75; },
+      });
+      expect(await runSessionHistoryPull({ userId: 'user-1', force: true, deps: deps({
+        client: server.client, now: () => clock,
+      }) })).toEqual({ status: 'transport', pages: 0 });
+      expect(log.mock.calls).toEqual([
+        ['[SessionHistory] start forced=true mode=delta firstWalk=false'],
+      ]);
+      expect(warn.mock.calls).toEqual([
+        ['[SessionHistory] end status=transport pages=0 durationMs=75 complete=false failureKind=transport error="Network request failed"'],
+      ]);
+      const lines = [...log.mock.calls, ...warn.mock.calls].flat().join('\n');
+      for (const privateValue of ['Onwethu', 'user-1', 'child-private', session.id]) {
+        expect(lines).not.toContain(privateValue);
+      }
+    } finally {
+      log.mockRestore();
+      warn.mockRestore();
+    }
+  });
 
   test('slow attendee pagination saves a durable page past the run budget and subsequent runs complete', async () => {
     const parents = Array.from({ length: 200 }, (_, i) => parent(i + 1));

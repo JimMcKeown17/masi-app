@@ -5,7 +5,8 @@ import { useFocusEffect } from '@react-navigation/native';
 import { useAuth } from '../../context/AuthContext';
 import { useChildren } from '../../context/ChildrenContext';
 import { sessionsRepository } from '../../db/repositories/sessionsRepository';
-import { getSessionCountRanking } from '../../utils/dashboardStats';
+import { useSessionHistoryStatus } from '../../services/sessionHistoryStatus';
+import { getDistinctSessionCount, getSessionCountRanking } from '../../utils/dashboardStats';
 import RankedBarRow from '../../components/dashboard/RankedBarRow';
 import StatBar from '../../components/dashboard/StatBar';
 import { colors, spacing } from '../../constants/colors';
@@ -13,20 +14,24 @@ import { colors, spacing } from '../../constants/colors';
 export default function SessionCountRankingScreen() {
   const { user } = useAuth();
   const { children: childrenList } = useChildren();
+  const { pageVersion, runVersion } = useSessionHistoryStatus();
   const [ranking, setRanking] = useState([]);
+  const [totalSessions, setTotalSessions] = useState(0);
   const [loading, setLoading] = useState(true);
 
   useFocusEffect(
     useCallback(() => {
+      // The spinner only covers the first load (initial state). Later reloads, including one per
+      // history page landed, update the figures in place instead of flashing a spinner.
       const load = async () => {
-        setLoading(true);
         const sessions = await sessionsRepository.getSessions({ userId: user.id });
         const ranked = getSessionCountRanking(childrenList, sessions);
         setRanking(ranked);
+        setTotalSessions(getDistinctSessionCount(childrenList, sessions));
         setLoading(false);
       };
       load();
-    }, [childrenList, user.id])
+    }, [childrenList, user.id, pageVersion, runVersion])
   );
 
   if (loading) {
@@ -37,9 +42,9 @@ export default function SessionCountRankingScreen() {
     );
   }
 
-  const totalSessions = ranking.reduce((sum, r) => sum + r.count, 0);
+  const childSessions = ranking.reduce((sum, r) => sum + r.count, 0);
   const avgPerChild = ranking.length > 0
-    ? Math.round((totalSessions / ranking.length) * 10) / 10
+    ? Math.round((childSessions / ranking.length) * 10) / 10
     : 0;
   const maxCount = ranking.length > 0 ? ranking[0].count : 1;
   const zeroSessions = ranking.filter(r => r.count === 0).length;

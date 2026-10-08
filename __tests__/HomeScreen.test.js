@@ -11,6 +11,7 @@ const mockGetSessionCountsSince = jest.fn();
 const mockGetAssessmentCountsSince = jest.fn();
 const mockGetSessionsTodayGoal = jest.fn();
 const mockGetActiveProgrammeGate = jest.fn();
+const mockUseSessionHistoryStatus = jest.fn();
 
 jest.mock('@expo/vector-icons', () => new Proxy({}, {
   get: (target, prop) => {
@@ -24,7 +25,7 @@ jest.mock('@react-navigation/native', () => {
   const React = require('react');
   return {
     ...jest.requireActual('@react-navigation/native'),
-    useFocusEffect: (cb) => { React.useEffect(() => cb(), []); },
+    useFocusEffect: (cb) => { React.useEffect(() => cb(), [cb]); },
   };
 });
 
@@ -56,6 +57,9 @@ jest.mock('../src/services/sessionsTodayGoal', () => ({
 }));
 jest.mock('../src/services/activeProgrammeGate', () => ({
   getActiveProgrammeGate: (...args) => mockGetActiveProgrammeGate(...args),
+}));
+jest.mock('../src/services/sessionHistoryStatus', () => ({
+  useSessionHistoryStatus: () => mockUseSessionHistoryStatus(),
 }));
 
 import React from 'react';
@@ -89,6 +93,7 @@ const defaultTimeTracking = {
 describe('HomeScreen', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    mockUseSessionHistoryStatus.mockReturnValue({ pageVersion: 0, runVersion: 0 });
     mockUseAuth.mockReturnValue({
       user: { id: 'ea-1', first_name: 'Alice' },
       profile: { first_name: 'Alice', schoolName: 'Charles Duna Primary' },
@@ -133,6 +138,48 @@ describe('HomeScreen', () => {
 
   afterEach(() => {
     jest.useRealTimers();
+  });
+
+  test.each(['pageVersion', 'runVersion'])('%s refreshes Home sessions and statistics without leaving', async (version) => {
+    jest.useFakeTimers();
+    jest.setSystemTime(new Date('2026-07-22T08:00:00.000Z'));
+    mockUseChildren.mockReturnValue({ children: [{ id: 'child-1', first_name: 'Onwethu' }] });
+    const navigation = { navigate: jest.fn() };
+    const screen = renderHome(navigation);
+    await screen.findByText('No sessions recorded yet.');
+    expect(screen.getByLabelText('Who to see next: Onwethu')).toBeTruthy();
+    expect(mockGetSessions).toHaveBeenCalledTimes(1);
+
+    mockGetSessions.mockResolvedValue([{
+      id: 'session-1', user_id: 'ea-1', session_date: '2026-07-22',
+      children_ids: ['child-1'], session_type: 'Shared reading',
+    }]);
+    mockGetSessionsTodayGoal.mockResolvedValue({ target: 3, ceiling: 5, count: 3, state: 'met' });
+    mockUseSessionHistoryStatus.mockReturnValue({ pageVersion: 0, runVersion: 0, [version]: 1 });
+    screen.rerender(<PaperProvider><HomeScreen navigation={navigation} /></PaperProvider>);
+
+    await waitFor(() => expect(mockGetSessions).toHaveBeenCalledTimes(2));
+    expect(await screen.findByText('Shared reading')).toBeTruthy();
+    expect(screen.getByText('3 of 3 sessions today')).toBeTruthy();
+    expect(screen.queryByLabelText('Who to see next: Onwethu')).toBeNull();
+    expect(mockGetSessions).toHaveBeenLastCalledWith({
+      userId: 'ea-1', recordedByUserId: 'ea-1', sinceDate: '2026-06-22', order: 'desc',
+    });
+  });
+
+  test('a history refresh keeps Home content on screen instead of flashing a spinner', async () => {
+    const navigation = { navigate: jest.fn() };
+    const screen = renderHome(navigation);
+    await screen.findByText('No sessions recorded yet.');
+    let releaseReload;
+    mockGetSessions.mockImplementationOnce(() => new Promise((resolve) => { releaseReload = resolve; }));
+    mockUseSessionHistoryStatus.mockReturnValue({ pageVersion: 1, runVersion: 0 });
+    screen.rerender(<PaperProvider><HomeScreen navigation={navigation} /></PaperProvider>);
+    await waitFor(() => expect(mockGetSessions).toHaveBeenCalledTimes(2));
+    // While the reload is in flight, the existing content stays visible.
+    expect(screen.getByText('No sessions recorded yet.')).toBeTruthy();
+    releaseReload([]);
+    await waitFor(() => expect(screen.getByText('No sessions recorded yet.')).toBeTruthy());
   });
 
   test('renders the locked status-only hero', async () => {
