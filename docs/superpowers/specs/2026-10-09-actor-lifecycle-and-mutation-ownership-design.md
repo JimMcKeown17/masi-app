@@ -1,6 +1,6 @@
 # Design Spec: Actor Lifecycle and Mutation Ownership
 
-**Status:** revised after Codex adversarial review round 1 (§11). Design walked through with Jim section by section on 2026-10-09 (brainstorming); every
+**Status:** revised after Codex adversarial review rounds 1 and 2 (§11). Design walked through with Jim section by section on 2026-10-09 (brainstorming); every
 section approved. Awaiting Jim's review of this written spec, then a Codex adversarial review, then
 an implementation plan. Companion decision record: an ADR for one database per EA, to be created
 through `grill-with-docs`.
@@ -99,7 +99,7 @@ coordinator; built for a problem Masi does not have, because Masi is pre-live wi
 At sign-out, after the questions in §7.1, the handle:
 
 1. Advances the epoch, so new work is refused.
-2. Waits up to the drain bound (§5.3) for in-flight work.
+2. Waits up to the drain bound (§5.5) for in-flight work.
 3. Writes `last_active_at` into the file's `local_state`.
 4. Closes both connections.
 
@@ -167,6 +167,7 @@ mutable module state under `src/` (excluding tests and constants) is:
 | State | Location | Treatment |
 |---|---|---|
 | `initPromise`, `writerConnection`, `readerConnection`, `databaseQueue` | `src/db/client.js:18-21` | Owned by each handle (§4.2) |
+| `defaultQueue` and its `tail` closure | `src/services/supabaseRequestQueue.js:13` | Replaced by one queue per handle (§5.3) |
 | `appMigrationQueue` | `src/db/migrations.js:10` | Owned by each handle |
 | `referenceDataReadyThisSession`, `referenceDataPromise` | `src/services/offlineSync.js:1659-1660` | Owned by each handle as `handle.referenceDataReady`, a single-flight promise. `ChildrenContext` and `ClassesContext` pulls, and history pulls, await **their handle's** readiness before persisting. EA B can never see EA A's fulfilled or pending barrier |
 | `actorGeneration`, `inFlight` | `src/services/sessionHistoryPull.js:26-27` | Keyed by the handle; a new handle starts empty, and A's in-flight runs are fenced by §5.2 |
@@ -181,51 +182,85 @@ A test fails if a new top-level `let`, `var`, `Map`, or `Set` appears under `src
 `src/db` without an entry in an allowlist that names its treatment. This keeps the inventory true as
 the code grows.
 
-### 5.2 Check the actor at the doors
+### 5.2 Every server request goes through the handle's own data client
 
-Remounting does not cancel promises that are already running. Every unit of work therefore captures
-`{ userId, epoch }` from the handle when it starts. That actor is checked again at three doors.
+A check at queue entry is not enough: one queued task can send several requests. For example,
+`reconcileChildClassMembership` (`src/services/offlineSync.js:600-614`) sends a SELECT, then
+possibly an UPDATE, then the final upsert, and swallows every error on the way (Codex review of
+this spec, round 2). So the fence sits on **each request**, not on each task.
 
-Each handle also has a state: `open`, `draining` (from sign-out until the §5.3 drain ends), or
-`closed`. When the network door lets a request through, it issues a **finalize token** bound to that
-handle and that request. The token is the only thing that admits a transaction while the handle is
-draining.
+Each handle owns a **data client**: a Supabase client created with supabase-js's `accessToken`
+option (available in the pinned 2.100.1) and a fenced `fetch`.
 
-| Door | Location | Check | If stale |
-|---|---|---|---|
-| Network | the queued task inside the Supabase request queue, immediately before the request is sent | the handle is `open`, the epoch is current, **and** the Supabase client's in-memory session user equals the actor's `userId` | throw `StaleActorError`; send nothing |
-| Transaction admission | `runRepositoryTransaction` / handle `withTransaction` | the handle is `open` with the current epoch, **or** it is `draining` and the transaction carries a finalize token for a request already sent | throw `StaleActorError` |
-| Commit | immediately before `COMMIT` | the same rule, re-checked | `ROLLBACK`, throw `StaleActorError` |
+- `accessToken: () => handle.requireAccessToken()` returns the access token from the single auth
+  client's latest session, which the handle keeps current from `onAuthStateChange`. It throws
+  `StaleActorError` unless the handle is `open` **and** that session's user is the handle's
+  `userId`. It never calls `getSession()`, which would add an auth-lock contender
+  (`AuthContext.js:61-63`).
+- `global.fetch` is `handle.fencedFetch`. It repeats the same check at the moment of sending,
+  attaches the handle's `AbortController` signal, and applies a per-request timeout (provisional
+  30 s, set by D4). A timeout or abort is reported as the existing codeless network error, so the
+  row stays retriable.
+- A client created with `accessToken` has no `auth` module. The one shared auth client keeps sign-in,
+  refresh, and storage, so the reason for rejecting a client per EA in the first draft (auth storage
+  and the refresh lock) no longer applies.
 
-The network door is the direct fix for live defect 2. With one file per EA, a stale write can only
-reach its own EA's file, so the two transaction doors are a second layer of protection.
-`StaleActorError` is logged once and is never retried or treated as a sync failure.
+**Every data request in the app uses the handle's data client.** The 16 direct `from`/`rpc` call sites
+in `AuthContext`, `ClassesContext`, `LookupsContext`, `offlineSync`, and `preloadedChildData` (as of
+2026-10-09) move to it, and so do the history pulls. A test fails if `from(` or `rpc(` is called on
+the shared client outside the auth module. A request built by EA A's client can therefore never carry
+EA B's token, however deep inside a task it is sent and whatever a `catch` does with the refusal.
 
-The Supabase session user is read from a value the handle keeps current from
-`onAuthStateChange`. The door does not call `getSession()`, because a second auth-lock contender
-causes Android startup contention (`AuthContext.js:61-63`).
+**`StaleActorError` is never swallowed.** Every `catch` in sync, pull, and reconcile code rethrows
+it through one helper (`rethrowIfStale`). That includes the conservative fallback in
+`reconcileChildClassMembership`, so a refused SELECT does not fall through to a "proceed anyway"
+upsert. A's client would refuse that upsert anyway; rethrowing keeps the log honest and stops wasted
+work.
 
-### 5.3 Sign-out drain
+### 5.3 Each handle has its own request queue
 
-When the epoch advances, the handle becomes `draining`. Requests already sent (past the network
-door) get up to a **drain bound of 10 seconds** to return and record their result in their own EA's
-file, using their finalize tokens. No other work is admitted. When the drain ends, the handle becomes
-`closed` and its connections close. Anything unfinished at the
-bound stays unsent in that EA's file. It uploads again the next time that EA signs in, and that is
-safe today because uploads are upserts by deterministic id.
+The process-wide `defaultQueue` in `src/services/supabaseRequestQueue.js` is replaced by one serial
+queue per handle (`handle.enqueueRequest`), and `enqueueSupabaseRequest` is deleted. Serialization
+within one EA's work is kept, as the 2026-05 queue tests require. EA B's queue never waits behind a
+request of EA A's that never returns. The queue's `tail` joins the §5.1a inventory.
 
-The 10 s value is provisional and is set by device measurement D4 (§9.3).
+### 5.4 Transaction doors
+
+Each handle has a state: `open`, `draining` (from sign-out until §5.5 ends), or `closed`.
+
+| Door | Location | Admits |
+|---|---|---|
+| Transaction admission | handle `withTransaction` / `runRepositoryTransaction` | handle `open`; or `draining` and the transaction carries a **finalize token** |
+| Commit | immediately before `COMMIT` | the same rule, re-checked; otherwise `ROLLBACK` and `StaleActorError` |
+
+A finalize token is issued by the fenced fetch for a request it actually sent. It authorizes only
+**recording that request's result** in the same EA's file. It never authorizes sending anything:
+the data client refuses every request once the handle leaves `open`. With one file per EA, a stale
+write can only reach its own EA's file, so these doors are a second layer behind the per-file
+design. `StaleActorError` is logged once and is never retried or treated as a sync failure.
+
+### 5.5 Sign-out drain
+
+When the epoch advances, the handle becomes `draining`, and the following happens in order:
+
+1. Requests already sent get up to a **drain bound of 10 seconds** to return and record their
+   results with their finalize tokens.
+2. At the bound, the handle aborts every outstanding request through its `AbortController`.
+3. Each aborted request's result-recording runs as a retriable network error, still under its token,
+   within a short grace (provisional 2 s).
+4. The handle becomes `closed` and its connections close.
+
+Rows still `in_flight` in the file return to `pending` through `resetInFlight` the next time that
+EA's file opens. They upload again then, which is safe today because uploads are idempotent by
+deterministic id. EA B is unaffected throughout, because B has a separate queue (§5.3) and a separate
+client (§5.2).
+
+Both bounds are provisional and are set by device measurement D4 (§9.3).
 
 **Dependency on the upload-contract spec:** once that spec adds base-version checks, a re-sent
 mutation the server already applied must be recognised as already applied, not treated as a
 conflict. The upload-contract spec must state how its uncertain-outcome recovery covers mutations
-left by a sign-out drain.
-
-### 5.4 Rejected: one Supabase client per EA
-
-This would make session mix-ups impossible by construction, but Supabase's auth storage and refresh
-lock assume a single client, and Masi already sees Android lock contention with one. The epoch
-check gives nearly all of the benefit.
+left by a sign-out drain or a request timeout.
 
 ## 6. Mutation ownership
 
@@ -275,33 +310,76 @@ and the 30-day rule both protect them. With fresh per-EA files (§4.5) and actor
 ### 6.5 Edits are sent as UPDATE, not upsert
 
 An `update` operation means "change a row the server already has". It must not ask for insert
-permission. For every table whose INSERT policy binds `created_by` (or another provenance column) to
-the caller, `runServerOperation` sends an `update` operation the way it already sends lifecycle
-archives:
+permission. The 2026-10-09 table-by-operation inventory (§6.5a) shows that `update` is produced for
+`time_entries`, `classes`, `children`, `groups`, `letter_mastery`, and `class_grouping_state`. For
+the first five, `runServerOperation` sends `update` the way it already sends lifecycle archives:
 
-- `update(patch).eq('id', recordId).select('id')`, where `patch` is the payload minus identity and
-  provenance columns (`id`, `created_by`, `created_at`, and the table's immutable identity columns).
-- Success requires exactly the requested id back. Zero rows is `UPDATE_NOT_APPLIED`, which is
-  **retriable** while the same record has an unsent `insert` in this file (the insert has not
-  landed yet), and **terminal** otherwise. It never creates the row.
-- `runBatchServerOperation` batches only `insert` operations for these tables; `update` operations
-  go one by one through the path above.
+- `update(patch).eq('id', serverId).select('id')`. `serverId` is the payload id **after**
+  `buildSyncPayload`'s remap, not the outbox `record_id`: `letter_mastery` always re-derives its
+  deterministic id, and a pre-fix local row can still carry a random one.
+- `patch` is the payload minus provenance and identity columns: `id`, `created_by`, `created_at`,
+  `user_id`, and `archived_by_user_id`. `updated_at` may stay in the patch, but the server's
+  `set_updated_at` trigger overwrites it.
+- Success requires exactly the requested id back. Zero rows is `UPDATE_NOT_APPLIED`, and it never
+  creates the row. Zero rows has several causes: the row has not landed yet, its FK parent has not
+  landed, or the row exists but the UPDATE `USING` policy excludes the caller until a pending
+  assignment lands. For example, `letter_mastery` SELECT admits `user_id = auth.uid()` while its
+  UPDATE also requires `current_user_can_write_for_child` (Codex review of this spec, round 2).
+  Classification therefore reuses the engine's existing evidence rules rather than a new one:
+  - **Retriable** while dependency evidence is still pending: the same record's own `insert`
+    outbox row is unacknowledged, **or** `computeEvidencePending` (`src/services/offlineSync.js:404`)
+    with `includeGrant: true` finds a pending FK parent or a pending active assignment for the
+    record's subject. This matches how `42501` is already handled.
+  - **Terminal** with reason `update_not_applied` when no dependency is pending.
+    `hasPendingRecord` already ignores terminal rows, so an update whose insert or grant was
+    permanently rejected becomes terminal too, rather than retrying forever.
+  - **Recovery:** terminal rows surface on the needs-attention card. The existing forced "Sync Now"
+    includes terminal rows, so once authorization changes (for example, Head Office restores an
+    assignment), a forced sync applies them. No automatic requeue is added in this spec.
+- `runBatchServerOperation` batches only `insert` operations for these five tables; `update`
+  operations go one by one through the path above. This also removes a possible same-batch conflict,
+  where a `children` insert and update for one id share an upsert array.
+- **Same-record ordering:** an `update` is not sent while the same record's own `insert` outbox row
+  is unacknowledged and not terminal. `findBlockingDependency` (`src/services/offlineSync.js:1329`)
+  today only gates on parent tables, so an update can run in the same pass after its own insert
+  failed. This narrow gate is the part of same-record ordering this spec needs. The upload-contract
+  spec owns the general rule.
 
 This exercises the UPDATE policy only, as the contract map already requires for archives. An EA can
-then edit a Head Office-created child, while the INSERT policy still stops anyone creating a row in
-someone else's name.
+then edit a Head Office-created child (UPDATE admits `created_by = me OR
+current_user_can_write_for_child`) or a Head Office-created class (`current_user_can_write_for_class`
+admits an active class EA), while every INSERT policy still stops anyone creating a row in someone
+else's name.
 
-**Exceptions stay on upsert, by name, with a reason.** A table keeps upsert for `update` only when
-its update genuinely means "create or update" and its INSERT policy is authorization-based, not
-creator-bound. The first known case is `class_grouping_state` (its INSERT policy is
-`current_user_can_write_for_class`). The implementation plan's first task produces the full
-table-by-operation inventory from the producers and the policies, and the contract map records each
-table's choice.
+**One exception stays on upsert:** `class_grouping_state`. `update` is its only operation and means
+create-or-update (one row per class and academic year), and its INSERT policy is authorization-based
+(`current_user_can_write_for_class`), not creator-bound. Its repository has no production caller
+today.
 
-**Known product limit surfaced by the policies:** `classes_update_created_by` lets only a class's
-creator update it. An EA's edit of a Head Office-created class will be refused by design. The
-inventory task checks whether the app offers that edit. If it does, that is a product question for
-Jim, not something this spec silently widens.
+### 6.5a Inventory summary (2026-10-09)
+
+| Table | `update` producer | Server id | Sent as |
+|---|---|---|---|
+| `time_entries` | `timeEntriesRepository.js:71` (only after the insert row is acknowledged, or for a pulled row) | same as local | UPDATE by id |
+| `classes` | `classesRepository.js:166` (Edit Class screen, including Head Office classes) | same | UPDATE by id |
+| `children` | `childrenRepository.js:424`, `classesRepository.js:252` | same | UPDATE by id |
+| `groups` | `groupsRepository.js:319` (no screen calls it today) | same | UPDATE by id |
+| `letter_mastery` | `masteryRepository.js:62` via `:174` (reactivating a soft-deleted letter) | re-derived deterministic id | UPDATE by the payload id; the server row is always the same EA's (the id includes the user id, and every policy requires `user_id = me`) |
+| `class_grouping_state` | `classGroupingStateRepository.js:43` (no production caller) | deterministic, same | upsert (exception) |
+
+No producer emits `restore` today, although the SQLite CHECK allows it. The contract map records this
+table as part of this branch, and it corrects one drift the inventory found: the map's "Batched
+upsert" row omits the three assignment tables, which do batch their inserts.
+
+### 6.5b Related defect found by the inventory: group assignment reactivation is lost
+
+`groupsRepository.js:111-129` reactivates an archived `group_ea_assignments` row by enqueuing
+`insert`. Assignment inserts are sent with `ignoreDuplicates: true`
+(`src/services/offlineSync.js:708-710`), so the server does nothing, keeps the row archived, and the
+phone records success. Fix in this branch: send reactivation as a lifecycle update
+(`unassigned_at = null`, plus `handover_reason` if the table carries it) through the existing
+archive-style exact acknowledgement. Unlike identity columns, those fields are not immutable, and
+the UPDATE policy admits `ea_user_id = me`. Test T21 covers it.
 
 **Relationship to the upload-contract spec:** the base-version (`stale_base`) check that spec adds
 will sit on this UPDATE path. The exact-acknowledgement shape chosen here is the hook it builds on.
@@ -319,7 +397,8 @@ using the exact PostgREST request shapes the app sends:
 4. **Impersonation negative:** an EA cannot INSERT a row with `created_by` set to Head Office or
    another EA.
 
-Steps 1–4 repeat for every table the inventory marks as edited by EAs through `update`. If any table
+Steps 1–4 repeat for `children`, `classes`, and `groups` (each created by Head Office and edited by
+an assigned EA), and steps 2–3 for `time_entries` and `letter_mastery` (own rows). If any table
 needs a policy change to allow a legitimate edit, the work returns to Jim before building.
 
 ## 7. Sign-out and clean-up
@@ -384,7 +463,7 @@ incident kinds (`left_behind_unsent_work`, `foreign_owner_in_file`, and `legacy_
   an allowlist and the payload size against a limit (8 KB), and is idempotent on a hash of
   `(reporter, kind, repeat key)`.
 - **Phone:** a small local queue in the signed-in EA's file (at most 200 rows, each at most 8 KB)
-  drained by the sync engine through the network door.
+  drained by the sync engine through the handle's data client (§5.2).
 - **`installId`:** a random UUID kept in AsyncStorage, created on first launch.
 
 The `/bug-sync` sweep, further incident kinds, and support actions belong to Step 4's own spec,
@@ -405,9 +484,10 @@ report is how support finds out; the remedy is a call asking A to sign in once o
    migration-replay harness. About a day, as a gate.
 2. Handle module, per-EA file lifecycle, `client.js` refactor, legacy file handling (§4) with T1,
    T2, T11.
-3. Signed-in tree remount, module-state move, and the three doors (§5, §5.1a) with T3, T4, T5, T14,
-   T15, T16.
-4. Ownership and edits-as-UPDATE (§6) with T6–T9 and T17. Lands with or after step 2, because the
+3. Signed-in tree remount, module-state move, per-handle data client and queue, transaction doors,
+   and drain (§5) with T3, T4, T5, T14–T16, and T18–T20.
+4. Ownership, edits-as-UPDATE, same-record ordering, and the reactivation fix (§6) with T6–T9, T17,
+   T21, and T22. Lands with or after step 2, because the
    owner comes from the handle.
 5. Incident envelope (§7.4) with S2 and T12, then the sign-out questions and 30-day deletion
    (§7.1–7.3) with T10 and T13.
@@ -428,9 +508,9 @@ WAL companions, connection close, file deletion) uses real SQLite through better
 |---|---|
 | T1 | Sign-in as A opens `masi-A.db`; sign-in as B opens `masi-B.db`; signed out, no domain file is open and the login screen reads none |
 | T2 | Offline restore of a saved session opens the right file; data screens show loading, never "no children" |
-| T3 | Live defect 2: A queues an upload, A signs out, B signs in, A's queued task runs; nothing is sent and the task fails with `StaleActorError` |
+| T3 | Live defect 2: A queues an upload, A signs out, B signs in, A's queued task runs; nothing is sent (asserted at the fetch layer) and the task fails with `StaleActorError` |
 | T4 | A transaction admitted under epoch N with sign-out before `COMMIT` is rolled back, unless it carries a finalize token for a request already sent; a token-less write while draining is refused |
-| T5 | An in-flight upload records its result within the drain bound; past the bound the row stays unsent in A's file and uploads after A signs in again |
+| T5 | An in-flight upload records its result within the drain bound; past the bound it is aborted, recorded as a retriable network error, the file closes, and on A's next open `resetInFlight` returns it to pending and it uploads |
 | T6 | Live defect 1: an EA edits a Head Office-created child; the outbox owner is the EA, the upload query returns the row, and it is sent as `update … eq('id') … select('id')` without `created_by` |
 | T7 | Inserting an outbox row with no actor throws in JavaScript; the trigger aborts a raw null insert |
 | T8 | Integrity scan, through the public open and sync paths: an outbox row owned by X in Y's file becomes terminal `foreign_owner` at open and before an upload pass, is never sent or healed, stays in the file-wide unsent count, and reports one incident |
@@ -442,7 +522,12 @@ WAL companions, connection close, file deletion) uses real SQLite through better
 | T14 | After a key change, no timer, interval, or listener from the previous EA's tree remains |
 | T15 | Account switch with A's reference-data barrier both fulfilled and still pending, B's file empty, and B's reference requests delayed or failing: B's roster and history pulls wait for B's own barrier and never persist before it |
 | T16 | Module-state allowlist: a new top-level `let`, `var`, `Map`, or `Set` under `src/services` or `src/db` without an allowlist entry fails the suite |
-| T17 | `UPDATE_NOT_APPLIED`: retriable while the record's `insert` is unsent in this file, terminal otherwise; never creates a row; `update` operations are excluded from batches for creator-bound tables |
+| T17 | `UPDATE_NOT_APPLIED`, against migration-backed RLS: a readable `letter_mastery` row with a pending child assignment is retriable; an RLS-invisible row with nothing pending is terminal; an update whose own insert is terminal becomes terminal; a forced sync after authorization is restored applies it; no row is ever created; `update` operations are excluded from batches for the tables §6.5 moves to UPDATE |
+| T18 | `reconcileChildClassMembership` paused inside its SELECT; A signs out, B signs in, the SELECT resumes: neither the archive UPDATE nor the final upsert is sent, and `StaleActorError` propagates out of the conservative fallback |
+| T19 | A's upload never resolves; A signs out; B signs in: B's reference-data pull and first upload start within a defined bound, and A's request is aborted at the drain bound |
+| T20 | No `from(` or `rpc(` call on the shared auth client outside the auth module (static test over `src/`) |
+| T21 | Reactivating an archived group assignment is sent as a lifecycle update; the server row's `unassigned_at` becomes null; zero rows acknowledged is not reported as success |
+| T22 | Same-record ordering: a `children` update is not sent while its own insert is unacknowledged and not terminal; once the insert is acknowledged, the update is sent by id |
 
 ### 9.2 Server
 
@@ -459,7 +544,7 @@ WAL companions, connection close, file deletion) uses real SQLite through better
 | D1 | A and B share a phone: A works offline, signs out with "Sign out anyway"; B signs in and works; A signs back in. A's work uploads, B never sees A's children, and the left-behind incident is on the server |
 | D2 | Sign-out during an upload on a throttled network: no request under B's session; A's work arrives exactly once later |
 | D3 | "Stay clocked in and sign out", sign back in after more than ten hours: the auto clock-out runs and the report shows "still open" |
-| D4 | Measure sign-out to file closed on the A03s; this sets the §5.3 drain bound |
+| D4 | Measure sign-out to file closed on the A03s; this sets the §5.5 drain bound, the abort grace, and the §5.2 request timeout |
 | D5 | Cold start with the file opened after sign-in, compared with today's build |
 
 These cover next-steps Step 7's "switch accounts on the same phone" case and the sign-out half of
@@ -485,9 +570,21 @@ Codex round 2's live defect 2.
      storage that is never opened as an EA file (§4.5).
   4. Module-scoped state survives a React remount. It now moves into the handle, guarded by an
      allowlist test (§5.1a).
+- **Codex adversarial review, round 2 (2026-10-09), verdict needs-attention, three findings, all
+  accepted:**
+  1. A check at queue entry does not fence later requests inside the same task. Every request now
+     goes through the handle's own data client, which checks the actor at send time (§5.2).
+  2. The process-wide request queue could leave EA B waiting behind EA A's hung request. Each handle
+     now has its own queue, plus request timeouts and aborts at the end of the drain (§5.3, §5.5).
+  3. Zero-row updates were classified without authorization evidence. They now reuse
+     `computeEvidencePending` (§6.5).
+
+  Codex also asked for the table-by-operation inventory before §6.5 is frozen. It was done
+  (§6.5a). It corrected the first draft's claim that only a class's creator may update it, and it
+  found the group-assignment reactivation defect (§6.5b).
 
 ## 12. Out of scope (owned by the upload-contract spec)
 
 Uncertain-outcome recovery, same-record ordering, base versions and `stale_base`, the assessment
 bundle as the exclusive insertion boundary, queue-level deadlines, and duplicate-proof submit. This
-spec's §5.3 drain states the one dependency it places on that work.
+spec's §5.5 drain states the one dependency it places on that work.
