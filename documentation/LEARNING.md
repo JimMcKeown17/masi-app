@@ -1576,3 +1576,37 @@ The meta-lesson: a plan reviewed only as prose hides the bugs that live in the r
 triggers, clocks, libraries (Supabase's request builder has `.then` but no `.catch`), and
 connections. Reviewing the plan against the code, then the code against tests that fail first,
 caught all of them before any EA ever saw the feature.
+
+## Latest intent must survive the in-flight boundary (October 2026)
+
+An offline queue can collapse `archive, restore, archive, restore` to the last row while everything
+is still waiting locally. That is not enough once the server has taken the first request. The old
+request is now outside the queue's control: deleting its SQLite row cannot cancel the network, and
+its response may be success, failure, or missing even when the server committed the change.
+
+This is the **in-flight boundary**. On the near side, queue-time coalescing removes replaceable
+pending work. On the far side, settlement has to preserve causality. If the older request succeeds,
+keep that success and send the newer intent next. If the older request fails and a newer complete
+lifecycle intent exists, delete the older row instead of giving it backoff or terminal state. Both
+archive and restore write the same small allowlisted lifecycle fields, so the newer row fully
+determines the desired final state. Retaining the failed older row would let it retry after the
+newer row and reverse the user's last action.
+
+The same causal rule explains insert ordering. An archive or restore is an UPDATE by id and can
+acknowledge only a row that exists. It therefore waits while its own insert is still owed. But an
+unacknowledged insert is not proof that the server lacks the row: the server may have committed it
+and lost the response. Reactivation consequently queues both safe operations when necessary: replay
+the assignment insert with insert-or-ignore, then send the explicit restore. The insert establishes
+existence; the restore establishes current lifecycle state.
+
+Authorization evidence has a similar direction. A membership INSERT may depend on an existing
+class or group relationship, but the membership being inserted cannot grant its own prerequisite
+permission. Evidence queries must exclude the current record while still accepting an independent
+pending membership path. This is a useful general test: **could this fact already be true on the
+server before the attempted write?** If not, it is not evidence that justifies an indefinite retry.
+
+Finally, test the production composition root, not only dependency-injected instances. The sync
+engine's evidence tests passed while a database was injected, but the default engine deliberately
+omits that argument and resolves the initialized client at runtime. One public-path test built the
+engine the production way and exposed the undefined connection immediately. A unit with ideal
+dependencies proves the algorithm; a composition test proves the application can actually run it.

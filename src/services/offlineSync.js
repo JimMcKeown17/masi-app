@@ -434,13 +434,21 @@ const UNACKNOWLEDGED_STATUSES = "('pending', 'failed', 'in_flight')";
 // A child write granted through a class or group needs BOTH an active membership and an active
 // assignment on the server. Evidence is pending when a local pair exists and either half has not
 // been acknowledged. A terminal half contributes nothing.
-const hasPendingMembershipMediatedGrant = async (database, childId) => {
+const hasPendingMembershipMediatedGrant = async (
+  database,
+  childId,
+  { tableName, recordId } = {},
+) => {
+  const currentTable = normalizeTableName(tableName);
+  const excludedClassMembershipId = currentTable === 'child_class_memberships' ? recordId : '';
+  const excludedGroupMembershipId = currentTable === 'child_group_memberships' ? recordId : '';
   const row = await database.getFirstAsync(`
     select 1 as present
     from child_class_memberships ccm
     join class_ea_assignments cea
       on cea.class_id = ccm.class_id and cea.unassigned_at is null
     where ccm.child_id = ?
+      and ccm.id != ?
       and ccm.exited_at is null
       and (ccm.sync_status in ${UNACKNOWLEDGED_STATUSES} or cea.sync_status in ${UNACKNOWLEDGED_STATUSES})
       and ccm.sync_status != 'terminal'
@@ -451,12 +459,13 @@ const hasPendingMembershipMediatedGrant = async (database, childId) => {
     join group_ea_assignments gea
       on gea.group_id = cgm.group_id and gea.unassigned_at is null
     where cgm.child_id = ?
+      and cgm.id != ?
       and cgm.removed_at is null
       and (cgm.sync_status in ${UNACKNOWLEDGED_STATUSES} or gea.sync_status in ${UNACKNOWLEDGED_STATUSES})
       and cgm.sync_status != 'terminal'
       and gea.sync_status != 'terminal'
     limit 1
-  `, childId, childId);
+  `, childId, excludedClassMembershipId, childId, excludedGroupMembershipId);
   return !!row;
 };
 
@@ -467,8 +476,9 @@ const computeEvidencePending = async ({
   includeGrant,
   includeOwnInsert = false,
 }) => {
+  const db = await resolveDatabase(database);
   const table = normalizeTableName(outboxRecord?.table_name);
-  const getField = makeFieldResolver(database, outboxRecord);
+  const getField = makeFieldResolver(db, outboxRecord);
 
   if (includeOwnInsert && await outboxRepository.hasPendingOperation({
     tableName: table,
@@ -490,11 +500,14 @@ const computeEvidencePending = async ({
     for (const grant of GRANT_SUBJECTS[table] || []) {
       if (grant.membershipMediatedChild) {
         const childId = await getField(grant.membershipMediatedChild);
-        if (childId && await hasPendingMembershipMediatedGrant(database, childId)) return true;
+        if (childId && await hasPendingMembershipMediatedGrant(db, childId, {
+          tableName: table,
+          recordId: outboxRecord.record_id,
+        })) return true;
         continue;
       }
       const subjectValue = await getField(grant.valueColumn || grant.subjectColumn);
-      if (subjectValue && await hasPendingActiveAssignment(database, grant.grantTable, grant.subjectColumn, subjectValue)) {
+      if (subjectValue && await hasPendingActiveAssignment(db, grant.grantTable, grant.subjectColumn, subjectValue)) {
         return true;
       }
     }
@@ -901,12 +914,43 @@ const finalizeSuccess = async ({
   return true;
 });
 
+// Queue-time lifecycle coalescing cannot remove an intent the server has already taken. If that
+// older request later fails, a queued opposite intent is the authoritative local state: delete the
+// stale in-flight row instead of giving it backoff/terminal state that could later reverse the
+// newer intent. Different lifecycle ids can coexist only when the older one was already in flight.
+const deleteSupersededLifecycleFailure = async (txn, outboxRecord, tableName) => {
+  if (outboxRecord.operation !== 'archive' && outboxRecord.operation !== 'restore') return false;
+  const newerLifecycle = await txn.getFirstAsync(`
+    select id
+    from sync_outbox
+    where table_name = ?
+      and record_id = ?
+      and operation in ('archive', 'restore')
+      and id != ?
+      and (
+        created_at > ?
+        or status in ('pending', 'failed', 'in_flight')
+      )
+    limit 1
+  `, tableName, outboxRecord.record_id, outboxRecord.id, outboxRecord.created_at);
+  if (!newerLifecycle) return false;
+
+  const deleteResult = await txn.runAsync(`
+    delete from sync_outbox
+    where id = ?
+      and updated_at = ?
+      and status = 'in_flight'
+  `, outboxRecord.id, outboxRecord.updated_at);
+  return (deleteResult?.changes || 0) > 0;
+};
+
 const finalizeRetriableFailure = async ({
   database,
   outboxRecord,
   tableName,
   reason,
 }) => runRepositoryTransaction(database, async (txn) => {
+  if (await deleteSupersededLifecycleFailure(txn, outboxRecord, tableName)) return true;
   const failureResult = await txn.runAsync(`
     update sync_outbox
     set status = 'failed',
@@ -937,6 +981,7 @@ const finalizeTerminalFailure = async ({
   reason,
   retryCount = null,
 }) => runRepositoryTransaction(database, async (txn) => {
+  if (await deleteSupersededLifecycleFailure(txn, outboxRecord, tableName)) return true;
   const failureResult = await txn.runAsync(`
     update sync_outbox
     set status = 'terminal',
@@ -1437,12 +1482,31 @@ export const createOutboxSyncEngine = ({
 
     const findBlockingDependency = async (record) => {
       const tableNameForRecord = normalizeTableName(record.table_name);
-      // Same-record ordering (spec §6.5): an UPDATE-by-id edit must not run before its own insert
-      // has been acknowledged, or it would match no row. A terminal insert does not block; the
-      // update then reads as UPDATE_NOT_APPLIED with no pending evidence and becomes terminal.
+      const isLifecycle = record.operation === 'archive' || record.operation === 'restore';
+      if (isLifecycle) {
+        const resolvedDatabase = await resolveDatabase(database);
+        const olderInFlightLifecycle = await resolvedDatabase.getFirstAsync(`
+          select id
+          from sync_outbox
+          where table_name = ?
+            and record_id = ?
+            and operation in ('archive', 'restore')
+            and status = 'in_flight'
+            and id != ?
+          limit 1
+        `, tableNameForRecord, record.record_id, record.id);
+        if (olderInFlightLifecycle) {
+          return { tableName: tableNameForRecord, recordId: record.record_id };
+        }
+      }
+      // Same-record ordering: an acknowledged UPDATE-by-id edit or lifecycle UPDATE must not run
+      // before its own insert has been acknowledged, or it cannot acknowledge a row that exists.
+      // A terminal insert does not block; the update then reaches its normal terminal classifier.
       if (
-        record.operation === 'update'
-        && UPDATE_BY_ID_TABLES.has(tableNameForRecord)
+        (isLifecycle || (
+          record.operation === 'update'
+          && UPDATE_BY_ID_TABLES.has(tableNameForRecord)
+        ))
         && await outboxRepository.hasPendingOperation({
           tableName: tableNameForRecord,
           recordId: record.record_id,

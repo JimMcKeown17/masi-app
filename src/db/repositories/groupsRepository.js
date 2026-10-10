@@ -133,22 +133,16 @@ const createMissingGroupAssignment = async (txn, {
         and status in ('pending', 'failed', 'in_flight')
       limit 1
     `, assignment.id);
+    // An unacknowledged insert may already have committed before its response was lost, so
+    // reactivation always carries an explicit restore. If the insert is still owed, replay it too:
+    // assignment inserts are insert-or-ignore and therefore safe to retry before the restore.
+    await enqueueLifecycleOutbox(txn, 'group_ea_assignments', assignment.id, 'restore', {
+      id: assignment.id,
+      unassigned_at: null,
+      handover_reason: null,
+    });
     if (insertStillOwed) {
-      // The server never received this assignment. Re-queue the insert with its active payload and
-      // drop any queued lifecycle row; there is nothing on the server to archive or restore.
-      await txn.runAsync(`
-        delete from sync_outbox
-        where table_name = 'group_ea_assignments' and record_id = ?
-          and operation in ('archive', 'restore') and status in ('pending', 'failed', 'terminal')
-      `, assignment.id);
       await enqueueDomainOutbox(txn, 'group_ea_assignments', assignment.id, 'insert', assignment);
-    } else {
-      // Inserts are sent insert-or-ignore, so an insert cannot reactivate the server row.
-      await enqueueLifecycleOutbox(txn, 'group_ea_assignments', assignment.id, 'restore', {
-        id: assignment.id,
-        unassigned_at: null,
-        handover_reason: null,
-      });
     }
     return assignment;
   }

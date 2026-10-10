@@ -4,6 +4,11 @@ jest.mock('../src/services/supabaseClient', () => ({ supabase: {} }));
 import { createBetterSqliteTestDatabase } from '../test-support/betterSqliteAdapter';
 import { createSupabaseMock } from '../test-support/supabaseSyncMock';
 import { runMigrations } from '../src/db/migrations';
+import {
+  __reset as resetExpoSQLiteMock,
+  __setDatabaseFactory,
+} from 'expo-sqlite';
+import { resetDatabaseConnectionForTests } from '../src/db/client';
 import { createOutboxSyncEngine } from '../src/services/offlineSync';
 import { createSyncOutboxRepository } from '../src/db/repositories/syncOutboxRepository';
 import { letterMasteryDomainId } from '../src/db/repositories/domainRepositoryUtils';
@@ -252,6 +257,231 @@ describe('edits are sent as UPDATE by id (spec §6.5)', () => {
     })]);
   });
 
+  test('a refused group membership insert cannot count itself as pending authorization evidence', async () => {
+    const child = await seedHeadOfficeChild(db);
+    await db.runAsync(`
+      insert into groups (id, name, programme_id, created_by, sync_status)
+      values ('group-self-evidence', 'Self Evidence Group', 'programme-1', 'head-office-1', 'synced')
+    `);
+    await db.runAsync(`
+      insert into group_ea_assignments (
+        id, group_id, ea_user_id, programme_id, created_by, sync_status
+      ) values (
+        'gea-self-evidence', 'group-self-evidence', 'user-1', 'programme-1', 'head-office-1', 'synced'
+      )
+    `);
+    await db.runAsync(`
+      insert into child_group_memberships (id, child_id, group_id, created_by, sync_status)
+      values ('cgm-self-evidence', ?, 'group-self-evidence', 'user-1', 'pending')
+    `, child.id);
+    await enqueue(db, 'child_group_memberships', 'cgm-self-evidence', 'insert', {
+      id: 'cgm-self-evidence',
+      child_id: child.id,
+      group_id: 'group-self-evidence',
+      grouping_version_id: null,
+      created_by: 'user-1',
+    });
+    const { supabaseClient } = createSupabaseMock({
+      upsertResults: {
+        child_group_memberships: {
+          error: { code: '42501', message: 'new row violates row-level security policy' },
+        },
+      },
+    });
+    const engine = createOutboxSyncEngine({ getAuthSession: liveTestSession, database: db, supabaseClient });
+
+    const result = await engine.syncAll({ tableName: 'child_group_memberships' });
+
+    expect(result.totalTerminal).toBe(1);
+    expect(await db.getFirstAsync(`
+      select status, last_error from sync_outbox where record_id = 'cgm-self-evidence'
+    `)).toEqual(expect.objectContaining({
+      status: 'terminal',
+      last_error: expect.stringContaining('42501-authenticated:'),
+    }));
+    expect(await db.getFirstAsync(`
+      select sync_status, last_sync_error from child_group_memberships
+      where id = 'cgm-self-evidence'
+    `)).toEqual(expect.objectContaining({
+      sync_status: 'terminal',
+      last_sync_error: expect.stringContaining('42501-authenticated:'),
+    }));
+  });
+
+  test('a different pending class membership still authorizes retry for a refused group membership', async () => {
+    const child = await seedHeadOfficeChild(db);
+    await db.runAsync(`
+      insert into groups (id, name, programme_id, created_by, sync_status)
+      values ('group-independent-class', 'Group With Class Evidence', 'programme-1', 'head-office-1', 'synced')
+    `);
+    await db.runAsync(`
+      insert into group_ea_assignments (
+        id, group_id, ea_user_id, programme_id, created_by, sync_status
+      ) values (
+        'gea-independent-class', 'group-independent-class', 'user-1', 'programme-1', 'head-office-1', 'synced'
+      )
+    `);
+    await db.runAsync(`
+      insert into child_group_memberships (id, child_id, group_id, created_by, sync_status)
+      values ('cgm-independent-class', ?, 'group-independent-class', 'user-1', 'pending')
+    `, child.id);
+    await db.runAsync(`
+      insert into classes (id, name, school_id, grade, created_by, sync_status)
+      values ('class-independent', 'Independent Class', 'school-1', '1', 'head-office-1', 'synced')
+    `);
+    await db.runAsync(`
+      insert into class_ea_assignments (
+        id, class_id, ea_user_id, programme_id, created_by, sync_status
+      ) values (
+        'cea-independent', 'class-independent', 'user-1', 'programme-1', 'head-office-1', 'synced'
+      )
+    `);
+    await db.runAsync(`
+      insert into child_class_memberships (
+        id, child_id, class_id, academic_year_id, created_by, sync_status
+      ) values (
+        'ccm-independent', ?, 'class-independent', 'academic-year-2026', 'user-1', 'pending'
+      )
+    `, child.id);
+    await enqueue(db, 'child_group_memberships', 'cgm-independent-class', 'insert', {
+      id: 'cgm-independent-class',
+      child_id: child.id,
+      group_id: 'group-independent-class',
+      grouping_version_id: null,
+      created_by: 'user-1',
+    });
+    const { supabaseClient } = createSupabaseMock({
+      upsertResults: {
+        child_group_memberships: {
+          error: { code: '42501', message: 'new row violates row-level security policy' },
+        },
+      },
+    });
+    const engine = createOutboxSyncEngine({ getAuthSession: liveTestSession, database: db, supabaseClient });
+
+    const result = await engine.syncAll({ tableName: 'child_group_memberships' });
+
+    expect(result.totalRetriable).toBe(1);
+    expect(await db.getFirstAsync(`
+      select status from sync_outbox where record_id = 'cgm-independent-class'
+    `)).toEqual({ status: 'failed' });
+    expect(await db.getFirstAsync(`
+      select sync_status from child_group_memberships where id = 'cgm-independent-class'
+    `)).toEqual({ sync_status: 'failed' });
+  });
+
+  test('a refused class membership insert cannot count itself as pending authorization evidence', async () => {
+    const child = await seedHeadOfficeChild(db);
+    await db.runAsync(`
+      insert into classes (id, name, school_id, grade, created_by, sync_status)
+      values ('class-self-evidence', 'Self Evidence Class', 'school-1', '1', 'head-office-1', 'synced')
+    `);
+    await db.runAsync(`
+      insert into class_ea_assignments (
+        id, class_id, ea_user_id, programme_id, created_by, sync_status
+      ) values (
+        'cea-self-evidence', 'class-self-evidence', 'user-1', 'programme-1', 'head-office-1', 'synced'
+      )
+    `);
+    await db.runAsync(`
+      insert into child_class_memberships (
+        id, child_id, class_id, academic_year_id, created_by, sync_status
+      ) values (
+        'ccm-self-evidence', ?, 'class-self-evidence', 'academic-year-2026', 'user-1', 'pending'
+      )
+    `, child.id);
+    await enqueue(db, 'child_class_memberships', 'ccm-self-evidence', 'insert', {
+      id: 'ccm-self-evidence',
+      child_id: child.id,
+      class_id: 'class-self-evidence',
+      academic_year_id: 'academic-year-2026',
+      created_by: 'user-1',
+    });
+    const { supabaseClient } = createSupabaseMock({
+      upsertResults: {
+        child_class_memberships: {
+          error: { code: '42501', message: 'new row violates row-level security policy' },
+        },
+      },
+    });
+    const engine = createOutboxSyncEngine({ getAuthSession: liveTestSession, database: db, supabaseClient });
+
+    const result = await engine.syncAll({ tableName: 'child_class_memberships' });
+
+    expect(result.totalTerminal).toBe(1);
+    expect(await db.getFirstAsync(`
+      select status, last_error from sync_outbox where record_id = 'ccm-self-evidence'
+    `)).toEqual(expect.objectContaining({
+      status: 'terminal',
+      last_error: expect.stringContaining('42501-authenticated:'),
+    }));
+    expect(await db.getFirstAsync(`
+      select sync_status from child_class_memberships where id = 'ccm-self-evidence'
+    `)).toEqual({ sync_status: 'terminal' });
+  });
+
+  test('a different pending group membership still authorizes retry for a refused class membership', async () => {
+    const child = await seedHeadOfficeChild(db);
+    await db.runAsync(`
+      insert into classes (id, name, school_id, grade, created_by, sync_status)
+      values ('class-independent-group', 'Class With Group Evidence', 'school-1', '1', 'head-office-1', 'synced')
+    `);
+    await db.runAsync(`
+      insert into class_ea_assignments (
+        id, class_id, ea_user_id, programme_id, created_by, sync_status
+      ) values (
+        'cea-independent-group', 'class-independent-group', 'user-1', 'programme-1', 'head-office-1', 'synced'
+      )
+    `);
+    await db.runAsync(`
+      insert into child_class_memberships (
+        id, child_id, class_id, academic_year_id, created_by, sync_status
+      ) values (
+        'ccm-independent-group', ?, 'class-independent-group', 'academic-year-2026', 'user-1', 'pending'
+      )
+    `, child.id);
+    await db.runAsync(`
+      insert into groups (id, name, programme_id, created_by, sync_status)
+      values ('group-independent', 'Independent Group', 'programme-1', 'head-office-1', 'synced')
+    `);
+    await db.runAsync(`
+      insert into group_ea_assignments (
+        id, group_id, ea_user_id, programme_id, created_by, sync_status
+      ) values (
+        'gea-independent', 'group-independent', 'user-1', 'programme-1', 'head-office-1', 'synced'
+      )
+    `);
+    await db.runAsync(`
+      insert into child_group_memberships (id, child_id, group_id, created_by, sync_status)
+      values ('cgm-independent', ?, 'group-independent', 'user-1', 'pending')
+    `, child.id);
+    await enqueue(db, 'child_class_memberships', 'ccm-independent-group', 'insert', {
+      id: 'ccm-independent-group',
+      child_id: child.id,
+      class_id: 'class-independent-group',
+      academic_year_id: 'academic-year-2026',
+      created_by: 'user-1',
+    });
+    const { supabaseClient } = createSupabaseMock({
+      upsertResults: {
+        child_class_memberships: {
+          error: { code: '42501', message: 'new row violates row-level security policy' },
+        },
+      },
+    });
+    const engine = createOutboxSyncEngine({ getAuthSession: liveTestSession, database: db, supabaseClient });
+
+    const result = await engine.syncAll({ tableName: 'child_class_memberships' });
+
+    expect(result.totalRetriable).toBe(1);
+    expect(await db.getFirstAsync(`
+      select status from sync_outbox where record_id = 'ccm-independent-group'
+    `)).toEqual({ status: 'failed' });
+    expect(await db.getFirstAsync(`
+      select sync_status from child_class_memberships where id = 'ccm-independent-group'
+    `)).toEqual({ sync_status: 'failed' });
+  });
+
   test('an update waits while its own insert is unacknowledged, then goes as UPDATE', async () => {
     await db.runAsync(`
       insert into children (id, first_name, last_name, created_by, sync_status)
@@ -290,5 +520,156 @@ describe('edits are sent as UPDATE by id (spec §6.5)', () => {
     expect(calls.filter((call) => call.type === 'update').map((call) => call.value)).toEqual(['child-offline-1']);
     expect(updateIndex).toBeGreaterThan(successfulInsertIndex);
     expect(await db.getFirstAsync('select count(*) as count from sync_outbox')).toEqual({ count: 0 });
+  });
+});
+
+describe('production-style evidence resolution without an injected engine database', () => {
+  let db;
+
+  beforeEach(async () => {
+    await resetDatabaseConnectionForTests();
+    resetExpoSQLiteMock();
+    db = createBetterSqliteTestDatabase();
+    await runMigrations(db);
+    __setDatabaseFactory(async () => db);
+    await db.runAsync("insert into programmes (id, code, name, sync_status) values ('programme-1', 'lit', 'Literacy', 'synced')");
+  });
+
+  afterEach(async () => {
+    await resetDatabaseConnectionForTests();
+    resetExpoSQLiteMock();
+  });
+
+  test('a zero-row child update with no evidence becomes terminal with a readable reason', async () => {
+    const child = await seedHeadOfficeChild(db);
+    const outboxRepository = createSyncOutboxRepository({ database: db });
+    await outboxRepository.enqueue({
+      tableName: 'children',
+      recordId: child.id,
+      operation: 'update',
+      payload: child,
+    });
+    const { supabaseClient } = createSupabaseMock({
+      updateResults: { children: { data: [], error: null } },
+    });
+    const engine = createOutboxSyncEngine({
+      getAuthSession: liveTestSession,
+      outboxRepository,
+      supabaseClient,
+    });
+
+    const result = await engine.syncAll({ tableName: 'children' });
+
+    expect(result.totalTerminal).toBe(1);
+    expect(result.failedRecords).toEqual([expect.objectContaining({
+      id: child.id,
+      reason: expect.stringContaining('did not acknowledge exactly one updated row'),
+    })]);
+    expect(await db.getFirstAsync(
+      'select status, last_error from sync_outbox where record_id = ?',
+      child.id,
+    )).toEqual(expect.objectContaining({
+      status: 'terminal',
+      last_error: expect.stringContaining('did not acknowledge exactly one updated row'),
+    }));
+  });
+
+  test('a zero-row child update stays failed while its child assignment is pending', async () => {
+    const child = await seedHeadOfficeChild(db);
+    await db.runAsync(`
+      insert into child_ea_assignments (id, child_id, user_id, created_by, sync_status)
+      values ('cea-production-style', ?, 'user-1', 'user-1', 'pending')
+    `, child.id);
+    const outboxRepository = createSyncOutboxRepository({ database: db });
+    await outboxRepository.enqueue({
+      tableName: 'children',
+      recordId: child.id,
+      operation: 'update',
+      payload: child,
+    });
+    const { supabaseClient } = createSupabaseMock({
+      updateResults: { children: { data: [], error: null } },
+    });
+    const engine = createOutboxSyncEngine({
+      getAuthSession: liveTestSession,
+      outboxRepository,
+      supabaseClient,
+    });
+
+    const result = await engine.syncAll({ tableName: 'children' });
+
+    expect(result.totalRetriable).toBe(1);
+    expect(await db.getFirstAsync(
+      'select status, last_error from sync_outbox where record_id = ?',
+      child.id,
+    )).toEqual(expect.objectContaining({
+      status: 'failed',
+      last_error: expect.stringContaining('did not acknowledge exactly one updated row'),
+    }));
+    expect(await db.getFirstAsync(
+      'select sync_status, last_sync_error from children where id = ?',
+      child.id,
+    )).toEqual(expect.objectContaining({
+      sync_status: 'failed',
+      last_sync_error: expect.stringContaining('did not acknowledge exactly one updated row'),
+    }));
+  });
+
+  test('a 42501 membership insert with no evidence becomes terminal with the authenticated marker', async () => {
+    const child = await seedHeadOfficeChild(db);
+    await db.runAsync(`
+      insert into groups (id, name, programme_id, created_by, sync_status)
+      values ('group-production-style', 'Group 1', 'programme-1', 'head-office-1', 'synced')
+    `);
+    await db.runAsync(`
+      insert into child_group_memberships (
+        id, child_id, group_id, created_by, sync_status
+      ) values (
+        'cgm-production-style', ?, 'group-production-style', 'user-1', 'pending'
+      )
+    `, child.id);
+    const outboxRepository = createSyncOutboxRepository({ database: db });
+    await outboxRepository.enqueue({
+      tableName: 'child_group_memberships',
+      recordId: 'cgm-production-style',
+      operation: 'insert',
+      payload: {
+        id: 'cgm-production-style',
+        child_id: child.id,
+        group_id: 'group-production-style',
+        grouping_version_id: null,
+        created_by: 'user-1',
+      },
+    });
+    const { supabaseClient } = createSupabaseMock({
+      upsertResults: {
+        child_group_memberships: {
+          error: { code: '42501', message: 'new row violates row-level security policy' },
+        },
+      },
+    });
+    const engine = createOutboxSyncEngine({
+      getAuthSession: liveTestSession,
+      outboxRepository,
+      supabaseClient,
+    });
+
+    const result = await engine.syncAll({ tableName: 'child_group_memberships' });
+
+    expect(result.totalTerminal).toBe(1);
+    expect(await db.getFirstAsync(`
+      select status, last_error from sync_outbox
+      where table_name = 'child_group_memberships' and record_id = 'cgm-production-style'
+    `)).toEqual(expect.objectContaining({
+      status: 'terminal',
+      last_error: expect.stringContaining('42501-authenticated:'),
+    }));
+    expect(await db.getFirstAsync(`
+      select sync_status, last_sync_error from child_group_memberships
+      where id = 'cgm-production-style'
+    `)).toEqual(expect.objectContaining({
+      sync_status: 'terminal',
+      last_sync_error: expect.stringContaining('42501-authenticated:'),
+    }));
   });
 });
