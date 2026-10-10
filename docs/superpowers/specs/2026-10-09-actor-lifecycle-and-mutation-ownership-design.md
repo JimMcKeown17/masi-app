@@ -1,6 +1,6 @@
 # Design Spec: Actor Lifecycle and Mutation Ownership
 
-**Status:** revised after Codex adversarial review rounds 1–3 (§11). Design walked through with Jim section by section on 2026-10-09 (brainstorming); every
+**Status:** revised after Codex adversarial review rounds 1–4 (§11). Design walked through with Jim section by section on 2026-10-09 (brainstorming); every
 section approved. Awaiting Jim's review of this written spec, then a Codex adversarial review, then
 an implementation plan. Companion decision record: an ADR for one database per EA, to be created
 through `grill-with-docs`.
@@ -355,10 +355,13 @@ the first five, `runServerOperation` sends `update` the way it already sends lif
       `group_ea_assignments.group_id = id`; `children` → `child_ea_assignments.child_id = id`.
     - **Via a membership:** for any child-scoped write (`children` by own id, and `letter_mastery`,
       `assessments`, `session_attendees`, `child_class_memberships`, `child_group_memberships`,
-      `child_programme_enrollments` by `child_id`), the evidence also counts a pending
-      `class_ea_assignments` row for a class the child has an active local `child_class_memberships`
-      row in, and a pending `group_ea_assignments` row for a group the child has an active local
-      `child_group_memberships` row in.
+      `child_programme_enrollments` by `child_id`), the server grant is a **conjunction**: an active
+      `class_ea_assignments` row for the actor joined to the child's active `child_class_memberships`
+      row (`exited_at is null`), or an active `group_ea_assignments` row for the actor joined to the
+      child's active `child_group_memberships` row (`removed_at is null`)
+      (`20260521144901:496-516`). Evidence is pending when the local pair exists and **either half**
+      is still unacknowledged and not terminal: the assignment row, or the membership row. A pair
+      whose half is terminal contributes no evidence (Codex review of this spec, round 4).
 
     Fixing the shared resolver also clears the existing false-terminal limitation for the tables
     that already used it. `time_entries` needs no grant (`user_id = me`).
@@ -556,7 +559,7 @@ WAL companions, connection close, file deletion) uses real SQLite through better
 | T14 | After a key change, no timer, interval, or listener from the previous EA's tree remains |
 | T15 | Account switch with A's reference-data barrier both fulfilled and still pending, B's file empty, and B's reference requests delayed or failing: B's roster and history pulls wait for B's own barrier and never persist before it |
 | T16 | Module-state allowlist: a new top-level `let`, `var`, `Map`, or `Set` under `src/services` or `src/db` without an allowlist entry fails the suite |
-| T17 | `UPDATE_NOT_APPLIED`, against migration-backed RLS: for each converted table, an edit sent before its granting assignment (direct child, class, group, and membership-mediated class/group for a child) is retriable, and after the assignment uploads, the **next automatic pass** sends it with no manual step; a terminal grant makes the edit terminal instead of retrying forever; a readable `letter_mastery` row with a pending child assignment is retriable; an RLS-invisible row with nothing pending is terminal; an update whose own insert is terminal becomes terminal; a forced sync after authorization is restored applies it; no row is ever created; `update` operations are excluded from batches for the tables §6.5 moves to UPDATE |
+| T17 | `UPDATE_NOT_APPLIED`, against migration-backed RLS: for each converted table, an edit sent before its granting assignment (direct child, class, group, and membership-mediated class/group for a child) is retriable; so is an edit whose class or group assignment is already synced but whose child membership is still pending, including a membership that failed transiently; and after the assignment uploads, the **next automatic pass** sends it with no manual step; a terminal grant makes the edit terminal instead of retrying forever; a readable `letter_mastery` row with a pending child assignment is retriable; an RLS-invisible row with nothing pending is terminal; an update whose own insert is terminal becomes terminal; a forced sync after authorization is restored applies it; no row is ever created; `update` operations are excluded from batches for the tables §6.5 moves to UPDATE |
 | T18 | Through the **real** supabase-js/postgrest-js 2.100.1 builders over a fake transport: `reconcileChildClassMembership` paused inside its SELECT; A signs out, B signs in, the SELECT resumes; neither the archive UPDATE nor the final upsert reaches the transport; the queue rejects with `StaleActorError`; the row is not finalized, and its attempt count and backoff are unchanged. Repeated for `rpc`, and for a refusal between token acquisition and fetch |
 | T23 | Token lifecycle: after `TOKEN_REFRESHED`, the next request carries the new token; after the token expires in the background, a foreground refresh lets requests proceed without a stale refusal; a request made outside a queued task is refused |
 | T19 | A's upload never resolves; A signs out; B signs in: B's reference-data pull and first upload start within a defined bound, and A's request is aborted at the drain bound |
@@ -625,6 +628,13 @@ Codex round 2's live defect 2.
   2. postgrest-js turns a rejected fetch into an ordinary returned error, so a thrown stale refusal
      would be misread as a network failure. The handle's queue now restores the refusal and skips
      finalization (§5.2). T18 must run through the real SDK builders.
+- **Codex adversarial review, round 4 (2026-10-09), verdict needs-attention, one medium finding,
+  accepted.** A grant through a membership needs both the assignment and the membership, and either
+  half can be the one waiting to upload. Evidence now counts either half (§6.5). Codex found no
+  further actor-isolation issue: every data request is queued, the history RPCs use the queue,
+  fallback concurrency still serializes server tasks, and skipping stale finalization keeps
+  `in_flight` work recoverable. The loop stops here, because the catches have narrowed from four
+  structural findings to one mechanical one.
 
 ## 12. Out of scope (owned by the upload-contract spec)
 
