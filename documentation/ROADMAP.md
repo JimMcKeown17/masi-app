@@ -438,7 +438,11 @@ the current-state model better than Zazi's per-session carry-forward.
 
 **Two live defects confirmed by the 2026-10-08 Codex round 2 (fix first, pilot blockers):**
 
-- [ ] **An EA's edit to a child Head Office created never uploads.**
+- [ ] **An EA's edit to a child Head Office created never uploads.** *Server half fixed on
+  `feat/upload-path-correctness` (Plan 1, 2026-10-10, not yet merged): edits go as UPDATE by id
+  with an exact acknowledgement, proven against the replayed migrations by S1. The phone half
+  below remains, for Plan 2. Plan 1 also fixed a third defect: group-assignment reactivation was
+  sent as an ignored insert and now goes as an acknowledged `restore`.*
   - `updateChild` takes `actorUserId` but enqueues without it (`childrenRepository.js:404-426`).
     The outbox owner therefore resolves from the child's `created_by`
     (`outboxOwnership.js`, `children: directOwner('created_by')`), which is the office account,

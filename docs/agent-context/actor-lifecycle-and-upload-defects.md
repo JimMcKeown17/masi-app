@@ -1,11 +1,10 @@
 # Briefing: actor lifecycle and three confirmed upload defects
 
 **Written 2026-10-10** for whichever session next runs CAP-004 device testing or touches uploads,
-sign-out, or account switching. The three defects below are confirmed in source. Implementation is
-in progress on `feat/upload-path-correctness`: Tasks 2–3 fix defect 1's server half (edits as
-UPDATE by id, zero-row results classified by evidence); its outbox-owner half and defects 2–3 remain
-unfixed. The
-complete fix is designed in:
+sign-out, or account switching. The three defects below are confirmed in source. Plan 1
+(`feat/upload-path-correctness`, not yet merged) fixes defect 1's server half and defect 3. Defect
+1's phone half and defect 2 remain unfixed until Plan 2 (the signed-in EA handle). The complete fix
+is designed in:
 [`docs/superpowers/specs/2026-10-09-actor-lifecycle-and-mutation-ownership-design.md`](../superpowers/specs/2026-10-09-actor-lifecycle-and-mutation-ownership-design.md)
 (walked through with Jim; four Codex adversarial review rounds; Jim's simplifications in §11). Spec
 section numbers below refer to that file.
@@ -42,14 +41,17 @@ per-EA data client fenced at every request, and a per-EA queue (§4, §5).
 
 `src/db/repositories/groupsRepository.js:111-129` reactivates an archived `group_ea_assignments`
 row by enqueuing `insert`, which is sent with `ignoreDuplicates`. The server keeps the row archived
-while the phone records success. **Fix (designed):** send it as a lifecycle update with an exact
-acknowledgement (§6.5b).
+while the phone records success. **Fixed in Plan 1 (not yet merged):** reactivation is queued as a
+`restore`, an exact-acknowledged lifecycle UPDATE, with at most one queued archive or restore per
+assignment (§6.5b).
 
 ## Rules for now
 
-- **Do not patch these ad hoc** on `feat/cap-004-session-history-hydration` or elsewhere. Continue
-  the approved implementation plan on `feat/upload-path-correctness`; its S1 server proof passed
-  before the app-code tasks began.
+- **Do not patch these ad hoc** on `feat/cap-004-session-history-hydration` or elsewhere. Defect
+  1's phone half (owner stamping) and defect 2 still interlock with the signed-in EA handle and are
+  Plan 2's work.
+- After Plan 1, an edit to a Head Office-created child **still** does not upload on a device: the
+  phone half selects it under the wrong owner. Do not treat that as a Plan 1 regression.
 - In device testing, a missing edit to a Head Office-created child or class is **this known
   defect**, not a CAP-004 history problem. Record it in the build log as reproduced, with the
   record id and build, and move on.
@@ -62,8 +64,9 @@ acknowledgement (§6.5b).
   Decision, and Bug And Gap registers).
 - Implementation plan: `docs/superpowers/plans/2026-10-10-upload-path-correctness.md`, built on
   branch `feat/upload-path-correctness`. S1 passed against disposable migration-replay PostgreSQL;
-  Tasks 2 and 3 are committed. Continue from the next unfinished task in that plan. Do not infer
-  that local Jest evidence proves a hosted, installed-build, device, or field repair.
+  Tasks 0–6 are done (local gates green, 2026-10-10). Task 7 (hosted S3-lite and EAS device
+  checks) waits for Jim's yes. Local Jest and Postgres evidence does not prove a hosted,
+  installed-build, device, or field repair.
 - Deferred by Jim on 2026-10-09: deleting other EAs' files (revisit before Step 9 Widen, for
   privacy on staff-owned phones) and the sign-out drain (removed; sign-out aborts immediately and
   idempotent uploads re-send).
