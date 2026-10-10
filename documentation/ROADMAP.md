@@ -442,7 +442,9 @@ the current-state model better than Zazi's per-session carry-forward.
   `feat/upload-path-correctness` (Plan 1, 2026-10-10, not yet merged): edits go as UPDATE by id
   with an exact acknowledgement, proven against the replayed migrations by S1. The phone half
   below remains, for Plan 2. Plan 1 also fixed a third defect: group-assignment reactivation was
-  sent as an ignored insert and now goes as an acknowledged `restore`.*
+  sent as an ignored insert and now goes as an acknowledged `restore`. Before field launch, clear
+  development outboxes: legacy per-operation lifecycle rows are not consolidated at startup (see the
+  contract map's Error Classification known limitations).*
   - `updateChild` takes `actorUserId` but enqueues without it (`childrenRepository.js:404-426`).
     The outbox owner therefore resolves from the child's `created_by`
     (`outboxOwnership.js`, `children: directOwner('created_by')`), which is the office account,
