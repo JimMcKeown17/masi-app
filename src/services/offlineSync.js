@@ -239,29 +239,50 @@ const PARENT_FK_COLUMNS = {
   letter_mastery: { children: 'child_id' },
 };
 
-// The DIRECT active-assignment grant(s) each write needs, per RLS
-// private.current_user_can_write_for_* (migration 20260521144901 lines 368-517). Only the
-// assignment half is here; the created_by half is covered by PARENT_FK_COLUMNS.
-// staff_programme_assignments is excluded (reference data, never pushed, so a 42501 from it is a
-// genuine terminal denial). Used for 42501 only. LIMITATION: write_for_child also grants via two
-// membership-mediated paths (class_ea via child_class_memberships, group_ea via
-// child_group_memberships) that this single-hop map cannot express; a child write whose ONLY
-// grant is a pending class/group assignment would false-terminal. Not reachable in the current
-// direct-child-assignment field model; extend this before group-centric (whole-class) access
-// ships. See rls-sync-contract-map.md "Error Classification (Item 10)".
+// The grant(s) each write needs, matching private.current_user_can_write_for_child/class/group
+// (migration 20260521144901 lines 368-517). The created_by half is covered by PARENT_FK_COLUMNS.
+// Entry shapes:
+//   { grantTable, subjectColumn, valueColumn? }: a direct active assignment whose subjectColumn
+//     equals this record's valueColumn (default subjectColumn). valueColumn 'id' means the
+//     record's own id is the subject (classes, groups, children).
+//   { membershipMediatedChild: column }: the child in `column` is reachable through an active
+//     class or group membership joined to an active class or group assignment. The server needs
+//     both rows, so evidence is pending when either half is unacknowledged and not terminal.
+// staff_programme_assignments is excluded (reference data, never pushed). Used for 42501 and
+// UPDATE_NOT_APPLIED.
 const GRANT_SUBJECTS = {
+  classes: [{ grantTable: 'class_ea_assignments', subjectColumn: 'class_id', valueColumn: 'id' }],
+  groups: [{ grantTable: 'group_ea_assignments', subjectColumn: 'group_id', valueColumn: 'id' }],
+  children: [
+    { grantTable: 'child_ea_assignments', subjectColumn: 'child_id', valueColumn: 'id' },
+    { membershipMediatedChild: 'id' },
+  ],
   child_class_memberships: [
     { grantTable: 'child_ea_assignments', subjectColumn: 'child_id' },
     { grantTable: 'class_ea_assignments', subjectColumn: 'class_id' },
+    { membershipMediatedChild: 'child_id' },
   ],
-  child_programme_enrollments: [{ grantTable: 'child_ea_assignments', subjectColumn: 'child_id' }],
+  child_programme_enrollments: [
+    { grantTable: 'child_ea_assignments', subjectColumn: 'child_id' },
+    { membershipMediatedChild: 'child_id' },
+  ],
   child_group_memberships: [
     { grantTable: 'child_ea_assignments', subjectColumn: 'child_id' },
     { grantTable: 'group_ea_assignments', subjectColumn: 'group_id' },
+    { membershipMediatedChild: 'child_id' },
   ],
-  session_attendees: [{ grantTable: 'child_ea_assignments', subjectColumn: 'child_id' }],
-  assessments: [{ grantTable: 'child_ea_assignments', subjectColumn: 'child_id' }],
-  letter_mastery: [{ grantTable: 'child_ea_assignments', subjectColumn: 'child_id' }],
+  session_attendees: [
+    { grantTable: 'child_ea_assignments', subjectColumn: 'child_id' },
+    { membershipMediatedChild: 'child_id' },
+  ],
+  assessments: [
+    { grantTable: 'child_ea_assignments', subjectColumn: 'child_id' },
+    { membershipMediatedChild: 'child_id' },
+  ],
+  letter_mastery: [
+    { grantTable: 'child_ea_assignments', subjectColumn: 'child_id' },
+    { membershipMediatedChild: 'child_id' },
+  ],
   grouping_versions: [{ grantTable: 'class_ea_assignments', subjectColumn: 'class_id' }],
   class_grouping_state: [{ grantTable: 'class_ea_assignments', subjectColumn: 'class_id' }],
 };
@@ -408,12 +429,54 @@ const hasPendingActiveAssignment = async (database, grantTable, subjectColumn, s
   return !!row;
 };
 
-// True when the record still has locally-pending evidence it legitimately needs: its FK
-// parent (for 23503 and the created_by half of 42501 grants) or, when includeGrant is set
-// (42501 only), an active assignment grant that has not synced. No server calls.
-const computeEvidencePending = async ({ database, outboxRepository, outboxRecord, includeGrant }) => {
+const UNACKNOWLEDGED_STATUSES = "('pending', 'failed', 'in_flight')";
+
+// A child write granted through a class or group needs BOTH an active membership and an active
+// assignment on the server. Evidence is pending when a local pair exists and either half has not
+// been acknowledged. A terminal half contributes nothing.
+const hasPendingMembershipMediatedGrant = async (database, childId) => {
+  const row = await database.getFirstAsync(`
+    select 1 as present
+    from child_class_memberships ccm
+    join class_ea_assignments cea
+      on cea.class_id = ccm.class_id and cea.unassigned_at is null
+    where ccm.child_id = ?
+      and ccm.exited_at is null
+      and (ccm.sync_status in ${UNACKNOWLEDGED_STATUSES} or cea.sync_status in ${UNACKNOWLEDGED_STATUSES})
+      and ccm.sync_status != 'terminal'
+      and cea.sync_status != 'terminal'
+    union all
+    select 1 as present
+    from child_group_memberships cgm
+    join group_ea_assignments gea
+      on gea.group_id = cgm.group_id and gea.unassigned_at is null
+    where cgm.child_id = ?
+      and cgm.removed_at is null
+      and (cgm.sync_status in ${UNACKNOWLEDGED_STATUSES} or gea.sync_status in ${UNACKNOWLEDGED_STATUSES})
+      and cgm.sync_status != 'terminal'
+      and gea.sync_status != 'terminal'
+    limit 1
+  `, childId, childId);
+  return !!row;
+};
+
+const computeEvidencePending = async ({
+  database,
+  outboxRepository,
+  outboxRecord,
+  includeGrant,
+  includeOwnInsert = false,
+}) => {
   const table = normalizeTableName(outboxRecord?.table_name);
   const getField = makeFieldResolver(database, outboxRecord);
+
+  if (includeOwnInsert && await outboxRepository.hasPendingOperation({
+    tableName: table,
+    recordId: outboxRecord.record_id,
+    operation: 'insert',
+  })) {
+    return true;
+  }
 
   const fkColumns = PARENT_FK_COLUMNS[table] || {};
   for (const [parentTable, column] of Object.entries(fkColumns)) {
@@ -424,10 +487,14 @@ const computeEvidencePending = async ({ database, outboxRepository, outboxRecord
   }
 
   if (includeGrant) {
-    const grants = GRANT_SUBJECTS[table] || [];
-    for (const { grantTable, subjectColumn } of grants) {
-      const subjectValue = await getField(subjectColumn);
-      if (subjectValue && await hasPendingActiveAssignment(database, grantTable, subjectColumn, subjectValue)) {
+    for (const grant of GRANT_SUBJECTS[table] || []) {
+      if (grant.membershipMediatedChild) {
+        const childId = await getField(grant.membershipMediatedChild);
+        if (childId && await hasPendingMembershipMediatedGrant(database, childId)) return true;
+        continue;
+      }
+      const subjectValue = await getField(grant.valueColumn || grant.subjectColumn);
+      if (subjectValue && await hasPendingActiveAssignment(database, grant.grantTable, grant.subjectColumn, subjectValue)) {
         return true;
       }
     }
@@ -1064,12 +1131,13 @@ export const createOutboxSyncEngine = ({
       }
 
       const failureCode = serverResult.error?.code;
-      const parentEvidencePending = (failureCode === '23503' || failureCode === '42501')
+      const parentEvidencePending = ['23503', '42501', 'UPDATE_NOT_APPLIED'].includes(failureCode)
         ? await computeEvidencePending({
             database,
             outboxRepository,
             outboxRecord: inFlightRecord,
-            includeGrant: failureCode === '42501',
+            includeGrant: failureCode !== '23503',
+            includeOwnInsert: failureCode === 'UPDATE_NOT_APPLIED',
           })
         : false;
       const classification = classifyError(serverResult.error, config, { parentEvidencePending });

@@ -35,9 +35,29 @@ const seedHeadOfficeChild = async (db, id = 'child-ho-1') => {
 describe('edits are sent as UPDATE by id (spec §6.5)', () => {
   let db;
 
+  const seedClassMediatedGrant = async ({ membershipStatus, assignmentStatus }) => {
+    await db.runAsync(`
+      insert into classes (id, name, school_id, grade, created_by, sync_status)
+      values ('class-1', 'Grade 1', 'school-1', '1', ?, 'synced')
+    `, HEAD_OFFICE);
+    await db.runAsync(`
+      insert into class_ea_assignments (id, class_id, ea_user_id, programme_id, created_by, sync_status)
+      values ('cea-class-1', 'class-1', 'user-1', 'programme-1', ?, ?)
+    `, HEAD_OFFICE, assignmentStatus);
+    await db.runAsync(`
+      insert into child_class_memberships (id, child_id, class_id, academic_year_id, created_by, sync_status)
+      values ('ccm-1', 'child-ho-1', 'class-1', 'academic-year-2026', 'user-1', ?)
+    `, membershipStatus);
+  };
+
   beforeEach(async () => {
     db = createBetterSqliteTestDatabase();
     await runMigrations(db);
+    await db.runAsync("insert into schools (id, name, sync_status) values ('school-1', 'Test School', 'synced')");
+    await db.runAsync(`
+      insert into academic_years (id, label, starts_on, ends_on, sync_status)
+      values ('academic-year-2026', '2026', '2026-01-01', '2026-12-31', 'synced')
+    `);
     await db.runAsync("insert into programmes (id, code, name, sync_status) values ('programme-1', 'lit', 'Literacy', 'synced')");
   });
 
@@ -127,5 +147,108 @@ describe('edits are sent as UPDATE by id (spec §6.5)', () => {
     const upsertCall = childCalls.find((call) => call.type === 'upsert');
     const upserted = Array.isArray(upsertCall.payload) ? upsertCall.payload : [upsertCall.payload];
     expect(upserted.map((row) => row.id)).toEqual(['child-new-1']);
+  });
+
+  test('a zero-row edit stays retriable while a class-mediated membership is pending, then uploads automatically', async () => {
+    const child = await seedHeadOfficeChild(db);
+    await seedClassMediatedGrant({ membershipStatus: 'pending', assignmentStatus: 'synced' });
+    await enqueue(db, 'children', child.id, 'update', child);
+    let acknowledge = false;
+    const { supabaseClient } = createSupabaseMock({
+      updateResults: {
+        children: ({ value }) => ({ data: acknowledge ? [{ id: value }] : [], error: null }),
+      },
+    });
+    const engine = createOutboxSyncEngine({ getAuthSession: liveTestSession, database: db, supabaseClient });
+
+    await engine.syncAll({ tableName: 'children' });
+    expect((await db.getFirstAsync('select status from sync_outbox where record_id = ?', child.id)).status).toBe('failed');
+
+    // The membership lands, and the edit's backoff expires.
+    await db.runAsync("update child_class_memberships set sync_status = 'synced' where id = 'ccm-1'");
+    await db.runAsync('update sync_outbox set next_retry_at = null where record_id = ?', child.id);
+    acknowledge = true;
+    const second = await engine.syncAll({ tableName: 'children' });
+
+    expect(second.totalSynced).toBe(1);
+    expect(await db.getFirstAsync('select count(*) as count from sync_outbox where record_id = ?', child.id)).toEqual({ count: 0 });
+  });
+
+  test('a zero-row edit stays retriable while a class assignment is pending (either half counts)', async () => {
+    const child = await seedHeadOfficeChild(db);
+    await seedClassMediatedGrant({ membershipStatus: 'synced', assignmentStatus: 'pending' });
+    await enqueue(db, 'children', child.id, 'update', child);
+    const { supabaseClient } = createSupabaseMock({ updateResults: { children: { data: [], error: null } } });
+    const engine = createOutboxSyncEngine({ getAuthSession: liveTestSession, database: db, supabaseClient });
+
+    await engine.syncAll({ tableName: 'children' });
+
+    expect((await db.getFirstAsync('select status from sync_outbox where record_id = ?', child.id)).status).toBe('failed');
+  });
+
+  test('a terminal membership gives no evidence, so the edit becomes terminal', async () => {
+    const child = await seedHeadOfficeChild(db);
+    await seedClassMediatedGrant({ membershipStatus: 'terminal', assignmentStatus: 'synced' });
+    await enqueue(db, 'children', child.id, 'update', child);
+    const { supabaseClient } = createSupabaseMock({ updateResults: { children: { data: [], error: null } } });
+    const engine = createOutboxSyncEngine({ getAuthSession: liveTestSession, database: db, supabaseClient });
+
+    await engine.syncAll({ tableName: 'children' });
+
+    expect((await db.getFirstAsync('select status from sync_outbox where record_id = ?', child.id)).status).toBe('terminal');
+  });
+
+  test('a class edit stays retriable while its own class assignment is pending (own id as subject)', async () => {
+    await db.runAsync(`
+      insert into classes (id, name, school_id, grade, created_by, sync_status)
+      values ('class-2', 'Grade 2', 'school-1', '2', ?, 'pending')
+    `, HEAD_OFFICE);
+    await db.runAsync(`
+      insert into class_ea_assignments (id, class_id, ea_user_id, programme_id, created_by, sync_status)
+      values ('cea-class-2', 'class-2', 'user-1', 'programme-1', ?, 'pending')
+    `, HEAD_OFFICE);
+    await enqueue(db, 'classes', 'class-2', 'update', { id: 'class-2', name: 'Grade 2B', created_by: HEAD_OFFICE });
+    const { supabaseClient } = createSupabaseMock({ updateResults: { classes: { data: [], error: null } } });
+    const engine = createOutboxSyncEngine({ getAuthSession: liveTestSession, database: db, supabaseClient });
+
+    await engine.syncAll({ tableName: 'classes' });
+
+    expect((await db.getFirstAsync("select status from sync_outbox where record_id = 'class-2'")).status).toBe('failed');
+  });
+
+  test('a readable letter_mastery row stays retriable while the child assignment is pending', async () => {
+    await db.runAsync(`
+      insert into children (id, first_name, last_name, created_by, sync_status)
+      values ('child-lm', 'Thandi', 'Mbeki', ?, 'synced')
+    `, HEAD_OFFICE);
+    await db.runAsync(`
+      insert into child_ea_assignments (id, child_id, user_id, created_by, sync_status)
+      values ('cea-lm', 'child-lm', 'user-1', ?, 'pending')
+    `, HEAD_OFFICE);
+    const payload = {
+      id: 'lm-1', user_id: 'user-1', child_id: 'child-lm', programme_id: 'programme-1',
+      letter: 'b', language: 'isiXhosa', source: 'taught', deleted_at: null,
+    };
+    await enqueue(db, 'letter_mastery', 'lm-1', 'update', payload);
+    const { supabaseClient } = createSupabaseMock({ updateResults: { letter_mastery: { data: [], error: null } } });
+    const engine = createOutboxSyncEngine({ getAuthSession: liveTestSession, database: db, supabaseClient });
+
+    await engine.syncAll({ tableName: 'letter_mastery' });
+
+    expect((await db.getFirstAsync("select status from sync_outbox where record_id = 'lm-1'")).status).toBe('failed');
+  });
+
+  test('an edit after the assignment ended on the server, with nothing pending, is terminal with a readable reason', async () => {
+    const child = await seedHeadOfficeChild(db);
+    await enqueue(db, 'children', child.id, 'update', child);
+    const { supabaseClient } = createSupabaseMock({ updateResults: { children: { data: [], error: null } } });
+    const engine = createOutboxSyncEngine({ getAuthSession: liveTestSession, database: db, supabaseClient });
+
+    const result = await engine.syncAll({ tableName: 'children' });
+
+    expect(result.failedRecords).toEqual([expect.objectContaining({
+      id: child.id,
+      reason: expect.stringContaining('did not acknowledge exactly one updated row'),
+    })]);
   });
 });
