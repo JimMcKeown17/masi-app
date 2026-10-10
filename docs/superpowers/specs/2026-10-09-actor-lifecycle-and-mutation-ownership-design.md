@@ -1,6 +1,6 @@
 # Design Spec: Actor Lifecycle and Mutation Ownership
 
-**Status:** revised after Codex adversarial review rounds 1 and 2 (§11). Design walked through with Jim section by section on 2026-10-09 (brainstorming); every
+**Status:** revised after Codex adversarial review rounds 1–3 (§11). Design walked through with Jim section by section on 2026-10-09 (brainstorming); every
 section approved. Awaiting Jim's review of this written spec, then a Codex adversarial review, then
 an implementation plan. Companion decision record: an ADR for one database per EA, to be created
 through `grill-with-docs`.
@@ -211,11 +211,27 @@ in `AuthContext`, `ClassesContext`, `LookupsContext`, `offlineSync`, and `preloa
 the shared client outside the auth module. A request built by EA A's client can therefore never carry
 EA B's token, however deep inside a task it is sent and whatever a `catch` does with the refusal.
 
-**`StaleActorError` is never swallowed.** Every `catch` in sync, pull, and reconcile code rethrows
-it through one helper (`rethrowIfStale`). That includes the conservative fallback in
-`reconcileChildClassMembership`, so a refused SELECT does not fall through to a "proceed anyway"
-upsert. A's client would refuse that upsert anyway; rethrowing keeps the log honest and stops wasted
-work.
+**A stale refusal survives the SDK.** postgrest-js 2.100.1 defaults to
+`shouldThrowOnError = false`, and it catches a rejected `fetch` (including a rejection from the
+`accessToken` callback) and returns an ordinary error object with an empty code
+(`@supabase/postgrest-js/dist/index.cjs:168-198`). A `StaleActorError` thrown in the fence would
+therefore reach application code as a retriable network error (Codex review of this spec, round
+3). The refusal is restored at a boundary we own, the handle's request queue:
+
+- Data requests may be made **only inside a task run by `handle.enqueueRequest`**. The fence refuses
+  any request made outside a running task, so the rule is enforced at runtime, not by convention.
+- When `requireAccessToken` or `fencedFetch` refuses, it marks the **current task** as stale. The
+  queue runs one task at a time per handle, so the refusal cannot be attributed to the wrong task.
+- When a stale-marked task settles, the queue discards whatever the task returned or threw and
+  rejects with `StaleActorError`. Application code never sees the SDK's codeless error for a stale
+  refusal.
+- On `StaleActorError`, the caller **skips finalization entirely**. It needs no finalize token
+  because it records nothing. The outbox row stays `in_flight` or `pending` in that EA's file, and
+  `resetInFlight` returns it to `pending` at the next open. A refused request is never counted as
+  a sync failure, an attempt, or a backoff.
+- Inside a task, conservative fallbacks such as `reconcileChildClassMembership`'s may still run, but
+  every later request in the same task is refused too. The fence, not the fallback's error handling,
+  is what stops the send.
 
 ### 5.3 Each handle has its own request queue
 
@@ -328,14 +344,32 @@ the first five, `runServerOperation` sends `update` the way it already sends lif
   Classification therefore reuses the engine's existing evidence rules rather than a new one:
   - **Retriable** while dependency evidence is still pending: the same record's own `insert`
     outbox row is unacknowledged, **or** `computeEvidencePending` (`src/services/offlineSync.js:404`)
-    with `includeGrant: true` finds a pending FK parent or a pending active assignment for the
-    record's subject. This matches how `42501` is already handled.
+    with `includeGrant: true` finds a pending FK parent or a pending active assignment that grants
+    the write. This matches how `42501` is already handled.
+  - **The grant-evidence resolver is extended** so that it matches the server's write helpers
+    (`current_user_can_write_for_child/class/group`, `20260521144901:368-517`) for every table this
+    spec sends as UPDATE. Today `GRANT_SUBJECTS` (`offlineSync.js:252-270`) has no entries for
+    these tables, and its own comment records the gap for authorization reached through a class or
+    group membership (Codex review of this spec, round 3). The resolver gains two shapes:
+    - **Own id as subject:** `classes` → `class_ea_assignments.class_id = id`; `groups` →
+      `group_ea_assignments.group_id = id`; `children` → `child_ea_assignments.child_id = id`.
+    - **Via a membership:** for any child-scoped write (`children` by own id, and `letter_mastery`,
+      `assessments`, `session_attendees`, `child_class_memberships`, `child_group_memberships`,
+      `child_programme_enrollments` by `child_id`), the evidence also counts a pending
+      `class_ea_assignments` row for a class the child has an active local `child_class_memberships`
+      row in, and a pending `group_ea_assignments` row for a group the child has an active local
+      `child_group_memberships` row in.
+
+    Fixing the shared resolver also clears the existing false-terminal limitation for the tables
+    that already used it. `time_entries` needs no grant (`user_id = me`).
   - **Terminal** with reason `update_not_applied` when no dependency is pending.
     `hasPendingRecord` already ignores terminal rows, so an update whose insert or grant was
     permanently rejected becomes terminal too, rather than retrying forever.
-  - **Recovery:** terminal rows surface on the needs-attention card. The existing forced "Sync Now"
-    includes terminal rows, so once authorization changes (for example, Head Office restores an
-    assignment), a forced sync applies them. No automatic requeue is added in this spec.
+  - **Recovery:** an edit that was waiting on a pending grant stays retriable, so the next
+    automatic pass after the grant uploads sends it, with no manual step. A terminal edit (nothing
+    was pending) surfaces on the needs-attention card. If Head Office later restores an
+    authorization, the existing forced "Sync Now", which includes terminal rows, applies it. No
+    automatic requeue of terminal rows is added in this spec.
 - `runBatchServerOperation` batches only `insert` operations for these five tables; `update`
   operations go one by one through the path above. This also removes a possible same-batch conflict,
   where a `children` insert and update for one id share an upsert array.
@@ -484,10 +518,10 @@ report is how support finds out; the remedy is a call asking A to sign in once o
    migration-replay harness. About a day, as a gate.
 2. Handle module, per-EA file lifecycle, `client.js` refactor, legacy file handling (§4) with T1,
    T2, T11.
-3. Signed-in tree remount, module-state move, per-handle data client and queue, transaction doors,
-   and drain (§5) with T3, T4, T5, T14–T16, and T18–T20.
+3. Signed-in tree remount, module-state move, per-handle data client and queue, stale-refusal
+   boundary, transaction doors, and drain (§5) with T3, T4, T5, T14–T16, T18–T20, and T23.
 4. Ownership, edits-as-UPDATE, same-record ordering, and the reactivation fix (§6) with T6–T9, T17,
-   T21, and T22. Lands with or after step 2, because the
+   T21, and T22, including the extended grant-evidence resolver. Lands with or after step 2, because the
    owner comes from the handle.
 5. Incident envelope (§7.4) with S2 and T12, then the sign-out questions and 30-day deletion
    (§7.1–7.3) with T10 and T13.
@@ -522,8 +556,9 @@ WAL companions, connection close, file deletion) uses real SQLite through better
 | T14 | After a key change, no timer, interval, or listener from the previous EA's tree remains |
 | T15 | Account switch with A's reference-data barrier both fulfilled and still pending, B's file empty, and B's reference requests delayed or failing: B's roster and history pulls wait for B's own barrier and never persist before it |
 | T16 | Module-state allowlist: a new top-level `let`, `var`, `Map`, or `Set` under `src/services` or `src/db` without an allowlist entry fails the suite |
-| T17 | `UPDATE_NOT_APPLIED`, against migration-backed RLS: a readable `letter_mastery` row with a pending child assignment is retriable; an RLS-invisible row with nothing pending is terminal; an update whose own insert is terminal becomes terminal; a forced sync after authorization is restored applies it; no row is ever created; `update` operations are excluded from batches for the tables §6.5 moves to UPDATE |
-| T18 | `reconcileChildClassMembership` paused inside its SELECT; A signs out, B signs in, the SELECT resumes: neither the archive UPDATE nor the final upsert is sent, and `StaleActorError` propagates out of the conservative fallback |
+| T17 | `UPDATE_NOT_APPLIED`, against migration-backed RLS: for each converted table, an edit sent before its granting assignment (direct child, class, group, and membership-mediated class/group for a child) is retriable, and after the assignment uploads, the **next automatic pass** sends it with no manual step; a terminal grant makes the edit terminal instead of retrying forever; a readable `letter_mastery` row with a pending child assignment is retriable; an RLS-invisible row with nothing pending is terminal; an update whose own insert is terminal becomes terminal; a forced sync after authorization is restored applies it; no row is ever created; `update` operations are excluded from batches for the tables §6.5 moves to UPDATE |
+| T18 | Through the **real** supabase-js/postgrest-js 2.100.1 builders over a fake transport: `reconcileChildClassMembership` paused inside its SELECT; A signs out, B signs in, the SELECT resumes; neither the archive UPDATE nor the final upsert reaches the transport; the queue rejects with `StaleActorError`; the row is not finalized, and its attempt count and backoff are unchanged. Repeated for `rpc`, and for a refusal between token acquisition and fetch |
+| T23 | Token lifecycle: after `TOKEN_REFRESHED`, the next request carries the new token; after the token expires in the background, a foreground refresh lets requests proceed without a stale refusal; a request made outside a queued task is refused |
 | T19 | A's upload never resolves; A signs out; B signs in: B's reference-data pull and first upload start within a defined bound, and A's request is aborted at the drain bound |
 | T20 | No `from(` or `rpc(` call on the shared auth client outside the auth module (static test over `src/`) |
 | T21 | Reactivating an archived group assignment is sent as a lifecycle update; the server row's `unassigned_at` becomes null; zero rows acknowledged is not reported as success |
@@ -546,6 +581,7 @@ WAL companions, connection close, file deletion) uses real SQLite through better
 | D3 | "Stay clocked in and sign out", sign back in after more than ten hours: the auto clock-out runs and the report shows "still open" |
 | D4 | Measure sign-out to file closed on the A03s; this sets the §5.5 drain bound, the abort grace, and the §5.2 request timeout |
 | D5 | Cold start with the file opened after sign-in, compared with today's build |
+| D6 | Leave the app in the background past token expiry on both phones, then foreground and capture: requests resume under the refreshed token, with no stale refusal and no sign-out |
 
 These cover next-steps Step 7's "switch accounts on the same phone" case and the sign-out half of
 Codex round 2's live defect 2.
@@ -582,6 +618,13 @@ Codex round 2's live defect 2.
   Codex also asked for the table-by-operation inventory before §6.5 is frozen. It was done
   (§6.5a). It corrected the first draft's claim that only a class's creator may update it, and it
   found the group-assignment reactivation defect (§6.5b).
+- **Codex adversarial review, round 3 (2026-10-09), verdict needs-attention, two findings, both
+  accepted.** Codex judged the core design proportionate.
+  1. The reused grant-evidence map had no entries for the converted tables and could not follow
+     authorization through class or group memberships. The resolver is extended (§6.5).
+  2. postgrest-js turns a rejected fetch into an ordinary returned error, so a thrown stale refusal
+     would be misread as a network failure. The handle's queue now restores the refusal and skips
+     finalization (§5.2). T18 must run through the real SDK builders.
 
 ## 12. Out of scope (owned by the upload-contract spec)
 
