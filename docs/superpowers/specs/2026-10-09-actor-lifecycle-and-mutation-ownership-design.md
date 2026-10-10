@@ -1,6 +1,6 @@
 # Design Spec: Actor Lifecycle and Mutation Ownership
 
-**Status:** design walked through with Jim section by section on 2026-10-09 (brainstorming); every
+**Status:** revised after Codex adversarial review round 1 (§11). Design walked through with Jim section by section on 2026-10-09 (brainstorming); every
 section approved. Awaiting Jim's review of this written spec, then a Codex adversarial review, then
 an implementation plan. Companion decision record: an ADR for one database per EA, to be created
 through `grill-with-docs`.
@@ -26,6 +26,13 @@ phone for a day or two is common. Two confirmed defects follow from today's desi
    server. About 45 call sites rely on this resolution. The auth-restore heal
    (`requeueTerminalRlsFailures`, `src/services/offlineSync.js:1563`) asks the same wrong question
    and skips such rows as "owner mismatch".
+   **The defect has a server half (Codex review of this spec, round 1).** Every `update` operation
+   is sent as an upsert (`runServerOperation`, `src/services/offlineSync.js:704-711`, and the batch
+   path at `:719-728`). PostgreSQL checks INSERT `WITH CHECK` "for all rows proposed for insertion,
+   regardless of whether or not they end up being inserted" (PostgreSQL 17, `CREATE POLICY`). The
+   `children` INSERT policy requires `created_by = auth.uid()`, so even with the right owner, the
+   server refuses an EA's edit of a Head Office-created child. The same applies to every table whose
+   INSERT policy binds `created_by` to the caller.
 2. **Live defect 2, upload under the next EA's session.** The sync engine checks the session when it
    queues a server request (`getMatchingPassSession`, `src/services/offlineSync.js:976`), not when
    the queued task runs (`src/services/supabaseRequestQueue.js` is a bare serial promise chain). A
@@ -104,15 +111,22 @@ There is no separate registry. At each sign-in the handle lists the SQLite direc
 `masi-*.db` and, for each file belonging to another EA, opens it read-only to read its unsent count
 and `last_active_at`. The file system is the only source of truth, so there is nothing to drift.
 
-### 4.5 Adopting the existing `masi.db`
+### 4.5 The existing shared `masi.db` is untrusted legacy storage
 
-Only test phones carry one (Masi is pre-live). On the first launch of this build:
+Only test phones carry one (Masi is pre-live). It may hold several EAs' cached data, and its outbox
+owners record provenance rather than who made each change, so no rule can prove who made its
+unsent work. A persisted session only says who signed in last. Therefore:
 
-- If a persisted session exists and no `masi-<thatUserId>.db` exists, rename `masi.db` and its
-  `-wal`/`-shm` companions to `masi-<thatUserId>.db`. Outbox rows with a null owner are assigned to
-  that EA. Rows owned by another EA are left as they are; the §6.3 tripwire surfaces them.
-- Otherwise leave `masi.db` in place. It follows the §7.3 rule (deleted only with nothing unsent and
-  30 days idle).
+- The app never opens `masi.db` as an EA's file, never renames it, and never uploads from it. Every
+  EA starts with a fresh `masi-<userId>.db`.
+- §4.4 discovery treats `masi.db` like any other file: it opens it read-only to count unsent rows
+  and read its idle age. If it holds unsent rows, one incident of kind `legacy_shared_file_unsent`
+  is reported (counts by table and oldest age only). It is deleted under the §7.3 rule.
+- Profile → Export Database can still export it, so support can recover anything that matters by
+  hand.
+- The existing field-cutover rule stands: phones moving to the SQLite build are freshly installed
+  (`documentation/rls-sync-contract-map.md`, deploy gate status). This section only covers test phones
+  that skip that rule.
 
 There is no other legacy path.
 
@@ -144,6 +158,28 @@ the file is open. While the handle opens, the signed-in tree shows "loading", ne
 
 `OfflineContext`'s hand-maintained `currentUserIdRef` guard is removed once the handle supplies the
 actor.
+
+### 5.1a Module-scoped state moves into the handle
+
+Remounting the React tree does not reset module-level variables. On 2026-10-09 the inventory of
+mutable module state under `src/` (excluding tests and constants) is:
+
+| State | Location | Treatment |
+|---|---|---|
+| `initPromise`, `writerConnection`, `readerConnection`, `databaseQueue` | `src/db/client.js:18-21` | Owned by each handle (§4.2) |
+| `appMigrationQueue` | `src/db/migrations.js:10` | Owned by each handle |
+| `referenceDataReadyThisSession`, `referenceDataPromise` | `src/services/offlineSync.js:1659-1660` | Owned by each handle as `handle.referenceDataReady`, a single-flight promise. `ChildrenContext` and `ClassesContext` pulls, and history pulls, await **their handle's** readiness before persisting. EA B can never see EA A's fulfilled or pending barrier |
+| `actorGeneration`, `inFlight` | `src/services/sessionHistoryPull.js:26-27` | Keyed by the handle; a new handle starts empty, and A's in-flight runs are fenced by §5.2 |
+| `snapshot`, `listeners`, `statusGeneration` | `src/services/sessionHistoryStatus.js:11-16` | Reset when the handle changes |
+| `reportedSyncIssueKeys`, `operationalErrorTimes` | `src/services/observability.js:9-11` | Keys include the actor's user id |
+| `initialized`, `enabled`, `runtimeContext`, `navigationIntegration` | `src/services/observability.js:5-8` | Device-level; unchanged |
+
+The startup `pullReferenceData` call is no longer fire-and-forget: it is the handle's
+`referenceDataReady` promise, so dependent pulls are ordered after it instead of racing it.
+
+A test fails if a new top-level `let`, `var`, `Map`, or `Set` appears under `src/services` or
+`src/db` without an entry in an allowlist that names its treatment. This keeps the inventory true as
+the code grows.
 
 ### 5.2 Check the actor at the doors
 
@@ -208,37 +244,83 @@ otherwise change. Tests that inject a raw database pass an explicit actor throug
   `create trigger sync_outbox_owner_required before insert on sync_outbox when new.owner_user_id is null begin select raise(abort, 'sync_outbox.owner_user_id is required'); end;`.
   A trigger is chosen over a table rebuild with `NOT NULL` because it gives the same guarantee
   without rebuilding the outbox's indexes.
-- The four null-owner wildcards in `src/db/repositories/syncOutboxRepository.js` (around lines 88,
-  118, 170, and 283) become a plain `owner_user_id = ?`.
+- The upload queries in `src/db/repositories/syncOutboxRepository.js` (`getReadyRecords`,
+  `getPendingHardDeleteIds`, `resetInFlight`, around lines 88, 118, and 170) lose their null-owner
+  wildcard and become a plain `owner_user_id = ?`, a second guard behind §6.3.
+- `getSyncStatus` (around line 283) and every "unsent" count become **file-wide** with no owner
+  filter. In a per-EA file every row is that EA's responsibility, and a filtered count would hide
+  exactly the rows §6.3 exists to surface.
 
-### 6.3 Owner tripwire at upload
+### 6.3 Owner integrity scan
 
-Before sending, the sync engine checks that the outbox row's owner equals the handle's actor. If
-not, the row is marked needs-attention, is not retried, and one incident (§7.4, kind
-`foreign_owner_in_file`) is reported. With one file per EA this should never fire; if it does, the
-isolation design has failed and we need to know.
+A per-record check before sending cannot work, because owner-filtered upload queries never hand it a
+foreign row (Codex review of this spec, round 1). Instead, an **unfiltered** scan runs:
+
+- when the handle opens a file, before it is published; and
+- at the start of each upload pass, before candidates are read.
+
+The scan selects every unsent outbox row whose `owner_user_id` differs from the file's EA. Each such
+row is moved to `terminal` with reason `foreign_owner`, so it is never sent and is never healed by
+§6.4. One incident of kind `foreign_owner_in_file` is reported per file and repeat key, containing
+counts by table only. These rows stay in the file-wide unsent count (§7.2), so the sign-out warning
+and the 30-day rule both protect them. With fresh per-EA files (§4.5) and actor-stamped owners
+(§6.1) this should never fire; if it does, the isolation design has failed and we need to know.
 
 ### 6.4 Rescue heal uses the stamped owner
 
 `requeueTerminalRlsFailures` compares `record.owner_user_id === userId` instead of calling
-`resolveRecordOwners`. `src/db/repositories/outboxOwnership.js` then has no users and is deleted,
-with its tests.
+`resolveRecordOwners`, and never requeues a row whose terminal reason is `foreign_owner`.
+`src/db/repositories/outboxOwnership.js` then has no users and is deleted, with its tests.
 
-### 6.5 Server precondition (verified first)
+### 6.5 Edits are sent as UPDATE, not upsert
 
-Fixing the owner only helps if the server accepts the upload. Two server behaviours make that
-expected:
+An `update` operation means "change a row the server already has". It must not ask for insert
+permission. For every table whose INSERT policy binds `created_by` (or another provenance column) to
+the caller, `runServerOperation` sends an `update` operation the way it already sends lifecycle
+archives:
 
-- `children_update_active_assignment_or_creator`
-  (`supabase/migrations/20260521120147_masi_rls_advisor_cleanup.sql`) allows an EA with an active
-  assignment to update a child someone else created.
-- Postgres applies INSERT `WITH CHECK` on `INSERT … ON CONFLICT DO UPDATE` only to rows inserted
-  through the insert path.
+- `update(patch).eq('id', recordId).select('id')`, where `patch` is the payload minus identity and
+  provenance columns (`id`, `created_by`, `created_at`, and the table's immutable identity columns).
+- Success requires exactly the requested id back. Zero rows is `UPDATE_NOT_APPLIED`, which is
+  **retriable** while the same record has an unsent `insert` in this file (the insert has not
+  landed yet), and **terminal** otherwise. It never creates the row.
+- `runBatchServerOperation` batches only `insert` operations for these tables; `update` operations
+  go one by one through the path above.
 
-Both are unverified for the app's exact upload path. Test S1 (§9.2) proves them, for `children` and
-for every Head Office-created table an EA can edit (`classes`, `groups`, and the membership tables),
-before any app code is written. If S1 fails, the defect also needs an RLS change, and the work
-returns to Jim before building.
+This exercises the UPDATE policy only, as the contract map already requires for archives. An EA can
+then edit a Head Office-created child, while the INSERT policy still stops anyone creating a row in
+someone else's name.
+
+**Exceptions stay on upsert, by name, with a reason.** A table keeps upsert for `update` only when
+its update genuinely means "create or update" and its INSERT policy is authorization-based, not
+creator-bound. The first known case is `class_grouping_state` (its INSERT policy is
+`current_user_can_write_for_class`). The implementation plan's first task produces the full
+table-by-operation inventory from the producers and the policies, and the contract map records each
+table's choice.
+
+**Known product limit surfaced by the policies:** `classes_update_created_by` lets only a class's
+creator update it. An EA's edit of a Head Office-created class will be refused by design. The
+inventory task checks whether the app offers that edit. If it does, that is a product question for
+Jim, not something this spec silently widens.
+
+**Relationship to the upload-contract spec:** the base-version (`stale_base`) check that spec adds
+will sit on this UPDATE path. The exact-acknowledgement shape chosen here is the hook it builds on.
+
+### 6.6 Server proof (verified first)
+
+Test S1 (§9.2) runs before any app code. It proves, in the migration-replay Postgres harness and
+using the exact PostgREST request shapes the app sends:
+
+1. **Red today:** an assigned EA's current upsert of a Head Office-created `children` row fails on
+   the INSERT policy. This reproduces the server half of defect 1.
+2. **Green with §6.5:** the same edit sent as `update … eq('id') … select('id')` succeeds and returns
+   exactly one id.
+3. An unassigned EA's UPDATE affects zero rows (it reads as `UPDATE_NOT_APPLIED`, never success).
+4. **Impersonation negative:** an EA cannot INSERT a row with `created_by` set to Head Office or
+   another EA.
+
+Steps 1–4 repeat for every table the inventory marks as edited by EAs through `update`. If any table
+needs a policy change to allow a legitimate edit, the work returns to Jim before building.
 
 ## 7. Sign-out and clean-up
 
@@ -294,8 +376,8 @@ one incident of kind `left_behind_unsent_work`:
 - **Repeat key:** `strandedUserId + installId + oldest unsent outbox row id`. The same situation
   reports once.
 
-This spec builds the **minimal incident envelope**, Zazi's proven shape, as the first two incident
-kinds (`left_behind_unsent_work` and `foreign_owner_in_file`):
+This spec builds the **minimal incident envelope**, Zazi's proven shape, with the first three
+incident kinds (`left_behind_unsent_work`, `foreign_owner_in_file`, and `legacy_shared_file_unsent`):
 
 - **Server:** a migration creates a table readable only by `service_role`, and a `SECURITY DEFINER`
   RPC `report_mobile_support_incident` for authenticated callers. The RPC validates the kind against
@@ -319,10 +401,14 @@ report is how support finds out; the remedy is a call asking A to sign in once o
 
 ## 8. Sequencing
 
-1. **S1 server precondition** (§6.5): half a day, as a gate.
-2. Handle module, per-EA file lifecycle, `client.js` refactor, adoption (§4) with T1, T2, T11.
-3. Signed-in tree remount and the three doors (§5) with T3, T4, T5, T14.
-4. Ownership (§6) with T6–T9. Lands with or after step 2, because the owner comes from the handle.
+1. **Inventory and S1** (§6.5, §6.6): the table-by-operation inventory, then S1 in the
+   migration-replay harness. About a day, as a gate.
+2. Handle module, per-EA file lifecycle, `client.js` refactor, legacy file handling (§4) with T1,
+   T2, T11.
+3. Signed-in tree remount, module-state move, and the three doors (§5, §5.1a) with T3, T4, T5, T14,
+   T15, T16.
+4. Ownership and edits-as-UPDATE (§6) with T6–T9 and T17. Lands with or after step 2, because the
+   owner comes from the handle.
 5. Incident envelope (§7.4) with S2 and T12, then the sign-out questions and 30-day deletion
    (§7.1–7.3) with T10 and T13.
 6. Device checks D1–D5 with the build intended to ship. Hosted migration apply and S3 need Jim's
@@ -345,21 +431,24 @@ WAL companions, connection close, file deletion) uses real SQLite through better
 | T3 | Live defect 2: A queues an upload, A signs out, B signs in, A's queued task runs; nothing is sent and the task fails with `StaleActorError` |
 | T4 | A transaction admitted under epoch N with sign-out before `COMMIT` is rolled back, unless it carries a finalize token for a request already sent; a token-less write while draining is refused |
 | T5 | An in-flight upload records its result within the drain bound; past the bound the row stays unsent in A's file and uploads after A signs in again |
-| T6 | Live defect 1: an EA edits a Head Office-created child; the outbox owner is the EA and the upload query returns the row |
+| T6 | Live defect 1: an EA edits a Head Office-created child; the outbox owner is the EA, the upload query returns the row, and it is sent as `update … eq('id') … select('id')` without `created_by` |
 | T7 | Inserting an outbox row with no actor throws in JavaScript; the trigger aborts a raw null insert |
-| T8 | Tripwire: an outbox row owned by X in Y's file becomes needs-attention, is not retried, and reports one incident |
+| T8 | Integrity scan, through the public open and sync paths: an outbox row owned by X in Y's file becomes terminal `foreign_owner` at open and before an upload pass, is never sent or healed, stays in the file-wide unsent count, and reports one incident |
 | T9 | Rescue heal requeues an RLS-quarantined row by its stamped owner, including Head Office-created records |
 | T10 | Deletion only when zero unsent (terminal counts) and idle over 30 days; removes `-wal`/`-shm`; never deletes the current EA's file or an unreadable file |
-| T11 | Adoption of `masi.db`: renamed for the persisted EA; null owners assigned; foreign-owned rows trip the tripwire |
+| T11 | Legacy `masi.db` holding two EAs' cached data, null-owner mutations, and an edit stamped with Head Office's id: never opened as an EA file, never renamed, nothing uploaded from it; one `legacy_shared_file_unsent` incident; deleted only under the §7.3 rule |
 | T12 | Left-behind report sent once per repeat key; a deny-list test proves the payload holds no child ids, names, or notes |
 | T13 | Sign-out order: the clock-out sheet comes before the unsent sheet; "Clock out now" increases the unsent count shown next |
 | T14 | After a key change, no timer, interval, or listener from the previous EA's tree remains |
+| T15 | Account switch with A's reference-data barrier both fulfilled and still pending, B's file empty, and B's reference requests delayed or failing: B's roster and history pulls wait for B's own barrier and never persist before it |
+| T16 | Module-state allowlist: a new top-level `let`, `var`, `Map`, or `Set` under `src/services` or `src/db` without an allowlist entry fails the suite |
+| T17 | `UPDATE_NOT_APPLIED`: retriable while the record's `insert` is unsent in this file, terminal otherwise; never creates a row; `update` operations are excluded from batches for creator-bound tables |
 
 ### 9.2 Server
 
 | # | Behaviour |
 |---|---|
-| S1 | In the migration-replay Postgres harness: an assigned EA's upsert of a Head Office-created `children` row succeeds, and an unassigned EA's fails; the same holds for `classes`, `groups`, and the EA-editable membership tables |
+| S1 | The four §6.6 steps in the migration-replay Postgres harness, with the app's exact request shapes, for every table the inventory marks as EA-edited through `update`: today's upsert fails (red), UPDATE-by-id succeeds with one id, an unassigned EA gets zero rows, and impersonating INSERTs are refused |
 | S2 | Incident RPC: anonymous callers refused; authenticated caller accepted; duplicate payload recorded once; unknown kind and oversize payload refused; only `service_role` reads the table |
 | S3 | After a hosted apply (Jim's yes), `npm run rls:probe` repeats S1 against `segygjzpujphwvrubusm` with real test accounts |
 
@@ -384,7 +473,20 @@ Codex round 2's live defect 2.
 - `documentation/build-log.md`: decisions, verification, and device results.
 - ADR for one database per EA with 30-day deletion, through `grill-with-docs`.
 
-## 11. Out of scope (owned by the upload-contract spec)
+## 11. Review history
+
+- **Codex adversarial review, round 1 (2026-10-09), verdict needs-attention, four findings, all
+  accepted:**
+  1. The PostgreSQL premise in the first §6.5 was wrong: INSERT `WITH CHECK` applies to every
+     upsert. Edits now go as UPDATE (§6.5), and S1 proves both halves (§6.6).
+  2. The per-record tripwire was unreachable behind owner-filtered queries. It is now an
+     unfiltered integrity scan with file-wide counts (§6.2, §6.3).
+  3. Adopting the shared `masi.db` could misattribute another EA's work. It is now untrusted legacy
+     storage that is never opened as an EA file (§4.5).
+  4. Module-scoped state survives a React remount. It now moves into the handle, guarded by an
+     allowlist test (§5.1a).
+
+## 12. Out of scope (owned by the upload-contract spec)
 
 Uncertain-outcome recovery, same-record ordering, base versions and `stale_base`, the assessment
 bundle as the exclusive insertion boundary, queue-level deadlines, and duplicate-proof submit. This
