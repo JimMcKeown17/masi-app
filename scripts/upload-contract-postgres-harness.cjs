@@ -27,7 +27,9 @@ const SCHOOL = '21000000-0000-0000-0000-000000000001';
 const CLASS = '41000000-0000-0000-0000-000000000001';
 const CHILD = '51000000-0000-0000-0000-000000000001';
 const GROUP = '72100000-0000-0000-0000-000000000001';
+const ACTIVE_GROUP = '72100000-0000-0000-0000-000000000002';
 const GROUP_ASSIGNMENT = '74100000-0000-0000-0000-000000000001';
+const ACTIVE_GROUP_ASSIGNMENT = '74100000-0000-0000-0000-000000000002';
 const MASTERY = '75100000-0000-0000-0000-000000000001';
 const TIME_ENTRY = '76100000-0000-0000-0000-000000000001';
 const NEW_CHILD = '51000000-0000-0000-0000-000000000099';
@@ -59,6 +61,13 @@ INSERT INTO public.group_ea_assignments (
 ) VALUES (
   '${GROUP_ASSIGNMENT}', '${GROUP}', '${ASSIGNED_EA}', ${PROGRAMME}, '${HEAD_OFFICE}',
   pg_catalog.now(), 'harness archive'
+);
+INSERT INTO public.groups (id, name, programme_id, class_id, created_by)
+VALUES ('${ACTIVE_GROUP}', 'Head Office active group', ${PROGRAMME}, '${CLASS}', '${HEAD_OFFICE}');
+INSERT INTO public.group_ea_assignments (
+  id, group_id, ea_user_id, programme_id, created_by, unassigned_at
+) VALUES (
+  '${ACTIVE_GROUP_ASSIGNMENT}', '${ACTIVE_GROUP}', '${ASSIGNED_EA}', ${PROGRAMME}, '${HEAD_OFFICE}', NULL
 );
 INSERT INTO public.letter_mastery (id, user_id, child_id, programme_id, letter, language, source, deleted_at)
 VALUES ('${MASTERY}', '${ASSIGNED_EA}', '${CHILD}', ${PROGRAMME}, 'a', 'isiXhosa', 'taught', pg_catalog.now());
@@ -116,16 +125,17 @@ const CASES = [
     impersonatingInsert: `INSERT INTO public.classes (id, school_id, name, grade, academic_year_id, created_by)
       VALUES ('41000000-0000-0000-0000-000000000099', '${SCHOOL}', 'Fake', '1', ${ACTIVE_YEAR}, '${HEAD_OFFICE}');`,
   },
+  // group writes need an active assignment, hence a separate group.
   {
     table: 'groups',
     headOfficeCreated: true,
     upsert: upsertSql(
       'groups',
       ['id', 'name', 'programme_id', 'class_id', 'created_by'],
-      [`'${GROUP}'`, "'Renamed group'", PROGRAMME, `'${CLASS}'`, `'${HEAD_OFFICE}'`],
+      [`'${ACTIVE_GROUP}'`, "'Renamed group'", PROGRAMME, `'${CLASS}'`, `'${HEAD_OFFICE}'`],
     ),
-    update: updateByIdSql('groups', "name = 'Renamed group'", GROUP),
-    id: GROUP,
+    update: updateByIdSql('groups', "name = 'Renamed group'", ACTIVE_GROUP),
+    id: ACTIVE_GROUP,
     impersonatingInsert: `INSERT INTO public.groups (id, name, programme_id, class_id, created_by)
       VALUES ('72100000-0000-0000-0000-000000000099', 'Fake', ${PROGRAMME}, '${CLASS}', '${HEAD_OFFICE}');`,
   },
