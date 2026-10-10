@@ -37,5 +37,11 @@ jobs:
           HISTORY_RLS_DATABASE_NAME: masi_history_rls_ci
           HISTORY_RLS_DISPOSABLE_CONFIRM: I_UNDERSTAND_THIS_IS_DISPOSABLE
         run: npm run verify:history-authorization:postgres
+      - name: Upload contract PostgreSQL harness (S1)
+        env:
+          HISTORY_RLS_ADMIN_DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/postgres
+          HISTORY_RLS_DATABASE_NAME: masi_history_rls_ci
+          HISTORY_RLS_DISPOSABLE_CONFIRM: I_UNDERSTAND_THIS_IS_DISPOSABLE
+        run: npm run verify:upload-contract:postgres
       - name: Integration suite (file-backed SQLite)
         run: npm run test:integration
