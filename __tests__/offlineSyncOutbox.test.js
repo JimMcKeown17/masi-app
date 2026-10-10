@@ -1979,7 +1979,7 @@ describe('SQLite outbox offline sync', () => {
       });
   });
 
-  test('archive operations update lifecycle fields while restore operations still upsert', async () => {
+  test('archive and restore operations update only lifecycle fields (spec §6.5b)', async () => {
     await db.runAsync(`
       insert into classes (id, school_id, name, grade, archived_at, sync_status)
       values ('class-1', 'school-1', 'Grade 1A', '1', '2026-05-21T09:00:00.000Z', 'pending')
@@ -2018,14 +2018,15 @@ describe('SQLite outbox offline sync', () => {
         column: 'id',
         value: 'class-1',
       },
-      expect.objectContaining({
-        type: 'upsert',
+      {
+        type: 'update',
         tableName: 'children',
-        payload: expect.objectContaining({
-          id: 'child-1',
+        payload: {
           archived_at: null,
-        }),
-      }),
+        },
+        column: 'id',
+        value: 'child-1',
+      },
     ]);
     expect(await db.getFirstAsync('select sync_status from classes where id = ?', 'class-1'))
       .toEqual({ sync_status: 'synced' });

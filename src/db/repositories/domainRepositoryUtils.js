@@ -130,6 +130,22 @@ export const enqueueDomainOutbox = async (
   });
 };
 
+// Lifecycle intents (archive, restore) for one record collapse to the latest one. Queued rows
+// the server has not taken are removed; a row already in flight is left alone, and the new row is
+// created after it, so it is pushed after it. Re-applying an archive or a restore is idempotent.
+export const enqueueLifecycleOutbox = async (db, tableName, recordId, operation, payload, options) => {
+  if (operation !== 'archive' && operation !== 'restore') {
+    throw new Error(`enqueueLifecycleOutbox: unsupported operation ${operation}`);
+  }
+  await db.runAsync(`
+    delete from sync_outbox
+    where table_name = ? and record_id = ?
+      and operation in ('archive', 'restore')
+      and status in ('pending', 'failed', 'terminal')
+  `, tableName, recordId);
+  return enqueueDomainOutbox(db, tableName, recordId, operation, payload, options);
+};
+
 export const shouldEnqueueOutbox = (record = {}) => !['synced', 'terminal'].includes(record.sync_status);
 
 // Statuses that mean "this row has local changes the server has not acknowledged".

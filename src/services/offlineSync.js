@@ -549,6 +549,7 @@ const classifyError = (
   if (
     code === 'ARCHIVE_REQUIRED'
     || code === 'ARCHIVE_NOT_APPLIED'
+    || code === 'RESTORE_NOT_APPLIED'
     || code === 'LOCAL_ONLY_REFERENCE'
     || code === 'MISSING_OUTBOX_PAYLOAD'
   ) {
@@ -749,7 +750,7 @@ const runServerOperation = async (supabaseClient, config, outboxRecord) => {
     return error ? { success: false, error } : { success: true };
   }
 
-  if (outboxRecord.operation === 'archive') {
+  if (outboxRecord.operation === 'archive' || outboxRecord.operation === 'restore') {
     const archiveColumns = ARCHIVE_SERVER_COLUMNS[config.tableName] || [];
     const archivePatch = Object.fromEntries(
       archiveColumns
@@ -763,11 +764,12 @@ const runServerOperation = async (supabaseClient, config, outboxRecord) => {
       .select('id');
     if (error) return { success: false, error };
     if (!Array.isArray(data) || data.length !== 1 || data[0]?.id !== outboxRecord.record_id) {
+      const notApplied = outboxRecord.operation === 'restore' ? 'RESTORE_NOT_APPLIED' : 'ARCHIVE_NOT_APPLIED';
       return {
         success: false,
         error: {
-          code: 'ARCHIVE_NOT_APPLIED',
-          message: `${config.tableName} archive did not acknowledge exactly one updated row`,
+          code: notApplied,
+          message: `${config.tableName} ${outboxRecord.operation} did not acknowledge exactly one updated row`,
         },
       };
     }
@@ -1031,7 +1033,8 @@ const finalizeManyRetriableFailure = async ({ database, records, tableName, reas
 };
 
 const pushOrderForRecord = (record) => {
-  if (record.operation === 'archive' && ARCHIVE_PUSH_ORDER[record.table_name] != null) {
+  const isLifecycle = record.operation === 'archive' || record.operation === 'restore';
+  if (isLifecycle && ARCHIVE_PUSH_ORDER[record.table_name] != null) {
     return ARCHIVE_PUSH_ORDER[record.table_name];
   }
   return TABLE_CONFIGS[record.table_name]?.order ?? Number.MAX_SAFE_INTEGER;
