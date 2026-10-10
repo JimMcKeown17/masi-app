@@ -251,4 +251,44 @@ describe('edits are sent as UPDATE by id (spec §6.5)', () => {
       reason: expect.stringContaining('did not acknowledge exactly one updated row'),
     })]);
   });
+
+  test('an update waits while its own insert is unacknowledged, then goes as UPDATE', async () => {
+    await db.runAsync(`
+      insert into children (id, first_name, last_name, created_by, sync_status)
+      values ('child-offline-1', 'Sipho', 'Khumalo', 'user-1', 'pending')
+    `);
+    await enqueue(db, 'children', 'child-offline-1', 'insert', {
+      id: 'child-offline-1', first_name: 'Sipho', last_name: 'Khumalo', created_by: 'user-1',
+    });
+    await enqueue(db, 'children', 'child-offline-1', 'update', {
+      id: 'child-offline-1', first_name: 'Sipho', last_name: 'Khumalo', reading_level: 'words', created_by: 'user-1',
+    });
+    let insertSucceeds = false;
+    const { supabaseClient, calls } = createSupabaseMock({
+      upsertResults: {
+        children: () => (insertSucceeds ? { error: null } : { error: { message: 'Network request failed' } }),
+      },
+    });
+    const engine = createOutboxSyncEngine({ getAuthSession: liveTestSession, database: db, supabaseClient });
+
+    await engine.syncAll({ tableName: 'children' });
+    expect(calls.filter((call) => call.type === 'update')).toHaveLength(0);
+
+    insertSucceeds = true;
+    // Whether the update follows in the same pass or the next one is an engine detail; the
+    // contract is that it is sent once, only after the insert succeeded.
+    for (let pass = 0; pass < 2; pass += 1) {
+      await db.runAsync("update sync_outbox set next_retry_at = null where record_id = 'child-offline-1'");
+      await engine.syncAll({ tableName: 'children' });
+    }
+
+    const updateIndex = calls.findIndex((call) => call.type === 'update');
+    const successfulInsertIndex = calls.reduce(
+      (last, call, index) => (call.type === 'upsert' ? index : last),
+      -1,
+    );
+    expect(calls.filter((call) => call.type === 'update').map((call) => call.value)).toEqual(['child-offline-1']);
+    expect(updateIndex).toBeGreaterThan(successfulInsertIndex);
+    expect(await db.getFirstAsync('select count(*) as count from sync_outbox')).toEqual({ count: 0 });
+  });
 });

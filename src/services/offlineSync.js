@@ -1434,6 +1434,20 @@ export const createOutboxSyncEngine = ({
 
     const findBlockingDependency = async (record) => {
       const tableNameForRecord = normalizeTableName(record.table_name);
+      // Same-record ordering (spec §6.5): an UPDATE-by-id edit must not run before its own insert
+      // has been acknowledged, or it would match no row. A terminal insert does not block; the
+      // update then reads as UPDATE_NOT_APPLIED with no pending evidence and becomes terminal.
+      if (
+        record.operation === 'update'
+        && UPDATE_BY_ID_TABLES.has(tableNameForRecord)
+        && await outboxRepository.hasPendingOperation({
+          tableName: tableNameForRecord,
+          recordId: record.record_id,
+          operation: 'insert',
+        })
+      ) {
+        return { tableName: tableNameForRecord, recordId: record.record_id };
+      }
       for (const dependency of dependenciesForRecord(record)) {
         const blockers = failedRecordsByTable.get(normalizeTableName(dependency));
         if (!blockers || blockers.size === 0) continue;
