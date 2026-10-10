@@ -9,16 +9,21 @@ import {
   enqueueLifecycleOutbox,
   groupEaAssignmentDomainId,
 } from '../src/db/repositories/domainRepositoryUtils';
+import {
+  createSyncOutboxRepository,
+  outboxRecordId,
+} from '../src/db/repositories/syncOutboxRepository';
+import { createGroupEaAssignmentsRepository } from '../src/db/repositories/groupEaAssignmentsRepository';
 import { createGroupsRepository } from '../src/db/repositories/groupsRepository';
 
 const liveTestSession = async () => ({ data: { session: { user: { id: 'user-1' } } } });
 const ASSIGNMENT = groupEaAssignmentDomainId({ groupId: 'group-1' });
 
-const lifecycleRows = (db) => db.getAllAsync(`
+const lifecycleRows = (db, recordId = ASSIGNMENT) => db.getAllAsync(`
   select operation, status from sync_outbox
   where table_name = 'group_ea_assignments' and record_id = ?
   order by created_at
-`, ASSIGNMENT);
+`, recordId);
 
 const createStatefulAssignmentSupabase = ({ loseFirstAssignmentInsertResponse = false } = {}) => {
   const calls = [];
@@ -116,6 +121,71 @@ const createBlockingLifecycleSupabase = ({ firstUpdateSucceeds }) => {
   };
 };
 
+const createCrashLifecycleSupabase = ({ failFirstRestore = false } = {}) => {
+  const assignments = new Map();
+  const calls = [];
+  let archiveAttempt = 0;
+  let restoreAttempt = 0;
+  let signalCrashedArchiveStarted;
+  const crashedArchiveStarted = new Promise((resolve) => {
+    signalCrashedArchiveStarted = resolve;
+  });
+  const abandonedRequest = new Promise(() => {});
+  const supabaseClient = {
+    from: (tableName) => ({
+      upsert: async (payload, options = {}) => {
+        const rows = Array.isArray(payload) ? payload : [payload];
+        for (const row of rows) {
+          calls.push({ type: 'upsert', tableName, id: row.id, payload: row, options });
+          if (tableName === 'group_ea_assignments') {
+            if (!assignments.has(row.id) || !options.ignoreDuplicates) {
+              assignments.set(row.id, { ...row });
+            }
+          }
+        }
+        return { error: null };
+      },
+      update: (payload) => ({
+        eq: (column, value) => ({
+          select: async () => {
+            calls.push({ type: 'update', tableName, id: value, payload, column });
+            if (tableName !== 'group_ea_assignments') {
+              return { data: [{ id: value }], error: null };
+            }
+            if (payload.unassigned_at != null) {
+              archiveAttempt += 1;
+              if (archiveAttempt === 1) {
+                return { data: null, error: { message: 'Archive network failure' } };
+              }
+              if (archiveAttempt === 2) {
+                signalCrashedArchiveStarted();
+                return abandonedRequest;
+              }
+            } else {
+              restoreAttempt += 1;
+              if (failFirstRestore && restoreAttempt === 1) {
+                return { data: null, error: { message: 'Restore network failure' } };
+              }
+            }
+            const existing = assignments.get(value);
+            if (!existing) return { data: [], error: null };
+            assignments.set(value, { ...existing, ...payload });
+            return { data: [{ id: value }], error: null };
+          },
+        }),
+      }),
+      delete: () => ({ eq: async () => ({ error: null }) }),
+    }),
+    rpc: async () => ({ data: true, error: null }),
+  };
+  return {
+    assignments,
+    calls,
+    crashedArchiveStarted,
+    supabaseClient,
+  };
+};
+
 describe('group assignment lifecycle (spec §6.5b)', () => {
   let db;
 
@@ -182,7 +252,7 @@ describe('group assignment lifecycle (spec §6.5b)', () => {
     expect(await lifecycleRows(db)).toEqual([{ operation: 'restore', status: 'pending' }]);
   });
 
-  test('a new intent queued while the opposite one is in flight runs after it', async () => {
+  test('a new intent queued while the opposite one is in flight replaces it in the single lifecycle slot', async () => {
     await enqueueLifecycleOutbox(db, 'group_ea_assignments', ASSIGNMENT, 'archive', {
       id: ASSIGNMENT, unassigned_at: '2026-10-10T08:00:00.000Z',
     });
@@ -190,10 +260,176 @@ describe('group assignment lifecycle (spec §6.5b)', () => {
     await enqueueLifecycleOutbox(db, 'group_ea_assignments', ASSIGNMENT, 'restore', {
       id: ASSIGNMENT, unassigned_at: null, handover_reason: null,
     });
+    expect(await lifecycleRows(db)).toEqual([{ operation: 'restore', status: 'pending' }]);
+  });
+
+  test.each([
+    ['success', true],
+    ['a codeless network failure', false],
+  ])('a stale in-flight archive finalize after %s leaves the replacement restore pending', async (
+    _outcome,
+    firstUpdateSucceeds
+  ) => {
+    await db.runAsync(`
+      insert into staff_programme_assignments (id, user_id, programme_id, sync_status)
+      values (?, 'user-1', 'programme-1', 'synced')
+    `, `spa-stale-finalize-${firstUpdateSucceeds ? 'success' : 'failure'}`);
+    await db.runAsync(`
+      update group_ea_assignments
+      set unassigned_at = null, sync_status = 'synced', last_sync_error = null
+      where id = ?
+    `, ASSIGNMENT);
+    const repository = createGroupsRepository({ database: db });
+    const server = createBlockingLifecycleSupabase({ firstUpdateSucceeds });
+    server.assignments.set(ASSIGNMENT, {
+      id: ASSIGNMENT,
+      unassigned_at: null,
+      handover_reason: null,
+    });
+    const engine = createOutboxSyncEngine({
+      getAuthSession: liveTestSession,
+      database: db,
+      supabaseClient: server.supabaseClient,
+    });
+    const archivedAt = firstUpdateSucceeds
+      ? '2026-10-11T15:00:00.000Z'
+      : '2026-10-11T16:00:00.000Z';
+    await repository.archiveGroup('group-1', {
+      actorUserId: 'user-1',
+      archivedAt,
+    });
+
+    const archivePassPromise = engine.syncAll({ tableName: 'group_ea_assignments' });
+    await server.firstUpdateStarted;
+    await repository.saveGroup({
+      id: 'group-1',
+      name: 'Group 1',
+      programme_id: 'programme-1',
+      created_by: 'user-1',
+      archived_at: null,
+      archived_by_user_id: null,
+      archive_reason: null,
+      sync_status: 'pending',
+    });
+    expect(await lifecycleRows(db)).toEqual([{ operation: 'restore', status: 'pending' }]);
+
+    server.releaseFirstUpdate();
+    await archivePassPromise;
+
+    expect(await lifecycleRows(db)).toEqual([{ operation: 'restore', status: 'pending' }]);
+    expect(await db.getFirstAsync(`
+      select unassigned_at, sync_status from group_ea_assignments where id = ?
+    `, ASSIGNMENT)).toEqual({ unassigned_at: null, sync_status: 'pending' });
+
+    const restorePass = await engine.syncAll({ tableName: 'group_ea_assignments' });
+
+    expect(restorePass.totalSynced).toBe(1);
+    expect(server.assignments.get(ASSIGNMENT).unassigned_at).toBeNull();
+    expect(await db.getFirstAsync(`
+      select unassigned_at, sync_status from group_ea_assignments where id = ?
+    `, ASSIGNMENT)).toEqual({ unassigned_at: null, sync_status: 'synced' });
+    expect(await lifecycleRows(db)).toEqual([]);
+    expect(server.calls.filter((call) => (
+      call.tableName === 'group_ea_assignments' && call.type === 'update'
+    )).map((call) => call.payload.unassigned_at)).toEqual([archivedAt, null]);
+  });
+
+  test.each(['pending', 'failed', 'terminal'])(
+    'a %s legacy per-operation lifecycle row is removed before writing the slot',
+    async (status) => {
+      const outboxRepository = createSyncOutboxRepository({ database: db });
+      const legacyId = await outboxRepository.enqueue({
+        tableName: 'group_ea_assignments',
+        recordId: ASSIGNMENT,
+        operation: 'archive',
+        payload: { id: ASSIGNMENT, unassigned_at: '2026-10-11T17:00:00.000Z' },
+        ownerUserId: 'user-1',
+      });
+      await db.runAsync(
+        'update sync_outbox set status = ? where id = ?',
+        status,
+        legacyId
+      );
+
+      await enqueueLifecycleOutbox(db, 'group_ea_assignments', ASSIGNMENT, 'restore', {
+        id: ASSIGNMENT,
+        unassigned_at: null,
+        handover_reason: null,
+      });
+
+      expect(await db.getAllAsync(`
+        select id, operation, status from sync_outbox
+        where table_name = 'group_ea_assignments' and record_id = ?
+      `, ASSIGNMENT)).toEqual([{
+        id: outboxRecordId('group_ea_assignments', ASSIGNMENT, 'lifecycle'),
+        operation: 'restore',
+        status: 'pending',
+      }]);
+    }
+  );
+
+  test('the lifecycle slot waits for a backed-off legacy per-operation row', async () => {
+    const outboxRepository = createSyncOutboxRepository({ database: db });
+    const legacyId = await outboxRepository.enqueue({
+      tableName: 'group_ea_assignments',
+      recordId: ASSIGNMENT,
+      operation: 'archive',
+      payload: { id: ASSIGNMENT, unassigned_at: '2026-10-11T18:00:00.000Z' },
+      ownerUserId: 'user-1',
+    });
+    await outboxRepository.markInFlight([legacyId]);
+    await enqueueLifecycleOutbox(db, 'group_ea_assignments', ASSIGNMENT, 'restore', {
+      id: ASSIGNMENT,
+      unassigned_at: null,
+      handover_reason: null,
+    });
+    await db.runAsync(`
+      update sync_outbox
+      set status = 'failed', next_retry_at = '2999-01-01T00:00:00.000Z'
+      where id = ?
+    `, legacyId);
+    await db.runAsync(`
+      update group_ea_assignments
+      set unassigned_at = null, sync_status = 'pending'
+      where id = ?
+    `, ASSIGNMENT);
+    const server = createStatefulAssignmentSupabase();
+    server.assignments.set(ASSIGNMENT, {
+      id: ASSIGNMENT,
+      unassigned_at: null,
+      handover_reason: null,
+    });
+    const engine = createOutboxSyncEngine({
+      getAuthSession: liveTestSession,
+      database: db,
+      outboxRepository,
+      supabaseClient: server.supabaseClient,
+    });
+
+    const deferredPass = await engine.syncAll({ tableName: 'group_ea_assignments' });
+
+    expect(deferredPass.tableResults.group_ea_assignments).toEqual(expect.objectContaining({
+      skipped: true,
+      skippedDependency: 'group_ea_assignments',
+      skippedDependencyRecordId: ASSIGNMENT,
+    }));
+    expect(server.calls).toEqual([]);
     expect(await lifecycleRows(db)).toEqual([
-      { operation: 'archive', status: 'in_flight' },
+      { operation: 'archive', status: 'failed' },
       { operation: 'restore', status: 'pending' },
     ]);
+
+    await db.runAsync('update sync_outbox set next_retry_at = null where id = ?', legacyId);
+    const settledPass = await engine.syncAll({ tableName: 'group_ea_assignments' });
+
+    expect(settledPass.totalSynced).toBe(2);
+    expect(server.assignments.get(ASSIGNMENT).unassigned_at).toBeNull();
+    expect(await lifecycleRows(db)).toEqual([]);
+    expect(server.calls.filter((call) => call.tableName === 'group_ea_assignments')
+      .map((call) => call.payload.unassigned_at)).toEqual([
+        '2026-10-11T18:00:00.000Z',
+        null,
+      ]);
   });
 
   test('saveGroup reactivating an archived assignment queues a restore, not an insert', async () => {
@@ -397,38 +633,57 @@ describe('group assignment lifecycle (spec §6.5b)', () => {
     expect(await db.getFirstAsync(`
       select unassigned_at, sync_status from group_ea_assignments where id = ?
     `, assignmentId)).toEqual({ unassigned_at: null, sync_status: 'synced' });
-    expect(await db.getFirstAsync('select count(*) as count from sync_outbox'))
-      .toEqual({ count: 0 });
+    expect(await db.getAllAsync(`
+      select table_name, record_id, operation, status from sync_outbox
+      order by table_name, record_id, operation
+    `)).toEqual([]);
 
     expect(server.calls.filter((call) => call.tableName === 'group_ea_assignments')
       .map((call) => call.type)).toEqual(['upsert', 'upsert', 'update', 'update']);
   });
 
-  test('a failed in-flight archive is superseded by the newer restore and never retried', async () => {
+  test('R1: crash recovery keeps the restore authoritative when its first attempt fails', async () => {
     await db.runAsync(`
       insert into staff_programme_assignments (id, user_id, programme_id, sync_status)
-      values ('spa-supersede-failure', 'user-1', 'programme-1', 'synced')
+      values ('spa-crash-restore-retry', 'user-1', 'programme-1', 'synced')
     `);
     await db.runAsync(`
       update group_ea_assignments
       set unassigned_at = null, sync_status = 'synced', last_sync_error = null
       where id = ?
     `, ASSIGNMENT);
+    await db.runAsync("update groups set created_by = 'user-1' where id = 'group-1'");
     const repository = createGroupsRepository({ database: db });
-    const server = createBlockingLifecycleSupabase({ firstUpdateSucceeds: false });
+    const outboxRepository = createSyncOutboxRepository({ database: db });
+    const server = createCrashLifecycleSupabase({ failFirstRestore: true });
     server.assignments.set(ASSIGNMENT, { id: ASSIGNMENT, unassigned_at: null, handover_reason: null });
-    const engine = createOutboxSyncEngine({
+    const engineBeforeCrash = createOutboxSyncEngine({
       getAuthSession: liveTestSession,
       database: db,
+      outboxRepository,
       supabaseClient: server.supabaseClient,
+      enqueueRequest: async (request) => request(),
     });
     await repository.archiveGroup('group-1', {
       actorUserId: 'user-1',
       archivedAt: '2026-10-11T12:00:00.000Z',
     });
 
-    const archivePassPromise = engine.syncAll({ tableName: 'group_ea_assignments' });
-    await server.firstUpdateStarted;
+    const initialFailure = await engineBeforeCrash.syncAll({ tableName: 'group_ea_assignments' });
+    expect(initialFailure.totalRetriable).toBe(1);
+    expect(await db.getFirstAsync(`
+      select status, next_retry_at from sync_outbox
+      where table_name = 'group_ea_assignments' and record_id = ?
+    `, ASSIGNMENT)).toEqual({
+      status: 'failed',
+      next_retry_at: expect.any(String),
+    });
+
+    const abandonedPass = engineBeforeCrash.syncAll({
+      tableName: 'group_ea_assignments',
+      force: true,
+    });
+    await server.crashedArchiveStarted;
     expect(await lifecycleRows(db)).toEqual([{ operation: 'archive', status: 'in_flight' }]);
 
     await repository.saveGroup({
@@ -441,64 +696,85 @@ describe('group assignment lifecycle (spec §6.5b)', () => {
       archive_reason: null,
       sync_status: 'pending',
     });
-    expect(await lifecycleRows(db)).toEqual([
-      { operation: 'archive', status: 'in_flight' },
-      { operation: 'restore', status: 'pending' },
-    ]);
-
-    server.releaseFirstUpdate();
-    await archivePassPromise;
-
     expect(await lifecycleRows(db)).toEqual([{ operation: 'restore', status: 'pending' }]);
-    expect(server.assignments.get(ASSIGNMENT).unassigned_at).toBeNull();
+    await outboxRepository.resetInFlight({ ownerUserId: 'user-1' });
+    void abandonedPass;
 
     await db.runAsync(`
       update sync_outbox set next_retry_at = null
-      where table_name = 'group_ea_assignments' and record_id = ?
-    `, ASSIGNMENT);
-    const restorePass = await engine.syncAll({ tableName: 'group_ea_assignments' });
+    `);
+    const engineAfterCrash = createOutboxSyncEngine({
+      getAuthSession: liveTestSession,
+      database: db,
+      outboxRepository,
+      supabaseClient: server.supabaseClient,
+      enqueueRequest: async (request) => request(),
+    });
+    const failedRestorePass = await engineAfterCrash.syncAll({
+      tableName: 'group_ea_assignments',
+    });
 
-    expect(restorePass.totalSynced).toBe(1);
+    expect(failedRestorePass.totalRetriable).toBe(1);
+    expect(server.assignments.get(ASSIGNMENT).unassigned_at).toBeNull();
+    expect(await lifecycleRows(db)).toEqual([{ operation: 'restore', status: 'failed' }]);
+
+    await db.runAsync('update sync_outbox set next_retry_at = null');
+    const successfulRestorePass = await engineAfterCrash.syncAll({
+      tableName: 'group_ea_assignments',
+    });
+
+    expect(successfulRestorePass.totalSynced).toBe(1);
     expect(server.assignments.get(ASSIGNMENT).unassigned_at).toBeNull();
     expect(await db.getFirstAsync(`
       select unassigned_at, sync_status from group_ea_assignments where id = ?
     `, ASSIGNMENT)).toEqual({ unassigned_at: null, sync_status: 'synced' });
-    expect(await lifecycleRows(db)).toEqual([]);
+    await engineAfterCrash.syncAll();
+    await engineAfterCrash.syncAll();
+    expect(await db.getAllAsync(`
+      select table_name, record_id, operation, status from sync_outbox
+      order by table_name, record_id, operation
+    `)).toEqual([]);
 
-    await engine.syncAll({ tableName: 'group_ea_assignments' });
     const assignmentUpdates = server.calls.filter((call) => (
       call.tableName === 'group_ea_assignments' && call.type === 'update'
     ));
-    expect(assignmentUpdates).toHaveLength(2);
     expect(assignmentUpdates.map((call) => call.payload.unassigned_at))
-      .toEqual(['2026-10-11T12:00:00.000Z', null]);
+      .toEqual(['2026-10-11T12:00:00.000Z', '2026-10-11T12:00:00.000Z', null, null]);
   });
 
-  test('a successful in-flight archive settles before the queued restore and finishes active', async () => {
+  test('R2: crash recovery sends a successful restore without replaying the older archive', async () => {
     await db.runAsync(`
       insert into staff_programme_assignments (id, user_id, programme_id, sync_status)
-      values ('spa-supersede-success', 'user-1', 'programme-1', 'synced')
+      values ('spa-crash-restore-success', 'user-1', 'programme-1', 'synced')
     `);
     await db.runAsync(`
       update group_ea_assignments
       set unassigned_at = null, sync_status = 'synced', last_sync_error = null
       where id = ?
     `, ASSIGNMENT);
+    await db.runAsync("update groups set created_by = 'user-1' where id = 'group-1'");
     const repository = createGroupsRepository({ database: db });
-    const server = createBlockingLifecycleSupabase({ firstUpdateSucceeds: true });
+    const outboxRepository = createSyncOutboxRepository({ database: db });
+    const server = createCrashLifecycleSupabase();
     server.assignments.set(ASSIGNMENT, { id: ASSIGNMENT, unassigned_at: null, handover_reason: null });
-    const engine = createOutboxSyncEngine({
+    const engineBeforeCrash = createOutboxSyncEngine({
       getAuthSession: liveTestSession,
       database: db,
+      outboxRepository,
       supabaseClient: server.supabaseClient,
+      enqueueRequest: async (request) => request(),
     });
     await repository.archiveGroup('group-1', {
       actorUserId: 'user-1',
       archivedAt: '2026-10-11T13:00:00.000Z',
     });
 
-    const archivePassPromise = engine.syncAll({ tableName: 'group_ea_assignments' });
-    await server.firstUpdateStarted;
+    await engineBeforeCrash.syncAll({ tableName: 'group_ea_assignments' });
+    const abandonedPass = engineBeforeCrash.syncAll({
+      tableName: 'group_ea_assignments',
+      force: true,
+    });
+    await server.crashedArchiveStarted;
     await repository.saveGroup({
       id: 'group-1',
       name: 'Group 1',
@@ -510,28 +786,167 @@ describe('group assignment lifecycle (spec §6.5b)', () => {
       sync_status: 'pending',
     });
 
-    server.releaseFirstUpdate();
-    const archivePass = await archivePassPromise;
-
-    expect(archivePass.totalSynced).toBe(1);
-    expect(server.assignments.get(ASSIGNMENT).unassigned_at)
-      .toBe('2026-10-11T13:00:00.000Z');
     expect(await lifecycleRows(db)).toEqual([{ operation: 'restore', status: 'pending' }]);
-    expect(await db.getFirstAsync(`
-      select unassigned_at, sync_status from group_ea_assignments where id = ?
-    `, ASSIGNMENT)).toEqual({ unassigned_at: null, sync_status: 'pending' });
+    await outboxRepository.resetInFlight({ ownerUserId: 'user-1' });
+    void abandonedPass;
+    await db.runAsync('update sync_outbox set next_retry_at = null');
 
-    const restorePass = await engine.syncAll({ tableName: 'group_ea_assignments' });
+    const engineAfterCrash = createOutboxSyncEngine({
+      getAuthSession: liveTestSession,
+      database: db,
+      outboxRepository,
+      supabaseClient: server.supabaseClient,
+      enqueueRequest: async (request) => request(),
+    });
+    const restorePass = await engineAfterCrash.syncAll({
+      tableName: 'group_ea_assignments',
+    });
 
-    expect(restorePass.totalSynced).toBe(1);
+    expect(restorePass.totalTerminal).toBe(0);
     expect(server.assignments.get(ASSIGNMENT).unassigned_at).toBeNull();
     expect(await db.getFirstAsync(`
       select unassigned_at, sync_status from group_ea_assignments where id = ?
     `, ASSIGNMENT)).toEqual({ unassigned_at: null, sync_status: 'synced' });
-    expect(await lifecycleRows(db)).toEqual([]);
+    await engineAfterCrash.syncAll();
+    await engineAfterCrash.syncAll();
+    expect(await db.getAllAsync(`
+      select table_name, record_id, operation, status from sync_outbox
+      order by table_name, record_id, operation
+    `)).toEqual([]);
     expect(server.calls.filter((call) => (
       call.tableName === 'group_ea_assignments' && call.type === 'update'
     )).map((call) => call.payload.unassigned_at))
-      .toEqual(['2026-10-11T13:00:00.000Z', null]);
+      .toEqual(['2026-10-11T13:00:00.000Z', '2026-10-11T13:00:00.000Z', null]);
+  });
+
+  test('R3: a lost insert response plus server archive still converges through the lifecycle slot', async () => {
+    await db.runAsync(`
+      insert into staff_programme_assignments (id, user_id, programme_id, sync_status)
+      values ('spa-lost-insert-server-archive', 'user-1', 'programme-1', 'synced')
+    `);
+    const repository = createGroupsRepository({ database: db });
+    const groupId = 'group-lost-insert-server-archive';
+    const assignmentId = groupEaAssignmentDomainId({ groupId });
+    const archivedAt = '2026-10-11T14:00:00.000Z';
+    const server = createStatefulAssignmentSupabase({ loseFirstAssignmentInsertResponse: true });
+    const engine = createOutboxSyncEngine({
+      getAuthSession: liveTestSession,
+      database: db,
+      supabaseClient: server.supabaseClient,
+    });
+
+    await repository.saveGroup({
+      id: groupId,
+      name: 'Lost Insert Server Archive Group',
+      programme_id: 'programme-1',
+      created_by: 'user-1',
+      sync_status: 'pending',
+    });
+    const lostInsertPass = await engine.syncAll({ tableName: 'group_ea_assignments' });
+    expect(lostInsertPass.totalRetriable).toBe(1);
+    server.assignments.set(assignmentId, {
+      ...server.assignments.get(assignmentId),
+      unassigned_at: archivedAt,
+      handover_reason: 'seeded-server-archive',
+    });
+
+    await repository.archiveGroup(groupId, { actorUserId: 'user-1', archivedAt });
+    await repository.saveGroup({
+      id: groupId,
+      name: 'Lost Insert Server Archive Group',
+      programme_id: 'programme-1',
+      created_by: 'user-1',
+      archived_at: null,
+      archived_by_user_id: null,
+      archive_reason: null,
+      sync_status: 'pending',
+    });
+
+    expect(await db.getAllAsync(`
+      select id, operation, status from sync_outbox
+      where table_name = 'group_ea_assignments' and record_id = ?
+      order by operation
+    `, assignmentId)).toEqual([
+      {
+        id: outboxRecordId('group_ea_assignments', assignmentId, 'insert'),
+        operation: 'insert',
+        status: 'pending',
+      },
+      {
+        id: outboxRecordId('group_ea_assignments', assignmentId, 'lifecycle'),
+        operation: 'restore',
+        status: 'pending',
+      },
+    ]);
+
+    await db.runAsync('update sync_outbox set next_retry_at = null');
+    const insertRetryPass = await engine.syncAll({ tableName: 'group_ea_assignments' });
+    expect(insertRetryPass.totalTerminal).toBe(0);
+    expect(server.assignments.get(assignmentId).unassigned_at).toBe(archivedAt);
+
+    const dependencyPass = await engine.syncAll();
+    expect(dependencyPass.totalTerminal).toBe(0);
+    const restorePass = await engine.syncAll();
+    expect(restorePass.totalTerminal).toBe(0);
+    expect(restorePass.totalSynced).toBeGreaterThan(0);
+    expect(await lifecycleRows(db, assignmentId)).toEqual([]);
+    expect(server.calls.filter((call) => call.tableName === 'group_ea_assignments')
+      .map((call) => ({ type: call.type, unassigned_at: call.payload.unassigned_at ?? null })))
+      .toEqual([
+        { type: 'upsert', unassigned_at: null },
+        { type: 'upsert', unassigned_at: null },
+        { type: 'update', unassigned_at: null },
+      ]);
+    expect(server.assignments.get(assignmentId).unassigned_at).toBeNull();
+    expect(await db.getFirstAsync(`
+      select unassigned_at, sync_status from group_ea_assignments where id = ?
+    `, assignmentId)).toEqual({ unassigned_at: null, sync_status: 'synced' });
+    await engine.syncAll();
+    expect(await db.getFirstAsync('select count(*) as count from sync_outbox'))
+      .toEqual({ count: 0 });
+  });
+
+  test('R4: assignment repository reactivation queues restore in the lifecycle slot', async () => {
+    const repository = createGroupEaAssignmentsRepository({ database: db });
+    const archived = await db.getFirstAsync(
+      'select * from group_ea_assignments where id = ?',
+      ASSIGNMENT
+    );
+    await repository.save({
+      ...archived,
+      unassigned_at: null,
+      handover_reason: null,
+      sync_status: 'pending',
+    });
+
+    expect(await db.getAllAsync(`
+      select id, operation, status from sync_outbox
+      where table_name = 'group_ea_assignments' and record_id = ?
+    `, ASSIGNMENT)).toEqual([{
+      id: outboxRecordId('group_ea_assignments', ASSIGNMENT, 'lifecycle'),
+      operation: 'restore',
+      status: 'pending',
+    }]);
+
+    const server = createStatefulAssignmentSupabase();
+    server.assignments.set(ASSIGNMENT, {
+      id: ASSIGNMENT,
+      unassigned_at: archived.unassigned_at,
+      handover_reason: archived.handover_reason,
+    });
+    const engine = createOutboxSyncEngine({
+      getAuthSession: liveTestSession,
+      database: db,
+      supabaseClient: server.supabaseClient,
+    });
+    const result = await engine.syncAll({ tableName: 'group_ea_assignments' });
+
+    expect(result.totalSynced).toBe(1);
+    expect(server.assignments.get(ASSIGNMENT).unassigned_at).toBeNull();
+    expect(await db.getFirstAsync(`
+      select unassigned_at, sync_status from group_ea_assignments where id = ?
+    `, ASSIGNMENT)).toEqual({ unassigned_at: null, sync_status: 'synced' });
+    expect(await db.getFirstAsync('select count(*) as count from sync_outbox'))
+      .toEqual({ count: 0 });
   });
 });

@@ -8,6 +8,7 @@ import {
   upsertRecord,
 } from './sqliteRepositoryUtils';
 import { resolvePrimaryOwner } from './outboxOwnership';
+import { outboxRecordId } from './syncOutboxRepository';
 
 export const LEGACY_PROGRAMME_ID = 'local-legacy-programme';
 const MASI_DOMAIN_ID_NAMESPACE = '09dcf4b2-6c53-4c46-917f-33bc7f2df4d2';
@@ -82,7 +83,7 @@ export const ensureServerUuid = (id, ...fallbackParts) => {
   return deterministicDomainId(...fallbackParts);
 };
 
-export const outboxId = (tableName, recordId, operation) => `${tableName}:${recordId}:${operation}`;
+export const outboxId = outboxRecordId;
 
 export const assertRlsRequiredFields = (tableName, record, fields) => {
   for (const field of fields) {
@@ -109,7 +110,7 @@ export const enqueueDomainOutbox = async (
   recordId,
   operation,
   payload = null,
-  { ownerRow, ownerUserId } = {}
+  { ownerRow, ownerUserId, outboxId: outboxIdOverride } = {}
 ) => {
   let resolvedOwnerUserId = ownerUserId;
   if (resolvedOwnerUserId === undefined) {
@@ -121,7 +122,7 @@ export const enqueueDomainOutbox = async (
   }
 
   return insertOutboxRecord(db, {
-    id: outboxId(tableName, recordId, operation),
+    id: outboxIdOverride || outboxRecordId(tableName, recordId, operation),
     tableName,
     recordId,
     operation,
@@ -130,20 +131,24 @@ export const enqueueDomainOutbox = async (
   });
 };
 
-// Lifecycle intents (archive, restore) for one record collapse to the latest one. Queued rows
-// the server has not taken are removed; a row already in flight is left alone, and the new row is
-// created after it, so it is pushed after it. Re-applying an archive or a restore is idempotent.
+// Lifecycle intents are one replaceable stream per record. Reusing the slot id lets a newer intent
+// replace an in-flight payload; the engine's updated_at CAS then prevents the stale request from
+// finalizing over it. Clean up operation-keyed rows left by older app builds before using the slot.
 export const enqueueLifecycleOutbox = async (db, tableName, recordId, operation, payload, options) => {
   if (operation !== 'archive' && operation !== 'restore') {
     throw new Error(`enqueueLifecycleOutbox: unsupported operation ${operation}`);
   }
+  const legacyArchiveId = outboxRecordId(tableName, recordId, 'archive');
+  const legacyRestoreId = outboxRecordId(tableName, recordId, 'restore');
   await db.runAsync(`
     delete from sync_outbox
-    where table_name = ? and record_id = ?
-      and operation in ('archive', 'restore')
+    where id in (?, ?)
       and status in ('pending', 'failed', 'terminal')
-  `, tableName, recordId);
-  return enqueueDomainOutbox(db, tableName, recordId, operation, payload, options);
+  `, legacyArchiveId, legacyRestoreId);
+  return enqueueDomainOutbox(db, tableName, recordId, operation, payload, {
+    ...options,
+    outboxId: outboxRecordId(tableName, recordId, 'lifecycle'),
+  });
 };
 
 export const shouldEnqueueOutbox = (record = {}) => !['synced', 'terminal'].includes(record.sync_status);

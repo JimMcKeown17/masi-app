@@ -6,6 +6,7 @@ import {
 } from './repositoryRuntime';
 import {
   enqueueDomainOutbox,
+  enqueueLifecycleOutbox,
   mapDomainRow,
   normalizeSyncFields,
   serverPullWouldClobberPendingLocal,
@@ -95,6 +96,10 @@ export const createGroupEaAssignmentsRepository = ({ database } = {}) => {
       if (await serverPullWouldClobberPendingLocal(txn, 'group_ea_assignments', record)) {
         return false;
       }
+      const existing = await txn.getFirstAsync(
+        'select * from group_ea_assignments where id = ?',
+        record.id
+      );
       const supersede = await supersedeStaleActivePairRow(txn, {
         tableName: 'group_ea_assignments',
         pairColumns: ['group_id'],
@@ -109,7 +114,56 @@ export const createGroupEaAssignmentsRepository = ({ database } = {}) => {
         columns: COLUMNS,
       }, record);
       if (shouldEnqueueOutbox(record)) {
-        await enqueueDomainOutbox(txn, 'group_ea_assignments', record.id, record.unassigned_at ? 'archive' : 'insert', record);
+        if (record.unassigned_at != null) {
+          await enqueueLifecycleOutbox(
+            txn,
+            'group_ea_assignments',
+            record.id,
+            'archive',
+            {
+              id: record.id,
+              unassigned_at: record.unassigned_at,
+              handover_reason: record.handover_reason ?? null,
+            }
+          );
+        } else if (existing?.unassigned_at != null) {
+          await enqueueLifecycleOutbox(
+            txn,
+            'group_ea_assignments',
+            record.id,
+            'restore',
+            {
+              id: record.id,
+              unassigned_at: null,
+              handover_reason: null,
+            }
+          );
+          const insertStillOwed = await txn.getFirstAsync(`
+            select 1 as owed from sync_outbox
+            where table_name = 'group_ea_assignments'
+              and record_id = ?
+              and operation = 'insert'
+              and status in ('pending', 'failed', 'in_flight')
+            limit 1
+          `, record.id);
+          if (insertStillOwed) {
+            await enqueueDomainOutbox(
+              txn,
+              'group_ea_assignments',
+              record.id,
+              'insert',
+              record
+            );
+          }
+        } else {
+          await enqueueDomainOutbox(
+            txn,
+            'group_ea_assignments',
+            record.id,
+            'insert',
+            record
+          );
+        }
       }
       return true;
     };

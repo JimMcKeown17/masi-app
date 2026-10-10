@@ -8,6 +8,7 @@ import {
 } from '../db/repositories/sqliteRepositoryUtils';
 import {
   createSyncOutboxRepository,
+  outboxRecordId,
   syncOutboxRepository,
 } from '../db/repositories/syncOutboxRepository';
 import {
@@ -914,43 +915,12 @@ const finalizeSuccess = async ({
   return true;
 });
 
-// Queue-time lifecycle coalescing cannot remove an intent the server has already taken. If that
-// older request later fails, a queued opposite intent is the authoritative local state: delete the
-// stale in-flight row instead of giving it backoff/terminal state that could later reverse the
-// newer intent. Different lifecycle ids can coexist only when the older one was already in flight.
-const deleteSupersededLifecycleFailure = async (txn, outboxRecord, tableName) => {
-  if (outboxRecord.operation !== 'archive' && outboxRecord.operation !== 'restore') return false;
-  const newerLifecycle = await txn.getFirstAsync(`
-    select id
-    from sync_outbox
-    where table_name = ?
-      and record_id = ?
-      and operation in ('archive', 'restore')
-      and id != ?
-      and (
-        created_at > ?
-        or status in ('pending', 'failed', 'in_flight')
-      )
-    limit 1
-  `, tableName, outboxRecord.record_id, outboxRecord.id, outboxRecord.created_at);
-  if (!newerLifecycle) return false;
-
-  const deleteResult = await txn.runAsync(`
-    delete from sync_outbox
-    where id = ?
-      and updated_at = ?
-      and status = 'in_flight'
-  `, outboxRecord.id, outboxRecord.updated_at);
-  return (deleteResult?.changes || 0) > 0;
-};
-
 const finalizeRetriableFailure = async ({
   database,
   outboxRecord,
   tableName,
   reason,
 }) => runRepositoryTransaction(database, async (txn) => {
-  if (await deleteSupersededLifecycleFailure(txn, outboxRecord, tableName)) return true;
   const failureResult = await txn.runAsync(`
     update sync_outbox
     set status = 'failed',
@@ -981,7 +951,6 @@ const finalizeTerminalFailure = async ({
   reason,
   retryCount = null,
 }) => runRepositoryTransaction(database, async (txn) => {
-  if (await deleteSupersededLifecycleFailure(txn, outboxRecord, tableName)) return true;
   const failureResult = await txn.runAsync(`
     update sync_outbox
     set status = 'terminal',
@@ -1483,22 +1452,6 @@ export const createOutboxSyncEngine = ({
     const findBlockingDependency = async (record) => {
       const tableNameForRecord = normalizeTableName(record.table_name);
       const isLifecycle = record.operation === 'archive' || record.operation === 'restore';
-      if (isLifecycle) {
-        const resolvedDatabase = await resolveDatabase(database);
-        const olderInFlightLifecycle = await resolvedDatabase.getFirstAsync(`
-          select id
-          from sync_outbox
-          where table_name = ?
-            and record_id = ?
-            and operation in ('archive', 'restore')
-            and status = 'in_flight'
-            and id != ?
-          limit 1
-        `, tableNameForRecord, record.record_id, record.id);
-        if (olderInFlightLifecycle) {
-          return { tableName: tableNameForRecord, recordId: record.record_id };
-        }
-      }
       // Same-record ordering: an acknowledged UPDATE-by-id edit or lifecycle UPDATE must not run
       // before its own insert has been acknowledged, or it cannot acknowledge a row that exists.
       // A terminal insert does not block; the update then reaches its normal terminal classifier.
@@ -1514,6 +1467,24 @@ export const createOutboxSyncEngine = ({
         })
       ) {
         return { tableName: tableNameForRecord, recordId: record.record_id };
+      }
+      if (
+        isLifecycle
+        && record.id === outboxRecordId(tableNameForRecord, record.record_id, 'lifecycle')
+      ) {
+        const resolvedDatabase = await resolveDatabase(database);
+        const legacyLifecycle = await resolvedDatabase.getFirstAsync(`
+          select id
+          from sync_outbox
+          where id in (?, ?)
+            and status in ('pending', 'failed', 'in_flight')
+          limit 1
+        `,
+        outboxRecordId(tableNameForRecord, record.record_id, 'archive'),
+        outboxRecordId(tableNameForRecord, record.record_id, 'restore'));
+        if (legacyLifecycle) {
+          return { tableName: tableNameForRecord, recordId: record.record_id };
+        }
       }
       for (const dependency of dependenciesForRecord(record)) {
         const blockers = failedRecordsByTable.get(normalizeTableName(dependency));

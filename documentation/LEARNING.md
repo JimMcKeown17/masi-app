@@ -1584,13 +1584,32 @@ is still waiting locally. That is not enough once the server has taken the first
 request is now outside the queue's control: deleting its SQLite row cannot cancel the network, and
 its response may be success, failure, or missing even when the server committed the change.
 
-This is the **in-flight boundary**. On the near side, queue-time coalescing removes replaceable
-pending work. On the far side, settlement has to preserve causality. If the older request succeeds,
-keep that success and send the newer intent next. If the older request fails and a newer complete
-lifecycle intent exists, delete the older row instead of giving it backoff or terminal state. Both
-archive and restore write the same small allowlisted lifecycle fields, so the newer row fully
-determines the desired final state. Retaining the failed older row would let it retry after the
-newer row and reverse the user's last action.
+This is the **in-flight boundary**. The robust model is one row per replaceable intent stream, not
+one row per operation. Archive and restore for a record therefore share one outbox id:
+`<table>:<record>:lifecycle`. The row's `operation` says what the user wants now. Writing a newer
+intent upserts that same slot, resets retry/backoff state, and changes `updated_at` even if the old
+payload was already in flight.
+
+That identity choice lets the queue reuse its ordinary stale-finalize guard. The request holds the
+old `updated_at`; its success, retriable-failure, or terminal-failure finalizer can change/delete the
+row only when both id and timestamp still match and it is still `in_flight`. Replacement makes that
+compare-and-swap miss, and `restorePendingAfterStaleFinalize` leaves the slot pending with the newer
+operation. A later pass sends exactly that operation. Crash recovery is safe for the same reason:
+`resetInFlight` can never resurrect an older operation in a second row because the stream has only
+one slot.
+
+The first attempted fix kept separate `:archive` and `:restore` rows, then tried to delete the older
+one when it settled. That cleanup was too late and had incomplete visibility. A process could die
+before settlement; `resetInFlight` could return the older row to pending; backoff could hide it while
+the newer row ran; and finalize-time cleanup could even delete the newer failure. The mental model
+is the important part: **replacement belongs in intent identity, not in compensating cleanup after
+the race**.
+
+Older development data can still contain operation-keyed lifecycle rows. Enqueue removes queued,
+failed, or terminal `:archive`/`:restore` rows before writing the slot. An in-flight legacy row is
+left alone because its network request cannot be cancelled; the new slot waits while that legacy
+row is still owed, so the older intent can settle first and can never replay after the slot. This is
+a compatibility bridge, not a second steady-state queue design.
 
 The same causal rule explains insert ordering. An archive or restore is an UPDATE by id and can
 acknowledge only a row that exists. It therefore waits while its own insert is still owed. But an
@@ -1598,6 +1617,11 @@ unacknowledged insert is not proof that the server lacks the row: the server may
 and lost the response. Reactivation consequently queues both safe operations when necessary: replay
 the assignment insert with insert-or-ignore, then send the explicit restore. The insert establishes
 existence; the restore establishes current lifecycle state.
+
+One boundary remains: if the network lets an older request time out on the client yet commit on the
+server only after a later request has committed, local queue identity cannot order those server
+arrivals. That is network reordering and belongs to the upload-contract design (base versions or an
+equivalent server-side ordering mechanism), not to lifecycle-slot cleanup.
 
 Authorization evidence has a similar direction. A membership INSERT may depend on an existing
 class or group relationship, but the membership being inserted cannot grant its own prerequisite
