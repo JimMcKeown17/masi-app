@@ -309,6 +309,16 @@ const IMMUTABLE_ASSIGNMENT_TABLES = new Set([
   'group_ea_assignments',
 ]);
 
+// Edits change a row the server already has. PostgreSQL checks INSERT WITH CHECK on every upsert
+// row, even one that conflicts, so sending an edit as an upsert asks for insert permission that an
+// EA editing a Head Office-created row does not have. These tables send `update` as UPDATE by id
+// with an exact acknowledgement (actor lifecycle spec §6.5). class_grouping_state stays an upsert:
+// its `update` means create-or-update and its INSERT policy is authorization-based.
+const UPDATE_BY_ID_TABLES = new Set(['time_entries', 'classes', 'children', 'groups', 'letter_mastery']);
+// Provenance and identity never change through an edit.
+const UPDATE_PATCH_EXCLUDED_COLUMNS = new Set(['id', 'created_by', 'created_at', 'user_id', 'archived_by_user_id']);
+export const _testUpdateByIdTables = UPDATE_BY_ID_TABLES;
+
 // Archive is a lifecycle transition, never a row creation or identity rewrite.
 // Older outbox rows can contain a full domain snapshot, so narrow every archive
 // to the lifecycle columns the operation is allowed to change before issuing
@@ -463,9 +473,9 @@ const classifyError = (
     return { terminal: true, markAsSynced: duplicateIsSuccess };
   }
 
-  if (code === '23503' || code === '42501') {
-    // A FK/RLS denial while required local evidence is still pending is a
-    // cross-pass race. Without pending evidence, it is a genuine rejection.
+  if (code === '23503' || code === '42501' || code === 'UPDATE_NOT_APPLIED') {
+    // A FK/RLS denial, or an UPDATE that matched no visible row, while required local evidence is
+    // still pending is a cross-pass race. Without pending evidence, it is a genuine rejection.
     return { terminal: !parentEvidencePending, markAsSynced: false };
   }
 
@@ -691,6 +701,31 @@ const runServerOperation = async (supabaseClient, config, outboxRecord) => {
         error: {
           code: 'ARCHIVE_NOT_APPLIED',
           message: `${config.tableName} archive did not acknowledge exactly one updated row`,
+        },
+      };
+    }
+    return { success: true };
+  }
+
+  if (outboxRecord.operation === 'update' && UPDATE_BY_ID_TABLES.has(config.tableName)) {
+    // buildSyncPayload has already re-derived deterministic ids (letter_mastery), so the server id
+    // is the payload id, not the outbox record_id.
+    const serverId = payload.id || outboxRecord.record_id;
+    const patch = Object.fromEntries(
+      Object.entries(payload).filter(([column]) => !UPDATE_PATCH_EXCLUDED_COLUMNS.has(column))
+    );
+    const { data, error } = await supabaseClient
+      .from(config.tableName)
+      .update(patch)
+      .eq('id', serverId)
+      .select('id');
+    if (error) return { success: false, error };
+    if (!Array.isArray(data) || data.length !== 1 || data[0]?.id !== serverId) {
+      return {
+        success: false,
+        error: {
+          code: 'UPDATE_NOT_APPLIED',
+          message: `${config.tableName} update did not acknowledge exactly one updated row`,
         },
       };
     }
@@ -947,7 +982,10 @@ const sortByPushOrder = (records) => records
 const canBatchRecord = (record, config) => (
   Boolean(config)
   && BATCHABLE_UPSERT_TABLES.has(config.tableName)
-  && (record.operation === 'insert' || record.operation === 'update')
+  && (
+    record.operation === 'insert'
+    || (record.operation === 'update' && !UPDATE_BY_ID_TABLES.has(config.tableName))
+  )
   && (!IMMUTABLE_ASSIGNMENT_TABLES.has(config.tableName) || record.operation === 'insert')
   && record.payload != null
 );

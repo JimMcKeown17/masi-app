@@ -73,6 +73,25 @@ const createServerBackedSupabase = (serverDb) => {
           return { error: toPgError(error) };
         }
       },
+      update: (payload) => ({
+        eq: (column, value) => ({
+          select: async () => {
+            const cols = Object.keys(payload);
+            const assignments = cols.map((c) => `"${c}" = ?`).join(', ');
+            try {
+              calls.push({ tableName, id: value, operation: 'update' });
+              const result = await serverDb.runAsync(
+                `update ${tableName} set ${assignments} where "${column}" = ?`,
+                ...cols.map((c) => payload[c]),
+                value
+              );
+              return { data: result.changes === 1 ? [{ id: value }] : [], error: null };
+            } catch (error) {
+              return { data: null, error: toPgError(error) };
+            }
+          },
+        }),
+      }),
       delete: () => ({ eq: async () => ({ error: null }) }),
     }),
     rpc: async () => ({ data: true, error: null }),

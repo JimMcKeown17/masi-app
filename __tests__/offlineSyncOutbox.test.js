@@ -4,6 +4,7 @@ jest.mock('../src/services/supabaseClient', () => ({
 }));
 
 import { createBetterSqliteTestDatabase } from '../test-support/betterSqliteAdapter';
+import { createSupabaseMock } from '../test-support/supabaseSyncMock';
 import { runMigrations } from '../src/db/migrations';
 import {
   AUTHENTICATED_DENIAL_MARKER,
@@ -32,49 +33,6 @@ import { createSessionsRepository } from '../src/db/repositories/sessionsReposit
 import { createSyncOutboxRepository } from '../src/db/repositories/syncOutboxRepository';
 import { createTimeEntriesRepository } from '../src/db/repositories/timeEntriesRepository';
 import { repairGroupOwnershipForSync } from '../src/db/repositories/groupsRepository';
-
-const createSupabaseMock = ({ upsertResults = {}, updateResults = {}, rpcResults = {} } = {}) => {
-  const calls = [];
-  const supabaseClient = {
-    from: jest.fn((tableName) => ({
-      upsert: jest.fn(async (payload, options) => {
-        calls.push({ type: 'upsert', tableName, payload, options });
-        const resultKey = Array.isArray(payload)
-          ? `${tableName}:batch`
-          : `${tableName}:${payload.id}`;
-        const result = upsertResults[resultKey] || upsertResults[tableName];
-        if (typeof result === 'function') {
-          return result({ tableName, payload, options, calls });
-        }
-        return result || { error: null };
-      }),
-      update: jest.fn((payload) => ({
-        eq: jest.fn((column, value) => ({
-          select: jest.fn(async () => {
-            calls.push({ type: 'update', tableName, payload, column, value });
-            const result = updateResults[`${tableName}:${value}`] || updateResults[tableName];
-            if (typeof result === 'function') {
-              return result({ tableName, payload, column, value, calls });
-            }
-            return result || { data: [{ id: value }], error: null };
-          }),
-        })),
-      })),
-      delete: jest.fn(() => ({
-        eq: jest.fn(async (column, value) => {
-          calls.push({ type: 'delete', tableName, column, value });
-          return { error: null };
-        }),
-      })),
-    })),
-    rpc: jest.fn(async (functionName, args) => {
-      calls.push({ type: 'rpc', functionName, args });
-      return rpcResults[functionName] || { data: true, error: null };
-    }),
-  };
-
-  return { supabaseClient, calls };
-};
 
 const seedReferences = async (db) => {
   await db.runAsync("insert into schools (id, name, sync_status) values ('school-1', 'Masi Primary', 'synced')");
@@ -1444,7 +1402,7 @@ describe('SQLite outbox offline sync', () => {
     ]);
   });
 
-  test('batches ready child inserts and updates into one upsert', async () => {
+  test('batches child inserts and sends child updates as UPDATE by id', async () => {
     const children = [
       { id: 'child-batch-1', first_name: 'Amahle', last_name: 'Dlamini', reading_level: 'letters' },
       { id: 'child-batch-2', first_name: 'Lebo', last_name: 'Mokoena', reading_level: 'words' },
@@ -1470,13 +1428,9 @@ describe('SQLite outbox offline sync', () => {
     const result = await engine.syncAll();
 
     const childCalls = calls.filter(call => call.tableName === 'children');
-    expect(childCalls).toHaveLength(1);
-    expect(childCalls[0]).toEqual(expect.objectContaining({
-      type: 'upsert',
-      tableName: 'children',
-      payload: expect.arrayContaining(children.map(child => expect.objectContaining(child))),
-      options: expect.objectContaining({ onConflict: 'id', ignoreDuplicates: false }),
-    }));
+    expect(childCalls.filter(call => call.type === 'upsert')).toHaveLength(1);
+    expect(childCalls.filter(call => call.type === 'update').map(call => call.value).sort())
+      .toEqual(['child-batch-2', 'child-batch-3']);
     expect(result).toEqual(expect.objectContaining({
       success: true,
       totalSynced: children.length,
