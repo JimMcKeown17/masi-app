@@ -76,9 +76,10 @@ session forms are finalized in parallel (see "Alongside Steps 2–4" below); Yeb
 1. **When two EAs correct the same child's letter, the most recently *made* correction wins**
    (Jim, 2026-10-08). The server keeps the correction made later, so a phone that was offline
    for a week cannot undo a fresher correction by the child's other EA.
-2. **One database per EA** (Jim, 2026-10-08). A borrowing EA's data is deleted from the phone
-   once all of it has uploaded and it has not been used for **30 days**. Data that has not
-   uploaded is never deleted. The decision record is written through `grill-with-docs` with the
+2. **One database per EA** (Jim, 2026-10-08). Deleting a borrowing EA's data from the phone
+   (once all of it has uploaded and it has not been used for **30 days**) waits until after the
+   pilot (Jim, 2026-10-09). Before widening, revisit it for privacy: staff use their own phones,
+   so another EA's roster stays on the phone. Data that has not uploaded is never deleted. The decision record is written through `grill-with-docs` with the
    upload-contract design. Background: Today every EA who signs in on a phone
    shares one database, and the app filters by owner. One database per EA makes "the second EA
    sees nothing of the first" true automatically. Recommended; changing it after launch means

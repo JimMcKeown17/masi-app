@@ -134,9 +134,11 @@ shape.
   - Phones rarely change hands.
   - The common case is two EAs sharing one phone for a day or two, so A→B→A alternation and
     another EA's data left on a *personal* phone are the real scenarios.
-  - **Decided:** per-actor files. Another EA's file is deleted only when it holds no unsent work
-    **and** has been unused for **30 days** (Jim, 2026-10-08). A file with unsent work is never
-    deleted.
+  - **Decided:** per-actor files (Jim, 2026-10-08). The rule for deleting another EA's file (no
+    unsent work **and** unused for **30 days**) is **deferred past the pilot** (Jim, 2026-10-09).
+    Revisit before Step 9 Widen: the real reason is privacy, because EA A's roster stays on EA B's
+    personal phone, not storage. Design:
+    `docs/superpowers/specs/2026-10-09-actor-lifecycle-and-mutation-ownership-design.md`.
 
   Either way, an outbox row with a null owner must fail closed. Today any signed-in actor can claim
   it (`syncOutboxRepository.js:88`). Run this through `grill-with-docs` to its ADR

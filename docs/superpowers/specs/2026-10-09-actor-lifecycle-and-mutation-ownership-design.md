@@ -1,6 +1,6 @@
 # Design Spec: Actor Lifecycle and Mutation Ownership
 
-**Status:** revised after Codex adversarial review rounds 1–4 (§11). Design walked through with Jim section by section on 2026-10-09 (brainstorming); every
+**Status:** revised after Codex adversarial review rounds 1–4 and Jim's simplification (§11). Design walked through with Jim section by section on 2026-10-09 (brainstorming); every
 section approved. Awaiting Jim's review of this written spec, then a Codex adversarial review, then
 an implementation plan. Companion decision record: an ADR for one database per EA, to be created
 through `grill-with-docs`.
@@ -45,9 +45,10 @@ the sync engine starts, repairs, and reads the outbox before any actor is known.
 
 | Decision | Choice | Date |
 |---|---|---|
-| Local storage | One SQLite file per EA, `masi-<userId>.db`. Another EA's file is deleted only when it has nothing unsent **and** has been idle for 30 days | 2026-10-08 |
+| Local storage | One SQLite file per EA, `masi-<userId>.db` | 2026-10-08 |
 | Letter-mastery conflicts (input to the upload-contract spec, recorded here for completeness) | The most recently *made* correction wins | 2026-10-08 |
-| Removing an EA's data | Automatic only (the 30-day rule); no manual removal screen | 2026-10-09 |
+| Removing an EA's data | Automatic only; no manual removal screen. The automatic rule (delete another EA's file when nothing is unsent and it has been idle 30 days, decided 2026-10-08) is **deferred** past the pilot (§7.3) | 2026-10-09 |
+| Sign-out and in-flight requests | Abort immediately; no drain and no finalize tokens. Unfinished work re-sends when that EA next signs in (§5.5) | 2026-10-09 |
 | Unsent work at sign-out | Warn, allow, track: a warning with "Try uploading now" or "Sign out anyway", plus a privacy-safe support report while the work stays unsent | 2026-10-09 |
 | Still clocked in at sign-out | Ask: "Clock out now" or "Stay clocked in and sign out" | 2026-10-09 |
 | Architecture | Approach A: one signed-in EA handle that owns the file, an epoch fence, and the outbox owner | 2026-10-09 |
@@ -98,10 +99,14 @@ coordinator; built for a problem Masi does not have, because Masi is pre-live wi
 
 At sign-out, after the questions in §7.1, the handle:
 
-1. Advances the epoch, so new work is refused.
-2. Waits up to the drain bound (§5.5) for in-flight work.
-3. Writes `last_active_at` into the file's `local_state`.
-4. Closes both connections.
+1. Advances the epoch and becomes `closed`, so new work is refused (§5.4).
+2. Aborts every outstanding request (§5.5).
+3. Waits for a SQLite transaction already executing to reach its commit check, which rolls it back.
+   This takes milliseconds, because a connection cannot be closed mid-transaction.
+4. Writes `last_active_at` into the file's `local_state`. The handle's own close step does this
+   directly on the writer, outside the §5.4 doors, which refuse everything else once the handle is
+   closed.
+5. Closes both connections.
 
 The file stays on the phone.
 
@@ -121,7 +126,7 @@ unsent work. A persisted session only says who signed in last. Therefore:
   EA starts with a fresh `masi-<userId>.db`.
 - §4.4 discovery treats `masi.db` like any other file: it opens it read-only to count unsent rows
   and read its idle age. If it holds unsent rows, one incident of kind `legacy_shared_file_unsent`
-  is reported (counts by table and oldest age only). It is deleted under the §7.3 rule.
+  is reported (counts by table and oldest age only). It is kept (§7.3).
 - Profile → Export Database can still export it, so support can recover anything that matters by
   hand.
 - The existing field-cutover rule stands: phones moving to the SQLite build are freshly installed
@@ -199,7 +204,7 @@ option (available in the pinned 2.100.1) and a fenced `fetch`.
   (`AuthContext.js:61-63`).
 - `global.fetch` is `handle.fencedFetch`. It repeats the same check at the moment of sending,
   attaches the handle's `AbortController` signal, and applies a per-request timeout (provisional
-  30 s, set by D4). A timeout or abort is reported as the existing codeless network error, so the
+  30 s, set by device measurement D4). A timeout or abort is reported as the existing codeless network error, so the
   row stays retriable.
 - A client created with `accessToken` has no `auth` module. The one shared auth client keeps sign-in,
   refresh, and storage, so the reason for rejecting a client per EA in the first draft (auth storage
@@ -225,8 +230,7 @@ therefore reach application code as a retriable network error (Codex review of t
 - When a stale-marked task settles, the queue discards whatever the task returned or threw and
   rejects with `StaleActorError`. Application code never sees the SDK's codeless error for a stale
   refusal.
-- On `StaleActorError`, the caller **skips finalization entirely**. It needs no finalize token
-  because it records nothing. The outbox row stays `in_flight` or `pending` in that EA's file, and
+- On `StaleActorError`, the caller **skips finalization entirely** and records nothing. The outbox row stays `in_flight` or `pending` in that EA's file, and
   `resetInFlight` returns it to `pending` at the next open. A refused request is never counted as
   a sync failure, an attempt, or a backoff.
 - Inside a task, conservative fallbacks such as `reconcileChildClassMembership`'s may still run, but
@@ -242,41 +246,39 @@ request of EA A's that never returns. The queue's `tail` joins the §5.1a invent
 
 ### 5.4 Transaction doors
 
-Each handle has a state: `open`, `draining` (from sign-out until §5.5 ends), or `closed`.
+Each handle has a state: `open` or `closed`.
 
 | Door | Location | Admits |
 |---|---|---|
-| Transaction admission | handle `withTransaction` / `runRepositoryTransaction` | handle `open`; or `draining` and the transaction carries a **finalize token** |
-| Commit | immediately before `COMMIT` | the same rule, re-checked; otherwise `ROLLBACK` and `StaleActorError` |
+| Transaction admission | handle `withTransaction` / `runRepositoryTransaction` | handle `open` |
+| Commit | immediately before `COMMIT` | handle still `open`; otherwise `ROLLBACK` and `StaleActorError` |
 
-A finalize token is issued by the fenced fetch for a request it actually sent. It authorizes only
-**recording that request's result** in the same EA's file. It never authorizes sending anything:
-the data client refuses every request once the handle leaves `open`. With one file per EA, a stale
-write can only reach its own EA's file, so these doors are a second layer behind the per-file
-design. `StaleActorError` is logged once and is never retried or treated as a sync failure.
+Once a handle is closed, nothing commits to its file. With one file per EA, a stale write can only
+reach its own EA's file, so these doors are a second layer behind the per-file design.
+`StaleActorError` is logged once and is never retried or treated as a sync failure.
 
-### 5.5 Sign-out drain
+### 5.5 Sign-out aborts immediately
 
-When the epoch advances, the handle becomes `draining`, and the following happens in order:
+There is no drain. At sign-out the handle closes, aborts every outstanding request through its
+`AbortController`, and records nothing about them. Jim simplified this on 2026-10-09; the first
+draft had a 10-second drain with finalize tokens. Rows left `in_flight` return to `pending` through
+`resetInFlight` the next time that EA's file opens, and they upload again then. That is safe
+because every upload is idempotent: upserts and inserts-or-ignore by deterministic id, UPDATE by id
+with the same patch, lifecycle archives, and the idempotent child-delete RPC. The usual cost is one
+repeated request. EA B is unaffected throughout, because B has a separate queue (§5.3) and a
+separate client (§5.2).
 
-1. Requests already sent get up to a **drain bound of 10 seconds** to return and record their
-   results with their finalize tokens.
-2. At the bound, the handle aborts every outstanding request through its `AbortController`.
-3. Each aborted request's result-recording runs as a retriable network error, still under its token,
-   within a short grace (provisional 2 s).
-4. The handle becomes `closed` and its connections close.
+The drain only made re-sends rarer; it never removed the need for them, because a timeout or a lost
+response can leave the same "did it land?" state at any time. The sign-out sheet's "Try uploading
+now" (§7.1) is the deliberate way for an EA to finish uploads before signing out.
 
-Rows still `in_flight` in the file return to `pending` through `resetInFlight` the next time that
-EA's file opens. They upload again then, which is safe today because uploads are idempotent by
-deterministic id. EA B is unaffected throughout, because B has a separate queue (§5.3) and a separate
-client (§5.2).
-
-Both bounds are provisional and are set by device measurement D4 (§9.3).
+One side effect is accepted: if EA A never signs in again, a request that did land before the
+abort still counts as unsent in A's file, so a left-behind report can slightly overstate.
 
 **Dependency on the upload-contract spec:** once that spec adds base-version checks, a re-sent
 mutation the server already applied must be recognised as already applied, not treated as a
 conflict. The upload-contract spec must state how its uncertain-outcome recovery covers mutations
-left by a sign-out drain or a request timeout.
+left by a sign-out abort or a request timeout.
 
 ## 6. Mutation ownership
 
@@ -314,7 +316,7 @@ The scan selects every unsent outbox row whose `owner_user_id` differs from the 
 row is moved to `terminal` with reason `foreign_owner`, so it is never sent and is never healed by
 §6.4. One incident of kind `foreign_owner_in_file` is reported per file and repeat key, containing
 counts by table only. These rows stay in the file-wide unsent count (§7.2), so the sign-out warning
-and the 30-day rule both protect them. With fresh per-EA files (§4.5) and actor-stamped owners
+and the left-behind report both cover them. With fresh per-EA files (§4.5) and actor-stamped owners
 (§6.1) this should never fire; if it does, the isolation design has failed and we need to know.
 
 ### 6.4 Rescue heal uses the stamped owner
@@ -467,19 +469,25 @@ Copy is provisional and gets a wording pass with Jim.
 
 ### 7.2 What counts as unsent
 
-Status `pending`, `failed`, `in_flight`, or `terminal`. The sign-out warning, the 30-day deletion
-rule, and the left-behind report all use this one definition, through one repository function.
+Status `pending`, `failed`, `in_flight`, or `terminal`. The sign-out warning and the left-behind
+report use this one definition, through one repository function. Any future deletion rule (§7.3)
+must use it too.
 
-### 7.3 Thirty-day deletion
+### 7.3 Deleting other EAs' files: deferred
 
-At each sign-in, during §4.4 discovery, another EA's file (and its `-wal` and `-shm` companions) is
-deleted only when **both** hold:
+Jim deferred this on 2026-10-09. Files are small, and a phone holding two or three EAs' files is
+fine for the pilot. Nothing in this spec deletes a domain file.
 
-- it has zero unsent rows;
-- its `last_active_at` (falling back to the file's modification time) is more than 30 days old.
+**Revisit trigger: before next-steps Step 9 (Widen), or sooner if storage becomes a concern.** The
+stronger reason to return is privacy, not storage. Because staff use their own phones, EA A's
+roster, including children's names, stays on EA B's personal phone indefinitely. The app never
+shows it to B, but it is on the disk. Before widening, check the retention rule against POPIA's
+principle of not keeping personal information longer than necessary.
 
-A file is never deleted if it is the signed-in EA's own file, or if it fails to open or read; when
-in doubt, keep it. Each deletion writes one app-log line (user id, idle days, file size). No UI.
+When it is built, the rule decided on 2026-10-08 still applies: delete another EA's file, with its
+`-wal` and `-shm` companions, only when it has zero unsent rows (§7.2) and its `last_active_at` is
+more than 30 days old. Never delete the signed-in EA's file or any file that cannot be read.
+`last_active_at` is already written at sign-out (§4.3) so the rule has its input from day one.
 
 ### 7.4 Left-behind report and the minimal incident envelope
 
@@ -522,12 +530,11 @@ report is how support finds out; the remedy is a call asking A to sign in once o
 2. Handle module, per-EA file lifecycle, `client.js` refactor, legacy file handling (§4) with T1,
    T2, T11.
 3. Signed-in tree remount, module-state move, per-handle data client and queue, stale-refusal
-   boundary, transaction doors, and drain (§5) with T3, T4, T5, T14–T16, T18–T20, and T23.
+   boundary, transaction doors, and sign-out abort (§5) with T3, T4, T5, T14–T16, T18–T20, and T23.
 4. Ownership, edits-as-UPDATE, same-record ordering, and the reactivation fix (§6) with T6–T9, T17,
    T21, and T22, including the extended grant-evidence resolver. Lands with or after step 2, because the
    owner comes from the handle.
-5. Incident envelope (§7.4) with S2 and T12, then the sign-out questions and 30-day deletion
-   (§7.1–7.3) with T10 and T13.
+5. Incident envelope (§7.4) with S2 and T12, then the sign-out questions (§7.1) with T13.
 6. Device checks D1–D5 with the build intended to ship. Hosted migration apply and S3 need Jim's
    explicit yes.
 
@@ -546,13 +553,13 @@ WAL companions, connection close, file deletion) uses real SQLite through better
 | T1 | Sign-in as A opens `masi-A.db`; sign-in as B opens `masi-B.db`; signed out, no domain file is open and the login screen reads none |
 | T2 | Offline restore of a saved session opens the right file; data screens show loading, never "no children" |
 | T3 | Live defect 2: A queues an upload, A signs out, B signs in, A's queued task runs; nothing is sent (asserted at the fetch layer) and the task fails with `StaleActorError` |
-| T4 | A transaction admitted under epoch N with sign-out before `COMMIT` is rolled back, unless it carries a finalize token for a request already sent; a token-less write while draining is refused |
-| T5 | An in-flight upload records its result within the drain bound; past the bound it is aborted, recorded as a retriable network error, the file closes, and on A's next open `resetInFlight` returns it to pending and it uploads |
+| T4 | A transaction admitted while the handle is open, with sign-out before `COMMIT`, is rolled back; a transaction started after sign-out is refused; the file closes only after the executing transaction settles |
+| T5 | Sign-out during an in-flight upload: the request is aborted at once, nothing is recorded, the file closes, and on A's next open `resetInFlight` returns the row to pending and it uploads once more; a repeat of an already-landed upsert, UPDATE, or archive leaves the server row unchanged |
 | T6 | Live defect 1: an EA edits a Head Office-created child; the outbox owner is the EA, the upload query returns the row, and it is sent as `update … eq('id') … select('id')` without `created_by` |
 | T7 | Inserting an outbox row with no actor throws in JavaScript; the trigger aborts a raw null insert |
 | T8 | Integrity scan, through the public open and sync paths: an outbox row owned by X in Y's file becomes terminal `foreign_owner` at open and before an upload pass, is never sent or healed, stays in the file-wide unsent count, and reports one incident |
 | T9 | Rescue heal requeues an RLS-quarantined row by its stamped owner, including Head Office-created records |
-| T10 | Deletion only when zero unsent (terminal counts) and idle over 30 days; removes `-wal`/`-shm`; never deletes the current EA's file or an unreadable file |
+| T10 | Nothing deletes a domain file: after a sign-in by B, A's file, the legacy `masi.db`, and their `-wal`/`-shm` companions are all still present; `last_active_at` is written at sign-out |
 | T11 | Legacy `masi.db` holding two EAs' cached data, null-owner mutations, and an edit stamped with Head Office's id: never opened as an EA file, never renamed, nothing uploaded from it; one `legacy_shared_file_unsent` incident; deleted only under the §7.3 rule |
 | T12 | Left-behind report sent once per repeat key; a deny-list test proves the payload holds no child ids, names, or notes |
 | T13 | Sign-out order: the clock-out sheet comes before the unsent sheet; "Clock out now" increases the unsent count shown next |
@@ -562,7 +569,7 @@ WAL companions, connection close, file deletion) uses real SQLite through better
 | T17 | `UPDATE_NOT_APPLIED`, against migration-backed RLS: for each converted table, an edit sent before its granting assignment (direct child, class, group, and membership-mediated class/group for a child) is retriable; so is an edit whose class or group assignment is already synced but whose child membership is still pending, including a membership that failed transiently; and after the assignment uploads, the **next automatic pass** sends it with no manual step; a terminal grant makes the edit terminal instead of retrying forever; a readable `letter_mastery` row with a pending child assignment is retriable; an RLS-invisible row with nothing pending is terminal; an update whose own insert is terminal becomes terminal; a forced sync after authorization is restored applies it; no row is ever created; `update` operations are excluded from batches for the tables §6.5 moves to UPDATE |
 | T18 | Through the **real** supabase-js/postgrest-js 2.100.1 builders over a fake transport: `reconcileChildClassMembership` paused inside its SELECT; A signs out, B signs in, the SELECT resumes; neither the archive UPDATE nor the final upsert reaches the transport; the queue rejects with `StaleActorError`; the row is not finalized, and its attempt count and backoff are unchanged. Repeated for `rpc`, and for a refusal between token acquisition and fetch |
 | T23 | Token lifecycle: after `TOKEN_REFRESHED`, the next request carries the new token; after the token expires in the background, a foreground refresh lets requests proceed without a stale refusal; a request made outside a queued task is refused |
-| T19 | A's upload never resolves; A signs out; B signs in: B's reference-data pull and first upload start within a defined bound, and A's request is aborted at the drain bound |
+| T19 | A's upload never resolves; A signs out; B signs in: B's reference-data pull and first upload start within a defined bound, and A's request is aborted at sign-out |
 | T20 | No `from(` or `rpc(` call on the shared auth client outside the auth module (static test over `src/`) |
 | T21 | Reactivating an archived group assignment is sent as a lifecycle update; the server row's `unassigned_at` becomes null; zero rows acknowledged is not reported as success |
 | T22 | Same-record ordering: a `children` update is not sent while its own insert is unacknowledged and not terminal; once the insert is acknowledged, the update is sent by id |
@@ -582,7 +589,7 @@ WAL companions, connection close, file deletion) uses real SQLite through better
 | D1 | A and B share a phone: A works offline, signs out with "Sign out anyway"; B signs in and works; A signs back in. A's work uploads, B never sees A's children, and the left-behind incident is on the server |
 | D2 | Sign-out during an upload on a throttled network: no request under B's session; A's work arrives exactly once later |
 | D3 | "Stay clocked in and sign out", sign back in after more than ten hours: the auto clock-out runs and the report shows "still open" |
-| D4 | Measure sign-out to file closed on the A03s; this sets the §5.5 drain bound, the abort grace, and the §5.2 request timeout |
+| D4 | Measure sign-out to file closed, and normal request durations on a throttled network, on the A03s; this sets the §5.2 request timeout |
 | D5 | Cold start with the file opened after sign-in, compared with today's build |
 | D6 | Leave the app in the background past token expiry on both phones, then foreground and capture: requests resume under the refreshed token, with no stale refusal and no sign-out |
 
@@ -595,7 +602,7 @@ Codex round 2's live defect 2.
 - `CONTEXT.md`: the §3 terms.
 - `documentation/ROADMAP.md` priority 5: mark what this delivers.
 - `documentation/build-log.md`: decisions, verification, and device results.
-- ADR for one database per EA with 30-day deletion, through `grill-with-docs`.
+- ADR for one database per EA (deletion deferred, with its privacy trigger), through `grill-with-docs`.
 
 ## 11. Review history
 
@@ -635,9 +642,16 @@ Codex round 2's live defect 2.
   fallback concurrency still serializes server tasks, and skipping stale finalization keeps
   `in_flight` work recoverable. The loop stops here, because the catches have narrowed from four
   structural findings to one mechanical one.
+- **Simplification by Jim after round 4 (2026-10-09):**
+  - The 10-second drain and the finalize tokens are removed; sign-out aborts immediately (§5.4,
+    §5.5). Uploads are idempotent, so the cost is usually one repeated request.
+  - The 30-day deletion is deferred, with a privacy revisit trigger (§7.3).
+
+  Neither change touches a round 1–4 resolution. The per-request fence, the per-handle queue, and
+  the stale-refusal boundary are unchanged.
 
 ## 12. Out of scope (owned by the upload-contract spec)
 
 Uncertain-outcome recovery, same-record ordering, base versions and `stale_base`, the assessment
 bundle as the exclusive insertion boundary, queue-level deadlines, and duplicate-proof submit. This
-spec's §5.5 drain states the one dependency it places on that work.
+spec's §5.5 sign-out abort states the one dependency it places on that work.
