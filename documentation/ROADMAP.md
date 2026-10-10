@@ -62,8 +62,8 @@ These horizons summarize the ordered register below. They are not a second backl
 8. **P2: settle Programme/group authority, then build group-centred sessions in contract order.**
    Access grants and identity,
    then RLS/sync, then UI and durable session drafts.
-9. **P3: resume WelaPLUS deliberately.** Integrate the off-main Question island without importing
-   stale design or identity contracts.
+9. **P3: resume WelaPLUS deliberately.** Wire the unwired Question island on `main` without
+   importing stale design or identity contracts.
 10. **P4: polish, hygiene, and longer-horizon scale work.**
 
 The deferred Head Office importer is not in the active execution order. It begins with read-only
@@ -390,20 +390,20 @@ against the exact SQLite backend. `scripts/loadTestUsers.js` is deliberately dis
 
 ## 8. WelaPLUS
 
-WelaPLUS is not on `main`. The 11 Question components and their tests are on
-`feature/wela-plus-battery-merge` at `fed3175`, 54 commits behind `main` and 19 commits ahead as of
-2026-09-23. The old `.claude` worktree no longer exists.
+The 11 Question components and their tests are on `main` under `src/assessment-questions/`
+(merged 2026-10-09 from `feature/wela-plus-battery-merge`). The package is unwired: nothing in
+`src/` or `App.js` imports it. `npm run test:types` type-checks it in CI. The
+`assessmentItemDomainId` rekey is still defused; a literal-UUID contract test pins current IDs.
 
 ### Integration and contract work
 
-- [ ] Rebase or otherwise reconcile the merge branch and review all branch-only commits against
-  current design tokens, shared capture chrome, BottomSheet behavior, SQLite repositories, and
-  outbox ownership.
-- [ ] Confirm the branch still defuses the `assessmentItemDomainId` rekey. Land any identity change
-  separately with a literal expected-UUID test, contract-map/build-log updates, and an explicit
+- [ ] Review the island against current design tokens, shared capture chrome, BottomSheet behavior,
+  SQLite repositories, and outbox ownership.
+- [ ] Before wiring Q11, land the ADR-0004 `assessmentItemDomainId` identity change as its own PR,
+  flipping the literal expected-UUID test, with contract-map/build-log updates and an explicit
   staging-data plan.
-- [ ] Add a source-wide raw-hex guard and complete the warm Masi design conformance pass.
-- [ ] Repair and verify the TypeScript/typecheck dependency and release-gate setup.
+- [ ] Add a source-wide raw-hex guard and complete the warm Masi design conformance pass (11
+  island files still use raw hex as of 2026-10-09).
 - [ ] Build the remaining local/server schema and contract: `battery_runs`,
   `battery_run_artifacts`, additive `assessments`/`programmes` fields, local photo queue, Storage
   bucket/RLS, allowlists, ordering, reference data, and EGRA backfill.

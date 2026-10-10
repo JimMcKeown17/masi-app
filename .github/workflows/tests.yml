@@ -31,6 +31,8 @@ jobs:
         run: psql --version
       - name: Unit suite
         run: npm test -- --silent --maxWorkers=2
+      - name: WelaPLUS assessment-questions type check
+        run: npm run test:types
       - name: PostgreSQL history-authorization suite
         env:
           HISTORY_RLS_ADMIN_DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/postgres
