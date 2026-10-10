@@ -1,7 +1,8 @@
 # Product and Engineering Roadmap
 
-**Standing document. Updated 2026-09-26 after the CAP-004 session-history build (branch, pre-hosted)
-and Jim's 2026-09-21/23 decisions. This is the single in-repository answer to "what is still outstanding?"**
+**Standing document. Updated 2026-10-08 with the Zazi September–October sync review
+([`zazi-sync-lessons-for-masi-2026-10-08.md`](./zazi-sync-lessons-for-masi-2026-10-08.md)), after the
+CAP-004 session-history build and Jim's 2026-09-21/23 decisions. This is the single in-repository answer to "what is still outstanding?"**
 
 This file contains open work only. Its priority section is the roadmap; the numbered sections are
 the detailed work register behind that roadmap. Completed implementation and verification belong in
@@ -51,20 +52,26 @@ These horizons summarize the ordered register below. They are not a second backl
 4. **P0: add minimum incident and release provenance before expanding the pilot.** Durable,
    idempotent, privacy-safe incidents need stable causal identity, a reader, an action, and exact
    backend/app/runtime/protocol provenance.
-5. **P0: settle field-continuity contracts before the candidate build.** Make location fallback
+5. **P0: settle the upload contract and local-database ownership before the candidate build.**
+   Put a deadline and release on every request in the shared queue, uploads included. Upload the
+   assessment family all-or-nothing. Reject stale edits on records more than one writer can change.
+   Make submit duplicate-proof. Decide one database per actor versus a shared database. Add the
+   newer-schema guard and a minimum revocation contract. Evidence:
+   [`zazi-sync-lessons-for-masi-2026-10-08.md`](./zazi-sync-lessons-for-masi-2026-10-08.md) Part 2.
+6. **P0: settle field-continuity contracts before the candidate build.** Make location fallback
    truthful, decide auto-clock-out authority and Android backup behavior, complete the
    credential/PII and provisioning preflight, and explicitly accept or remove unfinished-form loss.
-6. **P1: close reachable correctness gaps.** Fix session-attendee removal before saved-session
-   editing ships, add the newer-schema fail-safe, and resolve the remaining auth-diagnostic
-   ambiguity.
-7. **P1: finish sync efficiency and fleet controls.** Membership-specific batching, delta pulls,
+7. **P1: close reachable correctness gaps.** Fix session-attendee removal before saved-session
+   editing ships and resolve the remaining auth-diagnostic ambiguity. The newer-schema fail-safe
+   moved to item 5.
+8. **P1: finish sync efficiency and fleet controls.** Membership-specific batching, delta pulls,
    randomized retry/reconnect scheduling, remote controls, and proven query-specific indexes.
-8. **P2: settle Programme/group authority, then build group-centred sessions in contract order.**
+9. **P2: settle Programme/group authority, then build group-centred sessions in contract order.**
    Access grants and identity,
    then RLS/sync, then UI and durable session drafts.
-9. **P3: resume WelaPLUS deliberately.** Integrate the off-main Question island without importing
+10. **P3: resume WelaPLUS deliberately.** Integrate the off-main Question island without importing
    stale design or identity contracts.
-10. **P4: polish, hygiene, and longer-horizon scale work.**
+11. **P4: polish, hygiene, and longer-horizon scale work.**
 
 The deferred Head Office importer is not in the active execution order. It begins with read-only
 discovery of the existing Airtable/Postgres source model with Jim, not with an invented CSV or JSON
@@ -106,6 +113,47 @@ shape.
 - [ ] Verify required schools, Programmes, and other first-login reference values before creating
   the field roster. Provision unique temporary credentials privately and prove each account through
   real password sign-in plus the same authenticated RLS reads the app requires.
+- [ ] Mark every test, demo, and fixture account with `app_metadata.is_test_account = true` at
+  creation (`scripts/createTesters.js` sets nothing today), and exclude marked accounts from every
+  report and staff view. Zazi's unmarked demo pair appeared as real EAs on a live staff page
+  ([Z15](./zazi-sync-lessons-for-masi-2026-10-08.md)).
+- [ ] **Decision for Jim:** is a partner organisation plausible within a year? If yes, a required,
+  no-default `users.organization_id` (identity only, not an authorization boundary, as in Zazi's
+  organisation label v1) is nearly free before field data exists ([Z19](./zazi-sync-lessons-for-masi-2026-10-08.md)).
+- [ ] **Build one local database per EA (D2, decided by Jim 2026-10-08), before the first field install.**
+  The ADR is to be written through `grill-with-docs` alongside the upload-contract spec. Masi
+  keeps one shared `masi.db` for every EA who signs in on a phone today. The options weighed were:
+  - one SQLite file per signed-in actor, which is the stronger *storage* boundary (Zazi, after its
+    July audit finding A6). Per Codex round 2, it isolates only together with execution-time
+    actor fencing (see "Upload contract" in §2), and per-user cursors and owner columns stay as
+    extra guards;
+  - keep the shared file with owner columns enforced on every read and claim.
+
+  **Field facts (Jim, 2026-10-08):**
+  - Masi does not issue phones; every EA uses their own.
+  - Phones rarely change hands.
+  - The common case is two EAs sharing one phone for a day or two, so A→B→A alternation and
+    another EA's data left on a *personal* phone are the real scenarios.
+  - **Decided:** per-actor files (Jim, 2026-10-08). The rule for deleting another EA's file (no
+    unsent work **and** unused for **30 days**) is **deferred past the pilot** (Jim, 2026-10-09).
+    Revisit before Step 9 Widen: the real reason is privacy, because EA A's roster stays on EA B's
+    personal phone, not storage. Design:
+    `docs/superpowers/specs/2026-10-09-actor-lifecycle-and-mutation-ownership-design.md`.
+
+  Either way, an outbox row with a null owner must fail closed. Today any signed-in actor can claim
+  it (`syncOutboxRepository.js:88`). Run this through `grill-with-docs` to its ADR
+  ([F1](./zazi-sync-lessons-for-masi-2026-10-08.md)).
+- [ ] **Minimum revocation contract before pilot provisioning** (moved from §6 by the 2026-10-08
+  Codex review). `users.is_active = false` has no effect today:
+  - the owner policies still allow time-entry writes and session updates
+    (`20260521120147_masi_rls_advisor_cleanup.sql:331-377`);
+  - `can_read_session` and the history RPC grant reads without checking active status;
+  - `AuthContext` does not enforce profile inactivity.
+
+  Define the operator procedure (Auth ban, profile inactive, assignments ended) and the accepted
+  residual token window (Zazi accepts up to an hour). Test an already-signed-in actor against
+  owned-row policies and the SECURITY DEFINER RPCs. The national admin portal stays in §6
+  ([Z16](./zazi-sync-lessons-for-masi-2026-10-08.md)).
 
 ### Release and observability
 
@@ -115,6 +163,15 @@ shape.
 - [ ] Pass device gates N1, N2, N4, N6, and N7 for symbolication, structured sync reporting, local
   evidence, and telemetry privacy.
 - [ ] Connect and test the agreed Sentry alert rules.
+- [ ] Add Sentry fingerprint overrides for known native SQLite/Expo rejections (single-exception
+  events with a recognized pattern only; never put native error text into the fingerprint), so
+  unrelated rejections do not merge into one issue (Zazi `dff00db8`, `6339c958`).
+- [ ] One-command OTA publish wrapper that binds channel to build profile and reads back the
+  published manifest. Native version bumps come before any OTA that needs them. A raw `eas update`
+  published Zazi's wrong-lane bundle ([F3](./zazi-sync-lessons-for-masi-2026-10-08.md)).
+- [ ] Make sure server rows carry the evidence a future User Health view needs (actor, app build,
+  and last-sync time), so "who is active / who needs help" can be derived rather than reconstructed
+  from spreadsheets ([F5](./zazi-sync-lessons-for-masi-2026-10-08.md)).
 - [ ] Confirm every field device starts from a fresh installation, not an upgrade over the retired
   local data model.
 - [ ] Decide the Android Auto Backup/data-extraction policy for actor-scoped SQLite, domain rows,
@@ -122,7 +179,10 @@ shape.
   may not be called “fresh” until the resulting database identity and contents prove it.
 - [ ] Prove `masi-app-sqlite` is healthy after its restore onto the Pro plan. Jim moved the project
   to Pro on 2026-09-23 so it cannot auto-pause (it was found paused on 2026-09-04 and again on
-  2026-09-23). The dashboard shows Nano compute; confirm the intended compute size. The
+  2026-09-23). The dashboard shows Nano compute; confirm the intended compute size. Zazi's local
+  herd measurement (2026-09-24) had older-style full pulls failing on 2 cores somewhere between
+  1,000 and 3,000 EAs and clearing 1,000 EAs on 4 cores; size from Masi's own pull shape, not by
+  inheritance ([Z9](./zazi-sync-lessons-for-masi-2026-10-08.md)). The
   post-restore read-only probe matched the 2026-09-04 baseline on 2026-09-23 (build log). While restoring on 2026-09-04 it
   accepted connections with an empty `public` schema for roughly four minutes, so pilot
   automation, migration scripts, and support tooling must treat an empty or missing migration
@@ -142,6 +202,40 @@ work is external release and device proof.
   normalized-disposition provenance.
 - [ ] Give every incident/support state a named reader, bounded diagnostic view, safe action, and
   retention rule. Sentry is telemetry, not the durable sync-state ledger.
+
+Design rules from Zazi's field evidence ([Z12, Z13](./zazi-sync-lessons-for-masi-2026-10-08.md)):
+
+- [ ] The incident key identifies the **causal condition**. A re-report of the same condition with
+  a newer body (`last_seen_at`, observed build) is accepted as an update, never rejected as a key
+  mismatch. Zazi's server rejected exactly this and needed schema v3 (`condition_key`,
+  `report_generation`).
+- [ ] A size-bounded payload with an explicit allowlist of fields per schema version (Zazi: 8 KB).
+- [ ] Observed OTA provenance (update id, embedded-launch flag, release label), not only the app
+  version and build number. Zazi found build numbers did not prove which OTA was running.
+- [ ] Store a structured `error_class` and `error_code` on `sync_outbox` rows (today: `status` plus
+  free-text `last_error`, `src/db/migrations.js:45-48`). Map each class (retryable, needs-parent,
+  support-needed, terminal) to a named owner and procedure. Do this while the schema is still cheap
+  to change.
+
+The field-bug feedback loop, a pilot-sized version of Zazi's incident envelopes and `/bug-sync`
+([B1–B6](./zazi-sync-lessons-for-masi-2026-10-08.md)):
+
+- [ ] Server: a `mobile_sync_incidents` table keyed `(actor_user_id, incident_key)`, with RLS on and
+  `service_role` SELECT only. Add a SECURITY DEFINER reporting RPC (`auth.uid()` authority, exact
+  key allowlist, 8 KB cap, payload hash, per-actor daily limit) that updates a newer report of the
+  same condition in place.
+- [ ] Phone: a capped local incident queue, separate from `sync_outbox`, with its own backoff and
+  actor fence. It fails soft, so sync never depends on it.
+- [ ] Report only terminal, support-needed, or long-failing outbox rows, reconcile-breaker events,
+  and persistent pull failure. Never report an ordinary retry: 62% of Zazi's active EAs raised a
+  receipt within 10 days, mostly from upstream bugs.
+- [ ] A Masi `/bug-sync` skill and an `MA-BUG` registry under `docs/bugs/`. The skill sweeps
+  receipts, dedupes against the registry, and checks whether each record exists on the server
+  before diagnosing. Its rules: receipts are leads, not proof; bind attribution to the receipt's
+  actor id, never to a forwarded file.
+- [ ] The support export carries outbox rows with their `error_class`/`error_code`, because Zazi's
+  hardest bugs needed exports, not receipts. Keep `deviceName` out of every incident payload
+  (`runtimeDiagnostics.js` collects it today).
 
 ### Highest-signal device gates
 
@@ -208,8 +302,37 @@ correctly; the missing contract is inbound hydration.
 - [x] Reshape the parent page RPC so each grant arm yields ordered, bounded candidates before the
   merge, and extend the PostgreSQL harness with dense fixtures. `get_delivery_history_page`
   replaces it; with 125,007 sessions, pages read about 0.1% of a full scan. Surfaced by the same review; no field impact today.
+- [ ] **Server-stamped `updated_at` on insert for the assessment family, before its pull.** Only
+  `sessions` and `session_attendees` are stamped `before insert or update` today
+  (`20260925120000`). `assessments`, `assessment_items`, `letter_mastery`, and every other domain
+  table set the time on update only, so an insert keeps the phone clock and can land behind
+  another device's cursor ([Z1](./zazi-sync-lessons-for-masi-2026-10-08.md)). First audit client
+  code that relies on the phone-sent value. Extend to any other table before it gets a delta.
+- [ ] **Cheap page apply before the assessment pull copies the session shape.** Assessments carry
+  up to 61 items. Batch the per-page existence and pending-local lookups, skip rows identical to
+  the stored row, and reuse prepared statements. Keep one transaction per page together with its
+  cursor. Zazi went from 300 s to 46 s on a Galaxy A03s this way ([Z2](./zazi-sync-lessons-for-masi-2026-10-08.md);
+  CAP-004 plan Task 9 Step 4e).
 - [ ] Add authenticated, Programme/current-year-class-scoped pull for `assessments` and
   `assessment_items`.
+- [ ] **Upload the assessment family all-or-nothing ([U2](./zazi-sync-lessons-for-masi-2026-10-08.md)).**
+  - **Codex round 2:** the bundle RPC must be the *exclusive* EA insertion boundary. Revoke direct
+    INSERT on `assessments` and `assessment_items`.
+  - Dispatch the family once, regardless of the 1,000-row ready limit, with no generic per-row
+    fallback.
+  - Acknowledge the whole family locally in one transaction.
+  - Test missing members, pending child or grant evidence, malformed references, lost
+    acknowledgements, and interrupted finalization.
+  - Use one insert-or-ignore RPC for an assessment plus its items, with a member-set check, so the
+    server never holds an assessment with only some of its answers. A partial one reads as a real
+    low score.
+  - Because of ADR-0007, no version heads or generations are needed.
+  - Prove in the disposable PostgreSQL harness that:
+    - a late item insert re-surfaces its parent for the history delta, if items can ever arrive
+      separately;
+    - insert-or-ignore retries converge.
+  - Document server-owned change timestamps separately from local outbox timestamps in the contract
+    map.
 - [ ] **Enforce submitted-assessment immutability (ADR-0007) in the same slice.** Remove EA
   `UPDATE`/`DELETE` RLS on `assessments` and `assessment_items`, push this family as
   insert-or-ignore by `id`, and make `saveAssessment` refuse an already-saved assessment id, with
@@ -241,6 +364,17 @@ correctly; the missing contract is inbound hydration.
   isolated helper; hosted six-actor matrix and 1,205-attendee HTTP walk passed.
 - [ ] **CAP-004 device gates (new phone within a minute on iPhone and low-end Android; two-device convergence with a
   backdated session; force-stop and offline mid-download).
+  Step 1 passed for correctness with 20 practice sessions on 2026-10-08.
+  **Fix first (plan Task 9 Step 4-0):** a stopped or failed history run is not resumed by a
+  foreground or reconnect within 15 minutes, because history starts only after a roster pull that
+  skips itself while its stamps are fresh (2026-10-08 Codex review).
+  Added from Zazi's field evidence and the same review (plan Task 9 Steps 4a–4e):
+  - an RPC/save timing split in the run log;
+  - a realistic-volume account on the Galaxy A03s;
+  - user writes timed during a download;
+  - repeated early force-stops that resume forward, with the first durable commit within 3 s on a
+    throttled network;
+  - cheap page apply if any of these fail.
 
 Until this lands, a green sync label proves outbound completion only.
 
@@ -263,9 +397,9 @@ the current-state model better than Zazi's per-session carry-forward.
   the app is active or when the open entry is next loaded. Decide whether hosted rows may remain
   open until that phone returns, or add a fenced server/hybrid authority that a stale offline write
   cannot reopen. Reports must label overdue open rows honestly rather than fabricating closure.
-- [ ] **Newer-schema fail-safe:** when SQLite `user_version` exceeds the bundle's
+- [ ] **Newer-schema fail-safe (before pilot; priority item 5):** when SQLite `user_version` exceeds the bundle's
   `CURRENT_SCHEMA_VERSION`, stop safely instead of running an older OTA bundle against a newer
-  schema.
+  schema. `runMigrationsNow` has no such branch today ([F2](./zazi-sync-lessons-for-masi-2026-10-08.md)).
 - [ ] **Assessment draft persistence:** force-quit currently loses an in-progress assessment.
   Address this with the longer WelaPLUS/durable-draft lifecycle rather than a one-off 60-second EGRA
   patch.
@@ -288,6 +422,100 @@ the current-state model better than Zazi's per-session carry-forward.
   letters to pick, so the EA taps an arbitrary letter and corrupts `activities.letters_focused`.
   Add a truthful "no letters taught this session" state. The first pilot is Literacy-only, so fix
   this before the pilot candidate build.
+- [ ] **One stated timestamp-precision rule.** Record in `rls-sync-contract-map.md` the precision of
+  every timestamp the server compares, orders, or checks, and pin it with a shared client/server
+  corpus test. Zazi's millisecond-versus-microsecond equality refused every lifecycle request
+  (ZZ-BUG-20260915-001). Check one possible Masi risk, which is not reproduced: a millisecond
+  phone `unassigned_at` (`childrenRepository.js:154`) against a microsecond server `assigned_at`
+  under the `unassigned_at >= assigned_at` CHECKs, which `classifyError` treats as terminal
+  ([Z14](./zazi-sync-lessons-for-masi-2026-10-08.md)).
+- [ ] **When durable session drafts ship (§4), key them per group and refuse a second start;
+  bound any session timer.** Zazi's single active-session key let a second group overwrite an
+  unfinished session (ZZ-BUG-20260922-001), and its unbounded timer saved a 1,140-minute session
+  (ZZ-BUG-20260924-001) ([Z18](./zazi-sync-lessons-for-masi-2026-10-08.md)).
+
+### Upload contract (before pilot; priority item 5)
+
+**Two live defects confirmed by the 2026-10-08 Codex round 2 (fix first, pilot blockers):**
+
+- [ ] **An EA's edit to a child Head Office created never uploads.**
+  - `updateChild` takes `actorUserId` but enqueues without it (`childrenRepository.js:404-426`).
+    The outbox owner therefore resolves from the child's `created_by`
+    (`outboxOwnership.js`, `children: directOwner('created_by')`), which is the office account,
+    and the EA's owner-scoped claim never selects the row. The reading-level update submitted
+    with a session takes the same path.
+  - Fix: separate mutation ownership from creator attribution. Every user-facing enqueue
+    records the authenticated editing actor as the outbox owner; `created_by` is unchanged.
+  - Test an EA editing Head Office-created children and groups, including reading levels
+    submitted with a session, through claim, status, recovery, and sign-out.
+- [ ] **An upload can run under the next EA's session.**
+  - The pass checks the session before enqueueing, but the queued task runs later through the
+    shared Supabase client without re-checking (`offlineSync.js:1009-1016, 1196-1205`). Codex
+    probed an A→B switch between admission and dequeue: A's upload ran as B and finalized.
+  - Fix: every queued request and transaction captures its actor (and, under D2, its database
+    handle and connection epoch) and re-validates at execution, at transaction admission, and at
+    finalization.
+  - Test A→B and A→B→A switches for delayed uploads and roster persistence. This is required
+    whichever way D2 is decided.
+
+**The contract below is a set of requirements for a design spec, not ready to implement.**
+Round 2 showed that a naive version introduces new failures:
+
+- Releasing a timed-out upload lets an older whole-row upsert commit after a newer acknowledged
+  one. Codex's probe reopened a closed time entry on the server while the phone showed it synced.
+- A `stale_base` comparison has no base to compare against today. Pushes return no server
+  version, finalization writes phone time, and offline create→edit queues have no base.
+
+The spec must define, together:
+
+- uncertain-outcome recovery and same-record ordering (idempotent acknowledgements or
+  equivalent server fencing for mutable writes, single-writer tables such as time entries
+  included);
+- the full version lifecycle (base captured per pending mutation, compared atomically,
+  authoritative versions returned for single, batch, archive, and insert-or-ignore operations,
+  successor bases advanced);
+- the assessment bundle as the *exclusive* insertion boundary.
+
+Zazi's per-record generations do address the single-writer reordering case, so the spec should
+weigh them honestly rather than dismiss them.
+
+Masi's upload path is close to the one Zazi's July audit overturned. Zazi's replacement, about
+4,700 lines of client protocol, guards the wrong risk for Masi: its generations stop one install
+overtaking itself, while Masi's exposure is several writers editing one record. Build this smaller
+contract ([U1–U7](./zazi-sync-lessons-for-masi-2026-10-08.md)):
+
+- [ ] **Bounded completion for every shared-queue request, uploads included (U1; Codex 2026-10-08,
+  high). Prerequisite (round 2): uncertain-outcome recovery and same-record ordering must exist
+  before a timed-out upload is released.**
+  - Single and batch pushes enqueue with no deadline (`offlineSync.js:1014-1016, 1203-1205`), and
+    the queue holds every successor behind an unresolved task. A hung push therefore:
+    - leaves its rows `in_flight`;
+    - blocks every later pull;
+    - pins `activeSyncPromise`, so a manual retry joins the hung pass.
+  - The queue itself must abort and release a task at its deadline. A caller-side race alone
+    reports failure without freeing the queue.
+  - A timeout is an *uncertain* outcome: retried, never counted toward the deterministic-error cap.
+  - Test a hung upload, queue release, uncertain server acceptance, a late response after release,
+    and a safe outbox retry.
+- [ ] **Reject stale edits on records more than one writer can change (U3).** The client sends the
+  server `updated_at` it last saw, and the server rejects a mismatch as `stale_base`, which the phone
+  surfaces as needs-attention. Scope: children, assignments, and groups that Head Office or another
+  EA can also edit. Never compare phone clocks. This depends on server-owned timestamps (§1).
+- [ ] **Letter mastery: the most recently *made* correction wins (D1, decided by Jim
+  2026-10-08).**
+  - The server keeps whichever confirmation has the later correction time and treats a future
+    correction time as its own `now()`.
+  - This is a narrow, single-column guard, not the general `stale_base` mechanism.
+  - Build it with the mastery re-key in §1. `CONTEXT.md` is updated.
+- [ ] **Duplicate-proof submit (U5).** Use a ref-based lock, and mint the session id once per form
+  instead of per submit tap (`LiteracySessionForm.js:389, 502`). Zazi's per-tap ids produced 302
+  extra session copies (ZZ-BUG-20260819-021). Apply the same rule to assessment submit.
+- [ ] Android backup must exclude the SQLite database (U6, the §0 backup decision). A restored
+  database replayed already-accepted work in Zazi (ZZ-BUG-20260907-001).
+
+Deferred: mutation ids and server receipts for edits (U4, only if U3 proves insufficient), an
+environment circuit breaker, and strict acknowledgement inventories. Not adopted: per-install
+generations, client streams, cutover and activation machinery (U7).
 
 ### Deliberate tripwires
 
@@ -308,11 +536,56 @@ the current-state model better than Zazi's per-session carry-forward.
   scope is operationally expected to remain bounded.
 - [ ] Give every roster/reference pull request a deadline. Today a hung request blocks the shared
   `supabaseRequestQueue` for all later pulls (found by the 2026-09-26 Codex review of CAP-004).
-  Session history is protected by its queue-aware deadline; the roster pull is not.
+  Session history's deadline reports failure but does not release the queue; uploads have none.
+  This is now one queue-level contract under "Upload contract" in §2 (U1).
 - [ ] Add full-jitter backoff and randomized foreground/reconnect pull scheduling so a national
   fleet does not retry in synchronized waves.
 - [ ] Add remotely configurable pull intervals and a sync kill switch before large staged rollout.
 - [ ] Resolve whether My Children pull-to-refresh should force-push pending work or reload only.
+
+Sharpened by Zazi's 2026-09/10 delta-pull, first-install, and measurement work
+([`zazi-sync-lessons-for-masi-2026-10-08.md`](./zazi-sync-lessons-for-masi-2026-10-08.md), Z3–Z11).
+Order these before the pilot unless marked otherwise:
+
+- [ ] **Server-owned rollout and kill switch (Z8).**
+  - A `private` table holds a per-account row and an "all" row. The RPC answers `rollout_disabled`
+    when the caller sees no row, so a canary is one insert and a rollback is one delete, with no OTA.
+  - The same table can carry the pull interval and a minimum client protocol. This closes the
+    "remotely configurable pull intervals and a sync kill switch" item above.
+  - Disabling a feature never deletes a phone's cursor. The presence of a cursor does not mean the
+    feature is enabled.
+  - Run a rollback drill before the first cohort.
+  - **Scope it explicitly (Codex 2026-10-08):** an RPC-level gate stops only RPC pulls. Masi's
+    roster pulls and uploads are direct table calls, so the client must read the switch before
+    each sync pass, and the switch's behaviour on a read failure must be defined.
+- [ ] **Jitter covers cold opens, not only warm caches (Z7).** Use one shared 0–3 minute
+  admission window per cold open or offline-to-online transition. Empty-cache bootstrap and
+  explicit refresh bypass it.
+- [ ] **Any user-visible "stuck" limit measures lack of progress, never elapsed time (Z5).** Use a
+  no-progress timer, with Retry/Sign out shown only after a no-progress interval. Pair it with a
+  visible "still downloading" state, so an empty screen is never read as "no data". A run budget
+  that resumes from its cursor, as CAP-004's does, is not a failure claim and stays as is.
+- [ ] **Pull-trigger budget tests (Z4).** Pin every caller that may start a pull, with its frequency:
+  launch, per save, per foreground, per gesture. Per-save and per-foreground callers must request
+  the narrowest domains. Zazi shipped a save that triggered a full re-download, and Start took
+  22.8 s.
+- [ ] **Write-wait measurement (Z3).** Add a real-SQLite test that times a user write queued behind
+  a pull transaction. Add enqueue/start/end timing lines on the writer queue (`src/db/client.js`),
+  tagged with the pull that was active when the write was queued.
+- [ ] **Delta split (Z9).** Delta only the large history families. Keep roster/reference scopes as
+  paginated snapshots. Narrow each scope to the actor's ids before RLS runs. Prove scan work stays
+  flat as unrelated rows grow, rather than adding indexes by column inventory.
+- [ ] **Server-decided baseline mode (Z10).** Distinguish `no_cursor`, a future cursor (more than a
+  few minutes ahead of server time → re-baseline), and periodic. **Do not** import Zazi's "cursor
+  never passes a pending row" rule (Codex 2026-10-08). Masi skips a dirty family and advances
+  (`sessionsRepository.js:279, 318`). The family returns when its upload is re-stamped after the
+  cursor, or at the re-walk. Freezing the cursor would recreate the stall spec §12.3 rejected. Test
+  a dirty first parent followed by healthy later pages.
+- [ ] **Tombstones (Z11), decided before any roster delta.** Zazi never built them and relies on
+  periodic baselines. Decide whether removals ride a family timestamp, a tombstone table, or
+  snapshot reconcile alone.
+- [ ] **Per-phase pull timing on every pull (Z3, Z5).** Every pull, not only history, logs RPC time
+  versus SQLite save time, so an exported log can attribute a slow phone.
 
 Already closed and therefore intentionally absent from this backlog: record-scoped dependency
 gating, bounded failed-batch fallback, versioned startup repair, queue-age preservation, set-based
@@ -377,6 +650,9 @@ When this resumes:
 - [ ] Define the collision contract for imported `child_group_memberships`.
 - [ ] Build an audited national provisioning/control plane with role separation, revocation,
   secrets handling, and operator logs.
+- [ ] Build the audited suspension surface on top of §0's minimum revocation contract. Zazi's
+  version writes an audit row before any external call and restores only its own suspensions
+  ([Z16](./zazi-sync-lessons-for-masi-2026-10-08.md)).
 
 Current narrow capability: `scripts/createTesters.js` provisions explicit zero-class pilot testers
 against the exact SQLite backend. `scripts/loadTestUsers.js` is deliberately disabled. The archived
@@ -443,7 +719,13 @@ Its open operational work is tracked here:
 - [ ] Create an environment/capacity inventory, pilot dashboard, staged-rollout plan, incident
   runbook, and Supabase launch-notice checklist.
 - [ ] Run realistic RLS/load/storm tests and measure writes, pulls, Auth, Realtime, storage, and
-  recovery under staged concurrency.
+  recovery under staged concurrency. Model the harness on Zazi's local pull-herd stack: Postgres,
+  pgbouncer, and PostgREST in containers, a synthetic EA dataset, and HTTP replay of real pull
+  traffic. Build it after Masi's delta design lands. Treat absolute numbers as noisy; Zazi saw 57–116 s
+  p95 on repeats of one configuration.
+- [ ] Adopt a versioned server-function convention: never change a deployed RPC in place; add `_vN`
+  and keep the previous version for rollback. Each apply carries a post-apply verifier and a
+  `pg_get_functiondef` md5 record ([Z17](./zazi-sync-lessons-for-masi-2026-10-08.md)).
 - [ ] Separate national reporting/analytics workloads from the mobile transactional write path.
 - [ ] Complete penetration testing, POPIA/privacy review, data-processing agreements, breach
   response, and government security evidence.

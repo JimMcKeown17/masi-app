@@ -2075,7 +2075,7 @@ git commit -m "docs(cap-004): contract map, ledger, roadmap, build log, handoff,
 
 #### Task 9 additions from the Zazi field evidence (2026-10-08)
 
-Source: `documentation/zazi-sync-lessons-for-masi-2026-10-08.md` (on branch `docs/zazi-foundations-review-20261008` until it merges)
+Source: [`zazi-sync-lessons-for-masi-2026-10-08.md`](../../../documentation/zazi-sync-lessons-for-masi-2026-10-08.md)
 (Z2, Z3, Z5). Zazi measured on the same reference phone that, on a Galaxy A03s, **saving** dominates a
 history download (about 95% of a delta; a busy account's first download took 300 s, of which only 6 s
 was the RPC). The 2026-10-08 step-1 device test used 20 sessions and 40 attendee lines. That proves
