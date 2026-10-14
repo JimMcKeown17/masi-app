@@ -1,5 +1,13 @@
 # What Zazi's September–October Sync Work Means for Masi
 
+> **Status note, 2026-10-14 — Z19 decision closed.** Jim confirmed that a partner organisation is
+> plausible within a year. Masi's organisation label migration and provisioning requirement are
+> committed (`ff22fc2`, `c37b2e0`) and locally verified. Masinyusane intentionally shares id
+> `a111879f-d066-47c9-95a1-bed2a400319a` with Zazi iZandi. Hosted apply has not happened and needs
+> Jim's explicit yes. Current work is in [ROADMAP §0](./ROADMAP.md#0-pre-live-ground-truth-observability-and-pilot-activation);
+> verification is in the [build log](./build-log.md#organisation-label-v1--18-postgresql-checks).
+> The 2026-10-08 review below is unchanged.
+
 **Point-in-time review, 2026-10-08.** Evidence window: Zazi iZandi commits 2026-09-08 through
 2026-10-08 (`main` at `f0f78226`, plus the unmerged `feat/delta-fix-006-applier-20261008`,
 `feat/setup-escape-after-no-progress-20261008`, `measure/pull-herd-load-20260924`,

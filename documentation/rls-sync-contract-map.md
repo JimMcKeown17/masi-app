@@ -17,6 +17,25 @@ Use this map before changing any synced table, repository producer, outbox opera
 - Insert order: `PUSH_ORDER` in `src/services/offlineSync.js`
 - Archive order: `ARCHIVE_PUSH_ORDER` plus `ARCHIVE_TABLE_DEPENDENCIES` in `src/services/offlineSync.js`
 
+### Organisation label v1 — committed; hosted apply pending
+
+`supabase/migrations/20261014120000_organisation_label_v1.sql` adds `public.organizations` and
+the required, no-default `public.users.organization_id`. Existing users become Masinyusane through
+a temporary constant default; their `updated_at` does not move. Masinyusane's id is
+`a111879f-d066-47c9-95a1-bed2a400319a`, intentionally shared with Zazi iZandi; its slug is
+`masinyusane`. Partners are added by migration.
+
+`scripts/createTesters.js` requires `--organization <slug>`, resolves it before user access,
+and refuses an existing user's different organisation with `organisation_conflict` before any
+write. Dry runs resolve the slug and report the same conflicts. The profile remains an upsert
+on `id`. The label does not participate in app authorization, RLS policies, or triggers. The
+phone ignores it; it is not synced into phone SQLite or the outbox.
+
+The controller passed the 18-check harness on local PostgreSQL 17.11 with `PGTZ=UTC` and both
+existing PostgreSQL harnesses after their fixtures gained `organization_id`. The visibility
+probe fixture also supplies the id. See the [verification record](./build-log.md#organisation-label-v1--18-postgresql-checks).
+**Hosted apply has not happened. It needs Jim's explicit yes under plan Task 4.**
+
 ## Pre-Live History Authorization — Hosted Session Gate Passed; Assessment Gate Open
 
 Read-only Gate 0 inspection on 2026-08-27 verified the live policies and helper bodies on
@@ -482,6 +501,8 @@ Tests: `__tests__/offlineSyncAuthGate.test.js`, `__tests__/requeueTerminalRlsFai
 
 | Table | Producer | Local required fields | Sync operation | RLS authority / SELECT dependency | Ordering / dependencies | Tests and probes |
 | --- | --- | --- | --- | --- | --- | --- |
+| `organizations` | Canonical migrations; partners are added by migration | Server-only: `id`, `slug`, `name`; no phone table | No mobile sync | RLS enabled with no policies. Only `service_role` has API-role SELECT; no INSERT/UPDATE/DELETE. `anon`, `authenticated`, and `authenticator` have no SELECT | Seed before users. Hosted apply pending | `organisation-label-postgres-harness.cjs`: role refusals, slug resolution, explicit grants |
+| `users` | `scripts/createTesters.js`; service-role profile upsert after preflight | Server `organization_id` is required with no default. The phone ignores it; no SQLite/outbox sync | No mobile domain write. Own-profile SELECT with school/job-title joins stays unchanged | Existing own-profile SELECT policy. Organisation is an employer label, not an access boundary; changing a stored organisation is refused by provisioning preflight | Auth user and organisation must exist before profile creation. Hosted migration apply pending | `organisationProvisioning.test.js`; `testerProvisioning.test.js`; `organisation-label-postgres-harness.cjs` (timestamp, constraints, own-profile read); history/S1 and `rls-visibility-probe.cjs` fixtures supply the id |
 | `time_entries` | `timeEntriesRepository` | `id`, `user_id` | Inserts batch as upserts; edits use acknowledged UPDATE by id and are excluded from batching | Self-scoped by `user_id = auth.uid()` | No domain dependencies | `offlineSyncOutbox.test.js` time-entry sync coverage; `offlineSyncUpdateById.test.js`; `timeEntriesRepository.test.js` (integration tier, Item 8); `useTimeTracking.integration.test.js` (clock-in vertical through the real path, Item 8); `forceStopReopenOutbox.test.js` (force-stop close+reopen persistence, Item 8) |
 | `classes` | `classesRepository.saveClass`; `classOnboardingRepository.start` transaction wrapper for locally onboarded classes | `id`, `created_by`, active `programme_id` for local class EA assignment. The onboarding wrapper adds only a user-scoped local-state marker in the same SQLite transaction; it does not change the server payload. | Insert uses default upsert; edit uses acknowledged UPDATE by id; archive uses acknowledged lifecycle UPDATE by id | `classes_select_created_by`; `private.current_user_can_access_class` / `private.current_user_can_write_for_class` | Before `children`, `class_ea_assignments`, grouping rows, sessions with `class_id` | `classesRepository.test.js`; `classOnboardingRepository.test.js` atomic create, rollback, and restart marker coverage; `offlineSyncUpdateById.test.js`; `sqlitePlan1Migrations.test.js` creator SELECT coverage |
 | `class_ea_assignments` | `classesRepository.saveClass`; `classEaAssignmentsRepository`; Classes pull persistence and reconcile | `class_id`, `ea_user_id`, `programme_id`, `created_by` | Consecutive inserts batch with insert-or-ignore; archive uses acknowledged lifecycle UPDATE by id and non-archive updates use default upsert; direct pull scope persists and reconciles synced absentees | EA self assignment and class access; identity trigger blocks reassignment by update | Insert after `classes`; archive after dependent child/class cleanup rows | `junctionRepositoryGuards.test.js`; `offlineSyncOutbox.test.js` immutable assignment batching and lifecycle exclusion; `pullReconcile.integration.test.js`; `pullReconcileOffline.integration.test.js` |
