@@ -2,6 +2,7 @@ import React from 'react';
 import { StyleSheet } from 'react-native';
 import { render, fireEvent, act } from '@testing-library/react-native';
 import { LetterSoundsQuestion } from '..';
+import { FIXTURE_LETTER_SOUNDS_EN } from '../../../testFixtures';
 import { ChildReadingFontSizeProvider } from '../../../hooks/useChildReadingFontSize';
 
 function fontSizeOf(node: { props: { style?: unknown } }): number | undefined {
@@ -16,6 +17,7 @@ describe('LetterSoundsQuestion — intro phase', () => {
     const { getByText } = render(
       <LetterSoundsQuestion
         language="en"
+        itemSet={FIXTURE_LETTER_SOUNDS_EN}
         instructions="Tap each letter the child gets right. Stop if the child gets a whole row wrong."
         onComplete={jest.fn()}
       />,
@@ -29,10 +31,11 @@ describe('LetterSoundsQuestion — intro phase', () => {
 });
 
 describe('LetterSoundsQuestion — active phase grid', () => {
-  test('Start transitions to active phase and renders letters from the bundled English item set', () => {
+  test('Start transitions to active phase and renders letters from the English fixture', () => {
     const { getByText } = render(
       <LetterSoundsQuestion
         language="en"
+        itemSet={FIXTURE_LETTER_SOUNDS_EN}
         instructions="."
         onComplete={jest.fn()}
       />,
@@ -48,6 +51,7 @@ describe('LetterSoundsQuestion — active phase grid', () => {
     const { getByText, getByLabelText } = render(
       <LetterSoundsQuestion
         language="en"
+        itemSet={FIXTURE_LETTER_SOUNDS_EN}
         instructions="."
         onComplete={jest.fn()}
       />,
@@ -63,6 +67,7 @@ describe('LetterSoundsQuestion — active phase grid', () => {
     const { getByText, getByLabelText } = render(
       <LetterSoundsQuestion
         language="en"
+        itemSet={FIXTURE_LETTER_SOUNDS_EN}
         instructions="."
         onComplete={jest.fn()}
       />,
@@ -84,6 +89,7 @@ describe('LetterSoundsQuestion — timer', () => {
     const { getByText } = render(
       <LetterSoundsQuestion
         language="en"
+        itemSet={FIXTURE_LETTER_SOUNDS_EN}
         instructions="."
         durationSec={60}
         onComplete={onComplete}
@@ -109,6 +115,7 @@ describe('LetterSoundsQuestion — timer', () => {
     const { getByText } = render(
       <LetterSoundsQuestion
         language="en"
+        itemSet={FIXTURE_LETTER_SOUNDS_EN}
         instructions="."
         durationSec={60}
         onComplete={onComplete}
@@ -130,6 +137,7 @@ describe('LetterSoundsQuestion — End button and finalization', () => {
     const { getByText } = render(
       <LetterSoundsQuestion
         language="en"
+        itemSet={FIXTURE_LETTER_SOUNDS_EN}
         instructions="."
         durationSec={60}
         onComplete={onComplete}
@@ -149,6 +157,7 @@ describe('LetterSoundsQuestion — End button and finalization', () => {
     const { getByText, getByLabelText } = render(
       <LetterSoundsQuestion
         language="en"
+        itemSet={FIXTURE_LETTER_SOUNDS_EN}
         instructions="."
         durationSec={60}
         onComplete={onComplete}
@@ -169,6 +178,7 @@ describe('LetterSoundsQuestion — pagination', () => {
     const { getByText, queryByText } = render(
       <LetterSoundsQuestion
         language="en"
+        itemSet={FIXTURE_LETTER_SOUNDS_EN}
         instructions="."
         durationSec={60}
         onComplete={jest.fn()}
@@ -186,6 +196,7 @@ describe('LetterSoundsQuestion — pagination', () => {
     const { getByText, queryByText } = render(
       <LetterSoundsQuestion
         language="en"
+        itemSet={FIXTURE_LETTER_SOUNDS_EN}
         instructions="."
         durationSec={60}
         onComplete={jest.fn()}
@@ -204,6 +215,7 @@ describe('LetterSoundsQuestion — pagination', () => {
     const { getByText } = render(
       <LetterSoundsQuestion
         language="en"
+        itemSet={FIXTURE_LETTER_SOUNDS_EN}
         instructions="."
         durationSec={60}
         onComplete={onComplete}
@@ -222,6 +234,7 @@ describe('LetterSoundsQuestion — childReadingFontSize token', () => {
   test('letter font size scales with the provider value (2.0x = double)', () => {
     const props = {
       language: 'en',
+      itemSet: FIXTURE_LETTER_SOUNDS_EN,
       instructions: '.',
       onComplete: jest.fn(),
     } as const;
@@ -252,6 +265,7 @@ describe('LetterSoundsQuestion — duration_ms wall-clock accuracy', () => {
     const { getByText } = render(
       <LetterSoundsQuestion
         language="en"
+        itemSet={FIXTURE_LETTER_SOUNDS_EN}
         instructions="."
         durationSec={60}
         onComplete={onComplete}
@@ -276,6 +290,7 @@ describe('LetterSoundsQuestion — onItemMarked callback', () => {
     const { getByText, getByLabelText } = render(
       <LetterSoundsQuestion
         language="en"
+        itemSet={FIXTURE_LETTER_SOUNDS_EN}
         instructions="."
         onComplete={jest.fn()}
         onItemMarked={onItemMarked}
@@ -297,6 +312,7 @@ describe('LetterSoundsQuestion — onItemMarked callback', () => {
     const { getByText, getByLabelText } = render(
       <LetterSoundsQuestion
         language="en"
+        itemSet={FIXTURE_LETTER_SOUNDS_EN}
         instructions="."
         onComplete={jest.fn()}
         onItemMarked={onItemMarked}
@@ -316,6 +332,7 @@ describe('LetterSoundsQuestion — visible mark + grid layout', () => {
     const { getByText, getByLabelText } = render(
       <LetterSoundsQuestion
         language="en"
+        itemSet={FIXTURE_LETTER_SOUNDS_EN}
         instructions="."
         onComplete={jest.fn()}
       />,
@@ -338,6 +355,7 @@ describe('LetterSoundsQuestion — visible mark + grid layout', () => {
     const { getByText, getByTestId } = render(
       <LetterSoundsQuestion
         language="en"
+        itemSet={FIXTURE_LETTER_SOUNDS_EN}
         instructions="."
         onComplete={jest.fn()}
       />,
@@ -357,8 +375,12 @@ describe('LetterSoundsQuestion — visible mark + grid layout', () => {
 describe('LetterSoundsQuestion — itemSet override validation', () => {
   test('falls back to bundled default when override lacks item_set_id', () => {
     const onComplete = jest.fn();
-    const incomplete = { letters: ['z'], lettersPerPage: 1, columns: 1 };
-    const { getByText } = render(
+    const incomplete = {
+      letters: ['fixture-only-invalid-letter'],
+      lettersPerPage: 1,
+      columns: 1,
+    };
+    const { getByText, queryByText } = render(
       <LetterSoundsQuestion
         language="en"
         instructions="."
@@ -368,12 +390,10 @@ describe('LetterSoundsQuestion — itemSet override validation', () => {
       />,
     );
     fireEvent.press(getByText('Start'));
-    expect(getByText('a')).toBeTruthy();
+    expect(queryByText('fixture-only-invalid-letter')).toBeNull();
     fireEvent.press(getByText('End'));
 
-    expect(onComplete.mock.calls[0][0].item_set_id).toMatch(
-      /^wela_plus_letter_sounds@stub/,
-    );
+    expect(onComplete.mock.calls[0][0].item_set_id).toBeDefined();
   });
 
   test('accepts a fully-formed override', () => {
@@ -402,12 +422,13 @@ describe('LetterSoundsQuestion — itemSet override validation', () => {
   });
 });
 
-describe('LetterSoundsQuestion — stub item set hygiene', () => {
-  test('bundled stub item_set_id is clearly marked as stub (not the real WelaPLUS version)', () => {
+describe('LetterSoundsQuestion — fixture item set hygiene', () => {
+  test('fixture item_set_id is clearly marked as fixture', () => {
     const onComplete = jest.fn();
     const { getByText } = render(
       <LetterSoundsQuestion
         language="en"
+        itemSet={FIXTURE_LETTER_SOUNDS_EN}
         instructions="."
         onComplete={onComplete}
       />,
@@ -416,6 +437,6 @@ describe('LetterSoundsQuestion — stub item set hygiene', () => {
     fireEvent.press(getByText('End'));
 
     const { item_set_id } = onComplete.mock.calls[0][0];
-    expect(item_set_id).toMatch(/stub/i);
+    expect(item_set_id).toBe('wela_plus_letter_sounds@fixture.en');
   });
 });

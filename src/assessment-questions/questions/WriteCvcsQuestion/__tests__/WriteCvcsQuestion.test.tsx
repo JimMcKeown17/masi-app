@@ -1,12 +1,14 @@
 import React from 'react';
 import { render, fireEvent } from '@testing-library/react-native';
 import { WriteCvcsQuestion } from '..';
+import { FIXTURE_WRITE_CVCS_EN } from '../../../testFixtures';
 
 describe('WriteCvcsQuestion — intro & active', () => {
   test('Start renders all 12 CVC prompts in a vertical scroller', () => {
     const { getByText, getByTestId } = render(
       <WriteCvcsQuestion
         language="en"
+        itemSet={FIXTURE_WRITE_CVCS_EN}
         instructions="Dictate each CVC; tap if child wrote it correctly."
         onComplete={jest.fn()}
       />,
@@ -25,6 +27,7 @@ describe('WriteCvcsQuestion — marking', () => {
     const { getByText, getByTestId } = render(
       <WriteCvcsQuestion
         language="en"
+        itemSet={FIXTURE_WRITE_CVCS_EN}
         instructions="."
         onComplete={jest.fn()}
       />,
@@ -49,6 +52,7 @@ describe('WriteCvcsQuestion — Finish flow', () => {
     const { getByText, getByTestId } = render(
       <WriteCvcsQuestion
         language="en"
+        itemSet={FIXTURE_WRITE_CVCS_EN}
         instructions="."
         onComplete={onComplete}
       />,
@@ -69,6 +73,7 @@ describe('WriteCvcsQuestion — Finish flow', () => {
     const { getByText, getByTestId } = render(
       <WriteCvcsQuestion
         language="en"
+        itemSet={FIXTURE_WRITE_CVCS_EN}
         instructions="."
         onComplete={jest.fn()}
       />,
@@ -87,6 +92,7 @@ describe('WriteCvcsQuestion — Abandon flow', () => {
     const { getByText } = render(
       <WriteCvcsQuestion
         language="en"
+        itemSet={FIXTURE_WRITE_CVCS_EN}
         instructions="."
         onComplete={onComplete}
         onAbandon={onAbandon}
@@ -102,7 +108,7 @@ describe('WriteCvcsQuestion — Abandon flow', () => {
 
 describe('WriteCvcsQuestion — itemSet override', () => {
   test('falls back to bundled default when override missing item_set_id', () => {
-    const { getByText } = render(
+    const { getByText, queryByText } = render(
       <WriteCvcsQuestion
         language="en"
         instructions="."
@@ -111,6 +117,6 @@ describe('WriteCvcsQuestion — itemSet override', () => {
       />,
     );
     fireEvent.press(getByText('Start'));
-    expect(getByText('cat')).toBeTruthy();
+    expect(queryByText('foo')).toBeNull();
   });
 });

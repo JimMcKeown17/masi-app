@@ -1,11 +1,13 @@
 import { fireEvent } from '@testing-library/react-native';
 import { runContractTest } from '../../../contractTest/runContractTest';
 import { ReadWordsQuestion } from '..';
+import { FIXTURE_READ_WORDS_EN } from '../../../testFixtures';
 
 describe('ReadWordsQuestion — OSS contract', () => {
   test('End on a partially-marked Run emits a contract-valid Result', async () => {
     const { rendered, verdict } = runContractTest(ReadWordsQuestion, {
       language: 'en',
+      itemSet: FIXTURE_READ_WORDS_EN,
       instructions: '.',
       durationSec: 60,
     });
@@ -22,6 +24,7 @@ describe('ReadWordsQuestion — OSS contract', () => {
   test('Abandon path emits a contract-valid Result', async () => {
     const { rendered, verdict } = runContractTest(ReadWordsQuestion, {
       language: 'en',
+      itemSet: FIXTURE_READ_WORDS_EN,
       instructions: '.',
       durationSec: 60,
     });

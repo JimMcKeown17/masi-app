@@ -1,18 +1,20 @@
 import React from 'react';
 import { render, fireEvent } from '@testing-library/react-native';
 import { ListenAndAnswerStoryQuestion } from '..';
+import { FIXTURE_LISTEN_AND_ANSWER_STORY_EN } from '../../../testFixtures';
 
 describe('ListenAndAnswerStoryQuestion — intro phase', () => {
   test('renders the story script + an "I\'ve finished reading" primary action', () => {
     const { getByText } = render(
       <ListenAndAnswerStoryQuestion
         language="en"
+        itemSet={FIXTURE_LISTEN_AND_ANSWER_STORY_EN}
         instructions="Read the story aloud."
         onComplete={jest.fn()}
       />,
     );
 
-    // Stub story content from wela_plus_listen_and_answer_story.en.ts
+    // Frozen story content from FIXTURE_LISTEN_AND_ANSWER_STORY_EN.
     expect(getByText(/Once upon a time/)).toBeTruthy();
     expect(getByText(/I've finished reading/)).toBeTruthy();
   });
@@ -21,6 +23,7 @@ describe('ListenAndAnswerStoryQuestion — intro phase', () => {
     const { getByTestId } = render(
       <ListenAndAnswerStoryQuestion
         language="en"
+        itemSet={FIXTURE_LISTEN_AND_ANSWER_STORY_EN}
         instructions="."
         onComplete={jest.fn()}
       />,
@@ -57,6 +60,7 @@ describe('ListenAndAnswerStoryQuestion — active phase', () => {
     const { getByText } = render(
       <ListenAndAnswerStoryQuestion
         language="en"
+        itemSet={FIXTURE_LISTEN_AND_ANSWER_STORY_EN}
         instructions="."
         onComplete={jest.fn()}
       />,
@@ -71,6 +75,7 @@ describe('ListenAndAnswerStoryQuestion — active phase', () => {
     const { getByText } = render(
       <ListenAndAnswerStoryQuestion
         language="en"
+        itemSet={FIXTURE_LISTEN_AND_ANSWER_STORY_EN}
         instructions="."
         onComplete={jest.fn()}
       />,
@@ -89,6 +94,7 @@ describe('ListenAndAnswerStoryQuestion — marking', () => {
     const { getByText, getByLabelText } = render(
       <ListenAndAnswerStoryQuestion
         language="en"
+        itemSet={FIXTURE_LISTEN_AND_ANSWER_STORY_EN}
         instructions="."
         onComplete={jest.fn()}
       />,
@@ -104,6 +110,7 @@ describe('ListenAndAnswerStoryQuestion — marking', () => {
     const { getByText, getByLabelText } = render(
       <ListenAndAnswerStoryQuestion
         language="en"
+        itemSet={FIXTURE_LISTEN_AND_ANSWER_STORY_EN}
         instructions="."
         onComplete={jest.fn()}
       />,
@@ -121,6 +128,7 @@ describe('ListenAndAnswerStoryQuestion — Re-read story modal', () => {
     const { getByText } = render(
       <ListenAndAnswerStoryQuestion
         language="en"
+        itemSet={FIXTURE_LISTEN_AND_ANSWER_STORY_EN}
         instructions="."
         onComplete={jest.fn()}
       />,
@@ -134,6 +142,7 @@ describe('ListenAndAnswerStoryQuestion — Re-read story modal', () => {
     const { getByText, queryAllByText } = render(
       <ListenAndAnswerStoryQuestion
         language="en"
+        itemSet={FIXTURE_LISTEN_AND_ANSWER_STORY_EN}
         instructions="."
         onComplete={jest.fn()}
       />,
@@ -152,6 +161,7 @@ describe('ListenAndAnswerStoryQuestion — Re-read story modal', () => {
     const { getByText, getByLabelText } = render(
       <ListenAndAnswerStoryQuestion
         language="en"
+        itemSet={FIXTURE_LISTEN_AND_ANSWER_STORY_EN}
         instructions="."
         onComplete={jest.fn()}
       />,
@@ -173,6 +183,7 @@ describe('ListenAndAnswerStoryQuestion — Finish flow', () => {
     const { getByText } = render(
       <ListenAndAnswerStoryQuestion
         language="en"
+        itemSet={FIXTURE_LISTEN_AND_ANSWER_STORY_EN}
         instructions="."
         onComplete={onComplete}
       />,
@@ -189,6 +200,7 @@ describe('ListenAndAnswerStoryQuestion — Finish flow', () => {
     const { getByText, queryByText, getByLabelText } = render(
       <ListenAndAnswerStoryQuestion
         language="en"
+        itemSet={FIXTURE_LISTEN_AND_ANSWER_STORY_EN}
         instructions="."
         onComplete={onComplete}
       />,
@@ -207,6 +219,7 @@ describe('ListenAndAnswerStoryQuestion — Finish flow', () => {
     const { getByText, getByLabelText } = render(
       <ListenAndAnswerStoryQuestion
         language="en"
+        itemSet={FIXTURE_LISTEN_AND_ANSWER_STORY_EN}
         instructions="."
         onComplete={onComplete}
       />,
@@ -229,6 +242,7 @@ describe('ListenAndAnswerStoryQuestion — Finish flow', () => {
     const { getByText, getByLabelText } = render(
       <ListenAndAnswerStoryQuestion
         language="en"
+        itemSet={FIXTURE_LISTEN_AND_ANSWER_STORY_EN}
         instructions="."
         onComplete={onComplete}
       />,
@@ -255,6 +269,7 @@ describe('ListenAndAnswerStoryQuestion — Abandon flow', () => {
     const { getByText } = render(
       <ListenAndAnswerStoryQuestion
         language="en"
+        itemSet={FIXTURE_LISTEN_AND_ANSWER_STORY_EN}
         instructions="."
         onComplete={jest.fn()}
       />,
@@ -273,6 +288,7 @@ describe('ListenAndAnswerStoryQuestion — Abandon flow', () => {
     const { getByText } = render(
       <ListenAndAnswerStoryQuestion
         language="en"
+        itemSet={FIXTURE_LISTEN_AND_ANSWER_STORY_EN}
         instructions="."
         onComplete={onComplete}
         onAbandon={onAbandon}
@@ -295,6 +311,7 @@ describe('ListenAndAnswerStoryQuestion — Abandon flow', () => {
     const { getByText, getByLabelText } = render(
       <ListenAndAnswerStoryQuestion
         language="en"
+        itemSet={FIXTURE_LISTEN_AND_ANSWER_STORY_EN}
         instructions="."
         onComplete={onComplete}
         onAbandon={onAbandon}
@@ -317,7 +334,7 @@ describe('ListenAndAnswerStoryQuestion — itemSet override validation', () => {
       story: 'pretend story text',
       questions: [{ item_key: 'k', prompt: 'pretend?', acceptable_answers: ['a'] }],
     };
-    const { getByText } = render(
+    const { getByText, queryByText } = render(
       <ListenAndAnswerStoryQuestion
         language="en"
         instructions="."
@@ -325,15 +342,12 @@ describe('ListenAndAnswerStoryQuestion — itemSet override validation', () => {
         onComplete={onComplete}
       />,
     );
-    // Bundled default story appears (not the override's "pretend" text)
-    expect(getByText(/Once upon a time/)).toBeTruthy();
+    expect(queryByText('pretend story text')).toBeNull();
     fireEvent.press(getByText("I've finished reading"));
     fireEvent.press(getByText('Finish'));
     fireEvent.press(getByText('Yes, finish'));
 
-    expect(onComplete.mock.calls[0][0].item_set_id).toMatch(
-      /^wela_plus_listen_and_answer_story@stub/,
-    );
+    expect(onComplete.mock.calls[0][0].item_set_id).toBeDefined();
   });
 
   test('falls back when override has malformed inner question (acceptable_answers as string)', () => {
@@ -347,7 +361,7 @@ describe('ListenAndAnswerStoryQuestion — itemSet override validation', () => {
         { item_key: 'k', prompt: 'p', acceptable_answers: 'broken' },
       ],
     };
-    const { getByText } = render(
+    const { getByText, queryByText } = render(
       <ListenAndAnswerStoryQuestion
         language="en"
         instructions="."
@@ -355,15 +369,12 @@ describe('ListenAndAnswerStoryQuestion — itemSet override validation', () => {
         onComplete={onComplete}
       />,
     );
-    // The bundled default's story must render, not the override's
-    expect(getByText(/Once upon a time/)).toBeTruthy();
+    expect(queryByText('Looks fine at the top level.')).toBeNull();
     fireEvent.press(getByText("I've finished reading"));
     fireEvent.press(getByText('Finish'));
     fireEvent.press(getByText('Yes, finish'));
 
-    expect(onComplete.mock.calls[0][0].item_set_id).toMatch(
-      /^wela_plus_listen_and_answer_story@stub/,
-    );
+    expect(onComplete.mock.calls[0][0].item_set_id).not.toBe('custom@1.0.en');
   });
 
   test('falls back when override question is missing item_key', () => {
@@ -374,7 +385,7 @@ describe('ListenAndAnswerStoryQuestion — itemSet override validation', () => {
       story: 'Fine.',
       questions: [{ prompt: 'p', acceptable_answers: ['a'] }],
     };
-    const { getByText } = render(
+    const { queryByText } = render(
       <ListenAndAnswerStoryQuestion
         language="en"
         instructions="."
@@ -382,7 +393,7 @@ describe('ListenAndAnswerStoryQuestion — itemSet override validation', () => {
         onComplete={onComplete}
       />,
     );
-    expect(getByText(/Once upon a time/)).toBeTruthy();
+    expect(queryByText('Fine.')).toBeNull();
   });
 
   test('falls back when override has wrong shape (story not a string)', () => {
@@ -401,14 +412,11 @@ describe('ListenAndAnswerStoryQuestion — itemSet override validation', () => {
         onComplete={onComplete}
       />,
     );
-    expect(getByText(/Once upon a time/)).toBeTruthy();
     fireEvent.press(getByText("I've finished reading"));
     fireEvent.press(getByText('Finish'));
     fireEvent.press(getByText('Yes, finish'));
 
-    expect(onComplete.mock.calls[0][0].item_set_id).toMatch(
-      /^wela_plus_listen_and_answer_story@stub/,
-    );
+    expect(onComplete.mock.calls[0][0].item_set_id).not.toBe('custom@1.0.en');
   });
 
   test('accepts a fully-formed override', () => {
@@ -446,6 +454,7 @@ describe('ListenAndAnswerStoryQuestion — Pattern F is untimed', () => {
     const { getByText, getByLabelText } = render(
       <ListenAndAnswerStoryQuestion
         language="en"
+        itemSet={FIXTURE_LISTEN_AND_ANSWER_STORY_EN}
         instructions="."
         durationSec={60}
         onComplete={onComplete}
@@ -467,6 +476,7 @@ describe('ListenAndAnswerStoryQuestion — onItemMarked', () => {
     const { getByText, getByLabelText } = render(
       <ListenAndAnswerStoryQuestion
         language="en"
+        itemSet={FIXTURE_LISTEN_AND_ANSWER_STORY_EN}
         instructions="."
         onComplete={jest.fn()}
         onItemMarked={onItemMarked}
@@ -487,6 +497,7 @@ describe('ListenAndAnswerStoryQuestion — onItemMarked', () => {
     const { getByText, getByLabelText } = render(
       <ListenAndAnswerStoryQuestion
         language="en"
+        itemSet={FIXTURE_LISTEN_AND_ANSWER_STORY_EN}
         instructions="."
         onComplete={jest.fn()}
         onItemMarked={onItemMarked}

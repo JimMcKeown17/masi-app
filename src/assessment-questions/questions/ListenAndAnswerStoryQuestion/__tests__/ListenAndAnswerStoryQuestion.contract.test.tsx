@@ -1,11 +1,13 @@
 import { fireEvent } from '@testing-library/react-native';
 import { runContractTest } from '../../../contractTest/runContractTest';
 import { ListenAndAnswerStoryQuestion } from '..';
+import { FIXTURE_LISTEN_AND_ANSWER_STORY_EN } from '../../../testFixtures';
 
 describe('ListenAndAnswerStoryQuestion — OSS contract', () => {
   test('Finish on a fully-marked Run emits a contract-valid Result', async () => {
     const { rendered, verdict } = runContractTest(ListenAndAnswerStoryQuestion, {
       language: 'en',
+      itemSet: FIXTURE_LISTEN_AND_ANSWER_STORY_EN,
       instructions: '.',
     });
 
@@ -29,6 +31,7 @@ describe('ListenAndAnswerStoryQuestion — OSS contract', () => {
   test('Finish-with-unmarked confirmation path also emits a contract-valid Result', async () => {
     const { rendered, verdict } = runContractTest(ListenAndAnswerStoryQuestion, {
       language: 'en',
+      itemSet: FIXTURE_LISTEN_AND_ANSWER_STORY_EN,
       instructions: '.',
     });
 
@@ -45,6 +48,7 @@ describe('ListenAndAnswerStoryQuestion — OSS contract', () => {
   test('Abandon path emits a contract-valid Result with a skipped_* stopped_reason', async () => {
     const { rendered, verdict } = runContractTest(ListenAndAnswerStoryQuestion, {
       language: 'en',
+      itemSet: FIXTURE_LISTEN_AND_ANSWER_STORY_EN,
       instructions: '.',
     });
 

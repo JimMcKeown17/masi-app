@@ -1,11 +1,13 @@
 import { fireEvent } from '@testing-library/react-native';
 import { runContractTest } from '../../../contractTest/runContractTest';
 import { ListenFirstSoundQuestion } from '..';
+import { FIXTURE_FIRST_SOUND_EN } from '../../../testFixtures';
 
 describe('ListenFirstSoundQuestion — OSS contract', () => {
   test('Finish on a fully-marked Run emits a contract-valid Result', async () => {
     const { rendered, verdict } = runContractTest(ListenFirstSoundQuestion, {
       language: 'en',
+      itemSet: FIXTURE_FIRST_SOUND_EN,
       instructions: '.',
     });
 
@@ -34,6 +36,7 @@ describe('ListenFirstSoundQuestion — OSS contract', () => {
   test('Finish-with-unmarked confirmation path also emits a contract-valid Result', async () => {
     const { rendered, verdict } = runContractTest(ListenFirstSoundQuestion, {
       language: 'en',
+      itemSet: FIXTURE_FIRST_SOUND_EN,
       instructions: '.',
     });
 

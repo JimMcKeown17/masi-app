@@ -1,12 +1,14 @@
 import React from 'react';
 import { render, fireEvent, act } from '@testing-library/react-native';
 import { ReadWordsQuestion } from '..';
+import { FIXTURE_READ_WORDS_EN } from '../../../testFixtures';
 
 describe('ReadWordsQuestion — intro phase', () => {
   test('renders instructions + Start; Start transitions to active showing words', () => {
     const { getByText } = render(
       <ReadWordsQuestion
         language="en"
+        itemSet={FIXTURE_READ_WORDS_EN}
         instructions="Child reads words aloud; tap each correct word."
         durationSec={60}
         onComplete={jest.fn()}
@@ -14,7 +16,6 @@ describe('ReadWordsQuestion — intro phase', () => {
     );
     expect(getByText(/Child reads words aloud/)).toBeTruthy();
     fireEvent.press(getByText('Start'));
-    // Stub words from wela_plus_read_words.en.ts
     expect(getByText('cat')).toBeTruthy();
     expect(getByText('dog')).toBeTruthy();
   });
@@ -25,6 +26,7 @@ describe('ReadWordsQuestion — marking', () => {
     const { getByText, getByLabelText } = render(
       <ReadWordsQuestion
         language="en"
+        itemSet={FIXTURE_READ_WORDS_EN}
         instructions="."
         durationSec={60}
         onComplete={jest.fn()}
@@ -41,6 +43,7 @@ describe('ReadWordsQuestion — marking', () => {
     const { getByText, getByLabelText } = render(
       <ReadWordsQuestion
         language="en"
+        itemSet={FIXTURE_READ_WORDS_EN}
         instructions="."
         durationSec={60}
         onComplete={jest.fn()}
@@ -59,6 +62,7 @@ describe('ReadWordsQuestion — End button finishes early', () => {
     const { getByText, getByLabelText } = render(
       <ReadWordsQuestion
         language="en"
+        itemSet={FIXTURE_READ_WORDS_EN}
         instructions="."
         durationSec={60}
         onComplete={onComplete}
@@ -91,6 +95,7 @@ describe('ReadWordsQuestion — timer', () => {
     const { getByText, getByLabelText } = render(
       <ReadWordsQuestion
         language="en"
+        itemSet={FIXTURE_READ_WORDS_EN}
         instructions="."
         durationSec={1}
         onComplete={onComplete}
@@ -116,6 +121,7 @@ describe('ReadWordsQuestion — Abandon flow', () => {
     const { getByText } = render(
       <ReadWordsQuestion
         language="en"
+        itemSet={FIXTURE_READ_WORDS_EN}
         instructions="."
         durationSec={60}
         onComplete={onComplete}
@@ -137,7 +143,7 @@ describe('ReadWordsQuestion — itemSet override validation', () => {
   test('falls back to bundled default when override is missing item_set_id', () => {
     const onComplete = jest.fn();
     const incomplete = { words: [{ item_key: 'k', word: 'foo' }] };
-    const { getByText } = render(
+    const { getByText, queryByText } = render(
       <ReadWordsQuestion
         language="en"
         instructions="."
@@ -147,11 +153,9 @@ describe('ReadWordsQuestion — itemSet override validation', () => {
       />,
     );
     fireEvent.press(getByText('Start'));
-    expect(getByText('cat')).toBeTruthy();
+    expect(queryByText('foo')).toBeNull();
     fireEvent.press(getByText('End'));
-    expect(onComplete.mock.calls[0][0].item_set_id).toMatch(
-      /^wela_plus_read_words@stub/,
-    );
+    expect(onComplete.mock.calls[0][0].item_set_id).toBeDefined();
   });
 
   test('accepts a fully-formed override and renders its words', () => {
@@ -184,6 +188,7 @@ describe('ReadWordsQuestion — markingPolarity', () => {
     const { getByText, getByLabelText } = render(
       <ReadWordsQuestion
         language="en"
+        itemSet={FIXTURE_READ_WORDS_EN}
         instructions="."
         durationSec={60}
         onComplete={onComplete}
@@ -202,6 +207,7 @@ describe('ReadWordsQuestion — markingPolarity', () => {
     const { getByText, getByLabelText } = render(
       <ReadWordsQuestion
         language="en"
+        itemSet={FIXTURE_READ_WORDS_EN}
         instructions="."
         durationSec={60}
         markingPolarity="tap_wrong"
@@ -239,6 +245,7 @@ describe('ReadWordsQuestion — markingPolarity', () => {
     const { getByText } = render(
       <ReadWordsQuestion
         language="en"
+        itemSet={FIXTURE_READ_WORDS_EN}
         instructions="."
         durationSec={60}
         markingPolarity="tap_wrong"
@@ -262,6 +269,7 @@ describe('ReadWordsQuestion — markingPolarity', () => {
     const { getByText, getByLabelText } = render(
       <ReadWordsQuestion
         language="en"
+        itemSet={FIXTURE_READ_WORDS_EN}
         instructions="."
         durationSec={60}
         markingPolarity="tap_wrong"

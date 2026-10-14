@@ -1,18 +1,20 @@
 import React from 'react';
 import { render, fireEvent, act } from '@testing-library/react-native';
 import { ReadPassageQuestion } from '..';
+import { FIXTURE_READ_PASSAGE_EN } from '../../../testFixtures';
 
 describe('ReadPassageQuestion — intro & active', () => {
   test('Start renders the passage as wrap-pills', () => {
     const { getByText } = render(
       <ReadPassageQuestion
         language="en"
+        itemSet={FIXTURE_READ_PASSAGE_EN}
         instructions="."
         onComplete={jest.fn()}
       />,
     );
     fireEvent.press(getByText('Start'));
-    // First word of stub passage
+    // First and last words of the frozen fixture passage.
     expect(getByText('A')).toBeTruthy();
     expect(getByText('happy.')).toBeTruthy();
   });
@@ -31,6 +33,7 @@ describe('ReadPassageQuestion — durationSec defaults to 60 when omitted', () =
     const { getByText } = render(
       <ReadPassageQuestion
         language="en"
+        itemSet={FIXTURE_READ_PASSAGE_EN}
         instructions="."
         onComplete={onComplete}
       />,
@@ -54,6 +57,7 @@ describe('ReadPassageQuestion — derived.correct_words_per_minute', () => {
     const { getByText, getByTestId } = render(
       <ReadPassageQuestion
         language="en"
+        itemSet={FIXTURE_READ_PASSAGE_EN}
         instructions="."
         durationSec={60}
         onComplete={onComplete}
@@ -80,6 +84,7 @@ describe('ReadPassageQuestion — derived.correct_words_per_minute', () => {
     const { getByText } = render(
       <ReadPassageQuestion
         language="en"
+        itemSet={FIXTURE_READ_PASSAGE_EN}
         instructions="."
         durationSec={60}
         onComplete={onComplete}
@@ -132,7 +137,7 @@ describe('ReadPassageQuestion — itemSet override and variable passage length',
       />,
     );
     fireEvent.press(getByText('Start'));
-    expect(getByText('A')).toBeTruthy(); // first stub word
+    expect(getByText('End')).toBeTruthy();
   });
 });
 
@@ -143,6 +148,7 @@ describe('ReadPassageQuestion — Abandon flow', () => {
     const { getByText } = render(
       <ReadPassageQuestion
         language="en"
+        itemSet={FIXTURE_READ_PASSAGE_EN}
         instructions="."
         durationSec={60}
         onComplete={onComplete}
@@ -164,6 +170,7 @@ describe('ReadPassageQuestion — Abandon flow', () => {
     const { getByText } = render(
       <ReadPassageQuestion
         language="en"
+        itemSet={FIXTURE_READ_PASSAGE_EN}
         instructions="."
         durationSec={60}
         onComplete={onComplete}

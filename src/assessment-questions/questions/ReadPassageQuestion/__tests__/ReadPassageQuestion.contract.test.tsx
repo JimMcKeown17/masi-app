@@ -1,11 +1,13 @@
 import { fireEvent } from '@testing-library/react-native';
 import { runContractTest } from '../../../contractTest/runContractTest';
 import { ReadPassageQuestion } from '..';
+import { FIXTURE_READ_PASSAGE_EN } from '../../../testFixtures';
 
 describe('ReadPassageQuestion — OSS contract', () => {
   test('End on a partially-marked Run emits a contract-valid Result', async () => {
     const { rendered, verdict } = runContractTest(ReadPassageQuestion, {
       language: 'en',
+      itemSet: FIXTURE_READ_PASSAGE_EN,
       instructions: '.',
       durationSec: 60,
     });

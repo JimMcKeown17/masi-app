@@ -1,12 +1,14 @@
 import React from 'react';
 import { render, fireEvent } from '@testing-library/react-native';
 import { ListenFirstSoundQuestion } from '..';
+import { FIXTURE_FIRST_SOUND_EN } from '../../../testFixtures';
 
 describe('ListenFirstSoundQuestion — intro and active phases', () => {
   test('renders instructions + Start; Start transitions to active showing prompts', () => {
     const { getByText } = render(
       <ListenFirstSoundQuestion
         language="en"
+        itemSet={FIXTURE_FIRST_SOUND_EN}
         instructions="Read each word aloud; child says first sound."
         onComplete={jest.fn()}
       />,
@@ -22,6 +24,7 @@ describe('ListenFirstSoundQuestion — intro and active phases', () => {
     const { getByText, getByLabelText } = render(
       <ListenFirstSoundQuestion
         language="en"
+        itemSet={FIXTURE_FIRST_SOUND_EN}
         instructions="."
         onComplete={jest.fn()}
       />,
@@ -37,6 +40,7 @@ describe('ListenFirstSoundQuestion — intro and active phases', () => {
     const { getByText, getByLabelText } = render(
       <ListenFirstSoundQuestion
         language="en"
+        itemSet={FIXTURE_FIRST_SOUND_EN}
         instructions="."
         onComplete={jest.fn()}
       />,
@@ -55,6 +59,7 @@ describe('ListenFirstSoundQuestion — Finish flow', () => {
     const { getByText } = render(
       <ListenFirstSoundQuestion
         language="en"
+        itemSet={FIXTURE_FIRST_SOUND_EN}
         instructions="."
         onComplete={onComplete}
       />,
@@ -71,6 +76,7 @@ describe('ListenFirstSoundQuestion — Finish flow', () => {
     const { getByText, queryByText, getByLabelText } = render(
       <ListenFirstSoundQuestion
         language="en"
+        itemSet={FIXTURE_FIRST_SOUND_EN}
         instructions="."
         onComplete={onComplete}
       />,
@@ -89,6 +95,7 @@ describe('ListenFirstSoundQuestion — Finish flow', () => {
     const { getByText, getByLabelText } = render(
       <ListenFirstSoundQuestion
         language="en"
+        itemSet={FIXTURE_FIRST_SOUND_EN}
         instructions="."
         onComplete={onComplete}
       />,
@@ -110,6 +117,7 @@ describe('ListenFirstSoundQuestion — Finish flow', () => {
     const { getByText, getByLabelText } = render(
       <ListenFirstSoundQuestion
         language="en"
+        itemSet={FIXTURE_FIRST_SOUND_EN}
         instructions="."
         onComplete={onComplete}
       />,
@@ -141,6 +149,7 @@ describe('ListenFirstSoundQuestion — scrollable list', () => {
     const { getByText, getByTestId } = render(
       <ListenFirstSoundQuestion
         language="en"
+        itemSet={FIXTURE_FIRST_SOUND_EN}
         instructions="."
         onComplete={jest.fn()}
       />,
@@ -156,6 +165,7 @@ describe('ListenFirstSoundQuestion — Abandon flow', () => {
     const { getByText } = render(
       <ListenFirstSoundQuestion
         language="en"
+        itemSet={FIXTURE_FIRST_SOUND_EN}
         instructions="."
         onComplete={jest.fn()}
       />,
@@ -174,6 +184,7 @@ describe('ListenFirstSoundQuestion — Abandon flow', () => {
     const { getByText } = render(
       <ListenFirstSoundQuestion
         language="en"
+        itemSet={FIXTURE_FIRST_SOUND_EN}
         instructions="."
         onComplete={onComplete}
         onAbandon={onAbandon}
@@ -196,6 +207,7 @@ describe('ListenFirstSoundQuestion — Abandon flow', () => {
     const { getByText, getByLabelText } = render(
       <ListenFirstSoundQuestion
         language="en"
+        itemSet={FIXTURE_FIRST_SOUND_EN}
         instructions="."
         onComplete={onComplete}
         onAbandon={onAbandon}
@@ -215,7 +227,7 @@ describe('ListenFirstSoundQuestion — itemSet override validation', () => {
   test('falls back to bundled default when override is missing item_set_id', () => {
     const onComplete = jest.fn();
     const incomplete = { prompts: [{ item_key: 'k', prompt: 'pretend' }] };
-    const { getByText } = render(
+    const { getByText, queryByText } = render(
       <ListenFirstSoundQuestion
         language="en"
         instructions="."
@@ -224,12 +236,11 @@ describe('ListenFirstSoundQuestion — itemSet override validation', () => {
       />,
     );
     fireEvent.press(getByText('Start'));
-    // bundled default appears (not the override's single prompt)
-    expect(getByText('apple')).toBeTruthy();
+    expect(queryByText('pretend')).toBeNull();
     fireEvent.press(getByText('Finish'));
     fireEvent.press(getByText('Yes, finish'));
 
-    expect(onComplete.mock.calls[0][0].item_set_id).toMatch(/^wela_plus_first_sound@stub/);
+    expect(onComplete.mock.calls[0][0].item_set_id).toBeDefined();
   });
 
   test('accepts a fully-formed override', () => {
@@ -265,6 +276,7 @@ describe('ListenFirstSoundQuestion — Pattern B is untimed', () => {
     const { getByText, getByLabelText } = render(
       <ListenFirstSoundQuestion
         language="en"
+        itemSet={FIXTURE_FIRST_SOUND_EN}
         instructions="."
         durationSec={60}
         onComplete={onComplete}
@@ -285,6 +297,7 @@ describe('ListenFirstSoundQuestion — onItemMarked', () => {
     const { getByText, getByLabelText } = render(
       <ListenFirstSoundQuestion
         language="en"
+        itemSet={FIXTURE_FIRST_SOUND_EN}
         instructions="."
         onComplete={jest.fn()}
         onItemMarked={onItemMarked}

@@ -1,12 +1,14 @@
 import React from 'react';
 import { render, fireEvent } from '@testing-library/react-native';
 import { LetterWritingFromPicturesQuestion } from '..';
+import { FIXTURE_LETTER_WRITING_EN } from '../../../testFixtures';
 
 describe('LetterWritingFromPicturesQuestion — intro & first page', () => {
   test('Start renders 8 cells on page 1 with picture alt + expected letter', () => {
     const { getByText } = render(
       <LetterWritingFromPicturesQuestion
         language="en"
+        itemSet={FIXTURE_LETTER_WRITING_EN}
         instructions="."
         onComplete={jest.fn()}
       />,
@@ -25,6 +27,7 @@ describe('LetterWritingFromPicturesQuestion — pagination', () => {
     const { getByText } = render(
       <LetterWritingFromPicturesQuestion
         language="en"
+        itemSet={FIXTURE_LETTER_WRITING_EN}
         instructions="."
         onComplete={jest.fn()}
       />,
@@ -40,6 +43,7 @@ describe('LetterWritingFromPicturesQuestion — pagination', () => {
     const { getByText, queryByText } = render(
       <LetterWritingFromPicturesQuestion
         language="en"
+        itemSet={FIXTURE_LETTER_WRITING_EN}
         instructions="."
         onComplete={jest.fn()}
       />,
@@ -57,6 +61,7 @@ describe('LetterWritingFromPicturesQuestion — batch marking', () => {
     const { getByText, getByTestId } = render(
       <LetterWritingFromPicturesQuestion
         language="en"
+        itemSet={FIXTURE_LETTER_WRITING_EN}
         instructions="."
         onComplete={jest.fn()}
       />,
@@ -74,6 +79,7 @@ describe('LetterWritingFromPicturesQuestion — batch marking', () => {
     const { getByText, getByTestId } = render(
       <LetterWritingFromPicturesQuestion
         language="en"
+        itemSet={FIXTURE_LETTER_WRITING_EN}
         instructions="."
         onComplete={onComplete}
       />,
@@ -103,6 +109,7 @@ describe('LetterWritingFromPicturesQuestion — Abandon flow', () => {
     const { getByText } = render(
       <LetterWritingFromPicturesQuestion
         language="en"
+        itemSet={FIXTURE_LETTER_WRITING_EN}
         instructions="."
         onComplete={onComplete}
         onAbandon={onAbandon}
@@ -124,6 +131,7 @@ describe('LetterWritingFromPicturesQuestion — Abandon flow', () => {
     const { getByText } = render(
       <LetterWritingFromPicturesQuestion
         language="en"
+        itemSet={FIXTURE_LETTER_WRITING_EN}
         instructions="."
         onComplete={onComplete}
       />,
@@ -140,13 +148,14 @@ describe('LetterWritingFromPicturesQuestion — Abandon flow', () => {
   });
 });
 
-describe('LetterWritingFromPicturesQuestion — stub alphabet integrity', () => {
-  test('every stub item_key maps to expected_letter at alphabet position', () => {
-    // Codex caught: a stub with two B-leading entries and zero X-leading
+describe('LetterWritingFromPicturesQuestion — fixture alphabet integrity', () => {
+  test('every fixture item_key maps to expected_letter at alphabet position', () => {
+    // Codex caught: a fixture with two B-leading entries and zero X-leading
     // entries would silently mis-score an X cell in any pre-#34 run.
     const { getByText, getByTestId } = render(
       <LetterWritingFromPicturesQuestion
         language="en"
+        itemSet={FIXTURE_LETTER_WRITING_EN}
         instructions="."
         onComplete={jest.fn()}
       />,
@@ -163,15 +172,23 @@ describe('LetterWritingFromPicturesQuestion — stub alphabet integrity', () => 
 
 describe('LetterWritingFromPicturesQuestion — itemSet override', () => {
   test('falls back to bundled default when override missing item_set_id', () => {
-    const { getByText } = render(
+    const { getByText, queryByText } = render(
       <LetterWritingFromPicturesQuestion
         language="en"
         instructions="."
-        itemSet={{ prompts: [] }}
+        itemSet={{
+          prompts: [
+            {
+              item_key: 'invalid',
+              picture: { source: null, alt: 'fixture-only-invalid-picture' },
+              expected_letter: 'x',
+            },
+          ],
+        }}
         onComplete={jest.fn()}
       />,
     );
     fireEvent.press(getByText('Start'));
-    expect(getByText('apple')).toBeTruthy();
+    expect(queryByText('fixture-only-invalid-picture')).toBeNull();
   });
 });

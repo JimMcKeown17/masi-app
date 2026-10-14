@@ -1,11 +1,13 @@
 import { fireEvent } from '@testing-library/react-native';
 import { runContractTest } from '../../../contractTest/runContractTest';
 import { StoryWritingRubricQuestion } from '..';
+import { FIXTURE_STORY_WRITING_EN } from '../../../testFixtures';
 
 describe('StoryWritingRubricQuestion — OSS contract', () => {
   test('Finish all scored emits a contract-valid Result', async () => {
     const { rendered, verdict } = runContractTest(StoryWritingRubricQuestion, {
       language: 'en',
+      itemSet: FIXTURE_STORY_WRITING_EN,
       instructions: '.',
     });
     fireEvent.press(rendered.getByText('Start'));
@@ -21,6 +23,7 @@ describe('StoryWritingRubricQuestion — OSS contract', () => {
   test('Abandon emits a contract-valid Result with items=[]', async () => {
     const { rendered, verdict } = runContractTest(StoryWritingRubricQuestion, {
       language: 'en',
+      itemSet: FIXTURE_STORY_WRITING_EN,
       instructions: '.',
     });
     fireEvent.press(rendered.getByText('Start'));

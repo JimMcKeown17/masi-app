@@ -1,12 +1,14 @@
 import React from 'react';
 import { render, fireEvent } from '@testing-library/react-native';
 import { ReadSentencesQuestion } from '..';
+import { FIXTURE_READ_SENTENCES_EN } from '../../../testFixtures';
 
 describe('ReadSentencesQuestion — intro & active', () => {
   test('Start advances to active and renders all sentence words as pills', () => {
     const { getByText } = render(
       <ReadSentencesQuestion
         language="en"
+        itemSet={FIXTURE_READ_SENTENCES_EN}
         instructions="."
         onComplete={jest.fn()}
       />,
@@ -21,6 +23,7 @@ describe('ReadSentencesQuestion — intro & active', () => {
     const { getByText, getByTestId } = render(
       <ReadSentencesQuestion
         language="en"
+        itemSet={FIXTURE_READ_SENTENCES_EN}
         instructions="."
         onComplete={jest.fn()}
       />,
@@ -36,6 +39,7 @@ describe('ReadSentencesQuestion — marking', () => {
     const { getByText, getByLabelText } = render(
       <ReadSentencesQuestion
         language="en"
+        itemSet={FIXTURE_READ_SENTENCES_EN}
         instructions="."
         onComplete={jest.fn()}
       />,
@@ -54,6 +58,7 @@ describe('ReadSentencesQuestion — Finish flow and per-sentence percent', () =>
     const { getByText, getByTestId } = render(
       <ReadSentencesQuestion
         language="en"
+        itemSet={FIXTURE_READ_SENTENCES_EN}
         instructions="."
         onComplete={onComplete}
       />,
@@ -94,6 +99,7 @@ describe('ReadSentencesQuestion — Abandon flow', () => {
     const { getByText } = render(
       <ReadSentencesQuestion
         language="en"
+        itemSet={FIXTURE_READ_SENTENCES_EN}
         instructions="."
         onComplete={onComplete}
         onAbandon={onAbandon}
@@ -111,16 +117,23 @@ describe('ReadSentencesQuestion — Abandon flow', () => {
 describe('ReadSentencesQuestion — itemSet override', () => {
   test('falls back to bundled default when override misses item_set_id', () => {
     const onComplete = jest.fn();
-    const { getByText } = render(
+    const { getByText, queryByText } = render(
       <ReadSentencesQuestion
         language="en"
         instructions="."
-        itemSet={{ sentences: [{ item_key: 's', words: [] }] }}
+        itemSet={{
+          sentences: [
+            {
+              item_key: 's',
+              words: [{ item_key: 's.w1', word: 'fixture-only-invalid-word' }],
+            },
+          ],
+        }}
         onComplete={onComplete}
       />,
     );
     fireEvent.press(getByText('Start'));
-    expect(getByText('The')).toBeTruthy();
+    expect(queryByText('fixture-only-invalid-word')).toBeNull();
   });
 
   test('accepts a fully-formed override', () => {

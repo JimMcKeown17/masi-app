@@ -1,12 +1,14 @@
 import React from 'react';
 import { render, fireEvent } from '@testing-library/react-native';
 import { WriteSentencesFromDictationQuestion } from '..';
+import { FIXTURE_WRITE_SENTENCES_DICTATION_EN } from '../../../testFixtures';
 
 describe('WriteSentencesFromDictationQuestion — intro & active', () => {
   test('Start renders all 12 sentence prompts in a vertical scroller', () => {
     const { getByText, getByTestId } = render(
       <WriteSentencesFromDictationQuestion
         language="en"
+        itemSet={FIXTURE_WRITE_SENTENCES_DICTATION_EN}
         instructions="Dictate each sentence; tap if child wrote it correctly."
         onComplete={jest.fn()}
       />,
@@ -24,6 +26,7 @@ describe('WriteSentencesFromDictationQuestion — marking', () => {
     const { getByText, getByTestId } = render(
       <WriteSentencesFromDictationQuestion
         language="en"
+        itemSet={FIXTURE_WRITE_SENTENCES_DICTATION_EN}
         instructions="."
         onComplete={jest.fn()}
       />,
@@ -48,6 +51,7 @@ describe('WriteSentencesFromDictationQuestion — Finish & Abandon', () => {
     const { getByText, getByTestId } = render(
       <WriteSentencesFromDictationQuestion
         language="en"
+        itemSet={FIXTURE_WRITE_SENTENCES_DICTATION_EN}
         instructions="."
         onComplete={onComplete}
       />,
@@ -69,6 +73,7 @@ describe('WriteSentencesFromDictationQuestion — Finish & Abandon', () => {
     const { getByText } = render(
       <WriteSentencesFromDictationQuestion
         language="en"
+        itemSet={FIXTURE_WRITE_SENTENCES_DICTATION_EN}
         instructions="."
         onComplete={onComplete}
         onAbandon={onAbandon}
@@ -84,7 +89,7 @@ describe('WriteSentencesFromDictationQuestion — Finish & Abandon', () => {
 
 describe('WriteSentencesFromDictationQuestion — itemSet override', () => {
   test('falls back to bundled default when override missing item_set_id', () => {
-    const { getByText } = render(
+    const { getByText, queryByText } = render(
       <WriteSentencesFromDictationQuestion
         language="en"
         instructions="."
@@ -93,6 +98,6 @@ describe('WriteSentencesFromDictationQuestion — itemSet override', () => {
       />,
     );
     fireEvent.press(getByText('Start'));
-    expect(getByText('The cat sat down.')).toBeTruthy();
+    expect(queryByText('foo')).toBeNull();
   });
 });

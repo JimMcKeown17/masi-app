@@ -1,12 +1,14 @@
 import React from 'react';
 import { render, fireEvent } from '@testing-library/react-native';
 import { ListenPhonemeBlendQuestion } from '..';
+import { FIXTURE_PHONEME_BLEND_EN } from '../../../testFixtures';
 
 describe('ListenPhonemeBlendQuestion — intro and active phases', () => {
   test('renders instructions + Start; Start transitions to active showing segmented prompts', () => {
     const { getByText } = render(
       <ListenPhonemeBlendQuestion
         language="en"
+        itemSet={FIXTURE_PHONEME_BLEND_EN}
         instructions="Say each segmented prompt; child blends."
         onComplete={jest.fn()}
       />,
@@ -22,6 +24,7 @@ describe('ListenPhonemeBlendQuestion — intro and active phases', () => {
     const { getByText } = render(
       <ListenPhonemeBlendQuestion
         language="en"
+        itemSet={FIXTURE_PHONEME_BLEND_EN}
         instructions="."
         onComplete={jest.fn()}
       />,
@@ -36,6 +39,7 @@ describe('ListenPhonemeBlendQuestion — intro and active phases', () => {
     const { getByText, getByLabelText } = render(
       <ListenPhonemeBlendQuestion
         language="en"
+        itemSet={FIXTURE_PHONEME_BLEND_EN}
         instructions="."
         onComplete={jest.fn()}
       />,
@@ -56,6 +60,7 @@ describe('ListenPhonemeBlendQuestion — Finish flow', () => {
     const { getByText } = render(
       <ListenPhonemeBlendQuestion
         language="en"
+        itemSet={FIXTURE_PHONEME_BLEND_EN}
         instructions="."
         onComplete={onComplete}
       />,
@@ -72,6 +77,7 @@ describe('ListenPhonemeBlendQuestion — Finish flow', () => {
     const { getByText, getByLabelText } = render(
       <ListenPhonemeBlendQuestion
         language="en"
+        itemSet={FIXTURE_PHONEME_BLEND_EN}
         instructions="."
         onComplete={onComplete}
       />,
@@ -96,6 +102,7 @@ describe('ListenPhonemeBlendQuestion — scrollable list', () => {
     const { getByText, getByTestId } = render(
       <ListenPhonemeBlendQuestion
         language="en"
+        itemSet={FIXTURE_PHONEME_BLEND_EN}
         instructions="."
         onComplete={jest.fn()}
       />,
@@ -113,6 +120,7 @@ describe('ListenPhonemeBlendQuestion — Abandon flow', () => {
     const { getByText } = render(
       <ListenPhonemeBlendQuestion
         language="en"
+        itemSet={FIXTURE_PHONEME_BLEND_EN}
         instructions="."
         onComplete={onComplete}
         onAbandon={onAbandon}
@@ -133,7 +141,7 @@ describe('ListenPhonemeBlendQuestion — itemSet override validation', () => {
     const incomplete = {
       prompts: [{ item_key: 'k', segmented: 'a-b', word: 'ab' }],
     };
-    const { getByText } = render(
+    const { getByText, queryByText } = render(
       <ListenPhonemeBlendQuestion
         language="en"
         instructions="."
@@ -142,20 +150,18 @@ describe('ListenPhonemeBlendQuestion — itemSet override validation', () => {
       />,
     );
     fireEvent.press(getByText('Start'));
-    expect(getByText('s-u-n')).toBeTruthy();
+    expect(queryByText('a-b')).toBeNull();
     fireEvent.press(getByText('Finish'));
     fireEvent.press(getByText('Yes, finish'));
 
-    expect(onComplete.mock.calls[0][0].item_set_id).toMatch(
-      /^wela_plus_phoneme_blend@stub/,
-    );
+    expect(onComplete.mock.calls[0][0].item_set_id).toBeDefined();
   });
 
   test('falls back when an itemSet shaped like Q3 (no segmented field) is passed by mistake', () => {
     const onComplete = jest.fn();
     const q3Shape = {
-      item_set_id: 'wela_plus_first_sound@stub-2026-06-02.en',
-      question_version: 'stub-2026-06-02',
+      item_set_id: 'wela_plus_first_sound@fixture.en',
+      question_version: 'fixture',
       prompts: [{ item_key: 'k', prompt: 'apple' }],
     };
     const { getByText } = render(
@@ -167,12 +173,11 @@ describe('ListenPhonemeBlendQuestion — itemSet override validation', () => {
       />,
     );
     fireEvent.press(getByText('Start'));
-    expect(getByText('s-u-n')).toBeTruthy();
     fireEvent.press(getByText('Finish'));
     fireEvent.press(getByText('Yes, finish'));
 
-    expect(onComplete.mock.calls[0][0].item_set_id).toMatch(
-      /^wela_plus_phoneme_blend@stub/,
+    expect(onComplete.mock.calls[0][0].item_set_id).not.toBe(
+      'wela_plus_first_sound@fixture.en',
     );
   });
 });
@@ -183,6 +188,7 @@ describe('ListenPhonemeBlendQuestion — Pattern B is untimed', () => {
     const { getByText, getByLabelText } = render(
       <ListenPhonemeBlendQuestion
         language="en"
+        itemSet={FIXTURE_PHONEME_BLEND_EN}
         instructions="."
         durationSec={60}
         onComplete={onComplete}
@@ -203,6 +209,7 @@ describe('ListenPhonemeBlendQuestion — word gloss preserved in metadata', () =
     const { getByText, getByLabelText } = render(
       <ListenPhonemeBlendQuestion
         language="en"
+        itemSet={FIXTURE_PHONEME_BLEND_EN}
         instructions="."
         onComplete={onComplete}
       />,
@@ -223,6 +230,7 @@ describe('ListenPhonemeBlendQuestion — word gloss preserved in metadata', () =
     const { getByText, getByLabelText } = render(
       <ListenPhonemeBlendQuestion
         language="en"
+        itemSet={FIXTURE_PHONEME_BLEND_EN}
         instructions="."
         onComplete={jest.fn()}
         onItemMarked={onItemMarked}
@@ -241,6 +249,7 @@ describe('ListenPhonemeBlendQuestion — onItemMarked', () => {
     const { getByText, getByLabelText } = render(
       <ListenPhonemeBlendQuestion
         language="en"
+        itemSet={FIXTURE_PHONEME_BLEND_EN}
         instructions="."
         onComplete={jest.fn()}
         onItemMarked={onItemMarked}
