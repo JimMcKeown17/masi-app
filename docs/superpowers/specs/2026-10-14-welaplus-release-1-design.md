@@ -301,7 +301,7 @@ Required component changes. Each keeps the OSS boundary and passes the contract 
 | Q | Change |
 |---|---|
 | 1 | Marking grid mirrors the card: **5 rows × 12**, one scroll view, no 20-per-page pagination. |
-| 1, 6, 7, 8 | **Explicit last-attempted marker.** Today Q1 derives `last_attempted_position` from the last displayed page, and Q6/Q8 advance it only on correct taps (`LetterSoundsQuestion/index.tsx` ~91–112; `ReadWordsQuestion` ~199–209). Both are wrong once pagination and timers change. When a reading Question ends before its last item (End, stop rule, or timer), the EA must tap the **last item the child attempted** in a bottom sheet. This reuses the EGRA `LastAttemptedBottomSheet` interaction. If the EA reached the final item, it is the last item without asking. `derived.total_attempted = last_attempted_position`; items after it are "not reached", not wrong. |
+| 1, 6, 7, 8 | **Explicit last-attempted marker.** Today Q1 derives `last_attempted_position` from the last displayed page, and Q6/Q8 advance it only on correct taps (`LetterSoundsQuestion/index.tsx` ~91–112; `ReadWordsQuestion` ~199–209). Both are wrong once pagination and timers change. When a reading Question ends before its last item (End, stop rule, or timer), the EA must tap the **last item the child attempted** in a bottom sheet. This reuses the EGRA `LastAttemptedBottomSheet` interaction. If the EA reached the final item, it is the last item without asking. Positions stay **zero-based**, as the merged components emit them. `derived.total_attempted = last_attempted_position + 1`, and `last_attempted_position = null` means **no attempt** (`total_attempted = 0`, `percent = 0`). Items after it are "not reached", not wrong. Pinned cases on Q1/Q6/Q7/Q8: no attempt, first item only, a row boundary, and the final item, each checked on the emitted and the persisted values. |
 | 6 | Rows mirror the card (6 rows of up to 7). Untimed per 4.2. |
 | 7 | Unchanged structure (per-word pills grouped by sentence). Content only. |
 | 8 | Paragraphs mirror the handout. Untimed per 4.2. **The component currently falls back to a 60 s timer when `durationSec` is omitted** (`DEFAULT_DURATION_SEC`). Change it so an omitted `durationSec` means untimed, as Q6 already does. Without a timer, `correct_words_per_minute` is omitted from `derived`, and `last_attempted_position` still records where the EA stopped. |
@@ -451,13 +451,65 @@ Reporting treats the run's Questions as whatever has arrived.
   `PUSH_ORDER`/`TABLE_DEPENDENCIES` and the `SERVER_COLUMNS` allowlist. The run's outbox row
   carries its *latest* state, so a run finalized offline arrives as `completed` before its
   Questions. 7.3 makes that safe, so no operation-aware reordering is needed.
-- **Push semantics:** `battery_runs` uses update-capable upsert (its lifecycle trigger handles
-  replays). `assessments` and `assessment_items` use insert-or-ignore (7.1).
+- **Push semantics for `battery_runs`, by outbox operation:**
+  - **`insert`** (the run has never been acknowledged by the server) uses upsert. An offline
+    run that is started and finalized before its first sync coalesces into this one insert,
+    carrying its terminal state. The insert passes the active-assignment INSERT check because
+    the EA was assigned when they ran it. If the assignment was revoked before the first sync,
+    rejection is correct: the server never accepted that run.
+  - **`update`** (any lifecycle transition after the insert was acknowledged) uses
+    **UPDATE-by-id of the lifecycle columns only** (`status`, `completed_at`, `updated_at`),
+    and must acknowledge exactly one row. This mirrors the existing `archive` path
+    (`offlineSync.js` ~675–697), which uses UPDATE to stay authorized after assignment
+    changes. It passes the ownership-only UPDATE policy even after the child or programme
+    assignment is revoked. An identical replay hits the trigger's no-op and still
+    acknowledges one row.
+  - The repository chooses the operation from the run's local sync state. A transition while
+    the insert is still pending coalesces into that insert. A transition racing an in-flight
+    insert follows the engine's existing compare-and-swap rules. Test: insert in flight,
+    transition enqueued, both land, final server state terminal.
+- `assessments` and `assessment_items` use insert-or-ignore (7.1).
+- **Dependency evidence, not just order.** `computeEvidencePending` decides whether
+  `23503`/`42501` is temporary using only `PARENT_FK_COLUMNS` and `GRANT_SUBJECTS`
+  (`offlineSync.js` ~224–274, ~404–469). Without entries, a valid write can be quarantined as
+  terminal. Add:
+  - `PARENT_FK_COLUMNS.battery_runs`: `child_id → children`, `class_id → classes`;
+  - `PARENT_FK_COLUMNS.assessments`: `battery_run_id → battery_runs`, alongside the existing
+    entries;
+  - `GRANT_SUBJECTS.battery_runs`: the run's `child_id`, covered by pending
+    `child_ea_assignments`, mirroring how `assessments` is covered today.
+- **Cross-pass tests.** Each case must show the whole family draining automatically, without
+  terminal quarantine and without a manual Sync Now:
+  - the child's assignment upload fails, then succeeds;
+  - the run is backed off while its Questions are attempted.
 - `programmes.default_battery_*` is added to the reference-data pull allowlist.
 - **No pull or reconcile for `battery_runs` in Release 1.** Runs are push-only, like
   assessments today. The contract map records this explicitly.
 
-### 7.5 Windows (D8)
+### 7.5 Existing assessment readers (choke point)
+
+Twelve modules read `assessments` and assume EGRA shapes:
+- `AssessmentHistoryScreen` → `AssessmentDetailScreen` → `AssessmentDetailGrid`. This one
+  **throws** on a WelaPLUS row: `items_tested` is an object, and the grid calls `letters.map`;
+- `AssessmentsScreen`, `HomeScreen`, `ChildrenListScreen`, and `ChildResultsScreen`;
+- the insight rankings;
+- `dashboardStats`, `assessmentScoring`, and `masteryState`;
+- `useAssessmentSession` and `AssessmentChildSelectScreen`.
+
+Rather than patching each one:
+
+- **`assessmentsRepository.getAssessments` (and any sibling reader) excludes
+  `battery_run_id IS NOT NULL` rows by default.** WelaPLUS code opts in with
+  `includeBatteryRuns: true`. Existing EGRA readers stay correct without edits, and future
+  readers are safe by default.
+- **History:** `AssessmentHistoryScreen` additionally lists the EA's **WelaPLUS runs** from
+  `batteryRunsRepository`, one row per run with its status. Tapping one opens the run summary
+  (section 5.4), read-only. WelaPLUS Question rows never reach `AssessmentDetailScreen`.
+- **Regression test:** with mixed EGRA and WelaPLUS data (completed and skipped Questions),
+  every one of the twelve readers renders and computes. View History opens each EGRA result and
+  each WelaPLUS run. EGRA stats and rankings are numerically unchanged by the WelaPLUS rows.
+
+### 7.6 Windows (D8)
 
 Release 1 does not tag windows on the device.
 - Runs and their Questions are written as `assessment_purpose = 'progress_check'` with
@@ -586,8 +638,11 @@ EN/XH) to section 9. Engineering does not generate the PDFs. This section is the
    it. Also updates the ADR-0004 position note and the contract test's comment (D9).
 2. **Schema:** the Supabase migration, RLS and the run lifecycle trigger, the SQLite v10
    mirror, the contract map, and the RLS harness cases.
-3. **Repositories:** `batteryRunsRepository`, `saveQuestionResult`, and `saveSkippedQuestion`,
-   with integration tests.
+3. **Repositories and sync:** `batteryRunsRepository`, `saveQuestionResult`,
+   `saveSkippedQuestion`, the reader choke point (7.5), the lifecycle push operations, and the
+   dependency-evidence maps (7.4), with integration and cross-pass tests. This slice must land
+   before any WelaPLUS row can be written on a device, because the choke point protects the
+   twelve EGRA readers.
 4. **Package:** the battery definition and evaluator, the 2024.1 content (EN/XH), and the
    component changes in 5.3.
 5. **Host Run flow:** the entry card, child select mode, overview, Question host, skip,
