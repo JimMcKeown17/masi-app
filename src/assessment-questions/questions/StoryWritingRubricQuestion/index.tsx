@@ -78,9 +78,11 @@ function isFullItemSet(value: unknown): value is FullItemSet {
   const o = value as Record<string, unknown>;
   if (typeof o.item_set_id !== 'string') return false;
   if (typeof o.question_version !== 'string') return false;
-  if (!o.picture || typeof o.picture !== 'object') return false;
-  const pic = o.picture as Record<string, unknown>;
-  if (typeof pic.alt !== 'string') return false;
+  if (o.picture !== undefined) {
+    if (!o.picture || typeof o.picture !== 'object') return false;
+    const pic = o.picture as Record<string, unknown>;
+    if (typeof pic.alt !== 'string') return false;
+  }
   if (!Array.isArray(o.dimensions)) return false;
   return o.dimensions.every(isValidDimension);
 }
@@ -159,7 +161,7 @@ export function StoryWritingRubricQuestion(props: QuestionProps) {
                 metadata: {
                   score,
                   scorer: 'ea' as const,
-                  anchor_text: anchor?.text ?? '',
+                  ...(anchor ? { anchor_text: anchor.text } : {}),
                 },
               };
             })
@@ -224,7 +226,7 @@ export function StoryWritingRubricQuestion(props: QuestionProps) {
             metadata: {
               score,
               scorer: 'ea',
-              anchor_text: anchor?.text ?? '',
+              ...(anchor ? { anchor_text: anchor.text } : {}),
             },
           });
         }
@@ -298,23 +300,25 @@ export function StoryWritingRubricQuestion(props: QuestionProps) {
   return (
     <View style={styles.root}>
       <ScrollView contentContainerStyle={styles.scroll}>
-        <Pressable
-          testID="picture-thumbnail"
-          accessibilityRole="button"
-          onPress={() => setPictureEnlarged(true)}
-          style={styles.thumbnailRow}
-        >
-          {effectiveItemSet.picture.source ? (
-            <Image
-              source={effectiveItemSet.picture.source}
-              style={styles.thumbnailImage}
-              accessibilityLabel={effectiveItemSet.picture.alt}
-            />
-          ) : null}
-          <Text style={styles.thumbnailAlt}>
-            {effectiveItemSet.picture.alt}
-          </Text>
-        </Pressable>
+        {effectiveItemSet.picture ? (
+          <Pressable
+            testID="picture-thumbnail"
+            accessibilityRole="button"
+            onPress={() => setPictureEnlarged(true)}
+            style={styles.thumbnailRow}
+          >
+            {effectiveItemSet.picture.source ? (
+              <Image
+                source={effectiveItemSet.picture.source}
+                style={styles.thumbnailImage}
+                accessibilityLabel={effectiveItemSet.picture.alt}
+              />
+            ) : null}
+            <Text style={styles.thumbnailAlt}>
+              {effectiveItemSet.picture.alt}
+            </Text>
+          </Pressable>
+        ) : null}
 
         {dimensions.map((d) => {
           const selectedScore = scores[d.code] ?? null;
@@ -368,7 +372,9 @@ export function StoryWritingRubricQuestion(props: QuestionProps) {
                   );
                 })}
               </View>
-              <Text style={styles.gloss}>{d.end_anchor_gloss}</Text>
+              {d.end_anchor_gloss !== '' ? (
+                <Text style={styles.gloss}>{d.end_anchor_gloss}</Text>
+              ) : null}
             </View>
           );
         })}
@@ -399,12 +405,18 @@ export function StoryWritingRubricQuestion(props: QuestionProps) {
             {rubricDim ? (
               <>
                 <Text style={styles.modalHeader}>{rubricDim.label}</Text>
-                {rubricDim.anchors.map((a) => (
-                  <View key={a.score} style={styles.anchorRow}>
-                    <Text style={styles.anchorScore}>{a.score}</Text>
-                    <Text style={styles.anchorText}>{a.text}</Text>
-                  </View>
-                ))}
+                {rubricDim.anchors.length === 0 ? (
+                  <Text style={styles.rubricPending}>
+                    Rubric descriptions coming soon
+                  </Text>
+                ) : (
+                  rubricDim.anchors.map((a) => (
+                    <View key={a.score} style={styles.anchorRow}>
+                      <Text style={styles.anchorScore}>{a.score}</Text>
+                      <Text style={styles.anchorText}>{a.text}</Text>
+                    </View>
+                  ))
+                )}
               </>
             ) : null}
           </ScrollView>
@@ -418,34 +430,36 @@ export function StoryWritingRubricQuestion(props: QuestionProps) {
         </View>
       </Modal>
 
-      <Modal
-        visible={pictureEnlarged}
-        animationType="fade"
-        transparent={false}
-        onRequestClose={() => setPictureEnlarged(false)}
-      >
-        <View style={styles.modalRoot}>
-          <ScrollView contentContainerStyle={styles.modalContent}>
-            {effectiveItemSet.picture.source ? (
-              <Image
-                source={effectiveItemSet.picture.source}
-                style={styles.enlargedImage}
-                accessibilityLabel={effectiveItemSet.picture.alt}
-              />
-            ) : null}
-            <Text style={styles.enlargedAlt}>
-              {effectiveItemSet.picture.alt}
-            </Text>
-          </ScrollView>
-          <Pressable
-            accessibilityRole="button"
-            onPress={() => setPictureEnlarged(false)}
-            style={styles.modalCloseButton}
-          >
-            <Text style={styles.modalCloseText}>Close</Text>
-          </Pressable>
-        </View>
-      </Modal>
+      {effectiveItemSet.picture ? (
+        <Modal
+          visible={pictureEnlarged}
+          animationType="fade"
+          transparent={false}
+          onRequestClose={() => setPictureEnlarged(false)}
+        >
+          <View style={styles.modalRoot}>
+            <ScrollView contentContainerStyle={styles.modalContent}>
+              {effectiveItemSet.picture.source ? (
+                <Image
+                  source={effectiveItemSet.picture.source}
+                  style={styles.enlargedImage}
+                  accessibilityLabel={effectiveItemSet.picture.alt}
+                />
+              ) : null}
+              <Text style={styles.enlargedAlt}>
+                {effectiveItemSet.picture.alt}
+              </Text>
+            </ScrollView>
+            <Pressable
+              accessibilityRole="button"
+              onPress={() => setPictureEnlarged(false)}
+              style={styles.modalCloseButton}
+            >
+              <Text style={styles.modalCloseText}>Close</Text>
+            </Pressable>
+          </View>
+        </Modal>
+      ) : null}
     </View>
   );
 }
@@ -528,6 +542,10 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   anchorText: { fontSize: 15, flex: 1, lineHeight: 20 },
+  rubricPending: {
+    fontSize: tokens.font.body,
+    color: tokens.color.muted,
+  },
   modalCloseButton: {
     alignSelf: 'center',
     paddingHorizontal: 24,

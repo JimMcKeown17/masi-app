@@ -3,6 +3,38 @@ import { render, fireEvent } from '@testing-library/react-native';
 import { StoryWritingRubricQuestion } from '..';
 import { FIXTURE_STORY_WRITING_EN } from '../../../testFixtures';
 
+const SET = {
+  item_set_id: 'wela_plus_story_writing@fixture.en', question_code: 'wela_plus_story_writing',
+  question_version: 'fixture', language: 'en',
+  dimensions: ['meaning_making', 'spelling', 'length', 'vocabulary'].map((code) => ({
+    code, label: code, anchors: [], end_anchor_gloss: '',
+  })),
+};
+
+test('no picture: no thumbnail row', () => {
+  const r = render(<StoryWritingRubricQuestion language="en" itemSet={SET} instructions="." onComplete={jest.fn()} />);
+  fireEvent.press(r.getByText('Start'));
+  expect(r.queryByTestId('picture-thumbnail')).toBeNull();
+});
+
+test('no anchors: sheet says coming soon; metadata omits anchor_text; chips still score', () => {
+  const onComplete = jest.fn();
+  const r = render(<StoryWritingRubricQuestion language="en" itemSet={SET} instructions="." onComplete={onComplete} />);
+  fireEvent.press(r.getByText('Start'));
+  fireEvent.press(r.getAllByText('View full rubric')[0]);
+  expect(r.getByText('Rubric descriptions coming soon')).toBeTruthy();
+  fireEvent.press(r.getByText('Close'));
+  fireEvent.press(r.getByTestId('chip-meaning_making-2'));
+  fireEvent.press(r.getByTestId('chip-spelling-1'));
+  fireEvent.press(r.getByTestId('chip-length-3'));
+  fireEvent.press(r.getByTestId('chip-vocabulary-0'));
+  fireEvent.press(r.getByText('Finish'));
+  const res = onComplete.mock.calls[0][0];
+  expect(res.derived.ea_rubric_total).toBe(6);
+  expect(res.items.every((i: any) => !('anchor_text' in i.metadata))).toBe(true);
+  expect(res.items.map((i: any) => i.item_key)).toEqual(['ea:meaning_making', 'ea:spelling', 'ea:length', 'ea:vocabulary']);
+});
+
 describe('StoryWritingRubricQuestion — intro & active', () => {
   test('renders 4 dimension cards + picture alt + a Total: 0 / 16 running counter', () => {
     const { getByText } = render(
