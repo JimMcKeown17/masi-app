@@ -293,6 +293,8 @@ const seedProbeContext = async ({ admin, anon, email, password }) => {
       first_name: 'RLS',
       last_name: 'Probe',
       email,
+      // Masinyusane (organisation label v1, 20261014120000).
+      organization_id: 'a111879f-d066-47c9-95a1-bed2a400319a',
     }));
 
     await expectNoError('staff programme assignment seed', admin
