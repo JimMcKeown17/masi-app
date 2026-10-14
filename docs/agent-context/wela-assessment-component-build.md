@@ -192,6 +192,14 @@ It covers all 11 Questions, children reading printed cards, no photos, and real 
 change the PRD, including no `assessmentItemDomainId` change (ADR-0007) and no device-side
 window tagging.
 
+**Progress (2026-10-14):** Plan 1, the Question package, is built: real 2024.1 English and
+isiXhosa content, the `wela_plus_full@2024.1` battery and `evaluateBatteryState`, one terminal
+callback per Question, the last-attempted marker, per-letter Q9 and per-word Q10, untimed Q6/Q8,
+and package tokens. Plan 2 (data foundation) waits for the in-flight sync redesign
+(`feat/upload-path-correctness` and the actor-lifecycle plans); Plan 3 (host Run flow) follows
+Plan 2. Pending pedagogy content is machine-readable in
+`src/assessment-questions/itemsets/contentStatus.ts`.
+
 **Then:** build and deploy the host schema/sync contract, wire Run lifecycle and photos, and extract
 or publish the reviewed component island as the OSS package.
 

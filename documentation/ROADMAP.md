@@ -404,8 +404,11 @@ EA's 1–4). Release 1 scope and decisions:
   SQLite repositories, and outbox ownership.
 - [ ] WelaPLUS Release 1 depends on ADR-0007 enforcement (the assessment-history item above). If
   that has not landed first, Release 1 lands it (spec §7.1).
-- [ ] Add a source-wide raw-hex guard and complete the warm Masi design conformance pass (11
-  island files still use raw hex as of 2026-10-09).
+- [ ] Host-side Masi design conformance for the WelaPLUS screens (Plan 3). The package itself
+  now has Masi-aligned tokens and a raw-hex guard (Plan 1, 2026-10-14).
+- [ ] Plan 2 (data foundation) and Plan 3 (host Run flow, docs, printout pack). Plan 1 (Question
+  package: 2024.1 EN/XH content, battery and evaluator, component contract) is complete; see
+  [`2026-10-14-welaplus-plan-1-question-package.md`](../docs/superpowers/plans/2026-10-14-welaplus-plan-1-question-package.md).
 - [ ] Build the remaining local/server schema and contract: `battery_runs`,
   `battery_run_artifacts`, additive `assessments`/`programmes` fields, local photo queue, Storage
   bucket/RLS, allowlists, ordering, reference data, and EGRA backfill.

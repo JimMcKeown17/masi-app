@@ -80,7 +80,7 @@ moves from `stub-*` to `2024.1`.
 | 6 | `wela_plus_read_words` | Booklet page: 40 words in 6 rows | 40 | 40 |
 | 7 | `wela_plus_read_sentences` | Booklet page: 4 sentences | 20 | 11 |
 | 8 | `wela_plus_read_passage` | Handout passage | 80 | 45 |
-| 9 | `wela_plus_write_cvcs` | Booklet page: 4 pictures; the child writes each word | 12 | 18 (paper says 16, see 4.3) |
+| 9 | `wela_plus_write_cvcs` | Booklet page: 4 pictures; the child writes each word | 12 | 16 (noun prefix not scored; see 4.2, pending 4.3 #2) |
 | 10 | `wela_plus_write_sentences_dictation` | Booklet lines; the EA dictates 2 sentences | 15 (D5) | 9 (D5) |
 | 11 | `wela_plus_story_writing` | Picture cards; the child writes a story | 16 | 16 |
 

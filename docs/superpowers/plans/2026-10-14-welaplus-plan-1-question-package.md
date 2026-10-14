@@ -1,6 +1,6 @@
 # WelaPLUS Release 1 — Plan 1: Question Package Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking. In this repository the implementer for each task is **Codex through the plugin** (gpt-5.6-sol); Claude reviews each task's diff and test output before the next task starts (AGENTS.md, "When Building").
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [x]`) syntax for tracking. In this repository the implementer for each task is **Codex through the plugin** (gpt-5.6-sol); Claude reviews each task's diff and test output before the next task starts (AGENTS.md, "When Building").
 
 **Goal:** Make the `src/assessment-questions/` package field-correct for WelaPLUS 2024.1:
 - real English and isiXhosa content;
@@ -103,7 +103,7 @@ No host screen, repository, sync, or schema change is made here; those belong to
 
 **Files:** none.
 
-- [ ] **Step 1: Create an isolated worktree from current `main`.** Use the
+- [x] **Step 1: Create an isolated worktree from current `main`.** Use the
   superpowers:using-git-worktrees skill.
 
 ```bash
@@ -114,7 +114,7 @@ cd .claude/worktrees/welaplus-plan-1
 PATH=$HOME/.nvm/versions/node/v20.19.4/bin:$PATH npm ci
 ```
 
-- [ ] **Step 2: Record the baseline.**
+- [x] **Step 2: Record the baseline.**
 
 ```bash
 PATH=$HOME/.nvm/versions/node/v20.19.4/bin:$PATH npx jest src/assessment-questions 2>&1 | grep -E '^(Tests|Test Suites):'
@@ -138,7 +138,7 @@ them.
 - Produces: `import { tokens } from '../../theme/tokens'`, with `tokens.color.*`,
   `tokens.space.*`, `tokens.radius.*`, and `tokens.font.*` exactly as defined in Step 3.
 
-- [ ] **Step 1: Write the failing guard test**
+- [x] **Step 1: Write the failing guard test**
 
 ```ts
 // src/assessment-questions/__tests__/rawHexGuard.test.ts
@@ -171,12 +171,12 @@ describe('raw hex guard', () => {
 });
 ```
 
-- [ ] **Step 2: Run it and confirm it fails**
+- [x] **Step 2: Run it and confirm it fails**
 
 Run: `PATH=$HOME/.nvm/versions/node/v20.19.4/bin:$PATH npx jest src/assessment-questions/__tests__/rawHexGuard.test.ts`
 Expected: FAIL, listing offenders such as `questions/ReadWordsQuestion/index.tsx:19`.
 
-- [ ] **Step 3: Create the tokens module.** The values are copied, not imported, from
+- [x] **Step 3: Create the tokens module.** The values are copied, not imported, from
   `src/constants/colors.js` (the boundary forbids importing it).
 
 ```ts
@@ -210,7 +210,7 @@ export const tokens = {
 export type Tokens = typeof tokens;
 ```
 
-- [ ] **Step 4: Replace every hex literal in the 11 components with tokens.** Use this mapping
+- [x] **Step 4: Replace every hex literal in the 11 components with tokens.** Use this mapping
   (old → new):
   - `'#2e7d32'` (MARKED_BG) → `tokens.color.marked`
   - `'#ffffff'` (IDLE_BG, text on marked) → `tokens.color.surface` for backgrounds, and
@@ -231,7 +231,7 @@ style={[styles.pill, { backgroundColor: marked ? MARKED_BG : IDLE_BG }]}
 style={[styles.pill, { backgroundColor: marked ? tokens.color.marked : tokens.color.surface }]}
 ```
 
-- [ ] **Step 5: Run the guard, the package suite, and types**
+- [x] **Step 5: Run the guard, the package suite, and types**
 
 Run:
 ```bash
@@ -240,7 +240,7 @@ PATH=$HOME/.nvm/versions/node/v20.19.4/bin:$PATH npm run -s test:types
 ```
 Expected: all pass. The guard reports `[]`.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add src/assessment-questions
@@ -270,7 +270,7 @@ stubs as fixtures and passes them explicitly, so Task 12 cannot break behaviour 
   `itemsets/wela_plus_<name>.en.ts` export, with
   `item_set_id: '<question_code>@fixture.en'` and `question_version: 'fixture'`.
 
-- [ ] **Step 1: Create the fixtures.** Copy each current English stub's content into
+- [x] **Step 1: Create the fixtures.** Copy each current English stub's content into
   `testFixtures/<name>.ts` under the name `FIXTURE_<NAME>_EN`. Re-export them all from
   `testFixtures/index.ts`. Example:
 
@@ -299,7 +299,7 @@ export const FIXTURE_READ_WORDS_EN: ItemSet<ReadWordsItemSet> = {
 };
 ```
 
-- [ ] **Step 2: Pass fixtures in every component test.** In every `render(<XQuestion .../>)`
+- [x] **Step 2: Pass fixtures in every component test.** In every `render(<XQuestion .../>)`
   and every `runContractTest(XQuestion, { ... })` that relies on the default English item set,
   add `itemSet={FIXTURE_X_EN}` (or `itemSet: FIXTURE_X_EN`). Tests that explicitly exercise
   `language="xh"` default resolution are moved to Task 12's integrity test and deleted here.
@@ -311,16 +311,16 @@ render(<ReadWordsQuestion language="en" instructions="." durationSec={60} onComp
 render(<ReadWordsQuestion language="en" itemSet={FIXTURE_READ_WORDS_EN} instructions="." durationSec={60} onComplete={jest.fn()} />);
 ```
 
-- [ ] **Step 3: Prove the decoupling.** Temporarily change one word in
+- [x] **Step 3: Prove the decoupling.** Temporarily change one word in
   `itemsets/wela_plus_read_words.en.ts` (for example, `cat` → `cot`).
 
 Run: `PATH=$HOME/.nvm/versions/node/v20.19.4/bin:$PATH npx jest src/assessment-questions/questions/ReadWordsQuestion`
 Expected: PASS. The tests no longer read bundled content. Revert the temporary edit.
 
-- [ ] **Step 4: Run the package suite.** Expected: the same counts as the Task 0 baseline,
+- [x] **Step 4: Run the package suite.** Expected: the same counts as the Task 0 baseline,
   minus any default-language tests moved to Task 12, all passing.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add src/assessment-questions
@@ -355,7 +355,7 @@ also offers `Prerequisite unmet`, which is host-only.
     the picker. The picker title is `Why are you skipping this question?`.
   - `QuestionProps` no longer has `onAbandon`.
 
-- [ ] **Step 1: Write the failing cross-component test**
+- [x] **Step 1: Write the failing cross-component test**
 
 ```tsx
 // src/assessment-questions/__tests__/oneTerminalCallback.test.tsx
@@ -444,12 +444,12 @@ export type { Result, ResultItem, ResultDerived, StoppedReason } from './types/R
 export { tokens } from './theme/tokens';
 ```
 
-- [ ] **Step 2: Run it and confirm it fails**
+- [x] **Step 2: Run it and confirm it fails**
 
 Run: `PATH=$HOME/.nvm/versions/node/v20.19.4/bin:$PATH npx jest src/assessment-questions/__tests__/oneTerminalCallback.test.tsx`
 Expected: FAIL. `Skip question` is not found, because the button is still labelled `Abandon`.
 
-- [ ] **Step 3: Create the shared skip module**
+- [x] **Step 3: Create the shared skip module**
 
 ```ts
 // src/assessment-questions/skip/skipReasons.ts
@@ -509,7 +509,7 @@ const styles = StyleSheet.create({
 });
 ```
 
-- [ ] **Step 4: Remove `onAbandon` from the contract**
+- [x] **Step 4: Remove `onAbandon` from the contract**
 
 ```ts
 // src/assessment-questions/types/QuestionProps.ts
@@ -526,7 +526,7 @@ export interface QuestionProps {
 }
 ```
 
-- [ ] **Step 5: Rewire each component.** In each of the 10 components:
+- [x] **Step 5: Rewire each component.** In each of the 10 components:
   - delete the local `SkipReason` type and the `SKIP_REASONS` array;
   - delete `onAbandon` from the destructured props;
   - replace `handleAbandonChosen` with a handler that only calls `finish(reason)`;
@@ -555,14 +555,14 @@ if (phase === 'skip-picker') {
 </Pressable>
 ```
 
-- [ ] **Step 6: Update existing tests.** Replace `getByText('Abandon')` with
+- [x] **Step 6: Update existing tests.** Replace `getByText('Abandon')` with
   `getByText('Skip question')`. Delete assertions on `onAbandon`. In the contract tests, the
   "Abandon path" cases become "Skip path" cases with the same expectations.
 
-- [ ] **Step 7: Run the package suite and types.** Expected: everything passes, including
+- [x] **Step 7: Run the package suite and types.** Expected: everything passes, including
   `oneTerminalCallback.test.tsx` (44 tests: 11 components × 4).
 
-- [ ] **Step 8: Commit**
+- [x] **Step 8: Commit**
 
 ```bash
 git add src/assessment-questions
@@ -596,7 +596,7 @@ git commit -m "feat(wela): one terminal callback per Question; shared skip picke
   - Validator rule: when `derived.tracks_progress === true`, `last_attempted_position` must
     be an integer with `-1 <= p < max(items.length, 1)` (skips have empty items).
 
-- [ ] **Step 1: Write failing tests**
+- [x] **Step 1: Write failing tests**
 
 ```ts
 // src/assessment-questions/progress/__tests__/applyProgress.test.ts
@@ -695,12 +695,12 @@ describe('tracks_progress rule', () => {
 If `validateResult`'s export name or signature differs, use the signature already used
 elsewhere in `validateResult.test.ts`.
 
-- [ ] **Step 2: Run them and confirm they fail**
+- [x] **Step 2: Run them and confirm they fail**
 
 Run: `PATH=$HOME/.nvm/versions/node/v20.19.4/bin:$PATH npx jest src/assessment-questions/progress src/assessment-questions/__tests__/validateResult.test.ts`
 Expected: FAIL. The modules do not exist yet, and the rule is not implemented.
 
-- [ ] **Step 3: Implement**
+- [x] **Step 3: Implement**
 
 ```ts
 // src/assessment-questions/progress/applyProgress.ts
@@ -815,9 +815,9 @@ if (derivedObj?.tracks_progress === true) {
 
 Use the variable names already used in that function for the result and derived objects.
 
-- [ ] **Step 4: Run the tests.** Expected: PASS.
+- [x] **Step 4: Run the tests.** Expected: PASS.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add src/assessment-questions
@@ -843,7 +843,7 @@ git commit -m "feat(wela): progress primitives — applyProgress, LastAttemptedS
   is removed. Rows are `columns` wide (12 for WelaPLUS); there is no pagination. The result
   has `derived.tracks_progress = true`.
 
-- [ ] **Step 1: Write the failing tests** (replace the pagination tests)
+- [x] **Step 1: Write the failing tests** (replace the pagination tests)
 
 ```tsx
 import React from 'react';
@@ -920,12 +920,12 @@ test('Nothing attempted gives -1 and zero attempted', () => {
 
 Update `testFixtures/letterSounds.ts`: drop `lettersPerPage` and set `columns: 12`.
 
-- [ ] **Step 2: Run and confirm failure**
+- [x] **Step 2: Run and confirm failure**
 
 Run: `PATH=$HOME/.nvm/versions/node/v20.19.4/bin:$PATH npx jest src/assessment-questions/questions/LetterSoundsQuestion`
 Expected: FAIL. `Next` still renders, and there is no `letter-row-*` testID.
 
-- [ ] **Step 3: Implement.**
+- [x] **Step 3: Implement.**
   - `types.ts`: `export interface LetterSoundsItemSet { letters: string[]; columns: number; }`
   - `isFullItemSet`: drop the `lettersPerPage` check.
   - Phases: `'intro' | 'active' | 'mark-last' | 'skip-picker' | 'finished'`, plus a
@@ -977,10 +977,10 @@ const finish = useCallback((stoppedReason: StoppedReason, lastAttempted: number 
   - Fixed marking font: `fontSize: tokens.font.markingItem`. Remove the
     `useChildReadingFontSize` import from this component (D1).
 
-- [ ] **Step 4: Run the Q1 tests and the Q1 contract test.** Expected: PASS. Update the contract
+- [x] **Step 4: Run the Q1 tests and the Q1 contract test.** Expected: PASS. Update the contract
   test's End path to confirm the marker with `Reached the end`.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add src/assessment-questions
@@ -1003,7 +1003,7 @@ git commit -m "feat(wela): Q1 mirrors the 5x12 card and records the last attempt
   omitted (unchanged). End → marker (cancellable); timer (if timed) → marker
   (non-cancellable). `derived.tracks_progress = true`.
 
-- [ ] **Step 1: Write failing tests** (replace the tap-tracking `last_attempted` tests)
+- [x] **Step 1: Write failing tests** (replace the tap-tracking `last_attempted` tests)
 
 ```tsx
 const SET = {
@@ -1046,10 +1046,10 @@ test('wrong answers after the last correct still count as attempted (marker, not
 });
 ```
 
-- [ ] **Step 2: Run and confirm failure.** Expected: FAIL. There is no `word-row-*` testID,
+- [x] **Step 2: Run and confirm failure.** Expected: FAIL. There is no `word-row-*` testID,
   and End finishes immediately.
 
-- [ ] **Step 3: Implement.** Mirror Task 5:
+- [x] **Step 3: Implement.** Mirror Task 5:
   - add `row_lengths?: number[]` to `ReadWordsItemSet` and the `isFullItemSet` check
     (`row_lengths === undefined || array of positive integers summing to words.length`);
   - render `chunk` by `row_lengths`, with `<View testID={`word-row-${r}`}>`;
@@ -1062,9 +1062,9 @@ test('wrong answers after the last correct still count as attempted (marker, not
   - keep `markingPolarity`. With `'tap_wrong'`, `is_correct = !tapped` is computed before
     `applyProgress`, which then forces not-reached items to false.
 
-- [ ] **Step 4: Run the Q6 tests and the contract test.** Expected: PASS.
+- [x] **Step 4: Run the Q6 tests and the contract test.** Expected: PASS.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add src/assessment-questions
@@ -1090,7 +1090,7 @@ git commit -m "feat(wela): Q6 mirrors the card rows; last attempted word comes f
   - Q7: **Finish** (completed) sets `last_attempted_position = totalWords - 1` and
     `tracks_progress = true`. A skip gives `null` and no items.
 
-- [ ] **Step 1: Write failing tests**
+- [x] **Step 1: Write failing tests**
 
 ```tsx
 // ReadPassage
@@ -1131,10 +1131,10 @@ test('Finish reports every word attempted', () => {
 });
 ```
 
-- [ ] **Step 2: Run and confirm failure.** Expected: FAIL. The 60 s default timer fires,
+- [x] **Step 2: Run and confirm failure.** Expected: FAIL. The 60 s default timer fires,
   `paragraph-*` does not exist, and Q7 lacks `tracks_progress`.
 
-- [ ] **Step 3: Implement Q8.**
+- [x] **Step 3: Implement Q8.**
   - Delete `DEFAULT_DURATION_SEC` and `effectiveDurationSec`; use `durationSec` directly.
   - Add `paragraph_starts` to the type and validation (`undefined`, or a strictly increasing
     integer array starting at 0, every value `< words.length`).
@@ -1145,14 +1145,14 @@ test('Finish reports every word attempted', () => {
     `...(wasTimed && !isSkipped ? { correct_words_per_minute: wpm } : {})`.
   - Use `tokens.font.markingItem` and remove `useChildReadingFontSize`.
 
-- [ ] **Step 4: Implement Q7.** In `finish`, for a non-skipped stop, set
+- [x] **Step 4: Implement Q7.** In `finish`, for a non-skipped stop, set
   `last_attempted_position: items.length - 1`, `total_attempted: items.length`, and
   `tracks_progress: true`. For a skip, set `last_attempted_position: null`. Keep
   `per_sentence_percent`. Use `tokens.font.markingItem` and remove `useChildReadingFontSize`.
 
-- [ ] **Step 5: Run the Q7 and Q8 tests and contract tests.** Expected: PASS.
+- [x] **Step 5: Run the Q7 and Q8 tests and contract tests.** Expected: PASS.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add src/assessment-questions
@@ -1181,7 +1181,7 @@ git commit -m "feat(wela): Q8 untimed by default with paragraphs; Q7 Finish reco
   - `derived.per_word` = `[{ word, correct, total }]`; `last_attempted_position: null`;
     `was_timed: false`.
 
-- [ ] **Step 1: Write failing tests**
+- [x] **Step 1: Write failing tests**
 
 ```tsx
 const SET = {
@@ -1212,10 +1212,10 @@ test('one item per scoring letter, prefix excluded, per-word totals', () => {
 });
 ```
 
-- [ ] **Step 2: Run and confirm failure.** Expected: FAIL. The old shape is `prompts` with one
+- [x] **Step 2: Run and confirm failure.** Expected: FAIL. The old shape is `prompts` with one
   item per word.
 
-- [ ] **Step 3: Implement.**
+- [x] **Step 3: Implement.**
   - Replace the types; `isFullItemSet` checks `words[]` with string `item_key` and `word` and
     a non-empty string array `letters`.
   - Render each word as a row: a label `${wordIndex + 1}. ${word.word}` followed by
@@ -1227,9 +1227,9 @@ test('one item per scoring letter, prefix excluded, per-word totals', () => {
     dictated to completion; the confirm-unmarked flow is unchanged).
   - Use `tokens` for all styling.
 
-- [ ] **Step 4: Run the Q9 tests and contract test.** Expected: PASS.
+- [x] **Step 4: Run the Q9 tests and contract test.** Expected: PASS.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add src/assessment-questions
@@ -1255,7 +1255,7 @@ git commit -m "feat(wela): Q9 marks each scoring letter; scoring units come from
     `metadata` = `{ sentence_index, word_index }`.
   - `derived.per_sentence` = `[{ correct, total }]`; `last_attempted_position: null`.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 ```tsx
 const SET = {
@@ -1284,15 +1284,15 @@ test('one item per word; per_sentence totals; max is word count', () => {
 });
 ```
 
-- [ ] **Step 2: Run and confirm failure.**
+- [x] **Step 2: Run and confirm failure.**
 
-- [ ] **Step 3: Implement.** Reuse ReadSentences' grouped-pill layout, copying its JSX
+- [x] **Step 3: Implement.** Reuse ReadSentences' grouped-pill layout, copying its JSX
   structure, not importing it. Show a numbered sentence label above each group (`1.`, `2.`).
   Use `useToggleMark` keyed by the word `item_key`, and `tokens` for styling.
 
-- [ ] **Step 4: Run the tests.** Expected: PASS.
+- [x] **Step 4: Run the tests.** Expected: PASS.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add src/assessment-questions
@@ -1316,7 +1316,7 @@ git commit -m "feat(wela): Q10 marks each dictated word, grouped by sentence"
   - With no anchors for a dimension, its "View full rubric" sheet shows
     `Rubric descriptions coming soon`, and each item's `metadata` omits `anchor_text`.
 
-- [ ] **Step 1: Write failing tests**
+- [x] **Step 1: Write failing tests**
 
 ```tsx
 const SET = {
@@ -1358,9 +1358,9 @@ score through the chip testIDs the component already defines (`chip-<code>-<scor
   expect(res.items.map((i: any) => i.item_key)).toEqual(['ea:meaning_making', 'ea:spelling', 'ea:length', 'ea:vocabulary']);
 ```
 
-- [ ] **Step 2: Run and confirm failure.**
+- [x] **Step 2: Run and confirm failure.**
 
-- [ ] **Step 3: Implement.**
+- [x] **Step 3: Implement.**
   - Make `picture` optional in the type and in `isFullItemSet`.
   - Render the thumbnail row only when `effectiveItemSet.picture`.
   - In the rubric sheet, when `dim.anchors.length === 0`, render
@@ -1370,9 +1370,9 @@ score through the chip testIDs the component already defines (`chip-<code>-<scor
   - Hide the gloss line when `end_anchor_gloss === ''`.
   - Use `tokens` for styling.
 
-- [ ] **Step 4: Run the Q11 tests and contract test.** Expected: PASS.
+- [x] **Step 4: Run the Q11 tests and contract test.** Expected: PASS.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add src/assessment-questions
@@ -1425,7 +1425,7 @@ export function evaluateBatteryState(battery: BatteryConfig, decided: DecidedRes
 export const WELA_PLUS_FULL_2024_1: BatteryConfig;
 ```
 
-- [ ] **Step 1: Write failing evaluator tests**
+- [x] **Step 1: Write failing evaluator tests**
 
 ```ts
 import { evaluateBatteryState } from '../evaluateBatteryState';
@@ -1526,9 +1526,9 @@ test('every question has en and xh instructions', () => {
 });
 ```
 
-- [ ] **Step 2: Run and confirm failure.**
+- [x] **Step 2: Run and confirm failure.**
 
-- [ ] **Step 3: Implement the types (as in Interfaces) and the evaluator**
+- [x] **Step 3: Implement the types (as in Interfaces) and the evaluator**
 
 ```ts
 // src/assessment-questions/battery/evaluateBatteryState.ts
@@ -1562,7 +1562,7 @@ export function evaluateBatteryState(battery: BatteryConfig, decidedResults: Dec
 }
 ```
 
-- [ ] **Step 4: Write `wela_plus_full.ts`.** EA instructions are copied verbatim from the 2024
+- [x] **Step 4: Write `wela_plus_full.ts`.** EA instructions are copied verbatim from the 2024
   instruction sheet (spec 4.2), English for both languages. Only the Q3 and Q4 practice lines
   differ by language.
 
@@ -1622,7 +1622,7 @@ export const WELA_PLUS_FULL_2024_1: BatteryConfig = {
 };
 ```
 
-- [ ] **Step 5: Export from the barrel.** Append to `src/assessment-questions/index.ts`:
+- [x] **Step 5: Export from the barrel.** Append to `src/assessment-questions/index.ts`:
 
 ```ts
 export { evaluateBatteryState } from './battery/evaluateBatteryState';
@@ -1632,11 +1632,11 @@ export { MANUAL_SKIP_REASONS } from './skip/skipReasons';
 export type { ManualSkipReason } from './skip/skipReasons';
 ```
 
-- [ ] **Step 6: Run the battery tests, the package suite, and types.** Expected: PASS. Fix any
+- [x] **Step 6: Run the battery tests, the package suite, and types.** Expected: PASS. Fix any
   existing `BatteryConfig` consumer inside the package that relied on the old optional
   `prerequisites`, or on `instructions` being a string.
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add src/assessment-questions
@@ -1661,7 +1661,7 @@ git commit -m "feat(wela): wela_plus_full@2024.1 battery and the battery-state e
   - `CONTENT_PENDING: ReadonlyArray<{ item_set_id: string; field: string; note: string }>`
     covers spec 4.3 #1–#5, so the host (Plan 3) can surface pending content.
 
-- [ ] **Step 1: Write the failing integrity test**
+- [x] **Step 1: Write the failing integrity test**
 
 ```ts
 // src/assessment-questions/__tests__/itemSetIntegrity.test.tsx
@@ -1745,10 +1745,10 @@ test('pending content is declared', () => {
 Create `src/assessment-questions/itemsets/index.ts`, which re-exports all 22 item-set
 constants by name.
 
-- [ ] **Step 2: Run and confirm failure.** Expected: FAIL on versions and counts, because the
+- [x] **Step 2: Run and confirm failure.** Expected: FAIL on versions and counts, because the
   stubs are still in place.
 
-- [ ] **Step 3: Write `buildPassage.ts` and `contentStatus.ts`**
+- [x] **Step 3: Write `buildPassage.ts` and `contentStatus.ts`**
 
 ```ts
 // src/assessment-questions/itemsets/buildPassage.ts
@@ -1780,7 +1780,7 @@ export const CONTENT_PENDING: ReadonlyArray<{ item_set_id: string; field: string
 ];
 ```
 
-- [ ] **Step 4: Write the 22 item sets.** The content is verbatim from spec section 4.2, with
+- [x] **Step 4: Write the 22 item sets.** The content is verbatim from spec section 4.2, with
   this exact shape per file. Every header is:
 
 ```ts
@@ -1884,10 +1884,10 @@ The bodies:
   `Vocabulary` (English in both files until XH labels arrive), `anchors: []`, and
   `end_anchor_gloss: ''`.
 
-- [ ] **Step 5: Run the integrity test, the package suite, and types.** Expected: PASS.
+- [x] **Step 5: Run the integrity test, the package suite, and types.** Expected: PASS.
   Component tests are unaffected because they use fixtures (Task 2).
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add src/assessment-questions
@@ -1903,7 +1903,7 @@ git commit -m "feat(wela): 2024.1 English and isiXhosa content from the paper bo
 - Modify: `docs/agent-context/wela-assessment-component-build.md` (status line)
 - Modify: `documentation/ROADMAP.md` §8 (tick the design-conformance item for the package)
 
-- [ ] **Step 1: Run every gate**
+- [x] **Step 1: Run every gate**
 
 ```bash
 PATH=$HOME/.nvm/versions/node/v20.19.4/bin:$PATH npm test 2>&1 | grep -E '^(Tests|Test Suites):'
@@ -1914,7 +1914,7 @@ PATH=$HOME/.nvm/versions/node/v20.19.4/bin:$PATH npx tsc --noEmit; echo "tsc exi
 
 Expected: all green, and both exits are 0. The unit count exceeds Task 0's baseline.
 
-- [ ] **Step 2: Check the boundary and that no host file was touched**
+- [x] **Step 2: Check the boundary and that no host file was touched**
 
 ```bash
 git diff --name-only origin/main...HEAD | grep -vE '^(src/assessment-questions/|documentation/|docs/)' || echo "package-only: OK"
@@ -1922,7 +1922,7 @@ git diff --name-only origin/main...HEAD | grep -vE '^(src/assessment-questions/|
 
 Expected: `package-only: OK`.
 
-- [ ] **Step 3: Update the docs.**
+- [x] **Step 3: Update the docs.**
   - Add a build-log Verification Register row with the gate counts.
   - In ROADMAP §8, replace "Add a source-wide raw-hex guard and complete the warm Masi design
     conformance pass (11 island files still use raw hex as of 2026-10-09)" with "Package
@@ -1930,7 +1930,7 @@ Expected: `package-only: OK`.
     happens with the Plan 3 screens."
   - Set the agent-context status line to say Plan 1 is complete and Plans 2–3 remain.
 
-- [ ] **Step 4: Commit and open the PR**
+- [x] **Step 4: Commit and open the PR**
 
 ```bash
 git add documentation docs
