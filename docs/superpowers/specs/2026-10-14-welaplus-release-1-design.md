@@ -1,7 +1,7 @@
 # WelaPLUS Release 1 — Design
 
 **Date:** 2026-10-14
-**Status:** Design approved in conversation (Jim, 2026-10-14). Codex adversarial review: three rounds (9 → 4 → 1 findings, all verified and addressed; the last round still returned needs-attention before its single fix). Written spec pending Jim's review.
+**Status:** Design approved in conversation (Jim, 2026-10-14). Codex adversarial review: three rounds (9 → 4 → 1 findings, all verified and addressed; the last round still returned needs-attention before its single fix). Written spec approved by Jim 2026-10-14.
 **Parent PRD:** [`documentation/wela-plus-battery-prd-2026.md`](../../../documentation/wela-plus-battery-prd-2026.md)
 (design-complete, four Codex reviews). This spec does **not** restate the PRD. It records what
 Release 1 builds, the decisions taken on 2026-10-14 that change or narrow the PRD, and the
@@ -35,7 +35,7 @@ Success means:
 | D5 | **Q10 is scored one mark per correctly written word.** | English max = 15, isiXhosa max = 9. Replaces the paper's "/12" (section 4.3). |
 | D6 | **Language comes from the child's class `home_language`, with a picker fallback**, reusing EGRA's `AssessmentChildSelectScreen` behaviour. | None. |
 | D7 | **Approach A: the PRD's three-level data model**, with the run row created at run start and a per-Question atomic save. | None (confirms the PRD). |
-| D8 | **No window tagging at run start in Release 1.** Every run is saved as `assessment_purpose = 'progress_check'` with `assessment_window_id = null`. Window attribution happens at reporting time from `started_at` and the child's academic year. | Changes PRD "host tags the active Window". Local `assessment_windows` contains a trigger-generated baseline spanning the whole academic year (`src/db/migrations.js` `ensure_active_year_baseline_window_*`). Overlaps are allowed, so tagging on the device would mislabel runs. Revisit once windows are authoritative and non-overlapping. Recorded after Codex review round 1; to confirm with Jim. |
+| D8 | **No window tagging at run start in Release 1.** Every run is saved as `assessment_purpose = 'progress_check'` with `assessment_window_id = null`. Window attribution happens at reporting time from `started_at` and the child's academic year. | Changes PRD "host tags the active Window". Local `assessment_windows` contains a trigger-generated baseline spanning the whole academic year (`src/db/migrations.js` `ensure_active_year_baseline_window_*`). Overlaps are allowed, so tagging on the device would mislabel runs. Revisit once windows are authoritative and non-overlapping. Recorded after Codex review round 1; confirmed by Jim 2026-10-14. |
 | D9 | **No identity change. ADR-0007 supersedes it.** `assessmentItemDomainId` stays as it is. Q11 EA rows use positions 1–4; HQ calibration rows (future) use positions 5–8. | Removes the "ADR-0004 identity change" prerequisite that the merge commit and ROADMAP §8 carried. Accepted ADR-0007 (2026-09-23) keeps the id because submitted answers are immutable. Q11's EA/HQ disambiguation is achieved by distinct positions plus the `ea:`/`hq:` `item_key` prefix, without rehashing. |
 | D10 | **ADR-0007 enforcement is a prerequisite.** EAs cannot UPDATE or DELETE `assessments`/`assessment_items`, and the family pushes as insert-or-ignore. | If the planned assessment-history slice has not landed this by the time WelaPLUS needs it, WelaPLUS Slice 1 lands it. |
 
