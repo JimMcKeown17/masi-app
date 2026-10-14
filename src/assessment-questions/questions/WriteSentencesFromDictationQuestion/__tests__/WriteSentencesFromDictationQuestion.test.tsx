@@ -45,7 +45,7 @@ describe('WriteSentencesFromDictationQuestion — marking', () => {
   });
 });
 
-describe('WriteSentencesFromDictationQuestion — Finish & Abandon', () => {
+describe('WriteSentencesFromDictationQuestion — Finish & Skip', () => {
   test('Finish with all marked emits Result with stopped_reason=completed', () => {
     const onComplete = jest.fn();
     const { getByText, getByTestId } = render(
@@ -67,22 +67,19 @@ describe('WriteSentencesFromDictationQuestion — Finish & Abandon', () => {
     expect(r.derived.was_timed).toBe(false);
   });
 
-  test('Abandon picker emits skipped_* stopped_reason', () => {
+  test('Skip picker emits skipped_* stopped_reason', () => {
     const onComplete = jest.fn();
-    const onAbandon = jest.fn();
     const { getByText } = render(
       <WriteSentencesFromDictationQuestion
         language="en"
         itemSet={FIXTURE_WRITE_SENTENCES_DICTATION_EN}
         instructions="."
         onComplete={onComplete}
-        onAbandon={onAbandon}
       />,
     );
     fireEvent.press(getByText('Start'));
-    fireEvent.press(getByText('Abandon'));
+    fireEvent.press(getByText('Skip question'));
     fireEvent.press(getByText('Child tired'));
-    expect(onAbandon).toHaveBeenCalledWith('skipped_tired');
     expect(onComplete.mock.calls[0][0].stopped_reason).toBe('skipped_tired');
   });
 });

@@ -296,23 +296,20 @@ describe('StoryWritingRubricQuestion — onItemMarked', () => {
   });
 });
 
-describe('StoryWritingRubricQuestion — Abandon flow', () => {
-  test('Abandon picker fires onAbandon and emits items=[] (skip-empty contract)', () => {
+describe('StoryWritingRubricQuestion — Skip flow', () => {
+  test('Skip picker emits items=[] (skip-empty contract)', () => {
     const onComplete = jest.fn();
-    const onAbandon = jest.fn();
     const { getByText } = render(
       <StoryWritingRubricQuestion
         language="en"
         itemSet={FIXTURE_STORY_WRITING_EN}
         instructions="."
         onComplete={onComplete}
-        onAbandon={onAbandon}
       />,
     );
     fireEvent.press(getByText('Start'));
-    fireEvent.press(getByText('Abandon'));
+    fireEvent.press(getByText('Skip question'));
     fireEvent.press(getByText('Child refused'));
-    expect(onAbandon).toHaveBeenCalledWith('skipped_child_refused');
     const r = onComplete.mock.calls[0][0];
     expect(r.stopped_reason).toBe('skipped_child_refused');
     expect(r.items).toEqual([]);

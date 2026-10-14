@@ -264,8 +264,8 @@ describe('ListenAndAnswerStoryQuestion — Finish flow', () => {
   });
 });
 
-describe('ListenAndAnswerStoryQuestion — Abandon flow', () => {
-  test('Abandon button opens a reason picker with 6 reasons', () => {
+describe('ListenAndAnswerStoryQuestion — Skip flow', () => {
+  test('Skip question button opens a reason picker with 5 reasons', () => {
     const { getByText } = render(
       <ListenAndAnswerStoryQuestion
         language="en"
@@ -275,53 +275,47 @@ describe('ListenAndAnswerStoryQuestion — Abandon flow', () => {
       />,
     );
     fireEvent.press(getByText("I've finished reading"));
-    fireEvent.press(getByText('Abandon'));
+    fireEvent.press(getByText('Skip question'));
 
-    expect(getByText(/Why are you abandoning/i)).toBeTruthy();
+    expect(getByText(/Why are you skipping this question/i)).toBeTruthy();
     expect(getByText('Child refused')).toBeTruthy();
     expect(getByText('Other')).toBeTruthy();
   });
 
-  test('selecting a reason fires onAbandon and emits Result with that stopped_reason', () => {
+  test('selecting a reason emits Result with that stopped_reason', () => {
     const onComplete = jest.fn();
-    const onAbandon = jest.fn();
     const { getByText } = render(
       <ListenAndAnswerStoryQuestion
         language="en"
         itemSet={FIXTURE_LISTEN_AND_ANSWER_STORY_EN}
         instructions="."
         onComplete={onComplete}
-        onAbandon={onAbandon}
       />,
     );
     fireEvent.press(getByText("I've finished reading"));
-    fireEvent.press(getByText('Abandon'));
+    fireEvent.press(getByText('Skip question'));
     fireEvent.press(getByText('Child refused'));
 
-    expect(onAbandon).toHaveBeenCalledWith('skipped_child_refused');
     expect(onComplete).toHaveBeenCalledTimes(1);
     expect(onComplete.mock.calls[0][0].stopped_reason).toBe(
       'skipped_child_refused',
     );
   });
 
-  test('Cancel from abandon-picker returns to active without emitting', () => {
+  test('Cancel from skip-picker returns to active without emitting', () => {
     const onComplete = jest.fn();
-    const onAbandon = jest.fn();
     const { getByText, getByLabelText } = render(
       <ListenAndAnswerStoryQuestion
         language="en"
         itemSet={FIXTURE_LISTEN_AND_ANSWER_STORY_EN}
         instructions="."
         onComplete={onComplete}
-        onAbandon={onAbandon}
       />,
     );
     fireEvent.press(getByText("I've finished reading"));
-    fireEvent.press(getByText('Abandon'));
+    fireEvent.press(getByText('Skip question'));
     fireEvent.press(getByText('Cancel'));
 
-    expect(onAbandon).not.toHaveBeenCalled();
     expect(onComplete).not.toHaveBeenCalled();
     expect(getByLabelText('What was the name of the bird?, idle')).toBeTruthy();
   });

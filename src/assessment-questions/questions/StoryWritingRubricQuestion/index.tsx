@@ -38,6 +38,8 @@ import type {
 import { WELA_PLUS_STORY_WRITING_EN } from '../../itemsets/wela_plus_story_writing.en';
 import { WELA_PLUS_STORY_WRITING_XH } from '../../itemsets/wela_plus_story_writing.xh';
 import { tokens } from '../../theme/tokens';
+import { SkipReasonPicker } from '../../skip/SkipReasonPicker';
+import type { ManualSkipReason } from '../../skip/skipReasons';
 
 const CHIP_SCORES = [0, 1, 2, 3, 4] as const;
 
@@ -45,19 +47,8 @@ type Phase =
   | 'intro'
   | 'active'
   | 'confirm-finish'
-  | 'abandon-picker'
+  | 'skip-picker'
   | 'finished';
-
-type SkipReason = Extract<StoppedReason, `skipped_${string}` | 'ea_ended'>;
-
-const SKIP_REASONS: { reason: SkipReason; label: string }[] = [
-  { reason: 'skipped_child_refused', label: 'Child refused' },
-  { reason: 'skipped_tired', label: 'Child tired' },
-  { reason: 'skipped_time', label: 'Out of time' },
-  { reason: 'skipped_age', label: 'Age inappropriate' },
-  { reason: 'skipped_prerequisite_unmet', label: 'Prerequisite unmet' },
-  { reason: 'skipped_other', label: 'Other' },
-];
 
 type FullItemSet = StoryWritingRubricItemSet & {
   item_set_id: string;
@@ -108,7 +99,6 @@ export function StoryWritingRubricQuestion(props: QuestionProps) {
     instructions,
     onComplete,
     onItemMarked,
-    onAbandon,
   } = props;
   const [phase, setPhase] = useState<Phase>('intro');
   // Per-dimension score state. null = unscored; 0..4 = chosen score.
@@ -251,12 +241,9 @@ export function StoryWritingRubricQuestion(props: QuestionProps) {
     }
   }, [unscoredCount, finish]);
 
-  const handleAbandonChosen = useCallback(
-    (reason: SkipReason) => {
-      if (onAbandon) onAbandon(reason);
-      finish(reason);
-    },
-    [onAbandon, finish],
+  const handleSkipChosen = useCallback(
+    (reason: ManualSkipReason) => finish(reason),
+    [finish],
   );
 
   if (phase === 'intro') {
@@ -294,23 +281,12 @@ export function StoryWritingRubricQuestion(props: QuestionProps) {
     );
   }
 
-  if (phase === 'abandon-picker') {
+  if (phase === 'skip-picker') {
     return (
-      <View>
-        <Text>Why are you abandoning?</Text>
-        {SKIP_REASONS.map(({ reason, label }) => (
-          <Pressable
-            key={reason}
-            accessibilityRole="button"
-            onPress={() => handleAbandonChosen(reason)}
-          >
-            <Text>{label}</Text>
-          </Pressable>
-        ))}
-        <Pressable onPress={() => setPhase('active')}>
-          <Text>Cancel</Text>
-        </Pressable>
-      </View>
+      <SkipReasonPicker
+        onChoose={handleSkipChosen}
+        onCancel={() => setPhase('active')}
+      />
     );
   }
 
@@ -406,9 +382,9 @@ export function StoryWritingRubricQuestion(props: QuestionProps) {
         </Pressable>
         <Pressable
           accessibilityRole="button"
-          onPress={() => setPhase('abandon-picker')}
+          onPress={() => setPhase('skip-picker')}
         >
-          <Text>Abandon</Text>
+          <Text>Skip question</Text>
         </Pressable>
       </View>
 

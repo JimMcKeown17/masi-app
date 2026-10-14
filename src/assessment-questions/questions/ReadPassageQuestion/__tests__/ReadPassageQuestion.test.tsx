@@ -141,10 +141,9 @@ describe('ReadPassageQuestion — itemSet override and variable passage length',
   });
 });
 
-describe('ReadPassageQuestion — Abandon flow', () => {
-  test('Abandon picker fires onAbandon + emits Result', () => {
+describe('ReadPassageQuestion — Skip flow', () => {
+  test('Skip picker emits Result', () => {
     const onComplete = jest.fn();
-    const onAbandon = jest.fn();
     const { getByText } = render(
       <ReadPassageQuestion
         language="en"
@@ -152,20 +151,18 @@ describe('ReadPassageQuestion — Abandon flow', () => {
         instructions="."
         durationSec={60}
         onComplete={onComplete}
-        onAbandon={onAbandon}
       />,
     );
     fireEvent.press(getByText('Start'));
-    fireEvent.press(getByText('Abandon'));
+    fireEvent.press(getByText('Skip question'));
     fireEvent.press(getByText('Child refused'));
-    expect(onAbandon).toHaveBeenCalledWith('skipped_child_refused');
     expect(onComplete.mock.calls[0][0].stopped_reason).toBe('skipped_child_refused');
   });
 
-  test('Abandon emits items=[] yet last_attempted_position is still a number (timed contract)', () => {
+  test('Skip emits items=[] yet last_attempted_position is still a number (timed contract)', () => {
     // Q8 is timed → contract validator requires numeric last_attempted_position.
     // The skip-emits-empty fix must NOT break that. items=[] + lastPos=-1 is
-    // the correct shape for "EA abandoned a timed Question with zero taps".
+    // the correct shape for "EA skipped a timed Question with zero taps".
     const onComplete = jest.fn();
     const { getByText } = render(
       <ReadPassageQuestion
@@ -177,7 +174,7 @@ describe('ReadPassageQuestion — Abandon flow', () => {
       />,
     );
     fireEvent.press(getByText('Start'));
-    fireEvent.press(getByText('Abandon'));
+    fireEvent.press(getByText('Skip question'));
     fireEvent.press(getByText('Out of time'));
     const r = onComplete.mock.calls[0][0];
     expect(r.items).toEqual([]);

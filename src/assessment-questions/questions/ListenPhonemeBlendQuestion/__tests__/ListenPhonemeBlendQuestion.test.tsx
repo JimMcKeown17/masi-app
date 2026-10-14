@@ -113,24 +113,21 @@ describe('ListenPhonemeBlendQuestion — scrollable list', () => {
   });
 });
 
-describe('ListenPhonemeBlendQuestion — Abandon flow', () => {
-  test('Abandon → reason → onAbandon + Result with that stopped_reason', () => {
+describe('ListenPhonemeBlendQuestion — Skip flow', () => {
+  test('Skip question → reason → Result with that stopped_reason', () => {
     const onComplete = jest.fn();
-    const onAbandon = jest.fn();
     const { getByText } = render(
       <ListenPhonemeBlendQuestion
         language="en"
         itemSet={FIXTURE_PHONEME_BLEND_EN}
         instructions="."
         onComplete={onComplete}
-        onAbandon={onAbandon}
       />,
     );
     fireEvent.press(getByText('Start'));
-    fireEvent.press(getByText('Abandon'));
+    fireEvent.press(getByText('Skip question'));
     fireEvent.press(getByText('Child tired'));
 
-    expect(onAbandon).toHaveBeenCalledWith('skipped_tired');
     expect(onComplete.mock.calls[0][0].stopped_reason).toBe('skipped_tired');
   });
 });

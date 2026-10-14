@@ -16,22 +16,13 @@ import { WELA_PLUS_PHONEME_BLEND_XH } from '../../itemsets/wela_plus_phoneme_ble
 import { useToggleMark } from '../../hooks/useToggleMark';
 import { useChildReadingFontSize } from '../../hooks/useChildReadingFontSize';
 import { tokens } from '../../theme/tokens';
+import { SkipReasonPicker } from '../../skip/SkipReasonPicker';
+import type { ManualSkipReason } from '../../skip/skipReasons';
 
 const BASE_SEGMENTED_FONT_SIZE = 32;
 const BASE_GLOSS_FONT_SIZE = 18;
 
-type Phase = 'intro' | 'active' | 'confirm-finish' | 'abandon-picker' | 'finished';
-
-type SkipReason = Extract<StoppedReason, `skipped_${string}` | 'ea_ended'>;
-
-const SKIP_REASONS: { reason: SkipReason; label: string }[] = [
-  { reason: 'skipped_child_refused', label: 'Child refused' },
-  { reason: 'skipped_tired', label: 'Child tired' },
-  { reason: 'skipped_time', label: 'Out of time' },
-  { reason: 'skipped_age', label: 'Age inappropriate' },
-  { reason: 'skipped_prerequisite_unmet', label: 'Prerequisite unmet' },
-  { reason: 'skipped_other', label: 'Other' },
-];
+type Phase = 'intro' | 'active' | 'confirm-finish' | 'skip-picker' | 'finished';
 
 type FullItemSet = ListenPhonemeBlendItemSet & {
   item_set_id: string;
@@ -68,7 +59,6 @@ export function ListenPhonemeBlendQuestion(props: QuestionProps) {
     instructions,
     onComplete,
     onItemMarked,
-    onAbandon,
   } = props;
   const [phase, setPhase] = useState<Phase>('intro');
   const { isMarked, toggle } = useToggleMark();
@@ -171,12 +161,9 @@ export function ListenPhonemeBlendQuestion(props: QuestionProps) {
     }
   }, [unmarkedCount, finish]);
 
-  const handleAbandonChosen = useCallback(
-    (reason: SkipReason) => {
-      if (onAbandon) onAbandon(reason);
-      finish(reason);
-    },
-    [onAbandon, finish],
+  const handleSkipChosen = useCallback(
+    (reason: ManualSkipReason) => finish(reason),
+    [finish],
   );
 
   if (phase === 'intro') {
@@ -208,23 +195,12 @@ export function ListenPhonemeBlendQuestion(props: QuestionProps) {
     );
   }
 
-  if (phase === 'abandon-picker') {
+  if (phase === 'skip-picker') {
     return (
-      <View>
-        <Text>Why are you abandoning?</Text>
-        {SKIP_REASONS.map(({ reason, label }) => (
-          <Pressable
-            key={reason}
-            accessibilityRole="button"
-            onPress={() => handleAbandonChosen(reason)}
-          >
-            <Text>{label}</Text>
-          </Pressable>
-        ))}
-        <Pressable onPress={() => setPhase('active')}>
-          <Text>Cancel</Text>
-        </Pressable>
-      </View>
+      <SkipReasonPicker
+        onChoose={handleSkipChosen}
+        onCancel={() => setPhase('active')}
+      />
     );
   }
 
@@ -282,9 +258,9 @@ export function ListenPhonemeBlendQuestion(props: QuestionProps) {
       </Pressable>
       <Pressable
         accessibilityRole="button"
-        onPress={() => setPhase('abandon-picker')}
+        onPress={() => setPhase('skip-picker')}
       >
-        <Text>Abandon</Text>
+        <Text>Skip question</Text>
       </Pressable>
     </View>
   );

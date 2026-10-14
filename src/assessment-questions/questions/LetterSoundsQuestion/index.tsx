@@ -15,10 +15,12 @@ import { WELA_PLUS_LETTER_SOUNDS_XH } from '../../itemsets/wela_plus_letter_soun
 import { useToggleMark } from '../../hooks/useToggleMark';
 import { useChildReadingFontSize } from '../../hooks/useChildReadingFontSize';
 import { tokens } from '../../theme/tokens';
+import { SkipReasonPicker } from '../../skip/SkipReasonPicker';
+import type { ManualSkipReason } from '../../skip/skipReasons';
 
 const BASE_LETTER_FONT_SIZE = 32;
 
-type Phase = 'intro' | 'active' | 'finished';
+type Phase = 'intro' | 'active' | 'skip-picker' | 'finished';
 
 type FullLetterSoundsItemSet = LetterSoundsItemSet & {
   item_set_id: string;
@@ -96,8 +98,7 @@ export function LetterSoundsQuestion(props: QuestionProps) {
       // Skip-emits-empty contract: a skipped_* stop must NOT persist as if
       // every item was answered wrong. Host translates items=[] +
       // stopped_reason=skipped_* into NULL score / zero items.
-      // (Pattern A v1 has no Abandon UI so skipped_* would only arrive via
-      // an external caller, but the guard is here for contract symmetry.)
+      // Skip reasons emit no item rows, matching the cross-Pattern contract.
       const isSkipped = stoppedReason.startsWith('skipped_');
       const items = isSkipped
         ? []
@@ -181,6 +182,11 @@ export function LetterSoundsQuestion(props: QuestionProps) {
     [toggle, onItemMarked],
   );
 
+  const handleSkipChosen = useCallback(
+    (reason: ManualSkipReason) => finish(reason),
+    [finish],
+  );
+
   if (phase === 'intro') {
     return (
       <View>
@@ -194,6 +200,15 @@ export function LetterSoundsQuestion(props: QuestionProps) {
 
   if (phase === 'finished') {
     return <View />;
+  }
+
+  if (phase === 'skip-picker') {
+    return (
+      <SkipReasonPicker
+        onChoose={handleSkipChosen}
+        onCancel={() => setPhase('active')}
+      />
+    );
   }
 
   const pageStart = currentPage * lettersPerPage;
@@ -269,6 +284,12 @@ export function LetterSoundsQuestion(props: QuestionProps) {
           onPress={() => finish('ea_ended')}
         >
           <Text>End</Text>
+        </Pressable>
+        <Pressable
+          accessibilityRole="button"
+          onPress={() => setPhase('skip-picker')}
+        >
+          <Text>Skip question</Text>
         </Pressable>
       </View>
     </View>

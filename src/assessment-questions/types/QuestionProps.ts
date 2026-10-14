@@ -1,4 +1,4 @@
-import type { Result, ResultItem, StoppedReason } from './Result';
+import type { Result, ResultItem } from './Result';
 
 export interface QuestionProps {
   language: string;
@@ -6,6 +6,6 @@ export interface QuestionProps {
   instructions?: string;
   durationSec?: number;
   onItemMarked?: (item: ResultItem) => void;
+  /** Called exactly once per presentation: on completion, timer, End, or a manual skip. */
   onComplete: (result: Result) => void;
-  onAbandon?: (reason: Extract<StoppedReason, `skipped_${string}` | 'ea_ended'>) => void;
 }

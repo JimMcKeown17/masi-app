@@ -21,7 +21,7 @@ describe('ReadWordsQuestion — OSS contract', () => {
     expect(v.errors).toEqual([]);
   });
 
-  test('Abandon path emits a contract-valid Result', async () => {
+  test('Skip path emits a contract-valid Result', async () => {
     const { rendered, verdict } = runContractTest(ReadWordsQuestion, {
       language: 'en',
       itemSet: FIXTURE_READ_WORDS_EN,
@@ -29,7 +29,7 @@ describe('ReadWordsQuestion — OSS contract', () => {
       durationSec: 60,
     });
     fireEvent.press(rendered.getByText('Start'));
-    fireEvent.press(rendered.getByText('Abandon'));
+    fireEvent.press(rendered.getByText('Skip question'));
     fireEvent.press(rendered.getByText('Child refused'));
 
     const v = await verdict;

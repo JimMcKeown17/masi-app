@@ -45,7 +45,7 @@ describe('ListenAndAnswerStoryQuestion — OSS contract', () => {
     expect(v.errors).toEqual([]);
   });
 
-  test('Abandon path emits a contract-valid Result with a skipped_* stopped_reason', async () => {
+  test('Skip path emits a contract-valid Result with a skipped_* stopped_reason', async () => {
     const { rendered, verdict } = runContractTest(ListenAndAnswerStoryQuestion, {
       language: 'en',
       itemSet: FIXTURE_LISTEN_AND_ANSWER_STORY_EN,
@@ -53,7 +53,7 @@ describe('ListenAndAnswerStoryQuestion — OSS contract', () => {
     });
 
     fireEvent.press(rendered.getByText("I've finished reading"));
-    fireEvent.press(rendered.getByText('Abandon'));
+    fireEvent.press(rendered.getByText('Skip question'));
     fireEvent.press(rendered.getByText('Child refused'));
 
     const v = await verdict;

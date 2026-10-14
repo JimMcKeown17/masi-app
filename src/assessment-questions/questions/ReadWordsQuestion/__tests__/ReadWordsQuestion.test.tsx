@@ -114,10 +114,9 @@ describe('ReadWordsQuestion — timer', () => {
   });
 });
 
-describe('ReadWordsQuestion — Abandon flow', () => {
-  test('Abandon opens picker and selecting fires onAbandon + emits Result', () => {
+describe('ReadWordsQuestion — Skip flow', () => {
+  test('Skip question opens picker and selecting emits Result', () => {
     const onComplete = jest.fn();
-    const onAbandon = jest.fn();
     const { getByText } = render(
       <ReadWordsQuestion
         language="en"
@@ -125,15 +124,13 @@ describe('ReadWordsQuestion — Abandon flow', () => {
         instructions="."
         durationSec={60}
         onComplete={onComplete}
-        onAbandon={onAbandon}
       />,
     );
     fireEvent.press(getByText('Start'));
-    fireEvent.press(getByText('Abandon'));
-    expect(getByText(/Why are you abandoning/i)).toBeTruthy();
+    fireEvent.press(getByText('Skip question'));
+    expect(getByText(/Why are you skipping this question/i)).toBeTruthy();
     fireEvent.press(getByText('Child refused'));
 
-    expect(onAbandon).toHaveBeenCalledWith('skipped_child_refused');
     expect(onComplete).toHaveBeenCalledTimes(1);
     expect(onComplete.mock.calls[0][0].stopped_reason).toBe('skipped_child_refused');
   });

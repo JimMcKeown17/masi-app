@@ -85,23 +85,20 @@ describe('WriteCvcsQuestion — Finish flow', () => {
   });
 });
 
-describe('WriteCvcsQuestion — Abandon flow', () => {
-  test('Abandon emits skipped_* stopped_reason and fires onAbandon', () => {
+describe('WriteCvcsQuestion — Skip flow', () => {
+  test('Skip emits skipped_* stopped_reason', () => {
     const onComplete = jest.fn();
-    const onAbandon = jest.fn();
     const { getByText } = render(
       <WriteCvcsQuestion
         language="en"
         itemSet={FIXTURE_WRITE_CVCS_EN}
         instructions="."
         onComplete={onComplete}
-        onAbandon={onAbandon}
       />,
     );
     fireEvent.press(getByText('Start'));
-    fireEvent.press(getByText('Abandon'));
+    fireEvent.press(getByText('Skip question'));
     fireEvent.press(getByText('Out of time'));
-    expect(onAbandon).toHaveBeenCalledWith('skipped_time');
     expect(onComplete.mock.calls[0][0].stopped_reason).toBe('skipped_time');
   });
 });

@@ -92,24 +92,21 @@ describe('ReadSentencesQuestion — Finish flow and per-sentence percent', () =>
   });
 });
 
-describe('ReadSentencesQuestion — Abandon flow', () => {
-  test('Abandon picker fires onAbandon + Result.stopped_reason', () => {
+describe('ReadSentencesQuestion — Skip flow', () => {
+  test('Skip picker emits Result.stopped_reason', () => {
     const onComplete = jest.fn();
-    const onAbandon = jest.fn();
     const { getByText } = render(
       <ReadSentencesQuestion
         language="en"
         itemSet={FIXTURE_READ_SENTENCES_EN}
         instructions="."
         onComplete={onComplete}
-        onAbandon={onAbandon}
       />,
     );
     fireEvent.press(getByText('Start'));
-    fireEvent.press(getByText('Abandon'));
+    fireEvent.press(getByText('Skip question'));
     fireEvent.press(getByText('Child refused'));
 
-    expect(onAbandon).toHaveBeenCalledWith('skipped_child_refused');
     expect(onComplete.mock.calls[0][0].stopped_reason).toBe('skipped_child_refused');
   });
 });

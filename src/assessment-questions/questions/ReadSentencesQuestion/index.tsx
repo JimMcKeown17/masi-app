@@ -20,23 +20,14 @@ import { WELA_PLUS_READ_SENTENCES_XH } from '../../itemsets/wela_plus_read_sente
 import { useToggleMark } from '../../hooks/useToggleMark';
 import { useChildReadingFontSize } from '../../hooks/useChildReadingFontSize';
 import { tokens } from '../../theme/tokens';
+import { SkipReasonPicker } from '../../skip/SkipReasonPicker';
+import type { ManualSkipReason } from '../../skip/skipReasons';
 
 const BASE_WORD_FONT_SIZE = 22;
 
-type Phase = 'intro' | 'active' | 'confirm-finish' | 'abandon-picker' | 'finished';
+type Phase = 'intro' | 'active' | 'confirm-finish' | 'skip-picker' | 'finished';
 
 type MarkingPolarity = 'tap_correct' | 'tap_wrong';
-
-type SkipReason = Extract<StoppedReason, `skipped_${string}` | 'ea_ended'>;
-
-const SKIP_REASONS: { reason: SkipReason; label: string }[] = [
-  { reason: 'skipped_child_refused', label: 'Child refused' },
-  { reason: 'skipped_tired', label: 'Child tired' },
-  { reason: 'skipped_time', label: 'Out of time' },
-  { reason: 'skipped_age', label: 'Age inappropriate' },
-  { reason: 'skipped_prerequisite_unmet', label: 'Prerequisite unmet' },
-  { reason: 'skipped_other', label: 'Other' },
-];
 
 type FullItemSet = ReadSentencesItemSet & {
   item_set_id: string;
@@ -109,7 +100,6 @@ export function ReadSentencesQuestion(
     instructions,
     onComplete,
     onItemMarked,
-    onAbandon,
     markingPolarity = 'tap_correct',
   } = props;
   const [phase, setPhase] = useState<Phase>('intro');
@@ -250,12 +240,9 @@ export function ReadSentencesQuestion(
     }
   }, [unmarkedCount, finish]);
 
-  const handleAbandonChosen = useCallback(
-    (reason: SkipReason) => {
-      if (onAbandon) onAbandon(reason);
-      finish(reason);
-    },
-    [onAbandon, finish],
+  const handleSkipChosen = useCallback(
+    (reason: ManualSkipReason) => finish(reason),
+    [finish],
   );
 
   if (phase === 'intro') {
@@ -287,23 +274,12 @@ export function ReadSentencesQuestion(
     );
   }
 
-  if (phase === 'abandon-picker') {
+  if (phase === 'skip-picker') {
     return (
-      <View>
-        <Text>Why are you abandoning?</Text>
-        {SKIP_REASONS.map(({ reason, label }) => (
-          <Pressable
-            key={reason}
-            accessibilityRole="button"
-            onPress={() => handleAbandonChosen(reason)}
-          >
-            <Text>{label}</Text>
-          </Pressable>
-        ))}
-        <Pressable onPress={() => setPhase('active')}>
-          <Text>Cancel</Text>
-        </Pressable>
-      </View>
+      <SkipReasonPicker
+        onChoose={handleSkipChosen}
+        onCancel={() => setPhase('active')}
+      />
     );
   }
 
@@ -358,9 +334,9 @@ export function ReadSentencesQuestion(
         </Pressable>
         <Pressable
           accessibilityRole="button"
-          onPress={() => setPhase('abandon-picker')}
+          onPress={() => setPhase('skip-picker')}
         >
-          <Text>Abandon</Text>
+          <Text>Skip question</Text>
         </Pressable>
       </View>
     </View>
