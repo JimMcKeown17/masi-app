@@ -126,5 +126,13 @@ export function validateResult(result: unknown): ValidationVerdict {
     );
   }
 
+  if (derivedObj?.tracks_progress === true) {
+    const p = derivedObj.last_attempted_position;
+    const itemCount = Array.isArray(r.items) ? r.items.length : 0;
+    if (typeof p !== 'number' || !Number.isInteger(p) || p < -1 || p >= Math.max(itemCount, 1)) {
+      errors.push('last_attempted_position: tracks_progress requires an integer in [-1, items.length)');
+    }
+  }
+
   return { valid: errors.length === 0, errors };
 }

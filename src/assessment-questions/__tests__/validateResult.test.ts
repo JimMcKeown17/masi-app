@@ -160,3 +160,23 @@ describe('validateResult', () => {
     expect(validateResult(good).valid).toBe(true);
   });
 });
+
+describe('tracks_progress rule', () => {
+  const base = {
+    question_code: 'x', question_version: '1', item_set_id: 'x@1.en', language: 'en',
+    duration_ms: 1, stopped_reason: 'ea_ended' as const,
+    items: [{ position: 0, item_key: 'a', prompt: 'a', is_correct: true }],
+  };
+  test('null position with tracks_progress is invalid', () => {
+    const v = validateResult({ ...base, derived: { total_correct: 1, total_attempted: 1, percent: 100, last_attempted_position: null, tracks_progress: true } });
+    expect(v.valid).toBe(false);
+  });
+  test('-1 with tracks_progress is valid', () => {
+    const v = validateResult({ ...base, derived: { total_correct: 0, total_attempted: 0, percent: 0, last_attempted_position: -1, tracks_progress: true } });
+    expect(v.valid).toBe(true);
+  });
+  test('position beyond items is invalid', () => {
+    const v = validateResult({ ...base, derived: { total_correct: 1, total_attempted: 6, percent: 17, last_attempted_position: 5, tracks_progress: true } });
+    expect(v.valid).toBe(false);
+  });
+});
