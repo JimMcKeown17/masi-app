@@ -184,10 +184,13 @@ The PRD design surface is closed. What remains is **implementation work** (diffe
 
 **The PRD design phase is complete.** No more design grilling is needed; the next agent picks up implementation. The PRD's *Implementation handoff* section at the bottom of `documentation/wela-plus-battery-prd-2026.md` lays out the suggested handoff sequence in detail.
 
-**Most natural next step:** the island is on `main` (merged 2026-10-09) with the
-`assessmentItemDomainId` rekey still defused and `test:types` running in CI. Complete the Masi
-token/chrome conformance pass, then write the concrete host migration and integration plan from
-the PRD. The simplest first end-to-end slice is #27 (wire Pattern A, Q1, into the Run flow).
+**Most natural next step:** the island is on `main` (merged 2026-10-09) with `test:types`
+running in CI. Release 1 is specified in
+[`docs/superpowers/specs/2026-10-14-welaplus-release-1-design.md`](../superpowers/specs/2026-10-14-welaplus-release-1-design.md).
+It covers all 11 Questions, children reading printed cards, no photos, and real 2024 content.
+**Read it before the PRD's later sections**: it records ten 2026-10-14 decisions that narrow or
+change the PRD, including no `assessmentItemDomainId` change (ADR-0007) and no device-side
+window tagging.
 
 **Then:** build and deploy the host schema/sync contract, wire Run lifecycle and photos, and extract
 or publish the reviewed component island as the OSS package.

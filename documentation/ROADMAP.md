@@ -392,16 +392,18 @@ against the exact SQLite backend. `scripts/loadTestUsers.js` is deliberately dis
 
 The 11 Question components and their tests are on `main` under `src/assessment-questions/`
 (merged 2026-10-09 from `feature/wela-plus-battery-merge`). The package is unwired: nothing in
-`src/` or `App.js` imports it. `npm run test:types` type-checks it in CI. The
-`assessmentItemDomainId` rekey is still defused; a literal-UUID contract test pins current IDs.
+`src/` or `App.js` imports it. `npm run test:types` type-checks it in CI. A literal-UUID
+contract test pins current `assessmentItemDomainId` output. **No identity change is planned**
+(ADR-0007 keeps the id; Q11 HQ calibration rows use positions 5–8, so they never collide with the
+EA's 1–4). Release 1 scope and decisions:
+[`2026-10-14-welaplus-release-1-design.md`](../docs/superpowers/specs/2026-10-14-welaplus-release-1-design.md).
 
 ### Integration and contract work
 
 - [ ] Review the island against current design tokens, shared capture chrome, BottomSheet behavior,
   SQLite repositories, and outbox ownership.
-- [ ] Before wiring Q11, land the ADR-0004 `assessmentItemDomainId` identity change as its own PR,
-  flipping the literal expected-UUID test, with contract-map/build-log updates and an explicit
-  staging-data plan.
+- [ ] WelaPLUS Release 1 depends on ADR-0007 enforcement (the assessment-history item above). If
+  that has not landed first, Release 1 lands it (spec §7.1).
 - [ ] Add a source-wide raw-hex guard and complete the warm Masi design conformance pass (11
   island files still use raw hex as of 2026-10-09).
 - [ ] Build the remaining local/server schema and contract: `battery_runs`,
