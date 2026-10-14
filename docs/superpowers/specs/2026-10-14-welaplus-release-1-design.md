@@ -141,17 +141,23 @@ isiXhosa differ.
 
 **Q5 letter writing.**
 - 26 cells, one per letter a–z, in the booklet's grid order (rows of 6).
-- EN picture → letter, provisional, read from the booklet image:
-  - Row 1: apple a, fish f, key k, orange o, sun s, whale w.
-  - Row 2: bed b, gate g, leaf l, pot p, table t, *(unclear figure)*.
-  - Row 3: cat c, hat h, moon m, *(unclear figure)*, umbrella u, yo-yo y.
-  - Row 4: dog d, insect i, net n, ring r, van v, zebra z.
-  - Row 5: elephant e, jacket j.
-  - The two unclear cells are q and x in some order.
-- **The pedagogy team confirms the full mapping from the InDesign source.**
-- XH uses isiXhosa picture names: the script names i-apile /a/, ufudo /f/, ikati /k/. The XH
-  booklet may use different pictures, so its picture → letter mapping is a separate pedagogy
-  confirmation.
+- **The letter order is the same in both languages:** `a f k o s w / b g l p t x / c h m q u y
+  / d i n r v z / e j`. This was read from the EN and XH booklet pages at 110 dpi on
+  2026-10-14.
+- EN pictures:
+  - Row 1: apple, fish, key, orange, sun, whale.
+  - Row 2: bed, gate, leaf, pot, table, and a figure behind a sign (**x**, by elimination).
+  - Row 3: cat, hat, moon, a crowned figure (**q**, queen), umbrella, yo-yo.
+  - Row 4: dog, insect, net, ring, van, zebra.
+  - Row 5: elephant, jacket.
+- XH pictures differ but keep the same letters:
+  - Row 1: apple (i-apile), tortoise (ufudo), cat (ikati), orange, bread, a face.
+  - Row 2: milk, drum, sun, pear, table, and an **empty x cell (no picture)**.
+  - Row 3: spoon, pig, car, egg, tree, medicine.
+  - Row 4: duck, dog, nest, traffic light, van, axe.
+  - Row 5: bucket, jug.
+- The XH picture *names* in the app use these English glosses until pedagogy supplies the
+  isiXhosa names (4.3 #1). The EA, not the child, reads them.
 - The app needs only the **expected letter** and the **picture name** per cell. It shows no
   images (D1/D2).
 
@@ -204,7 +210,13 @@ isiXhosa differ.
   - EN: 1 jam, 2 hut, 3 fin, 4 net (4 × 3 = 12). This is the order of the instruction sheet.
     The 2024 booklet lays them out in two blocks: jam over hut on the left, fin over net on the
     right.
-  - XH: 1 lala, 2 sela, 3 imali, 4 idolo (4 + 4 + 5 + 5 = 18).
+  - XH: 1 lala, 2 sela, 3 imali, 4 idolo. The 2024 XH booklet orders them the same way
+    (sleeping over drinking on the left, money over knee on the right).
+- **Scoring units are explicit in the content.** Each word lists the letters that score.
+  EN: `j a m`, `h u t`, `f i n`, `n e t` (12). XH, proposed: `l a l a`, `s e l a`,
+  `m a l i`, `d o l o` (16). The noun-prefix `i` of *imali* and *idolo* is not scored, which
+  reproduces the booklet's /16 exactly. Pedagogy confirms (4.3 #2). Changing a scoring unit
+  is a content edit, not a code change.
 - The writing sheet prints the numbers 1–4 beside each picture (section 9.3), so reading order on
   the paper can never be ambiguous.
 
@@ -220,10 +232,10 @@ while the child writes.
 
 ### 4.3 Open content items (pedagogy; none blocks building)
 
-1. **Q5 picture → letter mapping**: confirm all 26 for EN, including the two unclear cells, and
-   the XH mapping.
-2. **Q9 isiXhosa maximum**: per-letter scoring gives 18, but the paper says /16. Confirm
-   whether a different rule applies (for example, syllables or specific letters).
+1. **Q5 pictures**: confirm the EN x and q cells; supply the isiXhosa picture names; and
+   decide whether the XH x cell (no picture) is scored.
+2. **Q9 isiXhosa scoring units**: confirm the prefix-excluded letters (`m a l i`, `d o l o`)
+   that give the booklet's /16.
 3. **Q11 rubric anchors**: the paper has dimension names only. Pedagogy supplies the five anchor
    descriptions (0–4) per dimension in EN and XH. Until then, the app shows the dimension names
    with the chip numbers and a "Rubric descriptions coming soon" sheet. This **blocks field
@@ -301,9 +313,10 @@ Required component changes. Each keeps the OSS boundary and passes the contract 
 | Q | Change |
 |---|---|
 | 1 | Marking grid mirrors the card: **5 rows × 12**, one scroll view, no 20-per-page pagination. |
-| 1, 6, 7, 8 | **Explicit last-attempted marker.** Today Q1 derives `last_attempted_position` from the last displayed page, and Q6/Q8 advance it only on correct taps (`LetterSoundsQuestion/index.tsx` ~91–112; `ReadWordsQuestion` ~199–209). Both are wrong once pagination and timers change. When a reading Question ends before its last item (End, stop rule, or timer), the EA must tap the **last item the child attempted** in a bottom sheet. This reuses the EGRA `LastAttemptedBottomSheet` interaction. If the EA reached the final item, it is the last item without asking. Positions stay **zero-based**, as the merged components emit them. `derived.total_attempted = last_attempted_position + 1`, and `last_attempted_position = null` means **no attempt** (`total_attempted = 0`, `percent = 0`). Items after it are "not reached", not wrong. Pinned cases on Q1/Q6/Q7/Q8: no attempt, first item only, a row boundary, and the final item, each checked on the emitted and the persisted values. |
+| 1, 6, 8 | **Explicit last-attempted marker.** Today Q1 derives `last_attempted_position` from the last displayed page, and Q6/Q8 advance it only on correct taps (`LetterSoundsQuestion/index.tsx` ~91–112; `ReadWordsQuestion` ~199–209). Both are wrong once pagination and timers change. When one of these Questions ends by End, stop rule, or timer, the EA taps the **last item the child attempted** in a sheet that also offers "Reached the end" and "Nothing attempted". This reuses the EGRA `LastAttemptedBottomSheet` interaction, rebuilt inside the package because of the OSS boundary. Positions stay **zero-based**, as the merged components emit them. `derived.total_attempted = last_attempted_position + 1`. **`-1` means nothing attempted**, the sentinel the existing contract validator and `ReadWordsQuestion` already use; `null` is reserved for Questions that do not track progress. Items after it are "not reached" (`is_correct = false`, `metadata.reached = false`), not wrong. `derived.tracks_progress = true` makes the validator require a numeric position. Pinned cases: nothing attempted, first item only, a row boundary, and the final item, each checked on the emitted and the persisted values. |
+| 7 | Q7 has no early-stop rule on paper, so it gets no marker sheet. **Finish** means every sentence was presented: `tracks_progress = true` and `last_attempted_position` = the last word. A skip emits no items. |
 | 6 | Rows mirror the card (6 rows of up to 7). Untimed per 4.2. |
-| 7 | Unchanged structure (per-word pills grouped by sentence). Content only. |
+| 7 | Structure unchanged (per-word pills grouped by sentence); content plus the Finish rule above. |
 | 8 | Paragraphs mirror the handout. Untimed per 4.2. **The component currently falls back to a 60 s timer when `durationSec` is omitted** (`DEFAULT_DURATION_SEC`). Change it so an omitted `durationSec` means untimed, as Q6 already does. Without a timer, `correct_words_per_minute` is omitted from `derived`, and `last_attempted_position` still records where the EA stopped. |
 | 1, 6–8 | Remove the child-facing font-size dependency. Pills use a fixed EA marking size from design tokens; `useChildReadingFontSize` is removed or returns a constant. |
 | 5 | Cells show **picture name + expected letter** (for example, "apple → a"). No image. |
@@ -640,7 +653,7 @@ EN/XH) to section 9. Engineering does not generate the PDFs. This section is the
   - duplicate-id refusal (7.1);
   - v10 migration from v9 with existing data.
 - **Component and host:** one terminal callback per presentation (cancel → no write; skip →
-  exactly one skipped row); and the last-attempted marker on Q1/Q6/Q7/Q8 for an all-wrong first
+  exactly one skipped row); and the last-attempted marker on Q1/Q6/Q8 (and Q7's Finish rule) for an all-wrong first
   row, correct-then-wrong, early stop, and timer expiry. Each case checks both the emitted
   `derived` values and the persisted row.
 - **PostgreSQL RLS harness:** the cases in 7.3.
@@ -651,25 +664,26 @@ EN/XH) to section 9. Engineering does not generate the PDFs. This section is the
 - **Gates:** `npm test`, `npm run test:integration`, `npm run test:types`, and the PostgreSQL
   harness, all green in CI.
 
-## 11. Delivery slices (each a PR, in order)
+## 11. Delivery slices
 
-1. **ADR-0007 enforcement** (7.1), skipped if the assessment-history slice has already landed
-   it. Also updates the ADR-0004 position note and the contract test's comment (D9).
-2. **Schema:** the Supabase migration, RLS and the run lifecycle trigger, the SQLite v10
-   mirror, the contract map, and the RLS harness cases.
-3. **Repositories and sync:** `batteryRunsRepository`, `saveQuestionResult`,
-   `saveSkippedQuestion`, the reader choke point (7.5), the lifecycle push operations, and the
-   dependency-evidence maps (7.4), with integration and cross-pass tests. This slice must land
-   before any WelaPLUS row can be written on a device, because the choke point protects the
-   twelve EGRA readers.
-4. **Package:** the battery definition and evaluator, the 2024.1 content (EN/XH), and the
-   component changes in 5.3.
-5. **Host Run flow:** the entry card, child select mode, overview, Question host, skip,
-   finalize, abandon, and summary, followed by the device check.
-6. **Docs:** update the PRD (status, D1–D10 deltas), ROADMAP §8, `CONTEXT.md` if terms change,
-   the build log, and the printout pack (section 9) published for the field team.
+The slices are delivered as **three implementation plans**, re-sequenced on 2026-10-14 after
+planning found the sync layer mid-redesign:
 
-Per `AGENTS.md`, Codex implements each slice. Claude specifies, reviews the diff and tests, and
+- **Plan 1 — Question package** (slice 4): the battery definition and evaluator, the 2024.1
+  content (EN/XH), and the component changes in 5.3. Everything stays inside
+  `src/assessment-questions/` with no sync dependency, so it starts now from `main`.
+  Plan: `docs/superpowers/plans/2026-10-14-welaplus-plan-1-question-package.md`.
+- **Plan 2 — Data foundation** (slices 1–3): ADR-0007 enforcement, the schema, RLS and the run
+  lifecycle trigger, the SQLite mirror, repositories, sync, and the reader choke point. It is
+  written against the code it will run on: after `feat/upload-path-correctness` (which adds
+  UPDATE-by-id and claims SQLite v10, so WelaPLUS takes **v11**) and the actor-lifecycle plans
+  that follow it (one database per EA, handle-scoped transactions, actor-stamped outbox owner).
+  Writing it earlier would plan against interfaces that are being replaced.
+- **Plan 3 — Host Run flow and docs** (slices 5–6): the entry card, child select mode,
+  overview, Question host, skip, finalize, abandon, summary, and history, followed by the
+  device check, the docs updates, and the printout pack published for the field team.
+
+Per `AGENTS.md`, Codex implements each task. Claude specifies, reviews the diff and tests, and
 verifies.
 
 ## 12. Risks
