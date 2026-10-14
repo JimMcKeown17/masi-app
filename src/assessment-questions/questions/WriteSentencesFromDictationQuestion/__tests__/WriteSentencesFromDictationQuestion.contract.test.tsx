@@ -14,7 +14,7 @@ describe('WriteSentencesFromDictationQuestion — OSS contract', () => {
       },
     );
     fireEvent.press(rendered.getByText('Start'));
-    fireEvent.press(rendered.getByTestId('card-q10.item_1'));
+    fireEvent.press(rendered.getByLabelText('Mom, idle'));
     fireEvent.press(rendered.getByText('Finish'));
     fireEvent.press(rendered.getByText('Yes, finish'));
     const v = await verdict;

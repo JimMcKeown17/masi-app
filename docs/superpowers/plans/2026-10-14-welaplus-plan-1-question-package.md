@@ -94,7 +94,7 @@ No host screen, repository, sync, or schema change is made here; those belong to
 | `src/assessment-questions/battery/wela_plus_full.ts` (create) | `WELA_PLUS_FULL_2024_1` battery definition | 11 |
 | `src/assessment-questions/itemsets/*.ts` (modify, 22 files) and `itemsets/buildPassage.ts` (create) | 2024.1 content EN and XH | 12 |
 | `src/assessment-questions/itemsets/contentStatus.ts` (create) | Machine-readable list of pedagogy-pending content (spec 4.3) | 12 |
-| `src/assessment-questions/__tests__/itemSetIntegrity.test.ts` (create) | Counts, versions, parity, language resolution | 12 |
+| `src/assessment-questions/__tests__/itemSetIntegrity.test.tsx` (create) | Counts, versions, parity, language resolution | 12 |
 | `src/assessment-questions/index.ts` (create) | Public barrel: Questions, battery, evaluator, types, tokens | 11 |
 
 ---
@@ -1651,7 +1651,7 @@ git commit -m "feat(wela): wela_plus_full@2024.1 battery and the battery-state e
 - Modify: all 22 `src/assessment-questions/itemsets/wela_plus_*.{en,xh}.ts`
 - Create: `src/assessment-questions/itemsets/buildPassage.ts`
 - Create: `src/assessment-questions/itemsets/contentStatus.ts`
-- Create: `src/assessment-questions/__tests__/itemSetIntegrity.test.ts`
+- Create: `src/assessment-questions/__tests__/itemSetIntegrity.test.tsx`
 
 **Interfaces:**
 - Produces:
@@ -1664,7 +1664,7 @@ git commit -m "feat(wela): wela_plus_full@2024.1 battery and the battery-state e
 - [ ] **Step 1: Write the failing integrity test**
 
 ```ts
-// src/assessment-questions/__tests__/itemSetIntegrity.test.ts
+// src/assessment-questions/__tests__/itemSetIntegrity.test.tsx
 import * as S from '../itemsets/index';
 import { CONTENT_PENDING } from '../itemsets/contentStatus';
 import { render, fireEvent } from '@testing-library/react-native';

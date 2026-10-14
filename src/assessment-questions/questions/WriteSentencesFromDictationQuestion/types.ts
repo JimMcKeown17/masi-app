@@ -1,9 +1,13 @@
-export interface WriteSentencesFromDictationPrompt {
+export interface WriteSentencesFromDictationWord {
   item_key: string;
-  /** The sentence the EA dictates aloud; child writes it from memory. */
-  sentence: string;
+  word: string;
+}
+
+export interface WriteSentencesFromDictationSentence {
+  item_key: string;
+  words: WriteSentencesFromDictationWord[];
 }
 
 export interface WriteSentencesFromDictationItemSet {
-  prompts: WriteSentencesFromDictationPrompt[];
+  sentences: WriteSentencesFromDictationSentence[];
 }

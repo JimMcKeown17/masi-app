@@ -1,10 +1,8 @@
 /**
  * WriteSentencesFromDictationQuestion — WelaPLUS Pattern D (Q10).
  *
- * EA dictates a sentence aloud; child writes from memory on paper; EA taps
- * the card if the child wrote it correctly. Live marking (one item at a
- * time, naturally gated by EA's own dictation pace). Single-column
- * auto-scroll layout shell — identical shape to Q9.
+ * EA dictates each sentence aloud; child writes from memory on paper; EA
+ * marks each written word independently. Words are grouped by sentence.
  */
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { View, Text, Pressable, ScrollView, StyleSheet } from 'react-native';
@@ -12,17 +10,15 @@ import type { QuestionProps } from '../../types/QuestionProps';
 import type { Result, ResultItem, StoppedReason } from '../../types/Result';
 import type {
   WriteSentencesFromDictationItemSet,
-  WriteSentencesFromDictationPrompt,
+  WriteSentencesFromDictationSentence,
+  WriteSentencesFromDictationWord,
 } from './types';
 import { WELA_PLUS_WRITE_SENTENCES_DICTATION_EN } from '../../itemsets/wela_plus_write_sentences_dictation.en';
 import { WELA_PLUS_WRITE_SENTENCES_DICTATION_XH } from '../../itemsets/wela_plus_write_sentences_dictation.xh';
 import { useToggleMark } from '../../hooks/useToggleMark';
-import { useChildReadingFontSize } from '../../hooks/useChildReadingFontSize';
 import { tokens } from '../../theme/tokens';
 import { SkipReasonPicker } from '../../skip/SkipReasonPicker';
 import type { ManualSkipReason } from '../../skip/skipReasons';
-
-const BASE_PROMPT_FONT_SIZE = 22;
 
 type Phase =
   | 'intro'
@@ -36,10 +32,23 @@ type FullItemSet = WriteSentencesFromDictationItemSet & {
   question_version: string;
 };
 
-function isValidPrompt(p: unknown): p is WriteSentencesFromDictationPrompt {
-  if (!p || typeof p !== 'object') return false;
-  const o = p as Record<string, unknown>;
-  return typeof o.item_key === 'string' && typeof o.sentence === 'string';
+function isValidWord(value: unknown): value is WriteSentencesFromDictationWord {
+  if (!value || typeof value !== 'object') return false;
+  const o = value as Record<string, unknown>;
+  return typeof o.item_key === 'string' && typeof o.word === 'string';
+}
+
+function isValidSentence(
+  value: unknown,
+): value is WriteSentencesFromDictationSentence {
+  if (!value || typeof value !== 'object') return false;
+  const o = value as Record<string, unknown>;
+  return (
+    typeof o.item_key === 'string' &&
+    Array.isArray(o.words) &&
+    o.words.length > 0 &&
+    o.words.every(isValidWord)
+  );
 }
 
 function isFullItemSet(value: unknown): value is FullItemSet {
@@ -47,8 +56,8 @@ function isFullItemSet(value: unknown): value is FullItemSet {
   const o = value as Record<string, unknown>;
   if (typeof o.item_set_id !== 'string') return false;
   if (typeof o.question_version !== 'string') return false;
-  if (!Array.isArray(o.prompts)) return false;
-  return o.prompts.every(isValidPrompt);
+  if (!Array.isArray(o.sentences) || o.sentences.length === 0) return false;
+  return o.sentences.every(isValidSentence);
 }
 
 function resolveItemSet(language: string, override: unknown): FullItemSet {
@@ -56,6 +65,31 @@ function resolveItemSet(language: string, override: unknown): FullItemSet {
   return language === 'xh'
     ? WELA_PLUS_WRITE_SENTENCES_DICTATION_XH
     : WELA_PLUS_WRITE_SENTENCES_DICTATION_EN;
+}
+
+interface FlatWord extends WriteSentencesFromDictationWord {
+  sentenceIndex: number;
+  wordIndex: number;
+  position: number;
+}
+
+function flattenWords(
+  sentences: WriteSentencesFromDictationSentence[],
+): FlatWord[] {
+  const flatWords: FlatWord[] = [];
+  let position = 0;
+  sentences.forEach((sentence, sentenceIndex) => {
+    sentence.words.forEach((word, wordIndex) => {
+      flatWords.push({
+        ...word,
+        sentenceIndex,
+        wordIndex,
+        position,
+      });
+      position += 1;
+    });
+  });
+  return flatWords;
 }
 
 export function WriteSentencesFromDictationQuestion(props: QuestionProps) {
@@ -68,8 +102,6 @@ export function WriteSentencesFromDictationQuestion(props: QuestionProps) {
   } = props;
   const [phase, setPhase] = useState<Phase>('intro');
   const { isMarked, toggle } = useToggleMark();
-  const fontScale = useChildReadingFontSize();
-  const promptFontSize = BASE_PROMPT_FONT_SIZE * fontScale;
   const effectiveItemSet = resolveItemSet(language, itemSet);
 
   const isMarkedRef = useRef(isMarked);
@@ -80,9 +112,10 @@ export function WriteSentencesFromDictationQuestion(props: QuestionProps) {
   const hasFinishedRef = useRef(false);
   const startTimeMsRef = useRef<number | null>(null);
 
-  const prompts = effectiveItemSet.prompts;
-  const unmarkedCount = prompts.reduce(
-    (acc, p) => acc + (isMarked(p.item_key) ? 0 : 1),
+  const sentences = effectiveItemSet.sentences;
+  const flatWords = React.useMemo(() => flattenWords(sentences), [sentences]);
+  const unmarkedCount = flatWords.reduce(
+    (acc, word) => acc + (isMarked(word.item_key) ? 0 : 1),
     0,
   );
 
@@ -98,22 +131,38 @@ export function WriteSentencesFromDictationQuestion(props: QuestionProps) {
       hasFinishedRef.current = true;
       setPhase('finished');
 
-      // Skip-emits-empty contract: see Q5 for the rationale.
       const isSkipped = stoppedReason.startsWith('skipped_');
       const items = isSkipped
         ? []
-        : prompts.map((p, idx) => ({
-            position: idx,
-            item_key: p.item_key,
-            prompt: p.sentence,
-            is_correct: isMarkedRef.current(p.item_key),
+        : flatWords.map((word) => ({
+            position: word.position,
+            item_key: word.item_key,
+            prompt: word.word,
+            is_correct: isMarkedRef.current(word.item_key),
+            metadata: {
+              sentence_index: word.sentenceIndex,
+              word_index: word.wordIndex,
+            },
           }));
       const totalCorrect = items.filter((i) => i.is_correct).length;
-      const totalAttempted = isSkipped ? 0 : prompts.length;
+      const totalAttempted = items.length;
       const elapsedMs =
         startTimeMsRef.current === null
           ? 0
           : Date.now() - startTimeMsRef.current;
+      const perSentence = isSkipped
+        ? []
+        : sentences.map((sentence, sentenceIndex) => {
+            const sentenceWords = flatWords.filter(
+              (word) => word.sentenceIndex === sentenceIndex,
+            );
+            return {
+              correct: sentenceWords.filter((word) =>
+                isMarkedRef.current(word.item_key),
+              ).length,
+              total: sentence.words.length,
+            };
+          });
 
       const result: Result = {
         question_code: 'wela_plus_write_sentences_dictation',
@@ -132,23 +181,28 @@ export function WriteSentencesFromDictationQuestion(props: QuestionProps) {
               : 0,
           last_attempted_position: null,
           was_timed: false,
+          per_sentence: perSentence,
         },
       };
       onComplete(result);
     },
-    [effectiveItemSet, language, prompts, onComplete],
+    [effectiveItemSet, language, flatWords, sentences, onComplete],
   );
 
   const handleToggle = useCallback(
-    (idx: number, p: WriteSentencesFromDictationPrompt) => {
-      const willBeMarked = !isMarkedRef.current(p.item_key);
-      toggle(p.item_key);
+    (word: FlatWord) => {
+      const willBeMarked = !isMarkedRef.current(word.item_key);
+      toggle(word.item_key);
       if (onItemMarked) {
         const item: ResultItem = {
-          position: idx,
-          item_key: p.item_key,
-          prompt: p.sentence,
+          position: word.position,
+          item_key: word.item_key,
+          prompt: word.word,
           is_correct: willBeMarked,
+          metadata: {
+            sentence_index: word.sentenceIndex,
+            word_index: word.wordIndex,
+          },
         };
         onItemMarked(item);
       }
@@ -214,37 +268,53 @@ export function WriteSentencesFromDictationQuestion(props: QuestionProps) {
         style={styles.scroll}
         contentContainerStyle={styles.list}
       >
-        {prompts.map((p, idx) => {
-          const marked = isMarked(p.item_key);
-          const labelState = marked ? 'correct' : 'idle';
-          return (
-            <Pressable
-              key={p.item_key}
-              testID={`card-${p.item_key}`}
-              accessibilityRole="button"
-              accessibilityLabel={`${p.sentence}, ${labelState}`}
-              onPress={() => handleToggle(idx, p)}
-              style={[
-                styles.card,
-                {
-                  backgroundColor: marked ? tokens.color.marked : tokens.color.surface,
-                },
-              ]}
-            >
-              <Text
-                style={[
-                  styles.promptText,
-                  {
-                    fontSize: promptFontSize,
-                    color: marked ? tokens.color.onMarked : tokens.color.ink,
-                  },
-                ]}
-              >
-                {p.sentence}
-              </Text>
-            </Pressable>
-          );
-        })}
+        {sentences.map((sentence, sentenceIndex) => (
+          <View key={sentence.item_key} style={styles.sentenceGroup}>
+            <Text style={styles.sentenceLabel}>{`${sentenceIndex + 1}.`}</Text>
+            <View style={styles.sentenceRow}>
+              {sentence.words.map((word, wordIndex) => {
+                const flatWord = flatWords.find(
+                  (candidate) =>
+                    candidate.sentenceIndex === sentenceIndex &&
+                    candidate.wordIndex === wordIndex,
+                );
+                if (!flatWord) return null;
+                const marked = isMarked(word.item_key);
+                const labelState = marked ? 'correct' : 'idle';
+                return (
+                  <Pressable
+                    key={word.item_key}
+                    testID={`word-${word.item_key}`}
+                    accessibilityRole="button"
+                    accessibilityLabel={`${word.word}, ${labelState}`}
+                    onPress={() => handleToggle(flatWord)}
+                    style={[
+                      styles.pill,
+                      {
+                        backgroundColor: marked
+                          ? tokens.color.marked
+                          : tokens.color.surface,
+                      },
+                    ]}
+                  >
+                    <Text
+                      style={[
+                        styles.word,
+                        {
+                          color: marked
+                            ? tokens.color.onMarked
+                            : tokens.color.ink,
+                        },
+                      ]}
+                    >
+                      {word.word}
+                    </Text>
+                  </Pressable>
+                );
+              })}
+            </View>
+          </View>
+        ))}
       </ScrollView>
       <View style={styles.nav}>
         <Pressable accessibilityRole="button" onPress={handleFinish}>
@@ -264,20 +334,38 @@ export function WriteSentencesFromDictationQuestion(props: QuestionProps) {
 const styles = StyleSheet.create({
   root: { flex: 1 },
   scroll: { flex: 1 },
-  list: { flexDirection: 'column', paddingBottom: 16 },
-  card: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 18,
-    paddingHorizontal: 12,
+  list: {
+    gap: tokens.space.md,
+    paddingBottom: tokens.space.lg,
+  },
+  sentenceGroup: {
+    gap: tokens.space.xs,
+  },
+  sentenceLabel: {
+    paddingHorizontal: tokens.space.md,
+    fontSize: tokens.font.body,
+    fontWeight: '600',
+    color: tokens.color.ink,
+  },
+  sentenceRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: tokens.space.sm,
+    padding: tokens.space.md,
+    backgroundColor: tokens.color.canvas,
+    borderRadius: tokens.radius.cell,
+  },
+  pill: {
+    paddingHorizontal: tokens.space.md,
+    paddingVertical: tokens.space.sm,
     borderWidth: 1,
     borderColor: tokens.color.line,
-    marginBottom: 8,
+    borderRadius: tokens.radius.pill,
   },
-  promptText: { fontWeight: '600' },
+  word: { fontSize: tokens.font.markingItem, fontWeight: '600' },
   nav: {
     flexDirection: 'row',
-    gap: 16,
-    padding: 12,
+    gap: tokens.space.lg,
+    padding: tokens.space.md,
   },
 });
