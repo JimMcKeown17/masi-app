@@ -11,7 +11,7 @@ describe('WriteCvcsQuestion — OSS contract', () => {
       instructions: '.',
     });
     fireEvent.press(rendered.getByText('Start'));
-    fireEvent.press(rendered.getByTestId('card-q9.item_1'));
+    fireEvent.press(rendered.getByLabelText('jam letter 1 j, idle'));
     fireEvent.press(rendered.getByText('Finish'));
     fireEvent.press(rendered.getByText('Yes, finish'));
     const v = await verdict;
