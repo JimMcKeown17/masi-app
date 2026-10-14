@@ -2,9 +2,9 @@ import type { ItemSet } from '../types/ItemSet';
 import type { WriteCvcsItemSet } from '../questions/WriteCvcsQuestion/types';
 
 export const WELA_PLUS_WRITE_CVCS_EN: ItemSet<WriteCvcsItemSet> = {
-  item_set_id: 'wela_plus_write_cvcs@stub-2026-06-04.en',
+  item_set_id: 'wela_plus_write_cvcs@2024.1.en',
   question_code: 'wela_plus_write_cvcs',
-  question_version: 'stub-2026-06-04',
+  question_version: '2024.1',
   language: 'en',
   words: [
     { item_key: 'w1', word: 'jam', letters: ['j', 'a', 'm'] },
