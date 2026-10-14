@@ -14,10 +14,9 @@ import { WELA_PLUS_LETTER_SOUNDS_EN } from '../../itemsets/wela_plus_letter_soun
 import { WELA_PLUS_LETTER_SOUNDS_XH } from '../../itemsets/wela_plus_letter_sounds.xh';
 import { useToggleMark } from '../../hooks/useToggleMark';
 import { useChildReadingFontSize } from '../../hooks/useChildReadingFontSize';
+import { tokens } from '../../theme/tokens';
 
 const BASE_LETTER_FONT_SIZE = 32;
-const MARKED_BG = '#2e7d32';
-const IDLE_BG = '#ffffff';
 
 type Phase = 'intro' | 'active' | 'finished';
 
@@ -221,14 +220,17 @@ export function LetterSoundsQuestion(props: QuestionProps) {
                 styles.tile,
                 {
                   flexBasis: tileBasis,
-                  backgroundColor: marked ? MARKED_BG : IDLE_BG,
+                  backgroundColor: marked ? tokens.color.marked : tokens.color.surface,
                 },
               ]}
             >
               <Text
                 style={[
                   styles.letter,
-                  { fontSize: letterFontSize, color: marked ? '#ffffff' : '#111' },
+                  {
+                    fontSize: letterFontSize,
+                    color: marked ? tokens.color.onMarked : tokens.color.ink,
+                  },
                 ]}
               >
                 {letter}
@@ -284,7 +286,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     paddingVertical: 16,
     borderWidth: 1,
-    borderColor: '#999',
+    borderColor: tokens.color.line,
   },
   letter: {
     fontWeight: '600',

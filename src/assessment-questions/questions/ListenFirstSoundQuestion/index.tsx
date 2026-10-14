@@ -15,10 +15,9 @@ import { WELA_PLUS_FIRST_SOUND_EN } from '../../itemsets/wela_plus_first_sound.e
 import { WELA_PLUS_FIRST_SOUND_XH } from '../../itemsets/wela_plus_first_sound.xh';
 import { useToggleMark } from '../../hooks/useToggleMark';
 import { useChildReadingFontSize } from '../../hooks/useChildReadingFontSize';
+import { tokens } from '../../theme/tokens';
 
 const BASE_PROMPT_FONT_SIZE = 28;
-const MARKED_BG = '#2e7d32';
-const IDLE_BG = '#ffffff';
 
 type Phase = 'intro' | 'active' | 'confirm-finish' | 'abandon-picker' | 'finished';
 
@@ -237,7 +236,9 @@ export function ListenFirstSoundQuestion(props: QuestionProps) {
               onPress={() => handleToggle(idx, p.item_key, p.prompt)}
               style={[
                 styles.card,
-                { backgroundColor: marked ? MARKED_BG : IDLE_BG },
+                {
+                  backgroundColor: marked ? tokens.color.marked : tokens.color.surface,
+                },
               ]}
             >
               <Text
@@ -245,7 +246,7 @@ export function ListenFirstSoundQuestion(props: QuestionProps) {
                   styles.promptText,
                   {
                     fontSize: promptFontSize,
-                    color: marked ? '#ffffff' : '#111',
+                    color: marked ? tokens.color.onMarked : tokens.color.ink,
                   },
                 ]}
               >
@@ -284,7 +285,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     paddingVertical: 24,
     borderWidth: 1,
-    borderColor: '#999',
+    borderColor: tokens.color.line,
     marginBottom: 8,
   },
   promptText: {

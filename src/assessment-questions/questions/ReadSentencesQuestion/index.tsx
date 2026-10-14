@@ -19,11 +19,9 @@ import { WELA_PLUS_READ_SENTENCES_EN } from '../../itemsets/wela_plus_read_sente
 import { WELA_PLUS_READ_SENTENCES_XH } from '../../itemsets/wela_plus_read_sentences.xh';
 import { useToggleMark } from '../../hooks/useToggleMark';
 import { useChildReadingFontSize } from '../../hooks/useChildReadingFontSize';
+import { tokens } from '../../theme/tokens';
 
 const BASE_WORD_FONT_SIZE = 22;
-const MARKED_BG = '#2e7d32';
-const IDLE_BG = '#ffffff';
-const SENTENCE_BG = '#f4f6fa';
 
 type Phase = 'intro' | 'active' | 'confirm-finish' | 'abandon-picker' | 'finished';
 
@@ -332,7 +330,9 @@ export function ReadSentencesQuestion(
                   onPress={() => handleToggle(flat)}
                   style={[
                     styles.pill,
-                    { backgroundColor: marked ? MARKED_BG : IDLE_BG },
+                    {
+                      backgroundColor: marked ? tokens.color.marked : tokens.color.surface,
+                    },
                   ]}
                 >
                   <Text
@@ -340,7 +340,7 @@ export function ReadSentencesQuestion(
                       styles.word,
                       {
                         fontSize: wordFontSize,
-                        color: marked ? '#ffffff' : '#111',
+                        color: marked ? tokens.color.onMarked : tokens.color.ink,
                       },
                     ]}
                   >
@@ -376,14 +376,14 @@ const styles = StyleSheet.create({
     gap: 8,
     padding: 12,
     margin: 8,
-    backgroundColor: SENTENCE_BG,
+    backgroundColor: tokens.color.canvas,
     borderRadius: 8,
   },
   pill: {
     paddingHorizontal: 12,
     paddingVertical: 8,
     borderWidth: 1,
-    borderColor: '#999',
+    borderColor: tokens.color.line,
     borderRadius: 999,
   },
   word: { fontWeight: '600' },

@@ -15,11 +15,10 @@ import { WELA_PLUS_PHONEME_BLEND_EN } from '../../itemsets/wela_plus_phoneme_ble
 import { WELA_PLUS_PHONEME_BLEND_XH } from '../../itemsets/wela_plus_phoneme_blend.xh';
 import { useToggleMark } from '../../hooks/useToggleMark';
 import { useChildReadingFontSize } from '../../hooks/useChildReadingFontSize';
+import { tokens } from '../../theme/tokens';
 
 const BASE_SEGMENTED_FONT_SIZE = 32;
 const BASE_GLOSS_FONT_SIZE = 18;
-const MARKED_BG = '#2e7d32';
-const IDLE_BG = '#ffffff';
 
 type Phase = 'intro' | 'active' | 'confirm-finish' | 'abandon-picker' | 'finished';
 
@@ -247,7 +246,9 @@ export function ListenPhonemeBlendQuestion(props: QuestionProps) {
               onPress={() => handleToggle(idx, p.item_key, p.segmented, p.word)}
               style={[
                 styles.card,
-                { backgroundColor: marked ? MARKED_BG : IDLE_BG },
+                {
+                  backgroundColor: marked ? tokens.color.marked : tokens.color.surface,
+                },
               ]}
             >
               <Text
@@ -255,7 +256,7 @@ export function ListenPhonemeBlendQuestion(props: QuestionProps) {
                   styles.segmentedText,
                   {
                     fontSize: segmentedFontSize,
-                    color: marked ? '#ffffff' : '#111',
+                    color: marked ? tokens.color.onMarked : tokens.color.ink,
                   },
                 ]}
               >
@@ -266,7 +267,7 @@ export function ListenPhonemeBlendQuestion(props: QuestionProps) {
                   styles.glossText,
                   {
                     fontSize: glossFontSize,
-                    color: marked ? '#dddddd' : '#666',
+                    color: marked ? tokens.color.onMarked : tokens.color.muted,
                   },
                 ]}
               >
@@ -305,7 +306,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     paddingVertical: 20,
     borderWidth: 1,
-    borderColor: '#999',
+    borderColor: tokens.color.line,
     marginBottom: 8,
   },
   segmentedText: {

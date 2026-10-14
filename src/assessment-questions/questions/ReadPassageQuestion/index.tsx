@@ -15,10 +15,9 @@ import { WELA_PLUS_READ_PASSAGE_EN } from '../../itemsets/wela_plus_read_passage
 import { WELA_PLUS_READ_PASSAGE_XH } from '../../itemsets/wela_plus_read_passage.xh';
 import { useToggleMark } from '../../hooks/useToggleMark';
 import { useChildReadingFontSize } from '../../hooks/useChildReadingFontSize';
+import { tokens } from '../../theme/tokens';
 
 const BASE_WORD_FONT_SIZE = 22;
-const MARKED_BG = '#2e7d32';
-const IDLE_BG = '#ffffff';
 const DEFAULT_DURATION_SEC = 60;
 
 type Phase = 'intro' | 'active' | 'abandon-picker' | 'finished';
@@ -282,7 +281,9 @@ export function ReadPassageQuestion(
               onPress={() => handleToggle(idx, w)}
               style={[
                 styles.pill,
-                { backgroundColor: marked ? MARKED_BG : IDLE_BG },
+                {
+                  backgroundColor: marked ? tokens.color.marked : tokens.color.surface,
+                },
               ]}
             >
               <Text
@@ -290,7 +291,7 @@ export function ReadPassageQuestion(
                   styles.word,
                   {
                     fontSize: wordFontSize,
-                    color: marked ? '#ffffff' : '#111',
+                    color: marked ? tokens.color.onMarked : tokens.color.ink,
                   },
                 ]}
               >
@@ -328,7 +329,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
     paddingVertical: 6,
     borderWidth: 1,
-    borderColor: '#999',
+    borderColor: tokens.color.line,
     borderRadius: 999,
   },
   word: { fontWeight: '600' },

@@ -15,10 +15,9 @@ import { WELA_PLUS_LISTEN_AND_ANSWER_STORY_EN } from '../../itemsets/wela_plus_l
 import { WELA_PLUS_LISTEN_AND_ANSWER_STORY_XH } from '../../itemsets/wela_plus_listen_and_answer_story.xh';
 import { useToggleMark } from '../../hooks/useToggleMark';
 import { useChildReadingFontSize } from '../../hooks/useChildReadingFontSize';
+import { tokens } from '../../theme/tokens';
 
 const BASE_PROMPT_FONT_SIZE = 28;
-const MARKED_BG = '#2e7d32';
-const IDLE_BG = '#ffffff';
 
 type Phase =
   | 'intro'
@@ -292,7 +291,9 @@ export function ListenAndAnswerStoryQuestion(props: QuestionProps) {
               onPress={() => handleToggle(idx, q.item_key, q.prompt)}
               style={[
                 styles.card,
-                { backgroundColor: marked ? MARKED_BG : IDLE_BG },
+                {
+                  backgroundColor: marked ? tokens.color.marked : tokens.color.surface,
+                },
               ]}
             >
               <Text
@@ -300,7 +301,7 @@ export function ListenAndAnswerStoryQuestion(props: QuestionProps) {
                   styles.promptText,
                   {
                     fontSize: promptFontSize,
-                    color: marked ? '#ffffff' : '#111',
+                    color: marked ? tokens.color.onMarked : tokens.color.ink,
                   },
                 ]}
               >
@@ -309,7 +310,7 @@ export function ListenAndAnswerStoryQuestion(props: QuestionProps) {
               <Text
                 style={[
                   styles.gloss,
-                  { color: marked ? '#e0e0e0' : '#666' },
+                  { color: marked ? tokens.color.onMarked : tokens.color.muted },
                 ]}
               >
                 {q.acceptable_answers.join(', ')}
@@ -340,32 +341,32 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     paddingVertical: 24,
     borderWidth: 1,
-    borderColor: '#999',
+    borderColor: tokens.color.line,
     marginBottom: 8,
   },
   promptText: { fontWeight: '600' },
   gloss: { fontSize: 14, marginTop: 8 },
   rereadPill: {
     alignSelf: 'center',
-    backgroundColor: '#e8eef5',
+    backgroundColor: tokens.color.canvas,
     paddingHorizontal: 16,
     paddingVertical: 8,
     borderRadius: 999,
     marginBottom: 8,
   },
-  rereadPillText: { color: '#1f3a5c', fontWeight: '600' },
-  modalRoot: { flex: 1, backgroundColor: '#ffffff' },
+  rereadPillText: { color: tokens.color.primary, fontWeight: '600' },
+  modalRoot: { flex: 1, backgroundColor: tokens.color.surface },
   modalContent: { padding: 24 },
   modalStory: { fontSize: 18, lineHeight: 26 },
   modalCloseButton: {
     alignSelf: 'center',
     paddingHorizontal: 24,
     paddingVertical: 12,
-    backgroundColor: '#1f3a5c',
+    backgroundColor: tokens.color.primary,
     borderRadius: 8,
     margin: 16,
   },
-  modalCloseText: { color: '#ffffff', fontWeight: '600' },
+  modalCloseText: { color: tokens.color.onPrimary, fontWeight: '600' },
   introRoot: { flex: 1 },
   introScroll: { flex: 1 },
   introScrollContent: { padding: 16 },
@@ -374,9 +375,9 @@ const styles = StyleSheet.create({
     alignSelf: 'center',
     paddingHorizontal: 24,
     paddingVertical: 12,
-    backgroundColor: '#1f3a5c',
+    backgroundColor: tokens.color.primary,
     borderRadius: 8,
     margin: 16,
   },
-  introStartButtonText: { color: '#ffffff', fontWeight: '600' },
+  introStartButtonText: { color: tokens.color.onPrimary, fontWeight: '600' },
 });

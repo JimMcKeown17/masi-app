@@ -19,11 +19,10 @@ import { WELA_PLUS_LETTER_WRITING_EN } from '../../itemsets/wela_plus_letter_wri
 import { WELA_PLUS_LETTER_WRITING_XH } from '../../itemsets/wela_plus_letter_writing.xh';
 import { useToggleMark } from '../../hooks/useToggleMark';
 import { useChildReadingFontSize } from '../../hooks/useChildReadingFontSize';
+import { tokens } from '../../theme/tokens';
 
 const BASE_LETTER_FONT_SIZE = 18;
 const BASE_ALT_FONT_SIZE = 14;
-const MARKED_BG = '#2e7d32';
-const IDLE_BG = '#ffffff';
 
 type Phase =
   | 'intro'
@@ -270,7 +269,7 @@ export function LetterWritingFromPicturesQuestion(props: QuestionProps) {
                 styles.tile,
                 {
                   flexBasis: tileBasis,
-                  backgroundColor: marked ? MARKED_BG : IDLE_BG,
+                  backgroundColor: marked ? tokens.color.marked : tokens.color.surface,
                 },
               ]}
             >
@@ -286,7 +285,7 @@ export function LetterWritingFromPicturesQuestion(props: QuestionProps) {
                     styles.altText,
                     {
                       fontSize: altFontSize,
-                      color: marked ? '#ffffff' : '#444',
+                      color: marked ? tokens.color.onMarked : tokens.color.ink,
                     },
                   ]}
                 >
@@ -298,7 +297,7 @@ export function LetterWritingFromPicturesQuestion(props: QuestionProps) {
                   styles.letter,
                   {
                     fontSize: letterFontSize,
-                    color: marked ? '#ffffff' : '#111',
+                    color: marked ? tokens.color.onMarked : tokens.color.ink,
                   },
                 ]}
               >
@@ -353,7 +352,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     paddingVertical: 16,
     borderWidth: 1,
-    borderColor: '#999',
+    borderColor: tokens.color.line,
     minHeight: 80,
   },
   thumbnail: { width: 48, height: 48, marginBottom: 4 },

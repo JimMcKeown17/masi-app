@@ -37,10 +37,9 @@ import type {
 } from './types';
 import { WELA_PLUS_STORY_WRITING_EN } from '../../itemsets/wela_plus_story_writing.en';
 import { WELA_PLUS_STORY_WRITING_XH } from '../../itemsets/wela_plus_story_writing.xh';
+import { tokens } from '../../theme/tokens';
 
 const CHIP_SCORES = [0, 1, 2, 3, 4] as const;
-const SELECTED_CHIP_BG = '#1f3a5c';
-const IDLE_CHIP_BG = '#e8eef5';
 
 type Phase =
   | 'intro'
@@ -372,15 +371,19 @@ export function StoryWritingRubricQuestion(props: QuestionProps) {
                         styles.chip,
                         {
                           backgroundColor: isSelected
-                            ? SELECTED_CHIP_BG
-                            : IDLE_CHIP_BG,
+                            ? tokens.color.primary
+                            : tokens.color.canvas,
                         },
                       ]}
                     >
                       <Text
                         style={[
                           styles.chipText,
-                          { color: isSelected ? '#ffffff' : '#1f3a5c' },
+                          {
+                            color: isSelected
+                              ? tokens.color.onPrimary
+                              : tokens.color.primary,
+                          },
                         ]}
                       >
                         {s}
@@ -479,7 +482,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     padding: 8,
     marginBottom: 12,
-    backgroundColor: '#f4f6fa',
+    backgroundColor: tokens.color.canvas,
     borderRadius: 8,
     gap: 12,
   },
@@ -487,15 +490,15 @@ const styles = StyleSheet.create({
   thumbnailAlt: {
     flex: 1,
     fontSize: 14,
-    color: '#444',
+    color: tokens.color.ink,
     fontStyle: 'italic',
   },
   dimensionCard: {
     marginBottom: 16,
     padding: 12,
-    backgroundColor: '#ffffff',
+    backgroundColor: tokens.color.surface,
     borderWidth: 1,
-    borderColor: '#bbb',
+    borderColor: tokens.color.line,
     borderRadius: 8,
   },
   dimensionHeader: {
@@ -508,10 +511,10 @@ const styles = StyleSheet.create({
   viewRubricButton: {
     paddingHorizontal: 10,
     paddingVertical: 6,
-    backgroundColor: '#e8eef5',
+    backgroundColor: tokens.color.canvas,
     borderRadius: 6,
   },
-  viewRubricText: { fontSize: 12, color: '#1f3a5c', fontWeight: '600' },
+  viewRubricText: { fontSize: 12, color: tokens.color.primary, fontWeight: '600' },
   chipRow: {
     flexDirection: 'row',
     gap: 8,
@@ -524,17 +527,17 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     borderRadius: 8,
     borderWidth: 1,
-    borderColor: '#1f3a5c',
+    borderColor: tokens.color.primary,
   },
   chipText: { fontSize: 18, fontWeight: '600' },
-  gloss: { fontSize: 13, color: '#666' },
+  gloss: { fontSize: 13, color: tokens.color.muted },
   runningTotal: { fontSize: 20, fontWeight: '700', marginTop: 8 },
   nav: {
     flexDirection: 'row',
     gap: 16,
     padding: 12,
   },
-  modalRoot: { flex: 1, backgroundColor: '#ffffff' },
+  modalRoot: { flex: 1, backgroundColor: tokens.color.surface },
   modalContent: { padding: 24 },
   modalHeader: { fontSize: 22, fontWeight: '700', marginBottom: 12 },
   anchorRow: {
@@ -553,11 +556,11 @@ const styles = StyleSheet.create({
     alignSelf: 'center',
     paddingHorizontal: 24,
     paddingVertical: 12,
-    backgroundColor: '#1f3a5c',
+    backgroundColor: tokens.color.primary,
     borderRadius: 8,
     margin: 16,
   },
-  modalCloseText: { color: '#ffffff', fontWeight: '600' },
+  modalCloseText: { color: tokens.color.onPrimary, fontWeight: '600' },
   enlargedImage: { width: '100%', height: 320, resizeMode: 'contain' },
   enlargedAlt: { fontSize: 14, fontStyle: 'italic', marginTop: 12 },
 });
