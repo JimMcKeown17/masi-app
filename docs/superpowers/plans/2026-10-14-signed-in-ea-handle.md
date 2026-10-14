@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking. In this repository the implementer for each task is **Codex through the plugin** (gpt-5.6-sol); Claude reviews every diff, reruns the tests, and commits.
 
-**Revision 5 (2026-10-14)** after four Codex adversarial reviews (revision 1: four high and two medium findings; revision 2: three high and one medium; revisions 3 and 4: seven high and one medium, all on the close protocol, which revision 5 redesigns; all verified and adopted; see "Review history" at the end).
+**Revision 6 (2026-10-14)** after five Codex adversarial reviews (revision 1: four high and two medium findings; revision 2: three high and one medium; revisions 3 and 4: seven high and one medium, all on the close protocol, which revision 5 redesigns; revision 5: two medium, mechanical; all verified and adopted; see "Review history" at the end).
 
 **Goal:** Give every signed-in EA their own SQLite file, request queue, and data client behind one handle, so no EA's work can be uploaded under another EA's session (live defect 2), written into another EA's file, or owned by anyone but the EA who made the change (live defect 1, phone half).
 
@@ -38,7 +38,7 @@ Each ruling names what it costs if wrong. Implementers follow them; reviewers ch
 7. **One lifecycle coordinator serializes opens and closes.** Revision 1 let a sign-out during A's migrations close nothing and then publish A afterwards, let overlapping opens publish out of order, and let a reopen of A race A's still-draining close. **Ruling:** `signedInHandle.js` holds a single coordinator: a monotonically increasing `generation`, the in-progress transition promise, and the latest requested state (`{ userId } | signedOut`). `requestOpen({ userId })` and `requestClose({ reason })` bump the generation at call time and chain after the in-progress transition. An open re-checks its generation immediately before publishing; a superseded open closes its own connections and resolves `null`. A same-user `requestOpen` while that user's handle is current or opening joins it instead of reopening. A transition is **logical** only: an open publishes, a close revokes. Physical disposal (ruling 8) runs outside the transition chain and is tracked per file as `disposals.get(fileName)`; only a later open **of that same file** awaits it, so a stalled disposal of A's file never delays B. Disposal never touches the registry or the generation, so A's late disposal cannot clear B's published state. *Cost if wrong:* none; it only orders transitions.
 8. **One serial native-operation queue per connection; disposal is its last item.** Revisions 2–4 tried to *count* native calls around a gate; Codex rounds 2–4 kept finding calls the count missed (statement results, iterators, the handle's own `BEGIN`/`COMMIT`, a `runAsync` result object that still reaches native code, multi-statement `execAsync`). The root cause is concurrency the handle does not own: expo-sqlite 16.0.10 schedules every operation and `closeAsync` on concurrent native queues on both platforms. **Ruling:** the handle owns the concurrency.
    - *Native queue.* Each raw connection (writer, reader) gets one serial queue. **Every** native call on that connection goes through it: the facade's calls, `withTransaction`'s `BEGIN IMMEDIATE`/`COMMIT`/`ROLLBACK`, the owner-marker and `resetInFlight` work at open, and disposal. One item runs at a time, so nothing can overlap disposal by construction; there is no counter to get wrong. (Migrations run on the raw writer before the queue exists, inside `openConfiguredConnections`.)
-   - *Closed facade.* Repositories receive a facade with exactly `runAsync`, `getFirstAsync`, `getAllAsync` (production uses no other method; `execAsync` is used only by `client.js` and migrations, verified 2026-10-14). `runAsync` returns a newly built plain `{ changes, lastInsertRowId }`; `getFirstAsync`/`getAllAsync` return the plain rows. No statement, result, or iterator object ever leaves the facade. **Statement policy, enforced before anything is queued:** after stripping leading comments and whitespace, the SQL must be a single statement (no `;` followed by anything but whitespace or comments) whose first keyword is `SELECT`, `WITH`, `INSERT`, `UPDATE`, `DELETE`, or `REPLACE`, or exactly one of the two allowlisted pragmas production uses, `PRAGMA user_version` (read) and `PRAGMA defer_foreign_keys = ON` (transaction-scoped). Everything else (transaction control, `ATTACH`/`DETACH`, other pragmas, `VACUUM`) is refused with an error before any native call. `runWithTransaction` in `sqliteRepositoryUtils.js` throws if handed a facade.
+   - *Closed facade.* Repositories receive a facade with exactly `runAsync`, `getFirstAsync`, `getAllAsync` (production uses no other method; `execAsync` is used only by `client.js` and migrations, verified 2026-10-14). `runAsync` returns a newly built plain `{ changes, lastInsertRowId }`; `getFirstAsync`/`getAllAsync` return the plain rows. No statement, result, or iterator object ever leaves the facade. **Statement policy, enforced before anything is queued:** after stripping leading comments and whitespace, the SQL must be a single statement (no `;` followed by anything but whitespace or comments) whose first keyword is `SELECT`, `WITH`, `INSERT`, `UPDATE`, `DELETE`, or `REPLACE`, or exactly one of the two allowlisted pragmas production uses, `PRAGMA user_version` (read) and `PRAGMA defer_foreign_keys = ON` (transaction-scoped). The `OR ROLLBACK` conflict clause is refused too, wherever it appears in the statement (checked on SQL tokens after removing comments and string literals, so whitespace, comments, and a `WITH` prefix cannot hide it): a constraint failure under it would end the handle's transaction outside `withTransaction`, letting later statements autocommit. Everything else (transaction control, `ATTACH`/`DETACH`, other pragmas, `VACUUM`) is refused with an error before any native call. `runWithTransaction` in `sqliteRepositoryUtils.js` throws if handed a facade.
    - *Seal at revocation.* Logical revocation is synchronous: `state = 'closed'`, epoch advances, the registry drops the handle, requests abort, and both queues **seal**: every item that has not yet started is refused with `StaleActorError` without a native call. The single item already running (at most one per connection) finishes. **Defined outcome:** if that item is a `COMMIT` admitted before revocation, A's transaction commits to A's own file; that is A's work finishing before sign-out took effect, exactly as if A had signed out a moment later. Any other in-flight item finishes and its transaction is rolled back by disposal.
    - *Disposal (the last item on each queue).* Writer queue: `ROLLBACK`, treating "no transaction is active" as success (SQLite may already have rolled back automatically on `SQLITE_FULL` or `SQLITE_IOERR`, so the JavaScript tracker is not trusted) → write `local_state('last_active_at')` best-effort (a failure is logged and does not stop disposal) → `closeAsync` the writer. Reader queue: `closeAsync` the reader. Both closes are always attempted. If either close fails, or the writer `ROLLBACK` fails with anything other than "no transaction is active", the file is fenced as `dispose_failed` and a later open of the same file rejects with `HandleDisposeFailedError`. A watchdog reports `handle_close_stalled` after `5_000` ms and keeps waiting.
    - *Signals.* `requestClose` resolves at revocation. `whenDisposed(fileName)` settles when both queues have run disposal. Sign-out awaits only `requestClose`.
@@ -445,20 +445,21 @@ test('ruling 8: disposal waits for an in-flight native call, and the watchdog re
 test('ruling 8: a transaction resuming during disposal cannot run ROLLBACK while the writer closes', async () => {
   // Instrument the raw connections: record every native call and whether a close was in progress.
   const log = [];
-  let closing = 0;
   const releaseReaderClose = deferred();
   const instrumented = async (name, options) => {
     const db = await openDatabase(name, options);
     const isReader = Boolean(options?.useNewConnection);
+    const connection = isReader ? 'reader' : 'writer';
+    let closingThis = false;
     for (const method of ['execAsync', 'runAsync', 'getFirstAsync', 'getAllAsync']) {
       const original = db[method].bind(db);
-      db[method] = async (...args) => { log.push({ method, sql: String(args[0]), duringClose: closing > 0 }); return original(...args); };
+      db[method] = async (...args) => { log.push({ connection, method, sql: String(args[0]), duringClose: closingThis }); return original(...args); };
     }
     const close = db.closeAsync.bind(db);
     db.closeAsync = async () => {
-      closing += 1;
+      closingThis = true;
       if (isReader) await releaseReaderClose.promise;
-      try { return await close(); } finally { closing -= 1; }
+      return close();
     };
     return db;
   };
@@ -480,7 +481,8 @@ test('ruling 8: a transaction resuming during disposal cannot run ROLLBACK while
   expect(caught).toBeInstanceOf(StaleActorError);
   releaseReaderClose.resolve();
   await whenDisposed(a.fileName);
-  // Only disposal's own ROLLBACK may run, and never while a close is in progress.
+  // No native call reaches a connection while that same connection is closing; only disposal's
+  // own ROLLBACK runs on the writer (the reader may be closing at the same time; that is allowed).
   expect(log.filter((entry) => entry.duringClose)).toEqual([]);
   expect(log.filter((entry) => /^\s*ROLLBACK/i.test(entry.sql)).length).toBeLessThanOrEqual(1);
   const again = await requestOpen({ userId: A, openDatabase });
@@ -497,6 +499,9 @@ test('ruling 8: the facade exposes only the production methods and refuses calle
       'BEGIN', ' commit', '/* x */ ROLLBACK', 'savepoint s1', 'RELEASE s1', 'END', '; BEGIN',
       "select 1; COMMIT", "insert into local_state (key, value, updated_at) values ('x','1','n'); COMMIT; BEGIN IMMEDIATE",
       'PRAGMA query_only = OFF', "ATTACH DATABASE 'other.db' AS other", 'VACUUM',
+      "insert or rollback into local_state (key, value, updated_at) values ('k','1','n')",
+      "UPDATE /* c */ OR\n ROLLBACK local_state set value = '2' where key = 'k'",
+      "with x as (select 1) insert or rollback into local_state (key, value, updated_at) select 'k','1','n' from x",
     ];
     for (const sql of refused) {
       let caught = null;
@@ -514,6 +519,72 @@ test('ruling 8: the facade exposes only the production methods and refuses calle
   let caught = null;
   try { await runWithTransaction(reader, async () => {}); } catch (error) { caught = error; }
   expect(caught).not.toBeNull();
+});
+
+test('ruling 8: a refused OR ROLLBACK leaves the transaction intact and later work is undone on revocation', async () => {
+  const a = await requestOpen({ userId: A, openDatabase });
+  await a.withTransaction(async (txn) => {
+    await txn.runAsync("insert into local_state (key, value, updated_at) values ('dup', '1', 'n')");
+  });
+  const begun = deferred();
+  const release = deferred();
+  const write = a.withTransaction(async (txn) => {
+    await txn.runAsync("insert into local_state (key, value, updated_at) values ('first', '1', 'n')");
+    await txn.runAsync("insert or rollback into local_state (key, value, updated_at) values ('dup', '2', 'n')").catch(() => {});
+    await txn.runAsync("insert into local_state (key, value, updated_at) values ('second', '1', 'n')");
+    begun.resolve();
+    await release.promise;
+  });
+  await begun.promise;
+  await requestClose({ reason: 'test' });
+  release.resolve();
+  await write.catch(() => {});
+  await whenDisposed(a.fileName);
+  const again = await requestOpen({ userId: A, openDatabase });
+  const reader = await again.getReader();
+  expect(await reader.getAllAsync("select key from local_state where key in ('first', 'second')")).toEqual([]);
+});
+
+test('ruling 8: both sides of the COMMIT boundary are durable as defined', async () => {
+  // An already-running COMMIT finishes and survives reopening.
+  const commitEntered = deferred();
+  const commitRelease = deferred();
+  const holdingCommit = async (name, options) => {
+    const db = await openDatabase(name, options);
+    const exec = db.execAsync.bind(db);
+    db.execAsync = async (sql) => {
+      if (/^\s*COMMIT/i.test(String(sql))) { commitEntered.resolve(); await commitRelease.promise; }
+      return exec(sql);
+    };
+    return db;
+  };
+  const a = await requestOpen({ userId: A, openDatabase: holdingCommit });
+  const committed = a.withTransaction((txn) => txn.runAsync("insert into local_state (key, value, updated_at) values ('kept', '1', 'n')"));
+  await commitEntered.promise;
+  await requestClose({ reason: 'test' });
+  commitRelease.resolve();
+  await committed;
+  await whenDisposed(a.fileName);
+  // A COMMIT not yet started when the seal lands is refused and its changes are gone.
+  const second = await requestOpen({ userId: A, openDatabase });
+  const begun = deferred();
+  const release = deferred();
+  const refused = second.withTransaction(async (txn) => {
+    await txn.runAsync("insert into local_state (key, value, updated_at) values ('dropped', '1', 'n')");
+    begun.resolve();
+    await release.promise;
+  });
+  await begun.promise;
+  await requestClose({ reason: 'test' });
+  release.resolve();
+  let caught = null;
+  try { await refused; } catch (error) { caught = error; }
+  expect(caught).toBeInstanceOf(StaleActorError);
+  await whenDisposed(second.fileName);
+  const third = await requestOpen({ userId: A, openDatabase });
+  const reader = await third.getReader();
+  expect(await reader.getFirstAsync("select key from local_state where key = 'kept'")).toEqual({ key: 'kept' });
+  expect(await reader.getFirstAsync("select key from local_state where key = 'dropped'")).toBeNull();
 });
 
 // Statement-policy refusals must happen before any native call: spy on the raw connection.
@@ -536,19 +607,27 @@ for (const control of ['BEGIN IMMEDIATE', 'COMMIT', 'ROLLBACK']) {
   test(`ruling 8: disposal waits for an in-progress ${control} and never overlaps it`, async () => {
     const entered = deferred();
     const release = deferred();
-    let active = 0;
+    // Overlap is measured PER RAW CONNECTION: the reader may close while the writer is busy.
     const overlaps = [];
+    const afterClose = [];
     const instrumented = async (name, options) => {
       const db = await openDatabase(name, options);
+      const connection = options?.useNewConnection ? 'reader' : 'writer';
+      let active = 0;
+      let closed = false;
       for (const method of ['execAsync', 'runAsync', 'getFirstAsync', 'getAllAsync', 'closeAsync']) {
         const original = db[method].bind(db);
         db[method] = async (...args) => {
-          if (active > 0) overlaps.push(method);
+          if (closed) afterClose.push({ connection, method });
+          if (active > 0) overlaps.push({ connection, method });
           active += 1;
           try {
             if (method === 'execAsync' && String(args[0]).trim().toUpperCase().startsWith(control)) { entered.resolve(); await release.promise; }
             return await original(...args);
-          } finally { active -= 1; }
+          } finally {
+            active -= 1;
+            if (method === 'closeAsync') closed = true;
+          }
         };
       }
       return db;
@@ -564,7 +643,8 @@ for (const control of ['BEGIN IMMEDIATE', 'COMMIT', 'ROLLBACK']) {
     release.resolve();
     await work.catch(() => {});
     await whenDisposed(a.fileName);
-    expect(overlaps.filter((method) => method === 'closeAsync')).toEqual([]);
+    expect(overlaps).toEqual([]);          // no connection ever runs two native calls at once
+    expect(afterClose).toEqual([]);        // no native call reaches a connection after its close
   });
 }
 
@@ -1075,3 +1155,4 @@ end;
   2. Statement results and iterators reach native code outside a method-level gate. → A closed facade, caller transaction control refused, `runWithTransaction` refuses a facade.
   3. Sign-out awaited physical disposal, so a stalled native call blocked B's login. → Two signals: `requestClose` resolves at revocation, `whenDisposed(fileName)` at disposal; only a same-file reopen waits; AuthContext regression.
 - **Codex adversarial review of revision 4 (2026-10-14), needs-attention, four high and one medium, all on the close protocol, verified and adopted by replacing the design rather than patching it:** a leading-keyword check let `select 1; COMMIT` through `execAsync`; the handle's own `BEGIN`/`COMMIT` bypassed the count; SQLite's automatic rollback (`SQLITE_FULL`) and a failing `last_active_at` write could stop disposal before closing; a parked same-file reopen blocked the transition chain; `runAsync`'s result object still reaches native code. → Ruling 8 now gives each connection one serial native queue that every native call uses (disposal is its last item), drops `execAsync` from the facade, enforces a single-statement policy with two allowlisted pragmas before queueing, returns plain `runAsync` results, makes disposal's `ROLLBACK` tolerant and its metadata write best-effort with both closes always attempted, and parks same-file reopens outside the chain on a supersedable race.
+- **Codex adversarial review of revision 5 (2026-10-14), needs-attention, two medium, both mechanical and adopted:** the statement policy admitted `INSERT/UPDATE OR ROLLBACK` (reproduced: a constraint failure ended the transaction and later statements autocommitted) → refused on SQL tokens, with a regression; the overlap tests shared one counter across reader and writer and would fail a correct implementation → per-connection accounting. Also adopted from its next steps: a test for both sides of the COMMIT boundary. Codex audited all 196 SQL calls under `src/` and found no statement the policy wrongly refuses and no reader-queue deadlock. **The review loop stops here** (Jim's rule: stop once findings narrow to mechanical fixes); implementation-stage reviews and device check D7 remain.
