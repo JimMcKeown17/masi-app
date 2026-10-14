@@ -2,6 +2,11 @@
 -- 20260922175324_organization_label_v1.sql). Identity only: no RLS policy,
 -- trigger, or app behaviour reads it. The phone ignores the column.
 
+BEGIN;
+
+SET LOCAL lock_timeout = '10s';
+SET LOCAL statement_timeout = '60s';
+
 create table public.organizations (
   id uuid primary key default gen_random_uuid(),
   slug text not null unique check (slug ~ '^[a-z0-9-]{2,40}$'),
@@ -15,8 +20,8 @@ insert into public.organizations (id, slug, name)
 values ('a111879f-d066-47c9-95a1-bed2a400319a', 'masinyusane', 'Masinyusane');
 
 -- RLS on with no policies: no API role reads through RLS. service_role gets
--- SELECT only, so provisioning can resolve a slug. A disposable database has
--- no default ACLs, so the harness asserts these grants explicitly.
+-- SELECT only, so provisioning can resolve a slug. The disposable harness
+-- installs Supabase-style default ACLs to prove these revocations remove them.
 alter table public.organizations enable row level security;
 revoke all on table public.organizations
   from public, anon, authenticated, authenticator, service_role;
@@ -40,3 +45,5 @@ create index idx_users_organization_id on public.users (organization_id);
 
 comment on column public.users.organization_id is
   'Employing organisation. Written once at account creation; never changed.';
+
+COMMIT;

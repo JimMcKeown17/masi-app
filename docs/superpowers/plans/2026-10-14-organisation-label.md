@@ -48,12 +48,14 @@
 **Files:**
 - Create: `supabase/migrations/20261014120000_organisation_label_v1.sql`, `scripts/organisation-label-postgres-harness.cjs`
 - Modify: `package.json` (`"verify:organisation-label:postgres": "node scripts/organisation-label-postgres-harness.cjs"`), `.github/workflows/tests.yml` (a step after the S1 harness, same `HISTORY_RLS_*` env)
+- Test: `__tests__/organisationLabelPostgresHarness.test.js` (migration bounds and mocked process/cleanup safeguards; the controller runs the real PostgreSQL checks)
 
 - [ ] **Step 1: Write the harness (red first).** Reuse `MIGRATIONS_DIR`, `assertDisposableAdminTarget`, `bootstrapSql`, `buildDatabaseUrl`, `expectSqlState`, `runPsql` from `scripts/history-authorization-postgres-harness.cjs`. Database name `${HISTORY_RLS_DATABASE_NAME}_org`. Sequence:
-  1. Drop/create the database (two separate psql calls), apply `bootstrapSql`, then every migration **before** `20261014120000_organisation_label_v1.sql` in filename order.
+  1. Drop/create the database (two separate psql calls), apply `bootstrapSql`, then install Supabase-style default privileges locally: `ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON TABLES TO anon, authenticated, service_role;` and the same for sequences and functions. Create `public.org_harness_acl_control` and assert authenticated has SELECT on it. Replay every migration **before** `20261014120000_organisation_label_v1.sql` in filename order. Leave shared `bootstrapSql` unchanged.
   2. Insert a fixture: one `auth.users` row and its `public.users` row (`id '12000000-0000-0000-0000-000000000001'`, school as in the S1 fixture) with `updated_at = '2026-01-01T00:00:00Z'`.
-  3. Apply `20261014120000_organisation_label_v1.sql`.
-  4. Assert, each as its own check:
+  3. Spawn a second psql connection with `BEGIN; LOCK TABLE public.users IN ACCESS SHARE MODE; SELECT pg_sleep(20); ROLLBACK;`. Observe its granted lock in `pg_locks` before applying the migration. Assert SQLSTATE `55P03` in 8–15 seconds and no partial schema: `public.organizations` and `users.organization_id` must both be absent. In `finally`, terminate the tagged backend, terminate/await the psql child, and escalate to SIGKILL if needed. The blocker uses the shared sanitized `buildPsqlEnv`.
+  4. After the blocker is cleaned up, apply `20261014120000_organisation_label_v1.sql` for real.
+  5. Assert, each as its own check (the original 18; with the ACL control and four lock/rollback checks, 23 total):
      - the fixture user's `organization_id` is `a111879f-d066-47c9-95a1-bed2a400319a` and `updated_at` is still `2026-01-01 00:00:00+00`;
      - `information_schema.columns` reports `is_nullable = 'NO'` and `column_default is null` for `users.organization_id`;
      - inserting a `public.users` row without `organization_id` fails with `23502`;
@@ -63,12 +65,17 @@
      - `has_table_privilege('authenticated', 'public.organizations', 'SELECT')` is false, and the same for `anon` and `authenticator`; `service_role` has `SELECT` and no `INSERT`/`UPDATE`/`DELETE`;
      - as `authenticated`, the app's profile read `select u.*, s.id, s.name, j.id, j.name, j.code from public.users u left join public.schools s on s.id = u.school_id left join public.job_titles j on j.id = u.job_title_id where u.id = '<fixture>'` returns one row including `organization_id`.
 - [ ] **Step 2: Run the harness to verify it fails** (migration file absent): `PGTZ=UTC HISTORY_RLS_ADMIN_DATABASE_URL=… HISTORY_RLS_DATABASE_NAME=masi_history_rls_org HISTORY_RLS_DISPOSABLE_CONFIRM=I_UNDERSTAND_THIS_IS_DISPOSABLE npm run verify:organisation-label:postgres`. Codex's sandbox cannot reach a local PostgreSQL; the controller runs every harness RED and GREEN.
-- [ ] **Step 3: Write the migration**
+- [ ] **Step 3: Write the migration.** The entire migration is one transaction with local 10-second lock and 60-second statement timeouts. A lock refusal must roll back all schema changes.
 
 ```sql
 -- Organisation label v1 (Jim, 2026-10-14; design from Zazi iZandi's
 -- 20260922175324_organization_label_v1.sql). Identity only: no RLS policy,
 -- trigger, or app behaviour reads it. The phone ignores the column.
+
+BEGIN;
+
+SET LOCAL lock_timeout = '10s';
+SET LOCAL statement_timeout = '60s';
 
 create table public.organizations (
   id uuid primary key default gen_random_uuid(),
@@ -83,8 +90,8 @@ insert into public.organizations (id, slug, name)
 values ('a111879f-d066-47c9-95a1-bed2a400319a', 'masinyusane', 'Masinyusane');
 
 -- RLS on with no policies: no API role reads through RLS. service_role gets
--- SELECT only, so provisioning can resolve a slug. A disposable database has
--- no default ACLs, so the harness asserts these grants explicitly.
+-- SELECT only, so provisioning can resolve a slug. The disposable harness
+-- installs Supabase-style default ACLs to prove these revocations remove them.
 alter table public.organizations enable row level security;
 revoke all on table public.organizations
   from public, anon, authenticated, authenticator, service_role;
@@ -108,6 +115,8 @@ create index idx_users_organization_id on public.users (organization_id);
 
 comment on column public.users.organization_id is
   'Employing organisation. Written once at account creation; never changed.';
+
+COMMIT;
 ```
 
 - [ ] **Step 4: Run the harness, then the existing harnesses** (history, S1) to prove nothing else changed. Expected: all pass.
@@ -124,9 +133,10 @@ comment on column public.users.organization_id is
 - `resolveOrganisationId(admin, slug) → uuid` selects `id` from `organizations` by slug through the service-role client; unknown slug throws `Unknown organisation "<slug>"` before any user is touched.
 - `checkExistingOrganisation(existingProfile, organisationId) → { ok: true } | { ok: false, reason }`: a stored `organization_id` that differs is refused with reason `organisation_conflict`.
 - `buildProfile(row, lookupMaps, userId, organisationId)` includes `organization_id`.
-- The profile write stays an upsert on `id`, but the preflight (`preflightExistingTester`) now runs the organisation check first, so a different stored organisation is never overwritten; the per-row result reports `organisation_conflict`.
+- The preflight (`preflightExistingTester`) runs the organisation check first. The write then uses `upsert(profile, { onConflict: 'id', ignoreDuplicates: true })` to insert only if absent, followed by a conditional UPDATE of `first_name`, `last_name`, `email`, `job_title_id`, and `school_id` only. Never update `organization_id`. Constrain the UPDATE with `.eq('id', userId).eq('organization_id', organisationId).select('id')`. Zero returned rows means `organisation_conflict` before any Programme-assignment write; delete the auth user only if this run created it, as on other downstream failures. This protects against another organisation inserting the profile after preflight.
 
 - [ ] **Step 1: Write the failing tests** for each helper: missing flag, malformed slug, unknown slug (mock client returning no row), matching stored organisation passes, different stored organisation refuses, `buildProfile` carries the id. Assert that on conflict no `users` upsert is attempted (mock client records calls).
+  Also reproduce the write race through the real `processRow`: preflight sees no profile, another organisation's profile lands before the write, and the losing run must return `organisation_conflict`, leave the stored organisation unchanged, and write no Programme assignment. Cover new-auth cleanup, a concurrent matching organisation, and conditional-update errors. Known preflight conflicts still attempt no profile write.
 - [ ] **Step 2: Run to verify failure:** `PATH=$HOME/.nvm/versions/node/v20.19.4/bin:$PATH npx jest __tests__/organisationProvisioning.test.js __tests__/testerProvisioning.test.js`.
 - [ ] **Step 3: Implement.** Usage line becomes `node scripts/createTesters.js [--dry-run] --organization <slug> <path-to-csv>`. `--dry-run` still resolves the slug (read-only) and reports conflicts.
 - [ ] **Step 4: Run** the focused tests and `npm test -- --silent`. Expected: pass.

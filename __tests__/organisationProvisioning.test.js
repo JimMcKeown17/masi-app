@@ -44,10 +44,13 @@ function mockAdmin({
   existingUser = { id: USER_ID, email: row.email },
   existingProfile = { organization_id: ORGANISATION_ID },
   profileError = null,
+  concurrentProfile = null,
+  profileUpdateError = null,
   assignments = {},
 } = {}) {
   const writes = [];
   const queries = [];
+  let storedProfile = existingProfile ? { id: USER_ID, ...existingProfile } : null;
   const admin = {
     auth: { admin: {
       listUsers: jest.fn(async () => ({ data: { users: existingUser ? [existingUser] : [] }, error: null })),
@@ -70,7 +73,7 @@ function mockAdmin({
             return {
               maybeSingle: async () => {
                 if (table === 'organizations') return { data: organisation, error: organisationError };
-                if (table === 'users') return { data: existingProfile, error: profileError };
+                if (table === 'users') return { data: storedProfile, error: profileError };
                 throw new Error(`Unexpected single-row query: ${table}`);
               },
               is: async () => ({ data: assignments[table] || [], error: null }),
@@ -89,15 +92,36 @@ function mockAdmin({
       },
       upsert: jest.fn(async (payload, options) => {
         writes.push({ table, operation: 'upsert', payload, options });
+        if (table === 'users') {
+          // Deterministic interleaving: another provisioner inserts after our
+          // preflight read and immediately before our profile write executes.
+          if (concurrentProfile) storedProfile = { id: USER_ID, ...concurrentProfile };
+          if (!storedProfile || !options.ignoreDuplicates) storedProfile = { ...storedProfile, ...payload };
+        }
         return { error: null };
       }),
+      update: (payload) => {
+        const filters = {};
+        const query = {
+          eq: (column, value) => { filters[column] = value; return query; },
+          select: async (columns) => {
+            writes.push({ table, operation: 'update', payload, filters, columns });
+            if (profileUpdateError) return { data: null, error: profileUpdateError };
+            const matches = storedProfile && Object.entries(filters).every(([key, value]) => storedProfile[key] === value);
+            if (!matches) return { data: [], error: null };
+            storedProfile = { ...storedProfile, ...payload };
+            return { data: [{ id: storedProfile.id }], error: null };
+          },
+        };
+        return query;
+      },
       insert: jest.fn(async (payload) => {
         writes.push({ table, operation: 'insert', payload });
         return { error: null };
       }),
     })),
   };
-  return { admin, queries, writes };
+  return { admin, queries, writes, getProfile: () => storedProfile };
 }
 
 describe('organisation provisioning helpers', () => {
@@ -235,24 +259,71 @@ describe('provisioning workflow with a mocked admin client', () => {
     expect(writes).toEqual([]);
   });
 
-  test('a compatible account keeps its organisation in an upsert on id', async () => {
+  test('a compatible account refreshes mutable fields only under its organisation', async () => {
     const { admin, writes } = mockAdmin({ assignments: { staff_programme_assignments: [programmeAssignment] } });
     await expect(processRow(admin, row, lookupMaps, ORGANISATION_ID)).resolves.toEqual({ status: 'reused' });
     expect(writes).toEqual([{
       table: 'users', operation: 'upsert',
       payload: buildProfile(row, lookupMaps, USER_ID, ORGANISATION_ID),
-      options: { onConflict: 'id' },
+      options: { onConflict: 'id', ignoreDuplicates: true },
+    }, {
+      table: 'users', operation: 'update',
+      payload: {
+        first_name: 'Pilot', last_name: 'Tester', email: row.email,
+        job_title_id: 'job-id', school_id: 'school-id',
+      },
+      filters: { id: USER_ID, organization_id: ORGANISATION_ID },
+      columns: 'id',
     }]);
   });
 
   test('a new account receives the explicit organisation and Programme assignment', async () => {
-    const { admin, writes } = mockAdmin({ existingUser: null });
+    const { admin, writes } = mockAdmin({ existingUser: null, existingProfile: null });
     await expect(processRow(admin, row, lookupMaps, ORGANISATION_ID)).resolves.toEqual({ status: 'created' });
     expect(writes.map(({ table, operation }) => [table, operation])).toEqual([
-      ['auth.users', 'create'], ['users', 'upsert'], ['staff_programme_assignments', 'insert'],
+      ['auth.users', 'create'], ['users', 'upsert'], ['users', 'update'], ['staff_programme_assignments', 'insert'],
     ]);
     expect(writes[1].payload.organization_id).toBe(ORGANISATION_ID);
-    expect(writes[1].options).toEqual({ onConflict: 'id' });
+    expect(writes[1].options).toEqual({ onConflict: 'id', ignoreDuplicates: true });
+  });
+
+  test.each([false, true])('a concurrent different organisation wins without being overwritten (newAuth=%s)', async (newAuth) => {
+    const concurrentProfile = {
+      id: USER_ID, organization_id: OTHER_ORGANISATION_ID, first_name: 'Concurrent', last_name: 'Winner',
+    };
+    const { admin, writes, getProfile } = mockAdmin({
+      existingUser: newAuth ? null : { id: USER_ID, email: row.email },
+      existingProfile: null,
+      concurrentProfile,
+    });
+    const result = await processRow(admin, row, lookupMaps, ORGANISATION_ID);
+    expect(result).toEqual({ status: 'error', reason: 'organisation_conflict' });
+    expect(getProfile()).toEqual(concurrentProfile);
+    expect(writes.filter(write => write.table === 'staff_programme_assignments')).toEqual([]);
+    expect(admin.auth.admin.deleteUser.mock.calls).toEqual(newAuth ? [[USER_ID]] : []);
+  });
+
+  test('a concurrent matching organisation can refresh names without changing identity', async () => {
+    const { admin, writes, getProfile } = mockAdmin({
+      existingProfile: null,
+      concurrentProfile: { organization_id: ORGANISATION_ID, first_name: 'Old' },
+    });
+    await expect(processRow(admin, row, lookupMaps, ORGANISATION_ID)).resolves.toEqual({ status: 'reused' });
+    expect(getProfile()).toMatchObject({ id: USER_ID, organization_id: ORGANISATION_ID, first_name: 'Pilot' });
+    const update = writes.find(write => write.operation === 'update');
+    expect(update.payload).not.toHaveProperty('organization_id');
+    expect(update.payload).not.toHaveProperty('id');
+    expect(update.filters).toEqual({ id: USER_ID, organization_id: ORGANISATION_ID });
+  });
+
+  test('a conditional profile update error cleans up newly created auth before Programme writes', async () => {
+    const { admin, writes } = mockAdmin({
+      existingUser: null, existingProfile: null, profileUpdateError: new Error('update unavailable'),
+    });
+    await expect(processRow(admin, row, lookupMaps, ORGANISATION_ID))
+      .resolves.toEqual({ status: 'error', reason: 'profile update failed: update unavailable' });
+    expect(admin.auth.admin.deleteUser).toHaveBeenCalledWith(USER_ID);
+    expect(writes.filter(write => write.table === 'staff_programme_assignments')).toEqual([]);
   });
 
   test.each([false, true])('unknown organisations stop the entire run before user access (dryRun=%s)', async (dryRun) => {

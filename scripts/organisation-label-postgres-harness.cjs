@@ -5,11 +5,14 @@
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
+const { spawn } = require('node:child_process');
+const { performance } = require('node:perf_hooks');
 const {
   MIGRATIONS_DIR,
   assertDisposableAdminTarget,
   bootstrapSql,
   buildDatabaseUrl,
+  buildPsqlEnv,
   expectSqlState,
   runPsql,
 } = require('./history-authorization-postgres-harness.cjs');
@@ -30,6 +33,96 @@ INSERT INTO public.schools (id, name) VALUES ('${SCHOOL}', 'Upload contract harn
 INSERT INTO public.users (id, first_name, last_name, school_id, updated_at)
 VALUES ('${FIXTURE_USER}', 'Organisation', 'EA', '${SCHOOL}', '2026-01-01T00:00:00Z');
 `;
+
+const installDefaultPrivileges = (databaseUrl) => {
+  runPsql({ databaseUrl, label: 'supabase-default-privileges', sql: `
+ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON TABLES TO anon, authenticated, service_role;
+ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON SEQUENCES TO anon, authenticated, service_role;
+ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON FUNCTIONS TO anon, authenticated, service_role;
+CREATE TABLE public.org_harness_acl_control (id integer);
+` });
+  assert.equal(runPsql({
+    databaseUrl,
+    label: 'default-acl-control',
+    sql: "SELECT has_table_privilege('authenticated', 'public.org_harness_acl_control', 'SELECT');",
+  }), 't', 'default-acl-control: authenticated must inherit SELECT on the control table');
+  return { 'default-acl-control': 'passed' };
+};
+
+const runLockTimeoutCase = async (databaseUrl, migrationSql) => {
+  const blockerEnv = buildPsqlEnv(`org-lock-blocker-${process.pid}`);
+  const blocker = spawn('psql', ['-X', '-v', 'ON_ERROR_STOP=1', '-Atq', databaseUrl, '-c', `
+BEGIN;
+LOCK TABLE public.users IN ACCESS SHARE MODE;
+SELECT pg_sleep(20);
+ROLLBACK;
+`], { env: blockerEnv, stdio: ['ignore', 'ignore', 'pipe'] });
+  let spawnError;
+  let closed = false;
+  let stderr = '';
+  const finished = new Promise((resolve) => {
+    blocker.once('error', (error) => { spawnError = error; });
+    blocker.once('close', () => { closed = true; resolve(); });
+  });
+  blocker.stderr.on('data', (chunk) => { stderr = (stderr + chunk).slice(-4000); });
+
+  try {
+    // Observe the granted lock, not a sleep or a buffered stdout marker. This
+    // makes the interleaving deterministic before we start timing the DDL.
+    const readyDeadline = performance.now() + 5000;
+    while (true) {
+      if (spawnError) throw spawnError;
+      assert(!closed, `Lock blocker exited before acquiring its lock: ${stderr}`);
+      const pid = runPsql({ databaseUrl, label: 'organisation-lock-blocker-ready', sql: `
+SELECT a.pid FROM pg_catalog.pg_stat_activity a
+JOIN pg_catalog.pg_locks l ON l.pid = a.pid
+WHERE a.datname = current_database() AND a.application_name = '${blockerEnv.PGAPPNAME}'
+  AND l.relation = 'public.users'::regclass AND l.mode = 'AccessShareLock' AND l.granted;
+` });
+      if (pid) {
+        assert.match(pid, /^\d+$/, 'Expected exactly one users lock blocker');
+        break;
+      }
+      assert(performance.now() < readyDeadline, 'Lock blocker did not acquire its lock within 5 seconds');
+      await new Promise((resolve) => setTimeout(resolve, 50));
+    }
+
+    const startedAt = performance.now();
+    expectSqlState({ databaseUrl, sql: migrationSql, label: 'migration-lock-timeout', sqlState: '55P03' });
+    const elapsedMs = performance.now() - startedAt;
+    assert(elapsedMs >= 8000 && elapsedMs < 15000,
+      `Migration must hit its lock timeout within 8–15 seconds; took ${elapsedMs.toFixed(0)} ms`);
+    assert.equal(runPsql({ databaseUrl, label: 'lock-timeout-no-organizations',
+      sql: "SELECT to_regclass('public.organizations') IS NULL;",
+    }), 't', 'lock-timeout-no-organizations: failed migration must leave no organizations table');
+    assert.equal(runPsql({ databaseUrl, label: 'lock-timeout-no-user-column', sql: `
+SELECT NOT EXISTS (SELECT 1 FROM information_schema.columns
+  WHERE table_schema = 'public' AND table_name = 'users' AND column_name = 'organization_id');
+` }), 't', 'lock-timeout-no-user-column: failed migration must leave no organization_id column');
+    return {
+      'migration-lock-timeout': 'passed',
+      'migration-lock-timeout-bound': 'passed',
+      'lock-timeout-no-organizations': 'passed',
+      'lock-timeout-no-user-column': 'passed',
+    };
+  } finally {
+    // Killing psql alone can leave its backend asleep and holding the lock.
+    // Terminate this database's uniquely tagged backend, then reap the child,
+    // including on assertion, startup, or backend-termination failure.
+    try {
+      runPsql({ databaseUrl, label: 'stop-organisation-lock-blocker', sql: `
+SELECT pg_terminate_backend(pid) FROM pg_catalog.pg_stat_activity
+WHERE datname = current_database() AND application_name = '${blockerEnv.PGAPPNAME}'
+  AND pid <> pg_backend_pid();
+` });
+    } finally {
+      if (!closed) blocker.kill('SIGTERM');
+      const killTimer = setTimeout(() => { if (!closed) blocker.kill('SIGKILL'); }, 1000);
+      killTimer.unref();
+      try { await finished; } finally { clearTimeout(killTimer); }
+    }
+  }
+};
 
 const asActor = (actorId, statement) => `
 BEGIN;
@@ -156,7 +249,7 @@ SELECT row_to_json(profile) FROM (
   return summary;
 };
 
-const main = () => {
+const main = async () => {
   const baseName = process.env.HISTORY_RLS_DATABASE_NAME;
   const databaseName = baseName ? `${baseName}_org` : baseName;
   const adminUrl = assertDisposableAdminTarget({
@@ -172,6 +265,7 @@ const main = () => {
   runPsql({ databaseUrl: adminDatabaseUrl, sql: `CREATE DATABASE ${quotedDatabase};`, label: 'create-database' });
   try {
     runPsql({ databaseUrl, sql: bootstrapSql, label: 'bootstrap' });
+    const aclSummary = installDefaultPrivileges(databaseUrl);
     const priorMigrations = fs.readdirSync(MIGRATIONS_DIR)
       .filter((filename) => filename.endsWith('.sql') && filename < ORGANISATION_MIGRATION)
       .sort();
@@ -179,17 +273,22 @@ const main = () => {
       runPsql({ databaseUrl, file: path.join(MIGRATIONS_DIR, filename), label: `migration-${filename}` });
     }
     runPsql({ databaseUrl, sql: fixtureSql, label: 'organisation-label-fixture' });
+    const migrationPath = path.join(MIGRATIONS_DIR, ORGANISATION_MIGRATION);
+    const lockSummary = await runLockTimeoutCase(databaseUrl, fs.readFileSync(migrationPath, 'utf8'));
     // Apply explicitly so the RED run fails if this file is absent. Later
     // migrations are excluded: these checks pin this migration's own effect.
-    runPsql({ databaseUrl, file: path.join(MIGRATIONS_DIR, ORGANISATION_MIGRATION), label: `migration-${ORGANISATION_MIGRATION}` });
-    process.stdout.write(`${JSON.stringify(runCases(databaseUrl))}\n`);
+    runPsql({ databaseUrl, file: migrationPath, label: `migration-${ORGANISATION_MIGRATION}` });
+    process.stdout.write(`${JSON.stringify({ ...aclSummary, ...lockSummary, ...runCases(databaseUrl) })}\n`);
   } finally {
     runPsql({ databaseUrl: adminDatabaseUrl, sql: `DROP DATABASE IF EXISTS ${quotedDatabase} WITH (FORCE);`, label: 'drop-database' });
   }
 };
 
 if (require.main === module) {
-  main();
+  main().catch((error) => {
+    console.error(error.message);
+    process.exitCode = 1;
+  });
 }
 
-module.exports = { ORGANISATION_MIGRATION, fixtureSql, runCases };
+module.exports = { ORGANISATION_MIGRATION, fixtureSql, installDefaultPrivileges, runLockTimeoutCase, runCases };

@@ -196,13 +196,36 @@ async function processRow(admin, row, lookupMaps, organisationId, { dryRun = fal
     createdNow = true;
   }
 
+  const profile = buildProfile(row, lookupMaps, userId, organisationId);
   const { error: profileErr } = await admin
     .from('users')
-    .upsert(buildProfile(row, lookupMaps, userId, organisationId), { onConflict: 'id' });
+    .upsert(profile, { onConflict: 'id', ignoreDuplicates: true });
 
   if (profileErr) {
     if (createdNow) await admin.auth.admin.deleteUser(userId);
     return { status: 'error', reason: `profile upsert failed: ${profileErr.message}` };
+  }
+
+  // The preflight can race another provisioner. Never update the employer:
+  // this single UPDATE refreshes mutable fields only while it still matches.
+  const { data: updated, error: updateError } = await admin
+    .from('users')
+    .update({
+      first_name: profile.first_name,
+      last_name: profile.last_name,
+      email: profile.email,
+      job_title_id: profile.job_title_id,
+      school_id: profile.school_id,
+    })
+    .eq('id', userId)
+    .eq('organization_id', organisationId)
+    .select('id');
+  if (updateError || !updated?.length) {
+    if (createdNow) await admin.auth.admin.deleteUser(userId);
+    return {
+      status: 'error',
+      reason: updateError ? `profile update failed: ${updateError.message}` : 'organisation_conflict',
+    };
   }
 
   try {
