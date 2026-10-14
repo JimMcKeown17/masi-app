@@ -1,7 +1,7 @@
 # WelaPLUS Release 1 — Design
 
 **Date:** 2026-10-14
-**Status:** Design approved in conversation (Jim, 2026-10-14); written spec pending review.
+**Status:** Design approved in conversation (Jim, 2026-10-14). Codex adversarial review: three rounds (9 → 4 → 1 findings, all verified and addressed; the last round still returned needs-attention before its single fix). Written spec pending Jim's review.
 **Parent PRD:** [`documentation/wela-plus-battery-prd-2026.md`](../../../documentation/wela-plus-battery-prd-2026.md)
 (design-complete, four Codex reviews). This spec does **not** restate the PRD. It records what
 Release 1 builds, the decisions taken on 2026-10-14 that change or narrow the PRD, and the
@@ -464,6 +464,25 @@ Reporting treats the run's Questions as whatever has arrived.
     changes. It passes the ownership-only UPDATE policy even after the child or programme
     assignment is revoked. An identical replay hits the trigger's no-op and still
     acknowledges one row.
+  - **Unknown-outcome recovery.** "Not acknowledged locally" does not prove "the server never
+    accepted it". The server may have committed the insert before a crash or a lost response.
+    PostgreSQL applies INSERT `WITH CHECK` even when an upsert conflicts, so a revoked
+    assignment would reject that retry. Before classifying a `battery_runs` **insert**'s
+    `42501`/RLS rejection as terminal:
+    1. read the run back by `id`; the owner can still SELECT it;
+    2. if it exists **and** its immutable identity columns match the local row, re-send the
+       lifecycle columns as an UPDATE-by-id that must acknowledge exactly one row, and treat
+       success as acknowledgement of the insert;
+    3. if it is absent, owned by someone else, or has mismatched identity, the rejection stands
+       as terminal. Authorization is never relaxed for genuinely new runs.
+
+    This also covers an insert refreshed after a stale compare-and-swap acknowledgement
+    (`offlineSync.js` ~746–781). Tests (real SQLite plus PostgreSQL) cover four cases, asserting
+    convergence with no quarantine in the first and denial in the last two:
+    - server commit, then lost acknowledgement, then revocation, then abandon;
+    - the same with a client crash in place of the lost acknowledgement;
+    - a genuinely absent run;
+    - another EA's run with the same id.
   - The repository chooses the operation from the run's local sync state. A transition while
     the insert is still pending coalesces into that insert. A transition racing an in-flight
     insert follows the engine's existing compare-and-swap rules. Test: insert in flight,
