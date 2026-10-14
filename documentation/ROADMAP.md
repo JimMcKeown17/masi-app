@@ -123,8 +123,8 @@ shape.
   organisation label v1. It does not change authorization or phone behaviour. Migration and
   provisioning are committed and locally verified; see the [build log](./build-log.md#organisation-label-v1--18-postgresql-checks)
   and [Z19 status note](./zazi-sync-lessons-for-masi-2026-10-08.md).
-- [ ] Apply `20261014120000_organisation_label_v1.sql` to hosted `masi-app-sqlite` only after
-  Jim's explicit yes. **Not applied.** This is [plan Task 4](../docs/superpowers/plans/2026-10-14-organisation-label.md).
+- [x] Applied `20261014120000_organisation_label_v1.sql` to hosted `masi-app-sqlite` on 2026-10-14
+  with Jim's explicit yes; verified read-only (see the build log). Partners are added by migration.
 - [ ] Reporting surfaces should default to Masinyusane. Add an organisation filter when the
   first partner exists.
 - [ ] **Build one local database per EA (D2, decided by Jim 2026-10-08), before the first field install.**

@@ -17,16 +17,16 @@ Use this map before changing any synced table, repository producer, outbox opera
 - Insert order: `PUSH_ORDER` in `src/services/offlineSync.js`
 - Archive order: `ARCHIVE_PUSH_ORDER` plus `ARCHIVE_TABLE_DEPENDENCIES` in `src/services/offlineSync.js`
 
-### Organisation label v1 — committed; hosted apply pending
+### Organisation label v1 — applied to hosted 2026-10-14
 
 `supabase/migrations/20261014120000_organisation_label_v1.sql` adds `public.organizations` and
 the required, no-default `public.users.organization_id`. Existing users become Masinyusane through
 a temporary constant default; their `updated_at` does not move. Masinyusane's id is
 `a111879f-d066-47c9-95a1-bed2a400319a`, intentionally shared with Zazi iZandi; its slug is
-`masinyusane`. Partners are added by migration. The migration sets `SET LOCAL lock_timeout = '10s'` and
-`SET LOCAL statement_timeout = '60s'` and has no `BEGIN`/`COMMIT` of its own: the Supabase CLI runs
-the file and its `schema_migrations` insert in one transaction, so a lock refusal rolls back the
-schema changes and the history row together. Provisioning never deletes an Auth user on
+`masinyusane`. Partners are added by migration. The migration sets session-level `lock_timeout = '10s'` and `statement_timeout = '60s'` and
+resets them at the end; it has no `BEGIN`/`COMMIT` of its own. `SET LOCAL` was dropped after the
+hosted `supabase db push` (CLI 2.109.1) warned that it had no effect outside a transaction block.
+**Applied to hosted `masi-app-sqlite` on 2026-10-14 with Jim's yes** (verification in the build log). Provisioning never deletes an Auth user on
 `organisation_conflict`, because another run may already own that identity.
 
 `scripts/createTesters.js` requires `--organization <slug>`, resolves it before user access,
@@ -46,7 +46,7 @@ The final-review harness adds a Supabase-default-ACL control and four lock-timeo
 checks: 23 total. It observes a competing users lock, expects `55P03` in 8–15 seconds, checks
 that no organisation table or user column committed, and always terminates/awaits the blocker
 before the real migration apply. These new PostgreSQL checks await controller verification.
-**Hosted apply has not happened. It needs Jim's explicit yes under plan Task 4.**
+**Applied to hosted on 2026-10-14 with Jim's explicit yes.**
 
 ## Pre-Live History Authorization — Hosted Session Gate Passed; Assessment Gate Open
 
@@ -513,7 +513,7 @@ Tests: `__tests__/offlineSyncAuthGate.test.js`, `__tests__/requeueTerminalRlsFai
 
 | Table | Producer | Local required fields | Sync operation | RLS authority / SELECT dependency | Ordering / dependencies | Tests and probes |
 | --- | --- | --- | --- | --- | --- | --- |
-| `organizations` | Canonical migrations; partners are added by migration | Server-only: `id`, `slug`, `name`; no phone table | No mobile sync | RLS enabled with no policies. Only `service_role` has API-role SELECT; no INSERT/UPDATE/DELETE. `anon`, `authenticated`, and `authenticator` have no SELECT | Seed before users in one transaction with 10s lock / 60s statement bounds. Hosted apply pending | `organisation-label-postgres-harness.cjs`: role refusals, slug resolution, explicit revocations under default ACLs, timeout rollback |
+| `organizations` | Canonical migrations; partners are added by migration | Server-only: `id`, `slug`, `name`; no phone table | No mobile sync | RLS enabled with no policies. Only `service_role` has API-role SELECT; no INSERT/UPDATE/DELETE. `anon`, `authenticated`, and `authenticator` have no SELECT | Seed before users, with session-level 10s lock / 60s statement bounds. Applied to hosted 2026-10-14 | `organisation-label-postgres-harness.cjs`: role refusals, slug resolution, explicit revocations under default ACLs, timeout rollback |
 | `users` | `scripts/createTesters.js`; service-role insert-if-absent, then mutable-fields UPDATE restricted by id and organisation | Server `organization_id` is required with no default. The phone ignores it; no SQLite/outbox sync | No mobile domain write. Own-profile SELECT with school/job-title joins stays unchanged | Existing own-profile SELECT policy. Organisation is an employer label, not an access boundary. Provisioning preflight rejects known conflicts; the conditional UPDATE refuses a concurrent organisation mismatch without overwriting it | Auth user and organisation must exist before profile creation. Confirm the profile UPDATE before Programme-assignment writes. Hosted migration apply pending | `organisationProvisioning.test.js` (including concurrent insertion); `testerProvisioning.test.js`; `organisation-label-postgres-harness.cjs` (timestamp, constraints, own-profile read); history/S1 and `rls-visibility-probe.cjs` fixtures supply the id |
 | `time_entries` | `timeEntriesRepository` | `id`, `user_id` | Inserts batch as upserts; edits use acknowledged UPDATE by id and are excluded from batching | Self-scoped by `user_id = auth.uid()` | No domain dependencies | `offlineSyncOutbox.test.js` time-entry sync coverage; `offlineSyncUpdateById.test.js`; `timeEntriesRepository.test.js` (integration tier, Item 8); `useTimeTracking.integration.test.js` (clock-in vertical through the real path, Item 8); `forceStopReopenOutbox.test.js` (force-stop close+reopen persistence, Item 8) |
 | `classes` | `classesRepository.saveClass`; `classOnboardingRepository.start` transaction wrapper for locally onboarded classes | `id`, `created_by`, active `programme_id` for local class EA assignment. The onboarding wrapper adds only a user-scoped local-state marker in the same SQLite transaction; it does not change the server payload. | Insert uses default upsert; edit uses acknowledged UPDATE by id; archive uses acknowledged lifecycle UPDATE by id | `classes_select_created_by`; `private.current_user_can_access_class` / `private.current_user_can_write_for_class` | Before `children`, `class_ea_assignments`, grouping rows, sessions with `class_id` | `classesRepository.test.js`; `classOnboardingRepository.test.js` atomic create, rollback, and restart marker coverage; `offlineSyncUpdateById.test.js`; `sqlitePlan1Migrations.test.js` creator SELECT coverage |

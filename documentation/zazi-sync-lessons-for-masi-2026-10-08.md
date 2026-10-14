@@ -3,8 +3,8 @@
 > **Status note, 2026-10-14 — Z19 decision closed.** Jim confirmed that a partner organisation is
 > plausible within a year. Masi's organisation label migration and provisioning requirement are
 > committed (`ff22fc2`, `c37b2e0`) and locally verified. Masinyusane intentionally shares id
-> `a111879f-d066-47c9-95a1-bed2a400319a` with Zazi iZandi. Hosted apply has not happened and needs
-> Jim's explicit yes. Current work is in [ROADMAP §0](./ROADMAP.md#0-pre-live-ground-truth-observability-and-pilot-activation);
+> `a111879f-d066-47c9-95a1-bed2a400319a` with Zazi iZandi. It was applied to hosted
+> `masi-app-sqlite` on 2026-10-14 with Jim's yes. Current work is in [ROADMAP §0](./ROADMAP.md#0-pre-live-ground-truth-observability-and-pilot-activation);
 > verification is in the [build log](./build-log.md#organisation-label-v1--18-postgresql-checks).
 > The 2026-10-08 review below is unchanged.
 

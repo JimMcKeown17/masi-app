@@ -2,11 +2,12 @@
 -- 20260922175324_organization_label_v1.sql). Identity only: no RLS policy,
 -- trigger, or app behaviour reads it. The phone ignores the column.
 
--- No BEGIN/COMMIT here: the Supabase CLI runs this file and its schema_migrations insert in
--- one implicit transaction, and an explicit COMMIT would split them. SET LOCAL applies to that
--- transaction.
-SET LOCAL lock_timeout = '10s';
-SET LOCAL statement_timeout = '60s';
+-- Session-level bounds, reset at the end. SET LOCAL is not used: applying this file with Supabase
+-- CLI 2.109.1 (`db push`, 2026-10-14) warned "SET LOCAL can only be used in transaction blocks"
+-- (25P01), so SET LOCAL had no effect there. The hosted apply ran that earlier SET LOCAL text,
+-- without these bounds; a read-only check found no blockers and the apply completed.
+SET lock_timeout = '10s';
+SET statement_timeout = '60s';
 
 create table public.organizations (
   id uuid primary key default gen_random_uuid(),
@@ -46,3 +47,6 @@ create index idx_users_organization_id on public.users (organization_id);
 
 comment on column public.users.organization_id is
   'Employing organisation. Written once at account creation; never changed.';
+
+RESET statement_timeout;
+RESET lock_timeout;
