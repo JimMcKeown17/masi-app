@@ -3,6 +3,47 @@ import { render, fireEvent, act } from '@testing-library/react-native';
 import { ReadPassageQuestion } from '..';
 import { FIXTURE_READ_PASSAGE_EN } from '../../../testFixtures';
 
+test('untimed by default: no timer fires and no correct_words_per_minute', () => {
+  jest.useFakeTimers();
+  try {
+    const onComplete = jest.fn();
+    const r = render(
+      <ReadPassageQuestion
+        language="en"
+        itemSet={FIXTURE_READ_PASSAGE_EN}
+        instructions="."
+        onComplete={onComplete}
+      />,
+    );
+    fireEvent.press(r.getByText('Start'));
+    act(() => {
+      jest.advanceTimersByTime(120000);
+    });
+    expect(onComplete).not.toHaveBeenCalled();
+    fireEvent.press(r.getByText('End'));
+    fireEvent.press(r.getByText('Reached the end'));
+    const d = onComplete.mock.calls[0][0].derived;
+    expect(d.was_timed).toBe(false);
+    expect(d.correct_words_per_minute).toBeUndefined();
+  } finally {
+    jest.useRealTimers();
+  }
+});
+
+test('paragraph_starts splits the passage into paragraphs', () => {
+  const set = { ...FIXTURE_READ_PASSAGE_EN, paragraph_starts: [0, 3] };
+  const r = render(
+    <ReadPassageQuestion
+      language="en"
+      itemSet={set}
+      instructions="."
+      onComplete={jest.fn()}
+    />,
+  );
+  fireEvent.press(r.getByText('Start'));
+  expect(r.getAllByTestId(/^paragraph-/)).toHaveLength(2);
+});
+
 describe('ReadPassageQuestion — intro & active', () => {
   test('Start renders the passage as wrap-pills', () => {
     const { getByText } = render(
@@ -20,7 +61,7 @@ describe('ReadPassageQuestion — intro & active', () => {
   });
 });
 
-describe('ReadPassageQuestion — durationSec defaults to 60 when omitted', () => {
+describe('ReadPassageQuestion — explicit durationSec timer', () => {
   beforeEach(() => {
     jest.useFakeTimers();
   });
@@ -28,13 +69,14 @@ describe('ReadPassageQuestion — durationSec defaults to 60 when omitted', () =
     jest.useRealTimers();
   });
 
-  test('timer fires at ~60s when host passes no durationSec', () => {
+  test('timer opens the marker at ~60s when durationSec is supplied', () => {
     const onComplete = jest.fn();
     const { getByText } = render(
       <ReadPassageQuestion
         language="en"
         itemSet={FIXTURE_READ_PASSAGE_EN}
         instructions="."
+        durationSec={60}
         onComplete={onComplete}
       />,
     );
@@ -46,6 +88,10 @@ describe('ReadPassageQuestion — durationSec defaults to 60 when omitted', () =
     act(() => {
       jest.advanceTimersByTime(2 * 1000);
     });
+    expect(onComplete).not.toHaveBeenCalled();
+    expect(getByText('Last item attempted')).toBeTruthy();
+    expect(() => getByText('Cancel')).toThrow();
+    fireEvent.press(getByText('Reached the end'));
     expect(onComplete).toHaveBeenCalledTimes(1);
     expect(onComplete.mock.calls[0][0].stopped_reason).toBe('timer');
   });
@@ -69,6 +115,7 @@ describe('ReadPassageQuestion — derived.correct_words_per_minute', () => {
       fireEvent.press(getByTestId(`pill-${k}`));
     });
     fireEvent.press(getByText('End'));
+    fireEvent.press(getByText('Confirm'));
     const r = onComplete.mock.calls[0][0];
     expect(r.derived.total_correct).toBe(6);
     expect(r.derived.was_timed).toBe(true);
@@ -92,6 +139,7 @@ describe('ReadPassageQuestion — derived.correct_words_per_minute', () => {
     );
     fireEvent.press(getByText('Start'));
     fireEvent.press(getByText('End'));
+    fireEvent.press(getByText('Nothing attempted'));
     const r = onComplete.mock.calls[0][0];
     expect(r.derived.correct_words_per_minute).toBe(0);
   });
@@ -121,6 +169,7 @@ describe('ReadPassageQuestion — itemSet override and variable passage length',
     expect(getByText('word0')).toBeTruthy();
     expect(getByText('word99')).toBeTruthy();
     fireEvent.press(getByText('End'));
+    fireEvent.press(getByText('Reached the end'));
     const r = onComplete.mock.calls[0][0];
     expect(r.items).toHaveLength(100);
   });
@@ -159,10 +208,7 @@ describe('ReadPassageQuestion — Skip flow', () => {
     expect(onComplete.mock.calls[0][0].stopped_reason).toBe('skipped_child_refused');
   });
 
-  test('Skip emits items=[] yet last_attempted_position is still a number (timed contract)', () => {
-    // Q8 is timed → contract validator requires numeric last_attempted_position.
-    // The skip-emits-empty fix must NOT break that. items=[] + lastPos=-1 is
-    // the correct shape for "EA skipped a timed Question with zero taps".
+  test('timed Skip emits no items, no progress position, and no WPM', () => {
     const onComplete = jest.fn();
     const { getByText } = render(
       <ReadPassageQuestion
@@ -180,7 +226,8 @@ describe('ReadPassageQuestion — Skip flow', () => {
     expect(r.items).toEqual([]);
     expect(r.derived.total_correct).toBe(0);
     expect(r.derived.total_attempted).toBe(0);
-    expect(r.derived.correct_words_per_minute).toBe(0);
-    expect(typeof r.derived.last_attempted_position).toBe('number'); // contract
+    expect(r.derived.correct_words_per_minute).toBeUndefined();
+    expect(r.derived.last_attempted_position).toBeNull();
+    expect(r.derived.tracks_progress).toBe(false);
   });
 });

@@ -18,12 +18,9 @@ import type {
 import { WELA_PLUS_READ_SENTENCES_EN } from '../../itemsets/wela_plus_read_sentences.en';
 import { WELA_PLUS_READ_SENTENCES_XH } from '../../itemsets/wela_plus_read_sentences.xh';
 import { useToggleMark } from '../../hooks/useToggleMark';
-import { useChildReadingFontSize } from '../../hooks/useChildReadingFontSize';
 import { tokens } from '../../theme/tokens';
 import { SkipReasonPicker } from '../../skip/SkipReasonPicker';
 import type { ManualSkipReason } from '../../skip/skipReasons';
-
-const BASE_WORD_FONT_SIZE = 22;
 
 type Phase = 'intro' | 'active' | 'confirm-finish' | 'skip-picker' | 'finished';
 
@@ -104,8 +101,6 @@ export function ReadSentencesQuestion(
   } = props;
   const [phase, setPhase] = useState<Phase>('intro');
   const { isMarked, toggle } = useToggleMark();
-  const fontScale = useChildReadingFontSize();
-  const wordFontSize = BASE_WORD_FONT_SIZE * fontScale;
   const effectiveItemSet = resolveItemSet(language, itemSet);
 
   const isMarkedRef = useRef(isMarked);
@@ -169,7 +164,7 @@ export function ReadSentencesQuestion(
         ? []
         : items.map((i) => i.is_correct);
       const totalCorrect = items.filter((i) => i.is_correct).length;
-      const totalAttempted = isSkipped ? 0 : flatWords.length;
+      const totalAttempted = items.length;
       const percent =
         totalAttempted > 0
           ? Math.round((totalCorrect / totalAttempted) * 100)
@@ -195,8 +190,9 @@ export function ReadSentencesQuestion(
           total_correct: totalCorrect,
           total_attempted: totalAttempted,
           percent,
-          last_attempted_position: null,
+          last_attempted_position: isSkipped ? null : items.length - 1,
           was_timed: false,
+          tracks_progress: !isSkipped,
           per_sentence_percent: perSentence,
         },
       };
@@ -315,7 +311,6 @@ export function ReadSentencesQuestion(
                     style={[
                       styles.word,
                       {
-                        fontSize: wordFontSize,
                         color: marked ? tokens.color.onMarked : tokens.color.ink,
                       },
                     ]}
@@ -349,23 +344,23 @@ const styles = StyleSheet.create({
   sentenceRow: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 8,
-    padding: 12,
-    margin: 8,
+    gap: tokens.space.sm,
+    padding: tokens.space.md,
+    margin: tokens.space.sm,
     backgroundColor: tokens.color.canvas,
-    borderRadius: 8,
+    borderRadius: tokens.radius.cell,
   },
   pill: {
-    paddingHorizontal: 12,
-    paddingVertical: 8,
+    paddingHorizontal: tokens.space.md,
+    paddingVertical: tokens.space.sm,
     borderWidth: 1,
     borderColor: tokens.color.line,
-    borderRadius: 999,
+    borderRadius: tokens.radius.pill,
   },
-  word: { fontWeight: '600' },
+  word: { fontSize: tokens.font.markingItem, fontWeight: '600' },
   nav: {
     flexDirection: 'row',
-    gap: 16,
-    padding: 12,
+    gap: tokens.space.lg,
+    padding: tokens.space.md,
   },
 });

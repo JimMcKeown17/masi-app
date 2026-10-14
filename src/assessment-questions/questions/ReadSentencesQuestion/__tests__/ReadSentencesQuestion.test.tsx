@@ -3,6 +3,26 @@ import { render, fireEvent } from '@testing-library/react-native';
 import { ReadSentencesQuestion } from '..';
 import { FIXTURE_READ_SENTENCES_EN } from '../../../testFixtures';
 
+test('Finish reports every word attempted', () => {
+  const onComplete = jest.fn();
+  const r = render(
+    <ReadSentencesQuestion
+      language="en"
+      itemSet={FIXTURE_READ_SENTENCES_EN}
+      instructions="."
+      onComplete={onComplete}
+    />,
+  );
+  fireEvent.press(r.getByText('Start'));
+  fireEvent.press(r.getByText('Finish'));
+  const confirm = r.queryByText('Yes, finish');
+  if (confirm) fireEvent.press(confirm);
+  const res = onComplete.mock.calls[0][0];
+  expect(res.derived.tracks_progress).toBe(true);
+  expect(res.derived.last_attempted_position).toBe(res.items.length - 1);
+  expect(res.derived.total_attempted).toBe(res.items.length);
+});
+
 describe('ReadSentencesQuestion — intro & active', () => {
   test('Start advances to active and renders all sentence words as pills', () => {
     const { getByText } = render(
@@ -88,7 +108,8 @@ describe('ReadSentencesQuestion — Finish flow and per-sentence percent', () =>
     expect(r.stopped_reason).toBe('completed');
     expect(r.derived.per_sentence_percent).toEqual([100, 100, 100, 60]);
     expect(r.derived.was_timed).toBe(false);
-    expect(r.derived.last_attempted_position).toBeNull();
+    expect(r.derived.last_attempted_position).toBe(r.items.length - 1);
+    expect(r.derived.tracks_progress).toBe(true);
   });
 });
 
@@ -107,7 +128,11 @@ describe('ReadSentencesQuestion — Skip flow', () => {
     fireEvent.press(getByText('Skip question'));
     fireEvent.press(getByText('Child refused'));
 
-    expect(onComplete.mock.calls[0][0].stopped_reason).toBe('skipped_child_refused');
+    const result = onComplete.mock.calls[0][0];
+    expect(result.stopped_reason).toBe('skipped_child_refused');
+    expect(result.items).toEqual([]);
+    expect(result.derived.last_attempted_position).toBeNull();
+    expect(result.derived.tracks_progress).toBe(false);
   });
 });
 

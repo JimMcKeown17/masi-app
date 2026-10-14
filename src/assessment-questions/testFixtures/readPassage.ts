@@ -39,6 +39,7 @@ export const FIXTURE_READ_PASSAGE_EN: ItemSet<ReadPassageItemSet> = {
   question_code: 'wela_plus_read_passage',
   question_version: 'fixture',
   language: 'en',
+  paragraph_starts: [0, 10, 21],
   words: STUB_PASSAGE_WORDS.map((word, idx) => ({
     item_key: `p1.w${idx + 1}`,
     word,

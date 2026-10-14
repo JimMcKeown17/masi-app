@@ -14,6 +14,7 @@ describe('ReadPassageQuestion — OSS contract', () => {
     fireEvent.press(rendered.getByText('Start'));
     fireEvent.press(rendered.getByTestId('pill-p1.w1'));
     fireEvent.press(rendered.getByText('End'));
+    fireEvent.press(rendered.getByText('Reached the end'));
     const v = await verdict;
     expect(v.valid).toBe(true);
     expect(v.errors).toEqual([]);
