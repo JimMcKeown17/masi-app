@@ -54,6 +54,8 @@ Direct psql with the DB password from `.env.local`, bypassing CLI auth entirely.
 PGPASSWORD=<SUPABASE_DB_PASSWORD_SQLITE> /opt/homebrew/opt/libpq/bin/psql -h db.segygjzpujphwvrubusm.supabase.co -U postgres -d postgres
 ```
 
+As of 2026-10-14 the direct host `db.segygjzpujphwvrubusm.supabase.co` resolves only to IPv6; on a network without IPv6 psql fails with "could not translate host name". Use the IPv4 session pooler recorded in `supabase/.temp/pooler-url` instead: host `aws-1-eu-west-2.pooler.supabase.com`, port `5432`, user `postgres.segygjzpujphwvrubusm`, `sslmode=require`, same password. Session mode keeps `SET LOCAL ROLE` and transactions intact.
+
 Never paste the password into output or docs. This is a direct `psql` connection with an explicit SQLite host; it does not invoke the Supabase CLI or establish CLI authentication. If switching back to CLI operations, use the isolated helper. Do not run raw CLI commands from the repository root as a fallback.
 
 ## Trap: CLI dotenv auto-loading and project overrides
