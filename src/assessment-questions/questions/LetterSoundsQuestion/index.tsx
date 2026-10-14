@@ -8,19 +8,19 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { View, Text, Pressable, StyleSheet } from 'react-native';
 import type { QuestionProps } from '../../types/QuestionProps';
-import type { Result, ResultItem, StoppedReason } from '../../types/Result';
+import type { ResultItem, StoppedReason } from '../../types/Result';
 import type { LetterSoundsItemSet } from './types';
 import { WELA_PLUS_LETTER_SOUNDS_EN } from '../../itemsets/wela_plus_letter_sounds.en';
 import { WELA_PLUS_LETTER_SOUNDS_XH } from '../../itemsets/wela_plus_letter_sounds.xh';
 import { useToggleMark } from '../../hooks/useToggleMark';
-import { useChildReadingFontSize } from '../../hooks/useChildReadingFontSize';
 import { tokens } from '../../theme/tokens';
 import { SkipReasonPicker } from '../../skip/SkipReasonPicker';
 import type { ManualSkipReason } from '../../skip/skipReasons';
+import { applyProgress, NO_ATTEMPT } from '../../progress/applyProgress';
+import { LastAttemptedSheet } from '../../progress/LastAttemptedSheet';
 
-const BASE_LETTER_FONT_SIZE = 32;
-
-type Phase = 'intro' | 'active' | 'skip-picker' | 'finished';
+type Phase = 'intro' | 'active' | 'mark-last' | 'skip-picker' | 'finished';
+type MarkReason = 'ea_ended' | 'timer';
 
 type FullLetterSoundsItemSet = LetterSoundsItemSet & {
   item_set_id: string;
@@ -32,7 +32,6 @@ function isFullItemSet(value: unknown): value is FullLetterSoundsItemSet {
   const o = value as Record<string, unknown>;
   return (
     Array.isArray(o.letters) &&
-    typeof o.lettersPerPage === 'number' &&
     typeof o.columns === 'number' &&
     typeof o.item_set_id === 'string' &&
     typeof o.question_version === 'string'
@@ -53,6 +52,13 @@ function keyFor(idx: number, letter: string): string {
   return `${idx}:${letter}`;
 }
 
+function chunk<T>(items: T[], size: number): T[][] {
+  return Array.from(
+    { length: Math.ceil(items.length / size) },
+    (_, row) => items.slice(row * size, (row + 1) * size),
+  );
+}
+
 export function LetterSoundsQuestion(props: QuestionProps) {
   const {
     language,
@@ -63,83 +69,68 @@ export function LetterSoundsQuestion(props: QuestionProps) {
     onItemMarked,
   } = props;
   const [phase, setPhase] = useState<Phase>('intro');
-  const [currentPage, setCurrentPage] = useState(0);
+  const [markReason, setMarkReason] = useState<MarkReason>('ea_ended');
   const { isMarked, toggle } = useToggleMark();
-  const fontScale = useChildReadingFontSize();
-  const letterFontSize = BASE_LETTER_FONT_SIZE * fontScale;
   const effectiveItemSet = resolveItemSet(language, itemSet);
 
   const isMarkedRef = useRef(isMarked);
   useEffect(() => {
     isMarkedRef.current = isMarked;
   }, [isMarked]);
-  const highestPageVisitedRef = useRef(0);
   const hasFinishedRef = useRef(false);
   const startTimeMsRef = useRef<number | null>(null);
 
-  const totalLetters = effectiveItemSet.letters.length;
-  const lettersPerPage = effectiveItemSet.lettersPerPage;
-  const totalPages = Math.max(1, Math.ceil(totalLetters / lettersPerPage));
+  const letters = effectiveItemSet.letters;
   const columns = effectiveItemSet.columns;
+  const letterRows = chunk(letters, columns);
   const tileBasis: `${number}%` = `${100 / columns}%`;
 
   const finish = useCallback(
-    (stoppedReason: StoppedReason) => {
+    (stoppedReason: StoppedReason, lastAttempted: number = NO_ATTEMPT) => {
       if (hasFinishedRef.current) return;
       hasFinishedRef.current = true;
       setPhase('finished');
-
-      const lastVisibleOnPage =
-        Math.min(
-          (highestPageVisitedRef.current + 1) * lettersPerPage,
-          totalLetters,
-        ) - 1;
-
-      // Skip-emits-empty contract: a skipped_* stop must NOT persist as if
-      // every item was answered wrong. Host translates items=[] +
-      // stopped_reason=skipped_* into NULL score / zero items.
-      // Skip reasons emit no item rows, matching the cross-Pattern contract.
       const isSkipped = stoppedReason.startsWith('skipped_');
-      const items = isSkipped
+      const raw = isSkipped
         ? []
-        : effectiveItemSet.letters.map((letter, idx) => ({
+        : letters.map((letter, idx) => ({
             position: idx,
             item_key: letter,
             prompt: letter,
             is_correct: isMarkedRef.current(keyFor(idx, letter)),
           }));
+      const { items, totalAttempted } = isSkipped
+        ? { items: [], totalAttempted: 0 }
+        : applyProgress(raw, lastAttempted);
       const totalCorrect = items.filter((i) => i.is_correct).length;
-      const totalAttempted = isSkipped ? 0 : lastVisibleOnPage + 1;
-      const percent =
-        totalAttempted > 0
-          ? Math.round((totalCorrect / totalAttempted) * 100)
-          : 0;
-      const elapsedMs =
-        startTimeMsRef.current === null ? 0 : Date.now() - startTimeMsRef.current;
-
-      const result: Result = {
+      onComplete({
         question_code: 'wela_plus_letter_sounds',
         question_version: effectiveItemSet.question_version,
         item_set_id: effectiveItemSet.item_set_id,
         language,
-        duration_ms: elapsedMs,
+        duration_ms:
+          startTimeMsRef.current === null
+            ? 0
+            : Date.now() - startTimeMsRef.current,
         stopped_reason: stoppedReason,
         items,
         derived: {
           total_correct: totalCorrect,
           total_attempted: totalAttempted,
-          percent,
-          last_attempted_position: lastVisibleOnPage,
+          percent:
+            totalAttempted > 0
+              ? Math.round((totalCorrect / totalAttempted) * 100)
+              : 0,
+          last_attempted_position: isSkipped ? null : lastAttempted,
           was_timed: durationSec !== undefined,
+          tracks_progress: !isSkipped,
         },
-      };
-      onComplete(result);
+      });
     },
     [
       effectiveItemSet,
       language,
-      lettersPerPage,
-      totalLetters,
+      letters,
       durationSec,
       onComplete,
     ],
@@ -158,11 +149,12 @@ export function LetterSoundsQuestion(props: QuestionProps) {
           : Date.now() - startTimeMsRef.current;
       if (elapsed >= durationSec * 1000) {
         clearInterval(interval);
-        finish('timer');
+        setMarkReason('timer');
+        setPhase('mark-last');
       }
     }, 250);
     return () => clearInterval(interval);
-  }, [phase, durationSec, finish]);
+  }, [phase, durationSec]);
 
   const handleToggle = useCallback(
     (idx: number, letter: string) => {
@@ -186,6 +178,13 @@ export function LetterSoundsQuestion(props: QuestionProps) {
     (reason: ManualSkipReason) => finish(reason),
     [finish],
   );
+
+  const highestMarkedIndex = useCallback(() => {
+    for (let idx = letters.length - 1; idx >= 0; idx -= 1) {
+      if (isMarkedRef.current(keyFor(idx, letters[idx]))) return idx;
+    }
+    return 0;
+  }, [letters]);
 
   if (phase === 'intro') {
     return (
@@ -211,77 +210,71 @@ export function LetterSoundsQuestion(props: QuestionProps) {
     );
   }
 
-  const pageStart = currentPage * lettersPerPage;
-  const pageLetters = effectiveItemSet.letters.slice(
-    pageStart,
-    pageStart + lettersPerPage,
-  );
+  if (phase === 'mark-last') {
+    return (
+      <LastAttemptedSheet
+        labels={letters}
+        rowLengths={letterRows.map((row) => row.length)}
+        defaultIndex={highestMarkedIndex()}
+        onConfirm={(idx) => finish(markReason, idx)}
+        onCancel={
+          markReason === 'ea_ended' ? () => setPhase('active') : undefined
+        }
+      />
+    );
+  }
 
   return (
     <View>
       <View testID="letter-grid" style={styles.grid}>
-        {pageLetters.map((letter, i) => {
-          const idx = pageStart + i;
-          const key = keyFor(idx, letter);
-          const marked = isMarked(key);
-          const labelState = marked ? 'correct' : 'idle';
-          return (
-            <Pressable
-              key={key}
-              accessibilityRole="button"
-              accessibilityLabel={`${letter}, ${labelState}`}
-              onPress={() => handleToggle(idx, letter)}
-              style={[
-                styles.tile,
-                {
-                  flexBasis: tileBasis,
-                  backgroundColor: marked ? tokens.color.marked : tokens.color.surface,
-                },
-              ]}
-            >
-              <Text
-                style={[
-                  styles.letter,
-                  {
-                    fontSize: letterFontSize,
-                    color: marked ? tokens.color.onMarked : tokens.color.ink,
-                  },
-                ]}
-              >
-                {letter}
-              </Text>
-            </Pressable>
-          );
-        })}
+        {letterRows.map((row, r) => (
+          <View key={r} testID={`letter-row-${r}`} style={styles.row}>
+            {row.map((letter, i) => {
+              const idx = r * columns + i;
+              const key = keyFor(idx, letter);
+              const marked = isMarked(key);
+              const labelState = marked ? 'correct' : 'idle';
+              return (
+                <Pressable
+                  key={key}
+                  accessibilityRole="button"
+                  accessibilityLabel={`${letter}, ${labelState}`}
+                  onPress={() => handleToggle(idx, letter)}
+                  style={[
+                    styles.tile,
+                    {
+                      flexBasis: tileBasis,
+                      backgroundColor: marked
+                        ? tokens.color.marked
+                        : tokens.color.surface,
+                    },
+                  ]}
+                >
+                  <Text
+                    style={[
+                      styles.letter,
+                      {
+                        color: marked
+                          ? tokens.color.onMarked
+                          : tokens.color.ink,
+                      },
+                    ]}
+                  >
+                    {letter}
+                  </Text>
+                </Pressable>
+              );
+            })}
+          </View>
+        ))}
       </View>
       <View style={styles.nav}>
-        {currentPage > 0 ? (
-          <Pressable
-            accessibilityRole="button"
-            onPress={() => setCurrentPage((p) => Math.max(0, p - 1))}
-          >
-            <Text>Prev</Text>
-          </Pressable>
-        ) : null}
-        {currentPage < totalPages - 1 ? (
-          <Pressable
-            accessibilityRole="button"
-            onPress={() => {
-              setCurrentPage((p) => {
-                const next = Math.min(totalPages - 1, p + 1);
-                if (next > highestPageVisitedRef.current) {
-                  highestPageVisitedRef.current = next;
-                }
-                return next;
-              });
-            }}
-          >
-            <Text>Next</Text>
-          </Pressable>
-        ) : null}
         <Pressable
           accessibilityRole="button"
-          onPress={() => finish('ea_ended')}
+          onPress={() => {
+            setMarkReason('ea_ended');
+            setPhase('mark-last');
+          }}
         >
           <Text>End</Text>
         </Pressable>
@@ -298,23 +291,25 @@ export function LetterSoundsQuestion(props: QuestionProps) {
 
 const styles = StyleSheet.create({
   grid: {
+    gap: tokens.space.xs,
+  },
+  row: {
     flexDirection: 'row',
-    flexWrap: 'wrap',
-    justifyContent: 'flex-start',
   },
   tile: {
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 16,
+    paddingVertical: tokens.space.lg,
     borderWidth: 1,
     borderColor: tokens.color.line,
   },
   letter: {
+    fontSize: tokens.font.markingItem,
     fontWeight: '600',
   },
   nav: {
     flexDirection: 'row',
-    gap: 16,
-    paddingTop: 16,
+    gap: tokens.space.lg,
+    paddingTop: tokens.space.lg,
   },
 });

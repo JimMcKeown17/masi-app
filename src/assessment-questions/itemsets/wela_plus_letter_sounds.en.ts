@@ -2,7 +2,7 @@ import type { ItemSet } from '../types/ItemSet';
 import type { LetterSoundsItemSet } from '../questions/LetterSoundsQuestion/types';
 
 // PLACEHOLDER content — real pedagogy-supplied letter set lands in #34.
-// Shape (letters + lettersPerPage + columns) is the WelaPLUS Pattern A contract.
+// Shape (letters + columns) is the WelaPLUS Pattern A contract.
 export const WELA_PLUS_LETTER_SOUNDS_EN: ItemSet<LetterSoundsItemSet> = {
   // Clearly-stub item_set_id so any captured run during scaffolding is
   // distinguishable from real WelaPLUS content. Swap to the canonical
@@ -18,6 +18,5 @@ export const WELA_PLUS_LETTER_SOUNDS_EN: ItemSet<LetterSoundsItemSet> = {
     'p', 'q', 'r', 's', 't',
     'u', 'v', 'w', 'x', 'y',
   ],
-  lettersPerPage: 20,
-  columns: 5,
+  columns: 12,
 };

@@ -13,6 +13,5 @@ export const FIXTURE_LETTER_SOUNDS_EN: ItemSet<LetterSoundsItemSet> = {
     'p', 'q', 'r', 's', 't',
     'u', 'v', 'w', 'x', 'y',
   ],
-  lettersPerPage: 20,
-  columns: 5,
+  columns: 12,
 };

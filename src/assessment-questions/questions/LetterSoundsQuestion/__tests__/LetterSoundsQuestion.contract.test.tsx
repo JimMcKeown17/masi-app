@@ -14,6 +14,7 @@ describe('LetterSoundsQuestion — OSS contract', () => {
 
     fireEvent.press(rendered.getByText('Start'));
     fireEvent.press(rendered.getByText('End'));
+    fireEvent.press(rendered.getByText('Reached the end'));
 
     const v = await verdict;
     expect(v.valid).toBe(true);
@@ -34,6 +35,7 @@ describe('LetterSoundsQuestion — OSS contract', () => {
       act(() => {
         jest.advanceTimersByTime(60000);
       });
+      fireEvent.press(rendered.getByText('Reached the end'));
 
       const v = await verdict;
       expect(v.valid).toBe(true);

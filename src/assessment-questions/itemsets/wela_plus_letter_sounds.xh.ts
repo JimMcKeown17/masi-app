@@ -16,6 +16,5 @@ export const WELA_PLUS_LETTER_SOUNDS_XH: ItemSet<LetterSoundsItemSet> = {
     'p', 'q', 'r', 's', 't',
     'u', 'v', 'w', 'x', 'y',
   ],
-  lettersPerPage: 20,
-  columns: 5,
+  columns: 12,
 };
