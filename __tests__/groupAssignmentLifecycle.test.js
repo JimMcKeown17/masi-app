@@ -190,6 +190,17 @@ describe('group assignment lifecycle (spec §6.5b)', () => {
   let db;
 
   beforeEach(async () => {
+    // The fixtures use fixed archive times; pin "now" before all of them so a newly created
+    // assignment never post-dates its own archive (unassigned_at >= assigned_at). Only Date is
+    // faked; timers and microtasks stay real.
+    jest.useFakeTimers({
+      now: new Date('2026-10-10T00:00:00.000Z'),
+      doNotFake: [
+        'hrtime', 'nextTick', 'performance', 'queueMicrotask', 'requestAnimationFrame',
+        'cancelAnimationFrame', 'requestIdleCallback', 'cancelIdleCallback', 'setImmediate',
+        'clearImmediate', 'setInterval', 'clearInterval', 'setTimeout', 'clearTimeout',
+      ],
+    });
     db = createBetterSqliteTestDatabase();
     await runMigrations(db);
     await db.runAsync("insert into programmes (id, code, name, sync_status) values ('programme-1', 'lit', 'Literacy', 'synced')");
@@ -205,6 +216,7 @@ describe('group assignment lifecycle (spec §6.5b)', () => {
 
   afterEach(async () => {
     await db.closeAsync();
+    jest.useRealTimers();
   });
 
   test('reactivation is sent as a lifecycle UPDATE that clears unassigned_at, not an ignored insert', async () => {
