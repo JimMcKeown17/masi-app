@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking. In this repository the implementer for each task is **Codex through the plugin** (gpt-5.6-sol); Claude reviews every diff, reruns the tests, and commits.
 
-**Revision 2 (2026-10-14)** after a Codex adversarial review of revision 1 (verdict needs-attention, four high and two medium findings, all verified and adopted; see "Review history" at the end).
+**Revision 3 (2026-10-14)** after two Codex adversarial reviews (revision 1: four high and two medium findings; revision 2: three high and one medium; all verified and adopted; see "Review history" at the end).
 
 **Goal:** Give every signed-in EA their own SQLite file, request queue, and data client behind one handle, so no EA's work can be uploaded under another EA's session (live defect 2), written into another EA's file, or owned by anyone but the EA who made the change (live defect 1, phone half).
 
@@ -19,7 +19,7 @@
 - No Supabase migration, no hosted apply, no write to `masi-app-sqlite` (`segygjzpujphwvrubusm`). Never touch the legacy backend `jcqrlwetutnpuchjoyyd`. Never run raw `supabase` CLI; never source `.env.local`.
 - SQLite behaviour is tested against real SQLite: better-sqlite3 through `test-support/betterSqliteAdapter.js` for unit tests, `test-support/expoSQLiteRealEngine.js` (`npm run test:integration`) for multi-file and close/reopen behaviour. **Every new integration suite is added to the `testMatch` allowlist in `jest.integration.config.js`**, and an integration GREEN counts only if `npx jest --config jest.integration.config.js --listTests` lists it.
 - The domain file name is exactly `masi-<userId>.db`. After the cutover (Task 5) production code never opens, renames, or uploads from the legacy file `masi.db` (spec §4.5).
-- Provisional per-request timeout: `30_000` ms (spec §5.2; device check D4 sets the final value). Close waits at most `5_000` ms for an executing transaction (ruling 8).
+- Provisional per-request timeout: `30_000` ms (spec §5.2; device check D4 sets the final value). Close revokes at once and disposes connections only after in-flight native calls settle; a watchdog reports a close still pending after `5_000` ms but never disposes early (ruling 8).
 - Every task leaves `npm test` and `npm run test:integration` green. Until Task 5 the new handle exists alongside the legacy entry points; Task 5 migrates every consumer and removes the legacy entry points in one cutover.
 - Commit messages carry no agent co-author trailer. Never use bare `git stash`; use a WIP commit.
 - Codex's sandbox cannot write the worktree's git admin directory: implementers leave changes uncommitted; the controller reviews and commits.
@@ -29,17 +29,25 @@
 
 Each ruling names what it costs if wrong. Implementers follow them; reviewers check them.
 
-1. **No ambient database in production.** The spec (§4.2) reaches the database "through the current handle". Revision 1 bound only background flows and let user actions resolve the current handle; Codex reproduced the failure: `ClassesContext.addClass` awaits reference reads, and when its continuation resumed after a switch it wrote A's class into B's file with owner B. A remount does not cancel a captured callback. **Ruling:** every production consumer under `src/` (contexts, screens, components, hooks, services, utils) gets repositories and services that are **bound to one handle**: React code through `useSignedInEA()` (`{ handle, repositories, services }`), non-React services and utils through an explicit `handle` or `repositories` argument. A bound repository's writes after its handle closes are refused at admission with `StaleActorError`, so a resumed stale callback reaches neither file. The static test in Task 5 fails if any file under `src/` outside `src/db/` and `src/session/` imports a repository singleton or calls `resolveDatabase`/`runRepositoryTransaction` without a database. The repository singletons stay exported only for tests; their ambient resolution goes to the current handle, which `jest.setup.js` and `jest.integration.setup.js` open for a fixed test actor. This is stronger than §4.2 and is not the rejected approach B: the binding happens once per tree and per service, not per call site with an actor argument. *Cost if wrong:* larger diff in Task 5 (29 `src/` files); no behaviour cost.
+1. **No ambient database in production.** The spec (§4.2) reaches the database "through the current handle". Revision 1 bound only background flows and let user actions resolve the current handle; Codex reproduced the failure: `ClassesContext.addClass` awaits reference reads, and when its continuation resumed after a switch it wrote A's class into B's file with owner B. A remount does not cancel a captured callback. **Ruling:** every production consumer under `src/` (contexts, screens, components, hooks, services, utils) gets repositories and services that are **bound to one handle**: React code through `useSignedInEA()` (`{ handle, repositories, services }`), non-React services and utils through an explicit `handle` or `repositories` argument. A bound repository's writes after its handle closes are refused at admission with `StaleActorError`, so a resumed stale callback reaches neither file. Binding must reach **composite repositories** too (Codex round 2): `createClassOnboardingRepository({ database })` today defaults its `classes` and `localState` dependencies to singletons, and its `complete()` read-then-delete ran against B's file when A's call resumed. Every `create*Repository` factory derives each repository dependency from its own `database` (or receives an already-bound one); no factory default may reference a singleton. **Production has no ambient fallback at all:** with no `database`, `resolveDatabase`/`runRepositoryTransaction` throw `UnboundRepositoryError` unless the test-only ambient mode is on (ruling 13). The static test in Task 5 covers every `.js` file under `src/` except `src/session/` and the repository singleton exports themselves: no singleton import, no unbound `resolveDatabase(`/`runRepositoryTransaction(` call, no factory default that names a singleton. The repository singletons stay exported only for legacy tests. This is stronger than §4.2 and is not the rejected approach B: the binding happens once per tree and per service, not per call site with an actor argument. *Cost if wrong:* larger diff in Task 5 (about 30 `src/` files plus the repository dependency graph); no behaviour cost.
 2. **Missing token is not staleness.** Only a *closed* handle (or one that is no longer current) produces `StaleActorError`. An open handle with no session, or a session for a different user, refuses the request with `AuthUnavailableError`, which the queue surfaces as the existing codeless network error (`{ code: '', message: 'auth unavailable' }`), so the row is retriable and counted normally (an open handle without a session is normal during offline restore or a refresh; treating it as stale would strand rows `in_flight` until the next open). T23 is unchanged. *Cost if wrong:* a refusal during a token gap counts as one retriable attempt.
 3. **The owner comes from the connection.** Each handle's writer belongs to one EA, so the handle registers `writer → userId` in a `WeakMap` at open (`registerConnectionActor`); `enqueueDomainOutbox(db, …)` reads it. No actor → throw (§6.2). Tests register an actor on their better-sqlite3 database with `bindTestActor`. *Cost if wrong:* none known.
 4. **The file records its owner.** At first open the handle writes `local_state('file_owner_user_id', userId)`. A later open whose marker names someone else fails with `FileOwnerMismatchError` and publishes nothing. *Cost if wrong:* a manually copied file cannot be opened; recovery is Export Database.
 5. **Incidents wait for Plan 3.** §6.3's `foreign_owner_in_file` incident needs Plan 3's envelope. Plan 2 records the scan result in `local_state('integrity_scan_last')` (JSON counts by table), logs one `console.error`, and calls `captureOperationalError(…, { category: 'foreign_owner_in_file' })`. *Cost if wrong:* until Plan 3, support learns of a foreign row through Sentry, not the incident table.
 6. **The ADR is written directly** from spec §2, §4, §7.3 (Jim decided one file per EA on 2026-10-08 and deferred deletion on 2026-10-09). *Cost if wrong:* none.
 7. **One lifecycle coordinator serializes opens and closes.** Revision 1 let a sign-out during A's migrations close nothing and then publish A afterwards, let overlapping opens publish out of order, and let a reopen of A race A's still-draining close. **Ruling:** `signedInHandle.js` holds a single coordinator: a monotonically increasing `generation`, the in-progress transition promise, and the latest requested state (`{ userId } | signedOut`). `requestOpen({ userId })` and `requestClose({ reason })` bump the generation at call time and chain after the in-progress transition. An open re-checks its generation immediately before publishing; a superseded open closes its own connections and resolves `null`. A same-user `requestOpen` while that user's handle is current or opening joins it instead of reopening. A close always completes the previous close (including the writer drain and connection close) before any later open starts. *Cost if wrong:* none; it only orders transitions.
-8. **Close has a bounded drain.** Close aborts requests first, then waits up to `5_000` ms for the write queue's tail. If a transaction is still running after that (it is awaiting something the abort does not cancel), the handle closes the connections anyway; SQLite rolls back the open transaction when its connection closes, and the transaction's commit door also refuses. The timeout is logged. *Cost if wrong:* a transaction that would have committed within a longer wait is rolled back; the EA's action reports a failure and can be repeated.
+8. **Revocation is immediate; physical close waits for native work.** Revision 2 force-closed connections after a 5 s drain. Codex showed that expo-sqlite 16.0.10 runs operations and `closeAsync` on a concurrent native queue (iOS `SQLiteModule.swift`), so closing while a `runAsync`/`getAllAsync` is still executing can race native statement use, and `sqlite3_close` does not guarantee rollback when it fails. **Ruling:** each handle wraps its writer and reader in a **gate** that counts in-flight native calls. Close happens in two phases:
+   - *Logical revocation (immediate, synchronous):* `state = 'closed'`, epoch advances, the registry drops the handle, requests abort, and the gates refuse every **new** native call with `StaleActorError` except `ROLLBACK` (so commit doors can clean up) and the close step's own statements.
+   - *Physical disposal (after native quiescence):* wait until both gates report zero in-flight calls; then, only if the writer has no open transaction (tracked from `BEGIN`/`COMMIT`/`ROLLBACK`), write `local_state('last_active_at')`; then `closeAsync` the reader and the writer. There is **no force-close timeout**. A watchdog logs and reports (`captureOperationalError`, category `handle_close_stalled`) if disposal has not finished after `5_000` ms, but never disposes early. A JavaScript transaction suspended on a promise does not hold a native call, so it does not block disposal; when it resumes, its next native call is refused by the gate and its connection is gone, so nothing commits.
+   - *Close failure:* if `closeAsync` throws, the file is recorded as `dispose_failed`; a later open of **the same file** in this process fails with `HandleDisposeFailedError` (the open-error screen asks the EA to restart the app). Opens of other EAs' files are unaffected.
+   - The coordinator lets a **different** EA's open proceed once A's logical revocation is done (different file, so no two-writer window); a **same-file** reopen waits for A's physical disposal.
+   - Native close-under-load on iOS and Android is device check **D7** (Plan 3's device list): sign out while a large pull persists and while a write transaction runs, then reopen the same EA.
+   *Cost if wrong:* a stalled native call keeps A's file open until the app restarts; B is unaffected.
 9. **Stale cancellation is a whole-pass rule.** When any server call in a sync pass rejects with `StaleActorError`, or any repository call refuses with it, the pass stops: no record is finalized, no batch fallback runs, the outer `catch` does not finalize a retriable failure, and the `finally` block does not call `updateSyncMeta` (it would be refused anyway). The pass resolves `{ abortedStaleActor: true }` and reports nothing to observability. Pulls follow the same rule: they stop without writing failure markers. *Cost if wrong:* none; the handle is closed, so nothing could be written.
 10. **Device-level settings move to AsyncStorage; the profile cache stays per EA.** `deviceSettings` stores the user profile cache and the capture mode in SQLite `local_state` today. With one file per EA the profile cache belongs in that EA's file (read inside the signed-in tree; sign-out no longer clears it, because the next EA has a different file). The capture mode is a device preference, so it moves to AsyncStorage key `masi:device:captureMode` (spec §4.1 already lists `deviceSettings` under AsyncStorage). No data migration: pre-live, the default applies once. *Cost if wrong:* a test phone shows the default capture mode once.
 11. **Uncertain server outcomes are not solved here.** An aborted or timed-out request can still commit on the server *after* a newer acknowledged mutation, because uploads are unconditional UPDATE-by-id and update-capable upserts (`offlineSync.js` ~793–828); for example an old time-entry upsert could restore `sign_out_time = null` after a newer clock-out. Identical replay being harmless (T5) does not prove ordering. Spec §5.5 and §12 already assign uncertain-outcome recovery and server ordering to the upload-contract spec. **Ruling:** T5 asserts only idempotent replay; Task 8 makes "server-enforced ordering or equivalent uncertain-outcome protection" an explicit **field-release prerequisite** in ROADMAP priority 5 and the contract map. *Cost if wrong:* none here; the risk is named, not hidden.
+12. **Export Database is bound to the handle that asked for it.** `ProfileScreen` shows an Alert whose confirmation calls `exportDatabase()` → `debugDump()` with no handle, so a confirmation of A's run after B opens exported B's failed-outbox payloads (Codex round 2, reproduced with the unchanged dump). **Ruling:** the screen captures `handle` before showing the confirmation; `exportDatabase({ handle })` passes it to `debugDump({ handle })`; both refuse with `StaleActorError` if the handle is no longer open, checked before reading and again before writing or sharing the file. *Cost if wrong:* none.
+13. **Test-harness lifecycle.** `jest.setup.js` and `jest.integration.setup.js` load through `setupFiles`, before Jest installs `beforeEach`. **Ruling:** module mocks stay in `setupFiles`; a new `test-support/defaultTestHandle.js` is registered under `setupFilesAfterEnv` in both the `package.json` Jest config and `jest.integration.config.js`. Its `beforeEach` opens a handle for `TEST_ACTOR_ID` and turns on the test-only ambient mode (`enableAmbientHandleForTests()`), and its `afterEach` turns it off and awaits `requestClose`. A suite opts out by setting `global.__MASI_NO_DEFAULT_HANDLE__ = true` at module top level. **Opt-out is required** for every actor-lifecycle, signed-out App, binding, static, and Task 5 regression suite, which therefore run with no handle and no ambient mode, exactly like production. Opt-out rather than opt-in keeps the 71 legacy repository suites unchanged; the masking risk Codex raised is closed because production code cannot use ambient mode (ruling 1) and the suites that prove binding run without it. *Cost if wrong:* a legacy suite could hide an unbound call, but the static test and the opted-out suites still catch it.
 
 ## Review Focus
 
@@ -283,14 +291,17 @@ This task is **additive**: the legacy `client.js` connection, `initializeDatabas
   - `getCurrentHandle() → Handle | null`; `requireCurrentHandle() → Handle` (throws `NoSignedInEAError`); `subscribeToHandle(listener) → unsubscribe`.
   - `setLatestAuthSession(session | null)`, `getLatestAuthSession()`.
   - `registerConnectionActor(connection, userId)`, `getConnectionActor(connection) → string | null`.
-  - `Handle` = `{ userId, epoch, state: 'open' | 'closed', fileName, getReader(), withTransaction(task), withDatabaseAccess(task), isOpen(), isCurrent(), enqueueRequest(task), requestQueue, abortSignal, onClose(listener) }`. `epoch` comes from a process-wide counter advanced by every publish and every close.
+  - `Handle` = `{ userId, epoch, state: 'open' | 'closed', fileName, getReader(), withTransaction(task), withDatabaseAccess(task), isOpen(), isCurrent(), isConnectionClosed(), enqueueRequest(task), requestQueue, abortSignal, onClose(listener) }`. `getReader()` and the transaction argument are gated connections (ruling 8).
+  - Adds to `src/session/staleActor.js`: `HandleDisposeFailedError` (`code = 'HANDLE_DISPOSE_FAILED'`) and `UnboundRepositoryError` (`code = 'UNBOUND_REPOSITORY'`). `epoch` comes from a process-wide counter advanced by every publish and every close.
 - Produces (`src/db/client.js`): `DATABASE_FILE_PREFIX = 'masi-'`, `LEGACY_DATABASE_NAME = 'masi.db'`, `databaseNameForUser(userId) → 'masi-<userId>.db'` (throws unless `userId` matches `/^[0-9a-f-]{36}$/i`), `openConfiguredConnections({ name, openDatabase }) → { writer, reader }` (the existing PRAGMA → migrate → foreign-keys-on → reader sequence, with its early-registration and failure-disposal comments).
-- Produces (`repositoryRuntime.js`): `isSignedInHandle(value)`; `resolveDatabase(database)` → `database.getReader()` for a handle; `runRepositoryTransaction(database, task)` → `database.withTransaction(task)` for a handle. The raw-database (test) and no-database (legacy, until Task 5) branches are unchanged in this task.
+- Produces (`repositoryRuntime.js`): `isSignedInHandle(value)`; `resolveDatabase(database)` → `database.getReader()` for a handle; `runRepositoryTransaction(database, task)` → `database.withTransaction(task)` for a handle; `enableAmbientHandleForTests()` / `disableAmbientHandleForTests()` (no-ops until Task 5 makes the no-database branch depend on them). The raw-database (test) and no-database (legacy, until Task 5) branches are unchanged in this task.
 - Produces (`test-support/actorTestUtils.js`): `TEST_ACTOR_ID = '00000000-0000-4000-8000-0000000000aa'`, `bindTestActor(db, userId)`, `openTestHandle({ userId, openDatabase })`, `createPathDatabaseOpener(dir)` (maps a name to a better-sqlite3 file in `dir`; writer and reader of one name share the file). Extend `test-support/betterSqliteAdapter.js` with a path-based constructor if it has none; do not write a second adapter.
 
 Transaction doors (spec §5.4) in `Handle.withTransaction`: admission refuses with `StaleActorError` when the handle is not open; the task runs on the handle's own serial write queue; immediately before `COMMIT`, a closed handle triggers `ROLLBACK` and `StaleActorError`; a failed `ROLLBACK` marks the connections unusable and the next transaction reopens them for the same file. Keep `client.js`'s non-re-entrant contract comment with the code.
 
-Close sequence (spec §4.3, rulings 7–8): `state = 'closed'`, epoch advances, current handle becomes `null`, subscribers notified → `abortController.abort()` → wait up to `5_000` ms for the write queue's tail → write `local_state('last_active_at', <ISO now>)` directly on the writer (skipped, with a log line, if the drain timed out) → close reader, then writer → `onClose` listeners.
+Connection gates (ruling 8): `openConfiguredConnections` returns raw connections; the handle wraps each in a gate exposing the same async API (`execAsync`, `runAsync`, `getFirstAsync`, `getAllAsync`, `prepareAsync` and the statement methods it returns) that counts in-flight native calls, tracks the writer's open transaction from `BEGIN`/`COMMIT`/`ROLLBACK`, and after revocation refuses every new call with `StaleActorError` except `ROLLBACK` and the close step's statements. Repositories only ever see gated connections.
+
+Close sequence (spec §4.3, rulings 7–8). *Logical revocation, synchronous:* `state = 'closed'`, epoch advances, current handle becomes `null`, subscribers notified, `abortController.abort()`, gates start refusing. *Physical disposal:* wait for both gates' in-flight count to reach zero → if the writer has no open transaction, write `local_state('last_active_at', <ISO now>)` → `closeAsync` the reader, then the writer → `onClose` listeners. A watchdog reports `handle_close_stalled` after `5_000` ms and keeps waiting. If `closeAsync` throws, record the file as `dispose_failed`; a later same-file open rejects with `HandleDisposeFailedError` (add it to `staleActor.js`). The coordinator's `requestClose` resolves after logical revocation for the purpose of a **different** user's open, and after physical disposal for a **same-file** reopen.
 
 - [ ] **Step 1: Write the failing unit tests** (`__tests__/signedInHandle.test.js`, better-sqlite3 files under a temp directory through `createPathDatabaseOpener`). Use a `deferred()` helper and **explicit barriers**: a test that needs "a transaction has begun" waits on a promise resolved inside the transaction task, never on `setTimeout(0)`.
 
@@ -367,28 +378,73 @@ test('T4: a transaction started after sign-out is refused', async () => {
   expect(caught).toBeInstanceOf(StaleActorError);
 });
 
-test('ruling 8: a transaction that never settles cannot hold the close for more than the bound', async () => {
-  jest.useFakeTimers({ doNotFake: ['nextTick', 'setImmediate', 'queueMicrotask'] });
-  try {
-    const a = await requestOpen({ userId: A, openDatabase });
-    const begun = deferred();
-    const write = a.withTransaction(async (txn) => {
-      await txn.runAsync("insert into local_state (key, value, updated_at) values ('hung', '1', 'now')");
-      begun.resolve();
-      await new Promise(() => {});
-    });
-    write.catch(() => {});
-    await begun.promise;
-    const closing = requestClose({ reason: 'test' });
-    await jest.advanceTimersByTimeAsync(5_000);
-    await closing;
-    expect(a.state).toBe('closed');
-  } finally {
-    jest.useRealTimers();
-  }
+test('ruling 8: a JavaScript-suspended transaction does not block disposal and never commits', async () => {
+  const a = await requestOpen({ userId: A, openDatabase });
+  const begun = deferred();
+  const resume = deferred();
+  const write = a.withTransaction(async (txn) => {
+    await txn.runAsync("insert into local_state (key, value, updated_at) values ('hung', '1', 'now')");
+    begun.resolve();
+    await resume.promise;
+    await txn.runAsync("insert into local_state (key, value, updated_at) values ('after', '1', 'now')");
+  });
+  await begun.promise;
+  await requestClose({ reason: 'test' });          // resolves: no native call is in flight
+  resume.resolve();
+  let caught = null;
+  try { await write; } catch (error) { caught = error; }
+  expect(caught).toBeInstanceOf(StaleActorError);    // the gate refused the resumed call
   const again = await requestOpen({ userId: A, openDatabase });
   const reader = await again.getReader();
-  expect(await reader.getFirstAsync("select value from local_state where key = 'hung'")).toBeNull();
+  expect(await reader.getFirstAsync("select key from local_state where key in ('hung', 'after')")).toBeNull();
+});
+
+test('ruling 8: disposal waits for an in-flight native call, and the watchdog reports without disposing', async () => {
+  // Hold one native call in flight: the opener wraps runAsync so a chosen statement awaits a gate
+  // BEFORE reaching SQLite (this models a call still executing on the native queue).
+  const nativeGate = deferred();
+  const entered = deferred();
+  const holding = async (name, options) => {
+    const db = await openDatabase(name, options);
+    const run = db.runAsync.bind(db);
+    db.runAsync = async (sql, ...params) => {
+      if (String(sql).includes("'held'")) { entered.resolve(); await nativeGate.promise; }
+      return run(sql, ...params);
+    };
+    return db;
+  };
+  const a = await requestOpen({ userId: A, openDatabase: holding });
+  const write = a.withTransaction((txn) => txn.runAsync("insert into local_state (key, value, updated_at) values ('held', '1', 'now')"));
+  write.catch(() => {});
+  await entered.promise;
+  const report = jest.spyOn(require('../src/services/observability'), 'captureOperationalError').mockImplementation(() => {});
+  jest.useFakeTimers({ doNotFake: ['nextTick', 'setImmediate', 'queueMicrotask'] });
+  let disposed = false;
+  const closing = requestClose({ reason: 'test' }).then(() => { disposed = true; });
+  await jest.advanceTimersByTimeAsync(5_000);
+  jest.useRealTimers();
+  expect(report).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({ category: 'handle_close_stalled' }));
+  expect(a.isConnectionClosed()).toBe(false);       // never disposed early
+  nativeGate.resolve();
+  await closing;
+  expect(disposed).toBe(true);
+  expect(a.isConnectionClosed()).toBe(true);
+  report.mockRestore();
+});
+
+test('ruling 8: a failed closeAsync blocks a same-file reopen but not another EA', async () => {
+  const failingClose = async (name, options) => {
+    const db = await openDatabase(name, options);
+    if (name.includes(A)) db.closeAsync = async () => { throw new Error('close failed'); };
+    return db;
+  };
+  await requestOpen({ userId: A, openDatabase: failingClose });
+  await requestClose({ reason: 'test' });
+  let caught = null;
+  try { await requestOpen({ userId: A, openDatabase }); } catch (error) { caught = error; }
+  expect(caught?.name).toBe('HandleDisposeFailedError');
+  const b = await requestOpen({ userId: B, openDatabase });
+  expect(b.userId).toBe(B);
 });
 
 test('T10: sign-out writes last_active_at and the file survives', async () => {
@@ -426,55 +482,98 @@ test('a migration failure publishes no handle', async () => {
   expect(getCurrentHandle()).toBeNull();
 });
 
-test('Review focus 2: sign-out during A\'s open means A is never published', async () => {
-  const gate = deferred();
-  const slow = async (name, options) => { const db = await openDatabase(name, options); await gate.promise; return db; };
-  const opening = requestOpen({ userId: A, openDatabase: slow });
+// Each coordinator test proves the open has ENTERED its work (a barrier inside the opener)
+// before the competing request is made, so the final pre-publish generation check is exercised.
+const blockingOpener = (matchUserId) => {
+  const entered = deferred();
+  const release = deferred();
+  const opener = async (name, options) => {
+    const db = await openDatabase(name, options);
+    if (name.includes(matchUserId)) { entered.resolve(); await release.promise; }
+    return db;
+  };
+  return { opener, entered, release };
+};
+
+test('Review focus 2: sign-out after A has entered opening means A is never published', async () => {
+  const { opener, entered, release } = blockingOpener(A);
+  const opening = requestOpen({ userId: A, openDatabase: opener });
+  await entered.promise;
   const closing = requestClose({ reason: 'test' });
-  gate.resolve();
+  release.resolve();
   expect(await opening).toBeNull();
   await closing;
   expect(getCurrentHandle()).toBeNull();
 });
 
-test('Review focus 2: overlapping A then B opens publish B, never A after B', async () => {
-  const gate = deferred();
-  const slow = async (name, options) => { const db = await openDatabase(name, options); if (name.includes(A)) await gate.promise; return db; };
-  const openingA = requestOpen({ userId: A, openDatabase: slow });
-  const openingB = requestOpen({ userId: B, openDatabase: slow });
-  gate.resolve();
+test('Review focus 2: overlapping A then B, with A inside its open, publishes only B', async () => {
+  const { opener, entered, release } = blockingOpener(A);
+  const openingA = requestOpen({ userId: A, openDatabase: opener });
+  await entered.promise;
+  const openingB = requestOpen({ userId: B, openDatabase });
+  release.resolve();
   expect(await openingA).toBeNull();
   const b = await openingB;
   expect(getCurrentHandle()).toBe(b);
 });
 
-test('Review focus 2: a duplicate same-user open joins the current handle', async () => {
+test('Review focus 2: A → B → A while the first A open is blocked publishes the second A only', async () => {
+  const { opener, entered, release } = blockingOpener(A);
+  const firstA = requestOpen({ userId: A, openDatabase: opener });
+  await entered.promise;
+  const openingB = requestOpen({ userId: B, openDatabase });
+  const secondA = requestOpen({ userId: A, openDatabase });
+  release.resolve();
+  expect(await firstA).toBeNull();
+  expect(await openingB).toBeNull();
+  const a = await secondA;
+  expect(getCurrentHandle()).toBe(a);
+});
+
+test('Review focus 2: a duplicate same-user open joins only a transition that has not been superseded', async () => {
   const [first, second] = await Promise.all([
     requestOpen({ userId: A, openDatabase }),
     requestOpen({ userId: A, openDatabase }),
   ]);
   expect(second).toBe(first);
   expect(opened.filter((name) => name === `masi-${A}.db`).length).toBe(2); // one writer + one reader
+  // A superseded A open is not joined: A (blocked), close, A again → the last A is a new handle.
+  await requestClose({ reason: 'test' });
+  const { opener, entered, release } = blockingOpener(A);
+  const blocked = requestOpen({ userId: A, openDatabase: opener });
+  await entered.promise;
+  const closing = requestClose({ reason: 'test' });
+  const fresh = requestOpen({ userId: A, openDatabase });
+  release.resolve();
+  expect(await blocked).toBeNull();
+  await closing;
+  expect((await fresh).isCurrent()).toBe(true);
 });
 
-test('Review focus 2: A reopening while A\'s close drains waits for the drain, then gets a new epoch', async () => {
-  const a = await requestOpen({ userId: A, openDatabase });
-  const begun = deferred();
-  const release = deferred();
-  const write = a.withTransaction(async () => { begun.resolve(); await release.promise; });
-  write.catch(() => {});
-  await begun.promise;
+test('Review focus 2: a same-file reopen waits for physical disposal of the previous handle', async () => {
+  const nativeGate = deferred();
+  const entered = deferred();
+  const holding = async (name, options) => {
+    const db = await openDatabase(name, options);
+    const run = db.runAsync.bind(db);
+    db.runAsync = async (sql, ...params) => {
+      if (String(sql).includes("'held'")) { entered.resolve(); await nativeGate.promise; }
+      return run(sql, ...params);
+    };
+    return db;
+  };
+  const a = await requestOpen({ userId: A, openDatabase: holding });
+  a.withTransaction((txn) => txn.runAsync("insert into local_state (key, value, updated_at) values ('held', '1', 'now')")).catch(() => {});
+  await entered.promise;
   const closing = requestClose({ reason: 'test' });
-  const reopening = requestOpen({ userId: A, openDatabase });
   let reopened = null;
-  reopening.then((handle) => { reopened = handle; });
-  await Promise.resolve();
-  expect(reopened).toBeNull();
-  release.resolve();
+  const reopening = requestOpen({ userId: A, openDatabase }).then((handle) => { reopened = handle; return handle; });
+  await new Promise((resolve) => setImmediate(resolve));
+  expect(reopened).toBeNull();                    // still waiting for A's native call
+  nativeGate.resolve();
   await closing;
   const second = await reopening;
   expect(second.epoch).toBeGreaterThan(a.epoch);
-  expect(a.isCurrent()).toBe(false);
 });
 ```
 
@@ -610,9 +709,9 @@ One task, because removing the legacy entry points and migrating their consumers
   - Contexts: `OfflineContext.js`, `ChildrenContext.js`, `ClassesContext.js`, `LookupsContext.js`, `TimeTrackingContext.js`
   - Screens, components, hooks: `src/components/assessment/LetterMasteryPanel.js`, `src/components/children/GroupPickerBottomSheet.js`, `src/hooks/useAssessmentSession.js`, `src/screens/assessments/AssessmentChildSelectScreen.js`, `AssessmentHistoryScreen.js`, `ChildResultsScreen.js`, `src/screens/insights/AssessmentRankingScreen.js`, `LetterMasteryRankingScreen.js`, `SessionCountRankingScreen.js`, `src/screens/main/AssessmentsScreen.js`, `ChildrenListScreen.js`, `HomeScreen.js`, `SessionsScreen.js`, `TimeEntriesListScreen.js`, `SyncStatusScreen.js`, `ProfileScreen.js`, `src/screens/sessions/SessionHistoryScreen.js`, and any other file the static test finds
   - Services and utils: `activeProgrammeGate.js`, `deviceSettings.js` (ruling 10), `literacySessionPersistence.js`, `sessionsTodayGoal.js`, `src/utils/masteryState.js`, `src/utils/timeEntryStatus.js` take a `handle` or `repositories` argument
-  - `src/services/offlineSync.js` (delete `defaultEngine` and its five module-level wrappers, the module-level reference barrier), `src/services/sessionHistoryStatus.js` (the hook reads the current handle's store), `src/db/client.js` (delete the module-level connections, `initializeDatabase`, `getDatabase`, `getWriter`, `withDatabaseAccess`, `withTransaction`, `resetDatabaseConnectionForTests`, `DATABASE_NAME`), `src/db/repositories/repositoryRuntime.js` (ambient branch → `requireCurrentHandle()`), `src/db/migrations.js` (delete `appMigrationQueue` and the no-argument branch), `src/db/debugDump.js` (export reads through the current handle's reader)
+  - `src/services/offlineSync.js` (delete `defaultEngine` and its five module-level wrappers, the module-level reference barrier), `src/services/sessionHistoryStatus.js` (the hook reads the current handle's store), `src/db/client.js` (delete the module-level connections, `initializeDatabase`, `getDatabase`, `getWriter`, `withDatabaseAccess`, `withTransaction`, `resetDatabaseConnectionForTests`, `DATABASE_NAME`), `src/db/repositories/repositoryRuntime.js` (the no-database branch throws `UnboundRepositoryError` unless test ambient mode is on, in which case it uses `requireCurrentHandle()`), every `src/db/repositories/*.js` factory whose defaults name another repository singleton (start with `classOnboardingRepository.js`; audit the whole dependency graph and list it in the report), `src/db/migrations.js` (delete `appMigrationQueue` and the no-argument branch), `src/db/debugDump.js` and `src/utils/debugExport.js` (`debugDump({ handle })`, `exportDatabase({ handle })`, both refusing a closed handle before reading and before writing/sharing, ruling 12), `src/screens/main/ProfileScreen.js` (captures `handle` before the Export Database confirmation)
   - Delete: `src/services/supabaseRequestQueue.js`
-  - Test harness: `jest.setup.js` and `jest.integration.setup.js` replace `resetDatabaseConnectionForTests` with opening a handle for `TEST_ACTOR_ID` before each test and `requestClose` after it; every test that imported the deleted APIs
+  - Test harness (ruling 13): `jest.setup.js` and `jest.integration.setup.js` drop `resetDatabaseConnectionForTests` and keep only module mocks; new `test-support/defaultTestHandle.js` registered under `setupFilesAfterEnv` in `package.json`'s Jest config and in `jest.integration.config.js`; every test that imported the deleted APIs; the opt-out flag in every lifecycle, signed-out App, binding, static, and Task 5 regression suite
 - Test: `__tests__/signedInTree.test.js`, `__tests__/staleUserAction.test.js`, `__tests__/productionBindingStatic.test.js`, updates to `__tests__/App.plan5.test.js` and `SyncStatusScreen` tests
 
 **Interfaces:**
@@ -663,7 +762,10 @@ return (
   - **T14:** after a key change, every timer, interval, AppState and NetInfo listener from A's tree has been removed (counts return to the signed-out baseline).
   - **Opening fails:** `requestOpen` rejects: `HandleOpenError` with Retry renders; Retry calls it again.
   - **Review focus 5:** Sync Status → Retry on a failed row sets it `pending` through A's bound engine (assert the row in A's file).
-  - **Static binding test (ruling 1):** every `.js` file under `src/` outside `src/db/` and `src/session/`: no import of a repository singleton (any export of `src/db/repositories/*` whose name ends in `Repository` and is not a `create*` factory), no `resolveDatabase(`/`runRepositoryTransaction(` call, no import of `src/db/client`'s connection functions, no import of `supabaseRequestQueue`. Show the failure with a temp file, then remove it.
+  - **Composite binding (Codex round 2):** with no default handle, `createClassOnboardingRepository({ database: a })`: `complete()` paused after its read; close A; open B and write B's own onboarding marker; resume: it refuses with `StaleActorError`, B's marker is intact, A's marker is intact. Repeat A → A: close A, reopen A, write a new marker, resume the old completion: the new marker survives.
+  - **Export binding (ruling 12):** A's Profile screen opens the Export Database confirmation; close A; open B with a failed outbox row; press A's saved confirmation: no read of B's file happens (spy on B's reader) and nothing is shared.
+  - **No ambient database in production:** with no default handle and ambient mode off, a repository singleton call rejects with `UnboundRepositoryError`.
+  - **Static binding test (ruling 1):** every `.js` file under `src/` except `src/session/` and the singleton export lines of `src/db/repositories/*`: no import of a repository singleton (any export of `src/db/repositories/*` whose name ends in `Repository` and is not a `create*` factory), no `create*Repository` default parameter that names a singleton, no `resolveDatabase(`/`runRepositoryTransaction(` call, no import of `src/db/client`'s connection functions, no import of `supabaseRequestQueue`. Show the failure with a temp file, then remove it.
 - [ ] **Step 2: Run to verify failure.** Step 3: implement. Step 4: run the new tests, full unit, full integration (with `--listTests` checked).
 - [ ] **Step 5: Leave uncommitted; report** (list every consumer migrated and every test changed, with reasons). Controller commits as `feat(app): bind every consumer to the signed-in EA handle`.
 
@@ -748,3 +850,9 @@ end;
   5. (medium) Root jest setup files and the integration `testMatch` allowlist were missed. → Global Constraints and Tasks 2, 4, 5.
   6. (medium) Asserting surviving WAL sidecars contradicts clean shutdown. → Task 2's integration test asserts durable rows and closed connections instead.
   Also adopted from Codex's next steps: explicit barriers in T4 (Task 2) and the whole-pass stale rule (ruling 9). Found while revising: `deviceSettings` keeps the profile cache and capture mode in SQLite (ruling 10), and close needs a bounded drain (ruling 8).
+- **Codex adversarial review of revision 2 (2026-10-14), needs-attention, all findings verified in source and adopted:**
+  1. (high) Force-closing expo-sqlite connections after a 5 s drain can race native statements still executing on the concurrent native queue; `sqlite3_close` does not guarantee rollback on failure. → Ruling 8 rewritten: immediate logical revocation, gated connections, physical disposal only after native quiescence, a reporting watchdog, `dispose_failed` handling, device check D7.
+  2. (high) Composite repositories (`classOnboardingRepository`) kept singleton dependencies, so a resumed completion deleted from B's file. → Ruling 1 extended to the repository dependency graph; production ambient fallback removed (`UnboundRepositoryError`); A → B and A → A regressions.
+  3. (high) Export Database resolved the current handle from a captured Alert callback, exporting B's failed payloads from A's confirmation. → Ruling 12 and its regression.
+  4. (medium) Handle hooks cannot live in `setupFiles`. → Ruling 13: `setupFilesAfterEnv`, opt-out for the suites that prove binding.
+  Also adopted: coordinator tests now prove the open has entered its work before the competing request, cover A → B → A with the first open blocked, and restrict same-user joining to unsuperseded transitions.
