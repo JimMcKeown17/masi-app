@@ -18,6 +18,10 @@ const {
 } = require('./history-authorization-postgres-harness.cjs');
 
 const ORGANISATION_MIGRATION = '20261014120000_organisation_label_v1.sql';
+
+// The Supabase CLI (2.109.1, pkg/migration/file.go) runs a migration file plus its
+// schema_migrations insert in one implicit transaction; model that wrapper here.
+const asCliTransaction = (sql) => `BEGIN;\n${sql}\nCOMMIT;\n`;
 const ORGANIZATION = 'a111879f-d066-47c9-95a1-bed2a400319a';
 const FIXTURE_USER = '12000000-0000-0000-0000-000000000001';
 const NEW_USER = '12000000-0000-0000-0000-000000000002';
@@ -274,10 +278,12 @@ const main = async () => {
     }
     runPsql({ databaseUrl, sql: fixtureSql, label: 'organisation-label-fixture' });
     const migrationPath = path.join(MIGRATIONS_DIR, ORGANISATION_MIGRATION);
-    const lockSummary = await runLockTimeoutCase(databaseUrl, fs.readFileSync(migrationPath, 'utf8'));
+    const migrationSql = fs.readFileSync(migrationPath, 'utf8');
+    assert.doesNotMatch(migrationSql, /^\s*(BEGIN|COMMIT|END|ROLLBACK)\s*;/im, 'The migration must leave transaction control to the CLI');
+    const lockSummary = await runLockTimeoutCase(databaseUrl, asCliTransaction(migrationSql));
     // Apply explicitly so the RED run fails if this file is absent. Later
     // migrations are excluded: these checks pin this migration's own effect.
-    runPsql({ databaseUrl, file: migrationPath, label: `migration-${ORGANISATION_MIGRATION}` });
+    runPsql({ databaseUrl, sql: asCliTransaction(migrationSql), label: `migration-${ORGANISATION_MIGRATION}` });
     process.stdout.write(`${JSON.stringify({ ...aclSummary, ...lockSummary, ...runCases(databaseUrl) })}\n`);
   } finally {
     runPsql({ databaseUrl: adminDatabaseUrl, sql: `DROP DATABASE IF EXISTS ${quotedDatabase} WITH (FORCE);`, label: 'drop-database' });

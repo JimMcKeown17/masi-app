@@ -53,10 +53,12 @@ describe('organisation harness lock and ACL safeguards (process boundary mocked)
     expectSqlState.mockImplementation(() => { elapsedMs += 10_000; });
   });
 
-  test('the whole migration is transactional with explicit 10s lock and 60s statement bounds', () => {
+  test('the migration sets 10s lock and 60s statement bounds and leaves the transaction to the CLI', () => {
     const statements = migrationSql.replace(/--[^\n]*/g, '').trim();
-    expect(statements).toMatch(/^BEGIN;\s*SET LOCAL lock_timeout = '10s';\s*SET LOCAL statement_timeout = '60s';/i);
-    expect(statements).toMatch(/COMMIT;$/i);
+    expect(statements).toMatch(/^SET LOCAL lock_timeout = '10s';\s*SET LOCAL statement_timeout = '60s';/i);
+    // The Supabase CLI applies the file and its schema_migrations insert in one transaction;
+    // an explicit COMMIT in the file would commit the schema before the history row.
+    expect(statements).not.toMatch(/^\s*(BEGIN|COMMIT|END|ROLLBACK)\s*;/im);
   });
 
   test('installs broad Supabase defaults and proves them on a control table', () => {

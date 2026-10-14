@@ -220,12 +220,15 @@ async function processRow(admin, row, lookupMaps, organisationId, { dryRun = fal
     .eq('id', userId)
     .eq('organization_id', organisationId)
     .select('id');
-  if (updateError || !updated?.length) {
+  if (updateError) {
     if (createdNow) await admin.auth.admin.deleteUser(userId);
-    return {
-      status: 'error',
-      reason: updateError ? `profile update failed: ${updateError.message}` : 'organisation_conflict',
-    };
+    return { status: 'error', reason: `profile update failed: ${updateError.message}` };
+  }
+  if (!updated?.length) {
+    // Another provisioner has adopted this identity under a different organisation. Never delete
+    // the Auth user here, even if this run created it: deleting it would cascade to the winner's
+    // profile and Programme assignment.
+    return { status: 'error', reason: 'organisation_conflict' };
   }
 
   try {

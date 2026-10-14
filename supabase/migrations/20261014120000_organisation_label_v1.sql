@@ -2,8 +2,9 @@
 -- 20260922175324_organization_label_v1.sql). Identity only: no RLS policy,
 -- trigger, or app behaviour reads it. The phone ignores the column.
 
-BEGIN;
-
+-- No BEGIN/COMMIT here: the Supabase CLI runs this file and its schema_migrations insert in
+-- one implicit transaction, and an explicit COMMIT would split them. SET LOCAL applies to that
+-- transaction.
 SET LOCAL lock_timeout = '10s';
 SET LOCAL statement_timeout = '60s';
 
@@ -45,5 +46,3 @@ create index idx_users_organization_id on public.users (organization_id);
 
 comment on column public.users.organization_id is
   'Employing organisation. Written once at account creation; never changed.';
-
-COMMIT;

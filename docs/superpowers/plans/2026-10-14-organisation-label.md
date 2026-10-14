@@ -65,14 +65,14 @@
      - `has_table_privilege('authenticated', 'public.organizations', 'SELECT')` is false, and the same for `anon` and `authenticator`; `service_role` has `SELECT` and no `INSERT`/`UPDATE`/`DELETE`;
      - as `authenticated`, the app's profile read `select u.*, s.id, s.name, j.id, j.name, j.code from public.users u left join public.schools s on s.id = u.school_id left join public.job_titles j on j.id = u.job_title_id where u.id = '<fixture>'` returns one row including `organization_id`.
 - [ ] **Step 2: Run the harness to verify it fails** (migration file absent): `PGTZ=UTC HISTORY_RLS_ADMIN_DATABASE_URL=… HISTORY_RLS_DATABASE_NAME=masi_history_rls_org HISTORY_RLS_DISPOSABLE_CONFIRM=I_UNDERSTAND_THIS_IS_DISPOSABLE npm run verify:organisation-label:postgres`. Codex's sandbox cannot reach a local PostgreSQL; the controller runs every harness RED and GREEN.
-- [ ] **Step 3: Write the migration.** The entire migration is one transaction with local 10-second lock and 60-second statement timeouts. A lock refusal must roll back all schema changes.
+- [ ] **Step 3: Write the migration.** Local 10-second lock and 60-second statement timeouts, and no `BEGIN`/`COMMIT` in the file: the Supabase CLI applies the file and its `schema_migrations` insert in one implicit transaction (CLI 2.109.1, `pkg/migration/file.go`), so an explicit `COMMIT` would split them. The harness wraps the file in `BEGIN`/`COMMIT` to model the CLI. A lock refusal must roll back all schema changes.
 
 ```sql
 -- Organisation label v1 (Jim, 2026-10-14; design from Zazi iZandi's
 -- 20260922175324_organization_label_v1.sql). Identity only: no RLS policy,
 -- trigger, or app behaviour reads it. The phone ignores the column.
 
-BEGIN;
+-- No BEGIN/COMMIT: the Supabase CLI owns the transaction.
 
 SET LOCAL lock_timeout = '10s';
 SET LOCAL statement_timeout = '60s';
@@ -115,8 +115,6 @@ create index idx_users_organization_id on public.users (organization_id);
 
 comment on column public.users.organization_id is
   'Employing organisation. Written once at account creation; never changed.';
-
-COMMIT;
 ```
 
 - [ ] **Step 4: Run the harness, then the existing harnesses** (history, S1) to prove nothing else changed. Expected: all pass.

@@ -300,7 +300,9 @@ describe('provisioning workflow with a mocked admin client', () => {
     expect(result).toEqual({ status: 'error', reason: 'organisation_conflict' });
     expect(getProfile()).toEqual(concurrentProfile);
     expect(writes.filter(write => write.table === 'staff_programme_assignments')).toEqual([]);
-    expect(admin.auth.admin.deleteUser.mock.calls).toEqual(newAuth ? [[USER_ID]] : []);
+    // Never delete on conflict: the Auth user now belongs to the winning run (cascades would
+    // remove its profile and Programme assignment).
+    expect(admin.auth.admin.deleteUser).not.toHaveBeenCalled();
   });
 
   test('a concurrent matching organisation can refresh names without changing identity', async () => {

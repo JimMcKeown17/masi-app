@@ -23,9 +23,11 @@ Use this map before changing any synced table, repository producer, outbox opera
 the required, no-default `public.users.organization_id`. Existing users become Masinyusane through
 a temporary constant default; their `updated_at` does not move. Masinyusane's id is
 `a111879f-d066-47c9-95a1-bed2a400319a`, intentionally shared with Zazi iZandi; its slug is
-`masinyusane`. Partners are added by migration. The entire migration runs inside one transaction
-with `SET LOCAL lock_timeout = '10s'` and `SET LOCAL statement_timeout = '60s'`; a lock refusal
-rolls back all schema changes.
+`masinyusane`. Partners are added by migration. The migration sets `SET LOCAL lock_timeout = '10s'` and
+`SET LOCAL statement_timeout = '60s'` and has no `BEGIN`/`COMMIT` of its own: the Supabase CLI runs
+the file and its `schema_migrations` insert in one transaction, so a lock refusal rolls back the
+schema changes and the history row together. Provisioning never deletes an Auth user on
+`organisation_conflict`, because another run may already own that identity.
 
 `scripts/createTesters.js` requires `--organization <slug>`, resolves it before user access,
 and refuses a known different organisation with `organisation_conflict` before any write.
