@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking. In this repository the implementer for each task is **Codex through the plugin** (gpt-5.6-sol); Claude reviews every diff, reruns the tests, and commits.
 
-**Revision 3 (2026-10-14)** after two Codex adversarial reviews (revision 1: four high and two medium findings; revision 2: three high and one medium; all verified and adopted; see "Review history" at the end).
+**Revision 4 (2026-10-14)** after three Codex adversarial reviews (revision 1: four high and two medium findings; revision 2: three high and one medium; revision 3: three high, all on the close protocol; all verified and adopted; see "Review history" at the end).
 
 **Goal:** Give every signed-in EA their own SQLite file, request queue, and data client behind one handle, so no EA's work can be uploaded under another EA's session (live defect 2), written into another EA's file, or owned by anyone but the EA who made the change (live defect 1, phone half).
 
@@ -35,13 +35,14 @@ Each ruling names what it costs if wrong. Implementers follow them; reviewers ch
 4. **The file records its owner.** At first open the handle writes `local_state('file_owner_user_id', userId)`. A later open whose marker names someone else fails with `FileOwnerMismatchError` and publishes nothing. *Cost if wrong:* a manually copied file cannot be opened; recovery is Export Database.
 5. **Incidents wait for Plan 3.** §6.3's `foreign_owner_in_file` incident needs Plan 3's envelope. Plan 2 records the scan result in `local_state('integrity_scan_last')` (JSON counts by table), logs one `console.error`, and calls `captureOperationalError(…, { category: 'foreign_owner_in_file' })`. *Cost if wrong:* until Plan 3, support learns of a foreign row through Sentry, not the incident table.
 6. **The ADR is written directly** from spec §2, §4, §7.3 (Jim decided one file per EA on 2026-10-08 and deferred deletion on 2026-10-09). *Cost if wrong:* none.
-7. **One lifecycle coordinator serializes opens and closes.** Revision 1 let a sign-out during A's migrations close nothing and then publish A afterwards, let overlapping opens publish out of order, and let a reopen of A race A's still-draining close. **Ruling:** `signedInHandle.js` holds a single coordinator: a monotonically increasing `generation`, the in-progress transition promise, and the latest requested state (`{ userId } | signedOut`). `requestOpen({ userId })` and `requestClose({ reason })` bump the generation at call time and chain after the in-progress transition. An open re-checks its generation immediately before publishing; a superseded open closes its own connections and resolves `null`. A same-user `requestOpen` while that user's handle is current or opening joins it instead of reopening. A close always completes the previous close (including the writer drain and connection close) before any later open starts. *Cost if wrong:* none; it only orders transitions.
-8. **Revocation is immediate; physical close waits for native work.** Revision 2 force-closed connections after a 5 s drain. Codex showed that expo-sqlite 16.0.10 runs operations and `closeAsync` on a concurrent native queue (iOS `SQLiteModule.swift`), so closing while a `runAsync`/`getAllAsync` is still executing can race native statement use, and `sqlite3_close` does not guarantee rollback when it fails. **Ruling:** each handle wraps its writer and reader in a **gate** that counts in-flight native calls. Close happens in two phases:
-   - *Logical revocation (immediate, synchronous):* `state = 'closed'`, epoch advances, the registry drops the handle, requests abort, and the gates refuse every **new** native call with `StaleActorError` except `ROLLBACK` (so commit doors can clean up) and the close step's own statements.
-   - *Physical disposal (after native quiescence):* wait until both gates report zero in-flight calls; then, only if the writer has no open transaction (tracked from `BEGIN`/`COMMIT`/`ROLLBACK`), write `local_state('last_active_at')`; then `closeAsync` the reader and the writer. There is **no force-close timeout**. A watchdog logs and reports (`captureOperationalError`, category `handle_close_stalled`) if disposal has not finished after `5_000` ms, but never disposes early. A JavaScript transaction suspended on a promise does not hold a native call, so it does not block disposal; when it resumes, its next native call is refused by the gate and its connection is gone, so nothing commits.
-   - *Close failure:* if `closeAsync` throws, the file is recorded as `dispose_failed`; a later open of **the same file** in this process fails with `HandleDisposeFailedError` (the open-error screen asks the EA to restart the app). Opens of other EAs' files are unaffected.
-   - The coordinator lets a **different** EA's open proceed once A's logical revocation is done (different file, so no two-writer window); a **same-file** reopen waits for A's physical disposal.
-   - Native close-under-load on iOS and Android is device check **D7** (Plan 3's device list): sign out while a large pull persists and while a write transaction runs, then reopen the same EA.
+7. **One lifecycle coordinator serializes opens and closes.** Revision 1 let a sign-out during A's migrations close nothing and then publish A afterwards, let overlapping opens publish out of order, and let a reopen of A race A's still-draining close. **Ruling:** `signedInHandle.js` holds a single coordinator: a monotonically increasing `generation`, the in-progress transition promise, and the latest requested state (`{ userId } | signedOut`). `requestOpen({ userId })` and `requestClose({ reason })` bump the generation at call time and chain after the in-progress transition. An open re-checks its generation immediately before publishing; a superseded open closes its own connections and resolves `null`. A same-user `requestOpen` while that user's handle is current or opening joins it instead of reopening. A transition is **logical** only: an open publishes, a close revokes. Physical disposal (ruling 8) runs outside the transition chain and is tracked per file as `disposals.get(fileName)`; only a later open **of that same file** awaits it, so a stalled disposal of A's file never delays B. Disposal never touches the registry or the generation, so A's late disposal cannot clear B's published state. *Cost if wrong:* none; it only orders transitions.
+8. **Revocation is immediate; disposal owns the connection exclusively.** Revisions 2 and 3 tried a bounded drain, then a gate that still admitted caller `ROLLBACK`s and counted only some native calls; Codex rounds 2–3 showed that expo-sqlite 16.0.10 runs operations, statement results, and `closeAsync` (which finalizes leftover statements) on concurrent native queues on both platforms, so any native call that overlaps disposal is a race. **Ruling:**
+   - *Closed facade.* Repositories never see an expo-sqlite connection. Each handle wraps its writer and reader in a facade that exposes exactly the methods production uses (verified 2026-10-14: `execAsync` 12 uses, `runAsync` 65, `getFirstAsync` 73, `getAllAsync` 58; `prepareAsync`, `getEachAsync`, `executeAsync`, and the sync methods are unused). It exposes no `prepareAsync`, `getEachAsync`, `withTransactionAsync`, `withExclusiveTransactionAsync`, statement objects, or iterators, so no descendant object can reach native code. Each facade call awaits the native promise fully (all four methods return plain data). Caller SQL that begins with `BEGIN`, `COMMIT`, `END`, `ROLLBACK`, `SAVEPOINT`, or `RELEASE` (case-insensitive, after comments and whitespace) is refused: only the handle's own `withTransaction` issues transaction control, so the handle knows whether a transaction is open. `runWithTransaction` in `sqliteRepositoryUtils.js` throws if handed a facade (its no-transaction fallback must never apply to a handle). A static test pins the facade's method list to production usage.
+   - *Logical revocation (synchronous):* `state = 'closed'`, epoch advances, the registry drops the handle, requests abort, and both facades **seal**: every new call, including the commit door's `ROLLBACK`, is refused with `StaleActorError` without touching native code. A transaction that resumes after the seal finds its next call refused; its cleanup path recognizes `disposalOwned` and makes no native call and no connection recovery.
+   - *Physical disposal (exclusive, after the seal):* wait until both facades' in-flight count is zero (the seal guarantees it can only fall) → issue `ROLLBACK` on the raw writer if the handle's transaction tracker says a transaction is open → write `local_state('last_active_at')` on the raw writer → `closeAsync` the reader → `closeAsync` the writer. Only disposal touches the raw connections after the seal. A watchdog reports `handle_close_stalled` after `5_000` ms and keeps waiting; it never disposes early.
+   - *Close failure:* if `closeAsync` throws, the file is recorded as `dispose_failed`; a later open of the same file rejects with `HandleDisposeFailedError` (the open-error screen asks the EA to restart the app). Other EAs' files are unaffected.
+   - *Signals:* `requestClose` resolves at revocation. `whenDisposed(fileName)` resolves (or rejects with the close failure) at physical disposal. Sign-out (Task 5) awaits only `requestClose`.
+   - Native close-under-load on iOS and Android is device check **D7** (Plan 3's device list): sign out while a large pull persists and while a write transaction runs, sign in as another EA before the first disposal finishes, then reopen the first EA. better-sqlite3 tests prove the accounting and ordering; only D7 proves native safety.
    *Cost if wrong:* a stalled native call keeps A's file open until the app restarts; B is unaffected.
 9. **Stale cancellation is a whole-pass rule.** When any server call in a sync pass rejects with `StaleActorError`, or any repository call refuses with it, the pass stops: no record is finalized, no batch fallback runs, the outer `catch` does not finalize a retriable failure, and the `finally` block does not call `updateSyncMeta` (it would be refused anyway). The pass resolves `{ abortedStaleActor: true }` and reports nothing to observability. Pulls follow the same rule: they stop without writing failure markers. *Cost if wrong:* none; the handle is closed, so nothing could be written.
 10. **Device-level settings move to AsyncStorage; the profile cache stays per EA.** `deviceSettings` stores the user profile cache and the capture mode in SQLite `local_state` today. With one file per EA the profile cache belongs in that EA's file (read inside the signed-in tree; sign-out no longer clears it, because the next EA has a different file). The capture mode is a device preference, so it moves to AsyncStorage key `masi:device:captureMode` (spec §4.1 already lists `deviceSettings` under AsyncStorage). No data migration: pre-live, the default applies once. *Cost if wrong:* a test phone shows the default capture mode once.
@@ -287,11 +288,12 @@ This task is **additive**: the legacy `client.js` connection, `initializeDatabas
 - Consumes: Task 1 errors and `createHandleRequestQueue`.
 - Produces (`src/session/signedInHandle.js`):
   - `requestOpen({ userId, openDatabase = openDatabaseAsync, fetchImpl, timeoutMs }) → Promise<Handle | null>` (ruling 7). Sequence after waiting for any in-progress transition: if this request's generation is stale, resolve `null`; if `userId`'s handle is current and open, resolve it; otherwise close the current handle (full close), open `masi-<userId>.db` with `openConfiguredConnections`, check or write the owner marker (ruling 4), reset `in_flight` outbox rows to `pending` for the whole file (`resetInFlight()` with no owner), run the startup repairs with this handle as `database`, register the writer's actor (ruling 3), **re-check the generation**, then publish. A superseded open closes its connections and resolves `null`. Any failure closes whatever opened, publishes nothing, and rejects.
-  - `requestClose({ reason }) → Promise<void>`: bumps the generation at call time (so an in-progress open will not publish), waits for the in-progress transition, then runs the close sequence on the current handle, if any.
+  - `requestClose({ reason }) → Promise<void>`: bumps the generation at call time (so an in-progress open will not publish), waits for the in-progress transition, then revokes the current handle, if any, and resolves; physical disposal continues detached (ruling 8).
+  - `whenDisposed(fileName) → Promise<void>`: settles when that file's last handle is physically disposed (resolved immediately if none is pending).
   - `getCurrentHandle() → Handle | null`; `requireCurrentHandle() → Handle` (throws `NoSignedInEAError`); `subscribeToHandle(listener) → unsubscribe`.
   - `setLatestAuthSession(session | null)`, `getLatestAuthSession()`.
   - `registerConnectionActor(connection, userId)`, `getConnectionActor(connection) → string | null`.
-  - `Handle` = `{ userId, epoch, state: 'open' | 'closed', fileName, getReader(), withTransaction(task), withDatabaseAccess(task), isOpen(), isCurrent(), isConnectionClosed(), enqueueRequest(task), requestQueue, abortSignal, onClose(listener) }`. `getReader()` and the transaction argument are gated connections (ruling 8).
+  - `Handle` = `{ userId, epoch, state: 'open' | 'closed', fileName, getReader(), withTransaction(task), isOpen(), isCurrent(), isConnectionClosed(), enqueueRequest(task), requestQueue, abortSignal, onClose(listener) }`. `getReader()` and the transaction argument are facades (ruling 8).
   - Adds to `src/session/staleActor.js`: `HandleDisposeFailedError` (`code = 'HANDLE_DISPOSE_FAILED'`) and `UnboundRepositoryError` (`code = 'UNBOUND_REPOSITORY'`). `epoch` comes from a process-wide counter advanced by every publish and every close.
 - Produces (`src/db/client.js`): `DATABASE_FILE_PREFIX = 'masi-'`, `LEGACY_DATABASE_NAME = 'masi.db'`, `databaseNameForUser(userId) → 'masi-<userId>.db'` (throws unless `userId` matches `/^[0-9a-f-]{36}$/i`), `openConfiguredConnections({ name, openDatabase }) → { writer, reader }` (the existing PRAGMA → migrate → foreign-keys-on → reader sequence, with its early-registration and failure-disposal comments).
 - Produces (`repositoryRuntime.js`): `isSignedInHandle(value)`; `resolveDatabase(database)` → `database.getReader()` for a handle; `runRepositoryTransaction(database, task)` → `database.withTransaction(task)` for a handle; `enableAmbientHandleForTests()` / `disableAmbientHandleForTests()` (no-ops until Task 5 makes the no-database branch depend on them). The raw-database (test) and no-database (legacy, until Task 5) branches are unchanged in this task.
@@ -299,9 +301,9 @@ This task is **additive**: the legacy `client.js` connection, `initializeDatabas
 
 Transaction doors (spec §5.4) in `Handle.withTransaction`: admission refuses with `StaleActorError` when the handle is not open; the task runs on the handle's own serial write queue; immediately before `COMMIT`, a closed handle triggers `ROLLBACK` and `StaleActorError`; a failed `ROLLBACK` marks the connections unusable and the next transaction reopens them for the same file. Keep `client.js`'s non-re-entrant contract comment with the code.
 
-Connection gates (ruling 8): `openConfiguredConnections` returns raw connections; the handle wraps each in a gate exposing the same async API (`execAsync`, `runAsync`, `getFirstAsync`, `getAllAsync`, `prepareAsync` and the statement methods it returns) that counts in-flight native calls, tracks the writer's open transaction from `BEGIN`/`COMMIT`/`ROLLBACK`, and after revocation refuses every new call with `StaleActorError` except `ROLLBACK` and the close step's statements. Repositories only ever see gated connections.
+Connection facades (ruling 8): `openConfiguredConnections` returns raw connections (migrations run on the raw writer before any facade exists); the handle wraps each in a facade with exactly `execAsync`, `runAsync`, `getFirstAsync`, `getAllAsync`, counting in-flight calls, refusing caller transaction-control SQL, and sealing at revocation. Only the handle's `withTransaction` and disposal reach the raw connections.
 
-Close sequence (spec §4.3, rulings 7–8). *Logical revocation, synchronous:* `state = 'closed'`, epoch advances, current handle becomes `null`, subscribers notified, `abortController.abort()`, gates start refusing. *Physical disposal:* wait for both gates' in-flight count to reach zero → if the writer has no open transaction, write `local_state('last_active_at', <ISO now>)` → `closeAsync` the reader, then the writer → `onClose` listeners. A watchdog reports `handle_close_stalled` after `5_000` ms and keeps waiting. If `closeAsync` throws, record the file as `dispose_failed`; a later same-file open rejects with `HandleDisposeFailedError` (add it to `staleActor.js`). The coordinator's `requestClose` resolves after logical revocation for the purpose of a **different** user's open, and after physical disposal for a **same-file** reopen.
+Close sequence (spec §4.3, rulings 7–8). `requestClose` performs *logical revocation* synchronously inside the coordinator chain (`state = 'closed'`, epoch advances, registry drops the handle, subscribers notified, `abortController.abort()`, facades seal) and resolves. *Physical disposal* then runs detached and exclusive: in-flight count reaches zero → `ROLLBACK` if a transaction is open → `last_active_at` → reader `closeAsync` → writer `closeAsync` → `onClose` listeners; it settles `whenDisposed(fileName)`. A watchdog reports `handle_close_stalled` after `5_000` ms. If `closeAsync` throws, record `dispose_failed` for the file; a later same-file open rejects with `HandleDisposeFailedError` (add it to `staleActor.js`). `requestOpen` of a file awaits `whenDisposed` for that file only. Export `resetHandleRegistryForTests()` (clears the registry, disposals, and `dispose_failed` state) for the default test handle fixture.
 
 - [ ] **Step 1: Write the failing unit tests** (`__tests__/signedInHandle.test.js`, better-sqlite3 files under a temp directory through `createPathDatabaseOpener`). Use a `deferred()` helper and **explicit barriers**: a test that needs "a transaction has begun" waits on a promise resolved inside the transaction task, never on `setTimeout(0)`.
 
@@ -310,7 +312,8 @@ import fs from 'fs';
 import os from 'os';
 import path from 'path';
 import {
-  requestOpen, requestClose, getCurrentHandle, requireCurrentHandle, getConnectionActor,
+  requestOpen, requestClose, whenDisposed, getCurrentHandle, requireCurrentHandle, getConnectionActor,
+  resetHandleRegistryForTests,
 } from '../src/session/signedInHandle';
 import { StaleActorError, NoSignedInEAError, FileOwnerMismatchError } from '../src/session/staleActor';
 import { databaseNameForUser } from '../src/db/client';
@@ -329,7 +332,12 @@ beforeEach(() => {
   const base = createPathDatabaseOpener(dir);
   openDatabase = async (name, options) => { opened.push(name); return base(name, options); };
 });
-afterEach(async () => { await requestClose({ reason: 'test' }); });
+afterEach(async () => {
+  const current = getCurrentHandle();
+  await requestClose({ reason: 'test' });
+  if (current) await whenDisposed(current.fileName).catch(() => {});
+  resetHandleRegistryForTests();
+});
 
 test('T1: A opens masi-A.db, B opens masi-B.db, and closing leaves no current handle', async () => {
   const a = await requestOpen({ userId: A, openDatabase });
@@ -419,17 +427,105 @@ test('ruling 8: disposal waits for an in-flight native call, and the watchdog re
   await entered.promise;
   const report = jest.spyOn(require('../src/services/observability'), 'captureOperationalError').mockImplementation(() => {});
   jest.useFakeTimers({ doNotFake: ['nextTick', 'setImmediate', 'queueMicrotask'] });
+  await requestClose({ reason: 'test' });            // revocation resolves at once
   let disposed = false;
-  const closing = requestClose({ reason: 'test' }).then(() => { disposed = true; });
+  whenDisposed(a.fileName).then(() => { disposed = true; });
   await jest.advanceTimersByTimeAsync(5_000);
   jest.useRealTimers();
   expect(report).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({ category: 'handle_close_stalled' }));
+  expect(disposed).toBe(false);
   expect(a.isConnectionClosed()).toBe(false);       // never disposed early
   nativeGate.resolve();
-  await closing;
-  expect(disposed).toBe(true);
+  await whenDisposed(a.fileName);
   expect(a.isConnectionClosed()).toBe(true);
   report.mockRestore();
+});
+
+test('ruling 8: a transaction resuming during disposal cannot run ROLLBACK while the writer closes', async () => {
+  // Instrument the raw connections: record every native call and whether a close was in progress.
+  const log = [];
+  let closing = 0;
+  const releaseReaderClose = deferred();
+  const instrumented = async (name, options) => {
+    const db = await openDatabase(name, options);
+    const isReader = Boolean(options?.useNewConnection);
+    for (const method of ['execAsync', 'runAsync', 'getFirstAsync', 'getAllAsync']) {
+      const original = db[method].bind(db);
+      db[method] = async (...args) => { log.push({ method, sql: String(args[0]), duringClose: closing > 0 }); return original(...args); };
+    }
+    const close = db.closeAsync.bind(db);
+    db.closeAsync = async () => {
+      closing += 1;
+      if (isReader) await releaseReaderClose.promise;
+      try { return await close(); } finally { closing -= 1; }
+    };
+    return db;
+  };
+  const a = await requestOpen({ userId: A, openDatabase: instrumented });
+  const begun = deferred();
+  const resume = deferred();
+  const write = a.withTransaction(async (txn) => {
+    await txn.runAsync("insert into local_state (key, value, updated_at) values ('late', '1', 'now')");
+    begun.resolve();
+    await resume.promise;
+    await txn.runAsync("insert into local_state (key, value, updated_at) values ('later', '1', 'now')");
+  });
+  await begun.promise;
+  await requestClose({ reason: 'test' });
+  log.length = 0;
+  resume.resolve();                                   // resumes while the reader close is held
+  let caught = null;
+  try { await write; } catch (error) { caught = error; }
+  expect(caught).toBeInstanceOf(StaleActorError);
+  releaseReaderClose.resolve();
+  await whenDisposed(a.fileName);
+  // Only disposal's own ROLLBACK may run, and never while a close is in progress.
+  expect(log.filter((entry) => entry.duringClose)).toEqual([]);
+  expect(log.filter((entry) => /^\s*ROLLBACK/i.test(entry.sql)).length).toBeLessThanOrEqual(1);
+  const again = await requestOpen({ userId: A, openDatabase });
+  const reader = await again.getReader();
+  expect(await reader.getFirstAsync("select key from local_state where key in ('late', 'later')")).toBeNull();
+});
+
+test('ruling 8: the facade exposes only the production methods and refuses caller transaction control', async () => {
+  const a = await requestOpen({ userId: A, openDatabase });
+  const reader = await a.getReader();
+  expect(Object.keys(reader).sort()).toEqual(['execAsync', 'getAllAsync', 'getFirstAsync', 'runAsync']);
+  await a.withTransaction(async (txn) => {
+    for (const sql of ['BEGIN', ' commit', '/* x */ ROLLBACK', 'savepoint s1', 'RELEASE s1', 'END']) {
+      let caught = null;
+      try { await txn.execAsync(sql); } catch (error) { caught = error; }
+      expect(caught).not.toBeNull();
+    }
+  });
+  const { runWithTransaction } = require('../src/db/repositories/sqliteRepositoryUtils');
+  let caught = null;
+  try { await runWithTransaction(reader, async () => {}); } catch (error) { caught = error; }
+  expect(caught).not.toBeNull();
+});
+
+test('Review focus 2: B opens while A\'s disposal is stalled, and A\'s late disposal leaves B published', async () => {
+  const nativeGate = deferred();
+  const entered = deferred();
+  const holding = async (name, options) => {
+    const db = await openDatabase(name, options);
+    const run = db.runAsync.bind(db);
+    db.runAsync = async (sql, ...params) => {
+      if (String(sql).includes("'held'")) { entered.resolve(); await nativeGate.promise; }
+      return run(sql, ...params);
+    };
+    return db;
+  };
+  const a = await requestOpen({ userId: A, openDatabase: holding });
+  a.withTransaction((txn) => txn.runAsync("insert into local_state (key, value, updated_at) values ('held', '1', 'now')")).catch(() => {});
+  await entered.promise;
+  await requestClose({ reason: 'test' });
+  const b = await requestOpen({ userId: B, openDatabase });   // not blocked by A's pending disposal
+  expect(getCurrentHandle()).toBe(b);
+  nativeGate.resolve();
+  await whenDisposed(a.fileName);
+  expect(getCurrentHandle()).toBe(b);
+  expect(b.isOpen()).toBe(true);
 });
 
 test('ruling 8: a failed closeAsync blocks a same-file reopen but not another EA', async () => {
@@ -718,7 +814,7 @@ One task, because removing the legacy entry points and migrating their consumers
 - `AuthContext`:
   - Calls `setLatestAuthSession(nextSession ?? null)` first thing for **every** auth event, before any early return (so `TOKEN_REFRESHED` reaches the handle).
   - After a fresh sign-in or an offline restore, calls `requestOpen({ userId })`; exposes `{ handle, handleStatus: 'opening' | 'open' | 'failed' | 'signed_out', handleError, retryOpenHandle }` driven by `subscribeToHandle` and the request's result.
-  - `signOut` and every server-ended sign-out path (`SIGNED_OUT`, grace timeout) call `await requestClose({ reason })` before clearing auth state. `deviceSettings.clearUserProfile()` is no longer called at sign-out (ruling 10). Plan 3 adds the questions in front of this.
+  - `signOut` and every server-ended sign-out path (`SIGNED_OUT`, grace timeout) call `await requestClose({ reason })` (which resolves at logical revocation, not physical disposal) before clearing auth state. `deviceSettings.clearUserProfile()` is no longer called at sign-out (ruling 10). Plan 3 adds the questions in front of this.
   - `loadUserProfile` and the startup reference pull move into `SignedInEAProvider`; the profile request uses `handle.enqueueRequest` and `handle.dataClient`, and the cache uses `handle.services.deviceProfile`.
 - `App.js`, inside `PaperProvider` and `DatabaseBootstrapGate`:
 
@@ -760,6 +856,7 @@ return (
   - **T1:** render `App` with a mocked auth client; signed out: login screen, zero `openDatabase` calls. Sign in as A: `masi-A.db` opens. Sign out, sign in as B: `masi-B.db` opens.
   - **T2:** offline restore of a persisted session for A (NetInfo offline, no auth session): the loading screen renders, then A's children; the "no children" empty state never renders in between; sync is skipped without errors.
   - **T14:** after a key change, every timer, interval, AppState and NetInfo listener from A's tree has been removed (counts return to the signed-out baseline).
+  - **Sign-out is not blocked by disposal (Codex round 3):** hold one of A's native calls; sign out through `AuthContext`: the login screen renders at once; sign in as B and B's tree renders before A's call is released; release it: B stays published and signed in.
   - **Opening fails:** `requestOpen` rejects: `HandleOpenError` with Retry renders; Retry calls it again.
   - **Review focus 5:** Sync Status → Retry on a failed row sets it `pending` through A's bound engine (assert the row in A's file).
   - **Composite binding (Codex round 2):** with no default handle, `createClassOnboardingRepository({ database: a })`: `complete()` paused after its read; close A; open B and write B's own onboarding marker; resume: it refuses with `StaleActorError`, B's marker is intact, A's marker is intact. Repeat A → A: close A, reopen A, write a new marker, resume the old completion: the new marker survives.
@@ -856,3 +953,7 @@ end;
   3. (high) Export Database resolved the current handle from a captured Alert callback, exporting B's failed payloads from A's confirmation. → Ruling 12 and its regression.
   4. (medium) Handle hooks cannot live in `setupFiles`. → Ruling 13: `setupFilesAfterEnv`, opt-out for the suites that prove binding.
   Also adopted: coordinator tests now prove the open has entered its work before the competing request, cover A → B → A with the first open blocked, and restrict same-user joining to unsuperseded transitions.
+- **Codex adversarial review of revision 3 (2026-10-14), needs-attention, three high findings on ruling 8, verified against the installed expo-sqlite 16.0.10 sources and adopted** (repository binding and ruling 13 raised nothing further):
+  1. Caller `ROLLBACK`s stayed admissible after the seal, so a transaction resuming during disposal could overlap the writer close. → Disposal owns the connection exclusively; the seal refuses every caller call, including `ROLLBACK`; regression with the reader close held.
+  2. Statement results and iterators reach native code outside a method-level gate. → A closed facade exposing only `execAsync`/`runAsync`/`getFirstAsync`/`getAllAsync` (the methods production uses), caller transaction control refused, `runWithTransaction` refuses a facade.
+  3. Sign-out awaited physical disposal, so a stalled native call blocked B's login. → Two signals: `requestClose` resolves at revocation, `whenDisposed(fileName)` at disposal; only a same-file reopen waits; AuthContext regression.
