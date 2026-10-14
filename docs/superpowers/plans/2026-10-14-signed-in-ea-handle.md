@@ -116,9 +116,12 @@ describe('handle request queue', () => {
     const queue = createHandleRequestQueue({ isOpen: () => true });
     const events = [];
     const first = deferred();
-    const a = queue.enqueue(async () => { events.push('a:start'); await first.promise; events.push('a:end'); return 'a'; });
+    const aStarted = deferred();
+    const a = queue.enqueue(async () => { events.push('a:start'); aStarted.resolve(); await first.promise; events.push('a:end'); return 'a'; });
     const b = queue.enqueue(async () => { events.push('b:start'); return 'b'; });
-    await Promise.resolve();
+    // Wait on an explicit barrier, never on a microtask count.
+    await aStarted.promise;
+    await new Promise((resolve) => setImmediate(resolve));
     expect(events).toEqual(['a:start']);
     first.resolve();
     await expect(a).resolves.toBe('a');
