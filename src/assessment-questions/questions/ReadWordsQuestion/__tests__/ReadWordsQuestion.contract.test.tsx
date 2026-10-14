@@ -15,6 +15,7 @@ describe('ReadWordsQuestion — OSS contract', () => {
     fireEvent.press(rendered.getByLabelText('cat, idle'));
     fireEvent.press(rendered.getByLabelText('dog, idle'));
     fireEvent.press(rendered.getByText('End'));
+    fireEvent.press(rendered.getByText('Reached the end'));
 
     const v = await verdict;
     expect(v.valid).toBe(true);

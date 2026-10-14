@@ -5,4 +5,5 @@ export interface ReadWordsPrompt {
 
 export interface ReadWordsItemSet {
   words: ReadWordsPrompt[];
+  row_lengths?: number[];
 }

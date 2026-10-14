@@ -3,6 +3,45 @@ import { render, fireEvent, act } from '@testing-library/react-native';
 import { ReadWordsQuestion } from '..';
 import { FIXTURE_READ_WORDS_EN } from '../../../testFixtures';
 
+const SET = {
+  item_set_id: 'wela_plus_read_words@fixture.en', question_code: 'wela_plus_read_words',
+  question_version: 'fixture', language: 'en', row_lengths: [3, 3],
+  words: ['there', 'how', 'there', 'how', 'come', 'with'].map((w) => ({ item_key: w, word: w })),
+};
+
+test('renders rows from row_lengths', () => {
+  const r = render(<ReadWordsQuestion language="en" itemSet={SET} instructions="." onComplete={jest.fn()} />);
+  fireEvent.press(r.getByText('Start'));
+  expect(r.getAllByTestId(/^word-row-/)).toHaveLength(2);
+});
+
+test('duplicate words are marked independently', () => {
+  const onComplete = jest.fn();
+  const r = render(<ReadWordsQuestion language="en" itemSet={SET} instructions="." onComplete={onComplete} />);
+  fireEvent.press(r.getByText('Start'));
+  fireEvent.press(r.getAllByLabelText('there, idle')[1]); // the second "there", position 2
+  expect(r.getAllByLabelText('there, idle')).toHaveLength(1);
+  fireEvent.press(r.getByText('End'));
+  fireEvent.press(r.getByText('Reached the end'));
+  const items = onComplete.mock.calls[0][0].items;
+  expect(items[0].is_correct).toBe(false);
+  expect(items[2].is_correct).toBe(true);
+});
+
+test('wrong answers after the last correct still count as attempted (marker, not taps)', () => {
+  const onComplete = jest.fn();
+  const r = render(<ReadWordsQuestion language="en" itemSet={SET} instructions="." onComplete={onComplete} />);
+  fireEvent.press(r.getByText('Start'));
+  fireEvent.press(r.getAllByLabelText('there, idle')[0]); // correct at 0
+  fireEvent.press(r.getByText('End'));
+  fireEvent.press(r.getByLabelText('come, item 5'));     // the child stopped after 5 words
+  fireEvent.press(r.getByText('Confirm'));
+  const d = onComplete.mock.calls[0][0].derived;
+  expect(d.total_attempted).toBe(5);
+  expect(d.total_correct).toBe(1);
+  expect(d.percent).toBe(20);
+});
+
 describe('ReadWordsQuestion — intro phase', () => {
   test('renders instructions + Start; Start transitions to active showing words', () => {
     const { getByText } = render(
@@ -56,8 +95,8 @@ describe('ReadWordsQuestion — marking', () => {
   });
 });
 
-describe('ReadWordsQuestion — End button finishes early', () => {
-  test('End fires onComplete with stopped_reason=ea_ended', () => {
+describe('ReadWordsQuestion — End marker finishes early', () => {
+  test('End then marker confirmation fires onComplete with stopped_reason=ea_ended', () => {
     const onComplete = jest.fn();
     const { getByText, getByLabelText } = render(
       <ReadWordsQuestion
@@ -72,13 +111,14 @@ describe('ReadWordsQuestion — End button finishes early', () => {
     fireEvent.press(getByLabelText('cat, idle'));
     fireEvent.press(getByLabelText('dog, idle'));
     fireEvent.press(getByText('End'));
+    fireEvent.press(getByText('Reached the end'));
 
     expect(onComplete).toHaveBeenCalledTimes(1);
     const r = onComplete.mock.calls[0][0];
     expect(r.stopped_reason).toBe('ea_ended');
     expect(r.derived.total_correct).toBe(2);
     expect(r.derived.was_timed).toBe(true);
-    expect(r.derived.last_attempted_position).toBe(1); // highest tapped position
+    expect(r.derived.last_attempted_position).toBe(19);
   });
 });
 
@@ -107,10 +147,11 @@ describe('ReadWordsQuestion — timer', () => {
     act(() => {
       jest.advanceTimersByTime(1500);
     });
+    fireEvent.press(getByText('Reached the end'));
 
     expect(onComplete).toHaveBeenCalledTimes(1);
     expect(onComplete.mock.calls[0][0].stopped_reason).toBe('timer');
-    expect(onComplete.mock.calls[0][0].derived.last_attempted_position).toBe(0);
+    expect(onComplete.mock.calls[0][0].derived.last_attempted_position).toBe(19);
   });
 });
 
@@ -152,6 +193,7 @@ describe('ReadWordsQuestion — itemSet override validation', () => {
     fireEvent.press(getByText('Start'));
     expect(queryByText('foo')).toBeNull();
     fireEvent.press(getByText('End'));
+    fireEvent.press(getByText('Reached the end'));
     expect(onComplete.mock.calls[0][0].item_set_id).toBeDefined();
   });
 
@@ -194,6 +236,7 @@ describe('ReadWordsQuestion — markingPolarity', () => {
     fireEvent.press(getByText('Start'));
     fireEvent.press(getByLabelText('cat, idle'));
     fireEvent.press(getByText('End'));
+    fireEvent.press(getByText('Reached the end'));
     const items = onComplete.mock.calls[0][0].items;
     const catItem = items.find((i: { item_key: string }) => i.item_key === 'cat');
     expect(catItem.is_correct).toBe(true);
@@ -214,10 +257,12 @@ describe('ReadWordsQuestion — markingPolarity', () => {
     fireEvent.press(getByText('Start'));
     // tap_wrong mode: tap cat (position 0) means "child got it wrong";
     // dog/sun/run (1, 2, 3) are untapped. Then tap sun (position 2) as
-    // wrong. last_attempted_position becomes 2 (max-tapped).
+    // wrong. The marker records that the child attempted through position 2.
     fireEvent.press(getByLabelText('cat, idle'));
     fireEvent.press(getByLabelText('sun, idle'));
     fireEvent.press(getByText('End'));
+    fireEvent.press(getByLabelText('sun, item 3'));
+    fireEvent.press(getByText('Confirm'));
     const items = onComplete.mock.calls[0][0].items;
     const r = onComplete.mock.calls[0][0];
     expect(r.derived.last_attempted_position).toBe(2);
@@ -251,6 +296,7 @@ describe('ReadWordsQuestion — markingPolarity', () => {
     );
     fireEvent.press(getByText('Start'));
     fireEvent.press(getByText('End'));
+    fireEvent.press(getByText('Nothing attempted'));
     const r = onComplete.mock.calls[0][0];
     expect(r.derived.last_attempted_position).toBe(-1);
     expect(r.derived.total_attempted).toBe(0);
@@ -274,12 +320,14 @@ describe('ReadWordsQuestion — markingPolarity', () => {
       />,
     );
     fireEvent.press(getByText('Start'));
-    // Reach position 0 only (cat) and don't tap (so cat is "correct" in tap_wrong).
+    // Mark position 0 wrong, then clear it so it is correct in tap_wrong.
     fireEvent.press(getByLabelText('cat, idle'));
     fireEvent.press(getByLabelText('cat, correct')); // untap, leaving it idle
     fireEvent.press(getByText('End'));
+    fireEvent.press(getByLabelText('cat, item 1'));
+    fireEvent.press(getByText('Confirm'));
     const r = onComplete.mock.calls[0][0];
-    // last_attempted_position should be 0 (we touched cat), total_attempted=1,
+    // The marker sets last_attempted_position=0 and total_attempted=1;
     // total_correct=1 (cat is "correct" in tap_wrong because untapped).
     // The other 19 words must NOT be counted as correct (codex finding #2 fix).
     expect(r.derived.last_attempted_position).toBe(0);

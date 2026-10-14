@@ -6,6 +6,7 @@ export const FIXTURE_READ_WORDS_EN: ItemSet<ReadWordsItemSet> = {
   question_code: 'wela_plus_read_words',
   question_version: 'fixture',
   language: 'en',
+  row_lengths: [5, 5, 5, 5],
   words: [
     { item_key: 'cat', word: 'cat' },
     { item_key: 'dog', word: 'dog' },
