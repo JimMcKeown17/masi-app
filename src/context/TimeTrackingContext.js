@@ -51,7 +51,6 @@ function useTimeTrackingState() {
       sign_out_lat: null,
       sign_out_lon: null,
       auto_clocked_out: true,
-      synced: false,
     };
 
     await timeEntriesRepository.updateTimeEntry(entry.id, updatedEntry);
@@ -201,7 +200,6 @@ function useTimeTrackingState() {
         sign_out_time: signOutTime,
         sign_out_lat: latitude,
         sign_out_lon: longitude,
-        synced: false,
       };
 
       await timeEntriesRepository.updateTimeEntry(current.id, updatedEntry);

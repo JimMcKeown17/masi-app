@@ -27,6 +27,40 @@ const makeChild = (overrides = {}) => ({
 const FIXED_NOW = new Date('2026-05-21T08:00:00.000Z');
 
 describe('childrenRepository', () => {
+  test('editing a full mapped synced child ignores caller sync bookkeeping and queues one update', async () => {
+    const db = await createMigratedDatabase(runMigrations);
+
+    try {
+      await seedCoreData(db);
+      const repository = createChildrenRepository({ database: db });
+      await repository.saveChildRecord(makeChild({ synced: true }));
+      const [current] = await repository.getChildren();
+      expect(current).toEqual(expect.objectContaining({ sync_status: 'synced', synced: true }));
+      expect(await db.getAllAsync('select * from sync_outbox')).toEqual([]);
+
+      await repository.updateChild(current.id, {
+        ...current,
+        first_name: 'Updated child',
+        last_sync_error: 'stale caller error',
+      });
+
+      const [updated] = await repository.getChildren();
+      expect(updated).toEqual(expect.objectContaining({
+        first_name: 'Updated child', sync_status: 'pending', synced: false, last_sync_error: null,
+      }));
+      const outbox = await db.getAllAsync('select table_name, record_id, operation, payload from sync_outbox');
+      expect(outbox).toHaveLength(1);
+      expect(outbox[0]).toEqual(expect.objectContaining({
+        table_name: 'children', record_id: current.id, operation: 'update',
+      }));
+      expect(JSON.parse(outbox[0].payload)).toEqual(expect.objectContaining({
+        first_name: 'Updated child', sync_status: 'pending', synced: false, last_sync_error: null,
+      }));
+    } finally {
+      await db.closeAsync();
+    }
+  });
+
   beforeEach(() => {
     jest.useFakeTimers();
     jest.setSystemTime(FIXED_NOW);

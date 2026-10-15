@@ -152,8 +152,10 @@ export const createTimeEntriesRepository = ({ database } = {}) => {
       ...updates,
       id,
       updated_at: updates.updated_at || timestamp(),
-      sync_status: updates.sync_status || syncStatusFromSynced(updates.synced),
-      synced: updates.synced === undefined ? undefined : updates.synced,
+      // A local edit owns its sync state, even when updates spreads a synced row.
+      sync_status: 'pending',
+      synced: false,
+      last_sync_error: null,
     });
 
     await upsertRecord(txn, {

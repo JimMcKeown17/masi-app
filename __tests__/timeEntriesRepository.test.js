@@ -18,6 +18,43 @@ const makeEntry = (overrides = {}) => ({
 });
 
 describe('timeEntriesRepository', () => {
+  test('editing a full mapped synced time entry ignores caller sync bookkeeping', async () => {
+    const db = createBetterSqliteTestDatabase();
+
+    try {
+      await runMigrations(db);
+      const repository = createTimeEntriesRepository({ database: db });
+      await repository.saveTimeEntry(makeEntry({ synced: true }));
+      const current = await repository.getActiveTimeEntry('user-1');
+      expect(current).toEqual(expect.objectContaining({ sync_status: 'synced', synced: true }));
+      expect(await db.getAllAsync('select * from sync_outbox')).toEqual([]);
+
+      await repository.updateTimeEntry(current.id, {
+        ...current,
+        sign_out_time: '2026-05-21T17:00:00.000Z',
+        last_sync_error: 'stale caller error',
+      });
+
+      const [updated] = await repository.getTimeEntries();
+      expect(updated).toEqual(expect.objectContaining({
+        sign_out_time: '2026-05-21T17:00:00.000Z',
+        sync_status: 'pending',
+        synced: false,
+        last_sync_error: null,
+      }));
+      const outbox = await db.getAllAsync('select table_name, record_id, operation, payload from sync_outbox');
+      expect(outbox).toHaveLength(1);
+      expect(outbox[0]).toEqual(expect.objectContaining({
+        table_name: 'time_entries', record_id: current.id, operation: 'update',
+      }));
+      expect(JSON.parse(outbox[0].payload)).toEqual(expect.objectContaining({
+        sign_out_time: updated.sign_out_time, sync_status: 'pending', synced: false, last_sync_error: null,
+      }));
+    } finally {
+      await db.closeAsync();
+    }
+  });
+
   test('active time entry survives repository reload', async () => {
     const db = createBetterSqliteTestDatabase();
 
