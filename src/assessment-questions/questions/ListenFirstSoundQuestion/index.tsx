@@ -15,23 +15,13 @@ import { WELA_PLUS_FIRST_SOUND_EN } from '../../itemsets/wela_plus_first_sound.e
 import { WELA_PLUS_FIRST_SOUND_XH } from '../../itemsets/wela_plus_first_sound.xh';
 import { useToggleMark } from '../../hooks/useToggleMark';
 import { useChildReadingFontSize } from '../../hooks/useChildReadingFontSize';
+import { tokens } from '../../theme/tokens';
+import { SkipReasonPicker } from '../../skip/SkipReasonPicker';
+import type { ManualSkipReason } from '../../skip/skipReasons';
 
 const BASE_PROMPT_FONT_SIZE = 28;
-const MARKED_BG = '#2e7d32';
-const IDLE_BG = '#ffffff';
 
-type Phase = 'intro' | 'active' | 'confirm-finish' | 'abandon-picker' | 'finished';
-
-type SkipReason = Extract<StoppedReason, `skipped_${string}` | 'ea_ended'>;
-
-const SKIP_REASONS: { reason: SkipReason; label: string }[] = [
-  { reason: 'skipped_child_refused', label: 'Child refused' },
-  { reason: 'skipped_tired', label: 'Child tired' },
-  { reason: 'skipped_time', label: 'Out of time' },
-  { reason: 'skipped_age', label: 'Age inappropriate' },
-  { reason: 'skipped_prerequisite_unmet', label: 'Prerequisite unmet' },
-  { reason: 'skipped_other', label: 'Other' },
-];
+type Phase = 'intro' | 'active' | 'confirm-finish' | 'skip-picker' | 'finished';
 
 type FullItemSet = ListenFirstSoundItemSet & {
   item_set_id: string;
@@ -62,7 +52,6 @@ export function ListenFirstSoundQuestion(props: QuestionProps) {
     instructions,
     onComplete,
     onItemMarked,
-    onAbandon,
   } = props;
   const [phase, setPhase] = useState<Phase>('intro');
   const { isMarked, toggle } = useToggleMark();
@@ -162,12 +151,9 @@ export function ListenFirstSoundQuestion(props: QuestionProps) {
     }
   }, [unmarkedCount, finish]);
 
-  const handleAbandonChosen = useCallback(
-    (reason: SkipReason) => {
-      if (onAbandon) onAbandon(reason);
-      finish(reason);
-    },
-    [onAbandon, finish],
+  const handleSkipChosen = useCallback(
+    (reason: ManualSkipReason) => finish(reason),
+    [finish],
   );
 
   if (phase === 'intro') {
@@ -199,23 +185,12 @@ export function ListenFirstSoundQuestion(props: QuestionProps) {
     );
   }
 
-  if (phase === 'abandon-picker') {
+  if (phase === 'skip-picker') {
     return (
-      <View>
-        <Text>Why are you abandoning?</Text>
-        {SKIP_REASONS.map(({ reason, label }) => (
-          <Pressable
-            key={reason}
-            accessibilityRole="button"
-            onPress={() => handleAbandonChosen(reason)}
-          >
-            <Text>{label}</Text>
-          </Pressable>
-        ))}
-        <Pressable onPress={() => setPhase('active')}>
-          <Text>Cancel</Text>
-        </Pressable>
-      </View>
+      <SkipReasonPicker
+        onChoose={handleSkipChosen}
+        onCancel={() => setPhase('active')}
+      />
     );
   }
 
@@ -237,7 +212,9 @@ export function ListenFirstSoundQuestion(props: QuestionProps) {
               onPress={() => handleToggle(idx, p.item_key, p.prompt)}
               style={[
                 styles.card,
-                { backgroundColor: marked ? MARKED_BG : IDLE_BG },
+                {
+                  backgroundColor: marked ? tokens.color.marked : tokens.color.surface,
+                },
               ]}
             >
               <Text
@@ -245,7 +222,7 @@ export function ListenFirstSoundQuestion(props: QuestionProps) {
                   styles.promptText,
                   {
                     fontSize: promptFontSize,
-                    color: marked ? '#ffffff' : '#111',
+                    color: marked ? tokens.color.onMarked : tokens.color.ink,
                   },
                 ]}
               >
@@ -260,9 +237,9 @@ export function ListenFirstSoundQuestion(props: QuestionProps) {
       </Pressable>
       <Pressable
         accessibilityRole="button"
-        onPress={() => setPhase('abandon-picker')}
+        onPress={() => setPhase('skip-picker')}
       >
-        <Text>Abandon</Text>
+        <Text>Skip question</Text>
       </Pressable>
     </View>
   );
@@ -284,7 +261,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     paddingVertical: 24,
     borderWidth: 1,
-    borderColor: '#999',
+    borderColor: tokens.color.line,
     marginBottom: 8,
   },
   promptText: {

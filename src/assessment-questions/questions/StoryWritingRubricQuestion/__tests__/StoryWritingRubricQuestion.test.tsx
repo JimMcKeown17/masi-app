@@ -1,12 +1,46 @@
 import React from 'react';
 import { render, fireEvent } from '@testing-library/react-native';
 import { StoryWritingRubricQuestion } from '..';
+import { FIXTURE_STORY_WRITING_EN } from '../../../testFixtures';
+
+const SET = {
+  item_set_id: 'wela_plus_story_writing@fixture.en', question_code: 'wela_plus_story_writing',
+  question_version: 'fixture', language: 'en',
+  dimensions: ['meaning_making', 'spelling', 'length', 'vocabulary'].map((code) => ({
+    code, label: code, anchors: [], end_anchor_gloss: '',
+  })),
+};
+
+test('no picture: no thumbnail row', () => {
+  const r = render(<StoryWritingRubricQuestion language="en" itemSet={SET} instructions="." onComplete={jest.fn()} />);
+  fireEvent.press(r.getByText('Start'));
+  expect(r.queryByTestId('picture-thumbnail')).toBeNull();
+});
+
+test('no anchors: sheet says coming soon; metadata omits anchor_text; chips still score', () => {
+  const onComplete = jest.fn();
+  const r = render(<StoryWritingRubricQuestion language="en" itemSet={SET} instructions="." onComplete={onComplete} />);
+  fireEvent.press(r.getByText('Start'));
+  fireEvent.press(r.getAllByText('View full rubric')[0]);
+  expect(r.getByText('Rubric descriptions coming soon')).toBeTruthy();
+  fireEvent.press(r.getByText('Close'));
+  fireEvent.press(r.getByTestId('chip-meaning_making-2'));
+  fireEvent.press(r.getByTestId('chip-spelling-1'));
+  fireEvent.press(r.getByTestId('chip-length-3'));
+  fireEvent.press(r.getByTestId('chip-vocabulary-0'));
+  fireEvent.press(r.getByText('Finish'));
+  const res = onComplete.mock.calls[0][0];
+  expect(res.derived.ea_rubric_total).toBe(6);
+  expect(res.items.every((i: any) => !('anchor_text' in i.metadata))).toBe(true);
+  expect(res.items.map((i: any) => i.item_key)).toEqual(['ea:meaning_making', 'ea:spelling', 'ea:length', 'ea:vocabulary']);
+});
 
 describe('StoryWritingRubricQuestion — intro & active', () => {
   test('renders 4 dimension cards + picture alt + a Total: 0 / 16 running counter', () => {
     const { getByText } = render(
       <StoryWritingRubricQuestion
         language="en"
+        itemSet={FIXTURE_STORY_WRITING_EN}
         instructions="Read the child's story and score each dimension."
         onComplete={jest.fn()}
       />,
@@ -26,6 +60,7 @@ describe('StoryWritingRubricQuestion — chip scoring', () => {
     const { getByText, getByTestId } = render(
       <StoryWritingRubricQuestion
         language="en"
+        itemSet={FIXTURE_STORY_WRITING_EN}
         instructions="."
         onComplete={jest.fn()}
       />,
@@ -43,6 +78,7 @@ describe('StoryWritingRubricQuestion — chip scoring', () => {
     const { getByText, getByTestId } = render(
       <StoryWritingRubricQuestion
         language="en"
+        itemSet={FIXTURE_STORY_WRITING_EN}
         instructions="."
         onComplete={jest.fn()}
       />,
@@ -59,6 +95,7 @@ describe('StoryWritingRubricQuestion — chip scoring', () => {
     const { getByText, getByTestId } = render(
       <StoryWritingRubricQuestion
         language="en"
+        itemSet={FIXTURE_STORY_WRITING_EN}
         instructions="."
         onComplete={jest.fn()}
       />,
@@ -75,6 +112,7 @@ describe('StoryWritingRubricQuestion — View full rubric sheet', () => {
     const { getByText, getByTestId, queryByText } = render(
       <StoryWritingRubricQuestion
         language="en"
+        itemSet={FIXTURE_STORY_WRITING_EN}
         instructions="."
         onComplete={jest.fn()}
       />,
@@ -94,6 +132,7 @@ describe('StoryWritingRubricQuestion — View full rubric sheet', () => {
     const { getByText, getByTestId } = render(
       <StoryWritingRubricQuestion
         language="en"
+        itemSet={FIXTURE_STORY_WRITING_EN}
         instructions="."
         onComplete={jest.fn()}
       />,
@@ -112,6 +151,7 @@ describe('StoryWritingRubricQuestion — picture thumbnail tap-to-enlarge', () =
     const { getByText, getByTestId, getAllByText } = render(
       <StoryWritingRubricQuestion
         language="en"
+        itemSet={FIXTURE_STORY_WRITING_EN}
         instructions="."
         onComplete={jest.fn()}
       />,
@@ -131,6 +171,7 @@ describe('StoryWritingRubricQuestion — Finish flow', () => {
     const { getByText, getByTestId } = render(
       <StoryWritingRubricQuestion
         language="en"
+        itemSet={FIXTURE_STORY_WRITING_EN}
         instructions="."
         onComplete={onComplete}
       />,
@@ -176,6 +217,7 @@ describe('StoryWritingRubricQuestion — Finish flow', () => {
     const { getByText, getByTestId } = render(
       <StoryWritingRubricQuestion
         language="en"
+        itemSet={FIXTURE_STORY_WRITING_EN}
         instructions="."
         onComplete={onComplete}
       />,
@@ -197,6 +239,7 @@ describe('StoryWritingRubricQuestion — Finish flow', () => {
     const { getByText, getByTestId } = render(
       <StoryWritingRubricQuestion
         language="en"
+        itemSet={FIXTURE_STORY_WRITING_EN}
         instructions="."
         onComplete={onComplete}
       />,
@@ -217,6 +260,7 @@ describe('StoryWritingRubricQuestion — Finish flow', () => {
     const { getByText, getByTestId } = render(
       <StoryWritingRubricQuestion
         language="en"
+        itemSet={FIXTURE_STORY_WRITING_EN}
         instructions="."
         onComplete={onComplete}
       />,
@@ -245,6 +289,7 @@ describe('StoryWritingRubricQuestion — onItemMarked', () => {
     const { getByText, getByTestId } = render(
       <StoryWritingRubricQuestion
         language="en"
+        itemSet={FIXTURE_STORY_WRITING_EN}
         instructions="."
         onComplete={jest.fn()}
         onItemMarked={onItemMarked}
@@ -269,6 +314,7 @@ describe('StoryWritingRubricQuestion — onItemMarked', () => {
     const { getByText, getByTestId } = render(
       <StoryWritingRubricQuestion
         language="en"
+        itemSet={FIXTURE_STORY_WRITING_EN}
         instructions="."
         onComplete={jest.fn()}
         onItemMarked={onItemMarked}
@@ -282,22 +328,20 @@ describe('StoryWritingRubricQuestion — onItemMarked', () => {
   });
 });
 
-describe('StoryWritingRubricQuestion — Abandon flow', () => {
-  test('Abandon picker fires onAbandon and emits items=[] (skip-empty contract)', () => {
+describe('StoryWritingRubricQuestion — Skip flow', () => {
+  test('Skip picker emits items=[] (skip-empty contract)', () => {
     const onComplete = jest.fn();
-    const onAbandon = jest.fn();
     const { getByText } = render(
       <StoryWritingRubricQuestion
         language="en"
+        itemSet={FIXTURE_STORY_WRITING_EN}
         instructions="."
         onComplete={onComplete}
-        onAbandon={onAbandon}
       />,
     );
     fireEvent.press(getByText('Start'));
-    fireEvent.press(getByText('Abandon'));
+    fireEvent.press(getByText('Skip question'));
     fireEvent.press(getByText('Child refused'));
-    expect(onAbandon).toHaveBeenCalledWith('skipped_child_refused');
     const r = onComplete.mock.calls[0][0];
     expect(r.stopped_reason).toBe('skipped_child_refused');
     expect(r.items).toEqual([]);
@@ -307,16 +351,25 @@ describe('StoryWritingRubricQuestion — Abandon flow', () => {
 
 describe('StoryWritingRubricQuestion — itemSet override', () => {
   test('falls back to bundled default when override missing item_set_id', () => {
-    const { getByText } = render(
+    const { getByText, queryByText } = render(
       <StoryWritingRubricQuestion
         language="en"
         instructions="."
-        itemSet={{ dimensions: [] }}
+        itemSet={{
+          dimensions: [
+            {
+              code: 'invalid',
+              label: 'Fixture-only invalid dimension',
+              end_anchor_gloss: 'invalid',
+              anchors: [],
+            },
+          ],
+        }}
         onComplete={jest.fn()}
       />,
     );
     fireEvent.press(getByText('Start'));
-    expect(getByText('Meaning Making')).toBeTruthy();
+    expect(queryByText('Fixture-only invalid dimension')).toBeNull();
   });
 
   test('accepts a fully-formed override with a different dimension count', () => {

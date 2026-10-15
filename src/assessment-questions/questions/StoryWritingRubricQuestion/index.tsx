@@ -37,28 +37,18 @@ import type {
 } from './types';
 import { WELA_PLUS_STORY_WRITING_EN } from '../../itemsets/wela_plus_story_writing.en';
 import { WELA_PLUS_STORY_WRITING_XH } from '../../itemsets/wela_plus_story_writing.xh';
+import { tokens } from '../../theme/tokens';
+import { SkipReasonPicker } from '../../skip/SkipReasonPicker';
+import type { ManualSkipReason } from '../../skip/skipReasons';
 
 const CHIP_SCORES = [0, 1, 2, 3, 4] as const;
-const SELECTED_CHIP_BG = '#1f3a5c';
-const IDLE_CHIP_BG = '#e8eef5';
 
 type Phase =
   | 'intro'
   | 'active'
   | 'confirm-finish'
-  | 'abandon-picker'
+  | 'skip-picker'
   | 'finished';
-
-type SkipReason = Extract<StoppedReason, `skipped_${string}` | 'ea_ended'>;
-
-const SKIP_REASONS: { reason: SkipReason; label: string }[] = [
-  { reason: 'skipped_child_refused', label: 'Child refused' },
-  { reason: 'skipped_tired', label: 'Child tired' },
-  { reason: 'skipped_time', label: 'Out of time' },
-  { reason: 'skipped_age', label: 'Age inappropriate' },
-  { reason: 'skipped_prerequisite_unmet', label: 'Prerequisite unmet' },
-  { reason: 'skipped_other', label: 'Other' },
-];
 
 type FullItemSet = StoryWritingRubricItemSet & {
   item_set_id: string;
@@ -88,9 +78,11 @@ function isFullItemSet(value: unknown): value is FullItemSet {
   const o = value as Record<string, unknown>;
   if (typeof o.item_set_id !== 'string') return false;
   if (typeof o.question_version !== 'string') return false;
-  if (!o.picture || typeof o.picture !== 'object') return false;
-  const pic = o.picture as Record<string, unknown>;
-  if (typeof pic.alt !== 'string') return false;
+  if (o.picture !== undefined) {
+    if (!o.picture || typeof o.picture !== 'object') return false;
+    const pic = o.picture as Record<string, unknown>;
+    if (typeof pic.alt !== 'string') return false;
+  }
   if (!Array.isArray(o.dimensions)) return false;
   return o.dimensions.every(isValidDimension);
 }
@@ -109,7 +101,6 @@ export function StoryWritingRubricQuestion(props: QuestionProps) {
     instructions,
     onComplete,
     onItemMarked,
-    onAbandon,
   } = props;
   const [phase, setPhase] = useState<Phase>('intro');
   // Per-dimension score state. null = unscored; 0..4 = chosen score.
@@ -170,7 +161,7 @@ export function StoryWritingRubricQuestion(props: QuestionProps) {
                 metadata: {
                   score,
                   scorer: 'ea' as const,
-                  anchor_text: anchor?.text ?? '',
+                  ...(anchor ? { anchor_text: anchor.text } : {}),
                 },
               };
             })
@@ -235,7 +226,7 @@ export function StoryWritingRubricQuestion(props: QuestionProps) {
             metadata: {
               score,
               scorer: 'ea',
-              anchor_text: anchor?.text ?? '',
+              ...(anchor ? { anchor_text: anchor.text } : {}),
             },
           });
         }
@@ -252,12 +243,9 @@ export function StoryWritingRubricQuestion(props: QuestionProps) {
     }
   }, [unscoredCount, finish]);
 
-  const handleAbandonChosen = useCallback(
-    (reason: SkipReason) => {
-      if (onAbandon) onAbandon(reason);
-      finish(reason);
-    },
-    [onAbandon, finish],
+  const handleSkipChosen = useCallback(
+    (reason: ManualSkipReason) => finish(reason),
+    [finish],
   );
 
   if (phase === 'intro') {
@@ -295,23 +283,12 @@ export function StoryWritingRubricQuestion(props: QuestionProps) {
     );
   }
 
-  if (phase === 'abandon-picker') {
+  if (phase === 'skip-picker') {
     return (
-      <View>
-        <Text>Why are you abandoning?</Text>
-        {SKIP_REASONS.map(({ reason, label }) => (
-          <Pressable
-            key={reason}
-            accessibilityRole="button"
-            onPress={() => handleAbandonChosen(reason)}
-          >
-            <Text>{label}</Text>
-          </Pressable>
-        ))}
-        <Pressable onPress={() => setPhase('active')}>
-          <Text>Cancel</Text>
-        </Pressable>
-      </View>
+      <SkipReasonPicker
+        onChoose={handleSkipChosen}
+        onCancel={() => setPhase('active')}
+      />
     );
   }
 
@@ -323,23 +300,25 @@ export function StoryWritingRubricQuestion(props: QuestionProps) {
   return (
     <View style={styles.root}>
       <ScrollView contentContainerStyle={styles.scroll}>
-        <Pressable
-          testID="picture-thumbnail"
-          accessibilityRole="button"
-          onPress={() => setPictureEnlarged(true)}
-          style={styles.thumbnailRow}
-        >
-          {effectiveItemSet.picture.source ? (
-            <Image
-              source={effectiveItemSet.picture.source}
-              style={styles.thumbnailImage}
-              accessibilityLabel={effectiveItemSet.picture.alt}
-            />
-          ) : null}
-          <Text style={styles.thumbnailAlt}>
-            {effectiveItemSet.picture.alt}
-          </Text>
-        </Pressable>
+        {effectiveItemSet.picture ? (
+          <Pressable
+            testID="picture-thumbnail"
+            accessibilityRole="button"
+            onPress={() => setPictureEnlarged(true)}
+            style={styles.thumbnailRow}
+          >
+            {effectiveItemSet.picture.source ? (
+              <Image
+                source={effectiveItemSet.picture.source}
+                style={styles.thumbnailImage}
+                accessibilityLabel={effectiveItemSet.picture.alt}
+              />
+            ) : null}
+            <Text style={styles.thumbnailAlt}>
+              {effectiveItemSet.picture.alt}
+            </Text>
+          </Pressable>
+        ) : null}
 
         {dimensions.map((d) => {
           const selectedScore = scores[d.code] ?? null;
@@ -372,15 +351,19 @@ export function StoryWritingRubricQuestion(props: QuestionProps) {
                         styles.chip,
                         {
                           backgroundColor: isSelected
-                            ? SELECTED_CHIP_BG
-                            : IDLE_CHIP_BG,
+                            ? tokens.color.primary
+                            : tokens.color.canvas,
                         },
                       ]}
                     >
                       <Text
                         style={[
                           styles.chipText,
-                          { color: isSelected ? '#ffffff' : '#1f3a5c' },
+                          {
+                            color: isSelected
+                              ? tokens.color.onPrimary
+                              : tokens.color.primary,
+                          },
                         ]}
                       >
                         {s}
@@ -389,7 +372,9 @@ export function StoryWritingRubricQuestion(props: QuestionProps) {
                   );
                 })}
               </View>
-              <Text style={styles.gloss}>{d.end_anchor_gloss}</Text>
+              {d.end_anchor_gloss !== '' ? (
+                <Text style={styles.gloss}>{d.end_anchor_gloss}</Text>
+              ) : null}
             </View>
           );
         })}
@@ -403,9 +388,9 @@ export function StoryWritingRubricQuestion(props: QuestionProps) {
         </Pressable>
         <Pressable
           accessibilityRole="button"
-          onPress={() => setPhase('abandon-picker')}
+          onPress={() => setPhase('skip-picker')}
         >
-          <Text>Abandon</Text>
+          <Text>Skip question</Text>
         </Pressable>
       </View>
 
@@ -420,12 +405,18 @@ export function StoryWritingRubricQuestion(props: QuestionProps) {
             {rubricDim ? (
               <>
                 <Text style={styles.modalHeader}>{rubricDim.label}</Text>
-                {rubricDim.anchors.map((a) => (
-                  <View key={a.score} style={styles.anchorRow}>
-                    <Text style={styles.anchorScore}>{a.score}</Text>
-                    <Text style={styles.anchorText}>{a.text}</Text>
-                  </View>
-                ))}
+                {rubricDim.anchors.length === 0 ? (
+                  <Text style={styles.rubricPending}>
+                    Rubric descriptions coming soon
+                  </Text>
+                ) : (
+                  rubricDim.anchors.map((a) => (
+                    <View key={a.score} style={styles.anchorRow}>
+                      <Text style={styles.anchorScore}>{a.score}</Text>
+                      <Text style={styles.anchorText}>{a.text}</Text>
+                    </View>
+                  ))
+                )}
               </>
             ) : null}
           </ScrollView>
@@ -439,34 +430,36 @@ export function StoryWritingRubricQuestion(props: QuestionProps) {
         </View>
       </Modal>
 
-      <Modal
-        visible={pictureEnlarged}
-        animationType="fade"
-        transparent={false}
-        onRequestClose={() => setPictureEnlarged(false)}
-      >
-        <View style={styles.modalRoot}>
-          <ScrollView contentContainerStyle={styles.modalContent}>
-            {effectiveItemSet.picture.source ? (
-              <Image
-                source={effectiveItemSet.picture.source}
-                style={styles.enlargedImage}
-                accessibilityLabel={effectiveItemSet.picture.alt}
-              />
-            ) : null}
-            <Text style={styles.enlargedAlt}>
-              {effectiveItemSet.picture.alt}
-            </Text>
-          </ScrollView>
-          <Pressable
-            accessibilityRole="button"
-            onPress={() => setPictureEnlarged(false)}
-            style={styles.modalCloseButton}
-          >
-            <Text style={styles.modalCloseText}>Close</Text>
-          </Pressable>
-        </View>
-      </Modal>
+      {effectiveItemSet.picture ? (
+        <Modal
+          visible={pictureEnlarged}
+          animationType="fade"
+          transparent={false}
+          onRequestClose={() => setPictureEnlarged(false)}
+        >
+          <View style={styles.modalRoot}>
+            <ScrollView contentContainerStyle={styles.modalContent}>
+              {effectiveItemSet.picture.source ? (
+                <Image
+                  source={effectiveItemSet.picture.source}
+                  style={styles.enlargedImage}
+                  accessibilityLabel={effectiveItemSet.picture.alt}
+                />
+              ) : null}
+              <Text style={styles.enlargedAlt}>
+                {effectiveItemSet.picture.alt}
+              </Text>
+            </ScrollView>
+            <Pressable
+              accessibilityRole="button"
+              onPress={() => setPictureEnlarged(false)}
+              style={styles.modalCloseButton}
+            >
+              <Text style={styles.modalCloseText}>Close</Text>
+            </Pressable>
+          </View>
+        </Modal>
+      ) : null}
     </View>
   );
 }
@@ -479,7 +472,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     padding: 8,
     marginBottom: 12,
-    backgroundColor: '#f4f6fa',
+    backgroundColor: tokens.color.canvas,
     borderRadius: 8,
     gap: 12,
   },
@@ -487,15 +480,15 @@ const styles = StyleSheet.create({
   thumbnailAlt: {
     flex: 1,
     fontSize: 14,
-    color: '#444',
+    color: tokens.color.ink,
     fontStyle: 'italic',
   },
   dimensionCard: {
     marginBottom: 16,
     padding: 12,
-    backgroundColor: '#ffffff',
+    backgroundColor: tokens.color.surface,
     borderWidth: 1,
-    borderColor: '#bbb',
+    borderColor: tokens.color.line,
     borderRadius: 8,
   },
   dimensionHeader: {
@@ -508,10 +501,10 @@ const styles = StyleSheet.create({
   viewRubricButton: {
     paddingHorizontal: 10,
     paddingVertical: 6,
-    backgroundColor: '#e8eef5',
+    backgroundColor: tokens.color.canvas,
     borderRadius: 6,
   },
-  viewRubricText: { fontSize: 12, color: '#1f3a5c', fontWeight: '600' },
+  viewRubricText: { fontSize: 12, color: tokens.color.primary, fontWeight: '600' },
   chipRow: {
     flexDirection: 'row',
     gap: 8,
@@ -524,17 +517,17 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     borderRadius: 8,
     borderWidth: 1,
-    borderColor: '#1f3a5c',
+    borderColor: tokens.color.primary,
   },
   chipText: { fontSize: 18, fontWeight: '600' },
-  gloss: { fontSize: 13, color: '#666' },
+  gloss: { fontSize: 13, color: tokens.color.muted },
   runningTotal: { fontSize: 20, fontWeight: '700', marginTop: 8 },
   nav: {
     flexDirection: 'row',
     gap: 16,
     padding: 12,
   },
-  modalRoot: { flex: 1, backgroundColor: '#ffffff' },
+  modalRoot: { flex: 1, backgroundColor: tokens.color.surface },
   modalContent: { padding: 24 },
   modalHeader: { fontSize: 22, fontWeight: '700', marginBottom: 12 },
   anchorRow: {
@@ -549,15 +542,19 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   anchorText: { fontSize: 15, flex: 1, lineHeight: 20 },
+  rubricPending: {
+    fontSize: tokens.font.body,
+    color: tokens.color.muted,
+  },
   modalCloseButton: {
     alignSelf: 'center',
     paddingHorizontal: 24,
     paddingVertical: 12,
-    backgroundColor: '#1f3a5c',
+    backgroundColor: tokens.color.primary,
     borderRadius: 8,
     margin: 16,
   },
-  modalCloseText: { color: '#ffffff', fontWeight: '600' },
+  modalCloseText: { color: tokens.color.onPrimary, fontWeight: '600' },
   enlargedImage: { width: '100%', height: 320, resizeMode: 'contain' },
   enlargedAlt: { fontSize: 14, fontStyle: 'italic', marginTop: 12 },
 });

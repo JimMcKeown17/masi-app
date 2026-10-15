@@ -2,7 +2,20 @@ import React from 'react';
 import { StyleSheet } from 'react-native';
 import { render, fireEvent, act } from '@testing-library/react-native';
 import { LetterSoundsQuestion } from '..';
-import { ChildReadingFontSizeProvider } from '../../../hooks/useChildReadingFontSize';
+import { FIXTURE_LETTER_SOUNDS_EN } from '../../../testFixtures';
+import { tokens } from '../../../theme/tokens';
+
+const SET = {
+  item_set_id: 'wela_plus_letter_sounds@fixture.en', question_code: 'wela_plus_letter_sounds',
+  question_version: 'fixture', language: 'en', columns: 4,
+  letters: ['a', 'n', 'i', 't', 'm', 's', 'p', 'e'],
+};
+
+function startQ(onComplete = jest.fn(), durationSec?: number) {
+  const r = render(<LetterSoundsQuestion language="en" itemSet={SET} instructions="." durationSec={durationSec} onComplete={onComplete} />);
+  fireEvent.press(r.getByText('Start'));
+  return { r, onComplete };
+}
 
 function fontSizeOf(node: { props: { style?: unknown } }): number | undefined {
   const flat = StyleSheet.flatten(node.props.style) as
@@ -16,6 +29,7 @@ describe('LetterSoundsQuestion — intro phase', () => {
     const { getByText } = render(
       <LetterSoundsQuestion
         language="en"
+        itemSet={FIXTURE_LETTER_SOUNDS_EN}
         instructions="Tap each letter the child gets right. Stop if the child gets a whole row wrong."
         onComplete={jest.fn()}
       />,
@@ -29,10 +43,11 @@ describe('LetterSoundsQuestion — intro phase', () => {
 });
 
 describe('LetterSoundsQuestion — active phase grid', () => {
-  test('Start transitions to active phase and renders letters from the bundled English item set', () => {
+  test('Start transitions to active phase and renders letters from the English fixture', () => {
     const { getByText } = render(
       <LetterSoundsQuestion
         language="en"
+        itemSet={FIXTURE_LETTER_SOUNDS_EN}
         instructions="."
         onComplete={jest.fn()}
       />,
@@ -48,6 +63,7 @@ describe('LetterSoundsQuestion — active phase grid', () => {
     const { getByText, getByLabelText } = render(
       <LetterSoundsQuestion
         language="en"
+        itemSet={FIXTURE_LETTER_SOUNDS_EN}
         instructions="."
         onComplete={jest.fn()}
       />,
@@ -63,6 +79,7 @@ describe('LetterSoundsQuestion — active phase grid', () => {
     const { getByText, getByLabelText } = render(
       <LetterSoundsQuestion
         language="en"
+        itemSet={FIXTURE_LETTER_SOUNDS_EN}
         instructions="."
         onComplete={jest.fn()}
       />,
@@ -84,6 +101,7 @@ describe('LetterSoundsQuestion — timer', () => {
     const { getByText } = render(
       <LetterSoundsQuestion
         language="en"
+        itemSet={FIXTURE_LETTER_SOUNDS_EN}
         instructions="."
         durationSec={60}
         onComplete={onComplete}
@@ -94,6 +112,7 @@ describe('LetterSoundsQuestion — timer', () => {
     act(() => {
       jest.advanceTimersByTime(60000);
     });
+    fireEvent.press(getByText('Reached the end'));
 
     expect(onComplete).toHaveBeenCalledTimes(1);
     const result = onComplete.mock.calls[0][0];
@@ -109,6 +128,7 @@ describe('LetterSoundsQuestion — timer', () => {
     const { getByText } = render(
       <LetterSoundsQuestion
         language="en"
+        itemSet={FIXTURE_LETTER_SOUNDS_EN}
         instructions="."
         durationSec={60}
         onComplete={onComplete}
@@ -119,6 +139,7 @@ describe('LetterSoundsQuestion — timer', () => {
     act(() => {
       jest.advanceTimersByTime(120000);
     });
+    fireEvent.press(getByText('Reached the end'));
 
     expect(onComplete).toHaveBeenCalledTimes(1);
   });
@@ -130,6 +151,7 @@ describe('LetterSoundsQuestion — End button and finalization', () => {
     const { getByText } = render(
       <LetterSoundsQuestion
         language="en"
+        itemSet={FIXTURE_LETTER_SOUNDS_EN}
         instructions="."
         durationSec={60}
         onComplete={onComplete}
@@ -137,6 +159,7 @@ describe('LetterSoundsQuestion — End button and finalization', () => {
     );
     fireEvent.press(getByText('Start'));
     fireEvent.press(getByText('End'));
+    fireEvent.press(getByText('Reached the end'));
 
     expect(onComplete).toHaveBeenCalledTimes(1);
     const result = onComplete.mock.calls[0][0];
@@ -149,6 +172,7 @@ describe('LetterSoundsQuestion — End button and finalization', () => {
     const { getByText, getByLabelText } = render(
       <LetterSoundsQuestion
         language="en"
+        itemSet={FIXTURE_LETTER_SOUNDS_EN}
         instructions="."
         durationSec={60}
         onComplete={onComplete}
@@ -159,87 +183,80 @@ describe('LetterSoundsQuestion — End button and finalization', () => {
     fireEvent.press(getByLabelText('b, idle'));
     fireEvent.press(getByLabelText('c, idle'));
     fireEvent.press(getByText('End'));
+    fireEvent.press(getByText('Reached the end'));
 
     expect(onComplete.mock.calls[0][0].derived.total_correct).toBe(3);
   });
 });
 
-describe('LetterSoundsQuestion — pagination', () => {
-  test('Next advances to a second page showing later letters', () => {
-    const { getByText, queryByText } = render(
-      <LetterSoundsQuestion
-        language="en"
-        instructions="."
-        durationSec={60}
-        onComplete={jest.fn()}
-      />,
-    );
-    fireEvent.press(getByText('Start'));
+test('renders every letter at once in rows of `columns`, no Next/Prev', () => {
+  const { r } = startQ();
+  for (const l of SET.letters) expect(r.getAllByText(l).length).toBeGreaterThan(0);
+  expect(r.queryByText('Next')).toBeNull();
+  expect(r.getAllByTestId(/^letter-row-/)).toHaveLength(2);
+});
 
-    expect(queryByText('u')).toBeNull();
-    fireEvent.press(getByText('Next'));
-    expect(getByText('u')).toBeTruthy();
-    expect(queryByText('a')).toBeNull();
-  });
+test('End opens the marker; picking item 5 scores positions 0..4 only', () => {
+  const { r, onComplete } = startQ();
+  fireEvent.press(r.getByLabelText('a, idle'));
+  fireEvent.press(r.getByLabelText('p, idle')); // position 6, beyond the marker
+  fireEvent.press(r.getByText('End'));
+  fireEvent.press(r.getByLabelText('m, item 5'));
+  fireEvent.press(r.getByText('Confirm'));
+  const res = onComplete.mock.calls[0][0];
+  expect(res.stopped_reason).toBe('ea_ended');
+  expect(res.derived.last_attempted_position).toBe(4);
+  expect(res.derived.total_attempted).toBe(5);
+  expect(res.derived.total_correct).toBe(1);
+  expect(res.derived.tracks_progress).toBe(true);
+  expect(res.items[6]).toMatchObject({ is_correct: false, metadata: { reached: false } });
+});
 
-  test('Prev returns to the previous page', () => {
-    const { getByText, queryByText } = render(
-      <LetterSoundsQuestion
-        language="en"
-        instructions="."
-        durationSec={60}
-        onComplete={jest.fn()}
-      />,
-    );
-    fireEvent.press(getByText('Start'));
-    fireEvent.press(getByText('Next'));
-    fireEvent.press(getByText('Prev'));
+test('cancel on the End marker returns to marking with marks intact', () => {
+  const { r, onComplete } = startQ();
+  fireEvent.press(r.getByLabelText('a, idle'));
+  fireEvent.press(r.getByText('End'));
+  fireEvent.press(r.getByText('Cancel'));
+  expect(onComplete).not.toHaveBeenCalled();
+  expect(r.getByLabelText('a, correct')).toBeTruthy();
+});
 
-    expect(getByText('a')).toBeTruthy();
-    expect(queryByText('u')).toBeNull();
-  });
+test('timer opens a non-cancellable marker; taps underneath are ignored; one onComplete', () => {
+  jest.useFakeTimers();
+  const { r, onComplete } = startQ(jest.fn(), 1);
+  act(() => { jest.advanceTimersByTime(1300); });
+  expect(r.queryByText('Cancel')).toBeNull();
+  expect(r.queryByLabelText('a, idle')).toBeNull(); // the marking grid is no longer interactive
+  fireEvent.press(r.getByText('Reached the end'));
+  expect(onComplete).toHaveBeenCalledTimes(1);
+  expect(onComplete.mock.calls[0][0].stopped_reason).toBe('timer');
+  expect(onComplete.mock.calls[0][0].derived.last_attempted_position).toBe(7);
+  jest.useRealTimers();
+});
 
-  test('last_attempted_position reflects the last visible index on the highest page visited', () => {
-    const onComplete = jest.fn();
+test('Nothing attempted gives -1 and zero attempted', () => {
+  const { r, onComplete } = startQ();
+  fireEvent.press(r.getByText('End'));
+  fireEvent.press(r.getByText('Nothing attempted'));
+  const d = onComplete.mock.calls[0][0].derived;
+  expect(d.last_attempted_position).toBe(-1);
+  expect(d.total_attempted).toBe(0);
+  expect(d.percent).toBe(0);
+});
+
+describe('LetterSoundsQuestion — fixed marking font', () => {
+  test('letter font size uses tokens.font.markingItem', () => {
     const { getByText } = render(
       <LetterSoundsQuestion
         language="en"
+        itemSet={FIXTURE_LETTER_SOUNDS_EN}
         instructions="."
-        durationSec={60}
-        onComplete={onComplete}
+        onComplete={jest.fn()}
       />,
     );
     fireEvent.press(getByText('Start'));
-    fireEvent.press(getByText('Next'));
-    fireEvent.press(getByText('End'));
 
-    // Bundled English set has 25 letters; on page 2 the last visible index is 24
-    expect(onComplete.mock.calls[0][0].derived.last_attempted_position).toBe(24);
-  });
-});
-
-describe('LetterSoundsQuestion — childReadingFontSize token', () => {
-  test('letter font size scales with the provider value (2.0x = double)', () => {
-    const props = {
-      language: 'en',
-      instructions: '.',
-      onComplete: jest.fn(),
-    } as const;
-
-    const { getByText: get1 } = render(<LetterSoundsQuestion {...props} />);
-    fireEvent.press(get1('Start'));
-    const baseSize = fontSizeOf(get1('a'));
-
-    const { getByText: get2 } = render(
-      <ChildReadingFontSizeProvider value={2.0}>
-        <LetterSoundsQuestion {...props} />
-      </ChildReadingFontSizeProvider>,
-    );
-    fireEvent.press(get2('Start'));
-    const scaledSize = fontSizeOf(get2('a'));
-
-    expect(baseSize).toBeGreaterThan(0);
-    expect(scaledSize).toBe((baseSize as number) * 2);
+    expect(fontSizeOf(getByText('a'))).toBe(tokens.font.markingItem);
   });
 });
 
@@ -252,6 +269,7 @@ describe('LetterSoundsQuestion — duration_ms wall-clock accuracy', () => {
     const { getByText } = render(
       <LetterSoundsQuestion
         language="en"
+        itemSet={FIXTURE_LETTER_SOUNDS_EN}
         instructions="."
         durationSec={60}
         onComplete={onComplete}
@@ -263,6 +281,7 @@ describe('LetterSoundsQuestion — duration_ms wall-clock accuracy', () => {
       jest.advanceTimersByTime(500);
     });
     fireEvent.press(getByText('End'));
+    fireEvent.press(getByText('Reached the end'));
 
     const { duration_ms } = onComplete.mock.calls[0][0];
     expect(duration_ms).toBeGreaterThanOrEqual(500);
@@ -276,6 +295,7 @@ describe('LetterSoundsQuestion — onItemMarked callback', () => {
     const { getByText, getByLabelText } = render(
       <LetterSoundsQuestion
         language="en"
+        itemSet={FIXTURE_LETTER_SOUNDS_EN}
         instructions="."
         onComplete={jest.fn()}
         onItemMarked={onItemMarked}
@@ -297,6 +317,7 @@ describe('LetterSoundsQuestion — onItemMarked callback', () => {
     const { getByText, getByLabelText } = render(
       <LetterSoundsQuestion
         language="en"
+        itemSet={FIXTURE_LETTER_SOUNDS_EN}
         instructions="."
         onComplete={jest.fn()}
         onItemMarked={onItemMarked}
@@ -316,6 +337,7 @@ describe('LetterSoundsQuestion — visible mark + grid layout', () => {
     const { getByText, getByLabelText } = render(
       <LetterSoundsQuestion
         language="en"
+        itemSet={FIXTURE_LETTER_SOUNDS_EN}
         instructions="."
         onComplete={jest.fn()}
       />,
@@ -334,31 +356,33 @@ describe('LetterSoundsQuestion — visible mark + grid layout', () => {
     expect(markedBg?.backgroundColor).not.toBe(idleBg?.backgroundColor);
   });
 
-  test('active-phase container lays out children as a row-wrapped grid', () => {
+  test('active-phase letter rows lay out children horizontally', () => {
     const { getByText, getByTestId } = render(
       <LetterSoundsQuestion
         language="en"
+        itemSet={FIXTURE_LETTER_SOUNDS_EN}
         instructions="."
         onComplete={jest.fn()}
       />,
     );
     fireEvent.press(getByText('Start'));
 
-    const grid = getByTestId('letter-grid');
-    const style = StyleSheet.flatten(grid.props.style) as {
+    const row = getByTestId('letter-row-0');
+    const style = StyleSheet.flatten(row.props.style) as {
       flexDirection?: string;
-      flexWrap?: string;
     };
     expect(style.flexDirection).toBe('row');
-    expect(style.flexWrap).toBe('wrap');
   });
 });
 
 describe('LetterSoundsQuestion — itemSet override validation', () => {
   test('falls back to bundled default when override lacks item_set_id', () => {
     const onComplete = jest.fn();
-    const incomplete = { letters: ['z'], lettersPerPage: 1, columns: 1 };
-    const { getByText } = render(
+    const incomplete = {
+      letters: ['fixture-only-invalid-letter'],
+      columns: 1,
+    };
+    const { getByText, queryByText } = render(
       <LetterSoundsQuestion
         language="en"
         instructions="."
@@ -368,12 +392,11 @@ describe('LetterSoundsQuestion — itemSet override validation', () => {
       />,
     );
     fireEvent.press(getByText('Start'));
-    expect(getByText('a')).toBeTruthy();
+    expect(queryByText('fixture-only-invalid-letter')).toBeNull();
     fireEvent.press(getByText('End'));
+    fireEvent.press(getByText('Reached the end'));
 
-    expect(onComplete.mock.calls[0][0].item_set_id).toMatch(
-      /^wela_plus_letter_sounds@stub/,
-    );
+    expect(onComplete.mock.calls[0][0].item_set_id).toBeDefined();
   });
 
   test('accepts a fully-formed override', () => {
@@ -382,7 +405,6 @@ describe('LetterSoundsQuestion — itemSet override validation', () => {
       item_set_id: 'custom@1.0.en',
       question_version: '1.0',
       letters: ['x', 'y'],
-      lettersPerPage: 20,
       columns: 5,
     };
     const { getByText } = render(
@@ -397,25 +419,28 @@ describe('LetterSoundsQuestion — itemSet override validation', () => {
     fireEvent.press(getByText('Start'));
     expect(getByText('x')).toBeTruthy();
     fireEvent.press(getByText('End'));
+    fireEvent.press(getByText('Reached the end'));
 
     expect(onComplete.mock.calls[0][0].item_set_id).toBe('custom@1.0.en');
   });
 });
 
-describe('LetterSoundsQuestion — stub item set hygiene', () => {
-  test('bundled stub item_set_id is clearly marked as stub (not the real WelaPLUS version)', () => {
+describe('LetterSoundsQuestion — fixture item set hygiene', () => {
+  test('fixture item_set_id is clearly marked as fixture', () => {
     const onComplete = jest.fn();
     const { getByText } = render(
       <LetterSoundsQuestion
         language="en"
+        itemSet={FIXTURE_LETTER_SOUNDS_EN}
         instructions="."
         onComplete={onComplete}
       />,
     );
     fireEvent.press(getByText('Start'));
     fireEvent.press(getByText('End'));
+    fireEvent.press(getByText('Reached the end'));
 
     const { item_set_id } = onComplete.mock.calls[0][0];
-    expect(item_set_id).toMatch(/stub/i);
+    expect(item_set_id).toBe('wela_plus_letter_sounds@fixture.en');
   });
 });

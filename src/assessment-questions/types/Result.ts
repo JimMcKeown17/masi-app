@@ -25,6 +25,7 @@ export interface ResultDerived {
   percent: number;
   last_attempted_position: number | null;
   was_timed?: boolean;
+  tracks_progress?: boolean;
   capture_mode?: 'grid' | 'sequential';
   correction_count?: number;
   [key: string]: unknown;

@@ -1,38 +1,27 @@
 /**
- * ReadPassageQuestion — WelaPLUS Pattern C (Q8, timed ORF passage).
+ * ReadPassageQuestion — WelaPLUS Pattern C (Q8, ORF passage).
  *
  * Child reads a flowing-paragraph passage aloud; EA taps each correct word.
- * Timed (default 60s if host omits durationSec). Passage length is variable —
- * read from the itemSet, not hardcoded. derived.correct_words_per_minute is
- * computed from total_correct and duration_ms.
+ * Untimed unless durationSec is provided. Passage length and paragraph starts
+ * come from the itemSet. Timed runs report correct words per minute.
  */
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { View, Text, Pressable, ScrollView, StyleSheet } from 'react-native';
 import type { QuestionProps } from '../../types/QuestionProps';
-import type { Result, ResultItem, StoppedReason } from '../../types/Result';
+import type { ResultItem, StoppedReason } from '../../types/Result';
 import type { ReadPassageItemSet, ReadPassageWord } from './types';
 import { WELA_PLUS_READ_PASSAGE_EN } from '../../itemsets/wela_plus_read_passage.en';
 import { WELA_PLUS_READ_PASSAGE_XH } from '../../itemsets/wela_plus_read_passage.xh';
 import { useToggleMark } from '../../hooks/useToggleMark';
-import { useChildReadingFontSize } from '../../hooks/useChildReadingFontSize';
+import { tokens } from '../../theme/tokens';
+import { SkipReasonPicker } from '../../skip/SkipReasonPicker';
+import type { ManualSkipReason } from '../../skip/skipReasons';
+import { applyProgress, NO_ATTEMPT } from '../../progress/applyProgress';
+import { LastAttemptedSheet } from '../../progress/LastAttemptedSheet';
 
-const BASE_WORD_FONT_SIZE = 22;
-const MARKED_BG = '#2e7d32';
-const IDLE_BG = '#ffffff';
-const DEFAULT_DURATION_SEC = 60;
-
-type Phase = 'intro' | 'active' | 'abandon-picker' | 'finished';
+type Phase = 'intro' | 'active' | 'mark-last' | 'skip-picker' | 'finished';
+type MarkReason = 'ea_ended' | 'timer';
 type MarkingPolarity = 'tap_correct' | 'tap_wrong';
-type SkipReason = Extract<StoppedReason, `skipped_${string}` | 'ea_ended'>;
-
-const SKIP_REASONS: { reason: SkipReason; label: string }[] = [
-  { reason: 'skipped_child_refused', label: 'Child refused' },
-  { reason: 'skipped_tired', label: 'Child tired' },
-  { reason: 'skipped_time', label: 'Out of time' },
-  { reason: 'skipped_age', label: 'Age inappropriate' },
-  { reason: 'skipped_prerequisite_unmet', label: 'Prerequisite unmet' },
-  { reason: 'skipped_other', label: 'Other' },
-];
 
 type FullItemSet = ReadPassageItemSet & {
   item_set_id: string;
@@ -51,8 +40,27 @@ function isFullItemSet(value: unknown): value is FullItemSet {
   const o = value as Record<string, unknown>;
   if (typeof o.item_set_id !== 'string') return false;
   if (typeof o.question_version !== 'string') return false;
-  if (!Array.isArray(o.words)) return false;
-  return o.words.every(isValidWord);
+  const words = o.words;
+  if (!Array.isArray(words)) return false;
+  const paragraphStarts = o.paragraph_starts;
+  if (paragraphStarts !== undefined) {
+    if (!Array.isArray(paragraphStarts)) return false;
+    if (paragraphStarts.length === 0 || paragraphStarts[0] !== 0) {
+      return false;
+    }
+    if (
+      !paragraphStarts.every(
+        (start, idx) =>
+          Number.isInteger(start) &&
+          start >= 0 &&
+          start < words.length &&
+          (idx === 0 || start > paragraphStarts[idx - 1]),
+      )
+    ) {
+      return false;
+    }
+  }
+  return words.every(isValidWord);
 }
 
 function resolveItemSet(language: string, override: unknown): FullItemSet {
@@ -66,6 +74,13 @@ function keyFor(idx: number, word: string): string {
   return `${idx}:${word}`;
 }
 
+function splitParagraphs<T>(items: T[], starts?: number[]): T[][] {
+  const paragraphStarts = starts ?? [0];
+  return paragraphStarts.map((start, idx) =>
+    items.slice(start, paragraphStarts[idx + 1] ?? items.length),
+  );
+}
+
 export function ReadPassageQuestion(
   props: QuestionProps & { markingPolarity?: MarkingPolarity },
 ) {
@@ -76,16 +91,11 @@ export function ReadPassageQuestion(
     durationSec,
     onComplete,
     onItemMarked,
-    onAbandon,
     markingPolarity = 'tap_correct',
   } = props;
-  // Q8 default timer: if host omits durationSec, fall back to 60s per PRD.
-  const effectiveDurationSec = durationSec ?? DEFAULT_DURATION_SEC;
-
   const [phase, setPhase] = useState<Phase>('intro');
+  const [markReason, setMarkReason] = useState<MarkReason>('ea_ended');
   const { isMarked, toggle } = useToggleMark();
-  const fontScale = useChildReadingFontSize();
-  const wordFontSize = BASE_WORD_FONT_SIZE * fontScale;
   const effectiveItemSet = resolveItemSet(language, itemSet);
 
   const isMarkedRef = useRef(isMarked);
@@ -95,64 +105,46 @@ export function ReadPassageQuestion(
 
   const hasFinishedRef = useRef(false);
   const startTimeMsRef = useRef<number | null>(null);
-  const lastAttemptedPositionRef = useRef<number | null>(null);
 
   const words = effectiveItemSet.words;
+  const indexedWords = words.map((word, idx) => ({ word, idx }));
+  const paragraphs = splitParagraphs(
+    indexedWords,
+    effectiveItemSet.paragraph_starts,
+  );
 
   const finish = useCallback(
-    (stoppedReason: StoppedReason) => {
+    (stoppedReason: StoppedReason, lastAttempted: number = NO_ATTEMPT) => {
       if (hasFinishedRef.current) return;
       hasFinishedRef.current = true;
       setPhase('finished');
-
-      const lastPosRaw = lastAttemptedPositionRef.current;
-      // Q8 is always timed → numeric last_attempted_position required;
-      // -1 sentinel for "no items reached".
-      const lastPos = lastPosRaw === null ? -1 : lastPosRaw;
-      const skippedEarly = stoppedReason.startsWith('skipped_');
-      const totalAttempted = skippedEarly || lastPos < 0 ? 0 : lastPos + 1;
-
-      // Skip-emits-empty contract: skipped_* never persists per-item rows.
       const isSkipped = stoppedReason.startsWith('skipped_');
-      const items = isSkipped
+      const raw = isSkipped
         ? []
         : words.map((w, idx) => {
             const tapped = isMarkedRef.current(keyFor(idx, w.word));
-            // Items past the reached boundary are "not reached" — they must
-            // NOT count as correct, regardless of polarity. Otherwise
-            // tap_wrong would inflate WPM/percent by treating untapped
-            // trailing words as correct. For lastPos = -1 (no taps), every
-            // idx >= 0 is "past" lastPos → every item is not-reached.
-            const notReached = idx > lastPos;
-            const isCorrect = notReached
-              ? false
-              : markingPolarity === 'tap_wrong'
-              ? !tapped
-              : tapped;
             return {
               position: idx,
               item_key: w.item_key,
               prompt: w.word,
-              is_correct: isCorrect,
+              is_correct:
+                markingPolarity === 'tap_wrong' ? !tapped : tapped,
             };
           });
+      const { items, totalAttempted } = isSkipped
+        ? { items: [], totalAttempted: 0 }
+        : applyProgress(raw, lastAttempted);
       const totalCorrect = items.filter((i) => i.is_correct).length;
-      const percent =
-        totalAttempted > 0
-          ? Math.round((totalCorrect / totalAttempted) * 100)
-          : 0;
       const elapsedMs =
         startTimeMsRef.current === null
           ? 0
           : Date.now() - startTimeMsRef.current;
-      // WPM = (correct / duration_ms) * 60000. Guard against duration_ms=0
-      // (e.g. EA hits End at t=0) to avoid divide-by-zero → Infinity.
+      const wasTimed = durationSec !== undefined;
       const wpm =
         elapsedMs > 0
           ? Math.round((totalCorrect / elapsedMs) * 60000)
           : 0;
-
-      const result: Result = {
+      onComplete({
         question_code: 'wela_plus_read_passage',
         question_version: effectiveItemSet.question_version,
         item_set_id: effectiveItemSet.item_set_id,
@@ -163,15 +155,27 @@ export function ReadPassageQuestion(
         derived: {
           total_correct: totalCorrect,
           total_attempted: totalAttempted,
-          percent,
-          last_attempted_position: lastPos,
-          was_timed: true,
-          correct_words_per_minute: wpm,
+          percent:
+            totalAttempted > 0
+              ? Math.round((totalCorrect / totalAttempted) * 100)
+              : 0,
+          last_attempted_position: isSkipped ? null : lastAttempted,
+          was_timed: wasTimed,
+          tracks_progress: !isSkipped,
+          ...(wasTimed && !isSkipped
+            ? { correct_words_per_minute: wpm }
+            : {}),
         },
-      };
-      onComplete(result);
+      });
     },
-    [effectiveItemSet, language, words, markingPolarity, onComplete],
+    [
+      effectiveItemSet,
+      language,
+      words,
+      markingPolarity,
+      durationSec,
+      onComplete,
+    ],
   );
 
   useEffect(() => {
@@ -179,30 +183,26 @@ export function ReadPassageQuestion(
     if (startTimeMsRef.current === null) {
       startTimeMsRef.current = Date.now();
     }
+    if (durationSec === undefined) return undefined;
     const interval = setInterval(() => {
       const elapsed =
         startTimeMsRef.current === null
           ? 0
           : Date.now() - startTimeMsRef.current;
-      if (elapsed >= effectiveDurationSec * 1000) {
+      if (elapsed >= durationSec * 1000) {
         clearInterval(interval);
-        finish('timer');
+        setMarkReason('timer');
+        setPhase('mark-last');
       }
     }, 250);
     return () => clearInterval(interval);
-  }, [phase, effectiveDurationSec, finish]);
+  }, [phase, durationSec]);
 
   const handleToggle = useCallback(
     (idx: number, w: ReadPassageWord) => {
       const key = keyFor(idx, w.word);
       const willBeMarked = !isMarkedRef.current(key);
       toggle(key);
-      if (
-        lastAttemptedPositionRef.current === null ||
-        idx > lastAttemptedPositionRef.current
-      ) {
-        lastAttemptedPositionRef.current = idx;
-      }
       if (onItemMarked) {
         const tappedAfter = willBeMarked;
         const isCorrect =
@@ -219,13 +219,17 @@ export function ReadPassageQuestion(
     [toggle, markingPolarity, onItemMarked],
   );
 
-  const handleAbandonChosen = useCallback(
-    (reason: SkipReason) => {
-      if (onAbandon) onAbandon(reason);
-      finish(reason);
-    },
-    [onAbandon, finish],
+  const handleSkipChosen = useCallback(
+    (reason: ManualSkipReason) => finish(reason),
+    [finish],
   );
+
+  const highestMarkedIndex = useCallback(() => {
+    for (let idx = words.length - 1; idx >= 0; idx -= 1) {
+      if (isMarkedRef.current(keyFor(idx, words[idx].word))) return idx;
+    }
+    return 0;
+  }, [words]);
 
   if (phase === 'intro') {
     return (
@@ -242,73 +246,91 @@ export function ReadPassageQuestion(
     return <View />;
   }
 
-  if (phase === 'abandon-picker') {
+  if (phase === 'skip-picker') {
     return (
-      <View>
-        <Text>Why are you abandoning?</Text>
-        {SKIP_REASONS.map(({ reason, label }) => (
-          <Pressable
-            key={reason}
-            accessibilityRole="button"
-            onPress={() => handleAbandonChosen(reason)}
-          >
-            <Text>{label}</Text>
-          </Pressable>
-        ))}
-        <Pressable onPress={() => setPhase('active')}>
-          <Text>Cancel</Text>
-        </Pressable>
-      </View>
+      <SkipReasonPicker
+        onChoose={handleSkipChosen}
+        onCancel={() => setPhase('active')}
+      />
     );
   }
+
+  if (phase === 'mark-last') {
+    return (
+      <LastAttemptedSheet
+        labels={words.map((word) => word.word)}
+        rowLengths={paragraphs.map((paragraph) => paragraph.length)}
+        defaultIndex={highestMarkedIndex()}
+        onConfirm={(idx) => finish(markReason, idx)}
+        onCancel={
+          markReason === 'ea_ended' ? () => setPhase('active') : undefined
+        }
+      />
+    );
+  }
+
+  const renderWord = ({ word: w, idx }: { word: ReadPassageWord; idx: number }) => {
+    const key = keyFor(idx, w.word);
+    const marked = isMarked(key);
+    const labelState = marked ? 'correct' : 'idle';
+    return (
+      <Pressable
+        key={key}
+        testID={`pill-${w.item_key}`}
+        accessibilityRole="button"
+        accessibilityLabel={`${w.word}, ${labelState}`}
+        onPress={() => handleToggle(idx, w)}
+        style={[
+          styles.pill,
+          {
+            backgroundColor: marked
+              ? tokens.color.marked
+              : tokens.color.surface,
+          },
+        ]}
+      >
+        <Text
+          style={[
+            styles.word,
+            {
+              color: marked ? tokens.color.onMarked : tokens.color.ink,
+            },
+          ]}
+        >
+          {w.word}
+        </Text>
+      </Pressable>
+    );
+  };
 
   return (
     <View style={styles.root}>
       <ScrollView
         testID="passage-scroll"
         style={styles.scroll}
-        contentContainerStyle={styles.wrap}
+        contentContainerStyle={styles.paragraphs}
       >
-        {words.map((w, idx) => {
-          const key = keyFor(idx, w.word);
-          const marked = isMarked(key);
-          const labelState = marked ? 'correct' : 'idle';
-          return (
-            <Pressable
-              key={`${w.item_key}-${idx}`}
-              testID={`pill-${w.item_key}`}
-              accessibilityRole="button"
-              accessibilityLabel={`${w.word}, ${labelState}`}
-              onPress={() => handleToggle(idx, w)}
-              style={[
-                styles.pill,
-                { backgroundColor: marked ? MARKED_BG : IDLE_BG },
-              ]}
-            >
-              <Text
-                style={[
-                  styles.word,
-                  {
-                    fontSize: wordFontSize,
-                    color: marked ? '#ffffff' : '#111',
-                  },
-                ]}
-              >
-                {w.word}
-              </Text>
-            </Pressable>
-          );
-        })}
+        {paragraphs.map((paragraph, p) => (
+          <View key={p} testID={`paragraph-${p}`} style={styles.paragraph}>
+            {paragraph.map(renderWord)}
+          </View>
+        ))}
       </ScrollView>
       <View style={styles.nav}>
-        <Pressable accessibilityRole="button" onPress={() => finish('ea_ended')}>
+        <Pressable
+          accessibilityRole="button"
+          onPress={() => {
+            setMarkReason('ea_ended');
+            setPhase('mark-last');
+          }}
+        >
           <Text>End</Text>
         </Pressable>
         <Pressable
           accessibilityRole="button"
-          onPress={() => setPhase('abandon-picker')}
+          onPress={() => setPhase('skip-picker')}
         >
-          <Text>Abandon</Text>
+          <Text>Skip question</Text>
         </Pressable>
       </View>
     </View>
@@ -318,23 +340,26 @@ export function ReadPassageQuestion(
 const styles = StyleSheet.create({
   root: { flex: 1 },
   scroll: { flex: 1 },
-  wrap: {
+  paragraphs: {
+    gap: tokens.space.lg,
+    padding: tokens.space.md,
+  },
+  paragraph: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 6,
-    padding: 12,
+    gap: tokens.space.sm,
   },
   pill: {
-    paddingHorizontal: 10,
-    paddingVertical: 6,
+    paddingHorizontal: tokens.space.md,
+    paddingVertical: tokens.space.sm,
     borderWidth: 1,
-    borderColor: '#999',
-    borderRadius: 999,
+    borderColor: tokens.color.line,
+    borderRadius: tokens.radius.pill,
   },
-  word: { fontWeight: '600' },
+  word: { fontSize: tokens.font.markingItem, fontWeight: '600' },
   nav: {
     flexDirection: 'row',
-    gap: 16,
-    padding: 12,
+    gap: tokens.space.lg,
+    padding: tokens.space.md,
   },
 });

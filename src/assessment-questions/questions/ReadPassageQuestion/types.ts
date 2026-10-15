@@ -5,4 +5,5 @@ export interface ReadPassageWord {
 
 export interface ReadPassageItemSet {
   words: ReadPassageWord[];
+  paragraph_starts?: number[];
 }

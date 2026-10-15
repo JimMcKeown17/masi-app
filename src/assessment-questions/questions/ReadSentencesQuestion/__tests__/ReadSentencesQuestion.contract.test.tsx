@@ -1,11 +1,13 @@
 import { fireEvent } from '@testing-library/react-native';
 import { runContractTest } from '../../../contractTest/runContractTest';
 import { ReadSentencesQuestion } from '..';
+import { FIXTURE_READ_SENTENCES_EN } from '../../../testFixtures';
 
 describe('ReadSentencesQuestion — OSS contract', () => {
   test('Finish on a partially-marked Run emits a contract-valid Result', async () => {
     const { rendered, verdict } = runContractTest(ReadSentencesQuestion, {
       language: 'en',
+      itemSet: FIXTURE_READ_SENTENCES_EN,
       instructions: '.',
     });
     fireEvent.press(rendered.getByText('Start'));

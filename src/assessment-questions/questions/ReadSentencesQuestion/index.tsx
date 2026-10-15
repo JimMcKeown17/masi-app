@@ -18,27 +18,13 @@ import type {
 import { WELA_PLUS_READ_SENTENCES_EN } from '../../itemsets/wela_plus_read_sentences.en';
 import { WELA_PLUS_READ_SENTENCES_XH } from '../../itemsets/wela_plus_read_sentences.xh';
 import { useToggleMark } from '../../hooks/useToggleMark';
-import { useChildReadingFontSize } from '../../hooks/useChildReadingFontSize';
+import { tokens } from '../../theme/tokens';
+import { SkipReasonPicker } from '../../skip/SkipReasonPicker';
+import type { ManualSkipReason } from '../../skip/skipReasons';
 
-const BASE_WORD_FONT_SIZE = 22;
-const MARKED_BG = '#2e7d32';
-const IDLE_BG = '#ffffff';
-const SENTENCE_BG = '#f4f6fa';
-
-type Phase = 'intro' | 'active' | 'confirm-finish' | 'abandon-picker' | 'finished';
+type Phase = 'intro' | 'active' | 'confirm-finish' | 'skip-picker' | 'finished';
 
 type MarkingPolarity = 'tap_correct' | 'tap_wrong';
-
-type SkipReason = Extract<StoppedReason, `skipped_${string}` | 'ea_ended'>;
-
-const SKIP_REASONS: { reason: SkipReason; label: string }[] = [
-  { reason: 'skipped_child_refused', label: 'Child refused' },
-  { reason: 'skipped_tired', label: 'Child tired' },
-  { reason: 'skipped_time', label: 'Out of time' },
-  { reason: 'skipped_age', label: 'Age inappropriate' },
-  { reason: 'skipped_prerequisite_unmet', label: 'Prerequisite unmet' },
-  { reason: 'skipped_other', label: 'Other' },
-];
 
 type FullItemSet = ReadSentencesItemSet & {
   item_set_id: string;
@@ -111,13 +97,10 @@ export function ReadSentencesQuestion(
     instructions,
     onComplete,
     onItemMarked,
-    onAbandon,
     markingPolarity = 'tap_correct',
   } = props;
   const [phase, setPhase] = useState<Phase>('intro');
   const { isMarked, toggle } = useToggleMark();
-  const fontScale = useChildReadingFontSize();
-  const wordFontSize = BASE_WORD_FONT_SIZE * fontScale;
   const effectiveItemSet = resolveItemSet(language, itemSet);
 
   const isMarkedRef = useRef(isMarked);
@@ -181,7 +164,7 @@ export function ReadSentencesQuestion(
         ? []
         : items.map((i) => i.is_correct);
       const totalCorrect = items.filter((i) => i.is_correct).length;
-      const totalAttempted = isSkipped ? 0 : flatWords.length;
+      const totalAttempted = items.length;
       const percent =
         totalAttempted > 0
           ? Math.round((totalCorrect / totalAttempted) * 100)
@@ -207,8 +190,9 @@ export function ReadSentencesQuestion(
           total_correct: totalCorrect,
           total_attempted: totalAttempted,
           percent,
-          last_attempted_position: null,
+          last_attempted_position: isSkipped ? null : items.length - 1,
           was_timed: false,
+          tracks_progress: !isSkipped,
           per_sentence_percent: perSentence,
         },
       };
@@ -252,12 +236,9 @@ export function ReadSentencesQuestion(
     }
   }, [unmarkedCount, finish]);
 
-  const handleAbandonChosen = useCallback(
-    (reason: SkipReason) => {
-      if (onAbandon) onAbandon(reason);
-      finish(reason);
-    },
-    [onAbandon, finish],
+  const handleSkipChosen = useCallback(
+    (reason: ManualSkipReason) => finish(reason),
+    [finish],
   );
 
   if (phase === 'intro') {
@@ -289,23 +270,12 @@ export function ReadSentencesQuestion(
     );
   }
 
-  if (phase === 'abandon-picker') {
+  if (phase === 'skip-picker') {
     return (
-      <View>
-        <Text>Why are you abandoning?</Text>
-        {SKIP_REASONS.map(({ reason, label }) => (
-          <Pressable
-            key={reason}
-            accessibilityRole="button"
-            onPress={() => handleAbandonChosen(reason)}
-          >
-            <Text>{label}</Text>
-          </Pressable>
-        ))}
-        <Pressable onPress={() => setPhase('active')}>
-          <Text>Cancel</Text>
-        </Pressable>
-      </View>
+      <SkipReasonPicker
+        onChoose={handleSkipChosen}
+        onCancel={() => setPhase('active')}
+      />
     );
   }
 
@@ -332,15 +302,16 @@ export function ReadSentencesQuestion(
                   onPress={() => handleToggle(flat)}
                   style={[
                     styles.pill,
-                    { backgroundColor: marked ? MARKED_BG : IDLE_BG },
+                    {
+                      backgroundColor: marked ? tokens.color.marked : tokens.color.surface,
+                    },
                   ]}
                 >
                   <Text
                     style={[
                       styles.word,
                       {
-                        fontSize: wordFontSize,
-                        color: marked ? '#ffffff' : '#111',
+                        color: marked ? tokens.color.onMarked : tokens.color.ink,
                       },
                     ]}
                   >
@@ -358,9 +329,9 @@ export function ReadSentencesQuestion(
         </Pressable>
         <Pressable
           accessibilityRole="button"
-          onPress={() => setPhase('abandon-picker')}
+          onPress={() => setPhase('skip-picker')}
         >
-          <Text>Abandon</Text>
+          <Text>Skip question</Text>
         </Pressable>
       </View>
     </View>
@@ -373,23 +344,23 @@ const styles = StyleSheet.create({
   sentenceRow: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 8,
-    padding: 12,
-    margin: 8,
-    backgroundColor: SENTENCE_BG,
-    borderRadius: 8,
+    gap: tokens.space.sm,
+    padding: tokens.space.md,
+    margin: tokens.space.sm,
+    backgroundColor: tokens.color.canvas,
+    borderRadius: tokens.radius.cell,
   },
   pill: {
-    paddingHorizontal: 12,
-    paddingVertical: 8,
+    paddingHorizontal: tokens.space.md,
+    paddingVertical: tokens.space.sm,
     borderWidth: 1,
-    borderColor: '#999',
-    borderRadius: 999,
+    borderColor: tokens.color.line,
+    borderRadius: tokens.radius.pill,
   },
-  word: { fontWeight: '600' },
+  word: { fontSize: tokens.font.markingItem, fontWeight: '600' },
   nav: {
     flexDirection: 'row',
-    gap: 16,
-    padding: 12,
+    gap: tokens.space.lg,
+    padding: tokens.space.md,
   },
 });

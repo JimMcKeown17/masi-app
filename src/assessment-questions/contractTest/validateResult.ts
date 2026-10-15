@@ -120,10 +120,22 @@ export function validateResult(result: unknown): ValidationVerdict {
     );
   }
 
-  if (derivedObj?.was_timed === true && positionMissing) {
+  // A skipped Question never presented its items, so it has no progress to report:
+  // skips are the only exemption from the timed-progress rule.
+  const isSkip =
+    typeof r.stopped_reason === 'string' && r.stopped_reason.startsWith('skipped_');
+  if (derivedObj?.was_timed === true && !isSkip && positionMissing) {
     errors.push(
-      'last_attempted_position: required when derived.was_timed is true — timed Questions must always report progress, regardless of stop reason'
+      'last_attempted_position: required when derived.was_timed is true (only skipped_* results are exempt)'
     );
+  }
+
+  if (derivedObj?.tracks_progress === true) {
+    const p = derivedObj.last_attempted_position;
+    const itemCount = Array.isArray(r.items) ? r.items.length : 0;
+    if (typeof p !== 'number' || !Number.isInteger(p) || p < -1 || p >= Math.max(itemCount, 1)) {
+      errors.push('last_attempted_position: tracks_progress requires an integer in [-1, items.length)');
+    }
   }
 
   return { valid: errors.length === 0, errors };

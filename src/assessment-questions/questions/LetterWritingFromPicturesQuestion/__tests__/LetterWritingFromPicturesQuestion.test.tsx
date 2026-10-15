@@ -1,12 +1,14 @@
 import React from 'react';
 import { render, fireEvent } from '@testing-library/react-native';
 import { LetterWritingFromPicturesQuestion } from '..';
+import { FIXTURE_LETTER_WRITING_EN } from '../../../testFixtures';
 
 describe('LetterWritingFromPicturesQuestion — intro & first page', () => {
   test('Start renders 8 cells on page 1 with picture alt + expected letter', () => {
     const { getByText } = render(
       <LetterWritingFromPicturesQuestion
         language="en"
+        itemSet={FIXTURE_LETTER_WRITING_EN}
         instructions="."
         onComplete={jest.fn()}
       />,
@@ -25,6 +27,7 @@ describe('LetterWritingFromPicturesQuestion — pagination', () => {
     const { getByText } = render(
       <LetterWritingFromPicturesQuestion
         language="en"
+        itemSet={FIXTURE_LETTER_WRITING_EN}
         instructions="."
         onComplete={jest.fn()}
       />,
@@ -40,6 +43,7 @@ describe('LetterWritingFromPicturesQuestion — pagination', () => {
     const { getByText, queryByText } = render(
       <LetterWritingFromPicturesQuestion
         language="en"
+        itemSet={FIXTURE_LETTER_WRITING_EN}
         instructions="."
         onComplete={jest.fn()}
       />,
@@ -57,6 +61,7 @@ describe('LetterWritingFromPicturesQuestion — batch marking', () => {
     const { getByText, getByTestId } = render(
       <LetterWritingFromPicturesQuestion
         language="en"
+        itemSet={FIXTURE_LETTER_WRITING_EN}
         instructions="."
         onComplete={jest.fn()}
       />,
@@ -74,6 +79,7 @@ describe('LetterWritingFromPicturesQuestion — batch marking', () => {
     const { getByText, getByTestId } = render(
       <LetterWritingFromPicturesQuestion
         language="en"
+        itemSet={FIXTURE_LETTER_WRITING_EN}
         instructions="."
         onComplete={onComplete}
       />,
@@ -96,26 +102,24 @@ describe('LetterWritingFromPicturesQuestion — batch marking', () => {
   });
 });
 
-describe('LetterWritingFromPicturesQuestion — Abandon flow', () => {
-  test('Abandon picker fires onAbandon', () => {
+describe('LetterWritingFromPicturesQuestion — Skip flow', () => {
+  test('Skip picker emits Result', () => {
     const onComplete = jest.fn();
-    const onAbandon = jest.fn();
     const { getByText } = render(
       <LetterWritingFromPicturesQuestion
         language="en"
+        itemSet={FIXTURE_LETTER_WRITING_EN}
         instructions="."
         onComplete={onComplete}
-        onAbandon={onAbandon}
       />,
     );
     fireEvent.press(getByText('Start'));
-    fireEvent.press(getByText('Abandon'));
+    fireEvent.press(getByText('Skip question'));
     fireEvent.press(getByText('Child refused'));
-    expect(onAbandon).toHaveBeenCalledWith('skipped_child_refused');
     expect(onComplete.mock.calls[0][0].stopped_reason).toBe('skipped_child_refused');
   });
 
-  test('skipped_* abandon emits items=[] (no bogus failed rows for skip)', () => {
+  test('skipped_* reason emits items=[] (no bogus failed rows for skip)', () => {
     // Adversarial review finding: skipped Questions must not persist as if
     // every item was answered wrong. Components emit no per-item data on
     // skip; the host's persistence layer is responsible for translating
@@ -124,12 +128,13 @@ describe('LetterWritingFromPicturesQuestion — Abandon flow', () => {
     const { getByText } = render(
       <LetterWritingFromPicturesQuestion
         language="en"
+        itemSet={FIXTURE_LETTER_WRITING_EN}
         instructions="."
         onComplete={onComplete}
       />,
     );
     fireEvent.press(getByText('Start'));
-    fireEvent.press(getByText('Abandon'));
+    fireEvent.press(getByText('Skip question'));
     fireEvent.press(getByText('Child tired'));
     const r = onComplete.mock.calls[0][0];
     expect(r.stopped_reason).toBe('skipped_tired');
@@ -140,13 +145,14 @@ describe('LetterWritingFromPicturesQuestion — Abandon flow', () => {
   });
 });
 
-describe('LetterWritingFromPicturesQuestion — stub alphabet integrity', () => {
-  test('every stub item_key maps to expected_letter at alphabet position', () => {
-    // Codex caught: a stub with two B-leading entries and zero X-leading
+describe('LetterWritingFromPicturesQuestion — fixture alphabet integrity', () => {
+  test('every fixture item_key maps to expected_letter at alphabet position', () => {
+    // Codex caught: a fixture with two B-leading entries and zero X-leading
     // entries would silently mis-score an X cell in any pre-#34 run.
     const { getByText, getByTestId } = render(
       <LetterWritingFromPicturesQuestion
         language="en"
+        itemSet={FIXTURE_LETTER_WRITING_EN}
         instructions="."
         onComplete={jest.fn()}
       />,
@@ -163,15 +169,23 @@ describe('LetterWritingFromPicturesQuestion — stub alphabet integrity', () => 
 
 describe('LetterWritingFromPicturesQuestion — itemSet override', () => {
   test('falls back to bundled default when override missing item_set_id', () => {
-    const { getByText } = render(
+    const { getByText, queryByText } = render(
       <LetterWritingFromPicturesQuestion
         language="en"
         instructions="."
-        itemSet={{ prompts: [] }}
+        itemSet={{
+          prompts: [
+            {
+              item_key: 'invalid',
+              picture: { source: null, alt: 'fixture-only-invalid-picture' },
+              expected_letter: 'x',
+            },
+          ],
+        }}
         onComplete={jest.fn()}
       />,
     );
     fireEvent.press(getByText('Start'));
-    expect(getByText('apple')).toBeTruthy();
+    expect(queryByText('fixture-only-invalid-picture')).toBeNull();
   });
 });

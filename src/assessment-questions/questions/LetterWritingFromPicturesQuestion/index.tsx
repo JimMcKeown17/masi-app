@@ -19,28 +19,19 @@ import { WELA_PLUS_LETTER_WRITING_EN } from '../../itemsets/wela_plus_letter_wri
 import { WELA_PLUS_LETTER_WRITING_XH } from '../../itemsets/wela_plus_letter_writing.xh';
 import { useToggleMark } from '../../hooks/useToggleMark';
 import { useChildReadingFontSize } from '../../hooks/useChildReadingFontSize';
+import { tokens } from '../../theme/tokens';
+import { SkipReasonPicker } from '../../skip/SkipReasonPicker';
+import type { ManualSkipReason } from '../../skip/skipReasons';
 
 const BASE_LETTER_FONT_SIZE = 18;
 const BASE_ALT_FONT_SIZE = 14;
-const MARKED_BG = '#2e7d32';
-const IDLE_BG = '#ffffff';
 
 type Phase =
   | 'intro'
   | 'active'
   | 'confirm-finish'
-  | 'abandon-picker'
+  | 'skip-picker'
   | 'finished';
-type SkipReason = Extract<StoppedReason, `skipped_${string}` | 'ea_ended'>;
-
-const SKIP_REASONS: { reason: SkipReason; label: string }[] = [
-  { reason: 'skipped_child_refused', label: 'Child refused' },
-  { reason: 'skipped_tired', label: 'Child tired' },
-  { reason: 'skipped_time', label: 'Out of time' },
-  { reason: 'skipped_age', label: 'Age inappropriate' },
-  { reason: 'skipped_prerequisite_unmet', label: 'Prerequisite unmet' },
-  { reason: 'skipped_other', label: 'Other' },
-];
 
 type FullItemSet = LetterWritingFromPicturesItemSet & {
   item_set_id: string;
@@ -82,7 +73,6 @@ export function LetterWritingFromPicturesQuestion(props: QuestionProps) {
     instructions,
     onComplete,
     onItemMarked,
-    onAbandon,
   } = props;
   const [phase, setPhase] = useState<Phase>('intro');
   const [currentPage, setCurrentPage] = useState(0);
@@ -192,12 +182,9 @@ export function LetterWritingFromPicturesQuestion(props: QuestionProps) {
     }
   }, [unmarkedCount, finish]);
 
-  const handleAbandonChosen = useCallback(
-    (reason: SkipReason) => {
-      if (onAbandon) onAbandon(reason);
-      finish(reason);
-    },
-    [onAbandon, finish],
+  const handleSkipChosen = useCallback(
+    (reason: ManualSkipReason) => finish(reason),
+    [finish],
   );
 
   if (phase === 'intro') {
@@ -229,23 +216,12 @@ export function LetterWritingFromPicturesQuestion(props: QuestionProps) {
     );
   }
 
-  if (phase === 'abandon-picker') {
+  if (phase === 'skip-picker') {
     return (
-      <View>
-        <Text>Why are you abandoning?</Text>
-        {SKIP_REASONS.map(({ reason, label }) => (
-          <Pressable
-            key={reason}
-            accessibilityRole="button"
-            onPress={() => handleAbandonChosen(reason)}
-          >
-            <Text>{label}</Text>
-          </Pressable>
-        ))}
-        <Pressable onPress={() => setPhase('active')}>
-          <Text>Cancel</Text>
-        </Pressable>
-      </View>
+      <SkipReasonPicker
+        onChoose={handleSkipChosen}
+        onCancel={() => setPhase('active')}
+      />
     );
   }
 
@@ -270,7 +246,7 @@ export function LetterWritingFromPicturesQuestion(props: QuestionProps) {
                 styles.tile,
                 {
                   flexBasis: tileBasis,
-                  backgroundColor: marked ? MARKED_BG : IDLE_BG,
+                  backgroundColor: marked ? tokens.color.marked : tokens.color.surface,
                 },
               ]}
             >
@@ -286,7 +262,7 @@ export function LetterWritingFromPicturesQuestion(props: QuestionProps) {
                     styles.altText,
                     {
                       fontSize: altFontSize,
-                      color: marked ? '#ffffff' : '#444',
+                      color: marked ? tokens.color.onMarked : tokens.color.ink,
                     },
                   ]}
                 >
@@ -298,7 +274,7 @@ export function LetterWritingFromPicturesQuestion(props: QuestionProps) {
                   styles.letter,
                   {
                     fontSize: letterFontSize,
-                    color: marked ? '#ffffff' : '#111',
+                    color: marked ? tokens.color.onMarked : tokens.color.ink,
                   },
                 ]}
               >
@@ -332,9 +308,9 @@ export function LetterWritingFromPicturesQuestion(props: QuestionProps) {
         </Pressable>
         <Pressable
           accessibilityRole="button"
-          onPress={() => setPhase('abandon-picker')}
+          onPress={() => setPhase('skip-picker')}
         >
-          <Text>Abandon</Text>
+          <Text>Skip question</Text>
         </Pressable>
       </View>
     </View>
@@ -353,7 +329,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     paddingVertical: 16,
     borderWidth: 1,
-    borderColor: '#999',
+    borderColor: tokens.color.line,
     minHeight: 80,
   },
   thumbnail: { width: 48, height: 48, marginBottom: 4 },

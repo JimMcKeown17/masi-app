@@ -1,9 +1,10 @@
-export interface WriteCvcsPrompt {
+export interface WriteCvcsWord {
   item_key: string;
-  /** The CVC word the EA dictates aloud; child writes it from memory. */
   word: string;
+  /** Scoring units; may exclude a prefix that is not assessed. */
+  letters: string[];
 }
 
 export interface WriteCvcsItemSet {
-  prompts: WriteCvcsPrompt[];
+  words: WriteCvcsWord[];
 }

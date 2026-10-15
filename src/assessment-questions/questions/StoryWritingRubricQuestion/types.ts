@@ -12,9 +12,9 @@ export interface StoryWritingRubricDimension {
   code: string;
   /** Human-readable header rendered on each dimension card. */
   label: string;
-  /** Five anchor descriptions, scores 0-4 inclusive. */
+  /** Anchor descriptions for any scores that have published guidance. */
   anchors: StoryWritingRubricAnchor[];
-  /** One-line gloss shown beneath the chip row (e.g. "no attempt → partial → sophisticated"). */
+  /** Optional one-line gloss shown beneath the chip row. */
   end_anchor_gloss: string;
 }
 
@@ -26,6 +26,6 @@ export interface StoryWritingRubricPicture {
 }
 
 export interface StoryWritingRubricItemSet {
-  picture: StoryWritingRubricPicture;
+  picture?: StoryWritingRubricPicture;
   dimensions: StoryWritingRubricDimension[];
 }

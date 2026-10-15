@@ -1,11 +1,13 @@
 import { fireEvent } from '@testing-library/react-native';
 import { runContractTest } from '../../../contractTest/runContractTest';
 import { ListenPhonemeBlendQuestion } from '..';
+import { FIXTURE_PHONEME_BLEND_EN } from '../../../testFixtures';
 
 describe('ListenPhonemeBlendQuestion — OSS contract', () => {
   test('Finish on a fully-marked Run emits a contract-valid Result', async () => {
     const { rendered, verdict } = runContractTest(ListenPhonemeBlendQuestion, {
       language: 'en',
+      itemSet: FIXTURE_PHONEME_BLEND_EN,
       instructions: '.',
     });
 
@@ -25,6 +27,7 @@ describe('ListenPhonemeBlendQuestion — OSS contract', () => {
   test('Finish-with-unmarked confirmation path emits a contract-valid Result', async () => {
     const { rendered, verdict } = runContractTest(ListenPhonemeBlendQuestion, {
       language: 'en',
+      itemSet: FIXTURE_PHONEME_BLEND_EN,
       instructions: '.',
     });
 

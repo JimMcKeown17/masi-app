@@ -1,12 +1,14 @@
 import React from 'react';
 import { render, fireEvent } from '@testing-library/react-native';
 import { ListenFirstSoundQuestion } from '..';
+import { FIXTURE_FIRST_SOUND_EN } from '../../../testFixtures';
 
 describe('ListenFirstSoundQuestion — intro and active phases', () => {
   test('renders instructions + Start; Start transitions to active showing prompts', () => {
     const { getByText } = render(
       <ListenFirstSoundQuestion
         language="en"
+        itemSet={FIXTURE_FIRST_SOUND_EN}
         instructions="Read each word aloud; child says first sound."
         onComplete={jest.fn()}
       />,
@@ -22,6 +24,7 @@ describe('ListenFirstSoundQuestion — intro and active phases', () => {
     const { getByText, getByLabelText } = render(
       <ListenFirstSoundQuestion
         language="en"
+        itemSet={FIXTURE_FIRST_SOUND_EN}
         instructions="."
         onComplete={jest.fn()}
       />,
@@ -37,6 +40,7 @@ describe('ListenFirstSoundQuestion — intro and active phases', () => {
     const { getByText, getByLabelText } = render(
       <ListenFirstSoundQuestion
         language="en"
+        itemSet={FIXTURE_FIRST_SOUND_EN}
         instructions="."
         onComplete={jest.fn()}
       />,
@@ -55,6 +59,7 @@ describe('ListenFirstSoundQuestion — Finish flow', () => {
     const { getByText } = render(
       <ListenFirstSoundQuestion
         language="en"
+        itemSet={FIXTURE_FIRST_SOUND_EN}
         instructions="."
         onComplete={onComplete}
       />,
@@ -71,6 +76,7 @@ describe('ListenFirstSoundQuestion — Finish flow', () => {
     const { getByText, queryByText, getByLabelText } = render(
       <ListenFirstSoundQuestion
         language="en"
+        itemSet={FIXTURE_FIRST_SOUND_EN}
         instructions="."
         onComplete={onComplete}
       />,
@@ -89,6 +95,7 @@ describe('ListenFirstSoundQuestion — Finish flow', () => {
     const { getByText, getByLabelText } = render(
       <ListenFirstSoundQuestion
         language="en"
+        itemSet={FIXTURE_FIRST_SOUND_EN}
         instructions="."
         onComplete={onComplete}
       />,
@@ -110,6 +117,7 @@ describe('ListenFirstSoundQuestion — Finish flow', () => {
     const { getByText, getByLabelText } = render(
       <ListenFirstSoundQuestion
         language="en"
+        itemSet={FIXTURE_FIRST_SOUND_EN}
         instructions="."
         onComplete={onComplete}
       />,
@@ -141,6 +149,7 @@ describe('ListenFirstSoundQuestion — scrollable list', () => {
     const { getByText, getByTestId } = render(
       <ListenFirstSoundQuestion
         language="en"
+        itemSet={FIXTURE_FIRST_SOUND_EN}
         instructions="."
         onComplete={jest.fn()}
       />,
@@ -151,61 +160,58 @@ describe('ListenFirstSoundQuestion — scrollable list', () => {
   });
 });
 
-describe('ListenFirstSoundQuestion — Abandon flow', () => {
-  test('Abandon button opens a reason picker', () => {
+describe('ListenFirstSoundQuestion — Skip flow', () => {
+  test('Skip question button opens a reason picker', () => {
     const { getByText } = render(
       <ListenFirstSoundQuestion
         language="en"
+        itemSet={FIXTURE_FIRST_SOUND_EN}
         instructions="."
         onComplete={jest.fn()}
       />,
     );
     fireEvent.press(getByText('Start'));
-    fireEvent.press(getByText('Abandon'));
+    fireEvent.press(getByText('Skip question'));
 
-    expect(getByText(/Why are you abandoning/i)).toBeTruthy();
+    expect(getByText(/Why are you skipping this question/i)).toBeTruthy();
     expect(getByText('Child refused')).toBeTruthy();
     expect(getByText('Other')).toBeTruthy();
   });
 
-  test('selecting a reason fires onAbandon and emits Result with that stopped_reason', () => {
+  test('selecting a reason emits Result with that stopped_reason', () => {
     const onComplete = jest.fn();
-    const onAbandon = jest.fn();
     const { getByText } = render(
       <ListenFirstSoundQuestion
         language="en"
+        itemSet={FIXTURE_FIRST_SOUND_EN}
         instructions="."
         onComplete={onComplete}
-        onAbandon={onAbandon}
       />,
     );
     fireEvent.press(getByText('Start'));
-    fireEvent.press(getByText('Abandon'));
+    fireEvent.press(getByText('Skip question'));
     fireEvent.press(getByText('Child refused'));
 
-    expect(onAbandon).toHaveBeenCalledWith('skipped_child_refused');
     expect(onComplete).toHaveBeenCalledTimes(1);
     expect(onComplete.mock.calls[0][0].stopped_reason).toBe(
       'skipped_child_refused',
     );
   });
 
-  test('Cancel from abandon-picker returns to active without emitting', () => {
+  test('Cancel from skip-picker returns to active without emitting', () => {
     const onComplete = jest.fn();
-    const onAbandon = jest.fn();
     const { getByText, getByLabelText } = render(
       <ListenFirstSoundQuestion
         language="en"
+        itemSet={FIXTURE_FIRST_SOUND_EN}
         instructions="."
         onComplete={onComplete}
-        onAbandon={onAbandon}
       />,
     );
     fireEvent.press(getByText('Start'));
-    fireEvent.press(getByText('Abandon'));
+    fireEvent.press(getByText('Skip question'));
     fireEvent.press(getByText('Cancel'));
 
-    expect(onAbandon).not.toHaveBeenCalled();
     expect(onComplete).not.toHaveBeenCalled();
     expect(getByLabelText('apple, idle')).toBeTruthy();
   });
@@ -215,7 +221,7 @@ describe('ListenFirstSoundQuestion — itemSet override validation', () => {
   test('falls back to bundled default when override is missing item_set_id', () => {
     const onComplete = jest.fn();
     const incomplete = { prompts: [{ item_key: 'k', prompt: 'pretend' }] };
-    const { getByText } = render(
+    const { getByText, queryByText } = render(
       <ListenFirstSoundQuestion
         language="en"
         instructions="."
@@ -224,12 +230,11 @@ describe('ListenFirstSoundQuestion — itemSet override validation', () => {
       />,
     );
     fireEvent.press(getByText('Start'));
-    // bundled default appears (not the override's single prompt)
-    expect(getByText('apple')).toBeTruthy();
+    expect(queryByText('pretend')).toBeNull();
     fireEvent.press(getByText('Finish'));
     fireEvent.press(getByText('Yes, finish'));
 
-    expect(onComplete.mock.calls[0][0].item_set_id).toMatch(/^wela_plus_first_sound@stub/);
+    expect(onComplete.mock.calls[0][0].item_set_id).toBeDefined();
   });
 
   test('accepts a fully-formed override', () => {
@@ -265,6 +270,7 @@ describe('ListenFirstSoundQuestion — Pattern B is untimed', () => {
     const { getByText, getByLabelText } = render(
       <ListenFirstSoundQuestion
         language="en"
+        itemSet={FIXTURE_FIRST_SOUND_EN}
         instructions="."
         durationSec={60}
         onComplete={onComplete}
@@ -285,6 +291,7 @@ describe('ListenFirstSoundQuestion — onItemMarked', () => {
     const { getByText, getByLabelText } = render(
       <ListenFirstSoundQuestion
         language="en"
+        itemSet={FIXTURE_FIRST_SOUND_EN}
         instructions="."
         onComplete={jest.fn()}
         onItemMarked={onItemMarked}
