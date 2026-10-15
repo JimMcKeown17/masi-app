@@ -1643,8 +1643,8 @@ describe('SQLite outbox offline sync', () => {
     }));
   });
 
-  test('keeps immutable assignment lifecycle updates out of insert-or-ignore batches', async () => {
-    const unassignedAt = '2026-07-14T12:00:00.000Z';
+  test.each(['update', 'archive', 'restore'])('keeps immutable assignment %s out of upsert batches and scopes its patch', async (operation) => {
+    const unassignedAt = operation === 'restore' ? null : '2026-07-14T12:00:00.000Z';
     for (let index = 1; index <= 2; index += 1) {
       const childId = `child-assignment-update-${index}`;
       const assignmentId = `assignment-update-${index}`;
@@ -1659,7 +1659,7 @@ describe('SQLite outbox offline sync', () => {
           ?, 'user-1', ?, '2026-07-14T10:00:00.000Z', ?, 'user-1', 'pending'
         )
       `, assignmentId, childId, unassignedAt);
-      await enqueue(db, 'child_ea_assignments', assignmentId, 'update', {
+      await enqueue(db, 'child_ea_assignments', assignmentId, operation, {
         id: assignmentId,
         user_id: 'user-1',
         child_id: childId,
@@ -1677,7 +1677,17 @@ describe('SQLite outbox offline sync', () => {
     const assignmentCalls = calls.filter(call => call.tableName === 'child_ea_assignments');
     expect(assignmentCalls).toHaveLength(2);
     expect(assignmentCalls.every(call => !Array.isArray(call.payload))).toBe(true);
-    expect(assignmentCalls.every(call => call.options.ignoreDuplicates === false)).toBe(true);
+    for (const call of assignmentCalls) {
+      expect(call.type).toBe('update');
+      if (operation === 'update') {
+        expect(call.payload).not.toHaveProperty('unassigned_at');
+        for (const column of ['id', 'created_by', 'created_at', 'user_id']) {
+          expect(call.payload).not.toHaveProperty(column);
+        }
+      } else {
+        expect(call.payload).toEqual({ unassigned_at: unassignedAt });
+      }
+    }
     expect(result).toEqual(expect.objectContaining({
       success: true,
       totalSynced: 2,

@@ -1634,3 +1634,24 @@ engine's evidence tests passed while a database was injected, but the default en
 omits that argument and resolves the initialized client at runtime. One public-path test built the
 engine the production way and exposed the undefined connection immediately. A unit with ideal
 dependencies proves the algorithm; a composition test proves the application can actually run it.
+
+## A location failure is evidence, not a failed shift
+
+Clock-in/out records that an EA started or ended work. GPS adds supporting evidence; it must not
+be a prerequisite for recording the event. We therefore store two separate facts: the coordinate
+pair, when available, and the reason it is absent. NULL status means the build did not record an
+outcome, including automatic clock-out. Inventing a reason for old rows would turn missing
+information into false evidence. Pair and status CHECKs in SQLite and PostgreSQL keep these facts
+consistent, while allowing older builds to omit the status columns.
+
+A timeout only bounds work inside its race. The old timer awaited a last-known-position lookup
+before returning, so a stalled native cache could still leave the spinner running indefinitely.
+The live GPS request and cache lookup now start together. GPS wins when it succeeds; a cache fix
+is used on failure or at the deadline. Both share the same ten-second budget. Permission dialogs
+remain an explicit user choice before that budget begins.
+
+SQLite cannot directly remove NOT NULL. The v11 migration creates a replacement table, copies
+every old field, drops and renames inside the existing migration transaction, and recreates the
+one time-entry index. Tests compare the old data, index/trigger definitions and FK inventory,
+keep queued uploads intact, and prove a failed CHECK rolls the whole migration back without
+advancing the schema version. PostgreSQL validation and device behavior remain separate proofs.

@@ -83,3 +83,12 @@ it('PUSH_ORDER contains every locally-written synced table (no pushable table om
   const expectedPush = syncedTables.filter((t) => !PULL_ONLY_SYNCED_TABLES.includes(t)).sort();
   expect([...PUSH_ORDER].sort()).toEqual(expectedPush);
 });
+
+
+it('time_entries explicitly uploads both nullable location outcome columns', () => {
+  expect(__contract.SERVER_COLUMNS.time_entries).toEqual([
+    'id', 'user_id', 'sign_in_time', 'sign_in_lat', 'sign_in_lon', 'sign_out_time',
+    'sign_out_lat', 'sign_out_lon', 'sign_in_location_status', 'sign_out_location_status',
+    'auto_clocked_out', 'created_at', 'updated_at',
+  ]);
+});

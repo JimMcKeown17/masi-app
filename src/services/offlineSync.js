@@ -76,7 +76,8 @@ const LOCAL_ONLY_COLUMNS = ['synced', 'sync_status', 'last_sync_error', 'server_
 export const SERVER_COLUMNS = {
   time_entries: [
     'id', 'user_id', 'sign_in_time', 'sign_in_lat', 'sign_in_lon', 'sign_out_time',
-    'sign_out_lat', 'sign_out_lon', 'auto_clocked_out', 'created_at', 'updated_at',
+    'sign_out_lat', 'sign_out_lon', 'sign_in_location_status', 'sign_out_location_status',
+    'auto_clocked_out', 'created_at', 'updated_at',
   ],
   classes: [
     'id', 'school_id', 'name', 'grade', 'teacher', 'teacher_id', 'home_language',
@@ -337,10 +338,8 @@ const IMMUTABLE_ASSIGNMENT_TABLES = new Set([
 // EA editing a Head Office-created row does not have. These tables send `update` as UPDATE by id
 // with an exact acknowledgement (actor lifecycle spec §6.5). class_grouping_state stays an upsert:
 // its `update` means create-or-update and its INSERT policy is authorization-based.
-const UPDATE_BY_ID_TABLES = new Set(['time_entries', 'classes', 'children', 'groups', 'letter_mastery']);
 // Provenance and identity never change through an edit.
 const UPDATE_PATCH_EXCLUDED_COLUMNS = new Set(['id', 'created_by', 'created_at', 'user_id', 'archived_by_user_id']);
-export const _testUpdateByIdTables = UPDATE_BY_ID_TABLES;
 
 // Archive is a lifecycle transition, never a row creation or identity rewrite.
 // Older outbox rows can contain a full domain snapshot, so narrow every archive
@@ -359,6 +358,12 @@ const ARCHIVE_SERVER_COLUMNS = {
   child_group_memberships: ['removed_at'],
   letter_mastery: ['deleted_at'],
 };
+
+// Lifecycle-bearing edits must also avoid single/batched upsert: full snapshots
+// replay old lifecycle values, and omitting columns from an upsert can still
+// apply INSERT defaults on conflict. UPDATE preserves every omitted column.
+const UPDATE_BY_ID_TABLES = new Set(['time_entries', ...Object.keys(ARCHIVE_SERVER_COLUMNS)]);
+export const _testUpdateByIdTables = UPDATE_BY_ID_TABLES;
 
 const dependenciesForRecord = (outboxRecord) => {
   const dependencies = new Set(TABLE_DEPENDENCIES[outboxRecord.table_name] || []);
@@ -802,8 +807,15 @@ const runServerOperation = async (supabaseClient, config, outboxRecord) => {
     // buildSyncPayload has already re-derived deterministic ids (letter_mastery), so the server id
     // is the payload id, not the outbox record_id.
     const serverId = payload.id || outboxRecord.record_id;
+    // Full stored snapshots may predate an archive/restore. Ordinary edits must
+    // not replay that lifecycle state. Mastery reactivation is intentionally an
+    // update with deleted_at:null (masteryRepository.enqueueMasteryWrite).
+    const lifecycleColumns = config.tableName === 'letter_mastery'
+      ? [] : (ARCHIVE_SERVER_COLUMNS[config.tableName] || []);
     const patch = Object.fromEntries(
-      Object.entries(payload).filter(([column]) => !UPDATE_PATCH_EXCLUDED_COLUMNS.has(column))
+      Object.entries(payload).filter(([column]) => (
+        !UPDATE_PATCH_EXCLUDED_COLUMNS.has(column) && !lifecycleColumns.includes(column)
+      ))
     );
     const { data, error } = await supabaseClient
       .from(config.tableName)
@@ -1489,6 +1501,17 @@ export const createOutboxSyncEngine = ({
     const findBlockingDependency = async (record) => {
       const tableNameForRecord = normalizeTableName(record.table_name);
       const isLifecycle = record.operation === 'archive' || record.operation === 'restore';
+      if (record.operation === 'hard_delete' && tableNameForRecord === 'children') {
+        // Deletion retained a possibly-committed INSERT. Do not let deletion
+        // finish before its retry, including a terminal insert retried manually.
+        const resolvedDatabase = await resolveDatabase(database);
+        const retainedInsert = await resolvedDatabase.getFirstAsync(`
+          select id from sync_outbox
+          where table_name = 'children' and record_id = ? and operation = 'insert'
+          limit 1
+        `, record.record_id);
+        if (retainedInsert) return { tableName: tableNameForRecord, recordId: record.record_id };
+      }
       // Same-record ordering: an acknowledged UPDATE-by-id edit or lifecycle UPDATE must not run
       // before its own insert has been acknowledged, or it cannot acknowledge a row that exists.
       // A terminal insert does not block; the update then reaches its normal terminal classifier.

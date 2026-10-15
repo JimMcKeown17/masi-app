@@ -484,12 +484,9 @@ export const ChildrenProvider = ({ children }) => {
   }, [user?.id, refreshSyncStatus]);
 
   /**
-   * Hide a child from the user's active list (soft-delete).
-   * Sets hidden_at on the child record and queues for sync. The row stays
-   * in Supabase for admin/reporting. loadChildren fetches all assigned
-   * children (active + hidden) so cross-device hide propagation works,
-   * and the derived `children` value in the context filters out records
-   * with hidden_at set.
+   * Remove a child from the active list. No-history children are deleted
+   * locally, with a server hard-delete queued if INSERT may have been
+   * acknowledged. Children with history are archived with their relationships.
    */
   const deleteChild = useCallback(async (childId) => {
     try {
