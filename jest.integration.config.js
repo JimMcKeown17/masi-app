@@ -9,6 +9,7 @@ module.exports = {
     '<rootDir>/__tests__/debugExport.test.js',
     '<rootDir>/__tests__/syncOutboxRepository.test.js',
     '<rootDir>/__tests__/offlineSyncOutbox.test.js',
+    '<rootDir>/__tests__/offlineSyncLifecycleEdits.test.js',
     '<rootDir>/__tests__/childrenRepository.test.js',
     '<rootDir>/__tests__/childrenHistoryReference.test.js',
     '<rootDir>/__tests__/classesRepository.test.js',

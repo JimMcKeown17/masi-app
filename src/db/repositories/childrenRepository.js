@@ -808,17 +808,37 @@ export const createChildrenRepository = ({ database } = {}) => {
     }
 
     const child = await txn.getFirstAsync(
-      'select sync_status, created_by from children where id = ?',
+      'select created_by from children where id = ?',
       childId
     );
     if (!child) return false;
 
-    await txn.runAsync('delete from child_class_memberships where child_id = ?', childId);
-    await txn.runAsync('delete from child_programme_enrollments where child_id = ?', childId);
-    await txn.runAsync('delete from child_ea_assignments where child_id = ?', childId);
+    // Sync status describes the latest edit, not whether INSERT was acknowledged.
+    // An in-flight INSERT may already have committed remotely, so retain it and
+    // follow it with the server's history-checked deletion.
+    const localInsert = await txn.getFirstAsync(`
+      select id from sync_outbox
+      where table_name = 'children' and record_id = ? and operation = 'insert'
+        and status in ('pending', 'failed', 'terminal')
+    `, childId);
+    await txn.runAsync(`
+      delete from sync_outbox
+      where table_name = 'children' and record_id = ?
+        and (? = 1 or operation <> 'insert')
+    `, childId, localInsert ? 1 : 0);
+
+    for (const tableName of ['child_class_memberships', 'child_programme_enrollments', 'child_ea_assignments']) {
+      // These active relationships disappear with the child; none of their
+      // queued writes should survive to recreate them or fail their FK check.
+      await txn.runAsync(`
+        delete from sync_outbox where table_name = ?
+          and record_id in (select id from ${tableName} where child_id = ?)
+      `, tableName, childId);
+      await txn.runAsync(`delete from ${tableName} where child_id = ?`, childId);
+    }
     await txn.runAsync('delete from children where id = ?', childId);
 
-    if (child.sync_status === 'synced') {
+    if (!localInsert) {
       await enqueueDomainOutbox(
         txn,
         'children',
