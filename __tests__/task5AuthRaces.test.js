@@ -73,6 +73,58 @@ beforeEach(async () => {
 });
 afterEach(async () => { cleanup(); await mockClient.auth.stopAutoRefresh(); await resetHandleRegistryForTests(); await engine.__resetMockDatabases(); jest.restoreAllMocks(); });
 
+test('Profile password change preserves the app session through revoke-others and token refresh', async () => {
+  const sessions = new Map();
+  let nextSessionId = 0;
+  let password = 'secret';
+  const issueSession = id => {
+    const sessionId = `S${++nextSessionId}`;
+    const value = { ...session(id), access_token: sessionId, refresh_token: `refresh-${sessionId}` };
+    sessions.set(sessionId, value);
+    return value;
+  };
+  transport.mockImplementation(async (url, init) => {
+    const path = new URL(url);
+    const body = init.body ? JSON.parse(init.body) : {};
+    const sessionId = new Headers(init.headers).get('authorization')?.replace('Bearer ', '');
+    if (path.pathname.endsWith('/token')) {
+      if (path.searchParams.get('grant_type') === 'refresh_token') {
+        const active = [...sessions.values()].find(value => value.refresh_token === body.refresh_token);
+        return active ? json(active) : new Response(JSON.stringify({ code: 'refresh_token_not_found', message: 'Session revoked' }), { status: 400 });
+      }
+      if (body.password !== password) return new Response(JSON.stringify({ code: 'invalid_credentials', message: 'Invalid login credentials' }), { status: 400 });
+      return json(issueSession(body.email.split('@')[0]));
+    }
+    if (path.pathname.endsWith('/user') && init.method === 'PUT') {
+      const requester = sessions.get(sessionId);
+      expect(requester).toBeDefined();
+      password = body.password;
+      // Supabase keeps the requesting session; every other session for this EA is revoked.
+      for (const [id, value] of sessions) if (value.user.id === requester.user.id && id !== sessionId) sessions.delete(id);
+      return json(requester.user);
+    }
+    if (path.pathname.endsWith('/logout')) { sessions.delete(sessionId); return json({}); }
+    return json([]);
+  });
+  const view = render(<AuthProvider><Tree profile /></AuthProvider>);
+  await signIn(A);
+  const appHandle = getCurrentHandle();
+  expect((await readPersistedSession()).access_token).toBe('S1');
+  const inputs = view.UNSAFE_getAllByType(TextInput);
+  ['secret', 'new-secret-123', 'new-secret-123'].forEach((value, i) => fireEvent.changeText(inputs[i], value));
+  await act(async () => { await view.UNSAFE_getAllByType(Button).find(node => node.props.children === 'Change Password').props.onPress(); });
+  expect(view.getByText('Password changed successfully')).toBeTruthy();
+  expect(nextSessionId).toBe(2);
+  let refreshed;
+  await act(async () => { refreshed = await mockClient.auth.refreshSession(); });
+  expect(refreshed.error).toBeNull();
+  expect(refreshed.data.session.access_token).toBe('S1');
+  expect([...sessions.keys()]).toEqual(['S1']);
+  expect(getCurrentHandle()).toBe(appHandle);
+  expect(view.getByTestId('actor').props.children).toBe(A);
+  expect((await readPersistedSession()).access_token).toBe('S1');
+});
+
 test.each([B, A])('late Profile verification cannot replace the new handle for %s or update a password', async nextActor => {
   const view = render(<AuthProvider><Tree profile /></AuthProvider>);
   await signIn(A);
@@ -82,7 +134,7 @@ test.each([B, A])('late Profile verification cannot replace the new handle for %
       const id = JSON.parse(init.body).email.split('@')[0];
       if (JSON.parse(init.body).password === 'current-secret') {
         entered.resolve(); await release.promise;
-        return json({ ...session(A), access_token: 'isolated-verification-token' });
+        return json({ ...session(A), access_token: 'isolated-verification-token', refresh_token: 'isolated-refresh-token' });
       }
       return json(session(id));
     }
@@ -102,10 +154,40 @@ test.each([B, A])('late Profile verification cannot replace the new handle for %
   expect(getCurrentHandle()).toBe(newHandle);
   expect(await readPersistedSession()).toMatchObject({ user: { id: nextActor }, access_token: `token-${nextActor}` });
   expect(transport.mock.calls.filter(([url, init]) => String(url).includes('/user') && init.method === 'PUT')).toEqual([]);
+  expect(transport.mock.calls.some(([url, init]) => String(url).includes('/logout?scope=local')
+    && new Headers(init.headers).get('authorization') === 'Bearer isolated-verification-token')).toBe(true);
   expect(view.queryByText('Password changed successfully')).toBeNull();
 });
 
-test('a late isolated password update cannot publish A or show feedback after switching to B', async () => {
+test('changePassword drops its result if the handle closes during isolated-session disposal', async () => {
+  render(<AuthProvider><Tree /></AuthProvider>);
+  await signIn(A);
+  const entered = barrier(); const release = barrier();
+  const originalTransport = transport.getMockImplementation();
+  transport.mockImplementation(async (url, init) => {
+    if (String(url).includes('/token') && JSON.parse(init.body).password === 'current-secret') {
+      return json({ ...session(A), access_token: 'verification-S2', refresh_token: 'verification-refresh-S2' });
+    }
+    if (String(url).includes('/logout') && new Headers(init.headers).get('authorization') === 'Bearer verification-S2') {
+      entered.resolve(); await release.promise;
+    }
+    return originalTransport(url, init);
+  });
+  let changing;
+  act(() => { changing = auth.changePassword({ currentPassword: 'current-secret', newPassword: 'new-secret-123', handle: getCurrentHandle() }); });
+  await entered.promise;
+  try {
+    await act(async () => { await auth.signOut(); });
+    await signIn(B);
+    let result;
+    await act(async () => { release.resolve(); result = await changing; });
+    expect(result.error).toMatchObject({ name: 'StaleActorError' });
+    expect(auth.user.id).toBe(B);
+    expect((await readPersistedSession()).user.id).toBe(B);
+  } finally { release.resolve(); await changing; }
+});
+
+test('a late shared password update cannot publish A or show feedback after switching to B', async () => {
   const view = render(<AuthProvider><Tree profile /></AuthProvider>);
   await signIn(A);
   const entered = barrier(); const release = barrier();
@@ -119,11 +201,15 @@ test('a late isolated password update cannot publish A or show feedback after sw
   let change;
   act(() => { change = view.UNSAFE_getAllByType(Button).find(node => node.props.children === 'Change Password').props.onPress(); });
   await entered.promise;
+  let signingIn;
   try {
     await act(async () => { await auth.signOut(); });
-    await signIn(B);
+    act(() => { signingIn = auth.signIn(`${B}@example.org`, 'secret'); });
+    expect(getCurrentHandle()).toBeNull();
+    expect(transport.mock.calls.filter(([url, init]) => String(url).includes('/token') && JSON.parse(init.body).email === `${B}@example.org`)).toHaveLength(0);
   } finally { release.resolve(); }
-  await act(async () => { await change; });
+  await act(async () => { await change; await signingIn; });
+  await waitFor(() => expect(getCurrentHandle()?.userId).toBe(B));
   expect(view.getByTestId('actor').props.children).toBe(B);
   expect(getCurrentHandle().userId).toBe(B);
   expect((await readPersistedSession()).user.id).toBe(B);
@@ -168,7 +254,53 @@ test.each(['storage removal', 'SDK sign-out'])('B sign-in waits for already-star
   }
 });
 
-test.each(['SIGNED_OUT', 'manual'])('%s cleanup superseded while A opens preserves B persisted session', async mode => {
+test('manual sign-out and its SDK event are one cleanup even with delayed event token removal', async () => {
+  const view = render(<AuthProvider><Tree /></AuthProvider>);
+  await signIn(A);
+  const sdkReadEntered = barrier(); const releaseSdkRead = barrier();
+  const releaseEventRemoval = barrier();
+  const storageKey = mockClient.auth.storageKey;
+  const remove = AsyncStorage.removeItem.getMockImplementation();
+  const read = AsyncStorage.getItem.getMockImplementation();
+  let tokenRemovals = 0; let heldRead = false; let heldEventRemoval = false;
+  let signedIn = false; let closing; let signingIn;
+  AsyncStorage.removeItem.mockImplementation(async key => {
+    if (key === storageKey) {
+      tokenRemovals += 1;
+      // First removal is ours, second is the SDK's; a third is reentrant cleanup.
+      if (tokenRemovals === 3) { heldEventRemoval = true; await releaseEventRemoval.promise; }
+    }
+    return remove(key);
+  });
+  AsyncStorage.getItem.mockImplementation(async key => {
+    if (key === storageKey && tokenRemovals === 1 && !heldRead) {
+      heldRead = true; sdkReadEntered.resolve(); await releaseSdkRead.promise;
+    }
+    return read(key);
+  });
+  try {
+    act(() => { closing = auth.signOut(); });
+    await act(async () => { await sdkReadEntered.promise; });
+    act(() => { signingIn = auth.signIn(`${B}@example.org`, 'secret').then(result => { signedIn = true; return result; }); });
+    expect(transport.mock.calls.filter(([url, init]) => String(url).includes('/token') && JSON.parse(init.body).email === `${B}@example.org`)).toHaveLength(0);
+    await act(async () => { releaseSdkRead.resolve(); });
+    await waitFor(() => expect(heldEventRemoval || signedIn).toBe(true));
+    // Let B complete if the lifecycle was incorrectly released ahead of its cleanup.
+    await act(async () => { await Promise.resolve(); });
+    await act(async () => { releaseEventRemoval.resolve(); await closing; await signingIn; });
+    await waitFor(() => expect(getCurrentHandle()?.userId).toBe(B));
+    expect(view.getByTestId('actor').props.children).toBe(B);
+    expect((await readPersistedSession())?.user.id).toBe(B);
+    expect(tokenRemovals).toBe(2);
+  } finally {
+    releaseSdkRead.resolve(); releaseEventRemoval.resolve();
+    await Promise.allSettled([closing, signingIn]);
+    AsyncStorage.removeItem.mockImplementation(remove);
+    AsyncStorage.getItem.mockImplementation(read);
+  }
+});
+
+test.each(['SIGNED_OUT', 'manual'])('%s cleanup while A opens finishes before B can persist a session', async mode => {
   const entered = barrier(); const release = barrier();
   sqlite.__setDatabaseFactory(async (name, options) => {
     if (name === `masi-${A}.db` && !options?.useNewConnection) { entered.resolve(); await release.promise; }
@@ -185,9 +317,10 @@ test.each(['SIGNED_OUT', 'manual'])('%s cleanup superseded while A opens preserv
       await mockClient.auth._notifyAllSubscribers('SIGNED_OUT', null);
     }
   });
-  await act(async () => { await auth.signIn(`${B}@example.org`, 'secret'); });
-  expect((await readPersistedSession()).user.id).toBe(B);
-  await act(async () => { release.resolve(); await signOut; });
+  let signingIn;
+  act(() => { signingIn = auth.signIn(`${B}@example.org`, 'secret'); });
+  expect(transport.mock.calls.filter(([url, init]) => String(url).includes('/token') && JSON.parse(init.body).email === `${B}@example.org`)).toHaveLength(0);
+  await act(async () => { release.resolve(); await signOut; await signingIn; });
   await waitFor(() => expect(getCurrentHandle()?.userId).toBe(B));
   // Drain the SDK lock too: a background signOut must not delete B later.
   await act(async () => { await mockClient.auth.getSession(); });
@@ -256,6 +389,87 @@ test('online warm-cache startup and reconnect refresh programme assignments and 
     });
     await waitFor(async () => expect((await handle.repositories.academicYears.getAll())[0].label).toBe('2027'));
     expect(transport.mock.calls.filter(([url]) => String(url).includes('/academic_years'))).toHaveLength(2);
+  } finally { release.resolve(); }
+});
+
+test('reconnect during a failing reference refresh owes one fresh pass and updates the warm cache', async () => {
+  const cached = await requestOpen({ userId: A });
+  await cached.repositories.schools.replaceFromServer([{ id: 'school', name: 'School' }]);
+  await cached.repositories.programmes.replaceFromServer([{ id: 'programme', code: 'literacy', name: 'Literacy' }]);
+  await cached.repositories.academicYears.replaceFromServer([{ id: 'year', label: '2025', starts_on: '2025-01-01', ends_on: '2025-12-31', is_active: true }]);
+  await requestClose({ reason: 'warm restart' });
+  mockNetwork = { isConnected: true };
+  const entered = barrier(); const release = barrier();
+  let schoolRequests = 0;
+  transport.mockImplementation(async (url, init) => {
+    if (String(url).includes('/token')) return json(session(A));
+    const table = new URL(url).pathname.split('/').pop();
+    if (table === 'users') return json(session(A).user);
+    if (table === 'schools') {
+      schoolRequests += 1;
+      if (schoolRequests === 1) { entered.resolve(); await release.promise; throw new TypeError('Network request failed'); }
+    }
+    return json({
+      schools: [{ id: 'school', name: 'School' }],
+      programmes: [{ id: 'programme', code: 'literacy', name: 'Literacy' }],
+      academic_years: [{ id: 'year', label: '2026', starts_on: '2026-01-01', ends_on: '2026-12-31', is_active: true }],
+      staff_programme_assignments: [{ id: 'assignment', user_id: A, programme_id: 'programme' }],
+    }[table] || []);
+  });
+  render(<AuthProvider><Tree /></AuthProvider>);
+  await signIn(A);
+  const handle = getCurrentHandle();
+  try {
+    await entered.promise;
+    await handle.services.referenceDataReady();
+    expect((await handle.repositories.academicYears.getAll())[0].label).toBe('2025');
+    await act(async () => {
+      // Multiple new edges while the first request is held coalesce to one pass.
+      for (let edge = 0; edge < 3; edge += 1) {
+        for (const listener of mockNetListeners) listener({ isConnected: false });
+        for (const listener of mockNetListeners) listener({ isConnected: true });
+      }
+      release.resolve();
+    });
+    await waitFor(async () => expect((await handle.repositories.academicYears.getAll())[0].label).toBe('2026'));
+    await waitFor(async () => expect((await handle.repositories.staffProgrammeAssignments.getAll())[0]?.programme_id).toBe('programme'));
+    expect(schoolRequests).toBe(2);
+  } finally { release.resolve(); }
+});
+
+test.each(['no newer request', 'offline again', 'closed handle'])('failed reference refresh starts no follow-up with %s', async mode => {
+  const entered = barrier(); const release = barrier();
+  const failures = jest.spyOn(console, 'error').mockImplementation(() => {});
+  mockNetwork = { isConnected: true };
+  let schoolRequests = 0;
+  transport.mockImplementation(async (url, init) => {
+    if (String(url).includes('/token')) return json(session(A));
+    const table = new URL(url).pathname.split('/').pop();
+    if (table === 'users') return json(session(A).user);
+    if (table === 'schools') {
+      schoolRequests += 1;
+      entered.resolve(); await release.promise;
+      throw new TypeError('Network request failed');
+    }
+    return json([]);
+  });
+  render(<AuthProvider><Tree /></AuthProvider>);
+  await signIn(A);
+  await entered.promise;
+  try {
+    if (mode !== 'no newer request') {
+      await act(async () => {
+        for (const listener of mockNetListeners) listener({ isConnected: false });
+        for (const listener of mockNetListeners) listener({ isConnected: true });
+        if (mode === 'offline again') for (const listener of mockNetListeners) listener({ isConnected: false });
+        if (mode === 'closed handle') await auth.signOut();
+      });
+    }
+    await act(async () => { release.resolve(); });
+    if (mode !== 'closed handle') {
+      await waitFor(() => expect(failures).toHaveBeenCalledWith('Error refreshing reference data:', expect.anything()));
+    }
+    expect(schoolRequests).toBe(1);
   } finally { release.resolve(); }
 });
 

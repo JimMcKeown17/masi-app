@@ -2,6 +2,8 @@ import React, { createContext, useState, useEffect, useContext, useRef, useCallb
 import { supabase } from '../services/supabaseClient';
 import { readPersistedSession, clearPersistedSession } from '../services/persistedAuthSession';
 import { requestOpen, requestClose, getCurrentHandle, subscribeToHandle, setLatestAuthSession } from '../session/signedInHandle';
+import { createPasswordVerificationClient } from '../services/passwordVerificationClient';
+import { StaleActorError } from '../session/staleActor';
 
 export const AuthContext = createContext(null);
 const AUTH_SIGN_OUT_GRACE_PERIOD_MS = 15000;
@@ -15,7 +17,8 @@ export const AuthProvider = ({ children }) => {
   const [handleError, setHandleError] = useState(null);
   const currentUserRef = useRef(null);
   const generationRef = useRef(0);
-  const authCleanupRef = useRef(Promise.resolve());
+  const signOutOperationRef = useRef(null);
+  const authMutationRef = useRef(Promise.resolve());
   const localSignOutCommittedRef = useRef(false);
   const pendingSignOutTimeoutRef = useRef(null);
   const authListenersRef = useRef(new Set());
@@ -60,22 +63,30 @@ export const AuthProvider = ({ children }) => {
     setHandleStatus('signed_out'); setLoading(false);
     return true;
   };
-  const finishSignOut = async (reason, signOutClient = false) => {
+  const finishSignOut = (reason, signOutClient = false) => {
+    if (signOutOperationRef.current) return signOutOperationRef.current.local;
+    // Reserve the entire transition before requestClose can yield. The SDK's
+    // SIGNED_OUT notification belongs to this operation, never a second cleanup.
+    const operation = {};
+    signOutOperationRef.current = operation;
     const closing = commitSignedOutState(reason);
     const generation = generationRef.current;
-    if (!await closing || generation !== generationRef.current) return;
-    // Reserve cleanup before yielding. New sign-ins invalidate pending cleanup,
-    // and wait for any already-started storage/SDK operation before saving a session.
-    const cleanup = authCleanupRef.current.catch(() => {}).then(async () => {
-      if (generation !== generationRef.current || !mountedRef.current) return;
+    operation.local = closing.then(async (committed) => {
+      if (!committed || generation !== generationRef.current || !mountedRef.current) return false;
       try { await clearPersistedSession(); } catch (error) { console.error('Sign out local cleanup error:', error); }
-      if (!signOutClient || generation !== generationRef.current || !mountedRef.current) return;
-      authCleanupRef.current = supabase.auth.signOut({ scope: 'local' }).catch((error) => {
-        console.warn('[Auth] Background Supabase sign-out failed:', error?.message);
-      });
+      return true;
     });
-    authCleanupRef.current = cleanup;
-    await cleanup;
+    operation.complete = operation.local.then(async (committed) => {
+      if (!committed || !signOutClient || generation !== generationRef.current || !mountedRef.current) return;
+      const { error } = await supabase.auth.signOut({ scope: 'local' });
+      if (error) throw error;
+    }).catch((error) => {
+      console.warn('[Auth] Background Supabase sign-out failed:', error?.message);
+    }).finally(() => {
+      if (signOutOperationRef.current === operation) signOutOperationRef.current = null;
+    });
+    // The login UI can appear before the SDK finishes, but signIn waits for complete.
+    return operation.local;
   };
   const resolveColdStartGate = async (reason) => {
     const generation = generationRef.current;
@@ -114,6 +125,7 @@ export const AuthProvider = ({ children }) => {
         return;
       }
       if (event === 'SIGNED_OUT') {
+        if (signOutOperationRef.current || (localSignOutCommittedRef.current && !currentUserRef.current)) return;
         const generation = generationRef.current;
         void (async () => {
           const persisted = await readPersistedSession();
@@ -146,22 +158,75 @@ export const AuthProvider = ({ children }) => {
     };
   }, [openForUser]);
 
+  // Password sign-in does not take the SDK's updateUser lock. Serialize these
+  // session-writing calls so an admitted update cannot persist over a new sign-in.
+  const runAuthMutation = useCallback((task) => {
+    const operation = authMutationRef.current.catch(() => {}).then(task);
+    authMutationRef.current = operation.catch(() => {});
+    return operation;
+  }, []);
+
   const signIn = useCallback(async (email, password) => {
     try {
-      ++generationRef.current;
-      await authCleanupRef.current;
-      const { data, error } = await supabase.auth.signInWithPassword({
-        email,
-        password,
-      });
+      return await runAuthMutation(async () => {
+        while (signOutOperationRef.current) await signOutOperationRef.current.complete;
+        ++generationRef.current;
+        const { data, error } = await supabase.auth.signInWithPassword({
+          email,
+          password,
+        });
 
-      if (error) throw error;
-      return { data, error: null };
+        if (error) throw error;
+        return { data, error: null };
+      });
     } catch (error) {
       console.error('Sign in error:', error);
       return { data: null, error };
     }
-  }, []);
+  }, [runAuthMutation]);
+
+  const changePassword = useCallback(async ({ currentPassword, newPassword, handle: origin }) => {
+    let verificationClient;
+    let outcome;
+    let phase = 'verification';
+    const assertCurrent = () => {
+      if (!mountedRef.current || !origin.isCurrent() || localSignOutCommittedRef.current
+        || currentUserRef.current?.id !== origin.userId) throw new StaleActorError();
+    };
+    try {
+      assertCurrent();
+      verificationClient = createPasswordVerificationClient(origin);
+      const { data, error } = await verificationClient.auth.signInWithPassword({
+        email: currentUserRef.current.email, password: currentPassword,
+      });
+      assertCurrent();
+      if (error) throw error;
+      if (data.user?.id !== origin.userId) throw new StaleActorError();
+      phase = 'update';
+      outcome = await runAuthMutation(async () => {
+        assertCurrent();
+        const { data: current, error: sessionError } = await supabase.auth.getSession();
+        assertCurrent();
+        if (sessionError) throw sessionError;
+        if (current.session?.user?.id !== origin.userId) throw new StaleActorError();
+        // The server retains the requesting session on password change. Use S1,
+        // the app's persisted session, rather than the verification session S2.
+        const result = await supabase.auth.updateUser({ password: newPassword });
+        assertCurrent();
+        return { error: result.error, phase };
+      });
+    } catch (error) {
+      outcome = { error, phase };
+    } finally {
+      if (verificationClient) {
+        try { await verificationClient.auth.signOut({ scope: 'local' }); }
+        catch (error) { console.warn('[Auth] Password verification cleanup failed:', error?.message); }
+      }
+    }
+    // Disposing the private session can itself yield across an account switch.
+    try { assertCurrent(); } catch (error) { return { error, phase }; }
+    return outcome;
+  }, [runAuthMutation]);
 
   const signOut = useCallback(async () => {
     localSignOutCommittedRef.current = true;
@@ -198,9 +263,9 @@ export const AuthProvider = ({ children }) => {
 
   const value = useMemo(() => ({
     user, profile: null, session, loading, handle, handleStatus, handleError, retryOpenHandle,
-    signIn, signOut, resetPassword, updatePassword, subscribeToAuthEvents,
+    signIn, signOut, resetPassword, updatePassword, changePassword, subscribeToAuthEvents,
   }), [user, session, loading, handle, handleStatus, handleError, retryOpenHandle,
-    signIn, signOut, resetPassword, updatePassword, subscribeToAuthEvents]);
+    signIn, signOut, resetPassword, updatePassword, changePassword, subscribeToAuthEvents]);
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 };
 export const useAuth = () => {

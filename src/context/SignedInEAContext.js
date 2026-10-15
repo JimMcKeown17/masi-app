@@ -34,15 +34,28 @@ export const SignedInEAProvider = ({ handle, children }) => {
     let active = true;
     let wasOnline = false;
     let receivedNetworkEvent = false;
+    let refreshing = false;
+    let refreshPending = false;
+    const refreshReferences = async () => {
+      if (refreshing) { refreshPending = true; return; }
+      refreshing = true;
+      do {
+        // A new edge during this attempt owes one follow-up, even if this fails.
+        // Failure alone owes nothing; repeated edges coalesce in this boolean.
+        refreshPending = false;
+        try { await services.pullReferenceData(); }
+        catch (error) {
+          if (!isStaleActorError(error)) console.error('Error refreshing reference data:', error);
+        }
+      } while (refreshPending && active && handle.isCurrent() && wasOnline);
+      refreshing = false;
+    };
     const refreshOnOnline = (network) => {
       if (!active || !handle.isCurrent()) return;
       const online = Boolean(network.isConnected && network.isInternetReachable !== false);
-      if (online && !wasOnline) {
-        void services.pullReferenceData().catch((error) => {
-          if (!isStaleActorError(error)) console.error('Error refreshing reference data:', error);
-        });
-      }
+      const reconnected = online && !wasOnline;
       wasOnline = online;
+      if (reconnected) void refreshReferences();
     };
     const unsubscribe = NetInfo.addEventListener((network) => {
       receivedNetworkEvent = true;

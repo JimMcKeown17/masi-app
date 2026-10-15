@@ -5,7 +5,7 @@ import { TextInput, Button, Text, Card, Divider, Snackbar, SegmentedButtons } fr
 import { NavigationContext, useFocusEffect } from '@react-navigation/native';
 import { useAuth } from '../../context/AuthContext';
 import { colors, spacing, borderRadius, shadows } from '../../constants/colors';
-import { createPasswordVerificationClient } from '../../services/passwordVerificationClient';
+import { isStaleActorError } from '../../session/staleActor';
 import { exportDatabase, exportLogs } from '../../utils/debugExport';
 import { getReleaseMetadata } from '../../utils/releaseMetadata';
 import { deviceSettings } from '../../services/deviceSettings';
@@ -38,7 +38,7 @@ function CaptureModeFocusLoader({ loadCaptureMode }) {
 export default function ProfileScreen({ navigation }) {
   const { handle } = useSignedInEA();
 
-  const { user, profile, signOut } = useAuth();
+  const { user, profile, signOut, changePassword } = useAuth();
   const releaseMetadata = getReleaseMetadata();
   const runtimeDiagnostics = getRuntimeDiagnostics();
   const navigationContext = useContext(NavigationContext);
@@ -201,34 +201,19 @@ export default function ProfileScreen({ navigation }) {
 
     setPasswordLoading(true);
     try {
-      const verificationClient = createPasswordVerificationClient(handle);
-      // Verification and mutation share only this operation's private session.
-      let signInError;
-      try {
-        const result = await verificationClient.auth.signInWithPassword({
-          email: user.email,
-          password: currentPassword,
-        });
-        signInError = result.error;
-      } catch (error) {
-        signInError = error;
-      }
-      if (!handle.isCurrent()) return;
+      const { error, phase } = await changePassword({ currentPassword, newPassword, handle });
+      if (!handle.isCurrent() || isStaleActorError(error)) return;
 
-      if (signInError) {
-        console.error('Password verification error:', signInError);
+      if (error && phase === 'verification') {
+        console.error('Password verification error:', error);
         showMessage(
-          isInvalidCredentialsError(signInError)
+          isInvalidCredentialsError(error)
             ? 'Current password is incorrect'
             : PASSWORD_VERIFICATION_FAILED_MESSAGE,
           'error'
         );
         return;
       }
-
-      // Update password
-      const { error } = await verificationClient.auth.updateUser({ password: newPassword });
-      if (!handle.isCurrent()) return;
 
       if (error) throw error;
 
