@@ -1,6 +1,7 @@
 import React, { createContext, useState, useEffect, useContext, useRef, useCallback, useMemo } from 'react';
 import { supabase } from '../services/supabaseClient';
 import { readPersistedSession, clearPersistedSession } from '../services/persistedAuthSession';
+import { admitAuthSessionUser, revokeAuthSessionAdmission } from '../services/authSessionStorage';
 import { requestOpen, requestClose, getCurrentHandle, subscribeToHandle, setLatestAuthSession } from '../session/signedInHandle';
 import { createPasswordVerificationClient } from '../services/passwordVerificationClient';
 import { StaleActorError } from '../session/staleActor';
@@ -19,6 +20,7 @@ export const AuthProvider = ({ children }) => {
   const generationRef = useRef(0);
   const signOutOperationRef = useRef(null);
   const authMutationRef = useRef(Promise.resolve());
+  const signInPendingRef = useRef(false);
   const localSignOutCommittedRef = useRef(false);
   const pendingSignOutTimeoutRef = useRef(null);
   const authListenersRef = useRef(new Set());
@@ -53,6 +55,7 @@ export const AuthProvider = ({ children }) => {
     if (currentUserRef.current) return openForUser(currentUserRef.current);
   }, [openForUser]);
   const commitSignedOutState = async (reason) => {
+    revokeAuthSessionAdmission();
     const generation = ++generationRef.current;
     clearPendingSignOutTimeout();
     currentUserRef.current = null;
@@ -77,9 +80,18 @@ export const AuthProvider = ({ children }) => {
       return true;
     });
     operation.complete = operation.local.then(async (committed) => {
-      if (!committed || !signOutClient || generation !== generationRef.current || !mountedRef.current) return;
-      const { error } = await supabase.auth.signOut({ scope: 'local' });
-      if (error) throw error;
+      if (!committed || generation !== generationRef.current || !mountedRef.current) return;
+      try {
+        // The SDK lock drains admitted update/refresh work, including storage
+        // writes that had already started before admission was revoked.
+        const { error } = signOutClient
+          ? await supabase.auth.signOut({ scope: 'local' })
+          : await supabase.auth.getSession();
+        if (error) throw error;
+      } finally {
+        // Remote logout failures must not leave an admitted late write durable.
+        await clearPersistedSession();
+      }
     }).catch((error) => {
       console.warn('[Auth] Background Supabase sign-out failed:', error?.message);
     }).finally(() => {
@@ -94,6 +106,7 @@ export const AuthProvider = ({ children }) => {
     const persisted = await readPersistedSession();
     if (generation !== generationRef.current || !mountedRef.current) return;
     if (persisted?.user?.id) {
+      admitAuthSessionUser(persisted.user.id);
       if (currentUserRef.current?.id !== persisted.user.id) {
         setSession(null);
         return openForUser(persisted.user);
@@ -111,9 +124,17 @@ export const AuthProvider = ({ children }) => {
       if (next) { setHandleStatus('open'); setHandleError(null); setLoading(false); }
     });
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, nextSession) => {
+      // The SDK delivers its initial storage read asynchronously. An explicit
+      // login has already taken ownership of admission, even before its response.
+      if (event === 'INITIAL_SESSION' && signInPendingRef.current) return;
       for (const listener of authListenersRef.current) listener(event, nextSession ?? null);
       if (nextSession?.user) {
         if (localSignOutCommittedRef.current && event !== 'SIGNED_IN') return;
+        if (event !== 'SIGNED_IN' && currentUserRef.current
+          && currentUserRef.current.id !== nextSession.user.id) return;
+        if (event === 'SIGNED_IN' || event === 'INITIAL_SESSION' || event === 'TOKEN_REFRESHED') {
+          admitAuthSessionUser(nextSession.user.id);
+        }
         ++generationRef.current;
         setLatestAuthSession(nextSession);
         if (event === 'SIGNED_IN') localSignOutCommittedRef.current = false;
@@ -144,7 +165,8 @@ export const AuthProvider = ({ children }) => {
       if (currentUserRef.current && !pendingSignOutTimeoutRef.current) {
         pendingSignOutTimeoutRef.current = setTimeout(() => {
           pendingSignOutTimeoutRef.current = null;
-          void commitSignedOutState(`${event}-grace-timeout`);
+          localSignOutCommittedRef.current = true;
+          void finishSignOut(`${event}-grace-timeout`);
         }, AUTH_SIGN_OUT_GRACE_PERIOD_MS);
         return;
       }
@@ -158,8 +180,8 @@ export const AuthProvider = ({ children }) => {
     };
   }, [openForUser]);
 
-  // Password sign-in does not take the SDK's updateUser lock. Serialize these
-  // session-writing calls so an admitted update cannot persist over a new sign-in.
+  // Serialize password changes with each other. Session storage admission fences
+  // their late results, so explicit sign-in need not join this queue.
   const runAuthMutation = useCallback((task) => {
     const operation = authMutationRef.current.catch(() => {}).then(task);
     authMutationRef.current = operation.catch(() => {});
@@ -168,22 +190,29 @@ export const AuthProvider = ({ children }) => {
 
   const signIn = useCallback(async (email, password) => {
     try {
-      return await runAuthMutation(async () => {
-        while (signOutOperationRef.current) await signOutOperationRef.current.complete;
-        ++generationRef.current;
-        const { data, error } = await supabase.auth.signInWithPassword({
-          email,
-          password,
-        });
-
-        if (error) throw error;
-        return { data, error: null };
+      while (signOutOperationRef.current) await signOutOperationRef.current.complete;
+      ++generationRef.current;
+      signInPendingRef.current = true;
+      admitAuthSessionUser('*');
+      const { data, error } = await supabase.auth.signInWithPassword({
+        email,
+        password,
       });
+
+      if (error) throw error;
+      return { data, error: null };
     } catch (error) {
       console.error('Sign in error:', error);
       return { data: null, error };
+    } finally {
+      signInPendingRef.current = false;
+      if (!localSignOutCommittedRef.current && currentUserRef.current?.id) {
+        admitAuthSessionUser(currentUserRef.current.id);
+      } else {
+        revokeAuthSessionAdmission();
+      }
     }
-  }, [runAuthMutation]);
+  }, []);
 
   const changePassword = useCallback(async ({ currentPassword, newPassword, handle: origin }) => {
     let verificationClient;

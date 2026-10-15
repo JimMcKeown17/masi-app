@@ -1,5 +1,7 @@
 import { createClient } from '@supabase/supabase-js';
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import { createAuthSessionStorage } from './authSessionStorage';
+import { authRequestFetch } from './authRequestFetch';
+export { AUTH_REQUEST_TIMEOUT_MS } from './authRequestFetch';
 import Constants from 'expo-constants';
 import { AppState, Platform } from 'react-native';
 import { processLock } from '@supabase/supabase-js';
@@ -15,12 +17,13 @@ export const { supabaseUrl, supabaseAnonKey } = resolveSupabaseProjectConfig({
 
 const createSupabaseClient = () => createClient(supabaseUrl, supabaseAnonKey, {
   auth: {
-    storage: AsyncStorage,
+    storage: createAuthSessionStorage(`sb-${new URL(supabaseUrl).hostname.split('.')[0]}-auth-token`),
     autoRefreshToken: true,
     persistSession: true,
     detectSessionInUrl: false,
     lock: processLock,
   },
+  global: { fetch: authRequestFetch },
 });
 
 const enqueueAuthAutoRefreshOperation = (state, operation, onError) => {

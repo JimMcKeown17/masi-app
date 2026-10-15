@@ -12,6 +12,8 @@ import { OfflineProvider, useOffline } from '../src/context/OfflineContext';
 import { ChildrenProvider, useChildren } from '../src/context/ChildrenContext';
 import { ClassesProvider, useClasses } from '../src/context/ClassesContext';
 import { readPersistedSession, clearPersistedSession } from '../src/services/persistedAuthSession';
+import { createAuthSessionStorage, revokeAuthSessionAdmission } from '../src/services/authSessionStorage';
+import { authRequestFetch, AUTH_REQUEST_TIMEOUT_MS } from '../src/services/authRequestFetch';
 import { getCurrentHandle, requestOpen, requestClose, resetHandleRegistryForTests } from '../src/session/signedInHandle';
 import * as engine from '../test-support/expoSQLiteRealEngine';
 import * as sqlite from 'expo-sqlite';
@@ -55,6 +57,7 @@ const signIn = async id => {
 };
 beforeEach(async () => {
   await resetHandleRegistryForTests(); await engine.__resetMockDatabases(); await AsyncStorage.clear();
+  revokeAuthSessionAdmission();
   mockNetwork = { isConnected: false };
   navigation.navigate.mockClear(); bootstrapStates.length = 0; roster = null;
   sqlite.__setDatabaseFactory(engine.openDatabaseAsync);
@@ -66,12 +69,64 @@ beforeEach(async () => {
   });
   jest.spyOn(global, 'fetch').mockImplementation((...args) => transport(...args));
   mockClient = createClient('https://example.supabase.co', 'test-key', {
-    auth: { storage: AsyncStorage, persistSession: true, autoRefreshToken: false, detectSessionInUrl: false },
-    global: { fetch: (...args) => transport(...args) },
+    auth: { storage: createAuthSessionStorage('sb-example-auth-token'), persistSession: true, autoRefreshToken: false, detectSessionInUrl: false },
+    global: { fetch: authRequestFetch },
   });
   await mockClient.auth.initialize();
 });
 afterEach(async () => { cleanup(); await mockClient.auth.stopAutoRefresh(); await resetHandleRegistryForTests(); await engine.__resetMockDatabases(); jest.restoreAllMocks(); });
+
+test.each([
+  ['response', 'manual'], ['admitted storage write', 'manual'], ['admitted storage write', 'SIGNED_OUT'],
+])('delayed password %s and logout 503 cannot restore A after provider remount (%s)', async (phase, mode) => {
+  let view = render(<AuthProvider><Tree profile /></AuthProvider>);
+  await signIn(A);
+  const entered = barrier(); const release = barrier();
+  const originalTransport = transport.getMockImplementation();
+  const write = AsyncStorage.setItem.getMockImplementation();
+  const storageKey = mockClient.auth.storageKey;
+  transport.mockImplementation(async (url, init) => {
+    if (String(url).includes('/user') && init.method === 'PUT' && phase === 'response') {
+      entered.resolve(); await release.promise;
+    }
+    if (String(url).includes('/logout')) return new Response(JSON.stringify({ message: 'unavailable' }), { status: 503 });
+    return originalTransport(url, init);
+  });
+  AsyncStorage.setItem.mockImplementation(async (key, value) => {
+    if (key === storageKey && phase === 'admitted storage write') { entered.resolve(); await release.promise; }
+    return write(key, value);
+  });
+  const inputs = view.UNSAFE_getAllByType(TextInput);
+  ['secret', 'new-secret-123', 'new-secret-123'].forEach((value, i) => fireEvent.changeText(inputs[i], value));
+  let change;
+  act(() => { change = view.UNSAFE_getAllByType(Button).find(node => node.props.children === 'Change Password').props.onPress(); });
+  await entered.promise;
+  try {
+    await act(async () => {
+      if (mode === 'manual') await auth.signOut();
+      else {
+        await clearPersistedSession();
+        await mockClient.auth._notifyAllSubscribers('SIGNED_OUT', null);
+      }
+    });
+    await waitFor(() => expect(auth.user).toBeNull());
+    expect(view.getByTestId('actor').props.children).toBe('signed-out');
+    await act(async () => { release.resolve(); await change; await mockClient.auth.getSession(); });
+    expect(await readPersistedSession()).toBeNull();
+    expect(await AsyncStorage.getAllKeys()).not.toContain(storageKey);
+    expect(view.queryByText('Password changed successfully')).toBeNull();
+    if (phase === 'admitted storage write' && mode === 'manual') {
+      expect(transport.mock.calls.some(([url, init]) => String(url).includes('/logout')
+        && new Headers(init.headers).get('authorization') === `Bearer token-${A}`)).toBe(true);
+    }
+    view.unmount();
+    view = render(<AuthProvider><Tree /></AuthProvider>);
+    await waitFor(() => expect(auth.loading).toBe(false));
+    expect(view.getByTestId('actor').props.children).toBe('signed-out');
+    expect(getCurrentHandle()).toBeNull();
+    expect(await readPersistedSession()).toBeNull();
+  } finally { release.resolve(); await change; AsyncStorage.setItem.mockImplementation(write); }
+});
 
 test('Profile password change preserves the app session through revoke-others and token refresh', async () => {
   const sessions = new Map();
@@ -187,6 +242,28 @@ test('changePassword drops its result if the handle closes during isolated-sessi
   } finally { release.resolve(); await changing; }
 });
 
+test('sign-in does not wait for a password update and its late A response cannot overwrite B', async () => {
+  const view = render(<AuthProvider><Tree /></AuthProvider>);
+  await signIn(A);
+  const entered = barrier(); const release = barrier();
+  const originalTransport = transport.getMockImplementation();
+  transport.mockImplementation(async (url, init) => {
+    if (String(url).includes('/user') && init.method === 'PUT') { entered.resolve(); await release.promise; }
+    return originalTransport(url, init);
+  });
+  let change; let signingIn;
+  act(() => { change = auth.changePassword({ currentPassword: 'secret', newPassword: 'new-secret-123', handle: getCurrentHandle() }); });
+  await entered.promise;
+  try {
+    act(() => { signingIn = auth.signIn(`${B}@example.org`, 'secret'); });
+    await waitFor(() => expect(getCurrentHandle()?.userId).toBe(B));
+    expect((await readPersistedSession()).user.id).toBe(B);
+    await act(async () => { release.resolve(); await change; await signingIn; });
+    expect(view.getByTestId('actor').props.children).toBe(B);
+    expect((await readPersistedSession()).user.id).toBe(B);
+  } finally { release.resolve(); await Promise.allSettled([change, signingIn]); }
+});
+
 test('a late shared password update cannot publish A or show feedback after switching to B', async () => {
   const view = render(<AuthProvider><Tree profile /></AuthProvider>);
   await signIn(A);
@@ -217,6 +294,89 @@ test('a late shared password update cannot publish A or show feedback after swit
   const updates = transport.mock.calls.filter(([url, init]) => String(url).includes('/user') && init.method === 'PUT');
   expect(updates).toHaveLength(1);
   expect(new Headers(updates[0][1].headers).get('authorization')).toBe(`Bearer token-${A}`);
+});
+
+test('a never-settling password PUT cannot block sign-out then B beyond the request bound', async () => {
+  const view = render(<AuthProvider><Tree profile /></AuthProvider>);
+  await signIn(A);
+  jest.useFakeTimers({ doNotFake: ['nextTick', 'setImmediate'] });
+  const entered = barrier(); const release = barrier();
+  let requestSignal;
+  const originalTransport = transport.getMockImplementation();
+  transport.mockImplementation(async (url, init) => {
+    if (String(url).includes('/user') && init.method === 'PUT') {
+      requestSignal = init.signal;
+      entered.resolve(); await release.promise; // Deliberately ignore abort, like a stuck native transport.
+    }
+    return originalTransport(url, init);
+  });
+  const inputs = view.UNSAFE_getAllByType(TextInput);
+  ['secret', 'new-secret-123', 'new-secret-123'].forEach((value, i) => fireEvent.changeText(inputs[i], value));
+  let change; let signingIn;
+  act(() => { change = view.UNSAFE_getAllByType(Button).find(node => node.props.children === 'Change Password').props.onPress(); });
+  await entered.promise;
+  const started = Date.now();
+  try {
+    await act(async () => { await auth.signOut(); });
+    act(() => { signingIn = auth.signIn(`${B}@example.org`, 'secret'); });
+    await act(async () => { await jest.advanceTimersByTimeAsync(AUTH_REQUEST_TIMEOUT_MS - 1); });
+    expect(view.getByTestId('actor').props.children).toBe('signed-out');
+    expect(transport.mock.calls.filter(([url, init]) => String(url).includes('/token') && JSON.parse(init.body).email === `${B}@example.org`)).toHaveLength(0);
+    await act(async () => { await jest.advanceTimersByTimeAsync(1); });
+    expect(view.getByTestId('actor').props.children).toBe(B);
+    expect(getCurrentHandle()?.userId).toBe(B);
+    expect((await readPersistedSession()).user.id).toBe(B);
+    expect(Date.now() - started).toBe(AUTH_REQUEST_TIMEOUT_MS);
+    expect(requestSignal.aborted).toBe(true);
+    await act(async () => { release.resolve(); await change; await signingIn; });
+    expect(view.getByTestId('actor').props.children).toBe(B);
+    expect((await readPersistedSession()).user.id).toBe(B);
+    expect(view.queryByText('Password changed successfully')).toBeNull();
+  } finally {
+    release.resolve(); await Promise.allSettled([change, signingIn]); jest.useRealTimers();
+  }
+});
+
+test('grace-timeout sign-out also clears credentials and rejects a late refresh', async () => {
+  const view = render(<AuthProvider><Tree /></AuthProvider>);
+  await signIn(A);
+  jest.useFakeTimers({ doNotFake: ['nextTick', 'setImmediate'] });
+  try {
+    await act(async () => { await mockClient.auth._notifyAllSubscribers('USER_UPDATED', null); });
+    await act(async () => { await jest.advanceTimersByTimeAsync(15_000); });
+    expect(view.getByTestId('actor').props.children).toBe('signed-out');
+    expect(await readPersistedSession()).toBeNull();
+    await act(async () => { await mockClient.auth._notifyAllSubscribers('TOKEN_REFRESHED', session(A)); });
+    await mockClient.auth._saveSession(session(A));
+    expect(view.getByTestId('actor').props.children).toBe('signed-out');
+    expect(await readPersistedSession()).toBeNull();
+  } finally { jest.useRealTimers(); }
+});
+
+test.each([null, B])('a late SDK refresh cannot persist or publish A after switching to %s', async nextActor => {
+  const view = render(<AuthProvider><Tree /></AuthProvider>);
+  await signIn(A);
+  const entered = barrier(); const release = barrier();
+  const originalTransport = transport.getMockImplementation();
+  transport.mockImplementation(async (url, init) => {
+    if (String(url).includes('grant_type=refresh_token')) {
+      entered.resolve(); await release.promise;
+      return json({ ...session(A), access_token: 'late-refreshed-A' });
+    }
+    return originalTransport(url, init);
+  });
+  let refreshing;
+  act(() => { refreshing = mockClient.auth.refreshSession(); });
+  await entered.promise;
+  try {
+    if (nextActor) await signIn(nextActor);
+    else await act(async () => { await auth.signOut(); });
+    await act(async () => { release.resolve(); await refreshing; await mockClient.auth.getSession(); });
+    expect(view.getByTestId('actor').props.children).toBe(nextActor || 'signed-out');
+    const persisted = await readPersistedSession();
+    if (nextActor) expect(persisted).toMatchObject({ user: { id: B }, access_token: `token-${B}` });
+    else expect(persisted).toBeNull();
+  } finally { release.resolve(); await refreshing; }
 });
 
 test.each(['storage removal', 'SDK sign-out'])('B sign-in waits for already-started %s cleanup before persisting', async phase => {
@@ -254,21 +414,21 @@ test.each(['storage removal', 'SDK sign-out'])('B sign-in waits for already-star
   }
 });
 
-test('manual sign-out and its SDK event are one cleanup even with delayed event token removal', async () => {
+test('manual sign-out and its SDK event are one cleanup even with delayed final token removal', async () => {
   const view = render(<AuthProvider><Tree /></AuthProvider>);
   await signIn(A);
   const sdkReadEntered = barrier(); const releaseSdkRead = barrier();
-  const releaseEventRemoval = barrier();
+  const releaseFinalRemoval = barrier();
   const storageKey = mockClient.auth.storageKey;
   const remove = AsyncStorage.removeItem.getMockImplementation();
   const read = AsyncStorage.getItem.getMockImplementation();
-  let tokenRemovals = 0; let heldRead = false; let heldEventRemoval = false;
+  let tokenRemovals = 0; let heldRead = false; let heldFinalRemoval = false;
   let signedIn = false; let closing; let signingIn;
   AsyncStorage.removeItem.mockImplementation(async key => {
     if (key === storageKey) {
       tokenRemovals += 1;
-      // First removal is ours, second is the SDK's; a third is reentrant cleanup.
-      if (tokenRemovals === 3) { heldEventRemoval = true; await releaseEventRemoval.promise; }
+      // Local clear, SDK clear, then the mandatory final clear; no reentrant cleanup.
+      if (tokenRemovals === 3) { heldFinalRemoval = true; await releaseFinalRemoval.promise; }
     }
     return remove(key);
   });
@@ -284,16 +444,17 @@ test('manual sign-out and its SDK event are one cleanup even with delayed event 
     act(() => { signingIn = auth.signIn(`${B}@example.org`, 'secret').then(result => { signedIn = true; return result; }); });
     expect(transport.mock.calls.filter(([url, init]) => String(url).includes('/token') && JSON.parse(init.body).email === `${B}@example.org`)).toHaveLength(0);
     await act(async () => { releaseSdkRead.resolve(); });
-    await waitFor(() => expect(heldEventRemoval || signedIn).toBe(true));
-    // Let B complete if the lifecycle was incorrectly released ahead of its cleanup.
+    await waitFor(() => expect(heldFinalRemoval || signedIn).toBe(true));
+    // B must remain behind the final durable clear, including the SDK event.
     await act(async () => { await Promise.resolve(); });
-    await act(async () => { releaseEventRemoval.resolve(); await closing; await signingIn; });
+    expect(signedIn).toBe(false);
+    await act(async () => { releaseFinalRemoval.resolve(); await closing; await signingIn; });
     await waitFor(() => expect(getCurrentHandle()?.userId).toBe(B));
     expect(view.getByTestId('actor').props.children).toBe(B);
     expect((await readPersistedSession())?.user.id).toBe(B);
-    expect(tokenRemovals).toBe(2);
+    expect(tokenRemovals).toBe(3);
   } finally {
-    releaseSdkRead.resolve(); releaseEventRemoval.resolve();
+    releaseSdkRead.resolve(); releaseFinalRemoval.resolve();
     await Promise.allSettled([closing, signingIn]);
     AsyncStorage.removeItem.mockImplementation(remove);
     AsyncStorage.getItem.mockImplementation(read);
