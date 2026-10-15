@@ -5,6 +5,8 @@ import { registerHandleFacade } from '../db/repositories/sqliteRepositoryUtils';
 import { createStartupRepairRunner } from '../services/startupRepairs';
 import { captureOperationalError } from '../services/observability';
 import { createHandleRequestQueue } from './handleRequestQueue';
+import { createHandleDataClient } from './handleDataClient';
+import { supabaseUrl, supabaseAnonKey } from '../services/supabaseClient';
 import {
   StaleActorError, NoSignedInEAError, FileOwnerMismatchError, HandleDisposeFailedError,
 } from './staleActor';
@@ -162,7 +164,7 @@ const trackDisposal = (fileName, promise) => {
 };
 export const whenDisposed = (fileName) => disposals.get(fileName) || Promise.resolve();
 
-const createHandle = ({ userId, fileName, openDatabase, connections }) => {
+const createHandle = ({ userId, fileName, openDatabase, connections, fetchImpl, timeoutMs }) => {
   const abortController = new AbortController();
   const closeListeners = new Set();
   const bundles = [];
@@ -307,6 +309,9 @@ const createHandle = ({ userId, fileName, openDatabase, connections }) => {
       return () => closeListeners.delete(listener);
     },
   };
+  handle.dataClient = createHandleDataClient({
+    handle, supabaseUrl, supabaseKey: supabaseAnonKey, fetchImpl, timeoutMs,
+  });
   const revoke = () => {
     if (closePromise) return closePromise;
     state = 'closed';
@@ -350,7 +355,6 @@ const waitForFile = async (fileName, myGeneration) => {
 };
 
 export const requestOpen = ({ userId, openDatabase = openDatabaseAsync, fetchImpl, timeoutMs }) => {
-  // fetchImpl/timeoutMs belong to Task 3's data client; accepting them here keeps the API stable.
   if (latestRequest?.userId === userId && latestRequest.generation === generation) return latestRequest.promise;
   let fileName;
   try { fileName = databaseNameForUser(userId); } catch (error) { return Promise.reject(error); }
@@ -366,7 +370,7 @@ export const requestOpen = ({ userId, openDatabase = openDatabaseAsync, fetchImp
     let created;
     try {
       const connections = await openConfiguredConnections({ name: fileName, openDatabase });
-      created = createHandle({ userId, fileName, openDatabase, connections });
+      created = createHandle({ userId, fileName, openDatabase, connections, fetchImpl, timeoutMs });
       const { handle } = created;
       await handle.withTransaction(async (txn) => {
         const owner = await txn.getFirstAsync("select value from local_state where key = 'file_owner_user_id'");

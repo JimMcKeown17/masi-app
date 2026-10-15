@@ -8,7 +8,7 @@ import { resolveSupabaseProjectConfig } from '../../config/supabaseProjectConfig
 const CLIENT_STATE_KEY = '__MASI_SUPABASE_CLIENT_STATE__';
 
 // Local dev uses public env vars; EAS builds fall back to Expo config extra.
-const { supabaseUrl, supabaseAnonKey } = resolveSupabaseProjectConfig({
+export const { supabaseUrl, supabaseAnonKey } = resolveSupabaseProjectConfig({
   env: process.env,
   expoExtra: Constants.expoConfig?.extra || {},
 });
