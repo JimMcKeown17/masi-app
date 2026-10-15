@@ -146,12 +146,12 @@ isiXhosa differ.
   2026-10-14.
 - EN pictures:
   - Row 1: apple, fish, key, orange, sun, whale.
-  - Row 2: bed, gate, leaf, pot, table, and a figure behind a sign (**x**, by elimination).
-  - Row 3: cat, hat, moon, a crowned figure (**q**, queen), umbrella, yo-yo.
+  - Row 2: bed, gate, leaf, pot, table, x-ray (a child holding a chest **x**-ray).
+  - Row 3: cat, hat, moon, queen (crowned figure, **q**), umbrella, yo-yo.
   - Row 4: dog, insect, net, ring, van, zebra.
   - Row 5: elephant, jacket.
 - XH pictures differ but keep the same letters:
-  - Row 1: apple (i-apile), tortoise (ufudo), cat (ikati), orange, bread, a face.
+  - Row 1: apple (i-apile), tortoise (ufudo), cat (ikati), orange, bread, watch.
   - Row 2: milk, drum, sun, pear, table, and an **empty x cell (no picture)**.
   - Row 3: spoon, pig, car, egg, tree, medicine.
   - Row 4: duck, dog, nest, traffic light, van, axe.
