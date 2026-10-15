@@ -6,6 +6,7 @@ import { createStartupRepairRunner } from '../services/startupRepairs';
 import { captureOperationalError } from '../services/observability';
 import { createHandleRequestQueue } from './handleRequestQueue';
 import { createHandleDataClient } from './handleDataClient';
+import { createHandleServices } from './handleServices';
 import { supabaseUrl, supabaseAnonKey } from '../services/supabaseClient';
 import {
   StaleActorError, NoSignedInEAError, FileOwnerMismatchError, HandleDisposeFailedError,
@@ -382,6 +383,8 @@ export const requestOpen = ({ userId, openDatabase = openDatabaseAsync, fetchImp
       });
       await createSyncOutboxRepository({ database: handle }).resetInFlight();
       await createStartupRepairRunner({ database: handle }).run();
+      handle.services = createHandleServices(handle);
+      handle.repositories = handle.services.repositories;
       if (generation !== myGeneration) { revocations.get(handle)(); return null; }
       created.publish();
       return handle;

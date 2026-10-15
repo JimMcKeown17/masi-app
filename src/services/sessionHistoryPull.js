@@ -3,13 +3,14 @@
 // the phone gains a delivery child (a handover) and as a weekly backstop, which catches what a
 // timestamp cursor cannot see. Each page is persisted atomically with its cursor; absence never
 // deletes; updatedAt is the raw PostgREST string and is never parsed into a Date.
+import { isStaleActorError } from '../session/staleActor';
 import { supabase } from './supabaseClient';
 import { enqueueSupabaseRequest } from './supabaseRequestQueue';
 import { classifyPullFailureKind } from './preloadedChildData';
 import { resolveDatabase, runRepositoryTransaction } from '../db/repositories/repositoryRuntime';
 import { getActiveAcademicYear, getActiveProgrammeId } from '../db/repositories/domainRepositoryUtils';
 import { createSessionsRepository, sessionsRepository } from '../db/repositories/sessionsRepository';
-import { syncStateRepository } from '../db/repositories/syncStateRepository';
+import { createSyncStateRepository, syncStateRepository } from '../db/repositories/syncStateRepository';
 import { decodeJson } from '../db/repositories/sqliteRepositoryUtils';
 
 export const SESSION_HISTORY_PAGE_SIZE = 200;
@@ -23,13 +24,14 @@ export const SESSION_HISTORY_REWALK_JITTER_MS = 2 * DAY_MS;
 
 export const sessionHistoryScope = (userId, programmeId) => `session_history_pull:${userId}:${programmeId}`;
 
-let actorGeneration = 0;
-const inFlight = new Map();
+export const createSessionHistoryState = () => ({ actorGeneration: 0, inFlight: new Map() });
+const defaultState = createSessionHistoryState();
 
-export const resetSessionHistoryForActorChange = () => {
-  actorGeneration += 1;
-  inFlight.clear();
+export const resetSessionHistoryState = (state) => {
+  state.actorGeneration += 1;
+  state.inFlight.clear();
 };
+export const resetSessionHistoryForActorChange = () => resetSessionHistoryState(defaultState);
 
 class HistoryRunStop extends Error {
   constructor(kind, message) {
@@ -66,6 +68,8 @@ const withDeadline = ({ enqueueRequest, timeoutMs, isStale, start }) => {
 const runOnce = async ({ userId, force, deps }) => {
   const {
     database,
+    state: runState = defaultState,
+    repositories,
     client = supabase,
     enqueueRequest = enqueueSupabaseRequest,
     now = () => Date.now(),
@@ -75,9 +79,10 @@ const runOnce = async ({ userId, force, deps }) => {
     runBudgetMs = SESSION_HISTORY_RUN_BUDGET_MS,
     onPageSaved = () => {},
   } = deps;
-  const generation = actorGeneration;
-  const isStale = () => generation !== actorGeneration;
-  const repo = database ? createSessionsRepository({ database }) : sessionsRepository;
+  const generation = runState.actorGeneration;
+  const isStale = () => generation !== runState.actorGeneration;
+  const repo = repositories?.sessions || (database ? createSessionsRepository({ database }) : sessionsRepository);
+  const stateRepo = repositories?.syncState || (database ? createSyncStateRepository({ database }) : syncStateRepository);
   const db = await resolveDatabase(database);
 
   const programmeId = userId ? await getActiveProgrammeId(db, userId) : null;
@@ -136,6 +141,7 @@ const runOnce = async ({ userId, force, deps }) => {
       start: (signal) => client.rpc(rpcName, args).abortSignal(signal),
     }).then(({ data, error }) => {
       if (isStale()) throw new HistoryRunStop('cancelled', 'Signed-in user changed');
+      if (isStaleActorError(error)) throw error;
       if (error) throw new HistoryRunStop(classifyPullFailureKind(error), error.message || 'RPC failed');
       return data || [];
     });
@@ -269,6 +275,7 @@ const runOnce = async ({ userId, force, deps }) => {
     }
     return finish(state.complete ? 'complete' : 'partial');
   } catch (error) {
+    if (isStaleActorError(error)) throw error;
     const kind = error instanceof HistoryRunStop ? error.kind
       : error?.kind === 'cancelled' ? 'cancelled'
         : 'transport';
@@ -281,10 +288,11 @@ const runOnce = async ({ userId, force, deps }) => {
       try {
         await runRepositoryTransaction(database, async (txn) => {
           if (isStale()) return;
-          await syncStateRepository.setPullState(scope, { lastPulledAt, cursor: JSON.stringify(failed) }, { transaction: txn });
+          await stateRepo.setPullState(scope, { lastPulledAt, cursor: JSON.stringify(failed) }, { transaction: txn });
         });
         state = failed;
       } catch (writeError) {
+        if (isStaleActorError(writeError)) throw writeError;
         console.warn('[SessionHistory] could not record failure:', writeError?.message);
       }
     }
@@ -293,6 +301,7 @@ const runOnce = async ({ userId, force, deps }) => {
 };
 
 export const runSessionHistoryPull = ({ userId, force = false, deps = {} } = {}) => {
+  const { inFlight } = deps.state || defaultState;
   const existing = inFlight.get(userId);
   if (existing) return existing;
   const run = runOnce({ userId, force, deps }).finally(() => {

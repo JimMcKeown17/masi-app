@@ -1,3 +1,4 @@
+import { getLatestAuthSession } from '../session/signedInHandle';
 import * as Sentry from '@sentry/react-native';
 import { getRuntimeDiagnostics } from '../utils/runtimeDiagnostics';
 import { logger } from '../utils/logger';
@@ -10,6 +11,9 @@ const reportedSyncIssueKeys = new Set();
 const MAX_REPORTED_SYNC_ISSUES = 500;
 const operationalErrorTimes = new Map();
 const OPERATIONAL_ERROR_DEDUPE_MS = 15 * 60 * 1000;
+
+const currentUserId = () => getLatestAuthSession()?.user?.id
+  || Sentry.getCurrentScope?.().getUser?.()?.id || 'signed-out';
 
 const sentryDsn = () => process.env.EXPO_PUBLIC_SENTRY_DSN || '';
 
@@ -101,10 +105,10 @@ export const setObservabilityUser = (user) => {
   Sentry.setUser(user ? { id: user.id } : null);
 };
 
-export const captureOperationalError = (error, { category, context, tags } = {}) => {
+export const captureOperationalError = (error, { category, context, tags, userId = currentUserId() } = {}) => {
   if (!enabled) return null;
   const normalizedError = error instanceof Error ? error : new Error(String(error));
-  const dedupeKey = [category || 'operation', normalizedError.name, normalizedError.message].join(':');
+  const dedupeKey = [userId, category || 'operation', normalizedError.name, normalizedError.message].join(':');
   const lastReportedAt = operationalErrorTimes.get(dedupeKey) || 0;
   if (Date.now() - lastReportedAt < OPERATIONAL_ERROR_DEDUPE_MS) return null;
   operationalErrorTimes.set(dedupeKey, Date.now());
@@ -143,15 +147,16 @@ const syncPassContext = (result, { source, force, isOnline }) => ({
  */
 export const reportSyncResult = (
   result,
-  { source = 'unknown', force = false, isOnline = null } = {}
+  { source = 'unknown', force = false, isOnline = null, userId = currentUserId() } = {}
 ) => {
-  if (!enabled || !result) return { reported: 0 };
+  if (!enabled || !result || result.abortedStaleActor) return { reported: 0 };
 
   const context = syncPassContext(result, { source, force, isOnline });
   let reported = 0;
   const report = (message, tags = {}) => {
     const eventId = captureOperationalError(new Error(message), {
       category: 'sync_pass',
+      userId,
       context,
       tags,
     });
@@ -211,7 +216,7 @@ const syncStatusContext = (status, { source, isOnline }) => ({
  */
 export const reportSyncStatus = (
   status = {},
-  { source = 'unknown', isOnline = null } = {}
+  { source = 'unknown', isOnline = null, userId = currentUserId() } = {}
 ) => {
   if (!enabled) return { terminalReported: 0, breakersReported: 0 };
 
@@ -221,6 +226,7 @@ export const reportSyncStatus = (
 
   for (const item of status.needsAttentionItems || []) {
     const key = [
+      userId,
       'terminal',
       item.table,
       item.id,
@@ -256,6 +262,7 @@ export const reportSyncStatus = (
 
   for (const note of status.reconcileBreakerNotes || []) {
     const key = [
+      userId,
       'breaker',
       note.scope,
       note.triggeredAt,

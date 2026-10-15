@@ -4,6 +4,7 @@ module.exports = {
   ...packageJson.jest,
   setupFiles: ['./jest.integration.setup.js'],
   testMatch: [
+    '<rootDir>/__tests__/integration/accountSwitch.integration.js',
     '<rootDir>/__tests__/integration/signedInHandleFiles.integration.js',
     '<rootDir>/test-support/integration/sqliteRuntime.integration.js',
     '<rootDir>/__tests__/sqliteFoundation.test.js',

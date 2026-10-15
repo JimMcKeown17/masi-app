@@ -1,3 +1,4 @@
+import { isStaleActorError } from '../../session/staleActor';
 import { getDatabase, withTransaction } from '../client';
 import { runMigrations } from '../migrations';
 import { runWithTransaction } from './sqliteRepositoryUtils';
@@ -111,6 +112,7 @@ export const runBatchWithPerRowFallback = async ({
   try {
     return await runRepositoryTransaction(database, applyRows);
   } catch (batchError) {
+    if (isStaleActorError(batchError)) throw batchError;
     console.error(
       `Pulled ${tableName} batch transaction failed; retrying rows without reconcile: ${batchError?.message || batchError}`
     );
@@ -125,6 +127,7 @@ export const runBatchWithPerRowFallback = async ({
           applied += 1;
         }
       } catch (error) {
+        if (isStaleActorError(error)) throw error;
         failed += 1;
         console.error(
           `Pulled ${tableName} row ${row?.id || '<unknown>'} failed local persistence: ${error?.message || error}`
