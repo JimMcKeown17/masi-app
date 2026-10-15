@@ -5,6 +5,8 @@ module.exports = {
   setupFiles: ['./jest.integration.setup.js'],
   setupFilesAfterEnv: ['./test-support/defaultTestHandle.js'],
   testMatch: [
+    '<rootDir>/__tests__/outboxOwnerStamping.test.js',
+    '<rootDir>/__tests__/outboxOwnerMigration.test.js',
     '<rootDir>/__tests__/task5AuthRaces.test.js',
     '<rootDir>/__tests__/task5ActionsBinding.test.js',
     '<rootDir>/__tests__/signedInTree.test.js',

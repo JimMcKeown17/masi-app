@@ -1,3 +1,4 @@
+import { bindTestActor } from '../test-support/actorTestUtils';
 jest.mock('expo-sqlite', () => require('../test-support/expoSQLiteMock'));
 jest.mock('../src/services/supabaseClient', () => ({
   ...require('../test-support/supabaseTestConfig'),
@@ -184,7 +185,7 @@ describe('SQLite outbox offline sync', () => {
   let db;
 
   beforeEach(async () => {
-    db = createBetterSqliteTestDatabase();
+    db = bindTestActor(createBetterSqliteTestDatabase(), 'user-1');
     await runMigrations(db);
     await seedReferences(db);
   });

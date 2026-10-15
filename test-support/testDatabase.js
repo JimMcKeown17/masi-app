@@ -1,8 +1,8 @@
 const { openDatabaseAsync } = require('expo-sqlite');
-const TEST_ACTOR_ID = '11111111-1111-4111-8111-111111111111';
-exports.TEST_ACTOR_ID = TEST_ACTOR_ID;
+Object.defineProperty(exports, 'TEST_ACTOR_ID', { get: () => require('./actorTestUtils').TEST_ACTOR_ID });
 const connections = new WeakMap();
 exports.openDefaultTestHandle = async () => {
+  const { TEST_ACTOR_ID } = require('./actorTestUtils');
   const lifecycle = require('../src/session/signedInHandle');
   const current = lifecycle.getCurrentHandle();
   if (current) return current;

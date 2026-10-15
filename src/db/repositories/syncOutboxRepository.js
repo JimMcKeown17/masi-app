@@ -41,7 +41,6 @@ export const createSyncOutboxRepository = ({ database } = {}) => {
     recordId,
     operation,
     payload = null,
-    ownerUserId = null,
     id = outboxRecordId(tableName, recordId, operation),
   }, { transaction } = {}) => runWrite(transaction, async (txn) => {
     await insertOutboxRecord(txn, {
@@ -51,7 +50,6 @@ export const createSyncOutboxRepository = ({ database } = {}) => {
       operation,
       payload,
       status: 'pending',
-      ownerUserId,
     });
     return id;
   });
@@ -85,7 +83,7 @@ export const createSyncOutboxRepository = ({ database } = {}) => {
       from sync_outbox
       where status in ${statuses}
         ${includeBackedOff ? '' : 'and (next_retry_at is null or next_retry_at <= ?)'}
-        ${ownerScoped ? 'and (owner_user_id is null or owner_user_id = ?)' : ''}
+        ${ownerScoped ? 'and owner_user_id = ?' : ''}
       order by created_at, table_name, record_id
       limit ?
     `, ...params);
@@ -128,7 +126,7 @@ export const createSyncOutboxRepository = ({ database } = {}) => {
       where table_name = ?
         and operation = 'hard_delete'
         and status in ('pending', 'failed', 'in_flight')
-        ${ownerScoped ? 'and (owner_user_id is null or owner_user_id = ?)' : ''}
+        ${ownerScoped ? 'and owner_user_id = ?' : ''}
     `, tableName, ...(ownerScoped ? [ownerUserId] : []));
     return new Set(rows.map((row) => row.record_id));
   };
@@ -180,7 +178,7 @@ export const createSyncOutboxRepository = ({ database } = {}) => {
       set status = 'pending',
           updated_at = ?
       where status = 'in_flight'
-        ${ownerScoped ? 'and (owner_user_id is null or owner_user_id = ?)' : ''}
+        ${ownerScoped ? 'and owner_user_id = ?' : ''}
     `, ...[timestamp(), ...(ownerScoped ? [ownerUserId] : [])]);
     return true;
   });
@@ -284,16 +282,26 @@ export const createSyncOutboxRepository = ({ database } = {}) => {
     return rows.map(toFailedItem);
   };
 
-  const getSyncStatus = async ({ ownerUserId } = {}) => {
+  // One definition of unsent work for the whole EA file, including quarantined rows.
+  const countUnsent = async () => {
+    const db = await resolveDatabase(database);
+    const rows = await db.getAllAsync(`
+      select table_name, count(*) as count
+      from sync_outbox
+      where status in ('pending', 'failed', 'in_flight', 'terminal')
+      group by table_name
+    `);
+    const byTable = Object.fromEntries(rows.map(row => [row.table_name, row.count]));
+    return { total: rows.reduce((total, row) => total + row.count, 0), byTable };
+  };
+
+  const getSyncStatus = async () => {
     const db = await resolveDatabase(database);
     // ONE statement = one snapshot (R1): counts and itemized lists must never disagree.
     // Separate queries can interleave with a sync pass finalizing rows, yielding e.g.
     // needsAttentionCount 1 with an empty needsAttentionItems. The outbox is a small,
     // bounded backlog, so loading it whole is cheap.
-    const snapshotRows = await db.getAllAsync('select * from sync_outbox');
-    const rows = ownerUserId === undefined
-      ? snapshotRows
-      : snapshotRows.filter((row) => row.owner_user_id == null || row.owner_user_id === ownerUserId);
+    const rows = await db.getAllAsync('select * from sync_outbox');
     const now = timestamp();
 
     const breakdown = {};
@@ -385,6 +393,7 @@ export const createSyncOutboxRepository = ({ database } = {}) => {
     deleteRecord,
     getFailedItems,
     getSyncStatus,
+    countUnsent,
   };
 };
 

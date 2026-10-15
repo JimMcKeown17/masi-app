@@ -220,9 +220,7 @@ export const createSessionsRepository = ({ database } = {}) => {
       jsonColumns: ['activities'],
     }, record);
     if (shouldEnqueueOutbox(record)) {
-      await enqueueDomainOutbox(txn, 'sessions', session.id, 'insert', stripLegacySessionPayload(record), {
-        ownerRow: record,
-      });
+      await enqueueDomainOutbox(txn, 'sessions', session.id, 'insert', stripLegacySessionPayload(record));
     }
 
     const childIds = session.children_ids || [];
@@ -243,9 +241,7 @@ export const createSessionsRepository = ({ database } = {}) => {
         columns: ATTENDEE_COLUMNS,
       }, attendee);
       if (shouldEnqueueOutbox(attendee)) {
-        await enqueueDomainOutbox(txn, 'session_attendees', attendee.id, 'insert', attendee, {
-          ownerUserId: record.user_id,
-        });
+        await enqueueDomainOutbox(txn, 'session_attendees', attendee.id, 'insert', attendee);
       }
     }
 

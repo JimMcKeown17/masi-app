@@ -457,7 +457,7 @@ describe('SQLite migration runner', () => {
 
       for (const operation of ['insert', 'update', 'archive', 'hard_delete', 'restore']) {
         await db.runAsync(
-          'insert into sync_outbox (id, table_name, record_id, operation, status) values (?, ?, ?, ?, ?)',
+          "insert into sync_outbox (id, table_name, record_id, operation, status, owner_user_id) values (?, ?, ?, ?, ?, 'user-1')",
           `outbox-${operation}`,
           'children',
           `record-${operation}`,
@@ -466,7 +466,7 @@ describe('SQLite migration runner', () => {
         );
       }
       await expectSqliteConstraintFailure(db.runAsync(
-        'insert into sync_outbox (id, table_name, record_id, operation) values (?, ?, ?, ?)',
+        "insert into sync_outbox (id, table_name, record_id, operation, owner_user_id) values (?, ?, ?, ?, 'user-1')",
         'outbox-delete',
         'children',
         'record-delete',
@@ -634,6 +634,7 @@ describe('SQLite debug dump', () => {
           { version: 9, name: 'sync_relationship_indexes' },
           { version: 10, name: 'children_history_reference' },
           { version: 11, name: 'time_entry_location_optional' },
+          { version: 12, name: 'sync_outbox_owner_required' },
         ],
         tableCounts: expect.objectContaining({
           schools: 1,

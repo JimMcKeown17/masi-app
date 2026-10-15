@@ -1,5 +1,13 @@
 # Briefing: actor lifecycle and three confirmed upload defects
 
+**2026-10-15 local implementation status:** Plan 1 is merged into `feat/signed-in-ea-handle`.
+Plan 2 Tasks 1–5 are committed; Task 6 now stamps outbox ownership from the connection actor,
+rejects missing actors, adds SQLite migration 12, and makes status counts file-wide. The
+Task 6 regression exercises the Head Office child edit through SQLite and the Plan 1 fake server.
+This is local evidence; hosted, installed-build, device, and field verification remain separate.
+See [the current contract map](../../documentation/rls-sync-contract-map.md). The dated account
+below preserves what was known on 2026-10-10; Task 7's owner integrity scan/heal remains pending.
+
 **Written 2026-10-10** for whichever session next runs CAP-004 device testing or touches uploads,
 sign-out, or account switching. The three defects below are confirmed in source. Plan 1
 (`feat/upload-path-correctness`, not yet merged) fixes defect 1's server half and defect 3. Defect

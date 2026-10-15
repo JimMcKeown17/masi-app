@@ -71,7 +71,7 @@ test('A saved Export Database confirmation never reads or shares B data', async 
   fireEvent.press(view.getByText('Share Database (Contains Sensitive Data)'));
   const confirm = alert.mock.calls.find(([title]) => title === 'Export Database')[2].find((button) => button.text === 'Export').onPress;
   view.unmount(); await requestClose({ reason: 'switch' }); const b = await open(B);
-  await b.repositories.syncOutbox.enqueue({ tableName: 'children', recordId: 'b-failed', operation: 'insert', payload: { id: 'b-failed' }, ownerUserId: B });
+  await b.repositories.syncOutbox.enqueue({ tableName: 'children', recordId: 'b-failed', operation: 'insert', payload: { id: 'b-failed' } });
   await b.withTransaction((tx) => tx.runAsync("update sync_outbox set status='failed' where record_id='b-failed'"));
   const read = jest.spyOn(b, 'getReader');
   await act(async () => { await confirm(); });
@@ -80,7 +80,7 @@ test('A saved Export Database confirmation never reads or shares B data', async 
 
 test('Sync Status Retry changes A failed outbox row to pending through its bound engine', async () => {
   const a = await open(A);
-  await a.repositories.syncOutbox.enqueue({ tableName: 'time_entries', recordId: 'retry-me', operation: 'insert', payload: { id: 'retry-me', user_id: A }, ownerUserId: A });
+  await a.repositories.syncOutbox.enqueue({ tableName: 'time_entries', recordId: 'retry-me', operation: 'insert', payload: { id: 'retry-me', user_id: A } });
   await a.withTransaction((tx) => tx.runAsync("update sync_outbox set status='failed' where record_id='retry-me'"));
   mockOffline.isOnline = true;
   mockOffline.syncStatus = { needsAttentionItems: [{ table: 'time_entries', id: 'retry-me', terminal: true, reason: 'failed' }] };

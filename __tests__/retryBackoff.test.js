@@ -1,3 +1,4 @@
+import { bindTestActor } from '../test-support/actorTestUtils';
 jest.mock('expo-sqlite', () => require('../test-support/expoSQLiteMock'));
 jest.mock('../src/services/supabaseClient', () => ({
   ...require('../test-support/supabaseTestConfig'), supabase: {} }));
@@ -41,7 +42,7 @@ describe('getReadyRecords includeBackedOff', () => {
   const OUTBOX_ID = outboxRecordId(TABLE, RECORD_ID, 'insert');
 
   beforeEach(async () => {
-    db = createBetterSqliteTestDatabase(':memory:');
+    db = bindTestActor(createBetterSqliteTestDatabase(':memory:'), 'user-1');
     await runMigrations(db);
     await db.runAsync("insert into schools (id, name) values ('school-1', 'Masi Primary')");
     await db.runAsync("insert into programmes (id, code, name) values ('programme-1', 'lit', 'Literacy')");
@@ -103,7 +104,7 @@ describe('retryFailedItem resets retry_count', () => {
   const OUTBOX_ID = outboxRecordId(TABLE, RECORD_ID, 'insert');
 
   beforeEach(async () => {
-    db = createBetterSqliteTestDatabase(':memory:');
+    db = bindTestActor(createBetterSqliteTestDatabase(':memory:'), 'user-1');
     await runMigrations(db);
     await db.runAsync("insert into schools (id, name) values ('school-1', 'Masi Primary')");
     await db.runAsync("insert into programmes (id, code, name) values ('programme-1', 'lit', 'Literacy')");

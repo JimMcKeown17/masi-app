@@ -1,3 +1,4 @@
+import { bindTestActor } from '../test-support/actorTestUtils';
 jest.mock('expo-sqlite', () => require('../test-support/expoSQLiteMock'));
 jest.mock('../src/services/supabaseClient', () => ({
   ...require('../test-support/supabaseTestConfig'),
@@ -34,7 +35,7 @@ describe('requeueTerminalRlsFailures', () => {
   let classGroupingStateRepository;
 
   beforeEach(async () => {
-    db = createBetterSqliteTestDatabase();
+    db = bindTestActor(createBetterSqliteTestDatabase(), 'user-1');
     await runMigrations(db);
     await seedCoreData(db);
     outboxRepository = createSyncOutboxRepository({ database: db });

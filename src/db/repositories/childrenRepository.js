@@ -844,8 +844,7 @@ export const createChildrenRepository = ({ database } = {}) => {
         'children',
         childId,
         'hard_delete',
-        { id: childId },
-        { ownerRow: child }
+        { id: childId }
       );
     }
 

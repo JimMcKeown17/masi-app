@@ -1,9 +1,9 @@
 // setupFilesAfterEnv: hooks must be registered after Jest installs its test API.
-const TEST_ACTOR_ID = '11111111-1111-4111-8111-111111111111';
 
 beforeEach(async () => {
   if (global.__MASI_NO_DEFAULT_HANDLE__) return;
   require('./legacyHandleMocks').restoreMockedFactories();
+  const { TEST_ACTOR_ID } = require('./actorTestUtils');
   const { resetHandleRegistryForTests } = require('../src/session/signedInHandle');
   const { enableAmbientHandleForTests } = require('../src/db/repositories/repositoryRuntime');
   const engine = require('./expoSQLiteRealEngine');
@@ -26,7 +26,10 @@ afterEach(async () => {
   await engine.__resetMockDatabases();
 });
 
-module.exports = { TEST_ACTOR_ID, getDefaultTestHandle: () => require('../src/session/signedInHandle').requireCurrentHandle() };
+module.exports = {
+  get TEST_ACTOR_ID() { return require('./actorTestUtils').TEST_ACTOR_ID; },
+  getDefaultTestHandle: () => require('../src/session/signedInHandle').requireCurrentHandle(),
+};
 
 afterAll(async () => {
   const state = globalThis.__MASI_SUPABASE_CLIENT_STATE__;

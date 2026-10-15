@@ -1,3 +1,4 @@
+import { bindTestActor } from '../test-support/actorTestUtils';
 jest.mock('expo-sqlite', () => require('../test-support/expoSQLiteMock'));
 jest.mock('../src/services/supabaseClient', () => ({
   ...require('../test-support/supabaseTestConfig'), supabase: {} }));
@@ -63,7 +64,7 @@ const seedTimeEntry = async (db, id) => {
 };
 
 it('one record fails while the healthy record still syncs and meta is written', async () => {
-  const db = createBetterSqliteTestDatabase(':memory:');
+  const db = bindTestActor(createBetterSqliteTestDatabase(':memory:'), 'test-user');
   await runMigrations(db);
   await seedClass(db, 'class-good');
   await seedTimeEntry(db, 'time-bad');
@@ -100,7 +101,7 @@ it('one record fails while the healthy record still syncs and meta is written', 
 });
 
 it('a getById throw after markInFlight does not strand the row in_flight and the pass completes', async () => {
-  const db = createBetterSqliteTestDatabase(':memory:');
+  const db = bindTestActor(createBetterSqliteTestDatabase(':memory:'), 'test-user');
   await runMigrations(db);
   await seedClass(db, 'class-good');
   await seedTimeEntry(db, 'time-getbyid-boom');
@@ -144,7 +145,7 @@ it('a getById throw after markInFlight does not strand the row in_flight and the
 });
 
 it('sync meta is written even when a loop-body path throws', async () => {
-  const db = createBetterSqliteTestDatabase(':memory:');
+  const db = bindTestActor(createBetterSqliteTestDatabase(':memory:'), 'test-user');
   await runMigrations(db);
   await seedTimeEntry(db, 'time-loop-throw');
 
@@ -215,7 +216,7 @@ const seedAssessmentItem = async (db, itemId, position, assessmentId = 'assessme
 };
 
 it('Fix 2 (Test A): a fallback processRecord markInFlight throw is owned by processBatch — no in_flight, no double-process', async () => {
-  const db = createBetterSqliteTestDatabase(':memory:');
+  const db = bindTestActor(createBetterSqliteTestDatabase(':memory:'), 'test-user');
   await runMigrations(db);
 
   // Seed prerequisite data: school, programme, child.
@@ -336,7 +337,7 @@ it('Fix 2 (Test A): a fallback processRecord markInFlight throw is owned by proc
 // handles each independently. B synced, A pending/failed, none in_flight, B not re-sent.
 
 it('Task 9 (allSettled race): sibling B synced even when A markInFlight throws before B upload settles', async () => {
-  const db = createBetterSqliteTestDatabase(':memory:');
+  const db = bindTestActor(createBetterSqliteTestDatabase(':memory:'), 'test-user');
   await runMigrations(db);
 
   // Prerequisite domain rows.
@@ -467,7 +468,7 @@ it('Task 9 (allSettled race): sibling B synced even when A markInFlight throws b
 });
 
 it('resetInFlight failure surfaces a preflight error, syncs healthy rows, and the stranded in_flight row recovers next pass', async () => {
-  const db = createBetterSqliteTestDatabase(':memory:');
+  const db = bindTestActor(createBetterSqliteTestDatabase(':memory:'), 'test-user');
   await runMigrations(db);
 
   // A healthy pending row that must still sync despite the reset failure.

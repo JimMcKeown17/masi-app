@@ -1,3 +1,4 @@
+import { bindTestActor } from '../test-support/actorTestUtils';
 jest.mock('expo-sqlite', () => require('../test-support/expoSQLiteMock'));
 jest.mock('../src/services/supabaseClient', () => ({
   ...require('../test-support/supabaseTestConfig'), supabase: {} }));
@@ -202,7 +203,7 @@ describe('group assignment lifecycle (spec §6.5b)', () => {
         'clearImmediate', 'setInterval', 'clearInterval', 'setTimeout', 'clearTimeout',
       ],
     });
-    db = createBetterSqliteTestDatabase();
+    db = bindTestActor(createBetterSqliteTestDatabase(), 'user-1');
     await runMigrations(db);
     await db.runAsync("insert into programmes (id, code, name, sync_status) values ('programme-1', 'lit', 'Literacy', 'synced')");
     await db.runAsync(`
@@ -356,7 +357,6 @@ describe('group assignment lifecycle (spec §6.5b)', () => {
         recordId: ASSIGNMENT,
         operation: 'archive',
         payload: { id: ASSIGNMENT, unassigned_at: '2026-10-11T17:00:00.000Z' },
-        ownerUserId: 'user-1',
       });
       await db.runAsync(
         'update sync_outbox set status = ? where id = ?',
@@ -388,7 +388,6 @@ describe('group assignment lifecycle (spec §6.5b)', () => {
       recordId: ASSIGNMENT,
       operation: 'archive',
       payload: { id: ASSIGNMENT, unassigned_at: '2026-10-11T18:00:00.000Z' },
-      ownerUserId: 'user-1',
     });
     await outboxRepository.markInFlight([legacyId]);
     await enqueueLifecycleOutbox(db, 'group_ea_assignments', ASSIGNMENT, 'restore', {

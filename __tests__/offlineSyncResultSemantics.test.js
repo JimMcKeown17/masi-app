@@ -1,3 +1,4 @@
+import { bindTestActor } from '../test-support/actorTestUtils';
 jest.mock('expo-sqlite', () => require('../test-support/expoSQLiteMock'));
 jest.mock('../src/services/supabaseClient', () => ({
   ...require('../test-support/supabaseTestConfig'), supabase: {} }));
@@ -27,7 +28,7 @@ describe('syncAll result.success semantics (trust UX, Finding 6)', () => {
   let stateRepository;
 
   beforeEach(async () => {
-    db = createBetterSqliteTestDatabase();
+    db = bindTestActor(createBetterSqliteTestDatabase(), 'test-user');
     await runMigrations(db);
     outbox = createSyncOutboxRepository({ database: db });
     stateRepository = createSyncStateRepository({ database: db });

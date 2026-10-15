@@ -1,3 +1,4 @@
+import { bindTestActor } from '../test-support/actorTestUtils';
 jest.mock('expo-sqlite', () => require('../test-support/expoSQLiteMock'));
 
 import { createBetterSqliteTestDatabase } from '../test-support/betterSqliteAdapter';
@@ -8,7 +9,7 @@ describe('outbox ownership at enqueue', () => {
   let db;
 
   beforeEach(async () => {
-    db = createBetterSqliteTestDatabase();
+    db = bindTestActor(createBetterSqliteTestDatabase(), 'user-1');
     await runMigrations(db);
     await db.runAsync("insert into programmes (id, code, name) values ('programme-1', 'literacy', 'Literacy')");
   });
@@ -17,7 +18,7 @@ describe('outbox ownership at enqueue', () => {
     await db.closeAsync();
   });
 
-  test('stamps a session insert from its domain owner', async () => {
+  test('stamps a session insert from its connection actor', async () => {
     await db.runAsync(`
       insert into sessions (id, user_id, programme_id, session_date)
       values ('session-1', 'ea-1', 'programme-1', '2026-07-12')
@@ -30,10 +31,10 @@ describe('outbox ownership at enqueue', () => {
 
     expect(await db.getFirstAsync(
       "select owner_user_id from sync_outbox where id = 'sessions:session-1:insert'"
-    )).toEqual({ owner_user_id: 'ea-1' });
+    )).toEqual({ owner_user_id: 'user-1' });
   });
 
-  test('resolves a session attendee owner through its parent session', async () => {
+  test('stamps an attendee from the actor, independently of its parent session', async () => {
     await db.runAsync("insert into children (id, first_name, last_name) values ('child-1', 'A', 'Child')");
     await db.runAsync(`
       insert into sessions (id, user_id, programme_id, session_date)
@@ -51,10 +52,10 @@ describe('outbox ownership at enqueue', () => {
 
     expect(await db.getFirstAsync(
       "select owner_user_id from sync_outbox where id = 'session_attendees:attendee-1:insert'"
-    )).toEqual({ owner_user_id: 'ea-1' });
+    )).toEqual({ owner_user_id: 'user-1' });
   });
 
-  test('stores NULL when no owner can be resolved', async () => {
+  test('stamps the actor even when the payload has no provenance', async () => {
     await enqueueDomainOutbox(db, 'schools', 'school-no-owner', 'insert', {
       id: 'school-no-owner',
       name: 'No Owner School',
@@ -62,13 +63,13 @@ describe('outbox ownership at enqueue', () => {
 
     expect(await db.getFirstAsync(
       "select owner_user_id from sync_outbox where id = 'schools:school-no-owner:insert'"
-    )).toEqual({ owner_user_id: null });
+    )).toEqual({ owner_user_id: 'user-1' });
   });
 
-  test('stamps a partial child archive from the current domain row', async () => {
+  test('stamps a Head Office child archive from the EA actor, not created_by', async () => {
     await db.runAsync(`
       insert into children (id, first_name, last_name, created_by)
-      values ('child-1', 'A', 'Child', 'ea-child')
+      values ('child-1', 'A', 'Child', 'head-office')
     `);
 
     await enqueueDomainOutbox(db, 'children', 'child-1', 'archive', {
@@ -78,10 +79,10 @@ describe('outbox ownership at enqueue', () => {
 
     expect(await db.getFirstAsync(
       "select owner_user_id from sync_outbox where id = 'children:child-1:archive'"
-    )).toEqual({ owner_user_id: 'ea-child' });
+    )).toEqual({ owner_user_id: 'user-1' });
   });
 
-  test('stamps a partial assignment archive from the current domain row', async () => {
+  test('stamps a partial assignment archive from the actor despite different domain provenance', async () => {
     await db.runAsync("insert into children (id, first_name, last_name) values ('child-1', 'A', 'Child')");
     await db.runAsync(`
       insert into child_ea_assignments (id, user_id, child_id)
@@ -95,10 +96,10 @@ describe('outbox ownership at enqueue', () => {
 
     expect(await db.getFirstAsync(
       "select owner_user_id from sync_outbox where id = 'child_ea_assignments:assignment-1:archive'"
-    )).toEqual({ owner_user_id: 'ea-assignment' });
+    )).toEqual({ owner_user_id: 'user-1' });
   });
 
-  test('owner fast paths stamp identically to row and parent resolution', async () => {
+  test('attendees, assessment items and mastery all use the same connection actor', async () => {
     await db.runAsync("insert into children (id, first_name, last_name) values ('child-1', 'A', 'Child')");
     await db.runAsync(`
       insert into sessions (id, user_id, programme_id, session_date)
@@ -113,7 +114,7 @@ describe('outbox ownership at enqueue', () => {
     });
     await enqueueDomainOutbox(db, 'session_attendees', 'attendee-fast', 'insert', {
       id: 'attendee-fast', session_id: 'session-1',
-    }, { ownerUserId: 'ea-owner' });
+    });
 
     await db.runAsync(`
       insert into assessments (id, user_id, child_id, programme_id, assessment_type, assessment_date)
@@ -128,7 +129,7 @@ describe('outbox ownership at enqueue', () => {
     });
     await enqueueDomainOutbox(db, 'assessment_items', 'item-fast', 'insert', {
       id: 'item-fast', assessment_id: 'assessment-1',
-    }, { ownerUserId: 'ea-owner' });
+    });
 
     await db.runAsync(`
       insert into letter_mastery (id, user_id, child_id, programme_id, letter, language, source)
@@ -137,9 +138,7 @@ describe('outbox ownership at enqueue', () => {
         ('mastery-fast', 'ea-owner', 'child-1', 'programme-1', 'b', 'English', 'taught')
     `);
     await enqueueDomainOutbox(db, 'letter_mastery', 'mastery-row', 'insert', { id: 'mastery-row' });
-    await enqueueDomainOutbox(db, 'letter_mastery', 'mastery-fast', 'insert', { id: 'mastery-fast' }, {
-      ownerRow: { id: 'mastery-fast', user_id: 'ea-owner' },
-    });
+    await enqueueDomainOutbox(db, 'letter_mastery', 'mastery-fast', 'insert', { id: 'mastery-fast' });
 
     expect(await db.getAllAsync(`
       select record_id, owner_user_id
@@ -147,12 +146,12 @@ describe('outbox ownership at enqueue', () => {
       where record_id in ('attendee-row', 'attendee-fast', 'item-row', 'item-fast', 'mastery-row', 'mastery-fast')
       order by record_id
     `)).toEqual([
-      { record_id: 'attendee-fast', owner_user_id: 'ea-owner' },
-      { record_id: 'attendee-row', owner_user_id: 'ea-owner' },
-      { record_id: 'item-fast', owner_user_id: 'ea-owner' },
-      { record_id: 'item-row', owner_user_id: 'ea-owner' },
-      { record_id: 'mastery-fast', owner_user_id: 'ea-owner' },
-      { record_id: 'mastery-row', owner_user_id: 'ea-owner' },
+      { record_id: 'attendee-fast', owner_user_id: 'user-1' },
+      { record_id: 'attendee-row', owner_user_id: 'user-1' },
+      { record_id: 'item-fast', owner_user_id: 'user-1' },
+      { record_id: 'item-row', owner_user_id: 'user-1' },
+      { record_id: 'mastery-fast', owner_user_id: 'user-1' },
+      { record_id: 'mastery-row', owner_user_id: 'user-1' },
     ]);
   });
 });

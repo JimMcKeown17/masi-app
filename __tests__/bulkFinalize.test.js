@@ -1,3 +1,4 @@
+import { bindTestActor } from '../test-support/actorTestUtils';
 jest.mock('expo-sqlite', () => require('../test-support/expoSQLiteMock'));
 jest.mock('../src/services/supabaseClient', () => ({
   ...require('../test-support/supabaseTestConfig'), supabase: {} }));
@@ -77,7 +78,7 @@ const seedAssessmentItemsBulk = async (db, count = 250) => {
 };
 
 it('finalizes a 250-row success batch in O(chunks) transactions (not O(N)), CAS preserved', async () => {
-  const db = createBetterSqliteTestDatabase(':memory:');
+  const db = bindTestActor(createBetterSqliteTestDatabase(':memory:'), 'test-user');
   await runMigrations(db);
 
   // seed references needed by offlineSync (school, programme, academic_year exist above for

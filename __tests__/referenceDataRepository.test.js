@@ -164,6 +164,7 @@ describe('reference data repositories', () => {
       await db.runAsync(
         `
         insert into sync_outbox (
+          owner_user_id,
           id,
           table_name,
           record_id,
@@ -176,7 +177,8 @@ describe('reference data repositories', () => {
           created_at,
           updated_at
         )
-        values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        values (
+          'user-1',?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `,
         'classes:class-1:update',
         'classes',

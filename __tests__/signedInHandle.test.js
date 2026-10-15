@@ -750,7 +750,9 @@ test('open resets in-flight rows for every owner in the file while preserving pe
     for (const [id, owner, status] of [['a', A, 'in_flight'], ['b', B, 'in_flight'], ['null', null, 'in_flight'], ['pending', A, 'pending']]) {
       await txn.runAsync(`insert into sync_outbox
         (id, table_name, record_id, operation, status, owner_user_id, retry_count, next_retry_at, created_at, updated_at)
-        values (?, 'children', ?, 'insert', ?, ?, 3, 'later', 'then', 'then')`, id, id, status, owner);
+        values (?, 'children', ?, 'insert', ?, ?, 3, 'later', 'then', 'then')`, id, id, status, owner ?? A);
+      // Simulate the legacy NULL row preserved by the v12 migration.
+      if (owner === null) await txn.runAsync('update sync_outbox set owner_user_id = null where id = ?', id);
     }
   });
   await requestClose({ reason: 'test' });

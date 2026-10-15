@@ -59,9 +59,7 @@ export const createMasteryRepository = ({ database } = {}) => {
     const operation = pendingInsert
       ? 'insert'
       : (masteryRecord.deleted_at ? 'archive' : fallbackActiveOp);
-    await enqueueDomainOutbox(txn, 'letter_mastery', id, operation, masteryRecord, {
-      ownerRow: masteryRecord,
-    });
+    await enqueueDomainOutbox(txn, 'letter_mastery', id, operation, masteryRecord);
   };
 
   const getLetterMastery = async ({

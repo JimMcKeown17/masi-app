@@ -1,3 +1,4 @@
+import { bindTestActor, TEST_ACTOR_ID } from '../test-support/actorTestUtils';
 jest.mock('expo-sqlite', () => require('../test-support/expoSQLiteMock'));
 jest.mock('../src/services/supabaseClient', () => ({
   ...require('../test-support/supabaseTestConfig'), supabase: {} }));
@@ -58,7 +59,7 @@ describe('edits are sent as UPDATE by id (spec §6.5)', () => {
   };
 
   beforeEach(async () => {
-    db = createBetterSqliteTestDatabase();
+    db = bindTestActor(createBetterSqliteTestDatabase(), 'user-1');
     await runMigrations(db);
     await db.runAsync("insert into schools (id, name, sync_status) values ('school-1', 'Test School', 'synced')");
     await db.runAsync(`
@@ -554,7 +555,7 @@ describe('production-style evidence resolution without an injected engine databa
   beforeEach(async () => {
     await closeDefaultTestHandle();
     resetExpoSQLiteMock();
-    db = createBetterSqliteTestDatabase();
+    db = bindTestActor(createBetterSqliteTestDatabase(), '00000000-0000-4000-8000-0000000000aa');
     await runMigrations(db);
     __setDatabaseFactory(async () => db);
   await initializeTestDatabase();
@@ -579,7 +580,7 @@ describe('production-style evidence resolution without an injected engine databa
       updateResults: { children: { data: [], error: null } },
     });
     const engine = createOutboxSyncEngine({ enqueueRequest: (task) => task(),
-      getAuthSession: liveTestSession,
+      getAuthSession: async () => ({ data: { session: { user: { id: TEST_ACTOR_ID } } } }),
       outboxRepository,
       supabaseClient,
     });
@@ -604,7 +605,7 @@ describe('production-style evidence resolution without an injected engine databa
     const child = await seedHeadOfficeChild(db);
     await db.runAsync(`
       insert into child_ea_assignments (id, child_id, user_id, created_by, sync_status)
-      values ('cea-production-style', ?, 'user-1', 'user-1', 'pending')
+      values ('cea-production-style', ?, '00000000-0000-4000-8000-0000000000aa', '00000000-0000-4000-8000-0000000000aa', 'pending')
     `, child.id);
     const outboxRepository = createSyncOutboxRepository({ database: db });
     await outboxRepository.enqueue({
@@ -617,7 +618,7 @@ describe('production-style evidence resolution without an injected engine databa
       updateResults: { children: { data: [], error: null } },
     });
     const engine = createOutboxSyncEngine({ enqueueRequest: (task) => task(),
-      getAuthSession: liveTestSession,
+      getAuthSession: async () => ({ data: { session: { user: { id: TEST_ACTOR_ID } } } }),
       outboxRepository,
       supabaseClient,
     });
@@ -651,7 +652,7 @@ describe('production-style evidence resolution without an injected engine databa
       insert into child_group_memberships (
         id, child_id, group_id, created_by, sync_status
       ) values (
-        'cgm-production-style', ?, 'group-production-style', 'user-1', 'pending'
+        'cgm-production-style', ?, 'group-production-style', '00000000-0000-4000-8000-0000000000aa', 'pending'
       )
     `, child.id);
     const outboxRepository = createSyncOutboxRepository({ database: db });
@@ -664,7 +665,7 @@ describe('production-style evidence resolution without an injected engine databa
         child_id: child.id,
         group_id: 'group-production-style',
         grouping_version_id: null,
-        created_by: 'user-1',
+        created_by: '00000000-0000-4000-8000-0000000000aa',
       },
     });
     const { supabaseClient } = createSupabaseMock({
@@ -675,7 +676,7 @@ describe('production-style evidence resolution without an injected engine databa
       },
     });
     const engine = createOutboxSyncEngine({ enqueueRequest: (task) => task(),
-      getAuthSession: liveTestSession,
+      getAuthSession: async () => ({ data: { session: { user: { id: TEST_ACTOR_ID } } } }),
       outboxRepository,
       supabaseClient,
     });

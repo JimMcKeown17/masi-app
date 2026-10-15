@@ -7,7 +7,6 @@ import {
   timestamp,
   upsertRecord,
 } from './sqliteRepositoryUtils';
-import { resolvePrimaryOwner } from './outboxOwnership';
 import { outboxRecordId } from './syncOutboxRepository';
 
 export const LEGACY_PROGRAMME_ID = 'local-legacy-programme';
@@ -110,31 +109,21 @@ export const enqueueDomainOutbox = async (
   recordId,
   operation,
   payload = null,
-  { ownerRow, ownerUserId, outboxId: outboxIdOverride } = {}
+  { outboxId: outboxIdOverride } = {}
 ) => {
-  let resolvedOwnerUserId = ownerUserId;
-  if (resolvedOwnerUserId === undefined) {
-    const row = ownerRow || await db.getFirstAsync(
-      `select * from ${quoteIdentifier(tableName)} where id = ?`,
-      recordId
-    ).catch(() => null);
-    resolvedOwnerUserId = await resolvePrimaryOwner({ db, tableName, row, payload });
-  }
-
   return insertOutboxRecord(db, {
     id: outboxIdOverride || outboxRecordId(tableName, recordId, operation),
     tableName,
     recordId,
     operation,
     payload,
-    ownerUserId: resolvedOwnerUserId,
   });
 };
 
 // Lifecycle intents are one replaceable stream per record. Reusing the slot id lets a newer intent
 // replace an in-flight payload; the engine's updated_at CAS then prevents the stale request from
 // finalizing over it. Clean up operation-keyed rows left by older app builds before using the slot.
-export const enqueueLifecycleOutbox = async (db, tableName, recordId, operation, payload, options) => {
+export const enqueueLifecycleOutbox = async (db, tableName, recordId, operation, payload) => {
   if (operation !== 'archive' && operation !== 'restore') {
     throw new Error(`enqueueLifecycleOutbox: unsupported operation ${operation}`);
   }
@@ -146,7 +135,6 @@ export const enqueueLifecycleOutbox = async (db, tableName, recordId, operation,
       and status in ('pending', 'failed', 'terminal')
   `, legacyArchiveId, legacyRestoreId);
   return enqueueDomainOutbox(db, tableName, recordId, operation, payload, {
-    ...options,
     outboxId: outboxRecordId(tableName, recordId, 'lifecycle'),
   });
 };

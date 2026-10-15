@@ -1,3 +1,4 @@
+import { bindTestActor } from '../test-support/actorTestUtils';
 jest.mock('expo-sqlite', () => require('../test-support/expoSQLiteMock'));
 jest.mock('../src/services/supabaseClient', () => ({
   ...require('../test-support/supabaseTestConfig'), supabase: {} }));
@@ -77,7 +78,7 @@ const seedAssessmentItemsForThrowTest = async (db, count = 3) => {
 };
 
 it('a thrown batch request degrades to per-record fallback (rows still sync)', async () => {
-  const db = createBetterSqliteTestDatabase(':memory:');
+  const db = bindTestActor(createBetterSqliteTestDatabase(':memory:'), 'test-user');
   await runMigrations(db);
   await seedCoreData(db);
   await seedAssessmentItemsForThrowTest(db, 3);
@@ -111,7 +112,7 @@ it('a thrown batch request degrades to per-record fallback (rows still sync)', a
 });
 
 it('a thrown per-row request in the batch fallback finalizes retriable, none left in_flight', async () => {
-  const db = createBetterSqliteTestDatabase(':memory:');
+  const db = bindTestActor(createBetterSqliteTestDatabase(':memory:'), 'test-user');
   await runMigrations(db);
   await seedCoreData(db);
   await seedAssessmentItemsForThrowTest(db, 3);
@@ -151,7 +152,7 @@ it('a thrown per-row request in the batch fallback finalizes retriable, none lef
 });
 
 it('a thrown batch error finalizes EVERY member as retriable failed with last_error (none in_flight)', async () => {
-  const db = createBetterSqliteTestDatabase(':memory:');
+  const db = bindTestActor(createBetterSqliteTestDatabase(':memory:'), 'test-user');
   await runMigrations(db);
   await seedCoreData(db);
   await seedAssessmentItemsForThrowTest(db, 3);
@@ -170,7 +171,7 @@ it('a thrown batch error finalizes EVERY member as retriable failed with last_er
 });
 
 it('bounds failed-batch fan-out across the whole pass and leaves unattempted rows pending', async () => {
-  const db = createBetterSqliteTestDatabase(':memory:');
+  const db = bindTestActor(createBetterSqliteTestDatabase(':memory:'), 'test-user');
   await runMigrations(db);
   await seedCoreData(db);
   await seedAssessmentItemsForThrowTest(db, 150);

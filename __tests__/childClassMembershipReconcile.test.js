@@ -11,7 +11,7 @@ import {
 } from '../test-support/sqliteRepositoryTestUtils';
 
 const liveTestSession = async () => ({
-  data: { session: { user: { id: 'test-user' } } },
+  data: { session: { user: { id: 'user-1' } } },
 });
 
 const quote = (identifier) => `"${String(identifier).replace(/"/g, '""')}"`;

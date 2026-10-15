@@ -1,3 +1,4 @@
+import { bindTestActor } from '../test-support/actorTestUtils';
 jest.mock('expo-sqlite', () => require('../test-support/expoSQLiteMock'));
 jest.mock('../src/services/supabaseClient', () => ({
   ...require('../test-support/supabaseTestConfig'),
@@ -139,7 +140,7 @@ describe('SQLite outbox auth gate', () => {
   let stateRepository;
 
   beforeEach(async () => {
-    db = createBetterSqliteTestDatabase();
+    db = bindTestActor(createBetterSqliteTestDatabase(), liveSession.user.id);
     await runMigrations(db);
     await seedReferences(db);
     outboxRepository = createSyncOutboxRepository({ database: db });
@@ -214,15 +215,19 @@ describe('SQLite outbox auth gate', () => {
     }));
   });
 
-  test('a session only pushes its own rows plus grandfathered NULL-owner rows', async () => {
+  test('a session only pushes its own rows and leaves foreign and legacy NULL owners queued', async () => {
     const aPayload = await seedPendingClass(db, { id: 'class-a', name: 'Grade A' });
     const bPayload = await seedPendingClass(db, { id: 'class-b', name: 'Grade B' });
     await seedPendingClass(db, { id: 'class-null', name: 'Grade NULL' });
+    // Legacy null-owner fixture remains visible but cannot upload.
+    await db.runAsync("update sync_outbox set owner_user_id = null where record_id = 'class-null'");
+    bindTestActor(db, 'ea-a');
     await outboxRepository.enqueue({
-      tableName: 'classes', recordId: aPayload.id, operation: 'insert', payload: aPayload, ownerUserId: 'ea-a',
+      tableName: 'classes', recordId: aPayload.id, operation: 'insert', payload: aPayload,
     });
+    bindTestActor(db, 'ea-b');
     await outboxRepository.enqueue({
-      tableName: 'classes', recordId: bPayload.id, operation: 'insert', payload: bPayload, ownerUserId: 'ea-b',
+      tableName: 'classes', recordId: bPayload.id, operation: 'insert', payload: bPayload,
     });
     const { supabaseClient, calls } = createSupabaseMock();
     const engine = createOutboxSyncEngine({ enqueueRequest: (task) => task(),
@@ -235,26 +240,32 @@ describe('SQLite outbox auth gate', () => {
 
     const result = await engine.syncAll();
 
-    expect(result).toEqual(expect.objectContaining({ totalSynced: 2, totalFailed: 0 }));
-    expect(calls.map((call) => call.payload.id).sort()).toEqual(['class-b', 'class-null']);
+    expect(result).toEqual(expect.objectContaining({ totalSynced: 1, totalFailed: 0 }));
+    expect(calls.map((call) => call.payload.id).sort()).toEqual(['class-b']);
     expect(await outboxRepository.getById('classes:class-a:insert')).toEqual(expect.objectContaining({
       status: 'pending',
       owner_user_id: 'ea-a',
     }));
+    expect(await outboxRepository.getById('classes:class-null:insert')).toMatchObject({ status: 'pending', owner_user_id: null });
     expect(await db.getFirstAsync("select sync_status from classes where id = 'class-a'"))
       .toEqual({ sync_status: 'pending' });
   });
 
-  test('engine getSyncStatus threads the owner filter into the real repository snapshot', async () => {
+  test('engine getSyncStatus returns the whole file despite an obsolete owner filter', async () => {
+    bindTestActor(db, 'ea-a');
     await outboxRepository.enqueue({
-      tableName: 'classes', recordId: 'a-row', operation: 'insert', payload: { id: 'a-row' }, ownerUserId: 'ea-a',
+      tableName: 'classes', recordId: 'a-row', operation: 'insert', payload: { id: 'a-row' },
     });
+    bindTestActor(db, 'ea-b');
     await outboxRepository.enqueue({
-      tableName: 'classes', recordId: 'b-row', operation: 'insert', payload: { id: 'b-row' }, ownerUserId: 'ea-b',
+      tableName: 'classes', recordId: 'b-row', operation: 'insert', payload: { id: 'b-row' },
     });
+    bindTestActor(db, 'user-1');
     await outboxRepository.enqueue({
-      tableName: 'classes', recordId: 'null-row', operation: 'insert', payload: { id: 'null-row' }, ownerUserId: null,
+      tableName: 'classes', recordId: 'null-row', operation: 'insert', payload: { id: 'null-row' },
     });
+    // Simulate a legacy null owner; v12 forbids creating one through enqueue.
+    await db.runAsync('update sync_outbox set owner_user_id = null where record_id = ?', 'null-row');
     const engine = createOutboxSyncEngine({ enqueueRequest: (task) => task(),
       database: db,
       supabaseClient: createSupabaseMock().supabaseClient,
@@ -264,22 +275,24 @@ describe('SQLite outbox auth gate', () => {
     });
 
     expect(await engine.getSyncStatus({ ownerUserId: 'ea-b' })).toEqual(expect.objectContaining({
-      unsyncedCount: 2,
-      readyCount: 2,
-      breakdown: { classes: 2 },
+      unsyncedCount: 3,
+      readyCount: 3,
+      breakdown: { classes: 3 },
     }));
   });
 
-  test('a pass only resets in-flight rows for its owner plus NULL rows', async () => {
-    for (const [recordId, ownerUserId] of [
+  test('a pass only resets in-flight rows for its owner, excluding legacy NULL owners', async () => {
+    for (const [recordId, actor] of [
       ['class-a', 'ea-a'],
       ['class-b', 'ea-b'],
       ['class-null', null],
     ]) {
+      bindTestActor(db, actor || 'user-1');
       const payload = await seedPendingClass(db, { id: recordId, name: recordId });
       await outboxRepository.enqueue({
-        tableName: 'classes', recordId, operation: 'insert', payload, ownerUserId,
+        tableName: 'classes', recordId, operation: 'insert', payload,
       });
+      if (actor === null) await db.runAsync('update sync_outbox set owner_user_id = null where record_id = ?', recordId);
     }
     await outboxRepository.markInFlight([
       'classes:class-a:insert',
@@ -297,7 +310,8 @@ describe('SQLite outbox auth gate', () => {
 
     await engine.syncAll();
 
-    expect(calls.map((call) => call.payload.id)).toEqual(['class-b', 'class-null']);
+    expect(calls.map((call) => call.payload.id)).toEqual(['class-b']);
+    expect(await outboxRepository.getById('classes:class-null:insert')).toMatchObject({ status: 'in_flight', owner_user_id: null });
     expect(await outboxRepository.getById('classes:class-a:insert')).toEqual(expect.objectContaining({
       status: 'in_flight',
       owner_user_id: 'ea-a',
@@ -306,8 +320,9 @@ describe('SQLite outbox auth gate', () => {
 
   test('a mid-pass user switch aborts before upload and leaves the selected row pending', async () => {
     const payload = await seedPendingClass(db, { id: 'class-a', name: 'Grade A' });
+    bindTestActor(db, 'ea-a');
     await outboxRepository.enqueue({
-      tableName: 'classes', recordId: payload.id, operation: 'insert', payload, ownerUserId: 'ea-a',
+      tableName: 'classes', recordId: payload.id, operation: 'insert', payload,
     });
     const { supabaseClient, calls } = createSupabaseMock();
     const getAuthSession = jest.fn()

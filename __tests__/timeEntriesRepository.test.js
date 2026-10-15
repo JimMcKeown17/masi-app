@@ -1,3 +1,4 @@
+import { bindTestActor } from '../test-support/actorTestUtils';
 jest.mock('expo-sqlite', () => require('../test-support/expoSQLiteMock'));
 
 import { createBetterSqliteTestDatabase } from '../test-support/betterSqliteAdapter';
@@ -19,7 +20,7 @@ const makeEntry = (overrides = {}) => ({
 
 describe('timeEntriesRepository', () => {
   test('editing a full mapped synced time entry ignores caller sync bookkeeping', async () => {
-    const db = createBetterSqliteTestDatabase();
+    const db = bindTestActor(createBetterSqliteTestDatabase(), 'user-1');
 
     try {
       await runMigrations(db);
@@ -56,7 +57,7 @@ describe('timeEntriesRepository', () => {
   });
 
   test('active time entry survives repository reload', async () => {
-    const db = createBetterSqliteTestDatabase();
+    const db = bindTestActor(createBetterSqliteTestDatabase(), 'user-1');
 
     try {
       await runMigrations(db);
@@ -75,7 +76,7 @@ describe('timeEntriesRepository', () => {
   });
 
   test('time-entry update changes one row and preserves sync metadata', async () => {
-    const db = createBetterSqliteTestDatabase();
+    const db = bindTestActor(createBetterSqliteTestDatabase(), 'user-1');
 
     try {
       await runMigrations(db);
@@ -111,7 +112,7 @@ describe('timeEntriesRepository', () => {
   });
 
   test('getTimeEntries can be scoped to the active user for dashboard stats', async () => {
-    const db = createBetterSqliteTestDatabase();
+    const db = bindTestActor(createBetterSqliteTestDatabase(), 'user-1');
 
     try {
       await runMigrations(db);
@@ -128,7 +129,7 @@ describe('timeEntriesRepository', () => {
   });
 
   test('saveTimeEntry enqueues a sync outbox insert in the same repository write', async () => {
-    const db = createBetterSqliteTestDatabase();
+    const db = bindTestActor(createBetterSqliteTestDatabase(), 'user-1');
 
     try {
       await runMigrations(db);
@@ -157,7 +158,7 @@ describe('timeEntriesRepository', () => {
   });
 
   test('createOpenTimeEntry rejects a second open entry for the same user', async () => {
-    const db = createBetterSqliteTestDatabase();
+    const db = bindTestActor(createBetterSqliteTestDatabase(), 'user-1');
 
     try {
       await runMigrations(db);
@@ -187,7 +188,7 @@ describe('timeEntriesRepository', () => {
   });
 
   test('createOpenTimeEntry allows sign-in after the previous entry is closed', async () => {
-    const db = createBetterSqliteTestDatabase();
+    const db = bindTestActor(createBetterSqliteTestDatabase(), 'user-1');
 
     try {
       await runMigrations(db);
@@ -203,7 +204,7 @@ describe('timeEntriesRepository', () => {
   });
 
   test('updateTimeEntry keeps the outbox payload current for an unsynced time entry', async () => {
-    const db = createBetterSqliteTestDatabase();
+    const db = bindTestActor(createBetterSqliteTestDatabase(), 'user-1');
 
     try {
       await runMigrations(db);
@@ -236,7 +237,7 @@ describe('timeEntriesRepository', () => {
   });
 
   test('synced server time entries do not enqueue outbox rows', async () => {
-    const db = createBetterSqliteTestDatabase();
+    const db = bindTestActor(createBetterSqliteTestDatabase(), 'user-1');
 
     try {
       await runMigrations(db);
@@ -252,7 +253,7 @@ describe('timeEntriesRepository', () => {
   });
 
   test('user update clears stale retry metadata from a failed time-entry outbox row', async () => {
-    const db = createBetterSqliteTestDatabase();
+    const db = bindTestActor(createBetterSqliteTestDatabase(), 'user-1');
 
     try {
       await runMigrations(db);
@@ -290,7 +291,7 @@ describe('timeEntriesRepository', () => {
   });
 
   test('clock-out closes the active time entry for the user', async () => {
-    const db = createBetterSqliteTestDatabase();
+    const db = bindTestActor(createBetterSqliteTestDatabase(), 'user-1');
 
     try {
       await runMigrations(db);

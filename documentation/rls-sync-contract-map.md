@@ -12,7 +12,7 @@ Use this map before changing any synced table, repository producer, outbox opera
 - Historical migrations: `supabase-migrations/` is old-backend reference only
 - Sync engine: `src/services/offlineSync.js`
 - Local write boundary: repository methods under `src/db/repositories/`
-- Durable queue: `sync_outbox`; schema v6 adds local-only `owner_user_id`, which is never included in server payloads. New rows stamp their EA owner at enqueue, readiness/status/reset queries include only the current owner plus NULL rows, and NULL means a grandfathered pre-v6 row that any authenticated EA session may drain.
+- Durable queue: `sync_outbox`; local-only `owner_user_id` is never included in server payloads. Every enqueue stamps the signed-in EA from the connection-to-actor WeakMap, including transaction facades. Record provenance (`created_by`, domain `user_id`) never determines the mutation owner. Missing actors fail before the outbox write; SQLite v12 (`sync_outbox_owner_required`) also rejects raw inserts with a NULL owner. Existing rows and indexes are preserved. Owner-scoped readiness, pending hard-delete, and reset queries use strict equality and exclude NULL owners; omitting the owner scope remains file-wide. `getSyncStatus()` always counts the whole file. `countUnsent()` returns `{ total, byTable }` across `pending`, `failed`, `in_flight`, and `terminal`, including foreign/NULL-owned work so it cannot disappear from status.
 - Server payload allowlist: `SERVER_COLUMNS` in `src/services/offlineSync.js`
 - Insert order: `PUSH_ORDER` in `src/services/offlineSync.js`
 - Archive order: `ARCHIVE_PUSH_ORDER` plus `ARCHIVE_TABLE_DEPENDENCIES` in `src/services/offlineSync.js`
@@ -141,7 +141,13 @@ operations and writes for the removed active relationships are superseded in the
 transaction as local deletion and RPC enqueue. A retained child INSERT stays queued; hard-delete
 waits until it is acknowledged, even if it later backs off or becomes terminal and needs manual
 retry. A successful local deletion still returns `true`; the caller does not additionally archive.
-The current outbox-owner derivation is unchanged (Head Office ownership is Plan 2 Task 6).
+Hard-delete enqueue uses the connection actor even after the child row is deleted; it no longer
+passes the deleted row as an ownership fallback. Lifecycle enqueue uses the same actor boundary.
+`outboxOwnership.js` remains for the Task 7 integrity/heal work; enqueue no longer imports
+`resolvePrimaryOwner`. Local regressions: `outboxOwnerStamping.test.js` covers an EA edit to a
+Head Office child through a real SQLite adapter and signed-in transaction facade, then the Plan 1
+fake-server UPDATE-by-id acknowledgement. `outboxOwnerMigration.test.js` covers the v11-to-v12
+upgrade with existing owned and NULL-owned rows, index preservation, and raw-insert refusal.
 
 **Edits and lifecycle are separate operations.** At dispatch, ordinary updates exclude every
 column allowed to archive/restore that table: archive metadata for classes/children/groups;

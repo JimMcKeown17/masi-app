@@ -1,7 +1,9 @@
 const { createBetterSqliteTestDatabase } = require('./betterSqliteAdapter');
 
 async function createMigratedDatabase(runMigrations) {
-  const db = createBetterSqliteTestDatabase();
+  // seedCoreData and the repository fixtures model user-1 as the acting EA.
+  const { bindTestActor } = require('./actorTestUtils');
+  const db = bindTestActor(createBetterSqliteTestDatabase(), 'user-1');
   await runMigrations(db);
   return db;
 }

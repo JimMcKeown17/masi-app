@@ -12,15 +12,15 @@ import { act, renderHook, waitFor } from '@testing-library/react-native';
 import { __reset, __setDatabaseFactory } from 'expo-sqlite';
 import { ChildrenProvider, useChildren } from '../src/context/ChildrenContext';
 import { initializeTestDatabase, closeDefaultTestHandle, getTestWriter } from '../test-support/testDatabase';
-import { runMigrations } from '../src/db/migrations';
 import { syncOutboxRepository } from '../src/db/repositories/syncOutboxRepository';
+import { runMigrations } from '../src/db/migrations';
 import { createBetterSqliteTestDatabase } from '../test-support/betterSqliteAdapter';
 import { seedCoreData } from '../test-support/sqliteRepositoryTestUtils';
 
 const mockPullPreloadedChildData = jest.fn();
 
 jest.mock('../src/context/AuthContext', () => ({
-  useAuth: () => ({ user: { id: 'user-1' } }),
+  useAuth: () => ({ user: { id: '00000000-0000-4000-8000-0000000000aa' } }),
 }));
 
 jest.mock('../src/context/OfflineContext', () => ({
@@ -54,13 +54,13 @@ beforeEach(async () => {
   const db = await getTestWriter();
   expect(db).toBe(testDb);
   await seedCoreData(db);
+  await db.runAsync("update staff_programme_assignments set user_id = '00000000-0000-4000-8000-0000000000aa'");
   await testDb.execAsync('PRAGMA foreign_keys = ON');
   await syncOutboxRepository.enqueue({
     tableName: 'children',
     recordId: 'child-9',
     operation: 'hard_delete',
     payload: { id: 'child-9' },
-    ownerUserId: 'user-1',
   });
 
   const successfulScope = (rows) => ({
@@ -78,14 +78,14 @@ beforeEach(async () => {
       childEaAssignments: successfulScope([{
         id: 'cea-9',
         child_id: 'child-9',
-        user_id: 'user-1',
-        created_by: 'user-1',
+        user_id: '00000000-0000-4000-8000-0000000000aa',
+        created_by: '00000000-0000-4000-8000-0000000000aa',
         synced: true,
         children: {
           id: 'child-9',
           first_name: 'Deleted',
           last_name: 'Child',
-          created_by: 'user-1',
+          created_by: '00000000-0000-4000-8000-0000000000aa',
           synced: true,
         },
       }]),
@@ -93,7 +93,7 @@ beforeEach(async () => {
         id: 'cpe-9',
         child_id: 'child-9',
         programme_id: 'programme-a',
-        created_by: 'user-1',
+        created_by: '00000000-0000-4000-8000-0000000000aa',
         synced: true,
       }]),
       childClassMemberships: successfulScope([{
@@ -101,7 +101,7 @@ beforeEach(async () => {
         child_id: 'child-9',
         class_id: 'class-1',
         academic_year_id: 'year-2026',
-        created_by: 'user-1',
+        created_by: '00000000-0000-4000-8000-0000000000aa',
         synced: true,
       }]),
       groups: successfulScope([]),
@@ -123,7 +123,7 @@ test.each([false, true])('editing then deleting a pulled child keeps the context
   if (hasHistory) {
     await testDb.runAsync(`
       insert into assessments (id, user_id, child_id, programme_id, assessment_type, assessment_date)
-      values ('assessment-1', 'user-1', 'child-9', 'programme-a', 'letter_egra', '2026-10-15')
+      values ('assessment-1', '00000000-0000-4000-8000-0000000000aa', 'child-9', 'programme-a', 'letter_egra', '2026-10-15')
     `);
   }
   await act(async () => {
@@ -162,7 +162,7 @@ test('pending hard-delete filtering avoids FK-invalid relationship resurrection'
     await fkProofDb.execAsync('PRAGMA foreign_keys = OFF');
     await fkProofDb.runAsync(`
       insert into child_ea_assignments (id, user_id, child_id, created_by)
-      values ('fk-proof', 'user-1', 'child-9', 'user-1')
+      values ('fk-proof', '00000000-0000-4000-8000-0000000000aa', 'child-9', '00000000-0000-4000-8000-0000000000aa')
     `);
     expect(await fkProofDb.getAllAsync("PRAGMA foreign_key_check('child_ea_assignments')"))
       .toEqual([
@@ -179,7 +179,7 @@ test('pending hard-delete filtering avoids FK-invalid relationship resurrection'
 
   const { result } = renderHook(() => useChildren(), { wrapper });
 
-  await waitFor(() => expect(mockPullPreloadedChildData).toHaveBeenCalledWith(expect.objectContaining({ userId: 'user-1' })));
+  await waitFor(() => expect(mockPullPreloadedChildData).toHaveBeenCalledWith(expect.objectContaining({ userId: '00000000-0000-4000-8000-0000000000aa' })));
   await waitFor(() => expect(result.current.loading).toBe(false));
 
   expect(result.current.children.map((row) => row.id)).not.toContain('child-9');

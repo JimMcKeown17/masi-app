@@ -1,3 +1,4 @@
+import { bindTestActor } from '../test-support/actorTestUtils';
 jest.mock('expo-sqlite', () => require('../test-support/expoSQLiteMock'));
 jest.mock('../src/services/supabaseClient', () => ({
   ...require('../test-support/supabaseTestConfig'), supabase: {} }));
@@ -13,7 +14,7 @@ import { seedCoreData } from '../test-support/sqliteRepositoryTestUtils';
 // BEGIN/COMMIT wrapper, so the PRAGMA applied at the end of runMigrations is in
 // effect for the connection). No manual PRAGMA flip needed here.
 const migrated = async () => {
-  const db = createBetterSqliteTestDatabase(':memory:');
+  const db = bindTestActor(createBetterSqliteTestDatabase(':memory:'), 'user-1');
   await runMigrations(db);
   return db;
 };

@@ -1,3 +1,4 @@
+import { bindTestActor } from '../test-support/actorTestUtils';
 jest.mock('expo-sqlite', () => require('../test-support/expoSQLiteMock'));
 jest.mock('../src/services/supabaseClient', () => ({
   ...require('../test-support/supabaseTestConfig'), supabase: {} }));
@@ -16,7 +17,7 @@ describe('deterministic server error attempt budget', () => {
   let stateRepository;
 
   beforeEach(async () => {
-    db = createBetterSqliteTestDatabase();
+    db = bindTestActor(createBetterSqliteTestDatabase(), 'user-1');
     await runMigrations(db);
     await db.runAsync("insert into schools (id, name) values ('school-1', 'Masi Primary')");
     await db.runAsync(`
@@ -36,7 +37,6 @@ describe('deterministic server error attempt budget', () => {
         grade: '1',
         created_by: 'user-1',
       },
-      ownerUserId: 'user-1',
     });
   });
 

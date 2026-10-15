@@ -667,6 +667,18 @@ export const MIGRATIONS = [
       create index if not exists idx_time_entries_user_signin on time_entries(user_id, sign_in_time);
     `,
   },
+  {
+    version: 12,
+    name: 'sync_outbox_owner_required',
+    sql: `
+create trigger if not exists sync_outbox_owner_required
+before insert on sync_outbox
+when new.owner_user_id is null
+begin
+  select raise(abort, 'sync_outbox.owner_user_id is required');
+end;
+    `,
+  },
 ];
 
 // Derived from the migration list so it never drifts when a migration is added.

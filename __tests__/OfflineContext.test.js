@@ -106,11 +106,11 @@ const emitAuthEvent = async (event, session) => {
 const createHistoryHarness = async () => {
   const database = await createMigratedDatabase(runMigrations);
   await seedCoreData(database);
-  await database.runAsync("update staff_programme_assignments set user_id=?", '11111111-1111-4111-8111-111111111111');
+  await database.runAsync("update staff_programme_assignments set user_id=?", '00000000-0000-4000-8000-0000000000aa');
   const repository = createSyncStateRepository({ database });
-  const scope = sessionHistoryScope('11111111-1111-4111-8111-111111111111', 'programme-a');
+  const scope = sessionHistoryScope('00000000-0000-4000-8000-0000000000aa', 'programme-a');
   const parents = Array.from({ length: 200 }, (_, i) => ({
-    id: `session-${String(i).padStart(3, '0')}`, user_id: '11111111-1111-4111-8111-111111111111', programme_id: 'programme-a', class_id: null,
+    id: `session-${String(i).padStart(3, '0')}`, user_id: '00000000-0000-4000-8000-0000000000aa', programme_id: 'programme-a', class_id: null,
     session_date: '2026-09-01', activities: {},
     created_at: '2026-09-01T08:00:00.000Z', updated_at: '2026-09-01T08:00:00.000Z',
   }));
@@ -121,7 +121,7 @@ const createHistoryHarness = async () => {
     }),
   })) };
   const run = ({ force = false, ...extra } = {}) => runSessionHistoryPull({
-    userId: '11111111-1111-4111-8111-111111111111',
+    userId: '00000000-0000-4000-8000-0000000000aa',
     force,
     deps: { state: testHistoryState, database, client, enqueueRequest: (task) => task(), ...extra },
   });
@@ -216,7 +216,7 @@ describe('OfflineContext Plan 4 sync API', () => {
     runStartupRepairs.mockImplementationOnce(() => { entered(); return new Promise((resolve) => { finishRepair = resolve; }); });
     const rendered = renderHook(() => useOffline(), { wrapper });
     let opening;
-    act(() => { opening = requestOpen({ userId: '11111111-1111-4111-8111-111111111111' }); });
+    act(() => { opening = requestOpen({ userId: '00000000-0000-4000-8000-0000000000aa' }); });
     await repairEntered;
     expect(getCurrentHandle()).toBeNull();
     expect(getSyncStatus).not.toHaveBeenCalled();
@@ -233,7 +233,7 @@ describe('OfflineContext Plan 4 sync API', () => {
     runStartupRepairs.mockRejectedValueOnce(repairError);
     renderHook(() => useOffline(), { wrapper });
     await act(async () => {
-      await expect(requestOpen({ userId: '11111111-1111-4111-8111-111111111111' })).rejects.toBe(repairError);
+      await expect(requestOpen({ userId: '00000000-0000-4000-8000-0000000000aa' })).rejects.toBe(repairError);
     });
     expect(getCurrentHandle()).toBeNull();
     expect(getSyncStatus).not.toHaveBeenCalled();
@@ -733,7 +733,7 @@ describe('OfflineContext Plan 4 sync API', () => {
       .mockResolvedValueOnce(freshState)
       .mockResolvedValueOnce(staleState);
     const { result } = await renderOfflineHook();
-    await emitAuthEvent('INITIAL_SESSION', { user: { id: '11111111-1111-4111-8111-111111111111' } });
+    await emitAuthEvent('INITIAL_SESSION', { user: { id: '00000000-0000-4000-8000-0000000000aa' } });
     const listener = AppState.addEventListener.mock.calls.at(-1)[1];
 
     await act(async () => {
@@ -773,7 +773,7 @@ describe('OfflineContext Plan 4 sync API', () => {
       syncStateRepository.getPullState.mockResolvedValue({ lastPulledAt: new Date().toISOString() });
       startSessionHistoryPull.mockImplementation(() => history.run());
       const { result } = await renderOfflineHook();
-      await emitAuthEvent('INITIAL_SESSION', { user: { id: '11111111-1111-4111-8111-111111111111' } });
+      await emitAuthEvent('INITIAL_SESSION', { user: { id: '00000000-0000-4000-8000-0000000000aa' } });
       const listener = AppState.addEventListener.mock.calls.at(-1)[1];
 
       await act(async () => {
@@ -807,7 +807,7 @@ describe('OfflineContext Plan 4 sync API', () => {
       syncStateRepository.getPullState.mockResolvedValue({ lastPulledAt: new Date().toISOString() });
       startSessionHistoryPull.mockImplementation(() => history.run());
       const { result } = await renderOfflineHook();
-      await emitAuthEvent('INITIAL_SESSION', { user: { id: '11111111-1111-4111-8111-111111111111' } });
+      await emitAuthEvent('INITIAL_SESSION', { user: { id: '00000000-0000-4000-8000-0000000000aa' } });
       const listener = NetInfo.addEventListener.mock.calls[0][0];
 
       await act(async () => {
@@ -830,7 +830,7 @@ describe('OfflineContext Plan 4 sync API', () => {
 
   test('foreground while offline does not start history (the roster staleness check still runs, as before)', async () => {
     const { result } = await renderOfflineHook();
-    await emitAuthEvent('INITIAL_SESSION', { user: { id: '11111111-1111-4111-8111-111111111111' } });
+    await emitAuthEvent('INITIAL_SESSION', { user: { id: '00000000-0000-4000-8000-0000000000aa' } });
     const networkListener = NetInfo.addEventListener.mock.calls[0][0];
     const foregroundListener = AppState.addEventListener.mock.calls.at(-1)[1];
 
@@ -848,7 +848,7 @@ describe('OfflineContext Plan 4 sync API', () => {
   test.each(['foreground', 'reconnect'])('%s without a signed-in user does not start history', async (reason) => {
     syncStateRepository.getPullState.mockResolvedValue({ lastPulledAt: new Date().toISOString() });
     await renderOfflineHook();
-    await emitAuthEvent('INITIAL_SESSION', { user: { id: '11111111-1111-4111-8111-111111111111' } });
+    await emitAuthEvent('INITIAL_SESSION', { user: { id: '00000000-0000-4000-8000-0000000000aa' } });
     await emitAuthEvent('SIGNED_OUT', null);
 
     await act(async () => {
@@ -875,7 +875,7 @@ describe('OfflineContext Plan 4 sync API', () => {
         .mockReturnValueOnce(new Promise((resolve) => { releaseStamp = resolve; }))
         .mockResolvedValueOnce(freshState);
       await renderOfflineHook();
-      await emitAuthEvent('INITIAL_SESSION', { user: { id: '11111111-1111-4111-8111-111111111111' } });
+      await emitAuthEvent('INITIAL_SESSION', { user: { id: '00000000-0000-4000-8000-0000000000aa' } });
       const listener = AppState.addEventListener.mock.calls.at(-1)[1];
       act(() => {
         listener('background');
@@ -994,9 +994,9 @@ describe('OfflineContext Plan 4 sync API', () => {
       }
       await renderOfflineHook();
 
-      await emitAuthEvent(event, { user: { id: '11111111-1111-4111-8111-111111111111' } });
+      await emitAuthEvent(event, { user: { id: '00000000-0000-4000-8000-0000000000aa' } });
 
-      expect(requeueTerminalRlsFailures).toHaveBeenCalledWith('11111111-1111-4111-8111-111111111111');
+      expect(requeueTerminalRlsFailures).toHaveBeenCalledWith('00000000-0000-4000-8000-0000000000aa');
       await act(async () => {
         jest.advanceTimersByTime(1500);
         await Promise.resolve();
@@ -1017,25 +1017,25 @@ describe('OfflineContext Plan 4 sync API', () => {
     test('an initial session refreshes status for that owner', async () => {
       renderHook(() => useOffline(), { wrapper });
       await waitFor(() => expect(getSyncStatus).toHaveBeenCalled());
-      expect(requeueTerminalRlsFailures).toHaveBeenCalledWith('11111111-1111-4111-8111-111111111111');
+      expect(requeueTerminalRlsFailures).toHaveBeenCalledWith('00000000-0000-4000-8000-0000000000aa');
 
-      expect(getSyncStatus).toHaveBeenLastCalledWith({ ownerUserId: '11111111-1111-4111-8111-111111111111' });
+      expect(getSyncStatus).toHaveBeenLastCalledWith({ ownerUserId: '00000000-0000-4000-8000-0000000000aa' });
     });
 
     test('an A-to-B auth transition replaces the visible status owner', async () => {
       await renderOfflineHook();
-      await emitAuthEvent('SIGNED_IN', { user: { id: '11111111-1111-4111-8111-111111111111' } });
+      await emitAuthEvent('SIGNED_IN', { user: { id: '00000000-0000-4000-8000-0000000000aa' } });
       getSyncStatus.mockClear();
 
       await emitAuthEvent('SIGNED_IN', { user: { id: '22222222-2222-4222-8222-222222222222' } });
 
       expect(getSyncStatus).toHaveBeenCalledWith({ ownerUserId: '22222222-2222-4222-8222-222222222222' });
-      expect(getSyncStatus).not.toHaveBeenCalledWith({ ownerUserId: '11111111-1111-4111-8111-111111111111' });
+      expect(getSyncStatus).not.toHaveBeenCalledWith({ ownerUserId: '00000000-0000-4000-8000-0000000000aa' });
     });
 
     test('sign-out unmounts the status tree without an ambient null-owner read', async () => {
       await renderOfflineHook();
-      await emitAuthEvent('SIGNED_IN', { user: { id: '11111111-1111-4111-8111-111111111111' } });
+      await emitAuthEvent('SIGNED_IN', { user: { id: '00000000-0000-4000-8000-0000000000aa' } });
       getSyncStatus.mockClear();
 
       await emitAuthEvent('SIGNED_OUT', null);
