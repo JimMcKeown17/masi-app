@@ -1,0 +1,378 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Masi: WelaPLUS Release 1 — Plan 3 screens</title>
+<link rel="stylesheet" href="../mockups-2026-07-b/fonts/fonts.css">
+<link rel="stylesheet" href="../mockups-2026-07-c/brand.css">
+<style>
+/* ═══════════════════════════════════════════════════════════════
+   WelaPLUS Release 1, Plan 3 host screens. Spec:
+   docs/superpowers/specs/2026-10-14-welaplus-release-1-design.md §5, §7.5, §9.
+
+   Tokens: brand.css (verbatim from src/constants/colors.js). Frame,
+   hero, sheet and tab-bar conventions: mockups-2026-07-c/04-locked.
+   Tab bar = the SHIPPED four tabs (Home · Children · Insights ·
+   Assessments), not the locked-but-unbuilt Record nav.
+   ═══════════════════════════════════════════════════════════════ */
+.row{display:flex;gap:30px;align-items:flex-start;flex-wrap:wrap;margin-bottom:46px;}
+.slot{width:390px;flex:none;}
+.slot.wide{width:600px;}
+.cap{margin-bottom:12px;min-height:70px;}
+.cap > b{display:block;font-family:var(--display);font-size:15px;font-weight:700;letter-spacing:-.01em;}
+.cap span{display:block;font-size:12.5px;color:#5F5557;margin-top:3px;line-height:1.5;}
+
+.phone{width:390px;height:844px;background:var(--canvas);color:var(--ink);display:flex;flex-direction:column;overflow:hidden;position:relative;}
+.tablet{width:600px;height:960px;background:var(--canvas);color:var(--ink);display:flex;flex-direction:column;overflow:hidden;position:relative;border-radius:18px;}
+.statusbar{height:44px;flex-shrink:0;display:flex;align-items:center;justify-content:space-between;padding:0 22px 0 28px;background:var(--hero);color:var(--on-dark);}
+.statusbar .t{font-weight:650;font-size:14.5px;font-variant-numeric:tabular-nums;}
+.statusbar .sig{display:flex;gap:6px;align-items:center;}
+
+/* stack-screen hero: back + title on charcoal */
+.hero{flex-shrink:0;background:var(--hero);color:var(--on-dark);padding:6px 20px 20px;}
+.nav{display:flex;align-items:center;gap:10px;}
+.back{width:36px;height:36px;border-radius:11px;display:flex;align-items:center;justify-content:center;background:#2A2224;border:1px solid #3A2F31;color:var(--on-dark-muted);flex:none;}
+.nav .ttl{font-size:13px;font-weight:650;color:var(--on-dark-muted);}
+.hero h1{font-family:var(--display);font-weight:700;font-size:25px;letter-spacing:-.025em;line-height:1.12;margin-top:12px;}
+.hero .meta{font-size:12.5px;color:var(--on-dark-muted);margin-top:6px;}
+.runcode{display:inline-flex;align-items:center;gap:7px;margin-top:10px;background:#2A2224;border:1px solid #3A2F31;border-radius:10px;padding:7px 11px;font-size:12px;font-weight:650;color:var(--on-dark-muted);}
+.runcode b{font-family:var(--display);font-size:15px;letter-spacing:.06em;color:#fff;}
+.prog{margin-top:12px;display:flex;align-items:center;gap:12px;}
+.prog .bar{flex:1;height:8px;border-radius:4px;background:#3A2F31;overflow:hidden;display:flex;}
+.prog .bar i{display:block;height:100%;}
+.prog .n{font-family:var(--display);font-weight:700;font-size:15px;white-space:nowrap;}
+.prog .n span{color:var(--on-dark-muted);font-size:13px;}
+
+.body{flex:1;padding:16px 20px 0;display:flex;flex-direction:column;overflow:hidden;}
+.lbl{font-size:10.5px;font-weight:750;letter-spacing:.11em;text-transform:uppercase;color:var(--muted);}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:14px;box-shadow:0 1px 2px rgba(58,36,36,.05);}
+.btn{display:flex;align-items:center;justify-content:center;gap:8px;height:50px;border-radius:14px;border:none;background:var(--primary);color:#fff;font-family:var(--display);font-size:15.5px;font-weight:700;}
+.btn.ghost{background:transparent;color:var(--primary-dark);border:1.5px solid var(--red100);}
+.btn.off{background:#EFE9E8;color:var(--disabled);}
+.link{font-size:13.5px;font-weight:650;color:var(--muted);text-align:center;padding:12px 0;}
+
+/* tab bar (shipped 4 tabs) */
+.tabbar{flex-shrink:0;display:flex;background:var(--surface);border-top:1px solid var(--line);padding:9px 6px 24px;}
+.tab{flex:1;display:flex;flex-direction:column;align-items:center;gap:4px;font-size:10px;font-weight:650;color:var(--muted);}
+.tab.on{color:var(--primary-dark);}
+
+/* S1 assessments */
+.wela{padding:16px;border-color:var(--red100);}
+.wela .top{display:flex;gap:12px;align-items:flex-start;}
+.wela .ic{width:44px;height:44px;border-radius:13px;background:var(--red50);display:flex;align-items:center;justify-content:center;flex:none;}
+.wela h2{font-family:var(--display);font-size:18px;font-weight:700;letter-spacing:-.015em;}
+.wela p{font-size:12.5px;color:var(--muted);margin-top:3px;line-height:1.45;}
+.wela .btn{margin-top:14px;}
+.unf{margin-top:18px;}
+.urow{display:flex;align-items:center;gap:12px;padding:11px 14px;border-bottom:1px solid var(--line);}
+.urow:last-child{border-bottom:none;}
+.av{width:34px;height:34px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;background:var(--red50);color:var(--red700);flex:none;}
+.urow .nm{font-size:14px;font-weight:650;}
+.urow .sub{font-size:12px;color:var(--muted);margin-top:2px;}
+.urow .mini{margin-left:auto;display:flex;align-items:center;gap:8px;font-size:12px;font-weight:700;color:var(--ink);}
+.egra{display:flex;align-items:center;justify-content:space-between;padding:13px 14px;margin-top:10px;}
+.egra b{font-size:14px;font-weight:650;}
+.egra span{display:block;font-size:12px;color:var(--muted);margin-top:2px;}
+.egra .go{font-size:13px;font-weight:700;color:var(--primary-dark);}
+
+/* S3 overview */
+.callout{display:flex;gap:10px;align-items:flex-start;background:var(--warning-bg);color:var(--warning-text);border-radius:12px;padding:11px 12px;font-size:12.5px;line-height:1.45;}
+.callout b{font-weight:750;}
+.qlist{margin-top:12px;}
+.q{display:flex;align-items:center;gap:11px;padding:0 12px;height:39px;border-bottom:1px solid var(--line);}
+.q:last-child{border-bottom:none;}
+.q .no{width:26px;font-family:var(--display);font-weight:700;font-size:13px;color:var(--muted);}
+.q .nm{font-size:13.5px;font-weight:600;flex:1;}
+.q .st{font-size:12.5px;font-weight:700;font-variant-numeric:tabular-nums;}
+.q.done .st{color:var(--success-text);}
+.q.skip .nm,.q.skip .st{color:var(--muted);}
+.q.skip .st{font-weight:600;font-style:italic;}
+.q.todo .nm{color:var(--muted);}
+.q.next{background:var(--red50);height:48px;}
+.q.next .no,.q.next .nm{color:var(--ink);}
+.q .start{background:var(--primary);color:#fff;font-weight:700;font-size:12.5px;border-radius:9px;padding:7px 12px;}
+.q .mat{display:inline-flex;align-items:center;gap:4px;font-size:10.5px;font-weight:700;color:var(--muted);background:#F3EEED;border-radius:6px;padding:3px 6px;margin-left:6px;}
+.q .more{color:var(--disabled);font-weight:800;letter-spacing:1px;}
+.foot{margin-top:auto;padding:12px 0 18px;}
+
+/* S4 intro */
+.material{padding:14px;display:flex;gap:14px;align-items:center;border:2px solid var(--primary);background:var(--surface);border-radius:16px;}
+.cards{display:flex;gap:5px;flex:none;}
+.cards i{width:24px;height:32px;border-radius:4px;border:1.5px solid #D9CFCE;background:#fff;display:flex;align-items:center;justify-content:center;font-style:normal;font-size:11px;font-weight:800;color:var(--disabled);}
+.cards i.on{border-color:var(--primary);background:var(--primary);color:#fff;}
+.material .t1{font-size:11px;font-weight:750;letter-spacing:.09em;text-transform:uppercase;color:var(--primary-dark);}
+.material .t2{font-family:var(--display);font-size:18px;font-weight:700;letter-spacing:-.015em;margin-top:3px;}
+.material .t3{font-size:12px;color:var(--muted);margin-top:2px;}
+.script{padding:15px 16px;margin-top:14px;font-size:14px;line-height:1.55;}
+.script .lbl{display:block;margin-bottom:7px;}
+.stop{margin-top:12px;}
+
+/* S5 tablet marking */
+.mhead{display:flex;align-items:center;gap:14px;padding:10px 24px 16px;background:var(--hero);color:#fff;}
+.mhead .t{font-size:13px;color:var(--on-dark-muted);font-weight:650;}
+.mhead .t b{display:block;color:#fff;font-family:var(--display);font-size:20px;letter-spacing:-.02em;margin-top:2px;}
+.timer{margin-left:auto;display:flex;align-items:baseline;gap:6px;background:#2A2224;border:1px solid #3A2F31;border-radius:14px;padding:8px 14px;}
+.timer b{font-family:var(--display);font-size:30px;letter-spacing:-.02em;font-variant-numeric:tabular-nums;}
+.timer span{font-size:12px;color:var(--on-dark-muted);font-weight:650;}
+.handnote{margin:14px 24px 0;font-size:12.5px;color:var(--muted);display:flex;gap:8px;align-items:center;}
+.lgrid{margin:12px 24px 0;display:grid;grid-template-columns:repeat(12,1fr);border:1.5px solid #D9CFCE;border-radius:12px;overflow:hidden;background:#fff;}
+.lgrid div{height:80px;display:flex;align-items:center;justify-content:center;font-family:var(--ui);font-size:32px;font-weight:600;border-right:1px solid var(--line);border-bottom:1px solid var(--line);}
+.lgrid div:nth-child(12n){border-right:none;}
+.lgrid div.ok{background:var(--success-text);color:#fff;}
+.legend{margin:12px 24px 0;font-size:12px;color:var(--muted);display:flex;gap:18px;}
+.legend i{display:inline-block;width:12px;height:12px;border-radius:3px;margin-right:6px;vertical-align:-1px;}
+.mfoot{margin-top:auto;display:flex;gap:12px;padding:16px 24px 26px;border-top:1px solid var(--line);background:var(--surface);}
+.mfoot .btn{flex:1;}
+
+/* S6 sheet */
+.scrim{position:absolute;inset:0;background:rgba(28,21,23,.55);}
+.sheet{position:absolute;left:0;right:0;bottom:0;background:var(--surface);border-radius:22px 22px 0 0;padding:10px 22px 26px;}
+.grab{width:38px;height:4px;border-radius:2px;background:#DDD5D4;margin:0 auto 16px;}
+.sheet h3{font-family:var(--display);font-size:21px;font-weight:700;letter-spacing:-.02em;}
+.sheet p{font-size:13.5px;color:var(--muted);margin-top:6px;line-height:1.5;}
+.pick{margin-top:14px;display:grid;grid-template-columns:repeat(12,1fr);gap:4px;}
+.pick div{height:40px;border:1px solid var(--line);border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:17px;font-weight:600;}
+.pick div.past{color:var(--disabled);background:#FAF7F6;}
+.pick div.sel{background:var(--primary);border-color:var(--primary);color:#fff;}
+.sel-note{margin-top:12px;font-size:13px;font-weight:650;}
+.sheet-acts{display:flex;gap:10px;margin-top:14px;}
+.sheet-acts .btn{flex:1;height:48px;font-size:14.5px;}
+.warnbox{display:flex;gap:9px;margin-top:14px;padding:11px 12px;border-radius:12px;background:var(--warning-bg);color:var(--warning-text);font-size:12.5px;line-height:1.45;}
+
+/* S7 summary */
+.score{display:flex;align-items:center;gap:10px;padding:0 14px;height:37px;border-bottom:1px solid var(--line);font-size:13px;}
+.score:last-child{border-bottom:none;}
+.score .no{width:24px;font-family:var(--display);font-weight:700;color:var(--muted);font-size:12.5px;}
+.score .nm{flex:1;font-weight:600;}
+.score .mb{width:70px;height:6px;border-radius:3px;background:#EFE9E8;overflow:hidden;}
+.score .mb i{display:block;height:100%;background:var(--success);}
+.score .v{width:48px;text-align:right;font-weight:700;font-variant-numeric:tabular-nums;}
+.score.skip .nm,.score.skip .v{color:var(--muted);}
+.check{padding:12px 14px;margin-top:12px;border:1.5px solid var(--red100);}
+.ck{display:flex;gap:10px;align-items:flex-start;font-size:13px;line-height:1.45;padding:6px 0;}
+.box{width:22px;height:22px;border-radius:7px;border:2px solid #D9CFCE;flex:none;display:flex;align-items:center;justify-content:center;}
+.box.on{background:var(--primary);border-color:var(--primary);}
+
+/* S8 history */
+.hrow{display:flex;align-items:center;gap:12px;padding:12px 14px;border-bottom:1px solid var(--line);}
+.hrow:last-child{border-bottom:none;}
+.badge{font-size:10px;font-weight:800;letter-spacing:.06em;border-radius:6px;padding:3px 6px;}
+.badge.w{background:var(--red50);color:var(--red700);}
+.badge.e{background:#F1ECEB;color:var(--muted);}
+.hrow .nm{font-size:13.5px;font-weight:650;}
+.hrow .sub{font-size:12px;color:var(--muted);margin-top:2px;}
+.hrow .r{margin-left:auto;text-align:right;font-size:12.5px;font-weight:700;}
+.hrow .r span{display:block;font-size:11px;color:var(--muted);font-weight:600;margin-top:2px;}
+.pillst{font-size:11px;font-weight:700;border-radius:999px;padding:3px 8px;}
+.pillst.ok{background:var(--success-bg);color:var(--success-text);}
+.pillst.open{background:var(--warning-bg);color:var(--warning-text);}
+.pillst.ab{background:#F1ECEB;color:var(--muted);}
+</style>
+</head>
+<body>
+<h2 class="page">WelaPLUS Release 1 — Plan 3 screens</h2>
+<p class="page">The EA's path through one WelaPLUS run, against the approved Release 1 spec (§5, §7.5, §9). Children read printed cards (D1); there are no photos in Release 1 (D2); only Core Literacy R–3 EAs see WelaPLUS (D3). Every colour is a <code>colors.js</code> token via <code>brand.css</code>. The tab bar is the <b>shipped</b> four-tab bar. Open design questions are in <code>README.md</code>.</p>
+
+<!-- ═══════════════ ROW 1: entry ═══════════════ -->
+<div class="row">
+
+<div class="slot">
+  <div class="cap"><b>1 · Assessments tab</b><span>WelaPLUS leads for Core Literacy R–3 EAs, gated by the programme's battery. Unfinished runs sit directly under it, so resuming is one tap. EGRA stays below, unchanged.</span></div>
+  <div class="phone">
+    <div class="statusbar"><span class="t">09:41</span><span class="t sig"><svg width="17" height="11" viewBox="0 0 17 11"><rect x="0" y="7" width="3" height="4" rx="1" fill="currentColor"/><rect x="4.5" y="5" width="3" height="6" rx="1" fill="currentColor"/><rect x="9" y="2.5" width="3" height="8.5" rx="1" fill="currentColor"/><rect x="13.5" y="0" width="3" height="11" rx="1" fill="currentColor"/></svg><svg width="25" height="12" viewBox="0 0 25 12"><rect x=".5" y=".5" width="21" height="11" rx="3" stroke="currentColor" fill="none" opacity=".5"/><rect x="2" y="2" width="15" height="8" rx="1.6" fill="currentColor"/><rect x="22.5" y="4" width="1.8" height="4" rx=".9" fill="currentColor" opacity=".5"/></svg></span></div>
+    <div class="hero" style="padding-bottom:18px;"><h1 style="margin-top:6px;">Assessments</h1><div class="meta">Core Literacy R–3 · Term 4</div></div>
+    <div class="body">
+      <div class="card wela">
+        <div class="top">
+          <div class="ic"><svg width="24" height="24" viewBox="0 0 24 24" fill="none"><rect x="5" y="4" width="14" height="17" rx="2" stroke="#C81F3E" stroke-width="2"/><path d="M9 4.5V3h6v1.5" stroke="#C81F3E" stroke-width="2"/><path d="M8.5 10h7M8.5 13.5h7M8.5 17h4" stroke="#C81F3E" stroke-width="2" stroke-linecap="round"/></svg></div>
+          <div><h2>WelaPLUS literacy assessment</h2><p>11 questions · about 25 minutes · English or isiXhosa. Have the Reading Card, Picture Cards and a Writing Sheet ready.</p></div>
+        </div>
+        <div class="btn">Start WelaPLUS</div>
+      </div>
+      <div class="unf">
+        <div class="lbl">Unfinished runs · 2</div>
+        <div class="card" style="margin-top:8px;">
+          <div class="urow"><div class="av">LM</div><div><div class="nm">Lwazi Mthembu</div><div class="sub">Started Tue · Run K7Q-4MD</div></div><div class="mini">5 / 11 <svg width="8" height="12" viewBox="0 0 8 12"><path d="M1.5 1.5 6 6l-4.5 4.5" stroke="#C81F3E" stroke-width="2" fill="none" stroke-linecap="round"/></svg></div></div>
+          <div class="urow"><div class="av">AN</div><div><div class="nm">Anele Ndlovu</div><div class="sub">Started Mon · Run 2HC-9TA</div></div><div class="mini">8 / 11 <svg width="8" height="12" viewBox="0 0 8 12"><path d="M1.5 1.5 6 6l-4.5 4.5" stroke="#C81F3E" stroke-width="2" fill="none" stroke-linecap="round"/></svg></div></div>
+        </div>
+      </div>
+      <div class="lbl" style="margin-top:20px;">Quick assessments</div>
+      <div class="card egra"><div><b>Letter sounds (EGRA)</b><span>60-second timed letters</span></div><span class="go">Start</span></div>
+      <div class="card egra"><div><b>Word reading (EGRA)</b><span>60-second timed words</span></div><span class="go">Start</span></div>
+      <div class="link" style="margin-top:4px;color:var(--primary-dark);">View history</div>
+    </div>
+    <div class="tabbar"><div class="tab"><svg width="24" height="24" viewBox="0 0 24 24" fill="none"><path d="M4 10.5 12 4l8 6.5V19a1.5 1.5 0 0 1-1.5 1.5h-13A1.5 1.5 0 0 1 4 19v-8.5z" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/><path d="M9.5 20v-5.5h5V20" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/></svg>Home</div><div class="tab"><svg width="24" height="24" viewBox="0 0 24 24" fill="none"><circle cx="9" cy="8" r="3.2" stroke="currentColor" stroke-width="2"/><path d="M3.5 19c.6-3 2.8-4.6 5.5-4.6s4.9 1.6 5.5 4.6" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><circle cx="17" cy="9.5" r="2.4" stroke="currentColor" stroke-width="2"/><path d="M16.5 14.6c2.2.2 3.6 1.5 4 3.9" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>Children</div><div class="tab"><svg width="24" height="24" viewBox="0 0 24 24" fill="none"><path d="M5 20V11M12 20V5M19 20v-6" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/></svg>Insights</div><div class="tab on"><svg width="24" height="24" viewBox="0 0 24 24" fill="none"><rect x="5" y="4" width="14" height="17" rx="2" stroke="currentColor" stroke-width="2"/><path d="M9 4.5V3h6v1.5" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/><path d="m8.8 13 2.2 2.2 4.2-4.4" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>Assessments</div></div>
+  </div>
+</div>
+
+<div class="slot">
+  <div class="cap"><b>2 · One unfinished run per child</b><span>Picking a child who already has an open run asks, in a bottom sheet, rather than silently opening a second run. Abandoning states its cost.</span></div>
+  <div class="phone">
+    <div class="statusbar"><span class="t">09:41</span><span class="t sig"><svg width="17" height="11" viewBox="0 0 17 11"><rect x="0" y="7" width="3" height="4" rx="1" fill="currentColor"/><rect x="4.5" y="5" width="3" height="6" rx="1" fill="currentColor"/><rect x="9" y="2.5" width="3" height="8.5" rx="1" fill="currentColor"/><rect x="13.5" y="0" width="3" height="11" rx="1" fill="currentColor"/></svg><svg width="25" height="12" viewBox="0 0 25 12"><rect x=".5" y=".5" width="21" height="11" rx="3" stroke="currentColor" fill="none" opacity=".5"/><rect x="2" y="2" width="15" height="8" rx="1.6" fill="currentColor"/><rect x="22.5" y="4" width="1.8" height="4" rx=".9" fill="currentColor" opacity=".5"/></svg></span></div>
+    <div class="hero" style="padding-bottom:18px;"><div class="nav"><div class="back">‹</div><span class="ttl">WelaPLUS · choose a child</span></div><h1>Who are you assessing?</h1></div>
+    <div class="body">
+      <div class="card"><div class="urow"><div class="av">AB</div><div><div class="nm">Asanda Bam</div><div class="sub">Grade 2 · isiXhosa</div></div></div><div class="urow"><div class="av">LM</div><div><div class="nm">Lwazi Mthembu</div><div class="sub">Grade 2 · English</div></div></div><div class="urow"><div class="av">SM</div><div><div class="nm">Sipho Mbeki</div><div class="sub">Grade 1 · isiXhosa</div></div></div></div>
+    </div>
+    <div class="scrim"></div>
+    <div class="sheet">
+      <div class="grab"></div>
+      <h3>Lwazi already has a run open</h3>
+      <p>Started Tuesday · Run <b style="color:var(--ink)">K7Q-4MD</b> · 5 of 11 questions done.</p>
+      <div class="btn" style="margin-top:18px;">Resume this run</div>
+      <div class="warnbox"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" style="flex:none;margin-top:1px"><path d="M12 3 2 21h20L12 3z" stroke="#8A4B00" stroke-width="2" stroke-linejoin="round"/><path d="M12 10v5M12 18v.5" stroke="#8A4B00" stroke-width="2" stroke-linecap="round"/></svg><span><b>Abandoning closes K7Q-4MD.</b> Its 5 finished questions stay saved, but the run can't be finished. Use this only if starting over.</span></div>
+      <div class="btn ghost" style="margin-top:10px;border-color:#E4C98F;color:var(--warning-text);font-family:var(--ui);font-weight:650;">Abandon it and start a new run</div>
+      <div class="link">Cancel</div>
+    </div>
+  </div>
+</div>
+
+<div class="slot">
+  <div class="cap"><b>3 · Battery overview</b><span>Driven by <code>evaluateBatteryState</code>. "Start" sits only on the next Question. Before the first written Question (Q5) the run code is pushed onto the sheet. Undecided rows have ⋯ → skip with a reason.</span></div>
+  <div class="phone">
+    <div class="statusbar"><span class="t">09:41</span><span class="t sig"><svg width="17" height="11" viewBox="0 0 17 11"><rect x="0" y="7" width="3" height="4" rx="1" fill="currentColor"/><rect x="4.5" y="5" width="3" height="6" rx="1" fill="currentColor"/><rect x="9" y="2.5" width="3" height="8.5" rx="1" fill="currentColor"/><rect x="13.5" y="0" width="3" height="11" rx="1" fill="currentColor"/></svg><svg width="25" height="12" viewBox="0 0 25 12"><rect x=".5" y=".5" width="21" height="11" rx="3" stroke="currentColor" fill="none" opacity=".5"/><rect x="2" y="2" width="15" height="8" rx="1.6" fill="currentColor"/><rect x="22.5" y="4" width="1.8" height="4" rx=".9" fill="currentColor" opacity=".5"/></svg></span></div>
+    <div class="hero">
+      <div class="nav"><div class="back">‹</div><span class="ttl">WelaPLUS · English</span></div>
+      <h1>Lwazi Mthembu</h1>
+      <div class="meta">Grade 2 · Progress check · started 09:12</div>
+      <div class="runcode">Run code <b>K7Q-4MD</b></div>
+      <div class="prog"><div class="bar"><i style="width:36.4%;background:#6FD064"></i><i style="width:9.1%;background:#76696B"></i></div><div class="n">5 <span>of 11 decided</span></div></div>
+    </div>
+    <div class="body" style="padding-top:12px;">
+      <div class="callout"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" style="flex:none;margin-top:1px"><path d="M4 20h16M6 16l9-9 3 3-9 9H6v-3z" stroke="#8A4B00" stroke-width="2" stroke-linejoin="round"/></svg><span><b>Next is the Writing Sheet.</b> Write <b>K7Q-4MD</b> and Lwazi's name at the top before you hand it over.</span></div>
+      <div class="card qlist">
+        <div class="q done"><span class="no">Q1</span><span class="nm">Letter sounds</span><span class="st">38 / 60</span></div>
+        <div class="q done"><span class="no">Q2</span><span class="nm">Listen to a story</span><span class="st">4 / 5</span></div>
+        <div class="q skip"><span class="no">Q3</span><span class="nm">First sounds</span><span class="st">Skipped · tired</span></div>
+        <div class="q done"><span class="no">Q4</span><span class="nm">Blend sounds</span><span class="st">6 / 8</span></div>
+        <div class="q done"><span class="no">Q5</span><span class="nm">Write letters</span><span class="st">19 / 26</span></div>
+        <div class="q next"><span class="no">Q6</span><span class="nm">Read words<span class="mat">Card B</span></span><span class="start">Start</span></div>
+        <div class="q todo"><span class="no">Q7</span><span class="nm">Read sentences<span class="mat">Card B</span></span><span class="more">⋯</span></div>
+        <div class="q todo"><span class="no">Q8</span><span class="nm">Read a story<span class="mat">Card C</span></span><span class="more">⋯</span></div>
+        <div class="q todo"><span class="no">Q9</span><span class="nm">Write words<span class="mat">Sheet</span></span><span class="more">⋯</span></div>
+        <div class="q todo"><span class="no">Q10</span><span class="nm">Dictation<span class="mat">Sheet</span></span><span class="more">⋯</span></div>
+        <div class="q todo"><span class="no">Q11</span><span class="nm">Write a story<span class="mat">Pictures</span></span><span class="more">⋯</span></div>
+      </div>
+      <div class="foot"><div class="btn off">Finalize run · 6 left</div></div>
+    </div>
+  </div>
+</div>
+
+</div>
+
+<!-- ═══════════════ ROW 2: a Question ═══════════════ -->
+<div class="row">
+
+<div class="slot">
+  <div class="cap"><b>4 · Question intro (host chrome)</b><span>The "Hand the child …" line is the loudest thing on screen; it is what keeps paper and tablet in sync (spec §9). Stop rule in amber, because it is a judgement the EA must make.</span></div>
+  <div class="phone">
+    <div class="statusbar"><span class="t">09:41</span><span class="t sig"><svg width="17" height="11" viewBox="0 0 17 11"><rect x="0" y="7" width="3" height="4" rx="1" fill="currentColor"/><rect x="4.5" y="5" width="3" height="6" rx="1" fill="currentColor"/><rect x="9" y="2.5" width="3" height="8.5" rx="1" fill="currentColor"/><rect x="13.5" y="0" width="3" height="11" rx="1" fill="currentColor"/></svg><svg width="25" height="12" viewBox="0 0 25 12"><rect x=".5" y=".5" width="21" height="11" rx="3" stroke="currentColor" fill="none" opacity=".5"/><rect x="2" y="2" width="15" height="8" rx="1.6" fill="currentColor"/><rect x="22.5" y="4" width="1.8" height="4" rx=".9" fill="currentColor" opacity=".5"/></svg></span></div>
+    <div class="hero" style="padding-bottom:18px;"><div class="nav"><div class="back">‹</div><span class="ttl">Lwazi · Run K7Q-4MD · 6 of 11</span></div><h1>Q6 · Read words</h1></div>
+    <div class="body">
+      <div class="material">
+        <div class="cards"><i>A</i><i class="on">B</i><i>C</i></div>
+        <div><div class="t1">Hand Lwazi</div><div class="t2">Reading Card B</div><div class="t3">English · the word list (top half)</div></div>
+      </div>
+      <div class="card script"><span class="lbl">Say and do</span>Point to each word and ask Lwazi to read it. If Lwazi reads it correctly, tap it — it turns green. If not, leave it blank.</div>
+      <div class="callout stop"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" style="flex:none;margin-top:1px"><rect x="4" y="4" width="16" height="16" rx="3" stroke="#8A4B00" stroke-width="2"/><path d="M9 9h6v6H9z" fill="#8A4B00"/></svg><span><b>Stop rule:</b> stop immediately if Lwazi gets <b>5 in a row wrong</b>, or clearly doesn't know any. Tap <b>End</b>, then mark the last word attempted.</span></div>
+      <div class="foot" style="padding-bottom:6px;"><div class="btn">Start</div><div class="link">Skip this question</div></div>
+    </div>
+  </div>
+</div>
+
+<div class="slot wide">
+  <div class="cap"><b>5 · Marking Q1 on a tablet (primary device)</b><span>The grid mirrors Reading Card A exactly: 5 rows × 12. On a 600 dp tablet each cell is ~46 × 80 dp — well above the 44 dp touch floor. The EA's finger tracks the child's finger, row by row.</span></div>
+  <div class="tablet">
+    <div class="statusbar" style="border-radius:18px 18px 0 0;"><span class="t">09:43</span><span class="t sig"><svg width="17" height="11" viewBox="0 0 17 11"><rect x="0" y="7" width="3" height="4" rx="1" fill="currentColor"/><rect x="4.5" y="5" width="3" height="6" rx="1" fill="currentColor"/><rect x="9" y="2.5" width="3" height="8.5" rx="1" fill="currentColor"/><rect x="13.5" y="0" width="3" height="11" rx="1" fill="currentColor"/></svg><svg width="25" height="12" viewBox="0 0 25 12"><rect x=".5" y=".5" width="21" height="11" rx="3" stroke="currentColor" fill="none" opacity=".5"/><rect x="2" y="2" width="15" height="8" rx="1.6" fill="currentColor"/><rect x="22.5" y="4" width="1.8" height="4" rx=".9" fill="currentColor" opacity=".5"/></svg></span></div>
+    <div class="mhead"><div class="t">Lwazi · Q1 of 11<b>Letter sounds</b></div><div class="timer"><b>0:42</b><span>left</span></div></div>
+    <div class="handnote"><span class="cards" style="transform:scale(.8);transform-origin:left"><i class="on">A</i><i>B</i><i>C</i></span>Lwazi reads from Reading Card A · tap each correct <b style="color:var(--ink)">sound</b></div>
+    <div class="lgrid">
+      <div class="ok">a</div><div class="ok">n</div><div class="ok">i</div><div class="ok">t</div><div class="ok">m</div><div class="ok">s</div><div>p</div><div class="ok">e</div><div class="ok">b</div><div>c</div><div class="ok">i</div><div class="ok">u</div>
+      <div class="ok">f</div><div class="ok">l</div><div>d</div><div class="ok">h</div><div class="ok">o</div><div>k</div><div class="ok">g</div><div class="ok">f</div><div>r</div><div class="ok">u</div><div class="ok">f</div><div class="ok">s</div>
+      <div class="ok">e</div><div class="ok">s</div><div>i</div><div class="ok">a</div><div>y</div><div>u</div><div>w</div><div>c</div><div>z</div><div>m</div><div>o</div><div>f</div>
+      <div>n</div><div>p</div><div>q</div><div>j</div><div>t</div><div>v</div><div>x</div><div>y</div><div>a</div><div>n</div><div>t</div><div>n</div>
+      <div>k</div><div>b</div><div>m</div><div>s</div><div>p</div><div>e</div><div>b</div><div>l</div><div>d</div><div>g</div><div>a</div><div>d</div>
+    </div>
+    <div class="legend"><span><i style="background:var(--success-text)"></i>Correct (tapped)</span><span><i style="background:#fff;border:1px solid #D9CFCE"></i>Blank = wrong or not reached — you mark where Lwazi stopped at the end</span></div>
+    <div class="mfoot"><div class="btn ghost">Skip question</div><div class="btn">End</div></div>
+  </div>
+</div>
+
+</div>
+
+<!-- ═══════════════ ROW 3: finish ═══════════════ -->
+<div class="row">
+
+<div class="slot">
+  <div class="cap"><b>6 · Where did the child stop? (timer)</b><span>The timer ended Q1, so the sheet can't be cancelled. Letters after the pick count as <i>not reached</i>, not wrong. "Reached the end" and "Nothing attempted" are one tap.</span></div>
+  <div class="phone">
+    <div class="statusbar"><span class="t">09:44</span><span class="t sig"><svg width="17" height="11" viewBox="0 0 17 11"><rect x="0" y="7" width="3" height="4" rx="1" fill="currentColor"/><rect x="4.5" y="5" width="3" height="6" rx="1" fill="currentColor"/><rect x="9" y="2.5" width="3" height="8.5" rx="1" fill="currentColor"/><rect x="13.5" y="0" width="3" height="11" rx="1" fill="currentColor"/></svg><svg width="25" height="12" viewBox="0 0 25 12"><rect x=".5" y=".5" width="21" height="11" rx="3" stroke="currentColor" fill="none" opacity=".5"/><rect x="2" y="2" width="15" height="8" rx="1.6" fill="currentColor"/><rect x="22.5" y="4" width="1.8" height="4" rx=".9" fill="currentColor" opacity=".5"/></svg></span></div>
+    <div class="hero" style="padding-bottom:18px;"><div class="nav"><div class="back" style="opacity:.35">‹</div><span class="ttl">Lwazi · Q1 · time's up</span></div><h1>Letter sounds</h1></div>
+    <div class="body"></div>
+    <div class="scrim"></div>
+    <div class="sheet">
+      <div class="grab"></div>
+      <h3>Time's up — where did Lwazi stop?</h3>
+      <p>Tap the last letter Lwazi tried. Letters after it count as not reached.</p>
+      <div class="pick">
+        <div>a</div><div>n</div><div>i</div><div>t</div><div>m</div><div>s</div><div>p</div><div>e</div><div>b</div><div>c</div><div>i</div><div>u</div>
+        <div>f</div><div>l</div><div>d</div><div>h</div><div>o</div><div>k</div><div>g</div><div>f</div><div>r</div><div>u</div><div>f</div><div>s</div>
+        <div>e</div><div>s</div><div>i</div><div>a</div><div>y</div><div>u</div><div>w</div><div>c</div><div>z</div><div class="sel">m</div><div class="past">o</div><div class="past">f</div>
+        <div class="past">n</div><div class="past">p</div><div class="past">q</div><div class="past">j</div><div class="past">t</div><div class="past">v</div><div class="past">x</div><div class="past">y</div><div class="past">a</div><div class="past">n</div><div class="past">t</div><div class="past">n</div>
+      </div>
+      <div class="sel-note">Selected: “m” — letter 34 of 60 · 26 not reached</div>
+      <div class="sheet-acts"><div class="btn ghost" style="font-family:var(--ui);font-weight:650;font-size:13.5px;">Reached the end</div><div class="btn ghost" style="font-family:var(--ui);font-weight:650;font-size:13.5px;">Nothing attempted</div></div>
+      <div class="btn" style="margin-top:10px;">Confirm</div>
+    </div>
+  </div>
+</div>
+
+<div class="slot">
+  <div class="cap"><b>7 · Summary and finalize</b><span>Scores per Question, then a required paper checklist — the run code on the sheet is the only paper-to-run link in Release 1 (no photos). Finalize unlocks only when both are ticked.</span></div>
+  <div class="phone">
+    <div class="statusbar"><span class="t">10:06</span><span class="t sig"><svg width="17" height="11" viewBox="0 0 17 11"><rect x="0" y="7" width="3" height="4" rx="1" fill="currentColor"/><rect x="4.5" y="5" width="3" height="6" rx="1" fill="currentColor"/><rect x="9" y="2.5" width="3" height="8.5" rx="1" fill="currentColor"/><rect x="13.5" y="0" width="3" height="11" rx="1" fill="currentColor"/></svg><svg width="25" height="12" viewBox="0 0 25 12"><rect x=".5" y=".5" width="21" height="11" rx="3" stroke="currentColor" fill="none" opacity=".5"/><rect x="2" y="2" width="15" height="8" rx="1.6" fill="currentColor"/><rect x="22.5" y="4" width="1.8" height="4" rx=".9" fill="currentColor" opacity=".5"/></svg></span></div>
+    <div class="hero" style="padding-bottom:16px;"><div class="nav"><div class="back">‹</div><span class="ttl">WelaPLUS · all 11 decided</span></div><h1>Lwazi's results</h1><div class="runcode">Run code <b>K7Q-4MD</b></div></div>
+    <div class="body" style="padding-top:12px;">
+      <div class="card">
+        <div class="score"><span class="no">Q1</span><span class="nm">Letter sounds</span><span class="mb"><i style="width:63%"></i></span><span class="v">38/60</span></div>
+        <div class="score"><span class="no">Q2</span><span class="nm">Listen to a story</span><span class="mb"><i style="width:80%"></i></span><span class="v">4/5</span></div>
+        <div class="score skip"><span class="no">Q3</span><span class="nm">First sounds · tired</span><span class="mb"></span><span class="v">—</span></div>
+        <div class="score"><span class="no">Q4</span><span class="nm">Blend sounds</span><span class="mb"><i style="width:75%"></i></span><span class="v">6/8</span></div>
+        <div class="score"><span class="no">Q5</span><span class="nm">Write letters</span><span class="mb"><i style="width:73%"></i></span><span class="v">19/26</span></div>
+        <div class="score"><span class="no">Q6</span><span class="nm">Read words</span><span class="mb"><i style="width:30%"></i></span><span class="v">12/40</span></div>
+        <div class="score"><span class="no">Q7</span><span class="nm">Read sentences</span><span class="mb"><i style="width:45%"></i></span><span class="v">9/20</span></div>
+        <div class="score"><span class="no">Q8</span><span class="nm">Read a story</span><span class="mb"><i style="width:26%"></i></span><span class="v">21/80</span></div>
+        <div class="score"><span class="no">Q9</span><span class="nm">Write words</span><span class="mb"><i style="width:58%"></i></span><span class="v">7/12</span></div>
+        <div class="score"><span class="no">Q10</span><span class="nm">Dictation</span><span class="mb"><i style="width:33%"></i></span><span class="v">5/15</span></div>
+        <div class="score"><span class="no">Q11</span><span class="nm">Write a story</span><span class="mb"><i style="width:44%"></i></span><span class="v">7/16</span></div>
+      </div>
+      <div class="card check">
+        <div class="lbl" style="margin-bottom:4px;">Before you finalize</div>
+        <div class="ck"><span class="box on"><svg width="12" height="12" viewBox="0 0 12 12"><path d="m2.5 6 2.5 2.5 4.5-5" stroke="#fff" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg></span><span><b>K7Q-4MD</b> and Lwazi's name are on the Writing Sheet</span></div>
+        <div class="ck"><span class="box"></span><span>The sheet is filed with this week's sheets for Head Office</span></div>
+      </div>
+      <div class="foot" style="padding-top:12px;"><div class="btn off">Finalize run</div></div>
+    </div>
+  </div>
+</div>
+
+<div class="slot">
+  <div class="cap"><b>8 · History</b><span>Runs are listed one row each, not as eleven Question rows, and open the read-only summary. EGRA rows are unchanged. (The reader choke point keeps WelaPLUS rows out of every EGRA-shaped screen — spec §7.5.)</span></div>
+  <div class="phone">
+    <div class="statusbar"><span class="t">10:07</span><span class="t sig"><svg width="17" height="11" viewBox="0 0 17 11"><rect x="0" y="7" width="3" height="4" rx="1" fill="currentColor"/><rect x="4.5" y="5" width="3" height="6" rx="1" fill="currentColor"/><rect x="9" y="2.5" width="3" height="8.5" rx="1" fill="currentColor"/><rect x="13.5" y="0" width="3" height="11" rx="1" fill="currentColor"/></svg><svg width="25" height="12" viewBox="0 0 25 12"><rect x=".5" y=".5" width="21" height="11" rx="3" stroke="currentColor" fill="none" opacity=".5"/><rect x="2" y="2" width="15" height="8" rx="1.6" fill="currentColor"/><rect x="22.5" y="4" width="1.8" height="4" rx=".9" fill="currentColor" opacity=".5"/></svg></span></div>
+    <div class="hero" style="padding-bottom:18px;"><div class="nav"><div class="back">‹</div><span class="ttl">Assessments</span></div><h1>History</h1></div>
+    <div class="body">
+      <div class="lbl">This week</div>
+      <div class="card" style="margin-top:8px;">
+        <div class="hrow"><span class="badge w">WELA+</span><div><div class="nm">Lwazi Mthembu</div><div class="sub">Today · Run K7Q-4MD</div></div><div class="r"><span class="pillst ok">Finalized</span><span>10 of 11 scored</span></div></div>
+        <div class="hrow"><span class="badge w">WELA+</span><div><div class="nm">Anele Ndlovu</div><div class="sub">Mon · Run 2HC-9TA</div></div><div class="r"><span class="pillst open">Open</span><span>8 of 11</span></div></div>
+        <div class="hrow"><span class="badge e">EGRA</span><div><div class="nm">Asanda Bam</div><div class="sub">Mon · Letter sounds</div></div><div class="r">41/60<span>isiXhosa</span></div></div>
+        <div class="hrow"><span class="badge w">WELA+</span><div><div class="nm">Sipho Mbeki</div><div class="sub">Mon · Run P3D-7KQ</div></div><div class="r"><span class="pillst ab">Abandoned</span><span>3 of 11</span></div></div>
+        <div class="hrow"><span class="badge e">EGRA</span><div><div class="nm">Lwazi Mthembu</div><div class="sub">Fri · Word reading</div></div><div class="r">18/40<span>English</span></div></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+</div>
+</body>
+</html>
