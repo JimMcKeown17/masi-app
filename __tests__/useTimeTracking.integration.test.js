@@ -5,7 +5,7 @@ import { act, renderHook, waitFor } from '@testing-library/react-native';
 import { __reset, __setDatabaseFactory } from 'expo-sqlite';
 import { useTimeTracking } from '../src/hooks/useTimeTracking';
 import { TimeTrackingProvider } from '../src/context/TimeTrackingContext';
-import { resetDatabaseConnectionForTests } from '../src/db/client';
+import { initializeTestDatabase, closeDefaultTestHandle } from '../test-support/testDatabase';
 import { createBetterSqliteTestDatabase } from '../test-support/betterSqliteAdapter';
 import { timeEntriesRepository } from '../src/db/repositories/timeEntriesRepository';
 
@@ -34,10 +34,11 @@ let testDb;
 
 beforeEach(async () => {
   jest.clearAllMocks();
-  await resetDatabaseConnectionForTests();
+  await closeDefaultTestHandle();
   __reset();
   testDb = createBetterSqliteTestDatabase();
   __setDatabaseFactory(async () => testDb);
+  await initializeTestDatabase();
   mockGetCurrentPosition.mockResolvedValue({
     coords: {
       latitude: -33.9,
@@ -47,7 +48,7 @@ beforeEach(async () => {
 });
 
 afterEach(async () => {
-  await resetDatabaseConnectionForTests();
+  await closeDefaultTestHandle();
   await testDb.closeAsync();
 });
 

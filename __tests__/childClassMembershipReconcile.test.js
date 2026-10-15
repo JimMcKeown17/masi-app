@@ -1,5 +1,6 @@
 jest.mock('expo-sqlite', () => require('../test-support/expoSQLiteMock'));
-jest.mock('../src/services/supabaseClient', () => ({ supabase: {} }));
+jest.mock('../src/services/supabaseClient', () => ({
+  ...require('../test-support/supabaseTestConfig'), supabase: {} }));
 
 import { runMigrations } from '../src/db/migrations';
 import { createOutboxSyncEngine } from '../src/services/offlineSync';
@@ -186,7 +187,7 @@ describe('child_class_memberships sync reconcile-before-upsert (#47)', () => {
     });
 
     const { supabaseClient, calls } = createServerBackedSupabase(serverDb);
-    const engine = createOutboxSyncEngine({ getAuthSession: liveTestSession, database: db, supabaseClient });
+    const engine = createOutboxSyncEngine({ enqueueRequest: (task) => task(), getAuthSession: liveTestSession, database: db, supabaseClient });
 
     const result = await engine.syncAll({ tableName: 'child_class_memberships' });
 
@@ -219,7 +220,7 @@ describe('child_class_memberships sync reconcile-before-upsert (#47)', () => {
     await seedTwoClassesAndChild(serverDb);
 
     const { supabaseClient, calls } = createServerBackedSupabase(serverDb);
-    const engine = createOutboxSyncEngine({ getAuthSession: liveTestSession, database: db, supabaseClient });
+    const engine = createOutboxSyncEngine({ enqueueRequest: (task) => task(), getAuthSession: liveTestSession, database: db, supabaseClient });
 
     const result = await engine.syncAll({ tableName: 'child_class_memberships' });
 
@@ -247,7 +248,7 @@ describe('child_class_memberships sync reconcile-before-upsert (#47)', () => {
     });
 
     const { supabaseClient, calls } = createServerBackedSupabase(serverDb, { throwOnSelect: true });
-    const engine = createOutboxSyncEngine({ getAuthSession: liveTestSession, database: db, supabaseClient });
+    const engine = createOutboxSyncEngine({ enqueueRequest: (task) => task(), getAuthSession: liveTestSession, database: db, supabaseClient });
 
     const result = await engine.syncAll({ tableName: 'child_class_memberships' });
 

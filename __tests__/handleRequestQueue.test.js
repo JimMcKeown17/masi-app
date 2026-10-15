@@ -1,3 +1,4 @@
+global.__MASI_NO_DEFAULT_HANDLE__ = true;
 // __tests__/handleRequestQueue.test.js
 import { createHandleRequestQueue } from '../src/session/handleRequestQueue';
 import { StaleActorError, isStaleActorError } from '../src/session/staleActor';

@@ -1,5 +1,5 @@
 import { isStaleActorError } from '../../session/staleActor';
-import { getDatabase, withTransaction } from '../client';
+import { UnboundRepositoryError } from '../../session/staleActor';
 import { runMigrations } from '../migrations';
 import { runWithTransaction } from './sqliteRepositoryUtils';
 
@@ -8,31 +8,28 @@ export const isSignedInHandle = (value) => Boolean(value
   && typeof value.getReader === 'function'
   && typeof value.withTransaction === 'function');
 
-// Task 5 will gate ambient resolution with these; the legacy path stays intact for now.
-export const enableAmbientHandleForTests = () => {};
-export const disableAmbientHandleForTests = () => {};
-
-export const resolveDatabase = async (database) => {
-  if (isSignedInHandle(database)) return database.getReader();
-  if (database) {
-    // Test / injected-db path: migrate the supplied connection.
-    await runMigrations(database);
-    return database;
-  }
-  // Production: client.initialize() already ran migrations on the writer during bootstrap;
-  // getDatabase() returns the read-only reader. Do NOT run migrations here (the reader is
-  // query_only and would throw).
-  return getDatabase();
+let ambientHandleForTests = false;
+export const enableAmbientHandleForTests = () => {
+  if (process.env.NODE_ENV !== 'test') throw new UnboundRepositoryError();
+  ambientHandleForTests = true;
 };
-
+export const disableAmbientHandleForTests = () => { ambientHandleForTests = false; };
+const boundDatabase = (database) => {
+  if (database) return database;
+  if (process.env.NODE_ENV === 'test' && ambientHandleForTests) return require('../../session/signedInHandle').requireCurrentHandle();
+  throw new UnboundRepositoryError();
+};
+export const resolveDatabase = async (database) => {
+  const bound = boundDatabase(database);
+  if (isSignedInHandle(bound)) return bound.getReader();
+  await runMigrations(bound);
+  return bound;
+};
 export const runRepositoryTransaction = async (database, task) => {
-  if (isSignedInHandle(database)) return database.withTransaction(task);
-  if (database) {
-    const db = await resolveDatabase(database);
-    return runWithTransaction(db, task);
-  }
-  // Production writes go through the persistent writer.
-  return withTransaction(async (txn) => task(txn));
+  const bound = boundDatabase(database);
+  if (isSignedInHandle(bound)) return bound.withTransaction(task);
+  const db = await resolveDatabase(bound);
+  return runWithTransaction(db, task);
 };
 
 export const RECONCILE_BREAKER_SCOPE_PREFIX = 'pull_reconcile_breaker:';

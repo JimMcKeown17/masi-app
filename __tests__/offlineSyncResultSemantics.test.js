@@ -1,5 +1,6 @@
 jest.mock('expo-sqlite', () => require('../test-support/expoSQLiteMock'));
-jest.mock('../src/services/supabaseClient', () => ({ supabase: {} }));
+jest.mock('../src/services/supabaseClient', () => ({
+  ...require('../test-support/supabaseTestConfig'), supabase: {} }));
 
 import { createBetterSqliteTestDatabase } from '../test-support/betterSqliteAdapter';
 import { runMigrations } from '../src/db/migrations';
@@ -56,7 +57,7 @@ describe('syncAll result.success semantics (trust UX, Finding 6)', () => {
     const { supabaseClient } = createSupabaseMock({
       upsertResults: { children: { error: { message: 'network down' } } },
     });
-    const engine = createOutboxSyncEngine({ getAuthSession: liveTestSession, database: db, supabaseClient });
+    const engine = createOutboxSyncEngine({ enqueueRequest: (task) => task(), getAuthSession: liveTestSession, database: db, supabaseClient });
 
     const result = await engine.syncAll();
 
@@ -77,7 +78,7 @@ describe('syncAll result.success semantics (trust UX, Finding 6)', () => {
     const { supabaseClient } = createSupabaseMock({
       upsertResults: { children: { error: { code: '42501', message: 'row-level security' } } },
     });
-    const engine = createOutboxSyncEngine({ getAuthSession: liveTestSession, database: db, supabaseClient });
+    const engine = createOutboxSyncEngine({ enqueueRequest: (task) => task(), getAuthSession: liveTestSession, database: db, supabaseClient });
 
     const result = await engine.syncAll();
 
@@ -98,7 +99,7 @@ describe('syncAll result.success semantics (trust UX, Finding 6)', () => {
       ...outbox,
       resetInFlight: jest.fn(async () => { throw new Error('disk I/O error'); }),
     };
-    const engine = createOutboxSyncEngine({
+    const engine = createOutboxSyncEngine({ enqueueRequest: (task) => task(),
       getAuthSession: liveTestSession,
       database: db,
       supabaseClient,
@@ -128,7 +129,7 @@ describe('syncAll result.success semantics (trust UX, Finding 6)', () => {
     const { supabaseClient } = createSupabaseMock({
       upsertResults: { children: { error: { message: 'network down' } } },
     });
-    const engine = createOutboxSyncEngine({ getAuthSession: liveTestSession, database: db, supabaseClient });
+    const engine = createOutboxSyncEngine({ enqueueRequest: (task) => task(), getAuthSession: liveTestSession, database: db, supabaseClient });
 
     const result = await engine.syncAll();
 

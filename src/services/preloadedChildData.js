@@ -1,6 +1,4 @@
 import { isStaleActorError } from '../session/staleActor';
-import { supabase } from './supabaseClient';
-import { enqueueSupabaseRequest } from './supabaseRequestQueue';
 
 export const PULL_SCOPE_COMPLETENESS_LIMIT = 1000;
 export const RECONCILE_ACK_SCHEMA_VERSION = 1;
@@ -84,8 +82,8 @@ const snapshotArray = (snapshot, key) => (
 
 export const pullReconcileAcknowledgments = async ({
   userId,
-  supabaseClient = supabase,
-  enqueueRequest = enqueueSupabaseRequest,
+  supabaseClient,
+  enqueueRequest,
 } = {}) => {
   try {
     const { data, error } = await enqueueRequest(() => (
@@ -220,8 +218,8 @@ const pullChildProgrammeEnrollments = async ({
 
 export const pullPreloadedChildData = async ({
   userId,
-  supabaseClient = supabase,
-  enqueueRequest = enqueueSupabaseRequest,
+  supabaseClient,
+  enqueueRequest,
 } = {}) => {
   const queuedQueryScope = (task) => queryScope(() => enqueueRequest(task));
   const reconcileAcknowledgments = await pullReconcileAcknowledgments({

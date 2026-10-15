@@ -1,4 +1,3 @@
-import { timeEntriesRepository } from '../db/repositories/timeEntriesRepository';
 
 export const CLOCK_IN_STATUS = {
   CLOCKED_IN: 'clocked_in',
@@ -7,7 +6,7 @@ export const CLOCK_IN_STATUS = {
 
 export const getClockInStatusForUser = async (
   userId,
-  repository = timeEntriesRepository
+  repository
 ) => {
   if (!userId) return CLOCK_IN_STATUS.CLOCKED_OUT;
 

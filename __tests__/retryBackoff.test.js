@@ -1,5 +1,6 @@
 jest.mock('expo-sqlite', () => require('../test-support/expoSQLiteMock'));
-jest.mock('../src/services/supabaseClient', () => ({ supabase: {} }));
+jest.mock('../src/services/supabaseClient', () => ({
+  ...require('../test-support/supabaseTestConfig'), supabase: {} }));
 
 import { createBetterSqliteTestDatabase } from '../test-support/betterSqliteAdapter';
 import { runMigrations } from '../src/db/migrations';
@@ -131,7 +132,7 @@ describe('retryFailedItem resets retry_count', () => {
     expect(before.status).toBe('failed');
     expect(before.retry_count).toBe(3);
 
-    const engine = createOutboxSyncEngine({ database: db });
+    const engine = createOutboxSyncEngine({ enqueueRequest: (task) => task(), database: db });
     await engine.retryFailedItem(TABLE, RECORD_ID);
 
     const row = await db.getFirstAsync(
@@ -156,7 +157,7 @@ describe('retryFailedItem resets retry_count', () => {
       OUTBOX_ID,
     );
 
-    const engine = createOutboxSyncEngine({ database: db });
+    const engine = createOutboxSyncEngine({ enqueueRequest: (task) => task(), database: db });
     await engine.retryFailedItem(TABLE, RECORD_ID);
 
     const row = await db.getFirstAsync('select status, retry_count from sync_outbox where id = ?', OUTBOX_ID);

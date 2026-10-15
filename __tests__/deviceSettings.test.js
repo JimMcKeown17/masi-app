@@ -1,52 +1,40 @@
-import { localStateRepository } from '../src/db/repositories/localStateRepository';
+global.__MASI_NO_DEFAULT_HANDLE__ = true;
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { deviceSettings } from '../src/services/deviceSettings';
+import { requireCurrentHandle, requestClose, requestOpen, resetHandleRegistryForTests } from '../src/session/signedInHandle';
 
-jest.mock('../src/db/repositories/localStateRepository');
-
-describe('deviceSettings', () => {
-  beforeEach(() => {
-    localStateRepository.set.mockResolvedValue(true);
-    localStateRepository.remove.mockResolvedValue(true);
-  });
-
-  afterEach(() => jest.clearAllMocks());
-
-  test('returns null when no user profile is stored', async () => {
-    localStateRepository.get.mockResolvedValue(null);
-
-    await expect(deviceSettings.getUserProfile()).resolves.toBeNull();
-    expect(localStateRepository.get).toHaveBeenCalledWith('user_profile', null);
-  });
-
-  test('round-trips and clears the user profile under its existing key', async () => {
-    const profile = { id: 'user-1', first_name: 'Nomsa' };
-    localStateRepository.get.mockResolvedValue(profile);
-
-    await expect(deviceSettings.saveUserProfile(profile)).resolves.toBe(true);
-    expect(localStateRepository.set).toHaveBeenCalledWith('user_profile', profile);
-    await expect(deviceSettings.getUserProfile()).resolves.toEqual(profile);
-    await expect(deviceSettings.clearUserProfile()).resolves.toBe(true);
-    expect(localStateRepository.remove).toHaveBeenCalledWith('user_profile');
-  });
-
-  test('resolves a valid stored capture mode', async () => {
-    localStateRepository.get.mockResolvedValue('grid');
-
-    await expect(deviceSettings.getCaptureMode()).resolves.toBe('grid');
-    expect(localStateRepository.get).toHaveBeenCalledWith('assessment_capture_mode');
-  });
-
-  test('falls back to sequential when the stored capture mode is unset or invalid', async () => {
-    localStateRepository.get.mockResolvedValueOnce(null).mockResolvedValueOnce('bogus');
-
-    await expect(deviceSettings.getCaptureMode()).resolves.toBe('sequential');
-    await expect(deviceSettings.getCaptureMode()).resolves.toBe('sequential');
-  });
-
-  test('validates and persists capture mode under its existing key', async () => {
-    await expect(deviceSettings.setCaptureMode('bogus')).rejects.toThrow(/invalid capture mode/i);
-
-    await expect(deviceSettings.setCaptureMode('sequential')).resolves.toBe(true);
-    expect(localStateRepository.set).toHaveBeenCalledWith('assessment_capture_mode', 'sequential');
-  });
+import * as engine from '../test-support/expoSQLiteRealEngine';
+beforeEach(async () => {
+  await resetHandleRegistryForTests(); await engine.__resetMockDatabases(); await AsyncStorage.clear();
+  await requestOpen({ userId: '11111111-1111-4111-8111-111111111111', openDatabase: engine.openDatabaseAsync });
+});
+afterEach(async () => { await resetHandleRegistryForTests(); await engine.__resetMockDatabases(); });
+test('returns null when this EA has no cached profile', async () => {
+  await expect(requireCurrentHandle().services.deviceProfile.get()).resolves.toBeNull();
+});
+test('round-trips the profile in its EA file and retains it across sign-out', async () => {
+  const a = requireCurrentHandle(); const profile = { id: a.userId, first_name: 'Test' };
+  await a.services.deviceProfile.save(profile);
+  expect(await a.repositories.localState.get('user_profile')).toEqual(profile);
+  await requestClose({ reason: 'profile retention' });
+  const b = await requestOpen({ userId: '22222222-2222-4222-8222-222222222222', openDatabase: engine.openDatabaseAsync });
+  expect(await b.services.deviceProfile.get()).toBeNull();
+  await requestClose({ reason: 'return to A' });
+  const again = await requestOpen({ userId: a.userId, openDatabase: engine.openDatabaseAsync });
+  expect(await again.services.deviceProfile.get()).toEqual(profile);
+});
+test('resolves a valid device capture mode', async () => {
+  await AsyncStorage.setItem('masi:device:captureMode', 'grid');
+  await expect(deviceSettings.getCaptureMode()).resolves.toBe('grid');
+});
+test('falls back to sequential when capture mode is unset or invalid', async () => {
+  await expect(deviceSettings.getCaptureMode()).resolves.toBe('sequential');
+  await AsyncStorage.setItem('masi:device:captureMode', 'bogus');
+  await expect(deviceSettings.getCaptureMode()).resolves.toBe('sequential');
+});
+test('validates and persists capture mode under the device-scoped key', async () => {
+  await expect(deviceSettings.setCaptureMode('bogus')).rejects.toThrow(/invalid capture mode/i);
+  await deviceSettings.setCaptureMode('sequential');
+  expect(await AsyncStorage.getItem('masi:device:captureMode')).toBe('sequential');
+  expect(await requireCurrentHandle().repositories.localState.get('assessment_capture_mode')).toBeNull();
 });

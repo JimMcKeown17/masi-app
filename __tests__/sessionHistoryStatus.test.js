@@ -1,22 +1,32 @@
+global.__MASI_NO_DEFAULT_HANDLE__ = true;
+import React from 'react';
+import { SignedInEAContext } from '../src/context/SignedInEAContext';
 // __tests__/sessionHistoryStatus.test.js
 import { describeHistoryState } from '../src/utils/syncStatusPresenter';
 import { act, renderHook } from '@testing-library/react-native';
-import { startSessionHistoryPull, resetSessionHistoryStatusForActorChange, useSessionHistoryStatus, getSessionHistoryPullState } from '../src/services/sessionHistoryStatus';
-import { runSessionHistoryPull, resetSessionHistoryForActorChange } from '../src/services/sessionHistoryPull';
+import { useSessionHistoryStatus, createSessionHistoryStore } from '../src/services/sessionHistoryStatus';
+import { runSessionHistoryPull, resetSessionHistoryState, createSessionHistoryState } from '../src/services/sessionHistoryPull';
 
 jest.mock('../src/services/sessionHistoryPull', () => ({
+  ...jest.requireActual('../src/services/sessionHistoryPull'),
   runSessionHistoryPull: jest.fn(),
-  resetSessionHistoryForActorChange: jest.fn(),
+  resetSessionHistoryState: jest.fn(),
   sessionHistoryScope: (userId, programmeId) => `session_history_pull:${userId}:${programmeId}`,
 }));
 const mockGetFirst = jest.fn();
-jest.mock('../src/db/repositories/repositoryRuntime', () => ({
-  resolveDatabase: async () => ({ getFirstAsync: (...args) => mockGetFirst(...args) }),
-}));
 
+
+let store;
+const resetSessionHistoryStatusForActorChange = () => store.reset();
+const startSessionHistoryPull = (options) => store.start(options);
+const getSessionHistoryPullState = (userId) => store.getPullState(userId);
+const wrapper = ({ children }) => <SignedInEAContext.Provider value={{ services: { sessionHistory: { store } } }}>{children}</SignedInEAContext.Provider>;
 describe('session history status store', () => {
   beforeEach(() => {
-    resetSessionHistoryStatusForActorChange();
+    store = createSessionHistoryStore({
+      database: { isOpen: () => true, getReader: async () => ({ getFirstAsync: (...args) => mockGetFirst(...args) }), withTransaction: async () => {} },
+      state: createSessionHistoryState(),
+    });
     jest.clearAllMocks();
   });
 
@@ -24,13 +34,13 @@ describe('session history status store', () => {
     let resolveA; let resolveB;
     runSessionHistoryPull.mockImplementationOnce(() => new Promise((resolve) => { resolveA = resolve; }))
       .mockImplementationOnce(() => new Promise((resolve) => { resolveB = resolve; }));
-    const { result } = renderHook(useSessionHistoryStatus);
+    const { result } = renderHook(useSessionHistoryStatus, { wrapper });
     let a; let b;
     act(() => { a = startSessionHistoryPull({ userId: 'A' }); });
     const pageA = runSessionHistoryPull.mock.calls[0][0].deps.onPageSaved;
     act(() => { pageA(); });
     act(() => { resetSessionHistoryStatusForActorChange(); });
-    expect(resetSessionHistoryForActorChange).toHaveBeenCalledTimes(1);
+    expect(resetSessionHistoryState).toHaveBeenCalledTimes(1);
     act(() => { b = startSessionHistoryPull({ userId: 'B', force: true }); });
     const beforeOldCompletion = result.current;
     await act(async () => { pageA(); resolveA({ status: 'cancelled', pages: 0 }); await a; });
@@ -45,7 +55,7 @@ describe('session history status store', () => {
   });
 
   test('a run saving no pages still publishes completion and anonymous starts do nothing', async () => {
-    const { result } = renderHook(useSessionHistoryStatus);
+    const { result } = renderHook(useSessionHistoryStatus, { wrapper });
     const before = result.current;
     await act(async () => { expect(await startSessionHistoryPull({})).toBeNull(); });
     expect(runSessionHistoryPull).not.toHaveBeenCalled();

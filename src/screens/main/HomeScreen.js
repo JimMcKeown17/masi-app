@@ -1,3 +1,4 @@
+import { useSignedInEA } from '../../context/SignedInEAContext';
 import React, { useCallback, useRef, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { ActivityIndicator, Snackbar, Text } from 'react-native-paper';
@@ -8,8 +9,8 @@ import { useAuth } from '../../context/AuthContext';
 import { useChildren } from '../../context/ChildrenContext';
 import { useClasses } from '../../context/ClassesContext';
 import { useTimeTracking } from '../../hooks/useTimeTracking';
-import { sessionsRepository } from '../../db/repositories/sessionsRepository';
-import { assessmentsRepository } from '../../db/repositories/assessmentsRepository';
+
+
 import ElapsedTime from '../../components/common/ElapsedTime';
 import SyncIndicator from '../../components/common/SyncIndicator';
 import SessionsTodayGauge from '../../components/sessions/SessionsTodayGauge';
@@ -76,6 +77,9 @@ const getGoalCopy = (goal, isSignedIn) => {
 };
 
 export default function HomeScreen({ navigation }) {
+  const { handle, repositories } = useSignedInEA();
+  const { sessions: sessionsRepository, assessments: assessmentsRepository } = repositories;
+
   const { user, profile } = useAuth();
   const { children: childrenList } = useChildren();
   const { pageVersion, runVersion } = useSessionHistoryStatus();
@@ -131,14 +135,14 @@ export default function HomeScreen({ navigation }) {
             assessmentsRepository.getAssessmentCountsSince({
               userId: user.id,
             }),
-            getSessionsTodayGoal({ userId: user.id }),
+            getSessionsTodayGoal({ handle, userId: user.id }),
             sessionsRepository.getSessions({
               userId: user.id,
               recordedByUserId: user.id,
               sinceDate: recentCutoff,
               order: 'desc',
             }),
-            getActiveProgrammeGate({ userId: user.id }),
+            getActiveProgrammeGate({ handle, userId: user.id }),
           ]);
 
           setWeekCounts(getWeekSessionCounts(sessions));

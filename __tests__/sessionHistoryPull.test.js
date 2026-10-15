@@ -1,16 +1,18 @@
 jest.mock('expo-sqlite', () => require('../test-support/expoSQLiteMock'));
-jest.mock('../src/services/supabaseClient', () => ({ supabase: {} }));
+jest.mock('../src/services/supabaseClient', () => ({
+  ...require('../test-support/supabaseTestConfig'), supabase: {} }));
 
 import { runMigrations } from '../src/db/migrations';
 import {
   runSessionHistoryPull,
-  resetSessionHistoryForActorChange,
+  resetSessionHistoryState, createSessionHistoryState,
   sessionHistoryScope,
 } from '../src/services/sessionHistoryPull';
-import { createSupabaseRequestQueue } from '../src/services/supabaseRequestQueue';
+import { createHandleRequestQueue } from '../src/session/handleRequestQueue';
 import { syncStateRepository } from '../src/db/repositories/syncStateRepository';
 import { createMigratedDatabase, seedCoreData } from '../test-support/sqliteRepositoryTestUtils';
 
+const testHistoryState = createSessionHistoryState();
 const DAY = 24 * 60 * 60 * 1000;
 const iso = (n) => `2026-09-01T08:00:00.${String(n).padStart(6, '0')}+00:00`; // microsecond strings
 const uuid = (n) => `00000000-0000-4000-8000-${String(n).padStart(12, '0')}`;
@@ -61,7 +63,7 @@ describe('runSessionHistoryPull', () => {
   let db;
   let wall;
   const deps = (extra) => ({
-    database: db, enqueueRequest: (task) => task(), requestTimeoutMs: 50, runBudgetMs: 60_000,
+    state: testHistoryState, database: db, enqueueRequest: (task) => task(), requestTimeoutMs: 50, runBudgetMs: 60_000,
     wallNow: () => wall, random: () => 0.5, ...extra, // 0.5 => exactly 7 days between re-walks
   });
   const cursorOf = async (userId = 'user-1', programmeId = 'programme-a') => {
@@ -75,7 +77,7 @@ describe('runSessionHistoryPull', () => {
 
   beforeEach(async () => {
     wall = Date.parse('2026-09-26T08:00:00.000Z');
-    resetSessionHistoryForActorChange();
+    resetSessionHistoryState(testHistoryState);
     db = await createMigratedDatabase(runMigrations);
     await seedCoreData(db);
   });
@@ -211,17 +213,22 @@ describe('runSessionHistoryPull', () => {
       created_at: iso(1), updated_at: iso(1),
       child_first_name: 'Reference', child_last_name: 'Child', child_preferred_name: null,
     }] } });
-    const setPullState = syncStateRepository.setPullState;
-    const cursorWrite = jest.spyOn(syncStateRepository, 'setPullState').mockImplementation(async (...args) => {
-      resetSessionHistoryForActorChange();
-      return setPullState(...args);
+    const run = db.runAsync;
+    const cursorWrite = jest.fn();
+    const connectionWrite = jest.spyOn(db, 'runAsync').mockImplementation(async (...args) => {
+      const result = await run(...args);
+      if (/insert into sync_state/i.test(args[0])) {
+        cursorWrite();
+        resetSessionHistoryState(testHistoryState);
+      }
+      return result;
     });
     let result;
     try {
       result = await runSessionHistoryPull({ userId: 'user-1', deps: deps({ client: server.client }) });
       expect(cursorWrite).toHaveBeenCalledTimes(1);
     } finally {
-      cursorWrite.mockRestore();
+      connectionWrite.mockRestore();
     }
     expect(result).toEqual({ status: 'cancelled', pages: 0 });
     for (const table of ['sessions', 'session_attendees', 'children', 'sync_state']) {
@@ -241,7 +248,7 @@ describe('runSessionHistoryPull', () => {
   });
 
   test('an error response from a stale actor is cancelled without recording failure', async () => {
-    const server = fakeServer({ parents: [], failParentAt: 1, onParentCall: resetSessionHistoryForActorChange });
+    const server = fakeServer({ parents: [], failParentAt: 1, onParentCall: () => resetSessionHistoryState(testHistoryState) });
     expect(await runSessionHistoryPull({ userId: 'user-1', deps: deps({ client: server.client }) })).toEqual({ status: 'cancelled', pages: 0 });
     expect(await cursorOf()).toBeNull();
   });
@@ -253,7 +260,7 @@ describe('runSessionHistoryPull', () => {
     if (stage === 'entry') {
       db.withExclusiveTransactionAsync = (task) => transaction(async (txn) => {
         reached = true;
-        resetSessionHistoryForActorChange();
+        resetSessionHistoryState(testHistoryState);
         return task(txn);
       });
     } else {
@@ -261,7 +268,7 @@ describe('runSessionHistoryPull', () => {
         const result = await write(sql, ...args);
         if (/insert into "sessions"/i.test(sql)) {
           reached = true;
-          resetSessionHistoryForActorChange();
+          resetSessionHistoryState(testHistoryState);
         }
         return result;
       };
@@ -424,7 +431,7 @@ describe('runSessionHistoryPull', () => {
   });
 
   test('a hung predecessor in the shared queue cannot hold the run past its deadline', async () => {
-    const queue = createSupabaseRequestQueue();
+    const queue = createHandleRequestQueue({ isOpen: () => true });
     let releasePredecessor;
     const predecessorStarted = new Promise((started) => {
       queue.enqueue(() => new Promise((resolve) => { releasePredecessor = resolve; started(); }));
@@ -455,7 +462,7 @@ describe('runSessionHistoryPull', () => {
   });
 
   test('an actor change while a request is queued cancels the run before it starts', async () => {
-    const queue = createSupabaseRequestQueue();
+    const queue = createHandleRequestQueue({ isOpen: () => true });
     let releasePredecessor;
     const predecessorStarted = new Promise((started) => {
       queue.enqueue(() => new Promise((resolve) => { releasePredecessor = resolve; started(); }));
@@ -467,7 +474,7 @@ describe('runSessionHistoryPull', () => {
     const server = fakeServer({ parents: [parent(1)] });
     const run = runSessionHistoryPull({ userId: 'user-1', deps: deps({ client: server.client, enqueueRequest, requestTimeoutMs: 5000 }) });
     await historyEnqueued; // the history request is genuinely waiting in the queue
-    resetSessionHistoryForActorChange();
+    resetSessionHistoryState(testHistoryState);
     releasePredecessor();
     expect((await run).status).toBe('cancelled');
     await queue.enqueue(() => null);
@@ -512,7 +519,7 @@ describe('runSessionHistoryPull', () => {
   });
 
   test('an actor change after a response arrives commits nothing', async () => {
-    const server = fakeServer({ parents: [parent(1)], onParentCall: () => resetSessionHistoryForActorChange() });
+    const server = fakeServer({ parents: [parent(1)], onParentCall: () => resetSessionHistoryState(testHistoryState) });
     expect((await runSessionHistoryPull({ userId: 'user-1', deps: deps({ client: server.client }) })).status).toBe('cancelled');
     expect((await db.getFirstAsync('select count(*) as n from sessions')).n).toBe(0);
     expect(await cursorOf()).toBeNull();

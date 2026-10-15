@@ -15,7 +15,8 @@ const findMasteryRecord = (records, { childId, letter, language, programmeId, de
 );
 
 export async function persistLiteracySession({
-  database,
+  handle,
+  database = handle,
   session,
   trackerLanguageKey,
   letterTrackerChanges = {},

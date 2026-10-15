@@ -1,3 +1,4 @@
+global.__MASI_NO_DEFAULT_HANDLE__ = true;
 const fs = require('fs');
 const os = require('os');
 const path = require('path');

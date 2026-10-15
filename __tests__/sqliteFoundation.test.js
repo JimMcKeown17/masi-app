@@ -586,7 +586,7 @@ describe('SQLite debug dump', () => {
     const db = createBetterSqliteTestDatabase();
 
     try {
-      const dump = await debugDump(db);
+      const dump = await debugDump({ handle: { isOpen: () => true, isCurrent: () => true, getReader: async () => db } });
 
       expect(dump).toEqual({
         database: 'sqlite',
@@ -613,7 +613,7 @@ describe('SQLite debug dump', () => {
       await runMigrations(db);
       await db.runAsync("insert into schools (id, name) values ('school-1', 'Masi Primary')");
 
-      const dump = await debugDump(db);
+      const dump = await debugDump({ handle: { isOpen: () => true, isCurrent: () => true, getReader: async () => db } });
 
       expect(dump).toEqual({
         database: 'sqlite',

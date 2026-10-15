@@ -1,12 +1,13 @@
+import { useSignedInEA } from '../../context/SignedInEAContext';
 import React, { useState, useCallback } from 'react';
 import { View, StyleSheet, FlatList, RefreshControl } from 'react-native';
 import { Text, Card, ActivityIndicator, Snackbar } from 'react-native-paper';
 import { useFocusEffect } from '@react-navigation/native';
 import { useAuth } from '../../context/AuthContext';
 import { colors, spacing, borderRadius, shadows } from '../../constants/colors';
-import { sessionsRepository } from '../../db/repositories/sessionsRepository';
+
 import { useLookupsContext } from '../../context/LookupsContext';
-import { useSessionHistoryStatus, getSessionHistoryPullState, startSessionHistoryPull } from '../../services/sessionHistoryStatus';
+import { useSessionHistoryStatus } from '../../services/sessionHistoryStatus';
 import { describeHistoryState } from '../../utils/syncStatusPresenter';
 
 import { toLocalDateString } from '../../utils/localDate';
@@ -26,6 +27,9 @@ function formatSessionDate(dateString) {
 }
 
 export default function SessionHistoryScreen() {
+  const { repositories, services } = useSignedInEA();
+  const { sessions: sessionsRepository } = repositories;
+
   const { user } = useAuth();
   const { jobTitles } = useLookupsContext();
   const { running, pageVersion, runVersion } = useSessionHistoryStatus();
@@ -65,7 +69,7 @@ export default function SessionHistoryScreen() {
             sinceDate: toLocalDateString(new Date(Date.now() - THIRTY_DAYS_MS)),
             order: 'desc',
           });
-          const persistedHistory = await getSessionHistoryPullState(user.id);
+          const persistedHistory = await services.sessionHistory.store.getPullState(user.id);
           if (active) {
             setSessions(cached);
             setPullState(persistedHistory);
@@ -164,7 +168,7 @@ export default function SessionHistoryScreen() {
       {history.detail && <Text variant="bodySmall" style={styles.historyDetail}>{history.detail}</Text>}
       <Text variant="bodySmall" style={styles.historyDetail}>Showing sessions you recorded in the last 30 days.</Text>
       <FlatList
-        refreshControl={<RefreshControl refreshing={running} onRefresh={() => startSessionHistoryPull({ userId: user?.id, force: true })} />}
+        refreshControl={<RefreshControl refreshing={running} onRefresh={() => services.sessionHistory.start({ userId: user?.id, force: true })} />}
         data={sessions}
         keyExtractor={(item) => item.id}
         renderItem={renderItem}

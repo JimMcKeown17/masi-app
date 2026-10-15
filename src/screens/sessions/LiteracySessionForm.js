@@ -1,3 +1,4 @@
+import { useSignedInEA } from '../../context/SignedInEAContext';
 import React, { useCallback, useState, useMemo, useRef, useEffect } from 'react';
 import { View, StyleSheet, Pressable, Alert } from 'react-native';
 import {
@@ -368,6 +369,8 @@ function FormFooter({
 // Main form
 // ---------------------------------------------------------------------------
 export default function LiteracySessionForm({ navigation }) {
+  const { handle } = useSignedInEA();
+
   const { user, profile } = useAuth();
   const { refreshSyncStatus, triggerBackgroundSync } = useOffline();
   const { classes } = useClasses();
@@ -517,7 +520,7 @@ export default function LiteracySessionForm({ navigation }) {
         updated_at: now,
       };
 
-      await persistLiteracySession({
+      await persistLiteracySession({ handle,
         session,
         trackerLanguageKey,
         letterTrackerChanges,

@@ -1,5 +1,7 @@
+global.__MASI_NO_DEFAULT_HANDLE__ = true;
 jest.mock('expo-sqlite', () => require('../test-support/expoSQLiteMock'));
-jest.mock('../src/services/supabaseClient', () => ({ supabase: {} }));
+jest.mock('../src/services/supabaseClient', () => ({
+  ...require('../test-support/supabaseTestConfig'), supabase: {} }));
 const { SERVER_COLUMNS, INTENTIONALLY_UNSYNCED } = require('../src/services/offlineSync').__contract;
 const fs = require('fs');
 const path = require('path');

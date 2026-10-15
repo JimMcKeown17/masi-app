@@ -1,6 +1,13 @@
-jest.mock('../src/services/sessionHistoryStatus', () => ({
-  startSessionHistoryPull: jest.fn(), resetSessionHistoryStatusForActorChange: jest.fn(),
+jest.mock('../test-support/handleServiceMocks', () => ({
+startSessionHistoryPull: jest.fn(),
+resetSessionHistoryStatusForActorChange: jest.fn(),
+getSyncStatus: jest.fn(),
+requeueTerminalRlsFailures: jest.fn(async () => 0),
+syncAll: jest.fn(async () => ({ success: true, totalSynced: 0, totalFailed: 0 })),
+pullLookups: jest.fn(async () => [{ id: 'job-1', name: 'EA' }]),
+enqueueSupabaseRequest: jest.fn()
 }));
+
 
 import React from 'react';
 import { act, render, waitFor } from '@testing-library/react-native';
@@ -9,9 +16,10 @@ import { ChildrenProvider, useChildren } from '../src/context/ChildrenContext';
 import { ClassesProvider, useClasses } from '../src/context/ClassesContext';
 import { LookupsProvider, useLookupsContext } from '../src/context/LookupsContext';
 import { TimeTrackingProvider, useTimeTracking } from '../src/context/TimeTrackingContext';
-import { fetchAndCacheSchools, getSyncStatus } from '../src/services/offlineSync';
+import { fetchAndCacheSchools } from '../src/services/offlineSync';
+import { getSyncStatus, pullLookups } from '../test-support/handleServiceMocks';
 import { pullPreloadedChildData } from '../src/services/preloadedChildData';
-import { enqueueSupabaseRequest } from '../src/services/supabaseRequestQueue';
+import { enqueueSupabaseRequest } from '../test-support/handleServiceMocks';
 import { timeEntriesRepository } from '../src/db/repositories/timeEntriesRepository';
 import { childrenRepository } from '../src/db/repositories/childrenRepository';
 import { classesRepository } from '../src/db/repositories/classesRepository';
@@ -24,15 +32,12 @@ import {
   schoolsRepository,
 } from '../src/db/repositories/referenceDataRepository';
 
-jest.mock('../src/services/offlineSync', () => ({
-  getSyncStatus: jest.fn(),
-  fetchAndCacheSchools: jest.fn(async () => []),
-  ensureReferenceData: jest.fn(async () => ({})),
-  requeueTerminalRlsFailures: jest.fn(async () => 0),
-  syncAll: jest.fn(async () => ({ success: true, totalSynced: 0, totalFailed: 0 })),
-}));
+jest.mock('../src/services/offlineSync', () => ({ ...jest.requireActual('../src/services/offlineSync'),
+fetchAndCacheSchools: jest.fn(async () => []),
+ensureReferenceData: jest.fn(async () => ({})) }));
 
 jest.mock('../src/services/supabaseClient', () => ({
+  ...require('../test-support/supabaseTestConfig'),
   supabase: {
     from: jest.fn(),
     auth: {
@@ -49,10 +54,11 @@ jest.mock('@react-native-community/netinfo', () => ({
 }));
 
 jest.mock('../src/context/AuthContext', () => ({
-  useAuth: jest.fn(() => ({ user: { id: 'user-1' } })),
+  useAuth: jest.fn(() => ({ user: { id: 'user-1' }, subscribeToAuthEvents: () => () => {} })),
 }));
 
 jest.mock('../src/db/repositories/childrenRepository', () => ({
+  ...jest.requireActual('../src/db/repositories/childrenRepository'),
   childrenRepository: {
     getMyChildren: jest.fn(),
     saveServerChildRows: jest.fn(),
@@ -63,6 +69,7 @@ jest.mock('../src/db/repositories/childrenRepository', () => ({
 }));
 
 jest.mock('../src/db/repositories/classesRepository', () => ({
+  ...jest.requireActual('../src/db/repositories/classesRepository'),
   classesRepository: {
     getClasses: jest.fn(),
     saveServerClassRows: jest.fn(),
@@ -73,12 +80,14 @@ jest.mock('../src/db/repositories/classesRepository', () => ({
 }));
 
 jest.mock('../src/db/repositories/classEaAssignmentsRepository', () => ({
+  ...jest.requireActual('../src/db/repositories/classEaAssignmentsRepository'),
   classEaAssignmentsRepository: {
     saveServerRows: jest.fn(),
   },
 }));
 
 jest.mock('../src/db/repositories/groupsRepository', () => ({
+  ...jest.requireActual('../src/db/repositories/groupsRepository'),
   groupsRepository: {
     getGroups: jest.fn(),
     getVisibleChildrenGroups: jest.fn(),
@@ -88,18 +97,21 @@ jest.mock('../src/db/repositories/groupsRepository', () => ({
 }));
 
 jest.mock('../src/db/repositories/groupEaAssignmentsRepository', () => ({
+  ...jest.requireActual('../src/db/repositories/groupEaAssignmentsRepository'),
   groupEaAssignmentsRepository: {
     saveServerRows: jest.fn(),
   },
 }));
 
 jest.mock('../src/db/repositories/syncOutboxRepository', () => ({
+  ...jest.requireActual('../src/db/repositories/syncOutboxRepository'),
   syncOutboxRepository: {
     getPendingHardDeleteIds: jest.fn(),
   },
 }));
 
 jest.mock('../src/db/repositories/syncStateRepository', () => ({
+  ...jest.requireActual('../src/db/repositories/syncStateRepository'),
   syncStateRepository: {
     getPullState: jest.fn(async () => null),
     getReconcileBreakerNotes: jest.fn(async () => []),
@@ -108,12 +120,14 @@ jest.mock('../src/db/repositories/syncStateRepository', () => ({
 }));
 
 jest.mock('../src/services/preloadedChildData', () => ({
+  ...jest.requireActual('../src/services/preloadedChildData'),
   PULL_SCOPE_COMPLETENESS_LIMIT: 1000,
   classifyPullFailureKind: jest.fn(() => 'query'),
   pullPreloadedChildData: jest.fn(),
 }));
 
 jest.mock('../src/db/repositories/referenceDataRepository', () => ({
+  ...jest.requireActual('../src/db/repositories/referenceDataRepository'),
   academicYearsRepository: {
     getActive: jest.fn(async () => ({ id: 'year-2026' })),
   },
@@ -127,22 +141,20 @@ jest.mock('../src/db/repositories/referenceDataRepository', () => ({
 }));
 
 jest.mock('../src/db/repositories/domainRepositoryUtils', () => ({
+  ...jest.requireActual('../src/db/repositories/domainRepositoryUtils'),
   getActiveProgrammeId: jest.fn(async () => 'programme-a'),
 }));
 
-jest.mock('../src/db/repositories/repositoryRuntime', () => ({
-  resolveDatabase: jest.fn(async () => ({})),
-}));
 
-jest.mock('../src/services/supabaseRequestQueue', () => ({
-  enqueueSupabaseRequest: jest.fn(),
-}));
+
+
 
 jest.mock('../src/services/locationService', () => ({
   getCurrentPosition: jest.fn(),
 }));
 
 jest.mock('../src/db/repositories/timeEntriesRepository', () => ({
+  ...jest.requireActual('../src/db/repositories/timeEntriesRepository'),
   OPEN_TIME_ENTRY_EXISTS: 'OPEN_TIME_ENTRY_EXISTS',
   timeEntriesRepository: {
     getActiveTimeEntry: jest.fn(),
@@ -291,7 +303,7 @@ describe('context render isolation', () => {
       expect(childrenRepository.getMyChildren).toHaveBeenCalledWith('user-1');
       expect(groupsRepository.getGroups).toHaveBeenCalledWith({ userId: 'user-1' });
       expect(groupsRepository.getVisibleChildrenGroups).toHaveBeenCalledWith({ userId: 'user-1' });
-      expect(pullPreloadedChildData).toHaveBeenCalledWith({ userId: 'user-1' });
+      expect(pullPreloadedChildData).toHaveBeenCalledWith(expect.objectContaining({ userId: 'user-1' }));
       expect(childrenApi.loading).toBe(false);
     });
   });
@@ -310,7 +322,7 @@ describe('context render isolation', () => {
       expect(childrenRepository.getMyChildren).toHaveBeenCalledWith('user-1');
       expect(groupsRepository.getGroups).toHaveBeenCalledWith({ userId: 'user-1' });
       expect(groupsRepository.getVisibleChildrenGroups).toHaveBeenCalledWith({ userId: 'user-1' });
-      expect(pullPreloadedChildData).toHaveBeenCalledWith({ userId: 'user-1' });
+      expect(pullPreloadedChildData).toHaveBeenCalledWith(expect.objectContaining({ userId: 'user-1' }));
       expect(childrenApi.loading).toBe(false);
     });
     const rendersAfterSettle = childrenRenders;
@@ -392,8 +404,8 @@ describe('context render isolation', () => {
 
     await waitFor(() => {
       expect(jobTitlesRepository.getAll).toHaveBeenCalled();
-      expect(enqueueSupabaseRequest).toHaveBeenCalled();
-      expect(jobTitlesRepository.replaceFromServer).toHaveBeenCalledWith([]);
+      expect(pullLookups).toHaveBeenCalled();
+      expect(lookupsApi.jobTitles).toEqual([{ id: 'job-1', name: 'EA' }]);
       expect(lookupsApi.loading).toBe(false);
     });
   });
@@ -410,8 +422,8 @@ describe('context render isolation', () => {
     await waitFor(() => {
       expect(getSyncStatus).toHaveBeenCalled();
       expect(jobTitlesRepository.getAll).toHaveBeenCalled();
-      expect(enqueueSupabaseRequest).toHaveBeenCalled();
-      expect(jobTitlesRepository.replaceFromServer).toHaveBeenCalledWith([]);
+      expect(pullLookups).toHaveBeenCalled();
+      expect(lookupsApi.jobTitles).toEqual([{ id: 'job-1', name: 'EA' }]);
       expect(lookupsApi.loading).toBe(false);
     });
     const rendersAfterSettle = lookupsRenders;

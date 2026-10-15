@@ -15,6 +15,7 @@ jest.mock('../src/context/OfflineContext', () => ({
 }));
 
 jest.mock('../src/db/repositories/assessmentsRepository', () => ({
+  ...jest.requireActual('../src/db/repositories/assessmentsRepository'),
   assessmentsRepository: {
     saveAssessment: jest.fn(),
   },

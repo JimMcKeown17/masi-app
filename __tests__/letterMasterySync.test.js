@@ -1,5 +1,6 @@
 jest.mock('expo-sqlite', () => require('../test-support/expoSQLiteMock'));
-jest.mock('../src/services/supabaseClient', () => ({ supabase: {} }));
+jest.mock('../src/services/supabaseClient', () => ({
+  ...require('../test-support/supabaseTestConfig'), supabase: {} }));
 
 import { runMigrations } from '../src/db/migrations';
 import { createOutboxSyncEngine } from '../src/services/offlineSync';
@@ -131,7 +132,7 @@ describe('letter_mastery sync — deterministic logical-key push ids (idempotent
     await seedCoreData(serverDb);
     await seedChild(serverDb);
     const { supabaseClient } = createServerBackedSupabase(serverDb);
-    const engine = createOutboxSyncEngine({ getAuthSession: liveTestSession, database: db, supabaseClient });
+    const engine = createOutboxSyncEngine({ enqueueRequest: (task) => task(), getAuthSession: liveTestSession, database: db, supabaseClient });
 
     const result = await engine.syncAll();
 
@@ -163,7 +164,7 @@ describe('letter_mastery sync — deterministic logical-key push ids (idempotent
     await seedCoreData(serverDb);
     await seedChild(serverDb);
     const { supabaseClient } = createServerBackedSupabase(serverDb);
-    const engine = createOutboxSyncEngine({ getAuthSession: liveTestSession, database: db, supabaseClient });
+    const engine = createOutboxSyncEngine({ enqueueRequest: (task) => task(), getAuthSession: liveTestSession, database: db, supabaseClient });
 
     const result = await engine.syncAll();
 
@@ -189,7 +190,7 @@ describe('letter_mastery sync — deterministic logical-key push ids (idempotent
       await seedCoreData(db);
       await seedChild(db);
       await createMasteryRepository({ database: db }).saveLetterMasteryRecord({ ...LOGICAL_KEY, synced: false });
-      const engine = createOutboxSyncEngine({ getAuthSession: liveTestSession, database: db, supabaseClient });
+      const engine = createOutboxSyncEngine({ enqueueRequest: (task) => task(), getAuthSession: liveTestSession, database: db, supabaseClient });
       const result = await engine.syncAll();
       expect(result.failedRecords).toEqual([]); // second install does not 23505
       await db.closeAsync();
@@ -226,7 +227,7 @@ describe('letter_mastery sync — deterministic logical-key push ids (idempotent
     await insertMastery(serverDb, LEGACY_SERVER_ID);
 
     const { supabaseClient } = createServerBackedSupabase(serverDb);
-    const engine = createOutboxSyncEngine({ getAuthSession: liveTestSession, database: db, supabaseClient });
+    const engine = createOutboxSyncEngine({ enqueueRequest: (task) => task(), getAuthSession: liveTestSession, database: db, supabaseClient });
 
     const result = await engine.syncAll();
 

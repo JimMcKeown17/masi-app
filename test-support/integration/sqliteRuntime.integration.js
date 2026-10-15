@@ -1,16 +1,14 @@
 const fs = require('fs');
 
-const { getDatabase } = require('../../src/db/client');
-const { runMigrations } = require('../../src/db/migrations');
+const { getTestWriter, TEST_ACTOR_ID } = require('../testDatabase');
 
 describe('SQLite integration runtime', () => {
   test('uses a file-backed database instead of the default in-memory test database', async () => {
-    const db = await getDatabase();
-    await runMigrations(db);
-
-    expect(db.filename).toEqual(expect.stringMatching(/\.sqlite$/));
-    expect(db.filename).not.toBe(':memory:');
-    expect(fs.existsSync(db.filename)).toBe(true);
+    const db = await getTestWriter();
+    const { file } = await db.getFirstAsync('PRAGMA database_list');
+    expect(file).toEqual(expect.stringContaining(`masi-${TEST_ACTOR_ID}.db`));
+    expect(file).not.toBe(':memory:');
+    expect(fs.existsSync(file)).toBe(true);
 
     await db.runAsync(
       'insert into local_state (key, value) values (?, ?)',

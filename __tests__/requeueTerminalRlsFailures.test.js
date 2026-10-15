@@ -1,5 +1,6 @@
 jest.mock('expo-sqlite', () => require('../test-support/expoSQLiteMock'));
 jest.mock('../src/services/supabaseClient', () => ({
+  ...require('../test-support/supabaseTestConfig'),
   supabase: { auth: { getSession: jest.fn() } },
 }));
 
@@ -37,7 +38,7 @@ describe('requeueTerminalRlsFailures', () => {
     await runMigrations(db);
     await seedCoreData(db);
     outboxRepository = createSyncOutboxRepository({ database: db });
-    engine = createOutboxSyncEngine({
+    engine = createOutboxSyncEngine({ enqueueRequest: (task) => task(),
       database: db,
       outboxRepository,
       stateRepository: createSyncStateRepository({ database: db }),

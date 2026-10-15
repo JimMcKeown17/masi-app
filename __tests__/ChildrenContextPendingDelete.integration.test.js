@@ -1,6 +1,8 @@
-jest.mock('../src/services/sessionHistoryStatus', () => ({
-  startSessionHistoryPull: jest.fn(), resetSessionHistoryStatusForActorChange: jest.fn(),
+jest.mock('../test-support/handleServiceMocks', () => ({
+startSessionHistoryPull: jest.fn(),
+resetSessionHistoryStatusForActorChange: jest.fn()
 }));
+
 
 jest.mock('expo-sqlite', () => require('../test-support/expoSQLiteMock'));
 
@@ -9,7 +11,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { act, renderHook, waitFor } from '@testing-library/react-native';
 import { __reset, __setDatabaseFactory } from 'expo-sqlite';
 import { ChildrenProvider, useChildren } from '../src/context/ChildrenContext';
-import { resetDatabaseConnectionForTests, getWriter } from '../src/db/client';
+import { initializeTestDatabase, closeDefaultTestHandle, getTestWriter } from '../test-support/testDatabase';
 import { runMigrations } from '../src/db/migrations';
 import { syncOutboxRepository } from '../src/db/repositories/syncOutboxRepository';
 import { createBetterSqliteTestDatabase } from '../test-support/betterSqliteAdapter';
@@ -23,12 +25,14 @@ jest.mock('../src/context/AuthContext', () => ({
 
 jest.mock('../src/context/OfflineContext', () => ({
   useOffline: () => ({
+    isOnline: true,
     refreshSyncStatus: jest.fn(),
     isSyncing: false,
   }),
 }));
 
 jest.mock('../src/services/preloadedChildData', () => ({
+  ...jest.requireActual('../src/services/preloadedChildData'),
   pullPreloadedChildData: (...args) => mockPullPreloadedChildData(...args),
 }));
 
@@ -41,12 +45,13 @@ let testDb;
 beforeEach(async () => {
   jest.clearAllMocks();
   await AsyncStorage.clear();
-  await resetDatabaseConnectionForTests();
+  await closeDefaultTestHandle();
   __reset();
   testDb = createBetterSqliteTestDatabase();
   __setDatabaseFactory(async () => testDb);
+  await initializeTestDatabase();
 
-  const db = await getWriter();
+  const db = await getTestWriter();
   expect(db).toBe(testDb);
   await seedCoreData(db);
   await testDb.execAsync('PRAGMA foreign_keys = ON');
@@ -107,7 +112,7 @@ beforeEach(async () => {
 });
 
 afterEach(async () => {
-  await resetDatabaseConnectionForTests();
+  await closeDefaultTestHandle();
   __reset();
 });
 
@@ -174,7 +179,7 @@ test('pending hard-delete filtering avoids FK-invalid relationship resurrection'
 
   const { result } = renderHook(() => useChildren(), { wrapper });
 
-  await waitFor(() => expect(mockPullPreloadedChildData).toHaveBeenCalledWith({ userId: 'user-1' }));
+  await waitFor(() => expect(mockPullPreloadedChildData).toHaveBeenCalledWith(expect.objectContaining({ userId: 'user-1' })));
   await waitFor(() => expect(result.current.loading).toBe(false));
 
   expect(result.current.children.map((row) => row.id)).not.toContain('child-9');

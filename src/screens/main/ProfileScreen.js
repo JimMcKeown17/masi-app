@@ -1,3 +1,4 @@
+import { useSignedInEA } from '../../context/SignedInEAContext';
 import React, { useCallback, useContext, useState } from 'react';
 import { View, StyleSheet, ScrollView, KeyboardAvoidingView, Platform, Linking, Alert } from 'react-native';
 import { TextInput, Button, Text, Card, Divider, Snackbar, SegmentedButtons } from 'react-native-paper';
@@ -35,6 +36,8 @@ function CaptureModeFocusLoader({ loadCaptureMode }) {
 }
 
 export default function ProfileScreen({ navigation }) {
+  const { handle } = useSignedInEA();
+
   const { user, profile, updatePassword, signOut } = useAuth();
   const releaseMetadata = getReleaseMetadata();
   const runtimeDiagnostics = getRuntimeDiagnostics();
@@ -112,7 +115,7 @@ export default function ProfileScreen({ navigation }) {
           onPress: async () => {
             setDatabaseExportLoading(true);
             try {
-              const result = await exportDatabase();
+              const result = await exportDatabase({ handle });
               if (result.success) {
                 showMessage('Database exported successfully');
               } else {

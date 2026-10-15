@@ -1,4 +1,5 @@
 jest.mock('../src/services/supabaseClient', () => ({
+  ...require('../test-support/supabaseTestConfig'),
   supabase: {
     from: jest.fn(),
   },

@@ -43,7 +43,7 @@ export const createHandleServices = (handle) => {
     syncState: createSyncStateRepository(options),
     localState: createLocalStateRepository(options),
   };
-  // Bind the composite graph too; its factory's legacy defaults remain until Task 5.
+  // Bind the composite graph to the same actor as its leaf repositories.
   repositories.classOnboarding = createClassOnboardingRepository({
     ...options, classes: repositories.classes, localState: repositories.localState,
   });

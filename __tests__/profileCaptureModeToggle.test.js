@@ -79,6 +79,7 @@ jest.mock('../src/context/AuthContext', () => ({
 }));
 
 jest.mock('../src/services/supabaseClient', () => ({
+  ...require('../test-support/supabaseTestConfig'),
   supabase: {
     auth: {
       signInWithPassword: jest.fn(),

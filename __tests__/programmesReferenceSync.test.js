@@ -2,14 +2,14 @@ jest.mock('expo-sqlite', () => require('../test-support/expoSQLiteMock'));
 
 import { __reset as resetExpoSQLiteMock } from 'expo-sqlite';
 import { createBetterSqliteTestDatabase } from '../test-support/betterSqliteAdapter';
-import { resetDatabaseConnectionForTests } from '../src/db/client';
+import { closeDefaultTestHandle } from '../test-support/testDatabase';
 import { runMigrations } from '../src/db/migrations';
 import { createReferenceDataRepository } from '../src/db/repositories/referenceDataRepository';
 
 describe('programmes reference sync — daily session target', () => {
   beforeEach(() => {
     resetExpoSQLiteMock();
-    resetDatabaseConnectionForTests();
+    closeDefaultTestHandle();
   });
 
   test('persists daily_session_target and daily_session_ceiling pulled from the server', async () => {

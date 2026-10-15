@@ -12,7 +12,7 @@ import {
   upsertDomainRecord,
 } from './domainRepositoryUtils';
 import { syncStatusFromSynced } from './sqliteRepositoryUtils';
-import { syncStateRepository } from './syncStateRepository';
+import { createSyncStateRepository } from './syncStateRepository';
 
 const SESSION_COLUMNS = [
   'id',
@@ -317,7 +317,7 @@ export const createSessionsRepository = ({ database } = {}) => {
       }
       savedFamilies += 1;
     }
-    await syncStateRepository.setPullState(scope, pullState, { transaction: txn });
+    await createSyncStateRepository({ database }).setPullState(scope, pullState, { transaction: txn });
     // Re-check after every awaited write, including the cursor. No await may follow this
     // check inside the transaction callback: an actor change must roll back the whole page.
     if (admit && !admit()) {

@@ -10,6 +10,7 @@ let mockStorageKey = 'test-auth-token';
 let mockSupabaseUrl = 'https://segygjzpujphwvrubusm.supabase.co';
 
 jest.mock('../src/services/supabaseClient', () => ({
+  ...require('../test-support/supabaseTestConfig'),
   supabase: {
     auth: {
       get storageKey() {

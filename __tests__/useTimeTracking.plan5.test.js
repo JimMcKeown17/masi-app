@@ -24,6 +24,7 @@ jest.mock('uuid', () => ({
 }));
 
 jest.mock('../src/db/repositories/timeEntriesRepository', () => ({
+  ...jest.requireActual('../src/db/repositories/timeEntriesRepository'),
   OPEN_TIME_ENTRY_EXISTS: 'OPEN_TIME_ENTRY_EXISTS',
   timeEntriesRepository: {
     getActiveTimeEntry: jest.fn(),

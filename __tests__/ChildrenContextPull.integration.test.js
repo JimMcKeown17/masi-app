@@ -1,18 +1,22 @@
-jest.mock('expo-sqlite', () => require('../test-support/expoSQLiteMock'));
-jest.mock('../src/services/sessionHistoryStatus', () => ({
-  startSessionHistoryPull: jest.fn(), resetSessionHistoryStatusForActorChange: jest.fn(),
+import { resetReferenceDataBarrierForTests } from '../test-support/handleServiceTestAccess';
+jest.mock('../test-support/handleServiceMocks', () => ({
+startSessionHistoryPull: jest.fn(),
+resetSessionHistoryStatusForActorChange: jest.fn()
 }));
+jest.mock('expo-sqlite', () => require('../test-support/expoSQLiteMock'));
+
 
 import React from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { act, renderHook, waitFor } from '@testing-library/react-native';
 import { __reset, __setDatabaseFactory } from 'expo-sqlite';
 import { ChildrenProvider, useChildren } from '../src/context/ChildrenContext';
-import { getWriter, resetDatabaseConnectionForTests } from '../src/db/client';
+import { initializeTestDatabase, getTestWriter, closeDefaultTestHandle } from '../test-support/testDatabase';
 import { childrenRepository } from '../src/db/repositories/childrenRepository';
 import { groupsRepository } from '../src/db/repositories/groupsRepository';
 import { groupEaAssignmentsRepository } from '../src/db/repositories/groupEaAssignmentsRepository';
 import { __testables as offlineSyncTestables } from '../src/services/offlineSync';
+
 import { createBetterSqliteTestDatabase } from '../test-support/betterSqliteAdapter';
 import { seedCoreData } from '../test-support/sqliteRepositoryTestUtils';
 
@@ -26,16 +30,19 @@ jest.mock('../src/context/AuthContext', () => ({
 
 jest.mock('../src/context/OfflineContext', () => ({
   useOffline: () => ({
+    isOnline: true,
     refreshSyncStatus: (...args) => mockRefreshSyncStatus(...args),
     isSyncing: false,
   }),
 }));
 
 jest.mock('../src/services/preloadedChildData', () => ({
+  ...jest.requireActual('../src/services/preloadedChildData'),
   pullPreloadedChildData: (...args) => mockPullPreloadedChildData(...args),
 }));
 
 jest.mock('../src/services/supabaseClient', () => ({
+  ...require('../test-support/supabaseTestConfig'),
   supabase: {
     from: (...args) => mockSupabaseFrom(...args),
   },
@@ -298,13 +305,14 @@ let testDb;
 
 beforeEach(async () => {
   jest.clearAllMocks();
-  offlineSyncTestables.resetReferenceDataBarrierForTests();
+  resetReferenceDataBarrierForTests();
   await AsyncStorage.clear();
-  await resetDatabaseConnectionForTests();
+  await closeDefaultTestHandle();
   __reset();
   testDb = createBetterSqliteTestDatabase();
   __setDatabaseFactory(async () => testDb);
-  await getWriter();
+  await initializeTestDatabase();
+  await getTestWriter();
   await testDb.execAsync('PRAGMA foreign_keys = ON');
 
   mockRefreshSyncStatus.mockResolvedValue(undefined);
@@ -322,7 +330,7 @@ beforeEach(async () => {
 });
 
 afterEach(async () => {
-  await resetDatabaseConnectionForTests();
+  await closeDefaultTestHandle();
   __reset();
 });
 
@@ -331,7 +339,7 @@ test('a child edit made while the network pull is pending survives in React stat
   const deferredPull = createDeferred();
   mockPullPreloadedChildData.mockReturnValue(deferredPull.promise);
   const { result } = renderHook(() => useChildren(), { wrapper });
-  await waitFor(() => expect(mockPullPreloadedChildData).toHaveBeenCalledWith({ userId: 'user-1' }));
+  await waitFor(() => expect(mockPullPreloadedChildData).toHaveBeenCalledWith(expect.objectContaining({ userId: 'user-1' })));
   await waitFor(() => expect(result.current.children).toEqual([
     expect.objectContaining({ id: 'child-1', first_name: 'Original Local Name' }),
   ]));

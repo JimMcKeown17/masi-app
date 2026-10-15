@@ -1,3 +1,4 @@
+global.__MASI_NO_DEFAULT_HANDLE__ = true;
 // __tests__/sessionHistoryFamilyDeltaMigration.test.js
 const fs = require('fs');
 const path = require('path');

@@ -1,5 +1,6 @@
 jest.mock('expo-sqlite', () => require('../test-support/expoSQLiteMock'));
-jest.mock('../src/services/supabaseClient', () => ({ supabase: {} }));
+jest.mock('../src/services/supabaseClient', () => ({
+  ...require('../test-support/supabaseTestConfig'), supabase: {} }));
 
 import { createBetterSqliteTestDatabase } from '../test-support/betterSqliteAdapter';
 import { runMigrations } from '../src/db/migrations';
@@ -95,7 +96,7 @@ it('finalizes a 250-row success batch in O(chunks) transactions (not O(N)), CAS 
   };
 
   const { supabaseClient } = createSuccessSupabaseMock();
-  const engine = createOutboxSyncEngine({ getAuthSession: liveTestSession, database: db, supabaseClient });
+  const engine = createOutboxSyncEngine({ enqueueRequest: (task) => task(), getAuthSession: liveTestSession, database: db, supabaseClient });
   await engine.syncAll();
 
   // Bulk finalize: 250 rows / 200 per chunk = 2 finalize transactions.

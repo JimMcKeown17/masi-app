@@ -46,6 +46,7 @@ jest.mock('../src/context/AuthContext', () => ({ useAuth: () => mockUseAuth() })
 jest.mock('../src/context/ChildrenContext', () => ({ useChildren: () => mockUseChildren() }));
 jest.mock('../src/context/ClassesContext', () => ({ useClasses: () => mockUseClasses() }));
 jest.mock('../src/db/repositories/assessmentsRepository', () => ({
+  ...jest.requireActual('../src/db/repositories/assessmentsRepository'),
   assessmentsRepository: {
     getAssessments: (...args) => mockGetAssessments(...args),
     countAssessments: (...args) => mockCountAssessments(...args),

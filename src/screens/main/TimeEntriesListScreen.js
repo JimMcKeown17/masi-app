@@ -1,3 +1,4 @@
+import { useSignedInEA } from '../../context/SignedInEAContext';
 import React, { useState, useCallback } from 'react';
 import { View, StyleSheet, ScrollView, SectionList, RefreshControl } from 'react-native';
 import { Card, Text, Divider, Chip, Snackbar } from 'react-native-paper';
@@ -5,12 +6,15 @@ import { useFocusEffect } from '@react-navigation/native';
 import { useAuth } from '../../context/AuthContext';
 import { useOffline } from '../../context/OfflineContext';
 import { colors, spacing, borderRadius, shadows } from '../../constants/colors';
-import { timeEntriesRepository } from '../../db/repositories/timeEntriesRepository';
+
 import { formatCoordinates } from '../../services/locationService';
 import { describeSyncState } from '../../utils/syncStatusPresenter';
 import { formatDisplayDate, toLocalDateString } from '../../utils/localDate';
 
 export default function TimeEntriesListScreen() {
+  const { repositories } = useSignedInEA();
+  const { timeEntries: timeEntriesRepository } = repositories;
+
   const { user } = useAuth();
   const { syncNow } = useOffline();
 

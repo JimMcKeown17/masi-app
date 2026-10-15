@@ -1,3 +1,4 @@
+import { getTestWriter } from '../test-support/testDatabase';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { childrenRepository } from '../src/db/repositories/childrenRepository';
 import { classesRepository } from '../src/db/repositories/classesRepository';
@@ -9,7 +10,7 @@ import { resolveDatabase } from '../src/db/repositories/repositoryRuntime';
 // Full integration tests would need a test wrapper with all providers.
 
 const seedReferenceData = async () => {
-  const db = await resolveDatabase();
+  const db = await getTestWriter();
   await db.runAsync(
     "insert into programmes (id, code, name, is_active, sync_status) values ('programme-a', 'literacy', 'Literacy', 1, 'synced')"
   );

@@ -1,11 +1,15 @@
+import { requireCurrentHandle } from '../src/session/signedInHandle';
+import { repositoriesForTest } from '../test-support/legacyHandleMocks';
 import { loadMasteryState, countMastered } from '../src/utils/masteryState';
 import { assessmentsRepository } from '../src/db/repositories/assessmentsRepository';
 import { masteryRepository } from '../src/db/repositories/masteryRepository';
 
 jest.mock('../src/db/repositories/assessmentsRepository', () => ({
+  ...jest.requireActual('../src/db/repositories/assessmentsRepository'),
   assessmentsRepository: { getAssessments: jest.fn() },
 }));
 jest.mock('../src/db/repositories/masteryRepository', () => ({
+  ...jest.requireActual('../src/db/repositories/masteryRepository'),
   masteryRepository: { getLetterMastery: jest.fn() },
 }));
 
@@ -38,7 +42,7 @@ describe('loadMasteryState', () => {
 
   test('picks the latest LETTER assessment even when a word assessment is newer', async () => {
     assessmentsRepository.getAssessments.mockResolvedValue([letterAssessment, newerWordAssessment]);
-    const state = await loadMasteryState({ userId: 'user-1', childId: 'child-1', languageKey: 'english' });
+    const state = await loadMasteryState({ repositories: repositoriesForTest(requireCurrentHandle()), userId: 'user-1', childId: 'child-1', languageKey: 'english' });
     expect(state.latestAssessment.id).toBe('a-letter');
     expect(state.assessmentMastered.size).toBeGreaterThan(0);
   });
@@ -47,7 +51,7 @@ describe('loadMasteryState', () => {
     const legacy = { ...letterAssessment, id: 'a-legacy' };
     delete legacy.assessment_type;
     assessmentsRepository.getAssessments.mockResolvedValue([legacy]);
-    const state = await loadMasteryState({ userId: 'user-1', childId: 'child-1', languageKey: 'english' });
+    const state = await loadMasteryState({ repositories: repositoriesForTest(requireCurrentHandle()), userId: 'user-1', childId: 'child-1', languageKey: 'english' });
     expect(state.latestAssessment.id).toBe('a-legacy');
   });
 
@@ -58,12 +62,12 @@ describe('loadMasteryState', () => {
       { id: 'm2', child_id: 'child-1', letter: 'b', language: 'English', _deleted: true },
       { id: 'm3', child_id: 'child-1', letter: 'c', language: 'isiXhosa', _deleted: false },
     ]);
-    const state = await loadMasteryState({ userId: 'user-1', childId: 'child-1', languageKey: 'english' });
+    const state = await loadMasteryState({ repositories: repositoriesForTest(requireCurrentHandle()), userId: 'user-1', childId: 'child-1', languageKey: 'english' });
     expect(state.taughtRecords.map(r => r.id)).toEqual(['m1']);
   });
 
   test('unknown language key returns empty state without repository calls', async () => {
-    const state = await loadMasteryState({ userId: 'user-1', childId: 'child-1', languageKey: 'klingon' });
+    const state = await loadMasteryState({ repositories: repositoriesForTest(requireCurrentHandle()), userId: 'user-1', childId: 'child-1', languageKey: 'klingon' });
     expect(state.assessmentMastered.size).toBe(0);
     expect(state.taughtRecords).toEqual([]);
     expect(assessmentsRepository.getAssessments).not.toHaveBeenCalled();

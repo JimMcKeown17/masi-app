@@ -82,6 +82,7 @@ jest.mock('../src/context/ClassesContext', () => ({
 }));
 
 jest.mock('../src/db/repositories/assessmentsRepository', () => ({
+  ...jest.requireActual('../src/db/repositories/assessmentsRepository'),
   assessmentsRepository: {
     getAssessments: jest.fn(),
     countAssessments: jest.fn(),

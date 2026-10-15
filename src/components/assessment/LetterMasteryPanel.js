@@ -1,3 +1,4 @@
+import { useSignedInEA } from '../../context/SignedInEAContext';
 import React, { useState, useCallback } from 'react';
 import { View, StyleSheet, Pressable, useWindowDimensions } from 'react-native';
 import { Text, ActivityIndicator } from 'react-native-paper';
@@ -8,7 +9,7 @@ import { letterStateColors } from '../../constants/letterStateColors';
 import { LETTER_SETS, PEDAGOGICAL_ORDERS } from '../../constants/egraConstants';
 import { normalizeLanguageKey } from '../../utils/letterMastery';
 import { loadMasteryState } from '../../utils/masteryState';
-import { masteryRepository } from '../../db/repositories/masteryRepository';
+
 import { useAuth } from '../../context/AuthContext';
 import { useOffline } from '../../context/OfflineContext';
 
@@ -17,6 +18,9 @@ const GRID_GAP = spacing.sm;
 const CELL_COLORS = letterStateColors;
 
 export default function LetterMasteryPanel({ child, classItem }) {
+  const { repositories } = useSignedInEA();
+  const { mastery: masteryRepository } = repositories;
+
   const { user } = useAuth();
   const { refreshSyncStatus, triggerBackgroundSync } = useOffline();
   const { width: windowWidth } = useWindowDimensions();
@@ -44,7 +48,7 @@ export default function LetterMasteryPanel({ child, classItem }) {
     try {
       setLoading(true);
 
-      const { assessmentMastered: masteredSet, latestAssessment, taughtRecords } = await loadMasteryState({
+      const { assessmentMastered: masteredSet, latestAssessment, taughtRecords } = await loadMasteryState({ repositories,
         userId: user.id,
         childId: child.id,
         languageKey,

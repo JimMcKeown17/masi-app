@@ -1,11 +1,10 @@
+import { useAuth } from './AuthContext';
+import { isStaleActorError } from '../session/staleActor';
+import { useSignedInEA } from './SignedInEAContext';
 import React, { createContext, useState, useEffect, useContext, useRef, useCallback, useMemo } from 'react';
 import NetInfo from '@react-native-community/netinfo';
 import { AppState } from 'react-native';
-import { supabase } from '../services/supabaseClient';
-import { syncAll, getSyncStatus, requeueTerminalRlsFailures } from '../services/offlineSync';
-import { runStartupRepairs } from '../services/startupRepairs';
-import { startSessionHistoryPull } from '../services/sessionHistoryStatus';
-import { syncStateRepository } from '../db/repositories/syncStateRepository';
+
 import { captureOperationalError, reportSyncResult, reportSyncStatus } from '../services/observability';
 
 const BACKGROUND_SYNC_DEBOUNCE_MS = 1000;
@@ -37,7 +36,11 @@ const OfflineContext = createContext({
 });
 
 export const OfflineProvider = ({ children }) => {
-  const [isOnline, setIsOnline] = useState(true);
+  const { handle, repositories, services } = useSignedInEA();
+  const { syncState: syncStateRepository } = repositories;
+
+  const { subscribeToAuthEvents } = useAuth();
+  const [isOnline, setIsOnline] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
   const [unsyncedCount, setUnsyncedCount] = useState(0);
   const [inFlightCount, setInFlightCount] = useState(0);
@@ -53,41 +56,13 @@ export const OfflineProvider = ({ children }) => {
   const isOnlineRef = useRef(isOnline);
   const readyCountRef = useRef(0);
   const inFlightCountRef = useRef(0);
-  const currentUserIdRef = useRef(null);
   const triggerBackgroundSyncRef = useRef(() => {});
   const reconcileBreakerAuthorizationsRef = useRef(new Set());
-  const startupRepairPromiseRef = useRef(null);
-  const startupRepairsReadyRef = useRef(false);
 
   // Keep ref in sync with state so event-listener closures always read current value
   useEffect(() => {
     isOnlineRef.current = isOnline;
   }, [isOnline]);
-
-  const ensureStartupRepairs = useCallback(() => {
-    if (!startupRepairPromiseRef.current) {
-      startupRepairPromiseRef.current = runStartupRepairs()
-        .catch((error) => {
-          console.error('Startup repair failed:', error);
-          captureOperationalError(error, {
-            category: 'startup_repair_failed',
-            context: {
-              repairVersion: error.repairVersion ?? null,
-              repairName: error.repairName || null,
-              completedVersion: error.completedVersion ?? null,
-            },
-          });
-          // Do not block the app for a best-effort data repair. Its durable marker was not
-          // advanced, so a fresh app launch retries before that launch's first sync.
-          return { success: false, error };
-        })
-        .then((result) => {
-          startupRepairsReadyRef.current = true;
-          return result;
-        });
-    }
-    return startupRepairPromiseRef.current;
-  }, []);
 
   /**
    * Update sync status (unsynced count, last sync time, etc.)
@@ -95,9 +70,10 @@ export const OfflineProvider = ({ children }) => {
   const refreshSyncStatus = useCallback(async ({ autoTrigger = true } = {}) => {
     try {
       const [outboxStatus, reconcileBreakerNotes] = await Promise.all([
-        getSyncStatus({ ownerUserId: currentUserIdRef.current }),
+        services.syncEngine.getSyncStatus({ ownerUserId: handle.userId }),
         syncStateRepository.getReconcileBreakerNotes(),
       ]);
+      if (!handle.isCurrent()) return null;
       const status = {
         ...outboxStatus,
         needsAttentionCount: (outboxStatus.needsAttentionCount || 0) + reconcileBreakerNotes.length,
@@ -124,10 +100,11 @@ export const OfflineProvider = ({ children }) => {
 
       return status;
     } catch (error) {
+      if (isStaleActorError(error)) return null;
       console.error('Error refreshing sync status:', error);
       captureOperationalError(error, {
         category: 'sync_status_refresh',
-        context: { ownerUserId: currentUserIdRef.current },
+        context: { ownerUserId: handle.userId },
       });
       return null;
     }
@@ -155,7 +132,7 @@ export const OfflineProvider = ({ children }) => {
       return activeSyncPromise.current;
     }
 
-    if (!isOnlineRef.current) {
+    if (!handle.isCurrent() || !isOnlineRef.current) {
       console.log('Cannot sync while offline');
       return Promise.resolve(null);
     }
@@ -163,11 +140,8 @@ export const OfflineProvider = ({ children }) => {
     const syncPromise = (async () => {
       setIsSyncing(true);
       try {
-        if (!startupRepairsReadyRef.current) {
-          await ensureStartupRepairs();
-        }
         console.log('Starting sync...');
-        const result = await syncAll({ force });
+        const result = await services.syncEngine.syncAll({ force });
         setLastSyncResult(result);
         try {
           reportSyncResult(result, {
@@ -182,6 +156,7 @@ export const OfflineProvider = ({ children }) => {
         console.log('Sync completed:', result);
         return result;
       } catch (error) {
+        if (isStaleActorError(error)) return null;
         console.error('Sync failed:', error);
         captureOperationalError(error, {
           category: 'sync_pass_failed',
@@ -198,13 +173,13 @@ export const OfflineProvider = ({ children }) => {
     activeSyncPromise.current = syncPromise;
     activeSyncIsForced.current = force;
     return syncPromise;
-  }, [ensureStartupRepairs, refreshSyncStatus]);
+  }, [handle, services, refreshSyncStatus]);
 
   /**
    * Debounced, non-blocking background sync trigger for write paths and listeners.
    */
   const triggerBackgroundSync = useCallback(() => {
-    if (!isOnlineRef.current) return undefined;
+    if (!handle.isCurrent() || !isOnlineRef.current) return undefined;
 
     if (backgroundSyncTimer.current) {
       clearTimeout(backgroundSyncTimer.current);
@@ -236,9 +211,11 @@ export const OfflineProvider = ({ children }) => {
       if (!isStale(childDataState) && !isStale(classesState)) return false;
 
       console.log('Requesting domain pull:', reason);
+      if (!handle.isCurrent()) return false;
       setDomainPullNonce((nonce) => nonce + 1);
       return true;
     } catch (error) {
+      if (isStaleActorError(error)) return null;
       console.error('Error checking domain pull staleness:', error);
       return false;
     }
@@ -247,12 +224,12 @@ export const OfflineProvider = ({ children }) => {
   const requestDomainPullOrResumeHistory = useCallback(async (reason) => {
     // The roster staleness check runs exactly as before (online or not); only the new
     // history resume is gated on connectivity.
-    const userId = currentUserIdRef.current;
+    const userId = handle.userId;
     const rosterPullRequested = await requestDomainPull(reason);
     // A requested roster pull starts history after persisting delivery assignments.
     // Otherwise let history's own admission and single flight decide whether to run.
-    if (!rosterPullRequested && userId && isOnlineRef.current && currentUserIdRef.current === userId) {
-      startSessionHistoryPull({ userId });
+    if (!rosterPullRequested && userId && isOnlineRef.current && handle.isCurrent()) {
+      void services.sessionHistory.start().catch((error) => { if (!isStaleActorError(error)) console.error('Session history failed:', error); });
     }
   }, [requestDomainPull]);
 
@@ -280,6 +257,7 @@ export const OfflineProvider = ({ children }) => {
    */
   useEffect(() => {
     const unsubscribe = NetInfo.addEventListener(state => {
+      if (!handle.isCurrent()) return;
       const online = Boolean(state.isConnected) && state.isInternetReachable !== false;
       console.log('Network state changed:', {
         isConnected: state.isConnected,
@@ -310,6 +288,7 @@ export const OfflineProvider = ({ children }) => {
    */
   useEffect(() => {
     const subscription = AppState.addEventListener('change', nextAppState => {
+      if (!handle.isCurrent()) return;
       // App came to foreground
       if (appState.current.match(/inactive|background/) && nextAppState === 'active') {
         console.log('App came to foreground');
@@ -337,56 +316,45 @@ export const OfflineProvider = ({ children }) => {
     return () => subscription.remove();
   }, [refreshSyncStatus, requestDomainPullOrResumeHistory]);
 
-  /**
-   * Auth-restore heal: rows RLS-quarantined while the session was dead requeue
-   * when a real session returns (#44). Idempotent (healed rows leave the
-   * candidate set) and user-scoped, so firing on every restore event is safe.
-   * A null INITIAL_SESSION is AuthContext's cold-start concern, not ours.
-   */
+  // A handle is already repaired before publication. Heal its RLS failures once
+  // at mount and on same-user token restoration through the single auth subscription.
   useEffect(() => {
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
-      const userId = session?.user?.id ?? null;
-      currentUserIdRef.current = userId;
-      const shouldHeal = event === 'SIGNED_IN'
-        || event === 'TOKEN_REFRESHED'
-        || (event === 'INITIAL_SESSION' && Boolean(session));
-      if (shouldHeal && userId) {
-        await ensureStartupRepairs();
-        try {
-          await requeueTerminalRlsFailures(userId);
-        } catch (error) {
-          console.error('Auth-restore requeue failed:', error);
-        }
-        triggerBackgroundSyncRef.current();
-      }
-      const shouldRefresh = event === 'SIGNED_IN'
-        || event === 'TOKEN_REFRESHED'
-        || event === 'SIGNED_OUT'
-        || (event === 'INITIAL_SESSION' && Boolean(session));
-      if (shouldRefresh) {
+    const heal = async ({ scheduleSync = false } = {}) => {
+      try {
+        await services.syncEngine.requeueTerminalRlsFailures(handle.userId);
+        if (!handle.isCurrent()) return;
         await refreshSyncStatus();
+        if (scheduleSync) triggerBackgroundSyncRef.current();
+      } catch (error) {
+        if (isStaleActorError(error)) return null;
+        if (!isStaleActorError(error)) console.error('Auth-restore requeue failed:', error);
       }
+    };
+    void heal();
+    return subscribeToAuthEvents((event, session) => {
+      if (session?.user?.id === handle.userId && (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED')) void heal({ scheduleSync: true });
     });
-    return () => subscription.unsubscribe();
-  }, [ensureStartupRepairs, refreshSyncStatus]);
+  }, [handle, services, subscribeToAuthEvents, refreshSyncStatus]);
 
   /**
    * Initial load: check network state and sync status
    */
   useEffect(() => {
     const initialize = async () => {
-      await ensureStartupRepairs();
       // Check initial network state
       const netInfoState = await NetInfo.fetch();
-      setIsOnline(Boolean(netInfoState.isConnected) && netInfoState.isInternetReachable !== false);
+      if (!handle.isCurrent()) return;
+      isOnlineRef.current = Boolean(netInfoState.isConnected) && netInfoState.isInternetReachable !== false;
+      setIsOnline(isOnlineRef.current);
 
       // Load sync status. refreshSyncStatus schedules a background sync when
       // unsynced work exists, but does not block startup on upload.
       await refreshSyncStatus();
     };
 
-    initialize();
-  }, [ensureStartupRepairs, refreshSyncStatus, triggerBackgroundSync]);
+    void initialize().catch((error) => { if (!isStaleActorError(error)) console.error('Offline initialization failed:', error); });
+    return () => { clearTimeout(backgroundSyncTimer.current); backgroundSyncTimer.current = null; };
+  }, [handle, refreshSyncStatus, triggerBackgroundSync]);
 
   /**
    * Periodically refresh sync status while app is active

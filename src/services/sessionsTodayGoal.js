@@ -1,7 +1,4 @@
-import { resolveDatabase } from '../db/repositories/repositoryRuntime';
 import { getActiveProgrammeId } from '../db/repositories/domainRepositoryUtils';
-import { programmesRepository } from '../db/repositories/referenceDataRepository';
-import { sessionsRepository } from '../db/repositories/sessionsRepository';
 import { getSessionGoal } from '../utils/sessionGoal';
 import { toLocalDateString } from '../utils/localDate';
 
@@ -18,18 +15,18 @@ import { toLocalDateString } from '../utils/localDate';
  *
  * `now` is injectable so this stays deterministic in tests.
  */
-export async function getSessionsTodayGoal({ userId, now = new Date() } = {}) {
+export async function getSessionsTodayGoal({ handle, userId, now = new Date() } = {}) {
   if (!userId) return null;
 
-  const db = await resolveDatabase();
+  const db = await handle.getReader();
   const programmeId = await getActiveProgrammeId(db, userId);
   if (!programmeId) return null;
 
-  const programmes = await programmesRepository.getAll();
+  const programmes = await handle.repositories.programmes.getAll();
   const programme = programmes.find((p) => p.id === programmeId);
   if (!programme) return null;
 
-  const count = await sessionsRepository.countSessionsOnDate({
+  const count = await handle.repositories.sessions.countSessionsOnDate({
     userId,
     programmeId,
     date: toLocalDateString(now),

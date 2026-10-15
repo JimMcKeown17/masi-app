@@ -1,13 +1,8 @@
+import { isStaleActorError } from '../session/staleActor';
+import { useSignedInEA } from './SignedInEAContext';
 import React, { createContext, useState, useEffect, useContext, useRef, useMemo, useCallback } from 'react';
 import { pullPreloadedChildData } from '../services/preloadedChildData';
-import { ensureReferenceData } from '../services/offlineSync';
-import { startSessionHistoryPull, resetSessionHistoryStatusForActorChange } from '../services/sessionHistoryStatus';
-import { childrenRepository } from '../db/repositories/childrenRepository';
-import { classesRepository } from '../db/repositories/classesRepository';
-import { groupsRepository } from '../db/repositories/groupsRepository';
-import { groupEaAssignmentsRepository } from '../db/repositories/groupEaAssignmentsRepository';
-import { syncOutboxRepository } from '../db/repositories/syncOutboxRepository';
-import { syncStateRepository } from '../db/repositories/syncStateRepository';
+
 import { useAuth } from './AuthContext';
 import { useOffline } from './OfflineContext';
 import { v4 as uuidv4 } from 'uuid';
@@ -30,8 +25,12 @@ const savePulledRows = async (saveRows, rows, reconcile, reconcileResults) => {
 };
 
 export const ChildrenProvider = ({ children }) => {
+  const { handle, repositories, services } = useSignedInEA();
+  const { children: childrenRepository, classes: classesRepository, groups: groupsRepository, groupEaAssignments: groupEaAssignmentsRepository, syncOutbox: syncOutboxRepository, syncState: syncStateRepository } = repositories;
+
   const { user } = useAuth();
   const {
+    isOnline,
     refreshSyncStatus,
     isSyncing,
     domainPullNonce = 0,
@@ -42,14 +41,14 @@ export const ChildrenProvider = ({ children }) => {
   const [childrenList, setChildrenList] = useState([]);
   const [groups, setGroups] = useState([]);
   const [childrenGroups, setChildrenGroups] = useState([]);
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
   const activeUserIdRef = useRef(null);
   const historyActorRef = useRef(user?.id || null);
   useEffect(() => {
     const nextActor = user?.id || null;
     if (historyActorRef.current !== nextActor) {
       historyActorRef.current = nextActor;
-      resetSessionHistoryStatusForActorChange();
+      services.sessionHistory.store.reset();
     }
   }, [user?.id]);
   const activePullRef = useRef(null);
@@ -117,9 +116,10 @@ export const ChildrenProvider = ({ children }) => {
       // Cache-first display: publish the SQLite snapshot immediately so a slow
       // or stalled network never holds the roster hostage.
       await refreshFromCache();
-      const pulled = await pullPreloadedChildData({ userId: activeUserId });
+      if (!isOnline) return;
+      const pulled = await pullPreloadedChildData({ userId: activeUserId, supabaseClient: handle.dataClient, enqueueRequest: handle.enqueueRequest });
       if (activeUserIdRef.current !== activeUserId) return;
-      await ensureReferenceData({ userId: activeUserId });
+      await services.referenceDataReady();
       if (activeUserIdRef.current !== activeUserId) return;
 
       const { activeProgrammeId, scopes, reconcileAcknowledgments } = pulled;
@@ -329,11 +329,12 @@ export const ChildrenProvider = ({ children }) => {
       // CAP-004: history starts only after this pull's assignments are persisted, so a
       // handover's new delivery child triggers its re-walk in this run, not the next one.
       // Never awaited: history must not delay roster publication.
-      startSessionHistoryPull({ userId: activeUserId });
+      void services.sessionHistory.start().catch((error) => { if (!isStaleActorError(error)) console.error('Session history failed:', error); });
       if (bypassedReconcileCompleted) {
         await refreshSyncStatusRef.current({ autoTrigger: false });
       }
     } catch (error) {
+      if (isStaleActorError(error)) return;
       console.error('Error in pullFromServer:', error);
       captureOperationalError(error, {
         category: 'child_data_pull_failed',
@@ -344,7 +345,7 @@ export const ChildrenProvider = ({ children }) => {
         setLoading(false);
       }
     }
-  }, [user?.id, refreshFromCache]);
+  }, [user?.id, isOnline, refreshFromCache]);
 
   const pullFromServer = useCallback(() => {
     const activeUserId = user?.id;
@@ -412,6 +413,7 @@ export const ChildrenProvider = ({ children }) => {
 
       await pullFromServer();
     } catch (error) {
+      if (isStaleActorError(error)) return;
       console.error('Error in loadChildren:', error);
     } finally {
       setLoading(false);
@@ -448,6 +450,7 @@ export const ChildrenProvider = ({ children }) => {
 
       return { success: true, child };
     } catch (error) {
+      if (isStaleActorError(error)) throw error;
       console.error('Error adding child:', error);
       return { success: false, error };
     }
@@ -478,6 +481,7 @@ export const ChildrenProvider = ({ children }) => {
 
       return { success: true };
     } catch (error) {
+      if (isStaleActorError(error)) throw error;
       console.error('Error updating child:', error);
       return { success: false, error };
     }
@@ -512,6 +516,7 @@ export const ChildrenProvider = ({ children }) => {
 
       return { success: true };
     } catch (error) {
+      if (isStaleActorError(error)) throw error;
       console.error('Error hiding child:', error);
       return { success: false, error };
     }
@@ -524,6 +529,7 @@ export const ChildrenProvider = ({ children }) => {
     try {
       await pullFromServer();
     } catch (error) {
+      if (isStaleActorError(error)) throw error;
       console.error('Error in loadGroups:', error);
     }
   }, [pullFromServer]);
@@ -549,6 +555,7 @@ export const ChildrenProvider = ({ children }) => {
 
       return { success: true, group };
     } catch (error) {
+      if (isStaleActorError(error)) throw error;
       console.error('Error adding group:', error);
       return { success: false, error };
     }
@@ -577,6 +584,7 @@ export const ChildrenProvider = ({ children }) => {
 
       return { success: true };
     } catch (error) {
+      if (isStaleActorError(error)) throw error;
       console.error('Error updating group:', error);
       return { success: false, error };
     }
@@ -598,6 +606,7 @@ export const ChildrenProvider = ({ children }) => {
 
       return { success: true };
     } catch (error) {
+      if (isStaleActorError(error)) throw error;
       console.error('Error deleting group:', error);
       return { success: false, error };
     }
@@ -610,6 +619,7 @@ export const ChildrenProvider = ({ children }) => {
     try {
       await pullFromServer();
     } catch (error) {
+      if (isStaleActorError(error)) throw error;
       console.error('Error in loadChildrenGroups:', error);
     }
   }, [pullFromServer]);
@@ -643,6 +653,7 @@ export const ChildrenProvider = ({ children }) => {
 
       return { success: true, membership };
     } catch (error) {
+      if (isStaleActorError(error)) throw error;
       console.error('Error adding child to group:', error);
       return { success: false, error };
     }
@@ -664,6 +675,7 @@ export const ChildrenProvider = ({ children }) => {
 
       return { success: true };
     } catch (error) {
+      if (isStaleActorError(error)) throw error;
       console.error('Error removing child from group:', error);
       return { success: false, error };
     }

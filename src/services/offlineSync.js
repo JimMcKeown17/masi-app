@@ -1,6 +1,4 @@
 import { isStaleActorError, StaleActorError } from '../session/staleActor';
-import { supabase } from './supabaseClient';
-import { enqueueSupabaseRequest } from './supabaseRequestQueue';
 import { resolveDatabase, runRepositoryTransaction } from '../db/repositories/repositoryRuntime';
 import {
   chunkArray,
@@ -10,22 +8,11 @@ import {
 import {
   createSyncOutboxRepository,
   outboxRecordId,
-  syncOutboxRepository,
 } from '../db/repositories/syncOutboxRepository';
 import {
   createSyncStateRepository,
-  syncStateRepository,
 } from '../db/repositories/syncStateRepository';
 import { resolveRecordOwners } from '../db/repositories/outboxOwnership';
-import {
-  academicYearsRepository,
-  assessmentWindowsRepository,
-  jobTitlesRepository,
-  programmesRepository,
-  schoolsRepository,
-  staffProgrammeAssignmentsRepository,
-  teachersRepository,
-} from '../db/repositories/referenceDataRepository';
 import {
   assessmentItemDomainId,
   childEaAssignmentDomainId,
@@ -1096,13 +1083,13 @@ const canBatchRecord = (record, config) => (
 
 export const createOutboxSyncEngine = ({
   database,
-  supabaseClient = supabase,
+  supabaseClient,
   outboxRepository = createSyncOutboxRepository({ database }),
   stateRepository = createSyncStateRepository({ database }),
   tableConfigs = TABLE_CONFIGS,
   safeDuplicateSuccessTables = [],
-  enqueueRequest = enqueueSupabaseRequest,
-  getAuthSession = () => supabase.auth.getSession(),
+  enqueueRequest,
+  getAuthSession = () => supabaseClient.auth.getSession(),
 } = {}) => {
   const safeDuplicateTables = new Set(safeDuplicateSuccessTables.map(normalizeTableName));
   const getConfig = (tableName) => {
@@ -1876,45 +1863,16 @@ export const createOutboxSyncEngine = ({
   };
 };
 
-const defaultEngine = createOutboxSyncEngine({
-  // Production keeps duplicate-key failures terminal. With upsert on id,
-  // 23505 usually means a different unique constraint needs review.
-  outboxRepository: syncOutboxRepository,
-  stateRepository: syncStateRepository,
-});
-
-export const syncAll = (options) => defaultEngine.syncAll(options);
-export const syncTableByName = (tableName) => defaultEngine.syncTableByName(tableName);
-export const getSyncStatus = (options) => defaultEngine.getSyncStatus(options);
-export const requeueTerminalRlsFailures = (userId) => defaultEngine.requeueTerminalRlsFailures(userId);
-export const retryFailedItem = (table, id) => defaultEngine.retryFailedItem(table, id);
-
-const defaultReferenceDataBarrier = { ready: false, promise: null };
-
-const resetReferenceDataBarrierForTests = () => {
-  defaultReferenceDataBarrier.ready = false;
-  defaultReferenceDataBarrier.promise = null;
-  defaultReferenceDataBarrier.cacheChecked = false;
-};
-
 export const _testBuildSyncPayload = buildSyncPayload;
 export const _testClassifyError = classifyError;
-export const __testables = { getRetryDelay, resetReferenceDataBarrierForTests };
+export const __testables = { getRetryDelay };
 export const __contract = { SERVER_COLUMNS, PUSH_ORDER, INTENTIONALLY_UNSYNCED, LOCAL_ONLY_COLUMNS };
 
 const pullReferenceDataRows = async ({
-  supabaseClient = supabase,
-  repositories = {
-    schools: schoolsRepository,
-    job_titles: jobTitlesRepository,
-    programmes: programmesRepository,
-    academic_years: academicYearsRepository,
-    assessment_windows: assessmentWindowsRepository,
-    teachers: teachersRepository,
-    staff_programme_assignments: staffProgrammeAssignmentsRepository,
-  },
+  supabaseClient,
+  repositories,
   userId,
-  enqueueRequest = enqueueSupabaseRequest,
+  enqueueRequest,
 } = {}) => {
   const tableNames = [
     'schools',
@@ -1948,7 +1906,7 @@ const pullReferenceDataRows = async ({
   return results;
 };
 
-// A barrier belongs to one handle. The legacy entry points retain their own default.
+// The single-flight barrier belongs to the supplied handle.
 const referenceFlight = (barrier, task) => {
   if (barrier.promise) return barrier.promise;
   const promise = Promise.resolve().then(task).then((result) => {
@@ -1967,8 +1925,8 @@ export const pullReferenceData = ({ barrier, ...options } = {}) => (
 );
 
 export const ensureReferenceData = ({
-  barrier = defaultReferenceDataBarrier,
-  repositories = { schools: schoolsRepository, programmes: programmesRepository, academic_years: academicYearsRepository },
+  barrier,
+  repositories,
   ...options
 } = {}) => {
   if (barrier.promise) return barrier.promise;
@@ -1985,12 +1943,7 @@ export const ensureReferenceData = ({
       ]);
       if (requiredRows.every((rows) => rows.length > 0)) return;
     }
-    return pullReferenceDataRows({ ...options, repositories: {
-      schools: schoolsRepository, job_titles: jobTitlesRepository, programmes: programmesRepository,
-      academic_years: academicYearsRepository, assessment_windows: assessmentWindowsRepository,
-      teachers: teachersRepository, staff_programme_assignments: staffProgrammeAssignmentsRepository,
-      ...repositories,
-    } });
+    return pullReferenceDataRows({ ...options, repositories });
   });
 };
 
@@ -1999,8 +1952,8 @@ export const ensureReferenceData = ({
  * Schools are admin-managed reference data, not an outbox push table.
  */
 export const fetchAndCacheSchools = async ({
-  supabaseClient = supabase, enqueueRequest = enqueueSupabaseRequest,
-  repositories = { schools: schoolsRepository },
+  supabaseClient, enqueueRequest,
+  repositories,
 } = {}) => {
   const { data, error } = await enqueueRequest(() => (
     supabaseClient

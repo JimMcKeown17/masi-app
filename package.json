@@ -71,6 +71,9 @@
     "modulePathIgnorePatterns": [
       "<rootDir>/.claude/worktrees/",
       "<rootDir>/.codex/worktrees/"
+    ],
+    "setupFilesAfterEnv": [
+      "<rootDir>/test-support/defaultTestHandle.js"
     ]
   },
   "private": true,

@@ -7,7 +7,6 @@ const LOCAL_SYNC_COLUMNS = `
   server_updated_at text
 `;
 
-let appMigrationQueue = Promise.resolve();
 const explicitDatabaseMigrationQueues = new WeakMap();
 
 export const MIGRATIONS = [
@@ -744,22 +743,12 @@ async function runMigrationsNow(database) {
 }
 
 export async function runMigrations(database) {
-  if (database) {
-    const currentQueue = explicitDatabaseMigrationQueues.get(database) || Promise.resolve();
-    const queuedMigration = currentQueue.then(
-      () => runMigrationsNow(database),
-      () => runMigrationsNow(database)
-    );
-    explicitDatabaseMigrationQueues.set(database, queuedMigration.catch(() => {}));
-
-    return queuedMigration;
-  }
-
-  const queuedMigration = appMigrationQueue.then(
-    () => withDatabaseAccess((db) => runMigrationsNow(db)),
-    () => withDatabaseAccess((db) => runMigrationsNow(db))
+  if (!database) throw new Error('Migrations require an explicit database');
+  const currentQueue = explicitDatabaseMigrationQueues.get(database) || Promise.resolve();
+  const queuedMigration = currentQueue.then(
+    () => runMigrationsNow(database),
+    () => runMigrationsNow(database)
   );
-  appMigrationQueue = queuedMigration.catch(() => {});
-
+  explicitDatabaseMigrationQueues.set(database, queuedMigration.catch(() => {}));
   return queuedMigration;
 }

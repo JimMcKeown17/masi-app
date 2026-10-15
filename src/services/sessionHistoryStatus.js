@@ -1,14 +1,13 @@
 import { isStaleActorError } from '../session/staleActor';
 import { useSyncExternalStore } from 'react';
 import {
-  resetSessionHistoryForActorChange,
   resetSessionHistoryState,
   runSessionHistoryPull,
   sessionHistoryScope,
 } from './sessionHistoryPull';
 import { resolveDatabase } from '../db/repositories/repositoryRuntime';
 import { getActiveProgrammeId } from '../db/repositories/domainRepositoryUtils';
-import { syncStateRepository } from '../db/repositories/syncStateRepository';
+import { createSyncStateRepository } from '../db/repositories/syncStateRepository';
 
 export const createSessionHistoryStore = ({
   database,
@@ -53,14 +52,13 @@ export const createSessionHistoryStore = ({
   const reset = () => {
     statusGeneration += 1;
     if (state) resetSessionHistoryState(state);
-    else resetSessionHistoryForActorChange();
     publish({ running: false, lastResult: null, runVersion: snapshot.runVersion + 1 });
   };
   const getPullState = async (userId) => {
     if (!userId) return null;
     const db = await resolveDatabase(database);
     const programmeId = await getActiveProgrammeId(db, userId);
-    const stateRepo = repositories?.syncState || syncStateRepository;
+    const stateRepo = repositories?.syncState || createSyncStateRepository({ database });
     return programmeId ? stateRepo.getPullState(sessionHistoryScope(userId, programmeId)) : null;
   };
   return {
@@ -70,9 +68,9 @@ export const createSessionHistoryStore = ({
   };
 };
 
-// Task 5 replaces legacy consumers; until then their shared store behaves as before.
-const defaultStore = createSessionHistoryStore();
-export const startSessionHistoryPull = (options) => defaultStore.start(options);
-export const resetSessionHistoryStatusForActorChange = () => defaultStore.reset();
-export const useSessionHistoryStatus = () => useSyncExternalStore(defaultStore.subscribe, defaultStore.getSnapshot);
-export const getSessionHistoryPullState = (userId) => defaultStore.getPullState(userId);
+export const useSessionHistoryStatus = () => {
+  const { useSignedInEA } = require('../context/SignedInEAContext');
+  const { services } = useSignedInEA();
+  const { store } = services.sessionHistory;
+  return useSyncExternalStore(store.subscribe, store.getSnapshot);
+};

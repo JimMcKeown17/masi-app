@@ -1,224 +1,127 @@
 import React, { createContext, useState, useEffect, useContext, useRef, useCallback, useMemo } from 'react';
 import { supabase } from '../services/supabaseClient';
-import { enqueueSupabaseRequest } from '../services/supabaseRequestQueue';
-import { pullReferenceData } from '../services/offlineSync';
 import { readPersistedSession, clearPersistedSession } from '../services/persistedAuthSession';
-import { deviceSettings } from '../services/deviceSettings';
-import { normalizeProfile } from '../utils/profileNormalizer';
+import { requestOpen, requestClose, getCurrentHandle, subscribeToHandle, setLatestAuthSession } from '../session/signedInHandle';
 
-const AuthContext = createContext({});
+export const AuthContext = createContext(null);
 const AUTH_SIGN_OUT_GRACE_PERIOD_MS = 15000;
 
 export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
-  const [profile, setProfile] = useState(null);
-  const [loading, setLoading] = useState(true);
   const [session, setSession] = useState(null);
-  const manualSignOutInProgressRef = useRef(false);
+  const [loading, setLoading] = useState(true);
+  const [handle, setHandle] = useState(getCurrentHandle);
+  const [handleStatus, setHandleStatus] = useState('signed_out');
+  const [handleError, setHandleError] = useState(null);
+  const currentUserRef = useRef(null);
+  const generationRef = useRef(0);
   const localSignOutCommittedRef = useRef(false);
   const pendingSignOutTimeoutRef = useRef(null);
-  const currentUserIdRef = useRef(null);
-  const profileLoadVersionRef = useRef(0);
+  const authListenersRef = useRef(new Set());
+  const mountedRef = useRef(true);
 
   const clearPendingSignOutTimeout = () => {
-    if (pendingSignOutTimeoutRef.current) {
-      clearTimeout(pendingSignOutTimeoutRef.current);
-      pendingSignOutTimeoutRef.current = null;
-    }
+    clearTimeout(pendingSignOutTimeoutRef.current);
+    pendingSignOutTimeoutRef.current = null;
   };
-
-  const commitSignedOutState = (reason) => {
-    clearPendingSignOutTimeout();
-    currentUserIdRef.current = null;
-    profileLoadVersionRef.current += 1;
-    setSession(null);
-    setUser(null);
-    setProfile(null);
-    setLoading(false);
-    console.warn(`[Auth] Cleared local auth state (${reason})`);
-  };
-
-  const invalidateProfileLoads = () => {
-    currentUserIdRef.current = null;
-    profileLoadVersionRef.current += 1;
-  };
-
-  const restoreOfflineSession = (persistedSession, reason) => {
-    clearPendingSignOutTimeout();
-    currentUserIdRef.current = persistedSession.user.id;
-    setSession(null);
+  const subscribeToAuthEvents = useCallback((listener) => {
+    authListenersRef.current.add(listener);
+    return () => authListenersRef.current.delete(listener);
+  }, []);
+  const openForUser = useCallback(async (authUser) => {
+    const generation = ++generationRef.current;
+    currentUserRef.current = authUser;
+    setUser(authUser);
     setLoading(true);
-    scheduleAuthenticatedStartup(persistedSession.user);
-    console.log(`[Auth] Restored persisted offline session (${reason})`);
+    setHandleError(null);
+    setHandleStatus('opening');
+    try {
+      const opened = await requestOpen({ userId: authUser.id });
+      if (!mountedRef.current || generation !== generationRef.current) return;
+      setHandle(opened);
+      if (opened) { setHandleStatus('open'); setLoading(false); }
+    } catch (error) {
+      if (!mountedRef.current || generation !== generationRef.current) return;
+      setHandle(null); setHandleError(error); setHandleStatus('failed'); setLoading(false);
+    }
+  }, []);
+  const retryOpenHandle = useCallback(() => {
+    if (currentUserRef.current) return openForUser(currentUserRef.current);
+  }, [openForUser]);
+  const commitSignedOutState = async (reason) => {
+    const generation = ++generationRef.current;
+    clearPendingSignOutTimeout();
+    currentUserRef.current = null;
+    await requestClose({ reason });
+    if (!mountedRef.current || generation !== generationRef.current) return;
+    setSession(null); setUser(null); setHandle(null); setHandleError(null);
+    setHandleStatus('signed_out'); setLoading(false);
   };
-
   const resolveColdStartGate = async (reason) => {
-    if (localSignOutCommittedRef.current) {
-      commitSignedOutState(`${reason}-after-local-sign-out`);
+    const generation = generationRef.current;
+    if (localSignOutCommittedRef.current) return commitSignedOutState(reason);
+    const persisted = await readPersistedSession();
+    if (generation !== generationRef.current || !mountedRef.current) return;
+    if (persisted?.user?.id) {
+      if (currentUserRef.current?.id !== persisted.user.id) {
+        setSession(null);
+        return openForUser(persisted.user);
+      }
       return;
     }
-    const persistedSession = await readPersistedSession();
-    const persistedUserId = persistedSession?.user?.id ?? null;
-    if (persistedUserId && persistedUserId === currentUserIdRef.current) {
-      setLoading(false);
-      return;
-    }
-    if (persistedUserId && !currentUserIdRef.current) {
-      restoreOfflineSession(persistedSession, reason);
-      return;
-    }
-    commitSignedOutState(reason);
+    return commitSignedOutState(reason);
   };
 
   useEffect(() => {
-    // Supabase emits INITIAL_SESSION through this subscription after its own
-    // storage recovery finishes; calling getSession here creates a second
-    // startup lock contender on Android.
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, nextSession) => {
-      console.log(`[Auth] Event=${event} hasSession=${Boolean(nextSession)}`);
-
+    mountedRef.current = true;
+    const unsubscribe = subscribeToHandle((next) => {
+      if (!mountedRef.current) return;
+      setHandle(next);
+      if (next) { setHandleStatus('open'); setHandleError(null); setLoading(false); }
+    });
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, nextSession) => {
+      // Refresh events must reach the fenced data client, including ignored auth events.
+      setLatestAuthSession(nextSession ?? null);
+      for (const listener of authListenersRef.current) listener(event, nextSession ?? null);
       if (nextSession?.user) {
         if (localSignOutCommittedRef.current && event !== 'SIGNED_IN') return;
-        if (event === 'SIGNED_IN') {
-          localSignOutCommittedRef.current = false;
-        }
+        if (event === 'SIGNED_IN') localSignOutCommittedRef.current = false;
         clearPendingSignOutTimeout();
         setSession(nextSession);
-        if (event === 'TOKEN_REFRESHED' && currentUserIdRef.current === nextSession.user.id) {
-          return;
-        }
-        currentUserIdRef.current = nextSession.user.id;
-        setLoading(true);
-        scheduleAuthenticatedStartup(nextSession.user);
+        if (currentUserRef.current?.id === nextSession.user.id && getCurrentHandle()?.isOpen()) return;
+        // Do not await data work inside the auth client's lock.
+        void openForUser(nextSession.user);
         return;
       }
-
       if (event === 'SIGNED_OUT') {
-        if (manualSignOutInProgressRef.current) {
-          manualSignOutInProgressRef.current = false;
-          commitSignedOutState('manual-sign-out');
-          return;
-        }
-        const persisted = await readPersistedSession();
-        if (persisted?.user?.id && persisted.user.id === currentUserIdRef.current) {
-          console.warn('[Auth] Ignoring stale SIGNED_OUT; a valid session for the current user persists');
-          return;
-        }
-        localSignOutCommittedRef.current = true;
-        await deviceSettings.clearUserProfile();
-        await clearPersistedSession();
-        commitSignedOutState('signed-out');
+        const generation = generationRef.current;
+        void (async () => {
+          const persisted = await readPersistedSession();
+          if (generation !== generationRef.current || !mountedRef.current) return;
+          if (!localSignOutCommittedRef.current && persisted?.user?.id === currentUserRef.current?.id && persisted?.user?.id) return;
+          localSignOutCommittedRef.current = true;
+          await commitSignedOutState('signed-out');
+          await clearPersistedSession();
+        })();
         return;
       }
-
-      if (event === 'INITIAL_SESSION') {
-        resolveColdStartGate(`${event}-no-active-user`);
-        return;
-      }
-
-      // Be forgiving of transient auth drops; only sign out after a short grace period.
-      if (currentUserIdRef.current && !pendingSignOutTimeoutRef.current) {
-        console.warn(
-          `[Auth] ${event} with empty session, waiting ${AUTH_SIGN_OUT_GRACE_PERIOD_MS}ms before logout`
-        );
+      if (event === 'INITIAL_SESSION') { void resolveColdStartGate('initial-session'); return; }
+      if (currentUserRef.current && !pendingSignOutTimeoutRef.current) {
         pendingSignOutTimeoutRef.current = setTimeout(() => {
           pendingSignOutTimeoutRef.current = null;
-          commitSignedOutState(`${event}-grace-timeout`);
+          void commitSignedOutState(`${event}-grace-timeout`);
         }, AUTH_SIGN_OUT_GRACE_PERIOD_MS);
-        setLoading(false);
         return;
       }
-
-      resolveColdStartGate(`${event}-no-active-user`);
+      void resolveColdStartGate(`${event}-no-active-user`);
     });
-
     return () => {
+      mountedRef.current = false;
+      generationRef.current += 1;
       clearPendingSignOutTimeout();
-      subscription.unsubscribe();
+      unsubscribe(); subscription.unsubscribe(); authListenersRef.current.clear();
     };
-  }, []);
-
-  const isCurrentProfileLoad = (userId, version) => (
-    currentUserIdRef.current === userId && profileLoadVersionRef.current === version
-  );
-
-  const scheduleAuthenticatedStartup = (authUser) => {
-    profileLoadVersionRef.current += 1;
-    const version = profileLoadVersionRef.current;
-    setTimeout(() => {
-      hydrateAuthenticatedUser(authUser, version);
-    }, 0);
-  };
-
-  const hydrateAuthenticatedUser = (authUser, version) => {
-    if (!isCurrentProfileLoad(authUser.id, version)) {
-      return;
-    }
-
-    setUser(authUser);
-    setLoading(false);
-
-    loadUserProfile(authUser.id, version, { setLoadingOnComplete: false }).catch((error) => {
-      console.error('Error loading startup profile:', error);
-    });
-    pullReferenceData({ userId: authUser.id }).catch((error) => {
-      console.error('Error pulling startup reference data:', error);
-    });
-  };
-
-  const loadUserProfile = async (userId, version = null, { setLoadingOnComplete = true } = {}) => {
-    const profileLoadVersion = version || profileLoadVersionRef.current + 1;
-    if (!version) {
-      profileLoadVersionRef.current = profileLoadVersion;
-    }
-
-    try {
-      // Try to load from local storage first
-      const localProfile = await deviceSettings.getUserProfile();
-      if (!isCurrentProfileLoad(userId, profileLoadVersion)) {
-        return;
-      }
-
-      if (localProfile) {
-        if (localProfile.id === userId) {
-          const normalizedLocalProfile = normalizeProfile(localProfile);
-          setProfile(normalizedLocalProfile);
-          if (setLoadingOnComplete) {
-            setLoading(false);
-          }
-        } else {
-          await deviceSettings.clearUserProfile();
-        }
-      }
-
-      // Then fetch from Supabase
-      const { data, error } = await enqueueSupabaseRequest(() => (
-        supabase
-          .from('users')
-          .select('*, school_lookup:schools(id,name), job_title_lookup:job_titles(id,name,code)')
-          .eq('id', userId)
-          .single()
-      ));
-
-      if (!isCurrentProfileLoad(userId, profileLoadVersion)) {
-        return;
-      }
-
-      if (error) {
-        console.error('Error loading profile:', error);
-      } else if (data) {
-        const normalizedProfile = normalizeProfile(data);
-        setProfile(normalizedProfile);
-        await deviceSettings.saveUserProfile(normalizedProfile);
-      }
-    } catch (error) {
-      console.error('Error in loadUserProfile:', error);
-    } finally {
-      if (setLoadingOnComplete && isCurrentProfileLoad(userId, profileLoadVersion)) {
-        setLoading(false);
-      }
-    }
-  };
+  }, [openForUser]);
 
   const signIn = useCallback(async (email, password) => {
     try {
@@ -236,24 +139,13 @@ export const AuthProvider = ({ children }) => {
   }, []);
 
   const signOut = useCallback(async () => {
-    manualSignOutInProgressRef.current = true;
-    clearPendingSignOutTimeout();
-    invalidateProfileLoads();
     localSignOutCommittedRef.current = true;
-    setSession(null);
-    setUser(null);
-    setProfile(null);
-    setLoading(false);
-    try {
-      await deviceSettings.clearUserProfile();
-      await clearPersistedSession();
-    } catch (error) {
-      console.error('Sign out local cleanup error:', error);
-    }
+    setLatestAuthSession(null);
+    await commitSignedOutState('manual-sign-out');
+    try { await clearPersistedSession(); } catch (error) { console.error('Sign out local cleanup error:', error); }
     supabase.auth.signOut({ scope: 'local' }).catch((error) => {
       console.warn('[Auth] Background Supabase sign-out failed:', error?.message);
     });
-    manualSignOutInProgressRef.current = false;
     return { error: null };
   }, []);
 
@@ -283,34 +175,15 @@ export const AuthProvider = ({ children }) => {
     }
   }, []);
 
-  const refreshProfile = useCallback(async () => {
-    if (user?.id) {
-      await loadUserProfile(user.id);
-    }
-  }, [user?.id]);
-
   const value = useMemo(() => ({
-    user,
-    profile,
-    session,
-    loading,
-    signIn,
-    signOut,
-    resetPassword,
-    updatePassword,
-    refreshProfile,
-  }), [
-    user, profile, session, loading, signIn, signOut,
-    resetPassword, updatePassword, refreshProfile,
-  ]);
-
+    user, profile: null, session, loading, handle, handleStatus, handleError, retryOpenHandle,
+    signIn, signOut, resetPassword, updatePassword, subscribeToAuthEvents,
+  }), [user, session, loading, handle, handleStatus, handleError, retryOpenHandle,
+    signIn, signOut, resetPassword, updatePassword, subscribeToAuthEvents]);
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 };
-
 export const useAuth = () => {
   const context = useContext(AuthContext);
-  if (!context) {
-    throw new Error('useAuth must be used within an AuthProvider');
-  }
+  if (!context) throw new Error('useAuth must be used within an AuthProvider');
   return context;
 };

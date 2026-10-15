@@ -1,3 +1,4 @@
+global.__MASI_NO_DEFAULT_HANDLE__ = true;
 const mockInit = jest.fn();
 const mockSetContext = jest.fn();
 const mockSetTags = jest.fn();

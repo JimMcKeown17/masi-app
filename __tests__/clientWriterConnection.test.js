@@ -1,3 +1,4 @@
+global.__MASI_NO_DEFAULT_HANDLE__ = true;
 // Uses the repo's configurable expo-sqlite mock (the same harness as sqliteFoundation.test.js)
 // so __setDatabaseFactory controls what each openDatabaseAsync call returns. The first open is
 // the writer, the second (useNewConnection: true) is the read-only reader.
@@ -11,12 +12,7 @@ jest.mock('expo-sqlite', () => require('../test-support/expoSQLiteMock'));
 
 import { __reset as resetExpoSQLiteMock, __setDatabaseFactory } from 'expo-sqlite';
 import { CURRENT_SCHEMA_VERSION } from '../src/db/migrations';
-import {
-  withTransaction,
-  getWriter,
-  getDatabase,
-  resetDatabaseConnectionForTests,
-} from '../src/db/client';
+import { initializeTestDatabase, withTestTransaction, getTestWriter, getTestReader, closeDefaultTestHandle } from '../test-support/testDatabase';
 
 const fakeConn = () => {
   const calls = [];
@@ -37,7 +33,7 @@ let writer;
 let reader;
 
 beforeEach(async () => {
-  await resetDatabaseConnectionForTests();
+  await closeDefaultTestHandle();
   resetExpoSQLiteMock();
   writer = fakeConn();
   reader = fakeConn();
@@ -45,11 +41,15 @@ beforeEach(async () => {
   // First open -> writer; second open (reader, useNewConnection) -> reader.
   __setDatabaseFactory(async () => (openCount++ === 0 ? writer : reader));
 });
-afterEach(async () => { await resetDatabaseConnectionForTests(); });
+afterEach(async () => { await closeDefaultTestHandle(); });
 
 it('commits via BEGIN IMMEDIATE/COMMIT on the writer and returns the task value', async () => {
-  const result = await withTransaction(async (db) => {
-    expect(db).toBe(writer);
+  await initializeTestDatabase();
+  writer.calls.length = 0;
+  const result = await withTestTransaction(async (db) => {
+    expect(Object.keys(db).sort()).toEqual(['getAllAsync', 'getFirstAsync', 'runAsync']);
+    await db.runAsync('insert into t(id) values (1)');
+    expect(writer.runAsync).toHaveBeenCalledWith('insert into t(id) values (1)');
     return 'ok';
   });
   expect(result).toBe('ok');
@@ -58,7 +58,9 @@ it('commits via BEGIN IMMEDIATE/COMMIT on the writer and returns the task value'
 });
 
 it('rolls back when the task throws', async () => {
-  await expect(withTransaction(async () => { throw new Error('boom'); })).rejects.toThrow('boom');
+  await initializeTestDatabase();
+  writer.calls.length = 0;
+  await expect(withTestTransaction(async () => { throw new Error('boom'); })).rejects.toThrow('boom');
   expect(writer.calls).toContain('BEGIN IMMEDIATE');
   expect(writer.calls).toContain('ROLLBACK');
   expect(writer.calls).not.toContain('COMMIT');
@@ -68,7 +70,9 @@ it('rolls back when the task throws', async () => {
 // deadlock by design and hang). Instead we prove the threading discipline with a positive test:
 // a multi-write task commits in exactly ONE transaction.
 it('a task doing multiple writes on the threaded handle commits in ONE transaction', async () => {
-  await withTransaction(async (db) => {
+  await initializeTestDatabase();
+  writer.calls.length = 0;
+  await withTestTransaction(async (db) => {
     await db.runAsync('insert into t (id) values (1)');
     await db.runAsync('insert into t (id) values (2)');
   });
@@ -77,16 +81,18 @@ it('a task doing multiple writes on the threaded handle commits in ONE transacti
 });
 
 it('serializes concurrent transactions (no interleave)', async () => {
+  await initializeTestDatabase();
+  writer.calls.length = 0;
   const order = [];
-  const a = withTransaction(async () => { order.push('a-start'); await Promise.resolve(); order.push('a-end'); });
-  const b = withTransaction(async () => { order.push('b-start'); order.push('b-end'); });
+  const a = withTestTransaction(async () => { order.push('a-start'); await Promise.resolve(); order.push('a-end'); });
+  const b = withTestTransaction(async () => { order.push('b-start'); order.push('b-end'); });
   await Promise.all([a, b]);
   expect(order).toEqual(['a-start', 'a-end', 'b-start', 'b-end']);
 });
 
-it('getDatabase returns the reader (second connection), getWriter returns the writer', async () => {
-  const r = await getDatabase();
-  const w = await getWriter();
+it('getTestReader returns the reader (second connection), getTestWriter returns the writer', async () => {
+  const r = await getTestReader();
+  const w = await getTestWriter();
   expect(w).toBe(writer);
   expect(r).toBe(reader);
 });
@@ -94,7 +100,7 @@ it('getDatabase returns the reader (second connection), getWriter returns the wr
 // Preserves the pragma-application coverage that the old "configures lock-related pragmas" test
 // had, in the new two-connection model.
 it('applies writer pragmas (WAL, busy_timeout, FK on) to the writer and query_only to the reader', async () => {
-  await getDatabase(); // triggers init (opens + configures both)
+  await getTestReader(); // triggers init (opens + configures both)
   expect(writer.calls).toEqual(expect.arrayContaining([
     'PRAGMA journal_mode = WAL',
     'PRAGMA busy_timeout = 5000',
@@ -107,6 +113,8 @@ it('applies writer pragmas (WAL, busy_timeout, FK on) to the writer and query_on
 });
 
 it('a ROLLBACK failure rethrows the original error (not the rollback error) and disposes the writer', async () => {
+  await initializeTestDatabase();
+  writer.calls.length = 0;
   // Writer whose ROLLBACK throws — simulates SQLite having already auto-rolled-back.
   writer.execAsync = jest.fn(async (sql) => {
     writer.calls.push(sql);
@@ -114,7 +122,7 @@ it('a ROLLBACK failure rethrows the original error (not the rollback error) and 
   });
   let caught;
   try {
-    await withTransaction(async () => { throw new Error('task boom'); });
+    await withTestTransaction(async () => { throw new Error('task boom'); });
   } catch (e) {
     caught = e;
   }
@@ -133,7 +141,7 @@ it('disposes a half-open bootstrap when the reader open fails, allowing a clean 
   });
   let caught;
   try {
-    await getWriter();
+    await getTestWriter();
   } catch (e) {
     caught = e;
   }
@@ -145,7 +153,7 @@ it('disposes a half-open bootstrap when the reader open fails, allowing a clean 
   const reader2 = fakeConn();
   let open2 = 0;
   __setDatabaseFactory(async () => (open2++ === 0 ? writer2 : reader2));
-  const w = await getWriter();
+  const w = await getTestWriter();
   expect(w).toBe(writer2);
 });
 
@@ -161,7 +169,7 @@ it('disposes the writer if a writer pragma/migration fails AFTER open (no leaked
   __setDatabaseFactory(async () => (openCount++ === 0 ? writer : reader));
   let caught;
   try {
-    await getWriter();
+    await getTestWriter();
   } catch (e) {
     caught = e;
   }
@@ -173,6 +181,6 @@ it('disposes the writer if a writer pragma/migration fails AFTER open (no leaked
   const reader2 = fakeConn();
   let open2 = 0;
   __setDatabaseFactory(async () => (open2++ === 0 ? writer2 : reader2));
-  const w = await getWriter();
+  const w = await getTestWriter();
   expect(w).toBe(writer2);
 });

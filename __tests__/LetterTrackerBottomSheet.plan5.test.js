@@ -15,12 +15,14 @@ jest.mock('react-native-safe-area-context', () => ({
 }));
 
 jest.mock('../src/db/repositories/assessmentsRepository', () => ({
+  ...jest.requireActual('../src/db/repositories/assessmentsRepository'),
   assessmentsRepository: {
     getAssessments: jest.fn(),
   },
 }));
 
 jest.mock('../src/db/repositories/masteryRepository', () => ({
+  ...jest.requireActual('../src/db/repositories/masteryRepository'),
   masteryRepository: {
     getLetterMastery: jest.fn(),
   },

@@ -1,3 +1,4 @@
+global.__MASI_NO_DEFAULT_HANDLE__ = true;
 describe('supabase client guardrails', () => {
   let mockCreateClient;
   let mockAddEventListener;

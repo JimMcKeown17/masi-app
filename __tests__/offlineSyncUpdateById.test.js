@@ -1,5 +1,6 @@
 jest.mock('expo-sqlite', () => require('../test-support/expoSQLiteMock'));
-jest.mock('../src/services/supabaseClient', () => ({ supabase: {} }));
+jest.mock('../src/services/supabaseClient', () => ({
+  ...require('../test-support/supabaseTestConfig'), supabase: {} }));
 
 import { createBetterSqliteTestDatabase } from '../test-support/betterSqliteAdapter';
 import { createSupabaseMock } from '../test-support/supabaseSyncMock';
@@ -8,7 +9,7 @@ import {
   __reset as resetExpoSQLiteMock,
   __setDatabaseFactory,
 } from 'expo-sqlite';
-import { resetDatabaseConnectionForTests } from '../src/db/client';
+import { initializeTestDatabase, closeDefaultTestHandle } from '../test-support/testDatabase';
 import { createOutboxSyncEngine } from '../src/services/offlineSync';
 import { createSyncOutboxRepository } from '../src/db/repositories/syncOutboxRepository';
 import { createTimeEntriesRepository } from '../src/db/repositories/timeEntriesRepository';
@@ -78,7 +79,7 @@ describe('edits are sent as UPDATE by id (spec §6.5)', () => {
       sign_in_lat: null, sign_in_lon: null, sign_in_location_status: 'timeout', synced: false,
     });
     const { supabaseClient, calls } = createSupabaseMock();
-    const engine = createOutboxSyncEngine({ getAuthSession: liveTestSession, database: db, supabaseClient });
+    const engine = createOutboxSyncEngine({ enqueueRequest: (task) => task(), getAuthSession: liveTestSession, database: db, supabaseClient });
     expect((await engine.syncAll()).totalSynced).toBe(1);
     const insert = calls.find(call => call.tableName === 'time_entries' && call.type === 'upsert');
     const insertPayload = Array.isArray(insert.payload) ? insert.payload[0] : insert.payload;
@@ -98,7 +99,7 @@ describe('edits are sent as UPDATE by id (spec §6.5)', () => {
     const child = await seedHeadOfficeChild(db);
     await enqueue(db, 'children', child.id, 'update', child);
     const { supabaseClient, calls } = createSupabaseMock();
-    const engine = createOutboxSyncEngine({ getAuthSession: liveTestSession, database: db, supabaseClient });
+    const engine = createOutboxSyncEngine({ enqueueRequest: (task) => task(), getAuthSession: liveTestSession, database: db, supabaseClient });
 
     const result = await engine.syncAll();
 
@@ -116,7 +117,7 @@ describe('edits are sent as UPDATE by id (spec §6.5)', () => {
     const child = await seedHeadOfficeChild(db);
     await enqueue(db, 'children', child.id, 'update', child);
     const { supabaseClient } = createSupabaseMock({ updateResults: { children: { data: [], error: null } } });
-    const engine = createOutboxSyncEngine({ getAuthSession: liveTestSession, database: db, supabaseClient });
+    const engine = createOutboxSyncEngine({ enqueueRequest: (task) => task(), getAuthSession: liveTestSession, database: db, supabaseClient });
 
     const result = await engine.syncAll();
 
@@ -144,7 +145,7 @@ describe('edits are sent as UPDATE by id (spec §6.5)', () => {
     };
     await enqueue(db, 'letter_mastery', legacyLocalId, 'update', payload);
     const { supabaseClient, calls } = createSupabaseMock();
-    const engine = createOutboxSyncEngine({ getAuthSession: liveTestSession, database: db, supabaseClient });
+    const engine = createOutboxSyncEngine({ enqueueRequest: (task) => task(), getAuthSession: liveTestSession, database: db, supabaseClient });
 
     await engine.syncAll();
 
@@ -167,7 +168,7 @@ describe('edits are sent as UPDATE by id (spec §6.5)', () => {
     });
     await enqueue(db, 'children', child.id, 'update', child);
     const { supabaseClient, calls } = createSupabaseMock();
-    const engine = createOutboxSyncEngine({ getAuthSession: liveTestSession, database: db, supabaseClient });
+    const engine = createOutboxSyncEngine({ enqueueRequest: (task) => task(), getAuthSession: liveTestSession, database: db, supabaseClient });
 
     await engine.syncAll();
 
@@ -188,7 +189,7 @@ describe('edits are sent as UPDATE by id (spec §6.5)', () => {
         children: ({ value }) => ({ data: acknowledge ? [{ id: value }] : [], error: null }),
       },
     });
-    const engine = createOutboxSyncEngine({ getAuthSession: liveTestSession, database: db, supabaseClient });
+    const engine = createOutboxSyncEngine({ enqueueRequest: (task) => task(), getAuthSession: liveTestSession, database: db, supabaseClient });
 
     await engine.syncAll({ tableName: 'children' });
     expect((await db.getFirstAsync('select status from sync_outbox where record_id = ?', child.id)).status).toBe('failed');
@@ -208,7 +209,7 @@ describe('edits are sent as UPDATE by id (spec §6.5)', () => {
     await seedClassMediatedGrant({ membershipStatus: 'synced', assignmentStatus: 'pending' });
     await enqueue(db, 'children', child.id, 'update', child);
     const { supabaseClient } = createSupabaseMock({ updateResults: { children: { data: [], error: null } } });
-    const engine = createOutboxSyncEngine({ getAuthSession: liveTestSession, database: db, supabaseClient });
+    const engine = createOutboxSyncEngine({ enqueueRequest: (task) => task(), getAuthSession: liveTestSession, database: db, supabaseClient });
 
     await engine.syncAll({ tableName: 'children' });
 
@@ -220,7 +221,7 @@ describe('edits are sent as UPDATE by id (spec §6.5)', () => {
     await seedClassMediatedGrant({ membershipStatus: 'terminal', assignmentStatus: 'synced' });
     await enqueue(db, 'children', child.id, 'update', child);
     const { supabaseClient } = createSupabaseMock({ updateResults: { children: { data: [], error: null } } });
-    const engine = createOutboxSyncEngine({ getAuthSession: liveTestSession, database: db, supabaseClient });
+    const engine = createOutboxSyncEngine({ enqueueRequest: (task) => task(), getAuthSession: liveTestSession, database: db, supabaseClient });
 
     await engine.syncAll({ tableName: 'children' });
 
@@ -238,7 +239,7 @@ describe('edits are sent as UPDATE by id (spec §6.5)', () => {
     `, HEAD_OFFICE);
     await enqueue(db, 'classes', 'class-2', 'update', { id: 'class-2', name: 'Grade 2B', created_by: HEAD_OFFICE });
     const { supabaseClient } = createSupabaseMock({ updateResults: { classes: { data: [], error: null } } });
-    const engine = createOutboxSyncEngine({ getAuthSession: liveTestSession, database: db, supabaseClient });
+    const engine = createOutboxSyncEngine({ enqueueRequest: (task) => task(), getAuthSession: liveTestSession, database: db, supabaseClient });
 
     await engine.syncAll({ tableName: 'classes' });
 
@@ -260,7 +261,7 @@ describe('edits are sent as UPDATE by id (spec §6.5)', () => {
     };
     await enqueue(db, 'letter_mastery', 'lm-1', 'update', payload);
     const { supabaseClient } = createSupabaseMock({ updateResults: { letter_mastery: { data: [], error: null } } });
-    const engine = createOutboxSyncEngine({ getAuthSession: liveTestSession, database: db, supabaseClient });
+    const engine = createOutboxSyncEngine({ enqueueRequest: (task) => task(), getAuthSession: liveTestSession, database: db, supabaseClient });
 
     await engine.syncAll({ tableName: 'letter_mastery' });
 
@@ -271,7 +272,7 @@ describe('edits are sent as UPDATE by id (spec §6.5)', () => {
     const child = await seedHeadOfficeChild(db);
     await enqueue(db, 'children', child.id, 'update', child);
     const { supabaseClient } = createSupabaseMock({ updateResults: { children: { data: [], error: null } } });
-    const engine = createOutboxSyncEngine({ getAuthSession: liveTestSession, database: db, supabaseClient });
+    const engine = createOutboxSyncEngine({ enqueueRequest: (task) => task(), getAuthSession: liveTestSession, database: db, supabaseClient });
 
     const result = await engine.syncAll({ tableName: 'children' });
 
@@ -312,7 +313,7 @@ describe('edits are sent as UPDATE by id (spec §6.5)', () => {
         },
       },
     });
-    const engine = createOutboxSyncEngine({ getAuthSession: liveTestSession, database: db, supabaseClient });
+    const engine = createOutboxSyncEngine({ enqueueRequest: (task) => task(), getAuthSession: liveTestSession, database: db, supabaseClient });
 
     const result = await engine.syncAll({ tableName: 'child_group_memberships' });
 
@@ -381,7 +382,7 @@ describe('edits are sent as UPDATE by id (spec §6.5)', () => {
         },
       },
     });
-    const engine = createOutboxSyncEngine({ getAuthSession: liveTestSession, database: db, supabaseClient });
+    const engine = createOutboxSyncEngine({ enqueueRequest: (task) => task(), getAuthSession: liveTestSession, database: db, supabaseClient });
 
     const result = await engine.syncAll({ tableName: 'child_group_memberships' });
 
@@ -428,7 +429,7 @@ describe('edits are sent as UPDATE by id (spec §6.5)', () => {
         },
       },
     });
-    const engine = createOutboxSyncEngine({ getAuthSession: liveTestSession, database: db, supabaseClient });
+    const engine = createOutboxSyncEngine({ enqueueRequest: (task) => task(), getAuthSession: liveTestSession, database: db, supabaseClient });
 
     const result = await engine.syncAll({ tableName: 'child_class_memberships' });
 
@@ -493,7 +494,7 @@ describe('edits are sent as UPDATE by id (spec §6.5)', () => {
         },
       },
     });
-    const engine = createOutboxSyncEngine({ getAuthSession: liveTestSession, database: db, supabaseClient });
+    const engine = createOutboxSyncEngine({ enqueueRequest: (task) => task(), getAuthSession: liveTestSession, database: db, supabaseClient });
 
     const result = await engine.syncAll({ tableName: 'child_class_memberships' });
 
@@ -523,7 +524,7 @@ describe('edits are sent as UPDATE by id (spec §6.5)', () => {
         children: () => (insertSucceeds ? { error: null } : { error: { message: 'Network request failed' } }),
       },
     });
-    const engine = createOutboxSyncEngine({ getAuthSession: liveTestSession, database: db, supabaseClient });
+    const engine = createOutboxSyncEngine({ enqueueRequest: (task) => task(), getAuthSession: liveTestSession, database: db, supabaseClient });
 
     await engine.syncAll({ tableName: 'children' });
     expect(calls.filter((call) => call.type === 'update')).toHaveLength(0);
@@ -551,16 +552,17 @@ describe('production-style evidence resolution without an injected engine databa
   let db;
 
   beforeEach(async () => {
-    await resetDatabaseConnectionForTests();
+    await closeDefaultTestHandle();
     resetExpoSQLiteMock();
     db = createBetterSqliteTestDatabase();
     await runMigrations(db);
     __setDatabaseFactory(async () => db);
+  await initializeTestDatabase();
     await db.runAsync("insert into programmes (id, code, name, sync_status) values ('programme-1', 'lit', 'Literacy', 'synced')");
   });
 
   afterEach(async () => {
-    await resetDatabaseConnectionForTests();
+    await closeDefaultTestHandle();
     resetExpoSQLiteMock();
   });
 
@@ -576,7 +578,7 @@ describe('production-style evidence resolution without an injected engine databa
     const { supabaseClient } = createSupabaseMock({
       updateResults: { children: { data: [], error: null } },
     });
-    const engine = createOutboxSyncEngine({
+    const engine = createOutboxSyncEngine({ enqueueRequest: (task) => task(),
       getAuthSession: liveTestSession,
       outboxRepository,
       supabaseClient,
@@ -614,7 +616,7 @@ describe('production-style evidence resolution without an injected engine databa
     const { supabaseClient } = createSupabaseMock({
       updateResults: { children: { data: [], error: null } },
     });
-    const engine = createOutboxSyncEngine({
+    const engine = createOutboxSyncEngine({ enqueueRequest: (task) => task(),
       getAuthSession: liveTestSession,
       outboxRepository,
       supabaseClient,
@@ -672,7 +674,7 @@ describe('production-style evidence resolution without an injected engine databa
         },
       },
     });
-    const engine = createOutboxSyncEngine({
+    const engine = createOutboxSyncEngine({ enqueueRequest: (task) => task(),
       getAuthSession: liveTestSession,
       outboxRepository,
       supabaseClient,

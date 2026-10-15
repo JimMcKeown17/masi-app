@@ -1,5 +1,6 @@
 jest.mock('expo-sqlite', () => require('../test-support/expoSQLiteMock'));
-jest.mock('../src/services/supabaseClient', () => ({ supabase: {} }));
+jest.mock('../src/services/supabaseClient', () => ({
+  ...require('../test-support/supabaseTestConfig'), supabase: {} }));
 
 import { createBetterSqliteTestDatabase } from '../test-support/betterSqliteAdapter';
 import { runMigrations } from '../src/db/migrations';
@@ -46,7 +47,7 @@ describe('deterministic server error attempt budget', () => {
   test('the eighth PGRST204 is terminal and a ninth forced pass can recover it', async () => {
     let serverError = { code: 'PGRST204', message: 'schema cache is stale' };
     const upsert = jest.fn(async () => ({ error: serverError }));
-    const engine = createOutboxSyncEngine({
+    const engine = createOutboxSyncEngine({ enqueueRequest: (task) => task(),
       database: db,
       outboxRepository,
       stateRepository,
@@ -92,7 +93,7 @@ describe('deterministic server error attempt budget', () => {
 
   test('a codeless network error remains retriable after twenty attempts', async () => {
     const upsert = jest.fn(async () => ({ error: { message: 'network down' } }));
-    const engine = createOutboxSyncEngine({
+    const engine = createOutboxSyncEngine({ enqueueRequest: (task) => task(),
       database: db,
       outboxRepository,
       stateRepository,

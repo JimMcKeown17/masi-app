@@ -1,10 +1,11 @@
+import { useSignedInEA } from '../context/SignedInEAContext';
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { Alert, AppState, useWindowDimensions } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { v4 as uuidv4 } from 'uuid';
 import { useAuth } from '../context/AuthContext';
 import { useOffline } from '../context/OfflineContext';
-import { assessmentsRepository } from '../db/repositories/assessmentsRepository';
+
 import { ASSESSMENT_DURATION } from '../constants/egraConstants';
 import { buildAssessmentRecord } from '../utils/assessmentScoring';
 import { spacing } from '../constants/colors';
@@ -15,6 +16,9 @@ const DURATION_MS = ASSESSMENT_DURATION * 1000;
 export function useAssessmentSession({
   navigation, child, letterSet, attemptNumber = 1, assessmentType, captureMode, isWordAssessment,
 }) {
+  const { repositories } = useSignedInEA();
+  const { assessments: assessmentsRepository } = repositories;
+
   const { user } = useAuth();
   const { triggerBackgroundSync, refreshSyncStatus } = useOffline();
 

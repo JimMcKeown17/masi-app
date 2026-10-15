@@ -1,8 +1,9 @@
+import { isStaleActorError } from '../session/staleActor';
 import { Platform } from 'react-native';
 import { File, Paths } from 'expo-file-system/next';
 import * as Sharing from 'expo-sharing';
 import { logger } from './logger';
-import { debugDump } from '../db/debugDump';
+import { debugDump, assertExportHandle } from '../db/debugDump';
 import { getReleaseMetadata } from './releaseMetadata';
 import { getRuntimeDiagnostics } from './runtimeDiagnostics';
 
@@ -10,7 +11,8 @@ import { getRuntimeDiagnostics } from './runtimeDiagnostics';
  * Write content to a temp file and share it via the native share sheet.
  * Users will see a file attachment they can send via WhatsApp, email, etc.
  */
-const shareFile = async (filename, content, mimeType) => {
+const shareFile = async (filename, content, mimeType, handle) => {
+  if (handle) assertExportHandle(handle);
   const file = new File(Paths.cache, filename);
   if (file.exists) {
     file.delete();
@@ -18,6 +20,7 @@ const shareFile = async (filename, content, mimeType) => {
   file.create();
   file.write(content);
 
+  if (handle) assertExportHandle(handle);
   await Sharing.shareAsync(file.uri, {
     mimeType,
     dialogTitle: filename,
@@ -27,7 +30,8 @@ const shareFile = async (filename, content, mimeType) => {
 /**
  * Export local SQLite support diagnostics as a .json file via native Share.
  */
-export const exportDatabase = async () => {
+export const exportDatabase = async ({ handle }) => {
+  assertExportHandle(handle);
   try {
     const releaseMetadata = getReleaseMetadata();
     const runtimeDiagnostics = getRuntimeDiagnostics();
@@ -49,15 +53,16 @@ export const exportDatabase = async () => {
         native_build: runtimeDiagnostics.application.build,
         expo_update_id: runtimeDiagnostics.update.id,
       },
-      database: await debugDump(),
+      database: await debugDump({ handle }),
     };
 
     const jsonString = JSON.stringify(exportData, null, 2);
     const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
-    await shareFile(`masi-database-${timestamp}.json`, jsonString, 'application/json');
+    await shareFile(`masi-database-${timestamp}.json`, jsonString, 'application/json', handle);
 
     return { success: true };
   } catch (error) {
+    if (isStaleActorError(error)) throw error;
     console.error('Export database error:', error);
     return { success: false, error: error.message };
   }

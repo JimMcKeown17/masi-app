@@ -1,5 +1,6 @@
 jest.mock('expo-sqlite', () => require('../test-support/expoSQLiteMock'));
 jest.mock('../src/services/supabaseClient', () => ({
+  ...require('../test-support/supabaseTestConfig'),
   supabase: {},
 }));
 
@@ -153,7 +154,7 @@ describe('SQLite outbox auth gate', () => {
     await seedPendingClass(db);
     const { supabaseClient, calls } = createSupabaseMock();
     const mockGetAuthSession = jest.fn(missingTestSession);
-    const engine = createOutboxSyncEngine({
+    const engine = createOutboxSyncEngine({ enqueueRequest: (task) => task(),
       database: db,
       supabaseClient,
       outboxRepository,
@@ -186,7 +187,7 @@ describe('SQLite outbox auth gate', () => {
     await seedPendingClass(db);
     const { supabaseClient, calls } = createSupabaseMock();
     const mockGetAuthSession = jest.fn(liveTestSession);
-    const engine = createOutboxSyncEngine({
+    const engine = createOutboxSyncEngine({ enqueueRequest: (task) => task(),
       database: db,
       supabaseClient,
       outboxRepository,
@@ -224,7 +225,7 @@ describe('SQLite outbox auth gate', () => {
       tableName: 'classes', recordId: bPayload.id, operation: 'insert', payload: bPayload, ownerUserId: 'ea-b',
     });
     const { supabaseClient, calls } = createSupabaseMock();
-    const engine = createOutboxSyncEngine({
+    const engine = createOutboxSyncEngine({ enqueueRequest: (task) => task(),
       database: db,
       supabaseClient,
       outboxRepository,
@@ -254,7 +255,7 @@ describe('SQLite outbox auth gate', () => {
     await outboxRepository.enqueue({
       tableName: 'classes', recordId: 'null-row', operation: 'insert', payload: { id: 'null-row' }, ownerUserId: null,
     });
-    const engine = createOutboxSyncEngine({
+    const engine = createOutboxSyncEngine({ enqueueRequest: (task) => task(),
       database: db,
       supabaseClient: createSupabaseMock().supabaseClient,
       outboxRepository,
@@ -286,7 +287,7 @@ describe('SQLite outbox auth gate', () => {
       'classes:class-null:insert',
     ]);
     const { supabaseClient, calls } = createSupabaseMock();
-    const engine = createOutboxSyncEngine({
+    const engine = createOutboxSyncEngine({ enqueueRequest: (task) => task(),
       database: db,
       supabaseClient,
       outboxRepository,
@@ -312,7 +313,7 @@ describe('SQLite outbox auth gate', () => {
     const getAuthSession = jest.fn()
       .mockResolvedValueOnce({ data: { session: { user: { id: 'ea-a' } } } })
       .mockResolvedValue({ data: { session: { user: { id: 'ea-b' } } } });
-    const engine = createOutboxSyncEngine({
+    const engine = createOutboxSyncEngine({ enqueueRequest: (task) => task(),
       database: db,
       supabaseClient,
       outboxRepository,
@@ -339,7 +340,7 @@ describe('SQLite outbox auth gate', () => {
     const getAuthSession = jest.fn()
       .mockResolvedValueOnce({ data: { session: { user: { id: 'ea-a' } } } })
       .mockResolvedValue({ data: { session: { user: { id: 'ea-b' } } } });
-    const engine = createOutboxSyncEngine({
+    const engine = createOutboxSyncEngine({ enqueueRequest: (task) => task(),
       database: db,
       supabaseClient,
       outboxRepository,
@@ -371,7 +372,7 @@ describe('SQLite outbox auth gate', () => {
       .mockResolvedValueOnce({ data: { session: liveSession } })
       .mockResolvedValueOnce({ data: { session: liveSession } })
       .mockResolvedValue({ data: { session: null } });
-    const engine = createOutboxSyncEngine({
+    const engine = createOutboxSyncEngine({ enqueueRequest: (task) => task(),
       database: db,
       supabaseClient,
       outboxRepository,
@@ -407,7 +408,7 @@ describe('SQLite outbox auth gate', () => {
       },
     });
     const mockGetAuthSession = jest.fn(liveTestSession);
-    const engine = createOutboxSyncEngine({
+    const engine = createOutboxSyncEngine({ enqueueRequest: (task) => task(),
       database: db,
       supabaseClient,
       outboxRepository,
@@ -444,7 +445,7 @@ describe('SQLite outbox auth gate', () => {
       },
     });
     const mockGetAuthSession = jest.fn(liveTestSession);
-    const engine = createOutboxSyncEngine({
+    const engine = createOutboxSyncEngine({ enqueueRequest: (task) => task(),
       database: db,
       supabaseClient,
       outboxRepository,
