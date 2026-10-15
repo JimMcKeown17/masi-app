@@ -11,7 +11,7 @@ import { ClassesProvider, useClasses } from '../src/context/ClassesContext';
 import * as engine from '../test-support/expoSQLiteRealEngine';
 
 global.__MASI_NO_DEFAULT_HANDLE__ = true;
-jest.mock('@react-native-community/netinfo', () => ({ fetch: async () => ({ isConnected: false }) }));
+jest.mock('@react-native-community/netinfo', () => ({ fetch: async () => ({ isConnected: false }), addEventListener: () => () => {} }));
 const A = '11111111-1111-4111-8111-111111111111';
 const B = '22222222-2222-4222-8222-222222222222';
 const barrier = () => { let resolve; const promise = new Promise((r) => { resolve = r; }); return { promise, resolve }; };

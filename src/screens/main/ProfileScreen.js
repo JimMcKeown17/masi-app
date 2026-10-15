@@ -5,7 +5,7 @@ import { TextInput, Button, Text, Card, Divider, Snackbar, SegmentedButtons } fr
 import { NavigationContext, useFocusEffect } from '@react-navigation/native';
 import { useAuth } from '../../context/AuthContext';
 import { colors, spacing, borderRadius, shadows } from '../../constants/colors';
-import { supabase } from '../../services/supabaseClient';
+import { createPasswordVerificationClient } from '../../services/passwordVerificationClient';
 import { exportDatabase, exportLogs } from '../../utils/debugExport';
 import { getReleaseMetadata } from '../../utils/releaseMetadata';
 import { deviceSettings } from '../../services/deviceSettings';
@@ -38,7 +38,7 @@ function CaptureModeFocusLoader({ loadCaptureMode }) {
 export default function ProfileScreen({ navigation }) {
   const { handle } = useSignedInEA();
 
-  const { user, profile, updatePassword, signOut } = useAuth();
+  const { user, profile, signOut } = useAuth();
   const releaseMetadata = getReleaseMetadata();
   const runtimeDiagnostics = getRuntimeDiagnostics();
   const navigationContext = useContext(NavigationContext);
@@ -182,6 +182,7 @@ export default function ProfileScreen({ navigation }) {
   };
 
   const handleChangePassword = async () => {
+    if (!handle.isCurrent()) return;
     // Validation
     if (!currentPassword || !newPassword || !confirmPassword) {
       showMessage('All password fields are required', 'error');
@@ -200,10 +201,11 @@ export default function ProfileScreen({ navigation }) {
 
     setPasswordLoading(true);
     try {
-      // Verify current password by attempting to sign in
+      const verificationClient = createPasswordVerificationClient(handle);
+      // Verification and mutation share only this operation's private session.
       let signInError;
       try {
-        const result = await supabase.auth.signInWithPassword({
+        const result = await verificationClient.auth.signInWithPassword({
           email: user.email,
           password: currentPassword,
         });
@@ -211,6 +213,7 @@ export default function ProfileScreen({ navigation }) {
       } catch (error) {
         signInError = error;
       }
+      if (!handle.isCurrent()) return;
 
       if (signInError) {
         console.error('Password verification error:', signInError);
@@ -224,7 +227,8 @@ export default function ProfileScreen({ navigation }) {
       }
 
       // Update password
-      const { error } = await updatePassword(newPassword);
+      const { error } = await verificationClient.auth.updateUser({ password: newPassword });
+      if (!handle.isCurrent()) return;
 
       if (error) throw error;
 
@@ -235,10 +239,11 @@ export default function ProfileScreen({ navigation }) {
 
       showMessage('Password changed successfully');
     } catch (error) {
+      if (!handle.isCurrent()) return;
       console.error('Password change error:', error);
       showMessage(error.message || 'Failed to change password', 'error');
     } finally {
-      setPasswordLoading(false);
+      if (handle.isCurrent()) setPasswordLoading(false);
     }
   };
 

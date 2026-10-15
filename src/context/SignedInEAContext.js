@@ -31,9 +31,27 @@ export const SignedInEAProvider = ({ handle, children }) => {
   }, [handle, services]);
   useEffect(() => {
     void refreshProfile();
+    let active = true;
+    let wasOnline = false;
+    let receivedNetworkEvent = false;
+    const refreshOnOnline = (network) => {
+      if (!active || !handle.isCurrent()) return;
+      const online = Boolean(network.isConnected && network.isInternetReachable !== false);
+      if (online && !wasOnline) {
+        void services.pullReferenceData().catch((error) => {
+          if (!isStaleActorError(error)) console.error('Error refreshing reference data:', error);
+        });
+      }
+      wasOnline = online;
+    };
+    const unsubscribe = NetInfo.addEventListener((network) => {
+      receivedNetworkEvent = true;
+      refreshOnOnline(network);
+    });
     void NetInfo.fetch().then((network) => {
-      if (handle.isCurrent() && network.isConnected && network.isInternetReachable !== false) return services.referenceDataReady();
-    }).catch((error) => { if (!isStaleActorError(error)) console.error('Error pulling startup reference data:', error); });
+      if (!receivedNetworkEvent) refreshOnOnline(network);
+    }).catch((error) => { if (!isStaleActorError(error)) console.error('Error checking startup connectivity:', error); });
+    return () => { active = false; unsubscribe(); };
   }, [handle, services, refreshProfile]);
   const value = useMemo(() => ({ handle, repositories: handle.repositories, services }), [handle, services]);
   const profileAuth = useMemo(() => ({ ...auth, profile, refreshProfile }), [auth, profile, refreshProfile]);

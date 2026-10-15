@@ -2,13 +2,13 @@ import { SignedInEAProvider } from '../src/context/SignedInEAContext';
 import { resetHandleRegistryForTests } from '../src/session/signedInHandle';
 import * as engine from '../test-support/expoSQLiteRealEngine';
 import * as sqlite from 'expo-sqlite';
-jest.mock('@react-native-community/netinfo', () => ({ fetch: async () => ({ isConnected: true }) }));
+jest.mock('@react-native-community/netinfo', () => ({ fetch: async () => ({ isConnected: true }), addEventListener: () => () => {} }));
 jest.mock('../src/session/handleDataClient', () => ({ createHandleDataClient: () => require('../src/services/supabaseClient').supabase }));
 jest.mock('../src/session/handleServices', () => ({
   createHandleServices: (handle) => ({
     ...jest.requireActual('../src/session/handleServices').createHandleServices(handle),
     deviceProfile: { get: (...args) => mockDeviceProfile.getUserProfile(...args), save: (...args) => mockDeviceProfile.saveUserProfile(...args) },
-    referenceDataReady: (...args) => mockReferenceDataReady(...args),
+    pullReferenceData: (...args) => mockPullReferenceData(...args),
   }),
 }));
 const ProfileTree = ({ children }) => {
@@ -23,7 +23,7 @@ import { act, fireEvent, render, renderHook, waitFor } from '@testing-library/re
 import { Pressable } from 'react-native';
 import { AuthProvider, useAuth } from '../src/context/AuthContext';
 import { supabase } from '../src/services/supabaseClient';
-const mockReferenceDataReady = jest.fn();
+const mockPullReferenceData = jest.fn();
 const mockDeviceProfile = { getUserProfile: jest.fn(), saveUserProfile: jest.fn(), clearUserProfile: jest.fn() };
 
 jest.mock('../src/services/supabaseClient', () => ({
@@ -93,7 +93,7 @@ describe('AuthContext Plan 5 startup discipline', () => {
     mockDeviceProfile.getUserProfile.mockResolvedValue(null);
     mockDeviceProfile.saveUserProfile.mockResolvedValue(true);
     mockDeviceProfile.clearUserProfile.mockResolvedValue(true);
-    mockReferenceDataReady.mockResolvedValue({});
+    mockPullReferenceData.mockResolvedValue({});
     mockProfileQuery(Promise.resolve({ data: profileRow, error: null }));
   });
 
@@ -118,7 +118,7 @@ describe('AuthContext Plan 5 startup discipline', () => {
       await Promise.resolve();
     });
 
-    await waitFor(() => expect(mockReferenceDataReady).toHaveBeenCalledWith());
+    await waitFor(() => expect(mockPullReferenceData).toHaveBeenCalledWith());
     await waitFor(() => expect(supabase.from).toHaveBeenCalledWith('users'));
   });
 
@@ -152,7 +152,7 @@ describe('AuthContext Plan 5 startup discipline', () => {
 
   test('authenticated startup publishes the user without waiting for reference data', async () => {
     const referencePull = deferred();
-    mockReferenceDataReady.mockReturnValue(referencePull.promise);
+    mockPullReferenceData.mockReturnValue(referencePull.promise);
 
     const { result } = renderHook(() => useAuth(), { wrapper });
     await waitFor(() => expect(authCallback).toEqual(expect.any(Function)));
@@ -166,8 +166,8 @@ describe('AuthContext Plan 5 startup discipline', () => {
       await Promise.resolve();
     });
 
-    expect(mockReferenceDataReady).toHaveBeenCalledWith();
-    expect(mockReferenceDataReady).toHaveBeenCalledTimes(1);
+    expect(mockPullReferenceData).toHaveBeenCalledWith();
+    expect(mockPullReferenceData).toHaveBeenCalledTimes(1);
     expect(result.current.user).toEqual(expect.objectContaining({ id: '11111111-1111-4111-8111-111111111111' }));
     expect(result.current.loading).toBe(false);
   });
@@ -180,7 +180,7 @@ describe('AuthContext Plan 5 startup discipline', () => {
       first_name: 'Cached Nomsa',
     };
     mockDeviceProfile.getUserProfile.mockResolvedValue(cachedProfile);
-    mockReferenceDataReady.mockReturnValue(referencePull.promise);
+    mockPullReferenceData.mockReturnValue(referencePull.promise);
     mockProfileQuery(profileFetch.promise);
 
     const { result } = renderHook(() => useAuth(), { wrapper });
@@ -196,7 +196,7 @@ describe('AuthContext Plan 5 startup discipline', () => {
       await Promise.resolve();
     });
 
-    expect(mockReferenceDataReady).toHaveBeenCalledWith();
+    expect(mockPullReferenceData).toHaveBeenCalledWith();
     expect(supabase.from).toHaveBeenCalledWith('users');
     expect(result.current.profile).toEqual(expect.objectContaining({
       id: '11111111-1111-4111-8111-111111111111',
@@ -225,7 +225,7 @@ describe('AuthContext Plan 5 startup discipline', () => {
       await Promise.resolve();
     });
 
-    await waitFor(() => expect(mockReferenceDataReady).toHaveBeenCalledWith());
+    await waitFor(() => expect(mockPullReferenceData).toHaveBeenCalledWith());
     await waitFor(() => expect(supabase.from).toHaveBeenCalledWith('users'));
   });
 
@@ -242,7 +242,7 @@ describe('AuthContext Plan 5 startup discipline', () => {
     });
     await waitFor(() => expect(result.current.user).toEqual(expect.objectContaining({ id: '11111111-1111-4111-8111-111111111111' })));
 
-    mockReferenceDataReady.mockClear();
+    mockPullReferenceData.mockClear();
     mockDeviceProfile.getUserProfile.mockClear();
     supabase.from.mockClear();
 
@@ -256,7 +256,7 @@ describe('AuthContext Plan 5 startup discipline', () => {
     });
 
     expect(result.current.session).toEqual(expect.objectContaining({ access_token: 'new-token' }));
-    expect(mockReferenceDataReady).not.toHaveBeenCalled();
+    expect(mockPullReferenceData).not.toHaveBeenCalled();
     expect(mockDeviceProfile.getUserProfile).not.toHaveBeenCalled();
     expect(supabase.from).not.toHaveBeenCalled();
   });

@@ -1,5 +1,3 @@
-import { getDatabase, withDatabaseAccess } from './client';
-
 const LOCAL_SYNC_COLUMNS = `
   sync_status text not null default 'synced'
     check (sync_status in ('pending', 'synced', 'failed', 'terminal')),
@@ -704,7 +702,7 @@ const runInTransaction = async (db, task) => {
 };
 
 async function runMigrationsNow(database) {
-  const db = database || await getDatabase();
+  const db = database;
   const userVersion = await getUserVersion(db);
   const pending = MIGRATIONS.filter((migration) => migration.version > userVersion);
   if (pending.length === 0) {

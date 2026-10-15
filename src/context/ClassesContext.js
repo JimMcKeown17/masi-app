@@ -75,7 +75,8 @@ export const ClassesProvider = ({ children: reactChildren }) => {
 
   const publishClassBootstrapStatus = useCallback((userId, status) => {
     if (activeUserIdRef.current !== userId) return;
-    setClassBootstrap({ userId, status });
+    const serverPassOwed = activePullRef.current?.pending?.isOnline;
+    setClassBootstrap({ userId, status: serverPassOwed && status !== 'available' ? 'checking' : status });
   }, []);
 
   const refreshFromCache = useCallback(async () => {
@@ -379,35 +380,45 @@ export const ClassesProvider = ({ children: reactChildren }) => {
         }
       }
     } finally {
-      if (activeUserIdRef.current === activeUserId) {
+      if (activeUserIdRef.current === activeUserId && !activePullRef.current?.pending) {
         setLoading(false);
       }
     }
   }, [user?.id, isOnline, refreshFromCache, publishClassBootstrapStatus]);
 
   const pullFromServer = useCallback(() => {
-    const activeUserId = user?.id;
-    if (activePullRef.current && activePullRef.current.userId === activeUserId) {
-      return activePullRef.current.promise;
+    const userId = user?.id;
+    const inputs = { isOnline, domainPullNonce, run: performPullFromServer };
+    const active = activePullRef.current;
+    if (active && active.userId === userId) {
+      // A join with newer inputs owes another pass; it cannot inherit the old
+      // pass's captured offline state or consume a reconnect request silently.
+      if (active.inputs.isOnline !== isOnline || active.inputs.domainPullNonce !== domainPullNonce) {
+        active.pending = inputs;
+      } else {
+        active.pending = null;
+      }
+      return active.promise;
     }
 
-    const pullPromise = (async () => {
+    const flight = { userId, inputs, pending: null, promise: null };
+    activePullRef.current = flight;
+    flight.promise = (async () => {
       try {
-        return await performPullFromServer();
-      } finally {
-        if (activePullRef.current?.promise === pullPromise) {
-          activePullRef.current = null;
-          const authorizedFollowUpNeeded = activeUserIdRef.current === activeUserId
-            && hasReconcileBreakerAuthorizationRef.current(CLASS_RECONCILE_BREAKER_SCOPE);
-          if (authorizedFollowUpNeeded) {
-            pullFromServer();
-          }
+        let pass = inputs;
+        while (pass && handle.isCurrent() && activeUserIdRef.current === userId) {
+          flight.inputs = pass;
+          flight.pending = null;
+          await pass.run();
+          const authorizedFollowUpNeeded = hasReconcileBreakerAuthorizationRef.current(CLASS_RECONCILE_BREAKER_SCOPE);
+          pass = flight.pending || (authorizedFollowUpNeeded ? flight.inputs : null);
         }
+      } finally {
+        if (activePullRef.current === flight) activePullRef.current = null;
       }
     })();
-    activePullRef.current = { userId: activeUserId, promise: pullPromise };
-    return pullPromise;
-  }, [user?.id, performPullFromServer]);
+    return flight.promise;
+  }, [user?.id, isOnline, domainPullNonce, performPullFromServer, handle]);
 
   const loadClasses = useCallback(async () => {
     await pullFromServer();

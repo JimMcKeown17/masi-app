@@ -13,7 +13,7 @@ exports.openDefaultTestHandle = async () => {
     return connection;
   } });
   connections.set(handle, { writer, reader });
-  if (!global.__MASI_NO_DEFAULT_HANDLE__) require('../src/db/repositories/repositoryRuntime').enableAmbientHandleForTests();
+  if (!global.__MASI_NO_DEFAULT_HANDLE__) require('../src/db/repositories/repositoryRuntime').enableAmbientHandleForTests(lifecycle.requireCurrentHandle);
   return handle;
 };
 exports.closeDefaultTestHandle = async () => {

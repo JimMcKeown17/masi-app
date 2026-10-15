@@ -2,13 +2,13 @@ import { SignedInEAProvider } from '../src/context/SignedInEAContext';
 import { resetHandleRegistryForTests } from '../src/session/signedInHandle';
 import * as engine from '../test-support/expoSQLiteRealEngine';
 import * as sqlite from 'expo-sqlite';
-jest.mock('@react-native-community/netinfo', () => ({ fetch: async () => ({ isConnected: true }) }));
+jest.mock('@react-native-community/netinfo', () => ({ fetch: async () => ({ isConnected: true }), addEventListener: () => () => {} }));
 jest.mock('../src/session/handleDataClient', () => ({ createHandleDataClient: () => require('../src/services/supabaseClient').supabase }));
 jest.mock('../src/session/handleServices', () => ({
   createHandleServices: (handle) => ({
     ...jest.requireActual('../src/session/handleServices').createHandleServices(handle),
     deviceProfile: { get: (...args) => mockDeviceProfile.getUserProfile(...args), save: (...args) => mockDeviceProfile.saveUserProfile(...args) },
-    referenceDataReady: (...args) => mockReferenceDataReady(...args),
+    pullReferenceData: (...args) => mockPullReferenceData(...args),
   }),
 }));
 const ProfileTree = ({ children }) => {
@@ -30,7 +30,7 @@ import {
   readPersistedSession,
 } from '../src/services/persistedAuthSession';
 const mockDeviceProfile = { getUserProfile: jest.fn(), saveUserProfile: jest.fn(), clearUserProfile: jest.fn() };
-const mockReferenceDataReady = jest.fn();
+const mockPullReferenceData = jest.fn();
 import { enqueueSupabaseRequest } from '../test-support/handleServiceMocks';
 
 let mockAuthStateCallback;
@@ -142,7 +142,7 @@ describe('AuthContext offline cold-start restore', () => {
     mockSignOut.mockResolvedValue({ error: null });
     readPersistedSession.mockResolvedValue(null);
     clearPersistedSession.mockResolvedValue(undefined);
-    mockReferenceDataReady.mockResolvedValue(undefined);
+    mockPullReferenceData.mockResolvedValue(undefined);
     enqueueSupabaseRequest.mockImplementation(async (operation) => operation());
     mockDeviceProfile.getUserProfile.mockResolvedValue(null);
     mockDeviceProfile.clearUserProfile.mockResolvedValue(true);
@@ -169,7 +169,7 @@ describe('AuthContext offline cold-start restore', () => {
       jest.advanceTimersByTime(15000);
     });
 
-    expect(mockReferenceDataReady).toHaveBeenCalledTimes(1);
+    expect(mockPullReferenceData).toHaveBeenCalledTimes(1);
     expect(mockDeviceProfile.clearUserProfile).not.toHaveBeenCalled();
     expect(screen.getByTestId('auth-state')).toHaveTextContent('ready|11111111-1111-4111-8111-111111111111|no-session');
   });

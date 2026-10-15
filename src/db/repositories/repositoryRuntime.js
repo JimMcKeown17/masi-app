@@ -8,15 +8,15 @@ export const isSignedInHandle = (value) => Boolean(value
   && typeof value.getReader === 'function'
   && typeof value.withTransaction === 'function');
 
-let ambientHandleForTests = false;
-export const enableAmbientHandleForTests = () => {
+let ambientHandleForTests = null;
+export const enableAmbientHandleForTests = (getTestHandle) => {
   if (process.env.NODE_ENV !== 'test') throw new UnboundRepositoryError();
-  ambientHandleForTests = true;
+  ambientHandleForTests = getTestHandle;
 };
-export const disableAmbientHandleForTests = () => { ambientHandleForTests = false; };
+export const disableAmbientHandleForTests = () => { ambientHandleForTests = null; };
 const boundDatabase = (database) => {
   if (database) return database;
-  if (process.env.NODE_ENV === 'test' && ambientHandleForTests) return require('../../session/signedInHandle').requireCurrentHandle();
+  if (process.env.NODE_ENV === 'test' && ambientHandleForTests) return ambientHandleForTests();
   throw new UnboundRepositoryError();
 };
 export const resolveDatabase = async (database) => {

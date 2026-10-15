@@ -3,7 +3,8 @@ import { Alert, TextInput as NativeTextInput } from 'react-native';
 import { act, fireEvent, render, waitFor } from '@testing-library/react-native';
 import { Button, PaperProvider } from 'react-native-paper';
 import ProfileScreen from '../src/screens/main/ProfileScreen';
-import { supabase } from '../src/services/supabaseClient';
+const mockVerificationAuth = { signInWithPassword: jest.fn() };
+jest.mock('../src/services/passwordVerificationClient', () => ({ createPasswordVerificationClient: () => ({ auth: mockVerificationAuth }) }));
 import { exportDatabase, exportLogs } from '../src/utils/debugExport';
 
 jest.mock('expo-constants', () => ({
@@ -102,7 +103,7 @@ describe('ProfileScreen', () => {
 
   test('does not blame the current password when verification fails over the network', async () => {
     const consoleError = jest.spyOn(console, 'error').mockImplementation(() => {});
-    supabase.auth.signInWithPassword.mockResolvedValueOnce({
+    mockVerificationAuth.signInWithPassword.mockResolvedValueOnce({
       error: { message: 'Network request failed', status: 0 },
     });
     const screen = render(
@@ -129,7 +130,7 @@ describe('ProfileScreen', () => {
 
   test('reports an explicitly identified invalid credential as an incorrect current password', async () => {
     const consoleError = jest.spyOn(console, 'error').mockImplementation(() => {});
-    supabase.auth.signInWithPassword.mockResolvedValueOnce({
+    mockVerificationAuth.signInWithPassword.mockResolvedValueOnce({
       error: {
         code: 'invalid_credentials',
         message: 'Invalid login credentials',

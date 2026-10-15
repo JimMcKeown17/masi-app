@@ -1907,21 +1907,19 @@ const pullReferenceDataRows = async ({
 };
 
 // The single-flight barrier belongs to the supplied handle.
-const referenceFlight = (barrier, task) => {
-  if (barrier.promise) return barrier.promise;
+const referenceFlight = (barrier, task, key = 'promise') => {
+  if (barrier[key]) return barrier[key];
   const promise = Promise.resolve().then(task).then((result) => {
     barrier.ready = true;
     return result;
-  }).finally(() => { if (barrier.promise === promise) barrier.promise = null; });
-  barrier.promise = promise;
+  }).finally(() => { if (barrier[key] === promise) barrier[key] = null; });
+  barrier[key] = promise;
   return promise;
 };
 
 export const pullReferenceData = ({ barrier, ...options } = {}) => (
-  barrier ? referenceFlight(barrier, () => {
-    barrier.cacheChecked = true;
-    return pullReferenceDataRows(options);
-  }) : pullReferenceDataRows(options)
+  barrier ? referenceFlight(barrier, () => pullReferenceDataRows(options), 'refreshPromise')
+    : pullReferenceDataRows(options)
 );
 
 export const ensureReferenceData = ({
@@ -1943,7 +1941,7 @@ export const ensureReferenceData = ({
       ]);
       if (requiredRows.every((rows) => rows.length > 0)) return;
     }
-    return pullReferenceDataRows({ ...options, repositories });
+    return pullReferenceData({ ...options, repositories, barrier });
   });
 };
 

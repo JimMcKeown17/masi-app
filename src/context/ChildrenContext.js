@@ -341,37 +341,47 @@ export const ChildrenProvider = ({ children }) => {
         context: { phase: 'persist_or_publish' },
       });
     } finally {
-      if (activeUserIdRef.current === activeUserId) {
+      if (activeUserIdRef.current === activeUserId && !activePullRef.current?.pending) {
         setLoading(false);
       }
     }
   }, [user?.id, isOnline, refreshFromCache]);
 
   const pullFromServer = useCallback(() => {
-    const activeUserId = user?.id;
-    if (activePullRef.current && activePullRef.current.userId === activeUserId) {
-      return activePullRef.current.promise;
+    const userId = user?.id;
+    const inputs = { isOnline, domainPullNonce, run: performPullFromServer };
+    const active = activePullRef.current;
+    if (active && active.userId === userId) {
+      // A join with newer inputs owes another pass; it cannot inherit the old
+      // pass's captured offline state or consume a reconnect request silently.
+      if (active.inputs.isOnline !== isOnline || active.inputs.domainPullNonce !== domainPullNonce) {
+        active.pending = inputs;
+      } else {
+        active.pending = null;
+      }
+      return active.promise;
     }
 
-    const pullPromise = (async () => {
+    const flight = { userId, inputs, pending: null, promise: null };
+    activePullRef.current = flight;
+    flight.promise = (async () => {
       try {
-        return await performPullFromServer();
-      } finally {
-        if (activePullRef.current?.promise === pullPromise) {
-          activePullRef.current = null;
-          const authorizedFollowUpNeeded = activeUserIdRef.current === activeUserId
-            && CHILD_RECONCILE_BREAKER_SCOPES.some(
-              (scope) => hasReconcileBreakerAuthorizationRef.current(scope)
-            );
-          if (authorizedFollowUpNeeded) {
-            pullFromServer();
-          }
+        let pass = inputs;
+        while (pass && handle.isCurrent() && activeUserIdRef.current === userId) {
+          flight.inputs = pass;
+          flight.pending = null;
+          await pass.run();
+          const authorizedFollowUpNeeded = CHILD_RECONCILE_BREAKER_SCOPES.some(
+            scope => hasReconcileBreakerAuthorizationRef.current(scope)
+          );
+          pass = flight.pending || (authorizedFollowUpNeeded ? flight.inputs : null);
         }
+      } finally {
+        if (activePullRef.current === flight) activePullRef.current = null;
       }
     })();
-    activePullRef.current = { userId: activeUserId, promise: pullPromise };
-    return pullPromise;
-  }, [user?.id, performPullFromServer]);
+    return flight.promise;
+  }, [user?.id, isOnline, domainPullNonce, performPullFromServer, handle]);
 
   // Load data on mount when user is authenticated
   useEffect(() => {

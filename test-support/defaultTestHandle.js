@@ -12,7 +12,7 @@ beforeEach(async () => {
   await engine.__resetMockDatabases();
   sqlite.__setDatabaseFactory?.(engine.openDatabaseAsync);
   await require('./testDatabase').openDefaultTestHandle();
-  enableAmbientHandleForTests();
+  enableAmbientHandleForTests(require('../src/session/signedInHandle').requireCurrentHandle);
   require('../src/session/signedInHandle').setLatestAuthSession({ user: { id: TEST_ACTOR_ID }, access_token: 'test-token' });
 });
 afterEach(async () => {

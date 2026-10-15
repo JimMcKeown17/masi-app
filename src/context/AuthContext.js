@@ -15,6 +15,7 @@ export const AuthProvider = ({ children }) => {
   const [handleError, setHandleError] = useState(null);
   const currentUserRef = useRef(null);
   const generationRef = useRef(0);
+  const authCleanupRef = useRef(Promise.resolve());
   const localSignOutCommittedRef = useRef(false);
   const pendingSignOutTimeoutRef = useRef(null);
   const authListenersRef = useRef(new Set());
@@ -52,10 +53,29 @@ export const AuthProvider = ({ children }) => {
     const generation = ++generationRef.current;
     clearPendingSignOutTimeout();
     currentUserRef.current = null;
+    setLatestAuthSession(null);
     await requestClose({ reason });
-    if (!mountedRef.current || generation !== generationRef.current) return;
+    if (!mountedRef.current || generation !== generationRef.current) return false;
     setSession(null); setUser(null); setHandle(null); setHandleError(null);
     setHandleStatus('signed_out'); setLoading(false);
+    return true;
+  };
+  const finishSignOut = async (reason, signOutClient = false) => {
+    const closing = commitSignedOutState(reason);
+    const generation = generationRef.current;
+    if (!await closing || generation !== generationRef.current) return;
+    // Reserve cleanup before yielding. New sign-ins invalidate pending cleanup,
+    // and wait for any already-started storage/SDK operation before saving a session.
+    const cleanup = authCleanupRef.current.catch(() => {}).then(async () => {
+      if (generation !== generationRef.current || !mountedRef.current) return;
+      try { await clearPersistedSession(); } catch (error) { console.error('Sign out local cleanup error:', error); }
+      if (!signOutClient || generation !== generationRef.current || !mountedRef.current) return;
+      authCleanupRef.current = supabase.auth.signOut({ scope: 'local' }).catch((error) => {
+        console.warn('[Auth] Background Supabase sign-out failed:', error?.message);
+      });
+    });
+    authCleanupRef.current = cleanup;
+    await cleanup;
   };
   const resolveColdStartGate = async (reason) => {
     const generation = generationRef.current;
@@ -80,11 +100,11 @@ export const AuthProvider = ({ children }) => {
       if (next) { setHandleStatus('open'); setHandleError(null); setLoading(false); }
     });
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, nextSession) => {
-      // Refresh events must reach the fenced data client, including ignored auth events.
-      setLatestAuthSession(nextSession ?? null);
       for (const listener of authListenersRef.current) listener(event, nextSession ?? null);
       if (nextSession?.user) {
         if (localSignOutCommittedRef.current && event !== 'SIGNED_IN') return;
+        ++generationRef.current;
+        setLatestAuthSession(nextSession);
         if (event === 'SIGNED_IN') localSignOutCommittedRef.current = false;
         clearPendingSignOutTimeout();
         setSession(nextSession);
@@ -98,13 +118,16 @@ export const AuthProvider = ({ children }) => {
         void (async () => {
           const persisted = await readPersistedSession();
           if (generation !== generationRef.current || !mountedRef.current) return;
-          if (!localSignOutCommittedRef.current && persisted?.user?.id === currentUserRef.current?.id && persisted?.user?.id) return;
+          if (!localSignOutCommittedRef.current && persisted?.user?.id === currentUserRef.current?.id && persisted?.user?.id) {
+            setLatestAuthSession(persisted);
+            return;
+          }
           localSignOutCommittedRef.current = true;
-          await commitSignedOutState('signed-out');
-          await clearPersistedSession();
+          await finishSignOut('signed-out');
         })();
         return;
       }
+      setLatestAuthSession(null);
       if (event === 'INITIAL_SESSION') { void resolveColdStartGate('initial-session'); return; }
       if (currentUserRef.current && !pendingSignOutTimeoutRef.current) {
         pendingSignOutTimeoutRef.current = setTimeout(() => {
@@ -125,6 +148,8 @@ export const AuthProvider = ({ children }) => {
 
   const signIn = useCallback(async (email, password) => {
     try {
+      ++generationRef.current;
+      await authCleanupRef.current;
       const { data, error } = await supabase.auth.signInWithPassword({
         email,
         password,
@@ -141,11 +166,7 @@ export const AuthProvider = ({ children }) => {
   const signOut = useCallback(async () => {
     localSignOutCommittedRef.current = true;
     setLatestAuthSession(null);
-    await commitSignedOutState('manual-sign-out');
-    try { await clearPersistedSession(); } catch (error) { console.error('Sign out local cleanup error:', error); }
-    supabase.auth.signOut({ scope: 'local' }).catch((error) => {
-      console.warn('[Auth] Background Supabase sign-out failed:', error?.message);
-    });
+    await finishSignOut('manual-sign-out', true);
     return { error: null };
   }, []);
 
