@@ -325,6 +325,8 @@ reconnect behavior, release uptake, or field behavior.
 
 A pull first persists returned server rows, then reconciles acknowledged relationship removals in SQLite. React state is never a second merge authority. `ChildrenContext` and `ClassesContext` publish the cache immediately, perform the pull, and then publish a fresh repository read after persistence and reconcile. The retired `mergeServerRows` helper and its three-way in-memory merge are gone.
 
+A repository `update*` function (`updateTimeEntry`, `updateChild`, `updateClass`, `updateGroup`, `updateLetterMasteryRecord`) records a local edit, so it always writes `sync_status = 'pending'`, `synced = false`, and `last_sync_error = null` and enqueues the edit, whatever sync bookkeeping the caller spreads in. Only the sync engine (`setDomainSyncResult`) marks a row synced, and only pull and seed paths pass `synced: true`, through `save*` functions. Before 2026-10-15 a caller that spread a stored synced row (the clock-out) won, and the edit was never queued.
+
 A pulled row is stamped `sync_status: 'synced'` before it reaches a repository save function. `serverPullWouldClobberPendingLocal` runs in the same transaction as the upsert and skips a server row when the local row is `pending` or `failed`. `synced` and `terminal` local rows may be replaced by an acknowledged server copy. Owner-scoped pending hard-delete ids are filtered out before child and relationship persistence. A skipped row never changes its queued outbox payload and never enqueues new work.
 
 ### Stale active-pair supersede (2026-07-22)

@@ -164,7 +164,10 @@ export const createMasteryRepository = ({ database } = {}) => {
       ...updates,
       id,
       deleted_at: deletedAt,
-      sync_status: updates.sync_status || syncStatusFromSynced(updates.synced),
+      // A local edit owns its sync state, even when updates spreads a synced row.
+      sync_status: 'pending',
+      synced: false,
+      last_sync_error: null,
     });
     await upsertDomainRecord(txn, {
       tableName: 'letter_mastery',

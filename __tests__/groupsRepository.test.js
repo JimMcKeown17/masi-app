@@ -16,6 +16,43 @@ import {
 const FIXED_NOW = new Date('2026-05-21T08:00:00.000Z');
 
 describe('groupsRepository', () => {
+  test('editing a full mapped synced group ignores caller sync bookkeeping and queues one update', async () => {
+    const db = await createMigratedDatabase(runMigrations);
+
+    try {
+      await seedCoreData(db);
+      const repository = createGroupsRepository({ database: db });
+      await repository.saveGroup({
+        id: 'group-synced', name: 'Synced group', programme_id: 'programme-a',
+        class_id: 'class-1', created_by: 'user-1', synced: true,
+      });
+      const [current] = await repository.getGroups();
+      expect(current).toEqual(expect.objectContaining({ sync_status: 'synced', synced: true }));
+      expect(await db.getAllAsync('select * from sync_outbox')).toEqual([]);
+
+      await repository.updateGroup(current.id, {
+        ...current,
+        name: 'Updated group',
+        last_sync_error: 'stale caller error',
+      });
+
+      const [updated] = await repository.getGroups();
+      expect(updated).toEqual(expect.objectContaining({
+        name: 'Updated group', sync_status: 'pending', synced: false, last_sync_error: null,
+      }));
+      const outbox = await db.getAllAsync('select table_name, record_id, operation, payload from sync_outbox');
+      expect(outbox).toHaveLength(1);
+      expect(outbox[0]).toEqual(expect.objectContaining({
+        table_name: 'groups', record_id: current.id, operation: 'update',
+      }));
+      expect(JSON.parse(outbox[0].payload)).toEqual(expect.objectContaining({
+        name: 'Updated group', sync_status: 'pending', synced: false, last_sync_error: null,
+      }));
+    } finally {
+      await db.closeAsync();
+    }
+  });
+
   beforeEach(() => {
     jest.useFakeTimers();
     jest.setSystemTime(FIXED_NOW);
