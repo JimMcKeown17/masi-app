@@ -6,7 +6,7 @@ jest.mock('expo-sqlite', () => require('../test-support/expoSQLiteMock'));
 
 import React from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { renderHook, waitFor } from '@testing-library/react-native';
+import { act, renderHook, waitFor } from '@testing-library/react-native';
 import { __reset, __setDatabaseFactory } from 'expo-sqlite';
 import { ChildrenProvider, useChildren } from '../src/context/ChildrenContext';
 import { resetDatabaseConnectionForTests, getWriter } from '../src/db/client';
@@ -109,6 +109,38 @@ beforeEach(async () => {
 afterEach(async () => {
   await resetDatabaseConnectionForTests();
   __reset();
+});
+
+test.each([false, true])('editing then deleting a pulled child keeps the context deletion contract (history=%s)', async (hasHistory) => {
+  await testDb.runAsync('delete from sync_outbox');
+  const { result } = renderHook(() => useChildren(), { wrapper });
+  await waitFor(() => expect(result.current.children.map(row => row.id)).toContain('child-9'));
+  if (hasHistory) {
+    await testDb.runAsync(`
+      insert into assessments (id, user_id, child_id, programme_id, assessment_type, assessment_date)
+      values ('assessment-1', 'user-1', 'child-9', 'programme-a', 'letter_egra', '2026-10-15')
+    `);
+  }
+  await act(async () => {
+    expect(await result.current.updateChild('child-9', { first_name: 'Edited' })).toEqual({ success: true });
+  });
+  await act(async () => {
+    expect(await result.current.deleteChild('child-9')).toEqual({ success: true });
+  });
+
+  expect(result.current.children.map(row => row.id)).not.toContain('child-9');
+  const child = await testDb.getFirstAsync("select archived_at from children where id = 'child-9'");
+  const operations = await testDb.getAllAsync("select operation from sync_outbox where table_name = 'children' order by operation");
+  if (hasHistory) {
+    expect(child.archived_at).toEqual(expect.any(String));
+    expect(operations).toEqual([{ operation: 'archive' }, { operation: 'update' }]);
+    expect(await testDb.getFirstAsync('select count(*) as count from assessments')).toEqual({ count: 1 });
+  } else {
+    expect(child).toBeNull();
+    expect(operations).toEqual([{ operation: 'hard_delete' }]);
+  }
+  await act(async () => { await result.current.loadChildren(); });
+  expect(result.current.children.map(row => row.id)).not.toContain('child-9');
 });
 
 test('pending hard-delete filtering avoids FK-invalid relationship resurrection', async () => {

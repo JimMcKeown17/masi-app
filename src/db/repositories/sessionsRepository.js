@@ -235,6 +235,8 @@ export const createSessionsRepository = ({ database } = {}) => {
         group_id: (session.group_ids || [])[0] || null,
         attendance_status: 'present',
         sync_status: session.sync_status || syncStatusFromSynced(session.synced),
+        synced: record.sync_status === 'synced',
+        last_sync_error: null,
       });
       await upsertDomainRecord(txn, {
         tableName: 'session_attendees',
@@ -332,7 +334,14 @@ export const createSessionsRepository = ({ database } = {}) => {
     for (const key of keysToRemove) {
       delete next[key];
     }
-    await saveSession(next, { transaction: txn });
+    await saveSession({
+      ...next,
+      // Local edits own their sync state, after both updates and key removal.
+      // saveSession applies this status to every attendee it rewrites too.
+      sync_status: 'pending',
+      synced: false,
+      last_sync_error: null,
+    }, { transaction: txn });
     return true;
   });
 
