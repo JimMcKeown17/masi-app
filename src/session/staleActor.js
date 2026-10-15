@@ -35,3 +35,19 @@ export class NoSignedInEAError extends Error {
 
 export const isStaleActorError = (error) => error instanceof StaleActorError
   || error?.name === 'StaleActorError';
+
+export class HandleDisposeFailedError extends Error {
+  constructor(message = 'Database connections could not be disposed safely') {
+    super(message);
+    this.name = 'HandleDisposeFailedError';
+    this.code = 'HANDLE_DISPOSE_FAILED';
+  }
+}
+
+export class UnboundRepositoryError extends Error {
+  constructor(message = 'Repository requires a signed-in EA handle') {
+    super(message);
+    this.name = 'UnboundRepositoryError';
+    this.code = 'UNBOUND_REPOSITORY';
+  }
+}

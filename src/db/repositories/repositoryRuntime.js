@@ -2,7 +2,17 @@ import { getDatabase, withTransaction } from '../client';
 import { runMigrations } from '../migrations';
 import { runWithTransaction } from './sqliteRepositoryUtils';
 
+export const isSignedInHandle = (value) => Boolean(value
+  && typeof value.isOpen === 'function'
+  && typeof value.getReader === 'function'
+  && typeof value.withTransaction === 'function');
+
+// Task 5 will gate ambient resolution with these; the legacy path stays intact for now.
+export const enableAmbientHandleForTests = () => {};
+export const disableAmbientHandleForTests = () => {};
+
 export const resolveDatabase = async (database) => {
+  if (isSignedInHandle(database)) return database.getReader();
   if (database) {
     // Test / injected-db path: migrate the supplied connection.
     await runMigrations(database);
@@ -15,6 +25,7 @@ export const resolveDatabase = async (database) => {
 };
 
 export const runRepositoryTransaction = async (database, task) => {
+  if (isSignedInHandle(database)) return database.withTransaction(task);
   if (database) {
     const db = await resolveDatabase(database);
     return runWithTransaction(db, task);

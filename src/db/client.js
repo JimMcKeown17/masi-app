@@ -1,7 +1,16 @@
 import { openDatabaseAsync } from 'expo-sqlite';
 import { runMigrations } from './migrations';
 
-export const DATABASE_NAME = 'masi.db';
+export const DATABASE_FILE_PREFIX = 'masi-';
+export const LEGACY_DATABASE_NAME = 'masi.db';
+export const DATABASE_NAME = LEGACY_DATABASE_NAME;
+
+export const databaseNameForUser = (userId) => {
+  if (typeof userId !== 'string' || !/^[0-9a-f-]{36}$/i.test(userId)) {
+    throw new Error('A UUID-shaped EA userId is required for a database file');
+  }
+  return `${DATABASE_FILE_PREFIX}${userId}.db`;
+};
 
 // journal_mode is database-level (set once). foreign_keys + busy_timeout + query_only
 // are PER-CONNECTION, which is why a persistent writer/reader fixes the historical leak.
@@ -40,33 +49,42 @@ const disposeConnections = async () => {
   readerConnection = null;
 };
 
-// Single bootstrap: open the writer, migrate it (FK off), flip FK on, then open the
-// read-only reader. Both getDatabase()/getWriter() await this, so no query ever sees a
-// pre-migration schema. Migrations run directly on the writer (NOT via the queued
-// runMigrations no-arg path) to avoid re-entering this initializer.
+// Open the writer, migrate it (FK off), flip FK on, then open the read-only reader.
+// Migrations run on the supplied writer, never through the ambient migration queue.
+export const openConfiguredConnections = async ({ name, openDatabase = openDatabaseAsync }) => {
+  let writer = null;
+  let reader = null;
+  try {
+    // Register each connection IMMEDIATELY after opening, BEFORE any awaited pragma or
+    // migration work. Otherwise configuration failure leaks an opened native connection.
+    // Neither connection is exposed to callers until configuration has completed.
+    writer = await openDatabase(name);
+    await applyPragmas(writer, WRITER_PRE_MIGRATION_PRAGMAS);
+    await runMigrations(writer);
+    await writer.execAsync('PRAGMA foreign_keys = ON');
+    reader = await openDatabase(name, { useNewConnection: true });
+    await applyPragmas(reader, READER_PRAGMAS);
+    return { writer, reader };
+  } catch (cause) {
+    // Any bootstrap failure disposes whatever opened, including a reader whose pragmas
+    // failed. Attempt both closes even if one fails; handle callers fence an unsafe file.
+    const error = cause instanceof Error ? cause : new Error(String(cause));
+    for (const connection of [writer, reader]) {
+      if (!connection) continue;
+      try { await connection.closeAsync(); } catch (_) { error.connectionDisposalFailed = true; }
+    }
+    throw error;
+  }
+};
+
 const initialize = async () => {
   if (!initPromise) {
-    initPromise = (async () => {
-      // Register each connection in its module var IMMEDIATELY after opening, BEFORE any awaited
-      // pragma/migration work. If configuration then throws, the handle is already visible to
-      // disposeConnections() in the catch — otherwise a writer that opened but failed its pragmas
-      // or migrations would leak its native handle (it wasn't yet assigned). Nothing reads these
-      // vars until initialize() resolves (every caller awaits initPromise), so early assignment
-      // of a not-yet-configured connection is safe.
-      writerConnection = await openDatabaseAsync(DATABASE_NAME);
-      await applyPragmas(writerConnection, WRITER_PRE_MIGRATION_PRAGMAS);
-      await runMigrations(writerConnection);
-      await writerConnection.execAsync('PRAGMA foreign_keys = ON');
-
-      readerConnection = await openDatabaseAsync(DATABASE_NAME, { useNewConnection: true });
-      await applyPragmas(readerConnection, READER_PRAGMAS);
-
+    initPromise = openConfiguredConnections({ name: DATABASE_NAME }).then(({ writer, reader }) => {
+      writerConnection = writer;
+      readerConnection = reader;
       return { writerConnection, readerConnection };
-    })().catch(async (error) => {
-      // Any bootstrap failure (writer open/pragma/migration OR reader open/pragma): close
-      // whatever opened and clear state so the next access re-bootstraps instead of leaking a
-      // native handle.
-      await disposeConnections();
+    }).catch((error) => {
+      initPromise = null;
       throw error;
     });
   }
