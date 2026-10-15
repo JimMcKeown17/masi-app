@@ -387,12 +387,11 @@ the current-state model better than Zazi's per-session carry-forward.
 
 ### Data and lifecycle
 
-- [ ] **Truthful no-location behavior:** the PRD says approximate location is used “when available”
-  with a roughly ten-second fallback, but `locationService` and `TimeTrackingContext` currently
-  return before writing when services, permission, current fix, and acceptable last-known fix are
-  unavailable. Choose capture-and-flag, explicit supervisor override, or a deliberate hard gate;
-  align PRD/runtime/schema/reporting and pass Android/iOS denial, services-off, indoor-timeout,
-  stale-cache, offline, and successful-fix device scenarios.
+- [ ] **No-location release gates:** manual clock-in/out now save without location and carry the
+  reason through SQLite and the upload payload. Before release, run the extended local upload-contract
+  PostgreSQL harness, apply `20261015120000_time_entry_location_optional.sql` to the hosted backend,
+  and pass Android/iOS denial, services-off, indoor-timeout, stale-cache, offline, Settings return,
+  double-tap, and successful-fix device scenarios. Controller owns hosted application and release.
 - [ ] **Auto-clock-out authority:** the ten-hour close is currently device-owned and runs only while
   the app is active or when the open entry is next loaded. Decide whether hosted rows may remain
   open until that phone returns, or add a fenced server/hybrid authority that a stale offline write

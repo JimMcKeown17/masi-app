@@ -633,6 +633,7 @@ describe('SQLite debug dump', () => {
           { version: 8, name: 'children_current_reading_level' },
           { version: 9, name: 'sync_relationship_indexes' },
           { version: 10, name: 'children_history_reference' },
+          { version: 11, name: 'time_entry_location_optional' },
         ],
         tableCounts: expect.objectContaining({
           schools: 1,

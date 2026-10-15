@@ -18,6 +18,11 @@ const {
   runPsql,
 } = require('./history-authorization-postgres-harness.cjs');
 
+// Local invocation: PATH includes PostgreSQL 17; set HISTORY_RLS_ADMIN_DATABASE_URL,
+// HISTORY_RLS_DATABASE_NAME (masi_history_rls_*), HISTORY_RLS_DISPOSABLE_CONFIRM
+// (I_UNDERSTAND_THIS_IS_DISPOSABLE), and PGTZ=UTC. Never loads dotenv or uses Supabase CLI.
+const LOCATION_MIGRATION = '20261015120000_time_entry_location_optional.sql';
+
 const quoteIdentifier = (identifier) => `"${identifier.replaceAll('"', '""')}"`;
 
 const HEAD_OFFICE = '11000000-0000-0000-0000-000000000001';
@@ -200,6 +205,74 @@ const runCases = (databaseUrl) => {
   return summary;
 };
 
+const runLocationCases = (databaseUrl) => {
+  let passed = 0;
+  const owner = (sql, label) => runPsql({ databaseUrl, sql: asActor(ASSIGNED_EA, sql), label });
+  const insert = (lat, lon, status) => `INSERT INTO public.time_entries
+    (user_id, sign_in_time, sign_in_lat, sign_in_lon, sign_in_location_status)
+    VALUES ('${ASSIGNED_EA}', now(), ${lat}, ${lon}, ${status})
+    RETURNING sign_in_location_status;`;
+  for (const status of ['timeout', 'denied', 'services_off', 'unavailable']) {
+    assert.equal(owner(insert('NULL', 'NULL', `'${status}'`), `location-insert-${status}`), status);
+    passed += 1;
+  }
+  assert.equal(owner(`INSERT INTO public.time_entries (user_id, sign_in_time, sign_in_lat, sign_in_lon)
+    VALUES ('${ASSIGNED_EA}', now(), -33.9, 25.6) RETURNING sign_in_location_status IS NULL;`, 'location-older-build'), 't');
+  passed += 1;
+  for (const prefix of ['sign_in', 'sign_out']) {
+    for (const [lat, lon, status] of [
+      ['1', 'NULL', 'NULL'], ['NULL', '2', 'NULL'], ['NULL', 'NULL', "'fix'"],
+      ['1', '2', "'timeout'"], ['1', '2', "'denied'"], ['1', '2', "'services_off'"],
+      ['1', '2', "'unavailable'"], ['NULL', 'NULL', "'unknown'"],
+    ]) {
+      expectSqlState({ databaseUrl, label: `location-${prefix}-invalid-${passed}`, sqlState: '23514',
+        sql: asActor(ASSIGNED_EA, updateByIdSql('time_entries',
+          `${prefix}_lat = ${lat}, ${prefix}_lon = ${lon}, ${prefix}_location_status = ${status}`, TIME_ENTRY)) });
+      passed += 1;
+    }
+    assert.equal(owner(updateByIdSql('time_entries',
+      `${prefix}_lat = 0, ${prefix}_lon = 0, ${prefix}_location_status = 'fix'`, TIME_ENTRY), `location-${prefix}-fix`), TIME_ENTRY);
+    passed += 1;
+  }
+  const close = updateByIdSql('time_entries',
+    "sign_out_time = now(), sign_out_lat = NULL, sign_out_lon = NULL, sign_out_location_status = 'unavailable'", TIME_ENTRY);
+  assert.equal(owner(close, 'location-owner-clock-out'), TIME_ENTRY);
+  passed += 1;
+  assert.equal(runPsql({ databaseUrl, sql: asActor(UNASSIGNED_EA, close), label: 'location-nonowner-update' }), '');
+  assert.equal(runPsql({ databaseUrl, sql: asActor(UNASSIGNED_EA,
+    `SELECT sign_in_location_status, sign_out_location_status FROM public.time_entries WHERE id = '${TIME_ENTRY}';`),
+    label: 'location-nonowner-select' }), '');
+  expectSqlState({ databaseUrl, sql: asActor(UNASSIGNED_EA, insert('NULL', 'NULL', "'timeout'")),
+    label: 'location-nonowner-insert', sqlState: '42501' });
+  passed += 3;
+  for (const column of ['sign_in_location_status', 'sign_out_location_status']) {
+    for (const privilege of ['INSERT', 'UPDATE', 'SELECT']) {
+      assert.equal(runPsql({ databaseUrl, label: `location-grant-${column}-${privilege}`,
+        sql: `SELECT has_column_privilege('authenticated', 'public.time_entries', '${column}', '${privilege}');` }), 't');
+      passed += 1;
+    }
+  }
+  assert.equal(runPsql({ databaseUrl, label: 'location-validated-checks', sql: `SELECT count(*) FROM pg_constraint
+    WHERE conrelid = 'public.time_entries'::regclass AND conname LIKE 'time_entries_%_location_%' AND convalidated;` }), '6');
+  passed += 1;
+  return { passed };
+};
+
+const locationLegacyFixture = `
+INSERT INTO public.time_entries (id, user_id, sign_in_time, sign_in_lat, sign_in_lon,
+  sign_out_time, sign_out_lat, sign_out_lon, auto_clocked_out)
+VALUES
+  ('76100000-0000-0000-0000-000000000002', '${ASSIGNED_EA}', now(), -33.9, 25.6, now(), -33.8, 25.7, false),
+  ('76100000-0000-0000-0000-000000000003', '${ASSIGNED_EA}', now(), -33.9, 25.6, now(), NULL, NULL, true);
+`;
+const locationSnapshot = (databaseUrl) => runPsql({ databaseUrl, label: 'location-snapshot', sql: `
+SELECT to_jsonb(t) - 'sign_in_location_status' - 'sign_out_location_status' FROM public.time_entries t ORDER BY id;
+SELECT relacl::text FROM pg_class WHERE oid = 'public.time_entries'::regclass;
+SELECT row_to_json(p) FROM pg_policies p WHERE schemaname = 'public' AND tablename = 'time_entries' ORDER BY policyname;
+SELECT indexdef FROM pg_indexes WHERE schemaname = 'public' AND tablename = 'time_entries' ORDER BY indexname;
+SELECT pg_get_triggerdef(oid) FROM pg_trigger WHERE tgrelid = 'public.time_entries'::regclass ORDER BY tgname;
+` });
+
 const main = () => {
   const baseName = process.env.HISTORY_RLS_DATABASE_NAME;
   const databaseName = baseName ? `${baseName}_upload` : baseName;
@@ -216,11 +289,19 @@ const main = () => {
   runPsql({ databaseUrl: adminDatabaseUrl, sql: `CREATE DATABASE ${quotedDatabase};`, label: 'create-database' });
   try {
     runPsql({ databaseUrl, sql: bootstrapSql, label: 'bootstrap' });
+    let seeded = false;
     for (const filename of fs.readdirSync(MIGRATIONS_DIR).filter((f) => f.endsWith('.sql')).sort()) {
+      let before;
+      if (filename === LOCATION_MIGRATION) {
+        runPsql({ databaseUrl, sql: fixtureSql + locationLegacyFixture, label: 'pre-location-fixture' });
+        seeded = true;
+        before = locationSnapshot(databaseUrl);
+      }
       runPsql({ databaseUrl, file: path.join(MIGRATIONS_DIR, filename), label: `migration-${filename}` });
+      if (before) assert.equal(locationSnapshot(databaseUrl), before, 'Location migration preserves legacy rows, grants, policies, indexes and triggers');
     }
-    runPsql({ databaseUrl, sql: fixtureSql, label: 'upload-contract-fixture' });
-    process.stdout.write(`${JSON.stringify(runCases(databaseUrl))}\n`);
+    if (!seeded) runPsql({ databaseUrl, sql: fixtureSql, label: 'upload-contract-fixture' });
+    process.stdout.write(`${JSON.stringify({ ...runCases(databaseUrl), location: runLocationCases(databaseUrl) })}\n`);
   } finally {
     runPsql({ databaseUrl: adminDatabaseUrl, sql: `DROP DATABASE IF EXISTS ${quotedDatabase} WITH (FORCE);`, label: 'drop-database' });
   }

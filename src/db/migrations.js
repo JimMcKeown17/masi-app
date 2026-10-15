@@ -10,7 +10,7 @@ const LOCAL_SYNC_COLUMNS = `
 let appMigrationQueue = Promise.resolve();
 const explicitDatabaseMigrationQueues = new WeakMap();
 
-const MIGRATIONS = [
+export const MIGRATIONS = [
   {
     version: 1,
     name: 'initial_sqlite_foundation',
@@ -628,6 +628,46 @@ const MIGRATIONS = [
     sql: `
       alter table children add column history_reference integer not null default 0
         check (history_reference in (0, 1));
+    `,
+  },
+  {
+    version: 11,
+    name: 'time_entry_location_optional',
+    // SQLite cannot DROP NOT NULL. Rebuild under the existing FK-off migration
+    // transaction; copy every old column and recreate the table's sole index.
+    // v10 has no time_entries triggers or inbound/outbound foreign keys.
+    sql: `
+      create table time_entries_new (
+        id text primary key,
+        user_id text not null,
+        sign_in_time text not null,
+        sign_in_lat real,
+        sign_in_lon real,
+        sign_out_time text,
+        sign_out_lat real,
+        sign_out_lon real,
+        auto_clocked_out integer not null default 0,
+        created_at text not null default (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+        updated_at text not null default (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+        ${LOCAL_SYNC_COLUMNS},
+        sign_in_location_status text,
+        sign_out_location_status text,
+        check (sign_in_location_status in ('fix', 'timeout', 'denied', 'services_off', 'unavailable')),
+        check ((sign_in_lat is null) = (sign_in_lon is null)),
+        check (sign_in_location_status is null or
+          (sign_in_location_status = 'fix' and sign_in_lat is not null and sign_in_lon is not null) or
+          (sign_in_location_status <> 'fix' and sign_in_lat is null and sign_in_lon is null)),
+        check (sign_out_location_status in ('fix', 'timeout', 'denied', 'services_off', 'unavailable')),
+        check ((sign_out_lat is null) = (sign_out_lon is null)),
+        check (sign_out_location_status is null or
+          (sign_out_location_status = 'fix' and sign_out_lat is not null and sign_out_lon is not null) or
+          (sign_out_location_status <> 'fix' and sign_out_lat is null and sign_out_lon is null))
+      );
+      insert into time_entries_new (id, user_id, sign_in_time, sign_in_lat, sign_in_lon, sign_out_time, sign_out_lat, sign_out_lon, auto_clocked_out, created_at, updated_at, sync_status, last_sync_error, server_updated_at)
+        select id, user_id, sign_in_time, sign_in_lat, sign_in_lon, sign_out_time, sign_out_lat, sign_out_lon, auto_clocked_out, created_at, updated_at, sync_status, last_sync_error, server_updated_at from time_entries;
+      drop table time_entries;
+      alter table time_entries_new rename to time_entries;
+      create index if not exists idx_time_entries_user_signin on time_entries(user_id, sign_in_time);
     `,
   },
 ];

@@ -11,6 +11,7 @@ import {
 import { resetDatabaseConnectionForTests } from '../src/db/client';
 import { createOutboxSyncEngine } from '../src/services/offlineSync';
 import { createSyncOutboxRepository } from '../src/db/repositories/syncOutboxRepository';
+import { createTimeEntriesRepository } from '../src/db/repositories/timeEntriesRepository';
 import { letterMasteryDomainId } from '../src/db/repositories/domainRepositoryUtils';
 
 const HEAD_OFFICE = 'head-office-1';
@@ -68,6 +69,29 @@ describe('edits are sent as UPDATE by id (spec §6.5)', () => {
 
   afterEach(async () => {
     await db.closeAsync();
+  });
+
+  test('no-location fields reach the server on insert and acknowledged clock-out UPDATE by id', async () => {
+    const repository = createTimeEntriesRepository({ database: db });
+    await repository.createOpenTimeEntry({
+      id: 'no-location-shift', user_id: 'user-1', sign_in_time: '2026-10-15T08:00:00Z',
+      sign_in_lat: null, sign_in_lon: null, sign_in_location_status: 'timeout', synced: false,
+    });
+    const { supabaseClient, calls } = createSupabaseMock();
+    const engine = createOutboxSyncEngine({ getAuthSession: liveTestSession, database: db, supabaseClient });
+    expect((await engine.syncAll()).totalSynced).toBe(1);
+    const insert = calls.find(call => call.tableName === 'time_entries' && call.type === 'upsert');
+    const insertPayload = Array.isArray(insert.payload) ? insert.payload[0] : insert.payload;
+    expect(insertPayload).toMatchObject({ sign_in_lat: null, sign_in_lon: null, sign_in_location_status: 'timeout' });
+    await repository.updateTimeEntry('no-location-shift', {
+      sign_out_time: '2026-10-15T09:00:00Z', sign_out_lat: null, sign_out_lon: null, sign_out_location_status: 'unavailable',
+    });
+    expect((await engine.syncAll()).totalSynced).toBe(1);
+    const update = calls.find(call => call.tableName === 'time_entries' && call.type === 'update');
+    expect(update).toMatchObject({ column: 'id', value: 'no-location-shift', payload: {
+      sign_in_location_status: 'timeout', sign_out_lat: null, sign_out_lon: null, sign_out_location_status: 'unavailable',
+    } });
+    expect(await db.getAllAsync("select * from sync_outbox where table_name = 'time_entries'")).toEqual([]);
   });
 
   test('a Head Office-created child edit is an UPDATE without provenance columns', async () => {
