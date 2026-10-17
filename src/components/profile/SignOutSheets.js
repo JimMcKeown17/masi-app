@@ -59,7 +59,7 @@ export default function SignOutSheets({
       title={countUnknown ? message : `${unsentCount} ${unsentCount === 1 ? "item hasn't" : "items haven't"} uploaded yet.`}
       subtitle={countUnknown
         ? 'If you sign out, anything not uploaded stays on this phone until you sign in here again.'
-        : "If you sign out, they'll upload next time you sign in on this phone."}
+        : `If you sign out, ${unsentCount === 1 ? "it'll" : "they'll"} upload next time you sign in on this phone.`}
       scrollable={false}
       keyboardAvoiding={false}
       maxHeight={520}

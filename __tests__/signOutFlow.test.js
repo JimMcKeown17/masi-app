@@ -9,6 +9,7 @@ import { HandleDisposeFailedError, StaleActorError } from '../src/session/staleA
 
 const CLOCK_TITLE = "You're still clocked in.";
 const UNSENT_SUBTITLE = "If you sign out, they'll upload next time you sign in on this phone.";
+const UNSENT_SUBTITLE_ONE = "If you sign out, it'll upload next time you sign in on this phone.";
 const UNKNOWN_TITLE = "Couldn't check for work that hasn't uploaded.";
 const UNKNOWN_SUBTITLE = 'If you sign out, anything not uploaded stays on this phone until you sign in here again.';
 
@@ -165,7 +166,8 @@ describe('Profile sign-out questions (T13)', () => {
     const screen = setup({ unsent: 1, online: false });
     await press(screen, 'Sign Out');
     expect(screen.getByText("1 item hasn't uploaded yet.")).toBeTruthy();
-    expect(screen.getByText(UNSENT_SUBTITLE)).toBeTruthy();
+    expect(screen.getByText(UNSENT_SUBTITLE_ONE)).toBeTruthy();
+    expect(screen.queryByText(UNSENT_SUBTITLE)).toBeNull();
     expect(screen.getByRole('button', { name: 'No connection' })).toBeDisabled();
     await press(screen, 'No connection');
     expect(screen.deps.syncNow).not.toHaveBeenCalled();

@@ -64,8 +64,8 @@ provider or pull inherits it instead of having to remember it.
 - Plan 3 now provides the sign-out questions, left-behind report and minimal incident envelope.
   Sign-in discovery reads other EA files and legacy `masi.db` without changing their rows. It queues
   counts in the signed-in EA's file and sends them through that EA's handle; it never uploads the
-  other EA's work. Hosted incident migration apply, device checks D1–D7, native file discovery and
-  the sign-out sheets' visual and wording passes remain open.
+  other EA's work. The incident migration is applied to `masi-app-sqlite` and D1 passed on Android
+  (2026-10-17). D2–D7, the iOS checks and the sign-out copy's wording pass remain open.
 - **Field-release prerequisite (ruling 11):** abort-on-sign-out means an upload the server accepted
   just before sign-out can be re-sent when the EA returns. Identical replay is proven harmless; the
   ordering of an uncertain older write against a newer one is owned by the upload-contract spec and
