@@ -57,7 +57,7 @@ These horizons summarize the ordered register below. They are not a second backl
    Put a deadline and release on every request in the shared queue, uploads included. Upload the
    assessment family all-or-nothing. Reject stale edits on records more than one writer can change.
    Make submit duplicate-proof. One database per EA is built (Plan 2; its sign-out UX is Plan 3).
-   Add the newer-schema guard and a minimum revocation contract. Evidence:
+   The newer-schema guard is built; add a minimum revocation contract. Evidence:
    [`zazi-sync-lessons-for-masi-2026-10-08.md`](./zazi-sync-lessons-for-masi-2026-10-08.md) Part 2.
 6. **P0: settle field-continuity contracts before the candidate build.** Make location fallback
    truthful, build the server-side ten-hour clock-out and the Android backup exclusion (both
@@ -433,9 +433,9 @@ the current-state model better than Zazi's per-session carry-forward.
   `auto_clocked_out`, fenced so a stale offline write from the phone cannot reopen the entry, and
   reconcile the phone's own close with the server's. Spec §7.1's "Stay clocked in" text and device
   gate D3 assume the phone-side close and must be updated with this change.
-- [ ] **Newer-schema fail-safe (before pilot; priority item 5):** when SQLite `user_version` exceeds the bundle's
-  `CURRENT_SCHEMA_VERSION`, stop safely instead of running an older OTA bundle against a newer
-  schema. `runMigrationsNow` has no such branch today ([F2](./zazi-sync-lessons-for-masi-2026-10-08.md)).
+- [x] **Newer-schema fail-safe (before pilot; priority item 5):** refuses to open a file whose SQLite
+  `user_version` exceeds the bundle's `CURRENT_SCHEMA_VERSION` and shows an update screen with
+  Sign out instead of Retry. Discovery skips too-new foreign files ([F2](./zazi-sync-lessons-for-masi-2026-10-08.md)).
 - [ ] **Assessment draft persistence:** force-quit currently loses an in-progress assessment.
   **Loss accepted for the pilot (Jim, 2026-10-17).** Address this later with the longer
   WelaPLUS/durable-draft lifecycle rather than a one-off 60-second EGRA patch.

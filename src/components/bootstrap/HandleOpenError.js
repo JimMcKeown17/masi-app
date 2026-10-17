@@ -10,11 +10,14 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { exportLogs } from '../../utils/debugExport';
 import { borderRadius, colors, spacing } from '../../constants/colors';
 import { typography } from '../../constants/typography';
+import { isSchemaTooNewError } from '../../db/migrations';
 import BrandButton from '../common/BrandButton';
 
 const errorCode = (error) => error?.code || 'SQLITE_BOOTSTRAP';
 
-export default function HandleOpenError({ error, onRetry }) {
+export default function HandleOpenError({ error, onRetry, onSignOut }) {
+  const schemaTooNew = isSchemaTooNewError(error);
+  const showActions = !schemaTooNew || Boolean(onSignOut);
   const [exportState, setExportState] = useState({ loading: false, message: null });
   const handleExportLogs = useCallback(async () => {
     setExportState({ loading: true, message: null });
@@ -38,37 +41,44 @@ export default function HandleOpenError({ error, onRetry }) {
         <View style={styles.errorMark} accessibilityElementsHidden>
           <Text style={styles.errorMarkText}>!</Text>
         </View>
-        <Text style={styles.title}>We could not open your offline data</Text>
+        <Text style={styles.title}>
+          {schemaTooNew ? 'Update Masi to continue' : 'We could not open your offline data'}
+        </Text>
         <Text style={styles.message}>
-          Your saved work has not been deleted. Try again. If this keeps happening,
-          share the error logs with Masi support.
+          {schemaTooNew
+            ? 'This phone has data from a newer version of Masi. Install the latest version from the app store, then open Masi again.'
+            : 'Your saved work has not been deleted. Try again. If this keeps happening, share the error logs with Masi support.'}
         </Text>
         <Text style={styles.supportCode}>Support code: {errorCode(error)}</Text>
 
-        <View style={styles.actions}>
-          <BrandButton
-            label="Try Again"
-            onPress={onRetry}
-          />
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel="Share Error Logs"
-            accessibilityState={{ disabled: exportState.loading, busy: exportState.loading }}
-            disabled={exportState.loading}
-            onPress={handleExportLogs}
-            style={({ pressed }) => [
-              styles.secondaryButton,
-              pressed && !exportState.loading && styles.secondaryButtonPressed,
-              exportState.loading && styles.secondaryButtonDisabled,
-            ]}
-          >
-            {exportState.loading ? (
-              <ActivityIndicator size="small" color={colors.primary} />
-            ) : (
-              <Text style={styles.secondaryButtonText}>Share Error Logs</Text>
-            )}
-          </Pressable>
-        </View>
+        {showActions ? (
+          <View style={styles.actions}>
+            <BrandButton
+              label={schemaTooNew ? 'Sign out' : 'Try Again'}
+              onPress={schemaTooNew ? onSignOut : onRetry}
+            />
+            {!schemaTooNew ? (
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="Share Error Logs"
+                accessibilityState={{ disabled: exportState.loading, busy: exportState.loading }}
+                disabled={exportState.loading}
+                onPress={handleExportLogs}
+                style={({ pressed }) => [
+                  styles.secondaryButton,
+                  pressed && !exportState.loading && styles.secondaryButtonPressed,
+                  exportState.loading && styles.secondaryButtonDisabled,
+                ]}
+              >
+                {exportState.loading ? (
+                  <ActivityIndicator size="small" color={colors.primary} />
+                ) : (
+                  <Text style={styles.secondaryButtonText}>Share Error Logs</Text>
+                )}
+              </Pressable>
+            ) : null}
+          </View>
+        ) : null}
 
         {exportState.message ? (
           <Text style={styles.exportMessage}>{exportState.message}</Text>

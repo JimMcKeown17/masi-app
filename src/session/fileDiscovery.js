@@ -1,6 +1,7 @@
 import { openDatabaseAsync, defaultDatabaseDirectory } from 'expo-sqlite';
 import { Directory, File } from 'expo-file-system/next';
 import { DATABASE_FILE_PREFIX, LEGACY_DATABASE_NAME, databaseNameForUser } from '../db/client';
+import { readSupportedSchemaVersion } from '../db/migrations';
 import { readUnsentSummary } from '../db/repositories/syncOutboxRepository';
 import { incidentRepeatKey } from '../db/repositories/supportIncidentRepository';
 import { readUnderFileFence } from './signedInHandle';
@@ -30,6 +31,7 @@ export const readOtherDatabase = async ({ name, openDatabase }) => {
     db = await openDatabase(name, { useNewConnection: true });
     await db.execAsync('PRAGMA query_only = ON');
     await db.execAsync('PRAGMA busy_timeout = 2000');
+    await readSupportedSchemaVersion(db);
     return { name, readable: true, unsent: await readUnsentSummary(db) };
   } catch (error) {
     console.warn('[FileDiscovery] unreadable database file skipped:', name, error?.message);
