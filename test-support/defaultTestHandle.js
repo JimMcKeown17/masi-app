@@ -35,7 +35,8 @@ afterAll(async () => {
   const state = globalThis.__MASI_SUPABASE_CLIENT_STATE__;
   if (state) {
     await state.autoRefreshOperation;
-    await state.client.auth.stopAutoRefresh();
+    // Suites that mock @supabase/supabase-js (e.g. organisationProvisioning) leave no real client.
+    await state.client?.auth?.stopAutoRefresh?.();
     state.appStateSubscription?.remove();
     delete globalThis.__MASI_SUPABASE_CLIENT_STATE__;
   }
