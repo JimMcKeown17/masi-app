@@ -40,8 +40,8 @@ For every non-trivial task:
   constraints, slice order, review focus, and safe resumption point.
 - [`documentation-system.md`](./documentation-system.md): documentation roles, update rules, and
   archive workflow.
-- [`wela-assessment-component-build.md`](./wela-assessment-component-build.md): WelaPLUS branch,
-  product, schema, package, and resumption context.
+- [`wela-assessment-component-build.md`](./wela-assessment-component-build.md): WelaPLUS package,
+  product, schema, and resumption context.
 
 Add a new briefing when a workstream spans several source documents or has a non-obvious safe
 resumption point. Remove or archive a briefing when the workstream becomes ordinary product
