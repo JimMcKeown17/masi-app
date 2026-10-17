@@ -1,0 +1,11 @@
+export { FIXTURE_LETTER_SOUNDS_EN } from './letterSounds';
+export { FIXTURE_LISTEN_AND_ANSWER_STORY_EN } from './listenAndAnswerStory';
+export { FIXTURE_FIRST_SOUND_EN } from './firstSound';
+export { FIXTURE_PHONEME_BLEND_EN } from './phonemeBlend';
+export { FIXTURE_LETTER_WRITING_EN } from './letterWriting';
+export { FIXTURE_READ_WORDS_EN } from './readWords';
+export { FIXTURE_READ_SENTENCES_EN } from './readSentences';
+export { FIXTURE_READ_PASSAGE_EN } from './readPassage';
+export { FIXTURE_WRITE_CVCS_EN } from './writeCvcs';
+export { FIXTURE_WRITE_SENTENCES_DICTATION_EN } from './writeSentencesDictation';
+export { FIXTURE_STORY_WRITING_EN } from './storyWriting';
