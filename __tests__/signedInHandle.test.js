@@ -6,13 +6,17 @@ import path from 'path';
 import {
   requestOpen, requestClose, whenDisposed, getCurrentHandle, requireCurrentHandle, getConnectionActor,
   resetHandleRegistryForTests,
+  readUnderFileFence,
 } from '../src/session/signedInHandle';
 import { StaleActorError, NoSignedInEAError, FileOwnerMismatchError } from '../src/session/staleActor';
 import { databaseNameForUser } from '../src/db/client';
 import { createPathDatabaseOpener } from '../test-support/actorTestUtils';
+import { runMigrations } from '../src/db/migrations';
+import { discoverAndQueueIncidents } from '../src/session/fileDiscovery';
 
 const A = '11111111-1111-4111-8111-111111111111';
 const B = '22222222-2222-4222-8222-222222222222';
+const C = '33333333-3333-4333-8333-333333333333';
 const deferred = () => { let resolve; let reject; const promise = new Promise((res, rej) => { resolve = res; reject = rej; }); return { promise, resolve, reject }; };
 
 let dir;
@@ -36,6 +40,153 @@ afterEach(async () => {
   fs.rmSync(dir, { recursive: true, force: true });
   jest.useRealTimers();
   jest.restoreAllMocks();
+});
+
+const seedDiscoveryFile = async (userId) => {
+  const db = await openDatabase(databaseNameForUser(userId));
+  try {
+    await runMigrations(db);
+    await db.runAsync("insert into local_state (key, value) values ('file_owner_user_id', ?)", userId);
+    await db.runAsync(`insert into sync_outbox
+      (id, table_name, record_id, operation, owner_user_id, status, created_at, updated_at)
+      values ('children:fixture:insert', 'children', 'fixture', 'insert', ?, 'pending', ?, ?)`,
+    userId, '2026-10-15T00:00:00.000Z', '2026-10-15T00:00:00.000Z');
+  } finally { await db.closeAsync(); }
+};
+const readDiscoveryQueue = async (userId) => {
+  const db = await openDatabase(databaseNameForUser(userId), { useNewConnection: true });
+  try {
+    await db.execAsync('PRAGMA query_only = ON');
+    return await db.getAllAsync('select * from support_incident_queue');
+  } finally { await db.closeAsync(); }
+};
+
+// Same native-call gate used by the existing stalled-disposal tests below.
+const stallDiscoverySourceDisposal = async () => {
+  const nativeGate = deferred();
+  const entered = deferred();
+  const holding = async (name, options) => {
+    const db = await openDatabase(name, options);
+    const run = db.runAsync.bind(db);
+    db.runAsync = async (sql, ...params) => {
+      if (String(sql).includes("'held'")) { entered.resolve(); await nativeGate.promise; }
+      return run(sql, ...params);
+    };
+    return db;
+  };
+  const a = await requestOpen({ userId: A, openDatabase: holding });
+  a.withTransaction(txn => txn.runAsync("insert into local_state (key, value, updated_at) values ('held', '1', 'now')")).catch(() => {});
+  await entered.promise;
+  await requestClose({ reason: 'discovery fence test' });
+  return { a, nativeGate };
+};
+
+test('discovery cancellation closes its active read, skips the next file and fences a same-file sign-in', async () => {
+  await seedDiscoveryFile(A);
+  await seedDiscoveryFile(C);
+  const entered = deferred();
+  const release = deferred();
+  const reads = [];
+  const readOpener = jest.fn(async (name, options) => {
+    if (name === databaseNameForUser(A)) { entered.resolve(); await release.promise; }
+    const db = await openDatabase(name, options);
+    reads.push({ name, close: jest.spyOn(db, 'closeAsync') });
+    return db;
+  });
+  const b = await requestOpen({ userId: B, openDatabase, discover: ({ handle }) => discoverAndQueueIncidents({
+    handle, listNames: () => [databaseNameForUser(A), databaseNameForUser(C)], openDatabase: readOpener,
+  }) });
+  await entered.promise;
+  let openedA = null;
+  const openingA = requestOpen({ userId: A, openDatabase }).then(handle => { openedA = handle; return handle; });
+  try {
+    await new Promise(resolve => setImmediate(resolve));
+    expect(openedA).toBeNull();
+    expect(b.isOpen()).toBe(false);
+  } finally { release.resolve(); }
+  const a = await openingA;
+  await b.discovery;
+  expect(a.isCurrent()).toBe(true);
+  expect(readOpener.mock.calls.map(([name]) => name)).toEqual([databaseNameForUser(A)]);
+  expect(reads).toHaveLength(1);
+  reads.forEach(({ close }) => expect(close).toHaveBeenCalledTimes(1));
+  expect(await readDiscoveryQueue(B)).toEqual([]);
+});
+
+test('discovery waits for a pending disposal before opening that file read-only', async () => {
+  await seedDiscoveryFile(A);
+  const { a, nativeGate } = await stallDiscoverySourceDisposal();
+  const events = [];
+  const disposed = whenDisposed(a.fileName).then(() => { events.push('disposed'); });
+  const readOpener = jest.fn(async (name, options) => {
+    events.push('read');
+    return openDatabase(name, options);
+  });
+  const b = await requestOpen({ userId: B, openDatabase, discover: ({ handle }) => discoverAndQueueIncidents({
+    handle, listNames: () => [a.fileName], openDatabase: readOpener,
+  }) });
+  try {
+    await new Promise(resolve => setImmediate(resolve));
+    expect(b.isCurrent()).toBe(true);
+    expect(readOpener).not.toHaveBeenCalled();
+  } finally { nativeGate.resolve(); }
+  await disposed;
+  await b.discovery;
+  expect(events).toEqual(['disposed', 'read']);
+  expect(readOpener).toHaveBeenCalledWith(a.fileName, { useNewConnection: true });
+  expect(await b.repositories.supportIncidents.listPending()).toHaveLength(1);
+});
+
+test('sign-out while discovery waits at the fence skips its read and releases the next same-file open', async () => {
+  await seedDiscoveryFile(A);
+  const { a, nativeGate } = await stallDiscoverySourceDisposal();
+  const readOpener = jest.fn(openDatabase);
+  const b = await requestOpen({ userId: B, openDatabase, discover: ({ handle }) => discoverAndQueueIncidents({
+    handle, listNames: () => [a.fileName], openDatabase: readOpener,
+  }) });
+  let openingA;
+  try {
+    await new Promise(resolve => setImmediate(resolve));
+    expect(readOpener).not.toHaveBeenCalled();
+    await requestClose({ reason: 'sign-out during discovery fence wait' });
+    let reopened = false;
+    openingA = requestOpen({ userId: A, openDatabase }).then(handle => { reopened = true; return handle; });
+    await new Promise(resolve => setImmediate(resolve));
+    expect(reopened).toBe(false);
+  } finally { nativeGate.resolve(); }
+  const freshA = await openingA;
+  await b.discovery;
+  expect(freshA.isCurrent()).toBe(true);
+  expect(readOpener).not.toHaveBeenCalled();
+  expect(await readDiscoveryQueue(B)).toEqual([]);
+});
+
+test('bootstrap cleanup failure fences discovery even without a disposal promise', async () => {
+  jest.spyOn(console, 'warn').mockImplementation(() => {});
+  const failing = async (name, options) => {
+    const db = await openDatabase(name, options);
+    // Exercise openConfiguredConnections' half-open-bootstrap cleanup path.
+    db.execAsync = async () => { throw new Error('bootstrap failed'); };
+    db.closeAsync = async () => { throw new Error('close failed'); };
+    return db;
+  };
+  await expect(requestOpen({ userId: A, openDatabase: failing })).rejects.toMatchObject({
+    message: 'bootstrap failed', connectionDisposalFailed: true,
+  });
+  await expect(whenDisposed(databaseNameForUser(A))).resolves.toBeUndefined();
+  const task = jest.fn();
+  await expect(readUnderFileFence(databaseNameForUser(A), task)).rejects.toMatchObject({
+    name: 'HandleDisposeFailedError', code: 'HANDLE_DISPOSE_FAILED',
+  });
+  expect(task).not.toHaveBeenCalled();
+  const readOpener = jest.fn(openDatabase);
+  const b = await requestOpen({ userId: B, openDatabase, discover: ({ handle }) => discoverAndQueueIncidents({
+    handle, listNames: () => [databaseNameForUser(A)], openDatabase: readOpener,
+  }) });
+  await b.discovery;
+  expect(readOpener).not.toHaveBeenCalled();
+  expect(await b.repositories.supportIncidents.listPending()).toEqual([]);
+  await expect(requestOpen({ userId: A, openDatabase })).rejects.toMatchObject({ code: 'HANDLE_DISPOSE_FAILED' });
 });
 
 test('T1: A opens masi-A.db, B opens masi-B.db, and closing leaves no current handle', async () => {
