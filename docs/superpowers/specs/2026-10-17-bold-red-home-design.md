@@ -422,3 +422,5 @@ fixed test-first.** A valid no-programme state (goal `null` from a successful lo
 load-failure message; Home now tracks a real failure separately and shows the no-programme or
 programme-not-synced copy. At large text sizes the hero could scroll away under a light status bar;
 a fixed red safe-area strip now sits behind it.
+
+**Branch review round 2 (2026-10-17, `13b2446...9b40e5c`): approve, no findings.**
