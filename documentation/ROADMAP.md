@@ -550,9 +550,12 @@ contract ([U1–U7](./zazi-sync-lessons-for-masi-2026-10-08.md)):
     correction time as its own `now()`.
   - This is a narrow, single-column guard, not the general `stale_base` mechanism.
   - Build it with the mastery re-key in §1. `CONTEXT.md` is updated.
-- [ ] **Duplicate-proof submit (U5).** Use a ref-based lock, and mint the session id once per form
-  instead of per submit tap (`LiteracySessionForm.js:389, 502`). Zazi's per-tap ids produced 302
-  extra session copies (ZZ-BUG-20260819-021). Apply the same rule to assessment submit.
+- [x] **Duplicate-proof submit (U5).** Literacy session capture now mints one session id per form,
+  reuses it on retry, and uses a synchronous ref lock to prevent double-tap saves; assessment
+  submit already guards completion with a ref and reuses its record on retry. This closes the
+  per-tap identity risk behind Zazi's 302 extra session copies (ZZ-BUG-20260819-021).
+  LetterMasteryPanel's same-EA/programme double taps already converge through the repository's
+  deterministic mastery id; its broader re-key remains separate.
 - [ ] Android backup must exclude the SQLite database (U6, the §0 backup decision). A restored
   database replayed already-accepted work in Zazi (ZZ-BUG-20260907-001).
 
