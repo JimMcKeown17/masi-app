@@ -161,6 +161,105 @@ test('sign-out while discovery waits at the fence skips its read and releases th
   expect(await readDiscoveryQueue(B)).toEqual([]);
 });
 
+test('late recovery disposal cannot release a discovery read or publish a same-file reopen', async () => {
+  const recoveryEntered = deferred();
+  const releaseRecovery = deferred();
+  const discoveryReserved = deferred();
+  const readEntered = deferred();
+  const releaseRead = deferred();
+  let writerOpens = 0;
+  let failRollback = true;
+  const flaky = async (name, options) => {
+    if (!options?.useNewConnection && ++writerOpens === 2) {
+      recoveryEntered.resolve();
+      await releaseRecovery.promise;
+    }
+    const db = await openDatabase(name, options);
+    const exec = db.execAsync.bind(db);
+    db.execAsync = async (sql) => {
+      if (failRollback && sql === 'ROLLBACK') {
+        failRollback = false;
+        throw new Error('rollback failed');
+      }
+      return exec(sql);
+    };
+    return db;
+  };
+  const a = await requestOpen({ userId: A, openDatabase: flaky });
+  await expect(a.withTransaction(async () => { throw new Error('original'); })).rejects.toThrow('original');
+  const recovering = a.withTransaction(async () => {});
+  const recovered = recovering.then(() => null, error => error);
+  await recoveryEntered.promise;
+
+  let readDb;
+  const readOpener = jest.fn(async (name, options) => {
+    const db = await openDatabase(name, options);
+    readDb = db;
+    const getAll = db.getAllAsync.bind(db);
+    db.getAllAsync = async (...args) => {
+      readEntered.resolve();
+      await releaseRead.promise;
+      return getAll(...args);
+    };
+    return db;
+  });
+  let openingA;
+  let b;
+  let fenced;
+  try {
+    b = await requestOpen({ userId: B, openDatabase, discover: ({ handle }) => discoverAndQueueIncidents({
+      handle, listNames: () => { discoveryReserved.resolve(); return [a.fileName]; }, openDatabase: readOpener,
+    }) });
+    await discoveryReserved.promise;
+    expect(b.isCurrent()).toBe(true);
+    expect(readOpener).not.toHaveBeenCalled();
+
+    releaseRecovery.resolve();
+    expect(await recovered).toBeInstanceOf(StaleActorError);
+    await readEntered.promise;
+    // The revoked recovery bundle has physically closed, but B still holds A's raw read.
+    expect(a.isConnectionClosed()).toBe(true);
+    expect(readDb.isOpen).toBe(true);
+    let disposed = false;
+    fenced = whenDisposed(a.fileName).then(() => { disposed = true; });
+    let reopened = null;
+    openingA = requestOpen({ userId: A, openDatabase }).then(handle => { reopened = handle; return handle; });
+    await new Promise(resolve => setImmediate(resolve));
+
+    expect({ disposed, reopened: reopened !== null }).toEqual({ disposed: false, reopened: false });
+    expect(getCurrentHandle()).toBeNull();
+    expect(b.isOpen()).toBe(false);
+  } finally {
+    releaseRecovery.resolve();
+    releaseRead.resolve();
+    await recovered;
+    await b?.discovery;
+    await fenced;
+    await openingA;
+  }
+  const freshA = await openingA;
+  expect(readDb.isOpen).toBe(false);
+  expect(freshA.isCurrent()).toBe(true);
+});
+
+test('successive file reads wait only for readers reserved before each call', async () => {
+  const firstEntered = deferred();
+  const releaseFirst = deferred();
+  const first = readUnderFileFence(databaseNameForUser(A), async () => {
+    firstEntered.resolve();
+    await releaseFirst.promise;
+  });
+  await firstEntered.promise;
+  const secondTask = jest.fn(async () => {});
+  const second = readUnderFileFence(databaseNameForUser(A), secondTask);
+  expect(secondTask).not.toHaveBeenCalled();
+  releaseFirst.resolve();
+  await first;
+  await second;
+  expect(secondTask).toHaveBeenCalledTimes(1);
+  await whenDisposed(databaseNameForUser(A));
+});
+
 test('bootstrap cleanup failure fences discovery even without a disposal promise', async () => {
   jest.spyOn(console, 'warn').mockImplementation(() => {});
   const failing = async (name, options) => {

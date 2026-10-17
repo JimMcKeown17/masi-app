@@ -36,6 +36,7 @@ const ALLOWLIST = {
   'src/session/signedInHandle.js:subscribers': 'the handle registry',
   'src/session/signedInHandle.js:generationWaiters': 'the handle registry',
   'src/session/signedInHandle.js:disposals': 'the handle registry; keyed by EA database file',
+  'src/session/signedInHandle.js:fileReaders': 'the handle registry; keyed by database file, settled read tails removed, drained and cleared on test reset',
   'src/session/signedInHandle.js:failedFiles': 'the handle registry; keyed by EA database file',
   'src/session/signedInHandle.js:revocations': 'the handle registry; keyed by handle',
 };

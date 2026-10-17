@@ -90,6 +90,67 @@ describe('Profile sign-out questions (T13)', () => {
     expect(screen.deps.clockOut).not.toHaveBeenCalled();
   });
 
+  test('an unsent check prevents a later clock-out from racing its zero-count sign-out', async () => {
+    const count = deferred();
+    const clockOut = deferred();
+    const screen = setup({ clockedIn: true });
+    let clockOutPending = false;
+    const signedOutDuringClockOut = jest.fn();
+    screen.deps.countUnsent.mockReturnValue(count.promise);
+    screen.deps.clockOut.mockImplementation(async () => {
+      clockOutPending = true;
+      await clockOut.promise;
+      clockOutPending = false;
+      return true;
+    });
+    screen.deps.signOut.mockImplementation(async () => {
+      if (clockOutPending) signedOutDuringClockOut();
+      return { error: null };
+    });
+    try {
+      await press(screen, 'Sign Out');
+      await press(screen, 'Stay clocked in and sign out');
+      const clockOutDisabled = screen.getByRole('button', { name: 'Clock out now' })
+        .props.accessibilityState.disabled;
+      await press(screen, 'Clock out now');
+      await act(async () => { count.resolve({ total: 0, byTable: {} }); });
+
+      expect(signedOutDuringClockOut).not.toHaveBeenCalled();
+      expect(clockOutDisabled).toBe(true);
+      expect(screen.deps.clockOut).not.toHaveBeenCalled();
+      expect(screen.deps.signOut).toHaveBeenCalledTimes(1);
+    } finally {
+      await act(async () => { clockOut.resolve(); });
+    }
+  });
+
+  test('Cancel stays available during a held unsent check and ignores its later zero result', async () => {
+    const count = deferred();
+    const screen = setup({ clockedIn: true });
+    screen.deps.countUnsent.mockReturnValue(count.promise);
+    await press(screen, 'Sign Out');
+    await press(screen, 'Stay clocked in and sign out');
+    expect(screen.getByRole('button', { name: 'Cancel' })).not.toBeDisabled();
+    await press(screen, 'Cancel');
+    await act(async () => { count.resolve({ total: 0, byTable: {} }); });
+
+    expect(screen.deps.signOut).not.toHaveBeenCalled();
+    expectNoSheet(screen);
+  });
+
+  test('a repeated Sign Out tap during the initial count does not start another check', async () => {
+    const count = deferred();
+    const screen = setup();
+    screen.deps.countUnsent.mockReturnValue(count.promise);
+    await press(screen, 'Sign Out');
+    await press(screen, 'Sign Out');
+    await act(async () => { count.resolve({ total: 1, byTable: {} }); });
+
+    expect(screen.deps.countUnsent).toHaveBeenCalledTimes(1);
+    expect(screen.getByText("1 item hasn't uploaded yet.")).toBeTruthy();
+    expect(screen.deps.signOut).not.toHaveBeenCalled();
+  });
+
   test('4: an incomplete clock-out leaves the question open with its error', async () => {
     const screen = setup({ clockedIn: true, clockOutOk: false });
     await press(screen, 'Sign Out');

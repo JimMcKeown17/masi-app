@@ -27,11 +27,14 @@ export function useSignOutFlow({ signOut, countUnsent, isClockedIn, clockOut, is
   }, [signOut]);
 
   const goToUnsent = useCallback(async (mine) => {
+    setBusyState('checking');
     let total;
     try {
       ({ total } = await countUnsent());
     } catch (error) {
-      if (!isLive(mine) || isStaleActorError(error)) return; // a sign-out is already under way
+      if (!isLive(mine)) return;
+      setBusyState(null);
+      if (isStaleActorError(error)) return; // a sign-out is already under way
       // Never treat a failed count as zero: ask, and keep an explicit way out.
       setUnsentCount(null);
       setMessage(UNSENT_CHECK_FAILED);
@@ -39,6 +42,7 @@ export function useSignOutFlow({ signOut, countUnsent, isClockedIn, clockOut, is
       return;
     }
     if (!isLive(mine)) return;
+    setBusyState(null);
     if (total === 0) { await finish(mine); return; }
     setUnsentCount(total);
     setMessage(null);
@@ -65,8 +69,14 @@ export function useSignOutFlow({ signOut, countUnsent, isClockedIn, clockOut, is
     await goToUnsent(mine);
   }, [clockOut, goToUnsent]);
 
-  const stayClockedIn = useCallback(() => goToUnsent(attempt.current), [goToUnsent]);
-  const recheck = useCallback(() => goToUnsent(attempt.current), [goToUnsent]);
+  const stayClockedIn = useCallback(() => {
+    if (busyRef.current) return;
+    return goToUnsent(attempt.current);
+  }, [goToUnsent]);
+  const recheck = useCallback(() => {
+    if (busyRef.current) return;
+    return goToUnsent(attempt.current);
+  }, [goToUnsent]);
 
   const tryUploadNow = useCallback(async () => {
     if (busyRef.current || !isOnline) return;
