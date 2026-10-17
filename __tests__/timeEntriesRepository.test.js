@@ -1,3 +1,4 @@
+import { bindTestActor } from '../test-support/actorTestUtils';
 jest.mock('expo-sqlite', () => require('../test-support/expoSQLiteMock'));
 
 import { createBetterSqliteTestDatabase } from '../test-support/betterSqliteAdapter';
@@ -18,8 +19,78 @@ const makeEntry = (overrides = {}) => ({
 });
 
 describe('timeEntriesRepository', () => {
+  test('editing a full mapped synced time entry ignores caller sync bookkeeping', async () => {
+    const db = bindTestActor(createBetterSqliteTestDatabase(), 'user-1');
+
+    try {
+      await runMigrations(db);
+      const repository = createTimeEntriesRepository({ database: db });
+      await repository.saveTimeEntry(makeEntry({ synced: true }));
+      const current = await repository.getActiveTimeEntry('user-1');
+      expect(current).toEqual(expect.objectContaining({ sync_status: 'synced', synced: true }));
+      expect(await db.getAllAsync('select * from sync_outbox')).toEqual([]);
+
+      await repository.updateTimeEntry(current.id, {
+        ...current,
+        sign_out_time: '2026-05-21T17:00:00.000Z',
+        last_sync_error: 'stale caller error',
+      });
+
+      const [updated] = await repository.getTimeEntries();
+      expect(updated).toEqual(expect.objectContaining({
+        sign_out_time: '2026-05-21T17:00:00.000Z',
+        sync_status: 'pending',
+        synced: false,
+        last_sync_error: null,
+      }));
+      const outbox = await db.getAllAsync('select table_name, record_id, operation, payload from sync_outbox');
+      expect(outbox).toHaveLength(1);
+      expect(outbox[0]).toEqual(expect.objectContaining({
+        table_name: 'time_entries', record_id: current.id, operation: 'update',
+      }));
+      expect(JSON.parse(outbox[0].payload)).toEqual(expect.objectContaining({
+        sign_out_time: updated.sign_out_time, sync_status: 'pending', synced: false, last_sync_error: null,
+      }));
+    } finally {
+      await db.closeAsync();
+    }
+  });
+
+  test('conditional close owns sync state and preserves location outcomes', async () => {
+    const db = bindTestActor(createBetterSqliteTestDatabase(), 'user-1');
+    try {
+      await runMigrations(db);
+      const repository = createTimeEntriesRepository({ database: db });
+      await repository.saveTimeEntry(makeEntry({
+        sync_status: 'failed', last_sync_error: 'previous upload failed',
+        sign_in_location_status: 'denied', sign_in_lat: null, sign_in_lon: null,
+      }));
+      const closed = await repository.closeOpenTimeEntry('time-1', {
+        sign_out_time: '2026-05-21T17:00:00.000Z',
+        sign_out_lat: null, sign_out_lon: null, sign_out_location_status: 'timeout',
+      });
+      const [stored] = await repository.getTimeEntries();
+      expect(stored).toEqual(expect.objectContaining({
+        sync_status: 'pending', synced: false, last_sync_error: null,
+        sign_in_location_status: 'denied', sign_out_location_status: 'timeout',
+      }));
+      expect(closed).toEqual(expect.objectContaining({
+        id: stored.id, sign_in_time: stored.sign_in_time, sign_out_time: stored.sign_out_time,
+        sync_status: 'pending', synced: false, last_sync_error: null,
+      }));
+      const before = await db.getAllAsync('select * from sync_outbox');
+      expect(await repository.closeOpenTimeEntry('time-1', {
+        sign_out_time: '2026-05-21T19:00:00.000Z',
+      })).toBeNull();
+      expect(await db.getAllAsync('select * from sync_outbox')).toEqual(before);
+      expect(await repository.closeOpenTimeEntry('missing', {})).toBeNull();
+    } finally {
+      await db.closeAsync();
+    }
+  });
+
   test('active time entry survives repository reload', async () => {
-    const db = createBetterSqliteTestDatabase();
+    const db = bindTestActor(createBetterSqliteTestDatabase(), 'user-1');
 
     try {
       await runMigrations(db);
@@ -38,7 +109,7 @@ describe('timeEntriesRepository', () => {
   });
 
   test('time-entry update changes one row and preserves sync metadata', async () => {
-    const db = createBetterSqliteTestDatabase();
+    const db = bindTestActor(createBetterSqliteTestDatabase(), 'user-1');
 
     try {
       await runMigrations(db);
@@ -74,7 +145,7 @@ describe('timeEntriesRepository', () => {
   });
 
   test('getTimeEntries can be scoped to the active user for dashboard stats', async () => {
-    const db = createBetterSqliteTestDatabase();
+    const db = bindTestActor(createBetterSqliteTestDatabase(), 'user-1');
 
     try {
       await runMigrations(db);
@@ -91,7 +162,7 @@ describe('timeEntriesRepository', () => {
   });
 
   test('saveTimeEntry enqueues a sync outbox insert in the same repository write', async () => {
-    const db = createBetterSqliteTestDatabase();
+    const db = bindTestActor(createBetterSqliteTestDatabase(), 'user-1');
 
     try {
       await runMigrations(db);
@@ -120,7 +191,7 @@ describe('timeEntriesRepository', () => {
   });
 
   test('createOpenTimeEntry rejects a second open entry for the same user', async () => {
-    const db = createBetterSqliteTestDatabase();
+    const db = bindTestActor(createBetterSqliteTestDatabase(), 'user-1');
 
     try {
       await runMigrations(db);
@@ -150,7 +221,7 @@ describe('timeEntriesRepository', () => {
   });
 
   test('createOpenTimeEntry allows sign-in after the previous entry is closed', async () => {
-    const db = createBetterSqliteTestDatabase();
+    const db = bindTestActor(createBetterSqliteTestDatabase(), 'user-1');
 
     try {
       await runMigrations(db);
@@ -166,7 +237,7 @@ describe('timeEntriesRepository', () => {
   });
 
   test('updateTimeEntry keeps the outbox payload current for an unsynced time entry', async () => {
-    const db = createBetterSqliteTestDatabase();
+    const db = bindTestActor(createBetterSqliteTestDatabase(), 'user-1');
 
     try {
       await runMigrations(db);
@@ -199,7 +270,7 @@ describe('timeEntriesRepository', () => {
   });
 
   test('synced server time entries do not enqueue outbox rows', async () => {
-    const db = createBetterSqliteTestDatabase();
+    const db = bindTestActor(createBetterSqliteTestDatabase(), 'user-1');
 
     try {
       await runMigrations(db);
@@ -215,7 +286,7 @@ describe('timeEntriesRepository', () => {
   });
 
   test('user update clears stale retry metadata from a failed time-entry outbox row', async () => {
-    const db = createBetterSqliteTestDatabase();
+    const db = bindTestActor(createBetterSqliteTestDatabase(), 'user-1');
 
     try {
       await runMigrations(db);
@@ -253,7 +324,7 @@ describe('timeEntriesRepository', () => {
   });
 
   test('clock-out closes the active time entry for the user', async () => {
-    const db = createBetterSqliteTestDatabase();
+    const db = bindTestActor(createBetterSqliteTestDatabase(), 'user-1');
 
     try {
       await runMigrations(db);
@@ -271,7 +342,7 @@ describe('timeEntriesRepository', () => {
   });
 
   test('closeOpenTimeEntry closes an open row once and enqueues one mutation', async () => {
-    const db = createBetterSqliteTestDatabase();
+    const db = bindTestActor(createBetterSqliteTestDatabase(), 'user-1');
     try {
       await runMigrations(db);
       const repository = createTimeEntriesRepository({ database: db });
@@ -290,8 +361,8 @@ describe('timeEntriesRepository', () => {
         sign_out_lon: 18.5,
       });
 
-      expect(first).toBe(true);
-      expect(second).toBe(false);
+      expect(first).toEqual(expect.objectContaining({ id: 'time-1', sign_out_time: '2026-05-21T18:00:00.000Z' }));
+      expect(second).toBeNull();
       expect(await repository.getTimeEntries()).toEqual([
         expect.objectContaining({
           id: 'time-1',
@@ -309,7 +380,7 @@ describe('timeEntriesRepository', () => {
   });
 
   test('closeOpenTimeEntry folds into a still-pending insert', async () => {
-    const db = createBetterSqliteTestDatabase();
+    const db = bindTestActor(createBetterSqliteTestDatabase(), 'user-1');
     try {
       await runMigrations(db);
       const repository = createTimeEntriesRepository({ database: db });
@@ -326,7 +397,7 @@ describe('timeEntriesRepository', () => {
   });
 
   test('closeOpenTimeEntry runs onClosed in the same transaction and rolls back if it throws', async () => {
-    const db = createBetterSqliteTestDatabase();
+    const db = bindTestActor(createBetterSqliteTestDatabase(), 'user-1');
     try {
       await runMigrations(db);
       const repository = createTimeEntriesRepository({ database: db });
@@ -354,14 +425,14 @@ describe('timeEntriesRepository', () => {
   });
 
   test('closeOpenTimeEntry does not call onClosed when the row is already closed', async () => {
-    const db = createBetterSqliteTestDatabase();
+    const db = bindTestActor(createBetterSqliteTestDatabase(), 'user-1');
     try {
       await runMigrations(db);
       const repository = createTimeEntriesRepository({ database: db });
       await repository.saveTimeEntry(makeEntry({ id: 'time-1', sign_out_time: '2026-05-21T12:00:00.000Z' }));
       const onClosed = jest.fn();
 
-      expect(await repository.closeOpenTimeEntry('time-1', { sign_out_time: 'x' }, { onClosed })).toBe(false);
+      expect(await repository.closeOpenTimeEntry('time-1', { sign_out_time: 'x' }, { onClosed })).toBeNull();
       expect(onClosed).not.toHaveBeenCalled();
     } finally {
       await db.closeAsync();

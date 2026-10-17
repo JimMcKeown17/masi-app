@@ -1,7 +1,9 @@
+import { getTestWriter } from '../test-support/testDatabase';
 jest.mock('../src/services/supabaseClient', () => ({
+  ...require('../test-support/supabaseTestConfig'),
   supabase: {
     auth: {
-      getSession: jest.fn(async () => ({ data: { session: { user: { id: 'user-1' } } } })),
+      getSession: jest.fn(async () => ({ data: { session: { user: { id: '11111111-1111-4111-8111-111111111111' } } } })),
     },
     from: jest.fn(() => ({
       upsert: jest.fn().mockResolvedValue({ error: null }),
@@ -11,13 +13,13 @@ jest.mock('../src/services/supabaseClient', () => ({
 
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { sessionsRepository } from '../src/db/repositories/sessionsRepository';
-import { syncTableByName, getSyncStatus } from '../src/services/offlineSync';
+import { syncTableByName, getSyncStatus } from '../test-support/handleServiceTestAccess';
 import { supabase } from '../src/services/supabaseClient';
 import { resolveDatabase } from '../src/db/repositories/repositoryRuntime';
 
 const makePendingSession = (overrides = {}) => ({
   id: 'session-1',
-  user_id: 'user-1',
+  user_id: '11111111-1111-4111-8111-111111111111',
   session_date: '2026-05-12',
   children_ids: [],
   group_ids: [],
@@ -43,7 +45,7 @@ describe('pending session outbox handling', () => {
       .rejects.toThrow(/No active programme assignment/i);
 
     const status = await getSyncStatus();
-    const db = await resolveDatabase();
+    const db = await getTestWriter();
 
     expect(supabase.from).not.toHaveBeenCalled();
     expect(await db.getFirstAsync('select count(*) as count from sessions')).toEqual({ count: 0 });
@@ -52,7 +54,7 @@ describe('pending session outbox handling', () => {
   });
 
   test('posts real-programme sessions while stripping local pending markers and view-model arrays', async () => {
-    const db = await resolveDatabase();
+    const db = await getTestWriter();
     await db.runAsync(`
       insert into programmes (id, code, name, sync_status)
       values ('programme-1', 'lit', 'Literacy', 'synced')

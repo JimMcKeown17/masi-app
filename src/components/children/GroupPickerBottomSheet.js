@@ -1,3 +1,4 @@
+import { isStaleActorError } from '../../session/staleActor';
 import React, { useState } from 'react';
 import {
   View,
@@ -92,6 +93,7 @@ export default function GroupPickerBottomSheet({
       onGroupChanged?.();
       handleDismiss();
     } catch (error) {
+      if (isStaleActorError(error)) throw error;
       console.error('Error assigning group:', error);
     } finally {
       setLoading(false);
@@ -111,6 +113,7 @@ export default function GroupPickerBottomSheet({
       onGroupChanged?.();
       handleDismiss();
     } catch (error) {
+      if (isStaleActorError(error)) throw error;
       console.error('Error removing from group:', error);
     } finally {
       setLoading(false);
@@ -175,6 +178,7 @@ export default function GroupPickerBottomSheet({
       onGroupChanged?.();
       handleDismiss();
     } catch (error) {
+      if (isStaleActorError(error)) throw error;
       console.error('Error creating virtual group:', error);
     } finally {
       setLoading(false);

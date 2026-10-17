@@ -1,3 +1,4 @@
+import { useSignedInEA } from '../context/SignedInEAContext';
 import { useCallback, useState } from 'react';
 import { Alert } from 'react-native';
 import { CLOCK_IN_STATUS, getClockInStatusForUser } from '../utils/timeEntryStatus';
@@ -19,6 +20,8 @@ export const useSessionLaunchGuard = ({
   sessionRouteName = 'SessionForm',
   clockInRouteName = 'TimeTracking',
 }) => {
+  const { handle, repositories } = useSignedInEA();
+
   const [warningVisible, setWarningVisible] = useState(false);
   const [pendingSessionParams, setPendingSessionParams] = useState(undefined);
 
@@ -35,7 +38,7 @@ export const useSessionLaunchGuard = ({
     // tab) at the shared chokepoint, so an unassigned EA never opens a session
     // form the data layer will reject at save.
     try {
-      const { hasActiveProgramme } = await getActiveProgrammeGate({ userId });
+      const { hasActiveProgramme } = await getActiveProgrammeGate({ handle, userId });
       if (!hasActiveProgramme) {
         Alert.alert(SESSION_NO_PROGRAMME_TITLE, SESSION_NO_PROGRAMME_MESSAGE);
         return;
@@ -47,7 +50,7 @@ export const useSessionLaunchGuard = ({
     }
 
     try {
-      const status = await getClockInStatusForUser(userId);
+      const status = await getClockInStatusForUser(userId, repositories.timeEntries);
       if (status === CLOCK_IN_STATUS.CLOCKED_IN) {
         navigateToSession(params);
         return;

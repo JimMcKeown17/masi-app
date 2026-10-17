@@ -1,5 +1,6 @@
 jest.mock('expo-sqlite', () => require('../test-support/expoSQLiteMock'));
 jest.mock('../src/services/supabaseClient', () => ({
+  ...require('../test-support/supabaseTestConfig'),
   supabase: {},
 }));
 
@@ -71,11 +72,19 @@ describe('evidence maps (#48 part 2)', () => {
     }
   });
 
-  test('GRANT_SUBJECTS references only the three device-produced assignment tables', () => {
+  test('GRANT_SUBJECTS references only device-produced assignments or membership-mediated children', () => {
     const { GRANT_SUBJECTS } = _testEvidenceMaps;
     const allowed = new Set(['child_ea_assignments', 'class_ea_assignments', 'group_ea_assignments']);
     for (const grants of Object.values(GRANT_SUBJECTS)) {
-      for (const { grantTable } of grants) expect(allowed.has(grantTable)).toBe(true);
+      for (const grant of grants) {
+        if (grant.grantTable) {
+          expect(allowed.has(grant.grantTable)).toBe(true);
+          expect(grant.subjectColumn).toEqual(expect.any(String));
+        } else {
+          expect(Object.keys(grant)).toEqual(['membershipMediatedChild']);
+          expect(['id', 'child_id']).toContain(grant.membershipMediatedChild);
+        }
+      }
     }
   });
 
@@ -84,9 +93,19 @@ describe('evidence maps (#48 part 2)', () => {
     expect(GRANT_SUBJECTS.child_group_memberships).toEqual(expect.arrayContaining([
       { grantTable: 'child_ea_assignments', subjectColumn: 'child_id' },
       { grantTable: 'group_ea_assignments', subjectColumn: 'group_id' },
+      { membershipMediatedChild: 'child_id' },
     ]));
     expect(GRANT_SUBJECTS.grouping_versions).toEqual([{ grantTable: 'class_ea_assignments', subjectColumn: 'class_id' }]);
-    expect(GRANT_SUBJECTS.groups).toBeUndefined(); // created_by + staff_programme_assignments only: no device assignment grant
+    expect(GRANT_SUBJECTS.classes).toEqual([
+      { grantTable: 'class_ea_assignments', subjectColumn: 'class_id', valueColumn: 'id' },
+    ]);
+    expect(GRANT_SUBJECTS.groups).toEqual([
+      { grantTable: 'group_ea_assignments', subjectColumn: 'group_id', valueColumn: 'id' },
+    ]);
+    expect(GRANT_SUBJECTS.children).toEqual([
+      { grantTable: 'child_ea_assignments', subjectColumn: 'child_id', valueColumn: 'id' },
+      { membershipMediatedChild: 'id' },
+    ]);
   });
 });
 

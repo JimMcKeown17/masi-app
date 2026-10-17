@@ -3,7 +3,8 @@ import { Alert } from 'react-native';
 import { useAssessmentSession } from '../src/hooks/useAssessmentSession';
 import { assessmentsRepository } from '../src/db/repositories/assessmentsRepository';
 
-jest.mock('../src/db/repositories/assessmentsRepository', () => ({ assessmentsRepository: { saveAssessment: jest.fn() } }));
+jest.mock('../src/db/repositories/assessmentsRepository', () => ({
+  ...jest.requireActual('../src/db/repositories/assessmentsRepository'), assessmentsRepository: { saveAssessment: jest.fn() } }));
 jest.mock('../src/context/AuthContext', () => ({ useAuth: () => ({ user: { id: 'u1' } }) }));
 jest.mock('../src/context/OfflineContext', () => ({ useOffline: () => ({ triggerBackgroundSync: jest.fn(), refreshSyncStatus: jest.fn().mockResolvedValue() }) }));
 jest.mock('react-native-safe-area-context', () => ({ useSafeAreaInsets: () => ({ top: 0, right: 0, bottom: 0, left: 0 }) }));

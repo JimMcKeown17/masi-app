@@ -16,9 +16,11 @@ const TIME_ENTRY_COLUMNS = [
   'sign_in_time',
   'sign_in_lat',
   'sign_in_lon',
+  'sign_in_location_status',
   'sign_out_time',
   'sign_out_lat',
   'sign_out_lon',
+  'sign_out_location_status',
   'auto_clocked_out',
   'created_at',
   'updated_at',
@@ -152,8 +154,10 @@ export const createTimeEntriesRepository = ({ database } = {}) => {
       ...updates,
       id,
       updated_at: updates.updated_at || timestamp(),
-      sync_status: updates.sync_status || syncStatusFromSynced(updates.synced),
-      synced: updates.synced === undefined ? undefined : updates.synced,
+      // A local edit owns its sync state, even when updates spreads a synced row.
+      sync_status: 'pending',
+      synced: false,
+      last_sync_error: null,
     });
 
     await upsertRecord(txn, {
@@ -166,12 +170,15 @@ export const createTimeEntriesRepository = ({ database } = {}) => {
     return true;
   });
 
-  // Conditional close shared by manual and automatic clock-out. Updates the row
-  // only while it is still open, so a stale snapshot (e.g. a manual clock-out
-  // that waited on GPS while the 10-hour watchdog closed the entry) can never
-  // overwrite the earlier close. onClosed runs in the same transaction, only on
-  // success, so side records (the Home auto clock-out notice) commit or roll
-  // back together with the close.
+  /**
+   * Conditional close shared by manual and automatic clock-out. Updates the row
+   * only while it is still open, so a stale snapshot (e.g. a manual clock-out
+   * that waited on GPS while the 10-hour watchdog closed the entry) can never
+   * overwrite the earlier close. onClosed runs in the same transaction, only on
+   * success, so side records (the Home auto clock-out notice) commit or roll
+   * back together with the close.
+   * Returns the closed record, or null when no open row remains.
+   */
   const closeOpenTimeEntry = async (id, closeFields, { onClosed, transaction } = {}) => runWrite(
     transaction,
     async (txn) => {
@@ -180,7 +187,7 @@ export const createTimeEntriesRepository = ({ database } = {}) => {
         id
       );
       if (!existing) {
-        return false;
+        return null;
       }
 
       const next = normalizeForWrite({
@@ -188,8 +195,9 @@ export const createTimeEntriesRepository = ({ database } = {}) => {
         ...closeFields,
         id,
         updated_at: timestamp(),
-        sync_status: syncStatusFromSynced(false),
+        sync_status: 'pending',
         synced: false,
+        last_sync_error: null,
       });
 
       await upsertRecord(txn, {
@@ -202,7 +210,7 @@ export const createTimeEntriesRepository = ({ database } = {}) => {
       if (onClosed) {
         await onClosed(txn, next);
       }
-      return true;
+      return next;
     }
   );
 

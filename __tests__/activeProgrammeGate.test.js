@@ -1,10 +1,12 @@
-jest.mock('../src/db/repositories/repositoryRuntime', () => ({
-  resolveDatabase: jest.fn(async () => ({})),
-}));
+import { requireCurrentHandle } from '../src/session/signedInHandle';
+import { repositoriesForTest } from '../test-support/legacyHandleMocks';
+
 jest.mock('../src/db/repositories/domainRepositoryUtils', () => ({
+  ...jest.requireActual('../src/db/repositories/domainRepositoryUtils'),
   getActiveProgrammeId: jest.fn(),
 }));
 jest.mock('../src/db/repositories/referenceDataRepository', () => ({
+  ...jest.requireActual('../src/db/repositories/referenceDataRepository'),
   programmesRepository: { getAll: jest.fn() },
 }));
 
@@ -20,7 +22,7 @@ describe('getActiveProgrammeGate', () => {
   test('no active programme assignment → hasActiveProgramme false', async () => {
     getActiveProgrammeId.mockResolvedValue(null);
 
-    const gate = await getActiveProgrammeGate({ userId: 'ea-1' });
+    const gate = await getActiveProgrammeGate({ handle: { getReader: () => requireCurrentHandle().getReader(), repositories: repositoriesForTest(requireCurrentHandle()) }, userId: 'ea-1' });
 
     expect(gate).toEqual({ hasActiveProgramme: false, programme: null });
   });
@@ -32,14 +34,14 @@ describe('getActiveProgrammeGate', () => {
       { id: 'prog-literacy', code: 'literacy', name: 'Core Literacy' },
     ]);
 
-    const gate = await getActiveProgrammeGate({ userId: 'ea-1' });
+    const gate = await getActiveProgrammeGate({ handle: { getReader: () => requireCurrentHandle().getReader(), repositories: repositoriesForTest(requireCurrentHandle()) }, userId: 'ea-1' });
 
     expect(gate.hasActiveProgramme).toBe(true);
     expect(gate.programme).toEqual({ id: 'prog-literacy', code: 'literacy', name: 'Core Literacy' });
   });
 
   test('no userId → hasActiveProgramme false without touching the database', async () => {
-    const gate = await getActiveProgrammeGate({});
+    const gate = await getActiveProgrammeGate({ handle: { getReader: () => requireCurrentHandle().getReader(), repositories: repositoriesForTest(requireCurrentHandle()) },});
 
     expect(gate).toEqual({ hasActiveProgramme: false, programme: null });
     expect(getActiveProgrammeId).not.toHaveBeenCalled();
@@ -53,7 +55,7 @@ describe('getActiveProgrammeGate', () => {
       { id: 'prog-other', code: 'numeracy', name: 'Numeracy' },
     ]);
 
-    const gate = await getActiveProgrammeGate({ userId: 'ea-1' });
+    const gate = await getActiveProgrammeGate({ handle: { getReader: () => requireCurrentHandle().getReader(), repositories: repositoriesForTest(requireCurrentHandle()) }, userId: 'ea-1' });
 
     expect(gate).toEqual({ hasActiveProgramme: true, programme: null });
   });

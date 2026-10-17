@@ -1,7 +1,10 @@
 import { resolveDatabase, runRepositoryTransaction } from './repositoryRuntime';
+import { enqueueSupportIncident, incidentRepeatKey } from './supportIncidentRepository';
+import { captureOperationalError } from '../../services/observability';
 import {
   decodeJson,
   insertOutboxRecord,
+  quoteIdentifier,
   sqlPlaceholders,
   timestamp,
 } from './sqliteRepositoryUtils';
@@ -31,6 +34,28 @@ export const outboxRecordId = (tableName, recordId, operation) => (
   `${tableName}:${recordId}:${operation}`
 );
 
+// Spec §7.2: the one definition of unsent work. The sign-out warning, the left-behind report
+// and any future deletion rule all read it through readUnsentSummary.
+export const UNSENT_STATUSES = ['pending', 'failed', 'in_flight', 'terminal'];
+const UNSENT_IN = `(${UNSENT_STATUSES.map((status) => `'${status}'`).join(', ')})`;
+
+export const readUnsentSummary = async (db) => {
+  const rows = await db.getAllAsync(`
+    select table_name, count(*) as count from sync_outbox
+    where status in ${UNSENT_IN} group by table_name
+  `);
+  const oldest = await db.getFirstAsync(`
+    select id, created_at from sync_outbox
+    where status in ${UNSENT_IN} order by created_at, id limit 1
+  `);
+  return {
+    total: rows.reduce((total, row) => total + row.count, 0),
+    byTable: Object.fromEntries(rows.map((row) => [row.table_name, row.count])),
+    oldestId: oldest?.id ?? null,
+    oldestCreatedAt: oldest?.created_at ?? null,
+  };
+};
+
 export const createSyncOutboxRepository = ({ database } = {}) => {
   const runWrite = (transaction, task) => (
     transaction ? task(transaction) : runRepositoryTransaction(database, task)
@@ -41,7 +66,6 @@ export const createSyncOutboxRepository = ({ database } = {}) => {
     recordId,
     operation,
     payload = null,
-    ownerUserId = null,
     id = outboxRecordId(tableName, recordId, operation),
   }, { transaction } = {}) => runWrite(transaction, async (txn) => {
     await insertOutboxRecord(txn, {
@@ -51,7 +75,6 @@ export const createSyncOutboxRepository = ({ database } = {}) => {
       operation,
       payload,
       status: 'pending',
-      ownerUserId,
     });
     return id;
   });
@@ -85,7 +108,7 @@ export const createSyncOutboxRepository = ({ database } = {}) => {
       from sync_outbox
       where status in ${statuses}
         ${includeBackedOff ? '' : 'and (next_retry_at is null or next_retry_at <= ?)'}
-        ${ownerScoped ? 'and (owner_user_id is null or owner_user_id = ?)' : ''}
+        ${ownerScoped ? 'and owner_user_id = ?' : ''}
       order by created_at, table_name, record_id
       limit ?
     `, ...params);
@@ -105,6 +128,19 @@ export const createSyncOutboxRepository = ({ database } = {}) => {
     return !!row;
   };
 
+  // True while an outbox row for exactly this operation is still owed. Terminal rows do not count.
+  const hasPendingOperation = async ({ tableName, recordId, operation }) => {
+    if (!tableName || !recordId || !operation) return false;
+    const db = await resolveDatabase(database);
+    const row = await db.getFirstAsync(`
+      select id from sync_outbox
+      where table_name = ? and record_id = ? and operation = ?
+        and status in ('pending', 'failed', 'in_flight')
+      limit 1
+    `, tableName, recordId, operation);
+    return !!row;
+  };
+
   const getPendingHardDeleteIds = async ({ tableName, ownerUserId } = {}) => {
     if (!tableName) return new Set();
     const db = await resolveDatabase(database);
@@ -115,7 +151,7 @@ export const createSyncOutboxRepository = ({ database } = {}) => {
       where table_name = ?
         and operation = 'hard_delete'
         and status in ('pending', 'failed', 'in_flight')
-        ${ownerScoped ? 'and (owner_user_id is null or owner_user_id = ?)' : ''}
+        ${ownerScoped ? 'and owner_user_id = ?' : ''}
     `, tableName, ...(ownerScoped ? [ownerUserId] : []));
     return new Set(rows.map((row) => row.record_id));
   };
@@ -134,6 +170,8 @@ export const createSyncOutboxRepository = ({ database } = {}) => {
   const updateInFlight = async (txn, ids, now) => txn.runAsync(`
     update sync_outbox
     set status = 'in_flight',
+        last_error = case when table_name = 'children' and operation = 'insert'
+          then coalesce(last_error, 'Upload started; server outcome unknown') else last_error end,
         updated_at = ?
     where id in (${sqlPlaceholders(ids.length)})
   `, now, ...ids);
@@ -165,12 +203,75 @@ export const createSyncOutboxRepository = ({ database } = {}) => {
     await txn.runAsync(`
       update sync_outbox
       set status = 'pending',
+          last_error = case when table_name = 'children' and operation = 'insert'
+            then coalesce(last_error, 'Upload interrupted; server outcome unknown') else last_error end,
           updated_at = ?
       where status = 'in_flight'
-        ${ownerScoped ? 'and (owner_user_id is null or owner_user_id = ?)' : ''}
+        ${ownerScoped ? 'and owner_user_id = ?' : ''}
     `, ...[timestamp(), ...(ownerScoped ? [ownerUserId] : [])]);
     return true;
   });
+
+  const quarantineForeignOwners = async ({ fileUserId, transaction }) => {
+    if (!fileUserId) throw new Error('File owner is required for the outbox integrity scan');
+    let result;
+    await runWrite(transaction, async (txn) => {
+      const now = timestamp();
+      // Migration 12 blocks new ownerless inserts; existing NULLs belong to this file.
+      const adopted = await txn.runAsync(`
+        update sync_outbox set owner_user_id = ?, updated_at = ?
+        where owner_user_id is null
+          and status in ('pending', 'failed', 'in_flight', 'terminal')
+      `, fileUserId, now);
+      const foreign = await txn.getAllAsync(`
+        select id, table_name, record_id from sync_outbox
+        where status in ('pending', 'failed', 'in_flight', 'terminal')
+          and owner_user_id is not null and owner_user_id <> ?
+      `, fileUserId);
+      const byTable = {};
+      for (const row of foreign) {
+        byTable[row.table_name] = (byTable[row.table_name] || 0) + 1;
+        await txn.runAsync(`
+          update sync_outbox
+          set status = 'terminal', last_error = 'foreign_owner', next_retry_at = null, updated_at = ?
+          where id = ?
+        `, now, row.id);
+        // A hard delete may already have removed its domain row; a zero-row update is fine.
+        await txn.runAsync(`
+          update ${quoteIdentifier(row.table_name)}
+          set sync_status = 'terminal', last_sync_error = 'foreign_owner', updated_at = ?
+          where id = ?
+        `, now, row.record_id);
+      }
+      if (foreign.length > 0) {
+        // Same transaction as the quarantine: the report exists exactly when the quarantine does.
+        // The key covers the whole set (a grown set is a new situation) and hides every id.
+        await enqueueSupportIncident(txn, {
+          kind: 'foreign_owner_in_file',
+          repeatKey: incidentRepeatKey('foreign', ...foreign.map((row) => row.id).sort()),
+          payload: { foreignTotal: foreign.length, foreignByTable: byTable },
+        });
+      }
+      const summary = { total: foreign.length, byTable, adoptedLegacy: adopted.changes };
+      if (summary.total || summary.adoptedLegacy) {
+        await txn.runAsync(`
+          insert into local_state (key, value, updated_at) values ('integrity_scan_last', ?, ?)
+          on conflict(key) do update set value = excluded.value, updated_at = excluded.updated_at
+        `, JSON.stringify({ at: now, ...summary }), now);
+      }
+      result = summary;
+    });
+    if (result.total) {
+      // Counts only; observability must not undo durable quarantine or block opening a file.
+      try { console.error('foreign_owner_in_file', { byTable: result.byTable }); } catch (_) { /* best effort */ }
+      try {
+        captureOperationalError(new Error('foreign_owner_in_file'), {
+          category: 'foreign_owner_in_file', context: { byTable: result.byTable }, userId: fileUserId,
+        });
+      } catch (_) { /* best effort */ }
+    }
+    return result;
+  };
 
   const markReady = async (id, { transaction } = {}) => runWrite(transaction, async (txn) => {
     await txn.runAsync(`
@@ -210,7 +311,8 @@ export const createSyncOutboxRepository = ({ database } = {}) => {
           set status = 'pending',
               retry_count = 0,
               next_retry_at = null,
-              last_error = null,
+              last_error = case when table_name = 'children' and operation = 'insert'
+                then last_error else null end,
               updated_at = ?
           where id = ?
             and status = 'terminal'
@@ -271,16 +373,19 @@ export const createSyncOutboxRepository = ({ database } = {}) => {
     return rows.map(toFailedItem);
   };
 
-  const getSyncStatus = async ({ ownerUserId } = {}) => {
+  // Preserve the public count shape while sharing the file-wide unsent definition.
+  const countUnsent = async () => {
+    const { total, byTable } = await readUnsentSummary(await resolveDatabase(database));
+    return { total, byTable };
+  };
+
+  const getSyncStatus = async () => {
     const db = await resolveDatabase(database);
     // ONE statement = one snapshot (R1): counts and itemized lists must never disagree.
     // Separate queries can interleave with a sync pass finalizing rows, yielding e.g.
     // needsAttentionCount 1 with an empty needsAttentionItems. The outbox is a small,
     // bounded backlog, so loading it whole is cheap.
-    const snapshotRows = await db.getAllAsync('select * from sync_outbox');
-    const rows = ownerUserId === undefined
-      ? snapshotRows
-      : snapshotRows.filter((row) => row.owner_user_id == null || row.owner_user_id === ownerUserId);
+    const rows = await db.getAllAsync('select * from sync_outbox');
     const now = timestamp();
 
     const breakdown = {};
@@ -358,11 +463,13 @@ export const createSyncOutboxRepository = ({ database } = {}) => {
     getById,
     getReadyRecords,
     hasPendingRecord,
+    hasPendingOperation,
     getPendingHardDeleteIds,
     getTerminalRecords,
     markInFlight,
     markInFlightAndGet,
     resetInFlight,
+    quarantineForeignOwners,
     markReady,
     markReadyMany,
     requeueTerminalRows,
@@ -371,6 +478,7 @@ export const createSyncOutboxRepository = ({ database } = {}) => {
     deleteRecord,
     getFailedItems,
     getSyncStatus,
+    countUnsent,
   };
 };
 

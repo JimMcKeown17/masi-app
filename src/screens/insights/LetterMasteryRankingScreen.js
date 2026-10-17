@@ -1,3 +1,4 @@
+import { useSignedInEA } from '../../context/SignedInEAContext';
 import React, { useState, useCallback } from 'react';
 import { View, StyleSheet, FlatList } from 'react-native';
 import { Text, ActivityIndicator } from 'react-native-paper';
@@ -5,14 +6,17 @@ import { useFocusEffect } from '@react-navigation/native';
 import { useAuth } from '../../context/AuthContext';
 import { useChildren } from '../../context/ChildrenContext';
 import { useClasses } from '../../context/ClassesContext';
-import { assessmentsRepository } from '../../db/repositories/assessmentsRepository';
-import { masteryRepository } from '../../db/repositories/masteryRepository';
+
+
 import { getLetterMasteryRanking } from '../../utils/dashboardStats';
 import RankedBarRow, { getBarColor } from '../../components/dashboard/RankedBarRow';
 import StatBar from '../../components/dashboard/StatBar';
 import { colors, spacing, borderRadius } from '../../constants/colors';
 
 export default function LetterMasteryRankingScreen({ navigation }) {
+  const { repositories } = useSignedInEA();
+  const { assessments: assessmentsRepository, mastery: masteryRepository } = repositories;
+
   const { user } = useAuth();
   const { children: childrenList } = useChildren();
   const { classes } = useClasses();

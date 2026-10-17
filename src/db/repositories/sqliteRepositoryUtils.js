@@ -1,3 +1,9 @@
+import { getConnectionActor } from '../../session/signedInHandle';
+
+// Facades carry no extra properties or native methods; identity stays out of their API.
+const handleFacades = new WeakSet();
+export const registerHandleFacade = (facade) => { handleFacades.add(facade); return facade; };
+
 const IDENTIFIER_PATTERN = /^[A-Za-z_][A-Za-z0-9_]*$/;
 
 export const timestamp = () => new Date().toISOString();
@@ -111,6 +117,9 @@ export const mapRowFromSqlite = ({
 };
 
 export const runWithTransaction = async (db, task) => {
+  if (handleFacades.has(db)) {
+    throw new Error('Use the signed-in handle transaction and thread its facade to nested work');
+  }
   if (typeof db.withExclusiveTransactionAsync === 'function') {
     return db.withExclusiveTransactionAsync(task);
   }
@@ -229,38 +238,44 @@ export const insertOutboxRecord = async (db, {
   operation,
   payload = null,
   status = 'pending',
-  ownerUserId = null,
   createdAt = timestamp(),
-}) => upsertRecord(db, {
-  tableName: 'sync_outbox',
-  columns: [
-    'id',
-    'table_name',
-    'record_id',
-    'operation',
-    'payload',
-    'status',
-    'owner_user_id',
-    'retry_count',
-    'last_error',
-    'next_retry_at',
-    'created_at',
-    'updated_at',
-  ],
-  record: {
-    id,
-    table_name: tableName,
-    record_id: recordId,
-    operation,
-    payload,
-    status,
-    owner_user_id: ownerUserId,
-    retry_count: 0,
-    last_error: null,
-    next_retry_at: null,
-    created_at: createdAt,
-    updated_at: createdAt,
-  },
-  preserveOnConflictColumns: ['created_at'],
-  jsonColumns: ['payload'],
-});
+}) => {
+  const ownerUserId = getConnectionActor(db);
+  if (ownerUserId === null) throw new Error('sync_outbox.owner_user_id is required');
+  return upsertRecord(db, {
+    tableName: 'sync_outbox',
+    columns: [
+      'id',
+      'table_name',
+      'record_id',
+      'operation',
+      'payload',
+      'status',
+      'owner_user_id',
+      'retry_count',
+      'last_error',
+      'next_retry_at',
+      'created_at',
+      'updated_at',
+    ],
+    record: {
+      id,
+      table_name: tableName,
+      record_id: recordId,
+      operation,
+      payload,
+      status,
+      owner_user_id: ownerUserId,
+      retry_count: 0,
+      last_error: null,
+      next_retry_at: null,
+      created_at: createdAt,
+      updated_at: createdAt,
+    },
+    // A child INSERT's error also records an uncertain dispatch. Replacing its
+    // payload must not make a later delete mistake it for a never-sent child.
+    preserveOnConflictColumns: tableName === 'children' && operation === 'insert'
+      ? ['created_at', 'last_error'] : ['created_at'],
+    jsonColumns: ['payload'],
+  });
+};

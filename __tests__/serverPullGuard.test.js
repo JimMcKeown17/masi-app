@@ -2,7 +2,7 @@ jest.mock('expo-sqlite', () => require('../test-support/expoSQLiteMock'));
 
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { runMigrations } from '../src/db/migrations';
-import { getWriter } from '../src/db/client';
+import { getTestWriter } from '../test-support/testDatabase';
 import {
   childrenRepository,
   createChildrenRepository,
@@ -346,7 +346,7 @@ describe('server pull guard — pending-local-wins (issue #42, ZZ F7)', () => {
 describe('server pull guard repository reads stay consistent with SQLite', () => {
   beforeEach(async () => {
     await AsyncStorage.clear();
-    await seedCoreData(await getWriter());
+    await seedCoreData(await getTestWriter());
   });
 
   test('after a pull, repository reads still show the pending local edit', async () => {

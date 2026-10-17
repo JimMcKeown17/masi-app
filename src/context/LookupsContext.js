@@ -1,13 +1,16 @@
+import { isStaleActorError } from '../session/staleActor';
+import { useSignedInEA } from './SignedInEAContext';
 import React, { createContext, useState, useEffect, useContext, useRef, useCallback, useMemo } from 'react';
-import { supabase } from '../services/supabaseClient';
-import { enqueueSupabaseRequest } from '../services/supabaseRequestQueue';
-import { jobTitlesRepository } from '../db/repositories/referenceDataRepository';
+
 import { useAuth } from './AuthContext';
 import { useOffline } from './OfflineContext';
 
 const LookupsContext = createContext({});
 
 export const LookupsProvider = ({ children }) => {
+  const { repositories, services } = useSignedInEA();
+  const { jobTitles: jobTitlesRepository } = repositories;
+
   const { user } = useAuth();
   const { isOnline } = useOffline();
   const [jobTitles, setJobTitles] = useState([]);
@@ -23,29 +26,23 @@ export const LookupsProvider = ({ children }) => {
       setJobTitles(cached);
 
       try {
-        const { data, error } = await enqueueSupabaseRequest(() => (
-          supabase
-            .from('job_titles')
-            .select('*')
-            .order('sort_order', { ascending: true })
-        ));
-
-        if (error) throw error;
-        const serverJobTitles = data || [];
-        await jobTitlesRepository.replaceFromServer(serverJobTitles);
+        if (!isOnline) return;
+        const serverJobTitles = await services.pullLookups();
         if (activeUserIdRef.current !== activeUserId) return;
         setJobTitles(serverJobTitles);
       } catch (error) {
+        if (isStaleActorError(error)) return;
         console.log('Could not fetch job titles from server (likely offline):', error.message);
       }
     } catch (error) {
+      if (isStaleActorError(error)) return;
       console.error('Error in loadJobTitles:', error);
     } finally {
       if (activeUserIdRef.current === activeUserId) {
         setLoading(false);
       }
     }
-  }, [user?.id]);
+  }, [user?.id, isOnline]);
 
   useEffect(() => {
     activeUserIdRef.current = user?.id || null;

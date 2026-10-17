@@ -216,8 +216,13 @@ render-time dependency.
 - Clock in and out with approximate geolocation when available.
 - Prevent overlapping open time entries at the repository boundary.
 - Use one shared time-tracking state across screens.
-- A GPS request must resolve or fall back within about ten seconds.
-- Permanent permission denial offers a path to device Settings.
+- GPS and a last-known fix no older than 15 minutes share a hard ten-second deadline.
+- Missing location never blocks a manual clock action: save null coordinates and the reason
+  (`timeout`, `denied`, `services_off`, or `unavailable`), or `fix` with coordinates, locally and
+  on the server. NULL status means not recorded by older builds or automatic clock-out.
+- Permission recovery offers Continue Without Location and one explicit retry or Open Settings.
+  A successful Settings handoff writes nothing and asks the EA to return and tap again.
+- Duplicate taps share an in-flight guard; clock-out re-resolves the active entry after capture.
 - Record-without-hours remains an explicit escape hatch for session capture.
 - Attribute work-day grouping to the South African Programme day.
 

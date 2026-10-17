@@ -1,15 +1,19 @@
-import React, { useState } from 'react';
+import { useSignedInEA } from '../../context/SignedInEAContext';
+import React, { useState, useCallback } from 'react';
 import { View, ScrollView, StyleSheet } from 'react-native';
 import { Card, Text, Button, Snackbar } from 'react-native-paper';
 import { Ionicons } from '@expo/vector-icons';
 import { useOffline } from '../../context/OfflineContext';
-import { retryFailedItem } from '../../services/offlineSync';
+import { useAuth } from '../../context/AuthContext';
+import { useFocusEffect } from '@react-navigation/native';
+import { useSessionHistoryStatus } from '../../services/sessionHistoryStatus';
 import { colors, spacing, borderRadius, shadows } from '../../constants/colors';
 import {
   deriveSyncState,
   describeReconcileBreakerNote,
   describeSyncState,
   describeWaitingDetail,
+  describeHistoryState,
 } from '../../utils/syncStatusPresenter';
 
 const TABLE_DISPLAY_NAMES = {
@@ -48,6 +52,21 @@ const formatSyncTime = (isoString) => {
 };
 
 export default function SyncStatusScreen() {
+  const { services } = useSignedInEA();
+
+  const { user } = useAuth();
+  const { running, pageVersion, runVersion } = useSessionHistoryStatus();
+  const [pullState, setPullState] = useState(null);
+  const history = describeHistoryState({ running, pullState });
+  useFocusEffect(useCallback(() => {
+    let active = true;
+    services.sessionHistory.store.getPullState(user?.id).then((state) => {
+      if (active) setPullState(state);
+    }).catch((error) => {
+      console.error('Error loading history status:', error);
+    });
+    return () => { active = false; };
+  }, [user?.id, pageVersion, runVersion]));
   const {
     isOnline, isSyncing, syncStatus, syncNow, refreshSyncStatus,
     waitingCount, needsAttentionCount, authorizeReconcileBreaker,
@@ -76,7 +95,7 @@ export default function SyncStatusScreen() {
     if (!isOnline) return;
     const displayName = TABLE_DISPLAY_NAMES[table] || table;
     showSnackbar(`Retrying ${displayName}...`);
-    await retryFailedItem(table, id);
+    await services.syncEngine.retryFailedItem(table, id);
     await refreshSyncStatus();
     await syncNow({ force: true });
   };
@@ -107,6 +126,14 @@ export default function SyncStatusScreen() {
                 )}
               </>
             )}
+          </Card.Content>
+        </Card>
+
+        <Card style={styles.card}>
+          <Card.Content>
+            <Text variant="titleMedium" style={styles.sectionTitle}>History</Text>
+            <Text variant="bodyMedium" style={styles.syncTimeText}>{history.label}</Text>
+            {history.detail && <Text variant="bodySmall" style={styles.waitingText}>{history.detail}</Text>}
           </Card.Content>
         </Card>
 

@@ -16,6 +16,7 @@ jest.mock('@react-navigation/native', () => ({
 jest.mock('../src/context/AuthContext', () => ({ useAuth: jest.fn() }));
 jest.mock('../src/context/OfflineContext', () => ({ useOffline: jest.fn() }));
 jest.mock('../src/db/repositories/timeEntriesRepository', () => ({
+  ...jest.requireActual('../src/db/repositories/timeEntriesRepository'),
   timeEntriesRepository: { getTimeEntries: jest.fn() },
 }));
 jest.mock('react-native-safe-area-context', () => ({

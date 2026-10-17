@@ -1,4 +1,7 @@
-import { getDatabase } from './client';
+import { StaleActorError } from '../session/staleActor';
+export const assertExportHandle = (handle) => {
+  if (!handle?.isOpen() || !handle.isCurrent()) throw new StaleActorError();
+};
 import { getReleaseMetadata } from '../utils/releaseMetadata';
 
 const quoteIdentifier = (identifier) => `"${String(identifier).replace(/"/g, '""')}"`;
@@ -119,11 +122,12 @@ const getFailedOutboxRows = async (db, tableNames) => {
   }
 };
 
-export async function debugDump(database) {
-  const db = database || await getDatabase();
+export async function debugDump({ handle }) {
+  assertExportHandle(handle);
+  const db = await handle.getReader();
   const tableNames = await getTableNames(db);
 
-  return {
+  const result = {
     database: 'sqlite',
     releaseMetadata: getReleaseMetadata(),
     schemaVersion: await getUserVersion(db),
@@ -133,4 +137,6 @@ export async function debugDump(database) {
     failedOutboxRows: await getFailedOutboxRows(db, tableNames),
     generatedAt: new Date().toISOString(),
   };
+  assertExportHandle(handle);
+  return result;
 }

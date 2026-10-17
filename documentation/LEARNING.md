@@ -1537,3 +1537,206 @@ facts. But complete-family access also exposes coattendee notes, grade snapshots
 status. The alternative is a real redacted projection/data-placement redesign, not a one-line RLS
 filter. The reusable principle is: **define the privacy and consistency boundary explicitly, then
 hydrate that boundary completely—or fail closed.**
+
+## A delta sync is only as honest as its clock (CAP-004, September 2026)
+
+The goal sounded simple: when an EA signs in on a new phone, download their past sessions, then keep
+up with changes cheaply. The cheap part is a **delta**. The phone remembers "the last change I saw"
+and asks only for rows changed after it. Writing the plan against the real code, and then two
+adversarial reviews, showed how many ways "changed after" can lie.
+
+1. **Whose clock?** The spec assumed the server stamped every write with its own time. In fact the
+   trigger ran only on *updates*; on an *insert*, the phone's own `updated_at` was kept. A phone
+   with the wrong date could therefore file a brand-new session "in the past", behind every other
+   phone's bookmark, where no one would ever ask for it. Fix: stamp on insert too. Lesson: check a
+   trigger's timing in the migration, not in the prose that describes it.
+2. **Which moment?** PostgreSQL's `now()` is the time a *transaction started*, not when it
+   committed. A slow write can become visible after the reader has moved past its timestamp.
+   That's why deltas re-ask for a small overlap window, and why they cannot promise perfection on
+   their own.
+3. **What does the timestamp watch?** It watches *rows*. But *who may see* a session changes when a
+   child is handed over to a new EA, and none of the session's rows change. The new EA's bookmark
+   is already past those older sessions. No overlap window fixes that, because the change is in a
+   different table. Hence the re-walk: immediately when the phone gains a delivery child, plus a
+   weekly jittered backstop for the rare cases.
+4. **Do not wait for the slowest client.** An early design stopped the bookmark in front of any
+   session whose attendance lines had not arrived yet. Phones upload the session first and the
+   lines later, sometimes days later if offline, so one offline phone would have frozen everyone's
+   history. Better: save what exists, and let the server's "family changed" stamp bring the
+   stragglers later.
+5. **Save the bookmark in the same transaction as the page.** Then "kill the app anywhere" is safe.
+   There is never a moment where data is saved but the bookmark is not, or the reverse.
+6. **Budgets are checked between units of saved progress.** Checking the 60-second budget in the
+   middle of a page let a slow connection download a page, run out of time, throw it away, and
+   repeat forever (a livelock). The budget now only decides whether to *start* a page.
+7. **A guard belongs right before the irreversible step.** "Check the user, await a write, commit"
+   leaves a window for the user to change. The final check now follows the last write.
+
+The meta-lesson: a plan reviewed only as prose hides the bugs that live in the real behaviour of
+triggers, clocks, libraries (Supabase's request builder has `.then` but no `.catch`), and
+connections. Reviewing the plan against the code, then the code against tests that fail first,
+caught all of them before any EA ever saw the feature.
+
+## Latest intent must survive the in-flight boundary (October 2026)
+
+An offline queue can collapse `archive, restore, archive, restore` to the last row while everything
+is still waiting locally. That is not enough once the server has taken the first request. The old
+request is now outside the queue's control: deleting its SQLite row cannot cancel the network, and
+its response may be success, failure, or missing even when the server committed the change.
+
+This is the **in-flight boundary**. The robust model is one row per replaceable intent stream, not
+one row per operation. Archive and restore for a record therefore share one outbox id:
+`<table>:<record>:lifecycle`. The row's `operation` says what the user wants now. Writing a newer
+intent upserts that same slot, resets retry/backoff state, and changes `updated_at` even if the old
+payload was already in flight.
+
+That identity choice lets the queue reuse its ordinary stale-finalize guard. The request holds the
+old `updated_at`; its success, retriable-failure, or terminal-failure finalizer can change/delete the
+row only when both id and timestamp still match and it is still `in_flight`. Replacement makes that
+compare-and-swap miss, and `restorePendingAfterStaleFinalize` leaves the slot pending with the newer
+operation. A later pass sends exactly that operation. Crash recovery is safe for the same reason:
+`resetInFlight` can never resurrect an older operation in a second row because the stream has only
+one slot.
+
+The first attempted fix kept separate `:archive` and `:restore` rows, then tried to delete the older
+one when it settled. That cleanup was too late and had incomplete visibility. A process could die
+before settlement; `resetInFlight` could return the older row to pending; backoff could hide it while
+the newer row ran; and finalize-time cleanup could even delete the newer failure. The mental model
+is the important part: **replacement belongs in intent identity, not in compensating cleanup after
+the race**.
+
+Older development data can still contain operation-keyed lifecycle rows. Enqueue removes queued,
+failed, or terminal `:archive`/`:restore` rows before writing the slot. An in-flight legacy row is
+left alone because its network request cannot be cancelled; the new slot waits while that legacy
+row is still owed, so the older intent can settle first and can never replay after the slot. This is
+a compatibility bridge, not a second steady-state queue design.
+
+The same causal rule explains insert ordering. An archive or restore is an UPDATE by id and can
+acknowledge only a row that exists. It therefore waits while its own insert is still owed. But an
+unacknowledged insert is not proof that the server lacks the row: the server may have committed it
+and lost the response. Reactivation consequently queues both safe operations when necessary: replay
+the assignment insert with insert-or-ignore, then send the explicit restore. The insert establishes
+existence; the restore establishes current lifecycle state.
+
+One boundary remains: if the network lets an older request time out on the client yet commit on the
+server only after a later request has committed, local queue identity cannot order those server
+arrivals. That is network reordering and belongs to the upload-contract design (base versions or an
+equivalent server-side ordering mechanism), not to lifecycle-slot cleanup.
+
+Authorization evidence has a similar direction. A membership INSERT may depend on an existing
+class or group relationship, but the membership being inserted cannot grant its own prerequisite
+permission. Evidence queries must exclude the current record while still accepting an independent
+pending membership path. This is a useful general test: **could this fact already be true on the
+server before the attempted write?** If not, it is not evidence that justifies an indefinite retry.
+
+Finally, test the production composition root, not only dependency-injected instances. The sync
+engine's evidence tests passed while a database was injected, but the default engine deliberately
+omits that argument and resolves the initialized client at runtime. One public-path test built the
+engine the production way and exposed the undefined connection immediately. A unit with ideal
+dependencies proves the algorithm; a composition test proves the application can actually run it.
+
+## A location failure is evidence, not a failed shift
+
+Clock-in/out records that an EA started or ended work. GPS adds supporting evidence; it must not
+be a prerequisite for recording the event. We therefore store two separate facts: the coordinate
+pair, when available, and the reason it is absent. NULL status means the build did not record an
+outcome, including automatic clock-out. Inventing a reason for old rows would turn missing
+information into false evidence. Pair and status CHECKs in SQLite and PostgreSQL keep these facts
+consistent, while allowing older builds to omit the status columns.
+
+A timeout only bounds work inside its race. The old timer awaited a last-known-position lookup
+before returning, so a stalled native cache could still leave the spinner running indefinitely.
+The live GPS request and cache lookup now start together. GPS wins when it succeeds; a cache fix
+is used on failure or at the deadline. Both share the same ten-second budget. Permission dialogs
+remain an explicit user choice before that budget begins.
+
+SQLite cannot directly remove NOT NULL. The v11 migration creates a replacement table, copies
+every old field, drops and renames inside the existing migration transaction, and recreates the
+one time-entry index. Tests compare the old data, index/trigger definitions and FK inventory,
+keep queued uploads intact, and prove a failed CHECK rolls the whole migration back without
+advancing the schema version. PostgreSQL validation and device behavior remain separate proofs.
+
+## Why the fence sits on each request, and the binding on each tree (Plan 2, October 2026)
+
+Two EAs can share one phone in a day. The old app had one database file, one Supabase client and
+one request queue for everyone, and it checked "who is signed in" when work was *queued*. Work
+outlives that check. An upload queued by A can still be waiting when B signs in, and then it runs
+on the shared client with B's token. The rule we adopted: **check identity at the moment of
+effect, not at the moment of intent.**
+
+That is why the fence sits on each request. The handle's data client re-checks, inside its own
+`fetch`, that the handle is open and current, that a queued task is running and that the session
+is this EA's. Checking only before `enqueueRequest` would leave the gap between enqueue and send,
+and every `await` inside a long workflow opens another one. Two details made the obvious version
+fail:
+
+- **postgrest-js swallows thrown errors.** A `fetch` that throws becomes a `{ data: null, error }`
+  result with an empty error code, which our classifier treats as a retriable network failure. A
+  stale refusal thrown inside `fetch` would therefore be retried later, possibly under the next EA.
+  The fence therefore also marks the running *task* stale, and the queue rejects the task with
+  `StaleActorError` no matter what the SDK returned.
+- **supabase-js primes Realtime at construction** by asking for a token outside any task. A strict
+  fence logged a false "Failed to set initial Realtime auth token" on every sign-in. The token
+  callback now returns nothing outside a task; the send-time check is the real guard.
+
+The binding sits on each tree because remounting is not cancellation. Keying the signed-in tree on
+`userId:epoch` unmounts A's screens when B signs in, but an `async` callback A started (for
+example `ClassesContext.addClass`, paused on a reference read) keeps running after unmount. If it
+had found its repository through "the current handle", it would have resumed and written A's class
+into **B's** file. So nothing in production resolves an ambient handle. Each consumer captures its
+own handle through `useSignedInEA()`, and a write through a revoked handle fails. Static tests
+enforce it, including ones that try the bypasses a reviewer found.
+
+The same principle recurred three more times during review, each time in a new place:
+
+- **A transaction facade outliving its transaction.** It could slip a stray write into the *next*
+  transaction. Each transaction now gets a facade that expires when its task settles.
+- **Late auth responses.** A password check or token refresh that finished after sign-out could
+  write A's session back to storage, or delete B's. Ordering rules kept leaking new interleavings.
+  The fix that held was to guard the stored thing itself: the session storage accepts a write only
+  for the identity AuthContext has admitted, and that admission is always one specific person, never
+  "anyone". The app's launch refresh is the one exception that must pass (it rotates the refresh
+  token), so before AuthContext's first decision the guard accepts only the user already stored.
+- **Ownership derived from content.** `created_by` says who made a record, not who changed it. An
+  EA editing a Head Office child had their change queued under Head Office, and it never uploaded.
+  The owner is now stamped from the signed-in EA at one choke point, and a database trigger refuses
+  a row without one.
+
+The general lesson: when an operation can outlive the context that authorised it, carry the
+context with the operation and check it where the effect happens. When a race keeps reappearing in
+new places after each fix, stop adding ordering rules and guard the resource being corrupted.
+
+## Reporting a situation, not an event
+
+Suppose EA A records work offline, signs out, and hands the phone to EA B. A's unsent work stays in
+A's file. B must not upload it, but support needs to know it is there. The file itself is the
+evidence, so discovery reads the other files at every sign-in and reports their unsent counts.
+It does not depend on having caught A's sign-out. A force-quit or a missed earlier discovery does
+not erase the situation; a later sign-in can find it again.
+
+Repeated discovery must not create a fresh incident every time. The server uses a unique
+`(reporter_id, kind, repeat_key)` constraint. The reporter is the signed-in EA whose session sends
+the report, which can be B while the work belongs to A. The key sent to the server combines the
+install id with a one-way UUIDv5 digest of the episode. The local queue stores that digest too.
+
+An outbox id looks like `table:recordId:operation`. It can contain a child id, so sending it as an
+innocent-looking repeat key would still disclose child data. We hash the episode inputs before
+queueing them and keep raw outbox and domain-record ids, names, notes and record payloads out of
+the report. Tests check the whole queued row and RPC request, including the repeat key.
+
+The key also needs to distinguish old work from new work. After an upload deletes an outbox row,
+a later edit to the same record can reuse its id. For left-behind work, the digest therefore uses
+the stranded EA, the oldest unsent row's id and its creation time. Retries keep that creation time;
+acknowledged work that is later recreated gets a new one. Legacy discovery uses `legacy` in place
+of the EA id. For foreign-owner quarantine, the digest uses the whole sorted set of foreign ids,
+so adding a row changes the key even if the smallest id stays the same.
+
+The local queue keeps a discovered report while the phone is offline. A full sync pass can send it
+later through the same EA's handle. It also gives Step 4's support work somewhere to put one-off
+events that cannot be recovered from the files later. The queue is bounded: at 200 rows it prunes old sent or rejected
+rows; if every row is pending, it logs and drops the new report. It is a support aid, not an audit
+log. Sending it never uploads another EA's domain work.
+
+The implementation lives in [file discovery](../src/session/fileDiscovery.js), the
+[incident repository](../src/db/repositories/supportIncidentRepository.js) and the
+[incident drain](../src/services/supportIncidents.js).

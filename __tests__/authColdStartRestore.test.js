@@ -1,3 +1,26 @@
+import { SignedInEAProvider } from '../src/context/SignedInEAContext';
+import { resetHandleRegistryForTests } from '../src/session/signedInHandle';
+import * as engine from '../test-support/expoSQLiteRealEngine';
+import * as sqlite from 'expo-sqlite';
+jest.mock('@react-native-community/netinfo', () => ({ fetch: async () => ({ isConnected: true }), addEventListener: () => () => {} }));
+jest.mock('../src/session/handleDataClient', () => ({ createHandleDataClient: () => require('../src/services/supabaseClient').supabase }));
+jest.mock('../src/session/handleServices', () => ({
+  createHandleServices: (handle) => ({
+    ...jest.requireActual('../src/session/handleServices').createHandleServices(handle),
+    deviceProfile: { get: (...args) => mockDeviceProfile.getUserProfile(...args), save: (...args) => mockDeviceProfile.saveUserProfile(...args) },
+    pullReferenceData: (...args) => mockPullReferenceData(...args),
+  }),
+}));
+const ProfileTree = ({ children }) => {
+  const { handle } = useAuth();
+  return handle ? <SignedInEAProvider key={`${handle.userId}:${handle.epoch}`} handle={handle}>{children}</SignedInEAProvider> : children;
+};
+beforeEach(async () => { await resetHandleRegistryForTests(); await engine.__resetMockDatabases(); sqlite.__setDatabaseFactory(engine.openDatabaseAsync); });
+afterEach(async () => { await resetHandleRegistryForTests(); await engine.__resetMockDatabases(); });
+global.__MASI_NO_DEFAULT_HANDLE__ = true;
+jest.mock('../test-support/handleServiceMocks', () => ({
+enqueueSupabaseRequest: jest.fn()
+}));
 import React from 'react';
 import { Text } from 'react-native';
 import { act, render, waitFor } from '@testing-library/react-native';
@@ -6,9 +29,9 @@ import {
   clearPersistedSession,
   readPersistedSession,
 } from '../src/services/persistedAuthSession';
-import { deviceSettings } from '../src/services/deviceSettings';
-import { pullReferenceData } from '../src/services/offlineSync';
-import { enqueueSupabaseRequest } from '../src/services/supabaseRequestQueue';
+const mockDeviceProfile = { getUserProfile: jest.fn(), saveUserProfile: jest.fn(), clearUserProfile: jest.fn() };
+const mockPullReferenceData = jest.fn();
+import { enqueueSupabaseRequest } from '../test-support/handleServiceMocks';
 
 let mockAuthStateCallback;
 
@@ -30,6 +53,7 @@ const mockSelect = jest.fn(() => ({ eq: mockEq }));
 const mockFrom = jest.fn(() => ({ select: mockSelect }));
 
 jest.mock('../src/services/supabaseClient', () => ({
+  ...require('../test-support/supabaseTestConfig'),
   supabase: {
     auth: {
       getSession: (...args) => mockGetSession(...args),
@@ -48,23 +72,13 @@ jest.mock('../src/services/persistedAuthSession', () => ({
   readPersistedSession: jest.fn(),
 }));
 
-jest.mock('../src/services/offlineSync', () => ({
-  pullReferenceData: jest.fn(),
-}));
 
-jest.mock('../src/services/supabaseRequestQueue', () => ({
-  enqueueSupabaseRequest: jest.fn(),
-}));
 
-jest.mock('../src/services/deviceSettings', () => ({
-  deviceSettings: {
-    getUserProfile: jest.fn(),
-    clearUserProfile: jest.fn(),
-    saveUserProfile: jest.fn(),
-  },
-}));
 
-const persistedSession = (userId = 'user-1') => ({
+
+
+
+const persistedSession = (userId = '11111111-1111-4111-8111-111111111111') => ({
   access_token: 'expired-access-token',
   refresh_token: 'refresh-token',
   token_type: 'bearer',
@@ -72,7 +86,7 @@ const persistedSession = (userId = 'user-1') => ({
   user: { id: userId, email: `${userId}@example.org` },
 });
 
-const liveSession = (userId = 'user-1') => ({
+const liveSession = (userId = '11111111-1111-4111-8111-111111111111') => ({
   access_token: 'live-token',
   refresh_token: 'live-refresh-token',
   user: { id: userId, email: `${userId}@example.org` },
@@ -91,7 +105,7 @@ const AuthStateProbe = () => {
 const renderAuthProbe = async () => {
   const screen = render(
     <AuthProvider>
-      <AuthStateProbe />
+      <ProfileTree><AuthStateProbe /></ProfileTree>
     </AuthProvider>
   );
   await waitFor(() => expect(mockOnAuthStateChange).toHaveBeenCalled());
@@ -128,11 +142,11 @@ describe('AuthContext offline cold-start restore', () => {
     mockSignOut.mockResolvedValue({ error: null });
     readPersistedSession.mockResolvedValue(null);
     clearPersistedSession.mockResolvedValue(undefined);
-    pullReferenceData.mockResolvedValue(undefined);
+    mockPullReferenceData.mockResolvedValue(undefined);
     enqueueSupabaseRequest.mockImplementation(async (operation) => operation());
-    deviceSettings.getUserProfile.mockResolvedValue(null);
-    deviceSettings.clearUserProfile.mockResolvedValue(true);
-    deviceSettings.saveUserProfile.mockResolvedValue(true);
+    mockDeviceProfile.getUserProfile.mockResolvedValue(null);
+    mockDeviceProfile.clearUserProfile.mockResolvedValue(true);
+    mockDeviceProfile.saveUserProfile.mockResolvedValue(true);
     mockSingle.mockResolvedValue({ data: null, error: null });
   });
 
@@ -142,12 +156,12 @@ describe('AuthContext offline cold-start restore', () => {
   });
 
   it('restores a persisted offline session idempotently when initial null events double-fire', async () => {
-    readPersistedSession.mockResolvedValue(persistedSession('user-1'));
+    readPersistedSession.mockResolvedValue(persistedSession('11111111-1111-4111-8111-111111111111'));
     const screen = await renderAuthProbe();
 
     await emitAuthEvent('INITIAL_SESSION', null);
     await flushStartup();
-    await expectAuthState(screen, 'ready|user-1|no-session');
+    await expectAuthState(screen, 'ready|11111111-1111-4111-8111-111111111111|no-session');
 
     await emitAuthEvent('INITIAL_SESSION', null);
     await flushStartup();
@@ -155,9 +169,9 @@ describe('AuthContext offline cold-start restore', () => {
       jest.advanceTimersByTime(15000);
     });
 
-    expect(pullReferenceData).toHaveBeenCalledTimes(1);
-    expect(deviceSettings.clearUserProfile).not.toHaveBeenCalled();
-    expect(screen.getByTestId('auth-state')).toHaveTextContent('ready|user-1|no-session');
+    expect(mockPullReferenceData).toHaveBeenCalledTimes(1);
+    expect(mockDeviceProfile.clearUserProfile).not.toHaveBeenCalled();
+    expect(screen.getByTestId('auth-state')).toHaveTextContent('ready|11111111-1111-4111-8111-111111111111|no-session');
   });
 
   it('stays signed out when no persisted auth-js session exists', async () => {
@@ -169,41 +183,41 @@ describe('AuthContext offline cold-start restore', () => {
   });
 
   it('clears restored auth immediately on a genuine SIGNED_OUT event', async () => {
-    readPersistedSession.mockResolvedValueOnce(persistedSession('user-1'));
+    readPersistedSession.mockResolvedValueOnce(persistedSession('11111111-1111-4111-8111-111111111111'));
     const screen = await renderAuthProbe();
     await emitAuthEvent('INITIAL_SESSION', null);
     await flushStartup();
-    await expectAuthState(screen, 'ready|user-1|no-session');
+    await expectAuthState(screen, 'ready|11111111-1111-4111-8111-111111111111|no-session');
 
     readPersistedSession.mockResolvedValueOnce(null);
     await emitAuthEvent('SIGNED_OUT', null);
 
     expect(screen.getByTestId('auth-state')).toHaveTextContent('ready|no-user|no-session');
-    expect(deviceSettings.clearUserProfile).toHaveBeenCalled();
+    expect(mockDeviceProfile.clearUserProfile).not.toHaveBeenCalled();
     expect(clearPersistedSession).toHaveBeenCalled();
   });
 
   it('ignores a stale SIGNED_OUT echo when the current user still has persisted auth', async () => {
     const screen = await renderAuthProbe();
-    await emitAuthEvent('SIGNED_IN', liveSession('user-1'));
+    await emitAuthEvent('SIGNED_IN', liveSession('11111111-1111-4111-8111-111111111111'));
     await flushStartup();
-    await expectAuthState(screen, 'ready|user-1|session');
+    await expectAuthState(screen, 'ready|11111111-1111-4111-8111-111111111111|session');
 
-    readPersistedSession.mockResolvedValue(persistedSession('user-1'));
+    readPersistedSession.mockResolvedValue(persistedSession('11111111-1111-4111-8111-111111111111'));
     await emitAuthEvent('SIGNED_OUT', null);
     await act(async () => {
       jest.advanceTimersByTime(15000);
     });
 
-    expect(screen.getByTestId('auth-state')).toHaveTextContent('ready|user-1|session');
-    expect(deviceSettings.clearUserProfile).not.toHaveBeenCalled();
+    expect(screen.getByTestId('auth-state')).toHaveTextContent('ready|11111111-1111-4111-8111-111111111111|session');
+    expect(mockDeviceProfile.clearUserProfile).not.toHaveBeenCalled();
   });
 
   it('signs out locally without waiting for Supabase network sign-out', async () => {
     const screen = await renderAuthProbe();
-    await emitAuthEvent('SIGNED_IN', liveSession('user-1'));
+    await emitAuthEvent('SIGNED_IN', liveSession('11111111-1111-4111-8111-111111111111'));
     await flushStartup();
-    await expectAuthState(screen, 'ready|user-1|session');
+    await expectAuthState(screen, 'ready|11111111-1111-4111-8111-111111111111|session');
     mockSignOut.mockImplementation(() => new Promise(() => {}));
 
     let outcome = 'pending';
@@ -218,58 +232,58 @@ describe('AuthContext offline cold-start restore', () => {
     expect(outcome).toEqual({ error: null });
     expect(screen.getByTestId('auth-state')).toHaveTextContent('ready|no-user|no-session');
     expect(clearPersistedSession).toHaveBeenCalled();
-    expect(deviceSettings.clearUserProfile).toHaveBeenCalled();
+    expect(mockDeviceProfile.clearUserProfile).not.toHaveBeenCalled();
     expect(mockSignOut).toHaveBeenCalledWith({ scope: 'local' });
   });
 
   it('does not resurrect old auth after local sign-out and ignores a late sign-out echo after re-login', async () => {
     const screen = await renderAuthProbe();
-    await emitAuthEvent('SIGNED_IN', liveSession('user-1'));
+    await emitAuthEvent('SIGNED_IN', liveSession('11111111-1111-4111-8111-111111111111'));
     await flushStartup();
-    await expectAuthState(screen, 'ready|user-1|session');
+    await expectAuthState(screen, 'ready|11111111-1111-4111-8111-111111111111|session');
 
     await act(async () => {
       await AuthStateProbe.latestAuth.signOut();
     });
     expect(screen.getByTestId('auth-state')).toHaveTextContent('ready|no-user|no-session');
 
-    await emitAuthEvent('TOKEN_REFRESHED', liveSession('user-1'));
+    await emitAuthEvent('TOKEN_REFRESHED', liveSession('11111111-1111-4111-8111-111111111111'));
     expect(screen.getByTestId('auth-state')).toHaveTextContent('ready|no-user|no-session');
 
-    await emitAuthEvent('SIGNED_IN', liveSession('user-2'));
+    await emitAuthEvent('SIGNED_IN', liveSession('22222222-2222-4222-8222-222222222222'));
     await flushStartup();
-    expect(screen.getByTestId('auth-state')).toHaveTextContent('ready|user-2|session');
+    expect(screen.getByTestId('auth-state')).toHaveTextContent('ready|22222222-2222-4222-8222-222222222222|session');
 
-    readPersistedSession.mockResolvedValue(persistedSession('user-2'));
+    readPersistedSession.mockResolvedValue(persistedSession('22222222-2222-4222-8222-222222222222'));
     await emitAuthEvent('SIGNED_OUT', null);
-    expect(screen.getByTestId('auth-state')).toHaveTextContent('ready|user-2|session');
+    expect(screen.getByTestId('auth-state')).toHaveTextContent('ready|22222222-2222-4222-8222-222222222222|session');
   });
 
   it('heals an offline-restored session when Supabase later refreshes the token', async () => {
-    readPersistedSession.mockResolvedValue(persistedSession('user-1'));
+    readPersistedSession.mockResolvedValue(persistedSession('11111111-1111-4111-8111-111111111111'));
     const screen = await renderAuthProbe();
     await emitAuthEvent('INITIAL_SESSION', null);
     await flushStartup();
-    await expectAuthState(screen, 'ready|user-1|no-session');
+    await expectAuthState(screen, 'ready|11111111-1111-4111-8111-111111111111|no-session');
 
-    await emitAuthEvent('TOKEN_REFRESHED', liveSession('user-1'));
+    await emitAuthEvent('TOKEN_REFRESHED', liveSession('11111111-1111-4111-8111-111111111111'));
 
-    expect(screen.getByTestId('auth-state')).toHaveTextContent('ready|user-1|session');
+    expect(screen.getByTestId('auth-state')).toHaveTextContent('ready|11111111-1111-4111-8111-111111111111|session');
   });
 
   it('preserves the grace period for non-SIGNED_OUT null events while running', async () => {
     const screen = await renderAuthProbe();
-    await emitAuthEvent('SIGNED_IN', liveSession('user-1'));
+    await emitAuthEvent('SIGNED_IN', liveSession('11111111-1111-4111-8111-111111111111'));
     await flushStartup();
-    await expectAuthState(screen, 'ready|user-1|session');
+    await expectAuthState(screen, 'ready|11111111-1111-4111-8111-111111111111|session');
 
     await emitAuthEvent('USER_UPDATED', null);
-    expect(screen.getByTestId('auth-state')).toHaveTextContent('ready|user-1|session');
+    expect(screen.getByTestId('auth-state')).toHaveTextContent('ready|11111111-1111-4111-8111-111111111111|session');
 
     await act(async () => {
       jest.advanceTimersByTime(14999);
     });
-    expect(screen.getByTestId('auth-state')).toHaveTextContent('ready|user-1|session');
+    expect(screen.getByTestId('auth-state')).toHaveTextContent('ready|11111111-1111-4111-8111-111111111111|session');
 
     await act(async () => {
       jest.advanceTimersByTime(1);

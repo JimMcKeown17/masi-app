@@ -1,3 +1,4 @@
+import { useSignedInEA } from '../../context/SignedInEAContext';
 import React, { useState, useCallback, useMemo, useRef } from 'react';
 import { View, StyleSheet, FlatList, RefreshControl, TouchableOpacity } from 'react-native';
 import {
@@ -15,13 +16,16 @@ import { colors, spacing } from '../../constants/colors';
 import { useChildren } from '../../context/ChildrenContext';
 import { useClasses } from '../../context/ClassesContext';
 import { useOffline } from '../../context/OfflineContext';
-import { assessmentsRepository } from '../../db/repositories/assessmentsRepository';
+
 import { getChildrenTabStats } from '../../utils/dashboardStats';
 import { getChildrenLanding } from '../../utils/childrenLanding';
 import StatBar from '../../components/dashboard/StatBar';
 import { NO_TEXT_SUGGESTIONS } from '../../constants/textInputProps';
 
 export default function ChildrenListScreen({ navigation }) {
+  const { repositories } = useSignedInEA();
+  const { assessments: assessmentsRepository } = repositories;
+
   const { user } = useAuth();
   const {
     children,

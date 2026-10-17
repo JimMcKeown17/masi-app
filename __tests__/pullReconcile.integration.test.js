@@ -1,3 +1,4 @@
+import { bindTestActor } from '../test-support/actorTestUtils';
 jest.mock('expo-sqlite', () => require('../test-support/expoSQLiteMock'));
 
 import { runMigrations } from '../src/db/migrations';
@@ -844,7 +845,7 @@ describe('relationship-scoped pull reconcile', () => {
   });
 
   test('two independent 999-id acknowledged sets bind as two JSON parameters below the variable limit', async () => {
-    const db = createCountingSqliteTestDatabase();
+    const db = bindTestActor(createCountingSqliteTestDatabase(), 'user-1');
     await runMigrations(db);
     await db.execAsync('PRAGMA foreign_keys = ON');
     await seedCoreData(db);

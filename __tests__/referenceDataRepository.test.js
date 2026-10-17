@@ -5,7 +5,7 @@ import {
   __setDatabaseFactory,
 } from 'expo-sqlite';
 import { createBetterSqliteTestDatabase } from '../test-support/betterSqliteAdapter';
-import { resetDatabaseConnectionForTests, withTransaction } from '../src/db/client';
+import { initializeTestDatabase, closeDefaultTestHandle, withTestTransaction, getTestWriter } from '../test-support/testDatabase';
 import { CURRENT_SCHEMA_VERSION, runMigrations } from '../src/db/migrations';
 import {
   createReferenceDataRepository,
@@ -24,57 +24,32 @@ const createDeferred = () => {
 };
 
 describe('reference data repositories', () => {
-  beforeEach(() => {
-    resetExpoSQLiteMock();
-    resetDatabaseConnectionForTests();
-  });
+
 
   test('default reference replacements share the global SQLite write queue', async () => {
     // New model: there is ONE persistent writer connection and all writes — repository
-    // transactions (via runRepositoryTransaction → withTransaction) AND raw withTransaction
+    // transactions (via runRepositoryTransaction → withTestTransaction) AND raw withTestTransaction
     // calls — funnel through it, serialized on the client's databaseQueue. We model that
     // single writer and prove a repository replace and a raw transaction do NOT interleave.
     const firstTransactionEntered = createDeferred();
     const releaseFirstTransaction = createDeferred();
     const events = [];
     let beginCount = 0;
-    const writer = {
-      // BEGIN IMMEDIATE / COMMIT / ROLLBACK + post-migration FK pragma all flow through here.
-      execAsync: jest.fn(async (sql) => {
-        if (/BEGIN IMMEDIATE/i.test(sql)) {
-          beginCount += 1;
-          const txnNumber = beginCount;
-          events.push(`enter-txn-${txnNumber}`);
-          if (txnNumber === 1) {
-            firstTransactionEntered.resolve();
-            await releaseFirstTransaction.promise;
-          }
-        } else if (/^COMMIT$/i.test(sql)) {
-          events.push(`exit-txn-${beginCount}`);
-        }
-      }),
-      // Schema already current so the bootstrap runMigrations is a no-op.
-      getFirstAsync: jest.fn(async (sql) => (
-        /user_version/i.test(sql) ? { user_version: CURRENT_SCHEMA_VERSION } : null
-      )),
-      // The repository replace path reads conflicts and writes rows on the writer (txn === writer).
-      getAllAsync: jest.fn(async () => []),
-      runAsync: jest.fn(async () => ({ changes: 0 })),
-    };
-
-    // First open -> writer; second open (reader) -> a query_only-style stub (unused by writes).
-    let openCount = 0;
-    __setDatabaseFactory(async () => (openCount++ === 0 ? writer : {
-      execAsync: jest.fn(async () => {}),
-      getFirstAsync: jest.fn(async () => null),
-      getAllAsync: jest.fn(async () => []),
-      runAsync: jest.fn(async () => ({ changes: 0 })),
-    }));
+    const writer = await getTestWriter();
+    const exec = writer.execAsync;
+    const nativeCall = jest.spyOn(writer, 'execAsync').mockImplementation(async (sql) => {
+      if (sql === 'BEGIN IMMEDIATE') {
+        beginCount += 1;
+        events.push(`enter-txn-${beginCount}`);
+        if (beginCount === 1) { firstTransactionEntered.resolve(); await releaseFirstTransaction.promise; }
+      } else if (sql === 'COMMIT') events.push(`exit-txn-${beginCount}`);
+      return exec(sql);
+    });
     const schoolsRepository = createSchoolsRepository();
 
     const first = schoolsRepository.replaceFromServer([{ id: 'school-1', name: 'Cached School' }]);
     await firstTransactionEntered.promise;
-    const second = withTransaction(async () => {
+    const second = withTestTransaction(async () => {
       events.push('task-b-txn-2');
     });
 
@@ -93,6 +68,7 @@ describe('reference data repositories', () => {
       'task-b-txn-2',
       'exit-txn-2',
     ]);
+    nativeCall.mockRestore();
   });
 
   test('reference table replacement is all-or-nothing per table', async () => {
@@ -188,6 +164,7 @@ describe('reference data repositories', () => {
       await db.runAsync(
         `
         insert into sync_outbox (
+          owner_user_id,
           id,
           table_name,
           record_id,
@@ -200,7 +177,8 @@ describe('reference data repositories', () => {
           created_at,
           updated_at
         )
-        values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        values (
+          'user-1',?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `,
         'classes:class-1:update',
         'classes',

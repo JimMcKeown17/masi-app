@@ -16,13 +16,7 @@ const mockStatusBar = jest.fn();
 
 const mockGetAssessmentDismissedOn = jest.fn();
 const mockDismissAssessmentForDay = jest.fn();
-jest.mock('../src/services/homeAttentionStore', () => ({
-  AUTO_CLOCK_OUT_NOTICE_TTL_MS: 24 * 60 * 60 * 1000,
-  homeAttentionStore: {
-    getAssessmentDismissedOn: (...args) => mockGetAssessmentDismissedOn(...args),
-    dismissAssessmentForDay: (...args) => mockDismissAssessmentForDay(...args),
-  },
-}));
+const mockUseSessionHistoryStatus = jest.fn();
 
 jest.mock('@expo/vector-icons', () => new Proxy({}, {
   get: (target, prop) => {
@@ -36,8 +30,8 @@ jest.mock('@react-navigation/native', () => {
   const React = require('react');
   return {
     ...jest.requireActual('@react-navigation/native'),
-    useFocusEffect: (cb) => { React.useEffect(() => cb(), []); },
     useIsFocused: () => mockIsFocused(),
+    useFocusEffect: (cb) => { React.useEffect(() => cb(), [cb]); },
   };
 });
 
@@ -52,15 +46,18 @@ jest.mock('../src/hooks/useSessionLaunchGuard', () => ({
   useSessionLaunchGuard: (...args) => mockUseSessionLaunchGuard(...args),
 }));
 jest.mock('../src/db/repositories/timeEntriesRepository', () => ({
+  ...jest.requireActual('../src/db/repositories/timeEntriesRepository'),
   timeEntriesRepository: { getTimeEntries: (...args) => mockGetTimeEntries(...args) },
 }));
 jest.mock('../src/db/repositories/sessionsRepository', () => ({
+  ...jest.requireActual('../src/db/repositories/sessionsRepository'),
   sessionsRepository: {
     getSessions: (...args) => mockGetSessions(...args),
     getSessionCountsSince: (...args) => mockGetSessionCountsSince(...args),
   },
 }));
 jest.mock('../src/db/repositories/assessmentsRepository', () => ({
+  ...jest.requireActual('../src/db/repositories/assessmentsRepository'),
   assessmentsRepository: {
     getAssessments: (...args) => mockGetAssessments(...args),
     getAssessmentCountsSince: (...args) => mockGetAssessmentCountsSince(...args),
@@ -72,10 +69,17 @@ jest.mock('../src/services/sessionsTodayGoal', () => ({
 jest.mock('../src/services/activeProgrammeGate', () => ({
   getActiveProgrammeGate: (...args) => mockGetActiveProgrammeGate(...args),
 }));
+jest.mock('../src/services/sessionHistoryStatus', () => ({
+  ...jest.requireActual('../src/services/sessionHistoryStatus'),
+  useSessionHistoryStatus: () => mockUseSessionHistoryStatus(),
+}));
 
 import React from 'react';
+import { AppState } from 'react-native';
 import { act, fireEvent, render, waitFor } from '@testing-library/react-native';
 import { PaperProvider } from 'react-native-paper';
+import { getDefaultTestHandle } from '../test-support/defaultTestHandle';
+import { StaleActorError } from '../src/session/staleActor';
 import HomeScreen from '../src/screens/main/HomeScreen';
 
 const renderHome = (navigation = { navigate: jest.fn() }) => render(
@@ -106,9 +110,16 @@ const defaultTimeTracking = {
 describe('HomeScreen', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    mockGetSessions.mockReset();
+    AppState.addEventListener.mockImplementation(() => ({ remove: jest.fn() }));
+    Object.assign(getDefaultTestHandle().services.homeAttention, {
+      getAssessmentDismissedOn: mockGetAssessmentDismissedOn,
+      dismissAssessmentForDay: mockDismissAssessmentForDay,
+    });
     mockIsFocused.mockReturnValue(true);
     mockGetAssessmentDismissedOn.mockResolvedValue(null);
     mockDismissAssessmentForDay.mockResolvedValue(undefined);
+    mockUseSessionHistoryStatus.mockReturnValue({ pageVersion: 0, runVersion: 0 });
     mockUseAuth.mockReturnValue({
       user: { id: 'ea-1', first_name: 'Alice' },
       profile: { first_name: 'Alice', schoolName: 'Charles Duna Primary' },
@@ -152,7 +163,94 @@ describe('HomeScreen', () => {
   });
 
   afterEach(() => {
+    jest.restoreAllMocks();
     jest.useRealTimers();
+  });
+
+  test.each(['pageVersion', 'runVersion'])('%s refreshes Home sessions and statistics without leaving', async (version) => {
+    jest.useFakeTimers();
+    jest.setSystemTime(new Date('2026-07-22T08:00:00.000Z'));
+    mockUseChildren.mockReturnValue({ children: [{ id: 'child-1', first_name: 'Onwethu' }] });
+    const navigation = { navigate: jest.fn() };
+    const screen = renderHome(navigation);
+    await screen.findByText('2 of 3 sessions today');
+    expect(mockGetSessions).toHaveBeenCalledTimes(1);
+
+    mockGetSessions.mockResolvedValue([{
+      id: 'session-1', user_id: 'ea-1', session_date: '2026-07-22',
+      children_ids: ['child-1'], session_type: 'Shared reading',
+    }]);
+    mockGetSessionsTodayGoal.mockResolvedValue({ target: 3, ceiling: 5, count: 3, state: 'met' });
+    mockUseSessionHistoryStatus.mockReturnValue({ pageVersion: 0, runVersion: 0, [version]: 1 });
+    screen.rerender(<PaperProvider><HomeScreen navigation={navigation} /></PaperProvider>);
+
+    await waitFor(() => expect(mockGetSessions).toHaveBeenCalledTimes(2));
+    expect(await screen.findByText('3 of 3 sessions today')).toBeTruthy();
+    expect(screen.getByText('3 of 3 sessions today')).toBeTruthy();
+    expect(screen.queryByLabelText('Loading statistics')).toBeNull();
+    expect(mockGetSessions).toHaveBeenLastCalledWith({
+      userId: 'ea-1', recordedByUserId: 'ea-1', sinceDate: '2026-06-22', order: 'desc',
+    });
+  });
+
+  test.each([true, false])('a history refresh keeps content visible without a skeleton (has programme: %s)', async (hasProgramme) => {
+    if (!hasProgramme) {
+      mockGetSessionsTodayGoal.mockResolvedValue(null);
+      mockGetActiveProgrammeGate.mockResolvedValue({ hasActiveProgramme: false, programme: null });
+    }
+    const title = hasProgramme ? '2 of 3 sessions today' : 'No active programme';
+    const navigation = { navigate: jest.fn() };
+    const screen = renderHome(navigation);
+    await screen.findByText(title);
+    let releaseReload;
+    mockGetSessions.mockImplementationOnce(() => new Promise((resolve) => { releaseReload = resolve; }));
+    mockUseSessionHistoryStatus.mockReturnValue({ pageVersion: 1, runVersion: 0 });
+    screen.rerender(<PaperProvider><HomeScreen navigation={navigation} /></PaperProvider>);
+    await waitFor(() => expect(mockGetSessions).toHaveBeenCalledTimes(2));
+    expect(screen.getByText(title)).toBeTruthy();
+    expect(screen.queryByLabelText('Loading statistics')).toBeNull();
+    await act(async () => { releaseReload([]); });
+    expect(screen.getByText(title)).toBeTruthy();
+  });
+
+  test('a stats load rejected for a stale EA stays quiet', async () => {
+    const report = jest.spyOn(console, 'error').mockImplementation(() => {});
+    try {
+      let rejectLoad;
+      mockGetSessions.mockImplementationOnce(() => new Promise((_, reject) => { rejectLoad = reject; }));
+      const screen = renderHome();
+      expect(screen.getByLabelText('Loading statistics')).toBeTruthy();
+      await act(async () => { rejectLoad(new StaleActorError()); });
+      expect(screen.queryByLabelText('Loading statistics')).toBeNull();
+      expect(report).not.toHaveBeenCalled();
+    } finally {
+      report.mockRestore();
+    }
+  });
+
+  test('a reload that read no dismissal cannot resurrect a card dismissed while it waits', async () => {
+    mockUseChildren.mockReturnValue({ children: [{ id: 'c1', first_name: 'A' }] });
+    const { AppState } = require('react-native');
+    const listeners = [];
+    const subscription = jest.spyOn(AppState, 'addEventListener').mockImplementation((type, fn) => {
+      listeners.push(fn);
+      return { remove: jest.fn() };
+    });
+    try {
+      const screen = renderHome();
+      await screen.findByText('1 child to assess');
+      let releaseReload;
+      mockGetSessions.mockImplementationOnce(() => new Promise((resolve) => { releaseReload = resolve; }));
+      await act(async () => { listeners.forEach((fn) => fn('active')); });
+      expect(mockGetAssessmentDismissedOn).toHaveBeenCalledTimes(2);
+      await act(async () => { fireEvent.press(screen.getByLabelText('Dismiss: 1 child to assess')); });
+      expect(screen.queryByText('1 child to assess')).toBeNull();
+      await act(async () => { releaseReload([]); });
+      expect(screen.queryByText('1 child to assess')).toBeNull();
+      expect(mockDismissAssessmentForDay).toHaveBeenCalledTimes(1);
+    } finally {
+      subscription.mockRestore();
+    }
   });
 
   test('renders the locked status-only hero', async () => {
@@ -171,7 +269,7 @@ describe('HomeScreen', () => {
     expect(await screen.findByLabelText('2 of 3 sessions today. Below target.')).toBeTruthy();
     expect(screen.getByText('2 of 3 sessions today')).toBeTruthy();
     expect(screen.getByText('One more pair reaches your target.')).toBeTruthy();
-    expect(mockGetSessionsTodayGoal).toHaveBeenCalledWith({ userId: 'ea-1' });
+    expect(mockGetSessionsTodayGoal).toHaveBeenCalledWith(expect.objectContaining({ userId: 'ea-1' }));
   });
 
   test('shows Clock in button when not signed in', async () => {
@@ -367,7 +465,7 @@ describe('HomeScreen', () => {
     const screen = renderHome();
     fireEvent.press(await screen.findByLabelText('Dismiss: 1 child to assess'));
     await waitFor(() => expect(screen.queryByText('1 child to assess')).toBeNull());
-    expect(mockDismissAssessmentForDay).toHaveBeenCalledWith('ea-1', expect.stringMatching(/^\d{4}-\d{2}-\d{2}$/));
+    expect(mockDismissAssessmentForDay).toHaveBeenCalledWith(expect.stringMatching(/^\d{4}-\d{2}-\d{2}$/));
   });
 
   test('returning to the foreground reloads the stats', async () => {

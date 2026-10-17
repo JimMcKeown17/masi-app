@@ -1,13 +1,23 @@
 import React from 'react';
 import { View, StyleSheet } from 'react-native';
-import { Text } from 'react-native-paper';
+import { Button, Text } from 'react-native-paper';
 import { useAuth } from '../../context/AuthContext';
 import { colors, spacing } from '../../constants/colors';
 import { JOB_TITLE_CODES } from '../../constants/jobTitles';
 import LiteracySessionForm from './LiteracySessionForm';
 
 export default function SessionFormScreen({ navigation }) {
-  const { profile } = useAuth();
+  const { profile, refreshProfile } = useAuth();
+
+  if (!profile) {
+    return (
+      <View style={styles.container}>
+        <Text variant="titleLarge" style={styles.title}>New Session</Text>
+        <Text variant="bodyMedium" style={styles.message}>Loading your profile...</Text>
+        <Button onPress={refreshProfile}>Retry</Button>
+      </View>
+    );
+  }
 
   if (profile?.jobTitleCode === JOB_TITLE_CODES.LITERACY_COACH) {
     return <LiteracySessionForm navigation={navigation} />;

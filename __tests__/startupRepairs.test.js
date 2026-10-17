@@ -1,3 +1,4 @@
+import { bindTestActor } from '../test-support/actorTestUtils';
 jest.mock('expo-sqlite', () => require('../test-support/expoSQLiteMock'));
 
 import { createBetterSqliteTestDatabase } from '../test-support/betterSqliteAdapter';
@@ -16,7 +17,7 @@ describe('versioned startup repairs', () => {
   let localStateRepository;
 
   beforeEach(async () => {
-    db = createBetterSqliteTestDatabase(':memory:');
+    db = bindTestActor(createBetterSqliteTestDatabase(':memory:'), 'user-1');
     await runMigrations(db);
     localStateRepository = createLocalStateRepository({ database: db });
   });

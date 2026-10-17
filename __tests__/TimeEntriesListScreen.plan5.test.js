@@ -24,12 +24,14 @@ jest.mock('../src/context/OfflineContext', () => ({
 }));
 
 jest.mock('../src/db/repositories/timeEntriesRepository', () => ({
+  ...jest.requireActual('../src/db/repositories/timeEntriesRepository'),
   timeEntriesRepository: {
     getTimeEntries: jest.fn(),
   },
 }));
 
 jest.mock('../src/services/supabaseClient', () => ({
+  ...require('../test-support/supabaseTestConfig'),
   supabase: {
     from: jest.fn(),
   },
@@ -82,6 +84,18 @@ describe('TimeEntriesListScreen Plan 5 behavior', () => {
   afterEach(() => {
     jest.useRealTimers();
     jest.clearAllMocks();
+  });
+
+  test('shows No location for both ends of a completed shift without coordinates', async () => {
+    timeEntriesRepository.getTimeEntries.mockResolvedValue([{
+      id: 'no-location', user_id: 'user-1', sign_in_time: '2026-10-15T08:00:00Z',
+      sign_out_time: '2026-10-15T09:00:00Z', sign_in_lat: null, sign_in_lon: null,
+      sign_out_lat: null, sign_out_lon: null, sign_in_location_status: 'timeout',
+      sign_out_location_status: 'unavailable', synced: false,
+    }]);
+    const screen = render(<SafeAreaProvider><TimeEntriesListScreen /></SafeAreaProvider>);
+    await waitFor(() => expect(screen.getAllByText('No location')).toHaveLength(2));
+    expect(screen.getByText('1.00')).toBeTruthy();
   });
 
   test('loads completed work history from SQLite without screen-owned Supabase or storage pulls', async () => {

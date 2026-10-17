@@ -31,6 +31,7 @@ const CHILD_COLUMNS = [
   'age',
   'gender',
   'reading_level',
+  'history_reference',
   'class_id',
   'hidden_at',
   'archived_at',
@@ -93,6 +94,13 @@ const normalizeChildRecord = (child) => ({
   ...child,
   gender: normalizeGender(child.gender),
 });
+
+const assertNotHistoryReference = async (txn, childId) => {
+  const row = await txn.getFirstAsync('select history_reference from children where id = ?', childId);
+  if (row?.history_reference === 1) {
+    throw new Error('History reference children are read-only');
+  }
+};
 
 export const createChildrenRepository = ({ database } = {}) => {
   const runWrite = (transaction, task) => (
@@ -274,12 +282,15 @@ export const createChildrenRepository = ({ database } = {}) => {
 
   const getChildren = async () => {
     const db = await resolveDatabase(database);
-    const rows = await db.getAllAsync('select * from children order by first_name, last_name');
+    const rows = await db.getAllAsync(
+      'select * from children where history_reference = 0 order by first_name, last_name'
+    );
     return rows.map(mapChild);
   };
 
   const save = async (child, { actorUserId = child.created_by || child.user_id, transaction } = {}) => (
     runWrite(transaction, async (txn) => {
+      await assertNotHistoryReference(txn, child.id);
       const programmeId = await resolveProgrammeId(txn, {
         programmeId: child.programme_id,
         userId: actorUserId,
@@ -391,6 +402,7 @@ export const createChildrenRepository = ({ database } = {}) => {
   );
 
   const updateChild = async (id, updates, { actorUserId, transaction } = {}) => runWrite(transaction, async (txn) => {
+    await assertNotHistoryReference(txn, id);
     const existing = await txn.getFirstAsync('select * from children where id = ?', id);
     if (!existing) return false;
 
@@ -401,7 +413,10 @@ export const createChildrenRepository = ({ database } = {}) => {
       }),
       id,
       updated_at: updates.updated_at || new Date().toISOString(),
-      sync_status: updates.sync_status || syncStatusFromSynced(updates.synced),
+      // A local edit owns its sync state, even when updates spreads a synced row.
+      sync_status: 'pending',
+      synced: false,
+      last_sync_error: null,
     });
 
     await upsertDomainRecord(txn, {
@@ -504,8 +519,18 @@ export const createChildrenRepository = ({ database } = {}) => {
   const saveChildRecord = async (child, { transaction } = {}) => runWrite(transaction, async (txn) => {
     const record = normalizeSyncFields({
       ...normalizeChildRecord(child),
+      // Every full-row save describes a real roster child; this is how a history reference
+      // row (CAP-004) is upgraded in place when the roster pull later returns the child.
+      history_reference: 0,
       sync_status: child.sync_status || syncStatusFromSynced(child.synced),
     });
+    const existing = await txn.getFirstAsync(
+      'select history_reference from children where id = ?',
+      record.id
+    );
+    if (existing?.history_reference === 1 && record.sync_status !== 'synced') {
+      throw new Error('History reference children are read-only');
+    }
     if (await serverPullWouldClobberPendingLocal(txn, 'children', record)) {
       return false;
     }
@@ -710,6 +735,7 @@ export const createChildrenRepository = ({ database } = {}) => {
         on classes.id = ccm.class_id
        and classes.archived_at is null
       where children.archived_at is null
+        and children.history_reference = 0
       order by children.first_name, children.last_name
     `, userId, userId);
 
@@ -722,6 +748,7 @@ export const createChildrenRepository = ({ database } = {}) => {
     archiveReason = null,
     transaction,
   } = {}) => runWrite(transaction, async (txn) => {
+    await assertNotHistoryReference(txn, childId);
     await txn.runAsync(`
       update children
       set archived_at = ?,
@@ -763,6 +790,7 @@ export const createChildrenRepository = ({ database } = {}) => {
   });
 
   const deleteIfNoHistory = async (childId, { transaction } = {}) => runWrite(transaction, async (txn) => {
+    await assertNotHistoryReference(txn, childId);
     const checks = [
       "select 1 from session_attendees where child_id = ? limit 1",
       "select 1 from assessments where child_id = ? limit 1",
@@ -780,24 +808,44 @@ export const createChildrenRepository = ({ database } = {}) => {
     }
 
     const child = await txn.getFirstAsync(
-      'select sync_status, created_by from children where id = ?',
+      'select created_by from children where id = ?',
       childId
     );
     if (!child) return false;
 
-    await txn.runAsync('delete from child_class_memberships where child_id = ?', childId);
-    await txn.runAsync('delete from child_programme_enrollments where child_id = ?', childId);
-    await txn.runAsync('delete from child_ea_assignments where child_id = ?', childId);
+    // Sync status describes the latest edit, not whether INSERT was acknowledged.
+    // Any attempted INSERT may have committed remotely, including a failed request
+    // or one reset after reopening. Only an untouched INSERT proves local-only data.
+    const localInsert = await txn.getFirstAsync(`
+      select id from sync_outbox
+      where table_name = 'children' and record_id = ? and operation = 'insert'
+        and status = 'pending'
+        and retry_count = 0 and last_error is null
+    `, childId);
+    await txn.runAsync(`
+      delete from sync_outbox
+      where table_name = 'children' and record_id = ?
+        and (? = 1 or operation <> 'insert')
+    `, childId, localInsert ? 1 : 0);
+
+    for (const tableName of ['child_class_memberships', 'child_programme_enrollments', 'child_ea_assignments']) {
+      // These active relationships disappear with the child; none of their
+      // queued writes should survive to recreate them or fail their FK check.
+      await txn.runAsync(`
+        delete from sync_outbox where table_name = ?
+          and record_id in (select id from ${tableName} where child_id = ?)
+      `, tableName, childId);
+      await txn.runAsync(`delete from ${tableName} where child_id = ?`, childId);
+    }
     await txn.runAsync('delete from children where id = ?', childId);
 
-    if (child.sync_status === 'synced') {
+    if (!localInsert) {
       await enqueueDomainOutbox(
         txn,
         'children',
         childId,
         'hard_delete',
-        { id: childId },
-        { ownerRow: child }
+        { id: childId }
       );
     }
 

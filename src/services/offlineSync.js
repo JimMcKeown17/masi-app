@@ -1,5 +1,6 @@
-import { supabase } from './supabaseClient';
-import { enqueueSupabaseRequest } from './supabaseRequestQueue';
+import { isStaleActorError, StaleActorError } from '../session/staleActor';
+import { buildIncidentEnvelope, drainSupportIncidents } from './supportIncidents';
+import { getConnectionActor } from '../session/signedInHandle';
 import { resolveDatabase, runRepositoryTransaction } from '../db/repositories/repositoryRuntime';
 import {
   chunkArray,
@@ -8,22 +9,11 @@ import {
 } from '../db/repositories/sqliteRepositoryUtils';
 import {
   createSyncOutboxRepository,
-  syncOutboxRepository,
+  outboxRecordId,
 } from '../db/repositories/syncOutboxRepository';
 import {
   createSyncStateRepository,
-  syncStateRepository,
 } from '../db/repositories/syncStateRepository';
-import { resolveRecordOwners } from '../db/repositories/outboxOwnership';
-import {
-  academicYearsRepository,
-  assessmentWindowsRepository,
-  jobTitlesRepository,
-  programmesRepository,
-  schoolsRepository,
-  staffProgrammeAssignmentsRepository,
-  teachersRepository,
-} from '../db/repositories/referenceDataRepository';
 import {
   assessmentItemDomainId,
   childEaAssignmentDomainId,
@@ -69,12 +59,13 @@ const INTENTIONALLY_UNSYNCED = {
 };
 
 // Local-only bookkeeping columns the engine strips before push — never sent to the server.
-const LOCAL_ONLY_COLUMNS = ['synced', 'sync_status', 'last_sync_error', 'server_updated_at'];
+const LOCAL_ONLY_COLUMNS = ['synced', 'sync_status', 'last_sync_error', 'server_updated_at', 'history_reference'];
 
 export const SERVER_COLUMNS = {
   time_entries: [
     'id', 'user_id', 'sign_in_time', 'sign_in_lat', 'sign_in_lon', 'sign_out_time',
-    'sign_out_lat', 'sign_out_lon', 'auto_clocked_out', 'created_at', 'updated_at',
+    'sign_out_lat', 'sign_out_lon', 'sign_in_location_status', 'sign_out_location_status',
+    'auto_clocked_out', 'created_at', 'updated_at',
   ],
   classes: [
     'id', 'school_id', 'name', 'grade', 'teacher', 'teacher_id', 'home_language',
@@ -239,29 +230,50 @@ const PARENT_FK_COLUMNS = {
   letter_mastery: { children: 'child_id' },
 };
 
-// The DIRECT active-assignment grant(s) each write needs, per RLS
-// private.current_user_can_write_for_* (migration 20260521144901 lines 368-517). Only the
-// assignment half is here; the created_by half is covered by PARENT_FK_COLUMNS.
-// staff_programme_assignments is excluded (reference data, never pushed, so a 42501 from it is a
-// genuine terminal denial). Used for 42501 only. LIMITATION: write_for_child also grants via two
-// membership-mediated paths (class_ea via child_class_memberships, group_ea via
-// child_group_memberships) that this single-hop map cannot express; a child write whose ONLY
-// grant is a pending class/group assignment would false-terminal. Not reachable in the current
-// direct-child-assignment field model; extend this before group-centric (whole-class) access
-// ships. See rls-sync-contract-map.md "Error Classification (Item 10)".
+// The grant(s) each write needs, matching private.current_user_can_write_for_child/class/group
+// (migration 20260521144901 lines 368-517). The created_by half is covered by PARENT_FK_COLUMNS.
+// Entry shapes:
+//   { grantTable, subjectColumn, valueColumn? }: a direct active assignment whose subjectColumn
+//     equals this record's valueColumn (default subjectColumn). valueColumn 'id' means the
+//     record's own id is the subject (classes, groups, children).
+//   { membershipMediatedChild: column }: the child in `column` is reachable through an active
+//     class or group membership joined to an active class or group assignment. The server needs
+//     both rows, so evidence is pending when either half is unacknowledged and not terminal.
+// staff_programme_assignments is excluded (reference data, never pushed). Used for 42501 and
+// UPDATE_NOT_APPLIED.
 const GRANT_SUBJECTS = {
+  classes: [{ grantTable: 'class_ea_assignments', subjectColumn: 'class_id', valueColumn: 'id' }],
+  groups: [{ grantTable: 'group_ea_assignments', subjectColumn: 'group_id', valueColumn: 'id' }],
+  children: [
+    { grantTable: 'child_ea_assignments', subjectColumn: 'child_id', valueColumn: 'id' },
+    { membershipMediatedChild: 'id' },
+  ],
   child_class_memberships: [
     { grantTable: 'child_ea_assignments', subjectColumn: 'child_id' },
     { grantTable: 'class_ea_assignments', subjectColumn: 'class_id' },
+    { membershipMediatedChild: 'child_id' },
   ],
-  child_programme_enrollments: [{ grantTable: 'child_ea_assignments', subjectColumn: 'child_id' }],
+  child_programme_enrollments: [
+    { grantTable: 'child_ea_assignments', subjectColumn: 'child_id' },
+    { membershipMediatedChild: 'child_id' },
+  ],
   child_group_memberships: [
     { grantTable: 'child_ea_assignments', subjectColumn: 'child_id' },
     { grantTable: 'group_ea_assignments', subjectColumn: 'group_id' },
+    { membershipMediatedChild: 'child_id' },
   ],
-  session_attendees: [{ grantTable: 'child_ea_assignments', subjectColumn: 'child_id' }],
-  assessments: [{ grantTable: 'child_ea_assignments', subjectColumn: 'child_id' }],
-  letter_mastery: [{ grantTable: 'child_ea_assignments', subjectColumn: 'child_id' }],
+  session_attendees: [
+    { grantTable: 'child_ea_assignments', subjectColumn: 'child_id' },
+    { membershipMediatedChild: 'child_id' },
+  ],
+  assessments: [
+    { grantTable: 'child_ea_assignments', subjectColumn: 'child_id' },
+    { membershipMediatedChild: 'child_id' },
+  ],
+  letter_mastery: [
+    { grantTable: 'child_ea_assignments', subjectColumn: 'child_id' },
+    { membershipMediatedChild: 'child_id' },
+  ],
   grouping_versions: [{ grantTable: 'class_ea_assignments', subjectColumn: 'class_id' }],
   class_grouping_state: [{ grantTable: 'class_ea_assignments', subjectColumn: 'class_id' }],
 };
@@ -309,6 +321,14 @@ const IMMUTABLE_ASSIGNMENT_TABLES = new Set([
   'group_ea_assignments',
 ]);
 
+// Edits change a row the server already has. PostgreSQL checks INSERT WITH CHECK on every upsert
+// row, even one that conflicts, so sending an edit as an upsert asks for insert permission that an
+// EA editing a Head Office-created row does not have. These tables send `update` as UPDATE by id
+// with an exact acknowledgement (actor lifecycle spec §6.5). class_grouping_state stays an upsert:
+// its `update` means create-or-update and its INSERT policy is authorization-based.
+// Provenance and identity never change through an edit.
+const UPDATE_PATCH_EXCLUDED_COLUMNS = new Set(['id', 'created_by', 'created_at', 'user_id', 'archived_by_user_id']);
+
 // Archive is a lifecycle transition, never a row creation or identity rewrite.
 // Older outbox rows can contain a full domain snapshot, so narrow every archive
 // to the lifecycle columns the operation is allowed to change before issuing
@@ -326,6 +346,12 @@ const ARCHIVE_SERVER_COLUMNS = {
   child_group_memberships: ['removed_at'],
   letter_mastery: ['deleted_at'],
 };
+
+// Lifecycle-bearing edits must also avoid single/batched upsert: full snapshots
+// replay old lifecycle values, and omitting columns from an upsert can still
+// apply INSERT defaults on conflict. UPDATE preserves every omitted column.
+const UPDATE_BY_ID_TABLES = new Set(['time_entries', ...Object.keys(ARCHIVE_SERVER_COLUMNS)]);
+export const _testUpdateByIdTables = UPDATE_BY_ID_TABLES;
 
 const dependenciesForRecord = (outboxRecord) => {
   const dependencies = new Set(TABLE_DEPENDENCIES[outboxRecord.table_name] || []);
@@ -380,7 +406,10 @@ const makeFieldResolver = (database, outboxRecord) => {
           `select * from ${quoteIdentifier(outboxRecord.table_name)} where id = ?`,
           outboxRecord.record_id,
         );
-      } catch (_) { domainRow = null; }
+      } catch (error) {
+        if (isStaleActorError(error)) throw error;
+        domainRow = null;
+      }
     }
     return domainRow?.[column] ?? null;
   };
@@ -398,12 +427,64 @@ const hasPendingActiveAssignment = async (database, grantTable, subjectColumn, s
   return !!row;
 };
 
-// True when the record still has locally-pending evidence it legitimately needs: its FK
-// parent (for 23503 and the created_by half of 42501 grants) or, when includeGrant is set
-// (42501 only), an active assignment grant that has not synced. No server calls.
-const computeEvidencePending = async ({ database, outboxRepository, outboxRecord, includeGrant }) => {
+const UNACKNOWLEDGED_STATUSES = "('pending', 'failed', 'in_flight')";
+
+// A child write granted through a class or group needs BOTH an active membership and an active
+// assignment on the server. Evidence is pending when a local pair exists and either half has not
+// been acknowledged. A terminal half contributes nothing.
+const hasPendingMembershipMediatedGrant = async (
+  database,
+  childId,
+  { tableName, recordId } = {},
+) => {
+  const currentTable = normalizeTableName(tableName);
+  const excludedClassMembershipId = currentTable === 'child_class_memberships' ? recordId : '';
+  const excludedGroupMembershipId = currentTable === 'child_group_memberships' ? recordId : '';
+  const row = await database.getFirstAsync(`
+    select 1 as present
+    from child_class_memberships ccm
+    join class_ea_assignments cea
+      on cea.class_id = ccm.class_id and cea.unassigned_at is null
+    where ccm.child_id = ?
+      and ccm.id != ?
+      and ccm.exited_at is null
+      and (ccm.sync_status in ${UNACKNOWLEDGED_STATUSES} or cea.sync_status in ${UNACKNOWLEDGED_STATUSES})
+      and ccm.sync_status != 'terminal'
+      and cea.sync_status != 'terminal'
+    union all
+    select 1 as present
+    from child_group_memberships cgm
+    join group_ea_assignments gea
+      on gea.group_id = cgm.group_id and gea.unassigned_at is null
+    where cgm.child_id = ?
+      and cgm.id != ?
+      and cgm.removed_at is null
+      and (cgm.sync_status in ${UNACKNOWLEDGED_STATUSES} or gea.sync_status in ${UNACKNOWLEDGED_STATUSES})
+      and cgm.sync_status != 'terminal'
+      and gea.sync_status != 'terminal'
+    limit 1
+  `, childId, excludedClassMembershipId, childId, excludedGroupMembershipId);
+  return !!row;
+};
+
+const computeEvidencePending = async ({
+  database,
+  outboxRepository,
+  outboxRecord,
+  includeGrant,
+  includeOwnInsert = false,
+}) => {
+  const db = await resolveDatabase(database);
   const table = normalizeTableName(outboxRecord?.table_name);
-  const getField = makeFieldResolver(database, outboxRecord);
+  const getField = makeFieldResolver(db, outboxRecord);
+
+  if (includeOwnInsert && await outboxRepository.hasPendingOperation({
+    tableName: table,
+    recordId: outboxRecord.record_id,
+    operation: 'insert',
+  })) {
+    return true;
+  }
 
   const fkColumns = PARENT_FK_COLUMNS[table] || {};
   for (const [parentTable, column] of Object.entries(fkColumns)) {
@@ -414,10 +495,17 @@ const computeEvidencePending = async ({ database, outboxRepository, outboxRecord
   }
 
   if (includeGrant) {
-    const grants = GRANT_SUBJECTS[table] || [];
-    for (const { grantTable, subjectColumn } of grants) {
-      const subjectValue = await getField(subjectColumn);
-      if (subjectValue && await hasPendingActiveAssignment(database, grantTable, subjectColumn, subjectValue)) {
+    for (const grant of GRANT_SUBJECTS[table] || []) {
+      if (grant.membershipMediatedChild) {
+        const childId = await getField(grant.membershipMediatedChild);
+        if (childId && await hasPendingMembershipMediatedGrant(db, childId, {
+          tableName: table,
+          recordId: outboxRecord.record_id,
+        })) return true;
+        continue;
+      }
+      const subjectValue = await getField(grant.valueColumn || grant.subjectColumn);
+      if (subjectValue && await hasPendingActiveAssignment(db, grant.grantTable, grant.subjectColumn, subjectValue)) {
         return true;
       }
     }
@@ -463,15 +551,16 @@ const classifyError = (
     return { terminal: true, markAsSynced: duplicateIsSuccess };
   }
 
-  if (code === '23503' || code === '42501') {
-    // A FK/RLS denial while required local evidence is still pending is a
-    // cross-pass race. Without pending evidence, it is a genuine rejection.
+  if (code === '23503' || code === '42501' || code === 'UPDATE_NOT_APPLIED') {
+    // A FK/RLS denial, or an UPDATE that matched no visible row, while required local evidence is
+    // still pending is a cross-pass race. Without pending evidence, it is a genuine rejection.
     return { terminal: !parentEvidencePending, markAsSynced: false };
   }
 
   if (
     code === 'ARCHIVE_REQUIRED'
     || code === 'ARCHIVE_NOT_APPLIED'
+    || code === 'RESTORE_NOT_APPLIED'
     || code === 'LOCAL_ONLY_REFERENCE'
     || code === 'MISSING_OUTBOX_PAYLOAD'
   ) {
@@ -604,6 +693,7 @@ const reconcileChildClassMembership = async (supabaseClient, payload) => {
       .eq('academic_year_id', payload.academic_year_id)
       .is('exited_at', null)
       .limit(1);
+    if (isStaleActorError(error)) throw error;
     if (error) return; // conservative fallback
     const serverRow = Array.isArray(data) ? data[0] : data;
     if (!serverRow || serverRow.id === payload.id) return;
@@ -611,7 +701,10 @@ const reconcileChildClassMembership = async (supabaseClient, payload) => {
       .from('child_class_memberships')
       .update({ exited_at: new Date().toISOString() })
       .eq('id', serverRow.id);
-  } catch (_) { /* conservative fallback: proceed to the normal upsert */ }
+  } catch (error) {
+    if (isStaleActorError(error)) throw error;
+    // Ordinary failures conservatively proceed to the normal upsert.
+  }
 };
 
 const makeFailedRecord = (outboxRecord, reason) => ({
@@ -672,7 +765,7 @@ const runServerOperation = async (supabaseClient, config, outboxRecord) => {
     return error ? { success: false, error } : { success: true };
   }
 
-  if (outboxRecord.operation === 'archive') {
+  if (outboxRecord.operation === 'archive' || outboxRecord.operation === 'restore') {
     const archiveColumns = ARCHIVE_SERVER_COLUMNS[config.tableName] || [];
     const archivePatch = Object.fromEntries(
       archiveColumns
@@ -686,11 +779,44 @@ const runServerOperation = async (supabaseClient, config, outboxRecord) => {
       .select('id');
     if (error) return { success: false, error };
     if (!Array.isArray(data) || data.length !== 1 || data[0]?.id !== outboxRecord.record_id) {
+      const notApplied = outboxRecord.operation === 'restore' ? 'RESTORE_NOT_APPLIED' : 'ARCHIVE_NOT_APPLIED';
       return {
         success: false,
         error: {
-          code: 'ARCHIVE_NOT_APPLIED',
-          message: `${config.tableName} archive did not acknowledge exactly one updated row`,
+          code: notApplied,
+          message: `${config.tableName} ${outboxRecord.operation} did not acknowledge exactly one updated row`,
+        },
+      };
+    }
+    return { success: true };
+  }
+
+  if (outboxRecord.operation === 'update' && UPDATE_BY_ID_TABLES.has(config.tableName)) {
+    // buildSyncPayload has already re-derived deterministic ids (letter_mastery), so the server id
+    // is the payload id, not the outbox record_id.
+    const serverId = payload.id || outboxRecord.record_id;
+    // Full stored snapshots may predate an archive/restore. Ordinary edits must
+    // not replay that lifecycle state. Mastery reactivation is intentionally an
+    // update with deleted_at:null (masteryRepository.enqueueMasteryWrite).
+    const lifecycleColumns = config.tableName === 'letter_mastery'
+      ? [] : (ARCHIVE_SERVER_COLUMNS[config.tableName] || []);
+    const patch = Object.fromEntries(
+      Object.entries(payload).filter(([column]) => (
+        !UPDATE_PATCH_EXCLUDED_COLUMNS.has(column) && !lifecycleColumns.includes(column)
+      ))
+    );
+    const { data, error } = await supabaseClient
+      .from(config.tableName)
+      .update(patch)
+      .eq('id', serverId)
+      .select('id');
+    if (error) return { success: false, error };
+    if (!Array.isArray(data) || data.length !== 1 || data[0]?.id !== serverId) {
+      return {
+        success: false,
+        error: {
+          code: 'UPDATE_NOT_APPLIED',
+          message: `${config.tableName} update did not acknowledge exactly one updated row`,
         },
       };
     }
@@ -929,7 +1055,8 @@ const finalizeManyRetriableFailure = async ({ database, records, tableName, reas
 };
 
 const pushOrderForRecord = (record) => {
-  if (record.operation === 'archive' && ARCHIVE_PUSH_ORDER[record.table_name] != null) {
+  const isLifecycle = record.operation === 'archive' || record.operation === 'restore';
+  if (isLifecycle && ARCHIVE_PUSH_ORDER[record.table_name] != null) {
     return ARCHIVE_PUSH_ORDER[record.table_name];
   }
   return TABLE_CONFIGS[record.table_name]?.order ?? Number.MAX_SAFE_INTEGER;
@@ -947,20 +1074,24 @@ const sortByPushOrder = (records) => records
 const canBatchRecord = (record, config) => (
   Boolean(config)
   && BATCHABLE_UPSERT_TABLES.has(config.tableName)
-  && (record.operation === 'insert' || record.operation === 'update')
+  && (
+    record.operation === 'insert'
+    || (record.operation === 'update' && !UPDATE_BY_ID_TABLES.has(config.tableName))
+  )
   && (!IMMUTABLE_ASSIGNMENT_TABLES.has(config.tableName) || record.operation === 'insert')
   && record.payload != null
 );
 
 export const createOutboxSyncEngine = ({
   database,
-  supabaseClient = supabase,
+  supabaseClient,
   outboxRepository = createSyncOutboxRepository({ database }),
   stateRepository = createSyncStateRepository({ database }),
+  supportIncidentRepository = null,
   tableConfigs = TABLE_CONFIGS,
   safeDuplicateSuccessTables = [],
-  enqueueRequest = enqueueSupabaseRequest,
-  getAuthSession = () => supabase.auth.getSession(),
+  enqueueRequest,
+  getAuthSession = () => supabaseClient.auth.getSession(),
 } = {}) => {
   const safeDuplicateTables = new Set(safeDuplicateSuccessTables.map(normalizeTableName));
   const getConfig = (tableName) => {
@@ -973,11 +1104,16 @@ export const createOutboxSyncEngine = ({
     };
   };
 
+  const assertActorOpen = () => {
+    if (typeof database?.isOpen === 'function' && (!database.isOpen() || !database.isCurrent())) throw new StaleActorError();
+  };
   const getMatchingPassSession = async (passUserId) => {
+    assertActorOpen();
     try {
       const { data: { session: currentSession } = {} } = await getAuthSession();
       return currentSession?.user?.id === passUserId ? currentSession : null;
-    } catch (_) {
+    } catch (error) {
+      if (isStaleActorError(error)) throw error;
       return null;
     }
   };
@@ -1015,6 +1151,8 @@ export const createOutboxSyncEngine = ({
         runServerOperation(supabaseClient, config, inFlightRecord)
       ));
 
+      if (isStaleActorError(serverResult.error)) throw serverResult.error;
+      assertActorOpen();
       if (serverResult.success) {
         await finalizeSuccess({
           database,
@@ -1026,12 +1164,13 @@ export const createOutboxSyncEngine = ({
       }
 
       const failureCode = serverResult.error?.code;
-      const parentEvidencePending = (failureCode === '23503' || failureCode === '42501')
+      const parentEvidencePending = ['23503', '42501', 'UPDATE_NOT_APPLIED'].includes(failureCode)
         ? await computeEvidencePending({
             database,
             outboxRepository,
             outboxRecord: inFlightRecord,
-            includeGrant: failureCode === '42501',
+            includeGrant: failureCode !== '23503',
+            includeOwnInsert: failureCode === 'UPDATE_NOT_APPLIED',
           })
         : false;
       const classification = classifyError(serverResult.error, config, { parentEvidencePending });
@@ -1048,7 +1187,10 @@ export const createOutboxSyncEngine = ({
         let liveSession = null;
         try {
           ({ data: { session: liveSession } = {} } = await getAuthSession());
-        } catch (_) { /* treat as no session and downgrade below */ }
+        } catch (error) {
+          if (isStaleActorError(error)) throw error;
+          // Ordinary auth failures downgrade the denial below.
+        }
         if (!liveSession) {
           // A permission denial without a live session is not trustworthy
           // evidence; retry after auth restore instead of quarantining.
@@ -1106,6 +1248,7 @@ export const createOutboxSyncEngine = ({
       });
       return { success: false, terminal: false, failedRecord: makeFailedRecord(outboxRecord, reason) };
     } catch (error) {
+      if (isStaleActorError(error)) throw error;
       // Any post-markInFlight throw (server request, getById, or a finalize) must not strand the
       // row in_flight. finalize-retriable with inFlightRecord when we have it (its updated_at makes
       // the CAS HIT → row marked failed+backoff, correct for a real attempt); else the original
@@ -1119,11 +1262,12 @@ export const createOutboxSyncEngine = ({
           outboxRepository,
           reason,
         });
-      } catch (_) {
+      } catch (finalizeError) {
+        if (isStaleActorError(finalizeError)) throw finalizeError;
         // Full finalize (CAS + domain update) failed; last-resort plain outbox status reset so the
         // row isn't left in_flight within THIS pass (markReady only touches sync_outbox, so it can
         // succeed even when the domain write can't). resetInFlight is the cross-pass backstop.
-        try { await outboxRepository.markReady(outboxRecord.id); } catch (_2) { /* truly broken; resetInFlight recovers */ }
+        try { await outboxRepository.markReady(outboxRecord.id); } catch (resetError) { if (isStaleActorError(resetError)) throw resetError; }
       }
       return { success: false, terminal: false, failedRecord: makeFailedRecord(outboxRecord, reason) };
     }
@@ -1147,6 +1291,9 @@ export const createOutboxSyncEngine = ({
       const settled = await Promise.allSettled(
         wave.map((record) => processRecord(record, passUserId))
       );
+      const stale = settled.find((outcome) => outcome.status === 'rejected' && isStaleActorError(outcome.reason));
+      if (stale) throw stale.reason;
+      assertActorOpen();
       for (let index = 0; index < settled.length; index += 1) {
         const outcome = settled[index];
         if (outcome.status === 'fulfilled') {
@@ -1155,7 +1302,7 @@ export const createOutboxSyncEngine = ({
         }
         const record = wave[index];
         const reason = errorMessage(outcome.reason) || 'Fallback record processing threw';
-        try { await outboxRepository.markReady(record.id); } catch (_) { /* resetInFlight recovers next pass */ }
+        try { await outboxRepository.markReady(record.id); } catch (resetError) { if (isStaleActorError(resetError)) throw resetError; }
         results.push({ success: false, terminal: false, failedRecord: makeFailedRecord(record, reason) });
       }
     }
@@ -1168,11 +1315,12 @@ export const createOutboxSyncEngine = ({
         } else {
           for (const id of deferredIds) await outboxRepository.markReady(id);
         }
-      } catch (_) {
+      } catch (resetError) {
+        if (isStaleActorError(resetError)) throw resetError;
         // Keep sibling outcomes intact. Best-effort per-row cleanup may recover a partial bulk
         // reset; resetInFlight is the cross-pass backstop for any row that remains in_flight.
         for (const id of deferredIds) {
-          try { await outboxRepository.markReady(id); } catch (_2) { /* resetInFlight recovers */ }
+          try { await outboxRepository.markReady(id); } catch (resetError) { if (isStaleActorError(resetError)) throw resetError; }
         }
       }
       results.push(...deferredRecords.map(() => ({
@@ -1204,12 +1352,15 @@ export const createOutboxSyncEngine = ({
           runBatchServerOperation(supabaseClient, config, inFlightRecords)
         ));
       } catch (batchError) {
+        if (isStaleActorError(batchError)) throw batchError;
         // A THROWN batch request (timeout / abort / oversized payload) — degrade to per-record so a
         // deterministic batch-level failure isolates per row (smaller payloads make progress) instead
         // of re-forming the same failing batch forever. processBatchFallback is allSettled-safe.
         return await processBatchFallback(outboxRecords, passUserId, fallbackBudget);
       }
 
+      if (isStaleActorError(serverResult.error)) throw serverResult.error;
+      assertActorOpen();
       if (!serverResult.success) {
         return await processBatchFallback(outboxRecords, passUserId, fallbackBudget);
       }
@@ -1218,6 +1369,7 @@ export const createOutboxSyncEngine = ({
 
       return outboxRecords.map(() => ({ success: true }));
     } catch (error) {
+      if (isStaleActorError(error)) throw error;
       // Post-markInFlight throw (getById / batch request / finalizeManySuccess) — don't strand the
       // batch in_flight. finalizeManyRetriableFailure with inFlightRecords when we have them (CAS
       // hits → failed+backoff); else the originals (CAS misses → restore pending).
@@ -1229,10 +1381,11 @@ export const createOutboxSyncEngine = ({
           tableName: config.tableName,
           reason,
         });
-      } catch (_) {
+      } catch (finalizeError) {
+        if (isStaleActorError(finalizeError)) throw finalizeError;
         // Last-resort per-id outbox status reset (see processRecord note).
         for (const id of ids) {
-          try { await outboxRepository.markReady(id); } catch (_2) { /* resetInFlight recovers next pass */ }
+          try { await outboxRepository.markReady(id); } catch (resetError) { if (isStaleActorError(resetError)) throw resetError; }
         }
       }
       return outboxRecords.map((record) => (
@@ -1241,7 +1394,30 @@ export const createOutboxSyncEngine = ({
     }
   };
 
+  const emptyPassResult = () => ({
+    success: true, totalSynced: 0, totalFailed: 0, totalTerminal: 0, totalRetriable: 0,
+    totalDeferred: 0, failedRecords: [], tableResults: {}, preflightErrors: [], durationMs: 0,
+  });
   const syncAll = async ({ tableName = null, force = false } = {}) => {
+    try {
+      assertActorOpen();
+      // Scan even while auth is unavailable, before recovery or candidate reads.
+      // Raw repository tests use their registered connection actor; production handles
+      // have already checked the persisted file-owner marker at open.
+      await runRepositoryTransaction(database, async (txn) => {
+        const owner = await txn.getFirstAsync("select value from local_state where key = 'file_owner_user_id'");
+        await outboxRepository.quarantineForeignOwners({
+          fileUserId: owner?.value || getConnectionActor(txn), transaction: txn,
+        });
+      });
+    } catch (error) {
+      if (isStaleActorError(error)) return { ...emptyPassResult(), success: false, abortedStaleActor: true };
+      console.error('syncAll: integrity scan failed:', error);
+      return {
+        ...emptyPassResult(), success: false,
+        preflightErrors: [{ step: 'integrityScan', error: errorMessage(error) }],
+      };
+    }
     // Auth gate: with no live session an upload pass would run anonymously and
     // RLS-quarantine the whole outbox as terminal (ZZ 2026-06-09 field incident).
     // getSession() can also return null while the refresh endpoint is merely
@@ -1250,7 +1426,11 @@ export const createOutboxSyncEngine = ({
     try {
       ({ data: { session } = {} } = await getAuthSession());
     } catch (error) {
+      if (isStaleActorError(error)) return { ...emptyPassResult(), success: false, abortedStaleActor: true };
       console.warn('syncAll: session check failed, skipping pass:', errorMessage(error));
+    }
+    if (typeof database?.isOpen === 'function' && (!database.isOpen() || !database.isCurrent())) {
+      return { ...emptyPassResult(), success: false, abortedStaleActor: true };
     }
     if (!session) {
       console.log('Sync skipped: no auth session');
@@ -1328,6 +1508,52 @@ export const createOutboxSyncEngine = ({
 
     const findBlockingDependency = async (record) => {
       const tableNameForRecord = normalizeTableName(record.table_name);
+      const isLifecycle = record.operation === 'archive' || record.operation === 'restore';
+      if (record.operation === 'hard_delete' && tableNameForRecord === 'children') {
+        // Deletion retained a possibly-committed INSERT. Do not let deletion
+        // finish before its retry, including a terminal insert retried manually.
+        const resolvedDatabase = await resolveDatabase(database);
+        const retainedInsert = await resolvedDatabase.getFirstAsync(`
+          select id from sync_outbox
+          where table_name = 'children' and record_id = ? and operation = 'insert'
+          limit 1
+        `, record.record_id);
+        if (retainedInsert) return { tableName: tableNameForRecord, recordId: record.record_id };
+      }
+      // Same-record ordering: an acknowledged UPDATE-by-id edit or lifecycle UPDATE must not run
+      // before its own insert has been acknowledged, or it cannot acknowledge a row that exists.
+      // A terminal insert does not block; the update then reaches its normal terminal classifier.
+      if (
+        (isLifecycle || (
+          record.operation === 'update'
+          && UPDATE_BY_ID_TABLES.has(tableNameForRecord)
+        ))
+        && await outboxRepository.hasPendingOperation({
+          tableName: tableNameForRecord,
+          recordId: record.record_id,
+          operation: 'insert',
+        })
+      ) {
+        return { tableName: tableNameForRecord, recordId: record.record_id };
+      }
+      if (
+        isLifecycle
+        && record.id === outboxRecordId(tableNameForRecord, record.record_id, 'lifecycle')
+      ) {
+        const resolvedDatabase = await resolveDatabase(database);
+        const legacyLifecycle = await resolvedDatabase.getFirstAsync(`
+          select id
+          from sync_outbox
+          where id in (?, ?)
+            and status in ('pending', 'failed', 'in_flight')
+          limit 1
+        `,
+        outboxRecordId(tableNameForRecord, record.record_id, 'archive'),
+        outboxRecordId(tableNameForRecord, record.record_id, 'restore'));
+        if (legacyLifecycle) {
+          return { tableName: tableNameForRecord, recordId: record.record_id };
+        }
+      }
       for (const dependency of dependenciesForRecord(record)) {
         const blockers = failedRecordsByTable.get(normalizeTableName(dependency));
         if (!blockers || blockers.size === 0) continue;
@@ -1412,11 +1638,12 @@ export const createOutboxSyncEngine = ({
     try {
       await resolveDatabase(database);
 
-      // Recover rows left in_flight by a prior interrupted pass FIRST and best-effort.
+      // Recover this EA's rows left in_flight by a prior interrupted pass, best-effort.
       if (typeof outboxRepository.resetInFlight === 'function') {
         try {
           await outboxRepository.resetInFlight({ ownerUserId: passUserId });
         } catch (resetError) {
+          if (isStaleActorError(resetError)) throw resetError;
           console.error('syncAll: resetInFlight failed (continuing):', resetError);
           result.success = false;
           result.preflightErrors.push({ step: 'resetInFlight', error: errorMessage(resetError) });
@@ -1511,28 +1738,55 @@ export const createOutboxSyncEngine = ({
           }
           applyRecordResult(outboxRecord, config, recordResult);
         } catch (error) {
+          if (isStaleActorError(error)) throw error;
           const reason = errorMessage(error) || 'Unhandled sync error';
           const tableNameForRow = getConfig(outboxRecord.table_name)?.tableName || outboxRecord.table_name;
           try {
             await finalizeRetriableFailure({ database, outboxRecord, tableName: tableNameForRow, outboxRepository, reason });
-          } catch (_) { /* best-effort */ }
+          } catch (finalizeError) { if (isStaleActorError(finalizeError)) throw finalizeError; }
           applyRecordResult(outboxRecord, getConfig(outboxRecord.table_name), { success: false, terminal: false, failedRecord: makeFailedRecord(outboxRecord, reason) });
         }
       }
+
+      if (!tableName && supportIncidentRepository) {
+        try {
+          result.incidents = await drainSupportIncidents({
+            repository: supportIncidentRepository, supabaseClient, enqueueRequest,
+            envelope: await buildIncidentEnvelope(),
+          });
+        } catch (error) {
+          if (isStaleActorError(error)) throw error;
+          // Support reporting never changes whether the upload pass succeeded.
+          console.warn('syncAll: support incident drain failed:', errorMessage(error));
+        }
+      }
     } catch (error) {
-      // Unexpected preflight failure (resolveDatabase / getReadyRecords). Don't reject the pass —
-      // mark it failed; the finally still records the attempt so meta is never skipped, and
-      // resetInFlight (run first, best-effort) has already recovered any prior-stranded rows.
-      console.error('syncAll: preflight error (continuing to record attempt):', error);
-      result.success = false;
-      result.preflightErrors.push({ step: 'preflight', error: errorMessage(error) });
+      if (isStaleActorError(error)) {
+        result.success = false;
+        result.abortedStaleActor = true;
+      } else {
+        // Ordinary preflight failures still record the attempt. Stale cancellation above
+        // skips both failure reporting and metadata; reopen recovers its in-flight claims.
+        console.error('syncAll: preflight error (continuing to record attempt):', error);
+        result.success = false;
+        result.preflightErrors.push({ step: 'preflight', error: errorMessage(error) });
+      }
     } finally {
       result.durationMs = Date.now() - startedAt;
-      const now = new Date().toISOString();
-      await stateRepository.updateSyncMeta({
-        lastSyncTime: now,
-        ...(result.success ? { lastSuccessfulSyncTime: now } : {}),
-      });
+      if (!result.abortedStaleActor) {
+        try {
+          assertActorOpen();
+          const now = new Date().toISOString();
+          await stateRepository.updateSyncMeta({
+            lastSyncTime: now,
+            ...(result.success ? { lastSuccessfulSyncTime: now } : {}),
+          });
+        } catch (error) {
+          if (!isStaleActorError(error)) throw error;
+          result.success = false;
+          result.abortedStaleActor = true;
+        }
+      }
     }
 
     return result;
@@ -1541,12 +1795,19 @@ export const createOutboxSyncEngine = ({
   const syncTableByName = async (name) => syncAll({ tableName: name });
 
   const getSyncStatus = async (options = {}) => {
-    const [status, meta] = await Promise.all([
+    const [status, meta, incidentReadyCount] = await Promise.all([
       outboxRepository.getSyncStatus(options),
       stateRepository.getSyncMeta(),
+      supportIncidentRepository
+        ? supportIncidentRepository.countDue().catch((error) => {
+          if (isStaleActorError(error)) throw error;
+          return 0; // support reporting never breaks the status the EA sees
+        })
+        : 0,
     ]);
     return {
       ...status,
+      incidentReadyCount,
       lastSyncTime: meta.lastSyncTime,
       lastSuccessfulSyncTime: meta.lastSuccessfulSyncTime || null,
     };
@@ -1562,32 +1823,11 @@ export const createOutboxSyncEngine = ({
    */
   const requeueTerminalRlsFailures = async (userId) => {
     if (!userId) return 0;
-    const db = await resolveDatabase(database);
-    const candidates = (await outboxRepository.getTerminalRecords()).filter(isHealableRlsError);
-    if (candidates.length === 0) return 0;
-
-    const heals = [];
-    for (const record of candidates) {
-      const row = await db.getFirstAsync(
-        `select * from ${quoteIdentifier(record.table_name)} where id = ?`,
-        record.record_id
-      ).catch(() => null);
-      const owners = await resolveRecordOwners({
-        db,
-        tableName: record.table_name,
-        row,
-        payload: record.payload,
-      });
-      if (owners.length === 0) {
-        console.warn(`syncRescue: skipping ${record.table_name} ${record.record_id} (no owner field)`);
-        continue;
-      }
-      if (!owners.includes(userId)) {
-        console.warn(`syncRescue: skipping ${record.table_name} ${record.record_id} (owner mismatch)`);
-        continue;
-      }
-      heals.push(record);
-    }
+    const heals = (await outboxRepository.getTerminalRecords()).filter(record => (
+      record.owner_user_id === userId
+      && record.last_error !== 'foreign_owner'
+      && isHealableRlsError(record)
+    ));
     if (heals.length === 0) return 0;
 
     let count = 0;
@@ -1618,7 +1858,8 @@ export const createOutboxSyncEngine = ({
         set status = 'pending',
             retry_count = 0,
             next_retry_at = null,
-            last_error = null,
+            last_error = case when table_name = 'children' and operation = 'insert'
+              then last_error else null end,
             updated_at = ?
         where lower(table_name) = ?
           and record_id = ?
@@ -1643,45 +1884,17 @@ export const createOutboxSyncEngine = ({
   };
 };
 
-const defaultEngine = createOutboxSyncEngine({
-  // Production keeps duplicate-key failures terminal. With upsert on id,
-  // 23505 usually means a different unique constraint needs review.
-  outboxRepository: syncOutboxRepository,
-  stateRepository: syncStateRepository,
-});
-
-export const syncAll = (options) => defaultEngine.syncAll(options);
-export const syncTableByName = (tableName) => defaultEngine.syncTableByName(tableName);
-export const getSyncStatus = (options) => defaultEngine.getSyncStatus(options);
-export const requeueTerminalRlsFailures = (userId) => defaultEngine.requeueTerminalRlsFailures(userId);
-export const retryFailedItem = (table, id) => defaultEngine.retryFailedItem(table, id);
-
-let referenceDataReadyThisSession = false;
-let referenceDataPromise = null;
-
-const resetReferenceDataBarrierForTests = () => {
-  referenceDataReadyThisSession = false;
-  referenceDataPromise = null;
-};
-
 export const _testBuildSyncPayload = buildSyncPayload;
 export const _testClassifyError = classifyError;
-export const __testables = { getRetryDelay, resetReferenceDataBarrierForTests };
+export const __testables = { getRetryDelay };
 export const __contract = { SERVER_COLUMNS, PUSH_ORDER, INTENTIONALLY_UNSYNCED, LOCAL_ONLY_COLUMNS };
 
-export const pullReferenceData = async ({
-  supabaseClient = supabase,
-  repositories = {
-    schools: schoolsRepository,
-    job_titles: jobTitlesRepository,
-    programmes: programmesRepository,
-    academic_years: academicYearsRepository,
-    assessment_windows: assessmentWindowsRepository,
-    teachers: teachersRepository,
-    staff_programme_assignments: staffProgrammeAssignmentsRepository,
-  },
+const pullReferenceDataRows = async ({
+  supabaseClient,
+  repositories,
+  localStateRepository,
   userId,
-  enqueueRequest = enqueueSupabaseRequest,
+  enqueueRequest,
 } = {}) => {
   const tableNames = [
     'schools',
@@ -1712,69 +1925,73 @@ export const pullReferenceData = async ({
     );
     results[tableName] = (data || []).length;
   }
+  // Persist completion only after every table write commits; failed refreshes keep prior evidence.
+  await localStateRepository.set('reference_data_complete_at', timestamp());
   return results;
 };
 
-export const ensureReferenceData = ({
-  supabaseClient = supabase,
-  repositories = {
-    schools: schoolsRepository,
-    job_titles: jobTitlesRepository,
-    programmes: programmesRepository,
-    academic_years: academicYearsRepository,
-    assessment_windows: assessmentWindowsRepository,
-    teachers: teachersRepository,
-    staff_programme_assignments: staffProgrammeAssignmentsRepository,
-  },
-  userId,
-  enqueueRequest = enqueueSupabaseRequest,
-} = {}) => {
-  if (referenceDataReadyThisSession) {
-    return Promise.resolve();
-  }
-  if (referenceDataPromise) {
-    return referenceDataPromise;
-  }
-
-  referenceDataPromise = (async () => {
-    const requiredRows = await Promise.all([
-      repositories.schools.getAll(),
-      repositories.programmes.getAll(),
-      repositories.academic_years.getAll(),
-    ]);
-    if (requiredRows.every((rows) => rows.length > 0)) {
-      referenceDataReadyThisSession = true;
-      return;
-    }
-
-    const result = await pullReferenceData({
-      supabaseClient,
-      repositories,
-      userId,
-      enqueueRequest,
-    });
-    referenceDataReadyThisSession = true;
+// The single-flight barrier belongs to the supplied handle.
+const referenceFlight = (barrier, task, key = 'promise') => {
+  if (barrier[key]) return barrier[key];
+  const promise = Promise.resolve().then(task).then((result) => {
+    barrier.ready = true;
     return result;
-  })().finally(() => {
-    referenceDataPromise = null;
-  });
+  }).finally(() => { if (barrier[key] === promise) barrier[key] = null; });
+  barrier[key] = promise;
+  return promise;
+};
 
-  return referenceDataPromise;
+// Completion survives reopening the file, even when reference tables are legitimately empty.
+// Partial rows cannot establish readiness; an earlier completed cache stays usable offline.
+const checkReferenceCache = (barrier, localStateRepository) => {
+  if (!barrier.cachePromise) {
+    barrier.cachePromise = localStateRepository.get('reference_data_complete_at').then((completedAt) => {
+      if (completedAt) barrier.ready = true;
+    }).catch((error) => {
+      barrier.cachePromise = null;
+      throw error;
+    });
+  }
+  return barrier.cachePromise;
+};
+
+export const pullReferenceData = ({ barrier, ...options } = {}) => (
+  barrier ? referenceFlight(barrier, async () => {
+    await checkReferenceCache(barrier, options.localStateRepository);
+    return pullReferenceDataRows(options);
+  }, 'refreshPromise') : pullReferenceDataRows(options)
+);
+
+export const ensureReferenceData = ({
+  barrier,
+  repositories,
+  ...options
+} = {}) => {
+  if (barrier.promise) return barrier.promise;
+  if (barrier.ready) return Promise.resolve();
+  return referenceFlight(barrier, async () => {
+    await checkReferenceCache(barrier, options.localStateRepository);
+    if (barrier.ready) return;
+    return pullReferenceData({ ...options, repositories, barrier });
+  });
 };
 
 /**
  * Fetch schools from Supabase and cache locally.
  * Schools are admin-managed reference data, not an outbox push table.
  */
-export const fetchAndCacheSchools = async () => {
-  const { data, error } = await enqueueSupabaseRequest(() => (
-    supabase
+export const fetchAndCacheSchools = async ({
+  supabaseClient, enqueueRequest,
+  repositories,
+} = {}) => {
+  const { data, error } = await enqueueRequest(() => (
+    supabaseClient
       .from('schools')
       .select('*')
       .order('name')
   ));
 
   if (error) throw error;
-  await schoolsRepository.replaceFromServer(data || []);
+  await repositories.schools.replaceFromServer(data || []);
   return data || [];
 };

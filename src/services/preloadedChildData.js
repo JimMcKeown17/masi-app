@@ -1,5 +1,4 @@
-import { supabase } from './supabaseClient';
-import { enqueueSupabaseRequest } from './supabaseRequestQueue';
+import { isStaleActorError } from '../session/staleActor';
 
 export const PULL_SCOPE_COMPLETENESS_LIMIT = 1000;
 export const RECONCILE_ACK_SCHEMA_VERSION = 1;
@@ -83,13 +82,14 @@ const snapshotArray = (snapshot, key) => (
 
 export const pullReconcileAcknowledgments = async ({
   userId,
-  supabaseClient = supabase,
-  enqueueRequest = enqueueSupabaseRequest,
+  supabaseClient,
+  enqueueRequest,
 } = {}) => {
   try {
     const { data, error } = await enqueueRequest(() => (
       supabaseClient.rpc('get_reconcile_acknowledgments')
     ));
+    if (isStaleActorError(error)) throw error;
     if (error) {
       return reconcileAcknowledgmentFailure(classifyPullFailureKind(error), error);
     }
@@ -138,6 +138,7 @@ export const pullReconcileAcknowledgments = async ({
       },
     };
   } catch (error) {
+    if (isStaleActorError(error)) throw error;
     return reconcileAcknowledgmentFailure('transport', error);
   }
 };
@@ -158,6 +159,7 @@ export const classifyPullFailureKind = (error) => {
 const queryScope = async (task) => {
   try {
     const result = await task();
+    if (isStaleActorError(result?.error)) throw result.error;
     if (result?.error) {
       return failedScope(
         classifyPullFailureKind(result.error),
@@ -166,6 +168,7 @@ const queryScope = async (task) => {
     }
     return successfulScope(result?.data);
   } catch (error) {
+    if (isStaleActorError(error)) throw error;
     return failedScope('transport', error);
   }
 };
@@ -215,8 +218,8 @@ const pullChildProgrammeEnrollments = async ({
 
 export const pullPreloadedChildData = async ({
   userId,
-  supabaseClient = supabase,
-  enqueueRequest = enqueueSupabaseRequest,
+  supabaseClient,
+  enqueueRequest,
 } = {}) => {
   const queuedQueryScope = (task) => queryScope(() => enqueueRequest(task));
   const reconcileAcknowledgments = await pullReconcileAcknowledgments({
@@ -373,4 +376,84 @@ export const pullPreloadedChildData = async ({
       childrenGroups,
     },
   };
+};
+
+// The handle service persists using the same guarded repositories and acknowledged scopes as
+// the legacy contexts. Task 5 moves those contexts onto these entry points.
+export const persistPreloadedChildData = async ({
+  pulled, userId, repositories, authorizedBreakerScopes = new Set(),
+}) => {
+  const { activeProgrammeId, scopes, reconcileAcknowledgments } = pulled;
+  const ack = reconcileAcknowledgments?.data;
+  const authority = reconcileAcknowledgments?.ok === true
+    && reconcileAcknowledgments.complete === true && ack?.activeProgrammeId === activeProgrammeId;
+  const canReconcile = authority && scopes.programmeAssignment.ok && Boolean(activeProgrammeId);
+  const pulledAt = new Date().toISOString();
+  const reconciles = [];
+  const save = async (name, method, rows, reconcile) => {
+    if (!scopes[name].ok) return;
+    const result = await method(rows, reconcile ? { reconcile: {
+      ...reconcile, pulledAt, bypassBreaker: authorizedBreakerScopes.has(name),
+    } } : {});
+    if (reconcile) reconciles.push(result);
+  };
+  const deleted = await repositories.syncOutbox.getPendingHardDeleteIds({ tableName: 'children', ownerUserId: userId });
+  const children = uniqueById([
+    ...(scopes.children.ok ? scopes.children.rows : []),
+    ...(scopes.childEaAssignments.ok ? scopes.childEaAssignments.rows.map((row) => row.children) : []),
+  ]).filter((row) => !deleted.has(row.id));
+  const kept = (name) => scopes[name].rows.filter((row) => !deleted.has(row.child_id));
+  if (scopes.classes.ok) await repositories.classes.saveServerClassRows(scopes.classes.rows);
+  if (scopes.children.ok || scopes.childEaAssignments.ok) await repositories.children.saveServerChildRows(children);
+  await save('childEaAssignments', repositories.children.saveServerStaffChildRows, kept('childEaAssignments'),
+    canReconcile ? { acknowledgedIds: ack.childEaAssignmentIds, userId } : null);
+  await save('childProgrammeEnrollments', repositories.children.saveServerChildProgrammeEnrollmentRows, kept('childProgrammeEnrollments'),
+    canReconcile ? { acknowledgedIds: ack.childProgrammeEnrollmentIds, acknowledgedAssignedChildIds: ack.assignedChildIds, programmeId: activeProgrammeId } : null);
+  await save('childClassMemberships', repositories.children.saveServerChildClassMembershipRows, kept('childClassMemberships'),
+    canReconcile ? { acknowledgedIds: ack.childClassMembershipIds, acknowledgedChildIds: ack.visibleChildIds } : null);
+  if (scopes.groups.ok) await repositories.groups.saveServerGroupRows(scopes.groups.rows);
+  await save('groupEaAssignments', repositories.groupEaAssignments.saveServerRows, scopes.groupEaAssignments.rows,
+    canReconcile ? { acknowledgedGroupIds: ack.groupIds, userId, programmeId: activeProgrammeId } : null);
+  await save('childrenGroups', repositories.groups.saveServerChildrenGroupRows, scopes.childrenGroups.rows,
+    canReconcile ? { acknowledgedIds: ack.childGroupMembershipIds, acknowledgedGroupIds: ack.groupIds } : null);
+  if (pullCanBeStamped(pulled, reconciles)) {
+    await repositories.syncState.setPullState('child_data_pull', { lastPulledAt: pulledAt });
+  }
+  return { ...pulled, reconcileResults: reconciles };
+};
+
+const pullCanBeStamped = ({ activeProgrammeId, scopes, reconcileAcknowledgments: ack }, reconciles) => (
+  ack?.ok === true && ack.complete === true && ack.data.activeProgrammeId === activeProgrammeId
+  && !Object.values(scopes).some((scope) => scope.failureKind === 'transport' || (scope.ok && !scope.complete))
+  && reconciles.every((result) => result?.reconcileCompleted === true)
+);
+
+export const pullClassData = async ({ userId, supabaseClient, enqueueRequest, repositories, bypassBreaker = false }) => {
+  const reconcileAcknowledgments = await pullReconcileAcknowledgments({ userId, supabaseClient, enqueueRequest });
+  const query = (task) => queryScope(() => enqueueRequest(task));
+  const assignments = await query(() => supabaseClient.from('staff_programme_assignments')
+    .select('programme_id').eq('user_id', userId).is('ended_at', null).order('assigned_at', { ascending: false }).limit(1));
+  const authoritative = reconcileAcknowledgments.ok && reconcileAcknowledgments.complete;
+  const activeProgrammeId = authoritative ? reconcileAcknowledgments.data.activeProgrammeId : assignments.rows[0]?.programme_id || null;
+  const programmeAssignment = authoritative ? successfulScope(activeProgrammeId ? [{ programme_id: activeProgrammeId }] : []) : assignments;
+  const rawClasses = activeProgrammeId ? await query(() => supabaseClient.from('classes')
+    .select('*, class_ea_assignments!inner(*)').eq('class_ea_assignments.ea_user_id', userId)
+    .eq('class_ea_assignments.programme_id', activeProgrammeId).is('class_ea_assignments.unassigned_at', null)
+    .order('name', { ascending: true })) : dependencyScope();
+  const classes = rawClasses.ok ? successfulScope(rawClasses.rows.map((row) => stripJoins(row, ['class_ea_assignments']))) : rawClasses;
+  const classEaAssignments = rawClasses.ok ? successfulScope(collectJoinRows(rawClasses.rows, 'class_ea_assignments')) : dependencyScope();
+  const pulled = { activeProgrammeId, reconcileAcknowledgments, scopes: { programmeAssignment, classes, classEaAssignments } };
+  const reconciles = [];
+  const pulledAt = new Date().toISOString();
+  if (classes.ok) {
+    await repositories.classes.saveServerClassRows(classes.rows);
+    const reconcile = activeProgrammeId && programmeAssignment.ok && authoritative
+      && reconcileAcknowledgments.data.activeProgrammeId === activeProgrammeId;
+    const result = await repositories.classEaAssignments.saveServerRows(classEaAssignments.rows, reconcile ? {
+      reconcile: { userId, programmeId: activeProgrammeId, pulledAt, bypassBreaker, acknowledgedClassIds: reconcileAcknowledgments.data.classIds },
+    } : {});
+    if (reconcile) reconciles.push(result);
+  }
+  if (pullCanBeStamped(pulled, reconciles)) await repositories.syncState.setPullState('classes_pull', { lastPulledAt: pulledAt });
+  return { ...pulled, reconcileResults: reconciles };
 };

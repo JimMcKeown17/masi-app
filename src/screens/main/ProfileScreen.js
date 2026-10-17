@@ -1,10 +1,15 @@
+import { useSignedInEA } from '../../context/SignedInEAContext';
 import React, { useCallback, useContext, useState } from 'react';
 import { View, StyleSheet, ScrollView, KeyboardAvoidingView, Platform, Linking, Alert } from 'react-native';
 import { TextInput, Button, Text, Card, Divider, Snackbar, SegmentedButtons } from 'react-native-paper';
 import { NavigationContext, useFocusEffect } from '@react-navigation/native';
 import { useAuth } from '../../context/AuthContext';
+import { useOffline } from '../../context/OfflineContext';
+import { useTimeTracking } from '../../hooks/useTimeTracking';
+import { useSignOutFlow } from '../../hooks/useSignOutFlow';
+import SignOutSheets from '../../components/profile/SignOutSheets';
 import { colors, spacing, borderRadius, shadows } from '../../constants/colors';
-import { supabase } from '../../services/supabaseClient';
+import { isStaleActorError } from '../../session/staleActor';
 import { exportDatabase, exportLogs } from '../../utils/debugExport';
 import { getReleaseMetadata } from '../../utils/releaseMetadata';
 import { deviceSettings } from '../../services/deviceSettings';
@@ -35,7 +40,15 @@ function CaptureModeFocusLoader({ loadCaptureMode }) {
 }
 
 export default function ProfileScreen({ navigation }) {
-  const { user, profile, updatePassword, signOut } = useAuth();
+  const { handle, repositories } = useSignedInEA();
+
+  const { user, profile, signOut, changePassword } = useAuth();
+  const { isSignedIn, handleSignOut } = useTimeTracking();
+  const { isOnline, syncNow } = useOffline();
+  const signOutFlow = useSignOutFlow({
+    signOut, countUnsent: repositories.syncOutbox.countUnsent,
+    isClockedIn: isSignedIn, clockOut: handleSignOut, isOnline, syncNow,
+  });
   const releaseMetadata = getReleaseMetadata();
   const runtimeDiagnostics = getRuntimeDiagnostics();
   const navigationContext = useContext(NavigationContext);
@@ -112,7 +125,7 @@ export default function ProfileScreen({ navigation }) {
           onPress: async () => {
             setDatabaseExportLoading(true);
             try {
-              const result = await exportDatabase();
+              const result = await exportDatabase({ handle });
               if (result.success) {
                 showMessage('Database exported successfully');
               } else {
@@ -179,6 +192,7 @@ export default function ProfileScreen({ navigation }) {
   };
 
   const handleChangePassword = async () => {
+    if (!handle.isCurrent()) return;
     // Validation
     if (!currentPassword || !newPassword || !confirmPassword) {
       showMessage('All password fields are required', 'error');
@@ -197,31 +211,19 @@ export default function ProfileScreen({ navigation }) {
 
     setPasswordLoading(true);
     try {
-      // Verify current password by attempting to sign in
-      let signInError;
-      try {
-        const result = await supabase.auth.signInWithPassword({
-          email: user.email,
-          password: currentPassword,
-        });
-        signInError = result.error;
-      } catch (error) {
-        signInError = error;
-      }
+      const { error, phase } = await changePassword({ currentPassword, newPassword, handle });
+      if (!handle.isCurrent() || isStaleActorError(error)) return;
 
-      if (signInError) {
-        console.error('Password verification error:', signInError);
+      if (error && phase === 'verification') {
+        console.error('Password verification error:', error);
         showMessage(
-          isInvalidCredentialsError(signInError)
+          isInvalidCredentialsError(error)
             ? 'Current password is incorrect'
             : PASSWORD_VERIFICATION_FAILED_MESSAGE,
           'error'
         );
         return;
       }
-
-      // Update password
-      const { error } = await updatePassword(newPassword);
 
       if (error) throw error;
 
@@ -232,10 +234,11 @@ export default function ProfileScreen({ navigation }) {
 
       showMessage('Password changed successfully');
     } catch (error) {
+      if (!handle.isCurrent()) return;
       console.error('Password change error:', error);
       showMessage(error.message || 'Failed to change password', 'error');
     } finally {
-      setPasswordLoading(false);
+      if (handle.isCurrent()) setPasswordLoading(false);
     }
   };
 
@@ -476,7 +479,8 @@ export default function ProfileScreen({ navigation }) {
         {/* Sign Out */}
         <Button
           mode="outlined"
-          onPress={signOut}
+          onPress={signOutFlow.start}
+          loading={signOutFlow.busy === 'signing_out'}
           style={styles.signOutButton}
           textColor={colors.emphasis}
           icon="logout"
@@ -484,6 +488,8 @@ export default function ProfileScreen({ navigation }) {
           Sign Out
         </Button>
       </ScrollView>
+
+      <SignOutSheets {...signOutFlow} isOnline={isOnline} />
 
       <Snackbar
         visible={snackbar.visible}

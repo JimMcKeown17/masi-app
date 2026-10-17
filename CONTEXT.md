@@ -7,8 +7,14 @@ Domain glossary for the Masi field-staff mobile app. Masi runs multiple educatio
 ### Roles and organisation
 
 **EA** (Education Assistant):
-A field worker employed by Masi who delivers programme sessions to children in schools.
+A field worker who delivers Masi programme sessions to children in schools.
 _Avoid_: "youth", "field staff", "user" — those are all loose.
+
+**Organisation**:
+The employer of a staff member. `users.organization_id` is a required label, set at account
+creation. It does not define an access boundary or change the phone's behaviour. A partner
+organisation is plausible within a year (Jim, 2026-10-14).
+_Avoid_: treating an organisation as a Programme or an authorization scope.
 
 **Head Office**:
 The Masi back-office team that marks long-form field assessments and assigns children to groups for the Core Literacy and Numeracy programmes.
@@ -81,6 +87,14 @@ There is an open product question (not a current commitment) about how much of t
 
 ### Work capture
 
+**Clock-in / clock-out**:
+The start/end of an EA's shift, recorded independently of location availability. A manual
+clock action attempts approximate location for at most 10 seconds after permission recovery,
+then saves either a complete coordinate pair or no coordinates, plus the outcome (`fix`,
+`timeout`, `denied`, `services_off`, or `unavailable`). NULL outcome means not recorded by an
+older build or automatic clock-out. Opening Settings hands control back to the EA and saves
+nothing until they return and tap again or choose Continue Without Location.
+
 **Session**:
 A single block of work an EA does with one group of children under one programme. The settled rule is **one session = one group-block of work**; EAs never work with two groups in one session. Always scoped to one `programme_id` (NOT NULL) and one `group_id` (planned NOT NULL, additive migration). The `group_id` references `groups.id`, and since each `groups` row carries `grouping_version_id`, the session's grouping context is automatically pinned to the version active at capture time — historical sessions never go stale when a future regroup happens. Programme-specific session attributes (e.g., `books_read` for 1000 Stories) live inside the existing `sessions.activities` JSON column, not as new schema columns.
 
@@ -131,6 +145,32 @@ Which capture *mechanic* the EA used to record a Question's items — `grid` (th
 _Avoid_: conflating **capture mode** (which UI mechanic) with **marking mode** (who marks) — different axes.
 
 > The legacy terms **Field Assessment** (long-form, HQ-marked) and **In-App Assessment** (short, app-marked) are retired in favor of the Question / Battery / Run / marking-mode vocabulary above. They described a workflow distinction that no longer holds once WelaPLUS Questions are EA-marked in the app: a Battery can mix marking modes per Question.
+
+### Devices and sync
+
+**Signed-in EA handle**:
+The single object that represents who is working on this phone right now: the EA's id, an epoch, that EA's own local database file (`masi-<userId>.db`), a data client and a request queue. It is the only way production code reaches local data or the server. Signing out revokes it at once; work begun under it and resumed later is **stale** and is refused rather than landing in the next EA's file or account.
+_Avoid_: "the database" or "the current user" as ambient globals — every consumer is handed a handle.
+
+**Unsent**:
+An outbox row whose status is `pending`, `failed`, `in_flight`, or `terminal`. `terminal` counts because the server does not have that work, even though the app will not retry it on its own.
+
+**Left-behind work**:
+Unsent rows in one EA's file while a different EA is signed in on the same phone. They stay in that EA's file, untouched, until that EA signs in again; another EA never uploads them.
+
+**Support incident**:
+A counts-only report a phone sends so support can act on a problem. It carries the incident kind,
+the relevant EA identity, counts and age, plus release and install metadata. It never carries child
+data: no child ids, names, notes or record payloads. It reports a situation; it does not upload the
+left-behind work.
+
+**Install id**:
+A random UUID kept in device-level AsyncStorage. It identifies an app installation, stays the same
+across sign-out and account switches, and is shared by all EAs using that installation. It is not
+an EA id or a hardware identifier.
+
+**Mutation owner**:
+The EA who made a change, stamped on its outbox row from the signed-in EA handle. Never derived from the record's content (`created_by` is provenance, not ownership): an EA's edit of a Head Office-created child is that EA's to upload.
 
 ## Relationships
 
@@ -203,7 +243,7 @@ _Avoid_: conflating **capture mode** (which UI mechanic) with **marking mode** (
   - **Child identity / current roster** — granted by **class** assignment. This is the replacement pool: an EA must see the whole class roster to pick a replacement for a child who leaves a delivery group.
   - **Assessment history, current academic year only** — granted by **class** assignment. Serves EA turnover (an incoming EA sees the baseline the previous EA captured) and control-group comparison, and lets co-EAs sharing a class coordinate the assessment divvy (each sees the other's assessments so nobody double-assesses). Bounded to the current academic year through the `child_class_memberships.academic_year_id` window so multi-year prior history is not exposed. **Mid-year moves (settled 2026-09-21):** an EA with an active class assignment sees a child's current-year assessments if the child was a member of that class at *any* point in the current academic year. After a move, both the old-class and the new-class EA see that year's assessments. The rule does not use only the child's current class, and it does not use the class the child was in on the assessment date. **Current implementation gap:** the live assessment policy reaches the general class/group-capable child-read helper and does not yet apply this year-bounded class predicate.
   - **Session / delivery history** — granted by **delivery** assignment only, and is **capturer-agnostic**: an EA who holds (or held) a delivery assignment on a child reads every session that child attended, including sessions the previous EA captured. A control child (nobody's delivery) has no sessions; a pure-assessor (class scope, no delivery) does not read the delivering EA's session diary. **The session is one complete delivery-history aggregate:** owning the session or qualifying through any attendee grants the complete parent plus every attendee row, including coattendee attendance, grade snapshot, notes, and child-keyed facts already stored in the parent activities JSON. A child-sliced attendee list would falsely imply privacy while the parent still carries all-child facts. Future genuinely restricted per-child facts must live behind a separate authorization contract rather than being added to this aggregate. **Implementation status:** the predicate and positively authorized keyset page RPC are applied to hosted `masi-app-sqlite` and passed the rollback-only six-actor PostgreSQL matrix plus authenticated/anonymous PostgREST probes on 2026-09-04. No mobile history pull exists yet.
-  - **Letter mastery** — **not** assessment history. It is current state (**What the child knows**), so it follows the *current* relationship. It is visible to the EA who recorded the confirmation and to every EA who **currently** delivers to the child (an active delivery assignment). There is no academic-year bound, because a letter mastered last year is still known. Former deliverers and class-only assessors do not see it. A child's current delivering EA may **add or remove an EA confirmation** whoever recorded it. The record notes who changed it last, and the latest server write wins. Assessment-evidence letters stay locked until the next assessment (settled 2026-09-21/23). Today's stored rows are keyed per EA, and only their author may change them; the per-child identity is built with the assessment-history slice. This supersedes ADR-0005's grouping of `letter_mastery` with assessment reads; see ADR-0005's 2026-09-21 follow-up.
+  - **Letter mastery** — **not** assessment history. It is current state (**What the child knows**), so it follows the *current* relationship. It is visible to the EA who recorded the confirmation and to every EA who **currently** delivers to the child (an active delivery assignment). There is no academic-year bound, because a letter mastered last year is still known. Former deliverers and class-only assessors do not see it. A child's current delivering EA may **add or remove an EA confirmation** whoever recorded it. The record notes who changed it last. When two corrections conflict, the **most recently made** one wins: the server keeps whichever has the later correction time and treats a correction time in the future as the server's current time, so a phone that was offline cannot undo a newer correction made elsewhere (Jim, 2026-10-08; this replaces the 2026-09-23 "latest server write wins"). Assessment-evidence letters stay locked until the next assessment (settled 2026-09-21/23). Today's stored rows are keyed per EA, and only their author may change them; the per-child identity is built with the assessment-history slice. This supersedes ADR-0005's grouping of `letter_mastery` with assessment reads; see ADR-0005's 2026-09-21 follow-up.
 - **Submitted assessments are immutable (settled 2026-09-21).** Correcting an answer is an edit only until the assessment is submitted, and it is locked after. EAs may add assessments and answers but may not change or delete them; a later correction is a new attempt. Head Office's Q11 calibration marks remain additional rows, never edits of the EA's rows (ADR-0004).
 - **An EA may assess a child in their class without holding a delivery assignment on that child, and without creating one.** Assessment write is authorized by **class** scope (`current_user_can_write_for_child` grants via the class-assignment branch). This is deliberate: control-group children must be assessable without being delivered to, and creating a delivery assignment just to assess would pollute "My Children", session pickers, and delivery-count reporting with children the EA does not actually run the intervention with. Assessing never implies delivering.
 - **Replacement / group-composition edits are authorized by *group* scope, a third tier below class scope.** Seeing the replacement pool (the class roster) is **class**-scoped; editing a specific delivery group's membership requires **group** scope — an active `group_ea_assignments` row on that group, or having created it (`current_user_can_write_for_group`). So a co-EA who merely shares the classroom can see and assess your children but **cannot** reach into your delivery groups. In the shared-class divvy (two EAs across 1A/1B/1C), each EA owns their own groups, so group scope cleanly separates edit authority. Head Office edits groups through the future dashboard. See ADR-0005.

@@ -1,5 +1,7 @@
+import { bindTestActor } from '../test-support/actorTestUtils';
 jest.mock('expo-sqlite', () => require('../test-support/expoSQLiteMock'));
-jest.mock('../src/services/supabaseClient', () => ({ supabase: {} }));
+jest.mock('../src/services/supabaseClient', () => ({
+  ...require('../test-support/supabaseTestConfig'), supabase: {} }));
 
 import { createBetterSqliteTestDatabase } from '../test-support/betterSqliteAdapter';
 import { runMigrations } from '../src/db/migrations';
@@ -40,7 +42,7 @@ describe('getReadyRecords includeBackedOff', () => {
   const OUTBOX_ID = outboxRecordId(TABLE, RECORD_ID, 'insert');
 
   beforeEach(async () => {
-    db = createBetterSqliteTestDatabase(':memory:');
+    db = bindTestActor(createBetterSqliteTestDatabase(':memory:'), 'user-1');
     await runMigrations(db);
     await db.runAsync("insert into schools (id, name) values ('school-1', 'Masi Primary')");
     await db.runAsync("insert into programmes (id, code, name) values ('programme-1', 'lit', 'Literacy')");
@@ -102,7 +104,7 @@ describe('retryFailedItem resets retry_count', () => {
   const OUTBOX_ID = outboxRecordId(TABLE, RECORD_ID, 'insert');
 
   beforeEach(async () => {
-    db = createBetterSqliteTestDatabase(':memory:');
+    db = bindTestActor(createBetterSqliteTestDatabase(':memory:'), 'user-1');
     await runMigrations(db);
     await db.runAsync("insert into schools (id, name) values ('school-1', 'Masi Primary')");
     await db.runAsync("insert into programmes (id, code, name) values ('programme-1', 'lit', 'Literacy')");
@@ -131,7 +133,7 @@ describe('retryFailedItem resets retry_count', () => {
     expect(before.status).toBe('failed');
     expect(before.retry_count).toBe(3);
 
-    const engine = createOutboxSyncEngine({ database: db });
+    const engine = createOutboxSyncEngine({ enqueueRequest: (task) => task(), database: db });
     await engine.retryFailedItem(TABLE, RECORD_ID);
 
     const row = await db.getFirstAsync(
@@ -141,7 +143,7 @@ describe('retryFailedItem resets retry_count', () => {
     expect(row.status).toBe('pending');
     expect(row.retry_count).toBe(0);
     expect(row.next_retry_at).toBeNull();
-    expect(row.last_error).toBeNull();
+    expect(row.last_error).toBe('network error'); // Child INSERT dispatch evidence survives retry.
   });
 
   it('also resets terminal rows to pending with retry_count=0', async () => {
@@ -156,7 +158,7 @@ describe('retryFailedItem resets retry_count', () => {
       OUTBOX_ID,
     );
 
-    const engine = createOutboxSyncEngine({ database: db });
+    const engine = createOutboxSyncEngine({ enqueueRequest: (task) => task(), database: db });
     await engine.retryFailedItem(TABLE, RECORD_ID);
 
     const row = await db.getFirstAsync('select status, retry_count from sync_outbox where id = ?', OUTBOX_ID);

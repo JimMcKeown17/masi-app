@@ -1,3 +1,9 @@
+jest.mock('../test-support/handleServiceMocks', () => ({
+startSessionHistoryPull: jest.fn(),
+resetSessionHistoryStatusForActorChange: jest.fn()
+}));
+
+
 jest.mock('expo-sqlite', () => require('../test-support/expoSQLiteMock'));
 
 import React from 'react';
@@ -6,9 +12,10 @@ import { act, renderHook, waitFor } from '@testing-library/react-native';
 import { __reset, __setDatabaseFactory } from 'expo-sqlite';
 import { ChildrenProvider, useChildren } from '../src/context/ChildrenContext';
 import { ClassesProvider, useClasses } from '../src/context/ClassesContext';
-import { getWriter, resetDatabaseConnectionForTests } from '../src/db/client';
+import { initializeTestDatabase, getTestWriter, closeDefaultTestHandle } from '../test-support/testDatabase';
 import { childrenRepository } from '../src/db/repositories/childrenRepository';
 import { classesRepository } from '../src/db/repositories/classesRepository';
+import { sessionsRepository } from '../src/db/repositories/sessionsRepository';
 import { createBetterSqliteTestDatabase } from '../test-support/betterSqliteAdapter';
 import { seedCoreData } from '../test-support/sqliteRepositoryTestUtils';
 
@@ -25,13 +32,14 @@ jest.mock('../src/context/AuthContext', () => ({
 
 jest.mock('../src/context/OfflineContext', () => ({
   useOffline: () => ({
-    isOnline: false,
+    isOnline: true,
     refreshSyncStatus: (...args) => mockRefreshSyncStatus(...args),
     isSyncing: false,
   }),
 }));
 
 jest.mock('../src/services/preloadedChildData', () => ({
+  ...jest.requireActual('../src/services/preloadedChildData'),
   PULL_SCOPE_COMPLETENESS_LIMIT: 1000,
   classifyPullFailureKind: jest.fn(() => 'query'),
   pullPreloadedChildData: (...args) => mockPullPreloadedChildData(...args),
@@ -39,11 +47,13 @@ jest.mock('../src/services/preloadedChildData', () => ({
 }));
 
 jest.mock('../src/services/offlineSync', () => ({
+  ...jest.requireActual('../src/services/offlineSync'),
   fetchAndCacheSchools: (...args) => mockFetchAndCacheSchools(...args),
   ensureReferenceData: (...args) => mockEnsureReferenceData(...args),
 }));
 
 jest.mock('../src/services/supabaseClient', () => ({
+  ...require('../test-support/supabaseTestConfig'),
   supabase: {
     from: (...args) => mockSupabaseFrom(...args),
   },
@@ -125,11 +135,12 @@ let testDb;
 beforeEach(async () => {
   jest.clearAllMocks();
   await AsyncStorage.clear();
-  await resetDatabaseConnectionForTests();
+  await closeDefaultTestHandle();
   __reset();
   testDb = createBetterSqliteTestDatabase();
   __setDatabaseFactory(async () => testDb);
-  await getWriter();
+  await initializeTestDatabase();
+  await getTestWriter();
   await testDb.execAsync('PRAGMA foreign_keys = ON');
   await seedCoreData(testDb);
   await testDb.runAsync(`
@@ -149,8 +160,62 @@ beforeEach(async () => {
 });
 
 afterEach(async () => {
-  await resetDatabaseConnectionForTests();
+  await closeDefaultTestHandle();
   __reset();
+});
+
+test('history reference children stay out of context, class, and group lists even when relationships arrive first', async () => {
+  await childrenRepository.save({
+    id: 'roster-child', first_name: 'Roster', last_name: 'Child',
+    class_id: 'class-1', created_by: 'user-1',
+  }, { actorUserId: 'user-1' });
+  await sessionsRepository.saveHistoryPage([{
+    session: {
+      id: 'history-session', user_id: 'user-9', programme_id: 'programme-a',
+      class_id: 'class-1', session_date: '2026-09-01', activities: {},
+      created_at: '2026-09-01T08:00:00+00:00', updated_at: '2026-09-01T08:00:00+00:00',
+    },
+    attendees: [{
+      id: 'history-attendee', session_id: 'history-session', child_id: 'reference-child',
+      attendance_status: 'present', child_first_name: 'Reference', child_last_name: 'Child',
+      created_at: '2026-09-01T08:00:00+00:00', updated_at: '2026-09-01T08:00:00+00:00',
+    }],
+  }], { scope: 'session_history_pull:user-1:programme-a', pullState: { cursor: '{}' } });
+  // A partial roster pull can land relationships before the full child row promotes the reference.
+  // Pin the explicit getMyChildren exclusion, rather than relying on absent relationships.
+  await testDb.execAsync(`
+    insert into child_ea_assignments (id, user_id, child_id)
+      values ('reference-assignment', 'user-1', 'reference-child');
+    insert into child_programme_enrollments (id, child_id, programme_id)
+      values ('reference-enrollment', 'reference-child', 'programme-a');
+    insert into child_class_memberships (id, child_id, class_id, academic_year_id)
+      values ('reference-class', 'reference-child', 'class-1', 'year-2026');
+    insert into groups (id, name, programme_id, class_id)
+      values ('reader-group', 'Reader Group', 'programme-a', 'class-1');
+    insert into group_ea_assignments (id, group_id, ea_user_id, programme_id)
+      values ('reader-group-assignment', 'reader-group', 'user-1', 'programme-a');
+    insert into child_group_memberships (id, child_id, group_id) values
+      ('roster-group-membership', 'roster-child', 'reader-group'),
+      ('reference-group-membership', 'reference-child', 'reader-group');
+  `);
+  mockSupabaseFrom.mockImplementation((tableName) => queryResult({
+    data: tableName === 'staff_programme_assignments' ? [{ programme_id: 'programme-a' }] : [],
+    error: null,
+  }));
+
+  const { result } = renderHook(() => useContexts(), { wrapper });
+  await waitFor(() => expect(result.current.childrenContext.loading).toBe(false));
+  await waitFor(() => expect(result.current.classesContext.loading).toBe(false));
+  await waitFor(() => expect(result.current.childrenContext.children.map((child) => child.id))
+    .toEqual(['roster-child']));
+  expect(result.current.childrenContext.allChildren.map((child) => child.id)).toEqual(['roster-child']);
+  expect(result.current.childrenContext.getChildById('reference-child')).toBeNull();
+  expect(result.current.classesContext.getChildrenInClass('class-1').map((child) => child.id))
+    .toEqual(['roster-child']);
+  expect(result.current.childrenContext.getChildrenInGroup('reader-group').map((child) => child.id))
+    .toEqual(['roster-child']);
+  expect(await testDb.getFirstAsync("select history_reference from children where id = 'reference-child'"))
+    .toEqual({ history_reference: 1 });
 });
 
 test('a class edit made while the network pull is pending survives in React state and SQLite', async () => {

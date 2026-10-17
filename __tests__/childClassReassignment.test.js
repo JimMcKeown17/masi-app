@@ -1,5 +1,6 @@
 jest.mock('expo-sqlite', () => require('../test-support/expoSQLiteMock'));
-jest.mock('../src/services/supabaseClient', () => ({ supabase: {} }));
+jest.mock('../src/services/supabaseClient', () => ({
+  ...require('../test-support/supabaseTestConfig'), supabase: {} }));
 
 import { runMigrations } from '../src/db/migrations';
 import { createChildrenRepository } from '../src/db/repositories/childrenRepository';
@@ -73,6 +74,25 @@ const createServerBackedSupabase = (serverDb) => {
           return { error: toPgError(error) };
         }
       },
+      update: (payload) => ({
+        eq: (column, value) => ({
+          select: async () => {
+            const cols = Object.keys(payload);
+            const assignments = cols.map((c) => `"${c}" = ?`).join(', ');
+            try {
+              calls.push({ tableName, id: value, operation: 'update' });
+              const result = await serverDb.runAsync(
+                `update ${tableName} set ${assignments} where "${column}" = ?`,
+                ...cols.map((c) => payload[c]),
+                value
+              );
+              return { data: result.changes === 1 ? [{ id: value }] : [], error: null };
+            } catch (error) {
+              return { data: null, error: toPgError(error) };
+            }
+          },
+        }),
+      }),
       delete: () => ({ eq: async () => ({ error: null }) }),
     }),
     rpc: async () => ({ data: true, error: null }),
@@ -174,7 +194,7 @@ describe('updateChild — offline create → reassign → sync coalesces the uns
     const serverDb = await createMigratedDatabase(runMigrations);
     await seedTwoClasses(serverDb);
     const { supabaseClient } = createServerBackedSupabase(serverDb);
-    const engine = createOutboxSyncEngine({ getAuthSession: liveTestSession, database: db, supabaseClient });
+    const engine = createOutboxSyncEngine({ enqueueRequest: (task) => task(), getAuthSession: liveTestSession, database: db, supabaseClient });
 
     const result = await engine.syncAll();
 

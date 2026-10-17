@@ -1,3 +1,4 @@
+global.__MASI_NO_DEFAULT_HANDLE__ = true;
 import React from 'react';
 import { Text } from 'react-native';
 import { fireEvent, render, waitFor } from '@testing-library/react-native';
@@ -10,8 +11,8 @@ jest.mock('@expo/vector-icons', () => ({
   Ionicons: () => null,
 }), { virtual: true });
 
-jest.mock('../src/db/client', () => ({
-  initializeDatabase: (...args) => mockInitializeDatabase(...args),
+jest.mock('expo-sqlite', () => ({
+  openDatabaseAsync: (...args) => mockInitializeDatabase(...args),
 }));
 
 jest.mock('../src/utils/debugExport', () => ({
@@ -34,7 +35,7 @@ test('blocks app providers after SQLite bootstrap failure and recovers on a clea
   });
   mockInitializeDatabase
     .mockRejectedValueOnce(bootstrapError)
-    .mockResolvedValueOnce({});
+    .mockResolvedValueOnce({ closeAsync: jest.fn(async () => {}) });
 
   const view = render(
     <DatabaseBootstrapGate>

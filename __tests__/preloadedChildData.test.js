@@ -1,4 +1,5 @@
 jest.mock('../src/services/supabaseClient', () => ({
+  ...require('../test-support/supabaseTestConfig'),
   supabase: {},
 }));
 
@@ -7,7 +8,7 @@ import {
   pullReconcileAcknowledgments,
   pullPreloadedChildData,
 } from '../src/services/preloadedChildData';
-import { createSupabaseRequestQueue } from '../src/services/supabaseRequestQueue';
+import { createHandleRequestQueue } from '../src/session/handleRequestQueue';
 
 const successful = (data = []) => ({ data, error: null });
 
@@ -104,7 +105,7 @@ const expectDependency = (scope) => {
 
 describe('preloaded child-data pull', () => {
   test('releases the request queue between dependent Supabase queries', async () => {
-    const queue = createSupabaseRequestQueue();
+    const queue = createHandleRequestQueue({ isOpen: () => true });
     const rpcStarted = deferred();
     const releaseRpc = deferred();
     const events = [];
@@ -122,7 +123,7 @@ describe('preloaded child-data pull', () => {
       return originalFrom(tableName);
     });
 
-    const pullPromise = pullPreloadedChildData({
+    const pullPromise = pullPreloadedChildData({ enqueueRequest: (task) => task(),
       userId: 'user-1',
       supabaseClient,
       enqueueRequest: queue.enqueue,
@@ -169,7 +170,7 @@ describe('preloaded child-data pull', () => {
       }),
     };
 
-    const snapshot = await pullReconcileAcknowledgments({
+    const snapshot = await pullReconcileAcknowledgments({ enqueueRequest: (task) => task(),
       userId: 'user-1',
       supabaseClient,
     });
@@ -206,7 +207,7 @@ describe('preloaded child-data pull', () => {
       },
     });
 
-    const result = await pullPreloadedChildData({ userId: 'user-1', supabaseClient });
+    const result = await pullPreloadedChildData({ enqueueRequest: (task) => task(), userId: 'user-1', supabaseClient });
 
     expect(result.reconcileAcknowledgments).toEqual(expect.objectContaining({
       ok: true,
@@ -227,7 +228,7 @@ describe('preloaded child-data pull', () => {
       },
     });
 
-    const result = await pullPreloadedChildData({ userId: 'user-1', supabaseClient });
+    const result = await pullPreloadedChildData({ enqueueRequest: (task) => task(), userId: 'user-1', supabaseClient });
 
     expect(result.activeProgrammeId).toBe('programme-authoritative');
     expect(result.scopes.programmeAssignment).toEqual({
@@ -248,7 +249,7 @@ describe('preloaded child-data pull', () => {
       },
     });
 
-    const result = await pullPreloadedChildData({ userId: 'user-1', supabaseClient });
+    const result = await pullPreloadedChildData({ enqueueRequest: (task) => task(), userId: 'user-1', supabaseClient });
 
     expect(result.activeProgrammeId).toBe('programme-a');
     expect(result.scopes.childClassMemberships).toEqual(expect.objectContaining({
@@ -287,7 +288,7 @@ describe('preloaded child-data pull', () => {
       },
     });
 
-    const result = await pullPreloadedChildData({ userId: 'user-1', supabaseClient });
+    const result = await pullPreloadedChildData({ enqueueRequest: (task) => task(), userId: 'user-1', supabaseClient });
 
     expect(result.scopes.children.failureKind).toBe('query');
     expect(result.scopes.childEaAssignments).toEqual(expect.objectContaining({
@@ -310,7 +311,7 @@ describe('preloaded child-data pull', () => {
       },
     });
 
-    const result = await pullPreloadedChildData({ userId: 'user-1', supabaseClient });
+    const result = await pullPreloadedChildData({ enqueueRequest: (task) => task(), userId: 'user-1', supabaseClient });
 
     expect(result.scopes.childEaAssignments.failureKind).toBe('query');
     expectDependency(result.scopes.childProgrammeEnrollments);
@@ -348,7 +349,7 @@ describe('preloaded child-data pull', () => {
       reconcileSnapshot: null,
     });
 
-    const result = await pullPreloadedChildData({ userId: 'user-1', supabaseClient });
+    const result = await pullPreloadedChildData({ enqueueRequest: (task) => task(), userId: 'user-1', supabaseClient });
 
     expect(result.activeProgrammeId).toBeNull();
     expect(result.scopes.programmeAssignment).toEqual(expect.objectContaining({
@@ -372,7 +373,7 @@ describe('preloaded child-data pull', () => {
       },
     });
 
-    const result = await pullPreloadedChildData({ userId: 'user-1', supabaseClient });
+    const result = await pullPreloadedChildData({ enqueueRequest: (task) => task(), userId: 'user-1', supabaseClient });
 
     expect(result.activeProgrammeId).toBeNull();
     expect(result.scopes.programmeAssignment).toEqual({
@@ -407,7 +408,7 @@ describe('preloaded child-data pull', () => {
     }));
     const supabaseClient = createSupabaseClient({ groups: successful(groups) });
 
-    const result = await pullPreloadedChildData({ userId: 'user-1', supabaseClient });
+    const result = await pullPreloadedChildData({ enqueueRequest: (task) => task(), userId: 'user-1', supabaseClient });
 
     expect(PULL_SCOPE_COMPLETENESS_LIMIT).toBe(1000);
     expect(result.scopes.groups).toEqual(expect.objectContaining({
@@ -457,7 +458,7 @@ describe('preloaded child-data pull', () => {
       }]),
     });
 
-    const result = await pullPreloadedChildData({ userId: 'user-1', supabaseClient });
+    const result = await pullPreloadedChildData({ enqueueRequest: (task) => task(), userId: 'user-1', supabaseClient });
 
     expect(result.scopes.childEaAssignments.rows).toEqual([expect.objectContaining({
       id: 'cea-0',
@@ -502,7 +503,7 @@ describe('preloaded child-data pull', () => {
       child_programme_enrollments: cpeFactory,
     });
 
-    const result = await pullPreloadedChildData({ userId: 'user-1', supabaseClient });
+    const result = await pullPreloadedChildData({ enqueueRequest: (task) => task(), userId: 'user-1', supabaseClient });
 
     const builders = supabaseClient.buildersByTable.child_programme_enrollments;
     expect(builders).toHaveLength(3);
@@ -532,7 +533,7 @@ describe('preloaded child-data pull', () => {
       ),
     });
 
-    const result = await pullPreloadedChildData({ userId: 'user-1', supabaseClient });
+    const result = await pullPreloadedChildData({ enqueueRequest: (task) => task(), userId: 'user-1', supabaseClient });
 
     expect(result.scopes.childProgrammeEnrollments).toEqual(expect.objectContaining({
       ok: false,
@@ -554,7 +555,7 @@ describe('preloaded child-data pull', () => {
       )),
     });
 
-    const result = await pullPreloadedChildData({ userId: 'user-1', supabaseClient });
+    const result = await pullPreloadedChildData({ enqueueRequest: (task) => task(), userId: 'user-1', supabaseClient });
 
     expect(supabaseClient.buildersByTable.child_programme_enrollments).toHaveLength(5);
     expect(result.scopes.childProgrammeEnrollments.rows).toHaveLength(

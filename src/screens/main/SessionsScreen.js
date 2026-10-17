@@ -1,3 +1,4 @@
+import { useSignedInEA } from '../../context/SignedInEAContext';
 import React, { useState, useCallback } from 'react';
 import { View, StyleSheet, TouchableOpacity, ScrollView } from 'react-native';
 import { Text, Button, ActivityIndicator } from 'react-native-paper';
@@ -6,11 +7,12 @@ import { useFocusEffect } from '@react-navigation/native';
 import { useAuth } from '../../context/AuthContext';
 import { colors, spacing, borderRadius } from '../../constants/colors';
 import { useChildren } from '../../context/ChildrenContext';
-import { sessionsRepository } from '../../db/repositories/sessionsRepository';
+
 import { getSessionsTabStats } from '../../utils/dashboardStats';
 import StatBar from '../../components/dashboard/StatBar';
 import SessionsTodayRing from '../../components/sessions/SessionsTodayRing';
 import { getSessionsTodayGoal } from '../../services/sessionsTodayGoal';
+import { useSessionHistoryStatus } from '../../services/sessionHistoryStatus';
 import { useSessionLaunchGuard } from '../../hooks/useSessionLaunchGuard';
 import ClockInBeforeSessionSheet from '../../components/sessions/ClockInBeforeSessionSheet';
 import { getActiveProgrammeGate } from '../../services/activeProgrammeGate';
@@ -29,8 +31,12 @@ const getStatsCutoff = () => {
 };
 
 export default function SessionsScreen({ navigation }) {
+  const { handle, repositories } = useSignedInEA();
+  const { sessions: sessionsRepository } = repositories;
+
   const { user } = useAuth();
   const { children: childrenList } = useChildren();
+  const { pageVersion, runVersion } = useSessionHistoryStatus();
   const [stats, setStats] = useState(null);
   const [goal, setGoal] = useState(null);
   const [programmeGate, setProgrammeGate] = useState(null);
@@ -49,7 +55,7 @@ export default function SessionsScreen({ navigation }) {
     useCallback(() => {
       const loadStats = async () => {
         try {
-          setProgrammeGate(await getActiveProgrammeGate({ userId: user.id }));
+          setProgrammeGate(await getActiveProgrammeGate({ handle, userId: user.id }));
         } catch (error) {
           console.error('Error resolving active programme gate:', error);
           // Never strand the tab on the spinner; the data layer still guards the
@@ -64,10 +70,10 @@ export default function SessionsScreen({ navigation }) {
         setStats(getSessionsTabStats(sessions, childrenList, user.id));
         // Re-resolved on every focus, so the ring reflects a session the EA just
         // recorded the moment they navigate back to this tab.
-        setGoal(await getSessionsTodayGoal({ userId: user.id }));
+        setGoal(await getSessionsTodayGoal({ handle, userId: user.id }));
       };
       loadStats();
-    }, [childrenList, user.id])
+    }, [childrenList, user.id, pageVersion, runVersion])
   );
 
   // Hold the capture UI until the programme check resolves, so an unassigned EA

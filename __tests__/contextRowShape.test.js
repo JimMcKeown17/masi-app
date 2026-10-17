@@ -4,7 +4,7 @@ import { __reset, __setDatabaseFactory } from 'expo-sqlite';
 import { childrenRepository } from '../src/db/repositories/childrenRepository';
 import { classesRepository } from '../src/db/repositories/classesRepository';
 import { groupsRepository } from '../src/db/repositories/groupsRepository';
-import { getWriter, resetDatabaseConnectionForTests } from '../src/db/client';
+import { initializeTestDatabase, getTestWriter, closeDefaultTestHandle } from '../test-support/testDatabase';
 import { createBetterSqliteTestDatabase } from '../test-support/betterSqliteAdapter';
 import { seedCoreData } from '../test-support/sqliteRepositoryTestUtils';
 
@@ -23,12 +23,13 @@ describe('consumer-visible context row shapes', () => {
   let db;
 
   beforeEach(async () => {
-    await resetDatabaseConnectionForTests();
+    await closeDefaultTestHandle();
     __reset();
     db = createBetterSqliteTestDatabase();
     __setDatabaseFactory(async () => db);
+  await initializeTestDatabase();
 
-    const writer = await getWriter();
+    const writer = await getTestWriter();
     await seedCoreData(writer);
     await writer.runAsync(`
       update classes
@@ -110,7 +111,7 @@ describe('consumer-visible context row shapes', () => {
   });
 
   afterEach(async () => {
-    await resetDatabaseConnectionForTests();
+    await closeDefaultTestHandle();
     __reset();
     db = null;
   });

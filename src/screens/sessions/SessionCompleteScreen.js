@@ -1,3 +1,4 @@
+import { useSignedInEA } from '../../context/SignedInEAContext';
 import React, { useState, useEffect } from 'react';
 import { View, StyleSheet } from 'react-native';
 import { Text, Button } from 'react-native-paper';
@@ -14,6 +15,8 @@ import { colors, spacing } from '../../constants/colors';
  * two never disagree.
  */
 export default function SessionCompleteScreen({ navigation, route }) {
+  const { handle } = useSignedInEA();
+
   const { user } = useAuth();
   const [goal, setGoal] = useState(null);
   const childCount = route?.params?.childCount;
@@ -24,7 +27,7 @@ export default function SessionCompleteScreen({ navigation, route }) {
   useEffect(() => {
     let active = true;
     // Resolved fresh after the save, so the count already includes this session.
-    getSessionsTodayGoal({ userId: user.id }).then((resolved) => {
+    getSessionsTodayGoal({ handle, userId: user.id }).then((resolved) => {
       if (active) setGoal(resolved);
     });
     return () => { active = false; };

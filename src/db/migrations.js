@@ -1,5 +1,3 @@
-import { getDatabase, withDatabaseAccess } from './client';
-
 const LOCAL_SYNC_COLUMNS = `
   sync_status text not null default 'synced'
     check (sync_status in ('pending', 'synced', 'failed', 'terminal')),
@@ -7,10 +5,9 @@ const LOCAL_SYNC_COLUMNS = `
   server_updated_at text
 `;
 
-let appMigrationQueue = Promise.resolve();
 const explicitDatabaseMigrationQueues = new WeakMap();
 
-const MIGRATIONS = [
+export const MIGRATIONS = [
   {
     version: 1,
     name: 'initial_sqlite_foundation',
@@ -622,6 +619,89 @@ const MIGRATIONS = [
         where group_id is not null;
     `,
   },
+  {
+    version: 10,
+    name: 'children_history_reference',
+    sql: `
+      alter table children add column history_reference integer not null default 0
+        check (history_reference in (0, 1));
+    `,
+  },
+  {
+    version: 11,
+    name: 'time_entry_location_optional',
+    // SQLite cannot DROP NOT NULL. Rebuild under the existing FK-off migration
+    // transaction; copy every old column and recreate the table's sole index.
+    // v10 has no time_entries triggers or inbound/outbound foreign keys.
+    sql: `
+      create table time_entries_new (
+        id text primary key,
+        user_id text not null,
+        sign_in_time text not null,
+        sign_in_lat real,
+        sign_in_lon real,
+        sign_out_time text,
+        sign_out_lat real,
+        sign_out_lon real,
+        auto_clocked_out integer not null default 0,
+        created_at text not null default (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+        updated_at text not null default (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+        ${LOCAL_SYNC_COLUMNS},
+        sign_in_location_status text,
+        sign_out_location_status text,
+        check (sign_in_location_status in ('fix', 'timeout', 'denied', 'services_off', 'unavailable')),
+        check ((sign_in_lat is null) = (sign_in_lon is null)),
+        check (sign_in_location_status is null or
+          (sign_in_location_status = 'fix' and sign_in_lat is not null and sign_in_lon is not null) or
+          (sign_in_location_status <> 'fix' and sign_in_lat is null and sign_in_lon is null)),
+        check (sign_out_location_status in ('fix', 'timeout', 'denied', 'services_off', 'unavailable')),
+        check ((sign_out_lat is null) = (sign_out_lon is null)),
+        check (sign_out_location_status is null or
+          (sign_out_location_status = 'fix' and sign_out_lat is not null and sign_out_lon is not null) or
+          (sign_out_location_status <> 'fix' and sign_out_lat is null and sign_out_lon is null))
+      );
+      insert into time_entries_new (id, user_id, sign_in_time, sign_in_lat, sign_in_lon, sign_out_time, sign_out_lat, sign_out_lon, auto_clocked_out, created_at, updated_at, sync_status, last_sync_error, server_updated_at)
+        select id, user_id, sign_in_time, sign_in_lat, sign_in_lon, sign_out_time, sign_out_lat, sign_out_lon, auto_clocked_out, created_at, updated_at, sync_status, last_sync_error, server_updated_at from time_entries;
+      drop table time_entries;
+      alter table time_entries_new rename to time_entries;
+      create index if not exists idx_time_entries_user_signin on time_entries(user_id, sign_in_time);
+    `,
+  },
+  {
+    version: 12,
+    name: 'sync_outbox_owner_required',
+    sql: `
+create trigger if not exists sync_outbox_owner_required
+before insert on sync_outbox
+when new.owner_user_id is null
+begin
+  select raise(abort, 'sync_outbox.owner_user_id is required');
+end;
+    `,
+  },
+  {
+    version: 13,
+    name: 'support_incident_queue',
+    sql: `
+create table if not exists support_incident_queue (
+  id text primary key,
+  kind text not null check (kind in (
+    'left_behind_unsent_work', 'foreign_owner_in_file', 'legacy_shared_file_unsent'
+  )),
+  repeat_key text not null,
+  payload text not null,
+  status text not null default 'pending' check (status in ('pending', 'sent', 'rejected')),
+  attempts integer not null default 0,
+  next_attempt_at text,
+  last_error text,
+  created_at text not null default (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  updated_at text not null default (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  unique (kind, repeat_key)
+);
+create index if not exists idx_support_incident_queue_status
+  on support_incident_queue (status, created_at);
+    `,
+  },
 ];
 
 // Derived from the migration list so it never drifts when a migration is added.
@@ -657,7 +737,7 @@ const runInTransaction = async (db, task) => {
 };
 
 async function runMigrationsNow(database) {
-  const db = database || await getDatabase();
+  const db = database;
   const userVersion = await getUserVersion(db);
   const pending = MIGRATIONS.filter((migration) => migration.version > userVersion);
   if (pending.length === 0) {
@@ -696,22 +776,12 @@ async function runMigrationsNow(database) {
 }
 
 export async function runMigrations(database) {
-  if (database) {
-    const currentQueue = explicitDatabaseMigrationQueues.get(database) || Promise.resolve();
-    const queuedMigration = currentQueue.then(
-      () => runMigrationsNow(database),
-      () => runMigrationsNow(database)
-    );
-    explicitDatabaseMigrationQueues.set(database, queuedMigration.catch(() => {}));
-
-    return queuedMigration;
-  }
-
-  const queuedMigration = appMigrationQueue.then(
-    () => withDatabaseAccess((db) => runMigrationsNow(db)),
-    () => withDatabaseAccess((db) => runMigrationsNow(db))
+  if (!database) throw new Error('Migrations require an explicit database');
+  const currentQueue = explicitDatabaseMigrationQueues.get(database) || Promise.resolve();
+  const queuedMigration = currentQueue.then(
+    () => runMigrationsNow(database),
+    () => runMigrationsNow(database)
   );
-  appMigrationQueue = queuedMigration.catch(() => {});
-
+  explicitDatabaseMigrationQueues.set(database, queuedMigration.catch(() => {}));
   return queuedMigration;
 }

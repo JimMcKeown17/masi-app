@@ -1,3 +1,4 @@
+import { getTestWriter } from '../test-support/testDatabase';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { childrenRepository } from '../src/db/repositories/childrenRepository';
 import { resolveDatabase } from '../src/db/repositories/repositoryRuntime';
@@ -74,7 +75,7 @@ describe('hidden children - repository soft-delete', () => {
     await childrenRepository.saveChildRecord({ id: 'child-no-history', first_name: 'A', last_name: 'M', synced: true });
     await childrenRepository.saveChildRecord({ id: 'child-with-history', first_name: 'B', last_name: 'K', synced: true });
 
-    const db = await resolveDatabase();
+    const db = await getTestWriter();
     await db.runAsync("insert into programmes (id, code, name) values ('programme-a', 'literacy', 'Literacy')");
     await db.runAsync(`
       insert into assessments (

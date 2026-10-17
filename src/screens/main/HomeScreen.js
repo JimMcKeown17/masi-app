@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useMemo, useRef, useState } from 'react';
 import { AppState, Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 import { Snackbar } from 'react-native-paper';
 import { Ionicons } from '@expo/vector-icons';
@@ -11,8 +11,6 @@ import { useChildren } from '../../context/ChildrenContext';
 import { useClasses } from '../../context/ClassesContext';
 import { useOffline } from '../../context/OfflineContext';
 import { useTimeTracking } from '../../hooks/useTimeTracking';
-import { sessionsRepository } from '../../db/repositories/sessionsRepository';
-import { assessmentsRepository } from '../../db/repositories/assessmentsRepository';
 import SyncIndicator from '../../components/common/SyncIndicator';
 import HomeClockRow from '../../components/home/HomeClockRow';
 import SegmentedSessionGauge from '../../components/home/SegmentedSessionGauge';
@@ -20,7 +18,9 @@ import WeekStrip from '../../components/home/WeekStrip';
 import AttentionArea from '../../components/home/AttentionArea';
 import { getSessionsTodayGoal } from '../../services/sessionsTodayGoal';
 import { getActiveProgrammeGate } from '../../services/activeProgrammeGate';
-import { homeAttentionStore } from '../../services/homeAttentionStore';
+import { useSignedInEA } from '../../context/SignedInEAContext';
+import { useSessionHistoryStatus } from '../../services/sessionHistoryStatus';
+import { isStaleActorError } from '../../session/staleActor';
 import { getAssessmentCoverage, getWeekSessionCounts } from '../../utils/dashboardStats';
 import { deriveHomeAttentionItems } from '../../utils/homeAttention';
 import { getGoalCopy } from '../../utils/sessionGoalPresentation';
@@ -35,6 +35,10 @@ const FAB_OVERHANG = 28; // LockedBottomTabBar recordAction marginTop
 const RING = { stroke: 50, r: 236, dxFromRight: 170, cy: 40 };
 
 export default function HomeScreen({ navigation }) {
+  const { handle, repositories, services } = useSignedInEA();
+  const { sessions: sessionsRepository, assessments: assessmentsRepository } = repositories;
+  const { homeAttention } = services;
+  const { pageVersion, runVersion } = useSessionHistoryStatus();
   const insets = useSafeAreaInsets();
   const { width, fontScale } = useWindowDimensions();
   const { user, profile } = useAuth();
@@ -78,17 +82,17 @@ export default function HomeScreen({ navigation }) {
   const loadStats = useCallback(async () => {
     const seq = ++loadSeqRef.current;
     setNow(new Date());
-    setStatsLoading(true);
+    // The initial load owns the skeleton; later loads update existing content in place.
     try {
       const recentCutoff = toLocalDateString(new Date(Date.now() - THIRTY_DAYS_MS));
       const [assessmentCounts, dailyGoal, sessions, programmeGate, dismissedOn] = await Promise.all([
         assessmentsRepository.getAssessmentCountsSince({ userId: user.id }),
-        getSessionsTodayGoal({ userId: user.id }),
+        getSessionsTodayGoal({ handle, userId: user.id }),
         sessionsRepository.getSessions({
           userId: user.id, recordedByUserId: user.id, sinceDate: recentCutoff, order: 'desc',
         }),
-        getActiveProgrammeGate({ userId: user.id }),
-        homeAttentionStore.getAssessmentDismissedOn(user.id),
+        getActiveProgrammeGate({ handle, userId: user.id }),
+        homeAttention.getAssessmentDismissedOn(),
       ]);
       if (seq !== loadSeqRef.current) return; // a newer load superseded this one
       setWeekCounts(getWeekSessionCounts(sessions));
@@ -96,17 +100,20 @@ export default function HomeScreen({ navigation }) {
       setSessionGoal(dailyGoal);
       setProgrammeName(programmeGate.programme?.name || '');
       setHasActiveProgramme(Boolean(programmeGate.hasActiveProgramme));
-      setAssessmentDismissedOn(dismissedOn);
+      setAssessmentDismissedOn((current) => (
+        current && (!dismissedOn || current > dismissedOn) ? current : dismissedOn
+      ));
       setStatsFailed(false);
     } catch (error) {
+      if (isStaleActorError(error)) return;
       console.error('Error loading Home statistics:', error);
       if (seq === loadSeqRef.current) setStatsFailed(true);
     } finally {
       if (seq === loadSeqRef.current) setStatsLoading(false);
     }
-  }, [childrenList, user.id]);
+  }, [handle, sessionsRepository, assessmentsRepository, homeAttention, childrenList, user.id, pageVersion, runVersion]);
 
-  // Load on focus (and when the roster or user changes); reload on foreground.
+  // Load on focus, roster or history changes; reload on foreground.
   useFocusEffect(
     useCallback(() => {
       loadStats();
@@ -136,14 +143,14 @@ export default function HomeScreen({ navigation }) {
       await dismissAutoClockOutNotice(item.entryId);
     } else if (item.kind === 'assessment_due') {
       const today = toLocalDateString(new Date());
-      setAssessmentDismissedOn(today);
+      setAssessmentDismissedOn((current) => (current && current > today ? current : today));
       try {
-        await homeAttentionStore.dismissAssessmentForDay(user.id, today);
+        await homeAttention.dismissAssessmentForDay(today);
       } catch (error) {
-        console.error('Error dismissing assessment card:', error);
+        if (!isStaleActorError(error)) console.error('Error dismissing assessment card:', error);
       }
     }
-  }, [dismissAutoClockOutNotice, user.id]);
+  }, [dismissAutoClockOutNotice, homeAttention]);
 
   const goalCopy = getGoalCopy(sessionGoal, isSignedIn);
   const subtitle = [programmeName, profile?.schoolName].filter(Boolean).join(' · ');

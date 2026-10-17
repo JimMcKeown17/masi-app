@@ -1,3 +1,4 @@
+import { bindTestActor } from '../test-support/actorTestUtils';
 jest.mock('expo-sqlite', () => require('../test-support/expoSQLiteRealEngine'));
 
 import {
@@ -50,7 +51,7 @@ test('useNewConnection returns a real second handle so query_only does not poiso
 });
 
 test('a pending outbox row survives force-stop close and reopen', async () => {
-  let db = await openDatabaseAsync(FORCE_STOP_DB);
+  let db = bindTestActor(await openDatabaseAsync(FORCE_STOP_DB), 'user-1');
   await runMigrations(db);
   await createTimeEntriesRepository({ database: db }).saveTimeEntry(makeTimeEntry());
 

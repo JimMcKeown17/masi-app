@@ -1,3 +1,4 @@
+import { requireCurrentHandle } from '../src/session/signedInHandle';
 let mockWrittenContent;
 
 jest.mock('expo-file-system/next', () => ({
@@ -42,7 +43,7 @@ jest.mock('../src/utils/runtimeDiagnostics', () => ({
 }));
 
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { getDatabase } from '../src/db/client';
+import { getTestWriter } from '../test-support/testDatabase';
 import { debugDump } from '../src/db/debugDump';
 import { runMigrations, CURRENT_SCHEMA_VERSION } from '../src/db/migrations';
 import { exportDatabase, exportLogs } from '../src/utils/debugExport';
@@ -55,7 +56,7 @@ beforeEach(async () => {
 
 describe('debug database export metadata', () => {
   test('exports SQLite database state with app metadata and sync diagnostics', async () => {
-    const db = await getDatabase();
+    const db = await getTestWriter();
     await runMigrations(db);
     await AsyncStorage.setItem('@sessions', JSON.stringify([]));
     await db.runAsync(`
@@ -64,6 +65,7 @@ describe('debug database export metadata', () => {
     `);
     await db.runAsync(`
       insert into sync_outbox (
+        owner_user_id,
         id,
         table_name,
         record_id,
@@ -74,11 +76,11 @@ describe('debug database export metadata', () => {
         last_error
       )
       values
-        ('sessions:session-1:insert', 'sessions', 'session-1', 'insert', '{"id":"session-1"}', 'failed', 2, 'network down'),
-        ('assessments:assessment-1:insert', 'assessments', 'assessment-1', 'insert', '{"id":"assessment-1"}', 'terminal', 1, 'RLS denied')
+        ('user-1', 'sessions:session-1:insert', 'sessions', 'session-1', 'insert', '{"id":"session-1"}', 'failed', 2, 'network down'),
+        ('user-1', 'assessments:assessment-1:insert', 'assessments', 'assessment-1', 'insert', '{"id":"assessment-1"}', 'terminal', 1, 'RLS denied')
     `);
 
-    const result = await exportDatabase();
+    const result = await exportDatabase({ handle: requireCurrentHandle() });
 
     expect(result).toEqual({ success: true });
     const exported = JSON.parse(mockWrittenContent);
@@ -157,7 +159,7 @@ describe('debug database export metadata', () => {
       }),
     };
 
-    const dump = await debugDump(failingDiagnosticDb);
+    const dump = await debugDump({ handle: { isOpen: () => true, isCurrent: () => true, getReader: async () => failingDiagnosticDb } });
 
     expect(dump.syncState).toEqual({
       error: 'Error: sync_state unreadable',

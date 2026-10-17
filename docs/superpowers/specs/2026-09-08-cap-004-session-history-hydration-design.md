@@ -1,7 +1,9 @@
 # CAP-004 Design Spec: Session and Attendee History Hydration
 
-**Status:** design approved by Jim on 2026-09-08 through a grill-with-docs session; awaiting Jim's
-review of this document before an implementation plan is written. Companion decision record:
+**Status:** design approved by Jim on 2026-09-08 through a grill-with-docs session; document
+walked through with Jim and approved on 2026-09-25. Plan-time corrections are recorded in §12 and
+take precedence over the sections they amend. Implementation plan:
+[`2026-09-25-cap-004-session-history-hydration.md`](../plans/2026-09-25-cap-004-session-history-hydration.md). Companion decision record:
 [ADR-0006](../../adr/0006-session-history-converges-on-server-stamped-family-timestamp.md).
 
 **Owner of build:** Codex, through the plugin, task by task from the implementation plan that
@@ -308,3 +310,102 @@ any other table; newest-first ordering during first hydration; activating `sessi
 - Measure and record the attendee-keyset and delivery-arm index decisions.
 - Decide where the run is orchestrated (extension of `OfflineContext`'s domain-pull trigger vs a
   small `SessionHistoryContext`) so screens can re-read SQLite when a page lands.
+
+## 12. Plan-time corrections (2026-09-25)
+
+Found while writing the implementation plan against current code. Each supersedes the named text.
+
+1. **Server stamping on insert (amends §4.1).** `sessions_set_updated_at` and
+   `session_attendees_set_updated_at` run `before update` only
+   (`20260521115412_masi_clean_base_schema.sql`), and the push payload carries the phone's
+   `updated_at` (`src/services/offlineSync.js` `SERVER_COLUMNS`). A fresh insert therefore keeps
+   the phone clock, so a phone with a wrong clock could place a new session behind another
+   device's cursor. The CAP-004 migration recreates both triggers as `before insert or update`.
+2. **Cursor scope is per user and Programme (amends §5.1).** SQLite is one shared database for
+   every EA who signs in on the phone (`src/db/client.js`), so the scope is
+   `session_history_pull:<userId>:<programmeId>`.
+3. **No "incomplete family" stop (replaces §5.4 and step 4c of §5.2).** The outbox pushes a parent
+   before its attendees, so a server parent legitimately has zero attendees for as long as the
+   capturing phone is offline. Stopping the cursor there would stall every later family behind
+   another EA's connectivity. Each returned parent is persisted with whatever attendees the
+   attendee RPC returns, and the cursor advances. Late attendees re-surface the family through the
+   §4.1 family timestamp. Only an attendee *request* failure abandons the page. (Corrected
+   2026-09-26: authorization is re-derived per attendee *request*, so losing access between two
+   attendee pages can leave a partial set. This is rare, and item 8's re-walk bounds it.)
+4. **Missing local references (amends §6.2).** A hydrated session's `class_id` or an attendee's
+   `group_id` can name a class or group this phone never pulled (for example the previous EA's
+   group). SQLite enforces those foreign keys, so the page would fail on every run. Such
+   references are stored as `null`, the pattern `childrenRepository.saveServerChildRow` already
+   uses for a missing class.
+5. **Overlap mechanism (settles §5.2 step 3 and §11).** `get_delivery_history_page` takes
+   `p_overlap_seconds` (0..600), applied as `p_after_updated_at - make_interval(secs => ...)`.
+   The client passes 120 only on the first page of a run that starts from a completed cursor, so
+   the client performs no timestamp arithmetic and no page after the first can rewind (a rewind
+   on every page would never terminate).
+6. **Orchestration (settles §11).** The run starts from `ChildrenContext` after the roster and
+   reference pulls, is single-flight per user, and publishes progress through a small in-memory
+   status store read with `useSyncExternalStore`; no new React provider.
+7. **Reader intent (settles §6.4, Jim 2026-09-25).** History, Home, the Sessions tab, and the
+   daily goal stay "sessions I recorded". The session-count ranking counts every session each of
+   the EA's current children attended, whoever recorded it.
+8. **New-child and weekly re-walk (Jim, 2026-09-26; Codex review 2026-09-26).** A timestamp cursor
+   watches session writes, not authorization. A new delivery assignment authorizes older sessions
+   that sit behind the cursor and would never be downloaded. `now()` is transaction-start time, so
+   a slow transaction can also commit behind the cursor. Each run therefore follows its delta with
+   a full walk of the academic year when:
+   - the weekly backstop is due (6–8 days after the last walk, randomized per phone so a fleet
+     does not re-walk in one burst; Jim 2026-09-26, revised from daily the same day because the
+     common case, a handover, is caught immediately by the new-delivery-child trigger);
+   - the phone has an active delivery child absent at the last completed walk; or
+   - a walk is part-way.
+
+   The first hydration counts as a completed walk. Cost is one year of one EA's families per week
+   (a handful of pages), which Jim accepted against the 2026-09-05 "traffic must not grow with
+   history" constraint.
+9. **Existing future timestamps (amends §4).** The migration normalizes any `updated_at` already
+   in the future (a pre-fix phone clock) to `now()`, so one bad row cannot pin every cursor ahead
+   of real writes.
+10. **Actor fencing, queue-aware deadlines, and failure memory (amends §5.3 and §7).**
+    - A change of signed-in user invalidates in-flight runs, and page commits check admission
+      inside the SQLite transaction.
+    - Request deadlines start at enqueue time, so a hung request ahead in the shared queue cannot
+      hold the history run.
+    - A failed run records `lastFailureAt`, so an earlier success is never shown as "Up to date".
+
+## 13. Field-evidence additions (2026-10-08)
+
+From [`zazi-sync-lessons-for-masi-2026-10-08.md`](../../../documentation/zazi-sync-lessons-for-masi-2026-10-08.md).
+The design is unchanged; the verification in §8 is extended.
+
+1. **"Within a minute" is a volume claim (amends §8, Device).** It is proved on a Galaxy A03s with a
+   realistic-volume test account, not only with practice data. On that phone Zazi measured saving,
+   not downloading, as about 95% of history time.
+2. **Run timing names its phases (amends §5.3).** The run's end log line separates RPC time from
+   SQLite save time, so an exported log can attribute a slow phone.
+3. **User writes stay responsive during a download (amends §8, Device).** A save, a start, or a clock-in
+   made while a run is in flight on the A03s must not wait behind page transactions for more than
+   about 2 s.
+4. **Page cost is bounded, and atomicity is kept (amends §6.2).** If 1, 3 or 6 fails, and in any case
+   before the assessment slice reuses this shape:
+   - batch the per-page existence and pending-local lookups;
+   - skip rows identical to the stored row;
+   - reuse prepared statements.
+
+   One page, with its cursor, stays one transaction.
+
+5. **Continuation does not depend on roster freshness (amends §5.5; found by the 2026-10-08 Codex
+   review).**
+   - §5.5 says history runs on foreground or reconnect when stale. As built, it starts only after a
+     roster pull, and roster pulls skip themselves for 15 minutes.
+   - A history scope that is incomplete, failed since its last success, or stale is admitted on
+     foreground and reconnect in its own right, single-flight.
+6. **Progress is durable within a short open (amends §5.3).**
+   - Atomic pages are necessary but not sufficient. A page that fetches every attendee for 200
+     parents before committing can take longer than a short app open.
+   - The first durable commit must land within a few seconds on a slow phone and network. The
+     parent page size is the tuning lever.
+7. **Do not import Zazi's "the cursor never passes a pending row" rule.** §6.2's skip-and-advance
+   is correct. A skipped family returns when its upload is re-stamped after the cursor, or at the
+   re-walk. Freezing the cursor would recreate the §12.3 stall.
+
+The executable steps are plan Task 9, Steps 4-0 and 4a–4e.

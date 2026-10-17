@@ -27,6 +27,40 @@ const makeChild = (overrides = {}) => ({
 const FIXED_NOW = new Date('2026-05-21T08:00:00.000Z');
 
 describe('childrenRepository', () => {
+  test('editing a full mapped synced child ignores caller sync bookkeeping and queues one update', async () => {
+    const db = await createMigratedDatabase(runMigrations);
+
+    try {
+      await seedCoreData(db);
+      const repository = createChildrenRepository({ database: db });
+      await repository.saveChildRecord(makeChild({ synced: true }));
+      const [current] = await repository.getChildren();
+      expect(current).toEqual(expect.objectContaining({ sync_status: 'synced', synced: true }));
+      expect(await db.getAllAsync('select * from sync_outbox')).toEqual([]);
+
+      await repository.updateChild(current.id, {
+        ...current,
+        first_name: 'Updated child',
+        last_sync_error: 'stale caller error',
+      });
+
+      const [updated] = await repository.getChildren();
+      expect(updated).toEqual(expect.objectContaining({
+        first_name: 'Updated child', sync_status: 'pending', synced: false, last_sync_error: null,
+      }));
+      const outbox = await db.getAllAsync('select table_name, record_id, operation, payload from sync_outbox');
+      expect(outbox).toHaveLength(1);
+      expect(outbox[0]).toEqual(expect.objectContaining({
+        table_name: 'children', record_id: current.id, operation: 'update',
+      }));
+      expect(JSON.parse(outbox[0].payload)).toEqual(expect.objectContaining({
+        first_name: 'Updated child', sync_status: 'pending', synced: false, last_sync_error: null,
+      }));
+    } finally {
+      await db.closeAsync();
+    }
+  });
+
   beforeEach(() => {
     jest.useFakeTimers();
     jest.setSystemTime(FIXED_NOW);
@@ -421,6 +455,91 @@ describe('childrenRepository', () => {
         record_id: 'membership-1',
         operation: 'archive',
       });
+    } finally {
+      await db.closeAsync();
+    }
+  });
+
+  test.each(['pending', 'failed', 'terminal'])('deleting a server child after a %s edit supersedes the edit with hard_delete', async (status) => {
+    const db = await createMigratedDatabase(runMigrations);
+    try {
+      await seedCoreData(db);
+      const repository = createChildrenRepository({ database: db });
+      await repository.saveChildRecord(makeChild({ synced: true }));
+      await repository.updateChild('child-1', { first_name: 'Edited' });
+      await db.runAsync('update children set sync_status = ? where id = ?', status, 'child-1');
+      await db.runAsync('update sync_outbox set status = ?', status);
+
+      expect(await repository.deleteIfNoHistory('child-1')).toBe(true);
+
+      expect(await repository.getChildren()).toEqual([]);
+      const rows = await db.getAllAsync('select operation, status, owner_user_id, payload from sync_outbox');
+      expect(rows).toEqual([{
+        operation: 'hard_delete', status: 'pending', owner_user_id: 'user-1',
+        payload: JSON.stringify({ id: 'child-1' }),
+      }]);
+    } finally {
+      await db.closeAsync();
+    }
+  });
+
+  test('deleting a local child with a never-dispatched insert removes its entire queued family', async () => {
+    const db = await createMigratedDatabase(runMigrations);
+    try {
+      await seedCoreData(db);
+      const repository = createChildrenRepository({ database: db });
+      await repository.save(makeChild(), { actorUserId: 'user-1' });
+      await repository.updateChild('child-1', { first_name: 'Edited' });
+
+      expect(await repository.deleteIfNoHistory('child-1')).toBe(true);
+
+      expect(await db.getAllAsync('select * from sync_outbox')).toEqual([]);
+      for (const table of ['children', 'child_ea_assignments', 'child_programme_enrollments', 'child_class_memberships']) {
+        expect(await db.getAllAsync(`select * from ${table}`)).toEqual([]);
+      }
+    } finally {
+      await db.closeAsync();
+    }
+  });
+
+  test('an in-flight child insert is retained and followed by a remote hard_delete', async () => {
+    const db = await createMigratedDatabase(runMigrations);
+    try {
+      await seedCoreData(db);
+      const repository = createChildrenRepository({ database: db });
+      await repository.save(makeChild(), { actorUserId: 'user-1' });
+      await repository.updateChild('child-1', { first_name: 'Edited' });
+      await db.runAsync("update sync_outbox set status = 'in_flight' where table_name = 'children' and operation = 'insert'");
+
+      expect(await repository.deleteIfNoHistory('child-1')).toBe(true);
+
+      expect(await repository.getChildren()).toEqual([]);
+      expect(await db.getAllAsync('select table_name, operation, status from sync_outbox order by operation')).toEqual([
+        { table_name: 'children', operation: 'hard_delete', status: 'pending' },
+        { table_name: 'children', operation: 'insert', status: 'in_flight' },
+      ]);
+    } finally {
+      await db.closeAsync();
+    }
+  });
+
+  test.each([false, true])('child deletion and outbox replacement roll back together (remote=%s)', async (remote) => {
+    const db = await createMigratedDatabase(runMigrations);
+    try {
+      await seedCoreData(db);
+      const repository = createChildrenRepository({ database: db });
+      await repository.save(makeChild(), { actorUserId: 'user-1' });
+      if (remote) await db.runAsync('delete from sync_outbox');
+      await repository.updateChild('child-1', { first_name: 'Edited' });
+      const tables = ['children', 'child_ea_assignments', 'child_programme_enrollments', 'child_class_memberships', 'sync_outbox'];
+      const before = await Promise.all(tables.map(table => db.getAllAsync(`select * from ${table} order by id`)));
+
+      await expect(db.withExclusiveTransactionAsync(async (transaction) => {
+        expect(await repository.deleteIfNoHistory('child-1', { transaction })).toBe(true);
+        throw new Error('rollback deletion');
+      })).rejects.toThrow('rollback deletion');
+
+      expect(await Promise.all(tables.map(table => db.getAllAsync(`select * from ${table} order by id`)))).toEqual(before);
     } finally {
       await db.closeAsync();
     }

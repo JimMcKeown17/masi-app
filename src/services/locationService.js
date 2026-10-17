@@ -1,184 +1,157 @@
 import * as Location from 'expo-location';
 import { Alert, Linking } from 'react-native';
 
-/**
- * Location Service
- *
- * Wrapper around expo-location for GPS access with:
- * - Permission handling with persistent prompts
- * - Medium accuracy (50-100m) for school vicinity verification
- * - Error handling with user-friendly messages
- * - Timeout handling (10 seconds max)
- */
-
-// Medium accuracy (50-100m) - sufficient for school vicinity
 const LOCATION_ACCURACY = Location.Accuracy.Balanced;
-const LOCATION_TIMEOUT = 10000; // 10 seconds
+const LOCATION_TIMEOUT = 10000;
 const LAST_KNOWN_MAX_AGE_MS = 15 * 60 * 1000;
 
+// Resolve the choice before doing any native work. A duplicate button callback
+// only settles this promise again; it cannot start another request or launch.
+const choosePermissionRecovery = (canRetry) => new Promise((resolve) => {
+  Alert.alert(
+    'Location Permission',
+    canRetry
+      ? 'Location helps verify you are at the school. You can try the permission request again, or clock in or out without location.'
+      : 'Open Settings to allow location while using this app. Then return and tap Clock In or Clock Out again. You can also continue without location.',
+    [
+      { text: canRetry ? 'Try Again' : 'Open Settings', onPress: () => resolve(canRetry ? 'retry' : 'settings') },
+      { text: 'Continue Without Location', style: 'cancel', onPress: () => resolve('continue') },
+    ],
+    { cancelable: false }
+  );
+});
+
 /**
- * Request location permission with persistent prompts
- * Won't let user proceed without permission (required for time tracking)
+ * True permits GPS, false explicitly continues without it, and null hands off
+ * to Settings without completing this clock action. Never cache this result:
+ * the next explicit attempt must read permission again after Settings/expiry.
  */
 export const requestLocationPermission = async () => {
-  try {
-    const { status, canAskAgain } = await Location.requestForegroundPermissionsAsync();
+  let permission = await Location.getForegroundPermissionsAsync();
+  if (permission.status === 'granted') return true;
+  if (permission.canAskAgain === true) {
+    permission = await Location.requestForegroundPermissionsAsync();
+    if (permission.status === 'granted') return true;
+  }
 
-    if (status !== 'granted') {
-      if (canAskAgain === false) {
-        return new Promise((resolve) => {
-          Alert.alert(
-            'Location Disabled',
-            'Location permission is disabled for this app. Open your device settings to enable it for time tracking.',
-            [
-              {
-                text: 'Open Settings',
-                onPress: async () => {
-                  try {
-                    await Linking.openSettings();
-                  } catch {}
-                  resolve(false);
-                },
-              },
-              {
-                text: 'Cancel',
-                style: 'cancel',
-                onPress: () => resolve(false),
-              },
-            ]
-          );
-        });
-      }
-
-      // Show explanation and prompt again
-      return new Promise((resolve) => {
+  let choice = await choosePermissionRecovery(permission.canAskAgain === true);
+  if (choice === 'retry') {
+    permission = await Location.requestForegroundPermissionsAsync();
+    if (permission.status === 'granted') return true;
+    // One explicit retry is enough. Even a still-requestable denial must have
+    // a finite recovery path instead of recreating the same request dialog.
+    choice = await choosePermissionRecovery(false);
+  }
+  if (choice === 'settings') {
+    try {
+      await Linking.openSettings();
+      return null;
+    } catch {
+      await new Promise((resolve) => {
         Alert.alert(
-          'Location Required',
-          'Location permission is required to verify you are at the school when you sign in/out. This is necessary for time tracking.',
-          [
-            {
-              text: 'Enable Location',
-              onPress: async () => {
-                const result = await requestLocationPermission();
-                resolve(result);
-              },
-            },
-            {
-              text: 'Cancel',
-              style: 'cancel',
-              onPress: () => resolve(false),
-            },
-          ]
+          'Could not open Settings',
+          'You can allow location later in your phone settings. You can still clock in or out without location.',
+          [{ text: 'Continue Without Location', onPress: resolve }],
+          { cancelable: false }
         );
       });
     }
-
-    return true;
-  } catch (error) {
-    console.error('Error requesting location permission:', error);
-    return false;
   }
+  return false;
 };
 
 /**
  * Check if location services are enabled on the device
  */
 export const checkLocationServicesEnabled = async () => {
-  try {
-    const enabled = await Location.hasServicesEnabledAsync();
+  const enabled = await Location.hasServicesEnabledAsync();
 
-    if (!enabled) {
-      Alert.alert(
-        'Enable GPS',
-        'Please turn on Location Services in your device settings to use time tracking.',
-        [{ text: 'OK' }]
-      );
-    }
-
-    return enabled;
-  } catch (error) {
-    console.error('Error checking location services:', error);
-    return false;
+  if (!enabled) {
+    Alert.alert(
+      'Location Services Are Off',
+      'You can turn on Location Services in device settings. Your shift will still start or end without location.',
+      [{ text: 'OK' }]
+    );
   }
+
+  return enabled;
 };
 
+const noFix = (status) => ({
+  coords: null,
+  status,
+  error: {
+    timeout: 'GPS timeout',
+    denied: 'Location permission denied',
+    services_off: 'Location services are disabled',
+    unavailable: 'Unable to get your location',
+  }[status],
+  cancelled: false,
+});
+
+const failureStatus = (error) => {
+  if (error?.code === 'E_LOCATION_TIMEOUT') return 'timeout';
+  if (error?.code === 'E_LOCATION_SERVICES_DISABLED') return 'services_off';
+  if (error?.code === 'E_LOCATION_UNAUTHORIZED') return 'denied';
+  return 'unavailable';
+};
+
+const hasFix = (position) => Number.isFinite(position?.coords?.latitude)
+  && Number.isFinite(position?.coords?.longitude);
+const withFix = (position) => ({
+  coords: {
+    latitude: position.coords.latitude,
+    longitude: position.coords.longitude,
+    accuracy: position.coords.accuracy,
+  },
+  timestamp: position.timestamp,
+  status: 'fix',
+  error: null,
+  cancelled: false,
+});
+
 /**
- * Get current GPS position with medium accuracy
- * Returns { latitude, longitude, accuracy } or null on error
+ * Native GPS and the cache share ONE deadline. Warm the cache alongside GPS:
+ * starting an awaited cache read after a 10s timeout would extend that deadline
+ * indefinitely if the native cache also hangs. A cached fix never beats a live
+ * fix; it is used only on a native error or at the deadline.
+ * Permission dialogs wait for an explicit user choice, outside the GPS budget.
  */
 export const getCurrentPosition = async () => {
   try {
-    // Check if location services are enabled
-    const servicesEnabled = await checkLocationServicesEnabled();
-    if (!servicesEnabled) {
-      return { error: 'Location services are disabled', coords: null };
-    }
+    if (!await checkLocationServicesEnabled()) return noFix('services_off');
+    const permission = await requestLocationPermission();
+    if (permission === null) return { coords: null, status: null, error: null, cancelled: true };
+    if (!permission) return noFix('denied');
 
-    // Check/request permission
-    const hasPermission = await requestLocationPermission();
-    if (!hasPermission) {
-      return { error: 'Location permission denied', coords: null };
-    }
-
-    // Get current position
-    const location = await new Promise((resolve, reject) => {
-      let settled = false;
-      const timer = setTimeout(async () => {
-        if (settled) return;
-        settled = true;
-        try {
-          const lastKnown = await Location.getLastKnownPositionAsync({
-            maxAge: LAST_KNOWN_MAX_AGE_MS,
-          });
-          if (lastKnown) {
-            resolve(lastKnown);
-            return;
-          }
-        } catch {}
-        reject({ code: 'E_LOCATION_TIMEOUT' });
-      }, LOCATION_TIMEOUT);
-
-      Location.getCurrentPositionAsync({ accuracy: LOCATION_ACCURACY })
-        .then((result) => {
-          if (settled) return;
-          settled = true;
-          clearTimeout(timer);
-          resolve(result);
-        })
-        .catch((error) => {
-          if (settled) return;
-          settled = true;
-          clearTimeout(timer);
-          reject(error);
-        });
-    });
-
-    return {
-      coords: {
-        latitude: location.coords.latitude,
-        longitude: location.coords.longitude,
-        accuracy: location.coords.accuracy,
-      },
-      timestamp: location.timestamp,
-      error: null,
-    };
+    let cached = null;
+    let status = 'timeout';
+    let timeoutId;
+    const lastKnown = Promise.resolve()
+      .then(() => Location.getLastKnownPositionAsync({ maxAge: LAST_KNOWN_MAX_AGE_MS }))
+      .then(position => { cached = hasFix(position) ? position : null; return cached; })
+      .catch(() => null);
+    const live = Promise.resolve()
+      .then(() => Location.getCurrentPositionAsync({ accuracy: LOCATION_ACCURACY }))
+      .then(position => {
+        if (!hasFix(position)) throw new Error('No coordinate pair');
+        return withFix(position);
+      })
+      .catch(async error => {
+        status = failureStatus(error);
+        // Denied/services-off are permission facts, not reasons to reuse a fix.
+        if (status === 'denied' || status === 'services_off') return noFix(status);
+        const fallback = await lastKnown;
+        return fallback ? withFix(fallback) : noFix(status);
+      });
+    return await Promise.race([
+      live,
+      new Promise(resolve => {
+        timeoutId = setTimeout(() => resolve(cached ? withFix(cached) : noFix(status)), LOCATION_TIMEOUT);
+      }),
+    ]).finally(() => clearTimeout(timeoutId));
   } catch (error) {
-    console.error('Error getting location:', error);
-
-    let errorMessage = 'Unable to get your location';
-
-    if (error.code === 'E_LOCATION_SERVICES_DISABLED') {
-      errorMessage = 'Location services are disabled. Please enable them in your device settings.';
-    } else if (error.code === 'E_LOCATION_TIMEOUT') {
-      errorMessage = 'GPS timeout. Please move to an area with better GPS signal (outdoors or near a window) and try again.';
-    } else if (error.code === 'E_LOCATION_UNAVAILABLE') {
-      errorMessage = 'Unable to determine your location. Please make sure GPS is enabled and try again.';
-    }
-
-    return {
-      error: errorMessage,
-      coords: null,
-    };
+    return noFix(failureStatus(error));
   }
 };
 
@@ -187,7 +160,7 @@ export const getCurrentPosition = async () => {
  * Example: "Lat: -25.1234, Lon: 28.5678"
  */
 export const formatCoordinates = (latitude, longitude) => {
-  if (!latitude || !longitude) return 'No location';
+  if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) return 'No location';
 
   return `${latitude.toFixed(4)}, ${longitude.toFixed(4)}`;
 };

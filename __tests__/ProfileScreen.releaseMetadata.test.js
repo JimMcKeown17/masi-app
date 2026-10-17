@@ -3,8 +3,24 @@ import { Alert, TextInput as NativeTextInput } from 'react-native';
 import { act, fireEvent, render, waitFor } from '@testing-library/react-native';
 import { Button, PaperProvider } from 'react-native-paper';
 import ProfileScreen from '../src/screens/main/ProfileScreen';
-import { supabase } from '../src/services/supabaseClient';
+const mockChangePassword = jest.fn();
+const mockSignOut = jest.fn(async () => ({ error: null }));
+const mockCountUnsent = jest.fn(async () => ({ total: 2, byTable: {} }));
+const mockClockOut = jest.fn(async () => true);
 import { exportDatabase, exportLogs } from '../src/utils/debugExport';
+
+jest.mock('../src/hooks/useTimeTracking', () => ({
+  useTimeTracking: () => ({ isSignedIn: true, handleSignOut: mockClockOut }),
+}));
+jest.mock('../src/context/OfflineContext', () => ({
+  useOffline: () => ({ isOnline: true, syncNow: jest.fn() }),
+}));
+jest.mock('../src/context/SignedInEAContext', () => ({
+  useSignedInEA: () => ({
+    handle: { isCurrent: () => true },
+    repositories: { syncOutbox: { countUnsent: mockCountUnsent } },
+  }),
+}));
 
 jest.mock('expo-constants', () => ({
   expoConfig: {
@@ -61,11 +77,13 @@ jest.mock('../src/context/AuthContext', () => ({
       schoolName: 'Masi Primary',
     },
     updatePassword: jest.fn(),
-    signOut: jest.fn(),
+    changePassword: mockChangePassword,
+    signOut: mockSignOut,
   }),
 }));
 
 jest.mock('../src/services/supabaseClient', () => ({
+  ...require('../test-support/supabaseTestConfig'),
   supabase: {
     auth: {
       signInWithPassword: jest.fn(),
@@ -99,9 +117,31 @@ describe('ProfileScreen', () => {
     expect(getByText(/Project segygjzpujphwvrubusm/)).toBeTruthy();
   });
 
+  test('Sign Out asks about the shift before reading the signed-in handle unsent count', async () => {
+    const screen = render(
+      <PaperProvider>
+        <ProfileScreen navigation={{ goBack: jest.fn() }} />
+      </PaperProvider>
+    );
+    await act(async () => { fireEvent.press(screen.getByText('Sign Out')); });
+    expect(screen.getByText("You're still clocked in.")).toBeTruthy();
+    expect(mockCountUnsent).not.toHaveBeenCalled();
+    expect(mockSignOut).not.toHaveBeenCalled();
+
+    await act(async () => { fireEvent.press(screen.getByText('Stay clocked in and sign out')); });
+    expect(mockCountUnsent).toHaveBeenCalledTimes(1);
+    expect(screen.getByText("2 items haven't uploaded yet.")).toBeTruthy();
+    expect(mockClockOut).not.toHaveBeenCalled();
+    expect(mockSignOut).not.toHaveBeenCalled();
+
+    await act(async () => { fireEvent.press(screen.getByText('Sign out anyway')); });
+    expect(mockSignOut).toHaveBeenCalledTimes(1);
+  });
+
   test('does not blame the current password when verification fails over the network', async () => {
     const consoleError = jest.spyOn(console, 'error').mockImplementation(() => {});
-    supabase.auth.signInWithPassword.mockResolvedValueOnce({
+    mockChangePassword.mockResolvedValueOnce({
+      phase: 'verification',
       error: { message: 'Network request failed', status: 0 },
     });
     const screen = render(
@@ -128,7 +168,8 @@ describe('ProfileScreen', () => {
 
   test('reports an explicitly identified invalid credential as an incorrect current password', async () => {
     const consoleError = jest.spyOn(console, 'error').mockImplementation(() => {});
-    supabase.auth.signInWithPassword.mockResolvedValueOnce({
+    mockChangePassword.mockResolvedValueOnce({
+      phase: 'verification',
       error: {
         code: 'invalid_credentials',
         message: 'Invalid login credentials',

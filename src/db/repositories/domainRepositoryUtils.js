@@ -7,7 +7,7 @@ import {
   timestamp,
   upsertRecord,
 } from './sqliteRepositoryUtils';
-import { resolvePrimaryOwner } from './outboxOwnership';
+import { outboxRecordId } from './syncOutboxRepository';
 
 export const LEGACY_PROGRAMME_ID = 'local-legacy-programme';
 const MASI_DOMAIN_ID_NAMESPACE = '09dcf4b2-6c53-4c46-917f-33bc7f2df4d2';
@@ -82,7 +82,7 @@ export const ensureServerUuid = (id, ...fallbackParts) => {
   return deterministicDomainId(...fallbackParts);
 };
 
-export const outboxId = (tableName, recordId, operation) => `${tableName}:${recordId}:${operation}`;
+export const outboxId = outboxRecordId;
 
 export const assertRlsRequiredFields = (tableName, record, fields) => {
   for (const field of fields) {
@@ -109,24 +109,33 @@ export const enqueueDomainOutbox = async (
   recordId,
   operation,
   payload = null,
-  { ownerRow, ownerUserId } = {}
+  { outboxId: outboxIdOverride } = {}
 ) => {
-  let resolvedOwnerUserId = ownerUserId;
-  if (resolvedOwnerUserId === undefined) {
-    const row = ownerRow || await db.getFirstAsync(
-      `select * from ${quoteIdentifier(tableName)} where id = ?`,
-      recordId
-    ).catch(() => null);
-    resolvedOwnerUserId = await resolvePrimaryOwner({ db, tableName, row, payload });
-  }
-
   return insertOutboxRecord(db, {
-    id: outboxId(tableName, recordId, operation),
+    id: outboxIdOverride || outboxRecordId(tableName, recordId, operation),
     tableName,
     recordId,
     operation,
     payload,
-    ownerUserId: resolvedOwnerUserId,
+  });
+};
+
+// Lifecycle intents are one replaceable stream per record. Reusing the slot id lets a newer intent
+// replace an in-flight payload; the engine's updated_at CAS then prevents the stale request from
+// finalizing over it. Clean up operation-keyed rows left by older app builds before using the slot.
+export const enqueueLifecycleOutbox = async (db, tableName, recordId, operation, payload) => {
+  if (operation !== 'archive' && operation !== 'restore') {
+    throw new Error(`enqueueLifecycleOutbox: unsupported operation ${operation}`);
+  }
+  const legacyArchiveId = outboxRecordId(tableName, recordId, 'archive');
+  const legacyRestoreId = outboxRecordId(tableName, recordId, 'restore');
+  await db.runAsync(`
+    delete from sync_outbox
+    where id in (?, ?)
+      and status in ('pending', 'failed', 'terminal')
+  `, legacyArchiveId, legacyRestoreId);
+  return enqueueDomainOutbox(db, tableName, recordId, operation, payload, {
+    outboxId: outboxRecordId(tableName, recordId, 'lifecycle'),
   });
 };
 

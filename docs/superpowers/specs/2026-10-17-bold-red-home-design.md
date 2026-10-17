@@ -1,5 +1,11 @@
 # Bold Red Home — Design
 
+> **2026-10-17 status:** Reconciled with the signed-in EA handle, upload-path, location,
+> session-history and sign-out changes in main. See the
+> [reconciliation plan](../plans/2026-10-17-bold-red-home-reconcile.md) and
+> [build log](../../../documentation/build-log.md) for current implementation and verification.
+> The design below preserves the original review snapshot.
+
 **Date:** 2026-10-17
 **Status:** Draft for Codex adversarial review
 **Branch:** `feat/bold-red-home`

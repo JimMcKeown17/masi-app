@@ -1,10 +1,11 @@
+import { useSignedInEA } from '../../context/SignedInEAContext';
 import React, { useState, useCallback, useRef } from 'react';
 import { View, StyleSheet, ScrollView } from 'react-native';
 import { Text, Card, Button } from 'react-native-paper';
 import { useFocusEffect } from '@react-navigation/native';
 import { useAuth } from '../../context/AuthContext';
 import { colors, spacing, borderRadius, shadows } from '../../constants/colors';
-import { assessmentsRepository } from '../../db/repositories/assessmentsRepository';
+
 import { LETTER_SETS, WORD_SETS } from '../../constants/egraConstants';
 import { normalizeLanguageKey } from '../../utils/letterMastery';
 import { resolveAssessmentRoute } from '../../utils/assessmentRouting';
@@ -28,6 +29,9 @@ function getFeedbackColor(accuracy) {
 }
 
 export default function ChildResultsScreen({ navigation, route }) {
+  const { repositories } = useSignedInEA();
+  const { assessments: assessmentsRepository } = repositories;
+
   const { user } = useAuth();
   const { child, classItem } = route.params;
   const childName = `${child.first_name} ${child.last_name}`;

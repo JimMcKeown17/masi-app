@@ -1,5 +1,7 @@
+import { bindTestActor } from '../test-support/actorTestUtils';
 jest.mock('expo-sqlite', () => require('../test-support/expoSQLiteMock'));
-jest.mock('../src/services/supabaseClient', () => ({ supabase: {} }));
+jest.mock('../src/services/supabaseClient', () => ({
+  ...require('../test-support/supabaseTestConfig'), supabase: {} }));
 
 import { createBetterSqliteTestDatabase } from '../test-support/betterSqliteAdapter';
 import { runMigrations } from '../src/db/migrations';
@@ -7,7 +9,8 @@ import { createSyncOutboxRepository } from '../src/db/repositories/syncOutboxRep
 import { outboxRecordId } from '../src/db/repositories/syncOutboxRepository';
 import { createSyncStateRepository } from '../src/db/repositories/syncStateRepository';
 import { createOutboxSyncEngine } from '../src/services/offlineSync';
-import { createSupabaseRequestQueue } from '../src/services/supabaseRequestQueue';
+
+import { createHandleRequestQueue } from '../src/session/handleRequestQueue';
 
 const liveTestSession = async () => ({
   data: { session: { user: { id: 'test-user' } } },
@@ -61,14 +64,14 @@ const seedTimeEntry = async (db, id) => {
 };
 
 it('one record fails while the healthy record still syncs and meta is written', async () => {
-  const db = createBetterSqliteTestDatabase(':memory:');
+  const db = bindTestActor(createBetterSqliteTestDatabase(':memory:'), 'test-user');
   await runMigrations(db);
   await seedClass(db, 'class-good');
   await seedTimeEntry(db, 'time-bad');
 
   const beforeSync = new Date().toISOString();
   // time_entries upsert errors (retriable); classes succeeds.
-  const engine = createOutboxSyncEngine({ getAuthSession: liveTestSession, database: db, supabaseClient: supabaseFailingTable('time_entries') });
+  const engine = createOutboxSyncEngine({ enqueueRequest: (task) => task(), getAuthSession: liveTestSession, database: db, supabaseClient: supabaseFailingTable('time_entries') });
 
   const result = await engine.syncAll();
 
@@ -98,7 +101,7 @@ it('one record fails while the healthy record still syncs and meta is written', 
 });
 
 it('a getById throw after markInFlight does not strand the row in_flight and the pass completes', async () => {
-  const db = createBetterSqliteTestDatabase(':memory:');
+  const db = bindTestActor(createBetterSqliteTestDatabase(':memory:'), 'test-user');
   await runMigrations(db);
   await seedClass(db, 'class-good');
   await seedTimeEntry(db, 'time-getbyid-boom');
@@ -114,7 +117,7 @@ it('a getById throw after markInFlight does not strand the row in_flight and the
   };
 
   const beforeSync = new Date().toISOString();
-  const engine = createOutboxSyncEngine({ getAuthSession: liveTestSession, database: db, outboxRepository: wrapped, supabaseClient: successSupabase() });
+  const engine = createOutboxSyncEngine({ enqueueRequest: (task) => task(), getAuthSession: liveTestSession, database: db, outboxRepository: wrapped, supabaseClient: successSupabase() });
 
   // Must not throw.
   const result = await engine.syncAll();
@@ -142,7 +145,7 @@ it('a getById throw after markInFlight does not strand the row in_flight and the
 });
 
 it('sync meta is written even when a loop-body path throws', async () => {
-  const db = createBetterSqliteTestDatabase(':memory:');
+  const db = bindTestActor(createBetterSqliteTestDatabase(':memory:'), 'test-user');
   await runMigrations(db);
   await seedTimeEntry(db, 'time-loop-throw');
 
@@ -159,7 +162,7 @@ it('sync meta is written even when a loop-body path throws', async () => {
   const stateRepository = createSyncStateRepository({ database: db });
   const updateSpy = jest.spyOn(stateRepository, 'updateSyncMeta');
 
-  const engine = createOutboxSyncEngine({
+  const engine = createOutboxSyncEngine({ enqueueRequest: (task) => task(),
     getAuthSession: liveTestSession,
     database: db,
     outboxRepository: wrapped,
@@ -213,7 +216,7 @@ const seedAssessmentItem = async (db, itemId, position, assessmentId = 'assessme
 };
 
 it('Fix 2 (Test A): a fallback processRecord markInFlight throw is owned by processBatch — no in_flight, no double-process', async () => {
-  const db = createBetterSqliteTestDatabase(':memory:');
+  const db = bindTestActor(createBetterSqliteTestDatabase(':memory:'), 'test-user');
   await runMigrations(db);
 
   // Seed prerequisite data: school, programme, child.
@@ -274,8 +277,8 @@ it('Fix 2 (Test A): a fallback processRecord markInFlight throw is owned by proc
   };
 
   // Use a fresh isolated queue so global queue state from other tests doesn't leak in.
-  const freshQueue = createSupabaseRequestQueue();
-  const engine = createOutboxSyncEngine({
+  const freshQueue = createHandleRequestQueue({ isOpen: () => true });
+  const engine = createOutboxSyncEngine({ enqueueRequest: (task) => task(),
     getAuthSession: liveTestSession,
     database: db,
     supabaseClient: batchErrorThenPerRowSupabase,
@@ -334,7 +337,7 @@ it('Fix 2 (Test A): a fallback processRecord markInFlight throw is owned by proc
 // handles each independently. B synced, A pending/failed, none in_flight, B not re-sent.
 
 it('Task 9 (allSettled race): sibling B synced even when A markInFlight throws before B upload settles', async () => {
-  const db = createBetterSqliteTestDatabase(':memory:');
+  const db = bindTestActor(createBetterSqliteTestDatabase(':memory:'), 'test-user');
   await runMigrations(db);
 
   // Prerequisite domain rows.
@@ -409,8 +412,8 @@ it('Task 9 (allSettled race): sibling B synced even when A markInFlight throws b
     },
   };
 
-  const freshQueue = createSupabaseRequestQueue();
-  const engine = createOutboxSyncEngine({
+  const freshQueue = createHandleRequestQueue({ isOpen: () => true });
+  const engine = createOutboxSyncEngine({ enqueueRequest: (task) => task(),
     getAuthSession: liveTestSession,
     database: db,
     supabaseClient: supabaseMock,
@@ -465,7 +468,7 @@ it('Task 9 (allSettled race): sibling B synced even when A markInFlight throws b
 });
 
 it('resetInFlight failure surfaces a preflight error, syncs healthy rows, and the stranded in_flight row recovers next pass', async () => {
-  const db = createBetterSqliteTestDatabase(':memory:');
+  const db = bindTestActor(createBetterSqliteTestDatabase(':memory:'), 'test-user');
   await runMigrations(db);
 
   // A healthy pending row that must still sync despite the reset failure.
@@ -494,7 +497,7 @@ it('resetInFlight failure surfaces a preflight error, syncs healthy rows, and th
   };
 
   const beforeSync = new Date().toISOString();
-  const engine = createOutboxSyncEngine({
+  const engine = createOutboxSyncEngine({ enqueueRequest: (task) => task(),
     getAuthSession: liveTestSession,
     database: db,
     outboxRepository: wrapped,
