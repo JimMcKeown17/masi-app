@@ -1,7 +1,7 @@
 import React, { createContext, useState, useEffect, useContext, useRef, useCallback, useMemo } from 'react';
 import { supabase } from '../services/supabaseClient';
 import { readPersistedSession, clearPersistedSession } from '../services/persistedAuthSession';
-import { admitAuthSessionUser, revokeAuthSessionAdmission } from '../services/authSessionStorage';
+import { admitAuthSessionUser, revokeAuthSessionAdmission, normalizeAuthEmail } from '../services/authSessionStorage';
 import { requestOpen, requestClose, getCurrentHandle, subscribeToHandle, setLatestAuthSession } from '../session/signedInHandle';
 import { createPasswordVerificationClient } from '../services/passwordVerificationClient';
 import { StaleActorError } from '../session/staleActor';
@@ -20,7 +20,7 @@ export const AuthProvider = ({ children }) => {
   const generationRef = useRef(0);
   const signOutOperationRef = useRef(null);
   const authMutationRef = useRef(Promise.resolve());
-  const signInPendingRef = useRef(false);
+  const signInPendingRef = useRef(null);
   const localSignOutCommittedRef = useRef(false);
   const pendingSignOutTimeoutRef = useRef(null);
   const authListenersRef = useRef(new Set());
@@ -55,6 +55,7 @@ export const AuthProvider = ({ children }) => {
     if (currentUserRef.current) return openForUser(currentUserRef.current);
   }, [openForUser]);
   const commitSignedOutState = async (reason) => {
+    signInPendingRef.current = null;
     revokeAuthSessionAdmission();
     const generation = ++generationRef.current;
     clearPendingSignOutTimeout();
@@ -101,12 +102,13 @@ export const AuthProvider = ({ children }) => {
     return operation.local;
   };
   const resolveColdStartGate = async (reason) => {
+    if (signInPendingRef.current) return;
     const generation = generationRef.current;
     if (localSignOutCommittedRef.current) return commitSignedOutState(reason);
     const persisted = await readPersistedSession();
     if (generation !== generationRef.current || !mountedRef.current) return;
     if (persisted?.user?.id) {
-      admitAuthSessionUser(persisted.user.id);
+      admitAuthSessionUser({ id: persisted.user.id });
       if (currentUserRef.current?.id !== persisted.user.id) {
         setSession(null);
         return openForUser(persisted.user);
@@ -129,11 +131,14 @@ export const AuthProvider = ({ children }) => {
       if (event === 'INITIAL_SESSION' && signInPendingRef.current) return;
       for (const listener of authListenersRef.current) listener(event, nextSession ?? null);
       if (nextSession?.user) {
+        const pendingSignIn = signInPendingRef.current;
+        if (event === 'SIGNED_IN' && pendingSignIn
+          && normalizeAuthEmail(nextSession.user.email) !== pendingSignIn.email) return;
         if (localSignOutCommittedRef.current && event !== 'SIGNED_IN') return;
         if (event !== 'SIGNED_IN' && currentUserRef.current
           && currentUserRef.current.id !== nextSession.user.id) return;
-        if (event === 'SIGNED_IN' || event === 'INITIAL_SESSION' || event === 'TOKEN_REFRESHED') {
-          admitAuthSessionUser(nextSession.user.id);
+        if ((event === 'SIGNED_IN' && pendingSignIn) || event === 'INITIAL_SESSION') {
+          admitAuthSessionUser({ id: nextSession.user.id });
         }
         ++generationRef.current;
         setLatestAuthSession(nextSession);
@@ -189,28 +194,34 @@ export const AuthProvider = ({ children }) => {
   }, []);
 
   const signIn = useCallback(async (email, password) => {
+    let attempt;
     try {
       while (signOutOperationRef.current) await signOutOperationRef.current.complete;
       ++generationRef.current;
-      signInPendingRef.current = true;
-      admitAuthSessionUser('*');
+      attempt = {
+        email: normalizeAuthEmail(email),
+        previousAdmission: null,
+      };
+      const previous = admitAuthSessionUser({ email: attempt.email });
+      // Snapshot admission itself, which may already be restored before the UI.
+      // A superseded login retains the last settled identity for failure rollback.
+      attempt.previousAdmission = previous?.id ? previous : signInPendingRef.current?.previousAdmission ?? null;
+      signInPendingRef.current = attempt;
       const { data, error } = await supabase.auth.signInWithPassword({
-        email,
+        email: attempt.email,
         password,
       });
 
       if (error) throw error;
       return { data, error: null };
     } catch (error) {
+      if (attempt && signInPendingRef.current === attempt) {
+        admitAuthSessionUser(attempt.previousAdmission);
+      }
       console.error('Sign in error:', error);
       return { data: null, error };
     } finally {
-      signInPendingRef.current = false;
-      if (!localSignOutCommittedRef.current && currentUserRef.current?.id) {
-        admitAuthSessionUser(currentUserRef.current.id);
-      } else {
-        revokeAuthSessionAdmission();
-      }
+      if (signInPendingRef.current === attempt) signInPendingRef.current = null;
     }
   }, []);
 

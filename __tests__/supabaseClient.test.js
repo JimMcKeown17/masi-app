@@ -117,10 +117,10 @@ describe('supabase client guardrails', () => {
       revokeAuthSessionAdmission();
       await supabase.auth._saveSession(value);
       expect(await storage.getItem(supabase.auth.storageKey)).toBeNull();
-      admitAuthSessionUser('*');
+      admitAuthSessionUser({ id: 'A' });
       await supabase.auth._saveSession(value);
       expect(JSON.parse(await storage.getItem(supabase.auth.storageKey)).user.id).toBe('A');
-      admitAuthSessionUser('B');
+      admitAuthSessionUser({ id: 'B' });
       await supabase.auth._saveSession({ ...value, user: { id: 'B' } });
       await supabase.auth._saveSession(value);
       expect(JSON.parse(await storage.getItem(supabase.auth.storageKey)).user.id).toBe('B');
