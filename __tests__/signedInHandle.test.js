@@ -761,7 +761,9 @@ test('open adopts legacy work and quarantines foreign work before recovering the
   expect(rows).toEqual(['a', 'b', 'null', 'pending'].map((id) => ({
     id, owner_user_id: id === 'b' ? B : A,
     status: id === 'b' ? 'terminal' : 'pending', retry_count: 3,
-    next_retry_at: id === 'b' ? null : 'later', last_error: id === 'b' ? 'foreign_owner' : null,
+    next_retry_at: id === 'b' ? null : 'later',
+    last_error: id === 'b' ? 'foreign_owner'
+      : id === 'pending' ? null : 'Upload interrupted; server outcome unknown',
   })));
 });
 

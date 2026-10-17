@@ -143,7 +143,7 @@ describe('retryFailedItem resets retry_count', () => {
     expect(row.status).toBe('pending');
     expect(row.retry_count).toBe(0);
     expect(row.next_retry_at).toBeNull();
-    expect(row.last_error).toBeNull();
+    expect(row.last_error).toBe('network error'); // Child INSERT dispatch evidence survives retry.
   });
 
   it('also resets terminal rows to pending with retry_count=0', async () => {

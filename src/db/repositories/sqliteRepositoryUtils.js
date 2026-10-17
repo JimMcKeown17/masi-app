@@ -272,7 +272,10 @@ export const insertOutboxRecord = async (db, {
       created_at: createdAt,
       updated_at: createdAt,
     },
-    preserveOnConflictColumns: ['created_at'],
+    // A child INSERT's error also records an uncertain dispatch. Replacing its
+    // payload must not make a later delete mistake it for a never-sent child.
+    preserveOnConflictColumns: tableName === 'children' && operation === 'insert'
+      ? ['created_at', 'last_error'] : ['created_at'],
     jsonColumns: ['payload'],
   });
 };

@@ -1363,10 +1363,10 @@ describe('SQLite outbox offline sync', () => {
   test('routes reference preload pulls through the Supabase request queue boundary', async () => {
     const events = [];
     const repositories = {
-      schools: { replaceFromServer: jest.fn() },
+      schools: { getAll: jest.fn(async () => []), replaceFromServer: jest.fn() },
       job_titles: { replaceFromServer: jest.fn() },
-      programmes: { replaceFromServer: jest.fn() },
-      academic_years: { replaceFromServer: jest.fn() },
+      programmes: { getAll: jest.fn(async () => []), replaceFromServer: jest.fn() },
+      academic_years: { getAll: jest.fn(async () => []), replaceFromServer: jest.fn() },
       assessment_windows: { replaceFromServer: jest.fn() },
       teachers: { replaceFromServer: jest.fn() },
       staff_programme_assignments: { replaceFromServer: jest.fn() },
@@ -2606,10 +2606,10 @@ describe('SQLite outbox offline sync', () => {
       })),
     };
     const repositories = {
-      schools: { replaceFromServer: jest.fn() },
+      schools: { getAll: jest.fn(async () => []), replaceFromServer: jest.fn() },
       job_titles: { replaceFromServer: jest.fn() },
-      programmes: { replaceFromServer: jest.fn() },
-      academic_years: { replaceFromServer: jest.fn() },
+      programmes: { getAll: jest.fn(async () => []), replaceFromServer: jest.fn() },
+      academic_years: { getAll: jest.fn(async () => []), replaceFromServer: jest.fn() },
       assessment_windows: { replaceFromServer: jest.fn() },
       teachers: { replaceFromServer: jest.fn() },
       staff_programme_assignments: { replaceFromServer: jest.fn() },

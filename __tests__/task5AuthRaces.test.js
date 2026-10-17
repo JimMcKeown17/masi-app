@@ -8,6 +8,7 @@ import { AuthProvider, useAuth } from '../src/context/AuthContext';
 import { SignedInEAProvider } from '../src/context/SignedInEAContext';
 import ProfileScreen from '../src/screens/main/ProfileScreen';
 import HomeScreen from '../src/screens/main/HomeScreen';
+import SessionFormScreen from '../src/screens/sessions/SessionFormScreen';
 import { OfflineProvider, useOffline } from '../src/context/OfflineContext';
 import { ChildrenProvider, useChildren } from '../src/context/ChildrenContext';
 import { ClassesProvider, useClasses } from '../src/context/ClassesContext';
@@ -31,12 +32,17 @@ let mockNetwork = { isConnected: false };
 const mockNetListeners = new Set();
 const navigation = { navigate: jest.fn() };
 let roster;
+let profileAuth;
 const bootstrapStates = [];
 jest.mock('../src/services/supabaseClient', () => ({ ...require('../test-support/supabaseTestConfig'), supabase: { get auth() { return mockClient.auth; } } }));
 jest.mock('@react-native-community/netinfo', () => ({ fetch: async () => mockNetwork, addEventListener: fn => { mockNetListeners.add(fn); return () => mockNetListeners.delete(fn); } }));
 jest.mock('@react-navigation/native', () => ({ NavigationContext: require('react').createContext(null), useFocusEffect: fn => require('react').useEffect(fn, [fn]) }));
 jest.mock('@expo/vector-icons', () => ({ Ionicons: () => null }), { virtual: true });
 jest.mock('../src/hooks/useTimeTracking', () => ({ useTimeTracking: () => ({ isSignedIn: false }) }));
+jest.mock('../src/screens/sessions/LiteracySessionForm', () => {
+  const React = require('react'); const { Text } = require('react-native');
+  return () => <Text>Literacy session form</Text>;
+});
 
 function Roster() {
   roster = { children: useChildren(), classes: useClasses(), offline: useOffline() };
@@ -44,9 +50,16 @@ function Roster() {
   return <PaperProvider><HomeScreen navigation={navigation} /></PaperProvider>;
 }
 
-function Tree({ profile = false, rosters = false }) {
+function ProfileProbe() {
+  profileAuth = useAuth();
+  return <Text testID="profile-role">{profileAuth.profile?.jobTitleCode || 'missing'}</Text>;
+}
+
+function Tree({ profile = false, rosters = false, sessionForm = false }) {
   auth = useAuth();
   return <><Text testID="actor">{auth.user?.id || 'signed-out'}</Text>{auth.user && auth.handle && <SignedInEAProvider key={`${auth.handle.userId}:${auth.handle.epoch}`} handle={auth.handle}>
+    <ProfileProbe />
+    {sessionForm ? <PaperProvider><SessionFormScreen navigation={navigation} /></PaperProvider> : null}
     {profile ? <PaperProvider><ProfileScreen navigation={{ navigate: jest.fn() }} /></PaperProvider> : null}
     {rosters ? <OfflineProvider><ChildrenProvider><ClassesProvider><Roster /></ClassesProvider></ChildrenProvider></OfflineProvider> : null}
   </SignedInEAProvider>}</>;
@@ -75,6 +88,36 @@ beforeEach(async () => {
     global: { fetch: authRequestFetch },
   });
   await mockClient.auth.initialize();
+});
+
+test('offline first launch loads the profile on reconnect and coalesces concurrent profile refreshes', async () => {
+  const entered = barrier(); const release = barrier();
+  const originalTransport = transport.getMockImplementation();
+  transport.mockImplementation(async (url, init) => {
+    if (new URL(url).pathname === '/rest/v1/users') {
+      entered.resolve(); await release.promise;
+      return json({ id: A, job_title_lookup: { code: 'literacy_coach', name: 'Literacy Coach' } });
+    }
+    return originalTransport(url, init);
+  });
+  const view = render(<AuthProvider><Tree /></AuthProvider>);
+  await signIn(A);
+  expect(view.getByTestId('profile-role').props.children).toBe('missing');
+  expect(transport.mock.calls.filter(([url]) => String(url).includes('/rest/v1/users'))).toHaveLength(0);
+  try {
+    await act(async () => {
+      mockNetwork = { isConnected: true };
+      for (const listener of mockNetListeners) listener(mockNetwork);
+    });
+    await waitFor(() => expect(transport.mock.calls.filter(([url]) => String(url).includes('/rest/v1/users'))).toHaveLength(1));
+    await entered.promise;
+    let retries;
+    act(() => { retries = Promise.all([profileAuth.refreshProfile(), profileAuth.refreshProfile()]); });
+    await act(async () => { release.resolve(); await retries; });
+    await waitFor(() => expect(view.getByTestId('profile-role').props.children).toBe('literacy_coach'));
+    expect(transport.mock.calls.filter(([url]) => String(url).includes('/rest/v1/users'))).toHaveLength(1);
+    expect((await getCurrentHandle().services.deviceProfile.get()).jobTitleCode).toBe('literacy_coach');
+  } finally { release.resolve(); }
 });
 afterEach(async () => { cleanup(); await mockClient.auth.stopAutoRefresh(); await resetHandleRegistryForTests(); await engine.__resetMockDatabases(); jest.restoreAllMocks(); jest.useRealTimers(); });
 
@@ -802,4 +845,68 @@ test('online transition and reconnect nonce during initial SQLite reads run one 
       expect(transport.mock.calls.filter(([url]) => new URL(url).pathname === `/rest/v1/${table}`)).toHaveLength(1);
     }
   } finally { release.resolve(); }
+});
+
+test('a failed initial profile request leaves New Session retryable and Retry opens the literacy form', async () => {
+  mockNetwork = { isConnected: true };
+  const failures = jest.spyOn(console, 'error').mockImplementation(() => {});
+  const originalTransport = transport.getMockImplementation();
+  let fail = true;
+  transport.mockImplementation(async (url, init) => {
+    if (new URL(url).pathname === '/rest/v1/users') {
+      if (fail) return new Response(JSON.stringify({ message: 'Profile unavailable' }), { status: 503 });
+      return json({ id: A, job_title_lookup: { code: 'literacy_coach', name: 'Literacy Coach' } });
+    }
+    return originalTransport(url, init);
+  });
+  const view = render(<AuthProvider><Tree sessionForm /></AuthProvider>);
+  await signIn(A);
+  await waitFor(() => expect(failures).toHaveBeenCalledWith('Error loading profile:', expect.anything()));
+  expect(view.queryByText(/coming soon/) === null).toBe(true);
+  expect(view.getByText('Loading your profile...')).toBeTruthy();
+  expect(transport.mock.calls.filter(([url]) => String(url).includes('/rest/v1/users'))).toHaveLength(1);
+  fail = false;
+  fireEvent.press(view.getByText('Retry'));
+  await waitFor(() => expect(view.getByText('Literacy session form')).toBeTruthy());
+  expect(view.queryByText('Loading your profile...')).toBeNull();
+  expect(transport.mock.calls.filter(([url]) => String(url).includes('/rest/v1/users'))).toHaveLength(2);
+});
+
+test('ClassesContext never confirms an empty roster after a partial reference refresh fails', async () => {
+  const errors = jest.spyOn(console, 'error').mockImplementation(() => {});
+  const view = render(<AuthProvider><Tree /></AuthProvider>);
+  await signIn(A);
+  const handle = getCurrentHandle();
+  const school = { id: 'school', name: 'School' };
+  const programme = { id: 'programme', code: 'literacy', name: 'Literacy' };
+  const year = { id: 'year', label: '2026', starts_on: '2026-01-01', ends_on: '2026-12-31', is_active: true };
+  const classroom = { id: 'class', name: 'Class', school_id: school.id, grade: '1', academic_year_id: year.id, created_by: A };
+  const assignment = { id: 'class-assignment', class_id: classroom.id, ea_user_id: A, programme_id: programme.id, assigned_at: '2026-01-01', created_by: A };
+  let fail = true;
+  transport.mockImplementation(async (url) => {
+    const table = new URL(url).pathname.split('/').pop();
+    if (table === 'teachers' && fail) return new Response(JSON.stringify({ message: 'Reference refresh failed' }), { status: 503 });
+    if (table === 'users') return json(session(A).user);
+    if (table === 'get_reconcile_acknowledgments') return json({ schema_version: 1, complete: true, user_id: A, active_programme_id: programme.id,
+      child_ea_assignment_ids: [], assigned_child_ids: [], visible_child_ids: [], child_programme_enrollment_ids: [],
+      child_class_membership_ids: [], class_ea_assignment_ids: [assignment.id], class_ids: [classroom.id],
+      group_ea_assignment_ids: [], group_ids: [], child_group_membership_ids: [] });
+    return json({ schools: [school], programmes: [programme], academic_years: [year],
+      staff_programme_assignments: [{ id: 'staff', user_id: A, programme_id: programme.id }],
+      classes: [{ ...classroom, class_ea_assignments: [assignment] }],
+    }[table] || []);
+  });
+  await expect(handle.services.pullReferenceData()).rejects.toMatchObject({ message: 'Reference refresh failed' });
+  expect(await handle.repositories.staffProgrammeAssignments.getAll()).toEqual([]);
+  mockNetwork = { isConnected: true };
+  view.rerender(<AuthProvider><Tree rosters /></AuthProvider>);
+  await waitFor(() => expect(roster?.classes.loading).toBe(false));
+  expect(bootstrapStates).not.toContain('confirmed_empty');
+  expect(roster.classes.classBootstrapStatus).toBe('unconfirmed_empty');
+  expect(errors).toHaveBeenCalledWith('Error in pullFromServer:', expect.anything());
+  fail = false;
+  await act(async () => { await roster.classes.loadClasses(); });
+  await waitFor(() => expect(roster.classes.classes.map(row => row.id)).toEqual([classroom.id]));
+  expect(roster.classes.classBootstrapStatus).toBe('available');
+  expect(bootstrapStates).not.toContain('confirmed_empty');
 });

@@ -58,7 +58,7 @@ describe('SQLite sync outbox repository', () => {
     expect(JSON.parse(rows[0].payload)).toEqual({ id: 'child-1', first_name: 'Updated' });
   });
 
-  test('re-enqueue refreshes pending work without changing its original queue age', async () => {
+  test('re-enqueue refreshes pending work while preserving queue age and child INSERT dispatch evidence', async () => {
     jest.useFakeTimers();
     try {
       jest.setSystemTime(new Date('2026-07-14T08:00:00.000Z'));
@@ -90,7 +90,7 @@ describe('SQLite sync outbox repository', () => {
       expect(row).toEqual(expect.objectContaining({
         status: 'pending',
         retry_count: 0,
-        last_error: null,
+        last_error: 'offline',
         next_retry_at: null,
       }));
       expect(JSON.parse(row.payload)).toEqual({ id: 'child-queue-age', first_name: 'Fresh' });

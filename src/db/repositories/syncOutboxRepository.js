@@ -147,6 +147,8 @@ export const createSyncOutboxRepository = ({ database } = {}) => {
   const updateInFlight = async (txn, ids, now) => txn.runAsync(`
     update sync_outbox
     set status = 'in_flight',
+        last_error = case when table_name = 'children' and operation = 'insert'
+          then coalesce(last_error, 'Upload started; server outcome unknown') else last_error end,
         updated_at = ?
     where id in (${sqlPlaceholders(ids.length)})
   `, now, ...ids);
@@ -178,6 +180,8 @@ export const createSyncOutboxRepository = ({ database } = {}) => {
     await txn.runAsync(`
       update sync_outbox
       set status = 'pending',
+          last_error = case when table_name = 'children' and operation = 'insert'
+            then coalesce(last_error, 'Upload interrupted; server outcome unknown') else last_error end,
           updated_at = ?
       where status = 'in_flight'
         ${ownerScoped ? 'and owner_user_id = ?' : ''}
@@ -275,7 +279,8 @@ export const createSyncOutboxRepository = ({ database } = {}) => {
           set status = 'pending',
               retry_count = 0,
               next_retry_at = null,
-              last_error = null,
+              last_error = case when table_name = 'children' and operation = 'insert'
+                then last_error else null end,
               updated_at = ?
           where id = ?
             and status = 'terminal'

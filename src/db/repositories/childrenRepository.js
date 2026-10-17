@@ -814,12 +814,13 @@ export const createChildrenRepository = ({ database } = {}) => {
     if (!child) return false;
 
     // Sync status describes the latest edit, not whether INSERT was acknowledged.
-    // An in-flight INSERT may already have committed remotely, so retain it and
-    // follow it with the server's history-checked deletion.
+    // Any attempted INSERT may have committed remotely, including a failed request
+    // or one reset after reopening. Only an untouched INSERT proves local-only data.
     const localInsert = await txn.getFirstAsync(`
       select id from sync_outbox
       where table_name = 'children' and record_id = ? and operation = 'insert'
-        and status in ('pending', 'failed', 'terminal')
+        and status = 'pending'
+        and retry_count = 0 and last_error is null
     `, childId);
     await txn.runAsync(`
       delete from sync_outbox

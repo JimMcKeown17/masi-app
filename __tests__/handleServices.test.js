@@ -84,7 +84,9 @@ test.each(['update', 'batch'])('T3 / whole-pass: stale %s stops the pass without
   expect(transport).toHaveBeenCalledTimes(1);
   expect(await b.repositories.children.getChildren()).toEqual([]);
   const again = await open(A, transport);
-  expect(await pending(again)).toEqual(before);
+  expect(await pending(again)).toEqual(before.map(row => ({
+    ...row, last_error: mode === 'batch' ? 'Upload started; server outcome unknown' : row.last_error,
+  })));
   expect((await again.repositories.children.getChildren()).every((row) => row.sync_status === 'pending')).toBe(true);
   await assertNoAttempt(again);
   expect(report).not.toHaveBeenCalled();
@@ -296,7 +298,9 @@ test('whole-pass cancellation during batch fallback leaves every row pending on 
   expect(transport).toHaveBeenCalledTimes(2);
   expect(transport.mock.calls[1][1].signal.aborted).toBe(true);
   const again = await open(A, transport);
-  expect(await pending(again)).toEqual(before);
+  expect(await pending(again)).toEqual(before.map(row => ({
+    ...row, last_error: 'Upload started; server outcome unknown',
+  })));
   await assertNoAttempt(again);
 });
 
@@ -325,4 +329,146 @@ test('bound schools, lookups and class pulls persist through the handle reposito
   expect(await a.repositories.classes.getClasses({ userId: A })).toEqual([expect.objectContaining({ id: 'server-class', sync_status: 'synced' })]);
   expect(await a.repositories.syncState.getPullState('classes_pull')).toMatchObject({ lastPulledAt: expect.any(String) });
   expect(await pending(a)).toEqual([]);
+});
+
+test('a partial background reference pull cannot satisfy readiness; readiness retries the missing staff assignment', async () => {
+  let fail = true;
+  const transport = jest.fn(async (url) => {
+    const table = new URL(url).pathname.split('/').pop();
+    if (table === 'staff_programme_assignments' && fail) return response({ message: 'staff references failed' }, 503);
+    return response(referenceRows(table, A));
+  });
+  const a = await open(A, transport);
+  await expect(a.services.pullReferenceData()).rejects.toMatchObject({ message: 'staff references failed' });
+  expect(await a.repositories.schools.getAll()).toHaveLength(1);
+  expect(await a.repositories.programmes.getAll()).toHaveLength(1);
+  expect(await a.repositories.academicYears.getAll()).toHaveLength(1);
+  expect(await a.repositories.staffProgrammeAssignments.getAll()).toEqual([]);
+  await expect(a.services.referenceDataReady()).rejects.toMatchObject({ message: 'staff references failed' });
+  expect(transport.mock.calls.filter(([url]) => String(url).includes('/staff_programme_assignments'))).toHaveLength(2);
+  fail = false;
+  await a.services.referenceDataReady();
+  expect(await a.repositories.staffProgrammeAssignments.getAll()).toEqual([expect.objectContaining({ user_id: A })]);
+});
+
+test('cold readiness joins the background reference pull and waits for its last table', async () => {
+  const entered = deferred(); const release = deferred();
+  const transport = jest.fn(async (url) => {
+    const table = new URL(url).pathname.split('/').pop();
+    if (table === 'staff_programme_assignments') { entered.resolve(); await release.promise; }
+    return response(referenceRows(table, A));
+  });
+  const a = await open(A, transport);
+  const refresh = a.services.pullReferenceData();
+  await within(entered.promise);
+  let ready = false;
+  const readiness = a.services.referenceDataReady().then(() => { ready = true; });
+  try {
+    // Queue a local read after the cache inspection to let a wrongly accepted barrier settle.
+    await a.repositories.schools.getAll();
+    expect(ready).toBe(false);
+    release.resolve();
+    await Promise.all([readiness, refresh]);
+    expect(await a.repositories.staffProgrammeAssignments.getAll()).toHaveLength(1);
+    expect(transport).toHaveBeenCalledTimes(7);
+  } finally { release.resolve(); }
+});
+
+test.each([true, false])('a previously completed cache is ready offline after reopen, assigned = %s', async assigned => {
+  const a = await open(A, async url => {
+    const table = new URL(url).pathname.split('/').pop();
+    return response(!assigned && table === 'staff_programme_assignments' ? [] : referenceRows(table, A));
+  });
+  await a.services.pullReferenceData();
+  await requestClose({ reason: 'offline restart' });
+  const offline = jest.fn(async () => { throw new TypeError('Offline'); });
+  const reopened = await open(A, offline);
+  await reopened.services.referenceDataReady();
+  expect(offline).not.toHaveBeenCalled();
+  expect(await reopened.repositories.staffProgrammeAssignments.getAll()).toHaveLength(assigned ? 1 : 0);
+});
+
+test.each(['failed', 'terminal', 'manual retry', 'terminal requeue', 're-enqueue'])('deleting a child after a committed insert loses its response retains the insert and queues hard_delete: %s', async mode => {
+  const server = new Map();
+  let loseResponse = true;
+  const transport = jest.fn(async (url, init) => {
+    const table = new URL(url).pathname.split('/').pop();
+    const payload = JSON.parse(init.body);
+    if (table === 'delete_child_if_no_history') {
+      server.delete(payload.p_child_id);
+      return response(true);
+    }
+    expect(table).toBe('children');
+    for (const row of Array.isArray(payload) ? payload : [payload]) server.set(row.id, row);
+    if (loseResponse) { loseResponse = false; throw new TypeError('Response lost after server commit'); }
+    return response();
+  });
+  const a = await open(A, transport);
+  await a.repositories.children.saveChildRecord(child());
+  await a.services.syncEngine.syncAll();
+  expect(server.has(CHILD)).toBe(true);
+  expect(await pending(a)).toEqual([expect.objectContaining({ status: 'failed', retry_count: 1 })]);
+  const insertId = `children:${CHILD}:insert`;
+  if (mode === 'manual retry') await a.services.syncEngine.retryFailedItem('children', CHILD);
+  if (mode === 'terminal' || mode === 'terminal requeue') {
+    await a.repositories.syncOutbox.markTerminalFailure(insertId, { errorMessage: 'Upload failed' });
+    if (mode === 'terminal requeue') await a.repositories.syncOutbox.requeueTerminalRows([insertId]);
+  }
+  if (mode === 're-enqueue') await a.repositories.children.saveChildRecord({ ...child(), first_name: 'Edited' });
+  expect(await a.repositories.children.deleteIfNoHistory(CHILD)).toBe(true);
+  expect(await a.repositories.syncOutbox.countUnsent()).toMatchObject({ total: 2 });
+  expect(await a.repositories.children.getChildren()).toEqual([]);
+  if (mode === 'failed') {
+    await a.services.syncEngine.syncAll();
+    expect(server.has(CHILD)).toBe(true); // hard_delete waits behind the backed-off INSERT.
+  }
+  for (let pass = 0; pass < 3; pass += 1) await a.services.syncEngine.syncAll({ force: true });
+  expect(server.size).toBe(0);
+  expect(await pending(a)).toEqual([]);
+  expect(transport.mock.calls.map(([url]) => new URL(url).pathname.split('/').pop())).toEqual([
+    'children', 'children', 'delete_child_if_no_history',
+  ]);
+});
+
+test.each([false, true])('deleting after reopen retains an insert committed before sign-out lost its response, replaced in flight = %s', async replaced => {
+  const entered = deferred();
+  const server = new Map();
+  let loseResponse = true;
+  const transport = jest.fn(async (url, init) => {
+    const table = new URL(url).pathname.split('/').pop();
+    const payload = JSON.parse(init.body);
+    if (table === 'delete_child_if_no_history') { server.delete(payload.p_child_id); return response(true); }
+    for (const row of Array.isArray(payload) ? payload : [payload]) server.set(row.id, row);
+    if (loseResponse) { loseResponse = false; entered.resolve(); return new Promise(() => {}); }
+    return response();
+  });
+  const a = await open(A, transport);
+  await a.repositories.children.saveChildRecord(child());
+  const pass = a.services.syncEngine.syncAll();
+  await within(entered.promise);
+  expect(server.has(CHILD)).toBe(true);
+  expect(await pending(a)).toEqual([expect.objectContaining({ status: 'in_flight', retry_count: 0 })]);
+  if (replaced) await a.repositories.children.saveChildRecord({ ...child(), first_name: 'Edited while uploading' });
+  await requestClose({ reason: 'sign out with response lost' });
+  expect(await pass).toMatchObject({ abortedStaleActor: true });
+  const reopened = await open(A, transport);
+  expect(await pending(reopened)).toEqual([expect.objectContaining({ status: 'pending', retry_count: 0 })]);
+  expect(await reopened.repositories.children.deleteIfNoHistory(CHILD)).toBe(true);
+  expect(await reopened.repositories.syncOutbox.countUnsent()).toMatchObject({ total: 2 });
+  for (let attempt = 0; attempt < 3; attempt += 1) await reopened.services.syncEngine.syncAll({ force: true });
+  expect(server.size).toBe(0);
+  expect(await pending(reopened)).toEqual([]);
+  expect(transport.mock.calls.map(([url]) => new URL(url).pathname.split('/').pop())).toEqual([
+    'children', 'children', 'delete_child_if_no_history',
+  ]);
+});
+
+test('deleting a never-dispatched child removes it locally with zero outbox rows or requests', async () => {
+  const transport = jest.fn();
+  const a = await open(A, transport);
+  await a.repositories.children.saveChildRecord(child());
+  expect(await a.repositories.children.deleteIfNoHistory(CHILD)).toBe(true);
+  expect(await a.repositories.children.getChildren()).toEqual([]);
+  expect(await pending(a)).toEqual([]);
+  expect(transport).not.toHaveBeenCalled();
 });

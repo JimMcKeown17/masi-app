@@ -1836,7 +1836,8 @@ export const createOutboxSyncEngine = ({
         set status = 'pending',
             retry_count = 0,
             next_retry_at = null,
-            last_error = null,
+            last_error = case when table_name = 'children' and operation = 'insert'
+              then last_error else null end,
             updated_at = ?
         where lower(table_name) = ?
           and record_id = ?
@@ -1915,9 +1916,29 @@ const referenceFlight = (barrier, task, key = 'promise') => {
   return promise;
 };
 
+// Inspect the pre-refresh cache once, before either entry point can write partial rows.
+// A warm cache stays usable while refreshing; a cold cache needs one complete pull.
+const checkReferenceCache = (barrier, repositories) => {
+  if (!barrier.cachePromise) {
+    barrier.cachePromise = Promise.all([
+      repositories.schools.getAll(),
+      repositories.programmes.getAll(),
+      repositories.academic_years.getAll(),
+    ]).then((rows) => {
+      if (rows.every((tableRows) => tableRows.length > 0)) barrier.ready = true;
+    }).catch((error) => {
+      barrier.cachePromise = null;
+      throw error;
+    });
+  }
+  return barrier.cachePromise;
+};
+
 export const pullReferenceData = ({ barrier, ...options } = {}) => (
-  barrier ? referenceFlight(barrier, () => pullReferenceDataRows(options), 'refreshPromise')
-    : pullReferenceDataRows(options)
+  barrier ? referenceFlight(barrier, async () => {
+    await checkReferenceCache(barrier, options.repositories);
+    return pullReferenceDataRows(options);
+  }, 'refreshPromise') : pullReferenceDataRows(options)
 );
 
 export const ensureReferenceData = ({
@@ -1928,17 +1949,8 @@ export const ensureReferenceData = ({
   if (barrier.promise) return barrier.promise;
   if (barrier.ready) return Promise.resolve();
   return referenceFlight(barrier, async () => {
-    // A partially downloaded reference set is not a fulfilled barrier. Check existing cache
-    // only once per handle; after a failed pull, retry every table before admitting dependents.
-    if (!barrier.cacheChecked) {
-      barrier.cacheChecked = true;
-      const requiredRows = await Promise.all([
-        repositories.schools.getAll(),
-        repositories.programmes.getAll(),
-        repositories.academic_years.getAll(),
-      ]);
-      if (requiredRows.every((rows) => rows.length > 0)) return;
-    }
+    await checkReferenceCache(barrier, repositories);
+    if (barrier.ready) return;
     return pullReferenceData({ ...options, repositories, barrier });
   });
 };

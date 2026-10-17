@@ -9,6 +9,7 @@ module.exports = {
     '<rootDir>/__tests__/outboxOwnerStamping.test.js',
     '<rootDir>/__tests__/outboxOwnerMigration.test.js',
     '<rootDir>/__tests__/task5AuthRaces.test.js',
+    '<rootDir>/__tests__/handleServices.test.js',
     '<rootDir>/__tests__/task5ActionsBinding.test.js',
     '<rootDir>/__tests__/signedInTree.test.js',
     '<rootDir>/__tests__/staleUserAction.test.js',

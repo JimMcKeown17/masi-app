@@ -128,7 +128,7 @@ describe('requeueTerminalRlsFailures', () => {
       status: 'pending',
       retry_count: 0,
       next_retry_at: null,
-      last_error: null,
+      last_error: 'new row violates row-level security policy for table "children"',
     }));
     expect(await db.getFirstAsync(`
       select sync_status, last_sync_error
