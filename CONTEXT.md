@@ -158,6 +158,17 @@ An outbox row whose status is `pending`, `failed`, `in_flight`, or `terminal`. `
 **Left-behind work**:
 Unsent rows in one EA's file while a different EA is signed in on the same phone. They stay in that EA's file, untouched, until that EA signs in again; another EA never uploads them.
 
+**Support incident**:
+A counts-only report a phone sends so support can act on a problem. It carries the incident kind,
+the relevant EA identity, counts and age, plus release and install metadata. It never carries child
+data: no child ids, names, notes or record payloads. It reports a situation; it does not upload the
+left-behind work.
+
+**Install id**:
+A random UUID kept in device-level AsyncStorage. It identifies an app installation, stays the same
+across sign-out and account switches, and is shared by all EAs using that installation. It is not
+an EA id or a hardware identifier.
+
 **Mutation owner**:
 The EA who made a change, stamped on its outbox row from the signed-in EA handle. Never derived from the record's content (`created_by` is provenance, not ownership): an EA's edit of a Head Office-created child is that EA's to upload.
 
