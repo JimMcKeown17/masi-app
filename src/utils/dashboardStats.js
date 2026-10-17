@@ -294,6 +294,18 @@ export function getSessionCountRanking(children, sessions) {
   return rankings.sort((a, b) => b.count - a.count);
 }
 
+/** Count distinct sessions attended by at least one of the listed children. */
+export function getDistinctSessionCount(children, sessions) {
+  const childIds = new Set(children.map(child => child.id));
+  const sessionIds = new Set();
+  for (const session of sessions) {
+    if ((session.children_ids || []).some(id => childIds.has(id))) {
+      sessionIds.add(session.id);
+    }
+  }
+  return sessionIds.size;
+}
+
 // ─── Tab Stats ──────────────────────────────────────────────────────────
 
 /**

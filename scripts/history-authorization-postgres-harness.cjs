@@ -22,7 +22,9 @@ const LIBPQ_ROUTING_ENV_KEYS = [
   'PGOPTIONS',
   'PGTARGETSESSIONATTRS',
 ];
-const PLAN_FIXTURE_SESSION_COUNT = 2_000;
+const PLAN_FIXTURE_SESSION_COUNT = 120_000;
+const DENSE_OWNER_SESSION_COUNT = 5_000;
+const FAMILY_MIGRATION = '20260925120000_session_history_family_delta.sql';
 
 const quoteIdentifier = (identifier) => `"${identifier.replaceAll('"', '""')}"`;
 
@@ -326,7 +328,7 @@ INSERT INTO public.group_ea_assignments (
 );
 
 INSERT INTO public.sessions (
-  id, user_id, programme_id, class_id, session_date, created_at, updated_at
+  id, user_id, programme_id, class_id, session_date, created_at
 ) VALUES
   (
     '80000000-0000-0000-0000-000000000001',
@@ -334,7 +336,6 @@ INSERT INTO public.sessions (
     (SELECT id FROM public.programmes WHERE code = 'literacy'),
     '40000000-0000-0000-0000-000000000001',
     DATE '2026-08-27',
-    TIMESTAMPTZ '2026-08-27 12:00:00.000001+02',
     TIMESTAMPTZ '2026-08-27 12:00:00.000001+02'
   ),
   (
@@ -343,7 +344,6 @@ INSERT INTO public.sessions (
     (SELECT id FROM public.programmes WHERE code = 'literacy'),
     '40000000-0000-0000-0000-000000000001',
     DATE '2026-08-28',
-    TIMESTAMPTZ '2026-08-28 12:00:00.000001+02',
     TIMESTAMPTZ '2026-08-28 12:00:00.000001+02'
   ),
   (
@@ -352,7 +352,6 @@ INSERT INTO public.sessions (
     (SELECT id FROM public.programmes WHERE code = 'literacy'),
     '40000000-0000-0000-0000-000000000001',
     DATE '2026-08-30',
-    TIMESTAMPTZ '2026-08-30 12:00:00.123456+02',
     TIMESTAMPTZ '2026-08-30 12:00:00.123456+02'
   ),
   (
@@ -361,7 +360,6 @@ INSERT INTO public.sessions (
     (SELECT id FROM public.programmes WHERE code = 'literacy'),
     '40000000-0000-0000-0000-000000000001',
     DATE '2026-08-30',
-    TIMESTAMPTZ '2026-08-30 12:00:00.123455+02',
     TIMESTAMPTZ '2026-08-30 12:00:00.123455+02'
   );
 
@@ -436,92 +434,44 @@ ${sessionVisibilityProjectionSql}
 ROLLBACK;
 `;
 
-const sessionPlanFixtureSql = `
-INSERT INTO public.sessions (
-  id, user_id, programme_id, class_id, session_date, created_at, updated_at
-)
-SELECT
-  pg_catalog.md5('history-plan-session-' || series.value::TEXT)::UUID,
-  '10000000-0000-0000-0000-000000000001',
-  (SELECT id FROM public.programmes WHERE code = 'literacy'),
-  '40000000-0000-0000-0000-000000000001',
-  DATE '2026-08-29',
-  TIMESTAMPTZ '2026-08-29 12:00:00.654321+02',
-  TIMESTAMPTZ '2026-08-29 12:00:00.654321+02'
-FROM pg_catalog.generate_series(1, ${PLAN_FIXTURE_SESSION_COUNT}) AS series(value);
+const PROGRAMME = "(SELECT id FROM public.programmes WHERE code = 'literacy')";
+const actorClaims = (actorId) => `SET LOCAL ROLE authenticated;
+SELECT pg_catalog.set_config('request.jwt.claim.sub', '${actorId}', TRUE);`;
 
-INSERT INTO public.session_attendees (id, session_id, child_id)
-SELECT
-  pg_catalog.md5('history-plan-attendee-' || series.value::TEXT)::UUID,
-  pg_catalog.md5('history-plan-session-' || series.value::TEXT)::UUID,
-  '50000000-0000-0000-0000-000000000002'
-FROM pg_catalog.generate_series(1, ${PLAN_FIXTURE_SESSION_COUNT}) AS series(value);
-
-ANALYZE public.sessions;
-ANALYZE public.session_attendees;
-ANALYZE public.child_ea_assignments;
-`;
-
-const actorSessionPlanSql = (actorId) => `
+const parentPageIdsSql = ({ actorId, windowStart = '2026-01-01', pageSize = 200, after = null, overlap = 0 }) => `
 BEGIN;
-SET LOCAL ROLE authenticated;
-SET LOCAL request.jwt.claim.sub = '${actorId}';
-EXPLAIN (ANALYZE, BUFFERS, FORMAT JSON)
-SELECT id, session_date, created_at
-FROM public.sessions
-WHERE programme_id = (SELECT id FROM public.programmes WHERE code = 'literacy')
-ORDER BY session_date DESC, created_at DESC, id DESC
-LIMIT 50;
-ROLLBACK;
-`;
+${actorClaims(actorId)}
+SELECT COALESCE(pg_catalog.json_agg(p.id ORDER BY p.updated_at, p.id), '[]'::JSON)::TEXT
+FROM public.get_delivery_history_page(
+  ${PROGRAMME}, DATE '${windowStart}', ${pageSize},
+  ${after ? `TIMESTAMPTZ '${after.updatedAt}'` : 'NULL'},
+  ${after ? `'${after.id}'::UUID` : 'NULL'},
+  ${overlap}
+) p;
+ROLLBACK;`;
 
-const actorSessionRpcPlanSql = (actorId) => `
+const attendeePageSql = ({ actorId, sessionIds, pageSize = 200, after = null }) => `
 BEGIN;
-SET LOCAL ROLE authenticated;
-SET LOCAL request.jwt.claim.sub = '${actorId}';
-EXPLAIN (ANALYZE, BUFFERS, FORMAT JSON)
-SELECT id, session_date, created_at
-FROM public.get_delivery_history_session_page(
-  (SELECT id FROM public.programmes WHERE code = 'literacy'),
-  50,
-  NULL,
-  NULL,
-  NULL
-);
-ROLLBACK;
-`;
+${actorClaims(actorId)}
+SELECT COALESCE(pg_catalog.json_agg(pg_catalog.json_build_object(
+  'id', a.id, 'session_id', a.session_id, 'child_first_name', a.child_first_name
+) ORDER BY a.session_id, a.id), '[]'::JSON)::TEXT
+FROM public.get_delivery_history_attendee_page(
+  ARRAY[${sessionIds.map((id) => `'${id}'::UUID`).join(', ')}], ${pageSize},
+  ${after ? `'${after.session_id}'::UUID` : 'NULL'},
+  ${after ? `'${after.id}'::UUID` : 'NULL'}
+) a;
+ROLLBACK;`;
 
-const sqlLiteral = (value) => {
-  if (value === null || value === undefined) return 'NULL';
-  return `'${String(value).replaceAll("'", "''")}'`;
+// VERBOSITY=verbose makes psql print "ERROR:  <SQLSTATE>: <message>", so the code is assertable.
+const expectSqlState = ({ databaseUrl, sql, label, sqlState }) => {
+  const result = spawnSync('psql', ['-X', '-v', 'ON_ERROR_STOP=1', '-v', 'VERBOSITY=verbose', '-Atq', databaseUrl, '-c', sql], {
+    encoding: 'utf8', env: buildPsqlEnv(label), timeout: 180_000,
+  });
+  assert.notEqual(result.status, 0, `${label} unexpectedly succeeded`);
+  assert.match(result.stderr, new RegExp(`ERROR:\\s+${sqlState}:`), `${label}: expected SQLSTATE ${sqlState}\n${result.stderr}`);
+  return result.stderr;
 };
-
-const actorSessionPageSql = ({ actorId, pageSize, cursor = {} }) => `
-BEGIN;
-SET LOCAL ROLE authenticated;
-SET LOCAL request.jwt.claim.sub = '${actorId}';
-SELECT pg_catalog.json_build_object(
-  'rows', COALESCE(
-    pg_catalog.json_agg(
-      pg_catalog.json_build_object(
-        'id', page.id,
-        'session_date', page.session_date,
-        'created_at', page.created_at
-      )
-      ORDER BY page.session_date DESC, page.created_at DESC, page.id DESC
-    ),
-    '[]'::JSON
-  )
-)::TEXT
-FROM public.get_delivery_history_session_page(
-  (SELECT id FROM public.programmes WHERE code = 'literacy'),
-  ${pageSize},
-  ${sqlLiteral(cursor.session_date)}::DATE,
-  ${sqlLiteral(cursor.created_at)}::TIMESTAMPTZ,
-  ${sqlLiteral(cursor.id)}::UUID
-) AS page;
-ROLLBACK;
-`;
 
 const collectPlanMetrics = (planJson) => {
   const statement = planJson[0];
@@ -551,39 +501,287 @@ const collectPlanMetrics = (planJson) => {
   };
 };
 
-const pageSessionHistoryToExhaustion = ({
-  databaseUrl,
-  actorId,
-  pageSize,
-}) => {
-  const rows = [];
-  let cursor = {};
-  let pageNumber = 1;
-
-  while (true) {
-    const [page] = parseJsonObjects(runPsql({
-      databaseUrl,
-      sql: actorSessionPageSql({ actorId, pageSize, cursor }),
-      label: `delivery-history-exhaustion-page-${pageNumber}`,
-    }));
-    if (page.rows.length === 0) break;
-    rows.push(...page.rows);
-    cursor = page.rows[page.rows.length - 1];
-    pageNumber += 1;
-    assert.ok(
-      rows.length <= PLAN_FIXTURE_SESSION_COUNT + 4,
-      'Keyset traversal did not terminate at the expected fixture boundary'
-    );
-  }
-
-  return rows;
-};
-
 const parseJsonObjects = (output) => {
   const lines = output.split('\n').map((line) => line.trim()).filter(Boolean);
   const jsonLines = lines.filter((line) => line.startsWith('{'));
   assert.ok(jsonLines.length > 0, `history RLS fixture emitted no JSON object:\n${output}`);
   return jsonLines.map((line) => JSON.parse(line));
+};
+
+// psql also prints set_config's scalar result. Only the JSON array is the page.
+const parsePage = (output) => {
+  const line = output.split('\n').find((value) => value.trim().startsWith('['));
+  assert.ok(line, `history page emitted no JSON array:\n${output}`);
+  return JSON.parse(line);
+};
+
+const actor = (n) => `10000000-0000-0000-0000-${String(n).padStart(12, '0')}`;
+const session = (n) => `80000000-0000-0000-0000-${String(n).padStart(12, '0')}`;
+const keysetSession = (n) => `81000000-0000-0000-0000-${String(n).padStart(12, '0')}`;
+const denseActor = (n) => `1f000000-0000-0000-0000-${String(n).padStart(12, '0')}`;
+const CHILD = '50000000-0000-0000-0000-000000000001';
+const TEMP_ATTENDEE = '91000000-0000-0000-0000-000000000001';
+
+const runFamilyDeltaChecks = (databaseUrl) => {
+  const run = (label, sql) => runPsql({ databaseUrl, label, sql });
+  const object = (label, sql) => parseJsonObjects(run(label, sql))[0];
+  const parentIds = (label, options) => parsePage(run(label, parentPageIdsSql(options)));
+  const attendees = (label, options) => parsePage(run(label, attendeePageSql(options)));
+  const report = (values) => process.stdout.write(`${JSON.stringify(values)}\n`);
+
+  const [parentStamp, attendeeStamp] = parseJsonObjects(run('family-insert-stamping', `
+    BEGIN;
+    INSERT INTO public.sessions (id, user_id, programme_id, session_date, updated_at)
+    VALUES ('${session(5)}', '${actor(1)}', ${PROGRAMME}, '2026-08-01', '2001-01-01 00:00:00+00');
+    -- Read before inserting the attendee: the family touch must not mask a broken parent INSERT stamp.
+    SELECT json_build_object('session_year', extract(year FROM updated_at))::TEXT
+      FROM public.sessions WHERE id = '${session(5)}';
+    INSERT INTO public.session_attendees (id, session_id, child_id, updated_at)
+    VALUES ('${TEMP_ATTENDEE}', '${session(5)}', '${CHILD}', '2001-01-01 00:00:00+00');
+    SELECT json_build_object('attendee_year', extract(year FROM updated_at))::TEXT
+      FROM public.session_attendees WHERE id = '${TEMP_ATTENDEE}';
+    ROLLBACK;`));
+  assert.notEqual(parentStamp.session_year, 2001);
+  assert.notEqual(attendeeStamp.attendee_year, 2001);
+  report({ insert_stamping: 'passed', ...parentStamp, ...attendeeStamp });
+
+  const parentTimestamp = (id, label) => run(label,
+    `SELECT updated_at::TEXT FROM public.sessions WHERE id = '${id}';`);
+  const assertBumped = (id, before, label) => {
+    assert.equal(run(label, `SELECT updated_at > TIMESTAMPTZ '${before}'
+      FROM public.sessions WHERE id = '${id}';`), 't', label);
+  };
+  let before = parentTimestamp(session(2), 'before-attendee-insert');
+  run('family-touch-insert', `INSERT INTO public.session_attendees (id, session_id, child_id)
+    VALUES ('${TEMP_ATTENDEE}', '${session(2)}', '${CHILD}');`);
+  assertBumped(session(2), before, 'after-attendee-insert');
+  assert.ok(parentIds('late-attendee-resurfaces-parent', {
+    actorId: actor(1), after: { updatedAt: before, id: session(2) },
+  }).includes(session(2)), 'A late attendee must resurface its parent after the old cursor');
+  before = parentTimestamp(session(2), 'before-attendee-update');
+  run('family-touch-update', `UPDATE public.session_attendees SET notes = 'x' WHERE id = '${TEMP_ATTENDEE}';`);
+  assertBumped(session(2), before, 'after-attendee-update');
+  before = parentTimestamp(session(2), 'before-attendee-delete');
+  run('family-touch-delete', `DELETE FROM public.session_attendees WHERE id = '${TEMP_ATTENDEE}';`);
+  assertBumped(session(2), before, 'after-attendee-delete');
+  run('family-move-fixture', `INSERT INTO public.session_attendees (id, session_id, child_id)
+    VALUES ('${TEMP_ATTENDEE}', '${session(2)}', '${CHILD}');`);
+  const oldBefore = parentTimestamp(session(2), 'before-move-old-parent');
+  const newBefore = parentTimestamp(session(3), 'before-move-new-parent');
+  run('family-touch-move', `UPDATE public.session_attendees SET session_id = '${session(3)}'
+    WHERE id = '${TEMP_ATTENDEE}';`);
+  assertBumped(session(2), oldBefore, 'after-move-old-parent');
+  assertBumped(session(3), newBefore, 'after-move-new-parent');
+  run('family-move-cleanup', `DELETE FROM public.session_attendees WHERE id = '${TEMP_ATTENDEE}';`);
+  report({ family_touch_insert: 'passed', family_touch_update: 'passed',
+    family_touch_delete: 'passed', family_touch_move_both_parents: 'passed', late_attendee_delta: 'passed' });
+
+  run('owner-active-delivery-assignment', `INSERT INTO public.child_ea_assignments
+    (id, user_id, child_id, created_by) VALUES
+    ('71000000-0000-0000-0000-000000000003', '${actor(1)}', '${CHILD}', '${actor(1)}');`);
+  before = parentTimestamp(session(2), 'before-authenticated-attendee-insert');
+  run('authenticated-attendee-insert', `BEGIN; ${actorClaims(actor(1))}
+    INSERT INTO public.session_attendees (id, session_id, child_id)
+    VALUES ('${TEMP_ATTENDEE}', '${session(2)}', '${CHILD}'); COMMIT;`);
+  assertBumped(session(2), before, 'after-authenticated-attendee-insert');
+  run('authenticated-attendee-cleanup', `DELETE FROM public.session_attendees WHERE id = '${TEMP_ATTENDEE}';`);
+  report({ authenticated_attendee_insert: 'passed' });
+
+  const matrix = [
+    { n: 1, label: 'owner', ids: [1, 2, 3, 4].map(session), family: true },
+    { n: 4, label: 'current-delivery', ids: [session(1)], family: true },
+    { n: 3, label: 'former-delivery', ids: [session(1)], family: true },
+    { n: 2, label: 'class-only', ids: [], family: false },
+    { n: 5, label: 'group-only', ids: [], family: false },
+    { n: 6, label: 'unrelated', ids: [], family: false },
+  ];
+  const expectedAttendees = [1, 2].map((n) => ({
+    id: `90000000-0000-0000-0000-${String(n).padStart(12, '0')}`,
+    session_id: session(1), child_first_name: 'Harness',
+  }));
+  for (const entry of matrix) {
+    const ids = parentIds(`${entry.label}-parent-page`, { actorId: actor(entry.n) });
+    assert.deepEqual([...ids].sort(), entry.ids, `${entry.label} parent authority`);
+    const rows = attendees(`${entry.label}-attendee-page`, {
+      actorId: actor(entry.n), sessionIds: [session(1), session(2)],
+    });
+    assert.deepEqual(rows, entry.family ? expectedAttendees : [], `${entry.label} attendee authority and names`);
+    if (entry.n === 1) {
+      assert.equal(ids.filter((id) => id === session(1)).length, 1, 'Both grant arms must deduplicate');
+    }
+  }
+  // Exercise the attendee cursor itself, including exhaustion, rather than only its first page.
+  const firstAttendee = attendees('attendee-keyset-first', {
+    actorId: actor(4), sessionIds: [session(1), session(2)], pageSize: 1,
+  });
+  const secondAttendee = attendees('attendee-keyset-second', {
+    actorId: actor(4), sessionIds: [session(1), session(2)], pageSize: 1, after: firstAttendee[0],
+  });
+  assert.deepEqual([...firstAttendee, ...secondAttendee], expectedAttendees);
+  assert.deepEqual(attendees('attendee-keyset-exhaustion', {
+    actorId: actor(4), sessionIds: [session(1), session(2)], pageSize: 1, after: secondAttendee[0],
+  }), []);
+  report({ parent_six_actor_matrix: 'passed', attendee_six_actor_matrix: 'passed',
+    coattendee_display_name: 'passed', grant_arm_deduplication: 'passed', attendee_keyset: 'passed' });
+
+  const parentCall = (args) => `SELECT * FROM public.get_delivery_history_page(${args});`;
+  const attendeeCall = (args) => `SELECT * FROM public.get_delivery_history_attendee_page(${args});`;
+  const idsSql = `ARRAY['${session(1)}'::UUID]`;
+  for (const [label, sql] of [
+    ['parent', parentCall(`${PROGRAMME}, DATE '2026-01-01'`)],
+    ['attendee', attendeeCall(idsSql)],
+  ]) {
+    expectSqlState({ databaseUrl, label: `anonymous-${label}`, sqlState: '42501',
+      sql: `BEGIN; SET LOCAL ROLE anon; ${sql} ROLLBACK;` });
+    expectSqlState({ databaseUrl, label: `missing-actor-${label}`, sqlState: '28000',
+      sql: `BEGIN; ${actorClaims('')} ${sql} ROLLBACK;` });
+  }
+  const invalidCalls = [
+    ['null-programme', parentCall("NULL, DATE '2026-01-01'")],
+    ['null-window', parentCall(`${PROGRAMME}, NULL`)],
+    ...['NULL', '0', '201'].map((size) => [
+      `parent-page-size-${size}`, parentCall(`${PROGRAMME}, DATE '2026-01-01', ${size}`),
+    ]),
+    ['parent-half-timestamp', parentCall(`${PROGRAMME}, DATE '2026-01-01', 200, now(), NULL`)],
+    ['parent-half-id', parentCall(`${PROGRAMME}, DATE '2026-01-01', 200, NULL, '${session(1)}'`)],
+    ...['NULL', '-1', '601'].map((overlap) => [
+      `overlap-${overlap}`, parentCall(`${PROGRAMME}, DATE '2026-01-01', 200, NULL, NULL, ${overlap}`),
+    ]),
+    ['201-session-ids', attendeeCall(`array_fill('${session(1)}'::UUID, ARRAY[201])`)],
+    ['null-session-ids', attendeeCall('NULL')],
+    ['empty-session-ids', attendeeCall('ARRAY[]::UUID[]')],
+    ...['NULL', '0', '201'].map((size) => [
+      `attendee-page-size-${size}`, attendeeCall(`${idsSql}, ${size}`),
+    ]),
+    ['attendee-half-session', attendeeCall(`${idsSql}, 200, '${session(1)}', NULL`)],
+    ['attendee-half-id', attendeeCall(`${idsSql}, 200, NULL, '${expectedAttendees[0].id}'`)],
+  ];
+  for (const [label, sql] of invalidCalls) {
+    expectSqlState({ databaseUrl, label, sqlState: '22023',
+      sql: `BEGIN; ${actorClaims(actor(1))} ${sql} ROLLBACK;` });
+  }
+  report({ anonymous_denial: 'passed', missing_actor_denial: 'passed',
+    invalid_argument_checks: invalidCalls.length, invalid_arguments: 'passed' });
+
+  run('equal-timestamp-keyset-fixture', `BEGIN; SET LOCAL session_replication_role = replica;
+    INSERT INTO public.sessions (id, user_id, programme_id, session_date, updated_at)
+    SELECT ('81000000-0000-0000-0000-' || lpad(n::TEXT, 12, '0'))::UUID,
+      '${actor(1)}', ${PROGRAMME}, DATE '2026-09-01', TIMESTAMPTZ '2026-09-01 10:00:00.000001+00'
+    FROM generate_series(1, 5) AS series(n);
+    COMMIT;`);
+  let after = null;
+  const pages = [];
+  for (let page = 0; page < 4; page += 1) {
+    const rows = parsePage(run(`equal-timestamp-keyset-page-${page + 1}`, `
+      BEGIN; ${actorClaims(actor(1))}
+      SELECT COALESCE(json_agg(json_build_object('id', p.id, 'updatedAt', p.updated_at::TEXT)
+        ORDER BY p.updated_at, p.id), '[]'::JSON)::TEXT
+      FROM public.get_delivery_history_page(${PROGRAMME}, DATE '2026-09-01', 2,
+        ${after ? `TIMESTAMPTZ '${after.updatedAt}'` : 'NULL'},
+        ${after ? `'${after.id}'::UUID` : 'NULL'}, 0) p;
+      ROLLBACK;`));
+    pages.push(rows.map(({ id }) => id));
+    if (rows.length) {
+      after = rows[rows.length - 1];
+      assert.match(after.updatedAt, /\.000001(?:\+00(?::00)?|Z)$/, 'Preserve microseconds in cursor');
+    }
+  }
+  assert.deepEqual(pages, [[1, 2].map(keysetSession), [3, 4].map(keysetSession), [keysetSession(5)], []]);
+  assert.equal(new Set(pages.flat()).size, 5);
+  const overlapCursor = { updatedAt: '2026-09-01 10:00:00.000001+00', id: keysetSession(3) };
+  assert.deepEqual(parentIds('zero-overlap', {
+    actorId: actor(1), windowStart: '2026-09-01', after: overlapCursor,
+  }), [4, 5].map(keysetSession));
+  assert.deepEqual(parentIds('two-minute-overlap', {
+    actorId: actor(1), windowStart: '2026-09-01', after: overlapCursor, overlap: 120,
+  }), [1, 2, 3, 4, 5].map(keysetSession));
+  run('retention-window-fixture', `INSERT INTO public.sessions (id, user_id, programme_id, session_date)
+    VALUES ('${session(6)}', '${actor(1)}', ${PROGRAMME}, DATE '2025-12-31');`);
+  assert.ok(!parentIds('current-year-window', { actorId: actor(1) }).includes(session(6)));
+  assert.ok(parentIds('previous-year-window', {
+    actorId: actor(1), windowStart: '2025-01-01',
+  }).includes(session(6)));
+  report({ equal_timestamp_keyset: 'passed', microsecond_cursor: 'passed',
+    keyset_pages: pages, overlap: 'passed', retention_window: 'passed' });
+
+  run('future-timestamp-fixture', `BEGIN; SET LOCAL session_replication_role = replica;
+    UPDATE public.sessions SET updated_at = TIMESTAMPTZ '2099-01-01 00:00:00+00' WHERE id = '${session(3)}';
+    UPDATE public.session_attendees SET updated_at = TIMESTAMPTZ '2099-01-01 00:00:00+00'
+      WHERE id = '${expectedAttendees[0].id}'; COMMIT;`);
+  runPsql({ databaseUrl, file: path.join(MIGRATIONS_DIR, FAMILY_MIGRATION), label: 'idempotent-family-migration' });
+  const normalized = object('future-timestamps-normalized', `SELECT json_build_object(
+    'session', (SELECT updated_at <= now() FROM public.sessions WHERE id = '${session(3)}'),
+    'attendee', (SELECT updated_at <= now() FROM public.session_attendees WHERE id = '${expectedAttendees[0].id}')
+    )::TEXT;`);
+  assert.deepEqual(normalized, { session: true, attendee: true });
+  const absent = object('old-history-objects-absent', `SELECT json_build_object(
+    'rpc', to_regprocedure('public.get_delivery_history_session_page(uuid,integer,date,timestamptz,uuid)') IS NULL,
+    'index', to_regclass('public.idx_sessions_owner_programme_history_cursor') IS NULL)::TEXT;`);
+  assert.deepEqual(absent, { rpc: true, index: true });
+  report({ future_timestamps_normalized: 'passed', migration_reapplication: 'passed', old_objects_absent: 'passed' });
+
+  runDensePlanChecks(databaseUrl);
+};
+
+const runDensePlanChecks = (databaseUrl) => {
+  runPsql({ databaseUrl, label: 'dense-session-plan-fixture', sql: `
+    INSERT INTO auth.users (id) VALUES ('${denseActor(1)}'), ('${denseActor(2)}'), ('${denseActor(3)}');
+    INSERT INTO public.users (id, first_name, last_name)
+    VALUES ('${denseActor(1)}', 'Noise', 'Owner'), ('${denseActor(2)}', 'Dense', 'Owner'),
+      ('${denseActor(3)}', 'Sparse', 'Delivery');
+    INSERT INTO public.children (id, first_name, last_name)
+    VALUES ('5f000000-0000-0000-0000-000000000001', 'Sparse', 'Child');
+    INSERT INTO public.child_ea_assignments (id, user_id, child_id, created_by)
+    VALUES ('7f000000-0000-0000-0000-000000000001', '${denseActor(3)}',
+      '5f000000-0000-0000-0000-000000000001', '${denseActor(1)}');
+    BEGIN; SET LOCAL session_replication_role = replica;
+    INSERT INTO public.sessions (id, user_id, programme_id, session_date, updated_at)
+    SELECT md5('history-noise-' || n::TEXT)::UUID, '${denseActor(1)}', ${PROGRAMME},
+      DATE '2026-01-01' + (n % 365), TIMESTAMPTZ '2026-01-01 00:00:00+00' + n * INTERVAL '1 second'
+    FROM generate_series(1, ${PLAN_FIXTURE_SESSION_COUNT}) series(n);
+    INSERT INTO public.sessions (id, user_id, programme_id, session_date, updated_at)
+    SELECT md5('history-dense-' || n::TEXT)::UUID, '${denseActor(2)}', ${PROGRAMME},
+      DATE '2026-01-01' + (n % 365), TIMESTAMPTZ '2026-01-01 00:00:00+00' + n * INTERVAL '1 second'
+    FROM generate_series(1, ${DENSE_OWNER_SESSION_COUNT}) series(n);
+    INSERT INTO public.session_attendees (id, session_id, child_id)
+    SELECT md5('history-sparse-attendee-' || n::TEXT)::UUID, md5('history-noise-' || n::TEXT)::UUID,
+      '5f000000-0000-0000-0000-000000000001'
+    FROM generate_series(1, 3) series(n);
+    COMMIT;
+    ANALYZE public.sessions;
+    ANALYZE public.session_attendees;
+    ANALYZE public.child_ea_assignments;` });
+
+  const measure = (label, sql, actorId = null) => {
+    const output = runPsql({ databaseUrl, label, sql: `BEGIN;
+      ${actorId ? actorClaims(actorId) : ''}
+      EXPLAIN (ANALYZE, BUFFERS, FORMAT JSON) ${sql}; ROLLBACK;` });
+    // EXPLAIN is multiline JSON, unlike the single-line page projection.
+    const start = output.indexOf('[');
+    assert.ok(start >= 0, `${label} emitted no plan JSON`);
+    return collectPlanMetrics(JSON.parse(output.slice(start)));
+  };
+  // Keep the existing harness's raw-RLS comparison: use the sparse delivery actor,
+  // so the baseline and RPC measure the same authority rather than a superuser bypass.
+  const raw = measure('dense-raw-baseline', 'SELECT pg_catalog.count(*) FROM public.sessions', denseActor(3));
+  const sparse = measure('sparse-delivery-first-page', `SELECT * FROM public.get_delivery_history_page(
+    ${PROGRAMME}, DATE '2026-01-01', 200, NULL, NULL, 0)`, denseActor(3));
+  const dense = measure('dense-owner-deep-page', `SELECT * FROM public.get_delivery_history_page(
+    ${PROGRAMME}, DATE '2026-01-01', 200,
+    TIMESTAMPTZ '2026-01-01 00:00:00+00' + 4900 * INTERVAL '1 second',
+    md5('history-dense-4900')::UUID, 0)`, denseActor(2));
+  // Print measurements even if a performance assertion fails, so the failure is reviewable.
+  process.stdout.write(`${JSON.stringify({ noise_fixture_sessions: PLAN_FIXTURE_SESSION_COUNT,
+    dense_owner_fixture_sessions: DENSE_OWNER_SESSION_COUNT, dense_raw_baseline: raw,
+    sparse_delivery_first_page: sparse, dense_owner_deep_page: dense })}\n`);
+  assert.equal(sparse.actual_rows, 3);
+  assert.equal(dense.actual_rows, DENSE_OWNER_SESSION_COUNT - 4900);
+  assert.ok(raw.root_shared_blocks > 0, 'Raw baseline must measure real shared buffer work');
+  for (const [label, metrics] of [['sparse delivery', sparse], ['dense owner', dense]]) {
+    assert.ok(metrics.root_shared_blocks < raw.root_shared_blocks / 10,
+      `${label} must use less than one tenth of raw shared blocks: raw=${JSON.stringify(raw)} rpc=${JSON.stringify(metrics)}`);
+  }
+  process.stdout.write(`${JSON.stringify({ dense_plan_buffer_gate: 'passed' })}\n`);
 };
 
 const main = () => {
@@ -768,154 +966,7 @@ const main = () => {
       ],
       'RLS authority must follow each actor when a pooled PostgreSQL connection is reused'
     );
-    const [ownerFirstPage] = parseJsonObjects(runPsql({
-      databaseUrl: databaseUrl.href,
-      sql: actorSessionPageSql({
-        actorId: '10000000-0000-0000-0000-000000000001',
-        pageSize: 1,
-      }),
-      label: 'owner-delivery-history-first-page',
-    }));
-    assert.deepEqual(
-      ownerFirstPage.rows.map(({ id }) => id),
-      ['80000000-0000-0000-0000-000000000003'],
-      'The owner page must follow the session_date/created_at/id descending keyset order'
-    );
-    assert.match(
-      ownerFirstPage.rows[0].created_at,
-      /\.123456(?:Z|[+-]\d{2}:\d{2})$/,
-      'The cursor must preserve the server timestamp string at microsecond precision'
-    );
-    const [ownerSecondPage] = parseJsonObjects(runPsql({
-      databaseUrl: databaseUrl.href,
-      sql: actorSessionPageSql({
-        actorId: '10000000-0000-0000-0000-000000000001',
-        pageSize: 1,
-        cursor: ownerFirstPage.rows[0],
-      }),
-      label: 'owner-delivery-history-second-page',
-    }));
-    assert.deepEqual(
-      ownerSecondPage.rows.map(({ id }) => id),
-      ['80000000-0000-0000-0000-000000000004'],
-      'The second keyset page must continue after the exact microsecond cursor tuple'
-    );
-    assert.match(
-      ownerSecondPage.rows[0].created_at,
-      /\.123455(?:Z|[+-]\d{2}:\d{2})$/,
-      'The second cursor must retain distinct sub-millisecond precision'
-    );
-    const [ownerThirdPage] = parseJsonObjects(runPsql({
-      databaseUrl: databaseUrl.href,
-      sql: actorSessionPageSql({
-        actorId: '10000000-0000-0000-0000-000000000001',
-        pageSize: 1,
-        cursor: ownerSecondPage.rows[0],
-      }),
-      label: 'owner-delivery-history-third-page',
-    }));
-    assert.deepEqual(
-      ownerThirdPage.rows.map(({ id }) => id),
-      ['80000000-0000-0000-0000-000000000002'],
-      'The third keyset page must continue beyond the microsecond fixtures'
-    );
-    const [classOnlyPage] = parseJsonObjects(runPsql({
-      databaseUrl: databaseUrl.href,
-      sql: actorSessionPageSql({
-        actorId: '10000000-0000-0000-0000-000000000002',
-        pageSize: 50,
-      }),
-      label: 'class-only-delivery-history-page',
-    }));
-    assert.deepEqual(
-      classOnlyPage.rows,
-      [],
-      'The delivery-history RPC must not widen authority to a class-only assessor'
-    );
-    for (const actorCase of [
-      {
-        actorId: '10000000-0000-0000-0000-000000000003',
-        label: 'former-delivery-history-page',
-        expectedIds: ['80000000-0000-0000-0000-000000000001'],
-      },
-      {
-        actorId: '10000000-0000-0000-0000-000000000004',
-        label: 'current-delivery-history-page',
-        expectedIds: ['80000000-0000-0000-0000-000000000001'],
-      },
-      {
-        actorId: '10000000-0000-0000-0000-000000000005',
-        label: 'group-only-delivery-history-page',
-        expectedIds: [],
-      },
-      {
-        actorId: '10000000-0000-0000-0000-000000000006',
-        label: 'unrelated-delivery-history-page',
-        expectedIds: [],
-      },
-    ]) {
-      const [actorPage] = parseJsonObjects(runPsql({
-        databaseUrl: databaseUrl.href,
-        sql: actorSessionPageSql({
-          actorId: actorCase.actorId,
-          pageSize: 50,
-        }),
-        label: actorCase.label,
-      }));
-      assert.deepEqual(
-        actorPage.rows.map(({ id }) => id),
-        actorCase.expectedIds,
-        `Unexpected delivery-history RPC scope for ${actorCase.label}`
-      );
-    }
-    runPsql({
-      databaseUrl: databaseUrl.href,
-      sql: sessionPlanFixtureSql,
-      label: 'session-plan-fixture',
-    });
-    const exhaustedOwnerRows = pageSessionHistoryToExhaustion({
-      databaseUrl: databaseUrl.href,
-      actorId: '10000000-0000-0000-0000-000000000001',
-      pageSize: 200,
-    });
-    assert.equal(
-      exhaustedOwnerRows.length,
-      PLAN_FIXTURE_SESSION_COUNT + 4,
-      'The owner keyset traversal must return every same-timestamp fixture row without gaps'
-    );
-    assert.equal(
-      new Set(exhaustedOwnerRows.map(({ id }) => id)).size,
-      PLAN_FIXTURE_SESSION_COUNT + 4,
-      'The owner keyset traversal must not duplicate a row across page boundaries'
-    );
-    const planMetrics = collectPlanMetrics(JSON.parse(runPsql({
-      databaseUrl: databaseUrl.href,
-      sql: actorSessionPlanSql('10000000-0000-0000-0000-000000000004'),
-      label: 'delivery-history-session-plan',
-    })));
-    assert.equal(
-      planMetrics.actual_rows,
-      1,
-      `The scaled plan fixture should expose only the directly assigned session: ${JSON.stringify(planMetrics)}`
-    );
-    const rpcPlanMetrics = collectPlanMetrics(JSON.parse(runPsql({
-      databaseUrl: databaseUrl.href,
-      sql: actorSessionRpcPlanSql('10000000-0000-0000-0000-000000000004'),
-      label: 'delivery-history-session-rpc-plan',
-    })));
-    assert.equal(
-      rpcPlanMetrics.actual_rows,
-      1,
-      `The scaled RPC plan should expose only the directly assigned session: ${JSON.stringify(rpcPlanMetrics)}`
-    );
-    assert.ok(
-      planMetrics.visible_rows_removed_by_filter >= PLAN_FIXTURE_SESSION_COUNT,
-      `The raw RLS plan should visibly filter the scaled unrelated fixture: ${JSON.stringify(planMetrics)}`
-    );
-    assert.ok(
-      rpcPlanMetrics.root_shared_blocks < planMetrics.root_shared_blocks / 2,
-      `The bounded actor-derived RPC root must use less than half the raw RLS root buffer work in the deterministic regression fixture: raw=${JSON.stringify(planMetrics)} rpc=${JSON.stringify(rpcPlanMetrics)}`
-    );
+    runFamilyDeltaChecks(databaseUrl.href);
     process.stdout.write(`${JSON.stringify({
       class_only_session_visibility: 'passed',
       former_delivery_history_visibility: 'passed',
@@ -925,13 +976,6 @@ const main = () => {
       owner_session_visibility: 'passed',
       complete_session_family_visibility: 'passed',
       same_connection_actor_switching: 'passed',
-      owner_keyset_pagination: 'passed',
-      owner_keyset_microsecond_cursor: 'passed',
-      same_tuple_pagination_exhaustion: 'passed',
-      rpc_actor_scope_matrix: 'passed',
-      scaled_plan_fixture_sessions: PLAN_FIXTURE_SESSION_COUNT,
-      scaled_raw_rls_plan: planMetrics,
-      scaled_rpc_plan: rpcPlanMetrics,
     })}\n`);
   } finally {
     runPsql({

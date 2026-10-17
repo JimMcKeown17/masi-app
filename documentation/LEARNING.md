@@ -1537,3 +1537,42 @@ facts. But complete-family access also exposes coattendee notes, grade snapshots
 status. The alternative is a real redacted projection/data-placement redesign, not a one-line RLS
 filter. The reusable principle is: **define the privacy and consistency boundary explicitly, then
 hydrate that boundary completely—or fail closed.**
+
+## A delta sync is only as honest as its clock (CAP-004, September 2026)
+
+The goal sounded simple: when an EA signs in on a new phone, download their past sessions, then keep
+up with changes cheaply. The cheap part is a **delta**. The phone remembers "the last change I saw"
+and asks only for rows changed after it. Writing the plan against the real code, and then two
+adversarial reviews, showed how many ways "changed after" can lie.
+
+1. **Whose clock?** The spec assumed the server stamped every write with its own time. In fact the
+   trigger ran only on *updates*; on an *insert*, the phone's own `updated_at` was kept. A phone
+   with the wrong date could therefore file a brand-new session "in the past", behind every other
+   phone's bookmark, where no one would ever ask for it. Fix: stamp on insert too. Lesson: check a
+   trigger's timing in the migration, not in the prose that describes it.
+2. **Which moment?** PostgreSQL's `now()` is the time a *transaction started*, not when it
+   committed. A slow write can become visible after the reader has moved past its timestamp.
+   That's why deltas re-ask for a small overlap window, and why they cannot promise perfection on
+   their own.
+3. **What does the timestamp watch?** It watches *rows*. But *who may see* a session changes when a
+   child is handed over to a new EA, and none of the session's rows change. The new EA's bookmark
+   is already past those older sessions. No overlap window fixes that, because the change is in a
+   different table. Hence the re-walk: immediately when the phone gains a delivery child, plus a
+   weekly jittered backstop for the rare cases.
+4. **Do not wait for the slowest client.** An early design stopped the bookmark in front of any
+   session whose attendance lines had not arrived yet. Phones upload the session first and the
+   lines later, sometimes days later if offline, so one offline phone would have frozen everyone's
+   history. Better: save what exists, and let the server's "family changed" stamp bring the
+   stragglers later.
+5. **Save the bookmark in the same transaction as the page.** Then "kill the app anywhere" is safe.
+   There is never a moment where data is saved but the bookmark is not, or the reverse.
+6. **Budgets are checked between units of saved progress.** Checking the 60-second budget in the
+   middle of a page let a slow connection download a page, run out of time, throw it away, and
+   repeat forever (a livelock). The budget now only decides whether to *start* a page.
+7. **A guard belongs right before the irreversible step.** "Check the user, await a write, commit"
+   leaves a window for the user to change. The final check now follows the last write.
+
+The meta-lesson: a plan reviewed only as prose hides the bugs that live in the real behaviour of
+triggers, clocks, libraries (Supabase's request builder has `.then` but no `.catch`), and
+connections. Reviewing the plan against the code, then the code against tests that fail first,
+caught all of them before any EA ever saw the feature.

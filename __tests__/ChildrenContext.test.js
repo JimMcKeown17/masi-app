@@ -11,6 +11,11 @@ import { groupEaAssignmentsRepository } from '../src/db/repositories/groupEaAssi
 import { syncOutboxRepository } from '../src/db/repositories/syncOutboxRepository';
 import { syncStateRepository } from '../src/db/repositories/syncStateRepository';
 import { ensureReferenceData } from '../src/services/offlineSync';
+import { startSessionHistoryPull, resetSessionHistoryStatusForActorChange } from '../src/services/sessionHistoryStatus';
+
+jest.mock('../src/services/sessionHistoryStatus', () => ({
+  startSessionHistoryPull: jest.fn(), resetSessionHistoryStatusForActorChange: jest.fn(),
+}));
 
 jest.mock('../src/services/supabaseClient', () => ({
   supabase: {},
@@ -216,6 +221,46 @@ describe('ChildrenContext Plan 5 hydration', () => {
 
   afterEach(() => {
     jest.clearAllMocks();
+  });
+
+  test('starts history after reference data without waiting for history before publishing the roster', async () => {
+    let releaseReferences;
+    ensureReferenceData.mockImplementationOnce(() => new Promise((resolve) => { releaseReferences = resolve; }));
+    startSessionHistoryPull.mockImplementationOnce(() => new Promise(() => {}));
+    const { result } = renderHook(() => useChildren(), { wrapper });
+    await waitFor(() => expect(ensureReferenceData).toHaveBeenCalledTimes(1));
+    expect(startSessionHistoryPull).not.toHaveBeenCalled();
+    await act(async () => { releaseReferences({}); });
+    await waitFor(() => expect(result.current.loading).toBe(false));
+    expect(startSessionHistoryPull).toHaveBeenCalledWith({ userId: 'user-1' });
+    expect(childrenRepository.saveServerChildRows).toHaveBeenCalled();
+  });
+
+  test('starts history only after this pull persisted its delivery assignments', async () => {
+    let releaseAssignments;
+    childrenRepository.saveServerStaffChildRows.mockImplementationOnce(
+      () => new Promise((resolve) => { releaseAssignments = resolve; })
+    );
+    startSessionHistoryPull.mockImplementationOnce(() => new Promise(() => {}));
+    const { result } = renderHook(() => useChildren(), { wrapper });
+    await waitFor(() => expect(childrenRepository.saveServerStaffChildRows).toHaveBeenCalledTimes(1));
+    // A handover's new delivery child must be local before history snapshots the child set.
+    expect(startSessionHistoryPull).not.toHaveBeenCalled();
+    await act(async () => { releaseAssignments({ applied: 1, skipped: 0 }); });
+    await waitFor(() => expect(result.current.loading).toBe(false));
+    expect(startSessionHistoryPull).toHaveBeenCalledWith({ userId: 'user-1' });
+  });
+
+  test.each([{ id: 'user-2' }, null])('a user id change to %p resets history while the old run is pending', async (nextUser) => {
+    startSessionHistoryPull.mockImplementationOnce(() => new Promise(() => {}));
+    const { result, rerender } = renderHook(() => useChildren(), { wrapper });
+    await waitFor(() => expect(result.current.loading).toBe(false));
+    expect(startSessionHistoryPull).toHaveBeenCalledWith({ userId: 'user-1' });
+    expect(resetSessionHistoryStatusForActorChange).not.toHaveBeenCalled();
+    useAuth.mockReturnValue({ user: nextUser });
+    rerender();
+    expect(resetSessionHistoryStatusForActorChange).toHaveBeenCalledTimes(1);
+    await waitFor(() => expect(result.current.loading).toBe(false));
   });
 
   test('mount performs one preloaded child-data pull and persists the result', async () => {

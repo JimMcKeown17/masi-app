@@ -31,6 +31,10 @@ module.exports = () => {
         backgroundColor: '#ffffff',
       },
       ios: {
+        // iOS needs full-bleed, opaque artwork: it applies its own rounded mask and fills any
+        // transparency with white. The shared icon has the logo inset for Android's adaptive-icon
+        // safe zone, which on iOS rendered as a small square inside a white tile.
+        icon: './assets/icon-ios.png',
         supportsTablet: false,
         bundleIdentifier: 'org.masinyusane.masi',
         infoPlist: {

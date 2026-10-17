@@ -622,6 +622,14 @@ const MIGRATIONS = [
         where group_id is not null;
     `,
   },
+  {
+    version: 10,
+    name: 'children_history_reference',
+    sql: `
+      alter table children add column history_reference integer not null default 0
+        check (history_reference in (0, 1));
+    `,
+  },
 ];
 
 // Derived from the migration list so it never drifts when a migration is added.

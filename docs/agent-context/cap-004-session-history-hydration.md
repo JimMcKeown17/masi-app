@@ -122,5 +122,15 @@ completeness.
 
 ## Safe resumption point
 
-This branch: `CONTEXT.md` term, spec, ADR-0006, roadmap pointer, decision-register row, and this
-briefing. No implementation has started. Nothing has been applied to the hosted backend for CAP-004.
+**Updated 2026-09-26.** Implementation is built on `feat/cap-004-session-history-hydration`: plan
+Tasks 1–8, commits `a33c1f2`..HEAD, local only and not pushed.
+- **Locally green:** the disposable PostgreSQL 17 harness, the unit suite (196 suites / 1,369
+  tests), and the integration suite (37 suites / 362 tests).
+- **Design corrections** since the handoff was written are in spec §12 and the ADR-0006 follow-ups:
+  server insert stamping, the per-user scope, no incomplete-family stop, nulling missing
+  references, the new-child and weekly re-walk, actor fencing, queue-aware deadlines, and failure
+  memory.
+- **Next, each needing Jim's explicit yes:**
+  1. push the branch and open a PR (CI);
+  2. ~~plan Task 9 hosted steps~~: done 2026-09-26 (applied; hosted matrix and HTTP walk passed);
+  3. an EAS preview build and the device gates.

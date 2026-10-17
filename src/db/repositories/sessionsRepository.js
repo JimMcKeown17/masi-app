@@ -7,10 +7,12 @@ import {
   normalizeSyncFields,
   resolveProgrammeId,
   sessionAttendeeDomainId,
+  serverPullWouldClobberPendingLocal,
   shouldEnqueueOutbox,
   upsertDomainRecord,
 } from './domainRepositoryUtils';
 import { syncStatusFromSynced } from './sqliteRepositoryUtils';
+import { syncStateRepository } from './syncStateRepository';
 
 const SESSION_COLUMNS = [
   'id',
@@ -248,6 +250,80 @@ export const createSessionsRepository = ({ database } = {}) => {
     return true;
   });
 
+  const HISTORY_REFERENCE_CHILD_COLUMNS = [
+    'id', 'first_name', 'last_name', 'preferred_name', 'history_reference', 'sync_status',
+  ];
+
+  const existingId = async (txn, table, id) => {
+    if (!id) return null;
+    const row = await txn.getFirstAsync(`select id from ${table} where id = ?`, id);
+    return row ? id : null;
+  };
+
+  // CAP-004: persist one parent page of hydrated session families and the traversal cursor
+  // in a single transaction (spec §6.2, §12). Absence never deletes; pending local rows win.
+  const saveHistoryPage = async (families, { scope, pullState, admit }) => runRepositoryTransaction(database, async (txn) => {
+    // Admission is checked inside the transaction, after the writer lock is held, so a run
+    // for an EA who signed out while this page waited for the writer commits nothing.
+    if (admit && !admit()) {
+      throw Object.assign(new Error('Session history run cancelled'), { kind: 'cancelled' });
+    }
+    let savedFamilies = 0;
+    for (const { session, attendees } of families) {
+      const parent = {
+        ...session,
+        class_id: await existingId(txn, 'classes', session.class_id),
+        sync_status: 'synced',
+        server_updated_at: session.updated_at,
+      };
+      if (await serverPullWouldClobberPendingLocal(txn, 'sessions', parent)) continue;
+      await upsertDomainRecord(txn, {
+        tableName: 'sessions',
+        columns: SESSION_COLUMNS,
+        jsonColumns: ['activities'],
+      }, parent);
+
+      for (const attendee of attendees) {
+        if (!(await existingId(txn, 'children', attendee.child_id))) {
+          await upsertDomainRecord(txn, {
+            tableName: 'children',
+            columns: HISTORY_REFERENCE_CHILD_COLUMNS,
+          }, {
+            id: attendee.child_id,
+            first_name: attendee.child_first_name,
+            last_name: attendee.child_last_name,
+            preferred_name: attendee.child_preferred_name ?? null,
+            history_reference: 1,
+            sync_status: 'synced',
+          });
+        }
+        const row = {
+          id: attendee.id,
+          session_id: attendee.session_id,
+          child_id: attendee.child_id,
+          group_id: await existingId(txn, 'groups', attendee.group_id),
+          attendance_status: attendee.attendance_status,
+          grade_snapshot: attendee.grade_snapshot ?? null,
+          notes: attendee.notes ?? null,
+          created_at: attendee.created_at,
+          updated_at: attendee.updated_at,
+          sync_status: 'synced',
+          server_updated_at: attendee.updated_at,
+        };
+        if (await serverPullWouldClobberPendingLocal(txn, 'session_attendees', row)) continue;
+        await upsertDomainRecord(txn, { tableName: 'session_attendees', columns: ATTENDEE_COLUMNS }, row);
+      }
+      savedFamilies += 1;
+    }
+    await syncStateRepository.setPullState(scope, pullState, { transaction: txn });
+    // Re-check after every awaited write, including the cursor. No await may follow this
+    // check inside the transaction callback: an actor change must roll back the whole page.
+    if (admit && !admit()) {
+      throw Object.assign(new Error('Session history run cancelled'), { kind: 'cancelled' });
+    }
+    return { savedFamilies };
+  });
+
   const updateSession = async (id, updates, keysToRemove = [], { transaction } = {}) => runWrite(transaction, async (txn) => {
     const rows = await hydrateSessions(txn, [await txn.getFirstAsync('select * from sessions where id = ?', id)].filter(Boolean));
     const existing = rows[0] || null;
@@ -271,6 +347,7 @@ export const createSessionsRepository = ({ database } = {}) => {
     getSessionCountsSince,
     countSessionsOnDate,
     saveSession,
+    saveHistoryPage,
     updateSession,
     getUnsyncedRecords,
   };

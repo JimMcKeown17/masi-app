@@ -1,3 +1,7 @@
+jest.mock('../src/services/sessionHistoryStatus', () => ({
+  startSessionHistoryPull: jest.fn(), resetSessionHistoryStatusForActorChange: jest.fn(),
+}));
+
 import React from 'react';
 import { act, render, waitFor } from '@testing-library/react-native';
 import { OfflineProvider, useOffline } from '../src/context/OfflineContext';

@@ -1,6 +1,7 @@
 import React, { createContext, useState, useEffect, useContext, useRef, useMemo, useCallback } from 'react';
 import { pullPreloadedChildData } from '../services/preloadedChildData';
 import { ensureReferenceData } from '../services/offlineSync';
+import { startSessionHistoryPull, resetSessionHistoryStatusForActorChange } from '../services/sessionHistoryStatus';
 import { childrenRepository } from '../db/repositories/childrenRepository';
 import { classesRepository } from '../db/repositories/classesRepository';
 import { groupsRepository } from '../db/repositories/groupsRepository';
@@ -43,6 +44,14 @@ export const ChildrenProvider = ({ children }) => {
   const [childrenGroups, setChildrenGroups] = useState([]);
   const [loading, setLoading] = useState(false);
   const activeUserIdRef = useRef(null);
+  const historyActorRef = useRef(user?.id || null);
+  useEffect(() => {
+    const nextActor = user?.id || null;
+    if (historyActorRef.current !== nextActor) {
+      historyActorRef.current = nextActor;
+      resetSessionHistoryStatusForActorChange();
+    }
+  }, [user?.id]);
   const activePullRef = useRef(null);
   const previousDomainPullNonceRef = useRef(domainPullNonce);
   const refreshSyncStatusRef = useRef(refreshSyncStatus);
@@ -317,6 +326,10 @@ export const ChildrenProvider = ({ children }) => {
       setChildrenList(freshChildren);
       setGroups(freshGroups);
       setChildrenGroups(freshMemberships);
+      // CAP-004: history starts only after this pull's assignments are persisted, so a
+      // handover's new delivery child triggers its re-walk in this run, not the next one.
+      // Never awaited: history must not delay roster publication.
+      startSessionHistoryPull({ userId: activeUserId });
       if (bypassedReconcileCompleted) {
         await refreshSyncStatusRef.current({ autoTrigger: false });
       }

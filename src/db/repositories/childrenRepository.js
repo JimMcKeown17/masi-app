@@ -31,6 +31,7 @@ const CHILD_COLUMNS = [
   'age',
   'gender',
   'reading_level',
+  'history_reference',
   'class_id',
   'hidden_at',
   'archived_at',
@@ -93,6 +94,13 @@ const normalizeChildRecord = (child) => ({
   ...child,
   gender: normalizeGender(child.gender),
 });
+
+const assertNotHistoryReference = async (txn, childId) => {
+  const row = await txn.getFirstAsync('select history_reference from children where id = ?', childId);
+  if (row?.history_reference === 1) {
+    throw new Error('History reference children are read-only');
+  }
+};
 
 export const createChildrenRepository = ({ database } = {}) => {
   const runWrite = (transaction, task) => (
@@ -274,12 +282,15 @@ export const createChildrenRepository = ({ database } = {}) => {
 
   const getChildren = async () => {
     const db = await resolveDatabase(database);
-    const rows = await db.getAllAsync('select * from children order by first_name, last_name');
+    const rows = await db.getAllAsync(
+      'select * from children where history_reference = 0 order by first_name, last_name'
+    );
     return rows.map(mapChild);
   };
 
   const save = async (child, { actorUserId = child.created_by || child.user_id, transaction } = {}) => (
     runWrite(transaction, async (txn) => {
+      await assertNotHistoryReference(txn, child.id);
       const programmeId = await resolveProgrammeId(txn, {
         programmeId: child.programme_id,
         userId: actorUserId,
@@ -391,6 +402,7 @@ export const createChildrenRepository = ({ database } = {}) => {
   );
 
   const updateChild = async (id, updates, { actorUserId, transaction } = {}) => runWrite(transaction, async (txn) => {
+    await assertNotHistoryReference(txn, id);
     const existing = await txn.getFirstAsync('select * from children where id = ?', id);
     if (!existing) return false;
 
@@ -504,8 +516,18 @@ export const createChildrenRepository = ({ database } = {}) => {
   const saveChildRecord = async (child, { transaction } = {}) => runWrite(transaction, async (txn) => {
     const record = normalizeSyncFields({
       ...normalizeChildRecord(child),
+      // Every full-row save describes a real roster child; this is how a history reference
+      // row (CAP-004) is upgraded in place when the roster pull later returns the child.
+      history_reference: 0,
       sync_status: child.sync_status || syncStatusFromSynced(child.synced),
     });
+    const existing = await txn.getFirstAsync(
+      'select history_reference from children where id = ?',
+      record.id
+    );
+    if (existing?.history_reference === 1 && record.sync_status !== 'synced') {
+      throw new Error('History reference children are read-only');
+    }
     if (await serverPullWouldClobberPendingLocal(txn, 'children', record)) {
       return false;
     }
@@ -710,6 +732,7 @@ export const createChildrenRepository = ({ database } = {}) => {
         on classes.id = ccm.class_id
        and classes.archived_at is null
       where children.archived_at is null
+        and children.history_reference = 0
       order by children.first_name, children.last_name
     `, userId, userId);
 
@@ -722,6 +745,7 @@ export const createChildrenRepository = ({ database } = {}) => {
     archiveReason = null,
     transaction,
   } = {}) => runWrite(transaction, async (txn) => {
+    await assertNotHistoryReference(txn, childId);
     await txn.runAsync(`
       update children
       set archived_at = ?,
@@ -763,6 +787,7 @@ export const createChildrenRepository = ({ database } = {}) => {
   });
 
   const deleteIfNoHistory = async (childId, { transaction } = {}) => runWrite(transaction, async (txn) => {
+    await assertNotHistoryReference(txn, childId);
     const checks = [
       "select 1 from session_attendees where child_id = ? limit 1",
       "select 1 from assessments where child_id = ? limit 1",

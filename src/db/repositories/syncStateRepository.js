@@ -20,6 +20,7 @@ const mapPullState = (row) => ({
   scope: row.scope,
   lastPulledAt: row.last_pulled_at,
   cursor: row.cursor,
+  updatedAt: row.updated_at,
 });
 
 export const createSyncStateRepository = ({ database } = {}) => {

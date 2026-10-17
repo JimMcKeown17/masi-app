@@ -473,6 +473,7 @@ describe('SQLite sync state repository', () => {
       scope: 'children',
       lastPulledAt: '2026-05-21T10:00:00.000Z',
       cursor: 'cursor-1',
+      updatedAt: expect.any(String),
     });
     expect(await syncState.getSyncMeta()).toEqual(expect.objectContaining({
       lastSyncTime: '2026-05-21T10:01:00.000Z',
