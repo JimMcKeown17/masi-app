@@ -30,11 +30,16 @@ For every non-trivial task:
 | Group-centred sessions | `documentation/group-session-workflow.md` | contract map, CONTEXT, open decisions, relevant ADRs |
 | Masi/Zazi comparison or shared field-app infrastructure | `documentation/field-app-capability-ledger.md`, `documentation/field-app-portfolio-invariants.md`, `documentation/masi-zazi-portfolio-audit-2026-08-27.md` | current app contract maps, source, tests, live probes, and relevant ADRs |
 | Pre-live estate, history hydration, or history authorization | [`cap-004-session-history-hydration.md`](./cap-004-session-history-hydration.md) for the session slice; `CONTEXT.md`, `documentation/pre-live-gate0-audit-2026-08-27.md`, `documentation/rls-sync-contract-map.md`, `docs/adr/0005-assessment-delivery-scope-two-tier-access.md` | `documentation/field-app-capability-ledger.md`, canonical migrations, live authenticated probes, release/device gates |
+| Uploads, sign-out, account switching, or a missing edit in device testing | [`actor-lifecycle-and-upload-defects.md`](./actor-lifecycle-and-upload-defects.md) | the actor lifecycle spec it links, `documentation/rls-sync-contract-map.md` |
 | Documentation cleanup or status reconciliation | [`documentation-system.md`](./documentation-system.md) | `documentation/README.md`, archive index, build log |
 | National scale or government readiness | `documentation/national-scale-readiness-250k-users-2026-07-15.md` | roadmap sections for still-open execution work |
 
 ## Current focused briefings
 
+- [`actor-lifecycle-and-upload-defects.md`](./actor-lifecycle-and-upload-defects.md): three
+  confirmed, unfixed upload defects (edits to Head Office records never upload; uploads can run
+  under the next EA's sign-in; group-assignment reactivation is lost), how they show up in device
+  testing, and the designed fix.
 - [`cap-004-session-history-hydration.md`](./cap-004-session-history-hydration.md): CAP-004
   session/attendee history hydration — Jim's locked decisions, spec and ADR pointers, estate state,
   constraints, slice order, review focus, and safe resumption point.

@@ -105,6 +105,19 @@ export const createSyncOutboxRepository = ({ database } = {}) => {
     return !!row;
   };
 
+  // True while an outbox row for exactly this operation is still owed. Terminal rows do not count.
+  const hasPendingOperation = async ({ tableName, recordId, operation }) => {
+    if (!tableName || !recordId || !operation) return false;
+    const db = await resolveDatabase(database);
+    const row = await db.getFirstAsync(`
+      select id from sync_outbox
+      where table_name = ? and record_id = ? and operation = ?
+        and status in ('pending', 'failed', 'in_flight')
+      limit 1
+    `, tableName, recordId, operation);
+    return !!row;
+  };
+
   const getPendingHardDeleteIds = async ({ tableName, ownerUserId } = {}) => {
     if (!tableName) return new Set();
     const db = await resolveDatabase(database);
@@ -358,6 +371,7 @@ export const createSyncOutboxRepository = ({ database } = {}) => {
     getById,
     getReadyRecords,
     hasPendingRecord,
+    hasPendingOperation,
     getPendingHardDeleteIds,
     getTerminalRecords,
     markInFlight,

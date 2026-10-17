@@ -8,6 +8,7 @@ import {
 } from '../db/repositories/sqliteRepositoryUtils';
 import {
   createSyncOutboxRepository,
+  outboxRecordId,
   syncOutboxRepository,
 } from '../db/repositories/syncOutboxRepository';
 import {
@@ -239,29 +240,50 @@ const PARENT_FK_COLUMNS = {
   letter_mastery: { children: 'child_id' },
 };
 
-// The DIRECT active-assignment grant(s) each write needs, per RLS
-// private.current_user_can_write_for_* (migration 20260521144901 lines 368-517). Only the
-// assignment half is here; the created_by half is covered by PARENT_FK_COLUMNS.
-// staff_programme_assignments is excluded (reference data, never pushed, so a 42501 from it is a
-// genuine terminal denial). Used for 42501 only. LIMITATION: write_for_child also grants via two
-// membership-mediated paths (class_ea via child_class_memberships, group_ea via
-// child_group_memberships) that this single-hop map cannot express; a child write whose ONLY
-// grant is a pending class/group assignment would false-terminal. Not reachable in the current
-// direct-child-assignment field model; extend this before group-centric (whole-class) access
-// ships. See rls-sync-contract-map.md "Error Classification (Item 10)".
+// The grant(s) each write needs, matching private.current_user_can_write_for_child/class/group
+// (migration 20260521144901 lines 368-517). The created_by half is covered by PARENT_FK_COLUMNS.
+// Entry shapes:
+//   { grantTable, subjectColumn, valueColumn? }: a direct active assignment whose subjectColumn
+//     equals this record's valueColumn (default subjectColumn). valueColumn 'id' means the
+//     record's own id is the subject (classes, groups, children).
+//   { membershipMediatedChild: column }: the child in `column` is reachable through an active
+//     class or group membership joined to an active class or group assignment. The server needs
+//     both rows, so evidence is pending when either half is unacknowledged and not terminal.
+// staff_programme_assignments is excluded (reference data, never pushed). Used for 42501 and
+// UPDATE_NOT_APPLIED.
 const GRANT_SUBJECTS = {
+  classes: [{ grantTable: 'class_ea_assignments', subjectColumn: 'class_id', valueColumn: 'id' }],
+  groups: [{ grantTable: 'group_ea_assignments', subjectColumn: 'group_id', valueColumn: 'id' }],
+  children: [
+    { grantTable: 'child_ea_assignments', subjectColumn: 'child_id', valueColumn: 'id' },
+    { membershipMediatedChild: 'id' },
+  ],
   child_class_memberships: [
     { grantTable: 'child_ea_assignments', subjectColumn: 'child_id' },
     { grantTable: 'class_ea_assignments', subjectColumn: 'class_id' },
+    { membershipMediatedChild: 'child_id' },
   ],
-  child_programme_enrollments: [{ grantTable: 'child_ea_assignments', subjectColumn: 'child_id' }],
+  child_programme_enrollments: [
+    { grantTable: 'child_ea_assignments', subjectColumn: 'child_id' },
+    { membershipMediatedChild: 'child_id' },
+  ],
   child_group_memberships: [
     { grantTable: 'child_ea_assignments', subjectColumn: 'child_id' },
     { grantTable: 'group_ea_assignments', subjectColumn: 'group_id' },
+    { membershipMediatedChild: 'child_id' },
   ],
-  session_attendees: [{ grantTable: 'child_ea_assignments', subjectColumn: 'child_id' }],
-  assessments: [{ grantTable: 'child_ea_assignments', subjectColumn: 'child_id' }],
-  letter_mastery: [{ grantTable: 'child_ea_assignments', subjectColumn: 'child_id' }],
+  session_attendees: [
+    { grantTable: 'child_ea_assignments', subjectColumn: 'child_id' },
+    { membershipMediatedChild: 'child_id' },
+  ],
+  assessments: [
+    { grantTable: 'child_ea_assignments', subjectColumn: 'child_id' },
+    { membershipMediatedChild: 'child_id' },
+  ],
+  letter_mastery: [
+    { grantTable: 'child_ea_assignments', subjectColumn: 'child_id' },
+    { membershipMediatedChild: 'child_id' },
+  ],
   grouping_versions: [{ grantTable: 'class_ea_assignments', subjectColumn: 'class_id' }],
   class_grouping_state: [{ grantTable: 'class_ea_assignments', subjectColumn: 'class_id' }],
 };
@@ -309,6 +331,14 @@ const IMMUTABLE_ASSIGNMENT_TABLES = new Set([
   'group_ea_assignments',
 ]);
 
+// Edits change a row the server already has. PostgreSQL checks INSERT WITH CHECK on every upsert
+// row, even one that conflicts, so sending an edit as an upsert asks for insert permission that an
+// EA editing a Head Office-created row does not have. These tables send `update` as UPDATE by id
+// with an exact acknowledgement (actor lifecycle spec §6.5). class_grouping_state stays an upsert:
+// its `update` means create-or-update and its INSERT policy is authorization-based.
+// Provenance and identity never change through an edit.
+const UPDATE_PATCH_EXCLUDED_COLUMNS = new Set(['id', 'created_by', 'created_at', 'user_id', 'archived_by_user_id']);
+
 // Archive is a lifecycle transition, never a row creation or identity rewrite.
 // Older outbox rows can contain a full domain snapshot, so narrow every archive
 // to the lifecycle columns the operation is allowed to change before issuing
@@ -326,6 +356,12 @@ const ARCHIVE_SERVER_COLUMNS = {
   child_group_memberships: ['removed_at'],
   letter_mastery: ['deleted_at'],
 };
+
+// Lifecycle-bearing edits must also avoid single/batched upsert: full snapshots
+// replay old lifecycle values, and omitting columns from an upsert can still
+// apply INSERT defaults on conflict. UPDATE preserves every omitted column.
+const UPDATE_BY_ID_TABLES = new Set(['time_entries', ...Object.keys(ARCHIVE_SERVER_COLUMNS)]);
+export const _testUpdateByIdTables = UPDATE_BY_ID_TABLES;
 
 const dependenciesForRecord = (outboxRecord) => {
   const dependencies = new Set(TABLE_DEPENDENCIES[outboxRecord.table_name] || []);
@@ -398,12 +434,64 @@ const hasPendingActiveAssignment = async (database, grantTable, subjectColumn, s
   return !!row;
 };
 
-// True when the record still has locally-pending evidence it legitimately needs: its FK
-// parent (for 23503 and the created_by half of 42501 grants) or, when includeGrant is set
-// (42501 only), an active assignment grant that has not synced. No server calls.
-const computeEvidencePending = async ({ database, outboxRepository, outboxRecord, includeGrant }) => {
+const UNACKNOWLEDGED_STATUSES = "('pending', 'failed', 'in_flight')";
+
+// A child write granted through a class or group needs BOTH an active membership and an active
+// assignment on the server. Evidence is pending when a local pair exists and either half has not
+// been acknowledged. A terminal half contributes nothing.
+const hasPendingMembershipMediatedGrant = async (
+  database,
+  childId,
+  { tableName, recordId } = {},
+) => {
+  const currentTable = normalizeTableName(tableName);
+  const excludedClassMembershipId = currentTable === 'child_class_memberships' ? recordId : '';
+  const excludedGroupMembershipId = currentTable === 'child_group_memberships' ? recordId : '';
+  const row = await database.getFirstAsync(`
+    select 1 as present
+    from child_class_memberships ccm
+    join class_ea_assignments cea
+      on cea.class_id = ccm.class_id and cea.unassigned_at is null
+    where ccm.child_id = ?
+      and ccm.id != ?
+      and ccm.exited_at is null
+      and (ccm.sync_status in ${UNACKNOWLEDGED_STATUSES} or cea.sync_status in ${UNACKNOWLEDGED_STATUSES})
+      and ccm.sync_status != 'terminal'
+      and cea.sync_status != 'terminal'
+    union all
+    select 1 as present
+    from child_group_memberships cgm
+    join group_ea_assignments gea
+      on gea.group_id = cgm.group_id and gea.unassigned_at is null
+    where cgm.child_id = ?
+      and cgm.id != ?
+      and cgm.removed_at is null
+      and (cgm.sync_status in ${UNACKNOWLEDGED_STATUSES} or gea.sync_status in ${UNACKNOWLEDGED_STATUSES})
+      and cgm.sync_status != 'terminal'
+      and gea.sync_status != 'terminal'
+    limit 1
+  `, childId, excludedClassMembershipId, childId, excludedGroupMembershipId);
+  return !!row;
+};
+
+const computeEvidencePending = async ({
+  database,
+  outboxRepository,
+  outboxRecord,
+  includeGrant,
+  includeOwnInsert = false,
+}) => {
+  const db = await resolveDatabase(database);
   const table = normalizeTableName(outboxRecord?.table_name);
-  const getField = makeFieldResolver(database, outboxRecord);
+  const getField = makeFieldResolver(db, outboxRecord);
+
+  if (includeOwnInsert && await outboxRepository.hasPendingOperation({
+    tableName: table,
+    recordId: outboxRecord.record_id,
+    operation: 'insert',
+  })) {
+    return true;
+  }
 
   const fkColumns = PARENT_FK_COLUMNS[table] || {};
   for (const [parentTable, column] of Object.entries(fkColumns)) {
@@ -414,10 +502,17 @@ const computeEvidencePending = async ({ database, outboxRepository, outboxRecord
   }
 
   if (includeGrant) {
-    const grants = GRANT_SUBJECTS[table] || [];
-    for (const { grantTable, subjectColumn } of grants) {
-      const subjectValue = await getField(subjectColumn);
-      if (subjectValue && await hasPendingActiveAssignment(database, grantTable, subjectColumn, subjectValue)) {
+    for (const grant of GRANT_SUBJECTS[table] || []) {
+      if (grant.membershipMediatedChild) {
+        const childId = await getField(grant.membershipMediatedChild);
+        if (childId && await hasPendingMembershipMediatedGrant(db, childId, {
+          tableName: table,
+          recordId: outboxRecord.record_id,
+        })) return true;
+        continue;
+      }
+      const subjectValue = await getField(grant.valueColumn || grant.subjectColumn);
+      if (subjectValue && await hasPendingActiveAssignment(db, grant.grantTable, grant.subjectColumn, subjectValue)) {
         return true;
       }
     }
@@ -463,15 +558,16 @@ const classifyError = (
     return { terminal: true, markAsSynced: duplicateIsSuccess };
   }
 
-  if (code === '23503' || code === '42501') {
-    // A FK/RLS denial while required local evidence is still pending is a
-    // cross-pass race. Without pending evidence, it is a genuine rejection.
+  if (code === '23503' || code === '42501' || code === 'UPDATE_NOT_APPLIED') {
+    // A FK/RLS denial, or an UPDATE that matched no visible row, while required local evidence is
+    // still pending is a cross-pass race. Without pending evidence, it is a genuine rejection.
     return { terminal: !parentEvidencePending, markAsSynced: false };
   }
 
   if (
     code === 'ARCHIVE_REQUIRED'
     || code === 'ARCHIVE_NOT_APPLIED'
+    || code === 'RESTORE_NOT_APPLIED'
     || code === 'LOCAL_ONLY_REFERENCE'
     || code === 'MISSING_OUTBOX_PAYLOAD'
   ) {
@@ -672,7 +768,7 @@ const runServerOperation = async (supabaseClient, config, outboxRecord) => {
     return error ? { success: false, error } : { success: true };
   }
 
-  if (outboxRecord.operation === 'archive') {
+  if (outboxRecord.operation === 'archive' || outboxRecord.operation === 'restore') {
     const archiveColumns = ARCHIVE_SERVER_COLUMNS[config.tableName] || [];
     const archivePatch = Object.fromEntries(
       archiveColumns
@@ -686,11 +782,44 @@ const runServerOperation = async (supabaseClient, config, outboxRecord) => {
       .select('id');
     if (error) return { success: false, error };
     if (!Array.isArray(data) || data.length !== 1 || data[0]?.id !== outboxRecord.record_id) {
+      const notApplied = outboxRecord.operation === 'restore' ? 'RESTORE_NOT_APPLIED' : 'ARCHIVE_NOT_APPLIED';
       return {
         success: false,
         error: {
-          code: 'ARCHIVE_NOT_APPLIED',
-          message: `${config.tableName} archive did not acknowledge exactly one updated row`,
+          code: notApplied,
+          message: `${config.tableName} ${outboxRecord.operation} did not acknowledge exactly one updated row`,
+        },
+      };
+    }
+    return { success: true };
+  }
+
+  if (outboxRecord.operation === 'update' && UPDATE_BY_ID_TABLES.has(config.tableName)) {
+    // buildSyncPayload has already re-derived deterministic ids (letter_mastery), so the server id
+    // is the payload id, not the outbox record_id.
+    const serverId = payload.id || outboxRecord.record_id;
+    // Full stored snapshots may predate an archive/restore. Ordinary edits must
+    // not replay that lifecycle state. Mastery reactivation is intentionally an
+    // update with deleted_at:null (masteryRepository.enqueueMasteryWrite).
+    const lifecycleColumns = config.tableName === 'letter_mastery'
+      ? [] : (ARCHIVE_SERVER_COLUMNS[config.tableName] || []);
+    const patch = Object.fromEntries(
+      Object.entries(payload).filter(([column]) => (
+        !UPDATE_PATCH_EXCLUDED_COLUMNS.has(column) && !lifecycleColumns.includes(column)
+      ))
+    );
+    const { data, error } = await supabaseClient
+      .from(config.tableName)
+      .update(patch)
+      .eq('id', serverId)
+      .select('id');
+    if (error) return { success: false, error };
+    if (!Array.isArray(data) || data.length !== 1 || data[0]?.id !== serverId) {
+      return {
+        success: false,
+        error: {
+          code: 'UPDATE_NOT_APPLIED',
+          message: `${config.tableName} update did not acknowledge exactly one updated row`,
         },
       };
     }
@@ -929,7 +1058,8 @@ const finalizeManyRetriableFailure = async ({ database, records, tableName, reas
 };
 
 const pushOrderForRecord = (record) => {
-  if (record.operation === 'archive' && ARCHIVE_PUSH_ORDER[record.table_name] != null) {
+  const isLifecycle = record.operation === 'archive' || record.operation === 'restore';
+  if (isLifecycle && ARCHIVE_PUSH_ORDER[record.table_name] != null) {
     return ARCHIVE_PUSH_ORDER[record.table_name];
   }
   return TABLE_CONFIGS[record.table_name]?.order ?? Number.MAX_SAFE_INTEGER;
@@ -947,7 +1077,10 @@ const sortByPushOrder = (records) => records
 const canBatchRecord = (record, config) => (
   Boolean(config)
   && BATCHABLE_UPSERT_TABLES.has(config.tableName)
-  && (record.operation === 'insert' || record.operation === 'update')
+  && (
+    record.operation === 'insert'
+    || (record.operation === 'update' && !UPDATE_BY_ID_TABLES.has(config.tableName))
+  )
   && (!IMMUTABLE_ASSIGNMENT_TABLES.has(config.tableName) || record.operation === 'insert')
   && record.payload != null
 );
@@ -1026,12 +1159,13 @@ export const createOutboxSyncEngine = ({
       }
 
       const failureCode = serverResult.error?.code;
-      const parentEvidencePending = (failureCode === '23503' || failureCode === '42501')
+      const parentEvidencePending = ['23503', '42501', 'UPDATE_NOT_APPLIED'].includes(failureCode)
         ? await computeEvidencePending({
             database,
             outboxRepository,
             outboxRecord: inFlightRecord,
-            includeGrant: failureCode === '42501',
+            includeGrant: failureCode !== '23503',
+            includeOwnInsert: failureCode === 'UPDATE_NOT_APPLIED',
           })
         : false;
       const classification = classifyError(serverResult.error, config, { parentEvidencePending });
@@ -1328,6 +1462,52 @@ export const createOutboxSyncEngine = ({
 
     const findBlockingDependency = async (record) => {
       const tableNameForRecord = normalizeTableName(record.table_name);
+      const isLifecycle = record.operation === 'archive' || record.operation === 'restore';
+      if (record.operation === 'hard_delete' && tableNameForRecord === 'children') {
+        // Deletion retained a possibly-committed INSERT. Do not let deletion
+        // finish before its retry, including a terminal insert retried manually.
+        const resolvedDatabase = await resolveDatabase(database);
+        const retainedInsert = await resolvedDatabase.getFirstAsync(`
+          select id from sync_outbox
+          where table_name = 'children' and record_id = ? and operation = 'insert'
+          limit 1
+        `, record.record_id);
+        if (retainedInsert) return { tableName: tableNameForRecord, recordId: record.record_id };
+      }
+      // Same-record ordering: an acknowledged UPDATE-by-id edit or lifecycle UPDATE must not run
+      // before its own insert has been acknowledged, or it cannot acknowledge a row that exists.
+      // A terminal insert does not block; the update then reaches its normal terminal classifier.
+      if (
+        (isLifecycle || (
+          record.operation === 'update'
+          && UPDATE_BY_ID_TABLES.has(tableNameForRecord)
+        ))
+        && await outboxRepository.hasPendingOperation({
+          tableName: tableNameForRecord,
+          recordId: record.record_id,
+          operation: 'insert',
+        })
+      ) {
+        return { tableName: tableNameForRecord, recordId: record.record_id };
+      }
+      if (
+        isLifecycle
+        && record.id === outboxRecordId(tableNameForRecord, record.record_id, 'lifecycle')
+      ) {
+        const resolvedDatabase = await resolveDatabase(database);
+        const legacyLifecycle = await resolvedDatabase.getFirstAsync(`
+          select id
+          from sync_outbox
+          where id in (?, ?)
+            and status in ('pending', 'failed', 'in_flight')
+          limit 1
+        `,
+        outboxRecordId(tableNameForRecord, record.record_id, 'archive'),
+        outboxRecordId(tableNameForRecord, record.record_id, 'restore'));
+        if (legacyLifecycle) {
+          return { tableName: tableNameForRecord, recordId: record.record_id };
+        }
+      }
       for (const dependency of dependenciesForRecord(record)) {
         const blockers = failedRecordsByTable.get(normalizeTableName(dependency));
         if (!blockers || blockers.size === 0) continue;

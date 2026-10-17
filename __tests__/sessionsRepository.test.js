@@ -10,6 +10,53 @@ import {
 } from '../test-support/sqliteRepositoryTestUtils';
 
 describe('sessionsRepository', () => {
+  test.each(['synced', 'terminal'])('editing a %s session resets and queues its parent and rewritten attendees', async (status) => {
+    const db = await createMigratedDatabase(runMigrations);
+    try {
+      await seedCoreData(db);
+      await createChildrenRepository({ database: db }).saveChildRecord({
+        id: 'child-1', first_name: 'Test', last_name: 'Child', created_by: 'user-1', synced: true,
+      });
+      const repository = createSessionsRepository({ database: db });
+      await repository.saveSession({
+        id: 'session-edit', user_id: 'user-1', programme_id: 'programme-a', session_date: '2026-10-15',
+        children_ids: ['child-1'], activities: { letters_focused: ['a'] },
+        sync_status: status, last_sync_error: 'old error', _pendingJobTitleResolve: true,
+      });
+      await db.runAsync("update session_attendees set last_sync_error = 'old attendee error'");
+      expect(await db.getAllAsync('select * from sync_outbox')).toEqual([]);
+
+      for (const keysToRemove of [['_pendingJobTitleResolve'], ['sync_status', 'synced', 'last_sync_error']]) {
+        const [current] = await repository.getSessions();
+        expect(await repository.updateSession('session-edit', {
+          ...current, notes: 'Edited', sync_status: status, synced: true, last_sync_error: 'caller error',
+        }, keysToRemove)).toBe(true);
+
+        expect(await repository.getSessions()).toEqual([expect.objectContaining({
+          notes: 'Edited', sync_status: 'pending', synced: false, last_sync_error: null,
+        })]);
+        expect((await repository.getSessions())[0]).not.toHaveProperty('_pendingJobTitleResolve');
+        expect(await db.getAllAsync('select sync_status, last_sync_error from session_attendees')).toEqual([
+          { sync_status: 'pending', last_sync_error: null },
+        ]);
+        const outbox = await db.getAllAsync('select table_name, operation, owner_user_id, payload from sync_outbox order by table_name');
+        expect(outbox.map(({ table_name, operation, owner_user_id }) => ({ table_name, operation, owner_user_id }))).toEqual([
+          { table_name: 'session_attendees', operation: 'insert', owner_user_id: 'user-1' },
+          { table_name: 'sessions', operation: 'insert', owner_user_id: 'user-1' },
+        ]);
+        for (const row of outbox) {
+          expect(JSON.parse(row.payload)).toEqual(expect.objectContaining({
+            sync_status: 'pending', synced: false, last_sync_error: null,
+          }));
+        }
+        expect(JSON.parse(outbox[0].payload)).toEqual(expect.objectContaining({ session_id: 'session-edit', child_id: 'child-1' }));
+        expect(JSON.parse(outbox[1].payload)).toEqual(expect.objectContaining({ notes: 'Edited', activities: { letters_focused: ['a'] } }));
+      }
+    } finally {
+      await db.closeAsync();
+    }
+  });
+
   test('session save writes parent and attendees in one transaction and returns screen-ready children_ids', async () => {
     const db = await createMigratedDatabase(runMigrations);
 

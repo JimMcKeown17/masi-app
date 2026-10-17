@@ -4,6 +4,7 @@ jest.mock('../src/services/supabaseClient', () => ({
 }));
 
 import { createBetterSqliteTestDatabase } from '../test-support/betterSqliteAdapter';
+import { createSupabaseMock } from '../test-support/supabaseSyncMock';
 import { runMigrations } from '../src/db/migrations';
 import {
   AUTHENTICATED_DENIAL_MARKER,
@@ -32,49 +33,6 @@ import { createSessionsRepository } from '../src/db/repositories/sessionsReposit
 import { createSyncOutboxRepository } from '../src/db/repositories/syncOutboxRepository';
 import { createTimeEntriesRepository } from '../src/db/repositories/timeEntriesRepository';
 import { repairGroupOwnershipForSync } from '../src/db/repositories/groupsRepository';
-
-const createSupabaseMock = ({ upsertResults = {}, updateResults = {}, rpcResults = {} } = {}) => {
-  const calls = [];
-  const supabaseClient = {
-    from: jest.fn((tableName) => ({
-      upsert: jest.fn(async (payload, options) => {
-        calls.push({ type: 'upsert', tableName, payload, options });
-        const resultKey = Array.isArray(payload)
-          ? `${tableName}:batch`
-          : `${tableName}:${payload.id}`;
-        const result = upsertResults[resultKey] || upsertResults[tableName];
-        if (typeof result === 'function') {
-          return result({ tableName, payload, options, calls });
-        }
-        return result || { error: null };
-      }),
-      update: jest.fn((payload) => ({
-        eq: jest.fn((column, value) => ({
-          select: jest.fn(async () => {
-            calls.push({ type: 'update', tableName, payload, column, value });
-            const result = updateResults[`${tableName}:${value}`] || updateResults[tableName];
-            if (typeof result === 'function') {
-              return result({ tableName, payload, column, value, calls });
-            }
-            return result || { data: [{ id: value }], error: null };
-          }),
-        })),
-      })),
-      delete: jest.fn(() => ({
-        eq: jest.fn(async (column, value) => {
-          calls.push({ type: 'delete', tableName, column, value });
-          return { error: null };
-        }),
-      })),
-    })),
-    rpc: jest.fn(async (functionName, args) => {
-      calls.push({ type: 'rpc', functionName, args });
-      return rpcResults[functionName] || { data: true, error: null };
-    }),
-  };
-
-  return { supabaseClient, calls };
-};
 
 const seedReferences = async (db) => {
   await db.runAsync("insert into schools (id, name, sync_status) values ('school-1', 'Masi Primary', 'synced')");
@@ -1444,7 +1402,7 @@ describe('SQLite outbox offline sync', () => {
     ]);
   });
 
-  test('batches ready child inserts and updates into one upsert', async () => {
+  test('batches child inserts and sends child updates as UPDATE by id', async () => {
     const children = [
       { id: 'child-batch-1', first_name: 'Amahle', last_name: 'Dlamini', reading_level: 'letters' },
       { id: 'child-batch-2', first_name: 'Lebo', last_name: 'Mokoena', reading_level: 'words' },
@@ -1470,13 +1428,9 @@ describe('SQLite outbox offline sync', () => {
     const result = await engine.syncAll();
 
     const childCalls = calls.filter(call => call.tableName === 'children');
-    expect(childCalls).toHaveLength(1);
-    expect(childCalls[0]).toEqual(expect.objectContaining({
-      type: 'upsert',
-      tableName: 'children',
-      payload: expect.arrayContaining(children.map(child => expect.objectContaining(child))),
-      options: expect.objectContaining({ onConflict: 'id', ignoreDuplicates: false }),
-    }));
+    expect(childCalls.filter(call => call.type === 'upsert')).toHaveLength(1);
+    expect(childCalls.filter(call => call.type === 'update').map(call => call.value).sort())
+      .toEqual(['child-batch-2', 'child-batch-3']);
     expect(result).toEqual(expect.objectContaining({
       success: true,
       totalSynced: children.length,
@@ -1689,8 +1643,8 @@ describe('SQLite outbox offline sync', () => {
     }));
   });
 
-  test('keeps immutable assignment lifecycle updates out of insert-or-ignore batches', async () => {
-    const unassignedAt = '2026-07-14T12:00:00.000Z';
+  test.each(['update', 'archive', 'restore'])('keeps immutable assignment %s out of upsert batches and scopes its patch', async (operation) => {
+    const unassignedAt = operation === 'restore' ? null : '2026-07-14T12:00:00.000Z';
     for (let index = 1; index <= 2; index += 1) {
       const childId = `child-assignment-update-${index}`;
       const assignmentId = `assignment-update-${index}`;
@@ -1705,7 +1659,7 @@ describe('SQLite outbox offline sync', () => {
           ?, 'user-1', ?, '2026-07-14T10:00:00.000Z', ?, 'user-1', 'pending'
         )
       `, assignmentId, childId, unassignedAt);
-      await enqueue(db, 'child_ea_assignments', assignmentId, 'update', {
+      await enqueue(db, 'child_ea_assignments', assignmentId, operation, {
         id: assignmentId,
         user_id: 'user-1',
         child_id: childId,
@@ -1723,7 +1677,17 @@ describe('SQLite outbox offline sync', () => {
     const assignmentCalls = calls.filter(call => call.tableName === 'child_ea_assignments');
     expect(assignmentCalls).toHaveLength(2);
     expect(assignmentCalls.every(call => !Array.isArray(call.payload))).toBe(true);
-    expect(assignmentCalls.every(call => call.options.ignoreDuplicates === false)).toBe(true);
+    for (const call of assignmentCalls) {
+      expect(call.type).toBe('update');
+      if (operation === 'update') {
+        expect(call.payload).not.toHaveProperty('unassigned_at');
+        for (const column of ['id', 'created_by', 'created_at', 'user_id']) {
+          expect(call.payload).not.toHaveProperty(column);
+        }
+      } else {
+        expect(call.payload).toEqual({ unassigned_at: unassignedAt });
+      }
+    }
     expect(result).toEqual(expect.objectContaining({
       success: true,
       totalSynced: 2,
@@ -2025,7 +1989,7 @@ describe('SQLite outbox offline sync', () => {
       });
   });
 
-  test('archive operations update lifecycle fields while restore operations still upsert', async () => {
+  test('archive and restore operations update only lifecycle fields (spec §6.5b)', async () => {
     await db.runAsync(`
       insert into classes (id, school_id, name, grade, archived_at, sync_status)
       values ('class-1', 'school-1', 'Grade 1A', '1', '2026-05-21T09:00:00.000Z', 'pending')
@@ -2064,14 +2028,15 @@ describe('SQLite outbox offline sync', () => {
         column: 'id',
         value: 'class-1',
       },
-      expect.objectContaining({
-        type: 'upsert',
+      {
+        type: 'update',
         tableName: 'children',
-        payload: expect.objectContaining({
-          id: 'child-1',
+        payload: {
           archived_at: null,
-        }),
-      }),
+        },
+        column: 'id',
+        value: 'child-1',
+      },
     ]);
     expect(await db.getFirstAsync('select sync_status from classes where id = ?', 'class-1'))
       .toEqual({ sync_status: 'synced' });

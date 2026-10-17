@@ -371,3 +371,41 @@ Found while writing the implementation plan against current code. Each supersede
     - Request deadlines start at enqueue time, so a hung request ahead in the shared queue cannot
       hold the history run.
     - A failed run records `lastFailureAt`, so an earlier success is never shown as "Up to date".
+
+## 13. Field-evidence additions (2026-10-08)
+
+From [`zazi-sync-lessons-for-masi-2026-10-08.md`](../../../documentation/zazi-sync-lessons-for-masi-2026-10-08.md).
+The design is unchanged; the verification in §8 is extended.
+
+1. **"Within a minute" is a volume claim (amends §8, Device).** It is proved on a Galaxy A03s with a
+   realistic-volume test account, not only with practice data. On that phone Zazi measured saving,
+   not downloading, as about 95% of history time.
+2. **Run timing names its phases (amends §5.3).** The run's end log line separates RPC time from
+   SQLite save time, so an exported log can attribute a slow phone.
+3. **User writes stay responsive during a download (amends §8, Device).** A save, a start, or a clock-in
+   made while a run is in flight on the A03s must not wait behind page transactions for more than
+   about 2 s.
+4. **Page cost is bounded, and atomicity is kept (amends §6.2).** If 1, 3 or 6 fails, and in any case
+   before the assessment slice reuses this shape:
+   - batch the per-page existence and pending-local lookups;
+   - skip rows identical to the stored row;
+   - reuse prepared statements.
+
+   One page, with its cursor, stays one transaction.
+
+5. **Continuation does not depend on roster freshness (amends §5.5; found by the 2026-10-08 Codex
+   review).**
+   - §5.5 says history runs on foreground or reconnect when stale. As built, it starts only after a
+     roster pull, and roster pulls skip themselves for 15 minutes.
+   - A history scope that is incomplete, failed since its last success, or stale is admitted on
+     foreground and reconnect in its own right, single-flight.
+6. **Progress is durable within a short open (amends §5.3).**
+   - Atomic pages are necessary but not sufficient. A page that fetches every attendee for 200
+     parents before committing can take longer than a short app open.
+   - The first durable commit must land within a few seconds on a slow phone and network. The
+     parent page size is the tuning lever.
+7. **Do not import Zazi's "the cursor never passes a pending row" rule.** §6.2's skip-and-advance
+   is correct. A skipped family returns when its upload is re-stamped after the cursor, or at the
+   re-walk. Freezing the cursor would recreate the §12.3 stall.
+
+The executable steps are plan Task 9, Steps 4-0 and 4a–4e.

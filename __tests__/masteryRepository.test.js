@@ -10,6 +10,47 @@ import {
 } from '../test-support/sqliteRepositoryTestUtils';
 
 describe('masteryRepository', () => {
+  test('editing a full mapped synced mastery row ignores caller sync bookkeeping and queues one update', async () => {
+    const db = await createMigratedDatabase(runMigrations);
+
+    try {
+      await seedCoreData(db);
+      await createChildrenRepository({ database: db }).saveChildRecord({
+        id: 'child-1', first_name: 'Test', last_name: 'Child', class_id: 'class-1',
+        created_by: 'user-1', synced: true,
+      });
+      const repository = createMasteryRepository({ database: db });
+      await repository.saveLetterMasteryRecord({
+        user_id: 'user-1', child_id: 'child-1', programme_id: 'programme-a',
+        letter: 'a', language: 'isiXhosa', source: 'taught', synced: true,
+      });
+      const [current] = await repository.getLetterMastery();
+      expect(current).toEqual(expect.objectContaining({ sync_status: 'synced', synced: true }));
+      expect(await db.getAllAsync('select * from sync_outbox')).toEqual([]);
+
+      await repository.updateLetterMasteryRecord(current.id, {
+        ...current,
+        mastered_at: '2026-05-22T08:00:00.000Z',
+        last_sync_error: 'stale caller error',
+      });
+
+      const [updated] = await repository.getLetterMastery();
+      expect(updated).toEqual(expect.objectContaining({
+        mastered_at: '2026-05-22T08:00:00.000Z', sync_status: 'pending', synced: false, last_sync_error: null,
+      }));
+      const outbox = await db.getAllAsync('select table_name, record_id, operation, payload from sync_outbox');
+      expect(outbox).toHaveLength(1);
+      expect(outbox[0]).toEqual(expect.objectContaining({
+        table_name: 'letter_mastery', record_id: current.id, operation: 'update',
+      }));
+      expect(JSON.parse(outbox[0].payload)).toEqual(expect.objectContaining({
+        mastered_at: updated.mastered_at, sync_status: 'pending', synced: false, last_sync_error: null,
+      }));
+    } finally {
+      await db.closeAsync();
+    }
+  });
+
   test('new mastery rows get a deterministic id from the logical key (ignoring a caller-supplied random id)', async () => {
     const db = await createMigratedDatabase(runMigrations);
 

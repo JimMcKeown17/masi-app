@@ -993,10 +993,13 @@ if (require.main === module) {
 module.exports = {
   DISPOSABLE_CONFIRMATION,
   DISPOSABLE_DATABASE_PREFIX,
+  MIGRATIONS_DIR,
   PLAN_FIXTURE_SESSION_COUNT,
   assertDisposableAdminTarget,
   buildDatabaseUrl,
   buildPsqlEnv,
   bootstrapSql,
   collectPlanMetrics,
+  expectSqlState,
+  runPsql,
 };

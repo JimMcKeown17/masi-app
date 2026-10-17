@@ -6,6 +6,7 @@ import {
 } from './repositoryRuntime';
 import {
   enqueueDomainOutbox,
+  enqueueLifecycleOutbox,
   getActiveProgrammeAssignment,
   getActiveProgrammeId,
   groupEaAssignmentDomainId,
@@ -126,7 +127,23 @@ const createMissingGroupAssignment = async (txn, {
       assignmentId
     );
     const assignment = mapDomainRow(reactivatedAssignment);
-    await enqueueDomainOutbox(txn, 'group_ea_assignments', assignment.id, 'insert', assignment);
+    const insertStillOwed = await txn.getFirstAsync(`
+      select 1 as owed from sync_outbox
+      where table_name = 'group_ea_assignments' and record_id = ? and operation = 'insert'
+        and status in ('pending', 'failed', 'in_flight')
+      limit 1
+    `, assignment.id);
+    // An unacknowledged insert may already have committed before its response was lost, so
+    // reactivation always carries an explicit restore. If the insert is still owed, replay it too:
+    // assignment inserts are insert-or-ignore and therefore safe to retry before the restore.
+    await enqueueLifecycleOutbox(txn, 'group_ea_assignments', assignment.id, 'restore', {
+      id: assignment.id,
+      unassigned_at: null,
+      handover_reason: null,
+    });
+    if (insertStillOwed) {
+      await enqueueDomainOutbox(txn, 'group_ea_assignments', assignment.id, 'insert', assignment);
+    }
     return assignment;
   }
 
@@ -309,7 +326,10 @@ export const createGroupsRepository = ({ database } = {}) => {
       ...mapDomainRow(existing),
       ...updates,
       id,
-      sync_status: updates.sync_status || syncStatusFromSynced(updates.synced),
+      // A local edit owns its sync state, even when updates spreads a synced row.
+      sync_status: 'pending',
+      synced: false,
+      last_sync_error: null,
     });
     await upsertDomainRecord(txn, {
       tableName: 'groups',
@@ -439,7 +459,7 @@ export const createGroupsRepository = ({ database } = {}) => {
         and unassigned_at is null
     `, archivedAt, archivedAt, groupId);
     for (const row of assignmentRows) {
-      await enqueueDomainOutbox(txn, 'group_ea_assignments', row.id, 'archive', { id: row.id, unassigned_at: archivedAt });
+      await enqueueLifecycleOutbox(txn, 'group_ea_assignments', row.id, 'archive', { id: row.id, unassigned_at: archivedAt });
     }
 
     const membershipRows = await txn.getAllAsync(
