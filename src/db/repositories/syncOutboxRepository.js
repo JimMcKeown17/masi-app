@@ -33,6 +33,28 @@ export const outboxRecordId = (tableName, recordId, operation) => (
   `${tableName}:${recordId}:${operation}`
 );
 
+// Spec §7.2: the one definition of unsent work. The sign-out warning, the left-behind report
+// and any future deletion rule all read it through readUnsentSummary.
+export const UNSENT_STATUSES = ['pending', 'failed', 'in_flight', 'terminal'];
+const UNSENT_IN = `(${UNSENT_STATUSES.map((status) => `'${status}'`).join(', ')})`;
+
+export const readUnsentSummary = async (db) => {
+  const rows = await db.getAllAsync(`
+    select table_name, count(*) as count from sync_outbox
+    where status in ${UNSENT_IN} group by table_name
+  `);
+  const oldest = await db.getFirstAsync(`
+    select id, created_at from sync_outbox
+    where status in ${UNSENT_IN} order by created_at, id limit 1
+  `);
+  return {
+    total: rows.reduce((total, row) => total + row.count, 0),
+    byTable: Object.fromEntries(rows.map((row) => [row.table_name, row.count])),
+    oldestId: oldest?.id ?? null,
+    oldestCreatedAt: oldest?.created_at ?? null,
+  };
+};
+
 export const createSyncOutboxRepository = ({ database } = {}) => {
   const runWrite = (transaction, task) => (
     transaction ? task(transaction) : runRepositoryTransaction(database, task)
@@ -341,17 +363,10 @@ export const createSyncOutboxRepository = ({ database } = {}) => {
     return rows.map(toFailedItem);
   };
 
-  // One definition of unsent work for the whole EA file, including quarantined rows.
+  // Preserve the public count shape while sharing the file-wide unsent definition.
   const countUnsent = async () => {
-    const db = await resolveDatabase(database);
-    const rows = await db.getAllAsync(`
-      select table_name, count(*) as count
-      from sync_outbox
-      where status in ('pending', 'failed', 'in_flight', 'terminal')
-      group by table_name
-    `);
-    const byTable = Object.fromEntries(rows.map(row => [row.table_name, row.count]));
-    return { total: rows.reduce((total, row) => total + row.count, 0), byTable };
+    const { total, byTable } = await readUnsentSummary(await resolveDatabase(database));
+    return { total, byTable };
   };
 
   const getSyncStatus = async () => {
