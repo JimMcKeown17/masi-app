@@ -145,11 +145,97 @@ describe('useTimeTracking Plan 5 behavior', () => {
     await waitFor(() => expect(result.current.isSignedIn).toBe(true));
 
     await act(async () => {
-      await result.current.handleSignOut();
+      expect(await result.current.handleSignOut()).toBe(false);
     });
 
     expect(timeEntriesRepository.updateTimeEntry).not.toHaveBeenCalled();
     expect(result.current.isSignedIn).toBe(false);
     expect(result.current.activeEntry).toBeNull();
+  });
+
+  const openEntry = {
+    id: 'open-entry', user_id: 'user-1',
+    sign_in_time: '2026-05-21T07:00:00.000Z', sign_out_time: null,
+  };
+
+  test('clock-out resolves true only after closing the open entry', async () => {
+    timeEntriesRepository.getActiveTimeEntry.mockResolvedValue(openEntry);
+    const { result } = renderHook(() => useTimeTracking(), { wrapper });
+    await waitFor(() => expect(result.current.isSignedIn).toBe(true));
+    // waitFor advances fake timers while the provider loads; pin the clock at the tap.
+    jest.setSystemTime(new Date('2026-05-21T08:00:00.000Z'));
+
+    await act(async () => {
+      expect(await result.current.handleSignOut()).toBe(true);
+    });
+
+    expect(timeEntriesRepository.updateTimeEntry).toHaveBeenCalledWith('open-entry', expect.objectContaining({
+      sign_out_time: '2026-05-21T08:00:00.000Z',
+    }));
+    expect(result.current.isSignedIn).toBe(false);
+    expect(result.current.activeEntry).toBeNull();
+  });
+
+  test('clock-out resolves false when not clocked in', async () => {
+    const { result } = renderHook(() => useTimeTracking(), { wrapper });
+    await waitFor(() => expect(timeEntriesRepository.getActiveTimeEntry).toHaveBeenCalledTimes(1));
+
+    await act(async () => {
+      expect(await result.current.handleSignOut()).toBe(false);
+    });
+
+    expect(getCurrentPosition).not.toHaveBeenCalled();
+    expect(timeEntriesRepository.updateTimeEntry).not.toHaveBeenCalled();
+  });
+
+  test('clock-out resolves false on the Settings detour and leaves the entry open', async () => {
+    timeEntriesRepository.getActiveTimeEntry.mockResolvedValue(openEntry);
+    getCurrentPosition.mockResolvedValue({ cancelled: true });
+    const { result } = renderHook(() => useTimeTracking(), { wrapper });
+    await waitFor(() => expect(result.current.isSignedIn).toBe(true));
+
+    await act(async () => {
+      expect(await result.current.handleSignOut()).toBe(false);
+    });
+
+    expect(timeEntriesRepository.updateTimeEntry).not.toHaveBeenCalled();
+    expect(result.current.isSignedIn).toBe(true);
+  });
+
+  test('clock-out resolves false for a duplicate tap while location is pending', async () => {
+    let resolveLocation;
+    getCurrentPosition.mockReturnValue(new Promise((resolve) => { resolveLocation = resolve; }));
+    timeEntriesRepository.getActiveTimeEntry.mockResolvedValue(openEntry);
+    const { result } = renderHook(() => useTimeTracking(), { wrapper });
+    await waitFor(() => expect(result.current.isSignedIn).toBe(true));
+
+    let firstClockOut;
+    act(() => { firstClockOut = result.current.handleSignOut(); });
+    let duplicateResult;
+    await act(async () => { duplicateResult = await result.current.handleSignOut(); });
+    await act(async () => {
+      resolveLocation({ coords: { latitude: -34.1, longitude: 18.4 }, status: 'fix' });
+      await firstClockOut;
+    });
+
+    expect(duplicateResult).toBe(false);
+    expect(timeEntriesRepository.updateTimeEntry).toHaveBeenCalledTimes(1);
+  });
+
+  test('clock-out resolves false when persistence fails', async () => {
+    const consoleError = jest.spyOn(console, 'error').mockImplementation(() => {});
+    timeEntriesRepository.getActiveTimeEntry.mockResolvedValue(openEntry);
+    timeEntriesRepository.updateTimeEntry.mockRejectedValueOnce(new Error('write failed'));
+    const { result } = renderHook(() => useTimeTracking(), { wrapper });
+    await waitFor(() => expect(result.current.isSignedIn).toBe(true));
+
+    try {
+      await act(async () => {
+        expect(await result.current.handleSignOut()).toBe(false);
+      });
+      expect(result.current.isSignedIn).toBe(true);
+    } finally {
+      consoleError.mockRestore();
+    }
   });
 });

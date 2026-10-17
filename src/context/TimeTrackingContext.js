@@ -178,10 +178,10 @@ function useTimeTrackingState() {
   ]);
 
   const handleSignOut = useCallback(async () => {
-    if (clockActionInFlight.current) return;
+    if (clockActionInFlight.current) return false;
     if (!isSignedInRef.current || !activeEntryRef.current) {
       showSnackbar('You must clock in first before clocking out.');
-      return;
+      return false;
     }
 
     clockActionInFlight.current = true;
@@ -190,7 +190,7 @@ function useTimeTrackingState() {
       const locationResult = await getCurrentPosition();
       if (locationResult.cancelled) {
         showSnackbar('Return from Settings and tap Clock Out again, or continue without location.');
-        return;
+        return false;
       }
 
       // Re-resolve from the repository: the cached entry may have been closed
@@ -201,7 +201,7 @@ function useTimeTrackingState() {
         setActiveEntryState(null);
         setSignedInState(false);
         showSnackbar('You are not clocked in.');
-        return;
+        return false;
       }
 
       const { latitude = null, longitude = null } = locationResult.coords || {};
@@ -227,9 +227,11 @@ function useTimeTrackingState() {
       showSnackbar(locationStatus === 'fix'
         ? `Clocked out. ${hoursWorked} hours worked.`
         : `Clocked out without location. ${hoursWorked} hours worked.`);
+      return true;
     } catch (error) {
       console.error('Error signing out:', error);
       showSnackbar('Failed to clock out. Please try again.');
+      return false;
     } finally {
       clockActionInFlight.current = false;
       setLoadingLocation(false);
