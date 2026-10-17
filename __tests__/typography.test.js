@@ -1,4 +1,4 @@
-import { typography } from '../src/constants/typography';
+import { fontFamilies, typeRoles, typography } from '../src/constants/typography';
 import { colors } from '../src/constants/colors';
 
 describe('Masi typography tokens', () => {
@@ -26,5 +26,21 @@ describe('Masi typography tokens', () => {
     Object.values(typography).forEach((entry) => {
       expect(entry.fontSize).toBeGreaterThanOrEqual(12);
     });
+  });
+});
+
+describe('typography roles', () => {
+  test('every new role uses a weight-specific custom face and never sets fontWeight', () => {
+    for (const [name, role] of Object.entries(typeRoles)) {
+      expect({ name, family: Object.values(fontFamilies).includes(role.fontFamily) })
+        .toEqual({ name, family: true });
+      expect({ name, fontWeight: role.fontWeight }).toEqual({ name, fontWeight: undefined });
+      expect(role.fontSize).toBeGreaterThanOrEqual(11);
+      expect(role.lineHeight).toBeGreaterThanOrEqual(role.fontSize);
+    }
+  });
+
+  test('the legacy roles are untouched', () => {
+    expect(typography.screenTitle).toEqual(expect.objectContaining({ fontSize: 26, fontWeight: '800' }));
   });
 });

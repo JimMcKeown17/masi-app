@@ -1,6 +1,13 @@
 import React from 'react';
 import { render } from '@testing-library/react-native';
 
+const mockUseFonts = jest.fn(() => [true, null]);
+jest.mock('expo-font', () => ({ useFonts: () => mockUseFonts() }));
+jest.mock('expo-splash-screen', () => ({
+  preventAutoHideAsync: jest.fn(() => Promise.resolve()),
+  hideAsync: jest.fn(() => Promise.resolve()),
+}));
+
 jest.mock('../src/utils/logger', () => ({
   logger: {
     init: jest.fn(),
@@ -79,6 +86,22 @@ jest.mock('../src/navigation/AppNavigator', () => {
 });
 
 describe('App root', () => {
+  it('releases the splash when fonts fail', () => {
+    const App = require('../App').default;
+    const { hideAsync } = require('expo-splash-screen');
+    mockUseFonts.mockReturnValue([false, new Error('x')]);
+    hideAsync.mockClear();
+
+    try {
+      const { getByText } = render(<App />);
+
+      expect(hideAsync).toHaveBeenCalled();
+      expect(getByText('Navigator')).toBeTruthy();
+    } finally {
+      mockUseFonts.mockReturnValue([true, null]);
+    }
+  });
+
   it('renders without legacy bootstrap imports', () => {
     const App = require('../App').default;
 
