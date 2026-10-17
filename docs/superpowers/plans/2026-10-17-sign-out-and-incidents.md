@@ -51,6 +51,7 @@ Plan 2 (`docs/superpowers/plans/2026-10-14-signed-in-ea-handle.md`) is merged. I
 5. **The same stranded situation is seen at many sign-ins.** It is queued and sent once. A new situation for the same EA is reported again: a different oldest unsent row, or the same outbox id recreated after an upload. Pinned in Task 5.
 6. **The EA cancels while the clock-out or upload is still running.** They stay signed in, and no sheet reopens. Pinned in Task 6.
 7. **An EA signs out, and the next EA signs in, while discovery is still reading a file.** Discovery opens nothing more, and the next open of a file it was reading waits for that read. Pinned in Task 5.
+8. **The unsent count cannot be read** (storage needs recovery). Sign-out is still possible, explicitly; a failed count never reads as zero. Pinned in Task 6.
 
 ---
 
@@ -87,6 +88,7 @@ Plan 2 (`docs/superpowers/plans/2026-10-14-signed-in-ea-handle.md`) is merged. I
    - `start` begins a new attempt. Cancel, backdrop dismissal, Android Back (all reach `cancel` through `BottomSheet.onDismiss`) and unmount end it.
    - Every continuation after an `await` (clock-out, upload, unsent count) checks that its attempt is still current before it changes a sheet or signs out. A cancelled attempt can never sign the EA out later.
    - Cancelling does not abort an upload or clock-out already in progress. It only stops the flow from acting on the result.
+   - A failed unsent count is never treated as zero. The EA sees "Couldn't check for work that hasn't uploaded." with Try again, Sign out anyway and Cancel, so manual sign-out never depends on SQLite being healthy.
 
 ## File Structure
 
@@ -950,6 +952,8 @@ git commit -m "feat(incidents): report foreign-owned outbox rows found by the in
       - While A's read is suspended, call `requestOpen({ userId: A, openDatabase: sqlite.openDatabaseAsync })`. After flushing microtasks it has not resolved: it waits for the read on A's file.
       - Release the deferred open. A's `requestOpen` resolves to A's handle. The wrapper never opened C's file, every connection it opened was closed, and B's queue received nothing.
   13. **Discovery waits for a pending disposal.** Close a handle on A's file and, before its disposal settles, start discovery for B over A's file: the wrapper's open of A's file happens only after `whenDisposed(A file)` resolves. If the existing handle tests have a helper that stalls disposal, reuse it; otherwise assert ordering with the recorded call sequence.
+  14. **Sign-out while discovery waits at the fence.** Stall A's disposal (as in case 13), start B's discovery over A's file, sign B out, then `requestOpen` A. Release the disposal. The wrapper never opens A's file for discovery, and A's `requestOpen` resolves right after the disposal settles.
+  15. **A file marked failed is never read.** Drive the existing bootstrap-failure-plus-cleanup-failure path that adds A's file to `failedFiles` (reuse the `signedInHandle.test.js` case that asserts `HANDLE_DISPOSE_FAILED`). Then `readUnderFileFence(A file, task)` rejects with `HandleDisposeFailedError` and `task` is never called; discovery over A's file opens nothing and queues nothing.
 
 - [ ] **Step 2: Run and watch them fail.**
   - Run: `PATH=$HOME/.nvm/versions/node/v20.19.4/bin:$PATH npx jest __tests__/fileDiscovery.test.js`
@@ -1009,8 +1013,10 @@ export const discoverOtherDatabases = async ({
     if ((!eaMatch && !isLegacy) || name === ownName) continue;
     // After sign-out the signed-out EA's discovery opens nothing more (spec §4.3 storage boundary).
     if (!isActive()) break;
-    const read = await readUnderFence(name, () => readOtherDatabase({ name, openDatabase }))
-      .catch(() => ({ name, readable: false })); // that file's earlier disposal failed: leave it alone
+    // Re-check inside the fence: waiting for a disposal can outlast the sign-in that queued this read.
+    const read = await readUnderFence(name, () => (
+      isActive() ? readOtherDatabase({ name, openDatabase }) : { name, readable: false }
+    )).catch(() => ({ name, readable: false })); // that file is fenced as failed: leave it alone
     results.push({ ...read, kind: isLegacy ? 'legacy' : 'ea', strandedUserId: eaMatch ? eaMatch[1] : null });
   }
   return results;
@@ -1071,9 +1077,13 @@ export const discoverAndQueueIncidents = async ({
 // A short read of another EA's file (sign-in discovery) joins that file's fence: it starts
 // after any pending disposal, and a same-file requestOpen waits for it as it waits for a
 // disposal. A failed disposal stays failed: the read never runs and the fence keeps rejecting.
+// failedFiles is part of the fence too (a bootstrap whose cleanup failed registers no disposal).
 export const readUnderFileFence = (fileName, task) => {
   const prior = whenDisposed(fileName);
-  const run = prior.then(task);
+  const run = prior.then(() => {
+    if (failedFiles.has(fileName)) throw new HandleDisposeFailedError();
+    return task();
+  });
   trackDisposal(fileName, prior.then(() => run.then(() => {}, () => {})));
   return run;
 };
@@ -1115,7 +1125,7 @@ git commit -m "feat(incidents): discover other EAs' files at sign-in and report 
 **Interfaces:**
 - Consumes: `useAuth().signOut`, `useTimeTracking()` (`isSignedIn`, `handleSignOut`), `useOffline()` (`isOnline`, `syncNow`), `useSignedInEA().repositories.syncOutbox.countUnsent`.
 - Produces:
-  - `useSignOutFlow({ signOut, countUnsent, isClockedIn, clockOut, isOnline, syncNow })` returns `{ step: null | 'clocked_in' | 'unsent', unsentCount, busy: null | 'clocking_out' | 'uploading' | 'signing_out', message: string | null, start, clockOutNow, stayClockedIn, tryUploadNow, signOutAnyway, cancel }`.
+  - `useSignOutFlow({ signOut, countUnsent, isClockedIn, clockOut, isOnline, syncNow })` returns `{ step: null | 'clocked_in' | 'unsent', unsentCount: number | null, busy: null | 'clocking_out' | 'uploading' | 'signing_out', message: string | null, start, clockOutNow, stayClockedIn, tryUploadNow, recheck, signOutAnyway, cancel }`. `unsentCount` is `null` when the count could not be read.
   - `SignOutSheets` props: the hook's return value plus `isOnline`.
 
 - [ ] **Step 1: Write the failing tests.**
@@ -1160,6 +1170,8 @@ const setup = ({ clockedIn = false, unsent = 0, online = true, clockOutOk = true
     10. **Cancel during upload (Review Focus 6).** 2 unsent; `syncNow` is a deferred promise and `uploadClears: true`. Press "Try uploading now", then "Cancel". Resolve the deferred upload. `signOut` is never called, and no sheet is visible.
     11. **Dismiss during clock-out.** Clocked in; `clockOut` is a deferred promise resolving `true`. Press "Clock out now", then dismiss the sheet through `BottomSheet`'s `onDismiss` (find the backdrop the way `ClockInBeforeSessionSheet.test.js` does, or call the sheet's `onDismiss` prop through `UNSAFE_getByType(BottomSheet).props.onDismiss()`). Resolve the clock-out. The unsent sheet never appears and `signOut` is never called.
     12. **A new attempt after a cancelled one works.** After case 10's cancel (before resolving the old upload), press "Sign Out" again with 0 unsent: `signOut` is called once. Resolving the old upload afterwards does not call it a second time.
+    13. **The unsent count cannot be read.** `countUnsent` rejects with `new HandleDisposeFailedError()` from `src/session/staleActor.js`, as the reader does after a failed disposal. Pressing "Sign Out" shows "Couldn't check for work that hasn't uploaded." with **Try again**, **Sign out anyway** and **Cancel**; `signOut` is not called yet. "Sign out anyway" then calls `signOut` once. In a second render, make `countUnsent` succeed with 0 on the second call: "Try again" signs out.
+    14. **A stale-actor count failure does nothing.** `countUnsent` rejects with `StaleActorError`: no sheet, no `signOut` call.
   - Clock-out return values: add to the existing `useTimeTracking` suite:
     - `await result.current.handleSignOut()` resolves `true` after a normal clock-out;
     - it resolves `false` when not clocked in;
@@ -1176,6 +1188,9 @@ const setup = ({ clockedIn = false, unsent = 0, online = true, clockOutOk = true
 `src/hooks/useSignOutFlow.js`:
 ```js
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { isStaleActorError } from '../session/staleActor';
+
+export const UNSENT_CHECK_FAILED = "Couldn't check for work that hasn't uploaded.";
 
 // Spec §7.1: clock-out question first (clocking out creates unsent work), then unsent work,
 // then the §4.3 close. Dependencies are injected so the order is testable without the app tree.
@@ -1201,7 +1216,17 @@ export function useSignOutFlow({ signOut, countUnsent, isClockedIn, clockOut, is
   }, [signOut]);
 
   const goToUnsent = useCallback(async (mine) => {
-    const { total } = await countUnsent();
+    let total;
+    try {
+      ({ total } = await countUnsent());
+    } catch (error) {
+      if (!isLive(mine) || isStaleActorError(error)) return; // a sign-out is already under way
+      // Never treat a failed count as zero: ask, and keep an explicit way out.
+      setUnsentCount(null);
+      setMessage(UNSENT_CHECK_FAILED);
+      setStep('unsent');
+      return;
+    }
     if (!isLive(mine)) return;
     if (total === 0) { await finish(mine); return; }
     setUnsentCount(total);
@@ -1230,6 +1255,7 @@ export function useSignOutFlow({ signOut, countUnsent, isClockedIn, clockOut, is
   }, [clockOut, goToUnsent]);
 
   const stayClockedIn = useCallback(() => goToUnsent(attempt.current), [goToUnsent]);
+  const recheck = useCallback(() => goToUnsent(attempt.current), [goToUnsent]);
 
   const tryUploadNow = useCallback(async () => {
     if (busyRef.current || !isOnline) return;
@@ -1253,7 +1279,7 @@ export function useSignOutFlow({ signOut, countUnsent, isClockedIn, clockOut, is
 
   return {
     step, unsentCount, busy, message,
-    start, clockOutNow, stayClockedIn, tryUploadNow, signOutAnyway, cancel,
+    start, clockOutNow, stayClockedIn, tryUploadNow, recheck, signOutAnyway, cancel,
   };
 }
 ```
@@ -1264,7 +1290,8 @@ export function useSignOutFlow({ signOut, countUnsent, isClockedIn, clockOut, is
   - Follow `src/components/sessions/ClockInBeforeSessionSheet.js` exactly: the same `BottomSheet` props, the primary/secondary/cancel `Pressable` styles, `accessibilityRole="button"`, and labels.
   - Two `BottomSheet`s:
     - `visible={step === 'clocked_in'}`: title "You're still clocked in."; buttons **Clock out now** (primary; label "Clocking out…" while `busy === 'clocking_out'`), **Stay clocked in and sign out** (secondary), **Cancel**. Show `message` above the buttons when set.
-    - `visible={step === 'unsent'}`:
+    - `visible={step === 'unsent'}` when `unsentCount === null` (the count failed): title is `message` ("Couldn't check for work that hasn't uploaded."); subtitle "If you sign out, anything not uploaded stays on this phone until you sign in here again."; buttons **Try again** (primary, calls `recheck`), **Sign out anyway** (secondary), **Cancel**.
+    - `visible={step === 'unsent'}` with a number:
       - Title `${unsentCount} ${unsentCount === 1 ? "item hasn't" : "items haven't"} uploaded yet.`
       - Subtitle "If you sign out, they'll upload next time you sign in on this phone."
       - Buttons:
