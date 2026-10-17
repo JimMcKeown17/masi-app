@@ -147,9 +147,10 @@ shape.
     ordering of an uncertain older write against a newer one is not yet closed.
   - **Device gates:** D2–D7 on the build intended to ship
     ([actor lifecycle spec §9](../docs/superpowers/specs/2026-10-09-actor-lifecycle-and-mutation-ownership-design.md);
-    D7 is native close under load, iOS and Android); D3's ten-hour auto clock-out half; and on iOS,
-    D1, native file discovery and both sign-out sheets. Re-check the clocked-in sheet's title gap on
-    the next build. A new EAS build needs Jim's yes.
+    D7 is native close under load, iOS and Android) and D3's ten-hour half, which changes with
+    the server-side clock-out. iOS D1, native discovery on both platforms and both sheets passed
+    on builds 9 and 10 (2026-10-17, build log). Fix the Android Profile header ("BackMy Profile").
+    A new EAS build needs Jim's yes.
   - **Legacy export gap:** spec §4.5 says Profile → Export Database can export `masi.db`.
     Today's export covers only the signed-in EA's file. Plan 3 did not change export; Step 4's
     support tooling must close this gap.
