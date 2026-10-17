@@ -65,7 +65,9 @@ needed.** Measurements are in dp at a 390-wide phone; the layout is flow-based, 
   passes behind the two top-row buttons and never under the greeting or subtitle text. It is
   decorative (`accessibilityElementsHidden`, `importantForAccessibility="no-hide-descendants"`).
 - The status bar uses light content while Home is focused, via a focus-scoped `<StatusBar>` so it
-  joins React Native's status-bar stack and blur restores the root setting.
+  joins React Native's status-bar stack and blur restores the root setting. A fixed `red600` strip
+  the height of the top safe area sits behind it, outside the scroll content, so the light icons
+  keep their contrast when large text scrolls the hero away.
 
 ### Top row, greeting, subtitle
 
@@ -150,7 +152,11 @@ below it at full width, still 44dp minimum. Both stay independently tappable.
   `textSecondary`, 4dp below. Copy is the existing `getGoalCopy` output, unchanged.
 - Loading: skeleton blocks in the same footprint (gauge, heading, line), only while a load is in
   flight and nothing has loaded yet. A failed refresh keeps the last good stats. A failed first load
-  shows "Couldn’t load today’s sessions" / "They’ll refresh next time you open Home."
+  shows "Couldn’t load today’s sessions" / "They’ll refresh next time you open Home." A successful
+  load with no goal is not a failure: with no active programme the card says "No active programme"
+  / "Contact your supervisor to be assigned." (the wording of `NoActiveProgrammeNotice`); with an
+  assigned programme whose record is not on the phone yet it says "Programme details aren’t on this
+  phone yet" / "They’ll appear after the next sync."
 - The existing `SessionsTodayGauge` stays for any other caller; Home switches to the segmented one.
 
 ### Week strip
@@ -410,3 +416,9 @@ failed-first-load fallback, refresh-failure retention, focus-scoped status bar, 
 and the real-SQLite conditional-close, rollback, publication, and race tests). Not verified there:
 real dependency installation, the file-backed integration setup, and native startup; those are the
 build's Task 6, Task 10 Step 5, and Task 12 gates.
+
+**Branch review (2026-10-17, `main...13b2446`): needs attention, 2 findings, both accepted and
+fixed test-first.** A valid no-programme state (goal `null` from a successful load) showed the
+load-failure message; Home now tracks a real failure separately and shows the no-programme or
+programme-not-synced copy. At large text sizes the hero could scroll away under a light status bar;
+a fixed red safe-area strip now sits behind it.

@@ -383,6 +383,31 @@ describe('HomeScreen', () => {
     await waitFor(() => expect(mockGetSessionsTodayGoal).toHaveBeenCalledTimes(2));
   });
 
+  test('an EA with no active programme sees that, not a load failure', async () => {
+    mockGetSessionsTodayGoal.mockResolvedValue(null);
+    mockGetActiveProgrammeGate.mockResolvedValue({ hasActiveProgramme: false, programme: null });
+    const screen = renderHome();
+    expect(await screen.findByText('No active programme')).toBeTruthy();
+    expect(screen.getByText('Contact your supervisor to be assigned.')).toBeTruthy();
+    expect(screen.queryByText('Couldn’t load today’s sessions')).toBeNull();
+  });
+
+  test('an assigned programme not yet on the phone says it will arrive with sync', async () => {
+    mockGetSessionsTodayGoal.mockResolvedValue(null);
+    mockGetActiveProgrammeGate.mockResolvedValue({ hasActiveProgramme: true, programme: null });
+    const screen = renderHome();
+    expect(await screen.findByText('Programme details aren’t on this phone yet')).toBeTruthy();
+    expect(screen.queryByText('Couldn’t load today’s sessions')).toBeNull();
+  });
+
+  test('a fixed red strip keeps the light status bar readable when the hero scrolls away', async () => {
+    const screen = renderHome();
+    const strip = await screen.findByTestId('home-status-bar-backdrop');
+    expect(strip.props.style).toEqual(expect.objectContaining({
+      position: 'absolute', top: 0, backgroundColor: '#C81F3E',
+    }));
+  });
+
   test('omits the subtitle when there is no programme or school', async () => {
     mockUseAuth.mockReturnValue({ user: { id: 'ea-1' }, profile: { first_name: 'Alice' } });
     mockGetActiveProgrammeGate.mockResolvedValue({ hasActiveProgramme: false, programme: null });

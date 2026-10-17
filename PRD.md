@@ -190,17 +190,23 @@ SQLite backend. The generic legacy loader is disabled.
 
 ### 6.2 Home
 
-Home is the primary daily-use surface. It must show:
+Home is the primary daily-use surface (Bold Red Home, spec
+`docs/superpowers/specs/2026-10-17-bold-red-home-design.md`). It shows:
 
 - identity, Programme, and school;
-- full sync status, not only a green/grey icon;
-- clocked-in or clocked-out state with elapsed time and safe actions;
-- the locked sessions-today half gauge;
-- a short "who to see next" list;
+- sync status as an icon button whose glyph and badge carry the state (full wording on the Sync
+  status screen and in the button's accessibility label);
+- clocked-in or clocked-out state with elapsed time and safe actions (clock-out is conditional on
+  the time entry still being open);
+- the sessions-today segmented half gauge (locked R3 colour rule);
 - Monday-to-Friday session activity;
-- active-roster assessment coverage;
-- recent sessions;
+- an attention area that is blank by default and shows at most two cards: items needing sync
+  attention, an automatic clock-out (for 24 hours after it is detected, dismissible), and children
+  still to assess (dismissible until the next day);
 - correct zero-class onboarding routing.
+
+Home reloads its statistics on focus and when the app returns to the foreground. Session history
+is reached from Insights. "Who to see next" moves into the session flow (separate work).
 
 All Home domain data comes from SQLite. Network activity may refresh SQLite, but must not be a
 render-time dependency.

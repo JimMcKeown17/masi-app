@@ -52,6 +52,8 @@ export default function HomeScreen({ navigation }) {
   const [coverage, setCoverage] = useState(null); // null until the first successful load
   const [sessionGoal, setSessionGoal] = useState(null);
   const [programmeName, setProgrammeName] = useState('');
+  const [hasActiveProgramme, setHasActiveProgramme] = useState(true);
+  const [statsFailed, setStatsFailed] = useState(false); // the latest load rejected
   const [assessmentDismissedOn, setAssessmentDismissedOn] = useState(null);
   const [statsLoading, setStatsLoading] = useState(true);
   const [now, setNow] = useState(() => new Date());
@@ -93,9 +95,12 @@ export default function HomeScreen({ navigation }) {
       setCoverage(getAssessmentCoverage(childrenList, assessmentCounts));
       setSessionGoal(dailyGoal);
       setProgrammeName(programmeGate.programme?.name || '');
+      setHasActiveProgramme(Boolean(programmeGate.hasActiveProgramme));
       setAssessmentDismissedOn(dismissedOn);
+      setStatsFailed(false);
     } catch (error) {
       console.error('Error loading Home statistics:', error);
+      if (seq === loadSeqRef.current) setStatsFailed(true);
     } finally {
       if (seq === loadSeqRef.current) setStatsLoading(false);
     }
@@ -218,10 +223,22 @@ export default function HomeScreen({ navigation }) {
                 <View style={styles.skelTitle} />
                 <View style={styles.skelLine} />
               </View>
-            ) : (
+            ) : statsFailed ? (
               <>
                 <Text style={styles.cardTitle}>Couldn’t load today’s sessions</Text>
                 <Text style={styles.cardSubtitle}>They’ll refresh next time you open Home.</Text>
+              </>
+            ) : !hasActiveProgramme ? (
+              // getSessionsTodayGoal returns null without an active programme: a
+              // valid state, not a failure. Same wording as NoActiveProgrammeNotice.
+              <>
+                <Text style={styles.cardTitle}>No active programme</Text>
+                <Text style={styles.cardSubtitle}>Contact your supervisor to be assigned.</Text>
+              </>
+            ) : (
+              <>
+                <Text style={styles.cardTitle}>Programme details aren’t on this phone yet</Text>
+                <Text style={styles.cardSubtitle}>They’ll appear after the next sync.</Text>
               </>
             )}
           </View>
@@ -231,6 +248,14 @@ export default function HomeScreen({ navigation }) {
           <AttentionArea items={attentionItems} onOpen={openItem} onDismiss={dismissItem} />
         </View>
       </ScrollView>
+
+      {/* Fixed behind the status bar: the red hero scrolls away at large text
+          sizes, and the light status bar must keep its contrast. */}
+      <View
+        testID="home-status-bar-backdrop"
+        pointerEvents="none"
+        style={{ position: 'absolute', top: 0, left: 0, right: 0, height: insets.top, backgroundColor: colors.red600 }}
+      />
 
       <Snackbar visible={snackbarVisible} onDismiss={() => setSnackbarVisible(false)} duration={3000}>
         {snackbarMessage}
