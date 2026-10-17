@@ -84,6 +84,17 @@ describe('BottomSheet', () => {
     expect(output.indexOf('Body content')).toBeLessThan(output.indexOf('Footer content'));
   });
 
+  test('a title-only header keeps the same gap above the body as a subtitle gives', () => {
+    const titleOnly = renderSheet({ subtitle: undefined });
+    const withSubtitle = renderSheet();
+    const titleGap = StyleSheet.flatten(titleOnly.getByText('Choose a group').props.style).marginBottom;
+    const subtitleGap = StyleSheet.flatten(withSubtitle.getByText('Amahle Dlamini').props.style).marginBottom;
+    expect(subtitleGap).toBeGreaterThan(0);
+    expect(titleGap).toBe(subtitleGap);
+    // With a subtitle, the title itself adds no gap: the subtitle owns it.
+    expect(StyleSheet.flatten(withSubtitle.getByText('Choose a group').props.style).marginBottom ?? 0).toBe(0);
+  });
+
   test('uses a plain body when scrolling is disabled', () => {
     const sheet = renderSheet({ scrollable: false });
 

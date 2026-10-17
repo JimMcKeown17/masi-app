@@ -61,7 +61,10 @@ export default function BottomSheet({
       </View>
 
       <View style={styles.header}>
-        <Text variant="titleMedium" style={styles.title}>{title}</Text>
+        {/* The header's bottom gap belongs to its last element; a title-only header owns it. */}
+        <Text variant="titleMedium" style={[styles.title, !subtitle && !headerExtras && styles.titleAlone]}>
+          {title}
+        </Text>
         {subtitle ? (
           <Text variant="bodySmall" style={styles.subtitle}>{subtitle}</Text>
         ) : null}
@@ -163,6 +166,9 @@ const styles = StyleSheet.create({
     color: colors.text,
     fontWeight: '700',
     marginTop: spacing.sm,
+  },
+  titleAlone: {
+    marginBottom: spacing.md,
   },
   subtitle: {
     color: colors.textSecondary,
