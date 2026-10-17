@@ -1,4 +1,5 @@
 import { resolveDatabase, runRepositoryTransaction } from './repositoryRuntime';
+import { enqueueSupportIncident, incidentRepeatKey } from './supportIncidentRepository';
 import { captureOperationalError } from '../../services/observability';
 import {
   decodeJson,
@@ -241,6 +242,15 @@ export const createSyncOutboxRepository = ({ database } = {}) => {
           set sync_status = 'terminal', last_sync_error = 'foreign_owner', updated_at = ?
           where id = ?
         `, now, row.record_id);
+      }
+      if (foreign.length > 0) {
+        // Same transaction as the quarantine: the report exists exactly when the quarantine does.
+        // The key covers the whole set (a grown set is a new situation) and hides every id.
+        await enqueueSupportIncident(txn, {
+          kind: 'foreign_owner_in_file',
+          repeatKey: incidentRepeatKey('foreign', ...foreign.map((row) => row.id).sort()),
+          payload: { foreignTotal: foreign.length, foreignByTable: byTable },
+        });
       }
       const summary = { total: foreign.length, byTable, adoptedLegacy: adopted.changes };
       if (summary.total || summary.adoptedLegacy) {

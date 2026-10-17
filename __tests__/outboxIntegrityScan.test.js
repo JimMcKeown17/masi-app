@@ -3,6 +3,7 @@ global.__MASI_NO_DEFAULT_HANDLE__ = true;
 import * as sqlite from '../test-support/expoSQLiteRealEngine';
 import { runMigrations, MIGRATIONS } from '../src/db/migrations';
 import { createSyncOutboxRepository } from '../src/db/repositories/syncOutboxRepository';
+import { incidentRepeatKey } from '../src/db/repositories/supportIncidentRepository';
 import {
   requestOpen, requestClose, whenDisposed, getCurrentHandle,
   resetHandleRegistryForTests, setLatestAuthSession, subscribeToHandle,
@@ -31,18 +32,100 @@ afterEach(async () => {
   jest.restoreAllMocks();
 });
 
-const seed = async ({ id = 'child', owner = B, status = 'pending', error = null } = {}) => {
+const seed = async ({ id = 'child', recordId = id, owner = B, status = 'pending', error = null } = {}) => {
   await db.runAsync(`insert into children (id, first_name, last_name, created_by, sync_status)
-    values (?, 'Test', 'Child', ?, ?)`, id, B, status === 'in_flight' ? 'pending' : status);
+    values (?, 'Test', 'Child', ?, ?)`, recordId, B, status === 'in_flight' ? 'pending' : status);
   await db.runAsync(`insert into sync_outbox
     (id, table_name, record_id, operation, owner_user_id, status, last_error, payload)
     values (?, 'children', ?, 'update', ?, ?, ?, ?)`,
-  id, id, owner, status, error, JSON.stringify({ id, created_by: B, reading_level: 'words' }));
+  id, recordId, owner, status, error, JSON.stringify({ id: recordId, created_by: B, reading_level: 'words' }));
 };
+const incidents = () => db.getAllAsync('select * from support_incident_queue order by created_at, id');
 const open = async (fetchImpl = jest.fn()) => {
   setLatestAuthSession({ user: { id: A }, access_token: 'test-token' });
   return requestOpen({ userId: A, openDatabase: sqlite.openDatabaseAsync, fetchImpl });
 };
+
+test('open queues one counts-only foreign-owner incident keyed by the foreign outbox set', async () => {
+  await seed({ id: 'foreign-outbox-1' });
+  await open();
+  const rows = await incidents();
+  expect(rows).toHaveLength(1);
+  expect(rows[0]).toMatchObject({
+    kind: 'foreign_owner_in_file', status: 'pending',
+    repeat_key: incidentRepeatKey('foreign', 'foreign-outbox-1'),
+  });
+  expect(rows[0].repeat_key).not.toContain('foreign-outbox-1');
+  expect(JSON.parse(rows[0].payload)).toEqual({ foreignTotal: 1, foreignByTable: { children: 1 } });
+});
+
+test('the same terminal foreign set deduplicates before every pass, even after its incident was sent', async () => {
+  const fetchImpl = jest.fn(async () => new Response('true', {
+    status: 200, headers: { 'content-type': 'application/json' },
+  }));
+  await seed({ id: 'foreign-outbox-1', status: 'in_flight' });
+  const handle = await open(fetchImpl);
+  const before = await incidents();
+  expect(before).toHaveLength(1);
+  for (const force of [false, true]) {
+    expect(await handle.services.syncEngine.syncAll({ force })).toMatchObject({ success: true, totalSynced: 0 });
+    const rows = await incidents();
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toMatchObject({ id: before[0].id, repeat_key: before[0].repeat_key, status: 'sent' });
+    expect(await handle.repositories.syncOutbox.getById('foreign-outbox-1'))
+      .toMatchObject({ status: 'terminal', last_error: 'foreign_owner' });
+  }
+  expect(fetchImpl).toHaveBeenCalledTimes(1);
+  expect(new URL(fetchImpl.mock.calls[0][0]).pathname).toBe('/rest/v1/rpc/report_mobile_support_incident');
+});
+
+test('foreign incident payload and repeat key hide outbox id, record id and the foreign EA id', async () => {
+  const id = 'children:private-child:update';
+  const recordId = 'private-child';
+  await seed({ id, recordId });
+  await open();
+  const rows = await incidents();
+  expect(rows).toHaveLength(1);
+  expect(JSON.parse(rows[0].payload)).toEqual({ foreignTotal: 1, foreignByTable: { children: 1 } });
+  for (const value of [rows[0].payload, rows[0].repeat_key]) {
+    for (const secret of [id, recordId, B]) expect(value).not.toContain(secret);
+  }
+});
+
+test('a file containing only its own EA work queues no foreign-owner incident', async () => {
+  await seed({ owner: A });
+  const handle = await open();
+  await handle.repositories.syncOutbox.quarantineForeignOwners({ fileUserId: A });
+  expect(await incidents()).toEqual([]);
+  expect(await handle.repositories.syncOutbox.getById('child')).toMatchObject({ owner_user_id: A, status: 'pending' });
+});
+
+test('a grown foreign set queues a new incident even when its smallest outbox id is unchanged', async () => {
+  await seed({ id: 'foreign-outbox-1' });
+  const handle = await open();
+  const before = await incidents();
+  expect(before).toHaveLength(1);
+  await seed({ id: 'foreign-outbox-2' });
+  await handle.repositories.syncOutbox.quarantineForeignOwners({ fileUserId: A });
+  const rows = await incidents();
+  expect(rows).toHaveLength(2);
+  expect(rows).toContainEqual(before[0]);
+  const grown = rows.find(row => row.id !== before[0].id);
+  expect(grown).toMatchObject({
+    kind: 'foreign_owner_in_file', status: 'pending',
+    repeat_key: incidentRepeatKey('foreign', 'foreign-outbox-1', 'foreign-outbox-2'),
+  });
+  expect(JSON.parse(grown.payload)).toEqual({ foreignTotal: 2, foreignByTable: { children: 2 } });
+});
+
+test('the foreign-set repeat key sorts all outbox ids independently of insertion order', async () => {
+  await seed({ id: 'z-foreign' });
+  await seed({ id: 'a-foreign' });
+  await open();
+  const rows = await incidents();
+  expect(rows).toHaveLength(1);
+  expect(rows[0].repeat_key).toBe(incidentRepeatKey('foreign', 'a-foreign', 'z-foreign'));
+});
 
 test('T8: open quarantines a foreign row before publication and retains file-wide unsent evidence', async () => {
   await seed();
@@ -96,14 +179,17 @@ test('legacy NULL owners in all four unsent states are adopted separately from n
   expect(JSON.parse((await db.getFirstAsync("select value from local_state where key = 'integrity_scan_last'")).value))
     .toEqual({ at: expect.any(String), total: 4, byTable: { children: 4 }, adoptedLegacy: 4 });
   expect(await outbox.countUnsent()).toEqual({ total: 9, byTable: { children: 9 } });
+  const queued = await incidents();
+  expect(queued).toHaveLength(1);
+  expect(JSON.parse(queued[0].payload)).toEqual({ foreignTotal: 4, foreignByTable: { children: 4 } });
   expect(log).toHaveBeenCalledTimes(1);
   expect(report).toHaveBeenCalledWith(new Error('foreign_owner_in_file'), {
     category: 'foreign_owner_in_file', context: { byTable: { children: 4 } }, userId: A,
   });
 });
 
-test('T8: each upload pass quarantines an injected foreign row before reset and transport, including forced passes', async () => {
-  const fetchImpl = jest.fn(async () => new Response('[]', { status: 200, headers: { 'content-type': 'application/json' } }));
+test('T8: each upload pass quarantines an injected foreign row before reset and transports only its incident, including forced passes', async () => {
+  const fetchImpl = jest.fn(async () => new Response('true', { status: 200, headers: { 'content-type': 'application/json' } }));
   const handle = await open(fetchImpl);
   expect(log).not.toHaveBeenCalled();
   for (const force of [false, true]) {
@@ -121,7 +207,11 @@ test('T8: each upload pass quarantines an injected foreign row before reset and 
     reset.mockRestore();
     expect(await handle.repositories.syncOutbox.getById(id)).toMatchObject({ status: 'terminal', last_error: 'foreign_owner' });
   }
-  expect(fetchImpl).not.toHaveBeenCalled();
+  expect(fetchImpl).toHaveBeenCalledTimes(2);
+  expect(fetchImpl.mock.calls.map(([url]) => new URL(url).pathname)).toEqual([
+    '/rest/v1/rpc/report_mobile_support_incident', '/rest/v1/rpc/report_mobile_support_incident',
+  ]);
+  expect(fetchImpl.mock.calls.map(([, options]) => JSON.parse(options.body).p_payload.foreignTotal)).toEqual([1, 2]);
   expect(await handle.services.syncEngine.requeueTerminalRlsFailures(A)).toBe(0);
   expect(await handle.repositories.syncOutbox.countUnsent()).toEqual({ total: 2, byTable: { children: 2 } });
 });
@@ -137,6 +227,7 @@ test('open adopts a legacy in-flight row before recovery; adoption-only and empt
   expect(summary).toEqual({ at: expect.any(String), total: 0, byTable: {}, adoptedLegacy: 1 });
   expect(await outbox.quarantineForeignOwners({ fileUserId: A })).toEqual({ total: 0, byTable: {}, adoptedLegacy: 0 });
   expect(await handle.repositories.localState.get('integrity_scan_last')).toEqual(summary);
+  expect(await incidents()).toEqual([]);
   expect(report).not.toHaveBeenCalled();
   expect(log).not.toHaveBeenCalled();
 });
@@ -161,6 +252,10 @@ test('multiple tables and absent hard-delete domain rows are counted and stay qu
   });
   expect(await handle.repositories.syncOutbox.getById('deleted')).toMatchObject({ status: 'terminal', last_error: 'foreign_owner' });
   expect(await handle.repositories.syncOutbox.countUnsent()).toEqual({ total: 2, byTable: { children: 1, classes: 1 } });
+  const queued = await handle.repositories.supportIncidents.listPending();
+  expect(queued).toHaveLength(1);
+  expect(queued[0].repeatKey).toBe(incidentRepeatKey('foreign', 'child', 'deleted'));
+  expect(queued[0].payload).toEqual({ foreignTotal: 2, foreignByTable: { children: 1, classes: 1 } });
 });
 
 test('adoption, quarantine, domain status and scan evidence roll back together when evidence cannot be written', async () => {
@@ -176,9 +271,28 @@ test('adoption, quarantine, domain status and scan evidence roll back together w
   expect(await outbox.getById('foreign')).toMatchObject({ owner_user_id: B, status: 'failed', last_error: '42501' });
   expect(await db.getFirstAsync("select sync_status from children where id = 'foreign'")).toEqual({ sync_status: 'failed' });
   expect(await db.getFirstAsync("select value from local_state where key = 'integrity_scan_last'")).toBeNull();
+  expect(await incidents()).toEqual([]);
   expect(report).not.toHaveBeenCalled();
   await expect(open()).rejects.toMatchObject({ message: 'evidence write failed' });
   expect(getCurrentHandle()).toBeNull();
+});
+
+test('an incident insert failure rolls back adoption, quarantine and scan evidence in the same transaction', async () => {
+  await seedLegacyFile();
+  await seed({ id: 'legacy', owner: null });
+  await seed({ id: 'foreign', status: 'failed', error: '42501' });
+  await runMigrations(db);
+  await db.execAsync(`create trigger fail_incident_insert before insert on support_incident_queue
+    begin select raise(abort, 'incident insert failed'); end;`);
+  const outbox = createSyncOutboxRepository({ database: db });
+  await expect(outbox.quarantineForeignOwners({ fileUserId: A })).rejects.toMatchObject({ message: 'incident insert failed' });
+  expect(await outbox.getById('legacy')).toMatchObject({ owner_user_id: null, status: 'pending' });
+  expect(await outbox.getById('foreign')).toMatchObject({ owner_user_id: B, status: 'failed', last_error: '42501' });
+  expect(await db.getFirstAsync("select sync_status from children where id = 'foreign'")).toEqual({ sync_status: 'failed' });
+  expect(await db.getFirstAsync("select value from local_state where key = 'integrity_scan_last'")).toBeNull();
+  expect(await incidents()).toEqual([]);
+  expect(report).not.toHaveBeenCalled();
+  expect(log).not.toHaveBeenCalled();
 });
 
 test('a failed pass scan prevents recovery and transport and does not mark a successful pass', async () => {
