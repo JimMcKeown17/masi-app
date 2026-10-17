@@ -70,8 +70,8 @@ These horizons summarize the ordered register below. They are not a second backl
 9. **P2: settle Programme/group authority, then build group-centred sessions in contract order.**
    Access grants and identity,
    then RLS/sync, then UI and durable session drafts.
-10. **P3: resume WelaPLUS deliberately.** Integrate the off-main Question island without importing
-   stale design or identity contracts.
+10. **P3: resume WelaPLUS deliberately.** Wire the unwired Question island on `main` without
+   importing stale design or identity contracts.
 11. **P4: polish, hygiene, and longer-horizon scale work.**
 
 The deferred Head Office importer is not in the active execution order. It begins with read-only
@@ -687,20 +687,25 @@ against the exact SQLite backend. `scripts/loadTestUsers.js` is deliberately dis
 
 ## 8. WelaPLUS
 
-WelaPLUS is not on `main`. The 11 Question components and their tests are on
-`feature/wela-plus-battery-merge` at `fed3175`, 54 commits behind `main` and 19 commits ahead as of
-2026-09-23. The old `.claude` worktree no longer exists.
+The 11 Question components and their tests are on `main` under `src/assessment-questions/`
+(merged 2026-10-09 from `feature/wela-plus-battery-merge`). The package is unwired: nothing in
+`src/` or `App.js` imports it. `npm run test:types` type-checks it in CI. A literal-UUID
+contract test pins current `assessmentItemDomainId` output. **No identity change is planned**
+(ADR-0007 keeps the id; Q11 HQ calibration rows use positions 5–8, so they never collide with the
+EA's 1–4). Release 1 scope and decisions:
+[`2026-10-14-welaplus-release-1-design.md`](../docs/superpowers/specs/2026-10-14-welaplus-release-1-design.md).
 
 ### Integration and contract work
 
-- [ ] Rebase or otherwise reconcile the merge branch and review all branch-only commits against
-  current design tokens, shared capture chrome, BottomSheet behavior, SQLite repositories, and
-  outbox ownership.
-- [ ] Confirm the branch still defuses the `assessmentItemDomainId` rekey. Land any identity change
-  separately with a literal expected-UUID test, contract-map/build-log updates, and an explicit
-  staging-data plan.
-- [ ] Add a source-wide raw-hex guard and complete the warm Masi design conformance pass.
-- [ ] Repair and verify the TypeScript/typecheck dependency and release-gate setup.
+- [ ] Review the island against current design tokens, shared capture chrome, BottomSheet behavior,
+  SQLite repositories, and outbox ownership.
+- [ ] WelaPLUS Release 1 depends on ADR-0007 enforcement (the assessment-history item above). If
+  that has not landed first, Release 1 lands it (spec §7.1).
+- [ ] Host-side Masi design conformance for the WelaPLUS screens (Plan 3). The package itself
+  now has Masi-aligned tokens and a raw-hex guard (Plan 1, 2026-10-14).
+- [ ] Plan 2 (data foundation) and Plan 3 (host Run flow, docs, printout pack). Plan 1 (Question
+  package: 2024.1 EN/XH content, battery and evaluator, component contract) is complete; see
+  [`2026-10-14-welaplus-plan-1-question-package.md`](../docs/superpowers/plans/2026-10-14-welaplus-plan-1-question-package.md).
 - [ ] Build the remaining local/server schema and contract: `battery_runs`,
   `battery_run_artifacts`, additive `assessments`/`programmes` fields, local photo queue, Storage
   bucket/RLS, allowlists, ordering, reference data, and EGRA backfill.

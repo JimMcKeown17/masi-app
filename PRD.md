@@ -342,9 +342,9 @@ cross-layer architecture change, not a UI-only port.
 
 The active PRD is
 [`documentation/wela-plus-battery-prd-2026.md`](documentation/wela-plus-battery-prd-2026.md).
-Question components exist only on the unmerged `feature/wela-plus-battery-merge` branch. Host
-schema, sync, Run lifecycle, package publication, content, calibration, and field validation remain
-open.
+Question components are on `main` under `src/assessment-questions/` but are not yet wired into the
+app. Host schema, sync, Run lifecycle, package publication, content, calibration, and field
+validation remain open.
 
 ### 7.4 Head Office importer
 
