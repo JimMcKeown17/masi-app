@@ -1,5 +1,3 @@
-import { getDatabase, withDatabaseAccess } from './client';
-
 const LOCAL_SYNC_COLUMNS = `
   sync_status text not null default 'synced'
     check (sync_status in ('pending', 'synced', 'failed', 'terminal')),
@@ -7,7 +5,6 @@ const LOCAL_SYNC_COLUMNS = `
   server_updated_at text
 `;
 
-let appMigrationQueue = Promise.resolve();
 const explicitDatabaseMigrationQueues = new WeakMap();
 
 export const MIGRATIONS = [
@@ -670,6 +667,18 @@ export const MIGRATIONS = [
       create index if not exists idx_time_entries_user_signin on time_entries(user_id, sign_in_time);
     `,
   },
+  {
+    version: 12,
+    name: 'sync_outbox_owner_required',
+    sql: `
+create trigger if not exists sync_outbox_owner_required
+before insert on sync_outbox
+when new.owner_user_id is null
+begin
+  select raise(abort, 'sync_outbox.owner_user_id is required');
+end;
+    `,
+  },
 ];
 
 // Derived from the migration list so it never drifts when a migration is added.
@@ -705,7 +714,7 @@ const runInTransaction = async (db, task) => {
 };
 
 async function runMigrationsNow(database) {
-  const db = database || await getDatabase();
+  const db = database;
   const userVersion = await getUserVersion(db);
   const pending = MIGRATIONS.filter((migration) => migration.version > userVersion);
   if (pending.length === 0) {
@@ -744,22 +753,12 @@ async function runMigrationsNow(database) {
 }
 
 export async function runMigrations(database) {
-  if (database) {
-    const currentQueue = explicitDatabaseMigrationQueues.get(database) || Promise.resolve();
-    const queuedMigration = currentQueue.then(
-      () => runMigrationsNow(database),
-      () => runMigrationsNow(database)
-    );
-    explicitDatabaseMigrationQueues.set(database, queuedMigration.catch(() => {}));
-
-    return queuedMigration;
-  }
-
-  const queuedMigration = appMigrationQueue.then(
-    () => withDatabaseAccess((db) => runMigrationsNow(db)),
-    () => withDatabaseAccess((db) => runMigrationsNow(db))
+  if (!database) throw new Error('Migrations require an explicit database');
+  const currentQueue = explicitDatabaseMigrationQueues.get(database) || Promise.resolve();
+  const queuedMigration = currentQueue.then(
+    () => runMigrationsNow(database),
+    () => runMigrationsNow(database)
   );
-  appMigrationQueue = queuedMigration.catch(() => {});
-
+  explicitDatabaseMigrationQueues.set(database, queuedMigration.catch(() => {}));
   return queuedMigration;
 }

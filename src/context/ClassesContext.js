@@ -1,22 +1,14 @@
+import { isStaleActorError } from '../session/staleActor';
+import { useSignedInEA } from './SignedInEAContext';
 import React, { createContext, useState, useEffect, useContext, useRef, useCallback, useMemo } from 'react';
-import { supabase } from '../services/supabaseClient';
-import { ensureReferenceData, fetchAndCacheSchools } from '../services/offlineSync';
-import { enqueueSupabaseRequest } from '../services/supabaseRequestQueue';
-import {
-  academicYearsRepository,
-  schoolsRepository,
-} from '../db/repositories/referenceDataRepository';
+
 import { getActiveProgrammeId } from '../db/repositories/domainRepositoryUtils';
-import { classesRepository } from '../db/repositories/classesRepository';
-import { classOnboardingRepository } from '../db/repositories/classOnboardingRepository';
-import { classEaAssignmentsRepository } from '../db/repositories/classEaAssignmentsRepository';
-import { syncStateRepository } from '../db/repositories/syncStateRepository';
+
 import {
   classifyPullFailureKind,
   PULL_SCOPE_COMPLETENESS_LIMIT,
   pullReconcileAcknowledgments,
 } from '../services/preloadedChildData';
-import { resolveDatabase } from '../db/repositories/repositoryRuntime';
 import { useAuth } from './AuthContext';
 import { useOffline } from './OfflineContext';
 import { useChildren } from './ChildrenContext';
@@ -45,6 +37,9 @@ const failedPullScope = (failureKind, error) => ({
 const dependencyPullScope = () => failedPullScope('dependency');
 
 export const ClassesProvider = ({ children: reactChildren }) => {
+  const { handle, repositories, services } = useSignedInEA();
+  const { academicYears: academicYearsRepository, schools: schoolsRepository, classes: classesRepository, classOnboarding: classOnboardingRepository, classEaAssignments: classEaAssignmentsRepository, syncState: syncStateRepository } = repositories;
+
   const { user } = useAuth();
   const {
     isOnline,
@@ -80,7 +75,8 @@ export const ClassesProvider = ({ children: reactChildren }) => {
 
   const publishClassBootstrapStatus = useCallback((userId, status) => {
     if (activeUserIdRef.current !== userId) return;
-    setClassBootstrap({ userId, status });
+    const serverPassOwed = activePullRef.current?.pending?.isOnline;
+    setClassBootstrap({ userId, status: serverPassOwed && status !== 'available' ? 'checking' : status });
   }, []);
 
   const refreshFromCache = useCallback(async () => {
@@ -121,17 +117,20 @@ export const ClassesProvider = ({ children: reactChildren }) => {
       setSchools(cached);
 
       try {
-        const serverSchools = await fetchAndCacheSchools();
+        if (!isOnline) return;
+        const serverSchools = await services.fetchAndCacheSchools();
         if (activeUserIdRef.current !== activeUserId) return;
         setSchools(serverSchools);
       } catch (error) {
+        if (isStaleActorError(error)) return;
         console.log('Could not fetch schools from server (likely offline):', error.message);
         // Keep cached data — it's fine to be stale
       }
     } catch (error) {
+      if (isStaleActorError(error)) return;
       console.error('Error in loadSchools:', error);
     }
-  }, [user?.id]);
+  }, [user?.id, isOnline]);
 
   const performPullFromServer = useCallback(async () => {
     const activeUserId = user?.id;
@@ -147,14 +146,18 @@ export const ClassesProvider = ({ children: reactChildren }) => {
     try {
       setLoading(true);
       const cachedClasses = await refreshFromCache();
+      if (!isOnline) {
+        publishClassBootstrapStatus(activeUserId, cachedClasses.length ? 'available' : 'unconfirmed_empty');
+        return;
+      }
 
       const resolvedReconcileAcknowledgments = await pullReconcileAcknowledgments({
         userId: activeUserId,
-        supabaseClient: supabase,
-        enqueueRequest: enqueueSupabaseRequest,
+        supabaseClient: handle.dataClient,
+        enqueueRequest: handle.enqueueRequest,
       });
-      const { data: assignments, error: assignmentError } = await enqueueSupabaseRequest(() => (
-        supabase
+      const { data: assignments, error: assignmentError } = await handle.enqueueRequest(() => (
+        handle.dataClient
           .from('staff_programme_assignments')
           .select('programme_id')
           .eq('user_id', activeUserId)
@@ -186,8 +189,8 @@ export const ClassesProvider = ({ children: reactChildren }) => {
           },
         };
       } else {
-        const { data, error } = await enqueueSupabaseRequest(() => (
-          supabase
+        const { data, error } = await handle.enqueueRequest(() => (
+          handle.dataClient
             .from('classes')
             .select(`
               *,
@@ -321,7 +324,7 @@ export const ClassesProvider = ({ children: reactChildren }) => {
         return;
       }
 
-      await ensureReferenceData({ userId: activeUserId });
+      await services.referenceDataReady();
       if (activeUserIdRef.current !== activeUserId) return;
       await classesRepository.saveServerClassRows(scopes.classes.rows);
       const shouldReconcileAssignments = Boolean(activeProgrammeId)
@@ -355,6 +358,7 @@ export const ClassesProvider = ({ children: reactChildren }) => {
         freshClasses.length > 0 ? 'available' : 'confirmed_empty'
       );
     } catch (error) {
+      if (isStaleActorError(error)) return;
       console.error('Error in pullFromServer:', error);
       captureOperationalError(error, {
         category: 'class_pull_failed',
@@ -376,35 +380,45 @@ export const ClassesProvider = ({ children: reactChildren }) => {
         }
       }
     } finally {
-      if (activeUserIdRef.current === activeUserId) {
+      if (activeUserIdRef.current === activeUserId && !activePullRef.current?.pending) {
         setLoading(false);
       }
     }
-  }, [user?.id, refreshFromCache, publishClassBootstrapStatus]);
+  }, [user?.id, isOnline, refreshFromCache, publishClassBootstrapStatus]);
 
   const pullFromServer = useCallback(() => {
-    const activeUserId = user?.id;
-    if (activePullRef.current && activePullRef.current.userId === activeUserId) {
-      return activePullRef.current.promise;
+    const userId = user?.id;
+    const inputs = { isOnline, domainPullNonce, run: performPullFromServer };
+    const active = activePullRef.current;
+    if (active && active.userId === userId) {
+      // A join with newer inputs owes another pass; it cannot inherit the old
+      // pass's captured offline state or consume a reconnect request silently.
+      if (active.inputs.isOnline !== isOnline || active.inputs.domainPullNonce !== domainPullNonce) {
+        active.pending = inputs;
+      } else {
+        active.pending = null;
+      }
+      return active.promise;
     }
 
-    const pullPromise = (async () => {
+    const flight = { userId, inputs, pending: null, promise: null };
+    activePullRef.current = flight;
+    flight.promise = (async () => {
       try {
-        return await performPullFromServer();
-      } finally {
-        if (activePullRef.current?.promise === pullPromise) {
-          activePullRef.current = null;
-          const authorizedFollowUpNeeded = activeUserIdRef.current === activeUserId
-            && hasReconcileBreakerAuthorizationRef.current(CLASS_RECONCILE_BREAKER_SCOPE);
-          if (authorizedFollowUpNeeded) {
-            pullFromServer();
-          }
+        let pass = inputs;
+        while (pass && handle.isCurrent() && activeUserIdRef.current === userId) {
+          flight.inputs = pass;
+          flight.pending = null;
+          await pass.run();
+          const authorizedFollowUpNeeded = hasReconcileBreakerAuthorizationRef.current(CLASS_RECONCILE_BREAKER_SCOPE);
+          pass = flight.pending || (authorizedFollowUpNeeded ? flight.inputs : null);
         }
+      } finally {
+        if (activePullRef.current === flight) activePullRef.current = null;
       }
     })();
-    activePullRef.current = { userId: activeUserId, promise: pullPromise };
-    return pullPromise;
-  }, [user?.id, performPullFromServer]);
+    return flight.promise;
+  }, [user?.id, isOnline, domainPullNonce, performPullFromServer, handle]);
 
   const loadClasses = useCallback(async () => {
     await pullFromServer();
@@ -463,7 +477,7 @@ export const ClassesProvider = ({ children: reactChildren }) => {
       if (!academicYearId) {
         throw new Error('No active academic year found for class creation');
       }
-      const db = await resolveDatabase();
+      const db = await handle.getReader();
       const activeProgrammeId = await getActiveProgrammeId(db, user.id);
       if (!activeProgrammeId) {
         throw new Error('No active programme assignment found for class creation');
@@ -496,6 +510,7 @@ export const ClassesProvider = ({ children: reactChildren }) => {
 
       return { success: true, classData: newClass };
     } catch (error) {
+      if (isStaleActorError(error)) throw error;
       console.error('Error adding class:', error);
       return { success: false, error };
     }
@@ -510,10 +525,11 @@ export const ClassesProvider = ({ children: reactChildren }) => {
       if (completed) setIncompleteOnboardingClassId(null);
       return { success: completed };
     } catch (error) {
+      if (isStaleActorError(error)) throw error;
       console.error('Error completing class onboarding:', error);
       return { success: false, error };
     }
-  }, [user?.id]);
+  }, [user?.id, isOnline]);
 
   /**
    * Update a class
@@ -534,6 +550,7 @@ export const ClassesProvider = ({ children: reactChildren }) => {
 
       return { success: true };
     } catch (error) {
+      if (isStaleActorError(error)) throw error;
       console.error('Error updating class:', error);
       return { success: false, error };
     }
@@ -552,6 +569,7 @@ export const ClassesProvider = ({ children: reactChildren }) => {
 
       return { success: true };
     } catch (error) {
+      if (isStaleActorError(error)) throw error;
       console.error('Error deleting class:', error);
       return { success: false, error };
     }

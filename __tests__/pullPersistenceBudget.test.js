@@ -1,3 +1,4 @@
+import { bindTestActor } from '../test-support/actorTestUtils';
 jest.mock('expo-sqlite', () => require('../test-support/expoSQLiteMock'));
 
 import { runMigrations } from '../src/db/migrations';
@@ -27,7 +28,7 @@ const batchResult = ({
 });
 
 const createDatabase = async () => {
-  const db = createCountingSqliteTestDatabase();
+  const db = bindTestActor(createCountingSqliteTestDatabase(), 'user-1');
   await runMigrations(db);
   await seedCoreData(db);
   return db;

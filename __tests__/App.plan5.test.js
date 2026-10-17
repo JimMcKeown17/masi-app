@@ -1,3 +1,4 @@
+global.__MASI_NO_DEFAULT_HANDLE__ = true;
 import React from 'react';
 import { render } from '@testing-library/react-native';
 
@@ -39,6 +40,7 @@ jest.mock('react-native-safe-area-context', () => ({
 
 jest.mock('../src/context/AuthContext', () => ({
   AuthProvider: ({ children }) => <>{children}</>,
+  useAuth: () => ({ user: null, handle: null, handleStatus: 'signed_out', loading: false }),
 }));
 
 jest.mock('../src/context/OfflineContext', () => ({

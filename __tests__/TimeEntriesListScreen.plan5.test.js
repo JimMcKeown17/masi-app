@@ -24,12 +24,14 @@ jest.mock('../src/context/OfflineContext', () => ({
 }));
 
 jest.mock('../src/db/repositories/timeEntriesRepository', () => ({
+  ...jest.requireActual('../src/db/repositories/timeEntriesRepository'),
   timeEntriesRepository: {
     getTimeEntries: jest.fn(),
   },
 }));
 
 jest.mock('../src/services/supabaseClient', () => ({
+  ...require('../test-support/supabaseTestConfig'),
   supabase: {
     from: jest.fn(),
   },

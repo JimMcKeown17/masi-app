@@ -1,10 +1,11 @@
+import { useSignedInEA } from '../../context/SignedInEAContext';
 import React, { useState, useCallback } from 'react';
 import { View, StyleSheet, FlatList } from 'react-native';
 import { Text, ActivityIndicator } from 'react-native-paper';
 import { useFocusEffect } from '@react-navigation/native';
 import { useAuth } from '../../context/AuthContext';
 import { useChildren } from '../../context/ChildrenContext';
-import { sessionsRepository } from '../../db/repositories/sessionsRepository';
+
 import { useSessionHistoryStatus } from '../../services/sessionHistoryStatus';
 import { getDistinctSessionCount, getSessionCountRanking } from '../../utils/dashboardStats';
 import RankedBarRow from '../../components/dashboard/RankedBarRow';
@@ -12,6 +13,9 @@ import StatBar from '../../components/dashboard/StatBar';
 import { colors, spacing } from '../../constants/colors';
 
 export default function SessionCountRankingScreen() {
+  const { repositories } = useSignedInEA();
+  const { sessions: sessionsRepository } = repositories;
+
   const { user } = useAuth();
   const { children: childrenList } = useChildren();
   const { pageVersion, runVersion } = useSessionHistoryStatus();

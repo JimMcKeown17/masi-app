@@ -1,3 +1,4 @@
+import { useSignedInEA } from '../../context/SignedInEAContext';
 import React, { useState, useCallback, useMemo } from 'react';
 import { View, StyleSheet, FlatList } from 'react-native';
 import { Text, ActivityIndicator, SegmentedButtons } from 'react-native-paper';
@@ -5,7 +6,7 @@ import { useFocusEffect } from '@react-navigation/native';
 import { useAuth } from '../../context/AuthContext';
 import { useChildren } from '../../context/ChildrenContext';
 import { useClasses } from '../../context/ClassesContext';
-import { assessmentsRepository } from '../../db/repositories/assessmentsRepository';
+
 import { getLetterAssessmentRanking, getWordAssessmentRanking } from '../../utils/dashboardStats';
 import { getScoreBand, getBandColor } from '../../utils/scoreBands';
 import RankedBarRow from '../../components/dashboard/RankedBarRow';
@@ -46,6 +47,9 @@ const BAND_LEGEND = [
 ];
 
 export default function AssessmentRankingScreen({ navigation }) {
+  const { repositories } = useSignedInEA();
+  const { assessments: assessmentsRepository } = repositories;
+
   const { user } = useAuth();
   const { children: childrenList } = useChildren();
   const { classes } = useClasses();

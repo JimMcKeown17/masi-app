@@ -1,7 +1,8 @@
+import { useSignedInEA } from './SignedInEAContext';
 import React, { createContext, useContext, useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { useAuth } from './AuthContext';
 import { useOffline } from './OfflineContext';
-import { timeEntriesRepository, OPEN_TIME_ENTRY_EXISTS } from '../db/repositories/timeEntriesRepository';
+import { OPEN_TIME_ENTRY_EXISTS } from '../db/repositories/timeEntriesRepository';
 import { getCurrentPosition } from '../services/locationService';
 import { v4 as uuidv4 } from 'uuid';
 
@@ -13,6 +14,9 @@ const MAX_SHIFT_MS = MAX_SHIFT_HOURS * 60 * 60 * 1000;
  * Used by both HomeScreen and TimeTrackingScreen.
  */
 function useTimeTrackingState() {
+  const { repositories } = useSignedInEA();
+  const { timeEntries: timeEntriesRepository } = repositories;
+
   const { user } = useAuth();
   const { refreshSyncStatus, triggerBackgroundSync } = useOffline();
 

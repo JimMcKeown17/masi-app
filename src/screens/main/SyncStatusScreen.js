@@ -1,3 +1,4 @@
+import { useSignedInEA } from '../../context/SignedInEAContext';
 import React, { useState, useCallback } from 'react';
 import { View, ScrollView, StyleSheet } from 'react-native';
 import { Card, Text, Button, Snackbar } from 'react-native-paper';
@@ -5,8 +6,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useOffline } from '../../context/OfflineContext';
 import { useAuth } from '../../context/AuthContext';
 import { useFocusEffect } from '@react-navigation/native';
-import { useSessionHistoryStatus, getSessionHistoryPullState } from '../../services/sessionHistoryStatus';
-import { retryFailedItem } from '../../services/offlineSync';
+import { useSessionHistoryStatus } from '../../services/sessionHistoryStatus';
 import { colors, spacing, borderRadius, shadows } from '../../constants/colors';
 import {
   deriveSyncState,
@@ -52,13 +52,15 @@ const formatSyncTime = (isoString) => {
 };
 
 export default function SyncStatusScreen() {
+  const { services } = useSignedInEA();
+
   const { user } = useAuth();
   const { running, pageVersion, runVersion } = useSessionHistoryStatus();
   const [pullState, setPullState] = useState(null);
   const history = describeHistoryState({ running, pullState });
   useFocusEffect(useCallback(() => {
     let active = true;
-    getSessionHistoryPullState(user?.id).then((state) => {
+    services.sessionHistory.store.getPullState(user?.id).then((state) => {
       if (active) setPullState(state);
     }).catch((error) => {
       console.error('Error loading history status:', error);
@@ -93,7 +95,7 @@ export default function SyncStatusScreen() {
     if (!isOnline) return;
     const displayName = TABLE_DISPLAY_NAMES[table] || table;
     showSnackbar(`Retrying ${displayName}...`);
-    await retryFailedItem(table, id);
+    await services.syncEngine.retryFailedItem(table, id);
     await refreshSyncStatus();
     await syncNow({ force: true });
   };

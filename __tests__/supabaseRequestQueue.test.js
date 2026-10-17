@@ -1,4 +1,4 @@
-import { createSupabaseRequestQueue } from '../src/services/supabaseRequestQueue';
+import { createHandleRequestQueue } from '../src/session/handleRequestQueue';
 
 const deferred = () => {
   let resolve;
@@ -12,7 +12,7 @@ const deferred = () => {
 
 describe('supabaseRequestQueue', () => {
   test('runs queued Supabase preload operations one at a time', async () => {
-    const queue = createSupabaseRequestQueue();
+    const queue = createHandleRequestQueue({ isOpen: () => true });
     const firstGate = deferred();
     const events = [];
 
@@ -38,7 +38,7 @@ describe('supabaseRequestQueue', () => {
   });
 
   test('continues running later requests after an earlier request fails', async () => {
-    const queue = createSupabaseRequestQueue();
+    const queue = createHandleRequestQueue({ isOpen: () => true });
     const events = [];
 
     const first = queue.enqueue(async () => {

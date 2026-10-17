@@ -1,5 +1,6 @@
 jest.mock('expo-sqlite', () => require('../test-support/expoSQLiteMock'));
 jest.mock('../src/services/supabaseClient', () => ({
+  ...require('../test-support/supabaseTestConfig'),
   supabase: {},
 }));
 

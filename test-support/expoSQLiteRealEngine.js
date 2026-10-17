@@ -60,6 +60,7 @@ const wrapDatabase = ({ handle, name, isRegistryHandle }) => {
   // API surface unchanged. better-sqlite3 itself is sync; async functions match
   // expected Promise-returning types.
   return {
+    get isOpen() { return handle.open; },
     async runAsync(sql, ...rest) {
       const params = normalizeParams(rest);
       const stmt = handle.prepare(sql);

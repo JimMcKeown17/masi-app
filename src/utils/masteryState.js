@@ -9,10 +9,8 @@
  */
 import { LETTER_SETS, PEDAGOGICAL_ORDERS } from '../constants/egraConstants';
 import { computeAssessmentMastery } from './letterMastery';
-import { assessmentsRepository } from '../db/repositories/assessmentsRepository';
-import { masteryRepository } from '../db/repositories/masteryRepository';
 
-export async function loadMasteryState({ userId, childId, languageKey }) {
+export async function loadMasteryState({ repositories, userId, childId, languageKey }) {
   const letterSet = LETTER_SETS[languageKey];
   const pedagogicalOrder = PEDAGOGICAL_ORDERS[languageKey];
   if (!letterSet || !pedagogicalOrder) {
@@ -29,7 +27,7 @@ export async function loadMasteryState({ userId, childId, languageKey }) {
   // letter_language, and computeAssessmentMastery returns an empty set for
   // them, so filtering by type here is what keeps a newer word assessment
   // from wiping tracker mastery.
-  const allAssessments = await assessmentsRepository.getAssessments({ userId, childId });
+  const allAssessments = await repositories.assessments.getAssessments({ userId, childId });
   const childAssessments = allAssessments
     .filter(a => a.child_id === childId
       && a.letter_language === letterSet.language
@@ -42,7 +40,7 @@ export async function loadMasteryState({ userId, childId, languageKey }) {
   const latestAssessment = childAssessments[0] || null;
   const assessmentMastered = computeAssessmentMastery(latestAssessment, letterSet, pedagogicalOrder);
 
-  const allMastery = await masteryRepository.getLetterMastery({ userId, childId });
+  const allMastery = await repositories.mastery.getLetterMastery({ userId, childId });
   const taughtRecords = allMastery.filter(
     r => r.child_id === childId && r.language === letterSet.language && !r._deleted
   );

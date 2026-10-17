@@ -1,13 +1,16 @@
-jest.mock('../src/db/repositories/repositoryRuntime', () => ({
-  resolveDatabase: jest.fn(async () => ({})),
-}));
+import { requireCurrentHandle } from '../src/session/signedInHandle';
+import { repositoriesForTest } from '../test-support/legacyHandleMocks';
+
 jest.mock('../src/db/repositories/domainRepositoryUtils', () => ({
+  ...jest.requireActual('../src/db/repositories/domainRepositoryUtils'),
   getActiveProgrammeId: jest.fn(),
 }));
 jest.mock('../src/db/repositories/referenceDataRepository', () => ({
+  ...jest.requireActual('../src/db/repositories/referenceDataRepository'),
   programmesRepository: { getAll: jest.fn() },
 }));
 jest.mock('../src/db/repositories/sessionsRepository', () => ({
+  ...jest.requireActual('../src/db/repositories/sessionsRepository'),
   sessionsRepository: { countSessionsOnDate: jest.fn() },
 }));
 
@@ -32,7 +35,7 @@ describe('getSessionsTodayGoal', () => {
     ]);
     sessionsRepository.countSessionsOnDate.mockResolvedValue(1);
 
-    const goal = await getSessionsTodayGoal({ userId: 'ea-1', now });
+    const goal = await getSessionsTodayGoal({ handle: { getReader: () => requireCurrentHandle().getReader(), repositories: repositoriesForTest(requireCurrentHandle()) }, userId: 'ea-1', now });
 
     // count === 1 proves only s1 survived the today + active-programme filter
     expect(goal).toEqual({ target: 3, ceiling: 5, count: 1, state: 'below' });
@@ -50,7 +53,7 @@ describe('getSessionsTodayGoal', () => {
     ]);
     sessionsRepository.countSessionsOnDate.mockResolvedValue(1);
 
-    const goal = await getSessionsTodayGoal({ userId: 'ea-1', now });
+    const goal = await getSessionsTodayGoal({ handle: { getReader: () => requireCurrentHandle().getReader(), repositories: repositoriesForTest(requireCurrentHandle()) }, userId: 'ea-1', now });
 
     expect(goal.count).toBe(1); // only the signed-in EA's session counts toward the ring
   });
@@ -58,7 +61,7 @@ describe('getSessionsTodayGoal', () => {
   test('returns null when the EA has no active programme', async () => {
     getActiveProgrammeId.mockResolvedValue(null);
 
-    const goal = await getSessionsTodayGoal({ userId: 'ea-1', now });
+    const goal = await getSessionsTodayGoal({ handle: { getReader: () => requireCurrentHandle().getReader(), repositories: repositoriesForTest(requireCurrentHandle()) }, userId: 'ea-1', now });
 
     expect(goal).toBeNull();
   });

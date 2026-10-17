@@ -1,3 +1,4 @@
+jest.mock('../src/context/AuthContext', () => ({ useAuth: () => ({ user: { id: '11111111-1111-4111-8111-111111111111' }, profile: {} }) }));
 import React from 'react';
 import { fireEvent, render } from '@testing-library/react-native';
 import { PaperProvider } from 'react-native-paper';

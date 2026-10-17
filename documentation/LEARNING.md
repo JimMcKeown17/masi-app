@@ -1655,3 +1655,53 @@ every old field, drops and renames inside the existing migration transaction, an
 one time-entry index. Tests compare the old data, index/trigger definitions and FK inventory,
 keep queued uploads intact, and prove a failed CHECK rolls the whole migration back without
 advancing the schema version. PostgreSQL validation and device behavior remain separate proofs.
+
+## Why the fence sits on each request, and the binding on each tree (Plan 2, October 2026)
+
+Two EAs can share one phone in a day. The old app had one database file, one Supabase client and
+one request queue for everyone, and it checked "who is signed in" when work was *queued*. Work
+outlives that check. An upload queued by A can still be waiting when B signs in, and then it runs
+on the shared client with B's token. The rule we adopted: **check identity at the moment of
+effect, not at the moment of intent.**
+
+That is why the fence sits on each request. The handle's data client re-checks, inside its own
+`fetch`, that the handle is open and current, that a queued task is running and that the session
+is this EA's. Checking only before `enqueueRequest` would leave the gap between enqueue and send,
+and every `await` inside a long workflow opens another one. Two details made the obvious version
+fail:
+
+- **postgrest-js swallows thrown errors.** A `fetch` that throws becomes a `{ data: null, error }`
+  result with an empty error code, which our classifier treats as a retriable network failure. A
+  stale refusal thrown inside `fetch` would therefore be retried later, possibly under the next EA.
+  The fence therefore also marks the running *task* stale, and the queue rejects the task with
+  `StaleActorError` no matter what the SDK returned.
+- **supabase-js primes Realtime at construction** by asking for a token outside any task. A strict
+  fence logged a false "Failed to set initial Realtime auth token" on every sign-in. The token
+  callback now returns nothing outside a task; the send-time check is the real guard.
+
+The binding sits on each tree because remounting is not cancellation. Keying the signed-in tree on
+`userId:epoch` unmounts A's screens when B signs in, but an `async` callback A started (for
+example `ClassesContext.addClass`, paused on a reference read) keeps running after unmount. If it
+had found its repository through "the current handle", it would have resumed and written A's class
+into **B's** file. So nothing in production resolves an ambient handle. Each consumer captures its
+own handle through `useSignedInEA()`, and a write through a revoked handle fails. Static tests
+enforce it, including ones that try the bypasses a reviewer found.
+
+The same principle recurred three more times during review, each time in a new place:
+
+- **A transaction facade outliving its transaction.** It could slip a stray write into the *next*
+  transaction. Each transaction now gets a facade that expires when its task settles.
+- **Late auth responses.** A password check or token refresh that finished after sign-out could
+  write A's session back to storage, or delete B's. Ordering rules kept leaking new interleavings.
+  The fix that held was to guard the stored thing itself: the session storage accepts a write only
+  for the identity AuthContext has admitted, and that admission is always one specific person, never
+  "anyone". The app's launch refresh is the one exception that must pass (it rotates the refresh
+  token), so before AuthContext's first decision the guard accepts only the user already stored.
+- **Ownership derived from content.** `created_by` says who made a record, not who changed it. An
+  EA editing a Head Office child had their change queued under Head Office, and it never uploaded.
+  The owner is now stamped from the signed-in EA at one choke point, and a database trigger refuses
+  a row without one.
+
+The general lesson: when an operation can outlive the context that authorised it, carry the
+context with the operation and check it where the effect happens. When a race keeps reappearing in
+new places after each fix, stop adding ordering rules and guard the resource being corrupted.

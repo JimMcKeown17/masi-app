@@ -1,13 +1,13 @@
-import { classesRepository } from './classesRepository';
-import { localStateRepository } from './localStateRepository';
+import { createClassesRepository } from './classesRepository';
+import { createLocalStateRepository } from './localStateRepository';
 import { runRepositoryTransaction } from './repositoryRuntime';
 
 const pendingClassKey = (userId) => `class_onboarding:${userId}`;
 
 export const createClassOnboardingRepository = ({
   database,
-  classes = classesRepository,
-  localState = localStateRepository,
+  classes = createClassesRepository({ database }),
+  localState = createLocalStateRepository({ database }),
 } = {}) => {
   const getPendingClassId = async (userId) => {
     if (!userId) return null;

@@ -1,3 +1,4 @@
+global.__MASI_NO_DEFAULT_HANDLE__ = true;
 import * as Location from 'expo-location';
 import { Alert, Linking } from 'react-native';
 

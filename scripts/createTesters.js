@@ -7,6 +7,13 @@ const { createClient } = require('@supabase/supabase-js');
 const { parseCsvFile } = require('./lib/parseCsv');
 const { loadEnvFiles } = require('./sqlite-staging.cjs');
 const {
+  PROVISIONING_USAGE,
+  parseOrganisationArg,
+  resolveOrganisationId,
+  checkExistingOrganisation,
+  buildProfile,
+} = require('./lib/organisationProvisioning');
+const {
   SQLITE_PROJECT_ID,
   ZERO_CLASS_ASSIGNMENT_TABLES,
   normalizeTesterRows,
@@ -15,30 +22,7 @@ const {
   validateTesterProvisioningEnv,
 } = require('./lib/testerProvisioning');
 
-const safeEnv = validateTesterProvisioningEnv({
-  ...loadEnvFiles(),
-  ...process.env,
-});
-const SUPABASE_URL = safeEnv.SUPABASE_PROJECT_URL_SQLITE;
-const SERVICE_ROLE_KEY = safeEnv.SUPABASE_SECRET_KEY_SQLITE;
-
-const args = process.argv.slice(2);
-const dryRun = args.includes('--dry-run');
-const csvArg = args.find(arg => arg !== '--dry-run');
-
-if (!csvArg || csvArg.startsWith('--')) {
-  console.error('Usage: node scripts/createTesters.js [--dry-run] <path-to-csv>');
-  console.error('CSV: email,password,first_name,last_name,job_title_code,school_uid,programme_code,tester_type');
-  console.error('tester_type must be zero_class; seeded rosters use the future Head Office importer.');
-  process.exit(1);
-}
-
-const csvPath = path.resolve(process.cwd(), csvArg);
-const admin = createClient(SUPABASE_URL, SERVICE_ROLE_KEY, {
-  auth: { autoRefreshToken: false, persistSession: false },
-});
-
-async function loadLookupMaps(rows) {
+async function loadLookupMaps(admin, rows) {
   const jobTitleCodes = [...new Set(rows.map(row => row.job_title_code))];
   const schoolUids = [...new Set(rows.map(row => row.school_uid))];
   const programmeCodes = [...new Set(rows.map(row => row.programme_code))];
@@ -81,7 +65,7 @@ async function loadLookupMaps(rows) {
   return { jobTitlesByCode, schoolsByUid, programmesByCode };
 }
 
-async function findUserByEmail(email) {
+async function findUserByEmail(admin, email) {
   const target = email.toLowerCase();
   let page = 1;
   const perPage = 1000;
@@ -95,21 +79,7 @@ async function findUserByEmail(email) {
   }
 }
 
-function buildProfile(row, lookupMaps, userId) {
-  const jobTitle = lookupMaps.jobTitlesByCode.get(row.job_title_code);
-  const school = lookupMaps.schoolsByUid.get(row.school_uid);
-  const base = {
-    id: userId,
-    first_name: row.first_name,
-    last_name: row.last_name,
-    email: row.email,
-    job_title_id: jobTitle.id,
-    school_id: school.id,
-  };
-  return base;
-}
-
-async function loadZeroClassAssignments(userId) {
+async function loadZeroClassAssignments(admin, userId) {
   const assignmentsByTable = {};
   for (const { table, userColumn } of ZERO_CLASS_ASSIGNMENT_TABLES) {
     const { data, error } = await admin
@@ -123,7 +93,7 @@ async function loadZeroClassAssignments(userId) {
   return assignmentsByTable;
 }
 
-async function loadActiveProgrammeAssignments(userId) {
+async function loadActiveProgrammeAssignments(admin, userId) {
   const { data, error } = await admin
     .from('staff_programme_assignments')
     .select('id,programme_id,school_id')
@@ -133,22 +103,34 @@ async function loadActiveProgrammeAssignments(userId) {
   return data || [];
 }
 
-async function preflightExistingTester(row, lookupMaps, userId) {
+async function preflightExistingTester(admin, row, lookupMaps, userId, organisationId) {
+  const { data: existingProfile, error } = await admin
+    .from('users')
+    .select('organization_id')
+    .eq('id', userId)
+    .maybeSingle();
+  if (error) throw error;
+  const organisationCheck = checkExistingOrganisation(existingProfile, organisationId);
+  if (!organisationCheck.ok) return organisationCheck;
+
   const programme = lookupMaps.programmesByCode.get(row.programme_code);
   const school = lookupMaps.schoolsByUid.get(row.school_uid);
   const [zeroClassAssignments, programmeAssignments] = await Promise.all([
-    loadZeroClassAssignments(userId),
-    loadActiveProgrammeAssignments(userId),
+    loadZeroClassAssignments(admin, userId),
+    loadActiveProgrammeAssignments(admin, userId),
   ]);
 
   validateZeroClassAssignments(zeroClassAssignments);
-  return validateActiveProgrammeAssignments(programmeAssignments, {
-    programmeId: programme.id,
-    schoolId: school.id,
-  });
+  return {
+    ok: true,
+    existingProgrammeAssignment: validateActiveProgrammeAssignments(programmeAssignments, {
+      programmeId: programme.id,
+      schoolId: school.id,
+    }),
+  };
 }
 
-async function ensureActiveProgrammeAssignment(row, lookupMaps, userId, existing) {
+async function ensureActiveProgrammeAssignment(admin, row, lookupMaps, userId, existing) {
   if (existing) {
     return 'reused';
   }
@@ -167,10 +149,10 @@ async function ensureActiveProgrammeAssignment(row, lookupMaps, userId, existing
   return 'created';
 }
 
-async function processRow(row, lookupMaps) {
+async function processRow(admin, row, lookupMaps, organisationId, { dryRun = false } = {}) {
   let existingUser;
   try {
-    existingUser = await findUserByEmail(row.email);
+    existingUser = await findUserByEmail(admin, row.email);
   } catch (error) {
     return { status: 'error', reason: `auth preflight failed: ${error.message}` };
   }
@@ -178,11 +160,15 @@ async function processRow(row, lookupMaps) {
   let existingProgrammeAssignment = null;
   if (existingUser) {
     try {
-      existingProgrammeAssignment = await preflightExistingTester(
+      const preflight = await preflightExistingTester(
+        admin,
         row,
         lookupMaps,
-        existingUser.id
+        existingUser.id,
+        organisationId
       );
+      if (!preflight.ok) return { status: 'error', reason: preflight.reason };
+      existingProgrammeAssignment = preflight.existingProgrammeAssignment;
     } catch (error) {
       return { status: 'error', reason: `existing-account preflight failed: ${error.message}` };
     }
@@ -210,17 +196,44 @@ async function processRow(row, lookupMaps) {
     createdNow = true;
   }
 
+  const profile = buildProfile(row, lookupMaps, userId, organisationId);
   const { error: profileErr } = await admin
     .from('users')
-    .upsert(buildProfile(row, lookupMaps, userId), { onConflict: 'id' });
+    .upsert(profile, { onConflict: 'id', ignoreDuplicates: true });
 
   if (profileErr) {
     if (createdNow) await admin.auth.admin.deleteUser(userId);
     return { status: 'error', reason: `profile upsert failed: ${profileErr.message}` };
   }
 
+  // The preflight can race another provisioner. Never update the employer:
+  // this single UPDATE refreshes mutable fields only while it still matches.
+  const { data: updated, error: updateError } = await admin
+    .from('users')
+    .update({
+      first_name: profile.first_name,
+      last_name: profile.last_name,
+      email: profile.email,
+      job_title_id: profile.job_title_id,
+      school_id: profile.school_id,
+    })
+    .eq('id', userId)
+    .eq('organization_id', organisationId)
+    .select('id');
+  if (updateError) {
+    if (createdNow) await admin.auth.admin.deleteUser(userId);
+    return { status: 'error', reason: `profile update failed: ${updateError.message}` };
+  }
+  if (!updated?.length) {
+    // Another provisioner has adopted this identity under a different organisation. Never delete
+    // the Auth user here, even if this run created it: deleting it would cascade to the winner's
+    // profile and Programme assignment.
+    return { status: 'error', reason: 'organisation_conflict' };
+  }
+
   try {
     await ensureActiveProgrammeAssignment(
+      admin,
       row,
       lookupMaps,
       userId,
@@ -234,17 +247,38 @@ async function processRow(row, lookupMaps) {
   return { status: createdNow ? 'created' : 'reused' };
 }
 
-(async () => {
+async function main(args = process.argv.slice(2)) {
+  const organisationSlug = parseOrganisationArg(args);
+  const dryRun = args.includes('--dry-run');
+  const organisationFlagIndex = args.indexOf('--organization');
+  const positionalArgs = args.filter((arg, index) => (
+    arg !== '--dry-run' && index !== organisationFlagIndex && index !== organisationFlagIndex + 1
+  ));
+  if (positionalArgs.length !== 1 || positionalArgs[0].startsWith('--')) {
+    throw new Error(PROVISIONING_USAGE);
+  }
+
+  const safeEnv = validateTesterProvisioningEnv({
+    ...loadEnvFiles(),
+    ...process.env,
+  });
+  const admin = createClient(safeEnv.SUPABASE_PROJECT_URL_SQLITE, safeEnv.SUPABASE_SECRET_KEY_SQLITE, {
+    auth: { autoRefreshToken: false, persistSession: false },
+  });
+  // Resolve once, including dry runs, before looking up or changing any user.
+  const organisationId = await resolveOrganisationId(admin, organisationSlug);
+  const csvPath = path.resolve(process.cwd(), positionalArgs[0]);
   const rows = normalizeTesterRows(parseCsvFile(csvPath));
-  const lookupMaps = await loadLookupMaps(rows);
+  const lookupMaps = await loadLookupMaps(admin, rows);
   console.log(`Target: masi-app-sqlite (${SQLITE_PROJECT_ID})`);
+  console.log(`Organisation: ${organisationSlug}`);
   console.log(`Processing ${rows.length} row(s) from ${csvPath}`);
   console.log(`Mode: zero-class tester provisioning${dryRun ? ' (dry run)' : ''}\n`);
 
   const summary = { created: 0, reused: 0, 'dry-run': 0, error: 0 };
 
   for (const row of rows) {
-    const result = await processRow(row, lookupMaps);
+    const result = await processRow(admin, row, lookupMaps, organisationId, { dryRun });
     summary[result.status] += 1;
     const line = `line ${row.__line} ${row.email}`;
     if (result.status === 'error') {
@@ -260,8 +294,22 @@ async function processRow(row, lookupMaps) {
   Object.entries(summary).forEach(([key, value]) => {
     console.log(`  ${key}: ${value}`);
   });
-  process.exit(summary.error > 0 ? 1 : 0);
-})().catch(error => {
-  console.error('Fatal:', error.message || error);
-  process.exit(1);
-});
+  return summary.error > 0 ? 1 : 0;
+}
+
+if (require.main === module) {
+  main().then(exitCode => {
+    process.exitCode = exitCode;
+  }).catch(error => {
+    if (error.message === PROVISIONING_USAGE) {
+      console.error(PROVISIONING_USAGE);
+      console.error('CSV: email,password,first_name,last_name,job_title_code,school_uid,programme_code,tester_type');
+      console.error('tester_type must be zero_class; seeded rosters use the future Head Office importer.');
+    } else {
+      console.error('Fatal:', error.message || error);
+    }
+    process.exitCode = 1;
+  });
+}
+
+module.exports = { main, processRow };

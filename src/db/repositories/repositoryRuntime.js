@@ -1,26 +1,35 @@
-import { getDatabase, withTransaction } from '../client';
+import { isStaleActorError } from '../../session/staleActor';
+import { UnboundRepositoryError } from '../../session/staleActor';
 import { runMigrations } from '../migrations';
 import { runWithTransaction } from './sqliteRepositoryUtils';
 
-export const resolveDatabase = async (database) => {
-  if (database) {
-    // Test / injected-db path: migrate the supplied connection.
-    await runMigrations(database);
-    return database;
-  }
-  // Production: client.initialize() already ran migrations on the writer during bootstrap;
-  // getDatabase() returns the read-only reader. Do NOT run migrations here (the reader is
-  // query_only and would throw).
-  return getDatabase();
-};
+export const isSignedInHandle = (value) => Boolean(value
+  && typeof value.isOpen === 'function'
+  && typeof value.getReader === 'function'
+  && typeof value.withTransaction === 'function');
 
+let ambientHandleForTests = null;
+export const enableAmbientHandleForTests = (getTestHandle) => {
+  if (process.env.NODE_ENV !== 'test') throw new UnboundRepositoryError();
+  ambientHandleForTests = getTestHandle;
+};
+export const disableAmbientHandleForTests = () => { ambientHandleForTests = null; };
+const boundDatabase = (database) => {
+  if (database) return database;
+  if (process.env.NODE_ENV === 'test' && ambientHandleForTests) return ambientHandleForTests();
+  throw new UnboundRepositoryError();
+};
+export const resolveDatabase = async (database) => {
+  const bound = boundDatabase(database);
+  if (isSignedInHandle(bound)) return bound.getReader();
+  await runMigrations(bound);
+  return bound;
+};
 export const runRepositoryTransaction = async (database, task) => {
-  if (database) {
-    const db = await resolveDatabase(database);
-    return runWithTransaction(db, task);
-  }
-  // Production writes go through the persistent writer.
-  return withTransaction(async (txn) => task(txn));
+  const bound = boundDatabase(database);
+  if (isSignedInHandle(bound)) return bound.withTransaction(task);
+  const db = await resolveDatabase(bound);
+  return runWithTransaction(db, task);
 };
 
 export const RECONCILE_BREAKER_SCOPE_PREFIX = 'pull_reconcile_breaker:';
@@ -100,6 +109,7 @@ export const runBatchWithPerRowFallback = async ({
   try {
     return await runRepositoryTransaction(database, applyRows);
   } catch (batchError) {
+    if (isStaleActorError(batchError)) throw batchError;
     console.error(
       `Pulled ${tableName} batch transaction failed; retrying rows without reconcile: ${batchError?.message || batchError}`
     );
@@ -114,6 +124,7 @@ export const runBatchWithPerRowFallback = async ({
           applied += 1;
         }
       } catch (error) {
+        if (isStaleActorError(error)) throw error;
         failed += 1;
         console.error(
           `Pulled ${tableName} row ${row?.id || '<unknown>'} failed local persistence: ${error?.message || error}`

@@ -13,6 +13,7 @@ jest.mock('@react-navigation/native', () => ({
 }));
 jest.mock('../src/context/AuthContext', () => ({ useAuth: jest.fn() }));
 jest.mock('../src/db/repositories/assessmentsRepository', () => ({
+  ...jest.requireActual('../src/db/repositories/assessmentsRepository'),
   assessmentsRepository: { getAssessments: jest.fn(), countAssessments: jest.fn() },
 }));
 jest.mock('../src/components/assessment/LetterMasteryPanel', () => {

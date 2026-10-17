@@ -1,3 +1,7 @@
+jest.mock('../test-support/handleServiceMocks', () => ({
+startSessionHistoryPull: jest.fn(),
+resetSessionHistoryStatusForActorChange: jest.fn()
+}));
 import React from 'react';
 import { act, renderHook, waitFor } from '@testing-library/react-native';
 import { ChildrenProvider, useChildren } from '../src/context/ChildrenContext';
@@ -11,13 +15,12 @@ import { groupEaAssignmentsRepository } from '../src/db/repositories/groupEaAssi
 import { syncOutboxRepository } from '../src/db/repositories/syncOutboxRepository';
 import { syncStateRepository } from '../src/db/repositories/syncStateRepository';
 import { ensureReferenceData } from '../src/services/offlineSync';
-import { startSessionHistoryPull, resetSessionHistoryStatusForActorChange } from '../src/services/sessionHistoryStatus';
+import { startSessionHistoryPull, resetSessionHistoryStatusForActorChange } from '../test-support/handleServiceMocks';
 
-jest.mock('../src/services/sessionHistoryStatus', () => ({
-  startSessionHistoryPull: jest.fn(), resetSessionHistoryStatusForActorChange: jest.fn(),
-}));
+
 
 jest.mock('../src/services/supabaseClient', () => ({
+  ...require('../test-support/supabaseTestConfig'),
   supabase: {},
 }));
 
@@ -35,14 +38,17 @@ jest.mock('../src/context/OfflineContext', () => ({
 }));
 
 jest.mock('../src/services/preloadedChildData', () => ({
+  ...jest.requireActual('../src/services/preloadedChildData'),
   pullPreloadedChildData: jest.fn(),
 }));
 
 jest.mock('../src/services/offlineSync', () => ({
+  ...jest.requireActual('../src/services/offlineSync'),
   ensureReferenceData: jest.fn(),
 }));
 
 jest.mock('../src/db/repositories/childrenRepository', () => ({
+  ...jest.requireActual('../src/db/repositories/childrenRepository'),
   childrenRepository: {
     getMyChildren: jest.fn(),
     getChildren: jest.fn(),
@@ -58,12 +64,14 @@ jest.mock('../src/db/repositories/childrenRepository', () => ({
 }));
 
 jest.mock('../src/db/repositories/classesRepository', () => ({
+  ...jest.requireActual('../src/db/repositories/classesRepository'),
   classesRepository: {
     saveServerClassRows: jest.fn(),
   },
 }));
 
 jest.mock('../src/db/repositories/groupsRepository', () => ({
+  ...jest.requireActual('../src/db/repositories/groupsRepository'),
   groupsRepository: {
     getGroups: jest.fn(),
     getVisibleChildrenGroups: jest.fn(),
@@ -78,18 +86,21 @@ jest.mock('../src/db/repositories/groupsRepository', () => ({
 }));
 
 jest.mock('../src/db/repositories/groupEaAssignmentsRepository', () => ({
+  ...jest.requireActual('../src/db/repositories/groupEaAssignmentsRepository'),
   groupEaAssignmentsRepository: {
     saveServerRows: jest.fn(),
   },
 }));
 
 jest.mock('../src/db/repositories/syncOutboxRepository', () => ({
+  ...jest.requireActual('../src/db/repositories/syncOutboxRepository'),
   syncOutboxRepository: {
     getPendingHardDeleteIds: jest.fn(),
   },
 }));
 
 jest.mock('../src/db/repositories/syncStateRepository', () => ({
+  ...jest.requireActual('../src/db/repositories/syncStateRepository'),
   syncStateRepository: {
     setPullState: jest.fn(),
   },
@@ -168,6 +179,7 @@ const pulledBundle = (options = {}) => {
 
 describe('ChildrenContext Plan 5 hydration', () => {
   beforeEach(() => {
+    startSessionHistoryPull.mockResolvedValue(null);
     useAuth.mockReturnValue({ user: { id: 'user-1' } });
     useOffline.mockReturnValue({
       isOnline: true,
@@ -232,7 +244,7 @@ describe('ChildrenContext Plan 5 hydration', () => {
     expect(startSessionHistoryPull).not.toHaveBeenCalled();
     await act(async () => { releaseReferences({}); });
     await waitFor(() => expect(result.current.loading).toBe(false));
-    expect(startSessionHistoryPull).toHaveBeenCalledWith({ userId: 'user-1' });
+    expect(startSessionHistoryPull).toHaveBeenCalledWith();
     expect(childrenRepository.saveServerChildRows).toHaveBeenCalled();
   });
 
@@ -248,14 +260,14 @@ describe('ChildrenContext Plan 5 hydration', () => {
     expect(startSessionHistoryPull).not.toHaveBeenCalled();
     await act(async () => { releaseAssignments({ applied: 1, skipped: 0 }); });
     await waitFor(() => expect(result.current.loading).toBe(false));
-    expect(startSessionHistoryPull).toHaveBeenCalledWith({ userId: 'user-1' });
+    expect(startSessionHistoryPull).toHaveBeenCalledWith();
   });
 
   test.each([{ id: 'user-2' }, null])('a user id change to %p resets history while the old run is pending', async (nextUser) => {
     startSessionHistoryPull.mockImplementationOnce(() => new Promise(() => {}));
     const { result, rerender } = renderHook(() => useChildren(), { wrapper });
     await waitFor(() => expect(result.current.loading).toBe(false));
-    expect(startSessionHistoryPull).toHaveBeenCalledWith({ userId: 'user-1' });
+    expect(startSessionHistoryPull).toHaveBeenCalledWith();
     expect(resetSessionHistoryStatusForActorChange).not.toHaveBeenCalled();
     useAuth.mockReturnValue({ user: nextUser });
     rerender();
@@ -412,12 +424,12 @@ describe('ChildrenContext Plan 5 hydration', () => {
     ));
 
     const { rerender, result } = renderHook(() => useChildren(), { wrapper });
-    await waitFor(() => expect(pullPreloadedChildData).toHaveBeenCalledWith({ userId: 'user-a' }));
+    await waitFor(() => expect(pullPreloadedChildData).toHaveBeenCalledWith(expect.objectContaining({ userId: 'user-a' })));
 
     useAuth.mockReturnValue({ user: { id: 'user-b' } });
     rerender();
 
-    await waitFor(() => expect(pullPreloadedChildData).toHaveBeenCalledWith({ userId: 'user-b' }));
+    await waitFor(() => expect(pullPreloadedChildData).toHaveBeenCalledWith(expect.objectContaining({ userId: 'user-b' })));
     await waitFor(() => expect(result.current.children).toEqual([
       expect.objectContaining({ id: 'user-b-child' }),
     ]));
@@ -685,7 +697,7 @@ describe('ChildrenContext Plan 5 hydration', () => {
     await waitFor(() => expect(pullPreloadedChildData).toHaveBeenCalledTimes(1));
     await waitFor(() => expect(groupsRepository.saveServerChildrenGroupRows).toHaveBeenCalledTimes(1));
 
-    expect(ensureReferenceData).toHaveBeenCalledWith({ userId: 'user-1' });
+    expect(ensureReferenceData).toHaveBeenCalledWith();
     expect(classesRepository.saveServerClassRows).toHaveBeenCalledWith([
       expect.objectContaining({ id: 'server-class' }),
     ]);

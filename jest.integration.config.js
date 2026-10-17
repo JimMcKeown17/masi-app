@@ -3,7 +3,18 @@ const packageJson = require('./package.json');
 module.exports = {
   ...packageJson.jest,
   setupFiles: ['./jest.integration.setup.js'],
+  setupFilesAfterEnv: ['./test-support/defaultTestHandle.js'],
   testMatch: [
+    '<rootDir>/__tests__/outboxIntegrityScan.test.js',
+    '<rootDir>/__tests__/outboxOwnerStamping.test.js',
+    '<rootDir>/__tests__/outboxOwnerMigration.test.js',
+    '<rootDir>/__tests__/task5AuthRaces.test.js',
+    '<rootDir>/__tests__/handleServices.test.js',
+    '<rootDir>/__tests__/task5ActionsBinding.test.js',
+    '<rootDir>/__tests__/signedInTree.test.js',
+    '<rootDir>/__tests__/staleUserAction.test.js',
+    '<rootDir>/__tests__/integration/accountSwitch.integration.js',
+    '<rootDir>/__tests__/integration/signedInHandleFiles.integration.js',
     '<rootDir>/test-support/integration/sqliteRuntime.integration.js',
     '<rootDir>/__tests__/sqliteFoundation.test.js',
     '<rootDir>/__tests__/debugExport.test.js',

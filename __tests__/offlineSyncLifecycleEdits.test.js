@@ -1,5 +1,6 @@
 jest.mock('expo-sqlite', () => require('../test-support/expoSQLiteMock'));
-jest.mock('../src/services/supabaseClient', () => ({ supabase: {} }));
+jest.mock('../src/services/supabaseClient', () => ({
+  ...require('../test-support/supabaseTestConfig'), supabase: {} }));
 
 import { runMigrations } from '../src/db/migrations';
 import { createOutboxSyncEngine } from '../src/services/offlineSync';
@@ -43,7 +44,7 @@ describe('ordinary edits preserve server lifecycle state', () => {
       serverChildren.delete(args.p_child_id);
       return { data: true, error: null };
     });
-    const engine = createOutboxSyncEngine({ database: db, supabaseClient, getAuthSession: liveTestSession });
+    const engine = createOutboxSyncEngine({ enqueueRequest: (task) => task(), database: db, supabaseClient, getAuthSession: liveTestSession });
 
     await engine.syncAll();
     expect(supabaseClient.rpc).not.toHaveBeenCalled();
@@ -75,7 +76,7 @@ describe('ordinary edits preserve server lifecycle state', () => {
       Object.assign(serverGroup, payload);
       return { data: [{ id: value }], error: null };
     } } });
-    const engine = createOutboxSyncEngine({ database: db, supabaseClient, getAuthSession: liveTestSession });
+    const engine = createOutboxSyncEngine({ enqueueRequest: (task) => task(), database: db, supabaseClient, getAuthSession: liveTestSession });
     const syncing = engine.syncAll();
     await started;
     try {
@@ -101,7 +102,7 @@ describe('ordinary edits preserve server lifecycle state', () => {
       Object.assign(serverMastery, payload);
       return { data: [{ id: value }], error: null };
     } } });
-    const engine = createOutboxSyncEngine({ database: db, supabaseClient, getAuthSession: liveTestSession });
+    const engine = createOutboxSyncEngine({ enqueueRequest: (task) => task(), database: db, supabaseClient, getAuthSession: liveTestSession });
 
     await repository.updateLetterMasteryRecord(id, { _deleted: true, deleted_at: ARCHIVED_AT });
     expect(await db.getFirstAsync('select operation from sync_outbox')).toEqual({ operation: 'archive' });
@@ -140,7 +141,7 @@ describe('ordinary edits preserve server lifecycle state', () => {
         return { error: null };
       } },
     });
-    const engine = createOutboxSyncEngine({ database: db, supabaseClient, getAuthSession: liveTestSession });
+    const engine = createOutboxSyncEngine({ enqueueRequest: (task) => task(), database: db, supabaseClient, getAuthSession: liveTestSession });
 
     await engine.syncAll();
 
@@ -166,7 +167,7 @@ describe('ordinary edits preserve server lifecycle state', () => {
         return { data: [{ id: value }], error: null };
       },
     } });
-    const engine = createOutboxSyncEngine({ database: db, supabaseClient, getAuthSession: liveTestSession });
+    const engine = createOutboxSyncEngine({ enqueueRequest: (task) => task(), database: db, supabaseClient, getAuthSession: liveTestSession });
 
     await engine.syncAll();
 

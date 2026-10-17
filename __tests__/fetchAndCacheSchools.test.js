@@ -1,18 +1,21 @@
-import { schoolsRepository } from '../src/db/repositories/referenceDataRepository';
-import { fetchAndCacheSchools } from '../src/services/offlineSync';
-import { enqueueSupabaseRequest } from '../src/services/supabaseRequestQueue';
-
-jest.mock('../src/services/supabaseRequestQueue', () => ({
-  enqueueSupabaseRequest: jest.fn(),
+jest.mock('../test-support/handleServiceMocks', () => ({
+enqueueSupabaseRequest: jest.fn()
 }));
+import { schoolsRepository } from '../src/db/repositories/referenceDataRepository';
+import { fetchAndCacheSchools } from '../test-support/handleServiceTestAccess';
+import { enqueueSupabaseRequest } from '../test-support/handleServiceMocks';
+
+
 
 jest.mock('../src/services/supabaseClient', () => ({
+  ...require('../test-support/supabaseTestConfig'),
   supabase: {
     from: jest.fn(),
   },
 }));
 
 jest.mock('../src/db/repositories/referenceDataRepository', () => ({
+  ...jest.requireActual('../src/db/repositories/referenceDataRepository'),
   schoolsRepository: {
     replaceFromServer: jest.fn(),
   },

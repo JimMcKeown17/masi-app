@@ -14,6 +14,7 @@ import { assessmentsRepository } from '../src/db/repositories/assessmentsReposit
 jest.mock('../src/context/AuthContext', () => ({ useAuth: jest.fn() }));
 jest.mock('../src/context/OfflineContext', () => ({ useOffline: jest.fn() }));
 jest.mock('../src/db/repositories/assessmentsRepository', () => ({
+  ...jest.requireActual('../src/db/repositories/assessmentsRepository'),
   assessmentsRepository: { saveAssessment: jest.fn() },
 }));
 jest.mock('uuid', () => ({ v4: jest.fn(() => 'assessment-1') }));

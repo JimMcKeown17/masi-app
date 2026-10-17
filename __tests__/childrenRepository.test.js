@@ -483,14 +483,13 @@ describe('childrenRepository', () => {
     }
   });
 
-  test.each(['pending', 'failed', 'terminal'])('deleting a local child with a %s insert removes its entire queued family', async (status) => {
+  test('deleting a local child with a never-dispatched insert removes its entire queued family', async () => {
     const db = await createMigratedDatabase(runMigrations);
     try {
       await seedCoreData(db);
       const repository = createChildrenRepository({ database: db });
       await repository.save(makeChild(), { actorUserId: 'user-1' });
       await repository.updateChild('child-1', { first_name: 'Edited' });
-      await db.runAsync('update sync_outbox set status = ?', status);
 
       expect(await repository.deleteIfNoHistory('child-1')).toBe(true);
 

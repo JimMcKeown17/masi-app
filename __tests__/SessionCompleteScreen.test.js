@@ -40,7 +40,7 @@ describe('SessionCompleteScreen', () => {
     );
 
     // Same source the Sessions Today ring uses, scoped to the signed-in EA.
-    await waitFor(() => expect(mockGetSessionsTodayGoal).toHaveBeenCalledWith({ userId: 'ea-1' }));
+    await waitFor(() => expect(mockGetSessionsTodayGoal).toHaveBeenCalledWith(expect.objectContaining({ userId: 'ea-1' })));
     // The ring renders the goal's count (2) — proving the progress is shown.
     await waitFor(() => expect(screen.getByText('2')).toBeTruthy());
   });

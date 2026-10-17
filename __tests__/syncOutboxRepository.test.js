@@ -1,3 +1,4 @@
+import { bindTestActor } from '../test-support/actorTestUtils';
 jest.mock('expo-sqlite', () => require('../test-support/expoSQLiteMock'));
 
 import { createBetterSqliteTestDatabase } from '../test-support/betterSqliteAdapter';
@@ -10,29 +11,37 @@ describe('SQLite sync outbox repository', () => {
   let outbox;
 
   beforeEach(async () => {
-    db = createBetterSqliteTestDatabase();
+    db = bindTestActor(createBetterSqliteTestDatabase(), 'user-1');
     await runMigrations(db);
     outbox = createSyncOutboxRepository({ database: db });
   });
+
+  const seedOwnedRecord = async (recordId, actor, tableName = 'sessions', operation = 'insert') => {
+    bindTestActor(db, actor || 'user-1');
+    const id = await outbox.enqueue({ tableName, recordId, operation, payload: { id: recordId } });
+    // Model a pre-v12 null-owner row without weakening the insert trigger.
+    if (actor === null) await db.runAsync('update sync_outbox set owner_user_id = null where id = ?', id);
+    return id;
+  };
 
   afterEach(async () => {
     await db.closeAsync();
   });
 
   test('enqueue is idempotent for a table, record, and operation', async () => {
+    bindTestActor(db, 'ea-old');
     await outbox.enqueue({
       tableName: 'children',
       recordId: 'child-1',
       operation: 'insert',
       payload: { id: 'child-1', first_name: 'Old' },
-      ownerUserId: 'ea-old',
     });
+    bindTestActor(db, 'ea-updated');
     await outbox.enqueue({
       tableName: 'children',
       recordId: 'child-1',
       operation: 'insert',
       payload: { id: 'child-1', first_name: 'Updated' },
-      ownerUserId: 'ea-updated',
     });
 
     const rows = await db.getAllAsync('select * from sync_outbox');
@@ -49,7 +58,7 @@ describe('SQLite sync outbox repository', () => {
     expect(JSON.parse(rows[0].payload)).toEqual({ id: 'child-1', first_name: 'Updated' });
   });
 
-  test('re-enqueue refreshes pending work without changing its original queue age', async () => {
+  test('re-enqueue refreshes pending work while preserving queue age and child INSERT dispatch evidence', async () => {
     jest.useFakeTimers();
     try {
       jest.setSystemTime(new Date('2026-07-14T08:00:00.000Z'));
@@ -81,7 +90,7 @@ describe('SQLite sync outbox repository', () => {
       expect(row).toEqual(expect.objectContaining({
         status: 'pending',
         retry_count: 0,
-        last_error: null,
+        last_error: 'offline',
         next_retry_at: null,
       }));
       expect(JSON.parse(row.payload)).toEqual({ id: 'child-queue-age', first_name: 'Fresh' });
@@ -147,14 +156,8 @@ describe('SQLite sync outbox repository', () => {
     expect(status.readyCount).toBe(1);
   });
 
-  test('readiness and every status counter are scoped to the current owner plus NULL rows', async () => {
-    const enqueue = (recordId, ownerUserId) => outbox.enqueue({
-      tableName: 'sessions',
-      recordId,
-      operation: 'insert',
-      payload: { id: recordId },
-      ownerUserId,
-    });
+  test('readiness is actor-scoped while every status counter is file-wide', async () => {
+    const enqueue = seedOwnedRecord;
 
     await enqueue('a-pending', 'ea-a');
     await enqueue('a-terminal', 'ea-a');
@@ -172,22 +175,23 @@ describe('SQLite sync outbox repository', () => {
     await outbox.markTerminalFailure('sessions:null-terminal:insert', { errorMessage: 'NULL terminal' });
 
     expect((await outbox.getReadyRecords({ ownerUserId: 'ea-b' })).map((row) => row.record_id))
-      .toEqual(['b-pending', 'null-pending']);
+      .toEqual(['b-pending']);
     expect((await outbox.getReadyRecords()).map((row) => row.record_id))
       .toEqual(['a-pending', 'b-pending', 'null-pending']);
 
     const scoped = await outbox.getSyncStatus({ ownerUserId: 'ea-b' });
     expect(scoped).toEqual(expect.objectContaining({
-      unsyncedCount: 3,
-      readyCount: 2,
-      failedCount: 3,
+      unsyncedCount: 4,
+      readyCount: 3,
+      failedCount: 4,
       inFlightCount: 0,
-      waitingCount: 3,
-      needsAttentionCount: 2,
+      waitingCount: 4,
+      needsAttentionCount: 3,
       backedOffCount: 1,
-      breakdown: { sessions: 3 },
+      breakdown: { sessions: 4 },
     }));
     expect(scoped.needsAttentionItems.map((item) => item.id)).toEqual([
+      'a-terminal',
       'b-terminal',
       'null-terminal',
     ]);
@@ -203,16 +207,21 @@ describe('SQLite sync outbox repository', () => {
     }));
   });
 
-  test('resetInFlight only recovers the current owner plus NULL rows', async () => {
+  test('resetInFlight only recovers the requested actor and leaves legacy NULL rows alone', async () => {
+    bindTestActor(db, 'ea-a');
     await outbox.enqueue({
-      tableName: 'sessions', recordId: 'a-row', operation: 'insert', payload: { id: 'a-row' }, ownerUserId: 'ea-a',
+      tableName: 'sessions', recordId: 'a-row', operation: 'insert', payload: { id: 'a-row' },
     });
+    bindTestActor(db, 'ea-b');
     await outbox.enqueue({
-      tableName: 'sessions', recordId: 'b-row', operation: 'insert', payload: { id: 'b-row' }, ownerUserId: 'ea-b',
+      tableName: 'sessions', recordId: 'b-row', operation: 'insert', payload: { id: 'b-row' },
     });
+    bindTestActor(db, 'user-1');
     await outbox.enqueue({
-      tableName: 'sessions', recordId: 'null-row', operation: 'insert', payload: { id: 'null-row' }, ownerUserId: null,
+      tableName: 'sessions', recordId: 'null-row', operation: 'insert', payload: { id: 'null-row' },
     });
+    // Simulate a legacy null owner; v12 forbids creating one through enqueue.
+    await db.runAsync('update sync_outbox set owner_user_id = null where record_id = ?', 'null-row');
     await outbox.markInFlight([
       'sessions:a-row:insert',
       'sessions:b-row:insert',
@@ -224,7 +233,7 @@ describe('SQLite sync outbox repository', () => {
     expect(await db.getAllAsync('select record_id, status from sync_outbox order by record_id')).toEqual([
       { record_id: 'a-row', status: 'in_flight' },
       { record_id: 'b-row', status: 'pending' },
-      { record_id: 'null-row', status: 'pending' },
+      { record_id: 'null-row', status: 'in_flight' },
     ]);
   });
 
@@ -351,26 +360,20 @@ describe('SQLite sync outbox repository', () => {
     });
   });
 
-  test('getPendingHardDeleteIds returns active hard-deletes for the owner plus legacy rows', async () => {
-    const enqueueDelete = (recordId, ownerUserId) => outbox.enqueue({
-      tableName: 'children',
-      recordId,
-      operation: 'hard_delete',
-      payload: { id: recordId },
-      ownerUserId,
-    });
+  test('getPendingHardDeleteIds returns active hard-deletes only for the requested actor', async () => {
+    const enqueueDelete = (recordId, actor) => seedOwnedRecord(recordId, actor, 'children', 'hard_delete');
     await enqueueDelete('legacy-child', null);
     await enqueueDelete('pending-child', 'ea-a');
     await enqueueDelete('failed-child', 'ea-a');
     await enqueueDelete('in-flight-child', 'ea-a');
     await enqueueDelete('other-owner-child', 'ea-b');
     await enqueueDelete('terminal-child', 'ea-a');
+    bindTestActor(db, 'ea-a');
     await outbox.enqueue({
       tableName: 'children',
       recordId: 'updated-child',
       operation: 'update',
       payload: { id: 'updated-child' },
-      ownerUserId: 'ea-a',
     });
     await outbox.markRetriableFailure('children:failed-child:hard_delete', { errorMessage: 'offline' });
     await outbox.markInFlight(['children:in-flight-child:hard_delete']);
@@ -380,7 +383,6 @@ describe('SQLite sync outbox repository', () => {
       tableName: 'children',
       ownerUserId: 'ea-a',
     })).toEqual(new Set([
-      'legacy-child',
       'pending-child',
       'failed-child',
       'in-flight-child',

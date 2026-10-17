@@ -1,3 +1,4 @@
+import { useSignedInEA } from '../../context/SignedInEAContext';
 import React, { useState, useEffect } from 'react';
 import {
   View,
@@ -36,6 +37,8 @@ export default function LetterTrackerBottomSheet({
   pendingChanges,
   onChangesUpdate,
 }) {
+  const { repositories } = useSignedInEA();
+
   const { width: screenWidth } = useWindowDimensions();
 
   const [assessmentMastered, setAssessmentMastered] = useState(new Set());
@@ -56,7 +59,7 @@ export default function LetterTrackerBottomSheet({
     (async () => {
       setLoading(true);
       try {
-        const { assessmentMastered: masteredSet, taughtRecords } = await loadMasteryState({
+        const { assessmentMastered: masteredSet, taughtRecords } = await loadMasteryState({ repositories,
           userId,
           childId: child.id,
           languageKey,

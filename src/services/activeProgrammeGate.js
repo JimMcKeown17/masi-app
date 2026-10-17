@@ -1,6 +1,4 @@
-import { resolveDatabase } from '../db/repositories/repositoryRuntime';
 import { getActiveProgrammeId } from '../db/repositories/domainRepositoryUtils';
-import { programmesRepository } from '../db/repositories/referenceDataRepository';
 
 /**
  * Resolve whether the signed-in EA has an active programme assignment, and which
@@ -14,14 +12,14 @@ import { programmesRepository } from '../db/repositories/referenceDataRepository
  * what lets the data layer write (it only needs the programme id). `programme` is
  * the resolved record for display, or null if it is not cached locally.
  */
-export async function getActiveProgrammeGate({ userId } = {}) {
+export async function getActiveProgrammeGate({ handle, userId } = {}) {
   if (!userId) return { hasActiveProgramme: false, programme: null };
 
-  const db = await resolveDatabase();
+  const db = await handle.getReader();
   const programmeId = await getActiveProgrammeId(db, userId);
   if (!programmeId) return { hasActiveProgramme: false, programme: null };
 
-  const programmes = await programmesRepository.getAll();
+  const programmes = await handle.repositories.programmes.getAll();
   const programme = programmes.find((p) => p.id === programmeId) || null;
   return { hasActiveProgramme: true, programme };
 }

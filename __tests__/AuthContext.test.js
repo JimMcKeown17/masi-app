@@ -1,12 +1,33 @@
+import { SignedInEAProvider } from '../src/context/SignedInEAContext';
+import { resetHandleRegistryForTests } from '../src/session/signedInHandle';
+import * as engine from '../test-support/expoSQLiteRealEngine';
+import * as sqlite from 'expo-sqlite';
+jest.mock('@react-native-community/netinfo', () => ({ fetch: async () => ({ isConnected: true }), addEventListener: () => () => {} }));
+jest.mock('../src/session/handleDataClient', () => ({ createHandleDataClient: () => require('../src/services/supabaseClient').supabase }));
+jest.mock('../src/session/handleServices', () => ({
+  createHandleServices: (handle) => ({
+    ...jest.requireActual('../src/session/handleServices').createHandleServices(handle),
+    deviceProfile: { get: (...args) => mockDeviceProfile.getUserProfile(...args), save: (...args) => mockDeviceProfile.saveUserProfile(...args) },
+    pullReferenceData: (...args) => mockPullReferenceData(...args),
+  }),
+}));
+const ProfileTree = ({ children }) => {
+  const { handle } = useAuth();
+  return handle ? <SignedInEAProvider key={`${handle.userId}:${handle.epoch}`} handle={handle}>{children}</SignedInEAProvider> : children;
+};
+beforeEach(async () => { await resetHandleRegistryForTests(); await engine.__resetMockDatabases(); sqlite.__setDatabaseFactory(engine.openDatabaseAsync); });
+afterEach(async () => { await resetHandleRegistryForTests(); await engine.__resetMockDatabases(); });
+global.__MASI_NO_DEFAULT_HANDLE__ = true;
 import React from 'react';
 import { act, fireEvent, render, renderHook, waitFor } from '@testing-library/react-native';
 import { Pressable } from 'react-native';
 import { AuthProvider, useAuth } from '../src/context/AuthContext';
 import { supabase } from '../src/services/supabaseClient';
-import { pullReferenceData } from '../src/services/offlineSync';
-import { deviceSettings } from '../src/services/deviceSettings';
+const mockPullReferenceData = jest.fn();
+const mockDeviceProfile = { getUserProfile: jest.fn(), saveUserProfile: jest.fn(), clearUserProfile: jest.fn() };
 
 jest.mock('../src/services/supabaseClient', () => ({
+  ...require('../test-support/supabaseTestConfig'),
   supabase: {
     auth: {
       getSession: jest.fn(),
@@ -20,20 +41,12 @@ jest.mock('../src/services/supabaseClient', () => ({
   },
 }));
 
-jest.mock('../src/services/deviceSettings', () => ({
-  deviceSettings: {
-    getUserProfile: jest.fn(),
-    saveUserProfile: jest.fn(),
-    clearUserProfile: jest.fn(),
-  },
-}));
 
-jest.mock('../src/services/offlineSync', () => ({
-  pullReferenceData: jest.fn(),
-}));
+
+
 
 const wrapper = ({ children }) => (
-  <AuthProvider>{children}</AuthProvider>
+  <AuthProvider><ProfileTree>{children}</ProfileTree></AuthProvider>
 );
 
 const deferred = () => {
@@ -47,7 +60,7 @@ const deferred = () => {
 };
 
 const profileRow = {
-  id: 'user-1',
+  id: '11111111-1111-4111-8111-111111111111',
   email: 'ea@example.org',
   first_name: 'Nomsa',
   last_name: 'Mbeki',
@@ -77,10 +90,10 @@ describe('AuthContext Plan 5 startup discipline', () => {
       return { data: { subscription: { unsubscribe } } };
     });
     supabase.auth.signOut.mockResolvedValue({ error: null });
-    deviceSettings.getUserProfile.mockResolvedValue(null);
-    deviceSettings.saveUserProfile.mockResolvedValue(true);
-    deviceSettings.clearUserProfile.mockResolvedValue(true);
-    pullReferenceData.mockResolvedValue({});
+    mockDeviceProfile.getUserProfile.mockResolvedValue(null);
+    mockDeviceProfile.saveUserProfile.mockResolvedValue(true);
+    mockDeviceProfile.clearUserProfile.mockResolvedValue(true);
+    mockPullReferenceData.mockResolvedValue({});
     mockProfileQuery(Promise.resolve({ data: profileRow, error: null }));
   });
 
@@ -94,10 +107,10 @@ describe('AuthContext Plan 5 startup discipline', () => {
     await waitFor(() => expect(authCallback).toEqual(expect.any(Function)));
 
     act(() => {
-      authCallback('SIGNED_IN', { user: { id: 'user-1', email: 'ea@example.org' } });
+      authCallback('SIGNED_IN', { user: { id: '11111111-1111-4111-8111-111111111111', email: 'ea@example.org' } });
     });
 
-    expect(deviceSettings.getUserProfile).not.toHaveBeenCalled();
+    expect(mockDeviceProfile.getUserProfile).not.toHaveBeenCalled();
     expect(supabase.from).not.toHaveBeenCalled();
 
     await act(async () => {
@@ -105,7 +118,7 @@ describe('AuthContext Plan 5 startup discipline', () => {
       await Promise.resolve();
     });
 
-    await waitFor(() => expect(pullReferenceData).toHaveBeenCalledWith({ userId: 'user-1' }));
+    await waitFor(() => expect(mockPullReferenceData).toHaveBeenCalledWith());
     await waitFor(() => expect(supabase.from).toHaveBeenCalledWith('users'));
   });
 
@@ -139,13 +152,13 @@ describe('AuthContext Plan 5 startup discipline', () => {
 
   test('authenticated startup publishes the user without waiting for reference data', async () => {
     const referencePull = deferred();
-    pullReferenceData.mockReturnValue(referencePull.promise);
+    mockPullReferenceData.mockReturnValue(referencePull.promise);
 
     const { result } = renderHook(() => useAuth(), { wrapper });
     await waitFor(() => expect(authCallback).toEqual(expect.any(Function)));
 
     act(() => {
-      authCallback('SIGNED_IN', { user: { id: 'user-1', email: 'ea@example.org' } });
+      authCallback('SIGNED_IN', { user: { id: '11111111-1111-4111-8111-111111111111', email: 'ea@example.org' } });
     });
 
     await act(async () => {
@@ -153,9 +166,9 @@ describe('AuthContext Plan 5 startup discipline', () => {
       await Promise.resolve();
     });
 
-    expect(pullReferenceData).toHaveBeenCalledWith({ userId: 'user-1' });
-    expect(pullReferenceData).toHaveBeenCalledTimes(1);
-    expect(result.current.user).toEqual(expect.objectContaining({ id: 'user-1' }));
+    expect(mockPullReferenceData).toHaveBeenCalledWith();
+    expect(mockPullReferenceData).toHaveBeenCalledTimes(1);
+    expect(result.current.user).toEqual(expect.objectContaining({ id: '11111111-1111-4111-8111-111111111111' }));
     expect(result.current.loading).toBe(false);
   });
 
@@ -166,15 +179,15 @@ describe('AuthContext Plan 5 startup discipline', () => {
       ...profileRow,
       first_name: 'Cached Nomsa',
     };
-    deviceSettings.getUserProfile.mockResolvedValue(cachedProfile);
-    pullReferenceData.mockReturnValue(referencePull.promise);
+    mockDeviceProfile.getUserProfile.mockResolvedValue(cachedProfile);
+    mockPullReferenceData.mockReturnValue(referencePull.promise);
     mockProfileQuery(profileFetch.promise);
 
     const { result } = renderHook(() => useAuth(), { wrapper });
     await waitFor(() => expect(authCallback).toEqual(expect.any(Function)));
 
     act(() => {
-      authCallback('SIGNED_IN', { user: { id: 'user-1', email: 'ea@example.org' } });
+      authCallback('SIGNED_IN', { user: { id: '11111111-1111-4111-8111-111111111111', email: 'ea@example.org' } });
     });
 
     await act(async () => {
@@ -183,10 +196,10 @@ describe('AuthContext Plan 5 startup discipline', () => {
       await Promise.resolve();
     });
 
-    expect(pullReferenceData).toHaveBeenCalledWith({ userId: 'user-1' });
+    expect(mockPullReferenceData).toHaveBeenCalledWith();
     expect(supabase.from).toHaveBeenCalledWith('users');
     expect(result.current.profile).toEqual(expect.objectContaining({
-      id: 'user-1',
+      id: '11111111-1111-4111-8111-111111111111',
       first_name: 'Cached Nomsa',
     }));
 
@@ -204,7 +217,7 @@ describe('AuthContext Plan 5 startup discipline', () => {
     expect(supabase.auth.getSession).not.toHaveBeenCalled();
 
     act(() => {
-      authCallback('INITIAL_SESSION', { user: { id: 'user-1', email: 'ea@example.org' } });
+      authCallback('INITIAL_SESSION', { user: { id: '11111111-1111-4111-8111-111111111111', email: 'ea@example.org' } });
     });
 
     await act(async () => {
@@ -212,7 +225,7 @@ describe('AuthContext Plan 5 startup discipline', () => {
       await Promise.resolve();
     });
 
-    await waitFor(() => expect(pullReferenceData).toHaveBeenCalledWith({ userId: 'user-1' }));
+    await waitFor(() => expect(mockPullReferenceData).toHaveBeenCalledWith());
     await waitFor(() => expect(supabase.from).toHaveBeenCalledWith('users'));
   });
 
@@ -221,20 +234,20 @@ describe('AuthContext Plan 5 startup discipline', () => {
     await waitFor(() => expect(authCallback).toEqual(expect.any(Function)));
 
     act(() => {
-      authCallback('INITIAL_SESSION', { user: { id: 'user-1', email: 'ea@example.org' }, access_token: 'old-token' });
+      authCallback('INITIAL_SESSION', { user: { id: '11111111-1111-4111-8111-111111111111', email: 'ea@example.org' }, access_token: 'old-token' });
     });
     await act(async () => {
       jest.runOnlyPendingTimers();
       await Promise.resolve();
     });
-    await waitFor(() => expect(result.current.user).toEqual(expect.objectContaining({ id: 'user-1' })));
+    await waitFor(() => expect(result.current.user).toEqual(expect.objectContaining({ id: '11111111-1111-4111-8111-111111111111' })));
 
-    pullReferenceData.mockClear();
-    deviceSettings.getUserProfile.mockClear();
+    mockPullReferenceData.mockClear();
+    mockDeviceProfile.getUserProfile.mockClear();
     supabase.from.mockClear();
 
     act(() => {
-      authCallback('TOKEN_REFRESHED', { user: { id: 'user-1', email: 'ea@example.org' }, access_token: 'new-token' });
+      authCallback('TOKEN_REFRESHED', { user: { id: '11111111-1111-4111-8111-111111111111', email: 'ea@example.org' }, access_token: 'new-token' });
     });
 
     await act(async () => {
@@ -243,8 +256,8 @@ describe('AuthContext Plan 5 startup discipline', () => {
     });
 
     expect(result.current.session).toEqual(expect.objectContaining({ access_token: 'new-token' }));
-    expect(pullReferenceData).not.toHaveBeenCalled();
-    expect(deviceSettings.getUserProfile).not.toHaveBeenCalled();
+    expect(mockPullReferenceData).not.toHaveBeenCalled();
+    expect(mockDeviceProfile.getUserProfile).not.toHaveBeenCalled();
     expect(supabase.from).not.toHaveBeenCalled();
   });
 
@@ -255,7 +268,7 @@ describe('AuthContext Plan 5 startup discipline', () => {
     await waitFor(() => expect(authCallback).toEqual(expect.any(Function)));
 
     act(() => {
-      authCallback('SIGNED_IN', { user: { id: 'user-1', email: 'ea@example.org' } });
+      authCallback('SIGNED_IN', { user: { id: '11111111-1111-4111-8111-111111111111', email: 'ea@example.org' } });
     });
     await act(async () => {
       jest.runOnlyPendingTimers();
@@ -276,7 +289,7 @@ describe('AuthContext Plan 5 startup discipline', () => {
 
     expect(result.current.user).toBeNull();
     expect(result.current.profile).toBeNull();
-    expect(deviceSettings.saveUserProfile).not.toHaveBeenCalledWith(expect.objectContaining({ id: 'user-1' }));
+    expect(mockDeviceProfile.saveUserProfile).not.toHaveBeenCalledWith(expect.objectContaining({ id: '11111111-1111-4111-8111-111111111111' }));
   });
 
   test('manual sign-out invalidates in-flight profile loads before Supabase emits SIGNED_OUT', async () => {
@@ -289,7 +302,7 @@ describe('AuthContext Plan 5 startup discipline', () => {
     await waitFor(() => expect(authCallback).toEqual(expect.any(Function)));
 
     act(() => {
-      authCallback('SIGNED_IN', { user: { id: 'user-1', email: 'ea@example.org' } });
+      authCallback('SIGNED_IN', { user: { id: '11111111-1111-4111-8111-111111111111', email: 'ea@example.org' } });
     });
     await act(async () => {
       jest.runOnlyPendingTimers();
@@ -310,7 +323,7 @@ describe('AuthContext Plan 5 startup discipline', () => {
     });
 
     expect(result.current.profile).toBeNull();
-    expect(deviceSettings.saveUserProfile).not.toHaveBeenCalledWith(expect.objectContaining({ id: 'user-1' }));
+    expect(mockDeviceProfile.saveUserProfile).not.toHaveBeenCalledWith(expect.objectContaining({ id: '11111111-1111-4111-8111-111111111111' }));
 
     await act(async () => {
       signOutRequest.resolve({ error: null });
@@ -319,7 +332,7 @@ describe('AuthContext Plan 5 startup discipline', () => {
   });
 
   test('local cached profile is ignored when it belongs to another user', async () => {
-    deviceSettings.getUserProfile.mockResolvedValueOnce({
+    mockDeviceProfile.getUserProfile.mockResolvedValueOnce({
       ...profileRow,
       id: 'other-user',
       first_name: 'Stale',
@@ -329,7 +342,7 @@ describe('AuthContext Plan 5 startup discipline', () => {
     await waitFor(() => expect(authCallback).toEqual(expect.any(Function)));
 
     act(() => {
-      authCallback('SIGNED_IN', { user: { id: 'user-1', email: 'ea@example.org' } });
+      authCallback('SIGNED_IN', { user: { id: '11111111-1111-4111-8111-111111111111', email: 'ea@example.org' } });
     });
     await act(async () => {
       jest.runOnlyPendingTimers();

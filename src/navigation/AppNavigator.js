@@ -374,28 +374,20 @@ function MainNavigator() {
   );
 }
 
-export default function AppNavigator() {
-  const { user, loading } = useAuth();
+export default function AppNavigator({ signedIn }) {
+  const { user } = useAuth();
   const navigationRef = useNavigationContainerRef();
 
   useEffect(() => {
     setObservabilityUser(user || null);
   }, [user?.id, user?.email]);
 
-  if (loading) {
-    return (
-      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
-        <ActivityIndicator size="large" />
-      </View>
-    );
-  }
-
   return (
     <NavigationContainer
       ref={navigationRef}
       onReady={() => registerNavigationContainer(navigationRef)}
     >
-      {user ? <MainNavigator /> : <AuthNavigator />}
+      {signedIn ? <MainNavigator /> : <AuthNavigator />}
     </NavigationContainer>
   );
 }

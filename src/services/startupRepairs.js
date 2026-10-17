@@ -1,4 +1,4 @@
-import { createLocalStateRepository, localStateRepository } from '../db/repositories/localStateRepository';
+import { createLocalStateRepository } from '../db/repositories/localStateRepository';
 import { repairGroupOwnershipForSync } from '../db/repositories/groupsRepository';
 
 export const STARTUP_REPAIR_MARKER_KEY = 'startup_repair_version';
@@ -33,9 +33,7 @@ const validateRepairs = (repairs) => {
 
 export const createStartupRepairRunner = ({
   database,
-  localStateRepository: stateRepository = database
-    ? createLocalStateRepository({ database })
-    : localStateRepository,
+  localStateRepository: stateRepository = createLocalStateRepository({ database }),
   repairs = defaultRepairs,
 } = {}) => {
   validateRepairs(repairs);
@@ -84,14 +82,4 @@ export const createStartupRepairRunner = ({
   return { run };
 };
 
-const defaultRunner = createStartupRepairRunner();
-
-export const runStartupRepairs = async () => {
-  const result = await defaultRunner.run();
-  if (result.applied.length > 0) {
-    console.log(
-      `Startup repair: advanced to v${result.toVersion} (${result.applied.join(', ')})`
-    );
-  }
-  return result;
-};
+export const runStartupRepairs = async ({ database } = {}) => createStartupRepairRunner({ database }).run();

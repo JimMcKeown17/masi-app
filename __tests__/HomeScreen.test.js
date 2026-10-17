@@ -38,15 +38,18 @@ jest.mock('../src/hooks/useSessionLaunchGuard', () => ({
   useSessionLaunchGuard: (...args) => mockUseSessionLaunchGuard(...args),
 }));
 jest.mock('../src/db/repositories/timeEntriesRepository', () => ({
+  ...jest.requireActual('../src/db/repositories/timeEntriesRepository'),
   timeEntriesRepository: { getTimeEntries: (...args) => mockGetTimeEntries(...args) },
 }));
 jest.mock('../src/db/repositories/sessionsRepository', () => ({
+  ...jest.requireActual('../src/db/repositories/sessionsRepository'),
   sessionsRepository: {
     getSessions: (...args) => mockGetSessions(...args),
     getSessionCountsSince: (...args) => mockGetSessionCountsSince(...args),
   },
 }));
 jest.mock('../src/db/repositories/assessmentsRepository', () => ({
+  ...jest.requireActual('../src/db/repositories/assessmentsRepository'),
   assessmentsRepository: {
     getAssessments: (...args) => mockGetAssessments(...args),
     getAssessmentCountsSince: (...args) => mockGetAssessmentCountsSince(...args),
@@ -59,6 +62,7 @@ jest.mock('../src/services/activeProgrammeGate', () => ({
   getActiveProgrammeGate: (...args) => mockGetActiveProgrammeGate(...args),
 }));
 jest.mock('../src/services/sessionHistoryStatus', () => ({
+  ...jest.requireActual('../src/services/sessionHistoryStatus'),
   useSessionHistoryStatus: () => mockUseSessionHistoryStatus(),
 }));
 
@@ -198,7 +202,7 @@ describe('HomeScreen', () => {
     expect(await screen.findByLabelText('2 of 3 sessions today. Below target.')).toBeTruthy();
     expect(screen.getByText('2 of 3 sessions today')).toBeTruthy();
     expect(screen.getByText('One more pair reaches your target.')).toBeTruthy();
-    expect(mockGetSessionsTodayGoal).toHaveBeenCalledWith({ userId: 'ea-1' });
+    expect(mockGetSessionsTodayGoal).toHaveBeenCalledWith(expect.objectContaining({ userId: 'ea-1' }));
   });
 
   test('shows children the signed-in EA has not seen this week', async () => {

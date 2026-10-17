@@ -12,10 +12,41 @@ Use this map before changing any synced table, repository producer, outbox opera
 - Historical migrations: `supabase-migrations/` is old-backend reference only
 - Sync engine: `src/services/offlineSync.js`
 - Local write boundary: repository methods under `src/db/repositories/`
-- Durable queue: `sync_outbox`; schema v6 adds local-only `owner_user_id`, which is never included in server payloads. New rows stamp their EA owner at enqueue, readiness/status/reset queries include only the current owner plus NULL rows, and NULL means a grandfathered pre-v6 row that any authenticated EA session may drain.
+- Durable queue: `sync_outbox`; local-only `owner_user_id` is never included in server payloads. Every enqueue stamps the signed-in EA from the connection-to-actor WeakMap, including transaction facades. Record provenance (`created_by`, domain `user_id`) never determines the mutation owner. Missing actors fail before the outbox write; SQLite v12 (`sync_outbox_owner_required`) also rejects raw inserts with a NULL owner. Existing rows and indexes are preserved. Owner-scoped readiness, pending hard-delete, and reset queries use strict equality with no NULL wildcard; omitting the owner scope remains file-wide. Legacy NULL-owner rows (queued before v12) are adopted for the file owner by the integrity scan, never left stranded (see "Signed-in EA handle"). `getSyncStatus()` always counts the whole file. `countUnsent()` returns `{ total, byTable }` across `pending`, `failed`, `in_flight`, and `terminal`, including foreign/NULL-owned work so it cannot disappear from status.
 - Server payload allowlist: `SERVER_COLUMNS` in `src/services/offlineSync.js`
 - Insert order: `PUSH_ORDER` in `src/services/offlineSync.js`
 - Archive order: `ARCHIVE_PUSH_ORDER` plus `ARCHIVE_TABLE_DEPENDENCIES` in `src/services/offlineSync.js`
+
+### Organisation label v1 — applied to hosted 2026-10-14
+
+`supabase/migrations/20261014120000_organisation_label_v1.sql` adds `public.organizations` and
+the required, no-default `public.users.organization_id`. Existing users become Masinyusane through
+a temporary constant default; their `updated_at` does not move. Masinyusane's id is
+`a111879f-d066-47c9-95a1-bed2a400319a`, intentionally shared with Zazi iZandi; its slug is
+`masinyusane`. Partners are added by migration. The migration sets session-level `lock_timeout = '10s'` and `statement_timeout = '60s'` and
+resets them at the end; it has no `BEGIN`/`COMMIT` of its own. `SET LOCAL` was dropped after the
+hosted `supabase db push` (CLI 2.109.1) warned that it had no effect outside a transaction block.
+**Applied to hosted `masi-app-sqlite` on 2026-10-14 with Jim's yes** (verification in the build log). Provisioning never deletes an Auth user on
+`organisation_conflict`, because another run may already own that identity.
+
+`scripts/createTesters.js` requires `--organization <slug>`, resolves it before user access,
+and refuses a known different organisation with `organisation_conflict` before any write.
+Dry runs resolve the slug and report those conflicts. The profile write inserts if absent
+(`onConflict: 'id', ignoreDuplicates: true`), then updates only names, email, job title, and
+school where both `id` and `organization_id` match. It never updates the stored organisation.
+Zero returned ids means `organisation_conflict` before a Programme-assignment write, including
+when another organisation inserts the profile after preflight. A newly created auth user is
+cleaned up on that refusal. The label does not participate in app authorization, RLS policies, or triggers. The
+phone ignores it; it is not synced into phone SQLite or the outbox.
+
+The controller passed the 18-check harness on local PostgreSQL 17.11 with `PGTZ=UTC` and both
+existing PostgreSQL harnesses after their fixtures gained `organization_id`. The visibility
+probe fixture also supplies the id. See the [verification record](./build-log.md#organisation-label-v1--18-postgresql-checks).
+The final-review harness adds a Supabase-default-ACL control and four lock-timeout/rollback
+checks: 23 total. It observes a competing users lock, expects `55P03` in 8–15 seconds, checks
+that no organisation table or user column committed, and always terminates/awaits the blocker
+before the real migration apply. These new PostgreSQL checks await controller verification.
+**Applied to hosted on 2026-10-14 with Jim's explicit yes.**
 
 ## Pre-Live History Authorization — Hosted Session Gate Passed; Assessment Gate Open
 
@@ -112,7 +143,7 @@ Before a mobile session-history pull can ship:
 10. Error classification is local-state-only and bounded for the classes it models (issue #48 plus audit finding #6). `23514` from the immutable-assignment identity triggers (`child_ea_assignments`, `class_ea_assignments`, `group_ea_assignments`) is immediately terminal with reason `Immutable identity or check constraint rejected the update (23514)`; inserts already avoid it via `ignoreDuplicates`, and archive patches are now lifecycle-only, so this remains a guard for other update-like paths or server check drift. `23503` is retriable while the FK parent has a `pending`/`failed`/`in_flight` `sync_outbox` row (`hasPendingRecord`), terminal otherwise. `42501` is retriable while the FK parent OR an RLS assignment grant is pending locally, terminal otherwise. Grant evidence covers a direct active, unsynced `child_ea_assignments`/`class_ea_assignments`/`group_ea_assignments` row for the record's subject and the membership-mediated child arms of `private.current_user_can_write_for_child`: an active class/group membership joined to its active assignment counts while either half is `pending`/`failed`/`in_flight`, provided neither half is terminal. The `child_class_memberships` or `child_group_memberships` row currently being inserted is excluded from this query because an INSERT cannot grant its own prerequisite authority; a different pending membership path still counts. `computeEvidencePending` resolves the runtime connection once through `resolveDatabase`, then uses that resolved handle for domain-row, direct-assignment, and membership-mediated reads, including the production engine where no database is injected. Subject and FK values resolve from the outbox payload first and the record's own local domain row second, so archive/update payloads still yield evidence. `UPDATE_NOT_APPLIED` uses the same grant evidence and is also retriable while the record's exact insert operation remains owed (`hasPendingOperation`); it is terminal when none of those evidence paths is pending. The `42501` no-session downgrade (Item 9) still applies to an otherwise-terminal `42501`. The deterministic class `PGRST204`, `42703`, `22P02`, `23502`, and non-immutable-table `23514` is retriable for attempts 1 through 7; attempt 8 becomes terminal with `retry_count = 8` and a `deterministic:` reason. `ARCHIVE_NOT_APPLIED` is terminal immediately because the server did not return the one exact updated id required to finalize the lifecycle transition. Codeless network/timeout errors remain retriable without an attempt cap. Force "Sync Now" includes terminal rows, so a repaired server condition can resurrect and finalize them. See "Error Classification" below.
 11. Active-pair identity is collision-proof by construction (issue #47). The four active-pair tables whose identity IS their server partial-unique key -- `child_ea_assignments` `(user_id, child_id)`, `child_programme_enrollments` `(child_id, programme_id)`, `class_ea_assignments` `(class_id, ea_user_id, programme_id)`, `group_ea_assignments` `(group_id)` -- use a deterministic UUIDv5 id keyed EXACTLY on those columns (local mint in the repository create path plus a force-remap on insert/update/restore push in `buildSyncPayload`, gated on all key columns). Archive operations never remap identity: they scope a lifecycle-only update by the outbox record id. Every writer (device or the future head-office seed) that means the same active pair derives the same id, so a would-be partial-index `23505` becomes an idempotent id-match. `child_class_memberships` cannot use this (it recurs on class moves and needs distinct archived rows for `deleteIfNoHistory` audit), so it uses reconcile-before-upsert: before an insert, a pre-push server read archives a conflicting active `(child_id, academic_year_id)` row (device-move-wins, audit-preserving), with a conservative fallback to the normal upsert on any error. See "Active-Pair Collision-Proofing" below.
 12. Grouping-flow collision-proofing is partial and mostly deferred (issue #46). `class_grouping_state` is a one-row-per-`(class_id, academic_year_id)` singleton, so it uses a deterministic id `f(class_id, academic_year_id)` (local mint + push-remap), same shape as Item 11. `grouping_versions` (generational -- needs an activate-new/deactivate-old reconcile) and `groups.display_number` (a partial-unique sequence never populated today) are NOT built: their collision-proofing is inseparable from the grouping/regrouping workflow, which is deferred to next year (CONTEXT.md:161, ADR-0001). Their write paths do not exist yet, so nothing collides today. See "Grouping-Flow Collision-Proofing" below.
-13. An outbox row's `created_at` is queue identity, not mutation time. Re-enqueueing the same `(table_name, record_id, operation)` refreshes its payload, owner, retry fields, status, and `updated_at`, but preserves its first `created_at`. Lifecycle intents are the deliberate identity exception: archive and restore share `<table>:<record>:lifecycle`, so the operation itself can change while the stream keeps its original `created_at`. Push ordering therefore remains fair when one record is edited repeatedly. Batch claiming is set-based: one local UPDATE assigns a shared in-flight timestamp, one SELECT returns the fresh records in input order, and finalization still compares each returned `updated_at` before deleting or failing the row.
+13. An outbox row's `created_at` is queue identity, not mutation time. Re-enqueueing the same `(table_name, record_id, operation)` refreshes its payload, owner, retry fields, status, and `updated_at`, but preserves its first `created_at`. Child INSERTs also preserve `last_error` as dispatch evidence (see no-history deletion below). Lifecycle intents are the deliberate identity exception: archive and restore share `<table>:<record>:lifecycle`, so the operation itself can change while the stream keeps its original `created_at`. Push ordering therefore remains fair when one record is edited repeatedly. Batch claiming is set-based: one local UPDATE assigns a shared in-flight timestamp, one SELECT returns the fresh records in input order, and finalization still compares each returned `updated_at` before deleting or failing the row.
 14. The concurrency-1 Supabase queue serializes requests, not workflows. A dependent domain pull keeps its query order but acquires one queue lease per RPC or query. No child/class preload may wrap its entire multi-request workflow in one `enqueueSupabaseRequest`. This lets a waiting auth, profile, lookup, or push request run between responses without allowing simultaneous Supabase operations.
 
 ## Operation Semantics
@@ -133,15 +164,26 @@ Before a mobile session-history pull can ship:
 **No-history deletion.** `childrenRepository.deleteIfNoHistory` first checks all existing
 history guards. With history it returns `false` and `ChildrenContext.deleteChild` archives the
 child and active relationships. With no history, a child is local-only exactly when its INSERT
-outbox row is still `pending`, `failed`, or `terminal`; deletion removes the child, active
-relationships, and their outbox rows without a server request. No queued INSERT means acknowledged
-or pulled; an `in_flight` INSERT may already have committed with its response lost. Both cases
-queue `hard_delete` through the existing history-checked RPC. Queued child updates/lifecycle
+outbox row is `pending`, has `retry_count = 0`, and has `last_error IS NULL`: it has never been
+marked in flight. Only then does deletion remove the child, active relationships, and their
+outbox rows without a server request. Marking a child INSERT in flight durably records its
+uncertain server outcome in `last_error`; resetting an interrupted INSERT to pending also
+leaves evidence, including rows claimed by an earlier build. Child INSERT re-enqueue and manual
+retry preserve that evidence even when retry counters reset. A failed, terminal, in-flight, or
+recovered-pending INSERT may already have committed with its response lost. These cases, and
+the absence of a queued INSERT (acknowledged or pulled), queue `hard_delete` through the existing
+history-checked RPC. Queued child updates/lifecycle
 operations and writes for the removed active relationships are superseded in the same SQLite
 transaction as local deletion and RPC enqueue. A retained child INSERT stays queued; hard-delete
 waits until it is acknowledged, even if it later backs off or becomes terminal and needs manual
 retry. A successful local deletion still returns `true`; the caller does not additionally archive.
-The current outbox-owner derivation is unchanged (Head Office ownership is Plan 2 Task 6).
+Hard-delete enqueue uses the connection actor even after the child row is deleted; it no longer
+passes the deleted row as an ownership fallback. Lifecycle enqueue uses the same actor boundary.
+`outboxOwnership.js` (ownership derived from record content) is deleted; the integrity scan and
+rescue heal use only the stamped owner. Local regressions: `outboxOwnerStamping.test.js` covers an EA edit to a
+Head Office child through a real SQLite adapter and signed-in transaction facade, then the Plan 1
+fake-server UPDATE-by-id acknowledgement. `outboxOwnerMigration.test.js` covers the v11-to-v12
+upgrade with existing owned and NULL-owned rows, index preservation, and raw-insert refusal.
 
 **Edits and lifecycle are separate operations.** At dispatch, ordinary updates exclude every
 column allowed to archive/restore that table: archive metadata for classes/children/groups;
@@ -202,11 +244,11 @@ When the fallback budget is exhausted, unattempted rows are reset from `in_fligh
 
 For a batch, `markInFlightAndGet(ids)` runs inside one writer transaction. It changes all ids through one `UPDATE`, then reads them through one `SELECT` and restores caller order in memory. The returned records carry the exact shared `updated_at` used by `finalizeManySuccess` and `finalizeManyRetriableFailure`. This removes O(N) local claim/read work without weakening stale-finalize protection: a concurrent re-enqueue changes `updated_at`, the compare-and-swap misses, and the newer payload remains pending.
 
-### Supabase request queue granularity
+### Request queue granularity
 
-`supabaseRequestQueue` remains concurrency 1 because React Native auth, preload, pull, and push calls share one client and previously exposed lock/race failures. Concurrency 1 does not imply that a high-level workflow owns the queue until every dependent request finishes. `pullPreloadedChildData` queues the reconcile acknowledgment RPC, Programme query, direct assignment query, each enrollment chunk, children query, class-membership query, group query, and group-membership query separately. `ClassesContext` similarly queues its acknowledgment, Programme, and classes requests separately.
+Each signed-in EA handle owns its own request queue (`handle.enqueueRequest`, concurrency 1) and its own data client; the shared `supabaseRequestQueue` module is deleted (Plan 2 Task 5). Concurrency 1 does not imply that a high-level workflow owns the queue until every dependent request finishes. `pullPreloadedChildData` queues the reconcile acknowledgment RPC, Programme query, direct assignment query, each enrollment chunk, children query, class-membership query, group query, and group-membership query separately. `ClassesContext` similarly queues its acknowledgment, Programme, and classes requests separately.
 
-Each workflow still awaits the result it needs before constructing the next dependent query. The change is fairness, not parallelism. If another operation was queued while request A was in flight, it runs after A and before the pull submits request B. Data shaping and SQLite persistence occur outside the network lease. Active-user guards still discard a completed old-user pull, and failed or incomplete scopes retain the same fail-closed reconcile rules.
+Each workflow still awaits the result it needs before constructing the next dependent query. The change is fairness, not parallelism. If another operation was queued while request A was in flight, it runs after A and before the pull submits request B. Data shaping and SQLite persistence occur outside the network lease. A pull begun under one handle cannot persist into another EA's file: its repositories are bound to its own handle, and a stale handle refuses every write. Failed or incomplete scopes retain the same fail-closed reconcile rules.
 
 ## Error Classification (Item 10)
 
@@ -487,39 +529,34 @@ Tests: `__tests__/startupRepairs.test.js`, `__tests__/OfflineContext.test.js`, `
 
 ## Auth-Restore RLS Heal
 
-Auth-loss `42501` failures are recoverable only when they were written without a live session marker. `OfflineContext` calls `offlineSync.requeueTerminalRlsFailures()` on `SIGNED_IN`, `TOKEN_REFRESHED`, and `INITIAL_SESSION` events that include a session. The engine resolves ownership against the restored user before requeueing, so a new user cannot revive another user's quarantined outbox rows.
+Auth-loss `42501` failures are recoverable only when they were written without a live session marker. `OfflineContext` runs the bound engine's `requeueTerminalRlsFailures()` once after the handle opens and again on `SIGNED_IN`/`TOKEN_REFRESHED` for the same EA (subscribed through `AuthContext`). A row is requeued only when its stamped `owner_user_id` equals the signed-in EA, its `last_error` is not `foreign_owner`, and it is not marked `42501-authenticated:`. Ownership is never re-derived from record content, so an EA's own edit of a Head Office-created child heals, and another EA's quarantined row never does.
 
-Rows marked with `42501-authenticated:` in `sync_outbox.last_error` are genuine authenticated RLS denials and remain terminal. Rows without that marker may be requeued when their owner matches the restored auth user. `sync_outbox.status`, retry counters, `last_error`, and the domain row's `sync_status`/`last_sync_error` are reset inside the same SQLite transaction, so the queue and domain table cannot disagree after a heal.
+`sync_outbox.status`, retry counters, `last_error`, and the domain row's `sync_status`/`last_sync_error` are reset inside the same SQLite transaction, so the queue and domain table cannot disagree after a heal.
 
-Owner resolution in `src/services/offlineSync.js`:
+Tests: `__tests__/offlineSyncAuthGate.test.js`, `__tests__/requeueTerminalRlsFailures.test.js`, `__tests__/outboxIntegrityScan.test.js` (T9), and `__tests__/OfflineContext.test.js`.
 
-| Table | Owner resolution |
-| --- | --- |
-| `time_entries` | Direct `user_id` |
-| `classes` | Direct `created_by` or `staff_id` |
-| `children` | Direct `created_by` |
-| `child_ea_assignments` | Direct `user_id` or `created_by` |
-| `child_programme_enrollments` | Direct `created_by` |
-| `child_class_memberships` | Direct `created_by` |
-| `class_ea_assignments` | Direct `ea_user_id` or `created_by` |
-| `grouping_versions` | Direct `created_by`, `accepted_by_user_id`, or `archived_by_user_id` |
-| `class_grouping_state` | Direct `class_list_completed_by_user_id` or `class_list_reopened_by_user_id`; otherwise parent `classes.created_by` through `class_id` |
-| `groups` | Direct `created_by` or `staff_id` |
-| `group_ea_assignments` | Direct `ea_user_id` or `created_by` |
-| `child_group_memberships` | Direct `created_by` |
-| `sessions` | Direct `user_id` |
-| `session_attendees` | Parent `sessions.user_id` through `session_id` |
-| `assessments` | Direct `user_id` |
-| `assessment_items` | Parent `assessments.user_id` through `assessment_id` |
-| `letter_mastery` | Direct `user_id` |
-| Fallback for unmapped tables | Direct `user_id`, `created_by`, `staff_id`, or `ea_user_id` |
+## Signed-in EA handle (Plan 2, 2026-10-17)
 
-Tests: `__tests__/offlineSyncAuthGate.test.js`, `__tests__/requeueTerminalRlsFailures.test.js`, and `__tests__/OfflineContext.test.js`.
+Spec: `docs/superpowers/specs/2026-10-09-actor-lifecycle-and-mutation-ownership-design.md`; ADR 0008. Code: `src/session/`.
+
+- **One file per EA.** The handle opens `masi-<userId>.db` after sign-in or offline restore, checks or writes `local_state.file_owner_user_id` (a mismatch refuses to open), runs the integrity scan, resets in-flight rows, runs startup repairs, builds `handle.services`, and only then publishes. Production code reaches SQLite only through a handle-bound repository (`useSignedInEA()` or an explicit handle); an unbound repository throws `UnboundRepositoryError`.
+- **Revocation before disposal.** `requestClose` resolves at logical revocation: the epoch advances, the handle is unpublished, requests abort, both native queues seal. Physical disposal is the last item on each connection's serial native queue (tolerant `ROLLBACK`, best-effort `last_active_at`, both closes attempted); `whenDisposed(fileName)` resolves when it finishes, and only a reopen of the same file waits for it. A failed disposal fences that file (`HandleDisposeFailedError`) but never another EA's sign-in.
+- **Transaction doors.** Each `withTransaction` gets its own facade that expires when the task settles, before COMMIT/ROLLBACK is admitted. Facades expose only `runAsync`/`getFirstAsync`/`getAllAsync` under a single-statement policy (`PRAGMA user_version` and `PRAGMA defer_foreign_keys = ON` excepted; `OR ROLLBACK` refused). A COMMIT already running at revocation finishes; a queued one is refused and disposal rolls the transaction back.
+- **Per-handle data client and queue.** Every server request runs inside `handle.enqueueRequest` on `handle.dataClient` (supabase-js in `accessToken` mode). Its fetch re-checks, at send time, that the handle is open and current, that a queued task is running, and that the latest session belongs to the handle's EA; it aborts on revocation or after 30 s and resolves as a codeless network error. The shared client is used only for `supabase.auth.*` in `supabaseClient.js`, `persistedAuthSession.js` and `AuthContext.js` (static test).
+- **`StaleActorError` vs `AuthUnavailableError`.** Stale means the work belongs to a revoked or superseded handle: it is never retried under anyone else. Auth-unavailable means the handle is current but has no usable session: a retriable, codeless failure for later.
+- **Whole-pass stale rule.** A stale refusal anywhere in a sync pass ends the pass: no record is finalised, no batch fallback runs, `sync_meta` is not written, and `syncAll` resolves `{ success: false, abortedStaleActor: true }` without observability noise. Rows left `in_flight` are reset when that EA's file next opens.
+- **Integrity scan.** At open and before every pass: legacy NULL-owner rows are adopted for the file owner; rows stamped with another EA move to `terminal` with `last_error = 'foreign_owner'` (domain row too), stay counted as unsent, are recorded in `local_state.integrity_scan_last`, and raise one operational error (`foreign_owner_in_file`, counts by table only).
+- **Profile and reference refresh.** Startup and reconnect refresh the EA profile and reference data through the current handle. Profile refreshes share an in-flight request; a missing profile shows “Loading your profile...” with Retry in the session form router. Reference readiness requires the durable `local_state.reference_data_complete_at` ISO timestamp, written only after all seven reference-table writes succeed; non-empty tables alone never establish readiness after reopening. Completed caches remain ready offline, including legitimately empty tables and EAs with no programme assignment. A failed or partial refresh neither writes nor clears the marker; without it, readiness joins an active refresh or retries a failed one.
+- **Shared auth session persistence.** The shared client's storage drops session writes for anyone but the admitted identity (the email being signed in, then that user's id; the restored user at launch; nobody after sign-out), and every shared auth request aborts after 30 s, so a late response can never restore or overwrite a session. **Accepted risk (Jim, 2026-10-17):** if A's background token refresh is in flight when B signs in on the same phone and the server rejects it, the SDK's own cleanup can remove B's new session and sign B out; B signs in again and nothing is lost, because B's work stays in B's file. A sequencing guard for this (Task 5 round 5) was built and then reverted by the auth simplicity check as not worth its complexity.
+- **Field-release prerequisite (ruling 11).** Sign-out aborts in-flight uploads, so an upload the server already accepted may be re-sent when the EA returns. Identical replay is proven harmless (Task 4 T5). Ordering an uncertain older write against a newer one is owned by the upload-contract spec and must be closed before field release.
+- **Device gates still open:** D7 (native close under load on iOS and Android) and D1–D6 on the build intended to ship, after Plan 3.
 
 ## Table Contract Map
 
 | Table | Producer | Local required fields | Sync operation | RLS authority / SELECT dependency | Ordering / dependencies | Tests and probes |
 | --- | --- | --- | --- | --- | --- | --- |
+| `organizations` | Canonical migrations; partners are added by migration | Server-only: `id`, `slug`, `name`; no phone table | No mobile sync | RLS enabled with no policies. Only `service_role` has API-role SELECT; no INSERT/UPDATE/DELETE. `anon`, `authenticated`, and `authenticator` have no SELECT | Seed before users, with session-level 10s lock / 60s statement bounds. Applied to hosted 2026-10-14 | `organisation-label-postgres-harness.cjs`: role refusals, slug resolution, explicit revocations under default ACLs, timeout rollback |
+| `users` | `scripts/createTesters.js`; service-role insert-if-absent, then mutable-fields UPDATE restricted by id and organisation | Server `organization_id` is required with no default. The phone ignores it; no SQLite/outbox sync | No mobile domain write. Own-profile SELECT with school/job-title joins stays unchanged | Existing own-profile SELECT policy. Organisation is an employer label, not an access boundary. Provisioning preflight rejects known conflicts; the conditional UPDATE refuses a concurrent organisation mismatch without overwriting it | Auth user and organisation must exist before profile creation. Confirm the profile UPDATE before Programme-assignment writes. Applied to hosted 2026-10-14 | `organisationProvisioning.test.js` (including concurrent insertion); `testerProvisioning.test.js`; `organisation-label-postgres-harness.cjs` (timestamp, constraints, own-profile read); history/S1 and `rls-visibility-probe.cjs` fixtures supply the id |
 | `time_entries` | `timeEntriesRepository` | `id`, `user_id`; nullable `sign_in_lat`/`sign_in_lon` and `sign_out_lat`/`sign_out_lon`; nullable `sign_in_location_status`/`sign_out_location_status` | Inserts batch as upserts; edits use acknowledged UPDATE by id and are excluded from batching | Self-scoped by `user_id = auth.uid()` | No domain dependencies | `offlineSyncOutbox.test.js` time-entry sync coverage; `offlineSyncUpdateById.test.js`; `timeEntriesRepository.test.js` (integration tier, Item 8); `useTimeTracking.integration.test.js` (clock-in vertical through the real path, Item 8); `forceStopReopenOutbox.test.js` (force-stop close+reopen persistence, Item 8); `locationUnavailableClock.integration.test.js`; `timeEntryLocationMigration.test.js`; `offlineSyncUpdateById.test.js` no-location wire payload; local upload-contract PostgreSQL harness |
 | `classes` | `classesRepository.saveClass`; `classOnboardingRepository.start` transaction wrapper for locally onboarded classes | `id`, `created_by`, active `programme_id` for local class EA assignment. The onboarding wrapper adds only a user-scoped local-state marker in the same SQLite transaction; it does not change the server payload. | Insert uses default upsert; edit uses acknowledged UPDATE by id; archive uses acknowledged lifecycle UPDATE by id | `classes_select_created_by`; `private.current_user_can_access_class` / `private.current_user_can_write_for_class` | Before `children`, `class_ea_assignments`, grouping rows, sessions with `class_id` | `classesRepository.test.js`; `classOnboardingRepository.test.js` atomic create, rollback, and restart marker coverage; `offlineSyncUpdateById.test.js`; `sqlitePlan1Migrations.test.js` creator SELECT coverage |
 | `class_ea_assignments` | `classesRepository.saveClass`; `classEaAssignmentsRepository`; Classes pull persistence and reconcile | `class_id`, `ea_user_id`, `programme_id`, `created_by` | Consecutive inserts batch with insert-or-ignore; archive uses acknowledged lifecycle UPDATE by id and ordinary updates use acknowledged UPDATE with lifecycle columns excluded; direct pull scope persists and reconciles synced absentees | EA self assignment and class access; identity trigger blocks reassignment by update | Insert after `classes`; archive after dependent child/class cleanup rows | `junctionRepositoryGuards.test.js`; `offlineSyncOutbox.test.js` immutable assignment batching and lifecycle exclusion; `pullReconcile.integration.test.js`; `pullReconcileOffline.integration.test.js` |
@@ -592,6 +629,8 @@ Use this checklist instead of a static "does the table have policies" audit.
 
 ## Source Files to Review Together
 
+- `src/session/signedInHandle.js`, `handleDataClient.js`, `handleServices.js`, `handleRequestQueue.js`, `staleActor.js`
+- `src/context/AuthContext.js`, `src/context/SignedInEAContext.js`, `src/services/authSessionStorage.js`, `src/services/authRequestFetch.js`
 - `src/services/offlineSync.js`
 - `src/db/repositories/domainRepositoryUtils.js`
 - `src/db/repositories/childrenRepository.js`

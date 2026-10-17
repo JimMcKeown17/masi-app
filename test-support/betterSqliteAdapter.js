@@ -8,7 +8,7 @@ const normalizeParams = (params) => {
   return params;
 };
 
-function createBetterSqliteTestDatabase(filename = ':memory:') {
+function createBetterSqliteTestDatabase(filename = ':memory:', { honorQueryOnly = false } = {}) {
   const database = new BetterSqlite3(filename);
 
   // Serializes concurrent withExclusiveTransactionAsync calls, mirroring the real
@@ -24,9 +24,9 @@ function createBetterSqliteTestDatabase(filename = ':memory:') {
       // The production client uses TWO real connections: a writer and a query_only reader
       // (a separate connection, so query_only never affects the writer). The test harness
       // shares ONE better-sqlite3 connection for both, so honoring `PRAGMA query_only = ON`
-      // here would poison the writer too. Skip it — reader read-only enforcement is covered
-      // separately by clientReadOnlyReader.test.js and device-verified (spec AC #10 / Task 12).
-      if (/PRAGMA\s+query_only/i.test(sql)) {
+      // here would poison the writer too. Legacy tests therefore skip it. Per-handle tests
+      // opt in with honorQueryOnly and use distinct connections to the same file.
+      if (!honorQueryOnly && /PRAGMA\s+query_only/i.test(sql)) {
         return;
       }
       database.exec(sql);
@@ -73,6 +73,7 @@ function createBetterSqliteTestDatabase(filename = ':memory:') {
       database.close();
     },
 
+    get isOpen() { return database.open; },
     filename,
     raw: database,
   };

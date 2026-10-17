@@ -20,6 +20,7 @@
     "rls:probe": "node scripts/rls-visibility-probe.cjs",
     "verify:history-authorization:postgres": "node scripts/history-authorization-postgres-harness.cjs",
     "verify:upload-contract:postgres": "node scripts/upload-contract-postgres-harness.cjs",
+    "verify:organisation-label:postgres": "node scripts/organisation-label-postgres-harness.cjs",
     "testers:provision": "node scripts/createTesters.js",
     "sentry:sourcemaps": "sentry-expo-upload-sourcemaps dist",
     "test": "jest",
@@ -72,6 +73,9 @@
     "modulePathIgnorePatterns": [
       "<rootDir>/.claude/worktrees/",
       "<rootDir>/.codex/worktrees/"
+    ],
+    "setupFilesAfterEnv": [
+      "<rootDir>/test-support/defaultTestHandle.js"
     ]
   },
   "private": true,

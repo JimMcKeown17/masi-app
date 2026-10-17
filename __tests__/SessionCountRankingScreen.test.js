@@ -14,9 +14,11 @@ jest.mock('@react-navigation/native', () => ({
 jest.mock('../src/context/AuthContext', () => ({ useAuth: () => ({ user: { id: 'ea-1' } }) }));
 jest.mock('../src/context/ChildrenContext', () => ({ useChildren: jest.fn() }));
 jest.mock('../src/db/repositories/sessionsRepository', () => ({
+  ...jest.requireActual('../src/db/repositories/sessionsRepository'),
   sessionsRepository: { getSessions: jest.fn() },
 }));
-jest.mock('../src/services/sessionHistoryStatus', () => ({ useSessionHistoryStatus: jest.fn() }));
+jest.mock('../src/services/sessionHistoryStatus', () => ({
+  ...jest.requireActual('../src/services/sessionHistoryStatus'), useSessionHistoryStatus: jest.fn() }));
 
 const containingView = (screen, text) => {
   let node = screen.getByText(text).parent;

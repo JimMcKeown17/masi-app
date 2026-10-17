@@ -46,7 +46,7 @@ the sync engine starts, repairs, and reads the outbox before any actor is known.
 | Decision | Choice | Date |
 |---|---|---|
 | Local storage | One SQLite file per EA, `masi-<userId>.db` | 2026-10-08 |
-| Letter-mastery conflicts (input to the upload-contract spec, recorded here for completeness) | The most recently *made* correction wins | 2026-10-08 |
+| Letter-mastery conflicts (input to the upload-contract spec, recorded here for completeness) | The most recently *made* correction wins | 2026-10-08; reconfirmed 2026-10-14 |
 | Removing an EA's data | Automatic only; no manual removal screen. The automatic rule (delete another EA's file when nothing is unsent and it has been idle 30 days, decided 2026-10-08) is **deferred** past the pilot (§7.3) | 2026-10-09 |
 | Sign-out and in-flight requests | Abort immediately; no drain and no finalize tokens. Unfinished work re-sends when that EA next signs in (§5.5) | 2026-10-09 |
 | Unsent work at sign-out | Warn, allow, track: a warning with "Try uploading now" or "Sign out anyway", plus a privacy-safe support report while the work stays unsent | 2026-10-09 |

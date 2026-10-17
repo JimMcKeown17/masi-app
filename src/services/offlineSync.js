@@ -1,5 +1,5 @@
-import { supabase } from './supabaseClient';
-import { enqueueSupabaseRequest } from './supabaseRequestQueue';
+import { isStaleActorError, StaleActorError } from '../session/staleActor';
+import { getConnectionActor } from '../session/signedInHandle';
 import { resolveDatabase, runRepositoryTransaction } from '../db/repositories/repositoryRuntime';
 import {
   chunkArray,
@@ -9,22 +9,10 @@ import {
 import {
   createSyncOutboxRepository,
   outboxRecordId,
-  syncOutboxRepository,
 } from '../db/repositories/syncOutboxRepository';
 import {
   createSyncStateRepository,
-  syncStateRepository,
 } from '../db/repositories/syncStateRepository';
-import { resolveRecordOwners } from '../db/repositories/outboxOwnership';
-import {
-  academicYearsRepository,
-  assessmentWindowsRepository,
-  jobTitlesRepository,
-  programmesRepository,
-  schoolsRepository,
-  staffProgrammeAssignmentsRepository,
-  teachersRepository,
-} from '../db/repositories/referenceDataRepository';
 import {
   assessmentItemDomainId,
   childEaAssignmentDomainId,
@@ -417,7 +405,10 @@ const makeFieldResolver = (database, outboxRecord) => {
           `select * from ${quoteIdentifier(outboxRecord.table_name)} where id = ?`,
           outboxRecord.record_id,
         );
-      } catch (_) { domainRow = null; }
+      } catch (error) {
+        if (isStaleActorError(error)) throw error;
+        domainRow = null;
+      }
     }
     return domainRow?.[column] ?? null;
   };
@@ -701,6 +692,7 @@ const reconcileChildClassMembership = async (supabaseClient, payload) => {
       .eq('academic_year_id', payload.academic_year_id)
       .is('exited_at', null)
       .limit(1);
+    if (isStaleActorError(error)) throw error;
     if (error) return; // conservative fallback
     const serverRow = Array.isArray(data) ? data[0] : data;
     if (!serverRow || serverRow.id === payload.id) return;
@@ -708,7 +700,10 @@ const reconcileChildClassMembership = async (supabaseClient, payload) => {
       .from('child_class_memberships')
       .update({ exited_at: new Date().toISOString() })
       .eq('id', serverRow.id);
-  } catch (_) { /* conservative fallback: proceed to the normal upsert */ }
+  } catch (error) {
+    if (isStaleActorError(error)) throw error;
+    // Ordinary failures conservatively proceed to the normal upsert.
+  }
 };
 
 const makeFailedRecord = (outboxRecord, reason) => ({
@@ -1088,13 +1083,13 @@ const canBatchRecord = (record, config) => (
 
 export const createOutboxSyncEngine = ({
   database,
-  supabaseClient = supabase,
+  supabaseClient,
   outboxRepository = createSyncOutboxRepository({ database }),
   stateRepository = createSyncStateRepository({ database }),
   tableConfigs = TABLE_CONFIGS,
   safeDuplicateSuccessTables = [],
-  enqueueRequest = enqueueSupabaseRequest,
-  getAuthSession = () => supabase.auth.getSession(),
+  enqueueRequest,
+  getAuthSession = () => supabaseClient.auth.getSession(),
 } = {}) => {
   const safeDuplicateTables = new Set(safeDuplicateSuccessTables.map(normalizeTableName));
   const getConfig = (tableName) => {
@@ -1107,11 +1102,16 @@ export const createOutboxSyncEngine = ({
     };
   };
 
+  const assertActorOpen = () => {
+    if (typeof database?.isOpen === 'function' && (!database.isOpen() || !database.isCurrent())) throw new StaleActorError();
+  };
   const getMatchingPassSession = async (passUserId) => {
+    assertActorOpen();
     try {
       const { data: { session: currentSession } = {} } = await getAuthSession();
       return currentSession?.user?.id === passUserId ? currentSession : null;
-    } catch (_) {
+    } catch (error) {
+      if (isStaleActorError(error)) throw error;
       return null;
     }
   };
@@ -1149,6 +1149,8 @@ export const createOutboxSyncEngine = ({
         runServerOperation(supabaseClient, config, inFlightRecord)
       ));
 
+      if (isStaleActorError(serverResult.error)) throw serverResult.error;
+      assertActorOpen();
       if (serverResult.success) {
         await finalizeSuccess({
           database,
@@ -1183,7 +1185,10 @@ export const createOutboxSyncEngine = ({
         let liveSession = null;
         try {
           ({ data: { session: liveSession } = {} } = await getAuthSession());
-        } catch (_) { /* treat as no session and downgrade below */ }
+        } catch (error) {
+          if (isStaleActorError(error)) throw error;
+          // Ordinary auth failures downgrade the denial below.
+        }
         if (!liveSession) {
           // A permission denial without a live session is not trustworthy
           // evidence; retry after auth restore instead of quarantining.
@@ -1241,6 +1246,7 @@ export const createOutboxSyncEngine = ({
       });
       return { success: false, terminal: false, failedRecord: makeFailedRecord(outboxRecord, reason) };
     } catch (error) {
+      if (isStaleActorError(error)) throw error;
       // Any post-markInFlight throw (server request, getById, or a finalize) must not strand the
       // row in_flight. finalize-retriable with inFlightRecord when we have it (its updated_at makes
       // the CAS HIT → row marked failed+backoff, correct for a real attempt); else the original
@@ -1254,11 +1260,12 @@ export const createOutboxSyncEngine = ({
           outboxRepository,
           reason,
         });
-      } catch (_) {
+      } catch (finalizeError) {
+        if (isStaleActorError(finalizeError)) throw finalizeError;
         // Full finalize (CAS + domain update) failed; last-resort plain outbox status reset so the
         // row isn't left in_flight within THIS pass (markReady only touches sync_outbox, so it can
         // succeed even when the domain write can't). resetInFlight is the cross-pass backstop.
-        try { await outboxRepository.markReady(outboxRecord.id); } catch (_2) { /* truly broken; resetInFlight recovers */ }
+        try { await outboxRepository.markReady(outboxRecord.id); } catch (resetError) { if (isStaleActorError(resetError)) throw resetError; }
       }
       return { success: false, terminal: false, failedRecord: makeFailedRecord(outboxRecord, reason) };
     }
@@ -1282,6 +1289,9 @@ export const createOutboxSyncEngine = ({
       const settled = await Promise.allSettled(
         wave.map((record) => processRecord(record, passUserId))
       );
+      const stale = settled.find((outcome) => outcome.status === 'rejected' && isStaleActorError(outcome.reason));
+      if (stale) throw stale.reason;
+      assertActorOpen();
       for (let index = 0; index < settled.length; index += 1) {
         const outcome = settled[index];
         if (outcome.status === 'fulfilled') {
@@ -1290,7 +1300,7 @@ export const createOutboxSyncEngine = ({
         }
         const record = wave[index];
         const reason = errorMessage(outcome.reason) || 'Fallback record processing threw';
-        try { await outboxRepository.markReady(record.id); } catch (_) { /* resetInFlight recovers next pass */ }
+        try { await outboxRepository.markReady(record.id); } catch (resetError) { if (isStaleActorError(resetError)) throw resetError; }
         results.push({ success: false, terminal: false, failedRecord: makeFailedRecord(record, reason) });
       }
     }
@@ -1303,11 +1313,12 @@ export const createOutboxSyncEngine = ({
         } else {
           for (const id of deferredIds) await outboxRepository.markReady(id);
         }
-      } catch (_) {
+      } catch (resetError) {
+        if (isStaleActorError(resetError)) throw resetError;
         // Keep sibling outcomes intact. Best-effort per-row cleanup may recover a partial bulk
         // reset; resetInFlight is the cross-pass backstop for any row that remains in_flight.
         for (const id of deferredIds) {
-          try { await outboxRepository.markReady(id); } catch (_2) { /* resetInFlight recovers */ }
+          try { await outboxRepository.markReady(id); } catch (resetError) { if (isStaleActorError(resetError)) throw resetError; }
         }
       }
       results.push(...deferredRecords.map(() => ({
@@ -1339,12 +1350,15 @@ export const createOutboxSyncEngine = ({
           runBatchServerOperation(supabaseClient, config, inFlightRecords)
         ));
       } catch (batchError) {
+        if (isStaleActorError(batchError)) throw batchError;
         // A THROWN batch request (timeout / abort / oversized payload) — degrade to per-record so a
         // deterministic batch-level failure isolates per row (smaller payloads make progress) instead
         // of re-forming the same failing batch forever. processBatchFallback is allSettled-safe.
         return await processBatchFallback(outboxRecords, passUserId, fallbackBudget);
       }
 
+      if (isStaleActorError(serverResult.error)) throw serverResult.error;
+      assertActorOpen();
       if (!serverResult.success) {
         return await processBatchFallback(outboxRecords, passUserId, fallbackBudget);
       }
@@ -1353,6 +1367,7 @@ export const createOutboxSyncEngine = ({
 
       return outboxRecords.map(() => ({ success: true }));
     } catch (error) {
+      if (isStaleActorError(error)) throw error;
       // Post-markInFlight throw (getById / batch request / finalizeManySuccess) — don't strand the
       // batch in_flight. finalizeManyRetriableFailure with inFlightRecords when we have them (CAS
       // hits → failed+backoff); else the originals (CAS misses → restore pending).
@@ -1364,10 +1379,11 @@ export const createOutboxSyncEngine = ({
           tableName: config.tableName,
           reason,
         });
-      } catch (_) {
+      } catch (finalizeError) {
+        if (isStaleActorError(finalizeError)) throw finalizeError;
         // Last-resort per-id outbox status reset (see processRecord note).
         for (const id of ids) {
-          try { await outboxRepository.markReady(id); } catch (_2) { /* resetInFlight recovers next pass */ }
+          try { await outboxRepository.markReady(id); } catch (resetError) { if (isStaleActorError(resetError)) throw resetError; }
         }
       }
       return outboxRecords.map((record) => (
@@ -1376,7 +1392,30 @@ export const createOutboxSyncEngine = ({
     }
   };
 
+  const emptyPassResult = () => ({
+    success: true, totalSynced: 0, totalFailed: 0, totalTerminal: 0, totalRetriable: 0,
+    totalDeferred: 0, failedRecords: [], tableResults: {}, preflightErrors: [], durationMs: 0,
+  });
   const syncAll = async ({ tableName = null, force = false } = {}) => {
+    try {
+      assertActorOpen();
+      // Scan even while auth is unavailable, before recovery or candidate reads.
+      // Raw repository tests use their registered connection actor; production handles
+      // have already checked the persisted file-owner marker at open.
+      await runRepositoryTransaction(database, async (txn) => {
+        const owner = await txn.getFirstAsync("select value from local_state where key = 'file_owner_user_id'");
+        await outboxRepository.quarantineForeignOwners({
+          fileUserId: owner?.value || getConnectionActor(txn), transaction: txn,
+        });
+      });
+    } catch (error) {
+      if (isStaleActorError(error)) return { ...emptyPassResult(), success: false, abortedStaleActor: true };
+      console.error('syncAll: integrity scan failed:', error);
+      return {
+        ...emptyPassResult(), success: false,
+        preflightErrors: [{ step: 'integrityScan', error: errorMessage(error) }],
+      };
+    }
     // Auth gate: with no live session an upload pass would run anonymously and
     // RLS-quarantine the whole outbox as terminal (ZZ 2026-06-09 field incident).
     // getSession() can also return null while the refresh endpoint is merely
@@ -1385,7 +1424,11 @@ export const createOutboxSyncEngine = ({
     try {
       ({ data: { session } = {} } = await getAuthSession());
     } catch (error) {
+      if (isStaleActorError(error)) return { ...emptyPassResult(), success: false, abortedStaleActor: true };
       console.warn('syncAll: session check failed, skipping pass:', errorMessage(error));
+    }
+    if (typeof database?.isOpen === 'function' && (!database.isOpen() || !database.isCurrent())) {
+      return { ...emptyPassResult(), success: false, abortedStaleActor: true };
     }
     if (!session) {
       console.log('Sync skipped: no auth session');
@@ -1593,11 +1636,12 @@ export const createOutboxSyncEngine = ({
     try {
       await resolveDatabase(database);
 
-      // Recover rows left in_flight by a prior interrupted pass FIRST and best-effort.
+      // Recover this EA's rows left in_flight by a prior interrupted pass, best-effort.
       if (typeof outboxRepository.resetInFlight === 'function') {
         try {
           await outboxRepository.resetInFlight({ ownerUserId: passUserId });
         } catch (resetError) {
+          if (isStaleActorError(resetError)) throw resetError;
           console.error('syncAll: resetInFlight failed (continuing):', resetError);
           result.success = false;
           result.preflightErrors.push({ step: 'resetInFlight', error: errorMessage(resetError) });
@@ -1692,28 +1736,42 @@ export const createOutboxSyncEngine = ({
           }
           applyRecordResult(outboxRecord, config, recordResult);
         } catch (error) {
+          if (isStaleActorError(error)) throw error;
           const reason = errorMessage(error) || 'Unhandled sync error';
           const tableNameForRow = getConfig(outboxRecord.table_name)?.tableName || outboxRecord.table_name;
           try {
             await finalizeRetriableFailure({ database, outboxRecord, tableName: tableNameForRow, outboxRepository, reason });
-          } catch (_) { /* best-effort */ }
+          } catch (finalizeError) { if (isStaleActorError(finalizeError)) throw finalizeError; }
           applyRecordResult(outboxRecord, getConfig(outboxRecord.table_name), { success: false, terminal: false, failedRecord: makeFailedRecord(outboxRecord, reason) });
         }
       }
     } catch (error) {
-      // Unexpected preflight failure (resolveDatabase / getReadyRecords). Don't reject the pass —
-      // mark it failed; the finally still records the attempt so meta is never skipped, and
-      // resetInFlight (run first, best-effort) has already recovered any prior-stranded rows.
-      console.error('syncAll: preflight error (continuing to record attempt):', error);
-      result.success = false;
-      result.preflightErrors.push({ step: 'preflight', error: errorMessage(error) });
+      if (isStaleActorError(error)) {
+        result.success = false;
+        result.abortedStaleActor = true;
+      } else {
+        // Ordinary preflight failures still record the attempt. Stale cancellation above
+        // skips both failure reporting and metadata; reopen recovers its in-flight claims.
+        console.error('syncAll: preflight error (continuing to record attempt):', error);
+        result.success = false;
+        result.preflightErrors.push({ step: 'preflight', error: errorMessage(error) });
+      }
     } finally {
       result.durationMs = Date.now() - startedAt;
-      const now = new Date().toISOString();
-      await stateRepository.updateSyncMeta({
-        lastSyncTime: now,
-        ...(result.success ? { lastSuccessfulSyncTime: now } : {}),
-      });
+      if (!result.abortedStaleActor) {
+        try {
+          assertActorOpen();
+          const now = new Date().toISOString();
+          await stateRepository.updateSyncMeta({
+            lastSyncTime: now,
+            ...(result.success ? { lastSuccessfulSyncTime: now } : {}),
+          });
+        } catch (error) {
+          if (!isStaleActorError(error)) throw error;
+          result.success = false;
+          result.abortedStaleActor = true;
+        }
+      }
     }
 
     return result;
@@ -1743,32 +1801,11 @@ export const createOutboxSyncEngine = ({
    */
   const requeueTerminalRlsFailures = async (userId) => {
     if (!userId) return 0;
-    const db = await resolveDatabase(database);
-    const candidates = (await outboxRepository.getTerminalRecords()).filter(isHealableRlsError);
-    if (candidates.length === 0) return 0;
-
-    const heals = [];
-    for (const record of candidates) {
-      const row = await db.getFirstAsync(
-        `select * from ${quoteIdentifier(record.table_name)} where id = ?`,
-        record.record_id
-      ).catch(() => null);
-      const owners = await resolveRecordOwners({
-        db,
-        tableName: record.table_name,
-        row,
-        payload: record.payload,
-      });
-      if (owners.length === 0) {
-        console.warn(`syncRescue: skipping ${record.table_name} ${record.record_id} (no owner field)`);
-        continue;
-      }
-      if (!owners.includes(userId)) {
-        console.warn(`syncRescue: skipping ${record.table_name} ${record.record_id} (owner mismatch)`);
-        continue;
-      }
-      heals.push(record);
-    }
+    const heals = (await outboxRepository.getTerminalRecords()).filter(record => (
+      record.owner_user_id === userId
+      && record.last_error !== 'foreign_owner'
+      && isHealableRlsError(record)
+    ));
     if (heals.length === 0) return 0;
 
     let count = 0;
@@ -1799,7 +1836,8 @@ export const createOutboxSyncEngine = ({
         set status = 'pending',
             retry_count = 0,
             next_retry_at = null,
-            last_error = null,
+            last_error = case when table_name = 'children' and operation = 'insert'
+              then last_error else null end,
             updated_at = ?
         where lower(table_name) = ?
           and record_id = ?
@@ -1824,45 +1862,17 @@ export const createOutboxSyncEngine = ({
   };
 };
 
-const defaultEngine = createOutboxSyncEngine({
-  // Production keeps duplicate-key failures terminal. With upsert on id,
-  // 23505 usually means a different unique constraint needs review.
-  outboxRepository: syncOutboxRepository,
-  stateRepository: syncStateRepository,
-});
-
-export const syncAll = (options) => defaultEngine.syncAll(options);
-export const syncTableByName = (tableName) => defaultEngine.syncTableByName(tableName);
-export const getSyncStatus = (options) => defaultEngine.getSyncStatus(options);
-export const requeueTerminalRlsFailures = (userId) => defaultEngine.requeueTerminalRlsFailures(userId);
-export const retryFailedItem = (table, id) => defaultEngine.retryFailedItem(table, id);
-
-let referenceDataReadyThisSession = false;
-let referenceDataPromise = null;
-
-const resetReferenceDataBarrierForTests = () => {
-  referenceDataReadyThisSession = false;
-  referenceDataPromise = null;
-};
-
 export const _testBuildSyncPayload = buildSyncPayload;
 export const _testClassifyError = classifyError;
-export const __testables = { getRetryDelay, resetReferenceDataBarrierForTests };
+export const __testables = { getRetryDelay };
 export const __contract = { SERVER_COLUMNS, PUSH_ORDER, INTENTIONALLY_UNSYNCED, LOCAL_ONLY_COLUMNS };
 
-export const pullReferenceData = async ({
-  supabaseClient = supabase,
-  repositories = {
-    schools: schoolsRepository,
-    job_titles: jobTitlesRepository,
-    programmes: programmesRepository,
-    academic_years: academicYearsRepository,
-    assessment_windows: assessmentWindowsRepository,
-    teachers: teachersRepository,
-    staff_programme_assignments: staffProgrammeAssignmentsRepository,
-  },
+const pullReferenceDataRows = async ({
+  supabaseClient,
+  repositories,
+  localStateRepository,
   userId,
-  enqueueRequest = enqueueSupabaseRequest,
+  enqueueRequest,
 } = {}) => {
   const tableNames = [
     'schools',
@@ -1893,69 +1903,73 @@ export const pullReferenceData = async ({
     );
     results[tableName] = (data || []).length;
   }
+  // Persist completion only after every table write commits; failed refreshes keep prior evidence.
+  await localStateRepository.set('reference_data_complete_at', timestamp());
   return results;
 };
 
-export const ensureReferenceData = ({
-  supabaseClient = supabase,
-  repositories = {
-    schools: schoolsRepository,
-    job_titles: jobTitlesRepository,
-    programmes: programmesRepository,
-    academic_years: academicYearsRepository,
-    assessment_windows: assessmentWindowsRepository,
-    teachers: teachersRepository,
-    staff_programme_assignments: staffProgrammeAssignmentsRepository,
-  },
-  userId,
-  enqueueRequest = enqueueSupabaseRequest,
-} = {}) => {
-  if (referenceDataReadyThisSession) {
-    return Promise.resolve();
-  }
-  if (referenceDataPromise) {
-    return referenceDataPromise;
-  }
-
-  referenceDataPromise = (async () => {
-    const requiredRows = await Promise.all([
-      repositories.schools.getAll(),
-      repositories.programmes.getAll(),
-      repositories.academic_years.getAll(),
-    ]);
-    if (requiredRows.every((rows) => rows.length > 0)) {
-      referenceDataReadyThisSession = true;
-      return;
-    }
-
-    const result = await pullReferenceData({
-      supabaseClient,
-      repositories,
-      userId,
-      enqueueRequest,
-    });
-    referenceDataReadyThisSession = true;
+// The single-flight barrier belongs to the supplied handle.
+const referenceFlight = (barrier, task, key = 'promise') => {
+  if (barrier[key]) return barrier[key];
+  const promise = Promise.resolve().then(task).then((result) => {
+    barrier.ready = true;
     return result;
-  })().finally(() => {
-    referenceDataPromise = null;
-  });
+  }).finally(() => { if (barrier[key] === promise) barrier[key] = null; });
+  barrier[key] = promise;
+  return promise;
+};
 
-  return referenceDataPromise;
+// Completion survives reopening the file, even when reference tables are legitimately empty.
+// Partial rows cannot establish readiness; an earlier completed cache stays usable offline.
+const checkReferenceCache = (barrier, localStateRepository) => {
+  if (!barrier.cachePromise) {
+    barrier.cachePromise = localStateRepository.get('reference_data_complete_at').then((completedAt) => {
+      if (completedAt) barrier.ready = true;
+    }).catch((error) => {
+      barrier.cachePromise = null;
+      throw error;
+    });
+  }
+  return barrier.cachePromise;
+};
+
+export const pullReferenceData = ({ barrier, ...options } = {}) => (
+  barrier ? referenceFlight(barrier, async () => {
+    await checkReferenceCache(barrier, options.localStateRepository);
+    return pullReferenceDataRows(options);
+  }, 'refreshPromise') : pullReferenceDataRows(options)
+);
+
+export const ensureReferenceData = ({
+  barrier,
+  repositories,
+  ...options
+} = {}) => {
+  if (barrier.promise) return barrier.promise;
+  if (barrier.ready) return Promise.resolve();
+  return referenceFlight(barrier, async () => {
+    await checkReferenceCache(barrier, options.localStateRepository);
+    if (barrier.ready) return;
+    return pullReferenceData({ ...options, repositories, barrier });
+  });
 };
 
 /**
  * Fetch schools from Supabase and cache locally.
  * Schools are admin-managed reference data, not an outbox push table.
  */
-export const fetchAndCacheSchools = async () => {
-  const { data, error } = await enqueueSupabaseRequest(() => (
-    supabase
+export const fetchAndCacheSchools = async ({
+  supabaseClient, enqueueRequest,
+  repositories,
+} = {}) => {
+  const { data, error } = await enqueueRequest(() => (
+    supabaseClient
       .from('schools')
       .select('*')
       .order('name')
   ));
 
   if (error) throw error;
-  await schoolsRepository.replaceFromServer(data || []);
+  await repositories.schools.replaceFromServer(data || []);
   return data || [];
 };

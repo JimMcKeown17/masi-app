@@ -1,6 +1,8 @@
-jest.mock('../src/services/sessionHistoryStatus', () => ({
-  startSessionHistoryPull: jest.fn(), resetSessionHistoryStatusForActorChange: jest.fn(),
+jest.mock('../test-support/handleServiceMocks', () => ({
+startSessionHistoryPull: jest.fn(),
+resetSessionHistoryStatusForActorChange: jest.fn()
 }));
+
 
 jest.mock('expo-sqlite', () => require('../test-support/expoSQLiteMock'));
 
@@ -10,7 +12,7 @@ import { act, renderHook, waitFor } from '@testing-library/react-native';
 import { __reset, __setDatabaseFactory } from 'expo-sqlite';
 import { ChildrenProvider, useChildren } from '../src/context/ChildrenContext';
 import { ClassesProvider, useClasses } from '../src/context/ClassesContext';
-import { getWriter, resetDatabaseConnectionForTests } from '../src/db/client';
+import { initializeTestDatabase, getTestWriter, closeDefaultTestHandle } from '../test-support/testDatabase';
 import { childrenRepository } from '../src/db/repositories/childrenRepository';
 import { classesRepository } from '../src/db/repositories/classesRepository';
 import { sessionsRepository } from '../src/db/repositories/sessionsRepository';
@@ -30,13 +32,14 @@ jest.mock('../src/context/AuthContext', () => ({
 
 jest.mock('../src/context/OfflineContext', () => ({
   useOffline: () => ({
-    isOnline: false,
+    isOnline: true,
     refreshSyncStatus: (...args) => mockRefreshSyncStatus(...args),
     isSyncing: false,
   }),
 }));
 
 jest.mock('../src/services/preloadedChildData', () => ({
+  ...jest.requireActual('../src/services/preloadedChildData'),
   PULL_SCOPE_COMPLETENESS_LIMIT: 1000,
   classifyPullFailureKind: jest.fn(() => 'query'),
   pullPreloadedChildData: (...args) => mockPullPreloadedChildData(...args),
@@ -44,11 +47,13 @@ jest.mock('../src/services/preloadedChildData', () => ({
 }));
 
 jest.mock('../src/services/offlineSync', () => ({
+  ...jest.requireActual('../src/services/offlineSync'),
   fetchAndCacheSchools: (...args) => mockFetchAndCacheSchools(...args),
   ensureReferenceData: (...args) => mockEnsureReferenceData(...args),
 }));
 
 jest.mock('../src/services/supabaseClient', () => ({
+  ...require('../test-support/supabaseTestConfig'),
   supabase: {
     from: (...args) => mockSupabaseFrom(...args),
   },
@@ -130,11 +135,12 @@ let testDb;
 beforeEach(async () => {
   jest.clearAllMocks();
   await AsyncStorage.clear();
-  await resetDatabaseConnectionForTests();
+  await closeDefaultTestHandle();
   __reset();
   testDb = createBetterSqliteTestDatabase();
   __setDatabaseFactory(async () => testDb);
-  await getWriter();
+  await initializeTestDatabase();
+  await getTestWriter();
   await testDb.execAsync('PRAGMA foreign_keys = ON');
   await seedCoreData(testDb);
   await testDb.runAsync(`
@@ -154,7 +160,7 @@ beforeEach(async () => {
 });
 
 afterEach(async () => {
-  await resetDatabaseConnectionForTests();
+  await closeDefaultTestHandle();
   __reset();
 });
 

@@ -40,13 +40,15 @@ describe('sessionsRepository.saveHistoryPage', () => {
   test('an actor change during the cursor write rolls back the session, attendee, reference child, and cursor', async () => {
     let admitted = true;
     const admit = jest.fn(() => admitted);
-    const setPullState = syncStateRepository.setPullState;
-    const cursorWrite = jest.spyOn(syncStateRepository, 'setPullState').mockImplementation(async (...args) => {
-      admitted = false;
-      await setPullState(...args);
-      // The cursor really was written inside the transaction before admission is rechecked.
-      expect(await args[2].transaction.getFirstAsync('select scope from sync_state where scope = ?', SCOPE))
-        .toEqual({ scope: SCOPE });
+    const run = db.runAsync;
+    const cursorWrite = jest.fn();
+    const connectionWrite = jest.spyOn(db, 'runAsync').mockImplementation(async (...args) => {
+      const result = await run(...args);
+      if (/insert into sync_state/i.test(args[0])) {
+        cursorWrite();
+        admitted = false;
+      }
+      return result;
     });
     let caught;
     try {
@@ -57,7 +59,7 @@ describe('sessionsRepository.saveHistoryPage', () => {
       } catch (error) { caught = error; }
       expect(cursorWrite).toHaveBeenCalledTimes(1);
     } finally {
-      cursorWrite.mockRestore();
+      connectionWrite.mockRestore();
     }
     expect(admit).toHaveBeenCalledTimes(2);
     expect(caught?.kind).toBe('cancelled');

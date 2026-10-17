@@ -1,3 +1,4 @@
+import { useSignedInEA } from '../../context/SignedInEAContext';
 import React, { useState, useCallback } from 'react';
 import { View, StyleSheet } from 'react-native';
 import { Text, Button, Card, ActivityIndicator } from 'react-native-paper';
@@ -5,7 +6,7 @@ import { useFocusEffect } from '@react-navigation/native';
 import { useAuth } from '../../context/AuthContext';
 import { colors, spacing, borderRadius, shadows } from '../../constants/colors';
 import { useChildren } from '../../context/ChildrenContext';
-import { assessmentsRepository } from '../../db/repositories/assessmentsRepository';
+
 import { getAssessmentsTabStats } from '../../utils/dashboardStats';
 import StatBar from '../../components/dashboard/StatBar';
 import { getActiveProgrammeGate } from '../../services/activeProgrammeGate';
@@ -13,6 +14,9 @@ import NoActiveProgrammeNotice from '../../components/common/NoActiveProgrammeNo
 import SectionHeader from '../../components/common/SectionHeader';
 
 export default function AssessmentsScreen({ navigation }) {
+  const { handle, repositories } = useSignedInEA();
+  const { assessments: assessmentsRepository } = repositories;
+
   const { user } = useAuth();
   const { children: childrenList } = useChildren();
   const [stats, setStats] = useState(null);
@@ -22,7 +26,7 @@ export default function AssessmentsScreen({ navigation }) {
     useCallback(() => {
       const loadStats = async () => {
         try {
-          setProgrammeGate(await getActiveProgrammeGate({ userId: user.id }));
+          setProgrammeGate(await getActiveProgrammeGate({ handle, userId: user.id }));
         } catch (error) {
           console.error('Error resolving active programme gate:', error);
           // Never strand the tab on the spinner; the data layer still guards the

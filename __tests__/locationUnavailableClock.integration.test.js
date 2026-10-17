@@ -20,7 +20,7 @@ import * as Location from 'expo-location';
 import { act, renderHook, cleanup } from '@testing-library/react-native';
 import { __reset, __setDatabaseFactory } from 'expo-sqlite';
 import { TimeTrackingProvider, useTimeTracking } from '../src/context/TimeTrackingContext';
-import { resetDatabaseConnectionForTests, initializeDatabase } from '../src/db/client';
+import { closeDefaultTestHandle, initializeTestDatabase } from '../test-support/testDatabase';
 import { createBetterSqliteTestDatabase } from '../test-support/betterSqliteAdapter';
 import { timeEntriesRepository } from '../src/db/repositories/timeEntriesRepository';
 
@@ -45,11 +45,12 @@ beforeEach(async () => {
   jest.setSystemTime(new Date('2026-10-15T08:00:00Z'));
   jest.clearAllMocks();
   Object.values(Location).forEach(value => value?.mockReset?.());
-  await resetDatabaseConnectionForTests();
+  await closeDefaultTestHandle();
   __reset();
   db = createBetterSqliteTestDatabase();
   __setDatabaseFactory(async () => db);
-  await initializeDatabase();
+  await initializeTestDatabase();
+  await initializeTestDatabase();
   Location.hasServicesEnabledAsync.mockResolvedValue(true);
   Location.getForegroundPermissionsAsync.mockResolvedValue({ status: 'granted' });
   Location.requestForegroundPermissionsAsync.mockResolvedValue({ status: 'granted' });
@@ -60,7 +61,7 @@ beforeEach(async () => {
 });
 afterEach(async () => {
   cleanup();
-  await resetDatabaseConnectionForTests();
+  await closeDefaultTestHandle();
   jest.restoreAllMocks();
   jest.useRealTimers();
 });

@@ -24,7 +24,8 @@ jest.mock('@react-navigation/native', () => ({
     React.useEffect(() => callback(), [callback]);
   },
 }));
-jest.mock('../src/services/sessionHistoryStatus', () => ({ useSessionHistoryStatus: jest.fn() }));
+jest.mock('../src/services/sessionHistoryStatus', () => ({
+  ...jest.requireActual('../src/services/sessionHistoryStatus'), useSessionHistoryStatus: jest.fn() }));
 jest.mock('../src/services/sessionsTodayGoal', () => ({ getSessionsTodayGoal: jest.fn() }));
 
 jest.mock('../src/context/AuthContext', () => ({
@@ -44,6 +45,7 @@ jest.mock('../src/hooks/useTimeTracking', () => ({
 }));
 
 jest.mock('../src/db/repositories/timeEntriesRepository', () => ({
+  ...jest.requireActual('../src/db/repositories/timeEntriesRepository'),
   timeEntriesRepository: {
     getActiveTimeEntry: (...args) => mockGetActiveTimeEntry(...args),
     getTimeEntries: (...args) => mockGetTimeEntries(...args),
@@ -51,6 +53,7 @@ jest.mock('../src/db/repositories/timeEntriesRepository', () => ({
 }));
 
 jest.mock('../src/db/repositories/sessionsRepository', () => ({
+  ...jest.requireActual('../src/db/repositories/sessionsRepository'),
   sessionsRepository: {
     getSessions: (...args) => mockGetSessions(...args),
     getSessionCountsSince: (...args) => mockGetSessionCountsSince(...args),
@@ -58,6 +61,7 @@ jest.mock('../src/db/repositories/sessionsRepository', () => ({
 }));
 
 jest.mock('../src/db/repositories/assessmentsRepository', () => ({
+  ...jest.requireActual('../src/db/repositories/assessmentsRepository'),
   assessmentsRepository: {
     getAssessments: (...args) => mockGetAssessments(...args),
     getAssessmentCountsSince: (...args) => mockGetAssessmentCountsSince(...args),

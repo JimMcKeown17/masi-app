@@ -1,3 +1,4 @@
+global.__MASI_NO_DEFAULT_HANDLE__ = true;
 jest.mock('expo-application', () => ({
   applicationId: 'org.masinyusane.masi',
   applicationName: 'Masi',

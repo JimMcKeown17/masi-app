@@ -1,5 +1,7 @@
+import { bindTestActor } from '../test-support/actorTestUtils';
 jest.mock('expo-sqlite', () => require('../test-support/expoSQLiteMock'));
-jest.mock('../src/services/supabaseClient', () => ({ supabase: {} }));
+jest.mock('../src/services/supabaseClient', () => ({
+  ...require('../test-support/supabaseTestConfig'), supabase: {} }));
 
 import { createBetterSqliteTestDatabase } from '../test-support/betterSqliteAdapter';
 import { createSupabaseMock } from '../test-support/supabaseSyncMock';
@@ -201,7 +203,7 @@ describe('group assignment lifecycle (spec §6.5b)', () => {
         'clearImmediate', 'setInterval', 'clearInterval', 'setTimeout', 'clearTimeout',
       ],
     });
-    db = createBetterSqliteTestDatabase();
+    db = bindTestActor(createBetterSqliteTestDatabase(), 'user-1');
     await runMigrations(db);
     await db.runAsync("insert into programmes (id, code, name, sync_status) values ('programme-1', 'lit', 'Literacy', 'synced')");
     await db.runAsync(`
@@ -224,7 +226,7 @@ describe('group assignment lifecycle (spec §6.5b)', () => {
       id: ASSIGNMENT, unassigned_at: null, handover_reason: null,
     });
     const { supabaseClient, calls } = createSupabaseMock();
-    const engine = createOutboxSyncEngine({ getAuthSession: liveTestSession, database: db, supabaseClient });
+    const engine = createOutboxSyncEngine({ enqueueRequest: (task) => task(), getAuthSession: liveTestSession, database: db, supabaseClient });
 
     const result = await engine.syncAll();
 
@@ -245,7 +247,7 @@ describe('group assignment lifecycle (spec §6.5b)', () => {
     const { supabaseClient } = createSupabaseMock({
       updateResults: { group_ea_assignments: { data: [], error: null } },
     });
-    const engine = createOutboxSyncEngine({ getAuthSession: liveTestSession, database: db, supabaseClient });
+    const engine = createOutboxSyncEngine({ enqueueRequest: (task) => task(), getAuthSession: liveTestSession, database: db, supabaseClient });
 
     const result = await engine.syncAll();
 
@@ -298,7 +300,7 @@ describe('group assignment lifecycle (spec §6.5b)', () => {
       unassigned_at: null,
       handover_reason: null,
     });
-    const engine = createOutboxSyncEngine({
+    const engine = createOutboxSyncEngine({ enqueueRequest: (task) => task(),
       getAuthSession: liveTestSession,
       database: db,
       supabaseClient: server.supabaseClient,
@@ -355,7 +357,6 @@ describe('group assignment lifecycle (spec §6.5b)', () => {
         recordId: ASSIGNMENT,
         operation: 'archive',
         payload: { id: ASSIGNMENT, unassigned_at: '2026-10-11T17:00:00.000Z' },
-        ownerUserId: 'user-1',
       });
       await db.runAsync(
         'update sync_outbox set status = ? where id = ?',
@@ -387,7 +388,6 @@ describe('group assignment lifecycle (spec §6.5b)', () => {
       recordId: ASSIGNMENT,
       operation: 'archive',
       payload: { id: ASSIGNMENT, unassigned_at: '2026-10-11T18:00:00.000Z' },
-      ownerUserId: 'user-1',
     });
     await outboxRepository.markInFlight([legacyId]);
     await enqueueLifecycleOutbox(db, 'group_ea_assignments', ASSIGNMENT, 'restore', {
@@ -411,7 +411,7 @@ describe('group assignment lifecycle (spec §6.5b)', () => {
       unassigned_at: null,
       handover_reason: null,
     });
-    const engine = createOutboxSyncEngine({
+    const engine = createOutboxSyncEngine({ enqueueRequest: (task) => task(),
       getAuthSession: liveTestSession,
       database: db,
       outboxRepository,
@@ -489,7 +489,7 @@ describe('group assignment lifecycle (spec §6.5b)', () => {
       archivedAt: '2026-10-11T09:00:00.000Z',
     });
     const { supabaseClient, calls } = createSupabaseMock();
-    const engine = createOutboxSyncEngine({ getAuthSession: liveTestSession, database: db, supabaseClient });
+    const engine = createOutboxSyncEngine({ enqueueRequest: (task) => task(), getAuthSession: liveTestSession, database: db, supabaseClient });
 
     const first = await engine.syncAll({ tableName: 'group_ea_assignments' });
 
@@ -575,7 +575,7 @@ describe('group assignment lifecycle (spec §6.5b)', () => {
     const groupId = 'group-lost-response';
     const assignmentId = groupEaAssignmentDomainId({ groupId });
     const server = createStatefulAssignmentSupabase({ loseFirstAssignmentInsertResponse: true });
-    const engine = createOutboxSyncEngine({
+    const engine = createOutboxSyncEngine({ enqueueRequest: (task) => task(),
       getAuthSession: liveTestSession,
       database: db,
       supabaseClient: server.supabaseClient,
@@ -669,7 +669,7 @@ describe('group assignment lifecycle (spec §6.5b)', () => {
     const outboxRepository = createSyncOutboxRepository({ database: db });
     const server = createCrashLifecycleSupabase({ failFirstRestore: true });
     server.assignments.set(ASSIGNMENT, { id: ASSIGNMENT, unassigned_at: null, handover_reason: null });
-    const engineBeforeCrash = createOutboxSyncEngine({
+    const engineBeforeCrash = createOutboxSyncEngine({ enqueueRequest: (task) => task(),
       getAuthSession: liveTestSession,
       database: db,
       outboxRepository,
@@ -715,7 +715,7 @@ describe('group assignment lifecycle (spec §6.5b)', () => {
     await db.runAsync(`
       update sync_outbox set next_retry_at = null
     `);
-    const engineAfterCrash = createOutboxSyncEngine({
+    const engineAfterCrash = createOutboxSyncEngine({ enqueueRequest: (task) => task(),
       getAuthSession: liveTestSession,
       database: db,
       outboxRepository,
@@ -769,7 +769,7 @@ describe('group assignment lifecycle (spec §6.5b)', () => {
     const outboxRepository = createSyncOutboxRepository({ database: db });
     const server = createCrashLifecycleSupabase();
     server.assignments.set(ASSIGNMENT, { id: ASSIGNMENT, unassigned_at: null, handover_reason: null });
-    const engineBeforeCrash = createOutboxSyncEngine({
+    const engineBeforeCrash = createOutboxSyncEngine({ enqueueRequest: (task) => task(),
       getAuthSession: liveTestSession,
       database: db,
       outboxRepository,
@@ -803,7 +803,7 @@ describe('group assignment lifecycle (spec §6.5b)', () => {
     void abandonedPass;
     await db.runAsync('update sync_outbox set next_retry_at = null');
 
-    const engineAfterCrash = createOutboxSyncEngine({
+    const engineAfterCrash = createOutboxSyncEngine({ enqueueRequest: (task) => task(),
       getAuthSession: liveTestSession,
       database: db,
       outboxRepository,
@@ -841,7 +841,7 @@ describe('group assignment lifecycle (spec §6.5b)', () => {
     const assignmentId = groupEaAssignmentDomainId({ groupId });
     const archivedAt = '2026-10-11T14:00:00.000Z';
     const server = createStatefulAssignmentSupabase({ loseFirstAssignmentInsertResponse: true });
-    const engine = createOutboxSyncEngine({
+    const engine = createOutboxSyncEngine({ enqueueRequest: (task) => task(),
       getAuthSession: liveTestSession,
       database: db,
       supabaseClient: server.supabaseClient,
@@ -946,7 +946,7 @@ describe('group assignment lifecycle (spec §6.5b)', () => {
       unassigned_at: archived.unassigned_at,
       handover_reason: archived.handover_reason,
     });
-    const engine = createOutboxSyncEngine({
+    const engine = createOutboxSyncEngine({ enqueueRequest: (task) => task(),
       getAuthSession: liveTestSession,
       database: db,
       supabaseClient: server.supabaseClient,

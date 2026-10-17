@@ -1,8 +1,9 @@
 # Product and Engineering Roadmap
 
-**Standing document. Updated 2026-10-08 with the Zazi September–October sync review
-([`zazi-sync-lessons-for-masi-2026-10-08.md`](./zazi-sync-lessons-for-masi-2026-10-08.md)), after the
-CAP-004 session-history build and Jim's 2026-09-21/23 decisions. This is the single in-repository answer to "what is still outstanding?"**
+**Standing document. Updated 2026-10-14 with Jim's organisation, letter-mastery, and legacy
+clock-in decisions. Includes the Zazi September–October sync review
+([`zazi-sync-lessons-for-masi-2026-10-08.md`](./zazi-sync-lessons-for-masi-2026-10-08.md)) and the
+CAP-004 session-history build. This is the single in-repository answer to "what is still outstanding?"**
 
 This file contains open work only. Its priority section is the roadmap; the numbered sections are
 the detailed work register behind that roadmap. Completed implementation and verification belong in
@@ -55,8 +56,8 @@ These horizons summarize the ordered register below. They are not a second backl
 5. **P0: settle the upload contract and local-database ownership before the candidate build.**
    Put a deadline and release on every request in the shared queue, uploads included. Upload the
    assessment family all-or-nothing. Reject stale edits on records more than one writer can change.
-   Make submit duplicate-proof. Decide one database per actor versus a shared database. Add the
-   newer-schema guard and a minimum revocation contract. Evidence:
+   Make submit duplicate-proof. One database per EA is built (Plan 2; its sign-out UX is Plan 3).
+   Add the newer-schema guard and a minimum revocation contract. Evidence:
    [`zazi-sync-lessons-for-masi-2026-10-08.md`](./zazi-sync-lessons-for-masi-2026-10-08.md) Part 2.
 6. **P0: settle field-continuity contracts before the candidate build.** Make location fallback
    truthful, decide auto-clock-out authority and Android backup behavior, complete the
@@ -86,8 +87,8 @@ shape.
 - [ ] Verify which Supabase project every current app profile, local environment, script, and
   connected backend targets. The forward SQLite project is verified. The legacy counts-only probe
   ran on 2026-09-23 (build log): session capture stopped by 26 Aug, but **legacy clock-ins
-  continue** (4 since 22 Sep). Jim to identify who is still clocking in through an old build, and
-  decide their cutover and field communication before the 1.4.0 pilot.
+  continue** (4 since 22 Sep). Identifying those legacy clock-in users and deciding their cutover
+  and field communication before the 1.4.0 pilot: **no action needed (Jim, 2026-10-14)**.
 - [x] Probe the live SQLite-backend schema, migration ledger, RLS, functions, indexes, row counts,
   and unclassified forward data before schema-facing design. The data appears to be test/pilot
   data. Disposition decided 2026-09-23: wipe it after the assessment-history slice passes (below).
@@ -117,32 +118,34 @@ shape.
   creation (`scripts/createTesters.js` sets nothing today), and exclude marked accounts from every
   report and staff view. Zazi's unmarked demo pair appeared as real EAs on a live staff page
   ([Z15](./zazi-sync-lessons-for-masi-2026-10-08.md)).
-- [ ] **Decision for Jim:** is a partner organisation plausible within a year? If yes, a required,
-  no-default `users.organization_id` (identity only, not an authorization boundary, as in Zazi's
-  organisation label v1) is nearly free before field data exists ([Z19](./zazi-sync-lessons-for-masi-2026-10-08.md)).
+- [x] **Organisation decision closed (Jim, 2026-10-14):** a partner organisation is plausible
+  within a year. Adopt the required, no-default `users.organization_id` label, as in Zazi's
+  organisation label v1. It does not change authorization or phone behaviour. Migration and
+  provisioning are committed and locally verified; see the [build log](./build-log.md#organisation-label-v1--18-postgresql-checks)
+  and [Z19 status note](./zazi-sync-lessons-for-masi-2026-10-08.md).
+- [x] Applied `20261014120000_organisation_label_v1.sql` to hosted `masi-app-sqlite` on 2026-10-14
+  with Jim's explicit yes; verified read-only (see the build log). Partners are added by migration.
+- [ ] Reporting surfaces should default to Masinyusane. Add an organisation filter when the
+  first partner exists.
 - [ ] **Build one local database per EA (D2, decided by Jim 2026-10-08), before the first field install.**
-  The ADR is to be written through `grill-with-docs` alongside the upload-contract spec. Masi
-  keeps one shared `masi.db` for every EA who signs in on a phone today. The options weighed were:
-  - one SQLite file per signed-in actor, which is the stronger *storage* boundary (Zazi, after its
-    July audit finding A6). Per Codex round 2, it isolates only together with execution-time
-    actor fencing (see "Upload contract" in §2), and per-user cursors and owner columns stay as
-    extra guards;
-  - keep the shared file with owner columns enforced on every read and claim.
-
-  **Field facts (Jim, 2026-10-08):**
-  - Masi does not issue phones; every EA uses their own.
-  - Phones rarely change hands.
-  - The common case is two EAs sharing one phone for a day or two, so A→B→A alternation and
-    another EA's data left on a *personal* phone are the real scenarios.
-  - **Decided:** per-actor files (Jim, 2026-10-08). The rule for deleting another EA's file (no
-    unsent work **and** unused for **30 days**) is **deferred past the pilot** (Jim, 2026-10-09).
-    Revisit before Step 9 Widen: the real reason is privacy, because EA A's roster stays on EA B's
-    personal phone, not storage. Design:
+  **Plan 2 built it** (`feat/signed-in-ea-handle`, 2026-10-17; ADR 0008; contract map "Signed-in EA
+  handle"): each EA's data lives in `masi-<userId>.db`, reached only through the signed-in EA
+  handle; sign-out revokes at once and disposes connections afterwards; every server request is
+  fenced at send time on a per-handle data client and queue; the outbox owner is stamped from the
+  signed-in EA (a local trigger refuses an ownerless row); an integrity scan quarantines foreign-owned
+  rows and adopts legacy ownerless ones; shared auth-session persistence is fenced by admitted
+  identity. The null-owner claim this item warned about is closed. **Still open before the field:**
+  - **Plan 3:** the sign-out questions (unsent work, still clocked in), the left-behind report and
+    minimal incident envelope, `masi.db` legacy discovery, and the Profile App Release card.
+  - **Ruling 11, field-release prerequisite owned by the upload-contract spec:** abort-on-sign-out
+    can re-send an upload the server already accepted. Identical replay is proven harmless; the
+    ordering of an uncertain older write against a newer one is not yet closed.
+  - **Device gates:** D7 (native close under load, iOS and Android) and D1–D6 on the build intended
+    to ship.
+  - **Deleting another EA's file is deferred past the pilot** (Jim, 2026-10-09): no unsent work and
+    unused for 30 days. Revisit before Step 9 Widen, for privacy (EA A's roster stays on EA B's
+    personal phone), against POPIA. Design:
     `docs/superpowers/specs/2026-10-09-actor-lifecycle-and-mutation-ownership-design.md`.
-
-  Either way, an outbox row with a null owner must fail closed. Today any signed-in actor can claim
-  it (`syncOutboxRepository.js:88`). Run this through `grill-with-docs` to its ADR
-  ([F1](./zazi-sync-lessons-for-masi-2026-10-08.md)).
 - [ ] **Minimum revocation contract before pilot provisioning** (moved from §6 by the 2026-10-08
   Codex review). `users.is_active = false` has no effect today:
   - the owner policies still allow time-entry writes and session updates
@@ -507,7 +510,7 @@ contract ([U1–U7](./zazi-sync-lessons-for-masi-2026-10-08.md)):
   surfaces as needs-attention. Scope: children, assignments, and groups that Head Office or another
   EA can also edit. Never compare phone clocks. This depends on server-owned timestamps (§1).
 - [ ] **Letter mastery: the most recently *made* correction wins (D1, decided by Jim
-  2026-10-08).**
+  2026-10-08; reconfirmed 2026-10-14).**
   - The server keeps whichever confirmation has the later correction time and treats a future
     correction time as its own `now()`.
   - This is a narrow, single-column guard, not the general `stale_base` mechanism.

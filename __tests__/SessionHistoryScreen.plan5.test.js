@@ -1,7 +1,12 @@
+jest.mock('../test-support/handleServiceMocks', () => ({
+getSessionHistoryPullState: jest.fn(),
+startSessionHistoryPull: jest.fn()
+}));
 import React from 'react';
 import { render, waitFor, act } from '@testing-library/react-native';
 import { FlatList } from 'react-native';
-import { useSessionHistoryStatus, getSessionHistoryPullState, startSessionHistoryPull } from '../src/services/sessionHistoryStatus';
+import { useSessionHistoryStatus } from '../src/services/sessionHistoryStatus';
+import { getSessionHistoryPullState, startSessionHistoryPull } from '../test-support/handleServiceMocks';
 import SessionHistoryScreen from '../src/screens/sessions/SessionHistoryScreen';
 import { useAuth } from '../src/context/AuthContext';
 import { useOffline } from '../src/context/OfflineContext';
@@ -9,9 +14,8 @@ import { useLookupsContext } from '../src/context/LookupsContext';
 import { sessionsRepository } from '../src/db/repositories/sessionsRepository';
 import { supabase } from '../src/services/supabaseClient';
 
-jest.mock('../src/services/sessionHistoryStatus', () => ({
-  useSessionHistoryStatus: jest.fn(), getSessionHistoryPullState: jest.fn(), startSessionHistoryPull: jest.fn(),
-}));
+jest.mock('../src/services/sessionHistoryStatus', () => ({ ...jest.requireActual('../src/services/sessionHistoryStatus'),
+useSessionHistoryStatus: jest.fn() }));
 
 jest.mock('@react-navigation/native', () => ({
   useFocusEffect: (callback) => {
@@ -33,12 +37,14 @@ jest.mock('../src/context/LookupsContext', () => ({
 }));
 
 jest.mock('../src/db/repositories/sessionsRepository', () => ({
+  ...jest.requireActual('../src/db/repositories/sessionsRepository'),
   sessionsRepository: {
     getSessions: jest.fn(),
   },
 }));
 
 jest.mock('../src/services/supabaseClient', () => ({
+  ...require('../test-support/supabaseTestConfig'),
   supabase: {
     from: jest.fn(),
   },

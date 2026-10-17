@@ -1,3 +1,4 @@
+import { useSignedInEA } from '../../context/SignedInEAContext';
 import React, { useState, useCallback } from 'react';
 import { View, StyleSheet, FlatList } from 'react-native';
 import { Text, Card, ActivityIndicator, Snackbar, IconButton } from 'react-native-paper';
@@ -5,7 +6,7 @@ import { useFocusEffect } from '@react-navigation/native';
 import { useAuth } from '../../context/AuthContext';
 import { useChildren } from '../../context/ChildrenContext';
 import { colors, spacing, borderRadius, shadows } from '../../constants/colors';
-import { assessmentsRepository } from '../../db/repositories/assessmentsRepository';
+
 
 function formatDate(dateString) {
   const [year, month, day] = dateString.split('-').map(Number);
@@ -19,6 +20,9 @@ function formatDate(dateString) {
 }
 
 export default function AssessmentHistoryScreen({ navigation }) {
+  const { repositories } = useSignedInEA();
+  const { assessments: assessmentsRepository } = repositories;
+
   const { user } = useAuth();
   // Use allChildren (includes hidden) so historical assessments still resolve
   // child names. Hidden children render with a "(removed)" badge so users know

@@ -1,5 +1,7 @@
 import { createClient } from '@supabase/supabase-js';
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import { createAuthSessionStorage } from './authSessionStorage';
+import { authRequestFetch } from './authRequestFetch';
+export { AUTH_REQUEST_TIMEOUT_MS } from './authRequestFetch';
 import Constants from 'expo-constants';
 import { AppState, Platform } from 'react-native';
 import { processLock } from '@supabase/supabase-js';
@@ -8,19 +10,20 @@ import { resolveSupabaseProjectConfig } from '../../config/supabaseProjectConfig
 const CLIENT_STATE_KEY = '__MASI_SUPABASE_CLIENT_STATE__';
 
 // Local dev uses public env vars; EAS builds fall back to Expo config extra.
-const { supabaseUrl, supabaseAnonKey } = resolveSupabaseProjectConfig({
+export const { supabaseUrl, supabaseAnonKey } = resolveSupabaseProjectConfig({
   env: process.env,
   expoExtra: Constants.expoConfig?.extra || {},
 });
 
 const createSupabaseClient = () => createClient(supabaseUrl, supabaseAnonKey, {
   auth: {
-    storage: AsyncStorage,
+    storage: createAuthSessionStorage(`sb-${new URL(supabaseUrl).hostname.split('.')[0]}-auth-token`),
     autoRefreshToken: true,
     persistSession: true,
     detectSessionInUrl: false,
     lock: processLock,
   },
+  global: { fetch: authRequestFetch },
 });
 
 const enqueueAuthAutoRefreshOperation = (state, operation, onError) => {

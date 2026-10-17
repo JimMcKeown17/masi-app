@@ -1,3 +1,4 @@
+import { useSignedInEA } from '../../context/SignedInEAContext';
 import React, { useState, useCallback, useRef } from 'react';
 import { View, StyleSheet, FlatList, Pressable } from 'react-native';
 import { Text, Searchbar } from 'react-native-paper';
@@ -7,7 +8,7 @@ import { useChildren } from '../../context/ChildrenContext';
 import { useClasses } from '../../context/ClassesContext';
 import { LETTER_SETS, WORD_SETS } from '../../constants/egraConstants';
 import { colors, spacing, borderRadius, shadows } from '../../constants/colors';
-import { assessmentsRepository } from '../../db/repositories/assessmentsRepository';
+
 import { NO_TEXT_SUGGESTIONS } from '../../constants/textInputProps';
 import { resolveAssessmentRoute } from '../../utils/assessmentRouting';
 import { buildAssessmentMap } from '../../utils/assessmentHistoryMap';
@@ -26,6 +27,9 @@ function formatShortDate(dateStr) {
 }
 
 export default function AssessmentChildSelectScreen({ navigation, route }) {
+  const { repositories } = useSignedInEA();
+  const { assessments: assessmentsRepository } = repositories;
+
   const { user } = useAuth();
   const assessmentType = route.params?.assessmentType || 'letter_egra';
   const isWordAssessment = assessmentType === 'word_egra';

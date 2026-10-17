@@ -1,5 +1,6 @@
 jest.mock('expo-sqlite', () => require('../test-support/expoSQLiteMock'));
-jest.mock('../src/services/supabaseClient', () => ({ supabase: {} }));
+jest.mock('../src/services/supabaseClient', () => ({
+  ...require('../test-support/supabaseTestConfig'), supabase: {} }));
 
 import { runMigrations } from '../src/db/migrations';
 import { createChildrenRepository } from '../src/db/repositories/childrenRepository';
@@ -193,7 +194,7 @@ describe('updateChild — offline create → reassign → sync coalesces the uns
     const serverDb = await createMigratedDatabase(runMigrations);
     await seedTwoClasses(serverDb);
     const { supabaseClient } = createServerBackedSupabase(serverDb);
-    const engine = createOutboxSyncEngine({ getAuthSession: liveTestSession, database: db, supabaseClient });
+    const engine = createOutboxSyncEngine({ enqueueRequest: (task) => task(), getAuthSession: liveTestSession, database: db, supabaseClient });
 
     const result = await engine.syncAll();
 

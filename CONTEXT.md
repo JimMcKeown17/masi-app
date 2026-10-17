@@ -7,8 +7,14 @@ Domain glossary for the Masi field-staff mobile app. Masi runs multiple educatio
 ### Roles and organisation
 
 **EA** (Education Assistant):
-A field worker employed by Masi who delivers programme sessions to children in schools.
+A field worker who delivers Masi programme sessions to children in schools.
 _Avoid_: "youth", "field staff", "user" — those are all loose.
+
+**Organisation**:
+The employer of a staff member. `users.organization_id` is a required label, set at account
+creation. It does not define an access boundary or change the phone's behaviour. A partner
+organisation is plausible within a year (Jim, 2026-10-14).
+_Avoid_: treating an organisation as a Programme or an authorization scope.
 
 **Head Office**:
 The Masi back-office team that marks long-form field assessments and assigns children to groups for the Core Literacy and Numeracy programmes.
@@ -139,6 +145,21 @@ Which capture *mechanic* the EA used to record a Question's items — `grid` (th
 _Avoid_: conflating **capture mode** (which UI mechanic) with **marking mode** (who marks) — different axes.
 
 > The legacy terms **Field Assessment** (long-form, HQ-marked) and **In-App Assessment** (short, app-marked) are retired in favor of the Question / Battery / Run / marking-mode vocabulary above. They described a workflow distinction that no longer holds once WelaPLUS Questions are EA-marked in the app: a Battery can mix marking modes per Question.
+
+### Devices and sync
+
+**Signed-in EA handle**:
+The single object that represents who is working on this phone right now: the EA's id, an epoch, that EA's own local database file (`masi-<userId>.db`), a data client and a request queue. It is the only way production code reaches local data or the server. Signing out revokes it at once; work begun under it and resumed later is **stale** and is refused rather than landing in the next EA's file or account.
+_Avoid_: "the database" or "the current user" as ambient globals — every consumer is handed a handle.
+
+**Unsent**:
+An outbox row whose status is `pending`, `failed`, `in_flight`, or `terminal`. `terminal` counts because the server does not have that work, even though the app will not retry it on its own.
+
+**Left-behind work**:
+Unsent rows in one EA's file while a different EA is signed in on the same phone. They stay in that EA's file, untouched, until that EA signs in again; another EA never uploads them.
+
+**Mutation owner**:
+The EA who made a change, stamped on its outbox row from the signed-in EA handle. Never derived from the record's content (`created_by` is provenance, not ownership): an EA's edit of a Head Office-created child is that EA's to upload.
 
 ## Relationships
 

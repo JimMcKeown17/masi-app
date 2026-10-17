@@ -1,3 +1,7 @@
+import { requireCurrentHandle } from '../src/session/signedInHandle';
+jest.mock('../test-support/handleServiceMocks', () => ({
+enqueueSupabaseRequest: (...args) => mockEnqueueSupabaseRequest(...args)
+}));
 import React from 'react';
 import { act, renderHook, waitFor } from '@testing-library/react-native';
 import { ClassesProvider, useClasses } from '../src/context/ClassesContext';
@@ -33,15 +37,14 @@ const queryResult = (result) => {
 };
 
 jest.mock('../src/services/supabaseClient', () => ({
+  ...require('../test-support/supabaseTestConfig'),
   supabase: {
     from: (...args) => mockSupabaseFrom(...args),
     rpc: (...args) => mockSupabaseRpc(...args),
   },
 }));
 
-jest.mock('../src/services/supabaseRequestQueue', () => ({
-  enqueueSupabaseRequest: (...args) => mockEnqueueSupabaseRequest(...args),
-}));
+
 
 jest.mock('../src/context/AuthContext', () => ({
   useAuth: jest.fn(() => ({ user: { id: 'user-1' } })),
@@ -61,6 +64,7 @@ jest.mock('../src/context/ChildrenContext', () => ({
 }));
 
 jest.mock('../src/services/offlineSync', () => ({
+  ...jest.requireActual('../src/services/offlineSync'),
   fetchAndCacheSchools: jest.fn(),
   ensureReferenceData: jest.fn(),
 }));
@@ -70,6 +74,7 @@ jest.mock('../src/services/observability', () => ({
 }));
 
 jest.mock('../src/db/repositories/referenceDataRepository', () => ({
+  ...jest.requireActual('../src/db/repositories/referenceDataRepository'),
   academicYearsRepository: {
     getActive: jest.fn(),
   },
@@ -85,11 +90,10 @@ jest.mock('../src/db/repositories/domainRepositoryUtils', () => ({
   hasUnpushedLocalChanges: jest.requireActual('../src/db/repositories/domainRepositoryUtils').hasUnpushedLocalChanges,
 }));
 
-jest.mock('../src/db/repositories/repositoryRuntime', () => ({
-  resolveDatabase: jest.fn(),
-}));
+
 
 jest.mock('../src/db/repositories/classesRepository', () => ({
+  ...jest.requireActual('../src/db/repositories/classesRepository'),
   classesRepository: {
     getClasses: jest.fn(),
     saveServerClassRows: jest.fn(),
@@ -100,18 +104,21 @@ jest.mock('../src/db/repositories/classesRepository', () => ({
 }));
 
 jest.mock('../src/db/repositories/classEaAssignmentsRepository', () => ({
+  ...jest.requireActual('../src/db/repositories/classEaAssignmentsRepository'),
   classEaAssignmentsRepository: {
     saveServerRows: jest.fn(),
   },
 }));
 
 jest.mock('../src/db/repositories/syncStateRepository', () => ({
+  ...jest.requireActual('../src/db/repositories/syncStateRepository'),
   syncStateRepository: {
     setPullState: jest.fn(),
   },
 }));
 
 jest.mock('../src/db/repositories/classOnboardingRepository', () => ({
+  ...jest.requireActual('../src/db/repositories/classOnboardingRepository'),
   classOnboardingRepository: {
     start: jest.fn(),
     getPendingClassId: jest.fn(),
@@ -170,7 +177,6 @@ describe('ClassesContext Plan 5 behavior', () => {
     fetchAndCacheSchools.mockResolvedValue([]);
     ensureReferenceData.mockResolvedValue({});
     academicYearsRepository.getActive.mockResolvedValue({ id: 'year-2026', label: '2026' });
-    resolveDatabase.mockResolvedValue({});
     getActiveProgrammeId.mockResolvedValue('programme-a');
     useOffline.mockReturnValue({
       isOnline: true,
@@ -188,12 +194,13 @@ describe('ClassesContext Plan 5 behavior', () => {
   });
 
   test('leases the request queue separately for each class-pull request', async () => {
+    const queue = jest.spyOn(requireCurrentHandle(), 'enqueueRequest');
     renderHook(() => useClasses(), { wrapper });
 
     await waitFor(() => expect(mockSupabaseRpc).toHaveBeenCalledTimes(1));
     await waitFor(() => expect(mockSupabaseFrom).toHaveBeenCalledWith('classes'));
 
-    expect(mockEnqueueSupabaseRequest).toHaveBeenCalledTimes(3);
+    expect(queue).toHaveBeenCalledTimes(3);
   });
 
   test('sync completion refreshes classes from SQLite without querying the server', async () => {
@@ -516,7 +523,7 @@ describe('ClassesContext Plan 5 behavior', () => {
     expect(classEaAssignmentsRepository.saveServerRows.mock.calls[0][0]).toEqual([
       expect.objectContaining({ id: 'assignment-1', sync_status: 'synced' }),
     ]);
-    expect(ensureReferenceData).toHaveBeenCalledWith({ userId: 'user-1' });
+    expect(ensureReferenceData).toHaveBeenCalledWith();
     expect(ensureReferenceData.mock.invocationCallOrder[0])
       .toBeLessThan(classesRepository.saveServerClassRows.mock.invocationCallOrder[0]);
     expect(classesRepository.saveServerClassRows.mock.invocationCallOrder[0])

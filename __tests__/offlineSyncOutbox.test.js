@@ -1,18 +1,15 @@
+import { bindTestActor } from '../test-support/actorTestUtils';
 jest.mock('expo-sqlite', () => require('../test-support/expoSQLiteMock'));
 jest.mock('../src/services/supabaseClient', () => ({
+  ...require('../test-support/supabaseTestConfig'),
   supabase: {},
 }));
 
 import { createBetterSqliteTestDatabase } from '../test-support/betterSqliteAdapter';
 import { createSupabaseMock } from '../test-support/supabaseSyncMock';
 import { runMigrations } from '../src/db/migrations';
-import {
-  AUTHENTICATED_DENIAL_MARKER,
-  createOutboxSyncEngine,
-  ensureReferenceData,
-  pullReferenceData,
-  _testComputeEvidencePending,
-} from '../src/services/offlineSync';
+import { AUTHENTICATED_DENIAL_MARKER, createOutboxSyncEngine, _testComputeEvidencePending } from '../src/services/offlineSync';
+import { ensureReferenceData, pullReferenceData } from '../test-support/handleServiceTestAccess';
 import {
   childEaAssignmentDomainId,
   childProgrammeEnrollmentDomainId,
@@ -188,7 +185,7 @@ describe('SQLite outbox offline sync', () => {
   let db;
 
   beforeEach(async () => {
-    db = createBetterSqliteTestDatabase();
+    db = bindTestActor(createBetterSqliteTestDatabase(), 'user-1');
     await runMigrations(db);
     await seedReferences(db);
   });
@@ -208,13 +205,13 @@ describe('SQLite outbox offline sync', () => {
 
     // Auto-sync (non-force): the terminal row is NOT retried and stays terminal.
     const auto = createSupabaseMock();
-    await createOutboxSyncEngine({ getAuthSession: liveTestSession, database: db, supabaseClient: auto.supabaseClient }).syncAll();
+    await createOutboxSyncEngine({ enqueueRequest: (task) => task(), getAuthSession: liveTestSession, database: db, supabaseClient: auto.supabaseClient }).syncAll();
     expect(auto.calls.filter((c) => c.tableName === 'classes')).toEqual([]);
     expect((await outbox.getById('classes:class-term:insert')).status).toBe('terminal');
 
     // Sync Now (force): the terminal row is resurrected, uploaded, and finalized synced.
     const forced = createSupabaseMock();
-    await createOutboxSyncEngine({ getAuthSession: liveTestSession, database: db, supabaseClient: forced.supabaseClient }).syncAll({ force: true });
+    await createOutboxSyncEngine({ enqueueRequest: (task) => task(), getAuthSession: liveTestSession, database: db, supabaseClient: forced.supabaseClient }).syncAll({ force: true });
     expect(forced.calls.map((c) => `${c.type}:${c.tableName}`)).toEqual(['upsert:classes']);
     expect(await db.getFirstAsync('select sync_status from classes where id = ?', 'class-term'))
       .toEqual({ sync_status: 'synced' });
@@ -239,7 +236,7 @@ describe('SQLite outbox offline sync', () => {
     await enqueue(db, 'classes', 'class-1', 'insert', { id: 'class-1', school_id: 'school-1', name: 'Grade 1A', grade: '1' });
 
     const { supabaseClient, calls } = createSupabaseMock();
-    const engine = createOutboxSyncEngine({ getAuthSession: liveTestSession, database: db, supabaseClient });
+    const engine = createOutboxSyncEngine({ enqueueRequest: (task) => task(), getAuthSession: liveTestSession, database: db, supabaseClient });
 
     const result = await engine.syncAll();
 
@@ -388,7 +385,7 @@ describe('SQLite outbox offline sync', () => {
     await enqueue(db, tableName, recordId, 'insert', payload);
 
     const { supabaseClient, calls } = createSupabaseMock();
-    const engine = createOutboxSyncEngine({ getAuthSession: liveTestSession, database: db, supabaseClient });
+    const engine = createOutboxSyncEngine({ enqueueRequest: (task) => task(), getAuthSession: liveTestSession, database: db, supabaseClient });
 
     const result = await engine.syncAll({ tableName });
 
@@ -431,7 +428,7 @@ describe('SQLite outbox offline sync', () => {
     });
 
     const { supabaseClient, calls } = createSupabaseMock();
-    const engine = createOutboxSyncEngine({ getAuthSession: liveTestSession, database: db, supabaseClient });
+    const engine = createOutboxSyncEngine({ enqueueRequest: (task) => task(), getAuthSession: liveTestSession, database: db, supabaseClient });
 
     const result = await engine.syncAll({ tableName: 'child_ea_assignments' });
 
@@ -483,7 +480,7 @@ describe('SQLite outbox offline sync', () => {
     });
 
     const { supabaseClient, calls } = createSupabaseMock();
-    const engine = createOutboxSyncEngine({ getAuthSession: liveTestSession, database: db, supabaseClient });
+    const engine = createOutboxSyncEngine({ enqueueRequest: (task) => task(), getAuthSession: liveTestSession, database: db, supabaseClient });
 
     const result = await engine.syncAll({ tableName: 'child_group_memberships' });
 
@@ -535,7 +532,7 @@ describe('SQLite outbox offline sync', () => {
         child_group_memberships: { data: [], error: null },
       },
     });
-    const engine = createOutboxSyncEngine({ getAuthSession: liveTestSession, database: db, supabaseClient });
+    const engine = createOutboxSyncEngine({ enqueueRequest: (task) => task(), getAuthSession: liveTestSession, database: db, supabaseClient });
 
     const result = await engine.syncAll({ tableName: 'child_group_memberships' });
 
@@ -674,7 +671,7 @@ describe('SQLite outbox offline sync', () => {
       },
     });
     await repairGroupOwnershipForSync({ database: db });
-    const engine = createOutboxSyncEngine({ getAuthSession: liveTestSession, database: db, supabaseClient });
+    const engine = createOutboxSyncEngine({ enqueueRequest: (task) => task(), getAuthSession: liveTestSession, database: db, supabaseClient });
 
     const result = await engine.syncAll();
 
@@ -806,7 +803,7 @@ describe('SQLite outbox offline sync', () => {
 
     const { supabaseClient, calls } = createSupabaseMock();
     await repairGroupOwnershipForSync({ database: db });
-    const engine = createOutboxSyncEngine({ getAuthSession: liveTestSession, database: db, supabaseClient });
+    const engine = createOutboxSyncEngine({ enqueueRequest: (task) => task(), getAuthSession: liveTestSession, database: db, supabaseClient });
 
     const result = await engine.syncAll();
 
@@ -878,7 +875,7 @@ describe('SQLite outbox offline sync', () => {
         ),
       },
     });
-    const engine = createOutboxSyncEngine({ getAuthSession: liveTestSession, database: db, supabaseClient });
+    const engine = createOutboxSyncEngine({ enqueueRequest: (task) => task(), getAuthSession: liveTestSession, database: db, supabaseClient });
 
     const result = await engine.syncAll();
 
@@ -915,7 +912,7 @@ describe('SQLite outbox offline sync', () => {
     });
 
     const { supabaseClient, calls } = createSupabaseMock();
-    const engine = createOutboxSyncEngine({ getAuthSession: liveTestSession, database: db, supabaseClient });
+    const engine = createOutboxSyncEngine({ enqueueRequest: (task) => task(), getAuthSession: liveTestSession, database: db, supabaseClient });
 
     const result = await engine.syncAll();
 
@@ -1162,7 +1159,7 @@ describe('SQLite outbox offline sync', () => {
         assessments: { error: null },
       },
     });
-    const engine = createOutboxSyncEngine({ getAuthSession: liveTestSession, database: db, supabaseClient });
+    const engine = createOutboxSyncEngine({ enqueueRequest: (task) => task(), getAuthSession: liveTestSession, database: db, supabaseClient });
 
     await engine.syncAll({ tableName: 'assessment_items' });
     let item = await db.getFirstAsync(`
@@ -1227,7 +1224,7 @@ describe('SQLite outbox offline sync', () => {
         assessment_items: { error: { code: '42501', message: 'row-level security' } },
       },
     });
-    const engine = createOutboxSyncEngine({ getAuthSession: liveTestSession, database: db, supabaseClient });
+    const engine = createOutboxSyncEngine({ enqueueRequest: (task) => task(), getAuthSession: liveTestSession, database: db, supabaseClient });
 
     await engine.syncAll({ tableName: 'assessment_items' });
 
@@ -1280,7 +1277,7 @@ describe('SQLite outbox offline sync', () => {
         session_attendees: { error: { code: '42501', message: 'row-level security' } },
       },
     });
-    const engine = createOutboxSyncEngine({ getAuthSession: liveTestSession, database: db, supabaseClient });
+    const engine = createOutboxSyncEngine({ enqueueRequest: (task) => task(), getAuthSession: liveTestSession, database: db, supabaseClient });
 
     await engine.syncAll({ tableName: 'session_attendees' });
 
@@ -1307,7 +1304,7 @@ describe('SQLite outbox offline sync', () => {
     });
 
     const { supabaseClient, calls } = createSupabaseMock();
-    const engine = createOutboxSyncEngine({ getAuthSession: liveTestSession, database: db, supabaseClient });
+    const engine = createOutboxSyncEngine({ enqueueRequest: (task) => task(), getAuthSession: liveTestSession, database: db, supabaseClient });
 
     const result = await engine.syncAll();
 
@@ -1354,7 +1351,7 @@ describe('SQLite outbox offline sync', () => {
       events.push('queue:end');
       return result;
     });
-    const engine = createOutboxSyncEngine({ getAuthSession: liveTestSession, database: db, supabaseClient, enqueueRequest });
+    const engine = createOutboxSyncEngine({ enqueueRequest: (task) => task(), getAuthSession: liveTestSession, database: db, supabaseClient, enqueueRequest });
 
     const result = await engine.syncAll();
 
@@ -1366,10 +1363,10 @@ describe('SQLite outbox offline sync', () => {
   test('routes reference preload pulls through the Supabase request queue boundary', async () => {
     const events = [];
     const repositories = {
-      schools: { replaceFromServer: jest.fn() },
+      schools: { getAll: jest.fn(async () => []), replaceFromServer: jest.fn() },
       job_titles: { replaceFromServer: jest.fn() },
-      programmes: { replaceFromServer: jest.fn() },
-      academic_years: { replaceFromServer: jest.fn() },
+      programmes: { getAll: jest.fn(async () => []), replaceFromServer: jest.fn() },
+      academic_years: { getAll: jest.fn(async () => []), replaceFromServer: jest.fn() },
       assessment_windows: { replaceFromServer: jest.fn() },
       teachers: { replaceFromServer: jest.fn() },
       staff_programme_assignments: { replaceFromServer: jest.fn() },
@@ -1423,7 +1420,7 @@ describe('SQLite outbox offline sync', () => {
     }
 
     const { supabaseClient, calls } = createSupabaseMock();
-    const engine = createOutboxSyncEngine({ getAuthSession: liveTestSession, database: db, supabaseClient });
+    const engine = createOutboxSyncEngine({ enqueueRequest: (task) => task(), getAuthSession: liveTestSession, database: db, supabaseClient });
 
     const result = await engine.syncAll();
 
@@ -1471,7 +1468,7 @@ describe('SQLite outbox offline sync', () => {
     }
 
     const { supabaseClient, calls } = createSupabaseMock();
-    const engine = createOutboxSyncEngine({ getAuthSession: liveTestSession, database: db, supabaseClient });
+    const engine = createOutboxSyncEngine({ enqueueRequest: (task) => task(), getAuthSession: liveTestSession, database: db, supabaseClient });
 
     const result = await engine.syncAll();
 
@@ -1529,7 +1526,7 @@ describe('SQLite outbox offline sync', () => {
     }
 
     const { supabaseClient, calls } = createSupabaseMock();
-    const engine = createOutboxSyncEngine({ getAuthSession: liveTestSession, database: db, supabaseClient });
+    const engine = createOutboxSyncEngine({ enqueueRequest: (task) => task(), getAuthSession: liveTestSession, database: db, supabaseClient });
 
     const result = await engine.syncAll();
 
@@ -1612,7 +1609,7 @@ describe('SQLite outbox offline sync', () => {
     }
 
     const { supabaseClient, calls } = createSupabaseMock();
-    const engine = createOutboxSyncEngine({ getAuthSession: liveTestSession, database: db, supabaseClient });
+    const engine = createOutboxSyncEngine({ enqueueRequest: (task) => task(), getAuthSession: liveTestSession, database: db, supabaseClient });
 
     const result = await engine.syncAll();
 
@@ -1670,7 +1667,7 @@ describe('SQLite outbox offline sync', () => {
     }
 
     const { supabaseClient, calls } = createSupabaseMock();
-    const engine = createOutboxSyncEngine({ getAuthSession: liveTestSession, database: db, supabaseClient });
+    const engine = createOutboxSyncEngine({ enqueueRequest: (task) => task(), getAuthSession: liveTestSession, database: db, supabaseClient });
 
     const result = await engine.syncAll();
 
@@ -1701,7 +1698,7 @@ describe('SQLite outbox offline sync', () => {
     const outboxRepository = createSyncOutboxRepository({ database: db });
     const markInFlightAndGetSpy = jest.spyOn(outboxRepository, 'markInFlightAndGet');
     const getByIdSpy = jest.spyOn(outboxRepository, 'getById');
-    const engine = createOutboxSyncEngine({
+    const engine = createOutboxSyncEngine({ enqueueRequest: (task) => task(),
       getAuthSession: liveTestSession,
       database: db,
       supabaseClient,
@@ -1754,7 +1751,7 @@ describe('SQLite outbox offline sync', () => {
         ),
       },
     });
-    const engine = createOutboxSyncEngine({ getAuthSession: liveTestSession, database: db, supabaseClient });
+    const engine = createOutboxSyncEngine({ enqueueRequest: (task) => task(), getAuthSession: liveTestSession, database: db, supabaseClient });
 
     const result = await engine.syncAll();
 
@@ -1816,7 +1813,7 @@ describe('SQLite outbox offline sync', () => {
     }
 
     const { supabaseClient, calls } = createSupabaseMock();
-    const engine = createOutboxSyncEngine({ getAuthSession: liveTestSession, database: db, supabaseClient });
+    const engine = createOutboxSyncEngine({ enqueueRequest: (task) => task(), getAuthSession: liveTestSession, database: db, supabaseClient });
 
     const result = await engine.syncAll();
 
@@ -1859,7 +1856,7 @@ describe('SQLite outbox offline sync', () => {
     await createSyncOutboxRepository({ database: db }).markInFlight(['classes:class-1:insert']);
 
     const { supabaseClient, calls } = createSupabaseMock();
-    const engine = createOutboxSyncEngine({ getAuthSession: liveTestSession, database: db, supabaseClient });
+    const engine = createOutboxSyncEngine({ enqueueRequest: (task) => task(), getAuthSession: liveTestSession, database: db, supabaseClient });
 
     const result = await engine.syncAll();
 
@@ -1901,7 +1898,7 @@ describe('SQLite outbox offline sync', () => {
         },
       },
     });
-    const engine = createOutboxSyncEngine({ getAuthSession: liveTestSession, database: db, supabaseClient });
+    const engine = createOutboxSyncEngine({ enqueueRequest: (task) => task(), getAuthSession: liveTestSession, database: db, supabaseClient });
 
     const result = await engine.syncAll();
 
@@ -1941,7 +1938,7 @@ describe('SQLite outbox offline sync', () => {
     });
 
     const { supabaseClient, calls } = createSupabaseMock();
-    const engine = createOutboxSyncEngine({ getAuthSession: liveTestSession, database: db, supabaseClient });
+    const engine = createOutboxSyncEngine({ enqueueRequest: (task) => task(), getAuthSession: liveTestSession, database: db, supabaseClient });
 
     const result = await engine.syncAll();
 
@@ -1968,7 +1965,7 @@ describe('SQLite outbox offline sync', () => {
     });
 
     const { supabaseClient, calls } = createSupabaseMock();
-    const engine = createOutboxSyncEngine({ getAuthSession: liveTestSession, database: db, supabaseClient });
+    const engine = createOutboxSyncEngine({ enqueueRequest: (task) => task(), getAuthSession: liveTestSession, database: db, supabaseClient });
 
     const result = await engine.syncAll();
 
@@ -2013,7 +2010,7 @@ describe('SQLite outbox offline sync', () => {
     });
 
     const { supabaseClient, calls } = createSupabaseMock();
-    const engine = createOutboxSyncEngine({ getAuthSession: liveTestSession, database: db, supabaseClient });
+    const engine = createOutboxSyncEngine({ enqueueRequest: (task) => task(), getAuthSession: liveTestSession, database: db, supabaseClient });
 
     const result = await engine.syncAll();
 
@@ -2069,7 +2066,7 @@ describe('SQLite outbox offline sync', () => {
     });
 
     const { supabaseClient, calls } = createSupabaseMock();
-    const engine = createOutboxSyncEngine({ getAuthSession: liveTestSession, database: db, supabaseClient });
+    const engine = createOutboxSyncEngine({ enqueueRequest: (task) => task(), getAuthSession: liveTestSession, database: db, supabaseClient });
 
     const result = await engine.syncAll();
 
@@ -2116,7 +2113,7 @@ describe('SQLite outbox offline sync', () => {
         },
       },
     });
-    const engine = createOutboxSyncEngine({ getAuthSession: liveTestSession, database: db, supabaseClient });
+    const engine = createOutboxSyncEngine({ enqueueRequest: (task) => task(), getAuthSession: liveTestSession, database: db, supabaseClient });
 
     const result = await engine.syncAll();
 
@@ -2188,7 +2185,7 @@ describe('SQLite outbox offline sync', () => {
     });
 
     const { supabaseClient, calls } = createSupabaseMock();
-    const engine = createOutboxSyncEngine({ getAuthSession: liveTestSession, database: db, supabaseClient });
+    const engine = createOutboxSyncEngine({ enqueueRequest: (task) => task(), getAuthSession: liveTestSession, database: db, supabaseClient });
 
     const result = await engine.syncAll();
 
@@ -2216,7 +2213,7 @@ describe('SQLite outbox offline sync', () => {
     });
 
     const { supabaseClient, calls } = createSupabaseMock();
-    const engine = createOutboxSyncEngine({ getAuthSession: liveTestSession, database: db, supabaseClient });
+    const engine = createOutboxSyncEngine({ enqueueRequest: (task) => task(), getAuthSession: liveTestSession, database: db, supabaseClient });
 
     const result = await engine.syncAll();
 
@@ -2251,7 +2248,7 @@ describe('SQLite outbox offline sync', () => {
         children: { error: { message: 'network down' } },
       },
     });
-    const engine = createOutboxSyncEngine({ getAuthSession: liveTestSession, database: db, supabaseClient });
+    const engine = createOutboxSyncEngine({ enqueueRequest: (task) => task(), getAuthSession: liveTestSession, database: db, supabaseClient });
 
     const result = await engine.syncAll();
 
@@ -2302,7 +2299,7 @@ describe('SQLite outbox offline sync', () => {
         'children:child-1': { error: { message: 'child 1 network failure' } },
       },
     });
-    const engine = createOutboxSyncEngine({ getAuthSession: liveTestSession, database: db, supabaseClient });
+    const engine = createOutboxSyncEngine({ enqueueRequest: (task) => task(), getAuthSession: liveTestSession, database: db, supabaseClient });
 
     const result = await engine.syncAll();
 
@@ -2370,7 +2367,7 @@ describe('SQLite outbox offline sync', () => {
         child_programme_enrollments: { error: { message: 'cleanup network failure' } },
       },
     });
-    const engine = createOutboxSyncEngine({ getAuthSession: liveTestSession, database: db, supabaseClient });
+    const engine = createOutboxSyncEngine({ enqueueRequest: (task) => task(), getAuthSession: liveTestSession, database: db, supabaseClient });
 
     const result = await engine.syncAll();
 
@@ -2431,7 +2428,7 @@ describe('SQLite outbox offline sync', () => {
         letter_mastery: { error: { code: '42501', message: 'RLS denied' } },
       },
     });
-    const engine = createOutboxSyncEngine({ getAuthSession: liveTestSession, database: db, supabaseClient });
+    const engine = createOutboxSyncEngine({ enqueueRequest: (task) => task(), getAuthSession: liveTestSession, database: db, supabaseClient });
 
     const result = await engine.syncAll();
     const status = await engine.getSyncStatus();
@@ -2492,7 +2489,7 @@ describe('SQLite outbox offline sync', () => {
         classes: { error: duplicateError },
       },
     });
-    const engine = createOutboxSyncEngine({
+    const engine = createOutboxSyncEngine({ enqueueRequest: (task) => task(),
       getAuthSession: liveTestSession,
       database: db,
       supabaseClient,
@@ -2531,7 +2528,7 @@ describe('SQLite outbox offline sync', () => {
     });
     const setTimeoutSpy = jest.spyOn(global, 'setTimeout');
     const beforeSync = new Date().toISOString();
-    const engine = createOutboxSyncEngine({ getAuthSession: liveTestSession, database: db, supabaseClient });
+    const engine = createOutboxSyncEngine({ enqueueRequest: (task) => task(), getAuthSession: liveTestSession, database: db, supabaseClient });
 
     try {
       const result = await engine.syncAll();
@@ -2572,7 +2569,7 @@ describe('SQLite outbox offline sync', () => {
         return { data: args.p_child_id === 'child-clean', error: null };
       }),
     };
-    const engine = createOutboxSyncEngine({ getAuthSession: liveTestSession, database: db, supabaseClient });
+    const engine = createOutboxSyncEngine({ enqueueRequest: (task) => task(), getAuthSession: liveTestSession, database: db, supabaseClient });
 
     const result = await engine.syncAll();
 
@@ -2609,10 +2606,10 @@ describe('SQLite outbox offline sync', () => {
       })),
     };
     const repositories = {
-      schools: { replaceFromServer: jest.fn() },
+      schools: { getAll: jest.fn(async () => []), replaceFromServer: jest.fn() },
       job_titles: { replaceFromServer: jest.fn() },
-      programmes: { replaceFromServer: jest.fn() },
-      academic_years: { replaceFromServer: jest.fn() },
+      programmes: { getAll: jest.fn(async () => []), replaceFromServer: jest.fn() },
+      academic_years: { getAll: jest.fn(async () => []), replaceFromServer: jest.fn() },
       assessment_windows: { replaceFromServer: jest.fn() },
       teachers: { replaceFromServer: jest.fn() },
       staff_programme_assignments: { replaceFromServer: jest.fn() },

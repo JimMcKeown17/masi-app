@@ -1,24 +1,28 @@
+jest.mock('../test-support/handleServiceMocks', () => ({
+getSessionHistoryPullState: jest.fn(),
+retryFailedItem: jest.fn()
+}));
 jest.mock('@expo/vector-icons', () => ({ Ionicons: () => null }), { virtual: true });
 
 import { render, fireEvent, waitFor } from '@testing-library/react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import SyncStatusScreen from '../src/screens/main/SyncStatusScreen';
-import { retryFailedItem } from '../src/services/offlineSync';
-import { useSessionHistoryStatus, getSessionHistoryPullState } from '../src/services/sessionHistoryStatus';
+import { retryFailedItem } from '../test-support/handleServiceMocks';
+import { useSessionHistoryStatus } from '../src/services/sessionHistoryStatus';
+import { getSessionHistoryPullState } from '../test-support/handleServiceMocks';
 
 jest.mock('../src/context/AuthContext', () => ({ useAuth: () => ({ user: { id: 'user-1' } }) }));
 jest.mock('@react-navigation/native', () => ({
   useFocusEffect: (callback) => require('react').useEffect(callback, [callback]),
 }));
-jest.mock('../src/services/sessionHistoryStatus', () => ({
-  useSessionHistoryStatus: jest.fn(), getSessionHistoryPullState: jest.fn(),
-}));
+jest.mock('../src/services/sessionHistoryStatus', () => ({ ...jest.requireActual('../src/services/sessionHistoryStatus'),
+useSessionHistoryStatus: jest.fn() }));
 beforeEach(() => {
   useSessionHistoryStatus.mockReturnValue({ running: false, pageVersion: 0, runVersion: 0 });
   getSessionHistoryPullState.mockResolvedValue(null);
 });
 
-jest.mock('../src/services/offlineSync', () => ({ retryFailedItem: jest.fn() }));
+
 
 const mockUseOffline = jest.fn();
 jest.mock('../src/context/OfflineContext', () => ({ useOffline: () => mockUseOffline() }));

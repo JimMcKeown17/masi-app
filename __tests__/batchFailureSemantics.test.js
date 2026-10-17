@@ -1,5 +1,7 @@
+import { bindTestActor } from '../test-support/actorTestUtils';
 jest.mock('expo-sqlite', () => require('../test-support/expoSQLiteMock'));
-jest.mock('../src/services/supabaseClient', () => ({ supabase: {} }));
+jest.mock('../src/services/supabaseClient', () => ({
+  ...require('../test-support/supabaseTestConfig'), supabase: {} }));
 
 import { createBetterSqliteTestDatabase } from '../test-support/betterSqliteAdapter';
 import { runMigrations } from '../src/db/migrations';
@@ -76,7 +78,7 @@ const seedAssessmentItemsForThrowTest = async (db, count = 3) => {
 };
 
 it('a thrown batch request degrades to per-record fallback (rows still sync)', async () => {
-  const db = createBetterSqliteTestDatabase(':memory:');
+  const db = bindTestActor(createBetterSqliteTestDatabase(':memory:'), 'test-user');
   await runMigrations(db);
   await seedCoreData(db);
   await seedAssessmentItemsForThrowTest(db, 3);
@@ -97,7 +99,7 @@ it('a thrown batch request degrades to per-record fallback (rows still sync)', a
     rpc: async () => ({ data: true, error: null }),
   });
 
-  const engine = createOutboxSyncEngine({ getAuthSession: liveTestSession, database: db, supabaseClient: batchThrowsPerRowSucceeds() });
+  const engine = createOutboxSyncEngine({ enqueueRequest: (task) => task(), getAuthSession: liveTestSession, database: db, supabaseClient: batchThrowsPerRowSucceeds() });
   const result = await engine.syncAll();
 
   // All rows synced via the per-record fallback; outbox drained; none failed.
@@ -110,7 +112,7 @@ it('a thrown batch request degrades to per-record fallback (rows still sync)', a
 });
 
 it('a thrown per-row request in the batch fallback finalizes retriable, none left in_flight', async () => {
-  const db = createBetterSqliteTestDatabase(':memory:');
+  const db = bindTestActor(createBetterSqliteTestDatabase(':memory:'), 'test-user');
   await runMigrations(db);
   await seedCoreData(db);
   await seedAssessmentItemsForThrowTest(db, 3);
@@ -135,7 +137,7 @@ it('a thrown per-row request in the batch fallback finalizes retriable, none lef
     rpc: async () => ({ data: true, error: null }),
   };
 
-  const engine = createOutboxSyncEngine({ getAuthSession: liveTestSession, database: db, supabaseClient: batchFailsThenRowThrows });
+  const engine = createOutboxSyncEngine({ enqueueRequest: (task) => task(), getAuthSession: liveTestSession, database: db, supabaseClient: batchFailsThenRowThrows });
   await engine.syncAll();
 
   const rows = await db.getAllAsync('select status, last_error from sync_outbox');
@@ -150,12 +152,12 @@ it('a thrown per-row request in the batch fallback finalizes retriable, none lef
 });
 
 it('a thrown batch error finalizes EVERY member as retriable failed with last_error (none in_flight)', async () => {
-  const db = createBetterSqliteTestDatabase(':memory:');
+  const db = bindTestActor(createBetterSqliteTestDatabase(':memory:'), 'test-user');
   await runMigrations(db);
   await seedCoreData(db);
   await seedAssessmentItemsForThrowTest(db, 3);
 
-  const engine = createOutboxSyncEngine({ getAuthSession: liveTestSession, database: db, supabaseClient: throwingSupabase() });
+  const engine = createOutboxSyncEngine({ enqueueRequest: (task) => task(), getAuthSession: liveTestSession, database: db, supabaseClient: throwingSupabase() });
   const result = await engine.syncAll();
 
   const rows = await db.getAllAsync(`select status, last_error from sync_outbox`);
@@ -169,7 +171,7 @@ it('a thrown batch error finalizes EVERY member as retriable failed with last_er
 });
 
 it('bounds failed-batch fan-out across the whole pass and leaves unattempted rows pending', async () => {
-  const db = createBetterSqliteTestDatabase(':memory:');
+  const db = bindTestActor(createBetterSqliteTestDatabase(':memory:'), 'test-user');
   await runMigrations(db);
   await seedCoreData(db);
   await seedAssessmentItemsForThrowTest(db, 150);
@@ -202,7 +204,7 @@ it('bounds failed-batch fan-out across the whole pass and leaves unattempted row
     rpc: async () => ({ data: true, error: null }),
   };
 
-  const engine = createOutboxSyncEngine({
+  const engine = createOutboxSyncEngine({ enqueueRequest: (task) => task(),
     getAuthSession: liveTestSession,
     database: db,
     supabaseClient: batchFailsPerRowSucceeds,
