@@ -60,8 +60,8 @@ These horizons summarize the ordered register below. They are not a second backl
    The newer-schema guard is built; add a minimum revocation contract. Evidence:
    [`zazi-sync-lessons-for-masi-2026-10-08.md`](./zazi-sync-lessons-for-masi-2026-10-08.md) Part 2.
 6. **P0: settle field-continuity contracts before the candidate build.** Make location fallback
-   truthful, build the server-side ten-hour clock-out and the Android backup exclusion (both
-   decided by Jim on 2026-10-17), and complete the credential/PII and provisioning preflight.
+   truthful, build the server-side ten-hour clock-out and verify the built Android backup exclusion
+   on device (both decided by Jim on 2026-10-17), and complete the credential/PII and provisioning preflight.
    Unfinished-form loss is accepted for the pilot (Jim, 2026-10-17).
 7. **P1: close reachable correctness gaps.** Fix session-attendee removal before saved-session
    editing ships and resolve the remaining auth-diagnostic ambiguity. The newer-schema fail-safe
@@ -205,12 +205,19 @@ shape.
   from spreadsheets ([F5](./zazi-sync-lessons-for-masi-2026-10-08.md)).
 - [ ] Confirm every field device starts from a fresh installation, not an upgrade over the retired
   local data model.
-- [ ] **Android backup: decided by Jim 2026-10-17, build open.** Exclude every SQLite database
-  (per-EA files, the legacy `masi.db`, their WAL/SHM sidecars) from Auto Backup and device-to-device
-  transfer; a reinstall or new phone re-downloads from the server instead of replaying a restored
-  outbox (Zazi ZZ-BUG-20260907-001). Decide per item whether safe preferences may be backed up. Test
-  uninstall/reinstall and Google restore; a reinstall may not be called “fresh” until the resulting
-  database identity and contents prove it.
+- [ ] **Android backup: decided by Jim 2026-10-17, built (allowBackup false and extraction
+  exclusions); restore test open.** Cloud backup AND device transfer are excluded by config:
+  `android.allowBackup: false` plus the local Expo plugin's `data_extraction_rules.xml`, which
+  excludes all nine valid domains from both `cloud-backup` and `device-transfer`, including
+  device-protected storage. This covers per-EA SQLite files, the legacy `masi.db`, WAL/SHM sidecars,
+  AsyncStorage auth sessions, files and shared preferences; the server is the recovery path
+  instead of a restored outbox (Zazi ZZ-BUG-20260907-001). Prebuild introspection confirms
+  `android:allowBackup="false"` and `android:dataExtractionRules="@xml/data_extraction_rules"`.
+  Legacy `fullBackupContent` is redundant because `allowBackup=false` already disables backup on
+  Android 11 and lower. Device proof remains open after the next native build: uninstall/reinstall
+  and Google restore / `adb shell bmgr` backup/restore on the A03s, plus a device-transfer check if
+  a second Android phone is available. A reinstall may not be called “fresh” until the resulting
+  database identity, contents and signed-out auth state prove it.
 - [ ] Prove `masi-app-sqlite` is healthy after its restore onto the Pro plan. Jim moved the project
   to Pro on 2026-09-23 so it cannot auto-pause (it was found paused on 2026-09-04 and again on
   2026-09-23). The dashboard shows Nano compute; confirm the intended compute size. Zazi's local
@@ -556,8 +563,11 @@ contract ([U1–U7](./zazi-sync-lessons-for-masi-2026-10-08.md)):
   per-tap identity risk behind Zazi's 302 extra session copies (ZZ-BUG-20260819-021).
   LetterMasteryPanel's same-EA/programme double taps already converge through the repository's
   deterministic mastery id; its broader re-key remains separate.
-- [ ] Android backup must exclude the SQLite database (U6, the §0 backup decision). A restored
-  database replayed already-accepted work in Zazi (ZZ-BUG-20260907-001).
+- [x] Android cloud-backup and device-transfer exclusion is built with `android.allowBackup: false`
+  and explicit data-extraction exclusions (U6). A restored database replayed already-accepted work
+  in Zazi (ZZ-BUG-20260907-001); the
+  [§0 backup item](#0-pre-live-ground-truth-observability-and-pilot-activation) retains the A03s
+  restore and device-to-device transfer proof as an open gate.
 
 Deferred: mutation ids and server receipts for edits (U4, only if U3 proves insufficient), an
 environment circuit breaker, and strict acknowledgement inventories. Not adopted: per-install

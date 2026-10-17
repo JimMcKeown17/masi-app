@@ -44,6 +44,7 @@ module.exports = () => {
         },
       },
       android: {
+        allowBackup: false,
         adaptiveIcon: {
           foregroundImage: './assets/masi-mobile-icon.png',
           backgroundColor: '#ffffff',
@@ -56,6 +57,7 @@ module.exports = () => {
         ],
       },
       plugins: [
+        './plugins/withNoBackupDataExtraction',
         'expo-sqlite',
         [
           'expo-location',
