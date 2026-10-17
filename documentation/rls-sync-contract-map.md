@@ -12,7 +12,7 @@ Use this map before changing any synced table, repository producer, outbox opera
 - Historical migrations: `supabase-migrations/` is old-backend reference only
 - Sync engine: `src/services/offlineSync.js`
 - Local write boundary: repository methods under `src/db/repositories/`
-- Durable queue: `sync_outbox`; local-only `owner_user_id` is never included in server payloads. Every enqueue stamps the signed-in EA from the connection-to-actor WeakMap, including transaction facades. Record provenance (`created_by`, domain `user_id`) never determines the mutation owner. Missing actors fail before the outbox write; SQLite v12 (`sync_outbox_owner_required`) also rejects raw inserts with a NULL owner. Existing rows and indexes are preserved. Owner-scoped readiness, pending hard-delete, and reset queries use strict equality and exclude NULL owners; omitting the owner scope remains file-wide. `getSyncStatus()` always counts the whole file. `countUnsent()` returns `{ total, byTable }` across `pending`, `failed`, `in_flight`, and `terminal`, including foreign/NULL-owned work so it cannot disappear from status.
+- Durable queue: `sync_outbox`; local-only `owner_user_id` is never included in server payloads. Every enqueue stamps the signed-in EA from the connection-to-actor WeakMap, including transaction facades. Record provenance (`created_by`, domain `user_id`) never determines the mutation owner. Missing actors fail before the outbox write; SQLite v12 (`sync_outbox_owner_required`) also rejects raw inserts with a NULL owner. Existing rows and indexes are preserved. Owner-scoped readiness, pending hard-delete, and reset queries use strict equality with no NULL wildcard; omitting the owner scope remains file-wide. Legacy NULL-owner rows (queued before v12) are adopted for the file owner by the integrity scan, never left stranded (see "Signed-in EA handle"). `getSyncStatus()` always counts the whole file. `countUnsent()` returns `{ total, byTable }` across `pending`, `failed`, `in_flight`, and `terminal`, including foreign/NULL-owned work so it cannot disappear from status.
 - Server payload allowlist: `SERVER_COLUMNS` in `src/services/offlineSync.js`
 - Insert order: `PUSH_ORDER` in `src/services/offlineSync.js`
 - Archive order: `ARCHIVE_PUSH_ORDER` plus `ARCHIVE_TABLE_DEPENDENCIES` in `src/services/offlineSync.js`
@@ -143,8 +143,8 @@ waits until it is acknowledged, even if it later backs off or becomes terminal a
 retry. A successful local deletion still returns `true`; the caller does not additionally archive.
 Hard-delete enqueue uses the connection actor even after the child row is deleted; it no longer
 passes the deleted row as an ownership fallback. Lifecycle enqueue uses the same actor boundary.
-`outboxOwnership.js` remains for the Task 7 integrity/heal work; enqueue no longer imports
-`resolvePrimaryOwner`. Local regressions: `outboxOwnerStamping.test.js` covers an EA edit to a
+`outboxOwnership.js` (ownership derived from record content) is deleted; the integrity scan and
+rescue heal use only the stamped owner. Local regressions: `outboxOwnerStamping.test.js` covers an EA edit to a
 Head Office child through a real SQLite adapter and signed-in transaction facade, then the Plan 1
 fake-server UPDATE-by-id acknowledgement. `outboxOwnerMigration.test.js` covers the v11-to-v12
 upgrade with existing owned and NULL-owned rows, index preservation, and raw-insert refusal.
@@ -208,11 +208,11 @@ When the fallback budget is exhausted, unattempted rows are reset from `in_fligh
 
 For a batch, `markInFlightAndGet(ids)` runs inside one writer transaction. It changes all ids through one `UPDATE`, then reads them through one `SELECT` and restores caller order in memory. The returned records carry the exact shared `updated_at` used by `finalizeManySuccess` and `finalizeManyRetriableFailure`. This removes O(N) local claim/read work without weakening stale-finalize protection: a concurrent re-enqueue changes `updated_at`, the compare-and-swap misses, and the newer payload remains pending.
 
-### Supabase request queue granularity
+### Request queue granularity
 
-`supabaseRequestQueue` remains concurrency 1 because React Native auth, preload, pull, and push calls share one client and previously exposed lock/race failures. Concurrency 1 does not imply that a high-level workflow owns the queue until every dependent request finishes. `pullPreloadedChildData` queues the reconcile acknowledgment RPC, Programme query, direct assignment query, each enrollment chunk, children query, class-membership query, group query, and group-membership query separately. `ClassesContext` similarly queues its acknowledgment, Programme, and classes requests separately.
+Each signed-in EA handle owns its own request queue (`handle.enqueueRequest`, concurrency 1) and its own data client; the shared `supabaseRequestQueue` module is deleted (Plan 2 Task 5). Concurrency 1 does not imply that a high-level workflow owns the queue until every dependent request finishes. `pullPreloadedChildData` queues the reconcile acknowledgment RPC, Programme query, direct assignment query, each enrollment chunk, children query, class-membership query, group query, and group-membership query separately. `ClassesContext` similarly queues its acknowledgment, Programme, and classes requests separately.
 
-Each workflow still awaits the result it needs before constructing the next dependent query. The change is fairness, not parallelism. If another operation was queued while request A was in flight, it runs after A and before the pull submits request B. Data shaping and SQLite persistence occur outside the network lease. Active-user guards still discard a completed old-user pull, and failed or incomplete scopes retain the same fail-closed reconcile rules.
+Each workflow still awaits the result it needs before constructing the next dependent query. The change is fairness, not parallelism. If another operation was queued while request A was in flight, it runs after A and before the pull submits request B. Data shaping and SQLite persistence occur outside the network lease. A pull begun under one handle cannot persist into another EA's file: its repositories are bound to its own handle, and a stale handle refuses every write. Failed or incomplete scopes retain the same fail-closed reconcile rules.
 
 ## Error Classification (Item 10)
 
@@ -493,34 +493,26 @@ Tests: `__tests__/startupRepairs.test.js`, `__tests__/OfflineContext.test.js`, `
 
 ## Auth-Restore RLS Heal
 
-Auth-loss `42501` failures are recoverable only when they were written without a live session marker. `OfflineContext` calls `offlineSync.requeueTerminalRlsFailures()` on `SIGNED_IN`, `TOKEN_REFRESHED`, and `INITIAL_SESSION` events that include a session. The engine resolves ownership against the restored user before requeueing, so a new user cannot revive another user's quarantined outbox rows.
+Auth-loss `42501` failures are recoverable only when they were written without a live session marker. `OfflineContext` runs the bound engine's `requeueTerminalRlsFailures()` once after the handle opens and again on `SIGNED_IN`/`TOKEN_REFRESHED` for the same EA (subscribed through `AuthContext`). A row is requeued only when its stamped `owner_user_id` equals the signed-in EA, its `last_error` is not `foreign_owner`, and it is not marked `42501-authenticated:`. Ownership is never re-derived from record content, so an EA's own edit of a Head Office-created child heals, and another EA's quarantined row never does.
 
-Rows marked with `42501-authenticated:` in `sync_outbox.last_error` are genuine authenticated RLS denials and remain terminal. Rows without that marker may be requeued when their owner matches the restored auth user. `sync_outbox.status`, retry counters, `last_error`, and the domain row's `sync_status`/`last_sync_error` are reset inside the same SQLite transaction, so the queue and domain table cannot disagree after a heal.
+`sync_outbox.status`, retry counters, `last_error`, and the domain row's `sync_status`/`last_sync_error` are reset inside the same SQLite transaction, so the queue and domain table cannot disagree after a heal.
 
-Owner resolution in `src/services/offlineSync.js`:
+Tests: `__tests__/offlineSyncAuthGate.test.js`, `__tests__/requeueTerminalRlsFailures.test.js`, `__tests__/outboxIntegrityScan.test.js` (T9), and `__tests__/OfflineContext.test.js`.
 
-| Table | Owner resolution |
-| --- | --- |
-| `time_entries` | Direct `user_id` |
-| `classes` | Direct `created_by` or `staff_id` |
-| `children` | Direct `created_by` |
-| `child_ea_assignments` | Direct `user_id` or `created_by` |
-| `child_programme_enrollments` | Direct `created_by` |
-| `child_class_memberships` | Direct `created_by` |
-| `class_ea_assignments` | Direct `ea_user_id` or `created_by` |
-| `grouping_versions` | Direct `created_by`, `accepted_by_user_id`, or `archived_by_user_id` |
-| `class_grouping_state` | Direct `class_list_completed_by_user_id` or `class_list_reopened_by_user_id`; otherwise parent `classes.created_by` through `class_id` |
-| `groups` | Direct `created_by` or `staff_id` |
-| `group_ea_assignments` | Direct `ea_user_id` or `created_by` |
-| `child_group_memberships` | Direct `created_by` |
-| `sessions` | Direct `user_id` |
-| `session_attendees` | Parent `sessions.user_id` through `session_id` |
-| `assessments` | Direct `user_id` |
-| `assessment_items` | Parent `assessments.user_id` through `assessment_id` |
-| `letter_mastery` | Direct `user_id` |
-| Fallback for unmapped tables | Direct `user_id`, `created_by`, `staff_id`, or `ea_user_id` |
+## Signed-in EA handle (Plan 2, 2026-10-17)
 
-Tests: `__tests__/offlineSyncAuthGate.test.js`, `__tests__/requeueTerminalRlsFailures.test.js`, and `__tests__/OfflineContext.test.js`.
+Spec: `docs/superpowers/specs/2026-10-09-actor-lifecycle-and-mutation-ownership-design.md`; ADR 0008. Code: `src/session/`.
+
+- **One file per EA.** The handle opens `masi-<userId>.db` after sign-in or offline restore, checks or writes `local_state.file_owner_user_id` (a mismatch refuses to open), runs the integrity scan, resets in-flight rows, runs startup repairs, builds `handle.services`, and only then publishes. Production code reaches SQLite only through a handle-bound repository (`useSignedInEA()` or an explicit handle); an unbound repository throws `UnboundRepositoryError`.
+- **Revocation before disposal.** `requestClose` resolves at logical revocation: the epoch advances, the handle is unpublished, requests abort, both native queues seal. Physical disposal is the last item on each connection's serial native queue (tolerant `ROLLBACK`, best-effort `last_active_at`, both closes attempted); `whenDisposed(fileName)` resolves when it finishes, and only a reopen of the same file waits for it. A failed disposal fences that file (`HandleDisposeFailedError`) but never another EA's sign-in.
+- **Transaction doors.** Each `withTransaction` gets its own facade that expires when the task settles, before COMMIT/ROLLBACK is admitted. Facades expose only `runAsync`/`getFirstAsync`/`getAllAsync` under a single-statement policy (`PRAGMA user_version` and `PRAGMA defer_foreign_keys = ON` excepted; `OR ROLLBACK` refused). A COMMIT already running at revocation finishes; a queued one is refused and disposal rolls the transaction back.
+- **Per-handle data client and queue.** Every server request runs inside `handle.enqueueRequest` on `handle.dataClient` (supabase-js in `accessToken` mode). Its fetch re-checks, at send time, that the handle is open and current, that a queued task is running, and that the latest session belongs to the handle's EA; it aborts on revocation or after 30 s and resolves as a codeless network error. The shared client is used only for `supabase.auth.*` in `supabaseClient.js`, `persistedAuthSession.js` and `AuthContext.js` (static test).
+- **`StaleActorError` vs `AuthUnavailableError`.** Stale means the work belongs to a revoked or superseded handle: it is never retried under anyone else. Auth-unavailable means the handle is current but has no usable session: a retriable, codeless failure for later.
+- **Whole-pass stale rule.** A stale refusal anywhere in a sync pass ends the pass: no record is finalised, no batch fallback runs, `sync_meta` is not written, and `syncAll` resolves `{ success: false, abortedStaleActor: true }` without observability noise. Rows left `in_flight` are reset when that EA's file next opens.
+- **Integrity scan.** At open and before every pass: legacy NULL-owner rows are adopted for the file owner; rows stamped with another EA move to `terminal` with `last_error = 'foreign_owner'` (domain row too), stay counted as unsent, are recorded in `local_state.integrity_scan_last`, and raise one operational error (`foreign_owner_in_file`, counts by table only).
+- **Shared auth session persistence.** The shared client's storage drops session writes for anyone but the admitted identity (the email being signed in, then that user's id; the restored user at launch; nobody after sign-out), and every shared auth request aborts after 30 s, so a late response can never restore or overwrite a session.
+- **Field-release prerequisite (ruling 11).** Sign-out aborts in-flight uploads, so an upload the server already accepted may be re-sent when the EA returns. Identical replay is proven harmless (Task 4 T5). Ordering an uncertain older write against a newer one is owned by the upload-contract spec and must be closed before field release.
+- **Device gates still open:** D7 (native close under load on iOS and Android) and D1–D6 on the build intended to ship, after Plan 3.
 
 ## Table Contract Map
 
@@ -598,6 +590,8 @@ Use this checklist instead of a static "does the table have policies" audit.
 
 ## Source Files to Review Together
 
+- `src/session/signedInHandle.js`, `handleDataClient.js`, `handleServices.js`, `handleRequestQueue.js`, `staleActor.js`
+- `src/context/AuthContext.js`, `src/context/SignedInEAContext.js`, `src/services/authSessionStorage.js`, `src/services/authRequestFetch.js`
 - `src/services/offlineSync.js`
 - `src/db/repositories/domainRepositoryUtils.js`
 - `src/db/repositories/childrenRepository.js`

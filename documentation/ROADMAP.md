@@ -55,8 +55,8 @@ These horizons summarize the ordered register below. They are not a second backl
 5. **P0: settle the upload contract and local-database ownership before the candidate build.**
    Put a deadline and release on every request in the shared queue, uploads included. Upload the
    assessment family all-or-nothing. Reject stale edits on records more than one writer can change.
-   Make submit duplicate-proof. Decide one database per actor versus a shared database. Add the
-   newer-schema guard and a minimum revocation contract. Evidence:
+   Make submit duplicate-proof. One database per EA is built (Plan 2; its sign-out UX is Plan 3).
+   Add the newer-schema guard and a minimum revocation contract. Evidence:
    [`zazi-sync-lessons-for-masi-2026-10-08.md`](./zazi-sync-lessons-for-masi-2026-10-08.md) Part 2.
 6. **P0: settle field-continuity contracts before the candidate build.** Make location fallback
    truthful, decide auto-clock-out authority and Android backup behavior, complete the
@@ -121,28 +121,24 @@ shape.
   no-default `users.organization_id` (identity only, not an authorization boundary, as in Zazi's
   organisation label v1) is nearly free before field data exists ([Z19](./zazi-sync-lessons-for-masi-2026-10-08.md)).
 - [ ] **Build one local database per EA (D2, decided by Jim 2026-10-08), before the first field install.**
-  The ADR is to be written through `grill-with-docs` alongside the upload-contract spec. Masi
-  keeps one shared `masi.db` for every EA who signs in on a phone today. The options weighed were:
-  - one SQLite file per signed-in actor, which is the stronger *storage* boundary (Zazi, after its
-    July audit finding A6). Per Codex round 2, it isolates only together with execution-time
-    actor fencing (see "Upload contract" in §2), and per-user cursors and owner columns stay as
-    extra guards;
-  - keep the shared file with owner columns enforced on every read and claim.
-
-  **Field facts (Jim, 2026-10-08):**
-  - Masi does not issue phones; every EA uses their own.
-  - Phones rarely change hands.
-  - The common case is two EAs sharing one phone for a day or two, so A→B→A alternation and
-    another EA's data left on a *personal* phone are the real scenarios.
-  - **Decided:** per-actor files (Jim, 2026-10-08). The rule for deleting another EA's file (no
-    unsent work **and** unused for **30 days**) is **deferred past the pilot** (Jim, 2026-10-09).
-    Revisit before Step 9 Widen: the real reason is privacy, because EA A's roster stays on EA B's
-    personal phone, not storage. Design:
+  **Plan 2 built it** (`feat/signed-in-ea-handle`, 2026-10-17; ADR 0008; contract map "Signed-in EA
+  handle"): each EA's data lives in `masi-<userId>.db`, reached only through the signed-in EA
+  handle; sign-out revokes at once and disposes connections afterwards; every server request is
+  fenced at send time on a per-handle data client and queue; the outbox owner is stamped from the
+  signed-in EA (a local trigger refuses an ownerless row); an integrity scan quarantines foreign-owned
+  rows and adopts legacy ownerless ones; shared auth-session persistence is fenced by admitted
+  identity. The null-owner claim this item warned about is closed. **Still open before the field:**
+  - **Plan 3:** the sign-out questions (unsent work, still clocked in), the left-behind report and
+    minimal incident envelope, `masi.db` legacy discovery, and the Profile App Release card.
+  - **Ruling 11, field-release prerequisite owned by the upload-contract spec:** abort-on-sign-out
+    can re-send an upload the server already accepted. Identical replay is proven harmless; the
+    ordering of an uncertain older write against a newer one is not yet closed.
+  - **Device gates:** D7 (native close under load, iOS and Android) and D1–D6 on the build intended
+    to ship.
+  - **Deleting another EA's file is deferred past the pilot** (Jim, 2026-10-09): no unsent work and
+    unused for 30 days. Revisit before Step 9 Widen, for privacy (EA A's roster stays on EA B's
+    personal phone), against POPIA. Design:
     `docs/superpowers/specs/2026-10-09-actor-lifecycle-and-mutation-ownership-design.md`.
-
-  Either way, an outbox row with a null owner must fail closed. Today any signed-in actor can claim
-  it (`syncOutboxRepository.js:88`). Run this through `grill-with-docs` to its ADR
-  ([F1](./zazi-sync-lessons-for-masi-2026-10-08.md)).
 - [ ] **Minimum revocation contract before pilot provisioning** (moved from §6 by the 2026-10-08
   Codex review). `users.is_active = false` has no effect today:
   - the owner policies still allow time-entry writes and session updates
