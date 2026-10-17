@@ -3,7 +3,7 @@ import { Text, TextInput } from 'react-native';
 import { act, cleanup, fireEvent, render, waitFor } from '@testing-library/react-native';
 import { PaperProvider, Button } from 'react-native-paper';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { createClient } from '@supabase/supabase-js';
+import { createClient, processLock } from '@supabase/supabase-js';
 import { AuthProvider, useAuth } from '../src/context/AuthContext';
 import { SignedInEAProvider } from '../src/context/SignedInEAContext';
 import ProfileScreen from '../src/screens/main/ProfileScreen';
@@ -32,7 +32,7 @@ const mockNetListeners = new Set();
 const navigation = { navigate: jest.fn() };
 let roster;
 const bootstrapStates = [];
-jest.mock('../src/services/supabaseClient', () => ({ ...require('../test-support/supabaseTestConfig'), supabase: { get auth() { return mockClient.auth; } } }));
+jest.mock('../src/services/supabaseClient', () => ({ ...require('../test-support/supabaseTestConfig'), withAuthAutoRefreshPaused: operation => operation(), supabase: { get auth() { return mockClient.auth; } } }));
 jest.mock('@react-native-community/netinfo', () => ({ fetch: async () => mockNetwork, addEventListener: fn => { mockNetListeners.add(fn); return () => mockNetListeners.delete(fn); } }));
 jest.mock('@react-navigation/native', () => ({ NavigationContext: require('react').createContext(null), useFocusEffect: fn => require('react').useEffect(fn, [fn]) }));
 jest.mock('@expo/vector-icons', () => ({ Ionicons: () => null }), { virtual: true });
@@ -71,7 +71,7 @@ beforeEach(async () => {
   });
   jest.spyOn(global, 'fetch').mockImplementation((...args) => transport(...args));
   mockClient = createClient('https://example.supabase.co', 'test-key', {
-    auth: { storage: createAuthSessionStorage('sb-example-auth-token'), persistSession: true, autoRefreshToken: false, detectSessionInUrl: false },
+    auth: { storage: createAuthSessionStorage('sb-example-auth-token'), persistSession: true, autoRefreshToken: false, detectSessionInUrl: false, lock: processLock },
     global: { fetch: authRequestFetch },
   });
   await mockClient.auth.initialize();
@@ -93,7 +93,7 @@ test.each([false, true])('SDK split-record initialization restores A and persist
     throw new TypeError('Offline');
   });
   mockClient = createClient('https://example.supabase.co', 'test-key', {
-    auth: { storage: createAuthSessionStorage(storageKey), persistSession: true, autoRefreshToken: expired, detectSessionInUrl: false },
+    auth: { storage: createAuthSessionStorage(storageKey), persistSession: true, autoRefreshToken: expired, detectSessionInUrl: false, lock: processLock },
     global: { fetch: authRequestFetch },
   });
   await mockClient.auth.initialize();
@@ -274,7 +274,7 @@ test('changePassword drops its result if the handle closes during isolated-sessi
   } finally { release.resolve(); await changing; }
 });
 
-test('sign-in does not wait for a password update and its late A response cannot overwrite B', async () => {
+test('sign-in drains an in-flight password update before admitting and persisting B', async () => {
   const view = render(<AuthProvider><Tree /></AuthProvider>);
   await signIn(A);
   const entered = barrier(); const release = barrier();
@@ -288,15 +288,17 @@ test('sign-in does not wait for a password update and its late A response cannot
   await entered.promise;
   try {
     act(() => { signingIn = auth.signIn(`${B}@example.org`, 'secret'); });
-    await waitFor(() => expect(getCurrentHandle()?.userId).toBe(B));
-    expect((await readPersistedSession()).user.id).toBe(B);
+    await act(async () => {});
+    expect(getCurrentHandle()?.userId).toBe(A);
+    expect(transport.mock.calls.filter(([url, init]) => String(url).includes('/token') && JSON.parse(init.body).email === `${B}@example.org`)).toHaveLength(0);
     await act(async () => { release.resolve(); await change; await signingIn; });
+    await waitFor(() => expect(getCurrentHandle()?.userId).toBe(B));
     expect(view.getByTestId('actor').props.children).toBe(B);
     expect((await readPersistedSession()).user.id).toBe(B);
   } finally { release.resolve(); await Promise.allSettled([change, signingIn]); }
 });
 
-test('A password response between B storage commit and callback cannot replace persisted B', async () => {
+test('B storage commit waits for A password response and stays B through its callback', async () => {
   const view = render(<AuthProvider><Tree /></AuthProvider>);
   await signIn(A);
   const putEntered = barrier(); const releasePut = barrier();
@@ -318,9 +320,11 @@ test('A password response between B storage commit and callback cannot replace p
   await putEntered.promise;
   try {
     act(() => { signingIn = auth.signIn(`${B}@example.org`, 'secret'); });
+    await act(async () => {});
+    expect((await readPersistedSession()).user.id).toBe(A);
+    await act(async () => { releasePut.resolve(); await change; });
     await bCommitted.promise;
     expect((await readPersistedSession()).user.id).toBe(B);
-    await act(async () => { releasePut.resolve(); await change; });
     await act(async () => { releaseBCallback.resolve(); expect((await signingIn).error).toBeNull(); });
     await waitFor(() => expect(getCurrentHandle()?.userId).toBe(B));
     expect(view.getByTestId('actor').props.children).toBe(B);
@@ -477,18 +481,23 @@ test.each([null, B])('a late SDK refresh cannot persist or publish A after switc
     }
     return originalTransport(url, init);
   });
-  let refreshing;
+  let refreshing; let signingIn;
   act(() => { refreshing = mockClient.auth.refreshSession(); });
   await entered.promise;
   try {
-    if (nextActor) await signIn(nextActor);
+    if (nextActor) {
+      act(() => { signingIn = auth.signIn(`${nextActor}@example.org`, 'secret'); });
+      await act(async () => {});
+      expect(getCurrentHandle()?.userId).toBe(A);
+    }
     else await act(async () => { await auth.signOut(); });
-    await act(async () => { release.resolve(); await refreshing; await mockClient.auth.getSession(); });
+    await act(async () => { release.resolve(); await refreshing; await signingIn; await mockClient.auth.getSession(); });
+    if (nextActor) await waitFor(() => expect(getCurrentHandle()?.userId).toBe(nextActor));
     expect(view.getByTestId('actor').props.children).toBe(nextActor || 'signed-out');
     const persisted = await readPersistedSession();
     if (nextActor) expect(persisted).toMatchObject({ user: { id: B }, access_token: `token-${B}` });
     else expect(persisted).toBeNull();
-  } finally { release.resolve(); await refreshing; }
+  } finally { release.resolve(); await refreshing; await signingIn; }
 });
 
 test.each(['storage removal', 'SDK sign-out'])('B sign-in waits for already-started %s cleanup before persisting', async phase => {

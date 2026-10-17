@@ -37,6 +37,7 @@ describe('supabase client guardrails', () => {
     mockAddEventListener = jest.fn(() => ({ remove: mockRemoveSubscription }));
     mockCreateClient = jest.fn(() => ({
       auth: {
+        initialize: jest.fn(() => Promise.resolve()),
         startAutoRefresh: jest.fn(() => Promise.resolve()),
         stopAutoRefresh: jest.fn(() => Promise.resolve()),
       },
@@ -99,6 +100,71 @@ describe('supabase client guardrails', () => {
     await Promise.resolve();
     expect(outcome).toBeInstanceOf(TypeError);
     expect(jest.getTimerCount()).toBe(0);
+  });
+
+  test.each([false, true])('login pause survives foreground transitions and resumes after settlement; failure = %s', async fails => {
+    const { supabase, withAuthAutoRefreshPaused } = loadClient();
+    await globalThis.__MASI_SUPABASE_CLIENT_STATE__.autoRefreshOperation;
+    const changeAppState = mockAddEventListener.mock.calls[0][1];
+    let release;
+    const held = new Promise(resolve => { release = resolve; });
+    let entered;
+    const ready = new Promise(resolve => { entered = resolve; });
+    const operation = withAuthAutoRefreshPaused(async () => {
+      entered(); await held;
+      if (fails) throw new Error('Login failed');
+      return 'signed in';
+    });
+    const outcome = operation.then(value => value, error => error.message);
+    await ready;
+    expect(supabase.auth.stopAutoRefresh).toHaveBeenCalledTimes(1);
+    changeAppState('background'); changeAppState('active');
+    await globalThis.__MASI_SUPABASE_CLIENT_STATE__.autoRefreshOperation;
+    expect(supabase.auth.startAutoRefresh).toHaveBeenCalledTimes(1);
+    release();
+    expect(await outcome).toBe(fails ? 'Login failed' : 'signed in');
+    await globalThis.__MASI_SUPABASE_CLIENT_STATE__.autoRefreshOperation;
+    expect(supabase.auth.startAutoRefresh).toHaveBeenCalledTimes(2);
+  });
+
+  test.each([false, true])('login settlement in background keeps refresh stopped; failure = %s', async fails => {
+    const { supabase, withAuthAutoRefreshPaused } = loadClient();
+    await globalThis.__MASI_SUPABASE_CLIENT_STATE__.autoRefreshOperation;
+    const changeAppState = mockAddEventListener.mock.calls[0][1];
+    const outcome = withAuthAutoRefreshPaused(async () => {
+      changeAppState('background');
+      if (fails) throw new Error('Login failed');
+      return 'signed in';
+    }).catch(error => error.message);
+    expect(await outcome).toBe(fails ? 'Login failed' : 'signed in');
+    await globalThis.__MASI_SUPABASE_CLIENT_STATE__.autoRefreshOperation;
+    expect(supabase.auth.startAutoRefresh).toHaveBeenCalledTimes(1);
+    changeAppState('active');
+    await globalThis.__MASI_SUPABASE_CLIENT_STATE__.autoRefreshOperation;
+    expect(supabase.auth.startAutoRefresh).toHaveBeenCalledTimes(2);
+  });
+
+  test('a failed stop prevents login and releases its refresh pause', async () => {
+    const { supabase, withAuthAutoRefreshPaused } = loadClient();
+    await globalThis.__MASI_SUPABASE_CLIENT_STATE__.autoRefreshOperation;
+    const operation = jest.fn();
+    supabase.auth.stopAutoRefresh.mockRejectedValueOnce(new Error('Stop failed'));
+    await expect(withAuthAutoRefreshPaused(operation)).rejects.toThrow('Stop failed');
+    expect(operation).not.toHaveBeenCalled();
+    await globalThis.__MASI_SUPABASE_CLIENT_STATE__.autoRefreshOperation;
+    expect(supabase.auth.startAutoRefresh).toHaveBeenCalledTimes(2);
+  });
+
+  test('overlapping login pauses resume only after the last caller settles', async () => {
+    const { supabase, withAuthAutoRefreshPaused } = loadClient();
+    await globalThis.__MASI_SUPABASE_CLIENT_STATE__.autoRefreshOperation;
+    await withAuthAutoRefreshPaused(async () => {
+      await withAuthAutoRefreshPaused(async () => {});
+      await globalThis.__MASI_SUPABASE_CLIENT_STATE__.autoRefreshOperation;
+      expect(supabase.auth.startAutoRefresh).toHaveBeenCalledTimes(1);
+    });
+    await globalThis.__MASI_SUPABASE_CLIENT_STATE__.autoRefreshOperation;
+    expect(supabase.auth.startAutoRefresh).toHaveBeenCalledTimes(2);
   });
 
   test('shared-client storage uses the fence with its actual SDK session key', async () => {

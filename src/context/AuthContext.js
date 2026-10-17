@@ -1,5 +1,5 @@
 import React, { createContext, useState, useEffect, useContext, useRef, useCallback, useMemo } from 'react';
-import { supabase } from '../services/supabaseClient';
+import { supabase, withAuthAutoRefreshPaused } from '../services/supabaseClient';
 import { readPersistedSession, clearPersistedSession } from '../services/persistedAuthSession';
 import { admitAuthSessionUser, revokeAuthSessionAdmission, normalizeAuthEmail } from '../services/authSessionStorage';
 import { requestOpen, requestClose, getCurrentHandle, subscribeToHandle, setLatestAuthSession } from '../session/signedInHandle';
@@ -106,7 +106,7 @@ export const AuthProvider = ({ children }) => {
     const generation = generationRef.current;
     if (localSignOutCommittedRef.current) return commitSignedOutState(reason);
     const persisted = await readPersistedSession();
-    if (generation !== generationRef.current || !mountedRef.current) return;
+    if (generation !== generationRef.current || !mountedRef.current || signInPendingRef.current) return;
     if (persisted?.user?.id) {
       admitAuthSessionUser({ id: persisted.user.id });
       if (currentUserRef.current?.id !== persisted.user.id) {
@@ -129,6 +129,11 @@ export const AuthProvider = ({ children }) => {
       // The SDK delivers its initial storage read asynchronously. An explicit
       // login has already taken ownership of admission, even before its response.
       if (event === 'INITIAL_SESSION' && signInPendingRef.current) return;
+      if (!nextSession?.user && signInPendingRef.current) {
+        // SDK events carry no originating identity. Defer destructive cleanup
+        // until the explicit login can reconcile its result with durable storage.
+        return;
+      }
       for (const listener of authListenersRef.current) listener(event, nextSession ?? null);
       if (nextSession?.user) {
         const pendingSignIn = signInPendingRef.current;
@@ -155,7 +160,7 @@ export const AuthProvider = ({ children }) => {
         const generation = generationRef.current;
         void (async () => {
           const persisted = await readPersistedSession();
-          if (generation !== generationRef.current || !mountedRef.current) return;
+          if (generation !== generationRef.current || !mountedRef.current || signInPendingRef.current) return;
           if (!localSignOutCommittedRef.current && persisted?.user?.id === currentUserRef.current?.id && persisted?.user?.id) {
             setLatestAuthSession(persisted);
             return;
@@ -185,8 +190,8 @@ export const AuthProvider = ({ children }) => {
     };
   }, [openForUser]);
 
-  // Serialize password changes with each other. Session storage admission fences
-  // their late results, so explicit sign-in need not join this queue.
+  // Serialize password changes with each other. Explicit sign-in drains the SDK
+  // lock, which includes an already-started password update, before its request.
   const runAuthMutation = useCallback((task) => {
     const operation = authMutationRef.current.catch(() => {}).then(task);
     authMutationRef.current = operation.catch(() => {});
@@ -195,33 +200,54 @@ export const AuthProvider = ({ children }) => {
 
   const signIn = useCallback(async (email, password) => {
     let attempt;
+    let signedInUser;
     try {
       while (signOutOperationRef.current) await signOutOperationRef.current.complete;
       ++generationRef.current;
       attempt = {
         email: normalizeAuthEmail(email),
-        previousAdmission: null,
+        previousAdmission: undefined,
       };
-      const previous = admitAuthSessionUser({ email: attempt.email });
-      // Snapshot admission itself, which may already be restored before the UI.
-      // A superseded login retains the last settled identity for failure rollback.
-      attempt.previousAdmission = previous?.id ? previous : signInPendingRef.current?.previousAdmission ?? null;
+      const previousAttempt = signInPendingRef.current;
       signInPendingRef.current = attempt;
-      const { data, error } = await supabase.auth.signInWithPassword({
-        email: attempt.email,
-        password,
+      clearPendingSignOutTimeout();
+      const { data, error } = await withAuthAutoRefreshPaused(async () => {
+        // auth-js 2.100.1 getSession and refreshSession acquire the same
+        // lock:<storageKey>. Password sign-in does not. Drain before admission
+        // and login so an old refresh's _removeSession cannot delete new tokens.
+        // The transport bounds active requests, including abort-ignoring fetches.
+        await supabase.auth.getSession();
+        if (signInPendingRef.current !== attempt || !mountedRef.current) throw new StaleActorError();
+        const previous = admitAuthSessionUser({ email: attempt.email });
+        attempt.previousAdmission = previous?.id ? previous : previousAttempt?.previousAdmission ?? null;
+        return supabase.auth.signInWithPassword({ email: attempt.email, password });
       });
 
       if (error) throw error;
+      signedInUser = data?.user;
       return { data, error: null };
     } catch (error) {
-      if (attempt && signInPendingRef.current === attempt) {
+      if (attempt && signInPendingRef.current === attempt && attempt.previousAdmission !== undefined) {
         admitAuthSessionUser(attempt.previousAdmission);
       }
       console.error('Sign in error:', error);
       return { data: null, error };
     } finally {
-      if (signInPendingRef.current === attempt) signInPendingRef.current = null;
+      try {
+        if (attempt && signInPendingRef.current === attempt) {
+          const persisted = await readPersistedSession();
+          if (signInPendingRef.current === attempt && mountedRef.current) {
+            if (persisted?.user?.id && persisted.user.id === (signedInUser?.id ?? currentUserRef.current?.id)) {
+              setLatestAuthSession(persisted);
+            } else {
+              localSignOutCommittedRef.current = true;
+              await finishSignOut('sign-in-reconcile');
+            }
+          }
+        }
+      } finally {
+        if (signInPendingRef.current === attempt) signInPendingRef.current = null;
+      }
     }
   }, []);
 
