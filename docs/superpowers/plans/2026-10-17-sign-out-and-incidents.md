@@ -47,27 +47,46 @@ Plan 2 (`docs/superpowers/plans/2026-10-14-signed-in-ea-handle.md`) is merged. I
 1. **An EA signs out while offline with unsent work.** "Try uploading now" is disabled and labelled "No connection"; "Sign out anyway" still signs out. Pinned in Task 6.
 2. **Clock-out from the sheet does not complete** (location Settings detour, or a write error). The EA is not signed out; the sheet stays, with an inline message, and they can try again or choose another option. Pinned in Task 6.
 3. **Another EA's file cannot be read** (corrupt, locked, or missing `sync_outbox`). Sign-in is unaffected, the bad file produces no incident and no crash, and readable files are still reported. Pinned in Task 5.
-4. **The incident RPC is unreachable, or the EA signs out mid-drain.** Queued incidents stay pending and send on a later pass. A stale handle's drain never sends under the next EA's session. Pinned in Task 3.
-5. **The same stranded situation is seen at many sign-ins.** It is queued and sent once. A new situation for the same EA (a different oldest unsent row) is reported again. Pinned in Task 5.
+4. **The incident RPC is unreachable, or the EA signs out mid-drain.** Queued incidents stay pending and send on a later pass, even when the domain outbox is empty. A stale handle's drain never sends under the next EA's session. Pinned in Tasks 3 and 5.
+5. **The same stranded situation is seen at many sign-ins.** It is queued and sent once. A new situation for the same EA is reported again: a different oldest unsent row, or the same outbox id recreated after an upload. Pinned in Task 5.
+6. **The EA cancels while the clock-out or upload is still running.** They stay signed in, and no sheet reopens. Pinned in Task 6.
+7. **An EA signs out, and the next EA signs in, while discovery is still reading a file.** Discovery opens nothing more, and the next open of a file it was reading waits for that read. Pinned in Task 5.
 
 ---
 
 ## Rulings this plan makes (record each in the SDD ledger)
 
 1. **Idempotency key.** The server dedupes on a unique `(reporter_id, kind, repeat_key)` constraint instead of a stored hash. The semantics are identical (spec: "idempotent on a hash of (reporter, kind, repeat key)") with no `pgcrypto` dependency.
-2. **Server repeat key = `installId + ':' + local repeat key`.**
-   - Local keys:
-     - `left_behind_unsent_work`: `<strandedUserId>:<oldest unsent outbox id>`
-     - `legacy_shared_file_unsent`: `legacy:<oldest unsent outbox id>`
-     - `foreign_owner_in_file`: `foreign:<smallest foreign outbox id>`
-   - This matches the spec's `strandedUserId + installId + oldest unsent outbox row id`.
+2. **Repeat keys are opaque digests; server repeat key = `installId + ':' + local repeat key`.**
+   - An outbox id is `${table}:${recordId}:${operation}` (`syncOutboxRepository.js` `outboxRecordId`), so it contains a child or session id. A raw outbox id must never reach the server, and must never sit in the queue either.
+   - The local repeat key is `incidentRepeatKey(...parts)`: a UUIDv5 over the parts joined with `\u0000`, under a fixed Masi incident namespace (`uuid` v5 is already used on device by `deterministicDomainId`). It is deterministic, so dedupe still works, and one-way, so it reveals nothing.
+   - Parts per kind:
+     - `left_behind_unsent_work`: `[strandedUserId, oldestUnsentOutboxId, oldestUnsentCreatedAt]`
+     - `legacy_shared_file_unsent`: `['legacy', oldestUnsentOutboxId, oldestUnsentCreatedAt]`
+     - `foreign_owner_in_file`: `['foreign', ...sortedForeignOutboxIds]`
+   - **Why `created_at` is in the left-behind key:** outbox ids are deterministic per record and operation, not per mutation. After an upload deletes the row, a later edit to the same child recreates the same id. The upsert keeps `created_at` on conflict (`insertOutboxRecord` `preserveOnConflictColumns`), so the pair is stable across retries of one episode and changes when the work was acknowledged and recreated.
+   - **Why the whole foreign set:** the scan re-finds every foreign row each pass. A set that grows while its smallest id stays present is a new situation, so the key covers all ids.
+   - This realises the spec's `strandedUserId + installId + oldest unsent outbox row id`, with the episode timestamp added and the result hashed so T12 holds for the key as well as the payload.
    - `installId` is added at send time, so SQLite transactions never read AsyncStorage.
 3. **Envelope metadata is added at send time.** `appVersion`, `buildNumber`, `updateId`, `backend` and `installId` are merged into the payload by the drain. Queued rows hold only the kind-specific counts.
 4. **`foreign_owner_in_file` payload** (the spec names the kind, not the shape): `{ foreignTotal, foreignByTable }`.
 5. **Discovery does not read `last_active_at`.** It only matters to the deferred deletion rule (§7.3), and the payload does not carry it. Revive when deletion is built.
-6. **Discovery runs detached after the handle is published.** It never delays sign-in. It runs in the handle registry (`src/session/`), which the production-binding static test already treats as privileged.
-7. **The drain runs at the end of a full `syncAll` pass** (not `syncTableByName`), only with a live session. A failed drain never changes the pass's `success`. A `22023` rejection marks the row `rejected` (never retried). Any other failure leaves it pending and stops the drain for this pass.
+6. **Discovery runs detached after the handle is published, bound to that handle and to the file fence.**
+   - It never delays sign-in. It runs in the handle registry (`src/session/`), which the production-binding static test already treats as privileged.
+   - Before each file it checks that its handle is still open and current; after a sign-out it opens nothing more.
+   - Each read of another file runs through `readUnderFileFence(fileName, task)` in `signedInHandle.js`. The read starts only after that file's pending disposal, and it joins the file's entry in the existing `disposals` map, so a same-file `requestOpen` waits for it exactly as it waits for a disposal. A failed disposal stays failed.
+   - The handle exposes `handle.discovery`: a promise that settles (never rejects) when discovery has queued its incidents. OfflineContext refreshes sync status when it settles, which schedules an upload (ruling 7).
+   - Closing a read-only connection may checkpoint that file's WAL and remove its `-wal`/`-shm` sidecars. That is ordinary SQLite behaviour: committed data moves into the main file and nothing is lost. T10's "never deleted" is about the database file and its rows, which test 8 pins.
+7. **Draining and scheduling.**
+   - The drain runs at the end of a full `syncAll` pass (not `syncTableByName`), and only with a live session. A failed drain never changes the pass's `success`.
+   - A `22023` rejection marks the row `rejected` (never retried). Any other failure leaves it pending with `next_attempt_at` backed off on the outbox's curve (`min(5 s × 3^attempts, 15 min)`), and stops the drain for this pass.
+   - Incidents are upload work. `getSyncStatus` reports `incidentReadyCount` (pending and due). OfflineContext treats it like `readyCount` everywhere it decides whether to schedule a pass: status refresh, reconnect, foreground and background. This happens through one `hasUploadWork()` helper; there is no new scheduler. A failed incident is retried by the existing 30-second status refresh once its backoff passes.
+   - `incidentReadyCount` is never shown to the EA and never counts as unsent work. It only decides whether a pass runs.
 8. **Retention.** When the queue reaches 200 rows, the oldest `sent`/`rejected` rows are deleted to make room. If all 200 are `pending`, the new incident is dropped and logged (`{ queued: false, reason: 'full' }`).
+9. **Each sign-out attempt has a generation.**
+   - `start` begins a new attempt. Cancel, backdrop dismissal, Android Back (all reach `cancel` through `BottomSheet.onDismiss`) and unmount end it.
+   - Every continuation after an `await` (clock-out, upload, unsent count) checks that its attempt is still current before it changes a sheet or signs out. A cancelled attempt can never sign the EA out later.
+   - Cancelling does not abort an upload or clock-out already in progress. It only stops the flow from acting on the result.
 
 ## File Structure
 
@@ -77,13 +96,14 @@ Plan 2 (`docs/superpowers/plans/2026-10-14-signed-in-ea-handle.md`) is merged. I
 | `scripts/support-incident-postgres-harness.cjs` (new) | S2 against a disposable PostgreSQL |
 | `src/db/migrations.js` (modify) | Local migration v13 `support_incident_queue` |
 | `src/db/repositories/syncOutboxRepository.js` (modify) | `readUnsentSummary(db)`, the one unsent definition; `countUnsent` uses it; the integrity scan queues `foreign_owner_in_file` |
-| `src/db/repositories/supportIncidentRepository.js` (new) | Local queue: enqueue (dedupe, size, cap), list, mark sent/rejected/failed; `enqueueSupportIncident(txn, …)` for callers already in a transaction |
+| `src/db/repositories/supportIncidentRepository.js` (new) | Local queue: enqueue (dedupe, size, cap), list due, count due, mark sent/rejected/failed with backoff; `enqueueSupportIncident(txn, …)` for callers already in a transaction; `incidentRepeatKey(...parts)` |
 | `src/services/installId.js` (new) | Device-level install id |
 | `src/services/supportIncidents.js` (new) | Envelope builder and `drainSupportIncidents` |
-| `src/services/offlineSync.js` (modify) | Engine accepts `supportIncidentRepository`; drain at the end of `syncAll` |
+| `src/services/offlineSync.js` (modify) | Engine accepts `supportIncidentRepository`; drain at the end of `syncAll`; `getSyncStatus` reports `incidentReadyCount` |
+| `src/context/OfflineContext.js` (modify) | `hasUploadWork()` includes due incidents; refresh status when `handle.discovery` settles |
 | `src/session/handleServices.js` (modify) | Registers the repository and passes it to the engine |
 | `src/session/fileDiscovery.js` (new) | List database files, read others read-only, turn results into incidents, queue them |
-| `src/session/signedInHandle.js` (modify) | Run discovery detached after publish (injectable `discover`) |
+| `src/session/signedInHandle.js` (modify) | Run discovery detached after publish (injectable `discover`), exposed as `handle.discovery`; `readUnderFileFence` |
 | `src/context/TimeTrackingContext.js` (modify) | `handleSignOut` (clock-out) returns `true` only when the entry closed |
 | `src/hooks/useSignOutFlow.js` (new) | Sign-out question state machine (dependencies injected) |
 | `src/components/profile/SignOutSheets.js` (new) | The two bottom sheets (presentational) |
@@ -278,11 +298,13 @@ git commit -m "feat(incidents): server support-incident envelope and S2 harness"
   - `export const SUPPORT_INCIDENT_KINDS = ['left_behind_unsent_work', 'foreign_owner_in_file', 'legacy_shared_file_unsent'];`
   - `export const MAX_QUEUED_INCIDENTS = 200;`
   - `export const MAX_INCIDENT_PAYLOAD_BYTES = 8192;`
+  - `export const incidentRepeatKey = (...parts) => string`: a UUIDv5 of `parts.map(String).join('\u0000')` under `INCIDENT_KEY_NAMESPACE` (ruling 2). Every producer builds its repeat key with it; no producer passes a raw outbox id.
   - `export const enqueueSupportIncident = async (txn, { kind, repeatKey, payload }) => ({ queued: boolean, reason?: 'duplicate' | 'full' | 'too_large' })`. The caller supplies the open transaction facade.
-  - `export const createSupportIncidentRepository = ({ database } = {}) => ({ enqueue, listPending, markSent, markRejected, markAttemptFailed })`. There is **no** singleton export; the production-binding static test forbids one.
+  - `export const createSupportIncidentRepository = ({ database } = {}) => ({ enqueue, listPending, countDue, markSent, markRejected, markAttemptFailed })`. There is **no** singleton export; the production-binding static test forbids one.
     - `enqueue({ kind, repeatKey, payload }, { transaction } = {})`: same result as `enqueueSupportIncident`.
-    - `listPending({ limit = 20 } = {}) → [{ id, kind, repeatKey, payload /* parsed object */, attempts }]`, oldest first.
-    - `markSent(id)`, `markRejected(id, errorMessage)`, `markAttemptFailed(id, errorMessage)` (increments `attempts`; stays `pending`).
+    - `listPending({ limit = 20, now = timestamp() } = {}) → [{ id, kind, repeatKey, payload /* parsed object */, attempts }]`: pending rows that are due (`next_attempt_at` is null or `<= now`), oldest first.
+    - `countDue({ now = timestamp() } = {}) → number`: the same filter, counted.
+    - `markSent(id)`, `markRejected(id, errorMessage)`, `markAttemptFailed(id, errorMessage, { now } = {})`. The last increments `attempts`, stays `pending`, and sets `next_attempt_at = now + min(5000 × 3^attemptsBefore, 900000) ms`.
 
 - [ ] **Step 1: Write the failing tests.**
 
@@ -363,16 +385,35 @@ test('at 200 rows the oldest sent rows make room; 200 pending rows refuse a new 
   expect(count.n).toBe(200);
 });
 
-test('markAttemptFailed keeps the row pending; markRejected and markSent remove it from pending', async () => {
+test('markAttemptFailed backs the row off; markRejected and markSent remove it from pending', async () => {
   const repo = createSupportIncidentRepository({ database: db });
   await repo.enqueue({ kind: 'left_behind_unsent_work', repeatKey: 'a', payload: {} });
   await repo.enqueue({ kind: 'left_behind_unsent_work', repeatKey: 'b', payload: {} });
   const [a, b] = await repo.listPending();
-  await repo.markAttemptFailed(a.id, 'Network request failed');
+  const failedAt = '2026-10-17T10:00:00.000Z';
+  await repo.markAttemptFailed(a.id, 'Network request failed', { now: failedAt });
   await repo.markRejected(b.id, '22023');
-  const pending = await repo.listPending();
-  expect(pending.map((row) => row.id)).toEqual([a.id]);
-  expect(pending[0].attempts).toBe(1);
+  // Backed off for 5 s after the first failure: not due at +4 s, due at +5 s.
+  expect(await repo.listPending({ now: '2026-10-17T10:00:04.000Z' })).toEqual([]);
+  expect(await repo.countDue({ now: '2026-10-17T10:00:04.000Z' })).toBe(0);
+  const due = await repo.listPending({ now: '2026-10-17T10:00:05.000Z' });
+  expect(due.map((row) => row.id)).toEqual([a.id]);
+  expect(due[0].attempts).toBe(1);
+  expect(await repo.countDue({ now: '2026-10-17T10:00:05.000Z' })).toBe(1);
+  // The second failure backs off 15 s (5 s × 3).
+  await repo.markAttemptFailed(a.id, 'Network request failed', { now: '2026-10-17T10:00:05.000Z' });
+  expect(await repo.countDue({ now: '2026-10-17T10:00:19.000Z' })).toBe(0);
+  expect(await repo.countDue({ now: '2026-10-17T10:00:20.000Z' })).toBe(1);
+});
+
+test('incidentRepeatKey is deterministic, opaque, and sensitive to every part', () => {
+  const key = incidentRepeatKey('u1', 'children:c-secret-child-id:update', '2026-10-15T00:00:00.000Z');
+  expect(key).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-5[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/);
+  expect(key).toBe(incidentRepeatKey('u1', 'children:c-secret-child-id:update', '2026-10-15T00:00:00.000Z'));
+  expect(key).not.toContain('c-secret-child-id');
+  expect(key).not.toBe(incidentRepeatKey('u1', 'children:c-secret-child-id:update', '2026-10-16T00:00:00.000Z'));
+  // Part boundaries matter: ('ab', 'c') and ('a', 'bc') are different situations.
+  expect(incidentRepeatKey('ab', 'c')).not.toBe(incidentRepeatKey('a', 'bc'));
 });
 ```
   - In `__tests__/sqlitePlan1Migrations.test.js`, or whichever suite pins `CURRENT_SCHEMA_VERSION` (grep for `CURRENT_SCHEMA_VERSION` in `__tests__`), add or adjust an assertion: the version is 13 and `support_incident_queue` exists after migrating.
@@ -398,6 +439,7 @@ create table if not exists support_incident_queue (
   payload text not null,
   status text not null default 'pending' check (status in ('pending', 'sent', 'rejected')),
   attempts integer not null default 0,
+  next_attempt_at text,
   last_error text,
   created_at text not null default (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
   updated_at text not null default (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
@@ -438,7 +480,7 @@ export const readUnsentSummary = async (db) => {
 
 `src/db/repositories/supportIncidentRepository.js`:
 ```js
-import { v4 as uuidv4 } from 'uuid';
+import { v4 as uuidv4, v5 as uuidv5 } from 'uuid';
 import { resolveDatabase, runRepositoryTransaction } from './repositoryRuntime';
 import { timestamp } from './sqliteRepositoryUtils';
 
@@ -447,6 +489,18 @@ export const SUPPORT_INCIDENT_KINDS = [
 ];
 export const MAX_QUEUED_INCIDENTS = 200;
 export const MAX_INCIDENT_PAYLOAD_BYTES = 8192;
+
+// Fixed namespace for incident repeat keys. Never change it: that would re-report every situation.
+const INCIDENT_KEY_NAMESPACE = 'd3a1c6f2-5b7e-4c1a-9f0e-2b8d4e6a7c10';
+
+// Outbox ids carry record ids (`table:recordId:operation`). The repeat key identifies the
+// situation without revealing it: deterministic for dedupe, one-way for privacy (spec T12).
+export const incidentRepeatKey = (...parts) => uuidv5(
+  parts.map(String).join('\u0000'), INCIDENT_KEY_NAMESPACE
+);
+
+// The outbox's retry curve (offlineSync getRetryDelay): 5 s, ×3 per failure, capped at 15 min.
+const retryDelayMs = (attemptsBefore) => Math.min(5000 * 3 ** attemptsBefore, 15 * 60 * 1000);
 
 const utf8Bytes = (text) => {
   let bytes = 0;
@@ -493,28 +547,44 @@ export const createSupportIncidentRepository = ({ database } = {}) => {
   const enqueue = (incident, { transaction } = {}) => runWrite(
     transaction, (txn) => enqueueSupportIncident(txn, incident)
   );
-  const listPending = async ({ limit = 20 } = {}) => {
+  const DUE = `status = 'pending' and (next_attempt_at is null or next_attempt_at <= ?)`;
+  const listPending = async ({ limit = 20, now = timestamp() } = {}) => {
     const db = await resolveDatabase(database);
     const rows = await db.getAllAsync(`
       select id, kind, repeat_key, payload, attempts from support_incident_queue
-      where status = 'pending' order by created_at, id limit ?`, limit);
+      where ${DUE} order by created_at, id limit ?`, now, limit);
     return rows.map((row) => ({
       id: row.id, kind: row.kind, repeatKey: row.repeat_key,
       payload: JSON.parse(row.payload), attempts: row.attempts,
     }));
   };
-  const mark = (sql) => (id, errorMessage = null, { transaction } = {}) => runWrite(
-    transaction, (txn) => txn.runAsync(sql, errorMessage, timestamp(), id)
+  const countDue = async ({ now = timestamp() } = {}) => {
+    const db = await resolveDatabase(database);
+    const { n } = await db.getFirstAsync(`select count(*) as n from support_incident_queue where ${DUE}`, now);
+    return n;
+  };
+  const close = (status) => (id, errorMessage = null, { transaction } = {}) => runWrite(
+    transaction, (txn) => txn.runAsync(`update support_incident_queue
+      set status = ?, last_error = ?, next_attempt_at = null, updated_at = ? where id = ?`,
+    status, errorMessage, timestamp(), id)
+  );
+  const markAttemptFailed = (id, errorMessage, { now = timestamp(), transaction } = {}) => runWrite(
+    transaction, async (txn) => {
+      const row = await txn.getFirstAsync('select attempts from support_incident_queue where id = ?', id);
+      if (!row) return;
+      const nextAttemptAt = new Date(Date.parse(now) + retryDelayMs(row.attempts)).toISOString();
+      await txn.runAsync(`update support_incident_queue
+        set attempts = attempts + 1, last_error = ?, next_attempt_at = ?, updated_at = ? where id = ?`,
+      errorMessage, nextAttemptAt, now, id);
+    }
   );
   return {
     enqueue,
     listPending,
-    markSent: (id, options) => mark(`update support_incident_queue
-      set status = 'sent', last_error = ?, updated_at = ? where id = ?`)(id, null, options),
-    markRejected: mark(`update support_incident_queue
-      set status = 'rejected', last_error = ?, updated_at = ? where id = ?`),
-    markAttemptFailed: mark(`update support_incident_queue
-      set attempts = attempts + 1, last_error = ?, updated_at = ? where id = ?`),
+    countDue,
+    markSent: (id, options) => close('sent')(id, null, options),
+    markRejected: close('rejected'),
+    markAttemptFailed,
   };
 };
 ```
@@ -541,10 +611,13 @@ git commit -m "feat(incidents): local incident queue and the one unsent definiti
 - Modify: `src/services/offlineSync.js`:
   - `createOutboxSyncEngine` accepts `supportIncidentRepository`;
   - `syncAll` drains after the outbox loop.
+  - `getSyncStatus` reports `incidentReadyCount`.
+- Modify: `src/context/OfflineContext.js`: one `hasUploadWork()` helper for the four scheduling checks; refresh status when `handle.discovery` settles.
 - Modify: `src/session/handleServices.js`: pass `supportIncidentRepository: repositories.supportIncidents` to `createOutboxSyncEngine`.
 - Modify: `__tests__/moduleStateAllowlist.test.js`: add `'src/services/installId.js:pending': 'device-level install id; one per phone, never per EA'`.
 - Test: `__tests__/supportIncidentDrain.test.js` (new)
 - Test: `__tests__/installId.test.js` (new)
+- Test: `__tests__/OfflineContext.test.js` (extend; reuse its provider and fake-timer setup).
 
 **Interfaces:**
 - Consumes: `createSupportIncidentRepository` (Task 2); `getRuntimeDiagnostics()` from `src/utils/runtimeDiagnostics.js`. Its result has `.application.version`, `.application.build`, `.update.id` and `.backend.projectId`.
@@ -555,6 +628,8 @@ git commit -m "feat(incidents): local incident queue and the one unsent definiti
   - `export const buildIncidentEnvelope = async () => ({ appVersion, buildNumber, updateId, backend, installId })`.
   - `export const drainSupportIncidents = async ({ repository, supabaseClient, enqueueRequest, envelope, limit = 20 }) => ({ sent, rejected, failed })`.
   - The `syncAll` result gains `incidents: { sent, rejected, failed }` when a drain ran.
+  - `getSyncStatus()` gains `incidentReadyCount: number` (0 when the engine has no incident repository).
+- Consumes from Task 5 (not yet built when this task runs): `handle.discovery`, a promise that never rejects. OfflineContext must tolerate its absence (`handle.discovery?.then`).
 
 - [ ] **Step 1: Write the failing tests.**
 
@@ -594,12 +669,18 @@ test('sign-out does not remove the install id', async () => {
     2. **A `{ error: { code: '22023' } }` marks the row rejected.** The drain continues to the next row; the result is `{ sent: 1, rejected: 1, failed: 0 }`.
     3. **A `{ error: { code: '08006', message: 'Network request failed' } }` keeps the row pending** with `attempts: 1`. The drain stops: the second row is not attempted, and `rpc` is called once.
     4. **A thrown `StaleActorError`** (`src/session/staleActor.js`) from `enqueueRequest` propagates out of `drainSupportIncidents`. The row stays pending with attempts unchanged.
-    5. **T12 deny-list.** Seed a child fixture with id `c-secret-child-id`, first name `Thandiwe` and note text `private note` in the domain tables. Seed an outbox row for it, and queue a `left_behind_unsent_work` incident built only from counts. Assert that `JSON.stringify(rpc.mock.calls)` contains none of `c-secret-child-id`, `Thandiwe` or `private note`. Use the children insert helper from an existing children repository test.
+    5. **T12 deny-list.** Seed a child fixture with id `c-secret-child-id`, first name `Thandiwe` and note text `private note` in the domain tables. Seed an outbox row for it, and queue a `left_behind_unsent_work` incident built only from counts. Assert that `JSON.stringify(rpc.mock.calls)` (the whole request, `p_repeat_key` included) contains none of `c-secret-child-id`, `Thandiwe` or `private note`. Use the children insert helper from an existing children repository test. Task 5 case 10 repeats this end to end through the real discovery producer.
   - Then engine-level cases, through `createOutboxSyncEngine`. Copy the setup of an existing engine test that uses `test-support/supabaseSyncMock.js`; grep `__tests__` for `createOutboxSyncEngine(`.
     6. **With a live session and an empty outbox**, `syncAll()` calls the RPC for a queued incident, and the result has `incidents: { sent: 1, rejected: 0, failed: 0 }` and `success: true`.
     7. **With the RPC failing**, `syncAll()` still returns `success: true` (outbox success is unchanged), and the incident stays pending.
     8. **With no session** (`skippedNoSession`), the RPC is never called.
     9. **`syncTableByName('children')`** never calls the RPC.
+    10. **`getSyncStatus()` reports `incidentReadyCount`**: 1 with one due incident; 0 after it is sent; 0 while a failed one is backed off.
+  - Provider-level cases in `__tests__/OfflineContext.test.js`, each with an **empty domain outbox** (`readyCount: 0`, `inFlightCount: 0`) and a due incident (`incidentReadyCount: 1` from the mocked engine status):
+    11. **Online at mount:** the initial status refresh schedules a background pass, and `syncAll` runs after the debounce (use fake timers, as the suite does for other triggers).
+    12. **Offline, then reconnect:** no pass while offline; the NetInfo transition to online schedules one.
+    13. **Discovery settles after mount:** the handle's `discovery` promise is a deferred one. Before it resolves, status reports 0 incidents and no pass runs. Resolve it with status now reporting 1, and a pass is scheduled.
+    14. **Retry after an RPC failure:** after a pass whose status still reports a due incident, the post-pass refresh does not re-trigger (it uses `autoTrigger: false`, unchanged). The next 30-second periodic refresh does.
 
 - [ ] **Step 2: Run and watch them fail.**
   - Run: `PATH=$HOME/.nvm/versions/node/v20.19.4/bin:$PATH npx jest __tests__/installId.test.js __tests__/supportIncidentDrain.test.js`
@@ -703,6 +784,47 @@ export const drainSupportIncidents = async ({
       }
 ```
   - This is reached only past the `!session` early return, so a pass with no session never drains.
+  - `getSyncStatus` adds the due-incident count. A failure to count must not break status:
+```js
+  const getSyncStatus = async (options = {}) => {
+    const [status, meta, incidentReadyCount] = await Promise.all([
+      outboxRepository.getSyncStatus(options),
+      stateRepository.getSyncMeta(),
+      supportIncidentRepository
+        ? supportIncidentRepository.countDue().catch((error) => {
+          if (isStaleActorError(error)) throw error;
+          return 0; // support reporting never breaks the status the EA sees
+        })
+        : 0,
+    ]);
+    return {
+      ...status,
+      incidentReadyCount,
+      lastSyncTime: meta.lastSyncTime,
+      lastSuccessfulSyncTime: meta.lastSuccessfulSyncTime || null,
+    };
+  };
+```
+
+`src/context/OfflineContext.js`:
+  - Add `const incidentReadyCountRef = useRef(0);` beside `readyCountRef`, and set it in `refreshSyncStatus` from `status.incidentReadyCount || 0`.
+  - Add one helper and use it for all four scheduling checks (status refresh with `autoTrigger`, reconnect, foreground, background). Each `(readyCountRef.current > 0 || inFlightCountRef.current > 0)` becomes `hasUploadWork()`:
+```js
+  // Domain rows and queued support incidents both need an upload pass. Incidents are never
+  // shown to the EA and never count as unsent work; they only decide whether a pass runs.
+  const hasUploadWork = () => (
+    readyCountRef.current > 0 || inFlightCountRef.current > 0 || incidentReadyCountRef.current > 0
+  );
+```
+  - Discovery queues incidents after the provider has mounted, so refresh once it settles:
+```js
+  useEffect(() => {
+    let active = true;
+    handle.discovery?.then(() => { if (active && handle.isCurrent()) void refreshSyncStatus(); });
+    return () => { active = false; };
+  }, [handle, refreshSyncStatus]);
+```
+  - Do not change `unsyncedCount`, `readyCount`, or any EA-facing number.
 
 - [ ] **Step 4: Run and watch them pass.**
   - Run the Step 2 command plus `npx jest __tests__/moduleStateAllowlist.test.js __tests__/sharedClientStatic.test.js` and every existing suite matching `offlineSync`: `npx jest offlineSync`.
@@ -710,7 +832,7 @@ export const drainSupportIncidents = async ({
 
 - [ ] **Step 5: Commit.** Include a build-log row.
 ```bash
-git add src/services/installId.js src/services/supportIncidents.js src/services/offlineSync.js src/session/handleServices.js __tests__/installId.test.js __tests__/supportIncidentDrain.test.js __tests__/moduleStateAllowlist.test.js documentation/build-log.md
+git add src/services/installId.js src/services/supportIncidents.js src/services/offlineSync.js src/context/OfflineContext.js src/session/handleServices.js __tests__/installId.test.js __tests__/supportIncidentDrain.test.js __tests__/moduleStateAllowlist.test.js __tests__/OfflineContext.test.js documentation/build-log.md
 git commit -m "feat(incidents): install id, envelope, and draining queued incidents in the sync pass"
 ```
 
@@ -723,17 +845,18 @@ git commit -m "feat(incidents): install id, envelope, and draining queued incide
 - Test: `__tests__/outboxIntegrityScan.test.js` (extend)
 
 **Interfaces:**
-- Consumes: `enqueueSupportIncident(txn, { kind, repeatKey, payload })` (Task 2).
-- Produces: one queued `foreign_owner_in_file` incident per distinct foreign set. The local repeat key is `foreign:<smallest foreign outbox id>`; the payload is `{ foreignTotal, foreignByTable }`.
+- Consumes: `enqueueSupportIncident(txn, { kind, repeatKey, payload })` and `incidentRepeatKey(...parts)` (Task 2).
+- Produces: one queued `foreign_owner_in_file` incident per distinct foreign set. The local repeat key is `incidentRepeatKey('foreign', ...sortedForeignOutboxIds)`; the payload is `{ foreignTotal, foreignByTable }`.
 
 - [ ] **Step 1: Write the failing tests** (add to `outboxIntegrityScan.test.js`, reusing its fixture helpers):
   1. **At open:** a file owned by A holds an outbox row owned by B. After `requestOpen({ userId: A, openDatabase: sqlite.openDatabaseAsync })`:
      - `support_incident_queue` holds exactly one `foreign_owner_in_file` row;
-     - its `repeat_key` is `foreign:<that row's id>`;
+     - its `repeat_key` equals `incidentRepeatKey('foreign', <that row's id>)`, and does not contain the row's id;
      - its `payload` parses to `{ foreignTotal: 1, foreignByTable: { children: 1 } }` (use the table the fixture uses).
   2. **Before every pass:** run `syncAll` twice on the open handle with a live session. There is still exactly one queued incident; the scan re-finds the same terminal rows, so the repeat key is unchanged.
-  3. **The payload carries no record ids:** it contains neither the foreign row's `record_id` nor B's user id.
+  3. **The queued row carries no record ids:** neither its payload nor its repeat key contains the foreign row's `id`, its `record_id`, or B's user id.
   4. **No foreign rows:** a file with only A-owned rows queues nothing.
+  5. **A grown foreign set is a new situation.** After case 1, add a second B-owned row whose id sorts *after* the first (so the smallest id is unchanged), then run the scan again. A second `foreign_owner_in_file` row is queued with `foreignTotal: 2`.
 
 - [ ] **Step 2: Run and watch them fail.**
   - Run: `PATH=$HOME/.nvm/versions/node/v20.19.4/bin:$PATH npx jest __tests__/outboxIntegrityScan.test.js`
@@ -742,16 +865,16 @@ git commit -m "feat(incidents): install id, envelope, and draining queued incide
 - [ ] **Step 3: Implement.** Inside the `runWrite` task in `quarantineForeignOwners`, after the quarantine loop and before writing `integrity_scan_last`:
 ```js
       if (foreign.length > 0) {
-        const smallestId = foreign.map((row) => row.id).sort()[0];
         // Same transaction as the quarantine: the report exists exactly when the quarantine does.
+        // The key covers the whole set (a grown set is a new situation) and hides every id.
         await enqueueSupportIncident(txn, {
           kind: 'foreign_owner_in_file',
-          repeatKey: `foreign:${smallestId}`,
+          repeatKey: incidentRepeatKey('foreign', ...foreign.map((row) => row.id).sort()),
           payload: { foreignTotal: foreign.length, foreignByTable: byTable },
         });
       }
 ```
-  - Import `enqueueSupportIncident` from `./supportIncidentRepository`.
+  - Import `enqueueSupportIncident` and `incidentRepeatKey` from `./supportIncidentRepository`.
   - Do not remove the existing `console.error` / `captureOperationalError` lines.
 
 - [ ] **Step 4: Run and watch them pass.** Run the Step 2 command plus `npx jest __tests__/signedInHandle.test.js`. Expected: PASS.
@@ -768,18 +891,19 @@ git commit -m "feat(incidents): report foreign-owned outbox rows found by the in
 
 **Files:**
 - Create: `src/session/fileDiscovery.js`
-- Modify: `src/session/signedInHandle.js` (`requestOpen` gains `discover`; runs it detached after `created.publish()`)
+- Modify: `src/session/signedInHandle.js`: `requestOpen` gains `discover`, starts it detached at publication and exposes it as `handle.discovery`; new export `readUnderFileFence`
 - Test: `__tests__/fileDiscovery.test.js` (new)
 
 **Interfaces:**
-- Consumes: `readUnsentSummary(db)` (Task 2), `LEGACY_DATABASE_NAME` and `DATABASE_FILE_PREFIX` from `src/db/client.js`, `handle.services.repositories.supportIncidents.enqueue` (Task 2).
+- Consumes: `readUnsentSummary(db)` and `incidentRepeatKey(...parts)` (Task 2), `drainSupportIncidents` (Task 3, test only), `LEGACY_DATABASE_NAME` and `DATABASE_FILE_PREFIX` from `src/db/client.js`, `handle.services.repositories.supportIncidents.enqueue` (Task 2), `handle.isOpen()` and `handle.isCurrent()`.
 - Produces:
   - `export const listDatabaseNames = () => string[]`. Files in `new Directory(Paths.document, 'SQLite')`; returns `[]` when the directory is missing or listing throws.
   - `export const readOtherDatabase = async ({ name, openDatabase }) => ({ name, readable: true, unsent } | { name, readable: false })`.
-  - `export const discoverOtherDatabases = async ({ signedInUserId, listNames, openDatabase }) => Array<{ name, kind: 'ea' | 'legacy', strandedUserId: string | null, readable, unsent? }>`.
+  - `export const discoverOtherDatabases = async ({ signedInUserId, listNames, openDatabase, isActive = () => true, readUnderFence = (name, task) => task() }) => Array<{ name, kind: 'ea' | 'legacy', strandedUserId: string | null, readable, unsent? }>`. It stops admitting files as soon as `isActive()` is false.
   - `export const incidentsFromDiscovery = (files, now = new Date()) => Array<{ kind, repeatKey, payload }>` (pure).
   - `export const discoverAndQueueIncidents = async ({ handle, listNames = listDatabaseNames, openDatabase = openDatabaseAsync, now }) => ({ queued: number })`.
-  - `requestOpen({ ..., discover = discoverAndQueueIncidents })`.
+  - `requestOpen({ ..., discover })`; a published handle has `handle.discovery: Promise<void>` that never rejects.
+  - From `signedInHandle.js`: `export const readUnderFileFence = (fileName, task) => Promise` (ruling 6).
 
 - [ ] **Step 1: Write the failing tests** in `__tests__/fileDiscovery.test.js`.
   - Use the real SQLite engine and the setup from `outboxIntegrityScan.test.js`.
@@ -790,15 +914,19 @@ git commit -m "feat(incidents): report foreign-owned outbox rows found by the in
      - Seed `masi-<A>.db` with two unsent rows (`children`, created `2026-10-15T00:00:00.000Z`; `time_entries`, created `2026-10-16T00:00:00.000Z`).
      - Call `discoverAndQueueIncidents({ handle: <B's open handle>, listNames: () => [`masi-${A}.db`, `masi-${B}.db`], openDatabase: sqlite.openDatabaseAsync, now: new Date('2026-10-17T00:00:00.000Z') })`.
      - B's `support_incident_queue` holds one `left_behind_unsent_work` row with:
-       - `repeat_key` = `${A}:<oldest outbox id>`;
+       - `repeat_key` = `incidentRepeatKey(A, <oldest outbox id>, '2026-10-15T00:00:00.000Z')`;
        - payload `{ strandedUserId: A, unsentByTable: { children: 1, time_entries: 1 }, oldestUnsentAgeHours: 48 }`.
   2. **Once per repeat key.** Running discovery again queues nothing new (still one row).
   3. **A new situation reports again.**
      - Mark A's oldest row synced: delete it from A's file to simulate an upload, as the engine does on success.
      - Add a new unsent row, then discover again.
      - Expect a second `left_behind_unsent_work` row with a different repeat key.
+  3b. **The same outbox id, recreated after an upload, is a new situation.**
+     - Seed A's file with one row `children:<child id>:update` created `2026-10-15T00:00:00.000Z`; discover (one incident).
+     - Delete it (the upload), then insert the same id again with `created_at` `2026-10-16T09:00:00.000Z` (a later edit); discover again.
+     - Expect a second `left_behind_unsent_work` row.
   4. **Legacy `masi.db` with unsent rows.** Queues one `legacy_shared_file_unsent` row with:
-     - `repeat_key` = `legacy:<oldest id>`;
+     - `repeat_key` = `incidentRepeatKey('legacy', <oldest id>, <its created_at>)`;
      - payload `{ unsentByTable, oldestUnsentAgeHours }`, with no `strandedUserId` key.
   5. **No unsent rows** in A's file: nothing is queued.
   6. **The signed-in EA's own file is never read**, even if it has unsent rows. Spy on the `openDatabase` passed in and assert it is never called with `masi-${B}.db`.
@@ -809,12 +937,19 @@ git commit -m "feat(incidents): report foreign-owned outbox rows found by the in
      - After discovery, A's file (and `masi.db`, if seeded) still exists, and its outbox row count is unchanged.
      - The connection discovery opened ran `PRAGMA query_only = ON`: wrap `openDatabase` and record `execAsync` calls.
   9. **Names that are not database files are ignored:** `masi-<A>.db-wal`, `masi-<A>.db-shm`, `notes.txt`, `masi-notauuid.db`.
-  10. **Payload deny-list (T12).**
-      - Seed A's file with a child named `Thandiwe`, id `c-secret-child-id` and a note `private note`, plus its outbox row.
-      - The queued payload JSON contains none of those strings, and contains no outbox `record_id`.
+  10. **Deny-list end to end (T12).**
+      - Seed A's file with a child named `Thandiwe`, id `c-secret-child-id` and a note `private note`, plus its outbox row with the id the repositories really produce: `outboxRecordId('children', 'c-secret-child-id', 'insert')` from `syncOutboxRepository.js`.
+      - Discover into B's queue, then drain it with `drainSupportIncidents` (Task 3) and a fake `rpc`.
+      - Neither the queued row (`select * from support_incident_queue`, stringified) nor `JSON.stringify(rpc.mock.calls)` contains `c-secret-child-id`, `Thandiwe`, `private note` or the outbox id.
   11. **Wiring.**
       - `requestOpen({ userId: B, openDatabase: sqlite.openDatabaseAsync, discover })` with a `jest.fn()` `discover` calls it once with `{ handle }` after the handle is current.
-      - A `discover` that rejects does not reject `requestOpen`, and the handle stays open. Silence the expected `console.error`.
+      - A `discover` that rejects does not reject `requestOpen`, and the handle stays open. `handle.discovery` resolves (it never rejects). Silence the expected `console.error`.
+      - With the real discovery, `await handle.discovery` resolves after the incidents are queued.
+  12. **Sign-out during discovery (Review Focus 7).**
+      - Seed `masi-<A>.db` and `masi-<C>.db` with unsent rows. Open B with the real `discoverAndQueueIncidents`, `listNames: () => [A file, C file]`, and an `openDatabase` wrapper that records every name it opens and every `closeAsync`, and that suspends the open of A's file on a deferred promise. Pass these in through a `discover` that calls `discoverAndQueueIncidents({ handle, listNames, openDatabase: wrapper })`.
+      - While A's read is suspended, call `requestOpen({ userId: A, openDatabase: sqlite.openDatabaseAsync })`. After flushing microtasks it has not resolved: it waits for the read on A's file.
+      - Release the deferred open. A's `requestOpen` resolves to A's handle. The wrapper never opened C's file, every connection it opened was closed, and B's queue received nothing.
+  13. **Discovery waits for a pending disposal.** Close a handle on A's file and, before its disposal settles, start discovery for B over A's file: the wrapper's open of A's file happens only after `whenDisposed(A file)` resolves. If the existing handle tests have a helper that stalls disposal, reuse it; otherwise assert ordering with the recorded call sequence.
 
 - [ ] **Step 2: Run and watch them fail.**
   - Run: `PATH=$HOME/.nvm/versions/node/v20.19.4/bin:$PATH npx jest __tests__/fileDiscovery.test.js`
@@ -828,6 +963,8 @@ import { openDatabaseAsync } from 'expo-sqlite';
 import { Directory, File, Paths } from 'expo-file-system/next';
 import { DATABASE_FILE_PREFIX, LEGACY_DATABASE_NAME, databaseNameForUser } from '../db/client';
 import { readUnsentSummary } from '../db/repositories/syncOutboxRepository';
+import { incidentRepeatKey } from '../db/repositories/supportIncidentRepository';
+import { readUnderFileFence } from './signedInHandle';
 import { isStaleActorError } from './staleActor';
 
 const EA_FILE = new RegExp(`^${DATABASE_FILE_PREFIX}([0-9a-f-]{36})\\.db$`, 'i');
@@ -860,14 +997,20 @@ export const readOtherDatabase = async ({ name, openDatabase }) => {
   }
 };
 
-export const discoverOtherDatabases = async ({ signedInUserId, listNames, openDatabase }) => {
+export const discoverOtherDatabases = async ({
+  signedInUserId, listNames, openDatabase,
+  isActive = () => true, readUnderFence = (name, task) => task(),
+}) => {
   const ownName = databaseNameForUser(signedInUserId);
   const results = [];
   for (const name of listNames()) {
     const eaMatch = EA_FILE.exec(name);
     const isLegacy = name === LEGACY_DATABASE_NAME;
     if ((!eaMatch && !isLegacy) || name === ownName) continue;
-    const read = await readOtherDatabase({ name, openDatabase });
+    // After sign-out the signed-out EA's discovery opens nothing more (spec §4.3 storage boundary).
+    if (!isActive()) break;
+    const read = await readUnderFence(name, () => readOtherDatabase({ name, openDatabase }))
+      .catch(() => ({ name, readable: false })); // that file's earlier disposal failed: leave it alone
     results.push({ ...read, kind: isLegacy ? 'legacy' : 'ea', strandedUserId: eaMatch ? eaMatch[1] : null });
   }
   return results;
@@ -882,11 +1025,16 @@ export const incidentsFromDiscovery = (files, now = new Date()) => files
       unsentByTable: unsent.byTable,
       oldestUnsentAgeHours: ageHours(unsent.oldestCreatedAt, now),
     };
+    // Ruling 2: the oldest row's id and created_at identify this episode; the key hides both.
     return kind === 'legacy'
-      ? { kind: 'legacy_shared_file_unsent', repeatKey: `legacy:${unsent.oldestId}`, payload: counts }
+      ? {
+        kind: 'legacy_shared_file_unsent',
+        repeatKey: incidentRepeatKey('legacy', unsent.oldestId, unsent.oldestCreatedAt),
+        payload: counts,
+      }
       : {
         kind: 'left_behind_unsent_work',
-        repeatKey: `${strandedUserId}:${unsent.oldestId}`,
+        repeatKey: incidentRepeatKey(strandedUserId, unsent.oldestId, unsent.oldestCreatedAt),
         payload: { strandedUserId, ...counts },
       };
   });
@@ -894,7 +1042,11 @@ export const incidentsFromDiscovery = (files, now = new Date()) => files
 export const discoverAndQueueIncidents = async ({
   handle, listNames = listDatabaseNames, openDatabase = openDatabaseAsync, now = new Date(),
 }) => {
-  const files = await discoverOtherDatabases({ signedInUserId: handle.userId, listNames, openDatabase });
+  const isActive = () => handle.isOpen() && handle.isCurrent();
+  const files = await discoverOtherDatabases({
+    signedInUserId: handle.userId, listNames, openDatabase, isActive, readUnderFence: readUnderFileFence,
+  });
+  if (!isActive()) return { queued: 0 };
   let queued = 0;
   for (const incident of incidentsFromDiscovery(files, now)) {
     try {
@@ -912,16 +1064,30 @@ export const discoverAndQueueIncidents = async ({
   - In jest, `expo-file-system/next` may be a jest-expo mock. `listDatabaseNames` must tolerate that by returning `[]`; tests always pass `listNames`.
 
 `src/session/signedInHandle.js`:
-  - Import `discoverAndQueueIncidents` with `const { discoverAndQueueIncidents } = require('./fileDiscovery');`, *inside* `requestOpen`'s published branch. This mirrors how `handleServices` is required there, and avoids an import cycle through repositories.
+  - Require `fileDiscovery` *inside* `requestOpen`, as `handleServices` is required there. `fileDiscovery` imports `readUnderFileFence` from this module, so a top-level import would be a cycle.
   - Add `discover` to the destructured options.
-  - Immediately after `created.publish();`:
+  - New export, next to `whenDisposed`:
+```js
+// A short read of another EA's file (sign-in discovery) joins that file's fence: it starts
+// after any pending disposal, and a same-file requestOpen waits for it as it waits for a
+// disposal. A failed disposal stays failed: the read never runs and the fence keeps rejecting.
+export const readUnderFileFence = (fileName, task) => {
+  const prior = whenDisposed(fileName);
+  const run = prior.then(task);
+  trackDisposal(fileName, prior.then(() => run.then(() => {}, () => {})));
+  return run;
+};
+```
+  - Immediately before `created.publish();` (after the generation check):
 ```js
       // §4.4: discovery never delays sign-in, and a failure never affects the open handle.
+      // It starts on a microtask, so it always runs after publication.
       const runDiscovery = discover || require('./fileDiscovery').discoverAndQueueIncidents;
-      Promise.resolve()
+      handle.discovery = Promise.resolve()
         .then(() => runDiscovery({ handle }))
-        .catch((error) => report(error, 'file_discovery_failed'));
+        .then(() => {}, (error) => { report(error, 'file_discovery_failed'); });
 ```
+  - Check that `report` is the observability helper already in scope in `signedInHandle.js`; use whatever that module uses for `handle_dispose_failed`.
 
 - [ ] **Step 4: Run and watch them pass.**
   - Run the Step 2 command, then the whole suite: `PATH=$HOME/.nvm/versions/node/v20.19.4/bin:$PATH npx jest --silent`.
@@ -991,6 +1157,9 @@ const setup = ({ clockedIn = false, unsent = 0, online = true, clockOutOk = true
     7. **Upload leaves work behind.** 2 unsent, the upload clears nothing but `state.unsent` is set to 1 inside `syncNow`: the sheet updates to "1 item hasn't uploaded yet" and `signOut` is not called.
     8. **Cancel** on either sheet closes it and never calls `signOut`.
     9. **Busy state.** While `syncNow` is pending (a deferred promise), the upload button shows "Uploading…" and repeated presses call `syncNow` once.
+    10. **Cancel during upload (Review Focus 6).** 2 unsent; `syncNow` is a deferred promise and `uploadClears: true`. Press "Try uploading now", then "Cancel". Resolve the deferred upload. `signOut` is never called, and no sheet is visible.
+    11. **Dismiss during clock-out.** Clocked in; `clockOut` is a deferred promise resolving `true`. Press "Clock out now", then dismiss the sheet through `BottomSheet`'s `onDismiss` (find the backdrop the way `ClockInBeforeSessionSheet.test.js` does, or call the sheet's `onDismiss` prop through `UNSAFE_getByType(BottomSheet).props.onDismiss()`). Resolve the clock-out. The unsent sheet never appears and `signOut` is never called.
+    12. **A new attempt after a cancelled one works.** After case 10's cancel (before resolving the old upload), press "Sign Out" again with 0 unsent: `signOut` is called once. Resolving the old upload afterwards does not call it a second time.
   - Clock-out return values: add to the existing `useTimeTracking` suite:
     - `await result.current.handleSignOut()` resolves `true` after a normal clock-out;
     - it resolves `false` when not clocked in;
@@ -1010,26 +1179,31 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 
 // Spec §7.1: clock-out question first (clocking out creates unsent work), then unsent work,
 // then the §4.3 close. Dependencies are injected so the order is testable without the app tree.
+// Ruling 9: each attempt has a generation. Cancel, dismissal and unmount end it, and every
+// continuation after an await checks it, so a cancelled attempt can never sign the EA out.
 export function useSignOutFlow({ signOut, countUnsent, isClockedIn, clockOut, isOnline, syncNow }) {
   const [step, setStep] = useState(null);
   const [unsentCount, setUnsentCount] = useState(0);
   const [busy, setBusy] = useState(null);
   const [message, setMessage] = useState(null);
-  const mounted = useRef(true);
+  const attempt = useRef(0);
   const busyRef = useRef(null);
-  useEffect(() => () => { mounted.current = false; }, []);
-  const setBusyState = (value) => { busyRef.current = value; if (mounted.current) setBusy(value); };
+  useEffect(() => () => { attempt.current += 1; }, []);
+  const setBusyState = (value) => { busyRef.current = value; setBusy(value); };
+  const isLive = (mine) => attempt.current === mine;
 
-  const finish = useCallback(async () => {
+  const finish = useCallback(async (mine) => {
+    if (!isLive(mine)) return;
+    attempt.current += 1; // the attempt ends here: no later continuation may act on it
     setBusyState('signing_out');
-    if (mounted.current) setStep(null);
-    await signOut(); // the signed-in tree unmounts after this
+    setStep(null);
+    try { await signOut(); } finally { setBusyState(null); } // on success the signed-in tree unmounts
   }, [signOut]);
 
-  const goToUnsent = useCallback(async () => {
+  const goToUnsent = useCallback(async (mine) => {
     const { total } = await countUnsent();
-    if (!mounted.current) return;
-    if (total === 0) return finish();
+    if (!isLive(mine)) return;
+    if (total === 0) { await finish(mine); return; }
     setUnsentCount(total);
     setMessage(null);
     setStep('unsent');
@@ -1037,38 +1211,54 @@ export function useSignOutFlow({ signOut, countUnsent, isClockedIn, clockOut, is
 
   const start = useCallback(async () => {
     if (busyRef.current) return;
+    attempt.current += 1;
+    const mine = attempt.current;
     setMessage(null);
     if (isClockedIn) { setStep('clocked_in'); return; }
-    await goToUnsent();
+    await goToUnsent(mine);
   }, [isClockedIn, goToUnsent]);
 
   const clockOutNow = useCallback(async () => {
     if (busyRef.current) return;
+    const mine = attempt.current;
     setBusyState('clocking_out');
     let closed = false;
-    try { closed = await clockOut(); } finally { setBusyState(null); }
-    if (!mounted.current) return;
+    try { closed = await clockOut(); } finally { if (isLive(mine)) setBusyState(null); }
+    if (!isLive(mine)) return;
     if (!closed) { setMessage("Couldn't clock out. Try again, or choose another option."); return; }
-    await goToUnsent();
+    await goToUnsent(mine);
   }, [clockOut, goToUnsent]);
 
-  const stayClockedIn = useCallback(() => goToUnsent(), [goToUnsent]);
+  const stayClockedIn = useCallback(() => goToUnsent(attempt.current), [goToUnsent]);
 
   const tryUploadNow = useCallback(async () => {
     if (busyRef.current || !isOnline) return;
+    const mine = attempt.current;
     setBusyState('uploading');
-    try { await syncNow({ force: true }); } finally { setBusyState(null); }
-    await goToUnsent();
+    try { await syncNow({ force: true }); } finally { if (isLive(mine)) setBusyState(null); }
+    if (!isLive(mine)) return;
+    await goToUnsent(mine);
   }, [isOnline, syncNow, goToUnsent]);
 
-  const cancel = useCallback(() => { setStep(null); setMessage(null); }, []);
+  const signOutAnyway = useCallback(() => finish(attempt.current), [finish]);
+
+  // Reached by Cancel, backdrop and Android Back (BottomSheet onDismiss). An upload or
+  // clock-out already running finishes; the flow just stops acting on its result.
+  const cancel = useCallback(() => {
+    attempt.current += 1;
+    setStep(null);
+    setMessage(null);
+    setBusyState(null);
+  }, []);
 
   return {
     step, unsentCount, busy, message,
-    start, clockOutNow, stayClockedIn, tryUploadNow, signOutAnyway: finish, cancel,
+    start, clockOutNow, stayClockedIn, tryUploadNow, signOutAnyway, cancel,
   };
 }
 ```
+  - React 18 and later (this app runs React 19) ignore state updates after unmount without warning, so the hook needs no `mounted` ref; the generation already stops every continuation.
+  - `cancel` clears `busy`, so a new `start` is possible right away even if the old upload is still running. `syncNow` itself coalesces concurrent passes (`activeSyncPromise`), so a second upload tap cannot double-run a pass.
 
 `src/components/profile/SignOutSheets.js`:
   - Follow `src/components/sessions/ClockInBeforeSessionSheet.js` exactly: the same `BottomSheet` props, the primary/secondary/cancel `Pressable` styles, `accessibilityRole="button"`, and labels.
@@ -1125,9 +1315,9 @@ git commit -m "feat(sign-out): ask about an open shift and unsent work before si
 - Modify: `docs/adr/0008-one-local-database-per-ea.md`, Consequences: the left-behind report now exists. Keep the date and status lines.
 - Modify: `documentation/LEARNING.md`: a short chapter, "Reporting a situation, not an event". It covers:
   - why discovery recomputes from files at every sign-in;
-  - why the server dedupes on `(reporter, kind, repeat key)`;
+  - why the server dedupes on `(reporter, kind, repeat key)`, and why the key is a one-way digest of the episode (an outbox id hides a child id, and is reused after upload);
   - why the local queue still exists: the drain may be offline, and Step 4 will add one-off events that cannot be recomputed.
-- Modify: `documentation/build-log.md`: a decision row listing rulings 1–8 of this plan.
+- Modify: `documentation/build-log.md`: a decision row listing rulings 1–9 of this plan.
 
 - [ ] **Step 1: Make the edits above.**
   - Run `git diff --check`.
@@ -1168,12 +1358,12 @@ git commit -m "docs: Plan 3 sign-out questions and support incidents"
 | §4.5 legacy incident | Task 5 |
 | §7.4 envelope: server | Task 1 |
 | §7.4 envelope: queue | Task 2 |
-| §7.4 envelope: drain and `installId` | Task 3 |
+| §7.4 envelope: drain, scheduling and `installId` | Task 3 (ruling 7) |
 | §7.4 three kinds | Tasks 4 and 5 |
 | T8 incident half | Task 4 |
 | T10 | Task 5 case 8 |
 | T11 incident half | Task 5 case 4 |
-| T12 | Task 3 case 5 and Task 5 cases 2 and 10 |
+| T12 | Task 2 key test; Task 3 case 5; Task 4 case 3; Task 5 cases 2, 3b and 10 (end to end, repeat key included) |
 | T13 | Task 6 case 1 |
 | S2 | Task 1 |
 
