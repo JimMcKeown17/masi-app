@@ -166,6 +166,46 @@ export const createTimeEntriesRepository = ({ database } = {}) => {
     return true;
   });
 
+  // Conditional close shared by manual and automatic clock-out. Updates the row
+  // only while it is still open, so a stale snapshot (e.g. a manual clock-out
+  // that waited on GPS while the 10-hour watchdog closed the entry) can never
+  // overwrite the earlier close. onClosed runs in the same transaction, only on
+  // success, so side records (the Home auto clock-out notice) commit or roll
+  // back together with the close.
+  const closeOpenTimeEntry = async (id, closeFields, { onClosed, transaction } = {}) => runWrite(
+    transaction,
+    async (txn) => {
+      const existing = await txn.getFirstAsync(
+        'select * from time_entries where id = ? and sign_out_time is null',
+        id
+      );
+      if (!existing) {
+        return false;
+      }
+
+      const next = normalizeForWrite({
+        ...mapTimeEntry(existing),
+        ...closeFields,
+        id,
+        updated_at: timestamp(),
+        sync_status: syncStatusFromSynced(false),
+        synced: false,
+      });
+
+      await upsertRecord(txn, {
+        tableName: 'time_entries',
+        columns: TIME_ENTRY_COLUMNS,
+        booleanColumns: ['auto_clocked_out'],
+        record: next,
+      });
+      await enqueueTimeEntryOutbox(txn, next);
+      if (onClosed) {
+        await onClosed(txn, next);
+      }
+      return true;
+    }
+  );
+
   const getActiveTimeEntry = async (userId) => {
     const db = await resolveDatabase(database);
     const row = await db.getFirstAsync(`
@@ -197,6 +237,7 @@ export const createTimeEntriesRepository = ({ database } = {}) => {
     saveTimeEntry,
     createOpenTimeEntry,
     updateTimeEntry,
+    closeOpenTimeEntry,
     getActiveTimeEntry,
     getUnsyncedRecords,
   };
