@@ -1,4 +1,5 @@
 import { isStaleActorError, StaleActorError } from '../session/staleActor';
+import { getConnectionActor } from '../session/signedInHandle';
 import { resolveDatabase, runRepositoryTransaction } from '../db/repositories/repositoryRuntime';
 import {
   chunkArray,
@@ -12,7 +13,6 @@ import {
 import {
   createSyncStateRepository,
 } from '../db/repositories/syncStateRepository';
-import { resolveRecordOwners } from '../db/repositories/outboxOwnership';
 import {
   assessmentItemDomainId,
   childEaAssignmentDomainId,
@@ -1397,6 +1397,25 @@ export const createOutboxSyncEngine = ({
     totalDeferred: 0, failedRecords: [], tableResults: {}, preflightErrors: [], durationMs: 0,
   });
   const syncAll = async ({ tableName = null, force = false } = {}) => {
+    try {
+      assertActorOpen();
+      // Scan even while auth is unavailable, before recovery or candidate reads.
+      // Raw repository tests use their registered connection actor; production handles
+      // have already checked the persisted file-owner marker at open.
+      await runRepositoryTransaction(database, async (txn) => {
+        const owner = await txn.getFirstAsync("select value from local_state where key = 'file_owner_user_id'");
+        await outboxRepository.quarantineForeignOwners({
+          fileUserId: owner?.value || getConnectionActor(txn), transaction: txn,
+        });
+      });
+    } catch (error) {
+      if (isStaleActorError(error)) return { ...emptyPassResult(), success: false, abortedStaleActor: true };
+      console.error('syncAll: integrity scan failed:', error);
+      return {
+        ...emptyPassResult(), success: false,
+        preflightErrors: [{ step: 'integrityScan', error: errorMessage(error) }],
+      };
+    }
     // Auth gate: with no live session an upload pass would run anonymously and
     // RLS-quarantine the whole outbox as terminal (ZZ 2026-06-09 field incident).
     // getSession() can also return null while the refresh endpoint is merely
@@ -1617,7 +1636,7 @@ export const createOutboxSyncEngine = ({
     try {
       await resolveDatabase(database);
 
-      // Recover rows left in_flight by a prior interrupted pass FIRST and best-effort.
+      // Recover this EA's rows left in_flight by a prior interrupted pass, best-effort.
       if (typeof outboxRepository.resetInFlight === 'function') {
         try {
           await outboxRepository.resetInFlight({ ownerUserId: passUserId });
@@ -1782,32 +1801,11 @@ export const createOutboxSyncEngine = ({
    */
   const requeueTerminalRlsFailures = async (userId) => {
     if (!userId) return 0;
-    const db = await resolveDatabase(database);
-    const candidates = (await outboxRepository.getTerminalRecords()).filter(isHealableRlsError);
-    if (candidates.length === 0) return 0;
-
-    const heals = [];
-    for (const record of candidates) {
-      const row = await db.getFirstAsync(
-        `select * from ${quoteIdentifier(record.table_name)} where id = ?`,
-        record.record_id
-      ).catch(() => null);
-      const owners = await resolveRecordOwners({
-        db,
-        tableName: record.table_name,
-        row,
-        payload: record.payload,
-      });
-      if (owners.length === 0) {
-        console.warn(`syncRescue: skipping ${record.table_name} ${record.record_id} (no owner field)`);
-        continue;
-      }
-      if (!owners.includes(userId)) {
-        console.warn(`syncRescue: skipping ${record.table_name} ${record.record_id} (owner mismatch)`);
-        continue;
-      }
-      heals.push(record);
-    }
+    const heals = (await outboxRepository.getTerminalRecords()).filter(record => (
+      record.owner_user_id === userId
+      && record.last_error !== 'foreign_owner'
+      && isHealableRlsError(record)
+    ));
     if (heals.length === 0) return 0;
 
     let count = 0;

@@ -372,6 +372,7 @@ export const requestOpen = ({ userId, openDatabase = openDatabaseAsync, fetchImp
       const connections = await openConfiguredConnections({ name: fileName, openDatabase });
       created = createHandle({ userId, fileName, openDatabase, connections, fetchImpl, timeoutMs });
       const { handle } = created;
+      const outbox = createSyncOutboxRepository({ database: handle });
       await handle.withTransaction(async (txn) => {
         const owner = await txn.getFirstAsync("select value from local_state where key = 'file_owner_user_id'");
         if (owner && owner.value !== userId) throw new FileOwnerMismatchError(userId, owner.value);
@@ -379,8 +380,9 @@ export const requestOpen = ({ userId, openDatabase = openDatabaseAsync, fetchImp
           "insert into local_state (key, value, updated_at) values ('file_owner_user_id', ?, ?)",
           userId, new Date().toISOString()
         );
+        await outbox.quarantineForeignOwners({ fileUserId: owner?.value || userId, transaction: txn });
       });
-      await createSyncOutboxRepository({ database: handle }).resetInFlight();
+      await outbox.resetInFlight({ ownerUserId: userId });
       await createStartupRepairRunner({ database: handle }).run();
       // Repositories import this module's connection-actor lookup. Load the service
       // composition only at open so its repository factories are fully initialized.

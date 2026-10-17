@@ -165,10 +165,11 @@ describe('requeueTerminalRlsFailures', () => {
     `)).toEqual({ sync_status: 'terminal', last_sync_error: RLS_ERROR });
   });
 
-  test("never heals another user's records", async () => {
-    await seedChild({ id: 'child-other-user', createdBy: 'user-2' });
+  test("never heals another actor's stamped mutation even when domain provenance names this user", async () => {
+    await seedChild({ id: 'child-other-user', createdBy: 'user-1' });
     await clearOutbox();
     await markDomainTerminal('children', 'child-other-user');
+    bindTestActor(db, 'user-2');
     const outboxId = await enqueueTerminal({
       tableName: 'children',
       recordId: 'child-other-user',
@@ -176,17 +177,18 @@ describe('requeueTerminalRlsFailures', () => {
         id: 'child-other-user',
         first_name: 'Amahle',
         last_name: 'Dlamini',
-        created_by: 'user-2',
+        created_by: 'user-1',
       },
     });
+    bindTestActor(db, 'user-1');
 
     await expect(engine.requeueTerminalRlsFailures('user-1')).resolves.toBe(0);
     expect(await outboxRepository.getById(outboxId)).toEqual(expect.objectContaining({
-      status: 'terminal',
+      status: 'terminal', owner_user_id: 'user-2',
     }));
   });
 
-  test('heals assessment items through the parent assessment owner and skips orphan items', async () => {
+  test('heals owned assessment items by their stamps even when the parent is absent', async () => {
     await seedChild({ id: 'child-assessed', syncStatus: 'synced' });
     await assessmentsRepository.saveAssessment({
       id: 'assessment-owned',
@@ -226,17 +228,17 @@ describe('requeueTerminalRlsFailures', () => {
       errorMessage: 'new row violates row-level security policy for table "assessment_items"',
     });
 
-    await expect(engine.requeueTerminalRlsFailures('user-1')).resolves.toBe(1);
+    await expect(engine.requeueTerminalRlsFailures('user-1')).resolves.toBe(2);
     expect(await outboxRepository.getById(ownedOutboxId)).toEqual(expect.objectContaining({
       status: 'pending',
       last_error: null,
     }));
     expect(await outboxRepository.getById(orphanOutboxId)).toEqual(expect.objectContaining({
-      status: 'terminal',
+      status: 'pending', owner_user_id: 'user-1', last_error: null,
     }));
   });
 
-  test('heals hard-delete rows from payload owner fallback without a domain reset', async () => {
+  test('heals stamped hard-delete rows without a domain reset', async () => {
     await classesRepository.saveClass({
       id: 'class-hard-delete',
       school_id: 'school-1',
@@ -308,7 +310,7 @@ describe('requeueTerminalRlsFailures', () => {
     await expect(engine.requeueTerminalRlsFailures('user-1')).resolves.toBe(0);
   });
 
-  test('heals class_grouping_state through its parent class owner', async () => {
+  test('heals class_grouping_state by its stamped owner', async () => {
     await classGroupingStateRepository.save({
       id: 'grouping-state-1',
       class_id: 'class-1',

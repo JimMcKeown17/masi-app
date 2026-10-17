@@ -744,7 +744,7 @@ test('a startup repair failure closes the unpublished handle and permits a clean
     .toEqual({ value: '1' });
 });
 
-test('open resets in-flight rows for every owner in the file while preserving pending work', async () => {
+test('open adopts legacy work and quarantines foreign work before recovering the file owner’s in-flight rows', async () => {
   const a = await requestOpen({ userId: A, openDatabase });
   await a.withTransaction(async (txn) => {
     for (const [id, owner, status] of [['a', A, 'in_flight'], ['b', B, 'in_flight'], ['null', null, 'in_flight'], ['pending', A, 'pending']]) {
@@ -757,8 +757,12 @@ test('open resets in-flight rows for every owner in the file while preserving pe
   });
   await requestClose({ reason: 'test' });
   const again = await requestOpen({ userId: A, openDatabase });
-  const rows = await (await again.getReader()).getAllAsync('select id, status, retry_count, next_retry_at from sync_outbox order by id');
-  expect(rows).toEqual(['a', 'b', 'null', 'pending'].map((id) => ({ id, status: 'pending', retry_count: 3, next_retry_at: 'later' })));
+  const rows = await (await again.getReader()).getAllAsync('select id, owner_user_id, status, retry_count, next_retry_at, last_error from sync_outbox order by id');
+  expect(rows).toEqual(['a', 'b', 'null', 'pending'].map((id) => ({
+    id, owner_user_id: id === 'b' ? B : A,
+    status: id === 'b' ? 'terminal' : 'pending', retry_count: 3,
+    next_retry_at: id === 'b' ? null : 'later', last_error: id === 'b' ? 'foreign_owner' : null,
+  })));
 });
 
 test('closing seals queued native reads and queued whole transactions without executing them', async () => {
