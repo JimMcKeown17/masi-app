@@ -72,8 +72,6 @@ const getSupabaseClientState = () => {
     appStateSubscription: null,
     autoRefreshRequested: false,
     autoRefreshOperation: Promise.resolve(),
-    autoRefreshPauses: 0,
-    appState: AppState.currentState,
   };
 
   globalThis[CLIENT_STATE_KEY] = state;
@@ -85,7 +83,6 @@ const supabaseState = getSupabaseClientState();
 export const supabase = supabaseState.client;
 
 const startAuthAutoRefresh = () => {
-  if (supabaseState.autoRefreshPauses || supabaseState.appState !== 'active') return;
   if (supabaseState.autoRefreshRequested) return;
 
   supabaseState.autoRefreshRequested = true;
@@ -101,32 +98,15 @@ const startAuthAutoRefresh = () => {
   );
 };
 
-const stopAuthAutoRefresh = (propagateError = false) => {
+const stopAuthAutoRefresh = () => {
   supabaseState.autoRefreshRequested = false;
-  return enqueueAuthAutoRefreshOperation(
+  enqueueAuthAutoRefreshOperation(
     supabaseState,
     () => supabase.auth.stopAutoRefresh(),
     (error) => {
       console.warn('[Supabase] Failed to stop auth auto-refresh:', error);
-      if (propagateError) throw error;
     }
   );
-};
-
-// AppState changes must not restart the ticker while a login is draining the
-// previous identity's SDK work. Overlapping callers release only their own pause.
-export const withAuthAutoRefreshPaused = async (operation) => {
-  supabaseState.autoRefreshPauses += 1;
-  try {
-    // Initialization may start its own ticker. Stop after it settles as well as
-    // before the operation, so a cold-start login cannot leave that ticker live.
-    await supabase.auth.initialize();
-    await stopAuthAutoRefresh(true);
-    return await operation();
-  } finally {
-    supabaseState.autoRefreshPauses -= 1;
-    startAuthAutoRefresh();
-  }
 };
 
 // React Native apps should explicitly signal foreground/background for auth refresh.
@@ -136,7 +116,6 @@ if (Platform.OS !== 'web' && !supabaseState.appStateSubscription) {
   }
 
   supabaseState.appStateSubscription = AppState.addEventListener('change', (appState) => {
-    supabaseState.appState = appState;
     if (appState === 'active') {
       startAuthAutoRefresh();
     } else {
