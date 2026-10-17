@@ -57,7 +57,8 @@ These horizons summarize the ordered register below. They are not a second backl
    Put a deadline and release on every request in the shared queue, uploads included. Upload the
    assessment family all-or-nothing. Reject stale edits on records more than one writer can change.
    Make submit duplicate-proof. One database per EA is built (Plan 2; its sign-out UX is Plan 3).
-   The newer-schema guard is built; add a minimum revocation contract. Evidence:
+   The newer-schema guard and minimum revocation tooling are built; revocation's hosted apply and
+   device proof remain open (§0). Evidence:
    [`zazi-sync-lessons-for-masi-2026-10-08.md`](./zazi-sync-lessons-for-masi-2026-10-08.md) Part 2.
 6. **P0: settle field-continuity contracts before the candidate build.** Make location fallback
    truthful, build the server-side ten-hour clock-out and verify the built Android backup exclusion
@@ -158,33 +159,35 @@ shape.
     unused for 30 days. Revisit before Step 9 Widen, for privacy (EA A's roster stays on EA B's
     personal phone), against POPIA. Design:
     `docs/superpowers/specs/2026-10-09-actor-lifecycle-and-mutation-ownership-design.md`.
-- [ ] **Minimum revocation contract before pilot provisioning** (moved from §6 by the 2026-10-08
-  Codex review). `users.is_active = false` has no effect today:
-  - the owner policies still allow time-entry writes and session updates
-    (`20260521120147_masi_rls_advisor_cleanup.sql:331-377`);
-  - `can_read_session` and the history RPC grant reads without checking active status;
-  - `AuthContext` does not enforce profile inactivity.
+- [ ] **Minimum revocation contract before pilot provisioning — tooling built; hosted apply and
+  device proof open** (moved from §6 by the 2026-10-08 Codex review). **Decided by Jim 2026-10-17:
+  copy Zazi's suspension, operated by a script first** (Head Office website later, §6). The canonical
+  `20261018120000_ea_access_suspension.sql` migration builds `private.ea_access_events` and
+  `suspend_ea`, `restore_ea`, and `ea_access_status`. `scripts/ea-access.cjs` exposes `ea:status`,
+  `ea:suspend`, and `ea:restore`; changes default to a dry run and require `--apply`, an exact
+  case-insensitive email match, a reason, and an operator. The connection is pinned to
+  `masi-app-sqlite`; the script runs as postgres and only service_role may execute the functions
+  through an API role. See the [operator runbook](./ea-access-runbook.md).
 
-  **Decided by Jim 2026-10-17: copy Zazi's suspension, operated by a script first** (a Head Office
-  website comes later, §6). Zazi's mechanism (`zazi-mobile-admin-django` `api/mobile/account_access.py`
-  at `21cb880`; design card `zazi-izandi-app/documentation/plans/2026-09-20-suspension-v1-card.md`):
-  1. validate the target (exact UUID, exists in Auth, is an EA);
-  2. record the request with a reason before any external call;
-  3. ban in Supabase Auth (`ban_duration: "876000h"`), then read the user back and accept only a
-     `banned_until` more than 24 hours away;
-  4. mark the profile inactive with a compare-and-set that never overwrites an existing departure;
-  5. record each step's observed result. Both writes are safe to repeat.
+  Suspension locks the Auth and profile rows, sets `banned_until = now() + interval '876000 hours'`,
+  changes an active profile to inactive, and writes the audit event in one transaction. Read-back
+  confirms the ban is more than 24 hours away and the profile is inactive. Restore requires the
+  latest audit event to be a suspend. It lifts the ban and reactivates only when the **first suspend
+  since the most recent restore** recorded an active profile; repeated suspends preserve this
+  baseline while recording each call's actual before/after state (Jim's clarification).
 
-  Zazi adds no RLS or RPC check and ends no assignments (Head Office reassigns separately). The ban
-  blocks sign-in and token refresh, so an already-signed-in phone keeps working until its access
-  token expires (up to an hour); unsent work stays on the phone and uploads if the EA is restored.
-  Restore lifts the ban and reactivates the profile, only for a suspension the script made.
-  Deleting Auth sessions does not shorten that window, because PostgREST accepts a valid access
-  token without checking its session; only a shorter JWT lifetime or an `is_active` check in RLS
-  would. Accept the hour, as Zazi does. Still to do: write the script, decide where its audit
-  record lives, and prove a banned, already-signed-in phone signs out at its next refresh. Reports
-  must keep a suspended EA's worked hours (a Zazi lesson). The national admin portal stays in §6
-  ([Z16](./zazi-sync-lessons-for-masi-2026-10-08.md)).
+  `users.is_active = false` still does not enforce access: owner policies, `can_read_session`, the
+  history RPC, and `AuthContext` do not check it. The Auth ban blocks sign-in and token refresh;
+  already-issued access tokens remain valid until expiry. Jim accepts the one-hour residual window
+  used by Zazi; verify the hosted JWT lifetime before pilot use. Assignments and worked hours stay
+  intact, and unsent work stays on the phone for upload after restoration and sign-in. This follows
+  Zazi's `api/mobile/account_access.py` at `21cb880` and suspension-v1 card, with both server writes
+  and the audit now atomic rather than separate external calls.
+
+  **Remaining gates:** run the disposable PostgreSQL harness (sandbox TCP was refused; no SQL
+  cases ran), inspect the hosted schema, obtain **Jim's yes before hosted apply**, and prove that a
+  suspended, already-signed-in phone signs out at its next refresh. The national admin portal stays
+  in §6 ([Z16](./zazi-sync-lessons-for-masi-2026-10-08.md)).
 
 ### Release and observability
 
@@ -711,7 +714,8 @@ When this resumes:
   ([Z16](./zazi-sync-lessons-for-masi-2026-10-08.md)).
 
 Current narrow capability: `scripts/createTesters.js` provisions explicit zero-class pilot testers
-against the exact SQLite backend. `scripts/loadTestUsers.js` is deliberately disabled. The archived
+against the exact SQLite backend. `scripts/ea-access.cjs` supplies audited suspension/status/restore
+tooling (hosted apply and device proof pending, §0). `scripts/loadTestUsers.js` is deliberately disabled. The archived
 [`seed plan`](./archive/seed_data_plan.md) and
 [`bulk-import plan`](./archive/bulk_import_children_plan.md) are schema-dead and must not be revived.
 
