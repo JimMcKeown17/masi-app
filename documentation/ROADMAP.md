@@ -137,19 +137,18 @@ shape.
   identity. The null-owner claim this item warned about is closed. Plan 3's sign-out questions,
   left-behind reporting, minimal incident envelope and legacy `masi.db` discovery are built.
   The Profile App Release information was already delivered at the bottom of Profile: version,
-  build, backend, project, device and update id. **Still open before the field:**
-  - **Hosted incident migration:** apply
-    [`20261017120000_mobile_support_incidents.sql`](../supabase/migrations/20261017120000_mobile_support_incidents.sql)
-    to `masi-app-sqlite` (`segygjzpujphwvrubusm`) only with Jim's explicit yes. Verify table and RPC
-    grants afterwards against S2.
+  build, backend, project, device and update id. The incident migration is on `masi-app-sqlite`
+  (2026-10-17, grants verified against S2), and D1 passed on the Galaxy A03s with Android build 8.
+  **Still open before the field:**
   - **Sign-out copy:** a wording pass with Jim; the current sheet copy is provisional.
   - **Ruling 11, field-release prerequisite owned by the upload-contract spec:** abort-on-sign-out
     can re-send an upload the server already accepted. Identical replay is proven harmless; the
     ordering of an uncertain older write against a newer one is not yet closed.
-  - **Device gates:** D1–D7 on the build intended to ship: D1–D6 from the
-    [actor lifecycle spec §9](../docs/superpowers/specs/2026-10-09-actor-lifecycle-and-mutation-ownership-design.md),
-    plus D7 (native close under load, iOS and Android). Confirm `listDatabaseNames` finds the files
-    on both platforms and visually check both sign-out sheets. A new EAS preview build needs Jim's yes.
+  - **Device gates:** D2–D7 on the build intended to ship
+    ([actor lifecycle spec §9](../docs/superpowers/specs/2026-10-09-actor-lifecycle-and-mutation-ownership-design.md);
+    D7 is native close under load, iOS and Android); D3's ten-hour auto clock-out half; and on iOS,
+    D1, native file discovery and both sign-out sheets. Re-check the clocked-in sheet's title gap on
+    the next build. A new EAS build needs Jim's yes.
   - **Legacy export gap:** spec §4.5 says Profile → Export Database can export `masi.db`.
     Today's export covers only the signed-in EA's file. Plan 3 did not change export; Step 4's
     support tooling must close this gap.
