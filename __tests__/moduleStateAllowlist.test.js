@@ -10,6 +10,7 @@ const root = path.resolve(__dirname, '..');
 // permission to remain global. Keep this inventory exact so removed state also
 // loses its exception. Factory-local state is owned by the factory's caller.
 const ALLOWLIST = {
+  'src/services/installId.js:pending': 'device-level install id; one per phone, never per EA',
   'src/services/authSessionStorage.js:admittedUser': 'device-level auth admission owned by AuthContext',
   'src/services/observability.js:initialized': 'device-level',
   'src/services/observability.js:enabled': 'device-level',

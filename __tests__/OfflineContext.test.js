@@ -86,6 +86,13 @@ const Scope = ({ children }) => {
 };
 const wrapper = ({ children }) => <AuthProvider><Scope>{children}</Scope></AuthProvider>;
 
+const incidentOnlyStatus = (incidentReadyCount) => ({
+  unsyncedCount: 0, readyCount: 0, inFlightCount: 0, waitingCount: 0,
+  needsAttentionCount: 0, backedOffCount: 0, nextRetryAt: null,
+  failedItems: [], needsAttentionItems: [], breakdown: {},
+  lastSyncTime: null, lastSuccessfulSyncTime: null, incidentReadyCount,
+});
+
 const renderOfflineHook = async () => {
   const rendered = renderHook(() => useOffline(), { wrapper });
   await waitFor(() => expect(getSyncStatus).toHaveBeenCalled());
@@ -171,6 +178,82 @@ describe('OfflineContext Plan 4 sync API', () => {
     jest.useRealTimers();
     jest.clearAllMocks();
     jest.restoreAllMocks();
+  });
+
+  test('incident-only work at online mount schedules a pass without changing EA-facing counts', async () => {
+    getSyncStatus.mockResolvedValue(incidentOnlyStatus(1));
+    const { result } = await renderOfflineHook();
+    expect(syncAll).not.toHaveBeenCalled();
+    expect(result.current).toMatchObject({ unsyncedCount: 0, inFlightCount: 0, waitingCount: 0, needsAttentionCount: 0 });
+    await act(async () => { jest.advanceTimersByTime(1000); });
+    expect(syncAll).toHaveBeenCalledTimes(1);
+    expect(syncAll).toHaveBeenCalledWith({ force: false });
+  });
+
+  test('incident-only work waits offline and schedules a pass on reconnect', async () => {
+    NetInfo.fetch.mockResolvedValueOnce({ isConnected: false, isInternetReachable: false });
+    getSyncStatus.mockResolvedValue(incidentOnlyStatus(1));
+    const { result } = await renderOfflineHook();
+    expect(result.current.isOnline).toBe(false);
+    await act(async () => { jest.advanceTimersByTime(1500); });
+    expect(syncAll).not.toHaveBeenCalled();
+    act(() => { NetInfo.addEventListener.mock.calls[0][0]({ isConnected: true, isInternetReachable: true }); });
+    await act(async () => { jest.advanceTimersByTime(1000); });
+    expect(syncAll).toHaveBeenCalledTimes(1);
+  });
+
+  test('incident-only work discovered after mount is refreshed and schedules a pass', async () => {
+    let finishDiscovery;
+    const discovery = new Promise(resolve => { finishDiscovery = resolve; });
+    requireCurrentHandle().discovery = discovery;
+    getSyncStatus.mockResolvedValue(incidentOnlyStatus(0));
+    await renderOfflineHook();
+    await act(async () => { jest.advanceTimersByTime(1000); });
+    expect(syncAll).not.toHaveBeenCalled();
+    getSyncStatus.mockResolvedValue(incidentOnlyStatus(1));
+    await act(async () => { finishDiscovery(); await discovery; });
+    await act(async () => { jest.advanceTimersByTime(1000); });
+    expect(syncAll).toHaveBeenCalledTimes(1);
+  });
+
+  test('incident-only work retries on the periodic refresh rather than immediately after the failed RPC pass', async () => {
+    getSyncStatus.mockResolvedValue(incidentOnlyStatus(1));
+    syncAll.mockResolvedValue({ success: true, totalSynced: 0, totalFailed: 0, incidents: { sent: 0, rejected: 0, failed: 1 } });
+    await renderOfflineHook();
+    await act(async () => { jest.advanceTimersByTime(1000); });
+    expect(syncAll).toHaveBeenCalledTimes(1);
+    expect(getSyncStatus).toHaveBeenCalled(); // post-pass refresh
+    await act(async () => { jest.advanceTimersByTime(1000); });
+    expect(syncAll).toHaveBeenCalledTimes(1);
+    await act(async () => { jest.advanceTimersByTime(28000); });
+    expect(syncAll).toHaveBeenCalledTimes(1); // periodic refresh has scheduled the debounce
+    await act(async () => { jest.advanceTimersByTime(1000); });
+    expect(syncAll).toHaveBeenCalledTimes(2);
+  });
+
+  test.each(['foreground', 'background'])('incident-only work schedules a pass on %s', async (transition) => {
+    const { result } = await renderOfflineHook();
+    const listener = AppState.addEventListener.mock.calls.at(-1)[1];
+    if (transition === 'foreground') act(() => { listener('background'); });
+    getSyncStatus.mockResolvedValue(incidentOnlyStatus(1));
+    await act(async () => { await result.current.refreshSyncStatus({ autoTrigger: false }); });
+    expect(syncAll).not.toHaveBeenCalled();
+    act(() => { listener(transition === 'foreground' ? 'active' : 'background'); });
+    await act(async () => { jest.advanceTimersByTime(1000); });
+    expect(syncAll).toHaveBeenCalledTimes(1);
+  });
+
+  test('late discovery does not refresh an unmounted provider', async () => {
+    let finishDiscovery;
+    const discovery = new Promise(resolve => { finishDiscovery = resolve; });
+    requireCurrentHandle().discovery = discovery;
+    getSyncStatus.mockResolvedValue(incidentOnlyStatus(0));
+    const { unmount } = await renderOfflineHook();
+    unmount();
+    getSyncStatus.mockResolvedValue(incidentOnlyStatus(1));
+    await act(async () => { finishDiscovery(); await discovery; });
+    expect(getSyncStatus).not.toHaveBeenCalled();
+    expect(syncAll).not.toHaveBeenCalled();
   });
 
   test('triggerBackgroundSync is debounced and non-blocking', async () => {

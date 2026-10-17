@@ -83,6 +83,7 @@ export const createHandleServices = (handle) => {
     syncEngine: createOutboxSyncEngine({
       ...options, supabaseClient: handle.dataClient, enqueueRequest: handle.enqueueRequest,
       outboxRepository: repositories.syncOutbox, stateRepository: repositories.syncState,
+      supportIncidentRepository: repositories.supportIncidents,
       getAuthSession: async () => {
         const s = getLatestAuthSession();
         return { data: { session: s?.user?.id === handle.userId ? s : null } };
