@@ -8,7 +8,7 @@ const NAMES = [
   'ikati (cat)',
   'orange',
   'bread',
-  'face',
+  'watch',
   'milk',
   'drum',
   'sun',
