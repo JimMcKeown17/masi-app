@@ -24,6 +24,7 @@ function useTimeTrackingState() {
   const isSignedInRef = useRef(isSignedIn);
   const activeEntryRef = useRef(activeEntry);
   const userRef = useRef(user);
+  const clockActionInFlight = useRef(false);
   userRef.current = user;
 
   const setSignedInState = useCallback((value) => {
@@ -116,26 +117,30 @@ function useTimeTrackingState() {
   }, []);
 
   const handleSignIn = useCallback(async () => {
+    if (clockActionInFlight.current) return;
     if (isSignedInRef.current) {
       showSnackbar('Already clocked in. Please clock out first.');
       return;
     }
 
+    clockActionInFlight.current = true;
     setLoadingLocation(true);
     try {
       const locationResult = await getCurrentPosition();
-      if (locationResult.error) {
-        showSnackbar(`Location error: ${locationResult.error}`);
+      if (locationResult.cancelled) {
+        showSnackbar('Return from Settings and tap Clock In again, or continue without location.');
         return;
       }
 
-      const { latitude, longitude } = locationResult.coords;
+      const { latitude = null, longitude = null } = locationResult.coords || {};
+      const locationStatus = locationResult.status || (locationResult.coords ? 'fix' : 'unavailable');
       const timeEntry = {
         id: uuidv4(),
         user_id: userRef.current.id,
         sign_in_time: new Date().toISOString(),
         sign_in_lat: latitude,
         sign_in_lon: longitude,
+        sign_in_location_status: locationStatus,
         sign_out_time: null,
         sign_out_lat: null,
         sign_out_lon: null,
@@ -147,7 +152,10 @@ function useTimeTrackingState() {
       setSignedInState(true);
       await refreshSyncStatus();
       triggerBackgroundSync?.();
-      showSnackbar(`Clocked in at ${formatTime(timeEntry.sign_in_time)}`);
+      const reasons = { timeout: 'GPS timed out', denied: 'permission denied', services_off: 'location services off', unavailable: 'location unavailable' };
+      showSnackbar(locationStatus === 'fix'
+        ? `Clocked in at ${formatTime(timeEntry.sign_in_time)}`
+        : `Clocked in without location (${reasons[locationStatus]}).`);
     } catch (error) {
       if (error?.code === OPEN_TIME_ENTRY_EXISTS) {
         await loadActiveEntry();
@@ -157,6 +165,7 @@ function useTimeTrackingState() {
       console.error('Error signing in:', error);
       showSnackbar('Failed to clock in. Please try again.');
     } finally {
+      clockActionInFlight.current = false;
       setLoadingLocation(false);
     }
   }, [
@@ -165,15 +174,23 @@ function useTimeTrackingState() {
   ]);
 
   const handleSignOut = useCallback(async () => {
+    if (clockActionInFlight.current) return;
     if (!isSignedInRef.current || !activeEntryRef.current) {
       showSnackbar('You must clock in first before clocking out.');
       return;
     }
 
+    clockActionInFlight.current = true;
     setLoadingLocation(true);
     try {
+      const locationResult = await getCurrentPosition();
+      if (locationResult.cancelled) {
+        showSnackbar('Return from Settings and tap Clock Out again, or continue without location.');
+        return;
+      }
+
       // Re-resolve from the repository: the cached entry may have been closed
-      // by auto-clock-out or another path. Never write a sign_out_time onto a
+      // during location capture by auto-clock-out or another path. Never write onto a
       // row that is no longer the open entry.
       const current = await timeEntriesRepository.getActiveTimeEntry(userRef.current.id);
       if (!current) {
@@ -183,13 +200,8 @@ function useTimeTrackingState() {
         return;
       }
 
-      const locationResult = await getCurrentPosition();
-      if (locationResult.error) {
-        showSnackbar(`Location error: ${locationResult.error}`);
-        return;
-      }
-
-      const { latitude, longitude } = locationResult.coords;
+      const { latitude = null, longitude = null } = locationResult.coords || {};
+      const locationStatus = locationResult.status || (locationResult.coords ? 'fix' : 'unavailable');
       const signOutTime = new Date().toISOString();
       const signInMs = new Date(current.sign_in_time).getTime();
       const signOutMs = new Date(signOutTime).getTime();
@@ -200,6 +212,7 @@ function useTimeTrackingState() {
         sign_out_time: signOutTime,
         sign_out_lat: latitude,
         sign_out_lon: longitude,
+        sign_out_location_status: locationStatus,
       };
 
       await timeEntriesRepository.updateTimeEntry(current.id, updatedEntry);
@@ -207,11 +220,14 @@ function useTimeTrackingState() {
       setSignedInState(false);
       await refreshSyncStatus();
       triggerBackgroundSync?.();
-      showSnackbar(`Clocked out. ${hoursWorked} hours worked.`);
+      showSnackbar(locationStatus === 'fix'
+        ? `Clocked out. ${hoursWorked} hours worked.`
+        : `Clocked out without location. ${hoursWorked} hours worked.`);
     } catch (error) {
       console.error('Error signing out:', error);
       showSnackbar('Failed to clock out. Please try again.');
     } finally {
+      clockActionInFlight.current = false;
       setLoadingLocation(false);
     }
   }, [

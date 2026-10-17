@@ -17,7 +17,9 @@ describe('history reference children', () => {
   afterEach(async () => { await db.closeAsync(); });
 
   test('schema v10 adds history_reference defaulting to 0 with a 0/1 check', async () => {
-    expect(CURRENT_SCHEMA_VERSION).toBe(10);
+    expect(await db.getFirstAsync('select version, name from schema_migrations where version = 10'))
+      .toEqual({ version: 10, name: 'children_history_reference' });
+    expect((await db.getFirstAsync('pragma user_version')).user_version).toBe(CURRENT_SCHEMA_VERSION);
     await db.runAsync("insert into children (id, first_name, last_name) values ('c-plain', 'A', 'B')");
     expect((await db.getFirstAsync("select history_reference from children where id = 'c-plain'")).history_reference).toBe(0);
     let checkError;

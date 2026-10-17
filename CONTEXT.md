@@ -81,6 +81,14 @@ There is an open product question (not a current commitment) about how much of t
 
 ### Work capture
 
+**Clock-in / clock-out**:
+The start/end of an EA's shift, recorded independently of location availability. A manual
+clock action attempts approximate location for at most 10 seconds after permission recovery,
+then saves either a complete coordinate pair or no coordinates, plus the outcome (`fix`,
+`timeout`, `denied`, `services_off`, or `unavailable`). NULL outcome means not recorded by an
+older build or automatic clock-out. Opening Settings hands control back to the EA and saves
+nothing until they return and tap again or choose Continue Without Location.
+
 **Session**:
 A single block of work an EA does with one group of children under one programme. The settled rule is **one session = one group-block of work**; EAs never work with two groups in one session. Always scoped to one `programme_id` (NOT NULL) and one `group_id` (planned NOT NULL, additive migration). The `group_id` references `groups.id`, and since each `groups` row carries `grouping_version_id`, the session's grouping context is automatically pinned to the version active at capture time — historical sessions never go stale when a future regroup happens. Programme-specific session attributes (e.g., `books_read` for 1000 Stories) live inside the existing `sessions.activities` JSON column, not as new schema columns.
 

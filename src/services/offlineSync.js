@@ -75,7 +75,8 @@ const LOCAL_ONLY_COLUMNS = ['synced', 'sync_status', 'last_sync_error', 'server_
 export const SERVER_COLUMNS = {
   time_entries: [
     'id', 'user_id', 'sign_in_time', 'sign_in_lat', 'sign_in_lon', 'sign_out_time',
-    'sign_out_lat', 'sign_out_lon', 'auto_clocked_out', 'created_at', 'updated_at',
+    'sign_out_lat', 'sign_out_lon', 'sign_in_location_status', 'sign_out_location_status',
+    'auto_clocked_out', 'created_at', 'updated_at',
   ],
   classes: [
     'id', 'school_id', 'name', 'grade', 'teacher', 'teacher_id', 'home_language',

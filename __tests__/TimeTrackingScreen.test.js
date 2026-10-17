@@ -85,3 +85,16 @@ describe('TimeTrackingScreen signed-in branch', () => {
     expect(screen.getByText('Clock Out')).toBeTruthy();
   });
 });
+
+
+test('an active shift without coordinates renders No location and Clock Out', () => {
+  mockUseTimeTracking.mockReturnValue(buildTimeTrackingState({
+    isSignedIn: true, activeEntry: {
+      sign_in_time: '2026-10-15T08:00:00Z', sign_in_lat: null, sign_in_lon: null,
+      sign_in_location_status: 'timeout',
+    },
+  }));
+  const screen = renderTimeTracking();
+  expect(screen.getByText('No location')).toBeTruthy();
+  expect(screen.getByText('Clock Out')).toBeTruthy();
+});
