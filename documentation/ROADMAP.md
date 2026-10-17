@@ -149,7 +149,7 @@ shape.
     ([actor lifecycle spec §9](../docs/superpowers/specs/2026-10-09-actor-lifecycle-and-mutation-ownership-design.md);
     D7 is native close under load, iOS and Android) and D3's ten-hour half, which changes with
     the server-side clock-out. iOS D1, native discovery on both platforms and both sheets passed
-    on builds 9 and 10 (2026-10-17, build log). Fix the Android Profile header ("BackMy Profile").
+    on builds 9 and 10 (2026-10-17, build log). The Android header fix ("BackMy Profile") is built; verify it on the next build.
     A new EAS build needs Jim's yes.
   - **Legacy export gap:** spec §4.5 says Profile → Export Database can export `masi.db`.
     Today's export covers only the signed-in EA's file. Plan 3 did not change export; Step 4's
