@@ -367,11 +367,42 @@ test('cold readiness joins the background reference pull and waits for its last 
     // Queue a local read after the cache inspection to let a wrongly accepted barrier settle.
     await a.repositories.schools.getAll();
     expect(ready).toBe(false);
+    expect(await a.repositories.localState.get('reference_data_complete_at')).toBeNull();
     release.resolve();
     await Promise.all([readiness, refresh]);
     expect(await a.repositories.staffProgrammeAssignments.getAll()).toHaveLength(1);
     expect(transport).toHaveBeenCalledTimes(7);
   } finally { release.resolve(); }
+});
+
+test.each([false, true])('a partial reference cache after reopen retries readiness instead of reporting ready, repeat refresh = %s', async repeatRefresh => {
+  const partial = jest.fn(async url => {
+    const table = new URL(url).pathname.split('/').pop();
+    return table === 'staff_programme_assignments'
+      ? response({ message: 'staff references failed' }, 503)
+      : response(referenceRows(table, A));
+  });
+  const a = await open(A, partial);
+  await expect(a.services.pullReferenceData()).rejects.toMatchObject({ message: 'staff references failed' });
+  await requestClose({ reason: 'restart after partial reference refresh' });
+  let offline = false;
+  const transport = jest.fn(async url => {
+    if (offline) return response({ message: 'Offline' }, 503);
+    return partial(url);
+  });
+  const reopened = await open(A, transport);
+  expect(await reopened.repositories.schools.getAll()).toHaveLength(1);
+  expect(await reopened.repositories.programmes.getAll()).toHaveLength(1);
+  expect(await reopened.repositories.academicYears.getAll()).toHaveLength(1);
+  expect(await reopened.repositories.staffProgrammeAssignments.getAll()).toEqual([]);
+  if (repeatRefresh) {
+    await expect(reopened.services.pullReferenceData()).rejects.toMatchObject({ message: 'staff references failed' });
+  }
+  offline = true;
+  const requests = transport.mock.calls.length;
+  await expect(reopened.services.referenceDataReady()).rejects.toMatchObject({ message: 'Offline' });
+  expect(transport).toHaveBeenCalledTimes(requests + 1);
+  expect(await reopened.repositories.localState.get('reference_data_complete_at')).toBeNull();
 });
 
 test.each([true, false])('a previously completed cache is ready offline after reopen, assigned = %s', async assigned => {
@@ -380,11 +411,47 @@ test.each([true, false])('a previously completed cache is ready offline after re
     return response(!assigned && table === 'staff_programme_assignments' ? [] : referenceRows(table, A));
   });
   await a.services.pullReferenceData();
+  const completedAt = await a.repositories.localState.get('reference_data_complete_at');
+  expect(new Date(completedAt).toISOString()).toBe(completedAt);
   await requestClose({ reason: 'offline restart' });
   const offline = jest.fn(async () => { throw new TypeError('Offline'); });
   const reopened = await open(A, offline);
   await reopened.services.referenceDataReady();
   expect(offline).not.toHaveBeenCalled();
+  expect(await reopened.repositories.staffProgrammeAssignments.getAll()).toHaveLength(assigned ? 1 : 0);
+});
+
+test('a completed reference pull with every table empty is ready offline after reopen', async () => {
+  const online = jest.fn(async () => response());
+  const a = await open(A, online);
+  await a.services.pullReferenceData();
+  expect(online).toHaveBeenCalledTimes(7);
+  await requestClose({ reason: 'offline restart with empty references' });
+  const offline = jest.fn(async () => { throw new TypeError('Offline'); });
+  const reopened = await open(A, offline);
+  await reopened.services.referenceDataReady();
+  expect(offline).not.toHaveBeenCalled();
+});
+
+test.each([true, false])('a failed later refresh preserves completed-cache readiness after reopen, assigned = %s', async assigned => {
+  let fail = false;
+  const a = await open(A, async url => {
+    const table = new URL(url).pathname.split('/').pop();
+    if (fail && table === 'staff_programme_assignments') return response({ message: 'staff references failed' }, 503);
+    return response(!assigned && table === 'staff_programme_assignments' ? [] : referenceRows(table, A));
+  });
+  await a.services.pullReferenceData();
+  const completedAt = await a.repositories.localState.get('reference_data_complete_at');
+  expect(new Date(completedAt).toISOString()).toBe(completedAt);
+  fail = true;
+  await expect(a.services.pullReferenceData()).rejects.toMatchObject({ message: 'staff references failed' });
+  expect(await a.repositories.localState.get('reference_data_complete_at')).toBe(completedAt);
+  await requestClose({ reason: 'offline restart after failed later refresh' });
+  const offline = jest.fn(async () => { throw new TypeError('Offline'); });
+  const reopened = await open(A, offline);
+  await reopened.services.referenceDataReady();
+  expect(offline).not.toHaveBeenCalled();
+  expect(await reopened.repositories.localState.get('reference_data_complete_at')).toBe(completedAt);
   expect(await reopened.repositories.staffProgrammeAssignments.getAll()).toHaveLength(assigned ? 1 : 0);
 });
 

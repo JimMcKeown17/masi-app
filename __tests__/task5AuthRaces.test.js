@@ -666,6 +666,7 @@ test('online warm-cache startup and reconnect refresh programme assignments and 
   await a.repositories.programmes.replaceFromServer([{ id: 'old', code: 'old', name: 'Old' }]);
   await a.repositories.academicYears.replaceFromServer([{ id: 'year', label: '2025', starts_on: '2025-01-01', ends_on: '2025-12-31', is_active: true }]);
   await a.repositories.staffProgrammeAssignments.replaceFromServer([{ id: 'assignment', user_id: A, programme_id: 'old' }]);
+  await a.repositories.localState.set('reference_data_complete_at', '2026-10-16T00:00:00.000Z');
   await requestClose({ reason: 'warm restart' });
   mockNetwork = { isConnected: true };
   const entered = barrier(); const release = barrier();
@@ -713,6 +714,7 @@ test('reconnect during a failing reference refresh owes one fresh pass and updat
   await cached.repositories.schools.replaceFromServer([{ id: 'school', name: 'School' }]);
   await cached.repositories.programmes.replaceFromServer([{ id: 'programme', code: 'literacy', name: 'Literacy' }]);
   await cached.repositories.academicYears.replaceFromServer([{ id: 'year', label: '2025', starts_on: '2025-01-01', ends_on: '2025-12-31', is_active: true }]);
+  await cached.repositories.localState.set('reference_data_complete_at', '2026-10-16T00:00:00.000Z');
   await requestClose({ reason: 'warm restart' });
   mockNetwork = { isConnected: true };
   const entered = barrier(); const release = barrier();
@@ -872,9 +874,9 @@ test('a failed initial profile request leaves New Session retryable and Retry op
   expect(transport.mock.calls.filter(([url]) => String(url).includes('/rest/v1/users'))).toHaveLength(2);
 });
 
-test('ClassesContext never confirms an empty roster after a partial reference refresh fails', async () => {
+test.each([false, true])('ClassesContext never confirms an empty roster after a partial reference refresh fails, reopen = %s', async reopen => {
   const errors = jest.spyOn(console, 'error').mockImplementation(() => {});
-  const view = render(<AuthProvider><Tree /></AuthProvider>);
+  let view = render(<AuthProvider><Tree /></AuthProvider>);
   await signIn(A);
   const handle = getCurrentHandle();
   const school = { id: 'school', name: 'School' };
@@ -885,7 +887,7 @@ test('ClassesContext never confirms an empty roster after a partial reference re
   let fail = true;
   transport.mockImplementation(async (url) => {
     const table = new URL(url).pathname.split('/').pop();
-    if (table === 'teachers' && fail) return new Response(JSON.stringify({ message: 'Reference refresh failed' }), { status: 503 });
+    if (table === 'staff_programme_assignments' && fail) return new Response(JSON.stringify({ message: 'Reference refresh failed' }), { status: 503 });
     if (table === 'users') return json(session(A).user);
     if (table === 'get_reconcile_acknowledgments') return json({ schema_version: 1, complete: true, user_id: A, active_programme_id: programme.id,
       child_ea_assignment_ids: [], assigned_child_ids: [], visible_child_ids: [], child_programme_enrollment_ids: [],
@@ -898,6 +900,17 @@ test('ClassesContext never confirms an empty roster after a partial reference re
   });
   await expect(handle.services.pullReferenceData()).rejects.toMatchObject({ message: 'Reference refresh failed' });
   expect(await handle.repositories.staffProgrammeAssignments.getAll()).toEqual([]);
+  await handle.repositories.classes.saveServerClassRows([classroom]);
+  await handle.repositories.classEaAssignments.saveServerRows([assignment]);
+  if (reopen) {
+    view.unmount();
+    await requestClose({ reason: 'restart after partial reference refresh' });
+    view = render(<AuthProvider><Tree /></AuthProvider>);
+    await waitFor(() => expect(auth.handle?.userId).toBe(A));
+    expect(auth.handle).not.toBe(handle);
+    await expect(auth.handle.services.pullReferenceData()).rejects.toMatchObject({ message: 'Reference refresh failed' });
+  }
+  expect(await getCurrentHandle().repositories.classes.getClasses({ userId: A })).toEqual([]);
   mockNetwork = { isConnected: true };
   view.rerender(<AuthProvider><Tree rosters /></AuthProvider>);
   await waitFor(() => expect(roster?.classes.loading).toBe(false));

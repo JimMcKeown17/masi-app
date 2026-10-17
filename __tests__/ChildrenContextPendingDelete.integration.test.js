@@ -13,6 +13,7 @@ import { __reset, __setDatabaseFactory } from 'expo-sqlite';
 import { ChildrenProvider, useChildren } from '../src/context/ChildrenContext';
 import { initializeTestDatabase, closeDefaultTestHandle, getTestWriter } from '../test-support/testDatabase';
 import { syncOutboxRepository } from '../src/db/repositories/syncOutboxRepository';
+import { createLocalStateRepository } from '../src/db/repositories/localStateRepository';
 import { runMigrations } from '../src/db/migrations';
 import { createBetterSqliteTestDatabase } from '../test-support/betterSqliteAdapter';
 import { seedCoreData } from '../test-support/sqliteRepositoryTestUtils';
@@ -54,6 +55,7 @@ beforeEach(async () => {
   const db = await getTestWriter();
   expect(db).toBe(testDb);
   await seedCoreData(db);
+  await createLocalStateRepository({ database: db }).set('reference_data_complete_at', '2026-10-16T00:00:00.000Z');
   await db.runAsync("update staff_programme_assignments set user_id = '00000000-0000-4000-8000-0000000000aa'");
   await testDb.execAsync('PRAGMA foreign_keys = ON');
   await syncOutboxRepository.enqueue({

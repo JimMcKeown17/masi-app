@@ -1870,6 +1870,7 @@ export const __contract = { SERVER_COLUMNS, PUSH_ORDER, INTENTIONALLY_UNSYNCED, 
 const pullReferenceDataRows = async ({
   supabaseClient,
   repositories,
+  localStateRepository,
   userId,
   enqueueRequest,
 } = {}) => {
@@ -1902,6 +1903,8 @@ const pullReferenceDataRows = async ({
     );
     results[tableName] = (data || []).length;
   }
+  // Persist completion only after every table write commits; failed refreshes keep prior evidence.
+  await localStateRepository.set('reference_data_complete_at', timestamp());
   return results;
 };
 
@@ -1916,16 +1919,12 @@ const referenceFlight = (barrier, task, key = 'promise') => {
   return promise;
 };
 
-// Inspect the pre-refresh cache once, before either entry point can write partial rows.
-// A warm cache stays usable while refreshing; a cold cache needs one complete pull.
-const checkReferenceCache = (barrier, repositories) => {
+// Completion survives reopening the file, even when reference tables are legitimately empty.
+// Partial rows cannot establish readiness; an earlier completed cache stays usable offline.
+const checkReferenceCache = (barrier, localStateRepository) => {
   if (!barrier.cachePromise) {
-    barrier.cachePromise = Promise.all([
-      repositories.schools.getAll(),
-      repositories.programmes.getAll(),
-      repositories.academic_years.getAll(),
-    ]).then((rows) => {
-      if (rows.every((tableRows) => tableRows.length > 0)) barrier.ready = true;
+    barrier.cachePromise = localStateRepository.get('reference_data_complete_at').then((completedAt) => {
+      if (completedAt) barrier.ready = true;
     }).catch((error) => {
       barrier.cachePromise = null;
       throw error;
@@ -1936,7 +1935,7 @@ const checkReferenceCache = (barrier, repositories) => {
 
 export const pullReferenceData = ({ barrier, ...options } = {}) => (
   barrier ? referenceFlight(barrier, async () => {
-    await checkReferenceCache(barrier, options.repositories);
+    await checkReferenceCache(barrier, options.localStateRepository);
     return pullReferenceDataRows(options);
   }, 'refreshPromise') : pullReferenceDataRows(options)
 );
@@ -1949,7 +1948,7 @@ export const ensureReferenceData = ({
   if (barrier.promise) return barrier.promise;
   if (barrier.ready) return Promise.resolve();
   return referenceFlight(barrier, async () => {
-    await checkReferenceCache(barrier, repositories);
+    await checkReferenceCache(barrier, options.localStateRepository);
     if (barrier.ready) return;
     return pullReferenceData({ ...options, repositories, barrier });
   });

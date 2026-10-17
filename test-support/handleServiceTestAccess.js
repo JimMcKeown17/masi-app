@@ -4,6 +4,7 @@ const referenceOptions = () => {
   const handle = current(); const repos = require('./legacyHandleMocks').repositoriesForTest(handle);
   const mocks = require('./handleServiceMocks');
   return { supabaseClient: handle.dataClient,
+    localStateRepository: repos.localState,
     enqueueRequest: mocks.enqueueSupabaseRequest || handle.enqueueRequest,
     repositories: { schools: repos.schools, job_titles: repos.jobTitles, programmes: repos.programmes,
       academic_years: repos.academicYears, assessment_windows: repos.assessmentWindows,

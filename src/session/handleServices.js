@@ -58,7 +58,7 @@ export const createHandleServices = (handle) => {
   const barrier = { ready: false, promise: null };
   const referenceOptions = {
     userId: handle.userId, supabaseClient: handle.dataClient, enqueueRequest: handle.enqueueRequest,
-    repositories: referenceRepositories, barrier,
+    repositories: referenceRepositories, localStateRepository: repositories.localState, barrier,
   };
   const assertCurrent = () => {
     if (!handle.isOpen() || !handle.isCurrent()) throw new StaleActorError();

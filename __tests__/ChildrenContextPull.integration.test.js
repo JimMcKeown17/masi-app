@@ -15,6 +15,7 @@ import { initializeTestDatabase, getTestWriter, closeDefaultTestHandle } from '.
 import { childrenRepository } from '../src/db/repositories/childrenRepository';
 import { groupsRepository } from '../src/db/repositories/groupsRepository';
 import { groupEaAssignmentsRepository } from '../src/db/repositories/groupEaAssignmentsRepository';
+import { createLocalStateRepository } from '../src/db/repositories/localStateRepository';
 import { __testables as offlineSyncTestables } from '../src/services/offlineSync';
 
 import { createBetterSqliteTestDatabase } from '../test-support/betterSqliteAdapter';
@@ -225,6 +226,7 @@ const countGroupsForClass = ({ children, childrenGroups }, classId) => {
 
 const seedContextRows = async (db) => {
   await seedCoreData(db);
+  await createLocalStateRepository({ database: db }).set('reference_data_complete_at', '2026-10-16T00:00:00.000Z');
   await db.runAsync(`
     insert into children (
       id, first_name, last_name, class_id, created_by, sync_status
