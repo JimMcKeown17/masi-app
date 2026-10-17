@@ -170,7 +170,7 @@ below it at full width, still 44dp minimum. Both stay independently tappable.
 20dp below the week strip. Holds at most two cards, 8dp apart. When there is nothing to show, the
 area is not rendered at all (no heading, no placeholder, no empty accessibility container).
 
-**Card:** white, radius 18, 1dp border `rgba(34,26,27,0.12)` (ink at 12%), min height 60. A main
+**Card:** white, radius 18, 1dp border `colors.text + '1F'` (ink at about 12%, written as token plus alpha like the other translucent fills, so the colour guard needs no exception), min height 60. A main
 button fills the card: 40x40 icon tile (radius 14), a title (text font 15/20 weight 700; the copy
 below fits one line on a 360dp phone at normal size, and wraps when text is enlarged), a sub-line
 (13/18 weight 500 `textSecondary`, wraps), then either a chevron or nothing. A dismissible card

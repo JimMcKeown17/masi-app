@@ -11,6 +11,18 @@ const mockGetSessionCountsSince = jest.fn();
 const mockGetAssessmentCountsSince = jest.fn();
 const mockGetSessionsTodayGoal = jest.fn();
 const mockGetActiveProgrammeGate = jest.fn();
+const mockIsFocused = jest.fn(() => true);
+const mockStatusBar = jest.fn();
+
+const mockGetAssessmentDismissedOn = jest.fn();
+const mockDismissAssessmentForDay = jest.fn();
+jest.mock('../src/services/homeAttentionStore', () => ({
+  AUTO_CLOCK_OUT_NOTICE_TTL_MS: 24 * 60 * 60 * 1000,
+  homeAttentionStore: {
+    getAssessmentDismissedOn: (...args) => mockGetAssessmentDismissedOn(...args),
+    dismissAssessmentForDay: (...args) => mockDismissAssessmentForDay(...args),
+  },
+}));
 
 jest.mock('@expo/vector-icons', () => new Proxy({}, {
   get: (target, prop) => {
@@ -25,8 +37,11 @@ jest.mock('@react-navigation/native', () => {
   return {
     ...jest.requireActual('@react-navigation/native'),
     useFocusEffect: (cb) => { React.useEffect(() => cb(), []); },
+    useIsFocused: () => mockIsFocused(),
   };
 });
+
+jest.mock('expo-status-bar', () => ({ StatusBar: (props) => { mockStatusBar(props); return null; } }));
 
 jest.mock('../src/context/AuthContext', () => ({ useAuth: () => mockUseAuth() }));
 jest.mock('../src/context/OfflineContext', () => ({ useOffline: () => mockUseOffline() }));
@@ -70,6 +85,8 @@ const renderHome = (navigation = { navigate: jest.fn() }) => render(
 );
 
 const defaultTimeTracking = {
+  autoClockOutNotice: null,
+  dismissAutoClockOutNotice: jest.fn(),
   isSignedIn: false,
   activeEntry: null,
   currentEntry: null,
@@ -89,6 +106,9 @@ const defaultTimeTracking = {
 describe('HomeScreen', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    mockIsFocused.mockReturnValue(true);
+    mockGetAssessmentDismissedOn.mockResolvedValue(null);
+    mockDismissAssessmentForDay.mockResolvedValue(undefined);
     mockUseAuth.mockReturnValue({
       user: { id: 'ea-1', first_name: 'Alice' },
       profile: { first_name: 'Alice', schoolName: 'Charles Duna Primary' },
@@ -154,81 +174,13 @@ describe('HomeScreen', () => {
     expect(mockGetSessionsTodayGoal).toHaveBeenCalledWith({ userId: 'ea-1' });
   });
 
-  test('shows children the signed-in EA has not seen this week', async () => {
-    jest.useFakeTimers();
-    jest.setSystemTime(new Date('2026-07-22T08:00:00.000Z'));
-    mockUseChildren.mockReturnValue({
-      children: [
-        { id: 'child-1', first_name: 'Onwethu' },
-        { id: 'child-2', first_name: 'Esona' },
-        { id: 'child-3', first_name: 'Buhle' },
-      ],
-    });
-    mockGetSessions.mockResolvedValue([
-      {
-        id: 'session-1',
-        user_id: 'ea-1',
-        session_date: '2026-07-20',
-        children_ids: ['child-1'],
-      },
-    ]);
-
+  test('shows Clock in button when not signed in', async () => {
     const screen = renderHome();
 
-    expect(await screen.findByText('WHO TO SEE NEXT')).toBeTruthy();
-    expect(screen.getByLabelText('Who to see next: Esona')).toBeTruthy();
-    expect(screen.getByLabelText('Who to see next: Buhle')).toBeTruthy();
-    expect(screen.queryByLabelText('Who to see next: Onwethu')).toBeNull();
-    expect(mockGetSessions).toHaveBeenCalledWith(expect.objectContaining({
-      userId: 'ea-1',
-      recordedByUserId: 'ea-1',
-      order: 'desc',
-    }));
+    await waitFor(() => expect(screen.getByText('Clock in')).toBeTruthy());
   });
 
-  test('shows recent sessions and opens the complete history', async () => {
-    mockUseChildren.mockReturnValue({
-      children: [
-        { id: 'child-1', first_name: 'Sinovuyo' },
-        { id: 'child-2', first_name: 'Ayanda' },
-      ],
-    });
-    mockGetSessions.mockResolvedValue([
-      {
-        id: 'session-1',
-        user_id: 'ea-1',
-        session_date: '2026-07-22',
-        created_at: '2026-07-22T08:15:00+02:00',
-        children_ids: ['child-1', 'child-2'],
-        session_type: 'Shared reading',
-      },
-    ]);
-    const navigation = { navigate: jest.fn() };
-
-    const screen = renderHome(navigation);
-
-    expect(await screen.findByText('Sinovuyo & Ayanda')).toBeTruthy();
-    expect(screen.getByText('08:15')).toBeTruthy();
-    expect(screen.getByText('Shared reading')).toBeTruthy();
-    fireEvent.press(screen.getByText('View all →'));
-    expect(navigation.navigate).toHaveBeenCalledWith('SessionHistory');
-  });
-
-  test('renders the locked body sections', async () => {
-    const screen = renderHome();
-
-    expect(await screen.findByText('WHO TO SEE NEXT')).toBeTruthy();
-    expect(screen.getByText('RECENT')).toBeTruthy();
-    expect(screen.getByText('View all →')).toBeTruthy();
-  });
-
-  test('shows Clock In button when not signed in', async () => {
-    const screen = renderHome();
-
-    await waitFor(() => expect(screen.getByText('Clock In')).toBeTruthy());
-  });
-
-  test('shows Clock Out / session controls when signed in', async () => {
+  test('shows Clock out / session controls when signed in', async () => {
     mockUseTimeTracking.mockReturnValue({
       ...defaultTimeTracking,
       isSignedIn: true,
@@ -238,8 +190,8 @@ describe('HomeScreen', () => {
 
     const screen = renderHome();
 
-    await waitFor(() => expect(screen.getByText('Clock Out')).toBeTruthy());
-    expect(screen.queryByText('Clock In')).toBeNull();
+    await waitFor(() => expect(screen.getByText('Clock out')).toBeTruthy());
+    expect(screen.queryByText('Clock in')).toBeNull();
   });
 
   test('does not duplicate the navigation Record action on Home', async () => {
@@ -281,7 +233,7 @@ describe('HomeScreen', () => {
     expect(navigation.navigate).not.toHaveBeenCalledWith('ClassOnboarding');
   });
 
-  test('uses complete active-roster assessment coverage, matching the Assessments tab', async () => {
+  test('assessment card uses complete active-roster coverage', async () => {
     jest.useFakeTimers();
     jest.setSystemTime(new Date('2026-07-12T08:00:00.000Z'));
     mockUseChildren.mockReturnValue({
@@ -312,7 +264,8 @@ describe('HomeScreen', () => {
 
     const screen = renderHome();
 
-    await waitFor(() => expect(screen.getByText('1 of 2 children assessed')).toBeTruthy());
+    await waitFor(() => expect(screen.getByText('1 child to assess')).toBeTruthy());
+    expect(screen.getByText('1 of 2 children assessed')).toBeTruthy();
     expect(mockGetSessions).toHaveBeenCalledWith({
       userId: 'ea-1',
       recordedByUserId: 'ea-1',
@@ -350,9 +303,121 @@ describe('HomeScreen', () => {
       );
     });
     expect(screen.queryByLabelText('Loading statistics')).toBeNull();
-    expect(screen.getByLabelText('0 of 0 children assessed. 0 to go.')).toBeTruthy();
-    expect(screen.getByText('No sessions recorded yet.')).toBeTruthy();
+    expect(screen.getByText('Couldn’t load today’s sessions')).toBeTruthy();
+    expect(screen.queryByLabelText('Needs your attention')).toBeNull();
 
     consoleError.mockRestore();
+  });
+
+  test('a normal day shows no attention area', async () => {
+    mockUseChildren.mockReturnValue({ children: [{ id: 'c1', first_name: 'A' }] });
+    mockGetAssessmentCountsSince.mockResolvedValue([{ child_id: 'c1', count: 1 }]);
+    const screen = renderHome();
+    await waitFor(() => expect(screen.getByText('2 of 3 sessions today')).toBeTruthy());
+    expect(screen.queryByLabelText('Needs your attention')).toBeNull();
+    expect(screen.queryByText('WHO TO SEE NEXT')).toBeNull();
+    expect(screen.queryByText('RECENT')).toBeNull();
+  });
+
+  test('sync attention card opens Sync status and stays while syncing', async () => {
+    mockUseOffline.mockReturnValue({
+      isOnline: true, isSyncing: true, waitingCount: 0, needsAttentionCount: 2, syncStatus: { failedItems: [] },
+    });
+    const navigation = { navigate: jest.fn() };
+    const screen = renderHome(navigation);
+    fireEvent.press(await screen.findByLabelText('2 items need attention. Open sync status to sort it out'));
+    expect(navigation.navigate).toHaveBeenCalledWith('SyncStatus');
+  });
+
+  test('an auto clock-out published after the first load appears without navigation', async () => {
+    const screen = renderHome();
+    await waitFor(() => expect(screen.getByText('2 of 3 sessions today')).toBeTruthy());
+    expect(screen.queryByText('Clocked out after 10 hours')).toBeNull();
+
+    mockUseTimeTracking.mockReturnValue({
+      ...defaultTimeTracking,
+      autoClockOutNotice: {
+        entryId: 'time-1', userId: 'ea-1', signInTime: new Date(Date.now() - 11 * 3600e3).toISOString(),
+        detectedAt: new Date().toISOString(), dismissedAt: null,
+      },
+    });
+    screen.rerender(<PaperProvider><HomeScreen navigation={{ navigate: jest.fn() }} /></PaperProvider>);
+
+    expect(await screen.findByText('Clocked out after 10 hours')).toBeTruthy();
+  });
+
+  test('dismissing the auto clock-out card calls the provider with its entry', async () => {
+    const dismiss = jest.fn();
+    mockUseTimeTracking.mockReturnValue({
+      ...defaultTimeTracking,
+      autoClockOutNotice: {
+        entryId: 'time-9', userId: 'ea-1', signInTime: new Date().toISOString(),
+        detectedAt: new Date().toISOString(), dismissedAt: null,
+      },
+      dismissAutoClockOutNotice: dismiss,
+    });
+    const screen = renderHome();
+    fireEvent.press(await screen.findByLabelText('Dismiss: Clocked out after 10 hours'));
+    expect(dismiss).toHaveBeenCalledWith('time-9');
+  });
+
+  test('dismissing the assessment card hides it for today', async () => {
+    mockUseChildren.mockReturnValue({ children: [{ id: 'c1', first_name: 'A' }, { id: 'c2', first_name: 'B' }] });
+    mockGetAssessmentCountsSince.mockResolvedValue([{ child_id: 'c1', count: 1 }]);
+    const screen = renderHome();
+    fireEvent.press(await screen.findByLabelText('Dismiss: 1 child to assess'));
+    await waitFor(() => expect(screen.queryByText('1 child to assess')).toBeNull());
+    expect(mockDismissAssessmentForDay).toHaveBeenCalledWith('ea-1', expect.stringMatching(/^\d{4}-\d{2}-\d{2}$/));
+  });
+
+  test('returning to the foreground reloads the stats', async () => {
+    const { AppState } = require('react-native');
+    const listeners = [];
+    jest.spyOn(AppState, 'addEventListener').mockImplementation((type, fn) => {
+      listeners.push(fn);
+      return { remove: jest.fn() };
+    });
+    renderHome();
+    await waitFor(() => expect(mockGetSessionsTodayGoal).toHaveBeenCalledTimes(1));
+    await act(async () => { listeners.forEach((fn) => fn('active')); });
+    await waitFor(() => expect(mockGetSessionsTodayGoal).toHaveBeenCalledTimes(2));
+  });
+
+  test('omits the subtitle when there is no programme or school', async () => {
+    mockUseAuth.mockReturnValue({ user: { id: 'ea-1' }, profile: { first_name: 'Alice' } });
+    mockGetActiveProgrammeGate.mockResolvedValue({ hasActiveProgramme: false, programme: null });
+    const screen = renderHome();
+    await waitFor(() => expect(screen.getByText('Molo, Alice.')).toBeTruthy());
+    expect(screen.queryByText(/ · /)).toBeNull();
+  });
+
+  test('a failed refresh keeps the last good stats on screen', async () => {
+    const { AppState } = require('react-native');
+    const listeners = [];
+    jest.spyOn(AppState, 'addEventListener').mockImplementation((type, fn) => {
+      listeners.push(fn);
+      return { remove: jest.fn() };
+    });
+    const consoleError = jest.spyOn(console, 'error').mockImplementation(() => {});
+    const screen = renderHome();
+    await waitFor(() => expect(screen.getByText('2 of 3 sessions today')).toBeTruthy());
+
+    mockGetSessions.mockRejectedValueOnce(new Error('busy'));
+    await act(async () => { listeners.forEach((fn) => fn('active')); });
+
+    await waitFor(() => expect(consoleError).toHaveBeenCalled());
+    expect(screen.getByText('2 of 3 sessions today')).toBeTruthy();
+    consoleError.mockRestore();
+  });
+
+  test('Home owns a light status bar only while focused', async () => {
+    const screen = renderHome();
+    await waitFor(() => expect(mockStatusBar).toHaveBeenCalledWith(expect.objectContaining({ style: 'light' })));
+
+    mockStatusBar.mockClear();
+    mockIsFocused.mockReturnValue(false);
+    screen.rerender(<PaperProvider><HomeScreen navigation={{ navigate: jest.fn() }} /></PaperProvider>);
+
+    expect(mockStatusBar).not.toHaveBeenCalled();
   });
 });

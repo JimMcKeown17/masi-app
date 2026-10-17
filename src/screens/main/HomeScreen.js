@@ -1,70 +1,62 @@
-import React, { useCallback, useRef, useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
-import { ActivityIndicator, Snackbar, Text } from 'react-native-paper';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { AppState, Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
+import { Snackbar } from 'react-native-paper';
 import { Ionicons } from '@expo/vector-icons';
-import { useFocusEffect } from '@react-navigation/native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { useFocusEffect, useIsFocused } from '@react-navigation/native';
+import { StatusBar } from 'expo-status-bar';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import Svg, { Circle } from 'react-native-svg';
 import { useAuth } from '../../context/AuthContext';
 import { useChildren } from '../../context/ChildrenContext';
 import { useClasses } from '../../context/ClassesContext';
+import { useOffline } from '../../context/OfflineContext';
 import { useTimeTracking } from '../../hooks/useTimeTracking';
 import { sessionsRepository } from '../../db/repositories/sessionsRepository';
 import { assessmentsRepository } from '../../db/repositories/assessmentsRepository';
-import ElapsedTime from '../../components/common/ElapsedTime';
 import SyncIndicator from '../../components/common/SyncIndicator';
-import SessionsTodayGauge from '../../components/sessions/SessionsTodayGauge';
+import HomeClockRow from '../../components/home/HomeClockRow';
+import SegmentedSessionGauge from '../../components/home/SegmentedSessionGauge';
+import WeekStrip from '../../components/home/WeekStrip';
+import AttentionArea from '../../components/home/AttentionArea';
 import { getSessionsTodayGoal } from '../../services/sessionsTodayGoal';
-import { getGoalCopy } from '../../utils/sessionGoalPresentation';
 import { getActiveProgrammeGate } from '../../services/activeProgrammeGate';
-import {
-  getAssessmentCoverage,
-  getSessionsTabStats,
-  getWeekSessionCounts,
-} from '../../utils/dashboardStats';
-import { formatDisplayTime, toLocalDateString } from '../../utils/localDate';
-import { borderRadius, colors, spacing } from '../../constants/colors';
+import { homeAttentionStore } from '../../services/homeAttentionStore';
+import { getAssessmentCoverage, getWeekSessionCounts } from '../../utils/dashboardStats';
+import { deriveHomeAttentionItems } from '../../utils/homeAttention';
+import { getGoalCopy } from '../../utils/sessionGoalPresentation';
+import { toLocalDateString } from '../../utils/localDate';
+import { colors, shadows } from '../../constants/colors';
+import { typeRoles } from '../../constants/typography';
 
 const THIRTY_DAYS_MS = 30 * 24 * 60 * 60 * 1000;
-
-const getChildName = (child) => (
-  child?.first_name || child?.firstName || child?.name || 'Child'
-);
-
-const formatChildNames = (session, children) => {
-  const names = (session.children_ids || [])
-    .map((id) => children.find((child) => child.id === id))
-    .filter(Boolean)
-    .map(getChildName);
-  if (names.length <= 1) return names[0] || 'Session';
-  if (names.length === 2) return names[0] + ' & ' + names[1];
-  return names.slice(0, -1).join(', ') + ' & ' + names[names.length - 1];
-};
+const SIDE = 24;
+const CARD_STRADDLE = 56; // the red field ends this far below the card's top
+const FAB_OVERHANG = 28; // LockedBottomTabBar recordAction marginTop
+const RING = { stroke: 50, r: 236, dxFromRight: 170, cy: 40 };
 
 export default function HomeScreen({ navigation }) {
+  const insets = useSafeAreaInsets();
+  const { width, fontScale } = useWindowDimensions();
   const { user, profile } = useAuth();
   const { children: childrenList } = useChildren();
   const { classBootstrapStatus, incompleteOnboardingClassId } = useClasses();
-  const onboardingEnteredRef = useRef(false);
+  const { needsAttentionCount = 0 } = useOffline();
   const {
-    isSignedIn,
-    activeEntry,
-    loadingLocation,
-    snackbarMessage,
-    snackbarVisible,
-    setSnackbarVisible,
-    handleSignIn,
-    handleSignOut,
+    isSignedIn, activeEntry, loadingLocation, snackbarMessage, snackbarVisible, setSnackbarVisible,
+    handleSignIn, handleSignOut, autoClockOutNotice, dismissAutoClockOutNotice,
   } = useTimeTracking();
+  const onboardingEnteredRef = useRef(false);
+  const loadSeqRef = useRef(0);
 
   const [weekCounts, setWeekCounts] = useState([]);
-  const [coverage, setCoverage] = useState({ assessed: 0, total: 0, percent: 0 });
+  const [coverage, setCoverage] = useState(null); // null until the first successful load
   const [sessionGoal, setSessionGoal] = useState(null);
   const [programmeName, setProgrammeName] = useState('');
-  const [whoToSeeNext, setWhoToSeeNext] = useState([]);
-  const [recentSessions, setRecentSessions] = useState([]);
+  const [assessmentDismissedOn, setAssessmentDismissedOn] = useState(null);
   const [statsLoading, setStatsLoading] = useState(true);
-  const statsLoadStartedRef = useRef(false);
+  const [now, setNow] = useState(() => new Date());
 
+  // Unchanged onboarding routing.
   useFocusEffect(
     useCallback(() => {
       const shouldEnterOnboarding = classBootstrapStatus === 'confirmed_empty'
@@ -81,594 +73,199 @@ export default function HomeScreen({ navigation }) {
     }, [classBootstrapStatus, incompleteOnboardingClassId, navigation])
   );
 
+  const loadStats = useCallback(async () => {
+    const seq = ++loadSeqRef.current;
+    setNow(new Date());
+    setStatsLoading(true);
+    try {
+      const recentCutoff = toLocalDateString(new Date(Date.now() - THIRTY_DAYS_MS));
+      const [assessmentCounts, dailyGoal, sessions, programmeGate, dismissedOn] = await Promise.all([
+        assessmentsRepository.getAssessmentCountsSince({ userId: user.id }),
+        getSessionsTodayGoal({ userId: user.id }),
+        sessionsRepository.getSessions({
+          userId: user.id, recordedByUserId: user.id, sinceDate: recentCutoff, order: 'desc',
+        }),
+        getActiveProgrammeGate({ userId: user.id }),
+        homeAttentionStore.getAssessmentDismissedOn(user.id),
+      ]);
+      if (seq !== loadSeqRef.current) return; // a newer load superseded this one
+      setWeekCounts(getWeekSessionCounts(sessions));
+      setCoverage(getAssessmentCoverage(childrenList, assessmentCounts));
+      setSessionGoal(dailyGoal);
+      setProgrammeName(programmeGate.programme?.name || '');
+      setAssessmentDismissedOn(dismissedOn);
+    } catch (error) {
+      console.error('Error loading Home statistics:', error);
+    } finally {
+      if (seq === loadSeqRef.current) setStatsLoading(false);
+    }
+  }, [childrenList, user.id]);
+
+  // Load on focus (and when the roster or user changes); reload on foreground.
   useFocusEffect(
     useCallback(() => {
-      if (statsLoadStartedRef.current) return undefined;
-      statsLoadStartedRef.current = true;
-
-      const loadStats = async () => {
-        setStatsLoading(true);
-        try {
-          const recentCutoff = toLocalDateString(new Date(Date.now() - THIRTY_DAYS_MS));
-          const [assessmentCounts, dailyGoal, sessions, programmeGate] = await Promise.all([
-            assessmentsRepository.getAssessmentCountsSince({
-              userId: user.id,
-            }),
-            getSessionsTodayGoal({ userId: user.id }),
-            sessionsRepository.getSessions({
-              userId: user.id,
-              recordedByUserId: user.id,
-              sinceDate: recentCutoff,
-              order: 'desc',
-            }),
-            getActiveProgrammeGate({ userId: user.id }),
-          ]);
-
-          setWeekCounts(getWeekSessionCounts(sessions));
-          setCoverage(getAssessmentCoverage(childrenList, assessmentCounts));
-          setSessionGoal(dailyGoal);
-          setProgrammeName(programmeGate.programme?.name || '');
-          setWhoToSeeNext(
-            getSessionsTabStats(sessions, childrenList, user.id).notSeenThisWeek.slice(0, 3)
-          );
-          setRecentSessions(sessions.slice(0, 2));
-        } catch (error) {
-          console.error('Error loading Home statistics:', error);
-        } finally {
-          setStatsLoading(false);
-        }
-      };
       loadStats();
-
-      return () => {
-        statsLoadStartedRef.current = false;
-      };
-    }, [childrenList, user.id])
+      const sub = AppState.addEventListener('change', (next) => {
+        if (next === 'active') loadStats();
+      });
+      return () => sub.remove();
+    }, [loadStats])
   );
+  // Declarative and focus-scoped: React Native's StatusBar keeps a stack, so a
+  // mounted <StatusBar> wins over App.js's root <StatusBar style="auto"> and
+  // unmounting on blur restores it. The imperative setter would be overwritten
+  // by the next root update.
+  const isFocused = useIsFocused();
+
+  const attentionItems = useMemo(() => deriveHomeAttentionItems({
+    needsAttentionCount,
+    autoClockOut: autoClockOutNotice,
+    coverage,
+    assessmentDismissedOn,
+    now,
+  }), [needsAttentionCount, autoClockOutNotice, coverage, assessmentDismissedOn, now]);
+
+  const openItem = useCallback((item) => navigation.navigate(item.route), [navigation]);
+  const dismissItem = useCallback(async (item) => {
+    if (item.kind === 'auto_clock_out') {
+      await dismissAutoClockOutNotice(item.entryId);
+    } else if (item.kind === 'assessment_due') {
+      const today = toLocalDateString(new Date());
+      setAssessmentDismissedOn(today);
+      try {
+        await homeAttentionStore.dismissAssessmentForDay(user.id, today);
+      } catch (error) {
+        console.error('Error dismissing assessment card:', error);
+      }
+    }
+  }, [dismissAutoClockOutNotice, user.id]);
 
   const goalCopy = getGoalCopy(sessionGoal, isSignedIn);
-  const coverageRemaining = Math.max(coverage.total - coverage.assessed, 0);
   const subtitle = [programmeName, profile?.schoolName].filter(Boolean).join(' · ');
 
   return (
-    <SafeAreaView style={styles.safeArea} edges={['top']}>
-      <View style={styles.outerContainer}>
-        <ScrollView
-          style={styles.container}
-          contentContainerStyle={styles.scrollContent}
-          showsVerticalScrollIndicator={false}
-        >
-          <View style={styles.hero}>
-            <View style={styles.heroTopRow}>
-              <View style={styles.heroIdentity}>
-                <Text style={styles.greeting}>Molo, {profile?.first_name || 'there'}.</Text>
-                {subtitle ? <Text style={styles.subtitle}>{subtitle}</Text> : null}
-              </View>
-              <Pressable
-                onPress={() => navigation.navigate('Profile')}
-                accessibilityRole="button"
-                accessibilityLabel="Open profile"
-                hitSlop={8}
-                style={styles.settingsButton}
-              >
-                <Ionicons name="settings-outline" size={20} color={colors.onDarkMuted} />
-              </Pressable>
-            </View>
+    <View style={styles.screen}>
+      {isFocused ? <StatusBar style="light" /> : null}
+      <ScrollView
+        style={styles.scroll}
+        contentContainerStyle={{ paddingBottom: FAB_OVERHANG + 16 }}
+        showsVerticalScrollIndicator={false}
+      >
+        {/* Red above the content top so an iOS overscroll never shows the canvas. */}
+        <View style={styles.overscrollRed} />
+        <View style={[styles.hero, { paddingTop: insets.top + 6 }]}>
+          <Svg
+            width={width}
+            height={RING.cy + RING.r + RING.stroke}
+            style={StyleSheet.absoluteFill}
+            pointerEvents="none"
+            accessibilityElementsHidden
+            importantForAccessibility="no-hide-descendants"
+          >
+            <Circle
+              cx={width + RING.dxFromRight}
+              cy={RING.cy}
+              r={RING.r}
+              stroke={colors.red500}
+              strokeWidth={RING.stroke}
+              fill="none"
+            />
+          </Svg>
 
-            <View style={styles.syncRow}>
-              <SyncIndicator
-                onPress={() => navigation.navigate('SyncStatus')}
-                showLabel
-                dark
-              />
-            </View>
-
-            <View style={[styles.clockPill, !isSignedIn ? styles.clockPillOut : null]}>
-              {loadingLocation ? (
-                <View style={styles.clockStatus}>
-                  <ActivityIndicator size="small" color={colors.onDarkMuted} />
-                  <Text style={styles.clockText}>Getting location...</Text>
-                </View>
-              ) : isSignedIn ? (
-                <Pressable
-                  onPress={() => navigation.navigate('TimeEntriesList')}
-                  accessibilityRole="button"
-                  accessibilityLabel="View work history"
-                  style={styles.clockStatus}
-                >
-                  <View style={styles.clockLed} />
-                  <Text style={styles.clockText}>On the clock ·</Text>
-                  <ElapsedTime signInTime={activeEntry?.sign_in_time} style={styles.clockElapsed} />
-                </Pressable>
-              ) : (
-                <View style={styles.clockStatus}>
-                  <View style={styles.clockLedOut} />
-                  <Text style={styles.clockTextMuted}>Not clocked in</Text>
-                </View>
-              )}
-              {!loadingLocation ? (
-                <Pressable
-                  onPress={isSignedIn ? handleSignOut : handleSignIn}
-                  accessibilityRole="button"
-                  accessibilityLabel={isSignedIn ? 'Clock Out' : 'Clock In'}
-                  style={[styles.clockAction, !isSignedIn ? styles.clockInAction : null]}
-                >
-                  <Text style={[
-                    styles.clockActionText,
-                    !isSignedIn ? styles.clockInActionText : null,
-                  ]}>
-                    {isSignedIn ? 'Clock Out' : 'Clock In'}
-                  </Text>
-                </Pressable>
-              ) : null}
-            </View>
-
-            {sessionGoal && goalCopy ? (
-              <View style={styles.heroGoal}>
-                <SessionsTodayGauge goal={sessionGoal} />
-                <View style={styles.goalCopy}>
-                  <Text style={[
-                    styles.heroGoalTitle,
-                    sessionGoal.count === 0 ? styles.heroGoalTitleMuted : null,
-                  ]}>
-                    {goalCopy.title}
-                  </Text>
-                  <Text style={styles.heroGoalSubtitle}>{goalCopy.subtitle}</Text>
-                </View>
-              </View>
-            ) : statsLoading ? (
-              <ActivityIndicator
-                size="small"
-                color={colors.onDark}
-                accessibilityLabel="Loading statistics"
-                style={styles.heroLoader}
-              />
-            ) : null}
-          </View>
-
-          <View style={styles.content}>
-            <Text style={styles.sectionLabel}>WHO TO SEE NEXT</Text>
-            <View style={styles.nextChildrenRow}>
-              {whoToSeeNext.map((child) => {
-                const name = getChildName(child);
-                return (
-                  <View
-                    key={child.id}
-                    style={styles.childChip}
-                    accessible
-                    accessibilityLabel={'Who to see next: ' + name}
-                  >
-                    <View style={styles.childAvatar}>
-                      <Text style={styles.childInitial}>{name.slice(0, 2).toUpperCase()}</Text>
-                    </View>
-                    <Text style={styles.childName}>{name}</Text>
-                  </View>
-                );
-              })}
-              {!statsLoading && whoToSeeNext.length === 0 ? (
-                <Text style={styles.emptyHint}>
-                  {childrenList.length > 0
-                    ? 'Everyone has been seen this week.'
-                    : 'Your roster will appear here after setup.'}
-                </Text>
-              ) : null}
-            </View>
-
-            <View style={styles.weekRow}>
-              {weekCounts.map((day) => (
-                <View key={day.day} style={styles.dayColumn}>
-                  <Text style={[styles.dayLabel, day.isToday ? styles.dayLabelToday : null]}>
-                    {day.day.toUpperCase()}
-                  </Text>
-                  <View style={[
-                    styles.daySquare,
-                    day.count > 0 ? styles.daySquareDone : null,
-                    day.isToday ? styles.daySquareToday : null,
-                  ]}>
-                    <Text style={[
-                      styles.dayCount,
-                      day.count > 0 ? styles.dayCountDone : null,
-                      day.isToday ? styles.dayCountToday : null,
-                    ]}>
-                      {day.isFuture ? '-' : day.count}
-                    </Text>
-                  </View>
-                </View>
-              ))}
-            </View>
-
+          <View style={styles.topRow}>
+            <SyncIndicator variant="hero" onPress={() => navigation.navigate('SyncStatus')} />
             <Pressable
-              onPress={() => navigation.navigate('Assessments')}
+              onPress={() => navigation.navigate('Profile')}
               accessibilityRole="button"
-              accessibilityLabel={
-                coverage.assessed + ' of ' + coverage.total + ' children assessed. '
-                + coverageRemaining + ' to go.'
-              }
-              style={styles.coverageRow}
+              accessibilityLabel="Settings. Open profile"
+              style={styles.heroButton}
             >
-              <Text style={styles.coverageText}>
-                <Text style={styles.coverageStrong}>
-                  {coverage.assessed} of {coverage.total}
-                </Text>
-                {' children assessed'}
-              </Text>
-              <Text style={styles.coverageLink}>{coverageRemaining} to go →</Text>
+              <Ionicons name="settings-outline" size={22} color={colors.onDark} />
             </Pressable>
-
-            <View style={styles.recentHeader}>
-              <Text style={styles.sectionLabel}>RECENT</Text>
-              <Pressable
-                onPress={() => navigation.navigate('SessionHistory')}
-                accessibilityRole="button"
-                accessibilityLabel="View all session history"
-                hitSlop={8}
-              >
-                <Text style={styles.viewAllText}>View all →</Text>
-              </Pressable>
-            </View>
-            <View style={styles.recentList}>
-              {recentSessions.map((session) => (
-                <View key={session.id} style={styles.recentRow}>
-                  <Text style={styles.recentTime}>
-                    {formatDisplayTime(session.started_at || session.created_at) || '--:--'}
-                  </Text>
-                  <View style={styles.recentSummary}>
-                    <Text style={styles.recentChildren}>
-                      {formatChildNames(session, childrenList)}
-                    </Text>
-                    <Text style={styles.recentActivity}>
-                      {session.session_type_lookup?.name || session.session_type || 'Session'}
-                    </Text>
-                  </View>
-                </View>
-              ))}
-              {!statsLoading && recentSessions.length === 0 ? (
-                <Text style={styles.emptyHint}>No sessions recorded yet.</Text>
-              ) : null}
-            </View>
           </View>
-        </ScrollView>
 
-        <Snackbar
-          visible={snackbarVisible}
-          onDismiss={() => setSnackbarVisible(false)}
-          duration={3000}
-        >
-          {snackbarMessage}
-        </Snackbar>
-      </View>
-    </SafeAreaView>
+          <Text accessibilityRole="header" maxFontSizeMultiplier={1.2} style={styles.greeting}>
+            Molo, {profile?.first_name || 'there'}.
+          </Text>
+          {subtitle ? <Text style={styles.subtitle}>{subtitle}</Text> : null}
+
+          <View style={styles.clockWrap}>
+            <HomeClockRow
+              isSignedIn={isSignedIn}
+              loadingLocation={loadingLocation}
+              signInTime={activeEntry?.sign_in_time}
+              fontScale={fontScale}
+              onOpenHistory={() => navigation.navigate('TimeEntriesList')}
+              onClockIn={handleSignIn}
+              onClockOut={handleSignOut}
+            />
+          </View>
+        </View>
+
+        <View style={styles.body}>
+          <View style={[styles.card, shadows.elevated]} accessibilityLabel="Today’s sessions">
+            {sessionGoal && goalCopy ? (
+              // Previously loaded stats stay on screen while a refresh runs or
+              // if it fails; only a successful load replaces them.
+              <>
+                <SegmentedSessionGauge goal={sessionGoal} />
+                <Text style={styles.cardTitle}>{goalCopy.title}</Text>
+                <Text style={styles.cardSubtitle}>{goalCopy.subtitle}</Text>
+              </>
+            ) : statsLoading ? (
+              <View accessible accessibilityLabel="Loading statistics" style={styles.skeleton}>
+                <View style={styles.skelGauge} />
+                <View style={styles.skelTitle} />
+                <View style={styles.skelLine} />
+              </View>
+            ) : (
+              <>
+                <Text style={styles.cardTitle}>Couldn’t load today’s sessions</Text>
+                <Text style={styles.cardSubtitle}>They’ll refresh next time you open Home.</Text>
+              </>
+            )}
+          </View>
+
+          <WeekStrip days={weekCounts} />
+
+          <AttentionArea items={attentionItems} onOpen={openItem} onDismiss={dismissItem} />
+        </View>
+      </ScrollView>
+
+      <Snackbar visible={snackbarVisible} onDismiss={() => setSnackbarVisible(false)} duration={3000}>
+        {snackbarMessage}
+      </Snackbar>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  safeArea: {
-    flex: 1,
-    backgroundColor: colors.heroDark,
-  },
-  outerContainer: {
-    flex: 1,
-    backgroundColor: colors.background,
-  },
-  container: {
-    flex: 1,
-    backgroundColor: colors.background,
-  },
-  scrollContent: {
-    paddingBottom: spacing.lg,
-  },
+  screen: { flex: 1, backgroundColor: colors.background },
+  scroll: { flex: 1 },
+  overscrollRed: { position: 'absolute', top: -1000, left: 0, right: 0, height: 1000, backgroundColor: colors.red600 },
   hero: {
-    backgroundColor: colors.heroDark,
-    padding: spacing.lg,
-    paddingTop: spacing.sm,
-    paddingBottom: spacing.lg + 2,
+    backgroundColor: colors.red600,
+    paddingHorizontal: SIDE,
+    paddingBottom: 16 + CARD_STRADDLE,
+    overflow: 'hidden',
   },
-  heroTopRow: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    justifyContent: 'space-between',
-    gap: spacing.sm,
+  topRow: { flexDirection: 'row', justifyContent: 'flex-end', gap: 8 },
+  heroButton: {
+    width: 44, height: 44, borderRadius: 22, alignItems: 'center', justifyContent: 'center',
+    backgroundColor: colors.red700,
   },
-  heroIdentity: {
-    flex: 1,
+  greeting: { ...typeRoles.displayXL, color: colors.onDark, marginTop: 10 },
+  subtitle: { ...typeRoles.textBody, color: colors.red50, marginTop: 4, maxWidth: 280 },
+  clockWrap: { marginTop: 20 },
+  body: { paddingHorizontal: SIDE, marginTop: -CARD_STRADDLE, gap: 20 },
+  card: {
+    backgroundColor: colors.surface, borderRadius: 22, alignItems: 'center',
+    paddingTop: 18, paddingHorizontal: 16, paddingBottom: 16,
   },
-  greeting: {
-    color: colors.onDark,
-    fontSize: 27,
-    fontWeight: '800',
-    letterSpacing: -0.6,
-    lineHeight: 31,
-  },
-  subtitle: {
-    color: colors.onDarkMuted,
-    fontSize: 13,
-    fontWeight: '500',
-    marginTop: 6,
-  },
-  settingsButton: {
-    width: 36,
-    height: 36,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderRadius: 11,
-    borderCurve: 'continuous',
-    borderWidth: 1,
-    borderColor: colors.heroBorder,
-    backgroundColor: colors.heroSurface,
-  },
-  syncRow: {
-    alignItems: 'flex-end',
-    marginTop: spacing.sm,
-  },
-  clockPill: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: spacing.sm,
-    borderRadius: borderRadius.md,
-    borderCurve: 'continuous',
-    borderWidth: 1,
-    borderColor: colors.heroBorder,
-    backgroundColor: colors.heroSurface,
-    paddingVertical: 8,
-    paddingLeft: spacing.md,
-    paddingRight: spacing.sm,
-    marginTop: spacing.sm,
-    minHeight: 48,
-  },
-  clockPillOut: {
-    backgroundColor: 'transparent',
-    borderColor: colors.heroBorder,
-  },
-  clockStatus: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.sm,
-    flexShrink: 1,
-  },
-  clockLed: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    backgroundColor: colors.success,
-  },
-  clockLedOut: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    borderWidth: 2,
-    borderColor: colors.textSecondary,
-  },
-  clockText: {
-    color: colors.onDark,
-    fontSize: 13,
-    fontWeight: '700',
-  },
-  clockTextMuted: {
-    color: colors.onDarkMuted,
-    fontSize: 13,
-    fontWeight: '700',
-  },
-  clockElapsed: {
-    color: colors.onDark,
-    fontSize: 13,
-    fontWeight: '700',
-  },
-  clockAction: {
-    borderWidth: 1,
-    borderColor: colors.heroBorder,
-    borderRadius: 999,
-    paddingVertical: 7,
-    paddingHorizontal: 13,
-  },
-  clockActionText: {
-    color: colors.onDarkMuted,
-    fontSize: 12,
-    fontWeight: '700',
-  },
-  clockInAction: {
-    borderColor: colors.primary,
-    backgroundColor: colors.primary,
-    paddingVertical: 9,
-    paddingHorizontal: spacing.md,
-  },
-  clockInActionText: {
-    color: colors.onDark,
-  },
-  heroGoal: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.lg - 4,
-    marginTop: spacing.lg - 2,
-  },
-  goalCopy: {
-    flex: 1,
-  },
-  heroGoalTitle: {
-    color: colors.onDark,
-    fontSize: 17,
-    fontWeight: '800',
-    letterSpacing: -0.2,
-    lineHeight: 22,
-  },
-  heroGoalTitleMuted: {
-    color: colors.onDarkMuted,
-  },
-  heroGoalSubtitle: {
-    color: colors.onDarkMuted,
-    fontSize: 12,
-    lineHeight: 18,
-    marginTop: spacing.xs,
-  },
-  heroLoader: {
-    marginTop: spacing.lg,
-  },
-  content: {
-    paddingHorizontal: spacing.lg,
-    paddingTop: spacing.lg - 2,
-  },
-  sectionLabel: {
-    color: colors.textSecondary,
-    fontSize: 10.5,
-    fontWeight: '800',
-    letterSpacing: 1.1,
-  },
-  nextChildrenRow: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: spacing.sm,
-    marginTop: 12,
-  },
-  childChip: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.xs,
-    paddingVertical: spacing.xs,
-    paddingLeft: spacing.xs,
-    paddingRight: spacing.sm + 2,
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: 999,
-    backgroundColor: colors.surface,
-  },
-  childAvatar: {
-    width: 26,
-    height: 26,
-    borderRadius: 13,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: colors.red50,
-  },
-  childInitial: {
-    color: colors.red700,
-    fontSize: 10,
-    fontWeight: '700',
-  },
-  childName: {
-    color: colors.text,
-    fontSize: 13,
-    fontWeight: '700',
-  },
-  emptyHint: {
-    color: colors.textSecondary,
-    fontSize: 12,
-    lineHeight: 18,
-  },
-  weekRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginTop: spacing.lg - 2,
-  },
-  dayColumn: {
-    alignItems: 'center',
-    gap: 7,
-    width: 52,
-  },
-  daySquare: {
-    width: 44,
-    height: 44,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: colors.surface,
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: 13,
-    borderCurve: 'continuous',
-  },
-  daySquareDone: {
-    backgroundColor: colors.successBg,
-    borderColor: colors.successBorder,
-  },
-  daySquareToday: {
-    backgroundColor: colors.primary,
-    borderColor: colors.primary,
-  },
-  dayLabel: {
-    fontSize: 10,
-    color: colors.disabled,
-    fontWeight: '800',
-    letterSpacing: 0.6,
-  },
-  dayLabelToday: {
-    color: colors.primaryDark,
-  },
-  dayCount: {
-    fontSize: 16,
-    fontWeight: '800',
-    color: colors.disabled,
-  },
-  dayCountDone: {
-    color: colors.successText,
-  },
-  dayCountToday: {
-    color: colors.onDark,
-  },
-  coverageRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: spacing.sm,
-    backgroundColor: colors.surface,
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: borderRadius.md,
-    borderCurve: 'continuous',
-    paddingVertical: 14,
-    paddingHorizontal: spacing.md,
-    marginTop: spacing.lg - 2,
-  },
-  coverageText: {
-    color: colors.textSecondary,
-    fontSize: 13,
-    fontWeight: '600',
-  },
-  coverageStrong: {
-    color: colors.text,
-    fontWeight: '800',
-  },
-  coverageLink: {
-    color: colors.primaryDark,
-    fontSize: 12,
-    fontWeight: '800',
-  },
-  recentHeader: {
-    flexDirection: 'row',
-    alignItems: 'baseline',
-    justifyContent: 'space-between',
-    marginTop: spacing.lg,
-  },
-  viewAllText: {
-    color: colors.primaryDark,
-    fontSize: 12,
-    fontWeight: '700',
-  },
-  recentList: {
-    marginBottom: spacing.md,
-  },
-  recentRow: {
-    flexDirection: 'row',
-    gap: spacing.md,
-    paddingVertical: spacing.sm + 3,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.border,
-  },
-  recentTime: {
-    width: 48,
-    color: colors.text,
-    fontSize: 13,
-    fontWeight: '700',
-  },
-  recentSummary: {
-    flex: 1,
-  },
-  recentChildren: {
-    color: colors.text,
-    fontSize: 13,
-    fontWeight: '700',
-  },
-  recentActivity: {
-    color: colors.textSecondary,
-    fontSize: 12,
-    marginTop: 2,
-  },
+  cardTitle: { ...typeRoles.displayM, color: colors.text, marginTop: 10, textAlign: 'center' },
+  cardSubtitle: { ...typeRoles.textBody, color: colors.textSecondary, marginTop: 4, textAlign: 'center' },
+  skeleton: { alignItems: 'center' },
+  skelGauge: { width: 176, height: 97, borderRadius: 12, backgroundColor: colors.border },
+  skelTitle: { width: 200, height: 22, borderRadius: 6, marginTop: 12, backgroundColor: colors.border },
+  skelLine: { width: 240, height: 16, borderRadius: 6, marginTop: 8, backgroundColor: colors.border },
 });
