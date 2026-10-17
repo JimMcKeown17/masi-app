@@ -138,12 +138,14 @@ describe('SQLite migration runner', () => {
       await runMigrations(db);
       await runMigrations(db);
 
+      expect(CURRENT_SCHEMA_VERSION).toBe(13);
       expect(await getUserVersion(db)).toBe(CURRENT_SCHEMA_VERSION);
       expect(await getTableNames(db)).toEqual(expect.arrayContaining([
         'schema_migrations',
         'local_state',
         'sync_state',
         'sync_outbox',
+        'support_incident_queue',
       ]));
 
       const migrations = await db.getAllAsync('select version from schema_migrations');
@@ -635,6 +637,7 @@ describe('SQLite debug dump', () => {
           { version: 10, name: 'children_history_reference' },
           { version: 11, name: 'time_entry_location_optional' },
           { version: 12, name: 'sync_outbox_owner_required' },
+          { version: 13, name: 'support_incident_queue' },
         ],
         tableCounts: expect.objectContaining({
           schools: 1,

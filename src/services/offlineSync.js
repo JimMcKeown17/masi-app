@@ -1,4 +1,5 @@
 import { isStaleActorError, StaleActorError } from '../session/staleActor';
+import { buildIncidentEnvelope, drainSupportIncidents } from './supportIncidents';
 import { getConnectionActor } from '../session/signedInHandle';
 import { resolveDatabase, runRepositoryTransaction } from '../db/repositories/repositoryRuntime';
 import {
@@ -1086,6 +1087,7 @@ export const createOutboxSyncEngine = ({
   supabaseClient,
   outboxRepository = createSyncOutboxRepository({ database }),
   stateRepository = createSyncStateRepository({ database }),
+  supportIncidentRepository = null,
   tableConfigs = TABLE_CONFIGS,
   safeDuplicateSuccessTables = [],
   enqueueRequest,
@@ -1745,6 +1747,19 @@ export const createOutboxSyncEngine = ({
           applyRecordResult(outboxRecord, getConfig(outboxRecord.table_name), { success: false, terminal: false, failedRecord: makeFailedRecord(outboxRecord, reason) });
         }
       }
+
+      if (!tableName && supportIncidentRepository) {
+        try {
+          result.incidents = await drainSupportIncidents({
+            repository: supportIncidentRepository, supabaseClient, enqueueRequest,
+            envelope: await buildIncidentEnvelope(),
+          });
+        } catch (error) {
+          if (isStaleActorError(error)) throw error;
+          // Support reporting never changes whether the upload pass succeeded.
+          console.warn('syncAll: support incident drain failed:', errorMessage(error));
+        }
+      }
     } catch (error) {
       if (isStaleActorError(error)) {
         result.success = false;
@@ -1780,12 +1795,19 @@ export const createOutboxSyncEngine = ({
   const syncTableByName = async (name) => syncAll({ tableName: name });
 
   const getSyncStatus = async (options = {}) => {
-    const [status, meta] = await Promise.all([
+    const [status, meta, incidentReadyCount] = await Promise.all([
       outboxRepository.getSyncStatus(options),
       stateRepository.getSyncMeta(),
+      supportIncidentRepository
+        ? supportIncidentRepository.countDue().catch((error) => {
+          if (isStaleActorError(error)) throw error;
+          return 0; // support reporting never breaks the status the EA sees
+        })
+        : 0,
     ]);
     return {
       ...status,
+      incidentReadyCount,
       lastSyncTime: meta.lastSyncTime,
       lastSuccessfulSyncTime: meta.lastSuccessfulSyncTime || null,
     };

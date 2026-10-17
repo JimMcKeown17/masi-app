@@ -28,11 +28,12 @@ provider or pull inherits it instead of having to remember it.
 
 ## Decision
 
-- **Storage.** Each EA's domain tables, `sync_outbox`, `sync_state`, `local_state` and their copy of
-  reference data live in `masi-<userId>.db`. AsyncStorage keeps only device-level state: the
-  Supabase auth session, `deviceSettings` (including capture mode, `masi:device:captureMode`), and
-  app logs. The file records its owner (`local_state.file_owner_user_id`) and refuses to open for
-  anyone else. The shared legacy `masi.db` is never opened as an EA's file, renamed or uploaded from.
+- **Storage.** Each EA's domain tables, `sync_outbox`, `support_incident_queue`, `sync_state`,
+  `local_state` and their copy of reference data live in `masi-<userId>.db`. AsyncStorage keeps only
+  device-level state: the Supabase auth session, `deviceSettings` (including capture mode,
+  `masi:device:captureMode`), app logs and the install id (`masi:device:installId`). The file records
+  its owner (`local_state.file_owner_user_id`) and refuses to open for anyone else. The shared
+  legacy `masi.db` is never opened as an EA's file, renamed or uploaded from.
 - **Revocation before disposal.** Sign-out revokes the handle at once: its epoch advances, new work
   is refused with `StaleActorError`, outstanding requests abort, and the login screen can render.
   Physical disposal happens afterwards on each connection's serial native queue (tolerant
@@ -60,8 +61,11 @@ provider or pull inherits it instead of having to remember it.
   The app never shows it, but it is on the disk. **Revisit before next-steps Step 9 (Widen), or
   sooner if storage becomes a concern**, against POPIA's principle of not keeping personal
   information longer than necessary.
-- Native close under load (device check D7) and the sign-out questions, left-behind report and
-  incident envelope (Plan 3) are not covered by this decision's implementation and remain gates.
+- Plan 3 now provides the sign-out questions, left-behind report and minimal incident envelope.
+  Sign-in discovery reads other EA files and legacy `masi.db` without changing their rows. It queues
+  counts in the signed-in EA's file and sends them through that EA's handle; it never uploads the
+  other EA's work. Hosted incident migration apply, device checks D1–D7, native file discovery and
+  the sign-out sheets' visual and wording passes remain open.
 - **Field-release prerequisite (ruling 11):** abort-on-sign-out means an upload the server accepted
   just before sign-out can be re-sent when the EA returns. Identical replay is proven harmless; the
   ordering of an uncertain older write against a newer one is owned by the upload-contract spec and

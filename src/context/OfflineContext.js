@@ -55,9 +55,16 @@ export const OfflineProvider = ({ children }) => {
   const backgroundSyncTimer = useRef(null);
   const isOnlineRef = useRef(isOnline);
   const readyCountRef = useRef(0);
+  const incidentReadyCountRef = useRef(0);
   const inFlightCountRef = useRef(0);
   const triggerBackgroundSyncRef = useRef(() => {});
   const reconcileBreakerAuthorizationsRef = useRef(new Set());
+
+  // Domain rows and queued support incidents both need an upload pass. Incidents are never
+  // shown to the EA and never count as unsent work; they only decide whether a pass runs.
+  const hasUploadWork = () => (
+    readyCountRef.current > 0 || inFlightCountRef.current > 0 || incidentReadyCountRef.current > 0
+  );
 
   // Keep ref in sync with state so event-listener closures always read current value
   useEffect(() => {
@@ -82,6 +89,7 @@ export const OfflineProvider = ({ children }) => {
       setUnsyncedCount(status.unsyncedCount);
       setInFlightCount(status.inFlightCount || 0);
       readyCountRef.current = status.readyCount || 0;
+      incidentReadyCountRef.current = status.incidentReadyCount || 0;
       inFlightCountRef.current = status.inFlightCount || 0;
       setSyncStatus(prev => (isSameSyncStatus(prev, status) ? prev : status));
 
@@ -94,7 +102,7 @@ export const OfflineProvider = ({ children }) => {
         console.warn('Could not report sync status:', observabilityError);
       }
 
-      if (autoTrigger && ((status.readyCount || 0) > 0 || (status.inFlightCount || 0) > 0) && isOnlineRef.current) {
+      if (autoTrigger && hasUploadWork() && isOnlineRef.current) {
         triggerBackgroundSyncRef.current();
       }
 
@@ -109,6 +117,12 @@ export const OfflineProvider = ({ children }) => {
       return null;
     }
   }, []);
+
+  useEffect(() => {
+    let active = true;
+    handle.discovery?.then(() => { if (active && handle.isCurrent()) void refreshSyncStatus(); });
+    return () => { active = false; };
+  }, [handle, refreshSyncStatus]);
 
   /**
    * Perform a full sync
@@ -269,8 +283,8 @@ export const OfflineProvider = ({ children }) => {
       setIsOnline(online);
       isOnlineRef.current = online;
 
-      // If we just came online and have ready or in_flight data, sync
-      if (online && wasOffline && (readyCountRef.current > 0 || inFlightCountRef.current > 0)) {
+      // Reconnect uploads ready domain work, stranded in-flight rows and due incidents.
+      if (online && wasOffline && hasUploadWork()) {
         console.log('Connection restored, triggering sync...');
         triggerBackgroundSyncRef.current();
       }
@@ -295,8 +309,8 @@ export const OfflineProvider = ({ children }) => {
         refreshSyncStatus();
         requestDomainPullOrResumeHistory('foreground');
 
-        // Auto-sync if online and have ready or in_flight data
-        if (isOnlineRef.current && (readyCountRef.current > 0 || inFlightCountRef.current > 0)) {
+        // Auto-sync if online and any upload work is ready.
+        if (isOnlineRef.current && hasUploadWork()) {
           triggerBackgroundSyncRef.current();
         }
       }
@@ -305,7 +319,7 @@ export const OfflineProvider = ({ children }) => {
       if (appState.current === 'active' && nextAppState.match(/inactive|background/)) {
         console.log('App going to background');
         // Try to sync before backgrounding
-        if (isOnlineRef.current && (readyCountRef.current > 0 || inFlightCountRef.current > 0)) {
+        if (isOnlineRef.current && hasUploadWork()) {
           triggerBackgroundSyncRef.current();
         }
       }

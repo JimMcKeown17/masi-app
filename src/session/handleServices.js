@@ -13,6 +13,7 @@ import { createMasteryRepository } from '../db/repositories/masteryRepository';
 import { createTimeEntriesRepository } from '../db/repositories/timeEntriesRepository';
 import { createReferenceDataRepository, createSchoolsRepository } from '../db/repositories/referenceDataRepository';
 import { createSyncOutboxRepository } from '../db/repositories/syncOutboxRepository';
+import { createSupportIncidentRepository } from '../db/repositories/supportIncidentRepository';
 import { createSyncStateRepository } from '../db/repositories/syncStateRepository';
 import { createLocalStateRepository } from '../db/repositories/localStateRepository';
 import { createOutboxSyncEngine, ensureReferenceData, pullReferenceData, fetchAndCacheSchools } from '../services/offlineSync';
@@ -40,6 +41,7 @@ export const createHandleServices = (handle) => {
     timeEntries: createTimeEntriesRepository(options),
     schools: createSchoolsRepository(options),
     syncOutbox: createSyncOutboxRepository(options),
+    supportIncidents: createSupportIncidentRepository(options),
     syncState: createSyncStateRepository(options),
     localState: createLocalStateRepository(options),
   };
@@ -81,6 +83,7 @@ export const createHandleServices = (handle) => {
     syncEngine: createOutboxSyncEngine({
       ...options, supabaseClient: handle.dataClient, enqueueRequest: handle.enqueueRequest,
       outboxRepository: repositories.syncOutbox, stateRepository: repositories.syncState,
+      supportIncidentRepository: repositories.supportIncidents,
       getAuthSession: async () => {
         const s = getLatestAuthSession();
         return { data: { session: s?.user?.id === handle.userId ? s : null } };

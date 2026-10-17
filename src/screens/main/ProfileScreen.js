@@ -4,6 +4,10 @@ import { View, StyleSheet, ScrollView, KeyboardAvoidingView, Platform, Linking, 
 import { TextInput, Button, Text, Card, Divider, Snackbar, SegmentedButtons } from 'react-native-paper';
 import { NavigationContext, useFocusEffect } from '@react-navigation/native';
 import { useAuth } from '../../context/AuthContext';
+import { useOffline } from '../../context/OfflineContext';
+import { useTimeTracking } from '../../hooks/useTimeTracking';
+import { useSignOutFlow } from '../../hooks/useSignOutFlow';
+import SignOutSheets from '../../components/profile/SignOutSheets';
 import { colors, spacing, borderRadius, shadows } from '../../constants/colors';
 import { isStaleActorError } from '../../session/staleActor';
 import { exportDatabase, exportLogs } from '../../utils/debugExport';
@@ -36,9 +40,15 @@ function CaptureModeFocusLoader({ loadCaptureMode }) {
 }
 
 export default function ProfileScreen({ navigation }) {
-  const { handle } = useSignedInEA();
+  const { handle, repositories } = useSignedInEA();
 
   const { user, profile, signOut, changePassword } = useAuth();
+  const { isSignedIn, handleSignOut } = useTimeTracking();
+  const { isOnline, syncNow } = useOffline();
+  const signOutFlow = useSignOutFlow({
+    signOut, countUnsent: repositories.syncOutbox.countUnsent,
+    isClockedIn: isSignedIn, clockOut: handleSignOut, isOnline, syncNow,
+  });
   const releaseMetadata = getReleaseMetadata();
   const runtimeDiagnostics = getRuntimeDiagnostics();
   const navigationContext = useContext(NavigationContext);
@@ -469,7 +479,8 @@ export default function ProfileScreen({ navigation }) {
         {/* Sign Out */}
         <Button
           mode="outlined"
-          onPress={signOut}
+          onPress={signOutFlow.start}
+          loading={signOutFlow.busy === 'signing_out'}
           style={styles.signOutButton}
           textColor={colors.emphasis}
           icon="logout"
@@ -477,6 +488,8 @@ export default function ProfileScreen({ navigation }) {
           Sign Out
         </Button>
       </ScrollView>
+
+      <SignOutSheets {...signOutFlow} isOnline={isOnline} />
 
       <Snackbar
         visible={snackbar.visible}

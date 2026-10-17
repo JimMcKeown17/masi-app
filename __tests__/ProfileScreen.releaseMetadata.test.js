@@ -4,7 +4,23 @@ import { act, fireEvent, render, waitFor } from '@testing-library/react-native';
 import { Button, PaperProvider } from 'react-native-paper';
 import ProfileScreen from '../src/screens/main/ProfileScreen';
 const mockChangePassword = jest.fn();
+const mockSignOut = jest.fn(async () => ({ error: null }));
+const mockCountUnsent = jest.fn(async () => ({ total: 2, byTable: {} }));
+const mockClockOut = jest.fn(async () => true);
 import { exportDatabase, exportLogs } from '../src/utils/debugExport';
+
+jest.mock('../src/hooks/useTimeTracking', () => ({
+  useTimeTracking: () => ({ isSignedIn: true, handleSignOut: mockClockOut }),
+}));
+jest.mock('../src/context/OfflineContext', () => ({
+  useOffline: () => ({ isOnline: true, syncNow: jest.fn() }),
+}));
+jest.mock('../src/context/SignedInEAContext', () => ({
+  useSignedInEA: () => ({
+    handle: { isCurrent: () => true },
+    repositories: { syncOutbox: { countUnsent: mockCountUnsent } },
+  }),
+}));
 
 jest.mock('expo-constants', () => ({
   expoConfig: {
@@ -62,7 +78,7 @@ jest.mock('../src/context/AuthContext', () => ({
     },
     updatePassword: jest.fn(),
     changePassword: mockChangePassword,
-    signOut: jest.fn(),
+    signOut: mockSignOut,
   }),
 }));
 
@@ -99,6 +115,27 @@ describe('ProfileScreen', () => {
     expect(getByText(/Version 1\.2\.0/)).toBeTruthy();
     expect(getByText(/Backend sqlite-staging/)).toBeTruthy();
     expect(getByText(/Project segygjzpujphwvrubusm/)).toBeTruthy();
+  });
+
+  test('Sign Out asks about the shift before reading the signed-in handle unsent count', async () => {
+    const screen = render(
+      <PaperProvider>
+        <ProfileScreen navigation={{ goBack: jest.fn() }} />
+      </PaperProvider>
+    );
+    await act(async () => { fireEvent.press(screen.getByText('Sign Out')); });
+    expect(screen.getByText("You're still clocked in.")).toBeTruthy();
+    expect(mockCountUnsent).not.toHaveBeenCalled();
+    expect(mockSignOut).not.toHaveBeenCalled();
+
+    await act(async () => { fireEvent.press(screen.getByText('Stay clocked in and sign out')); });
+    expect(mockCountUnsent).toHaveBeenCalledTimes(1);
+    expect(screen.getByText("2 items haven't uploaded yet.")).toBeTruthy();
+    expect(mockClockOut).not.toHaveBeenCalled();
+    expect(mockSignOut).not.toHaveBeenCalled();
+
+    await act(async () => { fireEvent.press(screen.getByText('Sign out anyway')); });
+    expect(mockSignOut).toHaveBeenCalledTimes(1);
   });
 
   test('does not blame the current password when verification fails over the network', async () => {

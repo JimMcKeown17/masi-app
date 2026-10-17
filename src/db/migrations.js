@@ -679,6 +679,29 @@ begin
 end;
     `,
   },
+  {
+    version: 13,
+    name: 'support_incident_queue',
+    sql: `
+create table if not exists support_incident_queue (
+  id text primary key,
+  kind text not null check (kind in (
+    'left_behind_unsent_work', 'foreign_owner_in_file', 'legacy_shared_file_unsent'
+  )),
+  repeat_key text not null,
+  payload text not null,
+  status text not null default 'pending' check (status in ('pending', 'sent', 'rejected')),
+  attempts integer not null default 0,
+  next_attempt_at text,
+  last_error text,
+  created_at text not null default (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  updated_at text not null default (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  unique (kind, repeat_key)
+);
+create index if not exists idx_support_incident_queue_status
+  on support_incident_queue (status, created_at);
+    `,
+  },
 ];
 
 // Derived from the migration list so it never drifts when a migration is added.

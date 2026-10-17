@@ -10,6 +10,7 @@ const root = path.resolve(__dirname, '..');
 // permission to remain global. Keep this inventory exact so removed state also
 // loses its exception. Factory-local state is owned by the factory's caller.
 const ALLOWLIST = {
+  'src/services/installId.js:pending': 'device-level install id; one per phone, never per EA',
   'src/services/authSessionStorage.js:admittedUser': 'device-level auth admission owned by AuthContext',
   'src/services/observability.js:initialized': 'device-level',
   'src/services/observability.js:enabled': 'device-level',
@@ -35,6 +36,7 @@ const ALLOWLIST = {
   'src/session/signedInHandle.js:subscribers': 'the handle registry',
   'src/session/signedInHandle.js:generationWaiters': 'the handle registry',
   'src/session/signedInHandle.js:disposals': 'the handle registry; keyed by EA database file',
+  'src/session/signedInHandle.js:fileReaders': 'the handle registry; keyed by database file, settled read tails removed, drained and cleared on test reset',
   'src/session/signedInHandle.js:failedFiles': 'the handle registry; keyed by EA database file',
   'src/session/signedInHandle.js:revocations': 'the handle registry; keyed by handle',
 };

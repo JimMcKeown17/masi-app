@@ -134,14 +134,25 @@ shape.
   fenced at send time on a per-handle data client and queue; the outbox owner is stamped from the
   signed-in EA (a local trigger refuses an ownerless row); an integrity scan quarantines foreign-owned
   rows and adopts legacy ownerless ones; shared auth-session persistence is fenced by admitted
-  identity. The null-owner claim this item warned about is closed. **Still open before the field:**
-  - **Plan 3:** the sign-out questions (unsent work, still clocked in), the left-behind report and
-    minimal incident envelope, `masi.db` legacy discovery, and the Profile App Release card.
+  identity. The null-owner claim this item warned about is closed. Plan 3's sign-out questions,
+  left-behind reporting, minimal incident envelope and legacy `masi.db` discovery are built.
+  The Profile App Release information was already delivered at the bottom of Profile: version,
+  build, backend, project, device and update id. **Still open before the field:**
+  - **Hosted incident migration:** apply
+    [`20261017120000_mobile_support_incidents.sql`](../supabase/migrations/20261017120000_mobile_support_incidents.sql)
+    to `masi-app-sqlite` (`segygjzpujphwvrubusm`) only with Jim's explicit yes. Verify table and RPC
+    grants afterwards against S2.
+  - **Sign-out copy:** a wording pass with Jim; the current sheet copy is provisional.
   - **Ruling 11, field-release prerequisite owned by the upload-contract spec:** abort-on-sign-out
     can re-send an upload the server already accepted. Identical replay is proven harmless; the
     ordering of an uncertain older write against a newer one is not yet closed.
-  - **Device gates:** D7 (native close under load, iOS and Android) and D1–D6 on the build intended
-    to ship.
+  - **Device gates:** D1–D7 on the build intended to ship: D1–D6 from the
+    [actor lifecycle spec §9](../docs/superpowers/specs/2026-10-09-actor-lifecycle-and-mutation-ownership-design.md),
+    plus D7 (native close under load, iOS and Android). Confirm `listDatabaseNames` finds the files
+    on both platforms and visually check both sign-out sheets. A new EAS preview build needs Jim's yes.
+  - **Legacy export gap:** spec §4.5 says Profile → Export Database can export `masi.db`.
+    Today's export covers only the signed-in EA's file. Plan 3 did not change export; Step 4's
+    support tooling must close this gap.
   - **Deleting another EA's file is deferred past the pilot** (Jim, 2026-10-09): no unsent work and
     unused for 30 days. Revisit before Step 9 Widen, for privacy (EA A's roster stays on EA B's
     personal phone), against POPIA. Design:
@@ -223,12 +234,12 @@ Design rules from Zazi's field evidence ([Z12, Z13](./zazi-sync-lessons-for-masi
 The field-bug feedback loop, a pilot-sized version of Zazi's incident envelopes and `/bug-sync`
 ([B1–B6](./zazi-sync-lessons-for-masi-2026-10-08.md)):
 
-- [ ] Server: a `mobile_sync_incidents` table keyed `(actor_user_id, incident_key)`, with RLS on and
-  `service_role` SELECT only. Add a SECURITY DEFINER reporting RPC (`auth.uid()` authority, exact
-  key allowlist, 8 KB cap, payload hash, per-actor daily limit) that updates a newer report of the
-  same condition in place.
-- [ ] Phone: a capped local incident queue, separate from `sync_outbox`, with its own backoff and
-  actor fence. It fails soft, so sync never depends on it.
+Plan 3 supplies `mobile_support_incidents`, its reporting RPC and a capped local queue with backoff
+and an actor fence. Step 4 extends that envelope; it does not add a second queue or table.
+
+- [ ] Extend the incident RPC for the wider kinds: versioned field allowlists, payload hashes,
+  per-actor daily limits and rules for updating a continuing condition. Keep the existing three
+  kinds' episode dedupe; define the new key and update rules in Step 4's spec.
 - [ ] Report only terminal, support-needed, or long-failing outbox rows, reconcile-breaker events,
   and persistent pull failure. Never report an ordinary retry: 62% of Zazi's active EAs raised a
   receipt within 10 days, mostly from upstream bugs.

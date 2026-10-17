@@ -246,20 +246,27 @@ test('the complete repository graph, composite onboarding and profile cache are 
     'childClassMemberships', 'classOnboarding', 'classGroupingState', 'groupingVersions',
     'sessions', 'assessments', 'mastery', 'timeEntries', 'schools', 'jobTitles', 'programmes',
     'staffProgrammeAssignments', 'assessmentTools', 'academicYears', 'assessmentWindows',
-    'teachers', 'syncOutbox', 'syncState', 'localState',
+    'teachers', 'syncOutbox', 'syncState', 'localState', 'supportIncidents',
   ].sort());
   await a.repositories.programmes.replaceFromServer(referenceRows('programmes', A));
   await a.repositories.schools.replaceFromServer(referenceRows('schools', A));
   await a.services.deviceProfile.save({ id: A, label: 'A profile' });
+  const incident = { kind: 'left_behind_unsent_work', repeatKey: 'a-file', payload: { unsentByTable: { children: 1 } } };
+  expect(await a.repositories.supportIncidents.enqueue(incident)).toEqual({ queued: true });
   await a.repositories.classOnboarding.start({ userId: A, classData: { id: 'class-a', name: 'A class', grade: '1', school_id: 'school', programme_id: PROGRAMME, created_by: A } });
   expect(await a.repositories.classOnboarding.getPendingClassId(A)).toBe('class-a');
   const b = await open(B, async () => response());
   expect(await b.services.deviceProfile.get()).toBeNull();
+  expect(await b.repositories.supportIncidents.listPending()).toEqual([]);
+  await expect(a.repositories.supportIncidents.enqueue(incident)).rejects.toMatchObject({ name: 'StaleActorError' });
   expect(await b.repositories.classOnboarding.getPendingClassId(A)).toBeNull();
   await expect(a.repositories.classOnboarding.complete({ userId: A, classId: 'class-a' })).rejects.toMatchObject({ name: 'StaleActorError' });
   await expect(a.services.deviceProfile.save({ id: B })).rejects.toMatchObject({ name: 'StaleActorError' });
   const again = await open(A, async () => response());
   expect(await again.services.deviceProfile.get()).toEqual({ id: A, label: 'A profile' });
+  expect(await again.repositories.supportIncidents.listPending()).toEqual([
+    expect.objectContaining({ ...incident, attempts: 0 }),
+  ]);
   expect(await again.repositories.classOnboarding.getPendingClassId(A)).toBe('class-a');
 });
 

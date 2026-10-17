@@ -1705,3 +1705,38 @@ The same principle recurred three more times during review, each time in a new p
 The general lesson: when an operation can outlive the context that authorised it, carry the
 context with the operation and check it where the effect happens. When a race keeps reappearing in
 new places after each fix, stop adding ordering rules and guard the resource being corrupted.
+
+## Reporting a situation, not an event
+
+Suppose EA A records work offline, signs out, and hands the phone to EA B. A's unsent work stays in
+A's file. B must not upload it, but support needs to know it is there. The file itself is the
+evidence, so discovery reads the other files at every sign-in and reports their unsent counts.
+It does not depend on having caught A's sign-out. A force-quit or a missed earlier discovery does
+not erase the situation; a later sign-in can find it again.
+
+Repeated discovery must not create a fresh incident every time. The server uses a unique
+`(reporter_id, kind, repeat_key)` constraint. The reporter is the signed-in EA whose session sends
+the report, which can be B while the work belongs to A. The key sent to the server combines the
+install id with a one-way UUIDv5 digest of the episode. The local queue stores that digest too.
+
+An outbox id looks like `table:recordId:operation`. It can contain a child id, so sending it as an
+innocent-looking repeat key would still disclose child data. We hash the episode inputs before
+queueing them and keep raw outbox and domain-record ids, names, notes and record payloads out of
+the report. Tests check the whole queued row and RPC request, including the repeat key.
+
+The key also needs to distinguish old work from new work. After an upload deletes an outbox row,
+a later edit to the same record can reuse its id. For left-behind work, the digest therefore uses
+the stranded EA, the oldest unsent row's id and its creation time. Retries keep that creation time;
+acknowledged work that is later recreated gets a new one. Legacy discovery uses `legacy` in place
+of the EA id. For foreign-owner quarantine, the digest uses the whole sorted set of foreign ids,
+so adding a row changes the key even if the smallest id stays the same.
+
+The local queue keeps a discovered report while the phone is offline. A full sync pass can send it
+later through the same EA's handle. It also gives Step 4's support work somewhere to put one-off
+events that cannot be recovered from the files later. The queue is bounded: at 200 rows it prunes old sent or rejected
+rows; if every row is pending, it logs and drops the new report. It is a support aid, not an audit
+log. Sending it never uploads another EA's domain work.
+
+The implementation lives in [file discovery](../src/session/fileDiscovery.js), the
+[incident repository](../src/db/repositories/supportIncidentRepository.js) and the
+[incident drain](../src/services/supportIncidents.js).

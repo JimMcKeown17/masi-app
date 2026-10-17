@@ -5,6 +5,7 @@ import { PaperProvider } from 'react-native-paper';
 import { requestOpen, requestClose, resetHandleRegistryForTests } from '../src/session/signedInHandle';
 import { SignedInEAContext } from '../src/context/SignedInEAContext';
 import { ChildrenProvider } from '../src/context/ChildrenContext';
+import { TimeTrackingProvider } from '../src/context/TimeTrackingContext';
 import GroupPickerBottomSheet from '../src/components/children/GroupPickerBottomSheet';
 import ProfileScreen from '../src/screens/main/ProfileScreen';
 import SyncStatusScreen from '../src/screens/main/SyncStatusScreen';
@@ -61,7 +62,7 @@ test('GroupPicker remove-then-add continuation cannot assign a group after A clo
 
 test('A saved Export Database confirmation never reads or shares B data', async () => {
   const a = await open(A); const alert = jest.spyOn(Alert, 'alert');
-  const view = render(wrapper(a, <ProfileScreen navigation={{ navigate: jest.fn() }} />));
+  const view = render(wrapper(a, <TimeTrackingProvider><ProfileScreen navigation={{ navigate: jest.fn() }} /></TimeTrackingProvider>));
   fireEvent.press(view.getByText('Share Database (Contains Sensitive Data)'));
   const firstConfirm = alert.mock.calls.find(([title]) => title === 'Export Database')[2].find((button) => button.text === 'Export').onPress;
   await act(async () => { await firstConfirm(); });

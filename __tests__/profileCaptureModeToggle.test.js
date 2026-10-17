@@ -1,11 +1,25 @@
 import React from 'react';
 import { fireEvent, render, waitFor } from '@testing-library/react-native';
+import { SafeAreaProvider } from 'react-native-safe-area-context';
 import ProfileScreen from '../src/screens/main/ProfileScreen';
 import { CAPTURE_MODES } from '../src/constants/egraConstants';
 import { deviceSettings } from '../src/services/deviceSettings';
 
 const mockSignOut = jest.fn();
 const mockUpdatePassword = jest.fn();
+
+jest.mock('../src/hooks/useTimeTracking', () => ({
+  useTimeTracking: () => ({ isSignedIn: false, handleSignOut: jest.fn() }),
+}));
+jest.mock('../src/context/OfflineContext', () => ({
+  useOffline: () => ({ isOnline: true, syncNow: jest.fn() }),
+}));
+jest.mock('../src/context/SignedInEAContext', () => ({
+  useSignedInEA: () => ({
+    handle: { isCurrent: () => true },
+    repositories: { syncOutbox: { countUnsent: jest.fn(async () => ({ total: 0, byTable: {} })) } },
+  }),
+}));
 
 jest.mock('react-native-paper', () => {
   const React = require('react');
@@ -109,7 +123,14 @@ jest.mock('../src/services/deviceSettings', () => ({
   },
 }));
 
-const renderProfile = () => render(<ProfileScreen navigation={{ goBack: jest.fn() }} />);
+const renderProfile = () => render(
+  <SafeAreaProvider initialMetrics={{
+    frame: { x: 0, y: 0, width: 390, height: 844 },
+    insets: { top: 0, left: 0, right: 0, bottom: 0 },
+  }}>
+    <ProfileScreen navigation={{ goBack: jest.fn() }} />
+  </SafeAreaProvider>
+);
 
 describe('ProfileScreen assessment capture mode toggle', () => {
   beforeEach(() => {

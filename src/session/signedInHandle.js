@@ -21,6 +21,7 @@ let connectionActors = new WeakMap();
 const subscribers = new Set();
 const generationWaiters = new Set();
 const disposals = new Map();
+const fileReaders = new Map(); // fileName -> Set<Promise<void>> of settled-never-reject reader tails
 const failedFiles = new Set();
 const revocations = new WeakMap();
 
@@ -162,7 +163,37 @@ const trackDisposal = (fileName, promise) => {
   promise.catch(() => {});
   return promise;
 };
-export const whenDisposed = (fileName) => disposals.get(fileName) || Promise.resolve();
+export const whenDisposed = (fileName) => {
+  const disposal = disposals.get(fileName) || Promise.resolve();
+  // Snapshot at call time: a later read must not add its own tail to what it waits for.
+  const readers = [...(fileReaders.get(fileName) || [])];
+  return readers.length ? disposal.then(() => Promise.all(readers)) : disposal;
+};
+
+// A short read of another EA's file (sign-in discovery) joins that file's fence: it starts
+// after any pending disposal, and a same-file requestOpen waits for it as it waits for a
+// disposal. Readers stay separate: a late recovery disposal must not overwrite their reservation
+// or wait on them (the read may itself be waiting for that recovery's aggregate close).
+// A failed disposal stays failed: the read never runs and the fence keeps rejecting.
+// failedFiles is part of the fence too (a bootstrap whose cleanup failed registers no disposal).
+export const readUnderFileFence = (fileName, task) => {
+  const run = whenDisposed(fileName).then(() => {
+    if (failedFiles.has(fileName)) throw new HandleDisposeFailedError();
+    return task();
+  });
+  const tail = run.then(() => {}, () => {});
+  let readers = fileReaders.get(fileName);
+  if (!readers) {
+    readers = new Set();
+    fileReaders.set(fileName, readers);
+  }
+  readers.add(tail);
+  tail.then(() => {
+    readers.delete(tail);
+    if (!readers.size && fileReaders.get(fileName) === readers) fileReaders.delete(fileName);
+  });
+  return run;
+};
 
 const createHandle = ({ userId, fileName, openDatabase, connections, fetchImpl, timeoutMs }) => {
   const abortController = new AbortController();
@@ -354,7 +385,7 @@ const waitForFile = async (fileName, myGeneration) => {
   } finally { generationWaiters.delete(superseded); }
 };
 
-export const requestOpen = ({ userId, openDatabase = openDatabaseAsync, fetchImpl, timeoutMs }) => {
+export const requestOpen = ({ userId, openDatabase = openDatabaseAsync, fetchImpl, timeoutMs, discover }) => {
   if (latestRequest?.userId === userId && latestRequest.generation === generation) return latestRequest.promise;
   let fileName;
   try { fileName = databaseNameForUser(userId); } catch (error) { return Promise.reject(error); }
@@ -390,6 +421,12 @@ export const requestOpen = ({ userId, openDatabase = openDatabaseAsync, fetchImp
       handle.services = createHandleServices(handle);
       handle.repositories = handle.services.repositories;
       if (generation !== myGeneration) { revocations.get(handle)(); return null; }
+      // §4.4: discovery never delays sign-in, and a failure never affects the open handle.
+      // It starts on a microtask, so it always runs after publication.
+      const runDiscovery = discover || require('./fileDiscovery').discoverAndQueueIncidents;
+      handle.discovery = Promise.resolve()
+        .then(() => runDiscovery({ handle }))
+        .then(() => {}, (error) => { report(error, 'file_discovery_failed'); });
       created.publish();
       return handle;
     } catch (error) {
@@ -420,7 +457,9 @@ export const requestClose = ({ reason } = {}) => {
 export const resetHandleRegistryForTests = async () => {
   await requestClose({ reason: 'test reset' });
   await Promise.allSettled([...disposals.values()]);
+  await Promise.all([...fileReaders.values()].flatMap(readers => [...readers]));
   disposals.clear();
+  fileReaders.clear();
   failedFiles.clear();
   subscribers.clear();
   generationWaiters.clear();
