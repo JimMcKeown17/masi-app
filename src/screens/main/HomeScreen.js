@@ -14,6 +14,7 @@ import ElapsedTime from '../../components/common/ElapsedTime';
 import SyncIndicator from '../../components/common/SyncIndicator';
 import SessionsTodayGauge from '../../components/sessions/SessionsTodayGauge';
 import { getSessionsTodayGoal } from '../../services/sessionsTodayGoal';
+import { getGoalCopy } from '../../utils/sessionGoalPresentation';
 import { getActiveProgrammeGate } from '../../services/activeProgrammeGate';
 import {
   getAssessmentCoverage,
@@ -37,41 +38,6 @@ const formatChildNames = (session, children) => {
   if (names.length <= 1) return names[0] || 'Session';
   if (names.length === 2) return names[0] + ' & ' + names[1];
   return names.slice(0, -1).join(', ') + ' & ' + names[names.length - 1];
-};
-
-const getGoalCopy = (goal, isSignedIn) => {
-  if (!goal) return null;
-  if (goal.state === 'no_target') {
-    return {
-      title: goal.count + ' ' + (goal.count === 1 ? 'session' : 'sessions') + ' today',
-      subtitle: 'This programme has no daily target.',
-    };
-  }
-  if (goal.count === 0) {
-    return {
-      title: 'No sessions yet today',
-      subtitle: isSignedIn ? 'Record your first session.' : 'Clock in to start your day.',
-    };
-  }
-  if (goal.state === 'exceeded') {
-    return {
-      title: goal.count + ' sessions today',
-      subtitle: 'Above the usual maximum of ' + goal.ceiling + '.',
-    };
-  }
-  if (goal.state === 'met') {
-    return {
-      title: goal.count + ' of ' + goal.target + ' sessions today',
-      subtitle: 'Daily target reached.',
-    };
-  }
-  const remaining = goal.target - goal.count;
-  return {
-    title: goal.count + ' of ' + goal.target + ' sessions today',
-    subtitle: remaining === 1
-      ? 'One more pair reaches your target.'
-      : remaining + ' more pairs reach your target.',
-  };
 };
 
 export default function HomeScreen({ navigation }) {
