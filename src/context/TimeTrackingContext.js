@@ -3,10 +3,9 @@ import { useAuth } from './AuthContext';
 import { useOffline } from './OfflineContext';
 import { timeEntriesRepository, OPEN_TIME_ENTRY_EXISTS } from '../db/repositories/timeEntriesRepository';
 import { getCurrentPosition } from '../services/locationService';
+import { MAX_SHIFT_HOURS, MAX_SHIFT_MS } from '../constants/timeTracking';
+import { homeAttentionStore } from '../services/homeAttentionStore';
 import { v4 as uuidv4 } from 'uuid';
-
-const MAX_SHIFT_HOURS = 10;
-const MAX_SHIFT_MS = MAX_SHIFT_HOURS * 60 * 60 * 1000;
 
 /**
  * Shared hook for sign in/out time tracking logic.
@@ -21,6 +20,7 @@ function useTimeTrackingState() {
   const [loadingLocation, setLoadingLocation] = useState(false);
   const [snackbarMessage, setSnackbarMessage] = useState('');
   const [snackbarVisible, setSnackbarVisible] = useState(false);
+  const [autoClockOutNotice, setAutoClockOutNotice] = useState(null);
   const isSignedInRef = useRef(isSignedIn);
   const activeEntryRef = useRef(activeEntry);
   const userRef = useRef(user);
@@ -44,19 +44,30 @@ function useTimeTrackingState() {
   const autoClockOut = useCallback(async (entry) => {
     const signInMs = new Date(entry.sign_in_time).getTime();
     const signOutTime = new Date(signInMs + MAX_SHIFT_MS).toISOString();
+    const detectedAt = new Date().toISOString();
+    let notice = null;
 
-    const updatedEntry = {
-      ...entry,
+    const closed = await timeEntriesRepository.closeOpenTimeEntry(entry.id, {
       sign_out_time: signOutTime,
       sign_out_lat: null,
       sign_out_lon: null,
       auto_clocked_out: true,
-      synced: false,
-    };
+    }, {
+      onClosed: async (txn, closedEntry) => {
+        notice = await homeAttentionStore.recordAutoClockOutNotice(txn, {
+          entry: closedEntry,
+          detectedAt,
+        });
+      },
+    });
 
-    await timeEntriesRepository.updateTimeEntry(entry.id, updatedEntry);
     setActiveEntryState(null);
     setSignedInState(false);
+    if (!closed) return; // already closed by another path or an earlier attempt
+
+    if (notice && notice.userId === userRef.current?.id) {
+      setAutoClockOutNotice(notice);
+    }
     await refreshSyncStatus();
     triggerBackgroundSync?.();
     showSnackbar(`Auto clocked out after ${MAX_SHIFT_HOURS} hours.`);
@@ -88,6 +99,24 @@ function useTimeTrackingState() {
   useEffect(() => {
     loadActiveEntry();
   }, [user?.id, loadActiveEntry]);
+
+  useEffect(() => {
+    let cancelled = false;
+    const userId = user?.id || null;
+    setAutoClockOutNotice(null);
+    if (!userId) return undefined;
+    homeAttentionStore.loadAutoClockOutNotice(userId)
+      .then((notice) => {
+        if (cancelled || userRef.current?.id !== userId) return;
+        setAutoClockOutNotice((current) => (
+          current && notice && Date.parse(current.detectedAt) > Date.parse(notice.detectedAt)
+            ? current
+            : (notice || current)
+        ));
+      })
+      .catch((error) => console.error('Error loading auto clock-out notice:', error));
+    return () => { cancelled = true; };
+  }, [user?.id]);
 
   useEffect(() => {
     if (!isSignedIn || !activeEntry) return undefined;
@@ -196,17 +225,17 @@ function useTimeTrackingState() {
       const signOutMs = new Date(signOutTime).getTime();
       const hoursWorked = ((signOutMs - signInMs) / (1000 * 60 * 60)).toFixed(2);
 
-      const updatedEntry = {
-        ...current,
+      const closed = await timeEntriesRepository.closeOpenTimeEntry(current.id, {
         sign_out_time: signOutTime,
         sign_out_lat: latitude,
         sign_out_lon: longitude,
-        synced: false,
-      };
-
-      await timeEntriesRepository.updateTimeEntry(current.id, updatedEntry);
+      });
       setActiveEntryState(null);
       setSignedInState(false);
+      if (!closed) {
+        showSnackbar('You are not clocked in.');
+        return;
+      }
       await refreshSyncStatus();
       triggerBackgroundSync?.();
       showSnackbar(`Clocked out. ${hoursWorked} hours worked.`);
@@ -221,6 +250,18 @@ function useTimeTrackingState() {
     setActiveEntryState, setSignedInState,
   ]);
 
+  const dismissAutoClockOutNotice = useCallback(async (entryId) => {
+    const userId = userRef.current?.id;
+    if (!userId) return;
+    try {
+      await homeAttentionStore.dismissAutoClockOutNotice(userId, entryId, new Date().toISOString());
+      const fresh = await homeAttentionStore.loadAutoClockOutNotice(userId);
+      if (userRef.current?.id === userId) setAutoClockOutNotice(fresh);
+    } catch (error) {
+      console.error('Error dismissing auto clock-out notice:', error);
+    }
+  }, []);
+
   return useMemo(() => ({
     isSignedIn,
     activeEntry,
@@ -231,9 +272,12 @@ function useTimeTrackingState() {
     handleSignIn,
     handleSignOut,
     formatTime,
+    autoClockOutNotice,
+    dismissAutoClockOutNotice,
   }), [
     isSignedIn, activeEntry, loadingLocation, snackbarMessage, snackbarVisible,
     setSnackbarVisible, handleSignIn, handleSignOut, formatTime,
+    autoClockOutNotice, dismissAutoClockOutNotice,
   ]);
 }
 
