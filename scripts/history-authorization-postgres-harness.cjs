@@ -167,42 +167,48 @@ INSERT INTO auth.users (id) VALUES
 INSERT INTO public.schools (id, name)
 VALUES ('20000000-0000-0000-0000-000000000001', 'History RLS harness school');
 
-INSERT INTO public.users (id, first_name, last_name, school_id) VALUES
+INSERT INTO public.users (id, first_name, last_name, school_id, organization_id) VALUES
   (
     '10000000-0000-0000-0000-000000000001',
     'Session',
     'Owner',
-    '20000000-0000-0000-0000-000000000001'
+    '20000000-0000-0000-0000-000000000001',
+    'a111879f-d066-47c9-95a1-bed2a400319a'
   ),
   (
     '10000000-0000-0000-0000-000000000002',
     'Class',
     'Assessor',
-    '20000000-0000-0000-0000-000000000001'
+    '20000000-0000-0000-0000-000000000001',
+    'a111879f-d066-47c9-95a1-bed2a400319a'
   ),
   (
     '10000000-0000-0000-0000-000000000003',
     'Former',
     'Delivery EA',
-    '20000000-0000-0000-0000-000000000001'
+    '20000000-0000-0000-0000-000000000001',
+    'a111879f-d066-47c9-95a1-bed2a400319a'
   ),
   (
     '10000000-0000-0000-0000-000000000004',
     'Current',
     'Delivery EA',
-    '20000000-0000-0000-0000-000000000001'
+    '20000000-0000-0000-0000-000000000001',
+    'a111879f-d066-47c9-95a1-bed2a400319a'
   ),
   (
     '10000000-0000-0000-0000-000000000005',
     'Group Only',
     'EA',
-    '20000000-0000-0000-0000-000000000001'
+    '20000000-0000-0000-0000-000000000001',
+    'a111879f-d066-47c9-95a1-bed2a400319a'
   ),
   (
     '10000000-0000-0000-0000-000000000006',
     'Unrelated',
     'EA',
-    '20000000-0000-0000-0000-000000000001'
+    '20000000-0000-0000-0000-000000000001',
+    'a111879f-d066-47c9-95a1-bed2a400319a'
   );
 
 INSERT INTO public.staff_programme_assignments (
@@ -726,9 +732,9 @@ const runFamilyDeltaChecks = (databaseUrl) => {
 const runDensePlanChecks = (databaseUrl) => {
   runPsql({ databaseUrl, label: 'dense-session-plan-fixture', sql: `
     INSERT INTO auth.users (id) VALUES ('${denseActor(1)}'), ('${denseActor(2)}'), ('${denseActor(3)}');
-    INSERT INTO public.users (id, first_name, last_name)
-    VALUES ('${denseActor(1)}', 'Noise', 'Owner'), ('${denseActor(2)}', 'Dense', 'Owner'),
-      ('${denseActor(3)}', 'Sparse', 'Delivery');
+    INSERT INTO public.users (id, first_name, last_name, organization_id)
+    VALUES ('${denseActor(1)}', 'Noise', 'Owner', 'a111879f-d066-47c9-95a1-bed2a400319a'), ('${denseActor(2)}', 'Dense', 'Owner', 'a111879f-d066-47c9-95a1-bed2a400319a'),
+      ('${denseActor(3)}', 'Sparse', 'Delivery', 'a111879f-d066-47c9-95a1-bed2a400319a');
     INSERT INTO public.children (id, first_name, last_name)
     VALUES ('5f000000-0000-0000-0000-000000000001', 'Sparse', 'Child');
     INSERT INTO public.child_ea_assignments (id, user_id, child_id, created_by)

@@ -1,8 +1,9 @@
 # Product and Engineering Roadmap
 
-**Standing document. Updated 2026-10-08 with the Zazi September–October sync review
-([`zazi-sync-lessons-for-masi-2026-10-08.md`](./zazi-sync-lessons-for-masi-2026-10-08.md)), after the
-CAP-004 session-history build and Jim's 2026-09-21/23 decisions. This is the single in-repository answer to "what is still outstanding?"**
+**Standing document. Updated 2026-10-14 with Jim's organisation, letter-mastery, and legacy
+clock-in decisions. Includes the Zazi September–October sync review
+([`zazi-sync-lessons-for-masi-2026-10-08.md`](./zazi-sync-lessons-for-masi-2026-10-08.md)) and the
+CAP-004 session-history build. This is the single in-repository answer to "what is still outstanding?"**
 
 This file contains open work only. Its priority section is the roadmap; the numbered sections are
 the detailed work register behind that roadmap. Completed implementation and verification belong in
@@ -86,8 +87,8 @@ shape.
 - [ ] Verify which Supabase project every current app profile, local environment, script, and
   connected backend targets. The forward SQLite project is verified. The legacy counts-only probe
   ran on 2026-09-23 (build log): session capture stopped by 26 Aug, but **legacy clock-ins
-  continue** (4 since 22 Sep). Jim to identify who is still clocking in through an old build, and
-  decide their cutover and field communication before the 1.4.0 pilot.
+  continue** (4 since 22 Sep). Identifying those legacy clock-in users and deciding their cutover
+  and field communication before the 1.4.0 pilot: **no action needed (Jim, 2026-10-14)**.
 - [x] Probe the live SQLite-backend schema, migration ledger, RLS, functions, indexes, row counts,
   and unclassified forward data before schema-facing design. The data appears to be test/pilot
   data. Disposition decided 2026-09-23: wipe it after the assessment-history slice passes (below).
@@ -117,9 +118,15 @@ shape.
   creation (`scripts/createTesters.js` sets nothing today), and exclude marked accounts from every
   report and staff view. Zazi's unmarked demo pair appeared as real EAs on a live staff page
   ([Z15](./zazi-sync-lessons-for-masi-2026-10-08.md)).
-- [ ] **Decision for Jim:** is a partner organisation plausible within a year? If yes, a required,
-  no-default `users.organization_id` (identity only, not an authorization boundary, as in Zazi's
-  organisation label v1) is nearly free before field data exists ([Z19](./zazi-sync-lessons-for-masi-2026-10-08.md)).
+- [x] **Organisation decision closed (Jim, 2026-10-14):** a partner organisation is plausible
+  within a year. Adopt the required, no-default `users.organization_id` label, as in Zazi's
+  organisation label v1. It does not change authorization or phone behaviour. Migration and
+  provisioning are committed and locally verified; see the [build log](./build-log.md#organisation-label-v1--18-postgresql-checks)
+  and [Z19 status note](./zazi-sync-lessons-for-masi-2026-10-08.md).
+- [x] Applied `20261014120000_organisation_label_v1.sql` to hosted `masi-app-sqlite` on 2026-10-14
+  with Jim's explicit yes; verified read-only (see the build log). Partners are added by migration.
+- [ ] Reporting surfaces should default to Masinyusane. Add an organisation filter when the
+  first partner exists.
 - [ ] **Build one local database per EA (D2, decided by Jim 2026-10-08), before the first field install.**
   **Plan 2 built it** (`feat/signed-in-ea-handle`, 2026-10-17; ADR 0008; contract map "Signed-in EA
   handle"): each EA's data lives in `masi-<userId>.db`, reached only through the signed-in EA
@@ -503,7 +510,7 @@ contract ([U1–U7](./zazi-sync-lessons-for-masi-2026-10-08.md)):
   surfaces as needs-attention. Scope: children, assignments, and groups that Head Office or another
   EA can also edit. Never compare phone clocks. This depends on server-owned timestamps (§1).
 - [ ] **Letter mastery: the most recently *made* correction wins (D1, decided by Jim
-  2026-10-08).**
+  2026-10-08; reconfirmed 2026-10-14).**
   - The server keeps whichever confirmation has the later correction time and treats a future
     correction time as its own `now()`.
   - This is a narrow, single-column guard, not the general `stale_base` mechanism.

@@ -7,8 +7,14 @@ Domain glossary for the Masi field-staff mobile app. Masi runs multiple educatio
 ### Roles and organisation
 
 **EA** (Education Assistant):
-A field worker employed by Masi who delivers programme sessions to children in schools.
+A field worker who delivers Masi programme sessions to children in schools.
 _Avoid_: "youth", "field staff", "user" — those are all loose.
+
+**Organisation**:
+The employer of a staff member. `users.organization_id` is a required label, set at account
+creation. It does not define an access boundary or change the phone's behaviour. A partner
+organisation is plausible within a year (Jim, 2026-10-14).
+_Avoid_: treating an organisation as a Programme or an authorization scope.
 
 **Head Office**:
 The Masi back-office team that marks long-form field assessments and assigns children to groups for the Core Literacy and Numeracy programmes.

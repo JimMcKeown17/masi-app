@@ -44,10 +44,10 @@ const ACTIVE_YEAR = '(SELECT id FROM public.academic_years WHERE is_active)';
 const fixtureSql = `
 INSERT INTO auth.users (id) VALUES ('${HEAD_OFFICE}'), ('${ASSIGNED_EA}'), ('${UNASSIGNED_EA}');
 INSERT INTO public.schools (id, name) VALUES ('${SCHOOL}', 'Upload contract harness school');
-INSERT INTO public.users (id, first_name, last_name, school_id) VALUES
-  ('${HEAD_OFFICE}', 'Head', 'Office', '${SCHOOL}'),
-  ('${ASSIGNED_EA}', 'Assigned', 'EA', '${SCHOOL}'),
-  ('${UNASSIGNED_EA}', 'Unassigned', 'EA', '${SCHOOL}');
+INSERT INTO public.users (id, first_name, last_name, school_id, organization_id) VALUES
+  ('${HEAD_OFFICE}', 'Head', 'Office', '${SCHOOL}', 'a111879f-d066-47c9-95a1-bed2a400319a'),
+  ('${ASSIGNED_EA}', 'Assigned', 'EA', '${SCHOOL}', 'a111879f-d066-47c9-95a1-bed2a400319a'),
+  ('${UNASSIGNED_EA}', 'Unassigned', 'EA', '${SCHOOL}', 'a111879f-d066-47c9-95a1-bed2a400319a');
 INSERT INTO public.staff_programme_assignments (id, user_id, programme_id, school_id) VALUES
   ('31000000-0000-0000-0000-000000000002', '${ASSIGNED_EA}', ${PROGRAMME}, '${SCHOOL}'),
   ('31000000-0000-0000-0000-000000000003', '${UNASSIGNED_EA}', ${PROGRAMME}, '${SCHOOL}');
