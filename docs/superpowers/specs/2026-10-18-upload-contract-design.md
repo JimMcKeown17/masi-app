@@ -91,6 +91,17 @@ actions, the off-outbox `exited_at` update in `reconcileChildClassMembership`
 (`offlineSync.js:686-708`), Studio edits, and a build that predates this spec. None needs an
 exemption. A higher version passes, which is the normal case.
 
+**The off-outbox membership exit.** Before uploading a `child_class_memberships` row,
+`reconcileChildClassMembership` (`offlineSync.js:686-708`, called at `:827-828`) closes whatever
+membership the server holds as active for that child and year. It sends no version, so the rule
+above accepts it as a tie. That is correct for a current membership, but not for a historical one.
+Take an offline move from class A to class B: A's pending insert coalesces into an already-exited row
+(`childrenRepository.js:476-487`), A commits with its response lost, and B is acknowledged. A's
+retry then closes B on the server, with no error and nothing left in the queue (Codex round 2
+reproduced it). **The reconcile is skipped when the payload already has `exited_at` set**: uploading
+a historical membership must never displace the current one. This is a phone-side guard; it needs
+no version.
+
 **Coverage.** The rule applies wherever a write reaches the update path: update by id,
 archive/restore, and single or batched upserts that conflict. In a batch, one refused row fails the
 whole request, and the engine already falls back to per-record sends for that batch
@@ -328,6 +339,9 @@ migrations outside a transaction block.
 - Claim snapshot: an ordinary edit and a lifecycle change that replace the slot's payload between
   the claim and the request, for a single send and for batch fallback, do not change what is sent,
   and the replacement is sent afterwards as its own request.
+- Class move under a lost response: offline A→B, A committed with its response lost, B
+  acknowledged, A retried. After the queue drains, B is still the active membership on the server
+  and on the phone.
 - Ignored insert: an assignment insert committed with its response lost, retried, then an
   interleaved reconcile that ends it locally; the next pull restores the active assignment.
 - Download mappers: for each pulled versioned table, a fresh database stores a server version above
@@ -419,3 +433,4 @@ version and ties are accepted.
 |---|---|---|
 | 0 | Re-check of the 2026-10-17 draft against `main` `7d545b6` (fact checks, three adversarial lenses with a skeptic per finding, `check-solution`) | Rewrote the draft: send-time stamping; sessions/attendees and time entries out of versioning; a forward-only time-entry rule; the pull guard; terminal `MV001`; the guarded `pg_cron` block. Jim approved the three resulting decisions on 2026-10-18. |
 | 1 | Codex adversarial review | Needs attention, 4 findings, 3 reproduced in real SQLite with the real engine; all accepted: send single requests from the claimed snapshot (`markInFlightAndGet`); carry `row_version` through every download mapper (`saveStaffChild` dropped it); do not stamp immutable-assignment inserts; apply the ten-hour cap on insert as well as update. Also: install `pg_cron` rather than assume it, verify the job after apply, and prove `MV001` through the real client. |
+| 2 | Codex adversarial review | Needs attention, 1 finding, reproduced with the real repositories and engine; accepted: skip the pre-upload active-membership reconcile when the payload is already exited, so a retried historical membership cannot close the current one. Round 1's four fixes verified against their code paths. |
