@@ -1,7 +1,7 @@
 # Upload Contract — Design
 
 **Date:** 2026-10-18
-**Status:** Draft for Codex adversarial review
+**Status:** Approved by Codex adversarial review (round 3); awaiting Jim's review
 **Branch:** `docs/upload-contract-spec` (from `main` `7d545b6`)
 **Roadmap:** priority item 5, §2 "Upload contract (before pilot)", and the §2 "Server-side ten-hour
 clock-out" item. This spec closes Plan 3's Ruling 11 for every table in scope.
@@ -342,6 +342,7 @@ migrations outside a transaction block.
 - Class move under a lost response: offline A→B, A committed with its response lost, B
   acknowledged, A retried. After the queue drains, B is still the active membership on the server
   and on the phone.
+  The same holds when the move to B is made while A's insert is in flight.
 - Ignored insert: an assignment insert committed with its response lost, retried, then an
   interleaved reconcile that ends it locally; the next pull restores the active assignment.
 - Download mappers: for each pulled versioned table, a fresh database stores a server version above
@@ -434,3 +435,4 @@ version and ties are accepted.
 | 0 | Re-check of the 2026-10-17 draft against `main` `7d545b6` (fact checks, three adversarial lenses with a skeptic per finding, `check-solution`) | Rewrote the draft: send-time stamping; sessions/attendees and time entries out of versioning; a forward-only time-entry rule; the pull guard; terminal `MV001`; the guarded `pg_cron` block. Jim approved the three resulting decisions on 2026-10-18. |
 | 1 | Codex adversarial review | Needs attention, 4 findings, 3 reproduced in real SQLite with the real engine; all accepted: send single requests from the claimed snapshot (`markInFlightAndGet`); carry `row_version` through every download mapper (`saveStaffChild` dropped it); do not stamp immutable-assignment inserts; apply the ten-hour cap on insert as well as update. Also: install `pg_cron` rather than assume it, verify the job after apply, and prove `MV001` through the real client. |
 | 2 | Codex adversarial review | Needs attention, 1 finding, reproduced with the real repositories and engine; accepted: skip the pre-upload active-membership reconcile when the payload is already exited, so a retried historical membership cannot close the current one. Round 1's four fixes verified against their code paths. |
+| 3 | Codex adversarial review | Approve, no material findings. Probes with the real repositories and engine confirmed the membership guard for the offline move and the move during an in-flight insert. Reinstall and late hard-delete stay accepted risks. |
