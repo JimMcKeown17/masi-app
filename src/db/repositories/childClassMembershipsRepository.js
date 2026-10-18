@@ -21,6 +21,7 @@ const COLUMNS = [
   'sync_status',
   'last_sync_error',
   'server_updated_at',
+  'row_version',
 ];
 
 const REQUIRED_RLS_FIELDS = ['child_id', 'class_id', 'created_by'];

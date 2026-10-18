@@ -715,6 +715,23 @@ create index if not exists idx_support_incident_queue_status
   on support_incident_queue (status, created_at);
     `,
   },
+  {
+    version: 14,
+    name: 'domain_row_versions',
+    sql: `
+alter table children add column row_version integer not null default 1;
+alter table classes add column row_version integer not null default 1;
+alter table groups add column row_version integer not null default 1;
+alter table child_ea_assignments add column row_version integer not null default 1;
+alter table class_ea_assignments add column row_version integer not null default 1;
+alter table group_ea_assignments add column row_version integer not null default 1;
+alter table child_programme_enrollments add column row_version integer not null default 1;
+alter table child_class_memberships add column row_version integer not null default 1;
+alter table child_group_memberships add column row_version integer not null default 1;
+alter table grouping_versions add column row_version integer not null default 1;
+alter table class_grouping_state add column row_version integer not null default 1;
+    `,
+  },
 ];
 
 // Derived from the migration list so it never drifts when a migration is added.

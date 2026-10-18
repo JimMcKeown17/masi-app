@@ -8,6 +8,7 @@ import {
   upsertRecord,
 } from './sqliteRepositoryUtils';
 import { outboxRecordId } from './syncOutboxRepository';
+import { VERSIONED_TABLES } from './rowVersion';
 
 export const LEGACY_PROGRAMME_ID = 'local-legacy-programme';
 const MASI_DOMAIN_ID_NAMESPACE = '09dcf4b2-6c53-4c46-917f-33bc7f2df4d2';
@@ -156,19 +157,25 @@ export const hasUnpushedLocalChanges = (row) => (
   || PENDING_LOCAL_SYNC_STATUSES.includes(row?.sync_status)
 );
 
-// Pending-local-wins pull guard (ZZ F7): only server pulls hand whole rows claiming
-// sync_status 'synced' to the save functions — local writes always claim 'pending',
-// and push acknowledgement flips status via setRecordSyncStatus, never a row replace.
-// So a 'synced' row arriving for an id whose local row still has unpushed changes is
-// a pull about to clobber a pending edit, and must be skipped. Must run inside the
-// same transaction as the upsert it guards.
+// Server pulls hand whole rows claiming 'synced' to these savers. Local edits are
+// pending; acknowledgement and reconcile patch existing rows without replacing versions.
+// Skip pulls over pending/failed changes, and older versions over acknowledged rows.
+// Equal versions may carry server edits; terminal rows still converge to the server.
+// Must run inside the same transaction as the upsert it guards.
 export const serverPullWouldClobberPendingLocal = async (db, tableName, record) => {
   if (record?.sync_status !== 'synced' || record?.id == null) return false;
+  const versioned = VERSIONED_TABLES.has(tableName);
   const existing = await db.getFirstAsync(
-    `select sync_status from ${quoteIdentifier(tableName)} where id = ?`,
+    `select sync_status${versioned ? ', row_version' : ''} from ${quoteIdentifier(tableName)} where id = ?`,
     record.id
   );
-  return Boolean(existing && PENDING_LOCAL_SYNC_STATUSES.includes(existing.sync_status));
+  return Boolean(existing && (
+    PENDING_LOCAL_SYNC_STATUSES.includes(existing.sync_status)
+    || (versioned
+      && existing.sync_status === 'synced'
+      && typeof record.row_version === 'number'
+      && record.row_version < existing.row_version)
+  ));
 };
 
 export const supersedeStaleActivePairRow = async (
@@ -263,7 +270,10 @@ export const mapDomainRow = (row, options = {}) => mapRowFromSqlite({
   ...options,
 });
 
-export const upsertDomainRecord = async (db, config, record) => upsertRecord(db, {
-  ...config,
-  record: normalizeSyncFields(record),
-});
+export const upsertDomainRecord = async (db, config, record) => {
+  const normalized = normalizeSyncFields(record);
+  if (VERSIONED_TABLES.has(config.tableName) && normalized.sync_status !== 'synced') {
+    delete normalized.row_version;
+  }
+  return upsertRecord(db, { ...config, record: normalized });
+};

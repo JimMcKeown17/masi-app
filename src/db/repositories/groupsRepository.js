@@ -35,6 +35,7 @@ const GROUP_COLUMNS = [
   'sync_status',
   'last_sync_error',
   'server_updated_at',
+  'row_version',
 ];
 
 const MEMBERSHIP_COLUMNS = [
@@ -50,6 +51,7 @@ const MEMBERSHIP_COLUMNS = [
   'sync_status',
   'last_sync_error',
   'server_updated_at',
+  'row_version',
 ];
 
 const GROUP_EA_ASSIGNMENT_COLUMNS = [
@@ -66,6 +68,7 @@ const GROUP_EA_ASSIGNMENT_COLUMNS = [
   'sync_status',
   'last_sync_error',
   'server_updated_at',
+  'row_version',
 ];
 
 const writeOutboxPayload = async (txn, outboxIdValue, payload) => {

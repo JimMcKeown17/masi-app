@@ -440,7 +440,28 @@ A pull first persists returned server rows, then reconciles acknowledged relatio
 
 A repository `update*` function (`updateTimeEntry`, `updateChild`, `updateClass`, `updateGroup`, `updateLetterMasteryRecord`) records a local edit, so it always writes `sync_status = 'pending'`, `synced = false`, and `last_sync_error = null` and enqueues the edit, whatever sync bookkeeping the caller spreads in. Only the sync engine (`setDomainSyncResult`) marks a row synced, and only pull and seed paths pass `synced: true`, through `save*` functions. Before 2026-10-15 a caller that spread a stored synced row (the clock-out) won, and the edit was never queued.
 
-A pulled row is stamped `sync_status: 'synced'` before it reaches a repository save function. `serverPullWouldClobberPendingLocal` runs in the same transaction as the upsert and skips a server row when the local row is `pending` or `failed`. `synced` and `terminal` local rows may be replaced by an acknowledged server copy. Owner-scoped pending hard-delete ids are filtered out before child and relationship persistence. A skipped row never changes its queued outbox payload and never enqueues new work.
+A pulled row is stamped `sync_status: 'synced'` before it reaches a repository save function. `serverPullWouldClobberPendingLocal` runs in the same transaction as the upsert and skips a server row when the local row is `pending` or `failed`. For a versioned table, it also skips a numeric server `row_version` lower than the local version when the local row is `synced`; equal or higher versions still apply, including server edits that leave the version unchanged. A `terminal` local row still converges to the server copy even when its version is lower. Owner-scoped pending hard-delete ids are filtered out before child and relationship persistence. A skipped row never changes its queued outbox payload and never enqueues new work.
+
+SQLite migration 14 adds `row_version integer not null default 1` to `children`, `classes`,
+`groups`, the three EA assignment tables, `child_programme_enrollments`,
+`child_class_memberships`, `child_group_memberships`, `grouping_versions`, and
+`class_grouping_state`. `upsertDomainRecord` removes `row_version` from normalized records whose
+`sync_status` is not `synced`, so local inserts take the default and local edits preserve the
+stored version. All nine roster download savers retain the server version, including the
+field-by-field `saveStaffChild` record. Grouping versions and class grouping state are not pulled.
+Reconcile end-row SQL and stale active-pair supersede preserve the existing version; the latter
+keeps the ended row `synced` without replacing it from an object. Session-history reference
+children are constructed from server attendee identity fields only, default to version 1, and
+remain read-only until a full roster pull replaces them.
+
+The 11 server payload allowlists include `row_version`. `rowVersion.js` shares the versioned and
+immutable-assignment table sets and `isStampedOperation`: only `insert`, `update`, `archive`, and
+`restore` on versioned tables qualify, excluding immutable-assignment inserts. Both single and
+batch payload construction receive the operation and strip the version for other operations.
+This is the Task 3 foundation of the [upload-contract design](../docs/superpowers/specs/2026-10-18-upload-contract-design.md):
+send-time stamping and lifecycle-patch version carriage are still later tasks, so current
+payloads retain only the version already present in the enqueue snapshot. Local real-SQLite
+coverage lives in `rowVersionLocal.test.js`; this does not establish PostgreSQL or device proof.
 
 ### Stale active-pair supersede (2026-07-22)
 

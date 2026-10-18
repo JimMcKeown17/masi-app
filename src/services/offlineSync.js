@@ -2,6 +2,7 @@ import { isStaleActorError, StaleActorError } from '../session/staleActor';
 import { buildIncidentEnvelope, drainSupportIncidents } from './supportIncidents';
 import { getConnectionActor } from '../session/signedInHandle';
 import { resolveDatabase, runRepositoryTransaction } from '../db/repositories/repositoryRuntime';
+import { IMMUTABLE_ASSIGNMENT_TABLES, isStampedOperation } from '../db/repositories/rowVersion';
 import {
   chunkArray,
   quoteIdentifier,
@@ -71,51 +72,62 @@ export const SERVER_COLUMNS = {
     'id', 'school_id', 'name', 'grade', 'teacher', 'teacher_id', 'home_language',
     'academic_year', 'academic_year_id', 'archived_at', 'archived_by_user_id',
     'archive_reason', 'created_by', 'created_at', 'updated_at',
+    'row_version',
   ],
   children: [
     'id', 'first_name', 'last_name', 'preferred_name', 'date_of_birth', 'age',
     'gender', 'reading_level', 'class_id', 'hidden_at', 'archived_at', 'archived_by_user_id',
     'archive_reason', 'created_by', 'created_at', 'updated_at',
+    'row_version',
   ],
   child_ea_assignments: [
     'id', 'user_id', 'child_id', 'assigned_at', 'unassigned_at', 'created_by',
     'created_at', 'updated_at',
+    'row_version',
   ],
   child_programme_enrollments: [
     'id', 'child_id', 'programme_id', 'enrolled_at', 'ended_at', 'created_by',
     'created_at', 'updated_at',
+    'row_version',
   ],
   child_class_memberships: [
     'id', 'child_id', 'class_id', 'academic_year_id', 'enrolled_at', 'exited_at',
     'created_by', 'created_at', 'updated_at',
+    'row_version',
   ],
   class_ea_assignments: [
     'id', 'class_id', 'ea_user_id', 'programme_id', 'assigned_at', 'unassigned_at',
     'handover_reason', 'created_by', 'created_at', 'updated_at',
+    'row_version',
   ],
   grouping_versions: [
     'id', 'class_id', 'academic_year_id', 'version_number', 'status',
     'accepted_at', 'accepted_by_user_id', 'archived_at', 'archived_by_user_id',
     'archive_reason', 'created_by', 'created_at', 'updated_at',
+    'row_version',
   ],
   class_grouping_state: [
     'id', 'class_id', 'academic_year_id', 'class_list_status',
     'class_list_completed_at', 'class_list_completed_by_user_id',
     'class_list_reopened_at', 'class_list_reopened_by_user_id',
     'active_grouping_version_id', 'created_at', 'updated_at',
+    'row_version',
   ],
   groups: [
     'id', 'name', 'programme_id', 'class_id', 'grouping_version_id',
     'display_number', 'archived_at', 'archived_by_user_id', 'archive_reason',
     'created_by', 'created_at', 'updated_at',
+    'row_version',
   ],
   group_ea_assignments: [
     'id', 'group_id', 'ea_user_id', 'programme_id', 'assigned_at', 'unassigned_at',
     'handover_reason', 'created_by', 'created_at', 'updated_at',
+    'row_version',
   ],
   child_group_memberships: [
     'id', 'child_id', 'group_id', 'grouping_version_id', 'joined_at', 'removed_at',
     'created_by', 'created_at', 'updated_at',
+    'row_version',
   ],
   sessions: [
     'id', 'user_id', 'programme_id', 'class_id', 'session_date', 'started_at',
@@ -315,11 +327,6 @@ export const SYNC_BATCH_LIMITS = Object.freeze({
   maxFallbackRecordsPerPass: 25,
   maxFallbackConcurrency: 5,
 });
-const IMMUTABLE_ASSIGNMENT_TABLES = new Set([
-  'child_ea_assignments',
-  'class_ea_assignments',
-  'group_ea_assignments',
-]);
 
 // Edits change a row the server already has. PostgreSQL checks INSERT WITH CHECK on every upsert
 // row, even one that conflicts, so sending an edit as an upsert asks for insert permission that an
@@ -584,9 +591,10 @@ const isHealableRlsError = (record) => {
   return RLS_ERROR_SIGNATURE.test(err);
 };
 
-const buildSyncPayload = (tableName, record) => {
+const buildSyncPayload = (tableName, record, operation) => {
   const tableLegacyKeys = LEGACY_KEYS_TO_STRIP[tableName] || [];
   const keysToStrip = new Set([...LOCAL_ONLY_KEYS_TO_STRIP, ...tableLegacyKeys]);
+  if (!isStampedOperation(tableName, operation)) keysToStrip.add('row_version');
   const allowlist = SERVER_COLUMNS[tableName] ? new Set(SERVER_COLUMNS[tableName]) : null;
 
   const payload = {};
@@ -728,7 +736,7 @@ const runServerOperation = async (supabaseClient, config, outboxRecord) => {
   const payloadSource = outboxRecord.operation === 'hard_delete'
     ? (outboxRecord.payload || { id: outboxRecord.record_id })
     : outboxRecord.payload;
-  const payload = buildSyncPayload(config.tableName, payloadSource);
+  const payload = buildSyncPayload(config.tableName, payloadSource, outboxRecord.operation);
 
   if (payload.programme_id === LEGACY_PROGRAMME_ID) {
     return {
@@ -841,7 +849,7 @@ const runServerOperation = async (supabaseClient, config, outboxRecord) => {
 
 const runBatchServerOperation = async (supabaseClient, config, outboxRecords) => {
   const payloads = outboxRecords.map((outboxRecord) => (
-    buildSyncPayload(config.tableName, outboxRecord.payload)
+    buildSyncPayload(config.tableName, outboxRecord.payload, outboxRecord.operation)
   ));
 
   const { error } = await supabaseClient

@@ -34,6 +34,7 @@ const CLASS_COLUMNS = [
   'sync_status',
   'last_sync_error',
   'server_updated_at',
+  'row_version',
 ];
 
 const CLASS_EA_ASSIGNMENT_COLUMNS = [
@@ -50,6 +51,7 @@ const CLASS_EA_ASSIGNMENT_COLUMNS = [
   'sync_status',
   'last_sync_error',
   'server_updated_at',
+  'row_version',
 ];
 
 export const createClassesRepository = ({ database } = {}) => {
