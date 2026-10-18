@@ -76,6 +76,18 @@ describe('Profile sign-out questions (T13)', () => {
     expect(screen.deps.signOut).not.toHaveBeenCalled();
   });
 
+  test('clock-out succeeds when the watchdog already closed the shift and advances to unsent work', async () => {
+    const screen = setup({ clockedIn: true, unsent: 2 });
+    await press(screen, 'Sign Out');
+    // The provider resolves true for an already-closed shift, without another write.
+    screen.deps.clockOut.mockResolvedValue(true);
+    await press(screen, 'Clock out now');
+    expect(screen.deps.countUnsent).toHaveBeenCalledTimes(1);
+    expect(screen.getByText("2 items haven't uploaded yet.")).toBeTruthy();
+    expect(screen.queryByText(CLOCK_TITLE)).toBeNull();
+    expect(screen.deps.signOut).not.toHaveBeenCalled();
+  });
+
   test('2: signs out immediately when there is no open shift or unsent work', async () => {
     const screen = setup();
     await press(screen, 'Sign Out');

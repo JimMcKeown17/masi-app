@@ -30,7 +30,7 @@ jest.mock('../src/db/repositories/timeEntriesRepository', () => ({
     getActiveTimeEntry: jest.fn(),
     saveTimeEntry: jest.fn(),
     createOpenTimeEntry: jest.fn(),
-    updateTimeEntry: jest.fn(),
+    closeOpenTimeEntry: jest.fn(),
   },
 }));
 
@@ -50,6 +50,7 @@ describe('useTimeTracking Plan 5 behavior', () => {
       triggerBackgroundSync,
     });
     getCurrentPosition.mockResolvedValue({
+      status: 'fix',
       coords: {
         latitude: -34.1,
         longitude: 18.4,
@@ -58,7 +59,7 @@ describe('useTimeTracking Plan 5 behavior', () => {
     timeEntriesRepository.getActiveTimeEntry.mockResolvedValue(null);
     timeEntriesRepository.saveTimeEntry.mockResolvedValue(true);
     timeEntriesRepository.createOpenTimeEntry.mockResolvedValue(true);
-    timeEntriesRepository.updateTimeEntry.mockResolvedValue(true);
+    timeEntriesRepository.closeOpenTimeEntry.mockImplementation(async (id, fields) => ({ ...openEntry, id, ...fields }));
     refreshSyncStatus.mockResolvedValue({ unsyncedCount: 1 });
   });
 
@@ -145,10 +146,10 @@ describe('useTimeTracking Plan 5 behavior', () => {
     await waitFor(() => expect(result.current.isSignedIn).toBe(true));
 
     await act(async () => {
-      expect(await result.current.handleSignOut()).toBe(false);
+      expect(await result.current.handleSignOut()).toBe(true);
     });
 
-    expect(timeEntriesRepository.updateTimeEntry).not.toHaveBeenCalled();
+    expect(timeEntriesRepository.closeOpenTimeEntry).not.toHaveBeenCalled();
     expect(result.current.isSignedIn).toBe(false);
     expect(result.current.activeEntry).toBeNull();
   });
@@ -158,7 +159,7 @@ describe('useTimeTracking Plan 5 behavior', () => {
     sign_in_time: '2026-05-21T07:00:00.000Z', sign_out_time: null,
   };
 
-  test('clock-out resolves true only after closing the open entry', async () => {
+  test('clock-out resolves true after closing the open entry', async () => {
     timeEntriesRepository.getActiveTimeEntry.mockResolvedValue(openEntry);
     const { result } = renderHook(() => useTimeTracking(), { wrapper });
     await waitFor(() => expect(result.current.isSignedIn).toBe(true));
@@ -169,23 +170,23 @@ describe('useTimeTracking Plan 5 behavior', () => {
       expect(await result.current.handleSignOut()).toBe(true);
     });
 
-    expect(timeEntriesRepository.updateTimeEntry).toHaveBeenCalledWith('open-entry', expect.objectContaining({
+    expect(timeEntriesRepository.closeOpenTimeEntry).toHaveBeenCalledWith('open-entry', expect.objectContaining({
       sign_out_time: '2026-05-21T08:00:00.000Z',
     }));
     expect(result.current.isSignedIn).toBe(false);
     expect(result.current.activeEntry).toBeNull();
   });
 
-  test('clock-out resolves false when not clocked in', async () => {
+  test('clock-out resolves true when already not clocked in', async () => {
     const { result } = renderHook(() => useTimeTracking(), { wrapper });
     await waitFor(() => expect(timeEntriesRepository.getActiveTimeEntry).toHaveBeenCalledTimes(1));
 
     await act(async () => {
-      expect(await result.current.handleSignOut()).toBe(false);
+      expect(await result.current.handleSignOut()).toBe(true);
     });
 
     expect(getCurrentPosition).not.toHaveBeenCalled();
-    expect(timeEntriesRepository.updateTimeEntry).not.toHaveBeenCalled();
+    expect(timeEntriesRepository.closeOpenTimeEntry).not.toHaveBeenCalled();
   });
 
   test('clock-out resolves false on the Settings detour and leaves the entry open', async () => {
@@ -198,7 +199,7 @@ describe('useTimeTracking Plan 5 behavior', () => {
       expect(await result.current.handleSignOut()).toBe(false);
     });
 
-    expect(timeEntriesRepository.updateTimeEntry).not.toHaveBeenCalled();
+    expect(timeEntriesRepository.closeOpenTimeEntry).not.toHaveBeenCalled();
     expect(result.current.isSignedIn).toBe(true);
   });
 
@@ -219,13 +220,13 @@ describe('useTimeTracking Plan 5 behavior', () => {
     });
 
     expect(duplicateResult).toBe(false);
-    expect(timeEntriesRepository.updateTimeEntry).toHaveBeenCalledTimes(1);
+    expect(timeEntriesRepository.closeOpenTimeEntry).toHaveBeenCalledTimes(1);
   });
 
   test('clock-out resolves false when persistence fails', async () => {
     const consoleError = jest.spyOn(console, 'error').mockImplementation(() => {});
     timeEntriesRepository.getActiveTimeEntry.mockResolvedValue(openEntry);
-    timeEntriesRepository.updateTimeEntry.mockRejectedValueOnce(new Error('write failed'));
+    timeEntriesRepository.closeOpenTimeEntry.mockRejectedValueOnce(new Error('write failed'));
     const { result } = renderHook(() => useTimeTracking(), { wrapper });
     await waitFor(() => expect(result.current.isSignedIn).toBe(true));
 

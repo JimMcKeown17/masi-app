@@ -51,6 +51,17 @@ Spacing `4 / 8 / 16 / 24 / 32 / 48`. Radii `sm 9 / md 14 / lg 18 / xl 22`. Two w
 `statValue`, `sectionLabel`. Each carries size, weight, and colour together, so a role is applied as
 one spread rather than reassembled per screen.
 
+**Bold Red roles (2026-10).** `typeRoles` in `src/constants/typography.js`: Bricolage Grotesque
+800 for display (greeting, numerals, headings) and Figtree 500/700/800 for text, loaded at the app
+root with `expo-font` while `expo-splash-screen` holds the splash. Roles set the weight-specific
+face and never `fontWeight` (Android falls back to the system font if both are set;
+`__tests__/typography.test.js` enforces this). Home uses them now; other screens adopt them as they
+are redesigned, and until then use the system font.
+
+**Translucent fills** are written as a token plus a two-digit alpha suffix (for example
+`colors.text + '1F'` for ink at about 12%), never as a raw `rgba(...)`, so the colour guard needs no
+exceptions.
+
 ## The rule (unchanged, and still correct)
 
 - **Semantic colour → token.** If a colour *means* something ("success", "error", "primary",
@@ -74,9 +85,12 @@ document that tells you to use them, that document is stale — this one, and th
 
 ## Open work
 
-- **Typography has no guard test and almost no adoption.** As of 2026-07-23,
+- **Typography has almost no adoption outside Home.** The Bold Red roles have a guard
+  (`__tests__/typography.test.js`); the legacy roles do not. As of 2026-07-23,
   `src/constants/typography.js` has **two** importers against **97** raw `fontSize:` declarations
   across `src/`. [`ROADMAP.md`](./ROADMAP.md) calls for the token rollout plus a fail-closed
   size-floor guard test. Until that lands, typography is not a meaningful system.
-- The locked Home R3 half gauge uses `ringNeutral` at zero/no-target, `ringStart` at one session,
-  primary red while progressing, success green at target, and amber above the usual ceiling.
+- The Home session gauge is segmented (`src/components/home/SegmentedSessionGauge.js`). The colour
+  rule lives in `src/utils/sessionGoalPresentation.js` and is shared with `SessionsTodayGauge`:
+  `ringNeutral` at zero/no-target, `ringStart` at one session, primary red while progressing,
+  success green at target, and amber above the usual ceiling.

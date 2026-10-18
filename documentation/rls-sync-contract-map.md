@@ -637,6 +637,20 @@ Both status columns are server payload fields, with exactly `fix`, `timeout`, `d
 `20261015120000_time_entry_location_optional.sql` enforce complete-or-null coordinate pairs,
 `fix` with a present pair, and every no-fix status with a null pair. NULL status permits either
 complete or absent coordinates and means **not recorded** (older builds and automatic clock-out).
+Manual and automatic clock-out share `closeOpenTimeEntry`: it reads the still-open row,
+writes its close and outbox mutation in one writer transaction, and returns the closed row
+(or `null` if it was already closed or missing). Each successful close owns its local sync state:
+`sync_status = 'pending'`, `synced = false`, `last_sync_error = null`; an existing insert absorbs
+the close, otherwise the edit queues an acknowledged UPDATE. A second close does not enqueue
+work or run `onClosed`. The automatic close records its Home notice through `onClosed` in the
+same transaction, so the notice and close commit or roll back together. `handleSignOut` resolves
+`true` when no open shift remains, including a shift closed by the watchdog while GPS was pending;
+busy, cancelled and failed actions resolve `false`. No RLS or payload change.
+
+Home attention is a handle service using that handle's `localState` repository. The local-only keys
+`home_attention.auto_clock_out` and `home_attention.assessment_due_dismissed_on` need no user suffix
+because the database file is per-EA; the notice value retains `userId` for support exports.
+
 Automatic clock-out keeps `auto_clocked_out = true`, null sign-out coordinates and null sign-out
 status. Existing `time_entries_*_own` policies still scope access to `user_id = auth.uid()`;
 the migration grants only SELECT/INSERT/UPDATE on the two added columns. It adds CHECKs NOT VALID

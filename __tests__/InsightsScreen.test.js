@@ -19,4 +19,13 @@ describe('InsightsScreen', () => {
       ['SessionCountRanking'],
     ]);
   });
+
+  test('owns the Session History entry so history stays reachable without Home', () => {
+    const navigation = { navigate: jest.fn() };
+    const screen = render(<InsightsScreen navigation={navigation} />);
+
+    fireEvent.press(screen.getByLabelText('Open Session History'));
+
+    expect(navigation.navigate).toHaveBeenCalledWith('SessionHistory');
+  });
 });

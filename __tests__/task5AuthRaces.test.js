@@ -36,7 +36,7 @@ let profileAuth;
 const bootstrapStates = [];
 jest.mock('../src/services/supabaseClient', () => ({ ...require('../test-support/supabaseTestConfig'), supabase: { get auth() { return mockClient.auth; } } }));
 jest.mock('@react-native-community/netinfo', () => ({ fetch: async () => mockNetwork, addEventListener: fn => { mockNetListeners.add(fn); return () => mockNetListeners.delete(fn); } }));
-jest.mock('@react-navigation/native', () => ({ NavigationContext: require('react').createContext(null), useFocusEffect: fn => require('react').useEffect(fn, [fn]) }));
+jest.mock('@react-navigation/native', () => ({ NavigationContext: require('react').createContext(null), useIsFocused: () => true, useFocusEffect: fn => require('react').useEffect(fn, [fn]) }));
 jest.mock('@expo/vector-icons', () => ({ Ionicons: () => null }), { virtual: true });
 jest.mock('../src/hooks/useTimeTracking', () => ({ useTimeTracking: () => ({ isSignedIn: false }) }));
 jest.mock('../src/screens/sessions/LiteracySessionForm', () => {

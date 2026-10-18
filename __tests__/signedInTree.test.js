@@ -10,6 +10,12 @@ import * as engine from '../test-support/expoSQLiteRealEngine';
 import * as sqlite from 'expo-sqlite';
 import { CURRENT_SCHEMA_VERSION, runMigrations } from '../src/db/migrations';
 
+jest.mock('expo-font', () => ({ useFonts: () => [true, null] }));
+jest.mock('expo-splash-screen', () => ({
+  preventAutoHideAsync: jest.fn(() => Promise.resolve()),
+  hideAsync: jest.fn(() => Promise.resolve()),
+}));
+
 global.__MASI_NO_DEFAULT_HANDLE__ = true;
 const A = '11111111-1111-4111-8111-111111111111';
 const B = '22222222-2222-4222-8222-222222222222';

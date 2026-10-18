@@ -24,6 +24,12 @@ const INSIGHTS = [
     icon: 'bar-chart-outline',
     route: 'SessionCountRanking',
   },
+  {
+    label: 'Session History',
+    description: 'Review the sessions you recorded in the last 30 days.',
+    icon: 'time-outline',
+    route: 'SessionHistory',
+  },
 ];
 
 export default function InsightsScreen({ navigation }) {

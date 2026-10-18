@@ -295,7 +295,7 @@ checks are recorded in the build log. The remaining checklist is still substanti
 - M1-M10: seeded and zero-class onboarding paths.
 - J6: BottomSheet geometry on a standalone preview build.
 - E4: assessment attribution across a South African Programme-day boundary.
-- S1-S7: locked Home and five-slot navigation visual acceptance.
+- S1-S7: Home and five-slot navigation visual acceptance. Home is now the Bold Red Home (2026-10-17); check it against the Design Round 4 canvas v2 boards and the device gate in `docs/superpowers/plans/2026-10-17-bold-red-home.md` Task 12.
 
 ## 1. Bidirectional session and assessment history
 

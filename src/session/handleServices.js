@@ -18,6 +18,7 @@ import { createSyncStateRepository } from '../db/repositories/syncStateRepositor
 import { createLocalStateRepository } from '../db/repositories/localStateRepository';
 import { createOutboxSyncEngine, ensureReferenceData, pullReferenceData, fetchAndCacheSchools } from '../services/offlineSync';
 import { pullPreloadedChildData, persistPreloadedChildData, pullClassData } from '../services/preloadedChildData';
+import { createHomeAttentionStore } from '../services/homeAttentionStore';
 import { createSessionHistoryState } from '../services/sessionHistoryPull';
 import { createSessionHistoryStore } from '../services/sessionHistoryStatus';
 import { getLatestAuthSession } from './signedInHandle';
@@ -80,6 +81,7 @@ export const createHandleServices = (handle) => {
   handle.onClose(() => store.reset());
   return {
     repositories,
+    homeAttention: createHomeAttentionStore({ database: handle, localState: repositories.localState }),
     syncEngine: createOutboxSyncEngine({
       ...options, supabaseClient: handle.dataClient, enqueueRequest: handle.enqueueRequest,
       outboxRepository: repositories.syncOutbox, stateRepository: repositories.syncState,

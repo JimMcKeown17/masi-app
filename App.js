@@ -1,5 +1,5 @@
 import 'react-native-get-random-values';
-import React from 'react';
+import React, { useEffect } from 'react';
 import { View, Text, StyleSheet as RNStyleSheet } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { PaperProvider, MD3LightTheme } from 'react-native-paper';
@@ -23,6 +23,15 @@ import {
   initializeObservability,
   wrapAppWithObservability,
 } from './src/services/observability';
+
+import * as SplashScreen from 'expo-splash-screen';
+import { useFonts } from 'expo-font';
+import { BricolageGrotesque_800ExtraBold } from '@expo-google-fonts/bricolage-grotesque';
+import { Figtree_500Medium, Figtree_700Bold, Figtree_800ExtraBold } from '@expo-google-fonts/figtree';
+
+// Keep the native splash up until the fonts settle, so a cold start never shows
+// an empty root. Called at module scope, before the first render.
+SplashScreen.preventAutoHideAsync().catch(() => {});
 
 initializeObservability();
 
@@ -146,6 +155,26 @@ export function AppRoot() {
 }
 
 export function App() {
+  const [fontsLoaded, fontError] = useFonts({
+    BricolageGrotesque_800ExtraBold,
+    Figtree_500Medium,
+    Figtree_700Bold,
+    Figtree_800ExtraBold,
+  });
+  const fontsSettled = fontsLoaded || Boolean(fontError);
+
+  useEffect(() => {
+    if (!fontsSettled) return;
+    // Never block the app on a failure: with fontError set, text falls back
+    // to the system font.
+    if (fontError) console.error('Font load failed; using system font:', fontError);
+    SplashScreen.hideAsync().catch(() => {});
+  }, [fontsSettled, fontError]);
+
+  if (!fontsSettled) {
+    return null; // the native splash is still showing
+  }
+
   return (
     <ErrorBoundary>
       <SafeAreaProvider>

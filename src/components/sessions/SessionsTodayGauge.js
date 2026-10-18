@@ -3,45 +3,26 @@ import { StyleSheet, View } from 'react-native';
 import { Text } from 'react-native-paper';
 import Svg, { Path } from 'react-native-svg';
 import { colors } from '../../constants/colors';
+import { getGaugeColor, getGaugeAccessibilityLabel } from '../../utils/sessionGoalPresentation';
 
 const WIDTH = 140;
 const HEIGHT = 86;
 const ARC_LENGTH = 182.2;
 const ARC_PATH = 'M 12 74 A 58 58 0 0 1 128 74';
 
-const STATE_CONFIG = {
-  below: {
-    color: ({ count }) => (count <= 0 ? colors.ringNeutral : count === 1 ? colors.ringStart : colors.primary),
-    label: ({ count, target }) => `${count} of ${target} sessions today. Below target.`,
-  },
-  met: {
-    color: () => colors.success,
-    label: ({ count, target }) => `${count} of ${target} sessions today. Goal met.`,
-  },
-  exceeded: {
-    color: () => colors.accent,
-    label: ({ count, ceiling }) => `${count} sessions today. Above the usual maximum of ${ceiling}.`,
-  },
-  no_target: {
-    color: () => colors.ringNeutral,
-    label: ({ count }) => `${count} sessions today.`,
-  },
-};
-
 /**
  * Locked R3 daily-session half gauge. Data stays outside this component: callers
  * provide the public getSessionGoal result and the gauge only presents it.
  */
 export default function SessionsTodayGauge({ goal }) {
-  const { target, count, state } = goal;
-  const config = STATE_CONFIG[state] || STATE_CONFIG.below;
+  const { target, count } = goal;
   const fraction = target ? Math.min(count / target, 1) : 1;
   const progressLength = Math.max(0, fraction * ARC_LENGTH);
 
   return (
     <View
       style={styles.container}
-      accessibilityLabel={config.label(goal)}
+      accessibilityLabel={getGaugeAccessibilityLabel(goal)}
       accessibilityRole="image"
     >
       <Svg width={WIDTH} height={HEIGHT} viewBox="0 0 140 86">
@@ -56,7 +37,7 @@ export default function SessionsTodayGauge({ goal }) {
           <Path
             d={ARC_PATH}
             fill="none"
-            stroke={config.color(goal)}
+            stroke={getGaugeColor(goal)}
             strokeWidth={11}
             strokeLinecap="round"
             strokeDasharray={`${progressLength} ${ARC_LENGTH}`}

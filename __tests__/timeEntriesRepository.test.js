@@ -56,6 +56,39 @@ describe('timeEntriesRepository', () => {
     }
   });
 
+  test('conditional close owns sync state and preserves location outcomes', async () => {
+    const db = bindTestActor(createBetterSqliteTestDatabase(), 'user-1');
+    try {
+      await runMigrations(db);
+      const repository = createTimeEntriesRepository({ database: db });
+      await repository.saveTimeEntry(makeEntry({
+        sync_status: 'failed', last_sync_error: 'previous upload failed',
+        sign_in_location_status: 'denied', sign_in_lat: null, sign_in_lon: null,
+      }));
+      const closed = await repository.closeOpenTimeEntry('time-1', {
+        sign_out_time: '2026-05-21T17:00:00.000Z',
+        sign_out_lat: null, sign_out_lon: null, sign_out_location_status: 'timeout',
+      });
+      const [stored] = await repository.getTimeEntries();
+      expect(stored).toEqual(expect.objectContaining({
+        sync_status: 'pending', synced: false, last_sync_error: null,
+        sign_in_location_status: 'denied', sign_out_location_status: 'timeout',
+      }));
+      expect(closed).toEqual(expect.objectContaining({
+        id: stored.id, sign_in_time: stored.sign_in_time, sign_out_time: stored.sign_out_time,
+        sync_status: 'pending', synced: false, last_sync_error: null,
+      }));
+      const before = await db.getAllAsync('select * from sync_outbox');
+      expect(await repository.closeOpenTimeEntry('time-1', {
+        sign_out_time: '2026-05-21T19:00:00.000Z',
+      })).toBeNull();
+      expect(await db.getAllAsync('select * from sync_outbox')).toEqual(before);
+      expect(await repository.closeOpenTimeEntry('missing', {})).toBeNull();
+    } finally {
+      await db.closeAsync();
+    }
+  });
+
   test('active time entry survives repository reload', async () => {
     const db = bindTestActor(createBetterSqliteTestDatabase(), 'user-1');
 
@@ -303,6 +336,104 @@ describe('timeEntriesRepository', () => {
       });
 
       expect(await repository.getActiveTimeEntry('user-1')).toBeNull();
+    } finally {
+      await db.closeAsync();
+    }
+  });
+
+  test('closeOpenTimeEntry closes an open row once and enqueues one mutation', async () => {
+    const db = bindTestActor(createBetterSqliteTestDatabase(), 'user-1');
+    try {
+      await runMigrations(db);
+      const repository = createTimeEntriesRepository({ database: db });
+      await repository.saveTimeEntry(makeEntry({ id: 'time-1', synced: true, sync_status: 'synced' }));
+      await db.runAsync('delete from sync_outbox');
+
+      const first = await repository.closeOpenTimeEntry('time-1', {
+        sign_out_time: '2026-05-21T18:00:00.000Z',
+        sign_out_lat: null,
+        sign_out_lon: null,
+        auto_clocked_out: true,
+      });
+      const second = await repository.closeOpenTimeEntry('time-1', {
+        sign_out_time: '2026-05-21T19:30:00.000Z',
+        sign_out_lat: -34.2,
+        sign_out_lon: 18.5,
+      });
+
+      expect(first).toEqual(expect.objectContaining({ id: 'time-1', sign_out_time: '2026-05-21T18:00:00.000Z' }));
+      expect(second).toBeNull();
+      expect(await repository.getTimeEntries()).toEqual([
+        expect.objectContaining({
+          id: 'time-1',
+          sign_out_time: '2026-05-21T18:00:00.000Z',
+          auto_clocked_out: true,
+          sync_status: 'pending',
+        }),
+      ]);
+      expect(await db.getAllAsync(
+        "select operation from sync_outbox where table_name = 'time_entries'"
+      )).toEqual([{ operation: 'update' }]);
+    } finally {
+      await db.closeAsync();
+    }
+  });
+
+  test('closeOpenTimeEntry folds into a still-pending insert', async () => {
+    const db = bindTestActor(createBetterSqliteTestDatabase(), 'user-1');
+    try {
+      await runMigrations(db);
+      const repository = createTimeEntriesRepository({ database: db });
+      await repository.saveTimeEntry(makeEntry({ id: 'time-1' })); // enqueues 'insert'
+
+      await repository.closeOpenTimeEntry('time-1', { sign_out_time: '2026-05-21T12:00:00.000Z' });
+
+      expect(await db.getAllAsync(
+        "select operation from sync_outbox where table_name = 'time_entries' order by created_at"
+      )).toEqual([{ operation: 'insert' }]);
+    } finally {
+      await db.closeAsync();
+    }
+  });
+
+  test('closeOpenTimeEntry runs onClosed in the same transaction and rolls back if it throws', async () => {
+    const db = bindTestActor(createBetterSqliteTestDatabase(), 'user-1');
+    try {
+      await runMigrations(db);
+      const repository = createTimeEntriesRepository({ database: db });
+      await repository.saveTimeEntry(makeEntry({ id: 'time-1' }));
+      const seen = [];
+
+      await expect(repository.closeOpenTimeEntry('time-1', {
+        sign_out_time: '2026-05-21T12:00:00.000Z',
+      }, {
+        onClosed: async (txn, closed) => {
+          seen.push(closed.id);
+          await txn.runAsync(
+            "insert into local_state (key, value, updated_at) values ('probe', '1', 'now')"
+          );
+          throw new Error('boom');
+        },
+      })).rejects.toBeDefined();
+
+      expect(seen).toEqual(['time-1']);
+      expect(await repository.getActiveTimeEntry('user-1')).toEqual(expect.objectContaining({ id: 'time-1' }));
+      expect(await db.getFirstAsync("select key from local_state where key = 'probe'")).toBeNull();
+    } finally {
+      await db.closeAsync();
+    }
+  });
+
+  test('closeOpenTimeEntry does not call onClosed when the row is already closed', async () => {
+    const db = bindTestActor(createBetterSqliteTestDatabase(), 'user-1');
+    try {
+      await runMigrations(db);
+      const repository = createTimeEntriesRepository({ database: db });
+      await repository.saveTimeEntry(makeEntry({ id: 'time-1', sign_out_time: '2026-05-21T12:00:00.000Z' }));
+      const onClosed = jest.fn();
+
+      expect(await repository.closeOpenTimeEntry('time-1', { sign_out_time: 'x' }, { onClosed })).toBeNull();
+      expect(onClosed).not.toHaveBeenCalled();
     } finally {
       await db.closeAsync();
     }

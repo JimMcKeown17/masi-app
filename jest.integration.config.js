@@ -32,6 +32,7 @@ module.exports = {
     '<rootDir>/__tests__/sessionHistoryPullProductionRouting.test.js',
     '<rootDir>/__tests__/assessmentsRepository.test.js',
     '<rootDir>/__tests__/timeEntriesRepository.test.js',
+    '<rootDir>/__tests__/homeAttentionStore.integration.test.js',
     '<rootDir>/__tests__/useTimeTracking.integration.test.js',
     '<rootDir>/__tests__/locationUnavailableClock.integration.test.js',
     '<rootDir>/__tests__/timeEntryLocationMigration.test.js',
