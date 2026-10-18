@@ -156,6 +156,10 @@ Codex-approved round 3, 2026-10-18). Read it before any task; section numbers be
 - Modify: `src/db/migrations.js` (version 14)
 - Modify: `src/db/repositories/domainRepositoryUtils.js` (`upsertDomainRecord`,
   `serverPullWouldClobberPendingLocal`)
+- Modify: `src/services/offlineSync.js` (`SERVER_COLUMNS` and operation-aware `buildSyncPayload`
+  only — `__tests__/syncContractCompleteness.test.js` requires every local column of a push table
+  to be classified, so the column and its server allowlist land together; do not mark
+  `row_version` local-only)
 - Modify: the local column lists and server-row savers for the 11 tables:
   `childrenRepository.js` (`CHILD_COLUMNS`, `RELATIONSHIP_COLUMNS`, `saveStaffChild`,
   `saveChildProgrammeEnrollment`, `saveChildClassMembership`, `saveServerChildRow`),
@@ -199,6 +203,10 @@ Codex-approved round 3, 2026-10-18). Read it before any task; section numbers be
     than the local one. Keep the pending/failed rule and the function name; update its comment.
   - Add `row_version` to each local column list above, and carry `row_version` through every saver
     that rebuilds a record field by field (`saveStaffChild` is the known one; check the rest).
+  - `SERVER_COLUMNS`: add `row_version` to the 11 tables. `buildSyncPayload(tableName, record,
+    operation)`: drop `row_version` when `!isStampedOperation(tableName, operation)`; pass the
+    operation from both callers (single and batch). Until Task 4 stamps, the payload's
+    `row_version` is whatever the enqueue snapshot held; no test in this task asserts sent values.
 - [ ] **Step 4: Run** the new suite → PASS; then `npm test` → all pass (fix only version-pin
   assertions).
 - [ ] **Step 5: Commit** `feat(sync): local row_version — schema 14, pulls store it, guard against rollback`.
@@ -207,10 +215,15 @@ Codex-approved round 3, 2026-10-18). Read it before any task; section numbers be
 
 **Files:**
 - Modify: `src/db/repositories/syncOutboxRepository.js` (`updateInFlight`)
-- Modify: `src/services/offlineSync.js` (`SERVER_COLUMNS`, `buildSyncPayload`, archive/restore
-  patch, single-send claim in `processRecord`)
+- Modify: `src/services/offlineSync.js` (archive/restore patch, single-send claim in
+  `processRecord`)
 - Test: `__tests__/rowVersionSend.test.js` (real better-sqlite3 + `createSupabaseMock`, in the style
   of `__tests__/offlineSyncUpdateById.test.js`)
+- Modify: `__tests__/syncErrorGuard.test.js` — its claim-failure fault injections (around lines
+  271 and 406) wrap `markInFlight`; once single sends claim through `markInFlightAndGet`, move the
+  single-record hooks to `markInFlightAndGet` while successful multi-record batch claims still
+  pass, assert the injected fault actually fired, and keep the assertions that the failed row stays
+  retryable and acknowledged siblings are not resent. Do not loosen them.
 
 **Interfaces:**
 - Consumes: `VERSIONED_TABLES`, `IMMUTABLE_ASSIGNMENT_TABLES`, `isStampedOperation` (Task 3).
@@ -255,13 +268,10 @@ Codex-approved round 3, 2026-10-18). Read it before any task; section numbers be
   - `processRecord`: replace `markInFlight([id])` + `getById(id)` with
     `const [inFlightRecord] = await outboxRepository.markInFlightAndGet([outboxRecord.id])`,
     keeping the existing "disappeared" handling when it is undefined.
-  - `SERVER_COLUMNS`: add `row_version` to the 11 tables.
-  - `buildSyncPayload`: drop `row_version` when `!isStampedOperation(tableName, operation)` (pass
-    the operation in from both callers).
   - Archive/restore patch: include `row_version` when the table is versioned and the payload has it.
   - `UPDATE_PATCH_EXCLUDED_COLUMNS` unchanged (must not contain `row_version`).
-- [ ] **Step 4: Run** the new suite and `npx jest offlineSync syncOutboxRepository` → PASS; then
-  `npm test`.
+- [ ] **Step 4: Run** the new suite, `npx jest offlineSync syncOutboxRepository syncErrorGuard
+  syncContractCompleteness` → PASS; then `npm test`.
 - [ ] **Step 5: Commit** `feat(sync): stamp row_version at claim and send it`.
 
 ### Task 5: Refusal, membership guard and the retry regressions
