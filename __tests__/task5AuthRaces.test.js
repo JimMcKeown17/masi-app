@@ -170,7 +170,7 @@ test.each(['TOKEN_REFRESHED', 'INITIAL_SESSION'])('%s wakes profile and referenc
   expect(transport.mock.calls.filter(([url]) => String(url).includes('/rest/v1/users'))).toHaveLength(1);
   expect(transport.mock.calls.filter(([url]) => String(url).includes('/rest/v1/schools'))).toHaveLength(1);
 });
-test.each(['TOKEN_REFRESHED', 'INITIAL_SESSION'])('%s wakes rosters and school options once after a mount restore without credentials', async event => {
+test.each([['TOKEN_REFRESHED', false], ['INITIAL_SESSION', false], ['TOKEN_REFRESHED', true]])('%s wakes rosters and school options once after a mount restore without credentials (recent pull stamps: %s)', async (event, recentStamps) => {
   let deliverAuth;
   jest.spyOn(mockClient.auth, 'onAuthStateChange').mockImplementation(callback => {
     deliverAuth = callback;
@@ -220,6 +220,12 @@ test.each(['TOKEN_REFRESHED', 'INITIAL_SESSION'])('%s wakes rosters and school o
   const nonce = roster.offline.domainPullNonce;
   const pull = jest.spyOn(handle.services, 'pullReferenceData');
   const opens = sqlite.openDatabaseAsync.mock.calls.length;
+  if (recentStamps) {
+    // A pull minutes before this launch must not suppress the pull that failed without credentials.
+    const lastPulledAt = new Date().toISOString();
+    await handle.repositories.syncState.setPullState('child_data_pull', { lastPulledAt });
+    await handle.repositories.syncState.setPullState('classes_pull', { lastPulledAt });
+  }
 
   await act(async () => {
     deliverAuth(event, session(B));

@@ -37,8 +37,9 @@ Two supporting behaviors:
   credentials, the first same-user session event with an access token (including `TOKEN_REFRESHED`
   or `INITIAL_SESSION`) wakes both providers through the shared `subscribeToFirstCredentials`
   rule: SignedInEA runs its existing coalesced profile/reference refresh, and OfflineContext calls
-  `requestDomainPull('credentials')` to wake ChildrenContext and ClassesContext through the existing
-  staleness check and `domainPullNonce`. ClassesContext's existing load effect also reloads and
+  `requestDomainPull('credentials', { force: true })` to wake ChildrenContext and ClassesContext through
+  `domainPullNonce`. The wake skips the 15-minute staleness check, because recent stamps from an
+  earlier launch say nothing about this launch's failed mount pulls. ClassesContext's existing load effect also reloads and
   republishes school options on that nonce. The rule checks `getLatestAuthSession()` at subscription
   time, defers work until AuthContext has installed credentials, and runs at most once per handle;
   later routine token refreshes do not repeat these pulls. OfflineContext still heals terminal RLS

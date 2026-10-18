@@ -212,7 +212,7 @@ export const OfflineProvider = ({ children }) => {
     triggerBackgroundSyncRef.current = triggerBackgroundSync;
   }, [triggerBackgroundSync]);
 
-  const requestDomainPull = useCallback(async (reason) => {
+  const requestDomainPull = useCallback(async (reason, { force = false } = {}) => {
     try {
       const [childDataState, classesState] = await Promise.all([
         syncStateRepository.getPullState('child_data_pull'),
@@ -223,7 +223,7 @@ export const OfflineProvider = ({ children }) => {
         const lastPulledAt = Date.parse(state?.lastPulledAt || '');
         return !Number.isFinite(lastPulledAt) || lastPulledAt < staleBefore;
       };
-      if (!isStale(childDataState) && !isStale(classesState)) return false;
+      if (!force && !isStale(childDataState) && !isStale(classesState)) return false;
 
       console.log('Requesting domain pull:', reason);
       if (!handle.isCurrent()) return false;
@@ -249,7 +249,8 @@ export const OfflineProvider = ({ children }) => {
   }, [requestDomainPull]);
 
   useEffect(() => subscribeToFirstCredentials({
-    handle, subscribeToAuthEvents, onCredentials: () => requestDomainPull('credentials'),
+    // Mount pulls failed without credentials; recent stamps from an earlier launch must not skip the retry.
+    handle, subscribeToAuthEvents, onCredentials: () => requestDomainPull('credentials', { force: true }),
   }), [handle, subscribeToAuthEvents, requestDomainPull]);
 
   const authorizeReconcileBreaker = useCallback((scope) => {
