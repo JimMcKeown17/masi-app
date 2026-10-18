@@ -102,7 +102,7 @@ export const AuthProvider = ({ children }) => {
     return operation.local;
   };
   const resolveColdStartGate = async (reason) => {
-    if (signInPendingRef.current) return;
+    if (signInPendingRef.current || signOutOperationRef.current) return;
     const generation = generationRef.current;
     if (localSignOutCommittedRef.current) return commitSignedOutState(reason);
     const persisted = await readPersistedSession();
@@ -177,6 +177,8 @@ export const AuthProvider = ({ children }) => {
       }
       void resolveColdStartGate(`${event}-no-active-user`);
     });
+    // Offline initialization can lose INITIAL_SESSION while the auth lock is held.
+    void resolveColdStartGate('mount-persisted');
     return () => {
       mountedRef.current = false;
       generationRef.current += 1;

@@ -12,8 +12,10 @@ import React from 'react';
 import { act, renderHook, waitFor } from '@testing-library/react-native';
 import { AppState } from 'react-native';
 import NetInfo from '@react-native-community/netinfo';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { OfflineProvider, useOffline } from '../src/context/OfflineContext';
 import { supabase } from '../src/services/supabaseClient';
+import { getAuthStorageKey, clearPersistedSession } from '../src/services/persistedAuthSession';
 import { getSyncStatus, requeueTerminalRlsFailures, syncAll } from '../test-support/handleServiceMocks';
 import { runStartupRepairs } from '../src/services/startupRepairs';
 import { createSyncStateRepository, syncStateRepository } from '../src/db/repositories/syncStateRepository';
@@ -104,6 +106,7 @@ const renderOfflineHook = async () => {
 const emitAuthEvent = async (event, session) => {
   const callback = supabase.auth.onAuthStateChange.mock.calls[0][0];
   await act(async () => {
+    if (event === 'SIGNED_OUT') await clearPersistedSession();
     await callback(event, session);
   });
 };
@@ -137,7 +140,12 @@ const createHistoryHarness = async () => {
 };
 
 describe('OfflineContext Plan 4 sync API', () => {
-  beforeEach(() => {
+  beforeEach(async () => {
+    // The real AuthProvider restores this EA at mount, before any SDK event.
+    await AsyncStorage.setItem(getAuthStorageKey(), JSON.stringify({
+      user: { id: '00000000-0000-4000-8000-0000000000aa' },
+      refresh_token: 'test-refresh-token',
+    }));
     jest.useFakeTimers();
     Object.defineProperty(AppState, 'currentState', {
       configurable: true,

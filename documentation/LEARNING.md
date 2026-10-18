@@ -1740,3 +1740,32 @@ log. Sending it never uploads another EA's domain work.
 The implementation lives in [file discovery](../src/session/fileDiscovery.js), the
 [incident repository](../src/db/repositories/supportIncidentRepository.js) and the
 [incident drain](../src/services/supportIncidents.js).
+
+## A lost auth event and the local-first cold start (October 2026)
+
+An offline app can have all the data it needs and still fail to open. On the Galaxy A03s,
+preview build 12 stayed on "Preparing your offline data" after the saved access token expired.
+AuthContext waited for Supabase's `INITIAL_SESSION` event before reading the saved session.
+That made a local decision depend on a library that was trying to reach the network.
+
+The reported device logs and auth-js 2.100.1 reproduction explained the missing event. The
+initial offline token refresh took about 26 seconds. The auto-refresh ticker then acquired
+the auth lock for another refresh attempt. Initial-session delivery waited only five seconds
+for that lock, then threw an unhandled `ProcessLockAcquireTimeoutError`. The callback never ran.
+Changing the subscription order made the event arrive in the control experiment, but opening
+still took about 51 seconds. Correct ordering could not make the network available.
+
+The fix separates opening local work from refreshing credentials. On mount, AuthContext reads
+the existing refreshable saved session and opens that EA's SQLite handle immediately; without
+a saved session it opens login. Supabase keeps handling later refresh and revocation events.
+If a non-retryable refresh failure removes the session and emits `SIGNED_OUT`, the EA is still
+signed out. Offline access is not a promise that server credentials remain valid.
+
+Every asynchronous local read also needs to respect a newer decision. The existing generation
+counter discards a mount read if sign-in or sign-out starts while it is waiting. The gate yields
+to an already-running sign-out so it cannot cancel that operation's persistence cleanup.
+Concurrent mount and null initial-event reads open once: the first open advances the generation,
+making the other read stale. No extra timer, state machine or refresh-order change is needed.
+
+The gate lives in [AuthContext](../src/context/AuthContext.js) (`resolveColdStartGate`), and the
+support-facing behaviour is in [auth session resilience](./auth-session-resilience-2026-04-24.md).

@@ -210,7 +210,7 @@ describe('AuthContext Plan 5 startup discipline', () => {
     });
   });
 
-  test('auth startup relies on INITIAL_SESSION event instead of a duplicate getSession call', async () => {
+  test('auth startup accepts INITIAL_SESSION without a duplicate getSession call', async () => {
     renderHook(() => useAuth(), { wrapper });
     await waitFor(() => expect(authCallback).toEqual(expect.any(Function)));
 
