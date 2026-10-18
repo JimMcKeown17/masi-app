@@ -666,6 +666,14 @@ Additional Head Office behavior retained from the Sprint 4 follow-up:
 
 ## 5. Product and UX
 
+- [ ] **Bold Red for the rest of the app (Jim, 2026-10-18: build all of it).** Only Home is Bold
+  Red (#70); every other screen still uses the old purple theme. Design source: the Design Round 4
+  canvas (https://claude.ai/artifact/8gQRtyqZ5Q1vTCTdSkz6zc, private to Jim), Bold Red (B) boards on
+  the Log in, Children, Record / New session, Session complete and Profile pages, plus the Bold Red
+  system sheet. Remaining: the app-wide look (colour, type, buttons, headers, tab bar, snackbars),
+  then Log in and reset password, My Children and Class detail, Record, Session complete, and
+  Profile. Each canvas page also holds behaviour proposals that need Jim's decision before they are
+  built. The typography-token and Snackbar items below belong to the app-wide pass.
 - [ ] Session completion should return to the Home payoff state instead of a bare `goBack()`.
 - [ ] Add a `deviceTier`/reduced-motion contract before celebratory animation work.
 - [ ] Roll typography tokens out or retire the incomplete token system. Current tree: two importers
