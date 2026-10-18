@@ -1,10 +1,11 @@
 # Auth Session Resilience (Android Focus)
 
 **Standing behavior doc.** Describes the present. Originally written 2026-04-24; the behavior section
-and operator checklist were **rewritten 2026-07-13** after an audit found they described a code path
-that no longer exists (the old checklist told support to grep for a log string the app never emits).
+and operator checklist were **updated 2026-10-18** for local-first cold start and the current
+signed-in EA handle. Historical log examples below are labelled separately from current behavior.
 
-Scope: `src/services/supabaseClient.js`, `src/context/AuthContext.js`
+Scope: `src/services/supabaseClient.js`, `src/context/AuthContext.js`,
+`src/context/SignedInEAContext.js`, `src/context/OfflineContext.js`
 
 ## Why this exists
 
@@ -22,22 +23,45 @@ Four distinct paths. The important thing to understand is that **`SIGNED_OUT` is
 
 | Trigger | Behavior |
 |---|---|
-| **Manual sign-out** (Profile → Sign Out) | Immediately clears React user state, cached profile, and persisted local auth before starting the Supabase sign-out request. The current path does **not** reliably emit a distinct `manual-sign-out` clearing reason; this diagnostic gap is tracked in `ROADMAP.md`. |
-| **`SIGNED_OUT` event** | Checks persisted auth first. If a refreshable persisted session exists **for the same user**, the event is treated as stale and **ignored entirely**. Otherwise clears the profile cache + persisted session and commits immediately with reason `signed-out`. |
-| **`INITIAL_SESSION` with no active user** (cold start) | Consults persisted auth. Persisted session present and no current user → **restores it offline** rather than bouncing to login. No persisted session → commits with reason `INITIAL_SESSION-no-active-user`. |
-| **Any other event with an empty session** | Waits `AUTH_SIGN_OUT_GRACE_PERIOD_MS` (15s). If the session recovers in that window the user stays signed in; otherwise commits with reason `<EVENT>-grace-timeout`. |
+| **Manual sign-out** (Profile → Sign Out) | Revokes session admission and closes the signed-in EA handle, then clears React user state and persisted local auth before starting the background Supabase sign-out request. Per-EA cached data stays in that EA's file. The internal reason is `manual-sign-out`; it is not emitted as a clearing log line. The diagnostic gap is tracked in `ROADMAP.md`. |
+| **`SIGNED_OUT` event** | Checks persisted auth first. If a refreshable persisted session exists **for the same user**, the event is treated as stale and **ignored entirely**. Otherwise closes the handle, clears persisted auth and commits immediately with reason `signed-out`. Non-retryable refresh failure removes the stored session, so revocation still signs the EA out. |
+| **Provider mount** (cold start) | After subscribing, immediately runs the persisted-session gate with reason `mount-persisted`, without waiting for `INITIAL_SESSION` or any other supabase-js event. This path is **open-only**: a refreshable saved session opens that EA's local handle; an empty read changes nothing, including session-storage admission. With no saved session, the signed-out/login decision stays with the SDK's null `INITIAL_SESSION`. An explicit sign-in or sign-out already in progress takes precedence. A late same-user `INITIAL_SESSION` keeps the open handle; a late null initial event re-reads persistence through the unchanged event-driven gate (`initial-session`) and keeps the restored EA when the saved session remains. |
+| **Any other event with an empty session** | With an active user, waits `AUTH_SIGN_OUT_GRACE_PERIOD_MS` (15s). If the session recovers in that window the user stays signed in; otherwise commits with reason `<EVENT>-grace-timeout`. Without an active user, consults the persisted-session gate. |
 
 Two supporting behaviors:
 
 - **`processLock` + AppState wiring** (`supabaseClient.js`): auto-refresh starts on `active` and stops
   when backgrounded. React Native has no reliable browser-style visibility signal, so this is wired
   explicitly. `processLock` serializes refresh operations and reduces token-refresh races.
-- **`TOKEN_REFRESHED` for the already-current user short-circuits** — it does not re-run authenticated
-  startup hydration.
+- **Credentials wake consumers after a local-only open.** If the handle opened without usable
+  credentials, the first same-user session event with an access token (including `TOKEN_REFRESHED`
+  or `INITIAL_SESSION`) wakes both providers through the shared `subscribeToFirstCredentials`
+  rule: SignedInEA runs its existing coalesced profile/reference refresh, and OfflineContext calls
+  `requestDomainPull('credentials', { force: true })` to wake ChildrenContext and ClassesContext through
+  `domainPullNonce`. The wake skips the 15-minute staleness check, because recent stamps from an
+  earlier launch say nothing about this launch's failed mount pulls. ClassesContext's existing load effect also reloads and
+  republishes school options on that nonce. The rule checks `getLatestAuthSession()` at subscription
+  time, defers work until AuthContext has installed credentials, and runs at most once per handle;
+  later routine token refreshes do not repeat these pulls. OfflineContext still heals terminal RLS
+  failures and schedules sync on same-user `INITIAL_SESSION`, `SIGNED_IN` and `TOKEN_REFRESHED`
+  sessions. Neither path reopens the handle.
+
+The Galaxy A03s preview build 12 reproduction exposed a lost `INITIAL_SESSION`: after the first
+offline refresh attempt, the auto-refresh ticker holds the auth lock for another offline refresh.
+Initial delivery waits only the 5 s `lockAcquireTimeout`; an unhandled
+`ProcessLockAcquireTimeoutError` in auth-js 2.100.1's fire-and-forget subscription task prevents the
+event from arriving. Subscribing before the ticker restored delivery in the control experiment but
+still took about 51 s. Reading local persistence at mount removes that network dependency.
+An empty mount read is not evidence of sign-out: auth-js removes a split session's `-user`
+companion before writing the merged session. Revoking admission in that gap would reject the
+SDK's merged write. The open-only mount leaves that migration and its later event intact.
 
 ## How to read the logs
 
-Available via Profile → Debug & Support → Share Logs. The auth subsystem emits these lines:
+Available via Profile → Debug & Support → Share Logs. Current `AuthContext` does not emit event,
+restore, grace-wait or clearing-reason lines. It does log `[Auth] Background Supabase sign-out failed`
+when background cleanup fails. The following examples belong to older builds; use them only when
+present, and do not infer a failed restore from their absence:
 
 ```
 [Auth] Event=<EVENT_NAME> hasSession=true|false
@@ -48,12 +72,10 @@ Available via Profile → Debug & Support → Share Logs. The auth subsystem emi
 [Auth] Background Supabase sign-out failed
 ```
 
-`<reason>` is `signed-out`, `<EVENT>-grace-timeout`, `<EVENT>-no-active-user`, or
-`<EVENT>-no-active-user-after-local-sign-out`. A future implementation may restore an explicit
-`manual-sign-out` reason, but operators must not rely on it today.
-
-> There is no `initial-session-null` reason. A pre-2026-07 version of this document told operators to
-> look for one. If you are working from an older copy, discard it.
+Current internal reasons include `mount-persisted`, `initial-session`, `manual-sign-out`,
+`signed-out`, `<EVENT>-grace-timeout`, and `<EVENT>-no-active-user`. These are code-path labels,
+not guaranteed support-log messages. Neither an `INITIAL_SESSION` line nor a restore line is
+required for a healthy offline start.
 
 ## Operator checklist (support triage)
 
@@ -66,12 +88,13 @@ a force-quit? network changed? password changed? signed in on another device?
 **2. Get the log export in the same session** (Profile → Debug & Support → Share Logs). Save as
 `auth-signout-<user>-<date>.txt`.
 
-**3. Find the `[Auth]` lines in time order**, then classify:
+**3. Find any `[Auth]` lines in time order**, then classify using the reported behavior as well.
+The literal lines in A–D and G are historical examples, not required output from current builds:
 
 ### A) Possible explicit sign-out
-The current manual path clears local state directly and may be followed by
-`Cleared local auth state (signed-out)` or no distinct clearing-reason line. Correlate the timestamp
-with user actions. The log cannot currently prove a manual tap by itself.
+The manual path clears local auth directly. Older builds may record
+`Cleared local auth state (signed-out)`; current builds have no distinct clearing-reason line.
+Correlate timestamps with user actions. The log cannot currently prove a manual tap by itself.
 
 ### B) `SIGNED_OUT` committed
 `Cleared local auth state (signed-out)`
@@ -90,15 +113,21 @@ Grace-wait line, then `Cleared local auth state (<EVENT>-grace-timeout)`.
 settings (step 4).
 
 ### E) Cold start with no persisted session
-`Event=INITIAL_SESSION hasSession=false` then `Cleared local auth state (INITIAL_SESSION-no-active-user)`.
-→ No valid local session at startup. Ask whether app data was cleared, the app reinstalled, or a
-device "cleaner"/battery-optimiser tool ran. If this is common across users, investigate storage
-persistence on the affected Android builds.
+The `mount-persisted` gate finds no refreshable saved session and leaves startup undecided.
+The SDK's null `INITIAL_SESSION` rechecks persistence and opens login if it is still empty; with
+no saved session the SDK has no network refresh to wait for. Older logs may show
+`Event=INITIAL_SESSION hasSession=false` followed by a clearing line, but current builds do not
+emit those lines. Ask whether app data was cleared, the app reinstalled, or a device
+"cleaner"/battery-optimiser tool ran. If this is common across
+users, investigate storage persistence on the affected Android builds.
 
 ### F) Healthy offline restore (not a bug — confirm and close)
-`Event=INITIAL_SESSION hasSession=false` then `Restored persisted offline session (...)`.
-→ The app came back offline and correctly restored the session instead of bouncing to login. If the
-user still reports being signed out, the problem is elsewhere; keep reading the log.
+The `mount-persisted` gate reads the saved session and opens that EA's local handle, even if
+`INITIAL_SESSION` never arrives. Confirm that the EA can open their local data offline. Older
+builds may log `Restored persisted offline session (...)`; current builds need not emit it.
+A late same-user or null `INITIAL_SESSION` must neither reopen the handle nor sign the EA out
+while that session remains saved. If the EA is still stuck on "Preparing your offline data",
+capture the build and timestamps; absent auth events alone no longer explain a blocked gate.
 
 ### G) Stale event, correctly ignored
 `Ignoring stale SIGNED_OUT; a valid session for the current user persists`

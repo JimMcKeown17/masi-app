@@ -376,6 +376,7 @@ export default function LiteracySessionForm({ navigation }) {
   const { classes } = useClasses();
   const { jobTitles } = useLookupsContext();
 
+  const [sessionId] = useState(() => uuidv4());
   const [sessionDate, setSessionDate] = useState(() => getProgrammeCalendarDate());
   const [dateMenuVisible, setDateMenuVisible] = useState(false);
   const [selectedChildren, setSelectedChildren] = useState([]);
@@ -390,6 +391,7 @@ export default function LiteracySessionForm({ navigation }) {
   const [trackerBottomSheetChild, setTrackerBottomSheetChild] = useState(null);
   const [comments, setComments] = useState('');
   const [submitting, setSubmitting] = useState(false);
+  const submittingRef = useRef(false);
   const [validationErrors, setValidationErrors] = useState({});
   const [snackbarMessage, setSnackbarMessage] = useState('');
   const [snackbarVisible, setSnackbarVisible] = useState(false);
@@ -488,6 +490,7 @@ export default function LiteracySessionForm({ navigation }) {
   };
 
   const handleSubmit = async () => {
+    if (submittingRef.current) return;
     const errors = {};
     if (selectedChildren.length === 0) errors.children = 'Select at least one child';
     if (selectedLetters.length === 0) errors.letters = 'Select at least one letter';
@@ -496,13 +499,14 @@ export default function LiteracySessionForm({ navigation }) {
       setValidationErrors(errors);
       return;
     }
+    submittingRef.current = true;
     setValidationErrors({});
     setSubmitting(true);
 
     try {
       const now = new Date().toISOString();
       const session = {
-        id: uuidv4(),
+        id: sessionId,
         user_id: user.id,
         ...buildSessionTypeFields({ profile, jobTitlesCache: jobTitles }),
         session_date: formatDateForStorage(sessionDate),
@@ -539,6 +543,7 @@ export default function LiteracySessionForm({ navigation }) {
           console.error('Error refreshing sync status after session save:', error);
         });
     } catch (error) {
+      submittingRef.current = false;
       console.error('Error saving session:', error);
       showSnackbar('Failed to save session. Please try again.');
     } finally {

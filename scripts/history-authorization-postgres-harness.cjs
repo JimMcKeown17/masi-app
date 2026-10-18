@@ -137,8 +137,11 @@ END
 $bootstrap_roles$;
 
 CREATE SCHEMA auth;
+-- Column types follow Supabase's real auth.users for every column a migration reads.
 CREATE TABLE auth.users (
   id UUID PRIMARY KEY,
+  email CHARACTER VARYING(255),
+  banned_until TIMESTAMPTZ,
   raw_user_meta_data JSONB NOT NULL DEFAULT '{}'::JSONB,
   created_at TIMESTAMPTZ NOT NULL DEFAULT pg_catalog.now()
 );

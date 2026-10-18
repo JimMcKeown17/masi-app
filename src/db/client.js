@@ -1,5 +1,5 @@
 import { openDatabaseAsync } from 'expo-sqlite';
-import { runMigrations } from './migrations';
+import { readSupportedSchemaVersion, runMigrations } from './migrations';
 
 export const DATABASE_FILE_PREFIX = 'masi-';
 export const LEGACY_DATABASE_NAME = 'masi.db';
@@ -39,6 +39,8 @@ export const openConfiguredConnections = async ({ name, openDatabase = openDatab
     // migration work. Otherwise configuration failure leaks an opened native connection.
     // Neither connection is exposed to callers until configuration has completed.
     writer = await openDatabase(name);
+    // Refuse a newer file before journal_mode can change its persistent header.
+    await readSupportedSchemaVersion(writer);
     await applyPragmas(writer, WRITER_PRE_MIGRATION_PRAGMAS);
     await runMigrations(writer);
     await writer.execAsync('PRAGMA foreign_keys = ON');

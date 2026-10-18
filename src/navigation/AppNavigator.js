@@ -3,11 +3,9 @@ import { NavigationContainer, useNavigationContainerRef } from '@react-navigatio
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { useAuth } from '../context/AuthContext';
-import { ActivityIndicator, View, Pressable, Platform } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
+import { View } from 'react-native';
 import LockedBottomTabBar from '../components/navigation/LockedBottomTabBar';
-import { Text } from 'react-native-paper';
-import { colors } from '../constants/colors';
+import HeaderBackButton from './HeaderBackButton';
 import SyncIndicator from '../components/common/SyncIndicator';
 import {
   registerNavigationContainer,
@@ -65,7 +63,7 @@ const ChildrenStack = createNativeStackNavigator();
 
 function AuthNavigator() {
   return (
-    <Stack.Navigator screenOptions={{ headerShown: false }}>
+    <Stack.Navigator screenOptions={{ headerShown: false, headerTitleAlign: 'center' }}>
       <Stack.Screen name="Login" component={LoginScreen} />
       <Stack.Screen
         name="ForgotPassword"
@@ -84,19 +82,9 @@ function ChildrenStackNavigator() {
   return (
     <ChildrenStack.Navigator
       screenOptions={({ navigation }) => ({
+        headerTitleAlign: 'center',
         headerLeft: navigation.canGoBack()
-          ? () => (
-            <Pressable
-              onPress={() => navigation.goBack()}
-              hitSlop={8}
-              accessibilityRole="button"
-              accessibilityLabel="Back"
-              style={{ flexDirection: 'row', alignItems: 'center', marginLeft: Platform.OS === 'ios' ? -8 : 0 }}
-            >
-              <Ionicons name="chevron-back" size={28} color={colors.primary} />
-              <Text style={{ color: colors.primary, fontSize: 17 }}>Back</Text>
-            </Pressable>
-          )
+          ? () => <HeaderBackButton onPress={() => navigation.goBack()} />
           : undefined,
       })}
     >
@@ -170,19 +158,9 @@ function MainNavigator() {
   return (
     <Stack.Navigator
       screenOptions={({ navigation }) => ({
+        headerTitleAlign: 'center',
         headerLeft: navigation.canGoBack()
-          ? () => (
-            <Pressable
-              onPress={() => navigation.goBack()}
-              hitSlop={8}
-              accessibilityRole="button"
-              accessibilityLabel="Back"
-              style={{ flexDirection: 'row', alignItems: 'center', marginLeft: Platform.OS === 'ios' ? -8 : 0 }}
-            >
-              <Ionicons name="chevron-back" size={28} color={colors.primary} />
-              <Text style={{ color: colors.primary, fontSize: 17 }}>Back</Text>
-            </Pressable>
-          )
+          ? () => <HeaderBackButton onPress={() => navigation.goBack()} />
           : undefined,
       })}
     >

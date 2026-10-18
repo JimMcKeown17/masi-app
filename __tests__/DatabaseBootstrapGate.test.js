@@ -24,9 +24,43 @@ jest.mock('../src/services/observability', () => ({
 }));
 
 import DatabaseBootstrapGate from '../src/components/bootstrap/DatabaseBootstrapGate';
+import HandleOpenError from '../src/components/bootstrap/HandleOpenError';
+import { CURRENT_SCHEMA_VERSION, SchemaTooNewError } from '../src/db/migrations';
 
 beforeEach(() => {
   jest.clearAllMocks();
+});
+
+test('a newer schema explains the update and offers Sign out instead of Retry', () => {
+  const onSignOut = jest.fn();
+  const onRetry = jest.fn();
+  const view = render(<HandleOpenError
+    error={new SchemaTooNewError(CURRENT_SCHEMA_VERSION + 86, CURRENT_SCHEMA_VERSION)}
+    onRetry={onRetry}
+    onSignOut={onSignOut}
+  />);
+
+  expect(view.getByText('Update Masi to continue')).toBeTruthy();
+  expect(view.getByText('This phone has data from a newer version of Masi. Install the latest version from the app store, then open Masi again.')).toBeTruthy();
+  expect(view.queryByText(/try again/i)).toBeNull();
+  expect(view.getAllByRole('button')).toHaveLength(1);
+  fireEvent.press(view.getByRole('button', { name: 'Sign out' }));
+  expect(onSignOut).toHaveBeenCalledTimes(1);
+  expect(onRetry).not.toHaveBeenCalled();
+});
+
+test('a newer-schema bootstrap failure shows no action when no EA is signed in', async () => {
+  mockInitializeDatabase.mockRejectedValueOnce(new SchemaTooNewError(CURRENT_SCHEMA_VERSION + 86, CURRENT_SCHEMA_VERSION));
+  const view = render(
+    <DatabaseBootstrapGate>
+      <Text>App providers mounted</Text>
+    </DatabaseBootstrapGate>
+  );
+
+  expect(await view.findByText('Update Masi to continue')).toBeTruthy();
+  expect(view.queryByText('App providers mounted')).toBeNull();
+  expect(view.queryAllByRole('button')).toEqual([]);
+  expect(mockInitializeDatabase).toHaveBeenCalledTimes(1);
 });
 
 test('blocks app providers after SQLite bootstrap failure and recovers on a clean retry', async () => {

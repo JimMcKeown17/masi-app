@@ -2,6 +2,8 @@ const packageJson = require('../package.json');
 const easConfig = require('../eas.json');
 const fs = require('fs');
 const path = require('path');
+const os = require('os');
+const { XML } = require('expo/config-plugins');
 
 const repoRoot = path.resolve(__dirname, '..');
 
@@ -106,5 +108,53 @@ describe('Plan 6 release gate configuration', () => {
 
     expect(config.version).toBe('1.3.0');
     expect(config.runtimeVersion).toEqual({ policy: 'appVersion' });
+  });
+
+  test('Android builds disable app-data backup', () => {
+    const config = require('../app.config')().expo;
+
+    expect(config.android.allowBackup).toBe(false);
+  });
+
+  test('Android prebuild excludes every data domain from cloud backup and device transfer', async () => {
+    const config = require('../app.config')().expo;
+    expect(config.plugins).toContain('./plugins/withNoBackupDataExtraction');
+
+    const withNoBackupDataExtraction = require('../plugins/withNoBackupDataExtraction');
+    const projectRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'masi-backup-plugin-'));
+    const platformProjectRoot = path.join(projectRoot, 'android');
+    const modRequest = { projectRoot, platformProjectRoot, platform: 'android' };
+    const manifest = { manifest: { application: [{ $: {
+      'android:name': '.MainApplication',
+      'android:allowBackup': 'false',
+    } }] } };
+    const expectedExclusions = [
+      'root', 'file', 'database', 'sharedpref', 'external',
+      'device_root', 'device_file', 'device_database', 'device_sharedpref',
+    ].map(domain => ({ $: { domain, path: '.' } }));
+
+    try {
+      const pluginConfig = withNoBackupDataExtraction(config);
+      const result = await pluginConfig.mods.android.manifest({
+        ...pluginConfig, modRequest, modResults: manifest,
+      });
+      expect(result.modResults.manifest.application[0].$).toEqual({
+        'android:name': '.MainApplication',
+        'android:allowBackup': 'false',
+        'android:dataExtractionRules': '@xml/data_extraction_rules',
+      });
+
+      const resourcePath = path.join(platformProjectRoot, 'app/src/main/res/xml/data_extraction_rules.xml');
+      for (let run = 0; run < 2; run += 1) {
+        await pluginConfig.mods.android.dangerous({ ...pluginConfig, modRequest });
+        const xml = await XML.parseXMLAsync(fs.readFileSync(resourcePath, 'utf8'));
+        expect(xml['data-extraction-rules']).toEqual({
+          'cloud-backup': [{ exclude: expectedExclusions }],
+          'device-transfer': [{ exclude: expectedExclusions }],
+        });
+      }
+    } finally {
+      fs.rmSync(projectRoot, { recursive: true, force: true });
+    }
   });
 });

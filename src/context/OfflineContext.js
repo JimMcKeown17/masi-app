@@ -1,5 +1,6 @@
 import { useAuth } from './AuthContext';
 import { isStaleActorError } from '../session/staleActor';
+import { subscribeToFirstCredentials } from '../session/subscribeToFirstCredentials';
 import { useSignedInEA } from './SignedInEAContext';
 import React, { createContext, useState, useEffect, useContext, useRef, useCallback, useMemo } from 'react';
 import NetInfo from '@react-native-community/netinfo';
@@ -211,7 +212,7 @@ export const OfflineProvider = ({ children }) => {
     triggerBackgroundSyncRef.current = triggerBackgroundSync;
   }, [triggerBackgroundSync]);
 
-  const requestDomainPull = useCallback(async (reason) => {
+  const requestDomainPull = useCallback(async (reason, { force = false } = {}) => {
     try {
       const [childDataState, classesState] = await Promise.all([
         syncStateRepository.getPullState('child_data_pull'),
@@ -222,7 +223,7 @@ export const OfflineProvider = ({ children }) => {
         const lastPulledAt = Date.parse(state?.lastPulledAt || '');
         return !Number.isFinite(lastPulledAt) || lastPulledAt < staleBefore;
       };
-      if (!isStale(childDataState) && !isStale(classesState)) return false;
+      if (!force && !isStale(childDataState) && !isStale(classesState)) return false;
 
       console.log('Requesting domain pull:', reason);
       if (!handle.isCurrent()) return false;
@@ -246,6 +247,11 @@ export const OfflineProvider = ({ children }) => {
       void services.sessionHistory.start().catch((error) => { if (!isStaleActorError(error)) console.error('Session history failed:', error); });
     }
   }, [requestDomainPull]);
+
+  useEffect(() => subscribeToFirstCredentials({
+    // Mount pulls failed without credentials; recent stamps from an earlier launch must not skip the retry.
+    handle, subscribeToAuthEvents, onCredentials: () => requestDomainPull('credentials', { force: true }),
+  }), [handle, subscribeToAuthEvents, requestDomainPull]);
 
   const authorizeReconcileBreaker = useCallback((scope) => {
     if (!scope) return false;
@@ -331,7 +337,7 @@ export const OfflineProvider = ({ children }) => {
   }, [refreshSyncStatus, requestDomainPullOrResumeHistory]);
 
   // A handle is already repaired before publication. Heal its RLS failures once
-  // at mount and on same-user token restoration through the single auth subscription.
+  // at mount and on same-user token restoration through AuthContext.
   useEffect(() => {
     const heal = async ({ scheduleSync = false } = {}) => {
       try {
@@ -346,7 +352,7 @@ export const OfflineProvider = ({ children }) => {
     };
     void heal();
     return subscribeToAuthEvents((event, session) => {
-      if (session?.user?.id === handle.userId && (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED')) void heal({ scheduleSync: true });
+      if (session?.user?.id === handle.userId && (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED' || event === 'INITIAL_SESSION')) void heal({ scheduleSync: true });
     });
   }, [handle, services, subscribeToAuthEvents, refreshSyncStatus]);
 

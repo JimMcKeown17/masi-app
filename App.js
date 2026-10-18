@@ -133,8 +133,8 @@ const theme = {
 };
 
 export function AppRoot() {
-  const { user, loading, handle, handleStatus, handleError, retryOpenHandle } = useAuth();
-  if (handleStatus === 'failed') return <HandleOpenError error={handleError} onRetry={retryOpenHandle} />;
+  const { user, loading, handle, handleStatus, handleError, retryOpenHandle, signOut } = useAuth();
+  if (handleStatus === 'failed') return <HandleOpenError error={handleError} onRetry={retryOpenHandle} onSignOut={user ? signOut : undefined} />;
   if (loading || (user && !handle)) return <LoadingScreen />;
   if (!handle) return <AppNavigator signedIn={false} />;
   return (

@@ -3,6 +3,7 @@ global.__MASI_NO_DEFAULT_HANDLE__ = true;
 import fs from 'fs';
 import os from 'os';
 import path from 'path';
+import { createHash } from 'crypto';
 import {
   requestOpen, requestClose, whenDisposed, getCurrentHandle, requireCurrentHandle, getConnectionActor,
   resetHandleRegistryForTests,
@@ -11,7 +12,7 @@ import {
 import { StaleActorError, NoSignedInEAError, FileOwnerMismatchError } from '../src/session/staleActor';
 import { databaseNameForUser } from '../src/db/client';
 import { createPathDatabaseOpener } from '../test-support/actorTestUtils';
-import { runMigrations } from '../src/db/migrations';
+import { CURRENT_SCHEMA_VERSION, SchemaTooNewError, isSchemaTooNewError, runMigrations } from '../src/db/migrations';
 import { discoverAndQueueIncidents } from '../src/session/fileDiscovery';
 
 const A = '11111111-1111-4111-8111-111111111111';
@@ -53,6 +54,32 @@ const seedDiscoveryFile = async (userId) => {
     userId, '2026-10-15T00:00:00.000Z', '2026-10-15T00:00:00.000Z');
   } finally { await db.closeAsync(); }
 };
+
+test('a newer schema fails handle open with its typed error and leaves the file untouched', async () => {
+  await seedDiscoveryFile(A);
+  const fileName = databaseNameForUser(A);
+  const fileVersion = CURRENT_SCHEMA_VERSION + 86;
+  const seed = await openDatabase(fileName);
+  await seed.execAsync(`PRAGMA user_version = ${fileVersion}`);
+  await seed.closeAsync();
+  const digest = () => createHash('sha256').update(fs.readFileSync(path.join(dir, fileName))).digest('hex');
+  const before = digest();
+  const openedBefore = opened.length;
+  const discover = jest.fn();
+  let caught;
+  try { await requestOpen({ userId: A, openDatabase, discover }); } catch (error) { caught = error; }
+
+  expect(caught).toBeInstanceOf(SchemaTooNewError);
+  expect(caught).toMatchObject({ code: 'SCHEMA_TOO_NEW', fileVersion, appVersion: CURRENT_SCHEMA_VERSION });
+  expect(isSchemaTooNewError(caught)).toBe(true);
+  expect(getCurrentHandle()).toBeNull();
+  expect(discover).not.toHaveBeenCalled();
+  expect(opened.slice(openedBefore)).toEqual([fileName]);
+  expect(connections[connections.length - 1].isOpen).toBe(false);
+  expect(digest()).toBe(before);
+  expect((await requestOpen({ userId: B, openDatabase })).userId).toBe(B);
+});
+
 const readDiscoveryQueue = async (userId) => {
   const db = await openDatabase(databaseNameForUser(userId), { useNewConnection: true });
   try {
