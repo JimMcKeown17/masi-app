@@ -99,6 +99,91 @@ create trigger class_grouping_state_enforce_row_version
   before update on public.class_grouping_state
   for each row execute function private.enforce_row_version();
 
+-- An EA's late open snapshot must not undo a close. Keep returning the row so
+-- absorbed retries still receive the phone's exact one-row acknowledgement.
+create or replace function private.time_entries_forward_only()
+returns trigger
+language plpgsql
+set search_path = ''
+as $$
+begin
+  if tg_op = 'INSERT' then
+    if (auth.uid() = new.user_id) is not true then
+      return new;
+    end if;
+  else
+    if (auth.uid() = old.user_id) is not true then
+      return new;
+    end if;
+    if old.sign_out_time is not null then
+      if old.auto_clocked_out and old.sign_out_time = old.sign_in_time + interval '10 hours'
+          and new.sign_out_time <= old.sign_out_time then
+        return new;
+      end if;
+      new.sign_out_time := old.sign_out_time;
+      new.sign_out_lat := old.sign_out_lat;
+      new.sign_out_lon := old.sign_out_lon;
+      new.sign_out_location_status := old.sign_out_location_status;
+      new.auto_clocked_out := old.auto_clocked_out;
+      return new;
+    end if;
+  end if;
+
+  -- A shift captured entirely offline first arrives as an already-closed insert.
+  if new.sign_out_time > new.sign_in_time + interval '10 hours' then
+    new.sign_out_time := new.sign_in_time + interval '10 hours';
+    new.sign_out_lat := null;
+    new.sign_out_lon := null;
+    new.sign_out_location_status := null;
+    new.auto_clocked_out := true;
+  end if;
+  return new;
+end;
+$$;
+
+revoke execute on function private.time_entries_forward_only() from public, anon, authenticated;
+
+drop trigger if exists time_entries_forward_only on public.time_entries;
+create trigger time_entries_forward_only
+  before insert or update on public.time_entries
+  for each row execute function private.time_entries_forward_only();
+
+create or replace function private.close_overdue_time_entries()
+returns integer
+language plpgsql
+set search_path = ''
+as $$
+declare
+  closed_count integer;
+begin
+  update public.time_entries
+    set sign_out_time = sign_in_time + interval '10 hours',
+      auto_clocked_out = true,
+      sign_out_lat = null,
+      sign_out_lon = null,
+      sign_out_location_status = null
+    where sign_out_time is null
+      and sign_in_time < now() - interval '10 hours';
+  get diagnostics closed_count = row_count;
+  return closed_count;
+end;
+$$;
+
+revoke execute on function private.close_overdue_time_entries() from public, anon, authenticated, service_role;
+
+do $$
+begin
+  if exists (select 1 from pg_available_extensions where name = 'pg_cron') and
+      current_database() = 'postgres' then
+    create extension if not exists pg_cron;
+    execute $cron$
+      select cron.schedule('masi_close_overdue_time_entries', '*/15 * * * *',
+        'select private.close_overdue_time_entries();');
+    $cron$;
+  end if;
+end;
+$$;
+
 notify pgrst, 'reload schema';
 
 reset statement_timeout;

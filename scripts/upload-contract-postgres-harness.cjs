@@ -402,6 +402,120 @@ const runRowVersionCases = (databaseUrl) => {
   return { passed };
 };
 
+const runTimeEntryForwardCases = (databaseUrl) => {
+  let passed = 0;
+  const lateOpenUpsert = upsertSql('time_entries',
+    ['id', 'user_id', 'sign_in_time', 'sign_in_lat', 'sign_in_lon',
+      'sign_out_time', 'sign_out_lat', 'sign_out_lon', 'sign_out_location_status', 'auto_clocked_out'],
+    [`'${TIME_ENTRY}'`, `'${ASSIGNED_EA}'`,
+      `(SELECT sign_in_time FROM public.time_entries WHERE id = '${TIME_ENTRY}')`, '-33.96', '25.6',
+      'NULL', 'NULL', 'NULL', 'NULL', 'false'], true);
+
+  // RED on the pre-fix migrations: the open snapshot overwrites the owner's close.
+  assert.deepEqual(returnedIds(runPsql({ databaseUrl, label: 'late open write reopens a closed shift',
+    sql: asActor(ASSIGNED_EA, `
+      ${updateByIdSql('time_entries', "sign_out_time = sign_in_time + interval '6 hours'", TIME_ENTRY)}
+      ${lateOpenUpsert}
+      SELECT sign_out_time IS NOT DISTINCT FROM sign_in_time + interval '6 hours'
+        FROM public.time_entries WHERE id = '${TIME_ENTRY}';`) })),
+  [TIME_ENTRY, TIME_ENTRY, 't'], 'late open write reopens a closed shift');
+  passed += 1;
+
+  const start = "(now() - interval '11 hours')";
+  const open = { hours: null, lat: null, lon: null, status: null, auto: false };
+  const manual = { hours: 6, lat: -33.95, lon: 25.61, status: 'fix', auto: false };
+  const automatic = { ...open, hours: 10, auto: true };
+  const later = { ...manual, hours: 7, lat: -33.94, lon: 25.62 };
+  const tooLate = { ...later, hours: 11 };
+  const columns = ['sign_out_time', 'sign_out_lat', 'sign_out_lon', 'sign_out_location_status', 'auto_clocked_out'];
+  const values = (state) => [
+    state.hours === null ? 'NULL' : `${start} + interval '${state.hours} hours'`,
+    state.lat ?? 'NULL', state.lon ?? 'NULL',
+    state.status === null ? 'NULL' : `'${state.status}'`, state.auto,
+  ];
+  const assignments = (state) => columns.map((column, index) => `${column} = ${values(state)[index]}`).join(', ');
+  const setup = (state) => `UPDATE public.time_entries SET sign_in_time = ${start},
+    ${assignments(state)} WHERE id = '${TIME_ENTRY}';`;
+  const jobSetup = `${setup(open)}
+    DO $case$ BEGIN PERFORM private.close_overdue_time_entries(); END; $case$;`;
+  const snapshot = `SELECT json_build_object(
+    'hours', extract(epoch FROM (sign_out_time - sign_in_time)) / 3600,
+    'lat', sign_out_lat, 'lon', sign_out_lon, 'status', sign_out_location_status, 'auto', auto_clocked_out)
+    FROM public.time_entries WHERE id = '${TIME_ENTRY}';`;
+  const write = (kind, state) => {
+    if (kind === 'update') return updateByIdSql('time_entries', assignments(state), TIME_ENTRY);
+    const insert = `INSERT INTO public.time_entries
+      (id, user_id, sign_in_time, sign_in_lat, sign_in_lon, ${columns.join(', ')})
+      VALUES ('${TIME_ENTRY}', '${ASSIGNED_EA}', ${start}, -33.96, 25.6, ${values(state).join(', ')})`;
+    return `${insert}${kind === 'upsert' ? ` ON CONFLICT (id) DO UPDATE SET ${columns
+      .map((column) => `${column} = EXCLUDED.${column}`).join(', ')}` : ''} RETURNING id;`;
+  };
+  const expectWrite = (label, sql, seed, expected, actor = ASSIGNED_EA) => {
+    const output = returnedIds(runPsql({ databaseUrl, label,
+      sql: actor === null ? `BEGIN; ${seed} ${sql} ${snapshot} ROLLBACK;`
+        : asActor(actor, `${sql} ${snapshot}`, seed) }));
+    assert.equal(output.length, 2, `${label}: one returned id and one stored snapshot`);
+    assert.equal(output[0], TIME_ENTRY, `${label}: the write must acknowledge exactly one row`);
+    assert.deepEqual(JSON.parse(output[1]), expected, `${label}: stored clock-out fields`);
+    passed += 1;
+  };
+
+  const cases = [
+    { label: 'open-honest-close', stored: open, incoming: manual, expected: manual },
+    { label: 'open-exact-ten-hour-close', stored: open, incoming: automatic, expected: automatic },
+    { label: 'open-over-ten-hour-close', stored: open, incoming: tooLate, expected: automatic },
+    { label: 'open-retry', stored: open, incoming: open, expected: open },
+    { label: 'job-closed-exact-phone-auto-close', job: true, incoming: automatic, expected: automatic },
+    { label: 'job-closed-honest-close', job: true, incoming: manual, expected: manual },
+    { label: 'job-closed-open-retry', job: true, incoming: open, expected: automatic },
+    { label: 'job-closed-later-close', job: true, incoming: tooLate, expected: automatic },
+    { label: 'manual-closed-open-retry', stored: manual, incoming: open, expected: manual },
+    { label: 'manual-closed-later-close', stored: manual, incoming: later, expected: manual },
+    { label: 'manual-closed-earlier-close', stored: later, incoming: manual, expected: later },
+    { label: 'manual-closed-auto-close', stored: manual, incoming: automatic, expected: manual },
+    { label: 'non-ten-hour-auto-is-preserved', stored: { ...manual, auto: true },
+      incoming: { ...later, hours: 5 }, expected: { ...manual, auto: true } },
+  ];
+  for (const kind of ['update', 'upsert']) {
+    for (const testCase of cases) {
+      expectWrite(`time-entry-${kind}-${testCase.label}`, write(kind, testCase.incoming),
+        testCase.job ? jobSetup : setup(testCase.stored), testCase.expected);
+    }
+  }
+  const missing = `DELETE FROM public.time_entries WHERE id = '${TIME_ENTRY}';`;
+  expectWrite('time-entry-insert-over-ten-hour-close', write('insert', tooLate), missing, automatic);
+  expectWrite('time-entry-insert-honest-close', write('insert', manual), missing, manual);
+  expectWrite('time-entry-insert-open', write('insert', open), missing, open);
+
+  // No auth.uid(): Head Office corrections are outside the EA's forward-only rule.
+  expectWrite('time-entry-postgres-closed-update', write('update', tooLate), setup(manual), tooLate, null);
+  expectWrite('time-entry-postgres-closed-insert', write('insert', tooLate), missing, tooLate, null);
+
+  const recentEntry = '76100000-0000-0000-0000-000000000099';
+  assert.deepEqual(returnedIds(runPsql({ databaseUrl, label: 'time-entry-job-overdue-only-and-idempotent', sql: `
+    BEGIN;
+    ${setup(open)}
+    INSERT INTO public.time_entries (id, user_id, sign_in_time, sign_in_lat, sign_in_lon)
+    VALUES ('${recentEntry}', '${ASSIGNED_EA}', now() - interval '2 hours', -33.96, 25.6);
+    SELECT private.close_overdue_time_entries();
+    SELECT sign_out_time = sign_in_time + interval '10 hours', auto_clocked_out,
+      sign_out_lat IS NULL, sign_out_lon IS NULL, sign_out_location_status IS NULL
+      FROM public.time_entries WHERE id = '${TIME_ENTRY}';
+    SELECT sign_out_time IS NULL, auto_clocked_out FROM public.time_entries WHERE id = '${recentEntry}';
+    SELECT private.close_overdue_time_entries();
+    ROLLBACK;` })), ['1', 't|t|t|t|t', 't|f', '0']);
+  passed += 1;
+
+  for (const role of ['anon', 'authenticated', 'service_role']) {
+    expectSqlState({ databaseUrl, label: `time-entry-job-${role}-refused`, sqlState: '42501',
+      sql: `BEGIN; SET LOCAL ROLE ${role}; SELECT private.close_overdue_time_entries(); ROLLBACK;` });
+    assert.equal(runPsql({ databaseUrl, label: `time-entry-job-${role}-execute-revoked`,
+      sql: `SELECT has_function_privilege('${role}', 'private.close_overdue_time_entries()', 'EXECUTE');` }), 'f');
+    passed += 2;
+  }
+  return { passed };
+};
+
 const locationLegacyFixture = `
 INSERT INTO public.time_entries (id, user_id, sign_in_time, sign_in_lat, sign_in_lon,
   sign_out_time, sign_out_lat, sign_out_lon, auto_clocked_out)
@@ -447,6 +561,7 @@ const main = () => {
     if (!seeded) runPsql({ databaseUrl, sql: fixtureSql, label: 'upload-contract-fixture' });
     process.stdout.write(`${JSON.stringify({
       ...runCases(databaseUrl), location: runLocationCases(databaseUrl), rowVersion: runRowVersionCases(databaseUrl),
+      timeEntryForward: runTimeEntryForwardCases(databaseUrl),
     })}\n`);
   } finally {
     runPsql({ databaseUrl: adminDatabaseUrl, sql: `DROP DATABASE IF EXISTS ${quotedDatabase} WITH (FORCE);`, label: 'drop-database' });
