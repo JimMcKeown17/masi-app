@@ -50,9 +50,9 @@ Codex-approved round 3, 2026-10-18). Read it before any task; section numbers be
    "acknowledged v5 survives a pulled v4" pins it.
 2. **An ordinary edit made while an upload is in flight must still upload afterwards.** Owned by
    Task 4; the claim-snapshot test asserts the replacement is sent as its own request.
-3. **A child created on the phone and then edited before its first upload must upload once, with
-   no needs-attention.** Owned by Task 4; the test "create then edit before first upload sends one
-   accepted request".
+3. **A child created on the phone and then edited before its first upload must end with the edit
+   on the server and nothing needing attention.** Owned by Task 4; the test "create then edit before
+   first upload": the insert goes before the edit, versions increase, both are accepted.
 4. **An EA who taps Clock out eleven hours after clocking in sees the shift recorded as ten hours,
    with the existing auto-clock-out notice.** Owned by Task 6.
 5. **A build from before this spec keeps uploading against the migrated server.** Owned by Task 1;
@@ -226,17 +226,30 @@ Codex-approved round 3, 2026-10-18). Read it before any task; section numbers be
   - `immutable insert is not stamped`: a `child_ea_assignments` insert → request has no
     `row_version`, local stays 1; its later archive → carries 2;
   - `hard_delete is not stamped`;
-  - `claim snapshot`: when the mock server receives the request (hook its request start), replace
-    the slot's payload via `childrenRepository` with a new edit before responding; the request carries the claimed content and version; after finalize the slot is
+  - `claim snapshot` (must fail with today's two-call claim): wrap the outbox repository so a
+    deterministic barrier runs right after the claim transaction commits and before any separate
+    read of the slot; there, replace the slot's payload via `childrenRepository` with a new edit.
+    With the old `markInFlight` + `getById` path the request would carry the replacement; with
+    `markInFlightAndGet` it carries the claimed content and version. Separately, a request-start
+    hook that replaces the payload before the mock responds proves the stale-finalize path; the request carries the claimed content and version; after finalize the slot is
     `pending` again and the next pass sends the new edit at a higher version. Same for a lifecycle
     change, and for a record sent through batch fallback;
-  - `create then edit before first upload sends one accepted request`;
+  - `create then edit before first upload`: the insert (v2) is sent before the edit (v3), both
+    are accepted, the server ends with the edited content, nothing needs attention;
+  - `a forced terminal retry is protected from an overlapping pull`: a `children` row `terminal` at
+    v7 with its outbox row forced (`includeTerminal`); at a barrier after the claim (v8 sent), save
+    a pulled v4 through the real server-row saver; acknowledge → local is v8 with the claimed
+    content, `synced`; the next edit sends v9 and is accepted. Must fail if the claim leaves the
+    domain row `terminal`;
   - `unversioned tables send no row_version` (`time_entries`, `sessions`, `letter_mastery`).
 - [ ] **Step 2: Run** → FAIL.
 - [ ] **Step 3: Implement.**
   - `updateInFlight(txn, ids, now)`: after the status update, read `id, table_name, record_id,
     operation` for the ids; for each where `isStampedOperation`, run
-    `update <table> set row_version = row_version + 1 where id = ?` then read the value; if the
+    `update <table> set row_version = row_version + 1, sync_status = case when sync_status =
+    'terminal' then 'pending' else sync_status end where id = ?` then read the value (a claimed
+    retry of a terminal row must be protected by the pull guard while it is in flight; terminal
+    rows that are not being retried still converge); if the
     local row exists, `update sync_outbox set payload = json_set(payload, '$.row_version', ?)
     where id = ?`. Use `quoteIdentifier` for the table name.
   - `processRecord`: replace `markInFlight([id])` + `getById(id)` with
@@ -255,8 +268,15 @@ Codex-approved round 3, 2026-10-18). Read it before any task; section numbers be
 
 **Files:**
 - Modify: `src/services/offlineSync.js` (`classifyError`, `reconcileChildClassMembership`)
-- Test: `__tests__/rowVersionRefusal.test.js` (real better-sqlite3 + `createSupabaseMock`); one
-  case using the real `@supabase/postgrest-js` client with a mocked `fetch`
+- Create: `test-support/statefulMembershipServer.js` — a small stateful fake of the
+  `child_class_memberships` server table for the engine's client: `from(t).select(cols).eq().eq()
+  .is().limit()` resolves rows from its store; `from(t).update(patch).eq('id', x)` is thenable and
+  applies without `.select`; `upsert` applies and can be told to commit and then reject with a
+  codeless network error (lost response). `createSupabaseMock` lacks the select chain and only
+  runs `update` when followed by `select`, so `reconcileChildClassMembership`'s catch would
+  silently swallow the TypeError and the test would pass with no guard.
+- Test: `__tests__/rowVersionRefusal.test.js` (real better-sqlite3); one case using the real
+  `@supabase/postgrest-js` client with a mocked `fetch`
 
 **Interfaces:**
 - Consumes: Task 4's stamping.
@@ -269,10 +289,12 @@ Codex-approved round 3, 2026-10-18). Read it before any task; section numbers be
   - `MV001 reaches error.code through postgrest-js`: a `PostgrestClient` whose `fetch` returns HTTP
     400 with body `{"code":"MV001","message":"stale_version","details":null,"hint":null}` → the
     engine's classifier sees `code === 'MV001'`;
-  - `class move under a lost response`: offline A→B via `childrenRepository.updateChild`; A's insert
-    "commits" on the mock server but its response is lost (mock records then rejects with a
-    codeless network error); B acknowledged; A retried → after the queue drains, the mock server
-    has B active and A exited, the phone has B active, no failed or terminal rows;
+  - `class move under a lost response` (using `statefulMembershipServer`): offline A→B via
+    `childrenRepository.updateChild`; A's insert commits on the fake server but its response is
+    lost; B acknowledged; A retried → after the queue drains, the fake server has B active and A
+    exited, the phone has B active, no failed or terminal rows. The test must fail, because A's
+    retry closes B, when the `exited_at` guard is removed — verify this once and say so in the
+    report;
   - the same with the move to B made while A's insert is in flight;
   - `ignored assignment insert`: an assignment insert committed with its response lost, retried
     (mock ignores the duplicate), then an interleaved reconcile ends it locally; the next pull of
@@ -288,18 +310,23 @@ Codex-approved round 3, 2026-10-18). Read it before any task; section numbers be
 ### Task 6: Cap a manual clock-out at ten hours
 
 **Files:**
-- Modify: `src/context/TimeTrackingContext.js` (`handleSignOut`)
+- Modify: `src/context/TimeTrackingContext.js` (`handleSignOut`; `autoClockOut` resolves
+  `undefined`, so `handleSignOut` returns `true` itself)
 - Test: extend `__tests__/useTimeTracking.integration.test.js`
 
 - [ ] **Step 1: Write the failing test** `a clock-out after ten hours records the ten-hour
-  auto-close`: an open entry signed in 11 h ago (fake timers), call `handleSignOut` → stored
-  `sign_out_time = sign_in + 10 h`, `auto_clocked_out = true`, sign-out location fields NULL, the
-  auto-clock-out notice recorded, and the location request is not awaited for the close. A
-  clock-out at 9 h 59 m still stores the real time and location.
+  auto-close`: mount with an entry signed in 9 h 59 m ago (so the startup auto-close does not run),
+  then advance the system clock past ten hours without firing the 30-second watchdog; leave the
+  location request unresolved; call `handleSignOut` → it resolves `true`, and the stored row has
+  `sign_out_time = sign_in + 10 h`, `auto_clocked_out = true`, sign-out location fields NULL, and
+  the auto-clock-out notice is recorded. A clock-out at 9 h 59 m still stores the real time and
+  location.
 - [ ] **Step 2: Run** → FAIL.
-- [ ] **Step 3: Implement.** In `handleSignOut`, after reading `current`, when
-  `Date.now() - Date.parse(current.sign_in_time) >= MAX_SHIFT_MS`, call `autoClockOut(current)` and
-  return its result path instead of closing with `new Date()`.
+- [ ] **Step 3: Implement.** In `handleSignOut` (`TimeTrackingContext.js:229-255`), read the
+  active entry **before** requesting location; if it is already past `MAX_SHIFT_MS`, `await
+  autoClockOut(entry)` and return `true` (callers such as `useSignOutFlow.js:66-68` treat a falsy
+  result as failure). Keep the existing post-location reread, and apply the same check there for a
+  shift that crosses ten hours while location is being captured.
 - [ ] **Step 4: Run** → PASS; `npm test`; `npm run test:integration`.
 - [ ] **Step 5: Commit** `fix(time): a clock-out after ten hours records the ten-hour auto-close`.
 
