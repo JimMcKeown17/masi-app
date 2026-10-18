@@ -57,8 +57,8 @@ These horizons summarize the ordered register below. They are not a second backl
    Put a deadline and release on every request in the shared queue, uploads included. Upload the
    assessment family all-or-nothing. Reject stale edits on records more than one writer can change.
    Make submit duplicate-proof. One database per EA is built (Plan 2; its sign-out UX is Plan 3).
-   The newer-schema guard and minimum revocation tooling are built; revocation's hosted apply and
-   device proof remain open (§0). Evidence:
+   The newer-schema guard and minimum revocation tooling are built, and the revocation migration is
+   applied to `masi-app-sqlite`; its device proof remains open (§0). Evidence:
    [`zazi-sync-lessons-for-masi-2026-10-08.md`](./zazi-sync-lessons-for-masi-2026-10-08.md) Part 2.
 6. **P0: settle field-continuity contracts before the candidate build.** Make location fallback
    truthful, build the server-side ten-hour clock-out and verify the built Android backup exclusion
@@ -159,8 +159,8 @@ shape.
     unused for 30 days. Revisit before Step 9 Widen, for privacy (EA A's roster stays on EA B's
     personal phone), against POPIA. Design:
     `docs/superpowers/specs/2026-10-09-actor-lifecycle-and-mutation-ownership-design.md`.
-- [ ] **Minimum revocation contract before pilot provisioning — tooling built; hosted apply and
-  device proof open** (moved from §6 by the 2026-10-08 Codex review). **Decided by Jim 2026-10-17:
+- [ ] **Minimum revocation contract before pilot provisioning — built and applied to hosted; device
+  proof open** (moved from §6 by the 2026-10-08 Codex review). **Decided by Jim 2026-10-17:
   copy Zazi's suspension, operated by a script first** (Head Office website later, §6). The canonical
   `20261018120000_ea_access_suspension.sql` migration builds `private.ea_access_events` and
   `suspend_ea`, `restore_ea`, and `ea_access_status`. `scripts/ea-access.cjs` exposes `ea:status`,
@@ -184,9 +184,10 @@ shape.
   Zazi's `api/mobile/account_access.py` at `21cb880` and suspension-v1 card, with both server writes
   and the audit now atomic rather than separate external calls.
 
-  **Remaining gates:** run the disposable PostgreSQL harness (sandbox TCP was refused; no SQL
-  cases ran), inspect the hosted schema, obtain **Jim's yes before hosted apply**, and prove that a
-  suspended, already-signed-in phone signs out at its next refresh. The national admin portal stays
+  **Done:** the disposable PostgreSQL harness passes 43/43 and runs in CI; the hosted schema was
+  inspected; with Jim's explicit yes the migration was applied to `masi-app-sqlite` on 2026-10-18
+  and read back (see the build log). **Remaining gate:** prove that a suspended, already-signed-in
+  phone signs out at its next refresh, then restore and confirm retained work uploads. The national admin portal stays
   in §6 ([Z16](./zazi-sync-lessons-for-masi-2026-10-08.md)).
 
 ### Release and observability
@@ -715,7 +716,7 @@ When this resumes:
 
 Current narrow capability: `scripts/createTesters.js` provisions explicit zero-class pilot testers
 against the exact SQLite backend. `scripts/ea-access.cjs` supplies audited suspension/status/restore
-tooling (hosted apply and device proof pending, §0). `scripts/loadTestUsers.js` is deliberately disabled. The archived
+tooling (applied to hosted 2026-10-18; device proof pending, §0). `scripts/loadTestUsers.js` is deliberately disabled. The archived
 [`seed plan`](./archive/seed_data_plan.md) and
 [`bulk-import plan`](./archive/bulk_import_children_plan.md) are schema-dead and must not be revived.
 

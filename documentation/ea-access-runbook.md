@@ -1,9 +1,9 @@
 # EA access suspension and restoration
 
-Built 2026-10-17. Hosted migration apply and device proof are still open. This runbook implements
+Built 2026-10-17; migration applied to `masi-app-sqlite` on 2026-10-18. Device proof is still open. This runbook implements
 Jim's decision to use Zazi's Auth-ban mechanism with an operator script before building a Head
 Office website. The [ROADMAP §0](./ROADMAP.md) owns the remaining gates; the
-[contract map](./rls-sync-contract-map.md#ea-access-suspension--built-hosted-apply-and-device-proof-pending)
+[contract map](./rls-sync-contract-map.md#ea-access-suspension--applied-to-hosted-device-proof-pending)
 describes the SQL and grants.
 
 ## Before first use
@@ -13,10 +13,10 @@ same `HISTORY_RLS_ADMIN_DATABASE_URL`, `HISTORY_RLS_DATABASE_NAME`, and
 `HISTORY_RLS_DISPOSABLE_CONFIRM=I_UNDERSTAND_THIS_IS_DISPOSABLE` setup as the existing history
 harness. The name must start with `masi_history_rls_`; this harness appends `_ea_access`, replays
 canonical migrations, checks behavior and grants, then drops that database. It refuses hosted
-targets. Codex's sandbox could not connect to localhost, so the SQL cases still need a controller
-run. Inspect the hosted Auth/profile schema before applying the migration.
+targets. CI runs it on every pull request.
 
-**Hosted apply requires Jim's explicit yes.** Apply
+The migration was applied on 2026-10-18 with Jim's explicit yes. For a fresh project, hosted apply
+again requires Jim's explicit yes. Apply
 `supabase/migrations/20261018120000_ea_access_suspension.sql` through the isolated
 [`sqlite-staging-sql` workflow](../.claude/skills/sqlite-staging-sql/SKILL.md), and read back its
 functions, table, RLS, and grants. Do not use ad-hoc DDL or the legacy Supabase project.
