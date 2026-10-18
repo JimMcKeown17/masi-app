@@ -48,7 +48,7 @@ that no organisation table or user column committed, and always terminates/await
 before the real migration apply. These new PostgreSQL checks await controller verification.
 **Applied to hosted on 2026-10-14 with Jim's explicit yes.**
 
-### EA access suspension — applied to hosted; device proof pending
+### EA access suspension — applied to hosted; device-proven
 
 **Applied to hosted on 2026-10-18 with Jim's explicit yes.**
 

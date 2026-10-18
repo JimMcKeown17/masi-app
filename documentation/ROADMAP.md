@@ -58,7 +58,7 @@ These horizons summarize the ordered register below. They are not a second backl
    assessment family all-or-nothing. Reject stale edits on records more than one writer can change.
    Make submit duplicate-proof. One database per EA is built (Plan 2; its sign-out UX is Plan 3).
    The newer-schema guard and minimum revocation tooling are built, and the revocation migration is
-   applied to `masi-app-sqlite`; its device proof remains open (§0). Evidence:
+   applied to `masi-app-sqlite` and device-proven on Android build 14 (2026-10-18, §0). Evidence:
    [`zazi-sync-lessons-for-masi-2026-10-08.md`](./zazi-sync-lessons-for-masi-2026-10-08.md) Part 2.
 6. **P0: settle field-continuity contracts before the candidate build.** Make location fallback
    truthful, build the server-side ten-hour clock-out and verify the built Android backup exclusion
@@ -159,8 +159,8 @@ shape.
     unused for 30 days. Revisit before Step 9 Widen, for privacy (EA A's roster stays on EA B's
     personal phone), against POPIA. Design:
     `docs/superpowers/specs/2026-10-09-actor-lifecycle-and-mutation-ownership-design.md`.
-- [ ] **Minimum revocation contract before pilot provisioning — built and applied to hosted; device
-  proof open** (moved from §6 by the 2026-10-08 Codex review). **Decided by Jim 2026-10-17:
+- [x] **Minimum revocation contract before pilot provisioning — built, applied to hosted, and
+  device-proven 2026-10-18** (moved from §6 by the 2026-10-08 Codex review). **Decided by Jim 2026-10-17:
   copy Zazi's suspension, operated by a script first** (Head Office website later, §6). The canonical
   `20261018120000_ea_access_suspension.sql` migration builds `private.ea_access_events` and
   `suspend_ea`, `restore_ea`, and `ea_access_status`. `scripts/ea-access.cjs` exposes `ea:status`,
@@ -179,15 +179,16 @@ shape.
   `users.is_active = false` still does not enforce access: owner policies, `can_read_session`, the
   history RPC, and `AuthContext` do not check it. The Auth ban blocks sign-in and token refresh;
   already-issued access tokens remain valid until expiry. Jim accepts the one-hour residual window
-  used by Zazi; verify the hosted JWT lifetime before pilot use. Assignments and worked hours stay
+  used by Zazi; the hosted JWT lifetime was measured at 3600 s on 2026-10-18. Assignments and worked hours stay
   intact, and unsent work stays on the phone for upload after restoration and sign-in. This follows
   Zazi's `api/mobile/account_access.py` at `21cb880` and suspension-v1 card, with both server writes
   and the audit now atomic rather than separate external calls.
 
   **Done:** the disposable PostgreSQL harness passes 43/43 and runs in CI; the hosted schema was
   inspected; with Jim's explicit yes the migration was applied to `masi-app-sqlite` on 2026-10-18
-  and read back (see the build log). **Remaining gate:** prove that a suspended, already-signed-in
-  phone signs out at its next refresh, then restore and confirm retained work uploads. The national admin portal stays
+  and read back (see the build log). On Android build 14 (2026-10-18) a suspended, signed-in phone
+  signed out at its first refresh after real token expiry, could not sign in while banned ("User is
+  banned"), kept an offline clock-in, and uploaded it after restore and sign-in. The national admin portal stays
   in §6 ([Z16](./zazi-sync-lessons-for-masi-2026-10-08.md)).
 
 ### Release and observability
@@ -218,8 +219,9 @@ shape.
   instead of a restored outbox (Zazi ZZ-BUG-20260907-001). Prebuild introspection confirms
   `android:allowBackup="false"` and `android:dataExtractionRules="@xml/data_extraction_rules"`.
   Legacy `fullBackupContent` is redundant because `allowBackup=false` already disables backup on
-  Android 11 and lower. Device proof remains open after the next native build: uninstall/reinstall
-  and Google restore / `adb shell bmgr` backup/restore on the A03s, plus a device-transfer check if
+  Android 11 and lower. On build 12 (2026-10-18) `adb shell bmgr` with `LocalTransport` refused
+  Masi's backup while allowing a control app's. Still open: uninstall/reinstall and Google restore
+  on the A03s, plus a device-transfer check if
   a second Android phone is available. A reinstall may not be called “fresh” until the resulting
   database identity, contents and signed-out auth state prove it.
 - [ ] Prove `masi-app-sqlite` is healthy after its restore onto the Pro plan. Jim moved the project
@@ -295,7 +297,7 @@ checks are recorded in the build log. The remaining checklist is still substanti
 - M1-M10: seeded and zero-class onboarding paths.
 - J6: BottomSheet geometry on a standalone preview build.
 - E4: assessment attribution across a South African Programme-day boundary.
-- S1-S7: Home and five-slot navigation visual acceptance. Home is now the Bold Red Home (2026-10-17); check it against the Design Round 4 canvas v2 boards and the device gate in `docs/superpowers/plans/2026-10-17-bold-red-home.md` Task 12.
+- S1-S7: Home and five-slot navigation visual acceptance. Home is now the Bold Red Home (2026-10-17); check it against the Design Round 4 canvas v2 boards and the device gate in `docs/superpowers/plans/2026-10-17-bold-red-home.md` Task 12. Android build 14 (2026-10-18) covered normal day, offline, sync attention (badge 1) and the largest One UI font (1.3) at 360dp and 411dp: all text complete. Still open: iOS; getting location, target met, above ceiling, no target, two messages; badges 12 and 99+; canvas comparison.
 
 ## 1. Bidirectional session and assessment history
 
@@ -463,11 +465,11 @@ the current-state model better than Zazi's per-session carry-forward.
   `manual-sign-out` clearing category, but the current manual path clears state directly and the
   later auth event may be recorded only as `signed-out`. Either restore reliable provenance or
   explicitly adopt the simpler diagnostic contract.
-- [ ] **Offline cold start device recheck, then a real supabase-js start-up harness (issue #73).**
-  The local-first cold start (build-log 2026-10-18) passes only in Jest. On the next preview build,
-  prove on the Galaxy A03s: offline start with an expired token reaches Home within seconds; an
-  online start loads profile, classes and children without Retry. Then build #73's harness, which
-  runs the real auth-js lock and ticker so lost or late auth events fail in CI instead of on a phone.
+- [ ] **Real supabase-js start-up harness (issue #73).** The local-first cold start (PR #74) passed
+  on the Galaxy A03s with build 13 on 2026-10-18: offline with an expired token Home appeared in
+  about 6 s despite the same auth-js lock timeout that stalled build 12, and an online start loaded
+  profile, classes and children without Retry. Build #73's harness, which runs the real auth-js lock
+  and ticker, so lost or late auth events fail in CI instead of on a phone.
 
 - [ ] **Literacy form forces a letter selection (issue #54):** a letters-mastered group has no
   letters to pick, so the EA taps an arbitrary letter and corrupts `activities.letters_focused`.
@@ -693,6 +695,12 @@ Additional Head Office behavior retained from the Sprint 4 follow-up:
 - [ ] Decide the fate of `session_type_id` and `activities.__legacySession`: promote a real synced
   contract or remove the machinery.
 - [ ] Push notifications and a durable message inbox remain unbuilt.
+- [ ] **Suspended sign-in copy:** a banned EA sees Supabase's raw "User is banned" in a Snackbar whose
+  Dismiss action uses Paper's default purple. Show Masi wording (for example, "Your access is paused.
+  Please contact your coordinator.") in brand colours. Found on build 14, 2026-10-18.
+- [ ] **Bold Red clock row at large font:** at One UI's largest font (1.3), "Not clocked in" wraps to
+  two lines at 411dp and three at 360dp, making the row tall. Text stays complete and the action
+  tappable; consider a shorter label or stacking the button. Found on build 14, 2026-10-18.
 
 ## 6. Head Office import and provisioning
 
@@ -721,7 +729,7 @@ When this resumes:
 
 Current narrow capability: `scripts/createTesters.js` provisions explicit zero-class pilot testers
 against the exact SQLite backend. `scripts/ea-access.cjs` supplies audited suspension/status/restore
-tooling (applied to hosted 2026-10-18; device proof pending, §0). `scripts/loadTestUsers.js` is deliberately disabled. The archived
+tooling (applied to hosted and device-proven 2026-10-18, §0). `scripts/loadTestUsers.js` is deliberately disabled. The archived
 [`seed plan`](./archive/seed_data_plan.md) and
 [`bulk-import plan`](./archive/bulk_import_children_plan.md) are schema-dead and must not be revived.
 

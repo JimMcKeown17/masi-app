@@ -1,9 +1,9 @@
 # EA access suspension and restoration
 
-Built 2026-10-17; migration applied to `masi-app-sqlite` on 2026-10-18. Device proof is still open. This runbook implements
+Built 2026-10-17; migration applied to `masi-app-sqlite` and device-proven on 2026-10-18. This runbook implements
 Jim's decision to use Zazi's Auth-ban mechanism with an operator script before building a Head
 Office website. The [ROADMAP §0](./ROADMAP.md) owns the remaining gates; the
-[contract map](./rls-sync-contract-map.md#ea-access-suspension--applied-to-hosted-device-proof-pending)
+[contract map](./rls-sync-contract-map.md#ea-access-suspension--applied-to-hosted-device-proven)
 describes the SQL and grants.
 
 ## Before first use
@@ -80,8 +80,8 @@ Head Office server. The current script runs as postgres.
 
 The Auth ban prevents sign-in and token refresh. It does not invalidate an already-issued access
 token immediately; the residual server-access window lasts until that token expires. Jim accepts
-the one-hour window used by Zazi. Verify the hosted JWT lifetime before pilot use; this task did
-not read it. Supabase documents the distinction between session termination and remaining JWT
+the one-hour window used by Zazi. The hosted access-token lifetime was measured at 3600 s on
+2026-10-18; recheck it if Auth settings change. Supabase documents the distinction between session termination and remaining JWT
 validity in its [session guidance](https://supabase.com/docs/guides/auth/sessions).
 
 `users.is_active` is an operational flag: the app and RLS do not enforce it. Suspension does not
@@ -89,7 +89,10 @@ end assignments, remove worked hours, delete history, or erase the phone's per-E
 Unsent work is kept and can upload after restoration and sign-in. An offline phone cannot learn
 about a server ban until it reconnects. Do not clear app storage or uninstall as part of suspension.
 
-After the hosted apply, prove on the pilot build that a suspended, already-signed-in phone signs
-out at its next refresh, cannot sign in while banned, and keeps unsent work. Restore it, sign in
-again, and verify the retained work uploads. Record hosted settings and device results in the
-Verification Register; unit and disposable-database checks do not prove this behavior.
+Proven on Android build 14 on 2026-10-18 (Verification Register): a suspended, signed-in phone
+signed out at its first refresh after real token expiry, could not sign in while banned, kept an
+offline clock-in, and uploaded it after restore and sign-in. Before a token expires, a suspended
+phone that reconnects can still upload with it; that is the accepted residual window. When testing,
+let the token really expire: moving the phone's clock forward makes it look expired to the phone
+only, so the server still accepts uploads. Repeat this proof on the pilot build if auth or sync
+changes.
