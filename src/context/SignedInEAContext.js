@@ -3,10 +3,12 @@ import NetInfo from '@react-native-community/netinfo';
 import { AuthContext, useAuth } from './AuthContext';
 import { normalizeProfile } from '../utils/profileNormalizer';
 import { isStaleActorError } from '../session/staleActor';
+import { getLatestAuthSession } from '../session/signedInHandle';
 
 export const SignedInEAContext = createContext(null);
 export const SignedInEAProvider = ({ handle, children }) => {
   const auth = useAuth();
+  const { subscribeToAuthEvents } = auth;
   const [profile, setProfile] = useState(null);
   const services = handle.services;
   const profileFlight = useMemo(() => ({ promise: null }), [handle]);
@@ -42,6 +44,8 @@ export const SignedInEAProvider = ({ handle, children }) => {
     let receivedNetworkEvent = false;
     let refreshing = false;
     let refreshPending = false;
+    const initialSession = getLatestAuthSession();
+    let hasCredentials = initialSession?.user?.id === handle.userId && Boolean(initialSession?.access_token);
     const refreshReferences = async () => {
       if (refreshing) { refreshPending = true; return; }
       refreshing = true;
@@ -56,6 +60,16 @@ export const SignedInEAProvider = ({ handle, children }) => {
       } while (refreshPending && active && handle.isCurrent() && wasOnline);
       refreshing = false;
     };
+    const unsubscribeAuth = subscribeToAuthEvents((event, session) => {
+      if (hasCredentials || session?.user?.id !== handle.userId || !session?.access_token) return;
+      // AuthContext installs the credentials after notifying listeners. Defer
+      // work outside that callback, and wake only once for this handle.
+      void Promise.resolve().then(() => {
+        if (!active || !handle.isCurrent() || hasCredentials) return;
+        hasCredentials = true;
+        return refreshReferences();
+      });
+    });
     const refreshOnOnline = (network) => {
       if (!active || !handle.isCurrent()) return;
       const online = Boolean(network.isConnected && network.isInternetReachable !== false);
@@ -70,8 +84,8 @@ export const SignedInEAProvider = ({ handle, children }) => {
     void NetInfo.fetch().then((network) => {
       if (!receivedNetworkEvent) refreshOnOnline(network);
     }).catch((error) => { if (!isStaleActorError(error)) console.error('Error checking startup connectivity:', error); });
-    return () => { active = false; unsubscribe(); };
-  }, [handle, services, refreshProfile]);
+    return () => { active = false; unsubscribe(); unsubscribeAuth(); };
+  }, [handle, services, refreshProfile, subscribeToAuthEvents]);
   const value = useMemo(() => ({ handle, repositories: handle.repositories, services }), [handle, services]);
   const profileAuth = useMemo(() => ({ ...auth, profile, refreshProfile }), [auth, profile, refreshProfile]);
   return <SignedInEAContext.Provider value={value}>

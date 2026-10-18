@@ -119,6 +119,57 @@ test('offline first launch loads the profile on reconnect and coalesces concurre
     expect((await getCurrentHandle().services.deviceProfile.get()).jobTitleCode).toBe('literacy_coach');
   } finally { release.resolve(); }
 });
+
+test.each(['TOKEN_REFRESHED', 'INITIAL_SESSION'])('%s wakes profile and references once after a mount restore without credentials', async event => {
+  // Hold SDK delivery while the real handle, data client and SQLite open locally.
+  let deliverAuth;
+  jest.spyOn(mockClient.auth, 'onAuthStateChange').mockImplementation(callback => {
+    deliverAuth = callback;
+    return { data: { subscription: { unsubscribe: jest.fn() } } };
+  });
+  await AsyncStorage.setItem(mockClient.auth.storageKey, JSON.stringify({ ...session(A), expires_at: 1 }));
+  mockNetwork = { isConnected: true };
+  const failures = jest.spyOn(console, 'error').mockImplementation(() => {});
+  transport.mockImplementation(async url => {
+    const table = new URL(url).pathname.split('/').pop();
+    if (table === 'users') return json({ id: A, job_title_lookup: { code: 'literacy_coach', name: 'Literacy Coach' } });
+    return json([]);
+  });
+  const view = render(<AuthProvider><Tree sessionForm /></AuthProvider>);
+  await waitFor(() => expect(auth.loading).toBe(false));
+  const handle = getCurrentHandle();
+  expect(handle.userId).toBe(A);
+  expect(auth.session).toBeNull();
+  await waitFor(() => expect(failures).toHaveBeenCalledWith('Error loading profile:', expect.objectContaining({
+    message: expect.stringContaining('auth unavailable'),
+  })));
+  expect(view.getByText('Loading your profile...')).toBeTruthy();
+  expect(await handle.services.deviceProfile.get()).toBeNull();
+  expect(transport).not.toHaveBeenCalled();
+  const pull = jest.spyOn(handle.services, 'pullReferenceData');
+
+  await act(async () => {
+    deliverAuth('TOKEN_REFRESHED', session(B));
+    deliverAuth('TOKEN_REFRESHED', { user: session(A).user });
+  });
+  expect(pull).not.toHaveBeenCalled();
+  expect(view.getByText('Loading your profile...')).toBeTruthy();
+  await act(async () => { deliverAuth(event, session(A)); });
+
+  await waitFor(() => expect(view.getByText('Literacy session form')).toBeTruthy());
+  await waitFor(async () => expect(await handle.repositories.localState.get('reference_data_complete_at')).toBeTruthy());
+  expect((await handle.services.deviceProfile.get()).id).toBe(A);
+  expect(pull).toHaveBeenCalledTimes(1);
+  expect(transport.mock.calls.filter(([url]) => String(url).includes('/rest/v1/users'))).toHaveLength(1);
+  expect(transport.mock.calls.filter(([url]) => String(url).includes('/rest/v1/schools'))).toHaveLength(1);
+
+  await act(async () => { deliverAuth('TOKEN_REFRESHED', { ...session(A), access_token: 'hourly-token' }); });
+
+  expect(getCurrentHandle()).toBe(handle);
+  expect(pull).toHaveBeenCalledTimes(1);
+  expect(transport.mock.calls.filter(([url]) => String(url).includes('/rest/v1/users'))).toHaveLength(1);
+  expect(transport.mock.calls.filter(([url]) => String(url).includes('/rest/v1/schools'))).toHaveLength(1);
+});
 afterEach(async () => { cleanup(); await mockClient.auth.stopAutoRefresh(); await resetHandleRegistryForTests(); await engine.__resetMockDatabases(); jest.restoreAllMocks(); jest.useRealTimers(); });
 
 test.each([false, true])('SDK split-record initialization restores A and persists merged credentials; expired = %s', async expired => {

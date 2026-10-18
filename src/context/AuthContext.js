@@ -101,10 +101,10 @@ export const AuthProvider = ({ children }) => {
     // The login UI can appear before the SDK finishes, but signIn waits for complete.
     return operation.local;
   };
-  const resolveColdStartGate = async (reason) => {
+  const resolveColdStartGate = async (reason, { openOnly = false } = {}) => {
     if (signInPendingRef.current || signOutOperationRef.current) return;
     const generation = generationRef.current;
-    if (localSignOutCommittedRef.current) return commitSignedOutState(reason);
+    if (localSignOutCommittedRef.current) return openOnly ? undefined : commitSignedOutState(reason);
     const persisted = await readPersistedSession();
     if (generation !== generationRef.current || !mountedRef.current) return;
     if (persisted?.user?.id) {
@@ -115,7 +115,7 @@ export const AuthProvider = ({ children }) => {
       }
       return;
     }
-    return commitSignedOutState(reason);
+    if (!openOnly) return commitSignedOutState(reason);
   };
 
   useEffect(() => {
@@ -178,7 +178,8 @@ export const AuthProvider = ({ children }) => {
       void resolveColdStartGate(`${event}-no-active-user`);
     });
     // Offline initialization can lose INITIAL_SESSION while the auth lock is held.
-    void resolveColdStartGate('mount-persisted');
+    // An empty read can be the SDK's split-session migration gap, not a sign-out.
+    void resolveColdStartGate('mount-persisted', { openOnly: true });
     return () => {
       mountedRef.current = false;
       generationRef.current += 1;

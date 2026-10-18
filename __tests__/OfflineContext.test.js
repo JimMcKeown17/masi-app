@@ -1080,19 +1080,22 @@ describe('OfflineContext Plan 4 sync API', () => {
       ['TOKEN_REFRESHED'],
       ['INITIAL_SESSION'],
     ])('%s with a session heals then schedules a sync', async (event) => {
-      if (event === 'INITIAL_SESSION') {
-        getSyncStatus.mockResolvedValue({ readyCount: 1, unsyncedCount: 1, inFlightCount: 0 });
-      }
       await renderOfflineHook();
+      await act(async () => { jest.advanceTimersByTime(1500); });
+      expect(syncAll).not.toHaveBeenCalled();
+      requeueTerminalRlsFailures.mockClear();
+      getSyncStatus.mockClear();
 
-      await emitAuthEvent(event, { user: { id: '00000000-0000-4000-8000-0000000000aa' } });
+      await emitAuthEvent(event, { user: { id: '00000000-0000-4000-8000-0000000000aa' }, access_token: 'restored-token' });
 
+      expect(requeueTerminalRlsFailures).toHaveBeenCalledTimes(1);
       expect(requeueTerminalRlsFailures).toHaveBeenCalledWith('00000000-0000-4000-8000-0000000000aa');
+      expect(getSyncStatus).toHaveBeenCalledWith({ ownerUserId: '00000000-0000-4000-8000-0000000000aa' });
       await act(async () => {
         jest.advanceTimersByTime(1500);
         await Promise.resolve();
       });
-      expect(syncAll).toHaveBeenCalled();
+      expect(syncAll).toHaveBeenCalledTimes(1);
     });
 
     test('SIGNED_OUT and a null INITIAL_SESSION do not heal', async () => {

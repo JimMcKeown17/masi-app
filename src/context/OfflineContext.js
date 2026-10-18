@@ -346,7 +346,7 @@ export const OfflineProvider = ({ children }) => {
     };
     void heal();
     return subscribeToAuthEvents((event, session) => {
-      if (session?.user?.id === handle.userId && (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED')) void heal({ scheduleSync: true });
+      if (session?.user?.id === handle.userId && (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED' || event === 'INITIAL_SESSION')) void heal({ scheduleSync: true });
     });
   }, [handle, services, subscribeToAuthEvents, refreshSyncStatus]);
 

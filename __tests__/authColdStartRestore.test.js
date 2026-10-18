@@ -23,10 +23,12 @@ jest.mock('../test-support/handleServiceMocks', () => ({
 enqueueSupabaseRequest: jest.fn()
 }));
 import React from 'react';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Text } from 'react-native';
 import { act, render, waitFor } from '@testing-library/react-native';
 import { AuthProvider, useAuth } from '../src/context/AuthContext';
 import { supabase } from '../src/services/supabaseClient';
+import * as authSessionStorage from '../src/services/authSessionStorage';
 import {
   clearPersistedSession,
   readPersistedSession,
@@ -175,14 +177,55 @@ describe('AuthContext offline cold-start restore', () => {
     expect(mockGetSession).not.toHaveBeenCalled();
   });
 
-  it('finishes signed out without a persisted session or any auth event', async () => {
+  it('leaves startup undecided without a persisted session or any auth event', async () => {
+    const close = jest.spyOn(handleLifecycle, 'requestClose');
+    const revoke = jest.spyOn(authSessionStorage, 'revokeAuthSessionAdmission');
+    const admit = jest.spyOn(authSessionStorage, 'admitAuthSessionUser');
     const screen = await renderAuthProbe();
+    await flushStartup();
 
-    await expectAuthState(screen, 'ready|no-user|no-session');
+    expect(screen.getByTestId('auth-state')).toHaveTextContent('loading|no-user|no-session');
 
     expect(AuthStateProbe.latestAuth.handle).toBeNull();
+    expect(close).not.toHaveBeenCalled();
+    expect(revoke).not.toHaveBeenCalled();
+    expect(admit).not.toHaveBeenCalled();
+    expect(clearPersistedSession).not.toHaveBeenCalled();
     expect(mockGetSession).not.toHaveBeenCalled();
     expect(sqlite.openDatabaseAsync).not.toHaveBeenCalled();
+  });
+
+  it('preserves admission through a split-session gap and restores the merged INITIAL_SESSION', async () => {
+    const persistedAuth = jest.requireActual('../src/services/persistedAuthSession');
+    const storageKey = persistedAuth.getAuthStorageKey();
+    const storage = authSessionStorage.createAuthSessionStorage(storageKey);
+    const { user, ...credentials } = persistedSession();
+    authSessionStorage.resetAuthSessionAdmissionForTests();
+    await AsyncStorage.setItem(storageKey, JSON.stringify(credentials));
+    await AsyncStorage.setItem(`${storageKey}-user`, JSON.stringify({ user }));
+    // Model the SDK migration: capture admission, then remove the companion
+    // before the merged session is written.
+    await storage.getItem(storageKey);
+    await storage.removeItem(`${storageKey}-user`);
+    readPersistedSession.mockImplementation(persistedAuth.readPersistedSession);
+    const revoke = jest.spyOn(authSessionStorage, 'revokeAuthSessionAdmission');
+    const screen = await renderAuthProbe();
+    await flushStartup();
+    expect(AuthStateProbe.latestAuth.loading).toBe(true);
+    expect(revoke).not.toHaveBeenCalled();
+
+    const merged = liveSession();
+    await storage.setItem(storageKey, JSON.stringify(merged));
+    expect(await persistedAuth.readPersistedSession()).toEqual(merged);
+    await emitAuthEvent('INITIAL_SESSION', merged);
+    await expectAuthState(screen, `ready|${user.id}|session`);
+    expect(AuthStateProbe.latestAuth.handle?.userId).toBe(user.id);
+    expect(AuthStateProbe.latestAuth.handle?.isOpen()).toBe(true);
+    const refreshed = { ...merged, refresh_token: 'later-refresh-token' };
+    await storage.setItem(storageKey, JSON.stringify(refreshed));
+    expect(await persistedAuth.readPersistedSession()).toEqual(refreshed);
+    expect(revoke).not.toHaveBeenCalled();
+    expect(clearPersistedSession).not.toHaveBeenCalled();
   });
 
   it.each([['same user', liveSession()], ['null', null]])(
@@ -202,7 +245,8 @@ describe('AuthContext offline cold-start restore', () => {
       expect(AuthStateProbe.latestAuth.handle).toBe(restored);
       expect(restored.isOpen()).toBe(true);
       expect(open).toHaveBeenCalledTimes(1);
-      expect(mockPullReferenceData).toHaveBeenCalledTimes(1);
+      // Credentials arriving after the local open owe one refresh; null does not.
+      expect(mockPullReferenceData).toHaveBeenCalledTimes(initialSession ? 2 : 1);
       expect(clearPersistedSession).not.toHaveBeenCalled();
       expect(mockSignOut).not.toHaveBeenCalled();
     }

@@ -1757,7 +1757,8 @@ still took about 51 seconds. Correct ordering could not make the network availab
 
 The fix separates opening local work from refreshing credentials. On mount, AuthContext reads
 the existing refreshable saved session and opens that EA's SQLite handle immediately; without
-a saved session it opens login. Supabase keeps handling later refresh and revocation events.
+a saved session it leaves the decision to `INITIAL_SESSION`. Supabase keeps handling later refresh
+and revocation events.
 If a non-retryable refresh failure removes the session and emits `SIGNED_OUT`, the EA is still
 signed out. Offline access is not a promise that server credentials remain valid.
 
@@ -1766,6 +1767,14 @@ counter discards a mount read if sign-in or sign-out starts while it is waiting.
 to an already-running sign-out so it cannot cancel that operation's persistence cleanup.
 Concurrent mount and null initial-event reads open once: the first open advances the generation,
 making the other read stale. No extra timer, state machine or refresh-order change is needed.
+
+A local-first open must never make a destructive decision from missing evidence: auth-js briefly
+removes a split session's user companion before saving the merged session, so an empty mount read
+must leave admission untouched. Opening local data also does not mean server credentials are ready.
+Consumers must wake when those credentials arrive, even if connectivity never changes: the first
+usable same-user session wakes the existing profile/reference refresh, and `INITIAL_SESSION`
+joins sign-in and token refresh in healing and scheduling sync. Later hourly refreshes do not
+repeat profile/reference work.
 
 The gate lives in [AuthContext](../src/context/AuthContext.js) (`resolveColdStartGate`), and the
 support-facing behaviour is in [auth session resilience](./auth-session-resilience-2026-04-24.md).
