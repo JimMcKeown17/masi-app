@@ -38,6 +38,7 @@ For status questions, do not infer progress from a plan:
 | [`assessment-score-bands-config.md`](./assessment-score-bands-config.md) | Human-readable score-band contract and content gaps |
 | [`auth-session-resilience-2026-04-24.md`](./auth-session-resilience-2026-04-24.md) | Current auth restoration and support-triage runbook |
 | [`DATABASE_SCHEMA_GUIDE.md`](./DATABASE_SCHEMA_GUIDE.md) | Relational-modelling primer; its worked schema is historical, not authoritative |
+| [`ea-access-runbook.md`](./ea-access-runbook.md) | EA suspension/status/restoration commands, audit and credential handling, and pending hosted/device gates |
 | [`egra_letter_sets.md`](./egra_letter_sets.md) | Human-readable EGRA letter-set reference |
 | [`field-app-capability-ledger.md`](./field-app-capability-ledger.md) | Maintained capability, evidence-level, known-limit, and next-verifier ledger |
 | [`field-app-portfolio-invariants.md`](./field-app-portfolio-invariants.md) | Maintained cross-app safety, evidence, and package-graduation contract |

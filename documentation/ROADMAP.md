@@ -57,11 +57,13 @@ These horizons summarize the ordered register below. They are not a second backl
    Put a deadline and release on every request in the shared queue, uploads included. Upload the
    assessment family all-or-nothing. Reject stale edits on records more than one writer can change.
    Make submit duplicate-proof. One database per EA is built (Plan 2; its sign-out UX is Plan 3).
-   Add the newer-schema guard and a minimum revocation contract. Evidence:
+   The newer-schema guard and minimum revocation tooling are built; revocation's hosted apply and
+   device proof remain open (§0). Evidence:
    [`zazi-sync-lessons-for-masi-2026-10-08.md`](./zazi-sync-lessons-for-masi-2026-10-08.md) Part 2.
 6. **P0: settle field-continuity contracts before the candidate build.** Make location fallback
-   truthful, decide auto-clock-out authority and Android backup behavior, complete the
-   credential/PII and provisioning preflight, and explicitly accept or remove unfinished-form loss.
+   truthful, build the server-side ten-hour clock-out and verify the built Android backup exclusion
+   on device (both decided by Jim on 2026-10-17), and complete the credential/PII and provisioning preflight.
+   Unfinished-form loss is accepted for the pilot (Jim, 2026-10-17).
 7. **P1: close reachable correctness gaps.** Fix session-attendee removal before saved-session
    editing ships and resolve the remaining auth-diagnostic ambiguity. The newer-schema fail-safe
    moved to item 5.
@@ -146,9 +148,10 @@ shape.
     ordering of an uncertain older write against a newer one is not yet closed.
   - **Device gates:** D2–D7 on the build intended to ship
     ([actor lifecycle spec §9](../docs/superpowers/specs/2026-10-09-actor-lifecycle-and-mutation-ownership-design.md);
-    D7 is native close under load, iOS and Android); D3's ten-hour auto clock-out half; and on iOS,
-    D1, native file discovery and both sign-out sheets. Re-check the clocked-in sheet's title gap on
-    the next build. A new EAS build needs Jim's yes.
+    D7 is native close under load, iOS and Android) and D3's ten-hour half, which changes with
+    the server-side clock-out. iOS D1, native discovery on both platforms and both sheets passed
+    on builds 9 and 10 (2026-10-17, build log). The Android header fix ("BackMy Profile") is built; verify it on the next build.
+    A new EAS build needs Jim's yes.
   - **Legacy export gap:** spec §4.5 says Profile → Export Database can export `masi.db`.
     Today's export covers only the signed-in EA's file. Plan 3 did not change export; Step 4's
     support tooling must close this gap.
@@ -156,17 +159,35 @@ shape.
     unused for 30 days. Revisit before Step 9 Widen, for privacy (EA A's roster stays on EA B's
     personal phone), against POPIA. Design:
     `docs/superpowers/specs/2026-10-09-actor-lifecycle-and-mutation-ownership-design.md`.
-- [ ] **Minimum revocation contract before pilot provisioning** (moved from §6 by the 2026-10-08
-  Codex review). `users.is_active = false` has no effect today:
-  - the owner policies still allow time-entry writes and session updates
-    (`20260521120147_masi_rls_advisor_cleanup.sql:331-377`);
-  - `can_read_session` and the history RPC grant reads without checking active status;
-  - `AuthContext` does not enforce profile inactivity.
+- [ ] **Minimum revocation contract before pilot provisioning — tooling built; hosted apply and
+  device proof open** (moved from §6 by the 2026-10-08 Codex review). **Decided by Jim 2026-10-17:
+  copy Zazi's suspension, operated by a script first** (Head Office website later, §6). The canonical
+  `20261018120000_ea_access_suspension.sql` migration builds `private.ea_access_events` and
+  `suspend_ea`, `restore_ea`, and `ea_access_status`. `scripts/ea-access.cjs` exposes `ea:status`,
+  `ea:suspend`, and `ea:restore`; changes default to a dry run and require `--apply`, an exact
+  case-insensitive email match, a reason, and an operator. The connection is pinned to
+  `masi-app-sqlite`; the script runs as postgres and only service_role may execute the functions
+  through an API role. See the [operator runbook](./ea-access-runbook.md).
 
-  Define the operator procedure (Auth ban, profile inactive, assignments ended) and the accepted
-  residual token window (Zazi accepts up to an hour). Test an already-signed-in actor against
-  owned-row policies and the SECURITY DEFINER RPCs. The national admin portal stays in §6
-  ([Z16](./zazi-sync-lessons-for-masi-2026-10-08.md)).
+  Suspension locks the Auth and profile rows, sets `banned_until = now() + interval '876000 hours'`,
+  changes an active profile to inactive, and writes the audit event in one transaction. Read-back
+  confirms the ban is more than 24 hours away and the profile is inactive. Restore requires the
+  latest audit event to be a suspend. It lifts the ban and reactivates only when the **first suspend
+  since the most recent restore** recorded an active profile; repeated suspends preserve this
+  baseline while recording each call's actual before/after state (Jim's clarification).
+
+  `users.is_active = false` still does not enforce access: owner policies, `can_read_session`, the
+  history RPC, and `AuthContext` do not check it. The Auth ban blocks sign-in and token refresh;
+  already-issued access tokens remain valid until expiry. Jim accepts the one-hour residual window
+  used by Zazi; verify the hosted JWT lifetime before pilot use. Assignments and worked hours stay
+  intact, and unsent work stays on the phone for upload after restoration and sign-in. This follows
+  Zazi's `api/mobile/account_access.py` at `21cb880` and suspension-v1 card, with both server writes
+  and the audit now atomic rather than separate external calls.
+
+  **Remaining gates:** run the disposable PostgreSQL harness (sandbox TCP was refused; no SQL
+  cases ran), inspect the hosted schema, obtain **Jim's yes before hosted apply**, and prove that a
+  suspended, already-signed-in phone signs out at its next refresh. The national admin portal stays
+  in §6 ([Z16](./zazi-sync-lessons-for-masi-2026-10-08.md)).
 
 ### Release and observability
 
@@ -187,9 +208,19 @@ shape.
   from spreadsheets ([F5](./zazi-sync-lessons-for-masi-2026-10-08.md)).
 - [ ] Confirm every field device starts from a fresh installation, not an upgrade over the retired
   local data model.
-- [ ] Decide the Android Auto Backup/data-extraction policy for actor-scoped SQLite, domain rows,
-  outbox, incidents, and safe preferences. Test uninstall/reinstall and Google restore; a reinstall
-  may not be called “fresh” until the resulting database identity and contents prove it.
+- [ ] **Android backup: decided by Jim 2026-10-17, built (allowBackup false and extraction
+  exclusions); restore test open.** Cloud backup AND device transfer are excluded by config:
+  `android.allowBackup: false` plus the local Expo plugin's `data_extraction_rules.xml`, which
+  excludes all nine valid domains from both `cloud-backup` and `device-transfer`, including
+  device-protected storage. This covers per-EA SQLite files, the legacy `masi.db`, WAL/SHM sidecars,
+  AsyncStorage auth sessions, files and shared preferences; the server is the recovery path
+  instead of a restored outbox (Zazi ZZ-BUG-20260907-001). Prebuild introspection confirms
+  `android:allowBackup="false"` and `android:dataExtractionRules="@xml/data_extraction_rules"`.
+  Legacy `fullBackupContent` is redundant because `allowBackup=false` already disables backup on
+  Android 11 and lower. Device proof remains open after the next native build: uninstall/reinstall
+  and Google restore / `adb shell bmgr` backup/restore on the A03s, plus a device-transfer check if
+  a second Android phone is available. A reinstall may not be called “fresh” until the resulting
+  database identity, contents and signed-out auth state prove it.
 - [ ] Prove `masi-app-sqlite` is healthy after its restore onto the Pro plan. Jim moved the project
   to Pro on 2026-09-23 so it cannot auto-pause (it was found paused on 2026-09-04 and again on
   2026-09-23). The dashboard shows Nano compute; confirm the intended compute size. Zazi's local
@@ -401,25 +432,27 @@ the current-state model better than Zazi's per-session carry-forward.
 ### Data and lifecycle
 
 - [ ] **No-location release gates:** manual clock-in/out now save without location and carry the
-  reason through SQLite and the upload payload. Before release, run the extended local upload-contract
-  PostgreSQL harness, apply `20261015120000_time_entry_location_optional.sql` to the hosted backend,
-  and pass Android/iOS denial, services-off, indoor-timeout, stale-cache, offline, Settings return,
+  reason through SQLite and the upload payload (PR #65). `20261015120000_time_entry_location_optional.sql`
+  is applied to the hosted backend (its status columns are present; the Plan 3 device pass read them
+  on 2026-10-17). Before release, run the extended local upload-contract PostgreSQL harness and
+  pass Android/iOS denial, services-off, indoor-timeout, stale-cache, offline, Settings return,
   double-tap, and successful-fix device scenarios. Controller owns hosted application and release.
-- [ ] **Auto-clock-out authority:** the ten-hour close is currently device-owned and runs only while
-  the app is active or when the open entry is next loaded. Decide whether hosted rows may remain
-  open until that phone returns, or add a fenced server/hybrid authority that a stale offline write
-  cannot reopen. Reports must label overdue open rows honestly rather than fabricating closure.
-- [ ] **Newer-schema fail-safe (before pilot; priority item 5):** when SQLite `user_version` exceeds the bundle's
-  `CURRENT_SCHEMA_VERSION`, stop safely instead of running an older OTA bundle against a newer
-  schema. `runMigrationsNow` has no such branch today ([F2](./zazi-sync-lessons-for-masi-2026-10-08.md)).
+- [ ] **Server-side ten-hour clock-out (decided by Jim 2026-10-17: the server closes it).** Today
+  the close is device-owned and runs only while the app is active or when the open entry is next
+  loaded. Build a scheduled server close for entries open more than ten hours, marked
+  `auto_clocked_out`, fenced so a stale offline write from the phone cannot reopen the entry, and
+  reconcile the phone's own close with the server's. Spec §7.1's "Stay clocked in" text and device
+  gate D3 assume the phone-side close and must be updated with this change.
+- [x] **Newer-schema fail-safe (before pilot; priority item 5):** refuses to open a file whose SQLite
+  `user_version` exceeds the bundle's `CURRENT_SCHEMA_VERSION` and shows an update screen with
+  Sign out instead of Retry. Discovery skips too-new foreign files ([F2](./zazi-sync-lessons-for-masi-2026-10-08.md)).
 - [ ] **Assessment draft persistence:** force-quit currently loses an in-progress assessment.
-  Address this with the longer WelaPLUS/durable-draft lifecycle rather than a one-off 60-second EGRA
-  patch.
-- [ ] **Session form draft persistence or explicit launch acceptance:** navigate-away or process
-  death currently loses an unfinished submit-and-go session. Re-demonstrate that consequence on the
-  exact candidate and obtain explicit field acceptance, or ship the one SQLite-backed draft/run
-  lifecycle already assigned to the group-centred workstream. Do not add a second temporary draft
-  mechanism or imply autosave before it exists.
+  **Loss accepted for the pilot (Jim, 2026-10-17).** Address this later with the longer
+  WelaPLUS/durable-draft lifecycle rather than a one-off 60-second EGRA patch.
+- [x] **Session form draft persistence or explicit launch acceptance:** navigate-away or process
+  death loses an unfinished submit-and-go session. **Accepted for the pilot (Jim, 2026-10-17).** The
+  SQLite-backed draft/run lifecycle stays with the group-centred workstream. Do not add a second
+  temporary draft mechanism or imply autosave before it exists.
 - [ ] **Removed session attendees:** `sessionsRepository` does not delete
   `session_attendees` removed by a later save. No current screen edits submitted sessions, but this
   must be fixed and behavior-tested before edit UI ships.
@@ -450,10 +483,10 @@ the current-state model better than Zazi's per-session carry-forward.
 
 **Two live defects confirmed by the 2026-10-08 Codex round 2 (fix first, pilot blockers):**
 
-- [ ] **An EA's edit to a child Head Office created never uploads.** *Server half fixed on
-  `feat/upload-path-correctness` (Plan 1, 2026-10-10, not yet merged): edits go as UPDATE by id
-  with an exact acknowledgement, proven against the replayed migrations by S1. The phone half
-  below remains, for Plan 2. Plan 1 also fixed a third defect: group-assignment reactivation was
+- [x] **An EA's edit to a child Head Office created never uploads.** *Closed: server half by Plan 1
+  (PR #64): edits go as UPDATE by id with an exact acknowledgement, proven against the replayed
+  migrations by S1. Phone half by Plan 2 (PR #67): the outbox owner is the signed-in EA, never
+  `created_by`. The two-EA device check of this exact path is still worth running on the pilot build. Plan 1 also fixed a third defect: group-assignment reactivation was
   sent as an ignored insert and now goes as an acknowledged `restore`. Before field launch, clear
   development outboxes: legacy per-operation lifecycle rows are not consolidated at startup (see the
   contract map's Error Classification known limitations).*
@@ -466,7 +499,9 @@ the current-state model better than Zazi's per-session carry-forward.
     records the authenticated editing actor as the outbox owner; `created_by` is unchanged.
   - Test an EA editing Head Office-created children and groups, including reading levels
     submitted with a session, through claim, status, recovery, and sign-out.
-- [ ] **An upload can run under the next EA's session.**
+- [x] **An upload can run under the next EA's session.** *Closed by Plan 2 (PR #67): every server
+  request goes through the signed-in EA handle's own data client and queue, fenced when it sends;
+  a stale refusal ends the pass without finalising. Device gate D2 is the remaining field proof.*
   - The pass checks the session before enqueueing, but the queued task runs later through the
     shared Supabase client without re-checking (`offlineSync.js:1009-1016, 1196-1205`). Codex
     probed an A→B switch between admission and dequeue: A's upload ran as B and finalized.
@@ -525,11 +560,17 @@ contract ([U1–U7](./zazi-sync-lessons-for-masi-2026-10-08.md)):
     correction time as its own `now()`.
   - This is a narrow, single-column guard, not the general `stale_base` mechanism.
   - Build it with the mastery re-key in §1. `CONTEXT.md` is updated.
-- [ ] **Duplicate-proof submit (U5).** Use a ref-based lock, and mint the session id once per form
-  instead of per submit tap (`LiteracySessionForm.js:389, 502`). Zazi's per-tap ids produced 302
-  extra session copies (ZZ-BUG-20260819-021). Apply the same rule to assessment submit.
-- [ ] Android backup must exclude the SQLite database (U6, the §0 backup decision). A restored
-  database replayed already-accepted work in Zazi (ZZ-BUG-20260907-001).
+- [x] **Duplicate-proof submit (U5).** Literacy session capture now mints one session id per form,
+  reuses it on retry, and uses a synchronous ref lock to prevent double-tap saves; assessment
+  submit already guards completion with a ref and reuses its record on retry. This closes the
+  per-tap identity risk behind Zazi's 302 extra session copies (ZZ-BUG-20260819-021).
+  LetterMasteryPanel's same-EA/programme double taps already converge through the repository's
+  deterministic mastery id; its broader re-key remains separate.
+- [x] Android cloud-backup and device-transfer exclusion is built with `android.allowBackup: false`
+  and explicit data-extraction exclusions (U6). A restored database replayed already-accepted work
+  in Zazi (ZZ-BUG-20260907-001); the
+  [§0 backup item](#0-pre-live-ground-truth-observability-and-pilot-activation) retains the A03s
+  restore and device-to-device transfer proof as an open gate.
 
 Deferred: mutation ids and server receipts for edits (U4, only if U3 proves insufficient), an
 environment circuit breaker, and strict acknowledgement inventories. Not adopted: per-install
@@ -673,7 +714,8 @@ When this resumes:
   ([Z16](./zazi-sync-lessons-for-masi-2026-10-08.md)).
 
 Current narrow capability: `scripts/createTesters.js` provisions explicit zero-class pilot testers
-against the exact SQLite backend. `scripts/loadTestUsers.js` is deliberately disabled. The archived
+against the exact SQLite backend. `scripts/ea-access.cjs` supplies audited suspension/status/restore
+tooling (hosted apply and device proof pending, §0). `scripts/loadTestUsers.js` is deliberately disabled. The archived
 [`seed plan`](./archive/seed_data_plan.md) and
 [`bulk-import plan`](./archive/bulk_import_children_plan.md) are schema-dead and must not be revived.
 

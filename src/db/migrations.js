@@ -7,6 +7,19 @@ const LOCAL_SYNC_COLUMNS = `
 
 const explicitDatabaseMigrationQueues = new WeakMap();
 
+export class SchemaTooNewError extends Error {
+  constructor(fileVersion, appVersion) {
+    super(`Database schema ${fileVersion} is newer than supported schema ${appVersion}`);
+    this.name = 'SchemaTooNewError';
+    this.code = 'SCHEMA_TOO_NEW';
+    this.fileVersion = fileVersion;
+    this.appVersion = appVersion;
+  }
+}
+
+export const isSchemaTooNewError = (error) => error instanceof SchemaTooNewError
+  || error?.code === 'SCHEMA_TOO_NEW';
+
 export const MIGRATIONS = [
   {
     version: 1,
@@ -707,9 +720,13 @@ create index if not exists idx_support_incident_queue_status
 // Derived from the migration list so it never drifts when a migration is added.
 export const CURRENT_SCHEMA_VERSION = MIGRATIONS[MIGRATIONS.length - 1].version;
 
-const getUserVersion = async (db) => {
+export const readSupportedSchemaVersion = async (db) => {
   const row = await db.getFirstAsync('PRAGMA user_version');
-  return row?.user_version || 0;
+  const userVersion = row?.user_version || 0;
+  if (userVersion > CURRENT_SCHEMA_VERSION) {
+    throw new SchemaTooNewError(userVersion, CURRENT_SCHEMA_VERSION);
+  }
+  return userVersion;
 };
 
 const runInTransaction = async (db, task) => {
@@ -738,7 +755,7 @@ const runInTransaction = async (db, task) => {
 
 async function runMigrationsNow(database) {
   const db = database;
-  const userVersion = await getUserVersion(db);
+  const userVersion = await readSupportedSchemaVersion(db);
   const pending = MIGRATIONS.filter((migration) => migration.version > userVersion);
   if (pending.length === 0) {
     // Fully migrated: do NOT toggle foreign_keys. resolveDatabase() calls this on every

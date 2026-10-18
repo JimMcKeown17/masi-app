@@ -8,6 +8,7 @@ import { useChildren } from '../src/context/ChildrenContext';
 import { getCurrentHandle, requestOpen, requestClose, resetHandleRegistryForTests, getLatestAuthSession, whenDisposed } from '../src/session/signedInHandle';
 import * as engine from '../test-support/expoSQLiteRealEngine';
 import * as sqlite from 'expo-sqlite';
+import { CURRENT_SCHEMA_VERSION, runMigrations } from '../src/db/migrations';
 
 global.__MASI_NO_DEFAULT_HANDLE__ = true;
 const A = '11111111-1111-4111-8111-111111111111';
@@ -174,4 +175,23 @@ test('a failed handle open shows the extracted failure UI and Retry opens again'
   sqlite.__setDatabaseFactory(engine.openDatabaseAsync);
   fireEvent.press(view.getByText('Try Again'));
   await waitFor(() => expect(view.getByText(A)).toBeTruthy());
+});
+
+test('a newer EA database reaches the update screen and Sign out returns to login', async () => {
+  const db = await engine.openDatabaseAsync(`masi-${A}.db`);
+  await runMigrations(db);
+  await db.execAsync(`PRAGMA user_version = ${CURRENT_SCHEMA_VERSION + 86}`);
+  await db.closeAsync();
+  const view = render(<App />);
+  await waitFor(() => expect(mockAuthListeners.size).toBe(1));
+  await emit('SIGNED_IN', A);
+
+  expect(await view.findByText('Update Masi to continue')).toBeTruthy();
+  expect(view.getByText('Support code: SCHEMA_TOO_NEW')).toBeTruthy();
+  expect(view.queryByText(/try again/i)).toBeNull();
+  expect(getCurrentHandle()).toBeNull();
+  expect(mockChildRenders).toEqual([]);
+  await act(async () => { fireEvent.press(view.getByRole('button', { name: 'Sign out' })); });
+  expect(await view.findByText('Login')).toBeTruthy();
+  expect(view.queryByText('Update Masi to continue')).toBeNull();
 });

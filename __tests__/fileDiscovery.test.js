@@ -14,7 +14,7 @@ import path from 'path';
 import { createHash } from 'crypto';
 import { Directory, File } from 'expo-file-system/next';
 import * as sqlite from '../test-support/expoSQLiteRealEngine';
-import { runMigrations } from '../src/db/migrations';
+import { CURRENT_SCHEMA_VERSION, runMigrations } from '../src/db/migrations';
 import { databaseNameForUser, LEGACY_DATABASE_NAME } from '../src/db/client';
 import { incidentRepeatKey } from '../src/db/repositories/supportIncidentRepository';
 import { outboxRecordId } from '../src/db/repositories/syncOutboxRepository';
@@ -173,6 +173,35 @@ test('an unreadable file is skipped and the next readable EA file is still repor
   expect(openDatabase.mock.calls.map(([name]) => name)).toEqual([C_FILE, A_FILE]);
   expect(await queued(b)).toHaveLength(1);
   expect(console.warn).toHaveBeenCalledWith('[FileDiscovery] unreadable database file skipped:', C_FILE, 'file is not a database');
+});
+
+test('a newer schema is unreadable without table reads and discovery continues to the next file', async () => {
+  await seedFile(C_FILE, C, [FIRST]);
+  await seedFile(A_FILE, A, [SECOND]);
+  const seed = await sqlite.openDatabaseAsync(C_FILE);
+  await seed.execAsync(`PRAGMA user_version = ${CURRENT_SCHEMA_VERSION + 86}`);
+  await seed.closeAsync();
+  const before = fileDigest(C_FILE);
+  let newer;
+  const openDatabase = async (name, options) => {
+    const db = await sqlite.openDatabaseAsync(name, options);
+    if (name === C_FILE) newer = {
+      first: jest.spyOn(db, 'getFirstAsync'), all: jest.spyOn(db, 'getAllAsync'),
+      close: jest.spyOn(db, 'closeAsync'),
+    };
+    return db;
+  };
+
+  const files = await discoverOtherDatabases({
+    signedInUserId: B, listNames: () => [C_FILE, A_FILE], openDatabase,
+  });
+
+  expect(files[0]).toEqual({ name: C_FILE, readable: false, kind: 'ea', strandedUserId: C });
+  expect(files[1]).toMatchObject({ name: A_FILE, readable: true, unsent: { total: 1, byTable: { time_entries: 1 } } });
+  expect(newer.first.mock.calls).toEqual([['PRAGMA user_version']]);
+  expect(newer.all).not.toHaveBeenCalled();
+  expect(newer.close).toHaveBeenCalledTimes(1);
+  expect(fileDigest(C_FILE)).toBe(before);
 });
 
 test('T10: other EA and legacy reads are query-only, close every connection and preserve files and rows', async () => {
