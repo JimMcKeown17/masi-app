@@ -161,7 +161,7 @@ const main = () => {
   runPsql({ databaseUrl: adminDatabaseUrl, sql: `DROP DATABASE IF EXISTS ${quotedDatabase} WITH (FORCE);`, label: 'drop-stale-database' });
   runPsql({ databaseUrl: adminDatabaseUrl, sql: `CREATE DATABASE ${quotedDatabase};`, label: 'create-database' });
   try {
-    runPsql({ databaseUrl, sql: bootstrapSql + '\nALTER TABLE auth.users ADD COLUMN email text, ADD COLUMN banned_until timestamptz;', label: 'bootstrap' });
+    runPsql({ databaseUrl, sql: bootstrapSql, label: 'bootstrap' });
     for (const filename of fs.readdirSync(MIGRATIONS_DIR).filter(name => name.endsWith('.sql') && name < ACCESS_MIGRATION).sort()) {
       runPsql({ databaseUrl, file: path.join(MIGRATIONS_DIR, filename), label: `migration-${filename}` });
     }
