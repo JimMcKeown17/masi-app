@@ -1,5 +1,6 @@
 import { SignedInEAProvider } from '../src/context/SignedInEAContext';
 import { resetHandleRegistryForTests } from '../src/session/signedInHandle';
+import * as handleLifecycle from '../src/session/signedInHandle';
 import * as engine from '../test-support/expoSQLiteRealEngine';
 import * as sqlite from 'expo-sqlite';
 jest.mock('@react-native-community/netinfo', () => ({ fetch: async () => ({ isConnected: true }), addEventListener: () => () => {} }));
@@ -22,9 +23,12 @@ jest.mock('../test-support/handleServiceMocks', () => ({
 enqueueSupabaseRequest: jest.fn()
 }));
 import React from 'react';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Text } from 'react-native';
 import { act, render, waitFor } from '@testing-library/react-native';
 import { AuthProvider, useAuth } from '../src/context/AuthContext';
+import { supabase } from '../src/services/supabaseClient';
+import * as authSessionStorage from '../src/services/authSessionStorage';
 import {
   clearPersistedSession,
   readPersistedSession,
@@ -92,6 +96,12 @@ const liveSession = (userId = '11111111-1111-4111-8111-111111111111') => ({
   user: { id: userId, email: `${userId}@example.org` },
 });
 
+const deferred = () => {
+  let resolve;
+  const promise = new Promise((done) => { resolve = done; });
+  return { promise, resolve };
+};
+
 const AuthStateProbe = () => {
   const auth = useAuth();
   AuthStateProbe.latestAuth = auth;
@@ -151,8 +161,171 @@ describe('AuthContext offline cold-start restore', () => {
   });
 
   afterEach(() => {
+    jest.restoreAllMocks();
     jest.clearAllTimers();
     jest.useRealTimers();
+  });
+
+  it('opens the persisted offline session when the auth client never emits an event', async () => {
+    readPersistedSession.mockResolvedValue(persistedSession());
+    const screen = await renderAuthProbe();
+
+    await expectAuthState(screen, 'ready|11111111-1111-4111-8111-111111111111|no-session');
+
+    expect(AuthStateProbe.latestAuth.handle?.isOpen()).toBe(true);
+    expect(AuthStateProbe.latestAuth.handle?.userId).toBe(persistedSession().user.id);
+    expect(mockGetSession).not.toHaveBeenCalled();
+  });
+
+  it('leaves startup undecided without a persisted session or any auth event', async () => {
+    const close = jest.spyOn(handleLifecycle, 'requestClose');
+    const revoke = jest.spyOn(authSessionStorage, 'revokeAuthSessionAdmission');
+    const admit = jest.spyOn(authSessionStorage, 'admitAuthSessionUser');
+    const screen = await renderAuthProbe();
+    await flushStartup();
+
+    expect(screen.getByTestId('auth-state')).toHaveTextContent('loading|no-user|no-session');
+
+    expect(AuthStateProbe.latestAuth.handle).toBeNull();
+    expect(close).not.toHaveBeenCalled();
+    expect(revoke).not.toHaveBeenCalled();
+    expect(admit).not.toHaveBeenCalled();
+    expect(clearPersistedSession).not.toHaveBeenCalled();
+    expect(mockGetSession).not.toHaveBeenCalled();
+    expect(sqlite.openDatabaseAsync).not.toHaveBeenCalled();
+  });
+
+  it('preserves admission through a split-session gap and restores the merged INITIAL_SESSION', async () => {
+    const persistedAuth = jest.requireActual('../src/services/persistedAuthSession');
+    const storageKey = persistedAuth.getAuthStorageKey();
+    const storage = authSessionStorage.createAuthSessionStorage(storageKey);
+    const { user, ...credentials } = persistedSession();
+    authSessionStorage.resetAuthSessionAdmissionForTests();
+    await AsyncStorage.setItem(storageKey, JSON.stringify(credentials));
+    await AsyncStorage.setItem(`${storageKey}-user`, JSON.stringify({ user }));
+    // Model the SDK migration: capture admission, then remove the companion
+    // before the merged session is written.
+    await storage.getItem(storageKey);
+    await storage.removeItem(`${storageKey}-user`);
+    readPersistedSession.mockImplementation(persistedAuth.readPersistedSession);
+    const revoke = jest.spyOn(authSessionStorage, 'revokeAuthSessionAdmission');
+    const screen = await renderAuthProbe();
+    await flushStartup();
+    expect(AuthStateProbe.latestAuth.loading).toBe(true);
+    expect(revoke).not.toHaveBeenCalled();
+
+    const merged = liveSession();
+    await storage.setItem(storageKey, JSON.stringify(merged));
+    expect(await persistedAuth.readPersistedSession()).toEqual(merged);
+    await emitAuthEvent('INITIAL_SESSION', merged);
+    await expectAuthState(screen, `ready|${user.id}|session`);
+    expect(AuthStateProbe.latestAuth.handle?.userId).toBe(user.id);
+    expect(AuthStateProbe.latestAuth.handle?.isOpen()).toBe(true);
+    const refreshed = { ...merged, refresh_token: 'later-refresh-token' };
+    await storage.setItem(storageKey, JSON.stringify(refreshed));
+    expect(await persistedAuth.readPersistedSession()).toEqual(refreshed);
+    expect(revoke).not.toHaveBeenCalled();
+    expect(clearPersistedSession).not.toHaveBeenCalled();
+  });
+
+  it.each([['same user', liveSession()], ['null', null]])(
+    'keeps the restored handle when a late INITIAL_SESSION arrives with %s',
+    async (_, initialSession) => {
+      readPersistedSession.mockResolvedValue(persistedSession());
+      const open = jest.spyOn(handleLifecycle, 'requestOpen');
+      const screen = await renderAuthProbe();
+      await expectAuthState(screen, 'ready|11111111-1111-4111-8111-111111111111|no-session');
+      const restored = AuthStateProbe.latestAuth.handle;
+
+      await emitAuthEvent('INITIAL_SESSION', initialSession);
+      await flushStartup();
+
+      expect(AuthStateProbe.latestAuth.loading).toBe(false);
+      expect(AuthStateProbe.latestAuth.user.id).toBe(restored.userId);
+      expect(AuthStateProbe.latestAuth.handle).toBe(restored);
+      expect(restored.isOpen()).toBe(true);
+      expect(open).toHaveBeenCalledTimes(1);
+      // Credentials arriving after the local open owe one refresh; null does not.
+      expect(mockPullReferenceData).toHaveBeenCalledTimes(initialSession ? 2 : 1);
+      expect(clearPersistedSession).not.toHaveBeenCalled();
+      expect(mockSignOut).not.toHaveBeenCalled();
+    }
+  );
+
+  it('opens once when mount and an early null INITIAL_SESSION read persistence concurrently', async () => {
+    const storageRead = deferred();
+    readPersistedSession.mockReturnValue(storageRead.promise);
+    const open = jest.spyOn(handleLifecycle, 'requestOpen');
+    const screen = await renderAuthProbe();
+    await emitAuthEvent('INITIAL_SESSION', null);
+    expect(readPersistedSession).toHaveBeenCalledTimes(2);
+
+    await act(async () => { storageRead.resolve(persistedSession()); });
+    await expectAuthState(screen, 'ready|11111111-1111-4111-8111-111111111111|no-session');
+
+    expect(AuthStateProbe.latestAuth.handle?.isOpen()).toBe(true);
+    expect(open).toHaveBeenCalledTimes(1);
+    expect(mockPullReferenceData).toHaveBeenCalledTimes(1);
+  });
+
+  it.each([['saved session', persistedSession()], ['no session', null]])(
+    'ignores a delayed mount read of %s after explicit sign-in starts',
+    async (_, storedSession) => {
+      const storageRead = deferred();
+      const login = deferred();
+      readPersistedSession.mockReturnValue(storageRead.promise);
+      supabase.auth.signInWithPassword.mockReturnValue(login.promise);
+      const screen = await renderAuthProbe();
+      const nextSession = liveSession('22222222-2222-4222-8222-222222222222');
+      let signingIn;
+      act(() => { signingIn = AuthStateProbe.latestAuth.signIn(nextSession.user.email, 'secret'); });
+
+      await act(async () => { storageRead.resolve(storedSession); });
+
+      expect(sqlite.openDatabaseAsync).not.toHaveBeenCalled();
+      expect(AuthStateProbe.latestAuth.loading).toBe(true);
+      await emitAuthEvent('SIGNED_IN', nextSession);
+      await act(async () => {
+        login.resolve({ data: { session: nextSession }, error: null });
+        await signingIn;
+      });
+      await expectAuthState(screen, 'ready|22222222-2222-4222-8222-222222222222|session');
+      expect(AuthStateProbe.latestAuth.handle?.userId).toBe(nextSession.user.id);
+      expect(clearPersistedSession).not.toHaveBeenCalled();
+    }
+  );
+
+  it('ignores a delayed mount restore after explicit sign-out starts', async () => {
+    const storageRead = deferred();
+    readPersistedSession.mockReturnValue(storageRead.promise);
+    const screen = await renderAuthProbe();
+
+    await act(async () => { await AuthStateProbe.latestAuth.signOut(); });
+    await act(async () => { storageRead.resolve(persistedSession()); });
+
+    await expectAuthState(screen, 'ready|no-user|no-session');
+    expect(AuthStateProbe.latestAuth.handle).toBeNull();
+    expect(sqlite.openDatabaseAsync).not.toHaveBeenCalled();
+    expect(clearPersistedSession).toHaveBeenCalled();
+  });
+
+  it('does not interrupt explicit sign-out that starts before the mount gate', async () => {
+    readPersistedSession.mockResolvedValue(persistedSession());
+    let signingOut;
+    const SignOutOnMount = () => {
+      const { signOut } = useAuth();
+      React.useEffect(() => { signingOut = signOut(); }, [signOut]);
+      return null;
+    };
+    const screen = render(<AuthProvider><SignOutOnMount /><AuthStateProbe /></AuthProvider>);
+
+    await act(async () => { await signingOut; });
+
+    await expectAuthState(screen, 'ready|no-user|no-session');
+    expect(readPersistedSession).not.toHaveBeenCalled();
+    expect(sqlite.openDatabaseAsync).not.toHaveBeenCalled();
+    expect(clearPersistedSession).toHaveBeenCalled();
+    expect(mockSignOut).toHaveBeenCalledWith({ scope: 'local' });
   });
 
   it('restores a persisted offline session idempotently when initial null events double-fire', async () => {
@@ -183,16 +356,18 @@ describe('AuthContext offline cold-start restore', () => {
   });
 
   it('clears restored auth immediately on a genuine SIGNED_OUT event', async () => {
-    readPersistedSession.mockResolvedValueOnce(persistedSession('11111111-1111-4111-8111-111111111111'));
+    readPersistedSession.mockResolvedValue(persistedSession('11111111-1111-4111-8111-111111111111'));
     const screen = await renderAuthProbe();
-    await emitAuthEvent('INITIAL_SESSION', null);
     await flushStartup();
     await expectAuthState(screen, 'ready|11111111-1111-4111-8111-111111111111|no-session');
+    const restored = AuthStateProbe.latestAuth.handle;
 
-    readPersistedSession.mockResolvedValueOnce(null);
+    readPersistedSession.mockResolvedValue(null);
     await emitAuthEvent('SIGNED_OUT', null);
 
     expect(screen.getByTestId('auth-state')).toHaveTextContent('ready|no-user|no-session');
+    expect(AuthStateProbe.latestAuth.handle).toBeNull();
+    expect(restored.isOpen()).toBe(false);
     expect(mockDeviceProfile.clearUserProfile).not.toHaveBeenCalled();
     expect(clearPersistedSession).toHaveBeenCalled();
   });

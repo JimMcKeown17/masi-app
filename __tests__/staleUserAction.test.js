@@ -15,7 +15,8 @@ jest.mock('@react-native-community/netinfo', () => ({ fetch: async () => ({ isCo
 const A = '11111111-1111-4111-8111-111111111111';
 const B = '22222222-2222-4222-8222-222222222222';
 const barrier = () => { let resolve; const promise = new Promise((r) => { resolve = r; }); return { promise, resolve }; };
-jest.mock('../src/context/AuthContext', () => ({ ...jest.requireActual('../src/context/AuthContext'), useAuth: () => ({ user: { id: '11111111-1111-4111-8111-111111111111' }, setProfile: jest.fn() }) }));
+const mockSubscribeToAuthEvents = jest.fn(() => () => {});
+jest.mock('../src/context/AuthContext', () => ({ ...jest.requireActual('../src/context/AuthContext'), useAuth: () => ({ user: { id: '11111111-1111-4111-8111-111111111111' }, setProfile: jest.fn(), subscribeToAuthEvents: mockSubscribeToAuthEvents }) }));
 jest.mock('../src/context/OfflineContext', () => ({ useOffline: () => ({ isOnline: false, refreshSyncStatus: jest.fn() }) }));
 jest.mock('../src/context/ChildrenContext', () => ({ useChildren: () => ({ children: [], refreshFromCache: jest.fn() }) }));
 

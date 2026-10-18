@@ -3,10 +3,12 @@ import NetInfo from '@react-native-community/netinfo';
 import { AuthContext, useAuth } from './AuthContext';
 import { normalizeProfile } from '../utils/profileNormalizer';
 import { isStaleActorError } from '../session/staleActor';
+import { subscribeToFirstCredentials } from '../session/subscribeToFirstCredentials';
 
 export const SignedInEAContext = createContext(null);
 export const SignedInEAProvider = ({ handle, children }) => {
   const auth = useAuth();
+  const { subscribeToAuthEvents } = auth;
   const [profile, setProfile] = useState(null);
   const services = handle.services;
   const profileFlight = useMemo(() => ({ promise: null }), [handle]);
@@ -56,6 +58,9 @@ export const SignedInEAProvider = ({ handle, children }) => {
       } while (refreshPending && active && handle.isCurrent() && wasOnline);
       refreshing = false;
     };
+    const unsubscribeAuth = subscribeToFirstCredentials({
+      handle, subscribeToAuthEvents, onCredentials: refreshReferences,
+    });
     const refreshOnOnline = (network) => {
       if (!active || !handle.isCurrent()) return;
       const online = Boolean(network.isConnected && network.isInternetReachable !== false);
@@ -70,8 +75,8 @@ export const SignedInEAProvider = ({ handle, children }) => {
     void NetInfo.fetch().then((network) => {
       if (!receivedNetworkEvent) refreshOnOnline(network);
     }).catch((error) => { if (!isStaleActorError(error)) console.error('Error checking startup connectivity:', error); });
-    return () => { active = false; unsubscribe(); };
-  }, [handle, services, refreshProfile]);
+    return () => { active = false; unsubscribe(); unsubscribeAuth(); };
+  }, [handle, services, refreshProfile, subscribeToAuthEvents]);
   const value = useMemo(() => ({ handle, repositories: handle.repositories, services }), [handle, services]);
   const profileAuth = useMemo(() => ({ ...auth, profile, refreshProfile }), [auth, profile, refreshProfile]);
   return <SignedInEAContext.Provider value={value}>
