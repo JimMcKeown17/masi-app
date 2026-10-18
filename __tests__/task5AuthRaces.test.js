@@ -170,6 +170,100 @@ test.each(['TOKEN_REFRESHED', 'INITIAL_SESSION'])('%s wakes profile and referenc
   expect(transport.mock.calls.filter(([url]) => String(url).includes('/rest/v1/users'))).toHaveLength(1);
   expect(transport.mock.calls.filter(([url]) => String(url).includes('/rest/v1/schools'))).toHaveLength(1);
 });
+test.each(['TOKEN_REFRESHED', 'INITIAL_SESSION'])('%s wakes rosters and school options once after a mount restore without credentials', async event => {
+  let deliverAuth;
+  jest.spyOn(mockClient.auth, 'onAuthStateChange').mockImplementation(callback => {
+    deliverAuth = callback;
+    return { data: { subscription: { unsubscribe: jest.fn() } } };
+  });
+  await AsyncStorage.setItem(mockClient.auth.storageKey, JSON.stringify({ ...session(A), expires_at: 1 }));
+  mockNetwork = { isConnected: true, isInternetReachable: true };
+  const failures = jest.spyOn(console, 'error').mockImplementation(() => {});
+  const school = { id: 'school', name: 'School' };
+  const programme = { id: 'programme', code: 'literacy', name: 'Literacy' };
+  const year = { id: 'year', label: '2026', starts_on: '2026-01-01', ends_on: '2026-12-31', is_active: true };
+  const child = { id: 'child', first_name: 'Server', last_name: 'Child', class_id: 'class', academic_year_id: year.id, created_by: A };
+  const classroom = { id: 'class', name: 'Class', school_id: school.id, grade: '1', academic_year_id: year.id, created_by: A };
+  const cea = { id: 'cea', user_id: A, child_id: child.id, assigned_at: '2026-01-01', created_by: A };
+  const cpe = { id: 'cpe', child_id: child.id, programme_id: programme.id, enrolled_at: '2026-01-01', created_by: A };
+  const ccm = { id: 'ccm', child_id: child.id, class_id: classroom.id, academic_year_id: year.id, entered_at: '2026-01-01', created_by: A };
+  const classAssignment = { id: 'class-assignment', class_id: classroom.id, ea_user_id: A, programme_id: programme.id, assigned_at: '2026-01-01', created_by: A };
+  const rows = { schools: [school], programmes: [programme], academic_years: [year],
+    staff_programme_assignments: [{ id: 'spa', user_id: A, programme_id: programme.id }],
+    children: [child], child_ea_assignments: [{ ...cea, children: child }], child_programme_enrollments: [cpe],
+    child_class_memberships: [{ ...ccm, classes: classroom }], classes: [{ ...classroom, class_ea_assignments: [classAssignment] }] };
+  const snapshot = { schema_version: 1, complete: true, user_id: A, active_programme_id: programme.id,
+    child_ea_assignment_ids: [cea.id], assigned_child_ids: [child.id], visible_child_ids: [child.id],
+    child_programme_enrollment_ids: [cpe.id], child_class_membership_ids: [ccm.id], class_ea_assignment_ids: [classAssignment.id],
+    class_ids: [classroom.id], group_ea_assignment_ids: [], group_ids: [], child_group_membership_ids: [] };
+  transport.mockImplementation(async url => {
+    const table = new URL(url).pathname.split('/').pop();
+    if (table === 'users') return json({ id: A, job_title_lookup: { code: 'literacy_coach', name: 'Literacy Coach' } });
+    if (table === 'get_reconcile_acknowledgments') return json(snapshot);
+    return json(rows[table] || []);
+  });
+  const view = render(<AuthProvider><Tree rosters /></AuthProvider>);
+  await waitFor(() => expect(auth.loading).toBe(false));
+  const handle = getCurrentHandle();
+  expect(handle.userId).toBe(A);
+  expect(auth.session).toBeNull();
+  for (const message of ['Error in pullFromServer:', 'Error loading classes from server:']) {
+    await waitFor(() => expect(failures).toHaveBeenCalledWith(message, expect.objectContaining({
+      message: expect.stringContaining('auth unavailable'),
+    })));
+  }
+  await waitFor(() => expect(roster.classes.loading || roster.children.loading).toBe(false));
+  expect(roster.classes.classes).toEqual([]);
+  expect(roster.children.children).toEqual([]);
+  expect(roster.classes.schools).toEqual([]);
+  expect(transport).not.toHaveBeenCalled();
+  const nonce = roster.offline.domainPullNonce;
+  const pull = jest.spyOn(handle.services, 'pullReferenceData');
+  const opens = sqlite.openDatabaseAsync.mock.calls.length;
+
+  await act(async () => {
+    deliverAuth(event, session(B));
+    deliverAuth(event, { user: session(A).user });
+  });
+  expect(roster.offline.domainPullNonce).toBe(nonce);
+  expect(pull).not.toHaveBeenCalled();
+  expect(transport).not.toHaveBeenCalled();
+
+  await act(async () => {
+    deliverAuth(event, session(A));
+    deliverAuth(event, session(A));
+    expect(pull).not.toHaveBeenCalled();
+    expect(transport).not.toHaveBeenCalled();
+  });
+
+  await waitFor(() => expect(roster.classes.classes.map(row => row.id)).toEqual([classroom.id]));
+  await waitFor(() => expect(roster.children.children.map(row => row.id)).toEqual([child.id]));
+  await waitFor(() => expect(roster.classes.schools.map(row => ({ id: row.id, name: row.name }))).toEqual([school]));
+  await waitFor(() => expect(roster.classes.loading || roster.children.loading).toBe(false));
+  expect(roster.classes.classBootstrapStatus).toBe('available');
+  expect(roster.offline.isOnline).toBe(true);
+  expect(roster.offline.domainPullNonce).toBe(nonce + 1);
+  expect(pull).toHaveBeenCalledTimes(1);
+  const requestCounts = () => ['users', 'schools', 'children', 'classes'].map(table => (
+    transport.mock.calls.filter(([url]) => new URL(url).pathname === `/rest/v1/${table}`).length
+  ));
+  const recoveredCounts = requestCounts();
+  expect(recoveredCounts.slice(2)).toEqual([1, 1]);
+
+  await act(async () => {
+    deliverAuth('TOKEN_REFRESHED', { ...session(A), access_token: 'hourly-token' });
+    deliverAuth('INITIAL_SESSION', session(A));
+    deliverAuth(event, session(B));
+  });
+
+  expect(requestCounts()).toEqual(recoveredCounts);
+  expect(pull).toHaveBeenCalledTimes(1);
+  expect(roster.offline.domainPullNonce).toBe(nonce + 1);
+  expect(view.getByTestId('actor').props.children).toBe(A);
+  expect(auth.handle).toBe(handle);
+  expect(getCurrentHandle()).toBe(handle);
+  expect(sqlite.openDatabaseAsync).toHaveBeenCalledTimes(opens);
+});
 afterEach(async () => { cleanup(); await mockClient.auth.stopAutoRefresh(); await resetHandleRegistryForTests(); await engine.__resetMockDatabases(); jest.restoreAllMocks(); jest.useRealTimers(); });
 
 test.each([false, true])('SDK split-record initialization restores A and persists merged credentials; expired = %s', async expired => {

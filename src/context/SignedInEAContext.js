@@ -3,7 +3,7 @@ import NetInfo from '@react-native-community/netinfo';
 import { AuthContext, useAuth } from './AuthContext';
 import { normalizeProfile } from '../utils/profileNormalizer';
 import { isStaleActorError } from '../session/staleActor';
-import { getLatestAuthSession } from '../session/signedInHandle';
+import { subscribeToFirstCredentials } from '../session/subscribeToFirstCredentials';
 
 export const SignedInEAContext = createContext(null);
 export const SignedInEAProvider = ({ handle, children }) => {
@@ -44,8 +44,6 @@ export const SignedInEAProvider = ({ handle, children }) => {
     let receivedNetworkEvent = false;
     let refreshing = false;
     let refreshPending = false;
-    const initialSession = getLatestAuthSession();
-    let hasCredentials = initialSession?.user?.id === handle.userId && Boolean(initialSession?.access_token);
     const refreshReferences = async () => {
       if (refreshing) { refreshPending = true; return; }
       refreshing = true;
@@ -60,15 +58,8 @@ export const SignedInEAProvider = ({ handle, children }) => {
       } while (refreshPending && active && handle.isCurrent() && wasOnline);
       refreshing = false;
     };
-    const unsubscribeAuth = subscribeToAuthEvents((event, session) => {
-      if (hasCredentials || session?.user?.id !== handle.userId || !session?.access_token) return;
-      // AuthContext installs the credentials after notifying listeners. Defer
-      // work outside that callback, and wake only once for this handle.
-      void Promise.resolve().then(() => {
-        if (!active || !handle.isCurrent() || hasCredentials) return;
-        hasCredentials = true;
-        return refreshReferences();
-      });
+    const unsubscribeAuth = subscribeToFirstCredentials({
+      handle, subscribeToAuthEvents, onCredentials: refreshReferences,
     });
     const refreshOnOnline = (network) => {
       if (!active || !handle.isCurrent()) return;

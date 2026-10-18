@@ -35,10 +35,15 @@ Two supporting behaviors:
   explicitly. `processLock` serializes refresh operations and reduces token-refresh races.
 - **Credentials wake consumers after a local-only open.** If the handle opened without usable
   credentials, the first same-user session event with an access token (including `TOKEN_REFRESHED`
-  or `INITIAL_SESSION`) runs SignedInEA's existing coalesced profile/reference refresh. The work is
-  deferred until AuthContext has installed the credentials; later routine token refreshes do not
-  repeat it. OfflineContext heals terminal RLS failures and schedules sync on same-user
-  `INITIAL_SESSION`, `SIGNED_IN` and `TOKEN_REFRESHED` sessions. Neither path reopens the handle.
+  or `INITIAL_SESSION`) wakes both providers through the shared `subscribeToFirstCredentials`
+  rule: SignedInEA runs its existing coalesced profile/reference refresh, and OfflineContext calls
+  `requestDomainPull('credentials')` to wake ChildrenContext and ClassesContext through the existing
+  staleness check and `domainPullNonce`. ClassesContext's existing load effect also reloads and
+  republishes school options on that nonce. The rule checks `getLatestAuthSession()` at subscription
+  time, defers work until AuthContext has installed credentials, and runs at most once per handle;
+  later routine token refreshes do not repeat these pulls. OfflineContext still heals terminal RLS
+  failures and schedules sync on same-user `INITIAL_SESSION`, `SIGNED_IN` and `TOKEN_REFRESHED`
+  sessions. Neither path reopens the handle.
 
 The Galaxy A03s preview build 12 reproduction exposed a lost `INITIAL_SESSION`: after the first
 offline refresh attempt, the auto-refresh ticker holds the auth lock for another offline refresh.

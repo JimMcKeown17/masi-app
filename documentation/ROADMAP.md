@@ -463,6 +463,11 @@ the current-state model better than Zazi's per-session carry-forward.
   `manual-sign-out` clearing category, but the current manual path clears state directly and the
   later auth event may be recorded only as `signed-out`. Either restore reliable provenance or
   explicitly adopt the simpler diagnostic contract.
+- [ ] **Offline cold start device recheck, then a real supabase-js start-up harness (issue #73).**
+  The local-first cold start (build-log 2026-10-18) passes only in Jest. On the next preview build,
+  prove on the Galaxy A03s: offline start with an expired token reaches Home within seconds; an
+  online start loads profile, classes and children without Retry. Then build #73's harness, which
+  runs the real auth-js lock and ticker so lost or late auth events fail in CI instead of on a phone.
 
 - [ ] **Literacy form forces a letter selection (issue #54):** a letters-mastered group has no
   letters to pick, so the EA taps an arbitrary letter and corrupts `activities.letters_focused`.

@@ -1,5 +1,6 @@
 import { useAuth } from './AuthContext';
 import { isStaleActorError } from '../session/staleActor';
+import { subscribeToFirstCredentials } from '../session/subscribeToFirstCredentials';
 import { useSignedInEA } from './SignedInEAContext';
 import React, { createContext, useState, useEffect, useContext, useRef, useCallback, useMemo } from 'react';
 import NetInfo from '@react-native-community/netinfo';
@@ -247,6 +248,10 @@ export const OfflineProvider = ({ children }) => {
     }
   }, [requestDomainPull]);
 
+  useEffect(() => subscribeToFirstCredentials({
+    handle, subscribeToAuthEvents, onCredentials: () => requestDomainPull('credentials'),
+  }), [handle, subscribeToAuthEvents, requestDomainPull]);
+
   const authorizeReconcileBreaker = useCallback((scope) => {
     if (!scope) return false;
     reconcileBreakerAuthorizationsRef.current.add(scope);
@@ -331,7 +336,7 @@ export const OfflineProvider = ({ children }) => {
   }, [refreshSyncStatus, requestDomainPullOrResumeHistory]);
 
   // A handle is already repaired before publication. Heal its RLS failures once
-  // at mount and on same-user token restoration through the single auth subscription.
+  // at mount and on same-user token restoration through AuthContext.
   useEffect(() => {
     const heal = async ({ scheduleSync = false } = {}) => {
       try {
