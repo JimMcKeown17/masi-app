@@ -125,7 +125,24 @@ is one of the 11 and whose operation is `insert`, `update`, `archive` or `restor
 1. `update <table> set row_version = row_version + 1 where id = <record_id> returning row_version`;
 2. write that value into the outbox payload as `row_version` (`json_set`).
 
-`hard_delete` is skipped, and so is a row whose local record no longer exists.
+Skipped:
+- `hard_delete`;
+- a row whose local record no longer exists;
+- **`insert` on the three immutable assignment tables** (`child_ea_assignments`,
+  `class_ea_assignments`, `group_ea_assignments`). Their inserts are `ON CONFLICT DO NOTHING`, so a
+  retry after a lost response "succeeds" without changing the server. A stamped retry would leave the
+  phone one version ahead of the server, and the pull guard would then refuse the server's copy for
+  ever, including an active assignment that an interleaved reconcile had ended locally (Codex
+  round 1 reproduced this). These inserts cannot overwrite anything, so they need no fence. Their
+  later `archive` and `restore` are updates and are stamped as usual.
+
+**The request is sent from the claimed snapshot.** Single sends today claim with `markInFlight` and
+then read the payload in a separate statement (`offlineSync.js:1136-1139`). An edit that coalesces
+into the slot between the two would be sent instead, carrying an unstamped or stale version. Single
+sends switch to `markInFlightAndGet([id])`, which stamps and returns the payload in one transaction,
+as batches already do; batch fallback uses the same path. An edit that coalesces after the claim
+stays separate pending work: it changes the slot's `updated_at`, so `finalizeSuccess`
+(`offlineSync.js:894-904`) finds the slot changed and returns it to `pending` for its own send.
 
 **Why at send time, not when the change is queued:**
 - One record can have more than one outbox slot (`syncOutboxRepository.js:33-35`), and the engine
@@ -164,8 +181,14 @@ therefore uploads first at version 2.
 
 ### Downloads
 
-- Pulls already `select('*')`, so a pulled row carries the server's `row_version`, and the download
-  save stores it.
+- Pulls already `select('*')`, so a pulled row carries the server's `row_version`. **Every download
+  save for a versioned table must carry it through.** Some rebuild the record field by field:
+  `childrenRepository.saveStaffChild` (`childrenRepository.js:562-590`) drops any field it does not
+  name, so a server assignment at version 7 would be stored locally at version 1 and its next archive
+  refused (Codex round 1). The implementation audits each server-row save for the pulled versioned
+  tables (`children`, `classes`, `groups`, the three assignment tables, the three membership and
+  enrolment tables) and adds `row_version` where it is rebuilt. One test per pulled table proves a
+  fresh database stores a server version above 2.
 - **Pull guard.** `serverPullWouldClobberPendingLocal` (`domainRepositoryUtils.js:165-172`) keeps
   today's rule (skip a pulled row when the local row is `pending` or `failed`) and adds one: **when
   the local row is `synced`, skip a pulled row whose `row_version` is lower than the local row's.**
@@ -206,20 +229,36 @@ and `sign_in_time < now() - interval '10 hours'`:
 Running it twice changes nothing. `EXECUTE` is revoked from `public`, `anon`, `authenticated` and
 `service_role`; it runs as the job owner.
 
-**Schedule.** In the same migration, a guarded block schedules it every 15 minutes under the fixed
-job name `masi_close_overdue_time_entries`, and only runs if `pg_cron` is available
-(`pg_available_extensions`) and `current_database() = 'postgres'`. CI's plain PostgreSQL 17
+**Schedule.** In the same migration, a guarded block runs only when `pg_cron` is offered
+(`pg_available_extensions`) and `current_database() = 'postgres'`. It installs the extension
+(`create extension if not exists pg_cron`, the form Supabase documents) and then schedules the
+function every 15 minutes under the fixed job name `masi_close_overdue_time_entries` (`cron.schedule`
+with a name replaces an existing job of that name, so a rerun is harmless). Being offered is not the
+same as being installed, so the block installs it rather than assuming it. CI's plain PostgreSQL 17
 (`.github/workflows/tests.yml:11-13`) and the disposable harnesses, which replay every migration
 (`history-authorization-postgres-harness.cjs:820-829`; `upload-contract-postgres-harness.cjs:292-301`),
-skip the block and call the function directly. Before the hosted apply, a read-only query confirms
-`pg_cron` is available on `masi-app-sqlite` and shows which schema Supabase installs it in.
+do not offer `pg_cron`, so they skip the block and call the function directly.
+
+Before the hosted apply, a read-only query confirms `pg_cron` is offered on `masi-app-sqlite`. After
+the apply, a read-only query of `cron.job` confirms the named job exists with the 15-minute schedule
+and the `postgres` owner, and `cron.job_run_details` shows a successful run.
 
 ### Forward-only rule for time entries
 
-A `BEFORE UPDATE` trigger on `public.time_entries`, `time_entries_forward_only`, applies when the
-writer is the row's owner (`auth.uid() = OLD.user_id`). The job, `service_role` and later Head Office
-tools pass through untouched. It never raises and always returns a row, so the phone's exact
-acknowledgement still works. Only the `sign_out_*` and `auto_clocked_out` columns are affected:
+A trigger function `private.time_entries_forward_only()` runs `BEFORE INSERT OR UPDATE` on
+`public.time_entries`. It applies when the writer is the row's owner (`auth.uid() = NEW.user_id` on
+insert, `auth.uid() = OLD.user_id` on update). The job, `service_role` and later Head Office tools
+pass through untouched. It never raises and always returns a row, so the phone's exact
+acknowledgement still works. Only the `sign_out_*` and `auto_clocked_out` columns are affected.
+
+**On insert:** a close later than `sign_in + 10 h` is stored as the ten-hour auto-close
+(`sign_in + 10 h`, `auto_clocked_out = true`, all three sign-out location fields NULL). This matters
+because a shift opened and closed entirely offline uploads as one closed **insert**: the close
+coalesces into the outstanding insert slot (`timeEntriesRepository.js:65-73`), so neither an update
+trigger nor the job (which only touches open rows) would ever see it. A build from before this spec
+can still send such an uncapped close.
+
+**On update:**
 
 | Stored row | Incoming write | Result |
 |---|---|---|
@@ -273,6 +312,9 @@ Writes that must not break:
 
 Time entries:
 - every row of the forward-only table above;
+- a closed shift first uploaded as an insert, as a conflicting upsert and as an update by id: a
+  close later than ten hours is stored capped, with `auto_clocked_out = true` and all three sign-out
+  location fields NULL;
 - the job closes only overdue rows, and running it twice is harmless;
 - `anon` and `authenticated` cannot execute the job.
 
@@ -282,7 +324,17 @@ migrations outside a transaction block.
 ### Phone (real SQLite and engine tests)
 
 - The stamp happens at claim, for single and batched sends, and only for the 11 tables and the four
-  operations.
+  operations; immutable-assignment inserts are not stamped.
+- Claim snapshot: an ordinary edit and a lifecycle change that replace the slot's payload between
+  the claim and the request, for a single send and for batch fallback, do not change what is sent,
+  and the replacement is sent afterwards as its own request.
+- Ignored insert: an assignment insert committed with its response lost, retried, then an
+  interleaved reconcile that ends it locally; the next pull restores the active assignment.
+- Download mappers: for each pulled versioned table, a fresh database stores a server version above
+  2, and the next archive or edit through the real repository and engine is accepted.
+- `MV001` reaches the engine as `error.code` through the real `postgrest-js` client (a mocked HTTP 400
+  with PostgREST's error body). PostgREST forwards a custom SQLSTATE as `code`; the hosted D2 run is
+  the end-to-end proof.
 - The outgoing request carries `row_version` for insert, batch upsert, update by id, archive and
   restore.
 - Pull guard: acknowledge v5, then persist a pulled v4, and the row stays at v5 and the next send
@@ -366,3 +418,4 @@ version and ties are accepted.
 | Round | Reviewer | Result |
 |---|---|---|
 | 0 | Re-check of the 2026-10-17 draft against `main` `7d545b6` (fact checks, three adversarial lenses with a skeptic per finding, `check-solution`) | Rewrote the draft: send-time stamping; sessions/attendees and time entries out of versioning; a forward-only time-entry rule; the pull guard; terminal `MV001`; the guarded `pg_cron` block. Jim approved the three resulting decisions on 2026-10-18. |
+| 1 | Codex adversarial review | Needs attention, 4 findings, 3 reproduced in real SQLite with the real engine; all accepted: send single requests from the claimed snapshot (`markInFlightAndGet`); carry `row_version` through every download mapper (`saveStaffChild` dropped it); do not stamp immutable-assignment inserts; apply the ten-hour cap on insert as well as update. Also: install `pg_cron` rather than assume it, verify the job after apply, and prove `MV001` through the real client. |
