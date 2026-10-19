@@ -1,7 +1,7 @@
 # Assessment results, one letter test, and WelaPLUS data — Design
 
 **Date:** 2026-10-19
-**Status:** Draft for Jim's review. Codex adversarial review: round 1 found 11 findings and round 2 found 6, all verified and addressed (2026-10-19). Jim asked for the design without a question round
+**Status:** Draft for Jim's review. Codex adversarial review: three rounds (11 → 6 → 2 findings), all verified and addressed (2026-10-19). The loop stopped at round 3, per the rule on rare edge cases. Jim asked for the design without a question round
 ("I think you can just design", 2026-10-19). Section 3 lists the two decisions only Jim can make,
 plus the calls I made that he should check.
 **Covers:**
@@ -643,10 +643,12 @@ letter, language, `confirmed` and `requested_at`.
 - **A replay** skips this check, for the same reason as 8.1 step 3.
 
 **Ordering rule (D1)**
-1. **Fix the effective time once.** For a new correction, insert it into
-   `letter_mastery_corrections` with `effective_at = least(p_changed_at, now())`. A replay reads
-   the stored `effective_at`. A retry, even hours later, therefore uses the time fixed at first
-   arrival.
+1. **Fix the effective time once.** Insert the receipt with `effective_at = least(p_changed_at,
+   now())`, `on conflict (correction_id) do nothing`. Then read the stored receipt back and check
+   all six fields (else `MA001`). Use its stored `effective_at`.
+   - Two overlapping calls with the same id both succeed and leave one receipt. The authority
+     check for a new correction runs before this insert.
+   - A retry, even hours later, uses the time fixed at first arrival.
 
    Codex's case shows why: a phone with its clock an hour fast confirms at T1 and loses the
    acknowledgement. Another phone then un-confirms at T2. If the retry at T3 were clamped again,
@@ -704,7 +706,13 @@ Ruling 11 for the table: a late, stale write cannot overwrite a newer correction
 - **SELECT RLS:** `changed_by = auth.uid()`, or an active `child_ea_assignments` row for the
   child. There is no year bound.
 - **Locally:** `getLetterMastery({ childId | childIds, language })`. It has no `user_id` filter
-  and no programme filter.
+  and no programme filter. **It excludes `terminal` rows.**
+  - A correction the server refused never shows as mastery. It stays visible in needs-attention
+    as evidence.
+  - Once a pull returns the accepted value, that value replaces the row (11.3). If the EA can no
+    longer read the record, for example after a handover, nothing shows. That is correct,
+    because they no longer deliver to the child.
+  - This works in Plan 2, before any mastery pull exists.
 
 ### 10.4 Assessment evidence
 
@@ -985,7 +993,7 @@ rerun.
 - a run with a different child;
 - a Question after its run completed is accepted;
 - a duplicate run Question raises `23505`;
-- two connections submitting the identical family at the same time: both succeed and one family is stored (the same case for `save_battery_run`);
+- two connections submitting the identical family at the same time: both succeed and one family is stored (the same case for `save_battery_run`, and for `set_letter_mastery` with the same correction id, which must leave one receipt and one effective time);
 - direct INSERT, UPDATE and DELETE on both tables are denied.
 
 **`save_battery_run` cases**
@@ -1016,6 +1024,8 @@ rerun.
   record.
 - Merge: a refused (terminal) local correction is restored to the accepted server value. Test it
   with correction ids that sort both above and below the accepted one.
+- A refused correction never shows as mastery, including after a handover where the old EA keeps
+  class access, the new EA is the last writer, and the pager returns nothing.
 
 **Pull calls**
 - The mastery pager returns the last writer's records after a delivery handover.
