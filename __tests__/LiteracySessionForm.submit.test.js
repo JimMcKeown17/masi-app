@@ -141,7 +141,13 @@ test('back-to-back submit presses persist one session and navigate once', async 
   expect(sessions).toHaveLength(1);
   expect(sessions[0].children_ids).toEqual([mockChild.id]);
   expect(mockCompleteMounted).toHaveBeenCalledTimes(1);
-  expect(mockCompleteMounted).toHaveBeenCalledWith({ childCount: 1 });
+  expect(mockCompleteMounted).toHaveBeenCalledWith({
+    childCount: 1,
+    childNames: [mockChild.first_name],
+    letters: ['a'],
+    readingLevel: READING_LEVELS[0],
+    sessionDate: sessions[0].session_date,
+  });
   expect(screen.routeNames()).toEqual(['Home', 'SessionComplete']);
   expect(screen.queryByText('Discard this session?')).toBeNull();
 });
@@ -187,7 +193,13 @@ test('a failed save rolls back and retry persists exactly one session with the o
   fireEvent.press(screen.getByText('Submit session'));
   expect(screen.queryByRole('alert')).toBeNull();
   await waitFor(() => expect(mockCompleteMounted).toHaveBeenCalledTimes(1));
-  expect(mockCompleteMounted).toHaveBeenCalledWith({ childCount: 1 });
+  expect(mockCompleteMounted).toHaveBeenCalledWith({
+    childCount: 1,
+    childNames: [mockChild.first_name],
+    letters: ['a'],
+    readingLevel: READING_LEVELS[0],
+    sessionDate: (await readSessions())[0].session_date,
+  });
   expect(screen.routeNames()).toEqual(['Home', 'SessionComplete']);
   expect(screen.queryByText('Discard this session?')).toBeNull();
 
@@ -212,7 +224,13 @@ test('validation failure leaves submit available after the input is corrected', 
   fillValidForm(screen);
   fireEvent.press(screen.getByText('Submit session'));
   await waitFor(() => expect(mockCompleteMounted).toHaveBeenCalledTimes(1));
-  expect(mockCompleteMounted).toHaveBeenCalledWith({ childCount: 1 });
+  expect(mockCompleteMounted).toHaveBeenCalledWith({
+    childCount: 1,
+    childNames: [mockChild.first_name],
+    letters: ['a'],
+    readingLevel: READING_LEVELS[0],
+    sessionDate: (await readSessions())[0].session_date,
+  });
   expect(screen.routeNames()).toEqual(['Home', 'SessionComplete']);
 
   expect(await readSessions()).toHaveLength(1);

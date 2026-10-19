@@ -25,6 +25,7 @@ import { validateLiteracySession } from '../../utils/literacySessionValidation';
 import { stepScrollOffset } from '../../utils/sessionFormLayout';
 import { v4 as uuidv4 } from 'uuid';
 import { formatSessionDate } from '../../utils/sessionDateFormat';
+import { buildSessionCompleteParams } from '../../utils/sessionCompleteView';
 import MonthCalendar from '../../components/common/MonthCalendar';
 import ChildProgressBlock from '../../components/sessions/ChildProgressBlock';
 import TextField from '../../components/common/TextField';
@@ -346,6 +347,12 @@ export default function LiteracySessionForm({ navigation }) {
         created_at: now,
         updated_at: now,
       };
+      const completionParams = buildSessionCompleteParams({
+        selectedChildren,
+        selectedLetters,
+        sessionReadingLevel,
+        sessionDateKey: session.session_date,
+      });
 
       await persistLiteracySession({ handle,
         session,
@@ -357,7 +364,7 @@ export default function LiteracySessionForm({ navigation }) {
 
       // Replace (not push) so Back can't return to the just-submitted form; the
       // completion screen confirms capture and shows updated daily progress.
-      pendingCompletionRef.current = { childCount: selectedChildIds.length };
+      pendingCompletionRef.current = completionParams;
       setAllowLeave(true);
     } catch (error) {
       submittingRef.current = false;
