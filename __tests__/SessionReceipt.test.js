@@ -1,4 +1,5 @@
 import React from 'react';
+const ReactNative = require('react-native');
 import { StyleSheet, View } from 'react-native';
 import { fireEvent, render } from '@testing-library/react-native';
 import SessionReceipt from '../src/components/sessions/SessionReceipt';
@@ -11,6 +12,43 @@ const rows = buildReceiptRows({
   childNames: ['Anelisa', 'Athenkosi'], letters: ['s', 'm', 'n', 'l'], readingLevel: '3 Letter Blends',
 });
 const style = node => StyleSheet.flatten(node.props.style);
+
+beforeEach(() => jest.spyOn(ReactNative, 'useWindowDimensions').mockReturnValue({
+  width: 390, height: 844, scale: 1, fontScale: 1,
+}));
+afterEach(() => jest.restoreAllMocks());
+
+test.each([1, 1.59])('fontScale %s preserves the horizontal receipt layout', fontScale => {
+  ReactNative.useWindowDimensions.mockReturnValue({ width: 390, height: 844, scale: 1, fontScale });
+  const screen = render(<SessionReceipt rows={rows} />);
+  rows.forEach(row => expect(style(screen.getByLabelText(row.accessibilityLabel))).toMatchObject({
+    flexDirection: 'row', justifyContent: 'space-between', gap: 16,
+  }));
+  expect(screen.getByText('Reading level').props.numberOfLines).toBe(1);
+  expect(style(screen.getByText('3 Letter Blends'))).toMatchObject({ textAlign: 'right', flex: 1 });
+});
+
+test.each([1.6, 2, 3.5])('fontScale %s stacks wrapping labels above left-aligned receipt values', fontScale => {
+  ReactNative.useWindowDimensions.mockReturnValue({ width: 390, height: 844, scale: 1, fontScale });
+  const screen = render(<SessionReceipt rows={rows} />);
+  rows.forEach(row => {
+    const renderedRow = screen.getByLabelText(row.accessibilityLabel);
+    expect(renderedRow.props.accessible).toBe(true);
+    expect(style(renderedRow)).toMatchObject({ flexDirection: 'column', alignItems: 'stretch' });
+    expect(screen.getByText(row.label).props.numberOfLines).toBeUndefined();
+    expect(style(screen.getByText(row.label)).marginTop ?? 0).toBe(0);
+  });
+  for (const value of ['Anelisa & Athenkosi', '3 Letter Blends']) {
+    expect(style(screen.getByText(value))).toMatchObject({ textAlign: 'left', flex: 0 });
+    expect(screen.getByText(value).props.numberOfLines).toBeUndefined();
+  }
+  expect(style(screen.getByTestId('receipt-letters'))).toMatchObject({ justifyContent: 'flex-start', flex: 0 });
+  // Native layout notifications must not reinstate the horizontal offsets.
+  fireEvent(screen.getByText('3 Letter Blends'), 'textLayout', { nativeEvent: { lines: [{}, {}] } });
+  expect(style(screen.getByText('Reading level')).marginTop ?? 0).toBe(0);
+  expect(screen.getAllByLabelText(/^(Children|Letters|Reading level):/).map(node => node.props.accessibilityLabel))
+    .toEqual(rows.map(row => row.accessibilityLabel));
+});
 
 test('each row is one accessible phrase in order', () => {
   const screen = render(<SessionReceipt rows={rows} />);

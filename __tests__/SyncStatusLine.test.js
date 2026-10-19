@@ -261,6 +261,45 @@ test('Reduce Motion stops rotation but keeps a still syncing ring', async () => 
   expect(screen.getByText('Syncing…')).toBeTruthy();
 });
 
+const spinnerStyle = screen => style(screen.UNSAFE_getAllByType(View)
+  .find(node => style(node)?.width === 18 && style(node)?.height === 18));
+
+test('hardware still mode keeps the syncing ring static without Reduce Motion', async () => {
+  const loop = jest.spyOn(Animated, 'loop');
+  setOffline({ isSyncing: true });
+  const screen = renderLine({ tier: 'static', motionLevel: 'still', reduceMotion: false });
+  await settleRefresh();
+  expect(loop).not.toHaveBeenCalled();
+  expect(spinnerStyle(screen).transform).toBeUndefined();
+  expect(screen.getByText('Syncing…')).toBeTruthy();
+});
+
+test.each([
+  { motionLevel: 'still', reduceMotion: false },
+  { motionLevel: 'full', reduceMotion: true },
+])('changing motion to %o stops and resets an active spinner', async override => {
+  jest.spyOn(NativeAnimatedHelper, 'shouldUseNativeDriver').mockReturnValue(false);
+  const loop = jest.spyOn(Animated, 'loop');
+  const timing = jest.spyOn(Animated, 'timing');
+  setOffline({ isSyncing: true });
+  const screen = renderLine();
+  await settleRefresh();
+  expect(loop).toHaveBeenCalledTimes(1);
+  const stop = jest.spyOn(loop.mock.results[0].value, 'stop');
+  const spin = timing.mock.calls[0][0];
+  act(() => jest.advanceTimersByTime(400));
+  expect(spin.__getValue()).toBeGreaterThan(0);
+  expect(spinnerStyle(screen).transform).toBeDefined();
+
+  screen.rerender(lineTree(override));
+  expect(stop).toHaveBeenCalledTimes(1);
+  expect(spin.__getValue()).toBe(0);
+  expect(spinnerStyle(screen).transform).toBeUndefined();
+  act(() => jest.advanceTimersByTime(2000));
+  expect(spin.__getValue()).toBe(0);
+  expect(loop).toHaveBeenCalledTimes(1);
+});
+
 test('unmount during a fade stops it without a late update', async () => {
   jest.spyOn(NativeAnimatedHelper, 'shouldUseNativeDriver').mockReturnValue(false);
   const timing = jest.spyOn(Animated, 'timing');

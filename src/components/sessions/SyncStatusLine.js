@@ -36,20 +36,21 @@ export function describeSyncLine({ phase, state, message }) {
 }
 
 function SyncSpinner() {
-  const { reduceMotion } = useMotion();
+  const { reduceMotion, motionLevel } = useMotion();
+  const rotates = !reduceMotion && motionLevel !== 'still';
   const spin = useRef(new Animated.Value(0)).current;
   useEffect(() => {
-    if (reduceMotion) return undefined;
+    if (!rotates) return undefined;
     const loop = Animated.loop(Animated.timing(spin, {
       toValue: 1, duration: 1000, easing: Easing.linear, useNativeDriver: true,
     }));
     loop.start();
     return () => { loop.stop(); spin.setValue(0); };
-  }, [reduceMotion, spin]);
+  }, [rotates, spin]);
 
   const rotate = spin.interpolate({ inputRange: [0, 1], outputRange: ['0deg', '360deg'] });
   return (
-    <Animated.View style={[styles.spinner, !reduceMotion && { transform: [{ rotate }] }]}>
+    <Animated.View style={[styles.spinner, rotates && { transform: [{ rotate }] }]}>
       <Svg width={18} height={18} viewBox="0 0 18 18" fill="none">
         <Circle cx={9} cy={9} r={7.7} stroke={tints.spinnerTrack} strokeWidth={2.6} />
         <Path d="M9 1.3 A7.7 7.7 0 0 1 16.7 9" stroke={colors.textSecondary} strokeWidth={2.6} strokeLinecap="round" />

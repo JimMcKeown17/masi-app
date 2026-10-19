@@ -39,6 +39,8 @@ export function useCelebrationTimeline({ view, goalStatus }) {
   const [settled, setSettled] = useState(false);
   const mounted = useRef(false);
   const started = useRef(false);
+  const previousCelebrate = useRef(view.celebrate);
+  const entranceAnimation = useRef(null);
   const goalAnimation = useRef(null);
 
   useEffect(() => {
@@ -47,6 +49,7 @@ export function useCelebrationTimeline({ view, goalStatus }) {
       track(values.cardEnter, TIMELINE.cardEnter, easing.enter),
       track(values.pillEnter, TIMELINE.pillEnter, easing.enter),
     ]) : null;
+    entranceAnimation.current = entrance;
     entrance?.start();
 
     return () => {
@@ -57,6 +60,20 @@ export function useCelebrationTimeline({ view, goalStatus }) {
       started.current = false;
     };
   }, [celebrateAtMount, values]);
+
+  useEffect(() => {
+    const wasCelebrating = previousCelebrate.current;
+    previousCelebrate.current = view.celebrate;
+    if (!wasCelebrating || view.celebrate) return;
+
+    // Still mode cancels the whole schedule, including tracks waiting on delays.
+    // Keep the one-shot guard closed even if motion or goal readiness changes later.
+    started.current = true;
+    entranceAnimation.current?.stop();
+    goalAnimation.current?.stop();
+    Object.values(values).forEach(value => value.setValue(1));
+    setSettled(true);
+  }, [view.celebrate, values]);
 
   useEffect(() => {
     if (goalStatus === 'loading' || started.current) return;

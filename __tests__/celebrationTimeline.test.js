@@ -4,7 +4,7 @@ import NativeAnimatedHelper from 'react-native/src/private/animated/NativeAnimat
 import { TIMELINE, useCelebrationTimeline } from '../src/components/sessions/celebrationTimeline';
 import { deriveSessionCompleteView } from '../src/utils/sessionCompleteView';
 import { deriveGoalState } from '../src/utils/sessionGoal';
-import { easing } from '../src/constants/motion';
+import { duration, easing } from '../src/constants/motion';
 
 // RN's native Jest mock ends in 16ms without updating the value. Keep the real
 // production configs, but run their timing/stop behaviour on the JS test driver.
@@ -134,6 +134,63 @@ test('still: one 150ms fade, no rise, sweep, flip or confetti tracks', () => {
   }
 });
 
+test.each(['full', 'calm'])('switching from %s to still at 400ms cancels both composites and settles permanently', level => {
+  const parallel = jest.spyOn(Animated, 'parallel');
+  const { result, rerender } = loadingThenReady(viewFor(goal(3), level));
+  expect(parallel).toHaveBeenCalledTimes(2);
+  const stops = parallel.mock.results.map(({ value }) => jest.spyOn(value, 'stop'));
+  const values = result.current.values;
+  const confettiStarts = ['confettiLayer', 'confettiTravel', 'confettiFade'].map(key => {
+    const index = timingSpy.mock.calls.findIndex(([value]) => value === values[key]);
+    return jest.spyOn(timingSpy.mock.results[index].value, 'start');
+  });
+  advance(400);
+  expect(values.earned.__getValue()).toBeGreaterThan(0);
+  expect(values.earned.__getValue()).toBeLessThan(1);
+  expect(values.headline.__getValue()).toBe(0);
+
+  rerender({ view: viewFor(goal(3), 'still'), goalStatus: 'ready' });
+  // RN parallel.stop() re-enters itself through unfinished child callbacks.
+  stops.forEach(stop => expect(stop).toHaveBeenCalled());
+  const stopCounts = stops.map(stop => stop.mock.calls.length);
+  expect(readValues(values)).toMatchObject({
+    cardEnter: 1, pillEnter: 1, earned: 1, flip: 1,
+    confettiLayer: 1, confettiTravel: 1, confettiFade: 1,
+  });
+  advance(duration.fade);
+  expect(values.headline.__getValue()).toBe(1);
+  expect(values.content.__getValue()).toBe(1);
+  expect(result.current.settled).toBe(true);
+
+  const calls = timingSpy.mock.calls.length;
+  rerender({ view: viewFor(goal(3), level), goalStatus: 'ready' });
+  advance(2000);
+  expect(result.current.settled).toBe(true);
+  expect(Object.values(readValues(values))).toEqual(Object.keys(values).map(() => 1));
+  expect(timingSpy).toHaveBeenCalledTimes(calls);
+  expect(parallel).toHaveBeenCalledTimes(2);
+  stops.forEach((stop, index) => expect(stop).toHaveBeenCalledTimes(stopCounts[index]));
+  confettiStarts.forEach(start => expect(start).not.toHaveBeenCalled());
+});
+
+test('switching to still while the goal loads stops the entrance and prevents a late celebration', () => {
+  const parallel = jest.spyOn(Animated, 'parallel');
+  const { result, rerender } = renderHook(props => useCelebrationTimeline(props), {
+    initialProps: { view: viewFor(null, 'full', { goalStatus: 'loading' }), goalStatus: 'loading' },
+  });
+  const stop = jest.spyOn(parallel.mock.results[0].value, 'stop');
+  advance(100);
+  expect(result.current.values.cardEnter.__getValue()).toBeLessThan(1);
+  rerender({ view: viewFor(null, 'still', { goalStatus: 'loading' }), goalStatus: 'loading' });
+  expect(stop).toHaveBeenCalled();
+  expect(result.current.values.cardEnter.__getValue()).toBe(1);
+  rerender({ view: viewFor(goal(3), 'full'), goalStatus: 'ready' });
+  advance(2000);
+  expect(parallel).toHaveBeenCalledTimes(1);
+  expect(result.current.values.headline.__getValue()).toBe(1);
+  expect(result.current.settled).toBe(true);
+});
+
 test('a goal that fails still fades the headline in (headlineOther)', () => {
   const view = viewFor(null, 'full', { goalStatus: 'failed' });
   const { result } = renderHook(() => useCelebrationTimeline({ view, goalStatus: 'failed' }));
@@ -178,6 +235,7 @@ test.each([goal(2), goal(4, null), goal(6, 3)])('non-target count %j never start
 });
 
 test('entrances run from mount; the goal tracks wait for resolution and run once with stable values', () => {
+  const parallel = jest.spyOn(Animated, 'parallel');
   const loading = viewFor(null, 'full', { goalStatus: 'loading' });
   const view = viewFor(goal(3));
   const { result, rerender } = renderHook((props) => useCelebrationTimeline(props), { initialProps: { view: loading, goalStatus: 'loading' } });
@@ -192,6 +250,8 @@ test('entrances run from mount; the goal tracks wait for resolution and run once
   expect(values.headline.__getValue()).toBe(0);
   expect(result.current.settled).toBe(false);
   rerender({ view, goalStatus: 'ready' });
+  expect(parallel).toHaveBeenCalledTimes(2);
+  const stops = parallel.mock.results.map(({ value }) => jest.spyOn(value, 'stop'));
   const calls = timingSpy.mock.calls.length;
   advance(400);
   expect(values.earned.__getValue()).toBeGreaterThan(0);
@@ -199,10 +259,12 @@ test('entrances run from mount; the goal tracks wait for resolution and run once
   rerender({ view: { ...view }, goalStatus: 'ready' });
   expect(result.current.values).toBe(values);
   expect(timingSpy.mock.calls).toHaveLength(calls);
+  stops.forEach(stop => expect(stop).not.toHaveBeenCalled());
   advance(950);
   expect(result.current.settled).toBe(true);
   rerender({ view: { ...view }, goalStatus: 'ready' });
   expect(timingSpy.mock.calls).toHaveLength(calls);
+  stops.forEach(stop => expect(stop).not.toHaveBeenCalled());
 });
 
 test.each([100, 400])('unmounting at %ims stops both composites and delayed tracks without warnings', (ms) => {
