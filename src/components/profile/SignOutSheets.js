@@ -1,9 +1,9 @@
 import React from 'react';
-import { ActivityIndicator, Pressable, StyleSheet, View } from 'react-native';
-import { Text } from 'react-native-paper';
-import { fontFamilies } from '../../constants/typography';
+import { StyleSheet, View } from 'react-native';
+import BrandButton from '../common/BrandButton';
+import InlineNote from '../common/InlineNote';
 import BottomSheet from '../common/BottomSheet';
-import { borderRadius, colors, spacing } from '../../constants/colors';
+import { spacing } from '../../constants/colors';
 
 export default function SignOutSheets({
   step, unsentCount, busy, message, isOnline,
@@ -27,30 +27,14 @@ export default function SignOutSheets({
       maxHeight={520}
       bodyContentStyle={styles.body}
     >
-      {message ? <View style={styles.warning}><Text style={styles.warningText}>{message}</Text></View> : null}
-      <Pressable
-        onPress={clockOutNow}
-        disabled={isBusy}
-        accessibilityRole="button"
-        accessibilityLabel={clockOutLabel}
-        accessibilityState={{ disabled: isBusy, busy: busy === 'clocking_out' }}
-        style={[styles.primaryButton, isBusy && styles.disabledButton]}
-      >
-        <Text style={styles.primaryButtonText}>{clockOutLabel}</Text>
-      </Pressable>
-      <Pressable
-        onPress={stayClockedIn}
-        disabled={isBusy}
-        accessibilityRole="button"
-        accessibilityLabel="Stay clocked in and sign out"
-        accessibilityState={{ disabled: isBusy }}
-        style={styles.secondaryButton}
-      >
-        <Text style={styles.secondaryButtonText}>Stay clocked in and sign out</Text>
-      </Pressable>
-      <Pressable onPress={cancel} accessibilityRole="button" accessibilityLabel="Cancel" style={styles.cancelButton}>
-        <Text style={styles.cancelText}>Cancel</Text>
-      </Pressable>
+      {message ? <InlineNote tone="warning" size="md">{message}</InlineNote> : null}
+      <View style={[styles.actions, message ? styles.afterWarning : null]}>
+        <BrandButton variant="primary" label={clockOutLabel} accessibilityLabel={clockOutLabel}
+          loading={busy === 'clocking_out'} disabled={isBusy} onPress={clockOutNow} />
+        <BrandButton variant="secondary" label="Stay clocked in and sign out"
+          disabled={isBusy} onPress={stayClockedIn} />
+        <BrandButton variant="tertiary" tone="ink" label="Cancel" onPress={cancel} />
+      </View>
     </BottomSheet>
 
     <BottomSheet
@@ -66,96 +50,22 @@ export default function SignOutSheets({
       maxHeight={520}
       bodyContentStyle={styles.body}
     >
-      <Pressable
-        onPress={countUnknown ? recheck : tryUploadNow}
-        disabled={uploadDisabled}
-        accessibilityRole="button"
-        accessibilityLabel={unsentActionLabel}
-        accessibilityState={{ disabled: uploadDisabled, busy: busy === 'uploading' }}
-        style={[styles.primaryButton, uploadDisabled && styles.disabledButton]}
-      >
-        {busy === 'uploading' ? <ActivityIndicator size="small" color={colors.onDark} /> : null}
-        <Text style={styles.primaryButtonText}>{unsentActionLabel}</Text>
-      </Pressable>
-      <Pressable
-        onPress={signOutAnyway}
-        disabled={isBusy}
-        accessibilityRole="button"
-        accessibilityLabel="Sign out anyway"
-        accessibilityState={{ disabled: isBusy }}
-        style={styles.secondaryButton}
-      >
-        <Text style={styles.secondaryButtonText}>Sign out anyway</Text>
-      </Pressable>
-      <Pressable onPress={cancel} accessibilityRole="button" accessibilityLabel="Cancel" style={styles.cancelButton}>
-        <Text style={styles.cancelText}>Cancel</Text>
-      </Pressable>
+      <View style={styles.actions}>
+        <BrandButton variant="secondary" icon="cloud-upload-outline"
+          label={unsentActionLabel} accessibilityLabel={unsentActionLabel}
+          loading={busy === 'uploading'} disabled={uploadDisabled}
+          onPress={countUnknown ? recheck : tryUploadNow} />
+        <BrandButton variant="destructive" icon="log-out-outline" label="Sign out anyway"
+          disabled={isBusy} onPress={signOutAnyway} />
+        <BrandButton variant="tertiary" tone="ink" label="Cancel" onPress={cancel} />
+      </View>
     </BottomSheet>
   </>;
 }
 
 const styles = StyleSheet.create({
-  body: {
-    gap: spacing.sm + 2,
-    paddingBottom: spacing.sm,
-  },
-  primaryButton: {
-    minHeight: 52,
-    flexDirection: 'row',
-    gap: spacing.sm,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderRadius: borderRadius.sm,
-    borderCurve: 'continuous',
-    backgroundColor: colors.primary,
-  },
-  disabledButton: {
-    backgroundColor: colors.disabled,
-  },
-  primaryButtonText: {
-    color: colors.onDark,
-    fontSize: 14,
-    fontFamily: fontFamilies.textHeavy,
-  },
-  warning: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    gap: spacing.sm,
-    borderRadius: borderRadius.sm,
-    borderCurve: 'continuous',
-    backgroundColor: colors.warningBg,
-    padding: spacing.sm + 2,
-  },
-  warningText: {
-    flex: 1,
-    color: colors.warningText,
-    fontSize: 12,
-    fontFamily: fontFamilies.textSemi,
-    lineHeight: 18,
-  },
-  secondaryButton: {
-    minHeight: 48,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 1,
-    borderColor: colors.warning,
-    borderRadius: borderRadius.sm,
-    borderCurve: 'continuous',
-    backgroundColor: colors.surface,
-  },
-  secondaryButtonText: {
-    color: colors.warningText,
-    fontSize: 13,
-    fontFamily: fontFamilies.textHeavy,
-  },
-  cancelButton: {
-    minHeight: 42,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  cancelText: {
-    color: colors.textSecondary,
-    fontSize: 13,
-    fontFamily: fontFamilies.textBold,
-  },
+  // BottomSheet already leaves 16dp below its title/subtitle.
+  body: { paddingTop: spacing.sm },
+  actions: { gap: spacing.ms },
+  afterWarning: { marginTop: spacing.lg },
 });

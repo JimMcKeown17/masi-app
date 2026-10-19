@@ -6,7 +6,7 @@ import { CAPTURE_MODES } from '../src/constants/egraConstants';
 import { deviceSettings } from '../src/services/deviceSettings';
 
 const mockSignOut = jest.fn();
-const mockUpdatePassword = jest.fn();
+const mockChangePassword = jest.fn();
 
 jest.mock('../src/hooks/useTimeTracking', () => ({
   useTimeTracking: () => ({ isSignedIn: false, handleSignOut: jest.fn() }),
@@ -16,68 +16,18 @@ jest.mock('../src/context/OfflineContext', () => ({
 }));
 jest.mock('../src/context/SignedInEAContext', () => ({
   useSignedInEA: () => ({
-    handle: { isCurrent: () => true },
+    handle: { isCurrent: () => true, userId: 'ea-1', epoch: 1 },
     repositories: { syncOutbox: { countUnsent: jest.fn(async () => ({ total: 0, byTable: {} })) } },
   }),
 }));
 
 jest.mock('@expo/vector-icons', () => ({ Ionicons: () => null }), { virtual: true });
 
-jest.mock('react-native-paper', () => {
-  const React = require('react');
-  const { Pressable, Text: NativeText, TextInput: NativeTextInput, View } = require('react-native');
-
-  const Text = ({ children, ...props }) => <NativeText {...props}>{children}</NativeText>;
-  const Button = ({ children, onPress, ...props }) => (
-    <Pressable onPress={onPress} {...props}>
-      <NativeText>{children}</NativeText>
-    </Pressable>
-  );
-  const Card = ({ children, ...props }) => <View {...props}>{children}</View>;
-  Card.Content = ({ children, ...props }) => <View {...props}>{children}</View>;
-  const Divider = (props) => <View {...props} />;
-  const Snackbar = ({ visible, children }) => (visible ? <View><NativeText>{children}</NativeText></View> : null);
-  const TextInput = ({ label, value, onChangeText, ...props }) => (
-    <NativeTextInput
-      accessibilityLabel={label}
-      value={value}
-      onChangeText={onChangeText}
-      {...props}
-    />
-  );
-  const SegmentedButtons = ({ value, onValueChange, buttons }) => (
-    <View accessibilityRole="radiogroup">
-      {buttons.map((button) => (
-        <Pressable
-          key={button.value}
-          accessibilityRole="button"
-          accessibilityState={{ selected: value === button.value }}
-          onPress={() => onValueChange(button.value)}
-          testID={`capture-mode-${button.value}`}
-        >
-          <NativeText>{button.label}</NativeText>
-        </Pressable>
-      ))}
-    </View>
-  );
-
-  return {
-    ...jest.requireActual('react-native-paper'),
-    Button,
-    Card,
-    Divider,
-    SegmentedButtons,
-    Snackbar,
-    Text,
-    TextInput,
-  };
-});
-
 jest.mock('@react-navigation/native', () => {
   const React = require('react');
   return {
     NavigationContext: React.createContext({ isFocused: () => true }),
-    useFocusEffect: (callback) => callback(),
+    useFocusEffect: (callback) => React.useEffect(callback, [callback]),
   };
 });
 
@@ -90,7 +40,7 @@ jest.mock('../src/context/AuthContext', () => ({
       jobTitleName: 'Education Assistant',
       schoolName: 'Masi Primary',
     },
-    updatePassword: mockUpdatePassword,
+    changePassword: mockChangePassword,
     signOut: mockSignOut,
   }),
 }));
@@ -144,22 +94,24 @@ describe('ProfileScreen assessment capture mode toggle', () => {
 
     expect(await screen.findByText('Assessment capture')).toBeTruthy();
     expect(screen.getByText('Grid')).toBeTruthy();
+    // The group stays non-accessible so VoiceOver can reach its individual radios.
+    expect(screen.getByLabelText('Assessment capture').props.accessibilityRole).toBe('radiogroup');
     await waitFor(() => {
-      expect(screen.getByTestId('capture-mode-grid').props.accessibilityState.selected).toBe(true);
+      expect(screen.getByRole('radio', { name: 'Grid' }).props.accessibilityState.checked).toBe(true);
     });
-    expect(screen.getByTestId('capture-mode-sequential').props.accessibilityState.selected).toBe(false);
+    expect(screen.getByRole('radio', { name: 'Step-by-step' }).props.accessibilityState.checked).toBe(false);
   });
 
-  test('pressing Step-by-Step saves the new capture mode', async () => {
+  test('pressing Step-by-step saves the new capture mode', async () => {
     deviceSettings.getCaptureMode.mockResolvedValue(CAPTURE_MODES.GRID);
 
     const screen = renderProfile();
 
     await waitFor(() => {
-      expect(screen.getByTestId('capture-mode-grid').props.accessibilityState.selected).toBe(true);
+      expect(screen.getByRole('radio', { name: 'Grid' }).props.accessibilityState.checked).toBe(true);
     });
 
-    fireEvent.press(screen.getByText('Step-by-Step'));
+    fireEvent.press(screen.getByText('Step-by-step'));
 
     await waitFor(() => {
       expect(deviceSettings.setCaptureMode).toHaveBeenCalledWith(CAPTURE_MODES.SEQUENTIAL);
@@ -174,17 +126,64 @@ describe('ProfileScreen assessment capture mode toggle', () => {
     const screen = renderProfile();
 
     await waitFor(() => {
-      expect(screen.getByTestId('capture-mode-grid').props.accessibilityState.selected).toBe(true);
+      expect(screen.getByRole('radio', { name: 'Grid' }).props.accessibilityState.checked).toBe(true);
     });
 
-    fireEvent.press(screen.getByText('Step-by-Step'));
+    fireEvent.press(screen.getByText('Step-by-step'));
 
     await waitFor(() => {
       expect(deviceSettings.setCaptureMode).toHaveBeenCalledWith(CAPTURE_MODES.SEQUENTIAL);
-      expect(screen.getByTestId('capture-mode-grid').props.accessibilityState.selected).toBe(true);
+      expect(screen.getByRole('radio', { name: 'Grid' }).props.accessibilityState.checked).toBe(true);
     });
-    expect(screen.getByTestId('capture-mode-sequential').props.accessibilityState.selected).toBe(false);
+    expect(screen.getByRole('radio', { name: 'Step-by-step' }).props.accessibilityState.checked).toBe(false);
 
     console.error.mockRestore();
   });
 });
+
+jest.mock('expo-constants', () => ({
+  expoConfig: {
+    version: '1.2.0',
+    runtimeVersion: { policy: 'appVersion' },
+    ios: { buildNumber: '7' },
+    android: { versionCode: 42 },
+    updates: { url: 'https://u.expo.dev/test-project' },
+    extra: {
+      supabaseTarget: 'sqlite-staging',
+      supabaseProjectId: 'segygjzpujphwvrubusm',
+    },
+  },
+}), { virtual: true });
+
+jest.mock('expo-application', () => ({
+  applicationId: 'org.masinyusane.masi',
+  applicationName: 'Masi',
+  nativeApplicationVersion: '1.2.0',
+  nativeBuildVersion: '7',
+}));
+
+jest.mock('expo-device', () => ({
+  brand: 'Apple',
+  deviceName: 'Field iPhone',
+  deviceType: 1,
+  isDevice: true,
+  manufacturer: 'Apple',
+  modelId: 'iPhone-test',
+  modelName: 'iPhone',
+  osBuildId: 'test-build',
+  osName: 'iOS',
+  osVersion: '18.0',
+  platformApiLevel: null,
+  supportedCpuArchitectures: ['arm64'],
+  totalMemory: 4_000_000_000,
+}));
+
+jest.mock('expo-updates', () => ({
+  channel: 'preview',
+  isEmbeddedLaunch: true,
+  isEmergencyLaunch: false,
+  runtimeVersion: '1.2.0',
+  updateId: null,
+}));
+
+jest.mock('../src/services/observability', () => ({ sendObservabilityTest: jest.fn() }));

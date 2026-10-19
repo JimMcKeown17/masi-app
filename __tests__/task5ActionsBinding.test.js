@@ -1,5 +1,5 @@
 import React from 'react';
-import { Alert, TouchableOpacity } from 'react-native';
+import { TouchableOpacity } from 'react-native';
 import { act, render, waitFor, fireEvent, cleanup } from '@testing-library/react-native';
 import { AllProviders } from '../test-support/renderWithProviders';
 import { ToastActorScope } from '../src/context/ToastContext';
@@ -9,6 +9,7 @@ import { ChildrenProvider } from '../src/context/ChildrenContext';
 import { TimeTrackingProvider } from '../src/context/TimeTrackingContext';
 import GroupPickerBottomSheet from '../src/components/children/GroupPickerBottomSheet';
 import ProfileScreen from '../src/screens/main/ProfileScreen';
+import ExportDatabaseSheet from '../src/components/profile/ExportDatabaseSheet';
 import SyncStatusScreen from '../src/screens/main/SyncStatusScreen';
 import * as Sharing from 'expo-sharing';
 import { File } from 'expo-file-system/next';
@@ -62,16 +63,16 @@ test('GroupPicker remove-then-add continuation cannot assign a group after A clo
 });
 
 test('A saved Export Database confirmation never reads or shares B data', async () => {
-  const a = await open(A); const alert = jest.spyOn(Alert, 'alert');
+  const a = await open(A);
   const view = render(wrapper(a, <TimeTrackingProvider><ProfileScreen navigation={{ navigate: jest.fn() }} /></TimeTrackingProvider>));
-  fireEvent.press(view.getByText('Share Database (Contains Sensitive Data)'));
-  const firstConfirm = alert.mock.calls.find(([title]) => title === 'Export Database')[2].find((button) => button.text === 'Export').onPress;
-  await act(async () => { await firstConfirm(); });
+  fireEvent.press(view.getByRole('button', { name: 'Support tools' }));
+  fireEvent.press(view.getByRole('button', { name: 'Share database, sensitive' }));
+  await act(async () => { await fireEvent.press(view.getByRole('button', { name: 'Export' })); });
   expect(Sharing.shareAsync).toHaveBeenCalledTimes(1);
   Sharing.shareAsync.mockClear();
-  alert.mockClear();
-  fireEvent.press(view.getByText('Share Database (Contains Sensitive Data)'));
-  const confirm = alert.mock.calls.find(([title]) => title === 'Export Database')[2].find((button) => button.text === 'Export').onPress;
+  await waitFor(() => expect(view.queryByText('Export database')).toBeNull());
+  fireEvent.press(view.getByRole('button', { name: 'Share database, sensitive' }));
+  const confirm = view.UNSAFE_getByType(ExportDatabaseSheet).props.onExport;
   view.unmount(); await requestClose({ reason: 'switch' }); const b = await open(B);
   await b.repositories.syncOutbox.enqueue({ tableName: 'children', recordId: 'b-failed', operation: 'insert', payload: { id: 'b-failed' } });
   await b.withTransaction((tx) => tx.runAsync("update sync_outbox set status='failed' where record_id='b-failed'"));

@@ -84,3 +84,12 @@ test('ListGroup adds dividers only between its valid rows', () => {
   expect(ui.getAllByTestId('list-row-divider')).toHaveLength(2);
   expect(StyleSheet.flatten(ui.toJSON().props.style)).toMatchObject({ backgroundColor: colors.surface, borderColor: tints.rule, borderRadius: 18, overflow: 'hidden' });
 });
+
+test('readOnly renders its leading tile within the single accessible row', () => {
+  const ui = render(<ListRow variant="readOnly" title="Email" subtitle="ea@masi.org"
+    lead={<View testID="mail-tile" />} showDivider />);
+  expect(ui.getByLabelText('Email, ea@masi.org').props.accessible).toBe(true);
+  expect(ui.getByTestId('mail-tile')).toBeTruthy();
+  expect(flat(ui.getByTestId('list-row-divider')).left).toBe(68);
+  expect(ui.queryByRole('button')).toBeNull();
+});

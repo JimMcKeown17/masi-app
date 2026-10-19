@@ -1599,3 +1599,12 @@ src/screens/sessions/LiteracySessionForm.js:              await storage.updateLe
 - `documentation/archive/sync-reliability-build-log.md` — Items 1 and 2 (sync reliability), 12 TDD tasks, device-verified 2026-06-17.
 - `documentation/sqlite-refactor-log.md` — now a redirect stub; its content was merged into this file on 2026-07-13.
 - (fork) `zazi-izandi-app/documentation/*build-log*.md` — companion-app history referenced by the ports.
+
+
+### 2026-10-19 — Bold Red Profile Task 6 password integration gate
+
+`PATH=$HOME/.nvm/versions/node/v20.19.4/bin:$PATH npm run test:integration -- __tests__/task5AuthRaces.test.js -t "password|Profile verification"` — PASS, 1 suite / 11 cases (29 skipped). The plan expected 10; the existing isolated-session-disposal case also matches. Initial migration run failed because a redundant inner PaperProvider put the sheet inside the accessibility-hidden background; removing that wrapper fixed it without changing the existing assertions, barriers or timers.
+
+Cases: delayed password response/manual; delayed admitted storage write/manual; delayed admitted storage write/SIGNED_OUT; Profile password session preservation through revoke-others/token refresh; late Profile verification after switching to B; late Profile verification after reopening A; changePassword result dropped during isolated-session disposal; sign-in independent of a late password update; password response between B storage commit and callback; late shared password update after switching to B; never-settling password PUT bounded across sign-out/sign-in.
+
+`PATH=$HOME/.nvm/versions/node/v20.19.4/bin:$PATH npm run test:integration -- __tests__/task5AuthRaces.test.js __tests__/task5ActionsBinding.test.js` — PASS, 2 suites / 44 tests. Local real-SQLite evidence only. Small spec repair: read-only ListRow now renders its supplied lead tile (regression RED 1 failed / 13 passed, GREEN 14 passed); its documentation update remains in Task 8.

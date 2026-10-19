@@ -17,6 +17,7 @@ export default function ListRow({
   const divider = showDivider ? <View testID="list-row-divider" pointerEvents="none"
     style={[styles.divider, { left: nested ? 104 : lead ? 68 : 16 }]} /> : null;
   if (readOnly) return <View accessible accessibilityLabel={label} style={rowStyle}>
+    {lead ? <View style={styles.lead}>{lead}</View> : null}
     <View style={styles.copy}>
       <Text style={styles.readOnlyLabel}>{title}</Text>
       <Text style={[styles.title, styles.below]}>{subtitle}</Text>
