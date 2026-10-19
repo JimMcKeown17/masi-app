@@ -21,18 +21,6 @@ const NAV_THEME = 'src/theme/navigationTheme.js';
 const PAPER_THEME = 'src/theme/paperTheme.js';
 const RATCHETED_PAPER = ['TextInput', 'Searchbar', 'SegmentedButtons', 'Card', 'Chip', 'FAB', 'Banner', 'Menu', 'Button', 'HelperText'];
 
-// Files the sweep has not reached yet. Every task that sweeps a file deletes its line.
-// Task 31 deletes this list and every reference to it.
-const PENDING_SWEEP = [
-  'src/components/children/ChildSelector.js',
-  'src/components/profile/SignOutSheets.js',
-  'src/components/sessions/SessionsTodayRing.js',
-  'src/screens/children/ClassDetailScreen.js',
-  'src/screens/main/ChildrenListScreen.js',
-  'src/screens/main/ProfileScreen.js',
-  'src/screens/sessions/LiteracySessionForm.js',
-];
-
 // The 10 board files keep their raw type sizes and Paper inputs until their own PR.
 // A count may fall but never rise; a line whose file is clean must be deleted.
 const BOARD_RATCHET = {
@@ -73,12 +61,8 @@ const violations = (f) => {
 };
 
 describe('design-system guard', () => {
-  test.each(FILES.filter((f) => !PENDING_SWEEP.includes(f)))('%s follows the token rules', (f) => {
+  test.each(FILES)('%s follows the token rules', (f) => {
     expect(violations(f)).toEqual([]);
-  });
-  test.each(PENDING_SWEEP)('%s is still pending (delete its PENDING_SWEEP line once swept)', (f) => {
-    expect(FILES).toContain(f);
-    expect(violations(f).length).toBeGreaterThan(0);
   });
   test.each(Object.keys(BOARD_RATCHET))('%s ratchet line is still needed', (f) => {
     expect(FILES).toContain(f);

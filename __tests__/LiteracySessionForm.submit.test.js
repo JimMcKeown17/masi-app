@@ -1,7 +1,8 @@
 global.__MASI_NO_DEFAULT_HANDLE__ = true;
 
 import React from 'react';
-import { act, cleanup, fireEvent, render, waitFor } from '@testing-library/react-native';
+import { act, cleanup, fireEvent, waitFor } from '@testing-library/react-native';
+import { renderWithProviders as render } from '../test-support/renderWithProviders';
 import { PaperProvider } from 'react-native-paper';
 import { SignedInEAContext } from '../src/context/SignedInEAContext';
 import { requestOpen, resetHandleRegistryForTests } from '../src/session/signedInHandle';
@@ -123,6 +124,7 @@ test('a failed save rolls back and retry persists exactly one session with the o
   fireEvent.press(screen.getByText('Submit Session'));
 
   expect(await screen.findByText('Failed to save session. Please try again.')).toBeTruthy();
+  expect(screen.getByRole('alert')).toHaveTextContent('Failed to save session. Please try again.');
   expect(errorLog).toHaveBeenCalledWith('Error saving session:', failure);
   expect(firstAttemptId).toEqual(expect.any(String));
   expect(await readSessions()).toEqual([]);

@@ -2,6 +2,7 @@ import React from 'react';
 import { View, StyleSheet } from 'react-native';
 import { Text } from 'react-native-paper';
 import Svg, { Circle } from 'react-native-svg';
+import { fontFamilies, typeRoles } from '../../constants/typography';
 import { colors, spacing } from '../../constants/colors';
 
 const SIZE = 132;
@@ -92,13 +93,12 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   count: {
-    fontSize: 36,
-    fontWeight: '700',
+    ...typeRoles.display2XL,
+    fontFamily: fontFamilies.textBold,
     color: colors.text,
-    lineHeight: 40,
   },
   denominator: {
-    fontSize: 13,
+    ...typeRoles.textCaption,
     color: colors.textSecondary,
     marginTop: spacing.xs / 2,
   },

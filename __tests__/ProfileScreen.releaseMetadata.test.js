@@ -1,13 +1,17 @@
 import React from 'react';
-import { Alert, TextInput as NativeTextInput } from 'react-native';
-import { act, fireEvent, render, waitFor } from '@testing-library/react-native';
+import { Alert, StyleSheet, TextInput as NativeTextInput } from 'react-native';
+import { act, fireEvent, waitFor, within } from '@testing-library/react-native';
+import { renderWithProviders as render } from '../test-support/renderWithProviders';
 import { Button, PaperProvider } from 'react-native-paper';
 import ProfileScreen from '../src/screens/main/ProfileScreen';
+import { colors } from '../src/constants/colors';
 const mockChangePassword = jest.fn();
 const mockSignOut = jest.fn(async () => ({ error: null }));
 const mockCountUnsent = jest.fn(async () => ({ total: 2, byTable: {} }));
 const mockClockOut = jest.fn(async () => true);
 import { exportDatabase, exportLogs } from '../src/utils/debugExport';
+
+jest.mock('@expo/vector-icons', () => ({ Ionicons: () => null }), { virtual: true });
 
 jest.mock('../src/hooks/useTimeTracking', () => ({
   useTimeTracking: () => ({ isSignedIn: true, handleSignOut: mockClockOut }),
@@ -191,8 +195,47 @@ describe('ProfileScreen', () => {
     await waitFor(() => {
       expect(screen.getByText('Current password is incorrect')).toBeTruthy();
     });
+    expect(screen.getByRole('alert')).toHaveTextContent('Current password is incorrect');
 
     consoleError.mockRestore();
+  });
+
+  test.each([
+    ['', '', '', 'All password fields are required'],
+    ['current-secret', 'short', 'short', 'New password must be at least 8 characters'],
+    ['current-secret', 'new-secret-123', 'different-secret', 'New passwords do not match'],
+  ])('password validation uses an error toast: %s / %s / %s', (current, next, confirm, message) => {
+    const screen = render(<ProfileScreen navigation={{ goBack: jest.fn() }} />);
+    const inputs = screen.UNSAFE_getAllByType(NativeTextInput);
+    [current, next, confirm].forEach((value, index) => fireEvent.changeText(inputs[index], value));
+
+    fireEvent.press(screen.getByRole('button', { name: 'Change Password' }));
+
+    expect(screen.getByRole('alert')).toHaveTextContent(message);
+    expect(within(screen.getByTestId('toast')).getByText(message)).toBeTruthy();
+    expect(mockChangePassword).not.toHaveBeenCalled();
+  });
+
+  test('an export error keeps its error tone even when its wording does not start with Failed', async () => {
+    exportLogs.mockResolvedValueOnce({ success: false, error: 'Sharing is unavailable on this device' });
+    const screen = render(<ProfileScreen navigation={{ goBack: jest.fn() }} />);
+
+    fireEvent.press(screen.getByRole('button', { name: 'Share Logs' }));
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('Sharing is unavailable on this device');
+    expect(within(screen.getByTestId('toast')).getByText('Sharing is unavailable on this device')).toBeTruthy();
+  });
+
+  test('a successful export keeps its success tone at the root toast host', async () => {
+    exportLogs.mockResolvedValueOnce({ success: true });
+    const screen = render(<ProfileScreen navigation={{ goBack: jest.fn() }} />);
+
+    fireEvent.press(screen.getByRole('button', { name: 'Share Logs' }));
+
+    expect(await screen.findByText('Logs exported successfully')).toBeTruthy();
+    expect(within(screen.getByTestId('toast')).getByText('Logs exported successfully')).toBeTruthy();
+    expect(StyleSheet.flatten(screen.getByTestId('toast-status', { includeHiddenElements: true }).props.style).backgroundColor).toBe(colors.success);
+    expect(screen.queryByRole('alert')).toBeNull();
   });
 
   test('keeps the database export available while logs are exporting', async () => {

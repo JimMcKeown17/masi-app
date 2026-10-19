@@ -8,9 +8,10 @@ import {
   Card,
   Menu,
   IconButton,
-  Snackbar,
 } from 'react-native-paper';
 import { useAuth } from '../../context/AuthContext';
+import { useToast } from '../../context/ToastContext';
+import { fontFamilies } from '../../constants/typography';
 import { useOffline } from '../../context/OfflineContext';
 import { colors, spacing, borderRadius, shadows } from '../../constants/colors';
 import { LETTER_ORDER, READING_LEVELS } from '../../constants/literacyConstants';
@@ -370,6 +371,7 @@ function FormFooter({
 // ---------------------------------------------------------------------------
 export default function LiteracySessionForm({ navigation }) {
   const { handle } = useSignedInEA();
+  const toast = useToast();
 
   const { user, profile } = useAuth();
   const { refreshSyncStatus, triggerBackgroundSync } = useOffline();
@@ -393,8 +395,6 @@ export default function LiteracySessionForm({ navigation }) {
   const [submitting, setSubmitting] = useState(false);
   const submittingRef = useRef(false);
   const [validationErrors, setValidationErrors] = useState({});
-  const [snackbarMessage, setSnackbarMessage] = useState('');
-  const [snackbarVisible, setSnackbarVisible] = useState(false);
 
   // Leave guard: same field-hardened pattern as useAssessmentSession. allowLeaveRef is
   // released only right before the success replace, so a failed save stays guarded.
@@ -431,11 +431,6 @@ export default function LiteracySessionForm({ navigation }) {
     });
     return unsubscribe;
   }, [navigation]);
-
-  const showSnackbar = (message) => {
-    setSnackbarMessage(message);
-    setSnackbarVisible(true);
-  };
 
   // Derive the group ids that were implicitly used (not tracked in this simple flow,
   // so we leave group_ids as an empty array — future enhancement).
@@ -545,7 +540,7 @@ export default function LiteracySessionForm({ navigation }) {
     } catch (error) {
       submittingRef.current = false;
       console.error('Error saving session:', error);
-      showSnackbar('Failed to save session. Please try again.');
+      toast.show({ message: 'Failed to save session. Please try again.', tone: 'error', duration: 3000 });
     } finally {
       setSubmitting(false);
     }
@@ -629,14 +624,6 @@ export default function LiteracySessionForm({ navigation }) {
         onSelect={(value) => handleSetChildReadingLevel(openChildLevelMenu, value)}
         cancelLabel="Cancel"
       />
-
-      <Snackbar
-        visible={snackbarVisible}
-        onDismiss={() => setSnackbarVisible(false)}
-        duration={3000}
-      >
-        {snackbarMessage}
-      </Snackbar>
     </View>
   );
 }
@@ -664,7 +651,7 @@ const styles = StyleSheet.create({
   sectionLabel: {
     color: colors.primary,
     marginBottom: spacing.sm,
-    fontWeight: '600',
+    fontFamily: fontFamilies.textSemi,
   },
   helperText: {
     color: colors.textSecondary,
@@ -706,7 +693,7 @@ const styles = StyleSheet.create({
   },
   dividerLabel: {
     color: colors.textSecondary,
-    fontWeight: '600',
+    fontFamily: fontFamilies.textSemi,
   },
   commentsInput: {
     backgroundColor: colors.surface,
@@ -732,7 +719,7 @@ const calStyles = StyleSheet.create({
   },
   monthTitle: {
     color: colors.text,
-    fontWeight: '600',
+    fontFamily: fontFamilies.textSemi,
   },
   dayHeaderRow: {
     flexDirection: 'row',
@@ -742,7 +729,7 @@ const calStyles = StyleSheet.create({
     flex: 1,
     textAlign: 'center',
     color: colors.textSecondary,
-    fontWeight: '600',
+    fontFamily: fontFamilies.textSemi,
   },
   dayRow: {
     flexDirection: 'row',
@@ -764,8 +751,8 @@ const calStyles = StyleSheet.create({
     color: colors.text,
   },
   dayTextSelected: {
-    color: '#FFFFFF',
-    fontWeight: '600',
+    color: colors.onDark,
+    fontFamily: fontFamilies.textSemi,
   },
   dayTextFuture: {
     color: colors.disabled,

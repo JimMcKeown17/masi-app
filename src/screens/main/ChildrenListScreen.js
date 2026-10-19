@@ -13,6 +13,7 @@ import {
 import { useFocusEffect } from '@react-navigation/native';
 import { useAuth } from '../../context/AuthContext';
 import { colors, spacing } from '../../constants/colors';
+import { fontFamilies } from '../../constants/typography';
 import { useChildren } from '../../context/ChildrenContext';
 import { useClasses } from '../../context/ClassesContext';
 import { useOffline } from '../../context/OfflineContext';
@@ -388,7 +389,7 @@ const styles = StyleSheet.create({
   childCount: {
     color: colors.primary,
     marginTop: spacing.sm,
-    fontWeight: '600',
+    fontFamily: fontFamilies.textSemi,
   },
   unsyncedBadge: {
     color: colors.warningText,

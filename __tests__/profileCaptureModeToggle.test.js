@@ -1,6 +1,6 @@
 import React from 'react';
-import { fireEvent, render, waitFor } from '@testing-library/react-native';
-import { SafeAreaProvider } from 'react-native-safe-area-context';
+import { fireEvent, waitFor } from '@testing-library/react-native';
+import { renderWithProviders as render } from '../test-support/renderWithProviders';
 import ProfileScreen from '../src/screens/main/ProfileScreen';
 import { CAPTURE_MODES } from '../src/constants/egraConstants';
 import { deviceSettings } from '../src/services/deviceSettings';
@@ -20,6 +20,8 @@ jest.mock('../src/context/SignedInEAContext', () => ({
     repositories: { syncOutbox: { countUnsent: jest.fn(async () => ({ total: 0, byTable: {} })) } },
   }),
 }));
+
+jest.mock('@expo/vector-icons', () => ({ Ionicons: () => null }), { virtual: true });
 
 jest.mock('react-native-paper', () => {
   const React = require('react');
@@ -60,6 +62,7 @@ jest.mock('react-native-paper', () => {
   );
 
   return {
+    ...jest.requireActual('react-native-paper'),
     Button,
     Card,
     Divider,
@@ -124,12 +127,7 @@ jest.mock('../src/services/deviceSettings', () => ({
 }));
 
 const renderProfile = () => render(
-  <SafeAreaProvider initialMetrics={{
-    frame: { x: 0, y: 0, width: 390, height: 844 },
-    insets: { top: 0, left: 0, right: 0, bottom: 0 },
-  }}>
-    <ProfileScreen navigation={{ goBack: jest.fn() }} />
-  </SafeAreaProvider>
+  <ProfileScreen navigation={{ goBack: jest.fn() }} />
 );
 
 describe('ProfileScreen assessment capture mode toggle', () => {

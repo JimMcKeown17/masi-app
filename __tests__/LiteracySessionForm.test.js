@@ -47,7 +47,8 @@ jest.mock('../src/services/literacySessionPersistence', () => ({
 }));
 
 import React from 'react';
-import { act, render, fireEvent, waitFor } from '@testing-library/react-native';
+import { renderWithProviders as render } from '../test-support/renderWithProviders';
+import { act, fireEvent, waitFor } from '@testing-library/react-native';
 import { Alert } from 'react-native';
 import { PaperProvider } from 'react-native-paper';
 import LiteracySessionForm from '../src/screens/sessions/LiteracySessionForm';
