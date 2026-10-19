@@ -15,7 +15,18 @@ test('2024.1 battery shape', () => {
   expect(B.questions.filter((q) => q.paper_marked).map((q) => q.question_code)).toEqual([
     'wela_plus_letter_writing', 'wela_plus_write_cvcs', 'wela_plus_write_sentences_dictation', 'wela_plus_story_writing',
   ]);
-  expect(B.questions.filter((q) => q.durationSec !== undefined).map((q) => [q.question_code, q.durationSec])).toEqual([['wela_plus_letter_sounds', 60]]);
+  expect(B.questions.filter((q) => q.durationSec !== undefined).map((q) => [q.question_code, q.durationSec])).toEqual([
+    ['wela_plus_letter_sounds', 60], ['wela_plus_read_words', 60], ['wela_plus_read_passage', 60],
+  ]);
+});
+
+test('Q6 and Q8 instructions include the one-minute stop and passage marker', () => {
+  const words = B.questions.find((q) => q.question_code === 'wela_plus_read_words')!;
+  const passage = B.questions.find((q) => q.question_code === 'wela_plus_read_passage')!;
+  for (const language of B.languages) {
+    expect(words.instructions![language]).toBe('Hand the child Reading Card side B. Point to each word and ask the child to read it. If the child gets an item correct, tap it (it turns green). If they get it wrong, leave it blank. STOP immediately if the child gets 5 in a row wrong, or clearly does not know any. Otherwise STOP at 1 minute.');
+    expect(passage.instructions![language]).toBe('Hand the child Reading Card side C. Ask the child to read the story. Tap each word they read correctly. STOP at 1 minute, then mark the last word they attempted.');
+  }
 });
 
 test('materials per question match the printout pack (spec 9)', () => {

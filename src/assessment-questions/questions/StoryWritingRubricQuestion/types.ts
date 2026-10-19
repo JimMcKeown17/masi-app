@@ -1,7 +1,7 @@
 import type { ImageSourcePropType } from 'react-native';
 
 export interface StoryWritingRubricAnchor {
-  /** Score value 0-4. */
+  /** Score value within the item set's score_range. */
   score: number;
   /** Anchor description shown on the "View full rubric" sheet. */
   text: string;
@@ -27,5 +27,7 @@ export interface StoryWritingRubricPicture {
 
 export interface StoryWritingRubricItemSet {
   picture?: StoryWritingRubricPicture;
+  /** Inclusive integer score bounds, with 0 <= min <= max. */
+  score_range: { min: number; max: number };
   dimensions: StoryWritingRubricDimension[];
 }

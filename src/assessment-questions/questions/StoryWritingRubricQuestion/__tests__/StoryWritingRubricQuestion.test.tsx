@@ -6,6 +6,7 @@ import { FIXTURE_STORY_WRITING_EN } from '../../../testFixtures';
 const SET = {
   item_set_id: 'wela_plus_story_writing@fixture.en', question_code: 'wela_plus_story_writing',
   question_version: 'fixture', language: 'en',
+  score_range: { min: 1, max: 4 },
   dimensions: ['meaning_making', 'spelling', 'length', 'vocabulary'].map((code) => ({
     code, label: code, anchors: [], end_anchor_gloss: '',
   })),
@@ -27,10 +28,10 @@ test('no anchors: sheet says coming soon; metadata omits anchor_text; chips stil
   fireEvent.press(r.getByTestId('chip-meaning_making-2'));
   fireEvent.press(r.getByTestId('chip-spelling-1'));
   fireEvent.press(r.getByTestId('chip-length-3'));
-  fireEvent.press(r.getByTestId('chip-vocabulary-0'));
+  fireEvent.press(r.getByTestId('chip-vocabulary-1'));
   fireEvent.press(r.getByText('Finish'));
   const res = onComplete.mock.calls[0][0];
-  expect(res.derived.ea_rubric_total).toBe(6);
+  expect(res.derived.ea_rubric_total).toBe(7);
   expect(res.items.every((i: any) => !('anchor_text' in i.metadata))).toBe(true);
   expect(res.items.map((i: any) => i.item_key)).toEqual(['ea:meaning_making', 'ea:spelling', 'ea:length', 'ea:vocabulary']);
 });
@@ -56,6 +57,32 @@ describe('StoryWritingRubricQuestion — intro & active', () => {
 });
 
 describe('StoryWritingRubricQuestion — chip scoring', () => {
+  test('a 1–4 range renders exactly chips 1–4 for every dimension and a /16 total', () => {
+    const onComplete = jest.fn();
+    const onItemMarked = jest.fn();
+    const r = render(
+      <StoryWritingRubricQuestion language="en" itemSet={SET} instructions="."
+        onComplete={onComplete} onItemMarked={onItemMarked} />,
+    );
+    fireEvent.press(r.getByText('Start'));
+    expect(r.getByText('Total: 0 / 16')).toBeTruthy();
+    expect(r.getAllByTestId(/^chip-/)).toHaveLength(16);
+    for (const d of SET.dimensions) {
+      expect(r.queryByTestId(`chip-${d.code}-0`)).toBeNull();
+      for (const score of [1, 2, 3, 4]) {
+        expect(r.getByTestId(`chip-${d.code}-${score}`)).toBeTruthy();
+      }
+      fireEvent.press(r.getByTestId(`chip-${d.code}-4`));
+    }
+    expect(r.getByText('Total: 16 / 16')).toBeTruthy();
+    fireEvent.press(r.getByText('Finish'));
+    expect(onItemMarked.mock.calls.map(([item]) => item.metadata.score)).toEqual([4, 4, 4, 4]);
+    expect(onComplete.mock.calls[0][0].derived).toMatchObject({
+      ea_rubric_total: 16, max: 16, percent: 100,
+      by_dimension: { meaning_making: 4, spelling: 4, length: 4, vocabulary: 4 },
+    });
+  });
+
   test('tap a chip records the score and updates the running total', () => {
     const { getByText, getByTestId } = render(
       <StoryWritingRubricQuestion
@@ -91,8 +118,8 @@ describe('StoryWritingRubricQuestion — chip scoring', () => {
     expect(getByText('Total: 1 / 16')).toBeTruthy();
   });
 
-  test('score 0 is a valid selection (not "unscored")', () => {
-    const { getByText, getByTestId } = render(
+  test('a 0–4 range still renders five chips per dimension and accepts 0 as scored', () => {
+    const { getByText, getByTestId, getAllByTestId } = render(
       <StoryWritingRubricQuestion
         language="en"
         itemSet={FIXTURE_STORY_WRITING_EN}
@@ -101,9 +128,12 @@ describe('StoryWritingRubricQuestion — chip scoring', () => {
       />,
     );
     fireEvent.press(getByText('Start'));
+    expect(getAllByTestId(/^chip-/)).toHaveLength(20);
     fireEvent.press(getByTestId('chip-spelling-0'));
     // Score is 0, but spelling is "decided" — Finish should not warn for it.
     expect(getByText('Total: 0 / 16')).toBeTruthy();
+    fireEvent.press(getByText('Finish'));
+    expect(getByText(/3 dimensions unscored/i)).toBeTruthy();
   });
 });
 
@@ -350,12 +380,79 @@ describe('StoryWritingRubricQuestion — Skip flow', () => {
 });
 
 describe('StoryWritingRubricQuestion — itemSet override', () => {
+  test.each([0, 2])('accepts equal range bounds at %s and emits a finite percentage', (score) => {
+    const onComplete = jest.fn();
+    const r = render(
+      <StoryWritingRubricQuestion language="en" instructions="." onComplete={onComplete}
+        itemSet={{ ...SET, score_range: { min: score, max: score } }} />,
+    );
+    fireEvent.press(r.getByText('Start'));
+    expect(r.getAllByTestId(/^chip-/)).toHaveLength(4);
+    for (const d of SET.dimensions) fireEvent.press(r.getByTestId(`chip-${d.code}-${score}`));
+    expect(r.getByText(`Total: ${score * 4} / ${score * 4}`)).toBeTruthy();
+    fireEvent.press(r.getByText('Finish'));
+    expect(onComplete.mock.calls[0][0].derived).toMatchObject({
+      ea_rubric_total: score * 4, max: score * 4, percent: score === 0 ? 0 : 100,
+    });
+  });
+
+  test.each([0, 5, NaN, Infinity])('rejects anchor score %s outside the 1–4 range', (score) => {
+    const onComplete = jest.fn();
+    const r = render(
+      <StoryWritingRubricQuestion language="en" instructions="." onComplete={onComplete}
+        itemSet={{
+          ...SET,
+          dimensions: [{
+            code: 'custom', label: 'Custom dimension', end_anchor_gloss: '',
+            anchors: [{ score, text: 'Invalid anchor' }],
+          }],
+        }} />,
+    );
+    fireEvent.press(r.getByText('Start'));
+    expect(r.queryByText('Custom dimension')).toBeNull();
+    expect(r.getByText('Meaning Making')).toBeTruthy();
+    fireEvent.press(r.getByText('Skip question'));
+    fireEvent.press(r.getByText('Child refused'));
+    expect(onComplete.mock.calls[0][0].item_set_id).toBe('wela_plus_story_writing@2024.1.en');
+  });
+
+  test.each([
+    ['missing range', undefined],
+    ['null range', null],
+    ['missing bounds', {}],
+    ['negative minimum', { min: -1, max: 4 }],
+    ['reversed bounds', { min: 4, max: 1 }],
+    ['fractional minimum', { min: 1.5, max: 4 }],
+    ['fractional maximum', { min: 1, max: 4.5 }],
+    ['string minimum', { min: '1', max: 4 }],
+    ['string maximum', { min: 1, max: '4' }],
+    ['NaN minimum', { min: NaN, max: 4 }],
+    ['infinite maximum', { min: 1, max: Infinity }],
+  ])('rejects %s through the existing language-default fallback', (_name, score_range) => {
+    const onComplete = jest.fn();
+    const r = render(
+      <StoryWritingRubricQuestion language="xh" instructions="." onComplete={onComplete}
+        itemSet={{
+          ...SET, score_range,
+          dimensions: [{ code: 'custom', label: 'Custom dimension', anchors: [], end_anchor_gloss: '' }],
+        }} />,
+    );
+    fireEvent.press(r.getByText('Start'));
+    expect(r.queryByText('Custom dimension')).toBeNull();
+    expect(r.getByText('Meaning Making')).toBeTruthy();
+    fireEvent.press(r.getByText('Skip question'));
+    fireEvent.press(r.getByText('Child refused'));
+    expect(onComplete.mock.calls[0][0].item_set_id).toBe('wela_plus_story_writing@2024.1.xh');
+  });
+
   test('falls back to bundled default when override missing item_set_id', () => {
     const { getByText, queryByText } = render(
       <StoryWritingRubricQuestion
         language="en"
         instructions="."
         itemSet={{
+          question_version: 'fixture',
+          score_range: { min: 1, max: 4 },
           dimensions: [
             {
               code: 'invalid',
@@ -372,11 +469,12 @@ describe('StoryWritingRubricQuestion — itemSet override', () => {
     expect(queryByText('Fixture-only invalid dimension')).toBeNull();
   });
 
-  test('accepts a fully-formed override with a different dimension count', () => {
+  test('derives chips, running total, and result maximum from a custom range and dimension count', () => {
     const onComplete = jest.fn();
     const override = {
       item_set_id: 'custom@1.0.en',
       question_version: '1.0',
+      score_range: { min: 2, max: 5 },
       picture: { source: null, alt: 'Custom picture' },
       dimensions: [
         {
@@ -384,16 +482,15 @@ describe('StoryWritingRubricQuestion — itemSet override', () => {
           label: 'Creativity',
           end_anchor_gloss: 'none → strong',
           anchors: [
-            { score: 0, text: 'none' },
-            { score: 1, text: 'minimal' },
             { score: 2, text: 'some' },
             { score: 3, text: 'strong' },
             { score: 4, text: 'exceptional' },
+            { score: 5, text: 'outstanding' },
           ],
         },
       ],
     };
-    const { getByText, getByTestId } = render(
+    const { getByText, getByTestId, getAllByTestId } = render(
       <StoryWritingRubricQuestion
         language="en"
         instructions="."
@@ -404,12 +501,19 @@ describe('StoryWritingRubricQuestion — itemSet override', () => {
     fireEvent.press(getByText('Start'));
     expect(getByText('Creativity')).toBeTruthy();
     expect(getByText(/Custom picture/)).toBeTruthy();
+    expect(getAllByTestId(/^chip-/).map((chip) => chip.props.testID)).toEqual([
+      'chip-creativity-2', 'chip-creativity-3', 'chip-creativity-4', 'chip-creativity-5',
+    ]);
     fireEvent.press(getByTestId('chip-creativity-2'));
+    expect(getByText('Total: 2 / 5')).toBeTruthy();
     fireEvent.press(getByText('Finish'));
     const r = onComplete.mock.calls[0][0];
     expect(r.items).toHaveLength(1);
     expect(r.items[0].item_key).toBe('ea:creativity');
-    expect(r.derived.max).toBe(4); // 1 dimension × 4 max
+    expect(r.derived.max).toBe(5); // 1 dimension × 5 max
     expect(r.derived.ea_rubric_total).toBe(2);
+    expect(r.derived.percent).toBe(40);
+    expect(r.derived.by_dimension).toEqual({ creativity: 2 });
+    expect(r.items[0].metadata).toEqual({ score: 2, scorer: 'ea', anchor_text: 'some' });
   });
 });

@@ -1,19 +1,20 @@
 /**
  * StoryWritingRubricQuestion — WelaPLUS Pattern E (Q11).
  *
- * EA reads the child's hand-written story (from paper) and scores 4
- * dimensions on a 0-4 rubric for a /16 total. Per ADR-0004 the emitted
- * items[].item_key is prefixed `ea:<dimension_code>` so HQ's later
+ * EA reads the child's hand-written story (from paper) and scores the
+ * item set's dimensions within its inclusive score_range. Per ADR-0004
+ * the emitted items[].item_key is prefixed `ea:<dimension_code>` so HQ's later
  * rubric inserts (with `hq:` prefix) don't collide via
  * deterministicItemId. metadata.scorer='ea' is the partition key for
- * the EA-vs-HQ calibration experiment; metadata.score holds the 0-4
+ * the EA-vs-HQ calibration experiment; metadata.score holds the selected
  * value (is_correct is NOT the carrier — it's `false` on every Q11 row).
  *
- * Layout: picture thumbnail at top (tap-to-enlarge), 4 stacked
+ * Layout: optional picture thumbnail at top (tap-to-enlarge), stacked
  * dimension cards each with header, "View full rubric" button, row of
- * five tappable chips (0-4), end-anchored gloss line, then a running
- * Total beneath. Re-scoring = tap a different chip (no toggle-clear
- * because 0 is a valid score).
+ * tappable chips from min through max, end-anchored gloss line, then a running
+ * Total out of max × dimension count beneath. Re-scoring = tap a different
+ * chip (no toggle-clear so a chosen score remains distinct from an
+ * unscored dimension).
  *
  * Skipped abandon emits items=[] per the cross-Pattern skip-empty
  * contract (the host writes NULL score / zero items in that case).
@@ -41,8 +42,6 @@ import { tokens } from '../../theme/tokens';
 import { SkipReasonPicker } from '../../skip/SkipReasonPicker';
 import type { ManualSkipReason } from '../../skip/skipReasons';
 
-const CHIP_SCORES = [0, 1, 2, 3, 4] as const;
-
 type Phase =
   | 'intro'
   | 'active'
@@ -55,13 +54,28 @@ type FullItemSet = StoryWritingRubricItemSet & {
   question_version: string;
 };
 
-function isValidAnchor(a: unknown): a is StoryWritingRubricAnchor {
-  if (!a || typeof a !== 'object') return false;
-  const o = a as Record<string, unknown>;
-  return typeof o.score === 'number' && typeof o.text === 'string';
+type ScoreRange = StoryWritingRubricItemSet['score_range'];
+
+function isValidScoreRange(value: unknown): value is ScoreRange {
+  if (!value || typeof value !== 'object') return false;
+  const o = value as Record<string, unknown>;
+  return (
+    typeof o.min === 'number' && Number.isInteger(o.min) &&
+    typeof o.max === 'number' && Number.isInteger(o.max) &&
+    o.min >= 0 && o.min <= o.max
+  );
 }
 
-function isValidDimension(d: unknown): d is StoryWritingRubricDimension {
+function isValidAnchor(a: unknown, range: ScoreRange): a is StoryWritingRubricAnchor {
+  if (!a || typeof a !== 'object') return false;
+  const o = a as Record<string, unknown>;
+  return (
+    typeof o.score === 'number' && o.score >= range.min && o.score <= range.max &&
+    typeof o.text === 'string'
+  );
+}
+
+function isValidDimension(d: unknown, range: ScoreRange): d is StoryWritingRubricDimension {
   if (!d || typeof d !== 'object') return false;
   const o = d as Record<string, unknown>;
   return (
@@ -69,7 +83,7 @@ function isValidDimension(d: unknown): d is StoryWritingRubricDimension {
     typeof o.label === 'string' &&
     typeof o.end_anchor_gloss === 'string' &&
     Array.isArray(o.anchors) &&
-    o.anchors.every(isValidAnchor)
+    o.anchors.every((a) => isValidAnchor(a, range))
   );
 }
 
@@ -78,13 +92,15 @@ function isFullItemSet(value: unknown): value is FullItemSet {
   const o = value as Record<string, unknown>;
   if (typeof o.item_set_id !== 'string') return false;
   if (typeof o.question_version !== 'string') return false;
+  const range = o.score_range;
+  if (!isValidScoreRange(range)) return false;
   if (o.picture !== undefined) {
     if (!o.picture || typeof o.picture !== 'object') return false;
     const pic = o.picture as Record<string, unknown>;
     if (typeof pic.alt !== 'string') return false;
   }
   if (!Array.isArray(o.dimensions)) return false;
-  return o.dimensions.every(isValidDimension);
+  return o.dimensions.every((d) => isValidDimension(d, range));
 }
 
 function resolveItemSet(language: string, override: unknown): FullItemSet {
@@ -103,13 +119,15 @@ export function StoryWritingRubricQuestion(props: QuestionProps) {
     onItemMarked,
   } = props;
   const [phase, setPhase] = useState<Phase>('intro');
-  // Per-dimension score state. null = unscored; 0..4 = chosen score.
+  // Per-dimension score state. null = unscored; a number = chosen score.
   const [scores, setScores] = useState<Record<string, number | null>>({});
   const [rubricSheetDim, setRubricSheetDim] = useState<string | null>(null);
   const [pictureEnlarged, setPictureEnlarged] = useState(false);
 
   const effectiveItemSet = resolveItemSet(language, itemSet);
   const dimensions = effectiveItemSet.dimensions;
+  const { min: minScore, max: maxScore } = effectiveItemSet.score_range;
+  const chipScores = Array.from({ length: maxScore - minScore + 1 }, (_, i) => minScore + i);
 
   const scoresRef = useRef(scores);
   useEffect(() => {
@@ -134,7 +152,7 @@ export function StoryWritingRubricQuestion(props: QuestionProps) {
     (acc, d) => acc + (scores[d.code] ?? 0),
     0,
   );
-  const max = dimensions.length * 4;
+  const max = dimensions.length * maxScore;
   const unscoredCount = dimensions.length - dimensions.filter((d) => scores[d.code] != null).length;
 
   const finish = useCallback(
@@ -336,7 +354,7 @@ export function StoryWritingRubricQuestion(props: QuestionProps) {
                 </Pressable>
               </View>
               <View style={styles.chipRow}>
-                {CHIP_SCORES.map((s) => {
+                {chipScores.map((s) => {
                   const isSelected = selectedScore === s;
                   return (
                     <Pressable

@@ -80,7 +80,7 @@ moves from `stub-*` to `2024.1`.
 | 6 | `wela_plus_read_words` | Booklet page: 40 words in 6 rows | 40 | 40 |
 | 7 | `wela_plus_read_sentences` | Booklet page: 4 sentences | 20 | 11 |
 | 8 | `wela_plus_read_passage` | Handout passage | 80 | 45 |
-| 9 | `wela_plus_write_cvcs` | Booklet page: 4 pictures; the child writes each word | 12 | 16 (noun prefix not scored; see 4.2, pending 4.3 #2) |
+| 9 | `wela_plus_write_cvcs` | Booklet page: 4 pictures; the child writes each word | 12 | 18 (whole word scored, Jim 2026-10-19; see 4.2) |
 | 10 | `wela_plus_write_sentences_dictation` | Booklet lines; the EA dictates 2 sentences | 15 (D5) | 9 (D5) |
 | 11 | `wela_plus_story_writing` | Picture cards; the child writes a story | 16 | 16 |
 
@@ -152,12 +152,14 @@ isiXhosa differ.
   - Row 5: elephant, jacket.
 - XH pictures differ but keep the same letters:
   - Row 1: apple (i-apile), tortoise (ufudo), cat (ikati), orange, bread, watch.
-  - Row 2: milk, drum, sun, pear, table, and an **empty x cell (no picture)**.
+  - Row 2: milk, drum, sun, pear, table, and an x cell with no picture in the 2024 booklet. The
+    x cell is scored; new artwork shows a clock (*ixesha*) (Jim, 2026-10-19).
   - Row 3: spoon, pig, car, egg, tree, medicine.
   - Row 4: duck, dog, nest, traffic light, van, axe.
   - Row 5: bucket, jug.
-- The XH picture *names* in the app use these English glosses until pedagogy supplies the
-  isiXhosa names (4.3 #1). The EA, not the child, reads them.
+- The XH picture names are isiXhosa with an English gloss (Jim, 2026-10-19), for example
+  `ufudo (tortoise)`. g (drum), n (nest) and z (axe) keep English placeholders while the Masi team
+  chooses better pictures (4.3 #1). The EA, not the child, reads them.
 - The app needs only the **expected letter** and the **picture name** per cell. It shows no
   images (D1/D2).
 
@@ -179,9 +181,8 @@ isiXhosa differ.
 - The English list contains **"there how" twice**. Keep it verbatim. Item identity is by
   `position`, and `item_key` is not unique within a Question (section 7.4).
 - Stop rule: "If they get 5 in a row wrong, or clearly do not know any, stop immediately."
-- The paper does not time Q6. Release 1 keeps Q6 **untimed** to match the paper; only the stop
-  rule applies. This overrides the component's timed default unless pedagogy supplies a
-  duration.
+- **Q6 is timed at one minute** (Jim, 2026-10-19), although the paper has no timer. The stop rule
+  still applies; the instruction ends "Otherwise STOP at 1 minute."
 
 **Q7 sentences, scored per word.**
 - EN: "A cat ran" / "The pot was red" / "The car was driving very fast" / "Who wants to come
@@ -200,9 +201,9 @@ isiXhosa differ.
   eqhwalela. UThando uhambe naye wamgodusa emgonile. Bathe bakufika ekhaya umama
   wamthuthuzela uSihle. Emva kokuba ethule, umama uye wampha amaqebengwana amnandi. Uye
   wawavuyela kakhulu amaqebengwana, babelana ngawo noThando."
-- Paragraph breaks follow the handout. Paper has no timer. Keep the component's 60 s default
-  **off** for Release 1 (untimed, per the paper) unless pedagogy supplies a duration. Without a
-  timer, correct-words-per-minute is not reported.
+- Paragraph breaks follow the handout. **Q8 is timed at one minute** (Jim, 2026-10-19), so
+  correct-words-per-minute is reported. When the minute ends, the EA marks the last word
+  attempted.
 
 **Q9 CVC writing, scored per letter.**
 - The EA says each picture name twice.
@@ -213,10 +214,10 @@ isiXhosa differ.
   - XH: 1 lala, 2 sela, 3 imali, 4 idolo. The 2024 XH booklet orders them the same way
     (sleeping over drinking on the left, money over knee on the right).
 - **Scoring units are explicit in the content.** Each word lists the letters that score.
-  EN: `j a m`, `h u t`, `f i n`, `n e t` (12). XH, proposed: `l a l a`, `s e l a`,
-  `m a l i`, `d o l o` (16). The noun-prefix `i` of *imali* and *idolo* is not scored, which
-  reproduces the booklet's /16 exactly. Pedagogy confirms (4.3 #2). Changing a scoring unit
-  is a content edit, not a code change.
+  EN: `j a m`, `h u t`, `f i n`, `n e t` (12). XH: `l a l a`, `s e l a`, `i m a l i`,
+  `i d o l o` (18). The whole word is scored, including the noun-prefix `i` of *imali* and
+  *idolo* (Jim, 2026-10-19), so the 2024 booklet's /16 is superseded and the printed sheet
+  changes to /18. Changing a scoring unit is a content edit, not a code change.
 - The writing sheet prints the numbers 1–4 beside each picture (section 9.3), so reading order on
   the paper can never be ambiguous.
 
@@ -228,22 +229,23 @@ while the child writes.
 **Q11 story writing.**
 - The EA script is verbatim from the booklet ("Show the child the Picture cards and ask: What
   can you see in these pictures? …").
-- Rubric dimensions: Meaning Making, Spelling, Length, Vocabulary, each scored 0–4, total /16.
+- Rubric dimensions: Meaning Making, Spelling, Length, Vocabulary. **Interim scale (Jim,
+  2026-10-19): each scored 1–4, total /16, with no anchor descriptions.** The score range is
+  item-set data (`score_range`), not code, because the rubric is expected to be redesigned.
 
 ### 4.3 Open content items (pedagogy; none blocks building)
 
-1. **Q5 pictures**: confirm the EN x and q cells; supply the isiXhosa picture names; and
-   decide whether the XH x cell (no picture) is scored.
-2. **Q9 isiXhosa scoring units**: confirm the prefix-excluded letters (`m a l i`, `d o l o`)
-   that give the booklet's /16.
-3. **Q11 rubric anchors**: the paper has dimension names only. Pedagogy supplies the five anchor
-   descriptions (0–4) per dimension in EN and XH. Until then, the app shows the dimension names
-   with the chip numbers and a "Rubric descriptions coming soon" sheet. This **blocks field
-   release** of Q11 scoring quality, not the build.
-4. **Q6/Q8 timing**: confirm untimed (as on paper) or supply durations.
-5. **isiXhosa spelling check** of all transcribed strings by a first-language reviewer.
+Jim answered the 2026-10-14 list on 2026-10-19: Q5 EN x = x-ray and q = queen; Q5 XH names as in
+4.2, with the x cell scored as a clock (*ixesha*); Q9 XH scores the whole word (/18); Q6 and Q8
+are timed at one minute; Q11 uses an interim 1–4 scale without anchors. Still open:
 
-Items 1–5 must be closed before the pilot build, and are tracked under #34.
+1. **Q5 pictures:** the Masi team chooses better pictures, with isiXhosa names, for g (drum),
+   n (nest) and z (axe), and draws the clock artwork for x.
+2. **Q11 rubric:** the interim 1–4 scale has no anchor descriptions and no isiXhosa labels. Jim
+   expects to redesign the rubric; a new scale is a content change (`score_range`).
+3. **isiXhosa spelling check** of all transcribed strings by a first-language reviewer.
+
+Items 1 and 3 must be closed before the pilot build, and are tracked under #34.
 
 ## 5. EA flow (host app)
 
@@ -315,14 +317,14 @@ Required component changes. Each keeps the OSS boundary and passes the contract 
 | 1 | Marking grid mirrors the card: **5 rows × 12**, one scroll view, no 20-per-page pagination. |
 | 1, 6, 8 | **Explicit last-attempted marker.** Today Q1 derives `last_attempted_position` from the last displayed page, and Q6/Q8 advance it only on correct taps (`LetterSoundsQuestion/index.tsx` ~91–112; `ReadWordsQuestion` ~199–209). Both are wrong once pagination and timers change. When one of these Questions ends by End, stop rule, or timer, the EA taps the **last item the child attempted** in a sheet that also offers "Reached the end" and "Nothing attempted". This reuses the EGRA `LastAttemptedBottomSheet` interaction, rebuilt inside the package because of the OSS boundary. Positions stay **zero-based**, as the merged components emit them. `derived.total_attempted = last_attempted_position + 1`. **`-1` means nothing attempted**, the sentinel the existing contract validator and `ReadWordsQuestion` already use; `null` is reserved for Questions that do not track progress. Items after it are "not reached" (`is_correct = false`, `metadata.reached = false`), not wrong. `derived.tracks_progress = true` makes the validator require a numeric position. Pinned cases: nothing attempted, first item only, a row boundary, and the final item, each checked on the emitted and the persisted values. |
 | 7 | Q7 has no early-stop rule on paper, so it gets no marker sheet. **Finish** means every sentence was presented: `tracks_progress = true` and `last_attempted_position` = the last word. A skip emits no items. |
-| 6 | Rows mirror the card (6 rows of up to 7). Untimed per 4.2. |
+| 6 | Rows mirror the card (6 rows of up to 7). Timed at 60 s per 4.2. |
 | 7 | Structure unchanged (per-word pills grouped by sentence); content plus the Finish rule above. |
-| 8 | Paragraphs mirror the handout. Untimed per 4.2. **The component currently falls back to a 60 s timer when `durationSec` is omitted** (`DEFAULT_DURATION_SEC`). Change it so an omitted `durationSec` means untimed, as Q6 already does. Without a timer, `correct_words_per_minute` is omitted from `derived`, and `last_attempted_position` still records where the EA stopped. |
+| 8 | Paragraphs mirror the handout. Timed at 60 s per 4.2 (`durationSec: 60` in the battery). An omitted `durationSec` still means untimed, so the timing is battery data. `correct_words_per_minute` is reported, and `last_attempted_position` records where the child stopped. |
 | 1, 6–8 | Remove the child-facing font-size dependency. Pills use a fixed EA marking size from design tokens; `useChildReadingFontSize` is removed or returns a constant. |
 | 5 | Cells show **picture name + expected letter** (for example, "apple → a"). No image. |
 | 9 | **Per-letter marking**: each word is a row of letter cells. Items are letters with `item_key` like `w1.l2`; `prompt` is the letter; metadata holds the word. |
 | 10 | **Per-word marking** grouped by sentence (Q7's layout shell). Items are words. |
-| 11 | No picture thumbnail (the EA holds the physical cards). Anchors come from the item set (4.3 #3). Totals and items stay as built (ADR-0004 `ea:` keys). |
+| 11 | No picture thumbnail (the EA holds the physical cards). The chip range and any anchors come from the item set (`score_range`, interim 1–4; 4.3 #2). Totals and items stay as built (ADR-0004 `ea:` keys). |
 | All | Raw hex colours replaced with Masi design tokens. This is the ROADMAP §8 conformance pass, scoped to the 11 Questions. |
 
 ### 5.4 Finalize and summary
@@ -340,7 +342,7 @@ Required component changes. Each keeps the OSS boundary and passes the contract 
 
 **`batteries/wela_plus_full.ts`, version `2024.1`:**
 - an ordered list of 11 `question_code`s;
-- per Question: `instructions` copy (EN/XH), an optional `durationSec` (Q1 only, 60), a
+- per Question: `instructions` copy (EN/XH), an optional `durationSec` (Q1, Q6 and Q8, each 60), a
   `materials` descriptor `{ item: 'reading_card' | 'picture_cards' | 'writing_sheet' | null,
   side?: 'A' | 'B' | 'C', section? }`, and `paper_marked: boolean` (Q5, Q9, Q10, Q11; consumed
   by Release 2 photos);
@@ -690,8 +692,8 @@ verifies.
 
 - **Card ↔ app drift.** Mitigated by the version footer, the intro-screen materials line, and the
   "rows are a contract" rule (9.1).
-- **Q11 without anchors.** Calibration data quality depends on 4.3 #3. Field release of Q11
-  waits for the anchors. The other 10 Questions do not.
+- **Q11 interim scale.** Jim chose a 1–4 scale without anchors for Release 1 (2026-10-19), so
+  scores between EAs will be less consistent until the rubric is redesigned.
 - **Paper handling in Release 1.** Sheets can still be lost, as today. Release 2 photos close
   this gap.
 - **Device-local unfinished runs.** If a device is lost or the app reinstalled, unfinished runs

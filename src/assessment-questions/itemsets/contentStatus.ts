@@ -1,11 +1,7 @@
 /** Content awaiting Masi pedagogy (spec 4.3). The host shows this before field release. */
 export const CONTENT_PENDING: ReadonlyArray<{ item_set_id: string; field: string; note: string }> = [
-  { item_set_id: 'wela_plus_letter_writing@2024.1.en', field: 'prompts.x,q', note: 'Confirm the picture names: x = x-ray (child holding a chest x-ray), q = queen (crowned figure). Identified from the 2024 booklet artwork on 2026-10-15.' },
-  { item_set_id: 'wela_plus_letter_writing@2024.1.xh', field: 'prompts.picture.alt', note: 'Supply isiXhosa picture names; decide whether the x cell (no picture) is scored.' },
-  { item_set_id: 'wela_plus_write_cvcs@2024.1.xh', field: 'words.letters', note: 'Confirm prefix-excluded scoring letters (m a l i, d o l o) giving /16.' },
-  { item_set_id: 'wela_plus_story_writing@2024.1.en', field: 'dimensions.anchors', note: 'Five anchor descriptions (0–4) per dimension.' },
-  { item_set_id: 'wela_plus_story_writing@2024.1.xh', field: 'dimensions.anchors', note: 'Five anchor descriptions (0–4) per dimension, and isiXhosa labels.' },
-  { item_set_id: 'wela_plus_read_words@2024.1.en', field: 'durationSec', note: 'Confirm Q6 untimed (paper has no timer).' },
-  { item_set_id: 'wela_plus_read_passage@2024.1.en', field: 'durationSec', note: 'Confirm Q8 untimed (paper has no timer).' },
+  { item_set_id: 'wela_plus_letter_writing@2024.1.xh', field: 'prompts.picture', note: 'Masi team to choose better pictures for g (drum), n (nest) and z (axe) and supply their isiXhosa names; draw new clock artwork for x (ixesha).' },
+  { item_set_id: 'wela_plus_story_writing@2024.1.en', field: 'dimensions.anchors', note: 'Interim scale: score each dimension 1–4 with no anchor descriptions. The rubric is expected to be redesigned.' },
+  { item_set_id: 'wela_plus_story_writing@2024.1.xh', field: 'dimensions.anchors', note: 'Interim scale: score each dimension 1–4 with no anchor descriptions; isiXhosa labels still needed. The rubric is expected to be redesigned.' },
   { item_set_id: 'all@2024.1.xh', field: 'strings', note: 'First-language review of every isiXhosa string.' },
 ];
