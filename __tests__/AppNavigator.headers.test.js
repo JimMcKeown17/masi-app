@@ -52,7 +52,7 @@ const TITLES = {
   AssessmentChildSelect: 'Select child', AssessmentHistory: 'Assessment history', LetterTracker: 'Letter tracker',
   AssessmentDetail: 'Assessment detail', LetterMasteryRanking: 'Letter mastery', AssessmentRanking: 'Assessment scores',
   SessionCountRanking: 'Session count', SyncStatus: 'Sync status',
-  ChildrenList: 'Children', ClassDetail: 'Class details', ChildResults: 'Child results',
+  ChildrenList: 'Children', ClassDetail: '', ChildResults: 'Child results',
 };
 const navigation = { goBack: jest.fn(), navigate: jest.fn(), canGoBack: () => true };
 const resolve = (options, name) => typeof options === 'function' ? options({ navigation, route: { name } }) : options ?? {};

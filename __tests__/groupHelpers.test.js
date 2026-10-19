@@ -99,3 +99,10 @@ describe('getGroupDotColor', () => {
     expect(getGroupDotColor(NaN)).toBe(GROUP_DOT_COLORS[0]);
   });
 });
+
+// Pin the public API so the retired palette cannot acquire new consumers.
+test('only the dot colour helper is exported', () => {
+  expect(Object.keys(require('../src/utils/groupHelpers')).sort()).toEqual([
+    'compareGroups', 'getGroupDotColor', 'nextGroupNumber',
+  ]);
+});

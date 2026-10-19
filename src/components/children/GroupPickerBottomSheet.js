@@ -13,7 +13,8 @@ import {
 } from 'react-native-paper';
 import { colors, spacing, borderRadius } from '../../constants/colors';
 import { useChildren } from '../../context/ChildrenContext';
-import { compareGroups, getGroupColor, nextGroupNumber } from '../../utils/groupHelpers';
+import { compareGroups, getGroupDotColor, nextGroupNumber } from '../../utils/groupHelpers';
+import { GroupDot } from './GroupChip';
 import BottomSheet from '../common/BottomSheet';
 import BrandButton from '../common/BrandButton';
 import { fontFamilies, typeRoles } from '../../constants/typography';
@@ -231,7 +232,6 @@ export default function GroupPickerBottomSheet({
       {/* Virtual preset rows — shown only when user has no groups yet */}
       {groups.length === 0 &&
         Array.from({ length: PRESET_VIRTUAL_COUNT }, (_, i) => i + 1).map((n) => {
-          const colorScheme = getGroupColor(n - 1);
           return (
             <TouchableOpacity
               key={`virtual-${n}`}
@@ -243,7 +243,7 @@ export default function GroupPickerBottomSheet({
               accessibilityState={{ disabled: loading }}
             >
               <View style={styles.groupInfo}>
-                <View style={[styles.groupColorDot, { backgroundColor: colorScheme.text }]} />
+                <View style={styles.groupColorDot}><GroupDot color={getGroupDotColor(n - 1)} size={12} /></View>
                 <View>
                   <Text variant="bodyLarge" style={styles.groupName}>
                     Group {n}
@@ -260,7 +260,6 @@ export default function GroupPickerBottomSheet({
       {/* Group list */}
       {sortedGroups.map((group, index) => {
         const isSelected = group.id === currentGroupId;
-        const colorScheme = getGroupColor(index);
         const childCount = getChildrenInGroup(group.id).length;
 
         return (
@@ -268,7 +267,7 @@ export default function GroupPickerBottomSheet({
             key={group.id}
             style={[
               styles.groupRow,
-              isSelected && { borderColor: colorScheme.text, borderWidth: 2 },
+              isSelected && { borderColor: colors.text, borderWidth: 2 },
             ]}
             onPress={() => handleSelectGroup(group.id)}
             disabled={loading}
@@ -277,11 +276,11 @@ export default function GroupPickerBottomSheet({
             accessibilityState={{ disabled: loading, selected: isSelected }}
           >
             <View style={styles.groupInfo}>
-              <View style={[styles.groupColorDot, { backgroundColor: colorScheme.text }]} />
+              <View style={styles.groupColorDot}><GroupDot color={getGroupDotColor(index)} size={12} /></View>
               <View>
                 <Text variant="bodyLarge" style={[
                   styles.groupName,
-                  isSelected && { color: colorScheme.text, fontFamily: fontFamilies.textBold },
+                  isSelected && { color: colors.text, fontFamily: fontFamilies.textBold },
                 ]}>
                   {group.name}
                 </Text>
@@ -292,7 +291,7 @@ export default function GroupPickerBottomSheet({
             </View>
             <View style={styles.groupActions}>
               {isSelected && (
-                <Text style={[styles.checkmark, { color: colorScheme.text }]}>✓</Text>
+                <Text style={[styles.checkmark, { color: colors.text }]}>✓</Text>
               )}
               <IconButton
                 icon="delete-outline"
@@ -353,13 +352,11 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   groupColorDot: {
-    width: 12,
-    height: 12,
-    borderRadius: 6,
     marginRight: spacing.sm,
   },
   groupName: {
     fontFamily: fontFamilies.textMedium,
+    color: colors.text,
   },
   groupChildCount: {
     color: colors.textSecondary,

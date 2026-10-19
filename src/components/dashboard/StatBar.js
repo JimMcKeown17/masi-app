@@ -9,8 +9,9 @@ export default function StatBar({ items }) {
     {items.map((item, index) => {
       const Column = item.onPress ? Pressable : View;
       return <Column key={item.label} onPress={item.onPress}
+        accessible={item.accessibilityLabel ? true : undefined}
         accessibilityRole={item.onPress ? 'button' : undefined}
-        accessibilityLabel={item.onPress ? item.accessibilityLabel ?? `View ${item.label}: ${item.value}` : undefined}
+        accessibilityLabel={item.accessibilityLabel ?? (item.onPress ? `View ${item.label}: ${item.value}` : undefined)}
         style={[styles.column, index > 0 && styles.divider]}>
         <View style={styles.numeralRow}>
           <Text maxFontSizeMultiplier={1.2} style={[styles.value, { color: item.color ?? (item.onPress ? colors.primary : colors.text) }]}>{item.value}</Text>

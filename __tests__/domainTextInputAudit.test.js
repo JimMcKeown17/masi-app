@@ -15,7 +15,7 @@ describe('domain text input audit', () => {
 
   test('search fields for child and class names disable keyboard suggestions', () => {
     expect(readSource('src/screens/main/ChildrenListScreen.js')).toMatch(
-      /<Searchbar[\s\S]*placeholder="Search classes\.\.\."[\s\S]*\{\.\.\.NO_TEXT_SUGGESTIONS\}/
+      /<SearchField[\s\S]*placeholder="Search classes…"/
     );
     const childSelectorSource = readSource('src/components/children/ChildSelector.js');
     expect(childSelectorSource).toMatch(

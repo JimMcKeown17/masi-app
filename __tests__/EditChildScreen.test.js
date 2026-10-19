@@ -1,7 +1,7 @@
 jest.mock('@expo/vector-icons', () => ({ Ionicons: 'Ionicons' }), { virtual: true });
 import React from 'react';
 import { Alert, StyleSheet } from 'react-native';
-import { colors } from '../src/constants/colors';
+import { colors, tints } from '../src/constants/colors';
 import { render, fireEvent, waitFor, within } from '@testing-library/react-native';
 import { AllProviders } from '../test-support/renderWithProviders';
 import EditChildScreen from '../src/screens/children/EditChildScreen';
@@ -13,6 +13,8 @@ const mockNavigationGoBack = jest.fn();
 let mockChildren;
 let mockClasses;
 let mockSchools;
+let mockGroups;
+let mockChildrenGroups;
 
 const makeChild = (gender = 'female') => ({
   id: 'child-1',
@@ -47,15 +49,15 @@ jest.mock('../src/components/children/GroupPickerBottomSheet', () => ({
 }));
 
 jest.mock('../src/utils/groupHelpers', () => ({
-  getGroupColor: () => ({ text: '#000000' }),
+  getGroupDotColor: () => '#1565C0',
   compareGroups: (left, right) => (left.name || '').localeCompare(right.name || ''),
 }));
 
 jest.mock('../src/context/ChildrenContext', () => ({
   useChildren: () => ({
     children: mockChildren,
-    groups: [],
-    childrenGroups: [],
+    groups: mockGroups,
+    childrenGroups: mockChildrenGroups,
     updateChild: mockUpdateChild,
     deleteChild: mockDeleteChild,
   }),
@@ -88,6 +90,8 @@ const collectNativeTextInputs = (node) => {
 beforeEach(() => {
   jest.clearAllMocks();
   mockChildren = [makeChild('female')];
+  mockGroups = [];
+  mockChildrenGroups = [];
   mockClasses = [
     {
       id: 'class-1',
@@ -273,4 +277,15 @@ test('Delete child keeps the confirmation and deletes only after confirmation', 
 test('leaves the page title to the navigator', () => {
   const screen = renderScreen();
   expect(screen.queryByText('Edit Child')).toBeNull();
+});
+
+
+test('the current group shows the shared dot and an ink name with the default field edge', () => {
+  mockGroups = [{ id: 'g1', name: 'Lions' }];
+  mockChildrenGroups = [{ child_id: 'child-1', group_id: 'g1' }];
+  const screen = renderScreen();
+  const field = screen.getByRole('button', { name: 'Choose group for Amahle Dlamini' });
+  expect(StyleSheet.flatten(within(field).getByTestId('group-dot').props.style)).toMatchObject({ backgroundColor: '#1565C0', width: 10, height: 10 });
+  expect(StyleSheet.flatten(within(field).getByText('Lions').props.style).color).toBe(colors.text);
+  expect(StyleSheet.flatten(field.props.style)).toMatchObject({ borderColor: tints.control, borderWidth: 1.5 });
 });
