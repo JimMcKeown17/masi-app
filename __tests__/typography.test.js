@@ -1,4 +1,6 @@
-import { fontFamilies, typeRoles } from '../src/constants/typography';
+import fs from 'fs';
+import path from 'path';
+import { fontFamilies, logoType, typeRoles } from '../src/constants/typography';
 import * as typographyModule from '../src/constants/typography';
 
 test('the legacy typography export is retired', () => {
@@ -70,4 +72,29 @@ test.each([
   ['textInitialsLg', 22, 28, 0.66],
 ])('%s pins initials geometry without fontWeight', (name, fontSize, lineHeight, letterSpacing) => {
   expect(typeRoles[name]).toEqual({ fontFamily: fontFamilies.textHeavy, fontSize, lineHeight, letterSpacing });
+});
+
+describe('Login lockup type', () => {
+  test('Bricolage 700 is a loaded face', () => {
+    expect(fontFamilies.displayBold).toBe('BricolageGrotesque_700Bold');
+  });
+
+  test('every fontFamilies face is loaded by App.js useFonts', () => {
+    const app = fs.readFileSync(path.join(process.cwd(), 'App.js'), 'utf8');
+    const useFontsBlock = app.slice(app.indexOf('useFonts({'), app.indexOf('});', app.indexOf('useFonts({')));
+    for (const face of Object.values(fontFamilies)) {
+      expect({ face, loaded: useFontsBlock.includes(face) }).toEqual({ face, loaded: true });
+    }
+  });
+
+  test('the wordmark styles match the board and are not type roles', () => {
+    expect(logoType.wordmark).toEqual({
+      fontFamily: fontFamilies.display, fontSize: 26, lineHeight: 24, letterSpacing: 0.26,
+    });
+    expect(logoType.wordmarkSub).toEqual({
+      fontFamily: fontFamilies.displayBold, fontSize: 12, lineHeight: 15, letterSpacing: 1.56,
+    });
+    expect(Object.values(typeRoles)).not.toContain(logoType.wordmark);
+    expect(typeRoles.wordmark).toBeUndefined();
+  });
 });

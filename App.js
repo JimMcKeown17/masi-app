@@ -31,7 +31,7 @@ import {
 
 import * as SplashScreen from 'expo-splash-screen';
 import { useFonts } from 'expo-font';
-import { BricolageGrotesque_800ExtraBold } from '@expo-google-fonts/bricolage-grotesque';
+import { BricolageGrotesque_700Bold, BricolageGrotesque_800ExtraBold } from '@expo-google-fonts/bricolage-grotesque';
 import { Figtree_500Medium, Figtree_600SemiBold, Figtree_700Bold, Figtree_800ExtraBold } from '@expo-google-fonts/figtree';
 
 // Keep the native splash up until the fonts settle, so a cold start never shows
@@ -133,6 +133,7 @@ export function AppRoot() {
 
 export function App() {
   const [fontsLoaded, fontError] = useFonts({
+    BricolageGrotesque_700Bold,
     BricolageGrotesque_800ExtraBold,
     Figtree_500Medium,
     Figtree_600SemiBold,

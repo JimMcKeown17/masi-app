@@ -6,7 +6,7 @@ import { typeRoles } from '../../constants/typography';
 import InlineNote from './InlineNote';
 
 export default function TextField({
-  label, value, onChangeText, icon, placeholder, error, disabled = false,
+  label, value, onChangeText, icon, placeholder, error, errorPlacement = 'field', disabled = false,
   secureTextEntry, onToggleSecure, multiline = false, surface = 'canvas', inputRef,
   accessibilityLabel, onFocus, onBlur, style, ...textInputProps
 }) {
@@ -17,20 +17,32 @@ export default function TextField({
     if (typeof inputRef === 'function') inputRef(input);
     else if (inputRef) inputRef.current = input;
   }, [inputRef]);
-  // The red surface intentionally shares the canvas look until the Login PR.
+  const onRed = surface === 'red';
+  const canvasDisabled = disabled && !onRed;
+  const redDisabled = disabled && onRed;
+  const haloColor = onRed
+    ? error ? colors.errorBg : focused ? tints.onRedHalo : null
+    : focused && !error && !disabled ? tints.pressed : null;
+  const iconColor = onRed
+    ? error ? colors.error : value || focused ? colors.text : colors.textSecondary
+    : disabled ? colors.disabled : colors.textSecondary;
+
   return <View>
     <View style={styles.wrapper}>
-      {focused && !error && !disabled ? <View testID="text-field-halo" pointerEvents="none" style={styles.halo} /> : null}
+      {haloColor ? <View testID="text-field-halo" pointerEvents="none"
+        style={[styles.halo, { backgroundColor: haloColor }]} /> : null}
       <Pressable testID="text-field-box" accessible={false} disabled={disabled}
         onPress={() => localRef.current?.focus()}
         style={[styles.box, multiline && styles.multiline, onToggleSecure && styles.trailing, {
-          backgroundColor: disabled ? colors.border : colors.surface,
-          borderColor: disabled ? 'transparent' : error ? colors.error : focused ? colors.text : colors.fieldEdge,
+          backgroundColor: canvasDisabled ? colors.border : colors.surface,
+          borderColor: canvasDisabled ? 'transparent' : error ? colors.error : focused ? colors.text : onRed ? 'transparent' : colors.fieldEdge,
         }]}
       >
-        {icon ? <Ionicons name={icon} size={22} color={disabled ? colors.disabled : colors.textSecondary} accessible={false} /> : null}
+        {icon ? <Ionicons name={icon} size={22} color={iconColor} accessible={false}
+          style={redDisabled && styles.dimmedChrome} /> : null}
         <View style={styles.values}>
-          <Text style={[styles.label, { color: error ? colors.error : colors.textSecondary }]}>{label}</Text>
+          <Text style={[styles.label, { color: error ? colors.error : colors.textSecondary },
+            redDisabled && styles.dimmedChrome]}>{label}</Text>
           <TextInput {...textInputProps} ref={setRef} value={value} onChangeText={onChangeText}
             placeholder={placeholder} placeholderTextColor={colors.placeholder}
             accessibilityLabel={error ? `${label}, error: ${error}` : accessibilityLabel ?? label}
@@ -39,18 +51,19 @@ export default function TextField({
             onFocus={(event) => { setFocused(true); onFocus?.(event); }}
             onBlur={(event) => { setFocused(false); onBlur?.(event); }}
             style={[styles.input, secureTextEntry && value ? typeRoles.textMasked : typeRoles.textInput,
-              multiline && styles.multilineInput, { color: disabled ? colors.disabled : colors.text }, style]}
+              multiline && styles.multilineInput, { color: canvasDisabled ? colors.disabled : colors.text },
+              redDisabled && styles.dimmedValue, style]}
           />
         </View>
         {onToggleSecure ? <Pressable onPress={onToggleSecure} disabled={disabled}
           accessibilityRole="button" accessibilityLabel={secureTextEntry ? 'Show password' : 'Hide password'}
-          accessibilityState={{ disabled }} style={styles.toggle}>
+          accessibilityState={{ disabled }} style={[styles.toggle, redDisabled && styles.dimmedChrome]}>
           <Ionicons name={secureTextEntry ? 'eye-outline' : 'eye-off-outline'} size={22}
-            color={disabled ? colors.disabled : colors.textSecondary} />
+            color={onRed ? colors.text : disabled ? colors.disabled : colors.textSecondary} />
         </Pressable> : null}
       </Pressable>
     </View>
-    {error ? <View style={styles.note}><InlineNote>{error}</InlineNote></View> : null}
+    {error && errorPlacement === 'field' ? <View style={styles.note}><InlineNote>{error}</InlineNote></View> : null}
   </View>;
 }
 const styles = StyleSheet.create({
@@ -64,5 +77,7 @@ const styles = StyleSheet.create({
   multiline: { minHeight: 112, paddingVertical: 12, alignItems: 'flex-start' },
   multilineInput: { minHeight: 66, textAlignVertical: 'top' },
   toggle: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
+  dimmedValue: { opacity: 0.7 },
+  dimmedChrome: { opacity: 0.5 },
   note: { marginTop: 8 },
 });

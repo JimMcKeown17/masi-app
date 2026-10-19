@@ -3,7 +3,12 @@ import { AccessibilityInfo, Platform, StyleSheet } from 'react-native';
 import { fireEvent, render } from '@testing-library/react-native';
 import { colors, tints } from '../src/constants/colors';
 import { typeRoles } from '../src/constants/typography';
-jest.mock('@expo/vector-icons', () => ({ Ionicons: 'Ionicons' }), { virtual: true });
+jest.mock('@expo/vector-icons', () => ({
+  Ionicons: ({ name, color, style }) => {
+    const { Text } = require('react-native');
+    return <Text testID={`icon-${name}`} style={[{ color }, style]} />;
+  },
+}), { virtual: true });
 const flat = (node) => StyleSheet.flatten(node.props.style);
 import TextField from '../src/components/common/TextField';
 
@@ -59,4 +64,89 @@ test('multiline grows and forwards input changes', () => {
   expect(flat(ui.getByLabelText('Notes'))).toMatchObject({ minHeight: 66, textAlignVertical: 'top' });
   fireEvent.changeText(ui.getByLabelText('Notes'), 'A note');
   expect(onChangeText).toHaveBeenCalledWith('A note');
+});
+
+describe('red surface and form-placed errors', () => {
+  const emailProps = {
+    surface: 'red', label: 'Email', icon: 'mail-outline', value: '', testID: 'email',
+  };
+
+  test('red rest has a transparent border and no halo', () => {
+    const onChangeText = jest.fn();
+    const ui = render(<TextField {...emailProps} onChangeText={onChangeText} />);
+    expect(flat(ui.getByTestId('text-field-box'))).toMatchObject({ borderColor: 'transparent', borderWidth: 2 });
+    expect(ui.queryByTestId('text-field-halo')).toBeNull();
+    expect(flat(ui.getByTestId('icon-mail-outline')).color).toBe(colors.textSecondary);
+    expect(flat(ui.getByText('Email')).color).toBe(colors.textSecondary);
+    fireEvent.changeText(ui.getByTestId('email'), 'ea@example.org');
+    expect(onChangeText).toHaveBeenCalledWith('ea@example.org');
+    ui.rerender(<TextField {...emailProps} value="ea@example.org" onChangeText={onChangeText} />);
+    expect(flat(ui.getByTestId('icon-mail-outline')).color).toBe(colors.text);
+  });
+
+  test('red focus draws an ink border and the white halo', () => {
+    const ui = render(<TextField {...emailProps} />);
+    fireEvent(ui.getByTestId('email'), 'focus');
+    expect(flat(ui.getByTestId('text-field-box'))).toMatchObject({ borderColor: colors.text, borderWidth: 2 });
+    expect(flat(ui.getByTestId('text-field-halo'))).toMatchObject({
+      backgroundColor: tints.onRedHalo, position: 'absolute', top: -4, bottom: -4,
+      left: -4, right: -4, borderRadius: 18,
+    });
+    expect(flat(ui.getByTestId('icon-mail-outline')).color).toBe(colors.text);
+    fireEvent(ui.getByTestId('email'), 'blur');
+    expect(ui.queryByTestId('text-field-halo')).toBeNull();
+    expect(flat(ui.getByTestId('text-field-box')).borderColor).toBe('transparent');
+  });
+
+  test('red error rings in error with the errorBg halo', () => {
+    const error = 'Please enter a valid email address';
+    const ui = render(<TextField {...emailProps} error={error} />);
+    expect(flat(ui.getByTestId('text-field-box'))).toMatchObject({ borderColor: colors.error, borderWidth: 2 });
+    expect(flat(ui.getByTestId('text-field-halo')).backgroundColor).toBe(colors.errorBg);
+    expect(flat(ui.getByTestId('icon-mail-outline')).color).toBe(colors.error);
+    expect(flat(ui.getByText('Email')).color).toBe(colors.error);
+    expect(ui.getAllByRole('alert')).toHaveLength(1);
+    expect(ui.getByRole('alert')).toHaveTextContent(error);
+    fireEvent(ui.getByTestId('email'), 'focus');
+    expect(flat(ui.getByTestId('text-field-box')).borderColor).toBe(colors.error);
+    expect(flat(ui.getByTestId('text-field-halo')).backgroundColor).toBe(colors.errorBg);
+  });
+
+  test.each([
+    ['rest', undefined, 'transparent', null],
+    ['focused', undefined, colors.text, tints.onRedHalo],
+    ['invalid', 'Required', colors.error, colors.errorBg],
+  ])('red disabled dims value and chrome but keeps the %s layout', (state, error, borderColor, haloColor) => {
+    const onToggleSecure = jest.fn();
+    const props = {
+      surface: 'red', label: 'Password', icon: 'lock-closed-outline', value: 'secret',
+      secureTextEntry: true, onToggleSecure, error, testID: 'password',
+    };
+    const ui = render(<TextField {...props} />);
+    if (state === 'focused') fireEvent(ui.getByTestId('password'), 'focus');
+    ui.rerender(<TextField {...props} disabled />);
+    expect(ui.getByTestId('password').props.editable).toBe(false);
+    expect(flat(ui.getByTestId('password'))).toMatchObject({ ...typeRoles.textMasked, color: colors.text, opacity: 0.7 });
+    expect(flat(ui.getByTestId('icon-lock-closed-outline')).opacity).toBe(0.5);
+    expect(flat(ui.getByText('Password')).opacity).toBe(0.5);
+    const toggle = ui.getByRole('button', { name: 'Show password' });
+    expect(flat(toggle)).toMatchObject({ width: 44, height: 44, opacity: 0.5 });
+    expect(toggle.props.accessibilityState.disabled).toBe(true);
+    fireEvent.press(toggle);
+    expect(onToggleSecure).not.toHaveBeenCalled();
+    expect(flat(ui.getByTestId('text-field-box'))).toMatchObject({
+      minHeight: 60, borderWidth: 2, backgroundColor: colors.surface, borderColor,
+    });
+    if (haloColor) expect(flat(ui.getByTestId('text-field-halo')).backgroundColor).toBe(haloColor);
+    else expect(ui.queryByTestId('text-field-halo')).toBeNull();
+  });
+
+  test.each(['red', 'canvas'])('form placement on %s keeps the ring and accessibility but draws no note', (surface) => {
+    const error = 'Please enter both email and password';
+    const ui = render(<TextField {...emailProps} surface={surface} error={error} errorPlacement="form" />);
+    expect(ui.queryByRole('alert')).toBeNull();
+    expect(ui.queryByText(error)).toBeNull();
+    expect(flat(ui.getByTestId('text-field-box')).borderColor).toBe(colors.error);
+    expect(ui.getByLabelText(`Email, error: ${error}`)).toBe(ui.getByTestId('email'));
+  });
 });
