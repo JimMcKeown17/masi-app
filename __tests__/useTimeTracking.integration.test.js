@@ -200,7 +200,9 @@ test('a clock-out after ten hours records the ten-hour auto-close', async () => 
   expect(result.current.isSignedIn).toBe(false);
   expect(result.current.activeEntry).toBeNull();
   expect(result.current.loadingLocation).toBe(false);
-  expect(result.current.snackbarMessage).toBe('Auto clocked out after 10 hours.');
+  expect(screen.getByText('Auto clocked out after 10 hours.')).toBeTruthy();
+  expect(screen.queryByRole('alert')).toBeNull();
+  expect(screen.queryByTestId('toast-status')).toBeNull();
 });
 
 test('a clock-out crossing ten hours during location capture records the ten-hour auto-close', async () => {
@@ -244,7 +246,9 @@ test('a clock-out crossing ten hours during location capture records the ten-hou
   expect(result.current.isSignedIn).toBe(false);
   expect(result.current.activeEntry).toBeNull();
   expect(result.current.loadingLocation).toBe(false);
-  expect(result.current.snackbarMessage).toBe('Auto clocked out after 10 hours.');
+  expect(screen.getByText('Auto clocked out after 10 hours.')).toBeTruthy();
+  expect(screen.queryByRole('alert')).toBeNull();
+  expect(screen.queryByTestId('toast-status')).toBeNull();
 });
 
 test.each([
