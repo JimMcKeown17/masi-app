@@ -47,10 +47,11 @@ jest.mock('../src/services/literacySessionPersistence', () => ({
 }));
 
 import React from 'react';
+const ReactNative = require('react-native');
 import { AllProviders } from '../test-support/renderWithProviders';
 import { renderInTestStack } from '../test-support/renderInTestStack';
 import { act, fireEvent, waitFor, within } from '@testing-library/react-native';
-import { BackHandler, FlatList, Platform, StyleSheet } from 'react-native';
+import { AccessibilityInfo, BackHandler, FlatList, Keyboard, Platform, StyleSheet } from 'react-native';
 import SegmentedControl from '../src/components/common/SegmentedControl';
 import InlineNote from '../src/components/common/InlineNote';
 import { colors } from '../src/constants/colors';
@@ -118,7 +119,7 @@ describe('LiteracySessionForm', () => {
     fireEvent.press(screen.getByLabelText('A, not selected'));
     fireEvent.press(screen.getByText('Select a level'));
     fireEvent.press(screen.getByText(READING_LEVELS[0]));
-    fireEvent.press(screen.getByText('Submit Session'));
+    fireEvent.press(screen.getByText('Submit session'));
   };
 
   test('renders the session-capture form scaffold', () => {
@@ -130,7 +131,182 @@ describe('LiteracySessionForm', () => {
     expect(screen.getByRole('tab', { name: 'Groups' }).props.accessibilityState).toEqual({ selected: false });
     expect(screen.queryByText('Select by Group')).toBeNull();
     expect(screen.getByRole('header', { name: 'Step 3: Letters focused on' })).toBeTruthy();
-    expect(screen.getByText('Submit Session')).toBeTruthy();
+    expect(screen.getByText('Submit session')).toBeTruthy();
+  });
+
+  test('Submit session is a button outside the scrolling list, with no Snackbar', () => {
+    const screen = renderForm();
+    const button = screen.getByRole('button', { name: 'Submit session' });
+    let parent = button.parent;
+    while (parent) {
+      expect(parent.type).not.toBe(FlatList);
+      parent = parent.parent;
+    }
+    const source = require('fs').readFileSync(require('path').join(__dirname, '../src/screens/sessions/LiteracySessionForm.js'), 'utf8');
+    expect(source).not.toMatch(/Snackbar/);
+  });
+
+  test('Saving… is busy and unavailable and ignores a second press', async () => {
+    let resolvePersistence;
+    mockPersistLiteracySession.mockReturnValue(new Promise(resolve => { resolvePersistence = resolve; }));
+    const screen = renderForm();
+    submitValidForm(screen);
+    const saving = screen.getByRole('button', { name: 'Saving…' });
+    expect(saving.props.accessibilityState).toMatchObject({ busy: true, disabled: true });
+    fireEvent.press(saving);
+    expect(mockPersistLiteracySession).toHaveBeenCalledTimes(1);
+    await act(async () => { resolvePersistence(true); });
+    expect(mockCompleteMounted).toHaveBeenCalledTimes(1);
+  });
+
+  test.each(['ios', 'android'])('the %s keyboard hides Submit and restores it on dismiss', os => {
+    const replacement = jest.replaceProperty(Platform, 'OS', os);
+    const listeners = {};
+    const spy = jest.spyOn(Keyboard, 'addListener').mockImplementation((event, listener) => {
+      (listeners[event] ??= []).push(listener);
+      return { remove: jest.fn() };
+    });
+    try {
+      const screen = renderForm();
+      const phase = os === 'ios' ? 'Will' : 'Did';
+      act(() => listeners[`keyboard${phase}Show`].forEach(listener => listener({ endCoordinates: { height: 300 } })));
+      expect(screen.queryByRole('button', { name: 'Submit session' })).toBeNull();
+      expect(screen.queryByLabelText('Children missing. Go to step 2')).toBeNull();
+      act(() => listeners[`keyboard${phase}Hide`].forEach(listener => listener()));
+      expect(screen.getByRole('button', { name: 'Submit session' })).toBeTruthy();
+      expect(screen.getByLabelText('Children missing. Go to step 2')).toBeTruthy();
+    } finally {
+      spy.mockRestore();
+      replacement.restore();
+    }
+  });
+
+  const summaryLabels = {
+    children: 'Children missing. Go to step 2',
+    letters: 'Letters missing. Go to step 3',
+    readingLevel: 'Reading level missing. Go to step 4',
+  };
+  const inlineErrors = {
+    children: 'Select at least one child',
+    letters: 'Select at least one letter',
+    readingLevel: 'Select a reading level',
+  };
+  const expectSubmitAvailable = screen => expect(screen.getByRole('button', { name: 'Submit session' }).props.accessibilityState.disabled).toBeFalsy();
+
+  test('the fresh summary shows all three missing requirements and an available Submit', () => {
+    const screen = renderForm();
+    Object.values(summaryLabels).forEach(name => expect(screen.getByRole('button', { name })).toBeTruthy());
+    expectSubmitAvailable(screen);
+  });
+
+  test('the summary follows children, letters, level and group selection without disabling Submit', () => {
+    const children = [
+      { id: 'child-1', first_name: 'Amahle', last_name: 'Dlamini', class_id: 'class-1' },
+      { id: 'child-2', first_name: 'Buhle', last_name: 'Moyo', class_id: 'class-1' },
+    ];
+    mockUseChildren.mockReturnValue({ children, groups: [{ id: 'g1', name: 'Group 1' }], getChildrenInGroup: () => children });
+    const screen = renderForm();
+    expectSubmitAvailable(screen);
+    fireEvent.press(screen.getByRole('checkbox', { name: 'Amahle Dlamini, Grade 1A' }));
+    expect(screen.getByLabelText('1 child, done')).toBeTruthy();
+    expectSubmitAvailable(screen);
+    fireEvent.press(screen.getByRole('checkbox', { name: 'Buhle Moyo, Grade 1A' }));
+    expect(screen.getByLabelText('2 children, done')).toBeTruthy();
+    expectSubmitAvailable(screen);
+    fireEvent.press(screen.getByLabelText('A, not selected'));
+    expect(screen.getByLabelText('1 letter, done')).toBeTruthy();
+    expectSubmitAvailable(screen);
+    fireEvent.press(screen.getByLabelText('M, not selected'));
+    expect(screen.getByLabelText('2 letters, done')).toBeTruthy();
+    expectSubmitAvailable(screen);
+    fireEvent.press(screen.getByText('Select a level'));
+    fireEvent.press(screen.getByText(READING_LEVELS[2]));
+    expect(screen.getByLabelText('3 Letter Blends, done')).toBeTruthy();
+    expectSubmitAvailable(screen);
+    fireEvent.press(screen.getByRole('tab', { name: 'Groups' }));
+    fireEvent.press(screen.getByRole('radio', { name: 'Group 1, 2 children' }));
+    expect(screen.getByRole('button', { name: summaryLabels.children })).toBeTruthy();
+    expectSubmitAvailable(screen);
+    fireEvent.press(screen.getByRole('radio', { name: 'Group 1, 2 children' }));
+    expect(screen.getByLabelText('2 children, done')).toBeTruthy();
+    expectSubmitAvailable(screen);
+  });
+
+  test.each(Array.from({ length: 8 }, (_, bits) => [Boolean(bits & 1), Boolean(bits & 2), Boolean(bits & 4)]))(
+    'summary and Submit agree with child=%s, letter=%s, level=%s', async (child, letter, level) => {
+      const screen = renderForm();
+      if (child) fireEvent.press(screen.getByRole('checkbox', { name: 'Amahle Dlamini, Grade 1A' }));
+      if (letter) fireEvent.press(screen.getByLabelText('A, not selected'));
+      if (level) {
+        fireEvent.press(screen.getByText('Select a level'));
+        fireEvent.press(screen.getByText(READING_LEVELS[2]));
+      }
+      const keys = Object.keys(summaryLabels);
+      const missing = keys.filter(key => screen.queryByRole('button', { name: summaryLabels[key] }));
+      expect(missing).toEqual(keys.filter((_, index) => ![child, letter, level][index]));
+      expectSubmitAvailable(screen);
+      fireEvent.press(screen.getByRole('button', { name: 'Submit session' }));
+      const shownErrors = keys.filter(key => screen.queryByText(inlineErrors[key]));
+      expect(shownErrors).toEqual(missing);
+      if (missing.length === 0) {
+        await waitFor(() => expect(mockCompleteMounted).toHaveBeenCalledTimes(1));
+        expect(screen.routeNames()).toEqual(['Home', 'SessionComplete']);
+        expect(screen.queryByRole('alert')).toBeNull();
+      } else {
+        expect(screen.getAllByRole('alert')).toHaveLength(missing.length);
+        expect(mockPersistLiteracySession).not.toHaveBeenCalled();
+      }
+    },
+  );
+
+  function measureSteps(screen) {
+    const layout = (id, values) => fireEvent(screen.getByTestId(id), 'layout', { nativeEvent: { layout: values } });
+    layout('roster-header', { height: 400 });
+    layout('children-section', { y: 140 });
+    layout('letters-section', { y: 0 });
+    layout('reading-level-section', { y: 520 });
+  }
+
+  test.each([
+    ['children', 28 + 140 - 12, 'Step 2: Select children'],
+    ['letters', 28 + 400 + 64 - 12, 'Step 3: Letters focused on'],
+    ['readingLevel', 28 + 400 + 64 + 520 - 12, 'Step 4: Session reading level'],
+  ])('jumping to %s scrolls and focuses the measured step without adding errors', (key, offset, label) => {
+    const screen = renderForm();
+    const scroll = jest.spyOn(screen.UNSAFE_getByType(FlatList).instance, 'scrollToOffset').mockImplementation(() => {});
+    const node = jest.spyOn(ReactNative, 'findNodeHandle').mockImplementation(ref => ref ? 101 : null);
+    const focus = jest.spyOn(AccessibilityInfo, 'setAccessibilityFocus');
+    try {
+      measureSteps(screen);
+      fireEvent.press(screen.getByRole('button', { name: summaryLabels[key] }));
+      expect(scroll).toHaveBeenCalledWith({ offset, animated: true });
+      expect(node).toHaveBeenCalledTimes(1);
+      expect(node.mock.calls[0][0].props.accessibilityLabel).toBe(label);
+      expect(focus).toHaveBeenCalledTimes(1);
+      expect(focus).toHaveBeenCalledWith(101);
+      expect(screen.queryByRole('alert')).toBeNull();
+      expect(screen.queryByRole('header', { name: /needs attention/ })).toBeNull();
+    } finally {
+      scroll.mockRestore(); node.mockRestore(); focus.mockRestore();
+    }
+  });
+
+  test('a summary jump after a no-match search uses the measured empty row', () => {
+    const screen = renderForm();
+    const scroll = jest.spyOn(screen.UNSAFE_getByType(FlatList).instance, 'scrollToOffset').mockImplementation(() => {});
+    const node = jest.spyOn(ReactNative, 'findNodeHandle').mockImplementation(ref => ref ? 102 : null);
+    const focus = jest.spyOn(AccessibilityInfo, 'setAccessibilityFocus');
+    try {
+      measureSteps(screen);
+      fireEvent.changeText(screen.getByPlaceholderText('Search children…'), 'no match');
+      fireEvent(screen.getByTestId('roster-empty'), 'layout', { nativeEvent: { layout: { height: 58 } } });
+      fireEvent.press(screen.getByRole('button', { name: summaryLabels.readingLevel }));
+      expect(scroll).toHaveBeenCalledWith({ offset: 28 + 400 + 58 + 520 - 12, animated: true });
+      expect(focus).toHaveBeenCalledWith(102);
+      expect(screen.queryByRole('alert')).toBeNull();
+    } finally {
+      scroll.mockRestore(); node.mockRestore(); focus.mockRestore();
+    }
   });
 
   test('selects a calendar key, cancels without changing it, and guards a changed date', () => {
@@ -246,7 +422,7 @@ describe('LiteracySessionForm', () => {
     fireEvent.press(screen.getByLabelText('A, not selected'));
     fireEvent.press(screen.getByText('Select a level'));
     fireEvent.press(screen.getByText(READING_LEVELS[0]));
-    fireEvent.press(screen.getByText('Submit Session'));
+    fireEvent.press(screen.getByText('Submit session'));
 
     await waitFor(() => expect(mockPersistLiteracySession).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -296,7 +472,7 @@ describe('LiteracySessionForm', () => {
 
   test('missing children alert precedes the tabs in the step-2 section', () => {
     const screen = renderForm();
-    fireEvent.press(screen.getByText('Submit Session'));
+    fireEvent.press(screen.getByText('Submit session'));
     expect(screen.getByRole('header', { name: 'Step 2: Select children, needs attention' })).toBeTruthy();
     expect(screen.getByText('Select at least one child')).toBeTruthy();
     expect(screen.getAllByRole('alert').some((note) => within(note).queryByText('Select at least one child'))).toBe(true);
@@ -361,7 +537,7 @@ describe('LiteracySessionForm', () => {
 
   test('missing letters alert sits above the grid and clears on selection', () => {
     const screen = renderForm();
-    fireEvent.press(screen.getByText('Submit Session'));
+    fireEvent.press(screen.getByText('Submit session'));
     const header = screen.getByRole('header', { name: 'Step 3: Letters focused on, needs attention' });
     const section = screen.getByTestId('letters-section');
     const note = section.findByType(InlineNote);
@@ -385,7 +561,7 @@ describe('LiteracySessionForm', () => {
     fireEvent.press(sheet.getByRole('button', { name: 'Cancel' }));
     expect(screen.getByText('Select a level')).toBeTruthy();
     expect(header('Step 4: Session reading level')).toBeTruthy();
-    fireEvent.press(screen.getByText('Submit Session'));
+    fireEvent.press(screen.getByText('Submit session'));
     expect(header('Step 4: Session reading level, needs attention')).toBeTruthy();
     const section = screen.getByTestId('reading-level-section');
     expect(within(section).getAllByRole('alert')).toHaveLength(1);
@@ -604,7 +780,7 @@ describe('LiteracySessionForm', () => {
     fireEvent.press(screen.getByLabelText('A, not selected'));
     fireEvent.press(screen.getByText('Select a level'));
     fireEvent.press(screen.getByText(READING_LEVELS[0]));
-    fireEvent.press(screen.getByText('Submit Session'));
+    fireEvent.press(screen.getByText('Submit session'));
 
     await waitFor(() => expect(mockPersistLiteracySession).toHaveBeenCalledWith(
       expect.objectContaining({

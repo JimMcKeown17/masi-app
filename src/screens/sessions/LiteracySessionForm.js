@@ -1,16 +1,16 @@
 import { useSignedInEA } from '../../context/SignedInEAContext';
 import React, { useCallback, useState, useMemo, useRef, useEffect } from 'react';
-import { View, StyleSheet, Text, Platform } from 'react-native';
+import { AccessibilityInfo, findNodeHandle, View, StyleSheet, Text, Platform } from 'react-native';
 import { usePreventRemove } from '@react-navigation/native';
-import { Button } from 'react-native-paper';
 import { useAuth } from '../../context/AuthContext';
-import { useToast } from '../../context/ToastContext';
 import { typeRoles } from '../../constants/typography';
 import { useOffline } from '../../context/OfflineContext';
-import { colors, spacing } from '../../constants/colors';
+import { colors } from '../../constants/colors';
 import { LETTER_ORDER, READING_LEVELS } from '../../constants/literacyConstants';
 import LetterToggleGrid from '../../components/sessions/LetterToggleGrid';
 import StepHeader from '../../components/forms/StepHeader';
+import StickyActionFooter from '../../components/forms/StickyActionFooter';
+import RequirementSummary from '../../components/forms/RequirementSummary';
 import InlineNote from '../../components/common/InlineNote';
 import ChildSelector from '../../components/children/ChildSelector';
 import LetterTrackerBottomSheet from '../../components/session/LetterTrackerBottomSheet';
@@ -22,6 +22,7 @@ import { persistLiteracySession } from '../../services/literacySessionPersistenc
 import { NO_TEXT_SUGGESTIONS } from '../../constants/textInputProps';
 import { toLocalDateString } from '../../utils/localDate';
 import { validateLiteracySession } from '../../utils/literacySessionValidation';
+import { stepScrollOffset } from '../../utils/sessionFormLayout';
 import { v4 as uuidv4 } from 'uuid';
 import { formatSessionDate } from '../../utils/sessionDateFormat';
 import MonthCalendar from '../../components/common/MonthCalendar';
@@ -64,14 +65,16 @@ function FormFooter({
   onOpenChildLevelMenu,
   getTrackerChangeCount,
   onOpenLetterTracker,
-  onSubmit,
-  submitting,
+  lettersStepRef,
+  levelStepRef,
+  onLettersLayout,
+  onLevelLayout,
 }) {
   return (
     <>
-      <View testID="letters-section" style={styles.lettersSection}>
+      <View testID="letters-section" onLayout={onLettersLayout} style={styles.lettersSection}>
         <View style={styles.stepHeading}>
-          <StepHeader step={3} label="Letters focused on" right="Tap to select"
+          <StepHeader ref={lettersStepRef} step={3} label="Letters focused on" right="Tap to select"
             status={validationErrors.letters ? 'error' : selectedLetters.length > 0 ? 'done' : 'todo'} />
         </View>
         {validationErrors.letters ? <View style={styles.stepError}>
@@ -83,9 +86,9 @@ function FormFooter({
         }} />
       </View>
 
-      <View testID="reading-level-section" style={styles.section}>
+      <View testID="reading-level-section" onLayout={onLevelLayout} style={styles.section}>
         <View style={styles.stepHeading}>
-          <StepHeader step={4} label="Session reading level"
+          <StepHeader ref={levelStepRef} step={4} label="Session reading level"
             status={validationErrors.readingLevel ? 'error' : sessionReadingLevel ? 'done' : 'todo'} />
         </View>
         {validationErrors.readingLevel ? <View style={styles.stepError}>
@@ -112,17 +115,6 @@ function FormFooter({
             onOpenLevel={onOpenChildLevelMenu} onOpenTracker={onOpenLetterTracker} />)}
         </View>
       </View> : null}
-
-      <Button
-        mode="contained"
-        onPress={onSubmit}
-        disabled={submitting}
-        loading={submitting}
-        style={styles.submitButton}
-        contentStyle={styles.submitButtonContent}
-      >
-        Submit Session
-      </Button>
     </>
   );
 }
@@ -132,7 +124,6 @@ function FormFooter({
 // ---------------------------------------------------------------------------
 export default function LiteracySessionForm({ navigation }) {
   const { handle } = useSignedInEA();
-  const toast = useToast();
   const onScroll = useHeaderHairline();
 
   const { user, profile } = useAuth();
@@ -156,8 +147,34 @@ export default function LiteracySessionForm({ navigation }) {
   const [trackerBottomSheetChild, setTrackerBottomSheetChild] = useState(null);
   const [comments, setComments] = useState('');
   const [submitting, setSubmitting] = useState(false);
+  const [saveError, setSaveError] = useState(null);
   const submittingRef = useRef(false);
   const [validationErrors, setValidationErrors] = useState({});
+
+  const listRef = useRef(null);
+  const childrenStepRef = useRef(null);
+  const lettersStepRef = useRef(null);
+  const levelStepRef = useRef(null);
+  const layoutRef = useRef({ headerHeight: 0, childrenSectionY: 0, bodyHeight: 0, footerSectionY: { 3: 0, 4: 0 } });
+  const onMetrics = useCallback(metrics => { Object.assign(layoutRef.current, metrics); }, []);
+  const onLettersLayout = useCallback(event => { layoutRef.current.footerSectionY[3] = event.nativeEvent.layout.y; }, []);
+  const onLevelLayout = useCallback(event => { layoutRef.current.footerSectionY[4] = event.nativeEvent.layout.y; }, []);
+  const jumpToStep = useCallback(step => {
+    listRef.current?.scrollToOffset({
+      offset: stepScrollOffset({ step, paddingTop: 28, ...layoutRef.current }), animated: true,
+    });
+    const ref = step === 2 ? childrenStepRef : step === 3 ? lettersStepRef : levelStepRef;
+    const node = findNodeHandle(ref.current);
+    if (node) AccessibilityInfo.setAccessibilityFocus(node);
+  }, []);
+  const summaryItems = useMemo(() => {
+    const errors = validateLiteracySession({ selectedChildren, selectedLetters, sessionReadingLevel });
+    return [
+      { key: 'children', step: 2, doneText: `${selectedChildren.length} ${selectedChildren.length === 1 ? 'child' : 'children'}`, missingText: 'Children' },
+      { key: 'letters', step: 3, doneText: `${selectedLetters.length} ${selectedLetters.length === 1 ? 'letter' : 'letters'}`, missingText: 'Letters' },
+      { key: 'readingLevel', step: 4, doneText: sessionReadingLevel, missingText: 'Reading level' },
+    ].map(item => ({ ...item, done: !(item.key in errors), onPress: () => jumpToStep(item.step) }));
+  }, [selectedChildren, selectedLetters, sessionReadingLevel, jumpToStep]);
 
   // Dirty = any save-bearing field differs from its initial value (all of these reach
   // the persisted session payload in handleSubmit).
@@ -261,6 +278,7 @@ export default function LiteracySessionForm({ navigation }) {
 
   const handleSubmit = async () => {
     if (submittingRef.current) return;
+    setSaveError(null);
     const errors = validateLiteracySession({ selectedChildren, selectedLetters, sessionReadingLevel });
     if (Object.keys(errors).length > 0) {
       setValidationErrors(errors);
@@ -306,7 +324,7 @@ export default function LiteracySessionForm({ navigation }) {
     } catch (error) {
       submittingRef.current = false;
       console.error('Error saving session:', error);
-      toast.show({ message: 'Failed to save session. Please try again.', tone: 'error', duration: 3000 });
+      setSaveError('Failed to save session. Please try again.');
     } finally {
       setSubmitting(false);
     }
@@ -326,6 +344,9 @@ export default function LiteracySessionForm({ navigation }) {
         onCancel={cancelDiscard}
       />
       <ChildSelector
+        listRef={listRef}
+        childrenStepRef={childrenStepRef}
+        onMetrics={onMetrics}
         selectedChildren={selectedChildren}
         onSelectionChange={handleChildrenChange}
         selectionError={validationErrors.children}
@@ -348,6 +369,10 @@ export default function LiteracySessionForm({ navigation }) {
         }
         ListFooterComponent={
           <FormFooter
+            lettersStepRef={lettersStepRef}
+            levelStepRef={levelStepRef}
+            onLettersLayout={onLettersLayout}
+            onLevelLayout={onLevelLayout}
             selectedLetters={selectedLetters}
             onToggleLetter={handleToggleLetter}
             validationErrors={validationErrors}
@@ -361,11 +386,18 @@ export default function LiteracySessionForm({ navigation }) {
             onOpenChildLevelMenu={setOpenChildLevelMenu}
             getTrackerChangeCount={getTrackerChangeCount}
             onOpenLetterTracker={setTrackerBottomSheetChild}
-            onSubmit={handleSubmit}
-            submitting={submitting}
           />
         }
       />
+
+      <StickyActionFooter hideOnKeyboard>
+        <View style={styles.summary}><RequirementSummary items={summaryItems} /></View>
+        {saveError ? <View style={styles.saveError}>
+          <InlineNote tone="error" live="assertive">{saveError}</InlineNote>
+        </View> : null}
+        <BrandButton variant="primary" size="lg" label="Submit session"
+          loading={submitting} loadingLabel="Saving…" onPress={handleSubmit} />
+      </StickyActionFooter>
 
       {/* ── Letter Tracker Bottom Sheet ── */}
       <LetterTrackerBottomSheet
@@ -436,10 +468,6 @@ const styles = StyleSheet.create({
   section: { marginBottom: 24 },
   progressDescription: { ...typeRoles.textCaption, color: colors.textSecondary, marginTop: 2 },
   progressBlocks: { marginTop: 12, gap: 12 },
-  submitButton: {
-    marginBottom: spacing.lg,
-  },
-  submitButtonContent: {
-    paddingVertical: spacing.sm,
-  },
+  saveError: { marginBottom: 8 },
+  summary: { marginBottom: 12 },
 });

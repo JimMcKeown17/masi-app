@@ -1,6 +1,7 @@
 global.__MASI_NO_DEFAULT_HANDLE__ = true;
 
 import React from 'react';
+import { AccessibilityInfo, FlatList, Platform } from 'react-native';
 import { act, cleanup, fireEvent, waitFor } from '@testing-library/react-native';
 import { AllProviders } from '../test-support/renderWithProviders';
 import { renderInTestStack } from '../test-support/renderInTestStack';
@@ -96,11 +97,37 @@ const fillValidForm = (screen) => {
   fireEvent.press(screen.getByText(READING_LEVELS[0]));
 };
 const readSessions = () => handle.repositories.sessions.getSessions({ userId: EA });
+const SAVE_ERROR = 'Failed to save session. Please try again.';
+function expectFooterAlert(screen) {
+  const alert = screen.getByRole('alert');
+  expect(alert).toHaveTextContent(SAVE_ERROR);
+  expect(alert.props.accessibilityLiveRegion).toBe('assertive');
+  let parent = alert.parent;
+  let inFooter = false;
+  while (parent) {
+    expect(parent.type).not.toBe(FlatList);
+    if (parent.props.testID === 'sticky-action-footer') inFooter = true;
+    parent = parent.parent;
+  }
+  expect(inFooter).toBe(true);
+}
+function injectAttendeeFailures(count) {
+  const run = writer.runAsync.bind(writer);
+  jest.spyOn(console, 'error').mockImplementation(() => {});
+  return jest.spyOn(writer, 'runAsync').mockImplementation(async (sql, ...params) => {
+    const result = await run(sql, ...params);
+    if (sql.includes('insert into "session_attendees"') && count-- > 0) {
+      throw new Error('Injected attendee failure');
+    }
+    return result;
+  });
+}
+
 
 test('back-to-back submit presses persist one session and navigate once', async () => {
   const screen = renderForm();
   fillValidForm(screen);
-  const submit = screen.getByText('Submit Session');
+  const submit = screen.getByText('Submit session');
 
   await act(async () => {
     fireEvent.press(submit);
@@ -120,6 +147,8 @@ test('back-to-back submit presses persist one session and navigate once', async 
 });
 
 test('a failed save rolls back and retry persists exactly one session with the original id', async () => {
+  jest.replaceProperty(Platform, 'OS', 'ios');
+  const announce = jest.spyOn(AccessibilityInfo, 'announceForAccessibility');
   const failure = new Error('Injected failure after attendee write');
   const errorLog = jest.spyOn(console, 'error').mockImplementation(() => {});
   let firstAttemptId;
@@ -134,10 +163,12 @@ test('a failed save rolls back and retry persists exactly one session with the o
   });
   const screen = renderForm();
   fillValidForm(screen);
-  fireEvent.press(screen.getByText('Submit Session'));
+  fireEvent.press(screen.getByText('Submit session'));
 
   expect(await screen.findByText('Failed to save session. Please try again.')).toBeTruthy();
-  expect(screen.getByRole('alert')).toHaveTextContent('Failed to save session. Please try again.');
+  expectFooterAlert(screen);
+  expect(announce).toHaveBeenCalledTimes(1);
+  expect(announce).toHaveBeenCalledWith(SAVE_ERROR);
   expect(errorLog).toHaveBeenCalledWith('Error saving session:', failure);
   expect(firstAttemptId).toEqual(expect.any(String));
   expect(await readSessions()).toEqual([]);
@@ -153,7 +184,8 @@ test('a failed save rolls back and retry persists exactly one session with the o
   expect(screen.queryByText('Discard this session?')).toBeNull();
   nativeWrite.mockRestore();
 
-  fireEvent.press(screen.getByText('Submit Session'));
+  fireEvent.press(screen.getByText('Submit session'));
+  expect(screen.queryByRole('alert')).toBeNull();
   await waitFor(() => expect(mockCompleteMounted).toHaveBeenCalledTimes(1));
   expect(mockCompleteMounted).toHaveBeenCalledWith({ childCount: 1 });
   expect(screen.routeNames()).toEqual(['Home', 'SessionComplete']);
@@ -168,7 +200,7 @@ test('a failed save rolls back and retry persists exactly one session with the o
 
 test('validation failure leaves submit available after the input is corrected', async () => {
   const screen = renderForm();
-  fireEvent.press(screen.getByText('Submit Session'));
+  fireEvent.press(screen.getByText('Submit session'));
 
   expect(screen.getByText('Select at least one child')).toBeTruthy();
   expect(screen.getByText('Select at least one letter')).toBeTruthy();
@@ -178,10 +210,48 @@ test('validation failure leaves submit available after the input is corrected', 
   expect(screen.routeNames()).toEqual(['Home', 'SessionForm']);
 
   fillValidForm(screen);
-  fireEvent.press(screen.getByText('Submit Session'));
+  fireEvent.press(screen.getByText('Submit session'));
   await waitFor(() => expect(mockCompleteMounted).toHaveBeenCalledTimes(1));
   expect(mockCompleteMounted).toHaveBeenCalledWith({ childCount: 1 });
   expect(screen.routeNames()).toEqual(['Home', 'SessionComplete']);
 
   expect(await readSessions()).toHaveLength(1);
+});
+
+
+test('a second failure shows and announces the note again', async () => {
+  jest.replaceProperty(Platform, 'OS', 'ios');
+  const announce = jest.spyOn(AccessibilityInfo, 'announceForAccessibility');
+  injectAttendeeFailures(2);
+  const screen = renderForm();
+  fillValidForm(screen);
+  fireEvent.press(screen.getByRole('button', { name: 'Submit session' }));
+  await screen.findByRole('alert');
+  expectFooterAlert(screen);
+  expect(announce).toHaveBeenCalledTimes(1);
+  fireEvent.press(screen.getByRole('button', { name: 'Submit session' }));
+  expect(screen.queryByRole('alert')).toBeNull();
+  await screen.findByRole('alert');
+  expectFooterAlert(screen);
+  expect(announce).toHaveBeenCalledTimes(2);
+  expect(announce.mock.calls).toEqual([[SAVE_ERROR], [SAVE_ERROR]]);
+  expect(await readSessions()).toEqual([]);
+  expect(mockCompleteMounted).not.toHaveBeenCalled();
+});
+
+test('a validation failure after a save failure shows only the inline errors', async () => {
+  injectAttendeeFailures(1);
+  const screen = renderForm();
+  fillValidForm(screen);
+  fireEvent.press(screen.getByRole('button', { name: 'Submit session' }));
+  await screen.findByRole('alert');
+  expectFooterAlert(screen);
+  fireEvent.press(screen.getByLabelText('A, selected'));
+  expectFooterAlert(screen); // Editing does not clear a failed-save note.
+  fireEvent.press(screen.getByRole('button', { name: 'Submit session' }));
+  expect(screen.queryByText(SAVE_ERROR)).toBeNull();
+  expect(screen.getAllByRole('alert')).toHaveLength(1);
+  expect(screen.getByRole('alert')).toHaveTextContent('Select at least one letter');
+  expect(await readSessions()).toEqual([]);
+  expect(mockCompleteMounted).not.toHaveBeenCalled();
 });
