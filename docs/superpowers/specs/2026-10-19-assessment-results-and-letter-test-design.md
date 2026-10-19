@@ -1,7 +1,7 @@
 # Assessment results, one letter test, and WelaPLUS data — Design
 
 **Date:** 2026-10-19
-**Status:** Draft for Jim's review. Codex adversarial review round 1: 11 findings, all verified and addressed (2026-10-19). Jim asked for the design without a question round
+**Status:** Draft for Jim's review. Codex adversarial review: round 1 found 11 findings and round 2 found 6, all verified and addressed (2026-10-19). Jim asked for the design without a question round
 ("I think you can just design", 2026-10-19). Section 3 lists the two decisions only Jim can make,
 plus the calls I made that he should check.
 **Covers:**
@@ -98,11 +98,13 @@ goes onto test phones lets us skip that code entirely. Nothing in the field is a
    results.** These now come from the standalone test or WelaPLUS Q1. Today they count any
    assessment, including word tests (9.3).
 6. **A standalone test is not a battery run.** Its result has no `battery_run_id` (7.1).
-7. **WelaPLUS runs are pulled to other devices with their Questions, read-only.** The owning EA
-   can abandon an unfinished run from a new phone but cannot resume it. Resuming safely would
-   need proof that every decided Question had downloaded, plus a rule for two phones deciding
-   the same Question (Codex review). The WelaPLUS spec's "device-local unfinished runs" risk
-   stays accepted for Release 1 (11.4).
+7. **WelaPLUS runs are pulled to other devices with their Questions, strictly read-only.** Only
+   the installation that started a run may resume, finalize or abandon it. Writes from other
+   devices would need proof that every decided Question had downloaded. They would also need
+   rules for two phones deciding the same Question or ending the same run (Codex rounds 1–2).
+   The WelaPLUS spec's "device-local unfinished runs" risk stays accepted for Release 1. A run
+   whose phone is lost stays `in_progress` on the server, and reporting reads whatever
+   Questions arrived (11.4).
 8. **`battery_runs` is not row-versioned.** Its status only moves forward, so a late, stale write
    is ignored instead of refused (8.2).
 9. **HQ calibration never edits an EA row.** `hq_rubric_total` is dropped from the WelaPLUS
@@ -326,10 +328,14 @@ correct|incorrect)`. Every new item has a position.
 
 **Locally, `battery_runs.class_id` is a plain column, not a foreign key.** A new phone can pull
 an owned run whose class it no longer holds. Its class assignment may have ended, and
-`ClassesContext` downloads only active ones. The value must stay exact, because the server
-treats it as run identity (8.2). Nulling it, as CAP-004 does for sessions, would make a later
-abandon fail with `MA001`. Screens show the class name only when the class is present locally.
-The server keeps its foreign key.
+`ClassesContext` downloads only active ones. The value stays exact because it is run identity on
+the server (8.2). Screens show the class name only when the class is present locally. The server
+keeps its foreign key.
+
+**`battery_runs.started_here`** is a local-only integer column (0 or 1). `startRun` sets it to 1,
+hydration inserts 0, and no merge ever changes it. Resume, finalize and abandon are offered only
+when it is 1. It is not uploaded. A reinstall or a second phone signed in as the same EA
+therefore sees the run read-only.
 
 **`programmes`**: `default_battery_code` and `default_battery_version`, both-or-neither, set for
 Core Literacy R–3 by a data statement after a read-only preflight. Both columns are added to the
@@ -406,6 +412,14 @@ The function is `security definer`, with `set search_path = ''`. It is granted t
 7. **The function reads only known columns from the JSON.** It is the payload allowlist on the
    server side.
 
+**Overlapping retries.** A retry can overlap the original request after a lost connection. Both
+may then see the id as absent, and one insert hits the primary key. The function catches
+`unique_violation` on the parent's **primary key** and falls through to step 6. That validates
+the family the other transaction committed and returns `already_present`. A violation of the
+`(battery_run_id, question_code)` index still raises `23505`. A two-connection harness case
+proves this. `save_battery_run` does the same for its primary key, falling through to its
+existing-run branch.
+
 **The function does not check:** that the score agrees with the items, any question-specific
 rule, or that the `question_code` is known. It is type-agnostic by design (section 12).
 
@@ -432,7 +446,8 @@ public.save_battery_run(p_run jsonb) returns text   -- 'inserted' | 'updated' | 
 
   This is why the table needs no row version (call 8).
 - A different terminal status, or a different `completed_at` on a terminal run, raises `MA002`
-  (conflict). One device cannot produce this, so it is classified terminal.
+  (conflict). Only the installation that started a run writes it (`started_here`, 7.1), so this
+  signals a bug. It is classified terminal.
 
 **What this replaces.** The WelaPLUS spec's upsert, UPDATE-by-id, lifecycle trigger, and
 "unknown-outcome recovery" read-back all collapse into this one call. A retried insert of a run
@@ -582,9 +597,10 @@ lookup by id all go.
 - `changed_by`: the last writer;
 - `programme_id`: the last writer's programme, kept as context, not identity;
 - `created_at`, `updated_at` (server-stamped);
-- the local sync columns. **Locally only**, `server_changed_at` holds the `changed_at` of the
-  server state this row last reflected. It comes from an acknowledgement or a pull, and it makes
-  local merges monotonic (10.2, 11.3).
+- the local sync columns. **Locally only**, `server_changed_at` and `server_correction_id` hold
+  the ordering of the **accepted server state** this row last reflected. They come only from an
+  acknowledgement or a pull, never from a local edit, and they make local merges monotonic
+  (10.2, 11.3).
 
 **`letter_mastery_corrections`** is new and server-side only. Its columns are `correction_id`
 (primary key), `child_id`, `letter`, `language`, `confirmed`, `requested_at` (sent by the phone),
@@ -610,19 +626,27 @@ it last". EAs have no direct access to it.
 public.set_letter_mastery(p_correction_id uuid, p_child_id uuid, p_letter text, p_language text,
                           p_confirmed boolean, p_changed_at timestamptz)
   returns table (outcome text, confirmed boolean, changed_at timestamptz,
-                 correction_id uuid, changed_by uuid)   -- outcome: 'applied' | 'superseded'
+                 correction_id uuid, changed_by uuid)
+  -- outcome: 'applied' | 'superseded' | 'acknowledged'
 ```
 
-**Authority.** The caller must currently deliver to the child, meaning an active
-`child_ea_assignments` row; otherwise `42501`. A retry of a correction already in
-`letter_mastery_corrections` from the same caller skips this check, for the same reason as 8.1
-step 3. Class-only assessors and former deliverers cannot write.
+**A correction id names one immutable payload.** The first arrival stores the caller, child,
+letter, language, `confirmed` and `requested_at`.
+- A later call with that id must match all six fields; otherwise `MA001`.
+- A matching call is a **replay**. The function then works only from the stored correction, never
+  from the incoming arguments.
+
+**Authority**
+- **A new correction:** the caller must currently deliver to the child (an active
+  `child_ea_assignments` row); otherwise `42501`. Class-only assessors and former deliverers
+  cannot write.
+- **A replay** skips this check, for the same reason as 8.1 step 3.
 
 **Ordering rule (D1)**
-1. **Fix the effective time once.** Insert the correction into `letter_mastery_corrections` with
-   `effective_at = least(p_changed_at, now())`, `on conflict (correction_id) do nothing`. Then
-   read its stored `effective_at` back. A retry, even hours later, therefore uses the time fixed
-   at first arrival.
+1. **Fix the effective time once.** For a new correction, insert it into
+   `letter_mastery_corrections` with `effective_at = least(p_changed_at, now())`. A replay reads
+   the stored `effective_at`. A retry, even hours later, therefore uses the time fixed at first
+   arrival.
 
    Codex's case shows why: a phone with its clock an hour fast confirms at T1 and loses the
    acknowledgement. Another phone then un-confirms at T2. If the retry at T3 were clamped again,
@@ -634,11 +658,15 @@ step 3. Class-only assessors and former deliverers cannot write.
      where (effective_at, correction_id) > (letter_mastery.changed_at, letter_mastery.correction_id)
    ```
    The id breaks exact ties deterministically.
-3. **Return the current record** for either outcome:
+3. **Return the current record, but only to a caller who may read it** (10.3: the last writer or
+   a current deliverer):
    - `applied`: this correction now holds;
-   - `superseded`: a newer one holds.
+   - `superseded`: a newer one holds;
+   - `acknowledged`: the caller may no longer read the record, so no record is returned. This
+     happens, for example, on a replay after a handover. A receipt proves an old write; it does
+     not grant access to later corrections.
 
-   Both count as success.
+   All three count as success.
 
 **Why it is safe**
 - A lost-acknowledgement retry is harmless.
@@ -647,13 +675,15 @@ step 3. Class-only assessors and former deliverers cannot write.
   update, not a crash.
 
 **Acknowledgement on the phone.** It runs in one transaction, with the existing CAS.
-- **No newer local change is queued** (the local `correction_id` is still the one sent). The
-  local row becomes the returned record, with `server_changed_at` set to the returned
-  `changed_at`, and is marked `synced`.
-  - On `superseded`, the phone therefore shows the winning value at once. It does not keep
+- **No newer local change is queued** (the local `correction_id` is still the one sent).
+  - On `applied` or `superseded`, the local row becomes the returned record, with
+    `server_changed_at` and `server_correction_id` set from it, and is marked `synced`. On
+    `superseded`, the phone therefore shows the winning value at once. It does not keep
     displaying its own losing value as synced, and this holds before any mastery pull exists.
-- **A newer local change is queued.** Only `server_changed_at` is updated. The local values and
-  the outbox row stay.
+  - On `acknowledged`, the local row is deleted. The EA can no longer read the record and no
+    longer delivers to the child, so the tracker never shows it.
+- **A newer local change is queued.** Only the two server ordering columns are updated. The
+  local values and the outbox row stay.
 
 **Direct writes.** Direct INSERT, UPDATE and DELETE on `letter_mastery` are revoked. This closes
 Ruling 11 for the table: a late, stale write cannot overwrite a newer correction, because of the
@@ -778,10 +808,11 @@ scope, or write authority (CONTEXT).
 
 **Runs: never insert-or-ignore, because runs change.** A run header from either walk is merged
 like this:
-- **Absent locally:** insert it.
-- **Present and synced:** take the incoming status only if it is further along
+- **Absent locally:** insert it with `started_here = 0`.
+- **Present with `started_here = 1`:** leave it alone. This installation is the run's only
+  writer, so its local state is authoritative; the server copy can only lag behind it.
+- **Present with `started_here = 0`:** take the incoming status only if it is further along
   (`in_progress` → `completed`/`abandoned`), together with its `completed_at`.
-- **Pending, failed or in flight locally:** leave it alone. Its upload settles it.
 
 The run walk runs before the assessment walk in each pass. Either order converges, because an
 assessment page always carries its own run header.
@@ -790,8 +821,13 @@ assessment page always carries its own run header.
 - **Absent locally:** insert the pulled row.
 - **Pending, failed or in flight locally:** leave it alone. Its acknowledgement brings back the
   authoritative record (10.2).
-- **Otherwise:** apply the pulled row only if `(changed_at, correction_id)` is greater than the
-  local `(server_changed_at, correction_id)`.
+- **Synced locally:** apply the pulled row only if its `(changed_at, correction_id)` is greater
+  than the local `(server_changed_at, server_correction_id)`. Both tuples are accepted server
+  states; the local edit's own `correction_id` is never compared.
+- **Terminal locally** (the server refused the local correction, for example after a revocation):
+  apply the pulled row if its tuple is **greater than or equal to** the local server tuple. This
+  restores the accepted baseline even when the server has not moved on. The refused correction
+  stays visible in needs-attention as evidence, as for other terminal rows.
 
 This stops one race in particular. A pull reads an older server value; a newer local correction
 then uploads and is acknowledged; then the old page is applied. Without the check, the newer
@@ -812,13 +848,16 @@ Start at 50 parents.
 
 ### 11.4 Runs on another device (call 7)
 
-- A pulled run is read-only on any device that did not start it.
-- **The owner may abandon** a pulled `in_progress` run. That status only moves forward and
-  touches no Question, so it is safe from any device.
-- **Resuming on another device is out of scope.** It would need proof that every decided
-  Question had downloaded, plus a rule for two phones deciding the same Question, where today
-  the second upload would be quarantined with `23505`. Revisit with durable drafts.
-- Another EA's run is read-only.
+- **A run is written only by the installation that started it** (`started_here = 1`, 7.1). Every
+  pulled run is read-only, including the same EA's own runs on a reinstall or a second phone.
+- **Why not resume or abandon from another device:**
+  - resuming would need proof that every decided Question had downloaded, plus a rule for two
+    phones deciding the same Question, where today the second upload would be quarantined with
+    `23505`;
+  - abandoning from a second phone races completion on the first, producing two terminal
+    statuses (Codex round 2).
+- **What happens to an orphaned run.** A run whose phone is lost stays `in_progress`. Its
+  Questions that synced are kept, and reporting reads what arrived. Revisit with durable drafts.
 
 ### 11.5 Status
 
@@ -924,9 +963,9 @@ Per `AGENTS.md`: Codex implements each task, and Claude reviews the diff and tes
 - Run merge:
   - an `in_progress` header followed by `completed` converges;
   - a run with no Questions arrives through the run walk;
-  - a pending local run is untouched;
-  - an owned run whose class is not on the phone keeps its exact `class_id`, and a later abandon
-    succeeds.
+  - a `started_here = 1` run is never changed by a pull;
+  - a hydrated run gets `started_here = 0`, and keeps it after a restart, a merge and a reinstall;
+  - an owned run whose class is not on the phone keeps its exact `class_id`.
 - Mastery merge: a stale page applied after a newer acknowledged correction does not roll it
   back.
 
@@ -946,6 +985,7 @@ rerun.
 - a run with a different child;
 - a Question after its run completed is accepted;
 - a duplicate run Question raises `23505`;
+- two connections submitting the identical family at the same time: both succeed and one family is stored (the same case for `save_battery_run`);
 - direct INSERT, UPDATE and DELETE on both tables are denied.
 
 **`save_battery_run` cases**
@@ -969,7 +1009,13 @@ rerun.
   The un-confirm still holds, because the retry keeps its first effective time;
 - the concurrent same-key insert race;
 - a non-deliverer is denied;
-- a retry after the assignment is revoked is still accepted.
+- a replay after the assignment is revoked is accepted;
+- a replay with the same correction id and a different child, letter, value or caller raises
+  `MA001`;
+- a replay after a handover and a newer writer's correction returns `acknowledged` without the
+  record.
+- Merge: a refused (terminal) local correction is restored to the accepted server value. Test it
+  with correction ids that sort both above and below the accepted one.
 
 **Pull calls**
 - The mastery pager returns the last writer's records after a delivery handover.
