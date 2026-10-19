@@ -519,7 +519,9 @@ the current-state model better than Zazi's per-session carry-forward.
   - Test A→B and A→B→A switches for delayed uploads and roster persistence. This is required
     whichever way D2 is decided.
 
-**The contract below is a set of requirements for a design spec, not ready to implement.**
+**Design spec written and Codex-approved (2026-10-18), awaiting Jim's review:** [`2026-10-18-upload-contract-design.md`](../docs/superpowers/specs/2026-10-18-upload-contract-design.md). It covers uncertain-outcome recovery and same-record ordering (send-time `row_version` on 11 tables), the server ten-hour clock-out with a forward-only time-entry rule, and the tests and rollout. Stale-edit rejection between two writers (U3) is deferred until Head Office edits EA records; the column and trigger built here take its base-version branch without rework.
+
+The requirements below were the input to that spec.
 Round 2 showed that a naive version introduces new failures:
 
 - Releasing a timed-out upload lets an older whole-row upsert commit after a newer acknowledged
@@ -568,6 +570,8 @@ contract ([U1–U7](./zazi-sync-lessons-for-masi-2026-10-08.md)):
     correction time as its own `now()`.
   - This is a narrow, single-column guard, not the general `stale_base` mechanism.
   - Build it with the mastery re-key in §1. `CONTEXT.md` is updated.
+  - **Pilot gate (Jim, 2026-10-18).** Until it is built, a late mastery toggle can still overtake a
+    newer one (Ruling 11 for `letter_mastery`); the upload-contract spec does not cover this table.
 - [x] **Duplicate-proof submit (U5).** Literacy session capture now mints one session id per form,
   reuses it on retry, and uses a synchronous ref lock to prevent double-tap saves; assessment
   submit already guards completion with a ref and reuses its record on retry. This closes the
