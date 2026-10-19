@@ -24,7 +24,6 @@ const RATCHETED_PAPER = ['TextInput', 'Searchbar', 'SegmentedButtons', 'Card', '
 // The 10 board files keep their raw type sizes and Paper inputs until their own PR.
 // A count may fall but never rise; a line whose file is clean must be deleted.
 const BOARD_RATCHET = {
-  'src/screens/auth/LoginScreen.js': { rawType: 0, paperImports: ['TextInput', 'Button'] },
   'src/screens/auth/ForgotPasswordScreen.js': { rawType: 0, paperImports: ['TextInput', 'Button'] },
 };
 
