@@ -1,7 +1,8 @@
 import React from 'react';
 import { Alert, TouchableOpacity } from 'react-native';
 import { act, render, waitFor, fireEvent, cleanup } from '@testing-library/react-native';
-import { PaperProvider } from 'react-native-paper';
+import { AllProviders } from '../test-support/renderWithProviders';
+import { ToastActorScope } from '../src/context/ToastContext';
 import { requestOpen, requestClose, resetHandleRegistryForTests } from '../src/session/signedInHandle';
 import { SignedInEAContext } from '../src/context/SignedInEAContext';
 import { ChildrenProvider } from '../src/context/ChildrenContext';
@@ -31,7 +32,7 @@ jest.mock('react-native-safe-area-context', () => {
   return { useSafeAreaInsets: () => insets, useSafeAreaFrame: () => frame, SafeAreaInsetsContext: c, SafeAreaFrameContext: React.createContext(frame), SafeAreaProvider: ({ children }) => children, SafeAreaView: ({ children }) => children, SafeAreaConsumer: c.Consumer, initialWindowMetrics: { insets, frame } };
 });
 const open = (userId) => requestOpen({ userId, openDatabase: engine.openDatabaseAsync });
-const wrapper = (handle, child) => <SignedInEAContext.Provider value={{ handle, repositories: handle.repositories, services: handle.services }}><PaperProvider>{child}</PaperProvider></SignedInEAContext.Provider>;
+const wrapper = (handle, child) => <SignedInEAContext.Provider value={{ handle, repositories: handle.repositories, services: handle.services }}><AllProviders><ToastActorScope handle={handle}>{child}</ToastActorScope></AllProviders></SignedInEAContext.Provider>;
 beforeEach(async () => { jest.clearAllMocks(); await resetHandleRegistryForTests(); await engine.__resetMockDatabases(); mockOffline.isOnline = false; mockOffline.syncStatus = {}; });
 afterEach(async () => { cleanup(); await resetHandleRegistryForTests(); await engine.__resetMockDatabases(); jest.restoreAllMocks(); });
 

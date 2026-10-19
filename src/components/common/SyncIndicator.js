@@ -1,8 +1,9 @@
-import React, { useEffect, useRef, useState } from 'react';
-import { AccessibilityInfo, Animated, Easing, Pressable, StyleSheet, Text as RNText, View } from 'react-native';
+import React, { useEffect, useRef } from 'react';
+import { Animated, Easing, Pressable, StyleSheet, Text as RNText, View } from 'react-native';
 import { Badge, ActivityIndicator, Text } from 'react-native-paper';
 import { Ionicons } from '@expo/vector-icons';
 import { useOffline } from '../../context/OfflineContext';
+import { useMotion } from '../../context/MotionContext';
 import { colors, spacing } from '../../constants/colors';
 import { typeRoles } from '../../constants/typography';
 import { deriveSyncState, describeSyncState } from '../../utils/syncStatusPresenter';
@@ -18,22 +19,17 @@ const HERO_ICONS = {
 function HeroSyncIndicator({ onPress, state, view }) {
   const attention = state === 'needs_attention';
   const spin = useRef(new Animated.Value(0)).current;
-  const [reduceMotion, setReduceMotion] = useState(false);
+  const { reduceMotion, motionLevel } = useMotion();
+  const rotates = state === 'syncing' && !reduceMotion && motionLevel !== 'still';
 
   useEffect(() => {
-    let mounted = true;
-    AccessibilityInfo.isReduceMotionEnabled?.().then((v) => { if (mounted) setReduceMotion(Boolean(v)); });
-    return () => { mounted = false; };
-  }, []);
-
-  useEffect(() => {
-    if (state !== 'syncing' || reduceMotion) return undefined;
+    if (!rotates) return undefined;
     const loop = Animated.loop(Animated.timing(spin, {
       toValue: 1, duration: 1000, easing: Easing.linear, useNativeDriver: true,
     }));
     loop.start();
     return () => { loop.stop(); spin.setValue(0); };
-  }, [state, reduceMotion, spin]);
+  }, [rotates, spin]);
 
   const rotate = spin.interpolate({ inputRange: [0, 1], outputRange: ['0deg', '360deg'] });
   const badge = state === 'syncing' ? 0 : view.badgeCount;
@@ -45,7 +41,7 @@ function HeroSyncIndicator({ onPress, state, view }) {
       accessibilityLabel={`${view.accessibilityLabel}. Sync status`}
       style={[heroStyles.disc, attention ? heroStyles.discAttention : null]}
     >
-      <Animated.View style={state === 'syncing' ? { transform: [{ rotate }] } : null}>
+      <Animated.View style={rotates ? { transform: [{ rotate }] } : null}>
         <Ionicons
           name={HERO_ICONS[state] || HERO_ICONS.synced}
           size={state === 'syncing' ? 22 : 24}

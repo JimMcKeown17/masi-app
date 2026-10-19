@@ -1,6 +1,6 @@
 import React from 'react';
 import { View, StyleSheet, ScrollView } from 'react-native';
-import { Card, Text, Button, ActivityIndicator, Divider, Snackbar } from 'react-native-paper';
+import { Card, Text, Button, ActivityIndicator, Divider } from 'react-native-paper';
 import { colors, spacing, borderRadius, shadows } from '../../constants/colors';
 import { formatCoordinates } from '../../services/locationService';
 import { useTimeTracking } from '../../hooks/useTimeTracking';
@@ -11,9 +11,6 @@ export default function TimeTrackingScreen({ navigation }) {
     isSignedIn,
     activeEntry,
     loadingLocation,
-    snackbarMessage,
-    snackbarVisible,
-    setSnackbarVisible,
     handleSignIn,
     handleSignOut,
     formatTime,
@@ -161,13 +158,6 @@ export default function TimeTrackingScreen({ navigation }) {
         </View>
       </ScrollView>
 
-      <Snackbar
-        visible={snackbarVisible}
-        onDismiss={() => setSnackbarVisible(false)}
-        duration={3000}
-      >
-        {snackbarMessage}
-      </Snackbar>
     </View>
   );
 }

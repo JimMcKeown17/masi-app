@@ -14,7 +14,7 @@ jest.mock('../src/hooks/useTimeTracking', () => ({
 
 import React from 'react';
 import { render } from '@testing-library/react-native';
-import { PaperProvider } from 'react-native-paper';
+import { PaperProvider, Snackbar } from 'react-native-paper';
 import TimeTrackingScreen from '../src/screens/main/TimeTrackingScreen';
 
 const renderTimeTracking = () => render(
@@ -31,9 +31,6 @@ const buildTimeTrackingState = (overrides = {}) => ({
   isLoading: false,
   loadingLocation: false,
   elapsedTime: 0,
-  snackbarMessage: '',
-  snackbarVisible: false,
-  setSnackbarVisible: jest.fn(),
   handleSignIn: jest.fn(),
   handleSignOut: jest.fn(),
   formatElapsedTime: jest.fn(() => '0h 0m 0s'),
@@ -42,6 +39,11 @@ const buildTimeTrackingState = (overrides = {}) => ({
 });
 
 describe('TimeTrackingScreen signed-out branch', () => {
+  test('renders no screen-local Snackbar', async () => {
+    const screen = renderTimeTracking();
+    expect(screen.UNSAFE_queryByType(Snackbar)).toBeNull();
+  });
+
   beforeEach(() => {
     jest.clearAllMocks();
     mockUseTimeTracking.mockReturnValue(buildTimeTrackingState({

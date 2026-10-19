@@ -1,32 +1,34 @@
 import React, { useState } from 'react';
 import { View, StyleSheet, KeyboardAvoidingView, Platform, ScrollView } from 'react-native';
-import { TextInput, Button, Text, Snackbar } from 'react-native-paper';
+import { TextInput, Button, Text } from 'react-native-paper';
 import { useAuth } from '../../context/AuthContext';
+import { useToast } from '../../context/ToastContext';
+import { describeAuthError } from '../../utils/authErrorCopy';
 import { colors, spacing } from '../../constants/colors';
 
 export default function ForgotPasswordScreen({ navigation }) {
   const [email, setEmail] = useState('');
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState('');
+  const toast = useToast();
   const [success, setSuccess] = useState(false);
 
   const { resetPassword } = useAuth();
 
   const handleResetPassword = async () => {
     if (!email || !email.includes('@')) {
-      setError('Please enter a valid email address');
+      toast.show({ message: 'Please enter a valid email address', tone: 'error', duration: 4000 });
       return;
     }
 
     setLoading(true);
-    setError('');
+    toast.hide();
 
     const { error: resetError } = await resetPassword(email);
 
     setLoading(false);
 
     if (resetError) {
-      setError(resetError.message || 'Failed to send reset email');
+      toast.show({ message: describeAuthError(resetError, 'reset'), tone: 'error', duration: 4000 });
     } else {
       setSuccess(true);
     }
@@ -104,17 +106,6 @@ export default function ForgotPasswordScreen({ navigation }) {
         </View>
       </ScrollView>
 
-      <Snackbar
-        visible={!!error}
-        onDismiss={() => setError('')}
-        duration={4000}
-        action={{
-          label: 'Dismiss',
-          onPress: () => setError(''),
-        }}
-      >
-        {error}
-      </Snackbar>
     </KeyboardAvoidingView>
   );
 }
@@ -141,7 +132,6 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     marginBottom: spacing.sm,
     color: colors.primary,
-    fontWeight: 'bold',
   },
   subtitle: {
     textAlign: 'center',
@@ -152,7 +142,6 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     marginBottom: spacing.md,
     color: colors.primary,
-    fontWeight: 'bold',
   },
   successMessage: {
     textAlign: 'center',

@@ -1,6 +1,5 @@
 import React, { useCallback, useMemo, useRef, useState } from 'react';
 import { AppState, Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
-import { Snackbar } from 'react-native-paper';
 import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect, useIsFocused } from '@react-navigation/native';
 import { StatusBar } from 'expo-status-bar';
@@ -46,7 +45,7 @@ export default function HomeScreen({ navigation }) {
   const { classBootstrapStatus, incompleteOnboardingClassId } = useClasses();
   const { needsAttentionCount = 0 } = useOffline();
   const {
-    isSignedIn, activeEntry, loadingLocation, snackbarMessage, snackbarVisible, setSnackbarVisible,
+    isSignedIn, activeEntry, loadingLocation,
     handleSignIn, handleSignOut, autoClockOutNotice, dismissAutoClockOutNotice,
   } = useTimeTracking();
   const onboardingEnteredRef = useRef(false);
@@ -264,9 +263,6 @@ export default function HomeScreen({ navigation }) {
         style={{ position: 'absolute', top: 0, left: 0, right: 0, height: insets.top, backgroundColor: colors.red600 }}
       />
 
-      <Snackbar visible={snackbarVisible} onDismiss={() => setSnackbarVisible(false)} duration={3000}>
-        {snackbarMessage}
-      </Snackbar>
     </View>
   );
 }

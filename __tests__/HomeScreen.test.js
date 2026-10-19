@@ -77,7 +77,7 @@ jest.mock('../src/services/sessionHistoryStatus', () => ({
 import React from 'react';
 import { AppState } from 'react-native';
 import { act, fireEvent, render, waitFor } from '@testing-library/react-native';
-import { PaperProvider } from 'react-native-paper';
+import { PaperProvider, Snackbar } from 'react-native-paper';
 import { getDefaultTestHandle } from '../test-support/defaultTestHandle';
 import { StaleActorError } from '../src/session/staleActor';
 import HomeScreen from '../src/screens/main/HomeScreen';
@@ -96,9 +96,6 @@ const defaultTimeTracking = {
   currentEntry: null,
   loadingLocation: false,
   elapsedTime: 0,
-  snackbarMessage: '',
-  snackbarVisible: false,
-  setSnackbarVisible: jest.fn(),
   signIn: jest.fn(),
   signOut: jest.fn(),
   handleSignIn: jest.fn(),
@@ -108,6 +105,12 @@ const defaultTimeTracking = {
 };
 
 describe('HomeScreen', () => {
+  test('renders no screen-local Snackbar', async () => {
+    const screen = renderHome();
+    await screen.findByText('2 of 3 sessions today');
+    expect(screen.UNSAFE_queryByType(Snackbar)).toBeNull();
+  });
+
   beforeEach(() => {
     jest.clearAllMocks();
     mockGetSessions.mockReset();

@@ -1,4 +1,6 @@
 import React from 'react';
+import { AllProviders } from '../test-support/renderWithProviders';
+jest.mock('@expo/vector-icons', () => ({ Ionicons: () => null }), { virtual: true });
 import { act, renderHook, waitFor } from '@testing-library/react-native';
 import { useTimeTracking } from '../src/hooks/useTimeTracking';
 import { TimeTrackingProvider } from '../src/context/TimeTrackingContext';
@@ -34,7 +36,7 @@ jest.mock('../src/db/repositories/timeEntriesRepository', () => ({
   },
 }));
 
-const wrapper = ({ children }) => <TimeTrackingProvider>{children}</TimeTrackingProvider>;
+const wrapper = ({ children }) => <AllProviders><TimeTrackingProvider>{children}</TimeTrackingProvider></AllProviders>;
 
 describe('useTimeTracking Plan 5 behavior', () => {
   const refreshSyncStatus = jest.fn();

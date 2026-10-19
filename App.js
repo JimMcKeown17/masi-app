@@ -6,6 +6,8 @@ import { PaperProvider } from 'react-native-paper';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { AuthProvider, useAuth } from './src/context/AuthContext';
 import { SignedInEAProvider } from './src/context/SignedInEAContext';
+import { MotionProvider } from './src/context/MotionContext';
+import { ToastActorScope, ToastProvider } from './src/context/ToastContext';
 import HandleOpenError from './src/components/bootstrap/HandleOpenError';
 import LoadingScreen from './src/components/bootstrap/LoadingScreen';
 import { OfflineProvider } from './src/context/OfflineContext';
@@ -111,17 +113,19 @@ export function AppRoot() {
   if (!handle) return <AppNavigator signedIn={false} />;
   return (
     <SignedInEAProvider key={`${handle.userId}:${handle.epoch}`} handle={handle}>
-      <OfflineProvider>
-        <TimeTrackingProvider>
-          <LookupsProvider>
-            <ChildrenProvider>
-              <ClassesProvider>
-                <AppNavigator signedIn />
-              </ClassesProvider>
-            </ChildrenProvider>
-          </LookupsProvider>
-        </TimeTrackingProvider>
-      </OfflineProvider>
+      <ToastActorScope handle={handle}>
+        <OfflineProvider>
+          <TimeTrackingProvider>
+            <LookupsProvider>
+              <ChildrenProvider>
+                <ClassesProvider>
+                  <AppNavigator signedIn />
+                </ClassesProvider>
+              </ChildrenProvider>
+            </LookupsProvider>
+          </TimeTrackingProvider>
+        </OfflineProvider>
+      </ToastActorScope>
     </SignedInEAProvider>
   );
 }
@@ -151,12 +155,16 @@ export function App() {
   return (
     <ErrorBoundary>
       <SafeAreaProvider>
-        <PaperProvider theme={paperTheme}>
-          <DatabaseBootstrapGate>
-            <AuthProvider><AppRoot /></AuthProvider>
-          </DatabaseBootstrapGate>
-          <StatusBar style="dark" />
-        </PaperProvider>
+        <MotionProvider>
+          <ToastProvider>
+            <PaperProvider theme={paperTheme}>
+              <DatabaseBootstrapGate>
+                <AuthProvider><AppRoot /></AuthProvider>
+              </DatabaseBootstrapGate>
+              <StatusBar style="dark" />
+            </PaperProvider>
+          </ToastProvider>
+        </MotionProvider>
       </SafeAreaProvider>
     </ErrorBoundary>
   );

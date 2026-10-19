@@ -1,7 +1,9 @@
 jest.mock('expo-sqlite', () => require('../test-support/expoSQLiteMock'));
 
 import React from 'react';
-import { act, renderHook, waitFor } from '@testing-library/react-native';
+import { AllProviders } from '../test-support/renderWithProviders';
+jest.mock('@expo/vector-icons', () => ({ Ionicons: () => null }), { virtual: true });
+import { act, renderHook, screen, waitFor } from '@testing-library/react-native';
 import { __reset, __setDatabaseFactory } from 'expo-sqlite';
 import { useTimeTracking } from '../src/hooks/useTimeTracking';
 import { TimeTrackingProvider } from '../src/context/TimeTrackingContext';
@@ -30,7 +32,7 @@ jest.mock('../src/services/locationService', () => ({
   getCurrentPosition: (...args) => mockGetCurrentPosition(...args),
 }));
 
-const wrapper = ({ children }) => <TimeTrackingProvider>{children}</TimeTrackingProvider>;
+const wrapper = ({ children }) => <AllProviders><TimeTrackingProvider>{children}</TimeTrackingProvider></AllProviders>;
 
 let testDb;
 
@@ -93,7 +95,9 @@ test('auto clock-out after a synced clock-in enqueues the sign-out for upload', 
   expect(await testDb.getAllAsync('select * from sync_outbox')).toEqual([]);
 
   const { result } = renderHook(() => useTimeTracking(), { wrapper });
-  await waitFor(() => expect(result.current.snackbarMessage).toBe('Auto clocked out after 10 hours.'));
+  await waitFor(() => expect(screen.getByText('Auto clocked out after 10 hours.')).toBeTruthy());
+  expect(screen.queryByRole('alert')).toBeNull();
+  expect(screen.queryByTestId('toast-status')).toBeNull();
 
   expect(await timeEntriesRepository.getActiveTimeEntry('user-1')).toBeNull();
   expect(result.current.isSignedIn).toBe(false);
@@ -326,7 +330,7 @@ test('a manual clock-out that loses the race to the watchdog keeps the automatic
 
   const row = await testDb.getFirstAsync("select auto_clocked_out, sign_out_time from time_entries where id = 'time-open'");
   expect(row).toEqual({ auto_clocked_out: 1, sign_out_time: '2026-10-17T16:00:00.000Z' });
-  expect(result.current.snackbarMessage).toBe('You are not clocked in.');
+  await waitFor(() => expect(screen.getByText('You are not clocked in.')).toBeTruthy());
   expect(result.current.isSignedIn).toBe(false);
 });
 
@@ -351,7 +355,7 @@ test('a cancelled location handoff returns false and leaves the shift open', asy
   await act(async () => { expect(await result.current.handleSignOut()).toBe(false); });
   expect(await timeEntriesRepository.getActiveTimeEntry('user-1')).not.toBeNull();
   expect(result.current.isSignedIn).toBe(true);
-  expect(result.current.snackbarMessage).toBe('Return from Settings and tap Clock Out again, or continue without location.');
+  await waitFor(() => expect(screen.getByText('Return from Settings and tap Clock Out again, or continue without location.')).toBeTruthy());
 });
 
 test('manual clock-out without location clears stale sync errors and queues the close', async () => {
@@ -366,7 +370,7 @@ test('manual clock-out without location clears stale sync errors and queues the 
     sign_out_time: expect.any(String), sign_out_lat: null, sign_out_lon: null,
     sign_out_location_status: 'timeout', sync_status: 'pending', synced: false, last_sync_error: null,
   }));
-  expect(result.current.snackbarMessage).toBe('Clocked out without location. 1.00 hours worked.');
+  await waitFor(() => expect(screen.getByText('Clocked out without location. 1.00 hours worked.')).toBeTruthy());
 });
 
 test('the automatic close notice survives provider remount', async () => {
@@ -410,6 +414,6 @@ test('clock-out succeeds when the provider already has no open shift', async () 
   await act(async () => { expect(await result.current.handleSignOut()).toBe(true); });
   expect(result.current.isSignedIn).toBe(false);
   expect(result.current.activeEntry).toBeNull();
-  expect(result.current.snackbarMessage).toBe('You must clock in first before clocking out.');
+  await waitFor(() => expect(screen.getByText('You must clock in first before clocking out.')).toBeTruthy());
   expect(mockGetCurrentPosition).not.toHaveBeenCalled();
 });
