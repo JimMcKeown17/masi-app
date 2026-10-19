@@ -1,9 +1,9 @@
 # Design System — Bold Red
 
-**Standing reference, reconciled with PR 1 on `feat/bold-red-app`, 2026-10-19.** This describes
+**Standing reference, reconciled through Children PR 2 on `feat/bold-red-children`, 2026-10-19.** This describes
 the implementation, including the remaining board-screen exceptions. Update it in the same branch
 as a change to the system. Automated verification is recorded in [build-log.md](./build-log.md);
-native visual acceptance remains the shared-look plan's Task 34.
+native visual acceptance remains the shared-look plan's Task 34 and the Children plan's Task 11.
 
 The design source is the Design Round 4 `RedSystemSheet` and chosen `red-*-components` boards.
 The [overview](../docs/superpowers/specs/2026-10-18-bold-red-app-design.md) resolves conflicts in
@@ -94,7 +94,7 @@ base colours in `colors.js`; the exact set is pinned by the colour tests.
 | `onRedDisabled` | `surface + '61'` | `#FFFFFF61` | Disabled primary fill on red |
 | `warningEdge` | `warning + '4D'` | `#B26A004D` | Attention-pill edge |
 | `warningControl` | `warning + '61'` | `#B26A0061` | Warning-button edge |
-| `avatarEdge` | `red700 + '2E'` | `#A4182F2E` | Reserved avatar edge |
+| `avatarEdge` | `red700 + '2E'` | `#A4182F2E` | Ringed roster-avatar edge |
 | `spinnerTrack` | `textSecondary + '47'` | `#76696B47` | Canvas sync spinner track |
 | `scrim` | `heroDark + '7A'` | `#1C15177A` | Sheet backdrop |
 
@@ -136,9 +136,10 @@ can fall back to the system font. Bricolage is for display headings/numerals at 
 Figtree carries UI copy, letters and row data. Roles carry geometry/family, not colour: add a
 semantic `color` at the call site. The eight original Home roles remain unchanged.
 
-The table lists all 42 roles. A dash means tracking is not set in the role (Paper explicitly uses
-zero). **Addition** marks the seven plan additions beyond the overview's role table: each captures
-existing Home or board geometry so no extra raw-size exemption is necessary.
+The table lists all 45 roles. A dash means tracking is not set in the role (Paper explicitly uses
+zero). **Addition** marks the seven shared-look plan additions beyond the overview's role table;
+Children adds three initials roles. Each captures Home or board geometry so no extra raw-size
+exemption is necessary.
 
 | Role | Family key | Size / line | Tracking | Use / extra |
 |---|---|---|---|---|
@@ -150,6 +151,9 @@ existing Home or board geometry so no extra raw-size exemption is necessary.
 | `textCaption` | textMedium | 13 / 18 | — | Supporting copy; Paper bodySmall |
 | `textLabel` | textHeavy | 11 / 14 | 1.1 | Uppercase field/stat labels |
 | `textButton` | textHeavy | 15 / 20 | — | Medium buttons, default tertiary, selected segments |
+| `textInitialsSm` | textHeavy | 11 / 14 | 0.33 | Children PR 2: 28dp roster avatars |
+| `textInitialsMd` | textHeavy | 14 / 18 | 0.42 | Children PR 2: 40dp child avatars |
+| `textInitialsLg` | textHeavy | 22 / 28 | 0.66 | Children PR 2: 64dp avatars for later reuse |
 | `display3XL` | display | 44 / 46 | −1.54 | Large headline; Paper displayLarge |
 | `display2XL` | display | 38 / 42 | −1.14 | Large display; Paper displayMedium |
 | `displayNumeralXL` | display | 64 / 64 | −1.28 | Reserved Session complete numeral |
@@ -325,9 +329,36 @@ state for changing displayed content.
 | `ListRow variant='nested'` | Min 56, left padding 68, 24dp lead and strong-body title. Dividers start at 104 for nested, otherwise 68 with a lead or 16 without. |
 | `IconTile({ icon, tone='canvas', iconSize })` | Decorative 40dp tile, radius 14. canvas: background/ink/20dp; red: red50/red700/22dp; warning: warningBg/warningText/22dp. iconSize preserves Home's 22dp canvas glyph. |
 | `StatusBadge({ label, tone='neutral' })` | Min 22, pill, textBadge, horizontal padding 8. Tones: neutral border/ink; warning warningBg/warningText; success successBg/successText; successStrong successText/white; error errorBg/error. |
-| `EmptyState({ title, body, footnote, action })` | Left-aligned, type-led state without an illustration. displaySheetTitle/header, paragraph body, caption footnote. action is { label, onPress }, rendered as a primary md button. NoActiveProgrammeNotice uses this. |
+| `EmptyState({ title, body, footnote, action })` | Left-aligned, type-led state without an illustration. displaySheetTitle/header, paragraph body; footnote accepts text (caption styling) or a React element rendered directly. action forwards BrandButton props, including icon, variant and style; size is always md, primary by default, with action.style composed after the default top margin. NoActiveProgrammeNotice uses this. |
 | `SectionHeader({ title, hint, action, style })` | Caps textSectionLabel/header and optional caption hint. action is BrandButton props, forced tertiary with negative vertical margin to retain its 44dp target without enlarging the label row. Use hint, not the retired subtitle prop. |
-| `dashboard/StatBar({ items })` | Bare stat columns. Items: { label, value, color?, onPress?, accessibilityLabel? }. displayTitle/tabular numeral, caps textLabel; actions use primary plus an 18dp chevron. color overrides the numeral for score meaning. Current compact labels retain one line, fit-to-size (floor 0.85), and 1.2 scaling caps on label/value. |
+| `dashboard/StatBar({ items })` | Bare stat columns. Items: { label, value, color?, onPress?, accessibilityLabel? }. An explicit accessibilityLabel groups a column into one accessible element; onPress gives it the button role, with the existing “View {label}: {value}” fallback when no label is supplied. displayTitle/tabular numeral, caps textLabel; actions use primary plus an 18dp chevron. color overrides the numeral for score meaning. Current compact labels retain one line, fit-to-size (floor 0.85), and 1.2 scaling caps on label/value. |
+
+### Children components (Bold Red PR 2)
+
+| Piece and source | Contract |
+|---|---|
+| [`Avatar`](../src/components/common/Avatar.js) | `label='', size=40, shape='circle', icon, ring=false, testID='avatar', style`; supports 28/40/64dp circles with the matching initials role, or `shape='tile'` (40dp class monogram, radius 14, textButton). red50 fill/red700 text; decorative and hidden from accessibility. Initials cap at 1.2; tiles fit one line. ring adds a 1dp avatarEdge border and a 2dp surface surround; style applies to the outer ring when present, otherwise the disc. |
+| [`getInitials(firstName, lastName)`](../src/utils/initials.js) | Trims each name and uppercases its first character; missing/null names contribute nothing and two blank names return an empty string. |
+| [`AvatarStack({ initials })`](../src/components/children/AvatarStack.js) | First three initials in supplied order, using decorative ringed 28dp Avatars with 4dp disc overlap; an empty array renders nothing. |
+| [`GroupChip` / `GroupDot`](../src/components/children/GroupChip.js) | Default GroupChip takes `groupName, color, onPress, accessibilityLabel`: assigned means a white dot/name/chevron pill; null/undefined groupName means the amber “Group” assign pill. Min-44dp target, min-28dp visual pill, −8dp vertical margins. Named export GroupDot takes `color, size=8` and draws a decorative dot; picker/Edit child retain their 12/10dp dots. |
+| [`SyncBanner({ onSyncNow })`](../src/components/common/SyncBanner.js) | Reads useOffline through describeSyncBanner; count and visibility use waitingCount. Hidden at zero or when needsAttentionCount is positive; waiting/offline/syncing copy, with “Sync now” only while waiting online. No alert role or live region; the header pill carries needs-attention. |
+| [`InlineLoading({ label })`](../src/components/common/InlineLoading.js) / [`SpinnerArc`](../src/components/common/SpinnerArc.js) | Loading line: polite live region, 22dp primary arc and wrapping textBodySemi label. SpinnerArc takes `size=22, color=colors.primary, testID='spinner-arc'`; rotates once per second in full/calm, remains still under Reduce Motion or motionLevel='still', and stops on cleanup. |
+| [`listGroupItemFrame(index, count)` / `ListGroupDivider({ inset })`](../src/components/common/ListGroup.js) | Named helpers for a virtualised FlatList: per-row white/rule frame, only outer rows have top/bottom edges and radius 18; place the top divider before each row after the first. Children uses inset 70 for classes and 68 for child rows. Use these when the list must remain virtualised rather than wrapping all rows in a ScrollView. |
+
+**Group colour.** [`getGroupDotColor(index)`](../src/utils/groupHelpers.js) is the only group
+colour lookup. It cycles the six [`GROUP_DOT_COLORS`](../src/constants/groupColors.js) in order;
+negative or non-finite indices fall back to the first. The hue appears only on the dot and the
+group name is always printed. Assigned group text, selected picker borders/checkmarks and Edit
+child field text are ink (`colors.text`); orange is suitable for a graphic, not small text on
+white. `getGroupColor` is removed; `GROUP_COLORS[].bg` remains in the palette but has no consumer.
+
+Children list and Class detail use one FlatList each under the navigator header, with
+`FAB_OVERHANG + 16` bottom clearance. The list header is an element of the module-scope
+`ChildrenListHeader`, preserving search focus. Loading replaces content only when
+`(loading || classesLoading) && classes.length === 0`; cached classes, stats, search and banner
+remain during a pull. Class detail keeps `useHeaderHairline(navigation)` above its early returns.
+Child-row results, group, letter-tracker and edit actions are separate controls: retain the 8dp
+gap above the meta row so GroupChip's negative margins cannot overlap the results target.
 
 ### Sheets
 
@@ -379,7 +410,8 @@ handler. It uses an explicit navigation argument or `NavigationContext`, and saf
 without either. Attach it to the root ScrollView/FlatList with `scrollEventThrottle={16}`; it
 calls `setOptions({ headerScrolled })` only when `contentOffset.y > 0` changes boolean value.
 
-Class detail still says **“Class details”** until the Children PR uses the class name.
+Children list sets **“Children”**; Class detail sets the class name (empty while loading or
+not found) and keeps “Manage classes” calling `popToTop()`.
 Session complete still has its **“Session saved”** header without a left icon until its PR.
 Child onboarding suppresses back and gestures; Home, Login and the three assessment capture/results
 surfaces retain hidden headers. Insights row titles use the sentence-case titles of their routes.
@@ -485,6 +517,7 @@ known recent year class is available. Tiers map to high/full, low/calm, static/s
 | BottomSheet | Measured-height slide over base (250ms); scrim over quick (200ms), enter easing; reverse on close | Panel and scrim fade (150ms); no slide |
 | Toast | Entry opacity + 16dp translation over quick (200ms); exit opacity fade (150ms) | Entry opacity still uses quick (200ms), exit fade (150ms); no translation |
 | Hero/canvas sync indicator | 1000ms linear rotation while syncing | Static glyph/arc, also static whenever reduceMotion is true |
+| Children SpinnerArc (InlineLoading and child-row “Syncing…”) | 1000ms linear rotation | Static arc, also static whenever reduceMotion is true |
 | BrandButton | Press scale 0.98 if reduceMotion is false | Current code checks reduceMotion, not tier: static hardware without the OS preference still gets the press scale |
 | Native ActivityIndicator | OS-owned spinner | Still OS-owned; not replaced by this contract |
 
@@ -525,8 +558,6 @@ line once both categories are zero**; the guard fails if a fully clean file stay
 |---|---|---|---|
 | screens/auth/LoginScreen.js | 0 | TextInput, Button | Login |
 | screens/auth/ForgotPasswordScreen.js | 0 | TextInput, Button | Login |
-| screens/main/ChildrenListScreen.js | 2 | Searchbar, Button, Card, Banner | Children |
-| screens/children/ClassDetailScreen.js | 5 | Card, FAB, Button | Children |
 | screens/sessions/SessionFormScreen.js | 0 | Button | Record |
 | screens/sessions/LiteracySessionForm.js | 0 | TextInput, Button, Card, Menu | Record |
 | screens/sessions/SessionCompleteScreen.js | 2 | Button | Session complete |
@@ -536,10 +567,11 @@ line once both categories are zero**; the guard fails if a fully clean file stay
 
 ## Remaining delivery boundaries
 
-Children, Record, Session complete, Profile and Login/reset retain their own board PRs. Components
-such as Avatar, SyncBanner, InlineLoading, CountChip, StickyActionFooter, ConfirmSheet
-and the celebration are future work, not available primitives. SyncStatusBanner is the existing
-unused component with a token-only change; do not treat it as the future Children banner.
+Children list and Class detail are built on `feat/bold-red-children`; their two ratchet entries
+are removed. ChildSelector retains its separate Searchbar allowance. Record, Session complete,
+Profile and Login/reset retain their board PRs; CountChip, StickyActionFooter, ConfirmSheet and
+the celebration remain future work. Avatar, SyncBanner and InlineLoading are available above;
+SyncStatusBanner and its test are removed.
 
 The dead SessionsScreen, SessionsTodayGauge, ProfileGearButton and HeaderBackButton are
 removed. SessionsTodayRing survives only until the Session complete PR. The remaining native
