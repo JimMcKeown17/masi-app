@@ -38,5 +38,6 @@ describe('domain text input audit', () => {
     expect(readSource('src/screens/auth/LoginScreen.js')).not.toContain('NO_TEXT_SUGGESTIONS');
     expect(readSource('src/screens/auth/ForgotPasswordScreen.js')).not.toContain('NO_TEXT_SUGGESTIONS');
     expect(readSource('src/screens/main/ProfileScreen.js')).not.toContain('NO_TEXT_SUGGESTIONS');
+    expect(readSource('src/components/profile/ChangePasswordSheet.js')).not.toContain('NO_TEXT_SUGGESTIONS');
   });
 });
