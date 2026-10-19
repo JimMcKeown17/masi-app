@@ -435,7 +435,18 @@ describe('design-system guard', () => {
   test('the theme exceptions hold', () => {
     const nav = source(NAV_THEME);
     expect(nav.match(/fontFamily\s*:\s*fontFamilies\.\w+/g)).toHaveLength(4);
-    expect(source(PAPER_THEME)).not.toMatch(/fontWeight\s*:\s*(?!undefined)/);
+    // Every fontWeight in the Paper theme must be exactly `undefined` (Codex plan review F1:
+    // a negative lookahead after `\s*` backtracks and matches `fontWeight: undefined`).
+    const weights = [...source(PAPER_THEME).matchAll(/fontWeight\s*:\s*([^,}\n]+)/g)].map((m) => m[1].trim());
+    expect(weights.length).toBeGreaterThan(0);
+    expect(weights.every((w) => w === 'undefined')).toBe(true);
+  });
+  test('the paper-theme weight rule accepts undefined and rejects real weights (fixtures)', () => {
+    const check = (src) => [...src.matchAll(/fontWeight\s*:\s*([^,}\n]+)/g)].map((m) => m[1].trim()).every((w) => w === 'undefined');
+    expect(check('{ fontWeight: undefined, a: 1 }')).toBe(true);
+    expect(check('{ fontWeight:   undefined }')).toBe(true);
+    expect(check("{ fontWeight: '400' }")).toBe(false);
+    expect(check('{ fontWeight: "bold" }')).toBe(false);
   });
 });
 ```
@@ -857,7 +868,7 @@ Specs:
 - `ClockInBeforeSessionSheet` (D8, copy verbatim): title and subtitle from `BottomSheet`; the body starts 24 below the subtitle with gap 12: `BrandButton variant="primary"` "Clock in now" → `<InlineNote tone="warning" size="md">{SESSION_CLOCK_WARNING_COST}</InlineNote>` → `BrandButton variant="warning"` "Record without clocking in" → `BrandButton variant="tertiary" tone="ink"` "Cancel" (calls `onDismiss`).
 
 - [ ] **Step 1: Write the failing tests.**
-  - `BottomSheet.test.js` (render through `renderWithProviders`): `the title is a header in the sheet face` (`typeRoles.displaySheetTitle` family); `the scrim uses tints.scrim`; `at full the panel rises with a translate`; `at still it fades without a translate` (`MotionProvider` value `still`; the panel's flattened style has no `transform` with `translateY`); `on close the content is hidden from screen readers and ignores touches until it unmounts` (fake timers: rerender `visible={false}`; `queryByText(title)` is null by default and found with `{ includeHiddenElements: true }`; the overlay has `pointerEvents="none"`; after `jest.advanceTimersByTime(250)` it is gone even with hidden elements included); `reopening during the exit is interactive` (close, advance 100ms, reopen; `getByText(title)` found and the backdrop press calls `onDismiss`); `hardware back is not handled during the exit`. Keep every existing test green.
+  - `BottomSheet.test.js` (render through `renderWithProviders`): `the title is a header in the sheet face` (`typeRoles.displaySheetTitle` family); `the scrim uses tints.scrim`; `at full the panel rises with a translate`; `at still it fades without a translate` (`MotionProvider` value `still`; the panel's flattened style has no `transform` with `translateY`); `on close the content is hidden from screen readers and ignores touches until it unmounts` (fake timers: rerender `visible={false}`; `queryByText(title)` is null by default and found with `{ includeHiddenElements: true }`; the overlay has `pointerEvents="none"`; after `jest.advanceTimersByTime(250)` it is gone even with hidden elements included); `reopening during the exit is interactive` (close, advance 100ms, reopen, then advance **past the original exit deadline** (another 300ms): the sheet is still mounted, `getByText(title)` is found without hidden elements, and the backdrop press calls `onDismiss`. This catches a stale exit-completion callback unmounting the reopened sheet; Codex plan review); `hardware back is not handled during the exit`. Keep every existing test green, **except** the obsolete diagnostic assertion at `__tests__/BottomSheet.test.js:112-118` that the panel has no `onLayout`: replace it with a behavioural test (`the measured panel height drives the rise`: fire the panel's `onLayout` with `{ nativeEvent: { layout: { height: 300 } } }` at `full`, and assert the opening translate starts from 300). Keep that test's other intent: the panel has no diagnostic side effects (no console output, no state outside the animation). (Codex plan review F3.)
   - `SelectSheet.test.js`: `the selected row is ink with a checkmark and no red` (no style in the row tree uses `colors.primary`; the selected label uses `textOptionSelected`); `the last row has no divider`; the existing search tests keep using "Search options".
   - `ClockInBeforeSessionSheet.test.js`: keep the copy assertions; add `Cancel dismisses`, `the warning note is a warning InlineNote` (warningBg fill), and `Record without clocking in uses the warning variant` (warningBg fill, `tints.warningControl` border).
 
@@ -1140,9 +1151,9 @@ Apply the Sweep recipe and part 1 §9:
 - Form card → `SurfaceCard`. Each `TextInput` + `HelperText` → `TextField` (same `label`, `value`, handlers, keyboard props, and the same `NO_TEXT_SUGGESTIONS` spread where the field has it today; the `HelperText` message becomes `error`). Picker inputs → `SelectField` + the existing `SelectSheet`. `ChipSelector` is already ink chips.
 - "Add Child" → `primary lg` "Add child"; "Save Changes" → `primary lg` "Save changes"; "Delete Child" → `destructiveQuiet lg` "Delete child".
 - `EditChildScreen`'s `primary`-bordered option boxes → ink selection (2dp `colors.text` border and `textOptionSelected` label when selected, `tints.control` 1.5 otherwise); the group picker sheet is unchanged here (Task 28).
-- Snackbars → toasts (copy and duration unchanged; failures `error`, saves `success`).
+- Snackbars → toasts (copy and duration unchanged). These forms have **no** save-success notification today: a successful save only navigates (`AddChildScreen.js:70-73`, `EditChildScreen.js:120-123`). Do not add one. The existing error toasts become `error`. Edit child's existing "Class updated" class-reassignment message becomes `success`. (Codex plan review F4.)
 
-- [ ] **Step 1:** Failing assertions: a required-field error renders an `alert` note and the field's name becomes "First Name *, error: {message}" (use the screen's existing validation copy); the save/delete buttons by their new labels keep their existing handlers; the success toast appears after save; the duplicate title text is gone.
+- [ ] **Step 1:** Failing assertions: a required-field error renders an `alert` note and the field's name becomes "First Name *, error: {message}" (use the screen's existing validation copy); the save/delete buttons by their new labels keep their existing handlers; a successful save navigates exactly as today and shows **no** toast; a save failure shows the existing error copy as an `error` toast; Edit child's class reassignment shows the existing "Class updated" message as a `success` toast; the duplicate title text is gone.
 - [ ] **Step 2:** run → FAIL. **Step 3:** implement; remove both files from `PENDING_SWEEP`. **Step 4:** same plus `jest __tests__/designSystemGuard.test.js __tests__/domainTextInputAudit.test.js __tests__/GroupPickerBottomSheet.test.js` → PASS.
 - [ ] **Step 5: Commit (orchestrator).** `git commit -m "style(children): child forms on TextField, SelectField and the root toast"`.
 
@@ -1154,7 +1165,7 @@ Apply the Sweep recipe and part 1 §9:
 
 Apply the Sweep recipe and part 1 §9: delete the duplicate titles ("Create New Class", "Edit Class"); card → `SurfaceCard`; "Class Name *" and "Teacher *" → `TextField` (the `errors.*` message becomes `error`); "School *", "Grade *", "Home Language *" (today read-only `TextInput`s with a `TextInput.Icon` that open a `SelectSheet`) → `SelectField` with the same `onPress`, value and `error`; "Create Class" → `primary lg` "Create class"; "Save Changes" → "Save changes"; "Delete Class" → `destructiveQuiet lg` "Delete class"; Snackbars → toasts.
 
-- [ ] **Step 1:** Failing assertions: the School field is a button named "School *, {school name}" that opens the existing search sheet; a missing class name shows the existing error copy as an `alert` note; the create success toast appears; the old Paper `TextInput` is gone.
+- [ ] **Step 1:** Failing assertions: the School field is a button named "School *, {school name}" that opens the existing search sheet; a missing class name shows the existing error copy as an `alert` note; a successful create navigates exactly as today (`CreateClassScreen.js:77-86`) and shows **no** toast (none exists today); a save failure shows the existing error copy as an `error` toast; the old Paper `TextInput` is gone. (Codex plan review F4.)
 - [ ] **Step 2:** run → FAIL. **Step 3:** implement; remove both files from `PENDING_SWEEP`. **Step 4:** same plus the guard → PASS.
 - [ ] **Step 5: Commit (orchestrator).** `git commit -m "style(classes): class forms on TextField, SelectField and the root toast"`.
 
@@ -1201,10 +1212,10 @@ Board files get only the mechanical pass (part 1 §9 "Board screens"): `fontWeig
 
 - `LiteracySessionForm`: `fontWeight` → faces; `'#FFFFFF'` (`:767`) → `colors.onDark`; its Snackbar (the save failure) → `toast.show({ message, tone: 'error' })`, copy and duration unchanged (the Record PR moves it inline).
 - `SessionsTodayRing` (not a board file; deleted by the Session complete PR): full sweep (roles for its raw sizes, faces), so it leaves `PENDING_SWEEP` with zero violations.
-- `ProfileScreen`: `fontWeight` → face; its Snackbar → toasts with tone per message ("…successfully" → `success`, "Failed…" → `error`, otherwise `neutral`), duration 4000; C13: the Sign out `textColor={colors.emphasis}` (`:485`) → `colors.primary`; the `:570` `borderColor: colors.emphasis` stays (a border). No layout change.
+- `ProfileScreen`: `fontWeight` → face; its Snackbar → toasts, **forwarding the existing classification**: `showMessage(message, type)` already passes an authoritative `type` (`ProfileScreen.js:194-224` password validation and incorrect current password, `:103-105` and `:239` export/server errors), so `type === 'error'` → `tone: 'error'`, `type === 'success'` → `success`, anything else → `neutral`. Never classify by message text. Duration 4000. (Codex plan review F2.) C13: the Sign out `textColor={colors.emphasis}` (`:485`) → `colors.primary`; the `:570` `borderColor: colors.emphasis` stays (a border). No layout change.
 - `SignOutSheets`: `fontWeight` → faces only. `useSignOutFlow` and `signOutFlow.test.js` are untouched (S4).
 
-- [ ] **Step 1:** Failing assertions: a failed session save shows the existing message as an error toast (`LiteracySessionForm.submit.test.js` already drives a save failure: assert `getByRole('alert')` text instead of the Snackbar); Profile's export success/failure messages show as toasts with the right tone.
+- [ ] **Step 1:** Failing assertions: a failed session save shows the existing message as an error toast (`LiteracySessionForm.submit.test.js` already drives a save failure: assert `getByRole('alert')` text instead of the Snackbar); Profile's messages keep their tone: a missing password field, a too-short password, a mismatch and an incorrect current password each show an `error` toast; an export error whose wording does not start with "Failed" still shows `error`; export success shows `success`.
 - [ ] **Step 2:** `jest` the unit files and `integration __tests__/LiteracySessionForm.submit.test.js` → FAIL. **Step 3:** implement; remove `LiteracySessionForm.js`, `SessionsTodayRing.js`, `ProfileScreen.js`, `SignOutSheets.js` from `PENDING_SWEEP`. **Step 4:** same plus the guard and `git diff --exit-code -- __tests__/signOutFlow.test.js src/hooks/useSignOutFlow.js` → PASS and no diff.
 - [ ] **Step 5: Commit (orchestrator).** `git commit -m "style: weight-to-face pass on Record, Profile and sign-out; their toasts move to the root host"`.
 
