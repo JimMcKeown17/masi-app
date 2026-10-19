@@ -8,6 +8,7 @@ import { AuthProvider, useAuth } from './src/context/AuthContext';
 import { SignedInEAProvider } from './src/context/SignedInEAContext';
 import { MotionProvider } from './src/context/MotionContext';
 import { ToastActorScope, ToastProvider } from './src/context/ToastContext';
+import { SheetAccessibilityBackground, SheetAccessibilityProvider } from './src/context/SheetAccessibilityContext';
 import HandleOpenError from './src/components/bootstrap/HandleOpenError';
 import LoadingScreen from './src/components/bootstrap/LoadingScreen';
 import { OfflineProvider } from './src/context/OfflineContext';
@@ -157,12 +158,16 @@ export function App() {
       <SafeAreaProvider>
         <MotionProvider>
           <ToastProvider>
-            <PaperProvider theme={paperTheme}>
-              <DatabaseBootstrapGate>
-                <AuthProvider><AppRoot /></AuthProvider>
-              </DatabaseBootstrapGate>
-              <StatusBar style="dark" />
-            </PaperProvider>
+            <SheetAccessibilityProvider>
+              <PaperProvider theme={paperTheme}>
+                <SheetAccessibilityBackground>
+                  <DatabaseBootstrapGate>
+                    <AuthProvider><AppRoot /></AuthProvider>
+                  </DatabaseBootstrapGate>
+                </SheetAccessibilityBackground>
+                <StatusBar style="dark" />
+              </PaperProvider>
+            </SheetAccessibilityProvider>
           </ToastProvider>
         </MotionProvider>
       </SafeAreaProvider>

@@ -259,6 +259,12 @@ The current Literacy form records:
 - comments;
 - current letter-mastery changes.
 
+The form shows a live summary above Submit of what is still missing (children, letters, reading
+level); tapping a missing item scrolls to its step. The summary and Submit's validation come from
+one function, so they always agree. A failed save stays on the form with an inline note above
+Submit; the retry writes the same session id. Leaving a form with unsaved changes (Close, iOS
+swipe-back, Android back) asks first in a bottom sheet: Discard or Keep editing.
+
 The same transaction persists:
 
 - the session;

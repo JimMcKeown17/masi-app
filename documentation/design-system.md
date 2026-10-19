@@ -1,9 +1,10 @@
 # Design System — Bold Red
 
-**Standing reference, reconciled through Children PR 2 on `feat/bold-red-children`, 2026-10-19.** This describes
+**Standing reference, reconciled through Record PR 3 on `feat/bold-red-record`, 2026-10-19.** This describes
 the implementation, including the remaining board-screen exceptions. Update it in the same branch
 as a change to the system. Automated verification is recorded in [build-log.md](./build-log.md);
-native visual acceptance remains the shared-look plan's Task 34 and the Children plan's Task 11.
+native visual acceptance remains the shared-look plan's Task 34, the Children plan's Task 11
+and the Record plan's Task 14.
 
 The design source is the Design Round 4 `RedSystemSheet` and chosen `red-*-components` boards.
 The [overview](../docs/superpowers/specs/2026-10-18-bold-red-app-design.md) resolves conflicts in
@@ -294,7 +295,9 @@ It does not apply `NO_TEXT_SUGGESTIONS` automatically: domain-entry callers must
 
 **`SelectField`** — `label, value, placeholder, icon, error, onPress, accessibilityLabel,
 disabled=false`. A button styled like the field, with `chevron-down`, `textInput` value and
-`InlineNote` on error. Default spoken label joins label and value/placeholder. Use it to open a
+`InlineNote` for a nonempty string error. Boolean `error={true}` applies the error border and
+label colour without a second note; Record renders its validation note under the step header.
+Default spoken label joins label and value/placeholder. Use it to open a
 picker, not a read-only `TextInput`. Pressed fill is `border`; disabled removes the visible edge.
 
 **`SearchField`** — `value, onChangeText, placeholder, accessibilityLabel, autoFocus`. Min height
@@ -324,7 +327,7 @@ state for changing displayed content.
 |---|---|
 | `SurfaceCard({ children, style, testID })` | White, rule edge, radius 18, padding 16, no shadow. Replace Paper Card; put actions in a right-aligned row of md BrandButtons with gap 8. |
 | `ListGroup({ children, style })` | White grouped surface, rule edge, radius 18, clipped corners, no shadow. Clones valid child elements with showDivider true except the last; custom row children must honour that prop. |
-| `ListRow({ title, subtitle, lead, trailing, onPress, variant='action', busy=false, expanded, disabled=false, showDivider=false, accessibilityLabel, accessibilityRole })` | Action rows min 64, padding 10/16, 40dp lead and wrapping title/subtitle. Default spoken label combines both. Busy disables press and replaces trailing content with a spinner. trailing accepts chevron, external, share, send, disclosure or an element. Disclosure uses expanded for arrow and accessibility state. |
+| `ListRow({ title, subtitle, lead, trailing, onPress, variant='action', busy=false, expanded, disabled=false, showDivider=false, accessibilityLabel, accessibilityRole, style, accessibilityState, titleNumberOfLines })` | Action rows min 64, padding 10/16, 40dp lead and wrapping title/subtitle. Default spoken label combines both. Busy disables press and replaces trailing content with a spinner. trailing accepts chevron, external, share, send, disclosure or an element. Disclosure uses expanded for arrow and accessibility state. Optional style composes onto the row; accessibilityState supplies caller state while busy/disabled/expanded stay owned by ListRow; titleNumberOfLines defaults to wrapping and lets roster rows request one line. |
 | `ListRow variant='readOnly'` | title is the caps label; subtitle is the value. An accessible View, no action, lead or trailing glyph. |
 | `ListRow variant='nested'` | Min 56, left padding 68, 24dp lead and strong-body title. Dividers start at 104 for nested, otherwise 68 with a lead or 16 without. |
 | `IconTile({ icon, tone='canvas', iconSize })` | Decorative 40dp tile, radius 14. canvas: background/ink/20dp; red: red50/red700/22dp; warning: warningBg/warningText/22dp. iconSize preserves Home's 22dp canvas glyph. |
@@ -364,11 +367,13 @@ gap above the meta row so GroupChip's negative margins cannot overlap the result
 
 **`BottomSheet`** — `visible, onDismiss, title, subtitle, dismissLabel, headerExtras, footer,
 scrollable=true, keyboardAvoiding=true, maxHeight='80%', bodyContentStyle, scrollViewProps={},
-children`. Uses Paper `Portal`, flexbox bottom anchoring, a scrim and explicit Android-back
+panelRole, children`. Uses Paper `Portal`, flexbox bottom anchoring, a scrim and explicit Android-back
 dismissal while visible. Supply a meaningful backdrop `dismissLabel`. Title is
 `displaySheetTitle`, subtitle `textParagraph`, radius 22, grabber 36×4/control, `shadows.sheet`,
 sides 24 and bottom padding `max(insets.bottom, 24)`. The footer has a divider; optional content
 styles compose with the scroll container. Set `scrollable=false` for a child `FlatList`.
+Optional `panelRole` sets the panel's role and `accessibilityViewIsModal`; `ConfirmSheet` uses
+`alertdialog`.
 
 The sheet measures its panel to determine slide distance (window height until measured), retains
 the exit animation, and ignores touches/hides accessibility content as soon as `visible` becomes
@@ -392,6 +397,63 @@ The D8 launch-guard sheet: primary “Clock in now”, md warning note, warning 
 clocking in”, then ink tertiary “Cancel”. It keeps its existing warning copy and handlers and
 opts out of scrolling/keyboard avoidance. Other domain sheets compose `BottomSheet` rather than
 introducing another overlay host.
+
+## Forms (Bold Red, 2026-10)
+
+Record keeps one virtualised `ChildSelector` list and a sibling footer under the navigator's
+“New session” header. The form derives completion from its current values; it does not store a
+second set of completion flags. Submit and the live summary both call
+[`validateLiteracySession`](../src/utils/literacySessionValidation.js) with
+`{ selectedChildren, selectedLetters, sessionReadingLevel }`. Its only required fields are
+children, letters and the session reading level. Optional comments and child progress do not
+affect readiness. Submit remains enabled until a save is in flight.
+
+| Component and source | Supported props and contract |
+|---|---|
+| [`StepHeader`](../src/components/forms/StepHeader.js) | `step, label, status='todo', right, onLayout`, with a forwarded ref for accessibility focus. A 20dp disc shows a numeral for to-do, an ink check for done, or an error ring/numeral. The wrapping textSectionLabel and top-aligned disc expose “Step {n}: {label}”, adding “complete” or “needs attention”. right accepts text or a node. Date is always done; children, letters and level derive done from their values; optional steps never become done. Errors appear only after Submit validation. |
+| [`CountChip`](../src/components/forms/CountChip.js) | `label, active`. Noninteractive, min 32dp pill with textChip/tabular numerals and no check icon. Active is ink/white; zero selection is surface/muted with a rule edge. Record passes “{n} selected”. |
+| [`SelectableRow`](../src/components/forms/SelectableRow.js) | `variant, title, subtitle, lead, selected, onPress, position, height, accessibilityLabel`. Supply variant as checkbox or radio; there is no default. Memoised ListRow composition; position is first/middle/last/only. Grouped-card edges and the inset divider stay inside the supplied fixed height. Rows carry checkbox/radio plus checked state; the virtualised roster has no radiogroup wrapper. Titles use one line with the full name in the accessible label. |
+| [`RequirementSummary`](../src/components/forms/RequirementSummary.js) | `items=[{ key, doneText, missingText, done, onPress, step }]`. A wrapping row, not a live region. Done items have a success disc and textSmallStrong; missing items use textLink/primary, an arrow and a min-44dp target. Labels read “{text}, done” or “{Missing text} missing. Go to step {n}”. The caller derives every done value from the same validation result as Submit. |
+| [`StickyActionFooter`](../src/components/forms/StickyActionFooter.js) | `children, surface='always', hideOnKeyboard=false`. White with a 1dp border top, 11dp top/24dp side padding and bottom padding max(insets.bottom, 16). Render as a sibling after the flexing list, never an overlay. Record passes hideOnKeyboard: the footer unmounts while the keyboard is visible and returns on dismiss. It registers its measured visible height with useToastObstruction; hidden footers do not obstruct the toast. Only surface='always' is implemented; Session complete owns onOverflow. |
+| [`ConfirmSheet`](../src/components/common/ConfirmSheet.js) | `visible, title, titleAccessory, body, confirmLabel, confirmVariant='destructiveQuiet', cancelLabel, onConfirm, onCancel, dismissLabel`. Composes BottomSheet and BrandButton instead of a native dialog. The panel has alertdialog and accessibilityViewIsModal; backdrop and Android back call onCancel. titleAccessory uses the sheet's headerExtras slot; Profile can reuse it with confirmVariant='destructive'. |
+| [`ChildProgressBlock`](../src/components/sessions/ChildProgressBlock.js) | `child, className, readingLevel, trackerChangeCount, onOpenLevel, onOpenTracker`. Avatar/name/class heading plus min-52dp ListRow actions for Reading level and Letter tracker. Unset level says “Not set”; positive changes use StatusBadge tone='successStrong' (“+{n} new”). Callbacks receive child.id for level and the child object for tracker. |
+| [`MonthCalendar`](../src/components/common/MonthCalendar.js) | `selectedKey, todayKey, onSelect`. Calendar keys only; opens on the selected month, Sunday first. Seven equal columns have no horizontal gaps, with centred 44dp day targets and 4dp row gaps. Future days and navigation beyond today's month are disabled. The caller closes the enclosing BottomSheet on selection or Cancel. |
+| [`LetterToggleGrid`](../src/components/sessions/LetterToggleGrid.js) | `letters, tileFor, onPressLetter`. Six columns, 8dp gaps; tileFor(letter) supplies each tile's tone, disabled flag and accessibility props. Named export letterTileSize(w) is min(56, floor((w − 40) / 6)). Measured content width replaces the initial window-width-minus-48 fallback. The grid itself is capped at 376dp (six 56dp tiles + five 8dp gaps), preventing a seventh column on wider screens. |
+| [`LetterToggleTile`](../src/components/sessions/LetterToggleTile.js) | `letter, tone, size, onPress, disabled=false, accessibilityLabel, accessibilityState`. Tones: rest, selected, taught, taughtNew, locked. Lowercase textLetter capped at 1.2 scaling, radius 14; selected focus letters are ink/white. Focus-grid labels keep capitals (“M, selected”); tracker/panel labels keep lowercase (“m, not mastered”). Press motion follows the contract below. |
+
+[`rosterRowHeight(fontScale)`](../src/utils/sessionFormLayout.js) is
+`max(64, ceil(20 + 2 + (22 + 18) * fontScale))`: 64dp at 1.0 and 74dp at 1.3. Every roster row
+and `getItemLayout` use the same height. Summary jumps use `stepScrollOffset` from that module:
+measured list-header/footer positions plus the **visible** row count times row height, or the
+measured empty-row height. The target sits 12dp below the header hairline, then receives
+screen-reader focus. Jumping changes no form value and creates no validation error.
+
+**Calendar dates are not instants.** [`formatSessionDate(dateKey, style)`](../src/utils/sessionDateFormat.js)
+accepts a `YYYY-MM-DD` key, never a `Date`. Styles are field (“Mon 12 Oct 2026”), fieldToday
+(“Today · Thu 15 Oct”), calendarLabel (“Thu 15 October 2026”), pill (“Tue 13 Oct”) and spoken
+(“Tuesday 13 October”). Fixed English names and UTC-only calendar arithmetic keep device timezone
+out of formatting. `MonthCalendar` also takes and returns keys. Record defaults directly to
+`toLocalDateString(new Date())` in Africa/Johannesburg (SAST), retains that key in state and saves
+it unchanged: no device-local-midnight Date round trip. This closes overview S6's Auckland case,
+where converting a local-midnight calendar date to SAST could show or save the previous day.
+
+**One mastery palette.** [`letterStateColors`](../src/constants/letterStateColors.js) supplies
+LetterToggleTile on the tracker sheet and LetterMasteryPanel (Letter tracker and Child results).
+Stored taught/EA-confirmed letters use successText fill/edge and onDark text; new confirmations
+add a white corner dot. Assessment mastery uses successBg/successBorder, successText letter and
+lock glyph, and disabled interaction. Unmastered is surface/control/ink. The sheet has four legend
+items, including “New this session”; the panel has three because it has no pending session state.
+This preserves the existing stored 'taught' terminology and tap rules; it changes presentation.
+
+**Save failure and leaving.** The footer's InlineNote uses live='assertive' and the existing
+“Failed to save session. Please try again.” copy. A new Submit press clears it before validation;
+another failed save remounts/announces it, and retry retains the same session id. Editing alone
+does not clear it. Dirty forms use `usePreventRemove` and ConfirmSheet with “Discard” / “Keep
+editing”; cancel, scrim and Android back keep the draft. A successful save releases the guard in
+React state and waits for that render's effect before replacing the route. Tests use the real
+StackRouter; native swipe-back still needs the Record device gate. iOS enables
+automaticallyAdjustKeyboardInsets on the list. Android KeyboardAvoidingView remains conditional
+on a device reproduction of Comments being covered.
 
 ## Navigation chrome
 
@@ -476,8 +538,8 @@ navigation within one EA but prevents it appearing on Login or the next EA after
 onExited })`; screens use the hook, not this internal host. Its bottom is exactly
 `8 + max(insets.bottom, 8, maxObstruction, keyboardHeight)`; obstruction heights compete by
 maximum, they do not add. `useKeyboardHeight()` (`src/hooks/useKeyboardHeight.js`) reads iOS
-keyboardWillShow/Hide or Android keyboardDidShow/Hide and returns zero while hidden. Future
-sticky footers register their measured obstruction through the same hook.
+keyboardWillShow/Hide or Android keyboardDidShow/Hide and returns zero while hidden.
+StickyActionFooter registers its measured visible obstruction through `useToastObstruction`.
 
 The toast is ink, min height 56, radius 18, horizontal screen inset 24, white textBodySemi and
 an always-visible underlined “Dismiss” (accessible name “Dismiss message”, min target height 44).
@@ -519,6 +581,7 @@ known recent year class is available. Tiers map to high/full, low/calm, static/s
 | Hero/canvas sync indicator | 1000ms linear rotation while syncing | Static glyph/arc, also static whenever reduceMotion is true |
 | Children SpinnerArc (InlineLoading and child-row “Syncing…”) | 1000ms linear rotation | Static arc, also static whenever reduceMotion is true |
 | BrandButton | Press scale 0.98 if reduceMotion is false | Current code checks reduceMotion, not tier: static hardware without the OS preference still gets the press scale |
+| LetterToggleTile | Press scale 0.96 over 90ms in / 140ms out, native driver, when enabled and reduceMotion is false | Like BrandButton, checks reduceMotion rather than tier; Reduce Motion stops/resets the scale and disables scaling |
 | Native ActivityIndicator | OS-owned spinner | Still OS-owned; not replaced by this contract |
 
 `duration = { fade: 150, quick: 200, base: 250, sweep: 300 }`;
@@ -558,22 +621,23 @@ line once both categories are zero**; the guard fails if a fully clean file stay
 |---|---|---|---|
 | screens/auth/LoginScreen.js | 0 | TextInput, Button | Login |
 | screens/auth/ForgotPasswordScreen.js | 0 | TextInput, Button | Login |
-| screens/sessions/SessionFormScreen.js | 0 | Button | Record |
-| screens/sessions/LiteracySessionForm.js | 0 | TextInput, Button, Card, Menu | Record |
 | screens/sessions/SessionCompleteScreen.js | 2 | Button | Session complete |
 | screens/main/ProfileScreen.js | 2 | TextInput, Button, Card, SegmentedButtons | Profile |
 | components/profile/SignOutSheets.js | 5 | None | Profile |
-| components/children/ChildSelector.js | 0 | Searchbar | Children |
 
 ## Remaining delivery boundaries
 
-Children list and Class detail are built on `feat/bold-red-children`; their two ratchet entries
-are removed. ChildSelector retains its separate Searchbar allowance. Record, Session complete,
-Profile and Login/reset retain their board PRs; CountChip, StickyActionFooter, ConfirmSheet and
-the celebration remain future work. Avatar, SyncBanner and InlineLoading are available above;
-SyncStatusBanner and its test are removed.
+Children list and Class detail are built on `feat/bold-red-children`; Record Tasks 1–12 are built
+on `feat/bold-red-record`. LiteracySessionForm, ChildSelector, LetterTrackerBottomSheet and
+SessionFormScreen pass the full guard without ratchet entries. Session complete, Profile and
+Login/reset retain their board PRs. CountChip, StickyActionFooter and ConfirmSheet are available
+above; the celebration and footer surface='onOverflow' remain Session complete work.
+Avatar, SyncBanner and InlineLoading are available; SyncStatusBanner and its test are removed.
 
 The dead SessionsScreen, SessionsTodayGauge, ProfileGearButton and HeaderBackButton are
 removed. SessionsTodayRing survives only until the Session complete PR. The remaining native
 gates are Task 34's EAS preview checks, including fonts, 360dp/large text, keyboard/toast/sheet
 ordering, navigation gestures, Home comparison and C11. Task 35 is conditional on the C11 repro.
+Record's Task 14 preview/device gate and branch review remain orchestrator-owned: board screenshots,
+native discard gestures, keyboard visibility, large text, screen-reader focus/announcements,
+Reduce Motion, A03s scrolling and Home comparison are not proved by local Jest results.

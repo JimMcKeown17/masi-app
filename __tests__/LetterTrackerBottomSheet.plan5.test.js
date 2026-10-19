@@ -1,7 +1,9 @@
+jest.mock('@expo/vector-icons', () => ({ Ionicons: 'Ionicons' }), { virtual: true });
+
 import React from 'react';
 import { StyleSheet } from 'react-native';
 import { typeRoles } from '../src/constants/typography';
-import { render, waitFor } from '@testing-library/react-native';
+import { fireEvent, render, waitFor } from '@testing-library/react-native';
 import { PaperProvider } from 'react-native-paper';
 import LetterTrackerBottomSheet from '../src/components/session/LetterTrackerBottomSheet';
 import { LETTER_SETS } from '../src/constants/egraConstants';
@@ -98,11 +100,15 @@ describe('LetterTrackerBottomSheet Plan 5 behavior', () => {
     // The letter at EGRA position 0 was attempted and fully correct in the
     // letter assessment; the newer word assessment must not unlock it.
     const firstEgraLetter = LETTER_SETS.english.letters[0].toLowerCase();
-    const { getByLabelText, getByText } = renderSheet();
+    const onChangesUpdate = jest.fn();
+    const { getByLabelText, getByText } = renderSheet({ onChangesUpdate });
 
     await waitFor(() =>
-      expect(getByLabelText(`${firstEgraLetter}, mastered from assessment`)).toBeTruthy(),
+      expect(getByLabelText(`${firstEgraLetter}, mastered from assessment, locked`)).toBeTruthy(),
     );
-    expect(StyleSheet.flatten(getByText(firstEgraLetter.toUpperCase()).props.style)).toEqual(expect.objectContaining(typeRoles.textLetter));
+    fireEvent.press(getByLabelText(`${firstEgraLetter}, mastered from assessment, locked`));
+    expect(onChangesUpdate).not.toHaveBeenCalled();
+    expect(getByLabelText(`${firstEgraLetter}, mastered from assessment, locked`).props.accessibilityState.disabled).toBe(true);
+    expect(StyleSheet.flatten(getByText(firstEgraLetter).props.style)).toEqual(expect.objectContaining(typeRoles.textLetter));
   });
 });

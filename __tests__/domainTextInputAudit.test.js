@@ -10,19 +10,20 @@ describe('domain text input audit', () => {
   test('literacy session comments disable keyboard suggestions', () => {
     const source = readSource('src/screens/sessions/LiteracySessionForm.js');
 
-    expect(source).toMatch(/placeholder="Add session notes\.\.\."[\s\S]*\{\.\.\.NO_TEXT_SUGGESTIONS\}/);
+    expect(source).toMatch(/placeholder="Add session notes…"[\s\S]*\{\.\.\.NO_TEXT_SUGGESTIONS\}/);
   });
 
   test('search fields for child and class names disable keyboard suggestions', () => {
     expect(readSource('src/screens/main/ChildrenListScreen.js')).toMatch(
       /<SearchField[\s\S]*placeholder="Search classes…"/
     );
+    expect(readSource('src/components/common/SearchField.js')).toContain('{...NO_TEXT_SUGGESTIONS}');
     const childSelectorSource = readSource('src/components/children/ChildSelector.js');
     expect(childSelectorSource).toMatch(
-      /<Searchbar[\s\S]*placeholder=\{searchPlaceholder\}[\s\S]*\{\.\.\.NO_TEXT_SUGGESTIONS\}/
+      /<SearchField[\s\S]*placeholder=\{searchPlaceholder\}/
     );
     expect(childSelectorSource).toContain(
-      "searchPlaceholder={selectionMode === 'groups' ? 'Search groups...' : 'Search children...'}"
+      "searchPlaceholder={selectionMode === 'groups' ? 'Search groups…' : 'Search children…'}"
     );
     expect(readSource('src/screens/assessments/AssessmentChildSelectScreen.js')).toMatch(
       /<SearchField[\s\S]*placeholder="Search children\.\.\."/

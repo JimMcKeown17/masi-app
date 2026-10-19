@@ -1,143 +1,65 @@
-import React, { useCallback, useMemo, useRef, useState } from 'react';
-import { FlatList, Pressable, StyleSheet, View } from 'react-native';
-import {
-  List,
-  Searchbar,
-  Text,
-} from 'react-native-paper';
-import { borderRadius, colors, shadows, spacing } from '../../constants/colors';
-import { fontFamilies } from '../../constants/typography';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { FlatList, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
+import { borderRadius, colors, tints } from '../../constants/colors';
+import { typeRoles } from '../../constants/typography';
 import { useChildren } from '../../context/ChildrenContext';
 import { useClasses } from '../../context/ClassesContext';
-import { NO_TEXT_SUGGESTIONS } from '../../constants/textInputProps';
+import { getInitials } from '../../utils/initials';
+import { rosterRowHeight } from '../../utils/sessionFormLayout';
+import Avatar from '../common/Avatar';
+import IconTile from '../common/IconTile';
+import InlineNote from '../common/InlineNote';
+import SearchField from '../common/SearchField';
+import SegmentedControl from '../common/SegmentedControl';
+import StepHeader from '../forms/StepHeader';
+import CountChip from '../forms/CountChip';
+import SelectableRow from '../forms/SelectableRow';
 
-const ROSTER_ROW_HEIGHT = 64;
 const INITIAL_ROSTER_ROWS = 8;
 const ROSTER_WINDOW_SIZE = 5;
-const PAPER_CARD_RADIUS = 12;
+const MODES = [{ value: 'children', label: 'Children' }, { value: 'groups', label: 'Groups' }];
+const rowPosition = (index, count) => count === 1 ? 'only' : index === 0 ? 'first' : index === count - 1 ? 'last' : 'middle';
 
-function SelectionPill({ selected }) {
-  return (
-    <View style={[styles.selectionPill, selected && styles.selectionPillSelected]}>
-      <Text style={[styles.selectionPillText, selected && styles.selectionPillTextSelected]}>
-        {selected ? 'Selected' : 'Select'}
-      </Text>
-    </View>
-  );
-}
-
-const ChildSelectorRow = React.memo(function ChildSelectorRow({
-  id,
-  name,
-  className,
-  isSelected,
-  onToggle,
-}) {
-  return (
-    <View style={styles.listItemChrome}>
-      <List.Item
-        title={name}
-        description={className}
-        onPress={() => onToggle(id)}
-        right={() => <SelectionPill selected={isSelected} />}
-        accessibilityLabel={`${name}, ${isSelected ? 'selected' : 'not selected'}`}
-        accessibilityState={{ selected: isSelected }}
-        style={[styles.listItem, isSelected && styles.listItemSelected]}
-      />
-    </View>
-  );
+const ChildSelectorRow = React.memo(function ChildSelectorRow({ id, name, initials, className, isSelected, onToggle, height, position }) {
+  return <SelectableRow variant="checkbox" title={name} subtitle={className}
+    lead={<Avatar label={initials} size={40} />} selected={isSelected}
+    onPress={() => onToggle(id)} height={height} position={position}
+    accessibilityLabel={`${name}, ${className}`} />;
 });
 
-const GroupSelectorRow = React.memo(function GroupSelectorRow({
-  id,
-  name,
-  childCount,
-  isSelected,
-  onSelect,
-}) {
-  return (
-    <View style={styles.listItemChrome}>
-      <List.Item
-        title={name}
-        description={`${childCount} ${childCount === 1 ? 'child' : 'children'}`}
-        onPress={() => onSelect(id)}
-        right={() => <SelectionPill selected={isSelected} />}
-        accessibilityLabel={`${name}, ${childCount} ${childCount === 1 ? 'child' : 'children'}, ${isSelected ? 'selected' : 'not selected'}`}
-        accessibilityState={{ selected: isSelected }}
-        style={[styles.listItem, isSelected && styles.listItemSelected]}
-      />
-    </View>
-  );
+const GroupSelectorRow = React.memo(function GroupSelectorRow({ id, name, childCount, isSelected, onSelect, height, position }) {
+  const subtitle = `${childCount} ${childCount === 1 ? 'child' : 'children'}`;
+  return <SelectableRow variant="radio" title={name} subtitle={subtitle}
+    lead={<IconTile icon="people-outline" tone="red" />} selected={isSelected}
+    onPress={() => onSelect(id)} height={height} position={position}
+    accessibilityLabel={`${name}, ${subtitle}`} />;
 });
 
-function ChildSelectorHeader({
-  formHeader,
-  searchTerm,
-  onSearchTermChange,
-  selectionMode,
-  onSelectionModeChange,
-  searchPlaceholder,
-  selectedCount,
-}) {
-  return (
-    <>
-      {formHeader}
-      <View style={styles.cardTop}>
-        <View style={styles.sectionHeading}>
-          <Text variant="titleSmall" style={styles.sectionLabel}>Select Children</Text>
-          <Text variant="bodySmall" style={styles.selectedCount}>
-            {selectedCount} selected
-          </Text>
-        </View>
-        <View style={styles.modeToggle}>
-          {[
-            { key: 'children', label: 'Children' },
-            { key: 'groups', label: 'Groups' },
-          ].map((option) => {
-            const selected = selectionMode === option.key;
-            return (
-              <Pressable
-                key={option.key}
-                onPress={() => onSelectionModeChange(option.key)}
-                accessibilityRole="button"
-                accessibilityLabel={`Show ${option.label.toLowerCase()}`}
-                accessibilityState={{ selected }}
-                style={[styles.modeOption, selected && styles.modeOptionSelected]}
-              >
-                <Text style={[styles.modeOptionText, selected && styles.modeOptionTextSelected]}>
-                  {option.label}
-                </Text>
-              </Pressable>
-            );
-          })}
-        </View>
-        <Searchbar
-          placeholder={searchPlaceholder}
-          value={searchTerm}
-          onChangeText={onSearchTermChange}
-          style={styles.searchBar}
-          elevation={0}
-          {...NO_TEXT_SUGGESTIONS}
-        />
+function ChildSelectorHeader({ formHeader, searchTerm, onSearchTermChange, selectionMode,
+  onSelectionModeChange, searchPlaceholder, selectedCount, selectionError, childrenStepRef,
+  onHeaderLayout, onSectionLayout }) {
+  return <View testID="roster-header" onLayout={onHeaderLayout}>
+    {formHeader}
+    <View testID="children-section" onLayout={onSectionLayout} style={styles.section}>
+      <View style={styles.heading}>
+        <StepHeader ref={childrenStepRef} step={2} label="Select children"
+          status={selectionError ? 'error' : selectedCount > 0 ? 'done' : 'todo'}
+          right={<CountChip label={`${selectedCount} selected`} active={selectedCount > 0} />} />
       </View>
-    </>
-  );
+      {selectionError ? <View style={styles.error}><InlineNote tone="error">{selectionError}</InlineNote></View> : null}
+      <SegmentedControl role="tab" accessibilityLabel="Show" options={MODES}
+        value={selectionMode} onChange={onSelectionModeChange} />
+      {selectionMode === 'groups' ? <Text style={styles.hint}>Choosing a group replaces your selection.</Text> : null}
+      <View style={styles.search}>
+        <SearchField placeholder={searchPlaceholder} accessibilityLabel={searchPlaceholder}
+          value={searchTerm} onChangeText={onSearchTermChange} />
+      </View>
+    </View>
+  </View>;
 }
 
-function ChildSelectorFooter({
-  formFooter,
-  selectionError,
-}) {
-  return (
-    <>
-      <View style={styles.cardBottom}>
-        {selectionError && (
-          <Text variant="bodySmall" style={styles.errorText}>{selectionError}</Text>
-        )}
-      </View>
-      {formFooter}
-    </>
-  );
+function ChildSelectorFooter({ formFooter }) {
+  return <>{formFooter}</>;
 }
 
 function ChildSelector({
@@ -148,11 +70,25 @@ function ChildSelector({
   ListFooterComponent,
   style,
   contentContainerStyle,
+  listRef,
+  childrenStepRef,
+  onScroll,
+  automaticallyAdjustKeyboardInsets = false,
+  onMetrics,
 }) {
   const { children, groups, getChildrenInGroup } = useChildren();
   const { classes } = useClasses();
   const [searchTerm, setSearchTerm] = useState('');
   const [selectionMode, setSelectionMode] = useState('children');
+  const rowHeight = rosterRowHeight(useWindowDimensions().fontScale);
+  const [headerHeight, setHeaderHeight] = useState(0);
+  const [childrenSectionY, setChildrenSectionY] = useState(0);
+  const [emptyHeight, setEmptyHeight] = useState(0);
+  const onMetricsRef = useRef(onMetrics);
+  onMetricsRef.current = onMetrics;
+  const onHeaderLayout = useCallback((event) => setHeaderHeight(event.nativeEvent.layout.height), []);
+  const onSectionLayout = useCallback((event) => setChildrenSectionY(event.nativeEvent.layout.y), []);
+  const onEmptyLayout = useCallback((event) => setEmptyHeight(event.nativeEvent.layout.height), []);
 
   const selectedIds = useMemo(
     () => new Set(selectedChildren.map((child) => child.id)),
@@ -174,6 +110,8 @@ function ChildSelector({
   const selectedChildrenRef = useRef(selectedChildren);
   const childrenByIdRef = useRef(childrenById);
   const onSelectionChangeRef = useRef(onSelectionChange);
+  const getChildrenInGroupRef = useRef(getChildrenInGroup);
+  getChildrenInGroupRef.current = getChildrenInGroup;
   selectedChildrenRef.current = selectedChildren;
   childrenByIdRef.current = childrenById;
   onSelectionChangeRef.current = onSelectionChange;
@@ -203,7 +141,7 @@ function ChildSelector({
   }, []);
 
   const handleSelectGroup = useCallback((groupId) => {
-    const groupChildren = getChildrenInGroup(groupId);
+    const groupChildren = getChildrenInGroupRef.current(groupId);
     const currentSelection = selectedChildrenRef.current;
     const isExactSelection = groupChildren.length > 0
       && groupChildren.length === currentSelection.length
@@ -211,18 +149,27 @@ function ChildSelector({
         (selected) => selected.id === child.id
       ));
     onSelectionChangeRef.current(isExactSelection ? [] : groupChildren);
-  }, [getChildrenInGroup]);
+  }, []);
 
   const handleSelectionModeChange = useCallback((mode) => {
     setSearchTerm('');
     setSelectionMode(mode);
   }, []);
 
-  const renderItem = useCallback(({ item }) => (
+  const data = selectionMode === 'groups' ? filteredGroups : filteredChildren;
+  const bodyHeight = data.length > 0 ? data.length * rowHeight : emptyHeight;
+  useEffect(() => {
+    onMetricsRef.current?.({ headerHeight, childrenSectionY, bodyHeight });
+  }, [headerHeight, childrenSectionY, bodyHeight]);
+  const getItemLayout = useCallback((_, index) => ({ length: rowHeight, offset: rowHeight * index, index }), [rowHeight]);
+
+  const renderItem = useCallback(({ item, index }) => (
     selectionMode === 'groups'
       ? (
         <GroupSelectorRow
           id={item.id}
+          height={rowHeight}
+          position={rowPosition(index, data.length)}
           name={item.name}
           childCount={groupChildrenById.get(item.id)?.length || 0}
           isSelected={(
@@ -236,7 +183,10 @@ function ChildSelector({
       : (
         <ChildSelectorRow
           id={item.id}
+          height={rowHeight}
+          position={rowPosition(index, data.length)}
           name={`${item.first_name} ${item.last_name}`}
+          initials={getInitials(item.first_name, item.last_name)}
           className={classNamesById.get(item.class_id) || 'No class'}
           isSelected={selectedIds.has(item.id)}
           onToggle={onToggle}
@@ -244,6 +194,8 @@ function ChildSelector({
       )
   ), [
     classNamesById,
+    data.length,
+    rowHeight,
     groupChildrenById,
     handleSelectGroup,
     onToggle,
@@ -258,31 +210,38 @@ function ChildSelector({
       onSearchTermChange={setSearchTerm}
       selectionMode={selectionMode}
       onSelectionModeChange={handleSelectionModeChange}
-      searchPlaceholder={selectionMode === 'groups' ? 'Search groups...' : 'Search children...'}
+      searchPlaceholder={selectionMode === 'groups' ? 'Search groups…' : 'Search children…'}
       selectedCount={selectedChildren.length}
+      selectionError={selectionError}
+      childrenStepRef={childrenStepRef}
+      onHeaderLayout={onHeaderLayout}
+      onSectionLayout={onSectionLayout}
     />
   );
 
   const listFooter = (
     <ChildSelectorFooter
       formFooter={ListFooterComponent}
-      selectionError={selectionError}
     />
   );
 
   return (
     <FlatList
+      ref={listRef}
+      onScroll={onScroll}
+      automaticallyAdjustKeyboardInsets={automaticallyAdjustKeyboardInsets}
+      scrollEventThrottle={16}
       style={style}
       contentContainerStyle={contentContainerStyle}
-      data={selectionMode === 'groups' ? filteredGroups : filteredChildren}
+      data={data}
       keyExtractor={(item) => item.id}
       renderItem={renderItem}
       extraData={selectedIds}
       ListHeaderComponent={listHeader}
       ListFooterComponent={listFooter}
       ListEmptyComponent={
-        <View style={styles.listItemChrome}>
-          <Text variant="bodySmall" style={styles.emptyText}>
+        <View testID="roster-empty" onLayout={onEmptyLayout} style={styles.emptyRow}>
+          <Text style={styles.emptyText}>
             {selectionMode === 'groups'
               ? (searchTerm ? 'No groups match your search' : 'No groups available')
               : (searchTerm ? 'No children match your search' : 'No children available')}
@@ -291,11 +250,7 @@ function ChildSelector({
       }
       initialNumToRender={INITIAL_ROSTER_ROWS}
       windowSize={ROSTER_WINDOW_SIZE}
-      getItemLayout={(_, index) => ({
-        length: ROSTER_ROW_HEIGHT,
-        offset: ROSTER_ROW_HEIGHT * index,
-        index,
-      })}
+      getItemLayout={getItemLayout}
     />
   );
 }
@@ -303,109 +258,11 @@ function ChildSelector({
 export default React.memo(ChildSelector);
 
 const styles = StyleSheet.create({
-  cardTop: {
-    backgroundColor: colors.surface,
-    borderTopLeftRadius: PAPER_CARD_RADIUS,
-    borderTopRightRadius: PAPER_CARD_RADIUS,
-    paddingHorizontal: spacing.md,
-    paddingTop: spacing.md,
-    ...shadows.card,
-  },
-  cardBottom: {
-    backgroundColor: colors.surface,
-    borderBottomLeftRadius: PAPER_CARD_RADIUS,
-    borderBottomRightRadius: PAPER_CARD_RADIUS,
-    marginBottom: spacing.md,
-    paddingHorizontal: spacing.md,
-    paddingBottom: spacing.md,
-    ...shadows.card,
-  },
-  sectionLabel: {
-    color: colors.primary,
-    fontFamily: fontFamilies.textSemi,
-  },
-  sectionHeading: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-  },
-  selectedCount: {
-    color: colors.textSecondary,
-    fontFamily: fontFamilies.textSemi,
-  },
-  modeToggle: {
-    flexDirection: 'row',
-    backgroundColor: colors.background,
-    borderRadius: borderRadius.md,
-    borderCurve: 'continuous',
-    padding: spacing.xs,
-    marginVertical: spacing.sm,
-    gap: spacing.xs,
-  },
-  modeOption: {
-    flex: 1,
-    minHeight: 44,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderRadius: borderRadius.sm,
-    borderCurve: 'continuous',
-  },
-  modeOptionSelected: {
-    backgroundColor: colors.surface,
-    ...shadows.card,
-  },
-  modeOptionText: {
-    color: colors.textSecondary,
-    fontFamily: fontFamilies.textSemi,
-  },
-  modeOptionTextSelected: {
-    color: colors.primary,
-  },
-  searchBar: {
-    marginBottom: spacing.sm,
-    backgroundColor: colors.surface,
-  },
-  listItemChrome: {
-    backgroundColor: colors.surface,
-    paddingHorizontal: spacing.md,
-  },
-  listItem: {
-    backgroundColor: colors.surface,
-    minHeight: ROSTER_ROW_HEIGHT,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: colors.border,
-  },
-  listItemSelected: {
-    backgroundColor: colors.red50,
-  },
-  selectionPill: {
-    alignSelf: 'center',
-    minWidth: 84,
-    minHeight: 38,
-    paddingHorizontal: spacing.sm,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: colors.background,
-    borderRadius: borderRadius.xl,
-    borderCurve: 'continuous',
-  },
-  selectionPillSelected: {
-    backgroundColor: colors.red50,
-  },
-  selectionPillText: {
-    color: colors.textSecondary,
-    fontFamily: fontFamilies.textSemi,
-  },
-  selectionPillTextSelected: {
-    color: colors.primary,
-  },
-  emptyText: {
-    color: colors.textSecondary,
-    textAlign: 'center',
-    paddingVertical: spacing.md,
-  },
-  errorText: {
-    color: colors.error,
-    marginTop: spacing.sm,
-  },
+  section: { paddingBottom: 22 },
+  heading: { minHeight: 32, marginBottom: 12 },
+  error: { marginBottom: 24 },
+  hint: { ...typeRoles.textCaption, color: colors.textSecondary, marginTop: 8 },
+  search: { marginTop: 12 },
+  emptyRow: { backgroundColor: colors.surface, borderWidth: 1, borderColor: tints.rule, borderRadius: borderRadius.lg, paddingVertical: 20, paddingHorizontal: 16 },
+  emptyText: { ...typeRoles.textCaption, color: colors.textSecondary },
 });

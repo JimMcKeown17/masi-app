@@ -26,12 +26,9 @@ const RATCHETED_PAPER = ['TextInput', 'Searchbar', 'SegmentedButtons', 'Card', '
 const BOARD_RATCHET = {
   'src/screens/auth/LoginScreen.js': { rawType: 0, paperImports: ['TextInput', 'Button'] },
   'src/screens/auth/ForgotPasswordScreen.js': { rawType: 0, paperImports: ['TextInput', 'Button'] },
-  'src/screens/sessions/SessionFormScreen.js': { rawType: 0, paperImports: ['Button'] },
-  'src/screens/sessions/LiteracySessionForm.js': { rawType: 0, paperImports: ['TextInput', 'Button', 'Card', 'Menu'] },
   'src/screens/sessions/SessionCompleteScreen.js': { rawType: 2, paperImports: ['Button'] },
   'src/screens/main/ProfileScreen.js': { rawType: 2, paperImports: ['TextInput', 'Button', 'Card', 'SegmentedButtons'] },
   'src/components/profile/SignOutSheets.js': { rawType: 5, paperImports: [] },
-  'src/components/children/ChildSelector.js': { rawType: 0, paperImports: ['Searchbar'] },
 };
 
 const rawTypeCount = (s) => (s.match(/\b(fontSize|lineHeight|letterSpacing)\s*:\s*-?\d/g) || []).length;

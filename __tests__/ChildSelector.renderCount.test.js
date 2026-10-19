@@ -28,25 +28,12 @@ jest.mock('react-native-safe-area-context', () => {
   };
 });
 
-jest.mock('react-native-paper', () => {
+jest.mock('../src/components/forms/SelectableRow', () => {
   const React = require('react');
-  const paper = jest.requireActual('react-native-paper');
-  const rowRenderSpy = jest.fn();
-  const OriginalListItem = paper.List.Item;
-
-  function InstrumentedListItem(props) {
-    rowRenderSpy(props.title);
-    return React.createElement(OriginalListItem, props);
-  }
-
-  return {
-    ...paper,
-    List: {
-      ...paper.List,
-      Item: InstrumentedListItem,
-    },
-    childSelectorRowRenderSpy: rowRenderSpy,
-  };
+  const Actual = jest.requireActual('../src/components/forms/SelectableRow').default;
+  const spy = jest.fn();
+  const Instrumented = React.memo((props) => { spy(props.title); return <Actual {...props} />; });
+  return { __esModule: true, default: Instrumented, selectableRowRenderSpy: spy };
 });
 
 const mockUseAuth = jest.fn();
@@ -65,10 +52,11 @@ jest.mock('../src/services/literacySessionPersistence', () => ({
 }));
 
 import React from 'react';
-import { renderWithProviders as render } from '../test-support/renderWithProviders';
+import { AllProviders } from '../test-support/renderWithProviders';
+import { renderInTestStack } from '../test-support/renderInTestStack';
 import { FlatList } from 'react-native';
 import { fireEvent } from '@testing-library/react-native';
-import { PaperProvider, childSelectorRowRenderSpy } from 'react-native-paper';
+import { selectableRowRenderSpy } from '../src/components/forms/SelectableRow';
 import LiteracySessionForm from '../src/screens/sessions/LiteracySessionForm';
 
 const children = Array.from({ length: 60 }, (_, index) => ({
@@ -78,11 +66,8 @@ const children = Array.from({ length: 60 }, (_, index) => ({
   class_id: 'class-1',
 }));
 
-const navigation = {
-  replace: jest.fn(),
-  dispatch: jest.fn(),
-  addListener: jest.fn(() => jest.fn()),
-};
+function HomeStub() { return null; }
+function SessionCompleteStub() { return null; }
 
 function hasAncestorOfType(node, type) {
   let current = node.parent;
@@ -113,42 +98,46 @@ describe('LiteracySessionForm roster render isolation', () => {
   });
 
   function renderForm() {
-    return render(
-      <PaperProvider settings={{ icon: () => null }}>
-        <LiteracySessionForm navigation={navigation} />
-      </PaperProvider>,
-    );
+    return renderInTestStack({
+      routes: [
+        { name: 'Home', component: HomeStub },
+        { name: 'SessionForm', component: LiteracySessionForm },
+        { name: 'SessionComplete', component: SessionCompleteStub },
+      ],
+      initialIndex: 1,
+      wrapper: AllProviders,
+    });
   }
 
   test('selecting one child re-renders exactly one roster row', () => {
     const screen = renderForm();
-    childSelectorRowRenderSpy.mockClear();
+    selectableRowRenderSpy.mockClear();
 
     fireEvent.press(screen.getByText('Child 1 Learner'));
 
-    expect(childSelectorRowRenderSpy).toHaveBeenCalledTimes(1);
-    expect(childSelectorRowRenderSpy).toHaveBeenCalledWith('Child 1 Learner');
+    expect(selectableRowRenderSpy).toHaveBeenCalledTimes(1);
+    expect(selectableRowRenderSpy).toHaveBeenCalledWith('Child 1 Learner');
   });
 
   test('typing a comment re-renders zero roster rows', () => {
     const screen = renderForm();
-    childSelectorRowRenderSpy.mockClear();
+    selectableRowRenderSpy.mockClear();
 
-    fireEvent.changeText(screen.getByPlaceholderText('Add session notes...'), 'a');
+    fireEvent.changeText(screen.getByPlaceholderText('Add session notes…'), 'a');
 
-    expect(childSelectorRowRenderSpy).not.toHaveBeenCalled();
+    expect(selectableRowRenderSpy).not.toHaveBeenCalled();
   });
 
   test('typing several comment characters keeps the focused input mounted with its text', () => {
     const screen = renderForm();
-    const focusedInput = screen.getByPlaceholderText('Add session notes...');
+    const focusedInput = screen.getByPlaceholderText('Add session notes…');
     fireEvent(focusedInput, 'focus');
 
     let value = '';
     for (const character of 'focus') {
       value += character;
-      fireEvent.changeText(screen.getByPlaceholderText('Add session notes...'), value);
-      expect(screen.getByPlaceholderText('Add session notes...')).toBe(focusedInput);
+      fireEvent.changeText(screen.getByPlaceholderText('Add session notes…'), value);
+      expect(screen.getByPlaceholderText('Add session notes…')).toBe(focusedInput);
     }
 
     expect(focusedInput.props.value).toBe('focus');

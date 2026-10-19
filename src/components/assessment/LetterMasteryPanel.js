@@ -1,11 +1,12 @@
-import { fontFamilies, typeRoles } from '../../constants/typography';
+import { typeRoles } from '../../constants/typography';
 import { useSignedInEA } from '../../context/SignedInEAContext';
 import React, { useState, useCallback } from 'react';
-import { View, StyleSheet, Pressable, useWindowDimensions } from 'react-native';
+import { View, StyleSheet } from 'react-native';
 import { Text, ActivityIndicator } from 'react-native-paper';
 import { useFocusEffect } from '@react-navigation/native';
 import { v4 as uuidv4 } from 'uuid';
 import { colors, spacing, borderRadius } from '../../constants/colors';
+import LetterToggleGrid from '../sessions/LetterToggleGrid';
 import { letterStateColors } from '../../constants/letterStateColors';
 import { LETTER_SETS, PEDAGOGICAL_ORDERS } from '../../constants/egraConstants';
 import { normalizeLanguageKey } from '../../utils/letterMastery';
@@ -14,9 +15,6 @@ import { loadMasteryState } from '../../utils/masteryState';
 import { useAuth } from '../../context/AuthContext';
 import { useOffline } from '../../context/OfflineContext';
 
-const GRID_COLUMNS = 5;
-const GRID_GAP = spacing.sm;
-const CELL_COLORS = letterStateColors;
 
 export default function LetterMasteryPanel({ child, classItem }) {
   const { repositories } = useSignedInEA();
@@ -24,9 +22,7 @@ export default function LetterMasteryPanel({ child, classItem }) {
 
   const { user } = useAuth();
   const { refreshSyncStatus, triggerBackgroundSync } = useOffline();
-  const { width: windowWidth } = useWindowDimensions();
 
-  const [panelWidth, setPanelWidth] = useState(0);
   const [assessmentMastered, setAssessmentMastered] = useState(new Set());
   const [taughtLetters, setTaughtLetters] = useState({}); // { letter: recordId }
   const [loading, setLoading] = useState(true);
@@ -37,13 +33,6 @@ export default function LetterMasteryPanel({ child, classItem }) {
   const languageKey = normalizeLanguageKey(classItem?.home_language);
   const letterSet = LETTER_SETS[languageKey];
   const pedagogicalOrder = PEDAGOGICAL_ORDERS[languageKey];
-
-  // onLayout self-measurement so the grid sizes correctly whether full-screen
-  // (wrapper) or inside a padded Card (ChildResults). Fallback to window width
-  // until the first layout pass (also what keeps RTL tests rendering cells).
-  const effectiveWidth = panelWidth || (windowWidth - spacing.md * 2);
-  const totalGapWidth = (GRID_COLUMNS - 1) * GRID_GAP;
-  const tileSize = Math.floor((effectiveWidth - totalGapWidth) / GRID_COLUMNS);
 
   const loadData = useCallback(async () => {
     try {
@@ -169,7 +158,7 @@ export default function LetterMasteryPanel({ child, classItem }) {
   if (loading) {
     return (
       <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color={colors.primary} />
+        <ActivityIndicator size="large" color={colors.text} />
       </View>
     );
   }
@@ -179,7 +168,7 @@ export default function LetterMasteryPanel({ child, classItem }) {
   const masteredCount = allMastered.size;
 
   return (
-    <View onLayout={(e) => setPanelWidth(e.nativeEvent.layout.width)}>
+    <View>
       {/* Meta row (NO child name — the consumer renders that) */}
       <View style={styles.header}>
         <View style={styles.headerMeta}>
@@ -202,60 +191,28 @@ export default function LetterMasteryPanel({ child, classItem }) {
         )}
       </View>
 
-      {/* Legend */}
       <View style={styles.legend}>
-        <View style={styles.legendItem}>
-          <View style={[styles.legendSwatch, { backgroundColor: CELL_COLORS.assessment.bg }]} />
-          <Text variant="bodySmall" style={styles.legendLabel}>Assessment</Text>
-        </View>
-        <View style={styles.legendItem}>
-          <View style={[styles.legendSwatch, { backgroundColor: CELL_COLORS.taught.bg }]} />
-          <Text variant="bodySmall" style={styles.legendLabel}>Taught</Text>
-        </View>
-        <View style={styles.legendItem}>
-          <View style={[styles.legendSwatch, styles.legendSwatchDefault]} />
-          <Text variant="bodySmall" style={styles.legendLabel}>Not yet</Text>
-        </View>
-      </View>
-
-      {/* Letter Grid */}
-      <View style={[styles.grid, { gap: GRID_GAP }]}>
-        {pedagogicalOrder.map((letter) => {
-          const state = getCellState(letter);
-          const cellColors = CELL_COLORS[state];
-          const isLocked = state === 'assessment';
-          const isDisabled = isLocked || Boolean(updatingLetter);
-
-          return (
-            <Pressable
-              key={letter}
-              onPress={() => handleCellTap(letter)}
-              disabled={isDisabled}
-              accessibilityState={{ disabled: isDisabled, selected: state !== 'default' }}
-              style={({ pressed }) => [
-                styles.cell,
-                {
-                  width: tileSize,
-                  height: tileSize,
-                  backgroundColor: cellColors.bg,
-                  borderColor: state === 'default' ? cellColors.border : cellColors.bg,
-                },
-                pressed && !isDisabled && styles.cellPressed,
-                isLocked && styles.cellLocked,
-              ]}
-              accessibilityRole="button"
-              accessibilityLabel={`${letter}, ${state === 'assessment' ? 'mastered from assessment' : state === 'taught' ? 'taught by coach' : 'not mastered'}`}
-            >
-              <Text style={[
-                styles.cellText,
-                { color: cellColors.text, fontSize: Math.max(16, Math.floor(tileSize * 0.35)) },
-              ]}>
-                {letter.toUpperCase()}
-              </Text>
-            </Pressable>
-          );
+        {[
+          ['Taught', 'taught'], ['Not yet', 'default'], ['Assessment (locked)', 'assessment'],
+        ].map(([label, state]) => {
+          const palette = letterStateColors[state];
+          return <View key={label} style={styles.legendItem}>
+            <View style={[styles.legendSwatch, { backgroundColor: palette.bg, borderColor: palette.border }]} />
+            <Text style={styles.legendLabel}>{label}</Text>
+          </View>;
         })}
       </View>
+
+      <LetterToggleGrid letters={pedagogicalOrder} onPressLetter={handleCellTap} tileFor={(letter) => {
+        const state = getCellState(letter);
+        const locked = state === 'assessment';
+        const disabled = locked || Boolean(updatingLetter);
+        return {
+          tone: locked ? 'locked' : state === 'taught' ? 'taught' : 'rest', disabled,
+          accessibilityState: { disabled, selected: state !== 'default' },
+          accessibilityLabel: `${letter}, ${locked ? 'mastered from assessment, locked' : state === 'taught' ? 'taught by coach' : 'not mastered'}`,
+        };
+      }} />
     </View>
   );
 }
@@ -297,50 +254,11 @@ const styles = StyleSheet.create({
     marginTop: spacing.sm,
   },
   legend: {
-    flexDirection: 'row',
-    gap: spacing.md,
-    marginBottom: spacing.lg,
-    paddingVertical: spacing.sm,
-    paddingHorizontal: spacing.md,
-    backgroundColor: colors.surface,
-    borderRadius: borderRadius.sm,
+    flexDirection: 'row', flexWrap: 'wrap', rowGap: 8, columnGap: 16,
+    marginBottom: spacing.lg, paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.md, backgroundColor: colors.surface, borderRadius: borderRadius.sm,
   },
-  legendItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.xs,
-  },
-  legendSwatch: {
-    width: 14,
-    height: 14,
-    borderRadius: 3,
-  },
-  legendSwatchDefault: {
-    backgroundColor: colors.surface,
-    borderWidth: 1,
-    borderColor: colors.border,
-  },
-  legendLabel: {
-    color: colors.textSecondary,
-  },
-  grid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-  },
-  cell: {
-    justifyContent: 'center',
-    alignItems: 'center',
-    borderWidth: 1,
-    borderRadius: borderRadius.sm,
-  },
-  cellPressed: {
-    transform: [{ scale: 0.95 }],
-    opacity: 0.85,
-  },
-  cellLocked: {
-    opacity: 0.9,
-  },
-  cellText: {
-    fontFamily: fontFamilies.textBold,
-  },
+  legendItem: { flexBasis: '45%', flexDirection: 'row', alignItems: 'center', gap: 6 },
+  legendSwatch: { width: 16, height: 16, borderRadius: 5, borderWidth: 1.5 },
+  legendLabel: { ...typeRoles.textCaption, color: colors.textSecondary, flexShrink: 1 },
 });

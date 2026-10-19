@@ -8,11 +8,12 @@ const glyphs = { chevron: 'chevron-forward', external: 'open-outline', share: 's
 export default function ListRow({
   title, subtitle, lead, trailing, onPress, variant = 'action', busy = false, expanded,
   disabled = false, showDivider = false, accessibilityLabel, accessibilityRole,
+  style, accessibilityState, titleNumberOfLines,
 }) {
   const readOnly = variant === 'readOnly';
   const nested = variant === 'nested';
   const label = accessibilityLabel ?? [title, subtitle].filter(Boolean).join(', ');
-  const rowStyle = [styles.row, nested && styles.nested];
+  const rowStyle = [styles.row, nested && styles.nested, style];
   const divider = showDivider ? <View testID="list-row-divider" pointerEvents="none"
     style={[styles.divider, { left: nested ? 104 : lead ? 68 : 16 }]} /> : null;
   if (readOnly) return <View accessible accessibilityLabel={label} style={rowStyle}>
@@ -25,11 +26,11 @@ export default function ListRow({
   const disclosure = trailing === 'disclosure';
   const glyph = disclosure ? (expanded ? 'chevron-up' : 'chevron-down') : glyphs[trailing];
   return <Pressable onPress={onPress} disabled={disabled || busy} accessibilityRole={accessibilityRole ?? 'button'}
-    accessibilityLabel={label} accessibilityState={{ busy, disabled: disabled || busy, ...(expanded === undefined ? {} : { expanded }) }}
+    accessibilityLabel={label} accessibilityState={{ ...accessibilityState, busy, disabled: disabled || busy, ...(expanded === undefined ? {} : { expanded }) }}
     style={({ pressed }) => [rowStyle, pressed && styles.pressed]}>
     {lead ? <View style={nested ? styles.nestedLead : styles.lead}>{lead}</View> : null}
     <View style={styles.copy}>
-      <Text style={[styles.title, nested && styles.nestedTitle]}>{title}</Text>
+      <Text numberOfLines={titleNumberOfLines} ellipsizeMode="tail" style={[styles.title, nested && styles.nestedTitle]}>{title}</Text>
       {subtitle ? <Text style={styles.subtitle}>{subtitle}</Text> : null}
     </View>
     {busy ? <ActivityIndicator size={20} color={colors.textSecondary} />

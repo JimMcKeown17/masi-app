@@ -3,20 +3,17 @@ import React, { useState, useEffect } from 'react';
 import {
   View,
   StyleSheet,
-  Pressable,
-  useWindowDimensions,
 } from 'react-native';
 import { Text, ActivityIndicator } from 'react-native-paper';
-import { colors, spacing, borderRadius } from '../../constants/colors';
+import { colors, spacing } from '../../constants/colors';
 import { letterStateColors } from '../../constants/letterStateColors';
-import { LETTER_SETS, PEDAGOGICAL_ORDERS } from '../../constants/egraConstants';
+import { PEDAGOGICAL_ORDERS } from '../../constants/egraConstants';
 import { loadMasteryState, countMastered } from '../../utils/masteryState';
 import BottomSheet from '../common/BottomSheet';
-import { typeRoles } from '../../constants/typography';
+import BrandButton from '../common/BrandButton';
+import LetterToggleGrid from '../sessions/LetterToggleGrid';
+import { fontFamilies, typeRoles } from '../../constants/typography';
 
-const GRID_COLUMNS = 5;
-const GRID_GAP = spacing.sm;
-const CELL_COLORS = letterStateColors;
 
 /**
  * Bottom sheet for updating a child's letter tracker from the session form.
@@ -40,19 +37,11 @@ export default function LetterTrackerBottomSheet({
 }) {
   const { repositories } = useSignedInEA();
 
-  const { width: screenWidth } = useWindowDimensions();
-
   const [assessmentMastered, setAssessmentMastered] = useState(new Set());
   const [existingTaught, setExistingTaught] = useState(new Set());
   const [loading, setLoading] = useState(true);
 
-  const letterSet = LETTER_SETS[languageKey];
   const pedagogicalOrder = PEDAGOGICAL_ORDERS[languageKey];
-
-  // Compute tile size for the bottom sheet grid
-  const sheetPadding = spacing.lg * 2;
-  const totalGapWidth = (GRID_COLUMNS - 1) * GRID_GAP;
-  const tileSize = Math.floor((screenWidth - sheetPadding - totalGapWidth) / GRID_COLUMNS);
 
   useEffect(() => {
     if (!visible || !child) return;
@@ -124,20 +113,35 @@ export default function LetterTrackerBottomSheet({
     ? countMastered({ assessmentMastered, taughtLetters: existingTaught, pendingChanges, pedagogicalOrder })
     : 0;
 
+  const tileFor = (letter) => {
+    const state = getCellState(letter);
+    if (state === 'assessment') return {
+      tone: 'locked', disabled: true,
+      accessibilityLabel: `${letter}, mastered from assessment, locked`, accessibilityState: { disabled: true },
+    };
+    const added = pendingChanges[letter] === true;
+    const taught = state === 'taught';
+    return {
+      tone: added ? 'taughtNew' : taught ? 'taught' : 'rest',
+      accessibilityLabel: `${letter}, ${added ? 'taught, added this session' : taught ? 'taught by coach' : 'not mastered'}`,
+      accessibilityState: { selected: taught },
+    };
+  };
+
   const legend = loading ? null : (
     <View style={styles.legend}>
-      <View style={styles.legendItem}>
-        <View style={[styles.legendSwatch, { backgroundColor: CELL_COLORS.assessment.bg }]} />
-        <Text variant="labelSmall" style={styles.legendLabel}>Assessment</Text>
-      </View>
-      <View style={styles.legendItem}>
-        <View style={[styles.legendSwatch, { backgroundColor: CELL_COLORS.taught.bg }]} />
-        <Text variant="labelSmall" style={styles.legendLabel}>Taught</Text>
-      </View>
-      <View style={styles.legendItem}>
-        <View style={[styles.legendSwatch, styles.legendSwatchDefault]} />
-        <Text variant="labelSmall" style={styles.legendLabel}>Not yet</Text>
-      </View>
+      {[
+        ['Taught', 'taught'], ['New this session', 'taught'],
+        ['Not yet', 'default'], ['Assessment (locked)', 'assessment'],
+      ].map(([label, state]) => {
+        const palette = letterStateColors[state];
+        return <View key={label} style={styles.legendItem}>
+          <View style={[styles.legendSwatch, { backgroundColor: palette.bg, borderColor: palette.border }]}>
+            {label === 'New this session' ? <View style={styles.legendDot} /> : null}
+          </View>
+          <Text style={styles.legendLabel}>{label}</Text>
+        </View>;
+      })}
     </View>
   );
 
@@ -145,105 +149,32 @@ export default function LetterTrackerBottomSheet({
     <BottomSheet
       visible={visible}
       onDismiss={onDismiss}
-      title="Letter Tracker"
-      subtitle={`${childName} \u2014 ${masteredCount}/26 letters`}
+      title="Letter tracker"
+      subtitle={<>{childName} · <Text style={styles.subtitleStrong}>{masteredCount}/26</Text> letters</>}
       dismissLabel="Dismiss letter tracker"
       headerExtras={legend}
+      footer={<BrandButton variant="primary" size="lg" label="Done" onPress={onDismiss} />}
       scrollable={false}
       keyboardAvoiding={false}
     >
       {loading ? (
         <View style={styles.loadingArea}>
-          <ActivityIndicator size="small" color={colors.primary} />
+          <ActivityIndicator size="small" color={colors.text} />
         </View>
       ) : (
-        <View style={[styles.grid, { gap: GRID_GAP }]}>
-          {pedagogicalOrder.map((letter) => {
-            const state = getCellState(letter);
-            const cellColors = CELL_COLORS[state];
-            const isLocked = state === 'assessment';
-
-            return (
-              <Pressable
-                key={letter}
-                onPress={() => handleCellTap(letter)}
-                disabled={isLocked}
-                accessibilityRole="button"
-                accessibilityLabel={`${letter}, ${state === 'assessment' ? 'mastered from assessment' : state === 'taught' ? 'taught by coach' : 'not mastered'}`}
-                accessibilityState={{ disabled: isLocked, selected: state !== 'default' }}
-                style={({ pressed }) => [
-                  styles.cell,
-                  {
-                    width: tileSize,
-                    height: tileSize,
-                    backgroundColor: cellColors.bg,
-                    borderColor: state === 'default' ? cellColors.border : cellColors.bg,
-                  },
-                  pressed && !isLocked && styles.cellPressed,
-                  isLocked && styles.cellLocked,
-                ]}
-              >
-                <Text style={[
-                  styles.cellText,
-                  { color: cellColors.text },
-                ]}>
-                  {letter.toUpperCase()}
-                </Text>
-              </Pressable>
-            );
-          })}
-        </View>
+        <LetterToggleGrid letters={pedagogicalOrder} tileFor={tileFor} onPressLetter={handleCellTap} />
       )}
     </BottomSheet>
   );
 }
 
 const styles = StyleSheet.create({
-  loadingArea: {
-    padding: spacing.xl,
-    alignItems: 'center',
-  },
-  legend: {
-    flexDirection: 'row',
-    gap: spacing.md,
-  },
-  legendItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.xs,
-  },
-  legendSwatch: {
-    width: 12,
-    height: 12,
-    borderRadius: 3,
-  },
-  legendSwatchDefault: {
-    backgroundColor: colors.surface,
-    borderWidth: 1,
-    borderColor: colors.border,
-  },
-  legendLabel: {
-    color: colors.textSecondary,
-  },
-  grid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    paddingBottom: spacing.md,
-  },
-  cell: {
-    justifyContent: 'center',
-    alignItems: 'center',
-    borderWidth: 1,
-    borderRadius: borderRadius.sm,
-  },
-  cellPressed: {
-    transform: [{ scale: 0.95 }],
-    opacity: 0.85,
-  },
-  cellLocked: {
-    opacity: 0.9,
-  },
-  cellText: {
-    ...typeRoles.textLetter,
-  },
+  loadingArea: { padding: spacing.xl, alignItems: 'center' },
+  subtitleStrong: { fontFamily: fontFamilies.textHeavy, color: colors.text },
+  // BottomSheet already gives its subtitle 16dp below; the board asks for 14.
+  legend: { marginTop: -2, flexDirection: 'row', flexWrap: 'wrap', rowGap: 8, columnGap: 16 },
+  legendItem: { flexBasis: '45%', flexDirection: 'row', alignItems: 'center', gap: 6 },
+  legendSwatch: { width: 16, height: 16, borderRadius: 5, borderWidth: 1.5, alignItems: 'center', justifyContent: 'center' },
+  legendDot: { width: 6, height: 6, borderRadius: 3, backgroundColor: colors.onDark },
+  legendLabel: { ...typeRoles.textCaption, color: colors.textSecondary, flexShrink: 1 },
 });

@@ -1,7 +1,7 @@
-import { colors } from './colors';
+import { colors, tints } from './colors';
 
 export const letterStateColors = {
-  assessment: { bg: colors.accent, text: '#FFFFFF' }, // amber assessed marker
-  taught: { bg: colors.success, text: '#FFFFFF' },
-  default: { bg: colors.surface, text: colors.text, border: colors.border },
+  taught: { bg: colors.successText, border: colors.successText, text: colors.onDark },
+  assessment: { bg: colors.successBg, border: colors.successBorder, text: colors.successText },
+  default: { bg: colors.surface, border: tints.control, text: colors.text },
 };

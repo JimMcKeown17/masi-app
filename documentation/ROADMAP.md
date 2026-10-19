@@ -671,7 +671,8 @@ Additional Head Office behavior retained from the Sprint 4 follow-up:
   canvas (https://claude.ai/artifact/8gQRtyqZ5Q1vTCTdSkz6zc, private to Jim), Bold Red (B) boards on
   the Log in, Children, Record / New session, Session complete and Profile pages, plus the Bold Red
   system sheet. Children (My Children and Class detail) is built on `feat/bold-red-children`;
-  its Task 11 preview/device gate remains open. Remaining per-screen PRs, in order: Record,
+  its Task 11 preview/device gate remains open. Record is built on `feat/bold-red-record`; its
+  Task 14 branch review and preview/device gate remain open. Remaining per-screen PRs, in order:
   Session complete, Profile, Login and reset password. Approved behaviour decisions are in
   `docs/superpowers/specs/2026-10-18-bold-red-app-design.md` §6. PR 1's Task 34 EAS preview/device
   gate remains open. **C11:** A03s Create class → School search has not been run in this task;

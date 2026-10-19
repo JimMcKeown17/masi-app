@@ -161,16 +161,22 @@ test('Android relies on live regions and does not double-announce', () => {
 });
 
 test.each([false, true])('the host renders after the whole Paper subtree with sheet-first=%s', (sheetFirst) => {
+  const holder = {};
   function SheetPublisher() {
     const [open, setOpen] = useState(sheetFirst);
-    return <View><Publisher /><Pressable accessibilityLabel="Open sheet" onPress={() => setOpen(true)}><Text>Open sheet</Text></Pressable><BottomSheet visible={open} title="Sheet" onDismiss={() => setOpen(false)}><Text>Sheet body</Text></BottomSheet></View>;
+    return <View><Publisher holder={holder} /><Pressable accessibilityLabel="Open sheet" onPress={() => setOpen(true)}><Text>Open sheet</Text></Pressable><BottomSheet visible={open} title="Sheet" onDismiss={() => setOpen(false)}><Text>Sheet body</Text></BottomSheet></View>;
   }
   renderWithProviders(<SheetPublisher />);
-  publish();
+  act(() => holder.current.show({ message: 'Saved', tone: 'success' }));
   if (!sheetFirst) fireEvent.press(screen.getByLabelText('Open sheet'));
   const root = findNode(screen.toJSON(), 'toast-root');
   expect(root.children.at(-1).props.testID).toBe('toast-host');
   expect(JSON.stringify(root.children[0])).toContain('Sheet');
+  const background = findNode(root, 'sheet-accessibility-background');
+  expect(background.props).toMatchObject({ accessibilityElementsHidden: true, importantForAccessibility: 'no-hide-descendants' });
+  expect(findNode(background, 'toast-host')).toBeNull();
+  expect(screen.queryByLabelText('Publish')).toBeNull();
+  expect(screen.getByText('Saved')).toBeTruthy();
   fireEvent.press(screen.getByLabelText('Dismiss message'));
   finishFade();
   expect(screen.queryByText('Saved')).toBeNull();

@@ -2,7 +2,7 @@ import React from 'react';
 import { Alert, StyleSheet, TextInput as NativeTextInput } from 'react-native';
 import { act, fireEvent, waitFor, within } from '@testing-library/react-native';
 import { renderWithProviders as render } from '../test-support/renderWithProviders';
-import { Button, PaperProvider } from 'react-native-paper';
+import { Button } from 'react-native-paper';
 import ProfileScreen from '../src/screens/main/ProfileScreen';
 import { colors } from '../src/constants/colors';
 const mockChangePassword = jest.fn();
@@ -111,9 +111,7 @@ describe('ProfileScreen', () => {
 
   test('shows app build and backend identity for support screenshots', () => {
     const { getByText } = render(
-      <PaperProvider>
-        <ProfileScreen navigation={{ goBack: jest.fn() }} />
-      </PaperProvider>
+      <ProfileScreen navigation={{ goBack: jest.fn() }} />
     );
 
     expect(getByText(/Version 1\.2\.0/)).toBeTruthy();
@@ -123,9 +121,7 @@ describe('ProfileScreen', () => {
 
   test('Sign Out asks about the shift before reading the signed-in handle unsent count', async () => {
     const screen = render(
-      <PaperProvider>
-        <ProfileScreen navigation={{ goBack: jest.fn() }} />
-      </PaperProvider>
+      <ProfileScreen navigation={{ goBack: jest.fn() }} />
     );
     await act(async () => { fireEvent.press(screen.getByText('Sign Out')); });
     expect(screen.getByText("You're still clocked in.")).toBeTruthy();
@@ -149,9 +145,7 @@ describe('ProfileScreen', () => {
       error: { message: 'Network request failed', status: 0 },
     });
     const screen = render(
-      <PaperProvider>
-        <ProfileScreen navigation={{ goBack: jest.fn() }} />
-      </PaperProvider>
+      <ProfileScreen navigation={{ goBack: jest.fn() }} />
     );
 
     const passwordInputs = screen.UNSAFE_getAllByType(NativeTextInput);
@@ -181,9 +175,7 @@ describe('ProfileScreen', () => {
       },
     });
     const screen = render(
-      <PaperProvider>
-        <ProfileScreen navigation={{ goBack: jest.fn() }} />
-      </PaperProvider>
+      <ProfileScreen navigation={{ goBack: jest.fn() }} />
     );
 
     const passwordInputs = screen.UNSAFE_getAllByType(NativeTextInput);
@@ -244,9 +236,7 @@ describe('ProfileScreen', () => {
       finishLogsExport = resolve;
     }));
     const screen = render(
-      <PaperProvider>
-        <ProfileScreen navigation={{ goBack: jest.fn() }} />
-      </PaperProvider>
+      <ProfileScreen navigation={{ goBack: jest.fn() }} />
     );
     const getButton = (label) => screen.UNSAFE_getAllByType(Button)
       .find((button) => button.props.children === label);
@@ -279,9 +269,7 @@ describe('ProfileScreen', () => {
       actions.find((action) => action.text === 'Export').onPress();
     });
     const screen = render(
-      <PaperProvider>
-        <ProfileScreen navigation={{ goBack: jest.fn() }} />
-      </PaperProvider>
+      <ProfileScreen navigation={{ goBack: jest.fn() }} />
     );
     const getButton = (label) => screen.UNSAFE_getAllByType(Button)
       .find((button) => button.props.children === label);

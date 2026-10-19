@@ -1,5 +1,10 @@
+jest.mock('@expo/vector-icons', () => ({ Ionicons: 'Ionicons' }), { virtual: true });
+
 import React from 'react';
 import { fireEvent, render, waitFor } from '@testing-library/react-native';
+import { StyleSheet } from 'react-native';
+import { colors } from '../src/constants/colors';
+import { LETTER_SETS } from '../src/constants/egraConstants';
 import LetterMasteryPanel from '../src/components/assessment/LetterMasteryPanel';
 import { assessmentsRepository } from '../src/db/repositories/assessmentsRepository';
 import { masteryRepository } from '../src/db/repositories/masteryRepository';
@@ -44,6 +49,34 @@ describe('LetterMasteryPanel', () => {
   });
 
   afterEach(() => jest.clearAllMocks());
+
+  test('uses lowercase green taught tiles and the three-state legend', async () => {
+    masteryRepository.getLetterMastery.mockResolvedValue([
+      { id: 'rec-a', child_id: child.id, letter: 'a', language: 'English', _deleted: false },
+    ]);
+    const screen = render(<LetterMasteryPanel child={child} classItem={classItem} />);
+    const tile = await screen.findByLabelText('a, taught by coach');
+    expect(StyleSheet.flatten(tile.props.style).backgroundColor).toBe(colors.successText);
+    expect(screen.getAllByText(/^[a-z]$/)).toHaveLength(26);
+    ['Taught', 'Not yet', 'Assessment (locked)'].forEach((label) => expect(screen.getByText(label)).toBeTruthy());
+    expect(screen.queryByText('New this session')).toBeNull();
+  });
+
+  test('assessment mastery stays locked and cannot be pressed', async () => {
+    assessmentsRepository.getAssessments.mockResolvedValue([{
+      id: 'letter-assessment', child_id: child.id, assessment_type: 'letter_egra',
+      letter_language: 'English', date_assessed: '2026-07-01', created_at: '2026-07-01T10:00:00Z',
+      last_letter_attempted: { index: 0 }, correct_letters: [{ index: 0 }],
+    }]);
+    const screen = render(<LetterMasteryPanel child={child} classItem={classItem} />);
+    const letter = LETTER_SETS.english.letters[0].toLowerCase();
+    const tile = await screen.findByLabelText(`${letter}, mastered from assessment, locked`);
+    expect(tile.props.accessibilityState.disabled).toBe(true);
+    expect(StyleSheet.flatten(tile.props.style)).toMatchObject({ backgroundColor: colors.successBg, borderColor: colors.successBorder });
+    fireEvent.press(tile);
+    expect(masteryRepository.saveLetterMasteryRecord).not.toHaveBeenCalled();
+    expect(masteryRepository.updateLetterMasteryRecord).not.toHaveBeenCalled();
+  });
 
   test('reactivates a soft-deleted record on toggle-on instead of creating a duplicate', async () => {
     masteryRepository.getLetterMastery.mockResolvedValue([

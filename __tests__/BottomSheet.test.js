@@ -1,14 +1,18 @@
 import React from 'react';
+const ReactNative = require('react-native');
 import {
+  AccessibilityInfo,
   Animated,
   BackHandler,
   KeyboardAvoidingView,
+  Platform,
   ScrollView,
   StyleSheet,
   Text,
   View,
 } from 'react-native';
 import { act, fireEvent, render } from '@testing-library/react-native';
+import { PaperProvider } from 'react-native-paper';
 import { renderWithProviders } from '../test-support/renderWithProviders';
 import { colors, tints } from '../src/constants/colors';
 import { typeRoles } from '../src/constants/typography';
@@ -126,6 +130,7 @@ describe('BottomSheet', () => {
 // Model only the native animation clock: retain the current value until its
 // duration elapses, and honour cancellation. No sheet internals are mocked.
 beforeEach(() => {
+  jest.clearAllMocks();
   jest.useFakeTimers();
   jest.spyOn(Animated, 'timing').mockImplementation((value, config) => {
     let timer;
@@ -157,6 +162,80 @@ test.each(['full', 'calm', 'still'])('at %s the panel uses the motion contract',
   expect(timings.map((config) => config.duration)).toEqual(motionLevel === 'still' ? [duration.fade, duration.fade] : [duration.quick, duration.base]);
 });
 const sheetElement = (visible, onDismiss = jest.fn()) => <BottomSheet visible={visible} onDismiss={onDismiss} title="Choose a group" dismissLabel="Dismiss test sheet"><Text>Body content</Text></BottomSheet>;
+test.each(['ios', 'android'])('an open sheet hides the %s background and closing restores it', platform => {
+  jest.replaceProperty(Platform, 'OS', platform);
+  const content = visible => <><Text>App content</Text>{sheetElement(visible)}</>;
+  const sheet = renderWithProviders(content(false));
+  const background = () => sheet.getByTestId('sheet-accessibility-background', { includeHiddenElements: true });
+  expect(background().props).toMatchObject({ accessibilityElementsHidden: false, importantForAccessibility: 'auto' });
+  sheet.rerender(content(true));
+  expect(background().props).toMatchObject({ accessibilityElementsHidden: true, importantForAccessibility: 'no-hide-descendants' });
+  expect(sheet.queryByText('App content')).toBeNull();
+  expect(sheet.getByRole('header', { name: 'Choose a group' })).toBeTruthy();
+  sheet.rerender(content(false));
+  expect(background().props).toMatchObject({ accessibilityElementsHidden: false, importantForAccessibility: 'auto' });
+  expect(sheet.getByText('App content')).toBeTruthy();
+});
+test('overlapping sheets hide the background until the last sheet closes or unmounts', () => {
+  const content = (first, second, mountSecond = true) => <>
+    <Text>App content</Text>
+    {sheetElement(first)}
+    {mountSecond ? <BottomSheet visible={second} title="Second sheet" /> : null}
+  </>;
+  const sheet = renderWithProviders(content(true, false));
+  sheet.rerender(content(true, true));
+  sheet.rerender(content(false, true));
+  expect(sheet.queryByText('App content')).toBeNull();
+  expect(sheet.getByRole('header', { name: 'Second sheet' })).toBeTruthy();
+  sheet.rerender(content(false, false));
+  expect(sheet.getByText('App content')).toBeTruthy();
+  // A same-commit handoff must not expose the background either.
+  sheet.rerender(content(true, false));
+  sheet.rerender(content(false, true));
+  expect(sheet.queryByText('App content')).toBeNull();
+  sheet.rerender(content(false, true, false));
+  expect(sheet.getByText('App content')).toBeTruthy();
+});
+test('a sheet renders without the accessibility provider', () => {
+  const sheet = render(<PaperProvider>{sheetElement(true)}</PaperProvider>);
+  expect(sheet.getByRole('header', { name: 'Choose a group' })).toBeTruthy();
+});
+test('opening focuses the title header after the first animation frame', () => {
+  const node = jest.spyOn(ReactNative, 'findNodeHandle').mockImplementation(ref => ref ? 201 : null);
+  const focus = jest.spyOn(AccessibilityInfo, 'setAccessibilityFocus');
+  const sheet = renderWithProviders(sheetElement(false));
+  sheet.rerender(sheetElement(true));
+  expect(node).not.toHaveBeenCalled();
+  expect(focus).not.toHaveBeenCalled();
+  act(() => jest.advanceTimersByTime(20));
+  expect(node).toHaveBeenCalledTimes(1);
+  expect(node.mock.calls[0][0].props).toMatchObject({ accessibilityRole: 'header', children: 'Choose a group' });
+  expect(focus).toHaveBeenCalledWith(201);
+  sheet.rerender(sheetElement(true));
+  act(() => jest.advanceTimersByTime(20));
+  expect(focus).toHaveBeenCalledTimes(1);
+});
+test.each(['close', 'unmount'])('%s cancels a pending title-focus frame', action => {
+  const requestFrame = jest.spyOn(global, 'requestAnimationFrame');
+  const cancelFrame = jest.spyOn(global, 'cancelAnimationFrame');
+  const node = jest.spyOn(ReactNative, 'findNodeHandle').mockReturnValue(201);
+  const focus = jest.spyOn(AccessibilityInfo, 'setAccessibilityFocus');
+  const sheet = renderWithProviders(sheetElement(true));
+  const frame = requestFrame.mock.results[0].value;
+  if (action === 'close') sheet.rerender(sheetElement(false));
+  else sheet.unmount();
+  expect(cancelFrame).toHaveBeenCalledWith(frame);
+  act(() => jest.advanceTimersByTime(20));
+  expect(node).not.toHaveBeenCalled();
+  expect(focus).not.toHaveBeenCalled();
+});
+test('opening silently skips focus when the title has no native node', () => {
+  jest.spyOn(ReactNative, 'findNodeHandle').mockReturnValue(null);
+  const focus = jest.spyOn(AccessibilityInfo, 'setAccessibilityFocus');
+  renderWithProviders(sheetElement(true));
+  act(() => jest.advanceTimersByTime(20));
+  expect(focus).not.toHaveBeenCalled();
+});
 test('on close content is hidden and ignores touches until it unmounts', () => {
   const sheet = renderWithProviders(sheetElement(true));
   act(() => jest.advanceTimersByTime(250));
