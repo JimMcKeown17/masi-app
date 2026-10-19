@@ -17,12 +17,13 @@ describe('domain text input audit', () => {
     expect(readSource('src/screens/main/ChildrenListScreen.js')).toMatch(
       /<SearchField[\s\S]*placeholder="Search classes…"/
     );
+    expect(readSource('src/components/common/SearchField.js')).toContain('{...NO_TEXT_SUGGESTIONS}');
     const childSelectorSource = readSource('src/components/children/ChildSelector.js');
     expect(childSelectorSource).toMatch(
-      /<Searchbar[\s\S]*placeholder=\{searchPlaceholder\}[\s\S]*\{\.\.\.NO_TEXT_SUGGESTIONS\}/
+      /<SearchField[\s\S]*placeholder=\{searchPlaceholder\}/
     );
     expect(childSelectorSource).toContain(
-      "searchPlaceholder={selectionMode === 'groups' ? 'Search groups...' : 'Search children...'}"
+      "searchPlaceholder={selectionMode === 'groups' ? 'Search groups…' : 'Search children…'}"
     );
     expect(readSource('src/screens/assessments/AssessmentChildSelectScreen.js')).toMatch(
       /<SearchField[\s\S]*placeholder="Search children\.\.\."/

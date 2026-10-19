@@ -8,6 +8,17 @@ const flat = (node) => StyleSheet.flatten(node.props.style);
 import ListRow from '../src/components/common/ListRow';
 import ListGroup from '../src/components/common/ListGroup';
 
+test('passes optional row style, checked state and title line limit through', () => {
+  const ui = render(<ListRow title="Child" style={{ height: 74 }} accessibilityRole="checkbox"
+    accessibilityState={{ checked: true }} titleNumberOfLines={1} />);
+  expect(flat(ui.getByRole('checkbox')).height).toBe(74);
+  expect(ui.getByRole('checkbox').props.accessibilityState).toMatchObject({ checked: true });
+  expect(ui.getByText('Child').props.numberOfLines).toBe(1);
+  ui.rerender(<ListRow title="Child" />);
+  expect(ui.getByText('Child').props.numberOfLines).toBeUndefined();
+  expect(flat(ui.getByRole('button')).height).toBeUndefined();
+});
+
 test('combines its title and subtitle into a button and supports a role override', () => {
   const onPress = jest.fn();
   const ui = render(<ListRow title="Help" subtitle="Contact your supervisor" onPress={onPress} />);

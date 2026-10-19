@@ -16,7 +16,9 @@ import { fontFamilies } from '../../constants/typography';
 import { useOffline } from '../../context/OfflineContext';
 import { colors, spacing, borderRadius, shadows } from '../../constants/colors';
 import { LETTER_ORDER, READING_LEVELS } from '../../constants/literacyConstants';
-import LetterGrid from '../../components/session/LetterGrid';
+import LetterToggleGrid from '../../components/sessions/LetterToggleGrid';
+import StepHeader from '../../components/forms/StepHeader';
+import InlineNote from '../../components/common/InlineNote';
 import ChildSelector from '../../components/children/ChildSelector';
 import LetterTrackerBottomSheet from '../../components/session/LetterTrackerBottomSheet';
 import { normalizeLanguageKey } from '../../utils/letterMastery';
@@ -244,19 +246,19 @@ function FormFooter({
 }) {
   return (
     <>
-      <Card style={styles.card}>
-        <Card.Content>
-          <Text variant="titleSmall" style={styles.sectionLabel}>Letters Focused On</Text>
-          <Text variant="bodySmall" style={styles.helperText}>Tap letters to select</Text>
-          <LetterGrid
-            selectedLetters={selectedLetters}
-            onToggleLetter={onToggleLetter}
-          />
-          {validationErrors.letters && (
-            <Text variant="bodySmall" style={styles.errorText}>{validationErrors.letters}</Text>
-          )}
-        </Card.Content>
-      </Card>
+      <View testID="letters-section" style={styles.lettersSection}>
+        <View style={styles.stepHeading}>
+          <StepHeader step={3} label="Letters focused on" right="Tap to select"
+            status={validationErrors.letters ? 'error' : selectedLetters.length > 0 ? 'done' : 'todo'} />
+        </View>
+        {validationErrors.letters ? <View style={styles.stepError}>
+          <InlineNote tone="error">{validationErrors.letters}</InlineNote>
+        </View> : null}
+        <LetterToggleGrid letters={LETTER_ORDER} onPressLetter={onToggleLetter} tileFor={(letter) => {
+          const selected = selectedLetters.includes(letter);
+          return { tone: selected ? 'selected' : 'rest', accessibilityLabel: `${letter.toUpperCase()}, ${selected ? 'selected' : 'not selected'}`, accessibilityState: { selected } };
+        }} />
+      </View>
 
       <Card style={styles.card}>
         <Card.Content>
@@ -649,6 +651,9 @@ export default function LiteracySessionForm({ navigation }) {
 // Styles
 // ---------------------------------------------------------------------------
 const styles = StyleSheet.create({
+  lettersSection: { marginTop: 24, marginBottom: 24 },
+  stepHeading: { marginBottom: 12 },
+  stepError: { marginBottom: 24 },
   outerContainer: {
     flex: 1,
   },

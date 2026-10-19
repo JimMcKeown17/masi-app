@@ -31,7 +31,6 @@ const BOARD_RATCHET = {
   'src/screens/sessions/SessionCompleteScreen.js': { rawType: 2, paperImports: ['Button'] },
   'src/screens/main/ProfileScreen.js': { rawType: 2, paperImports: ['TextInput', 'Button', 'Card', 'SegmentedButtons'] },
   'src/components/profile/SignOutSheets.js': { rawType: 5, paperImports: [] },
-  'src/components/children/ChildSelector.js': { rawType: 0, paperImports: ['Searchbar'] },
 };
 
 const rawTypeCount = (s) => (s.match(/\b(fontSize|lineHeight|letterSpacing)\s*:\s*-?\d/g) || []).length;

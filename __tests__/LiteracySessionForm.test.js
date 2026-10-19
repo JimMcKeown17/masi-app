@@ -49,8 +49,18 @@ jest.mock('../src/services/literacySessionPersistence', () => ({
 import React from 'react';
 import { AllProviders } from '../test-support/renderWithProviders';
 import { renderInTestStack } from '../test-support/renderInTestStack';
-import { act, fireEvent, waitFor } from '@testing-library/react-native';
-import { BackHandler } from 'react-native';
+import { act, fireEvent, waitFor, within } from '@testing-library/react-native';
+import { BackHandler, FlatList, StyleSheet } from 'react-native';
+import SegmentedControl from '../src/components/common/SegmentedControl';
+import InlineNote from '../src/components/common/InlineNote';
+import { colors } from '../src/constants/colors';
+import LetterToggleGrid from '../src/components/sessions/LetterToggleGrid';
+import ChildSelector from '../src/components/children/ChildSelector';
+import { render } from '@testing-library/react-native';
+import useWindowDimensions from 'react-native/Libraries/Utilities/useWindowDimensions';
+jest.mock('react-native/Libraries/Utilities/useWindowDimensions', () => ({
+  __esModule: true, default: jest.fn(() => ({ width: 390, height: 844, scale: 3, fontScale: 1 })),
+}));
 import LiteracySessionForm from '../src/screens/sessions/LiteracySessionForm';
 import { READING_LEVELS } from '../src/constants/literacyConstants';
 
@@ -76,6 +86,7 @@ describe('LiteracySessionForm', () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
+    useWindowDimensions.mockReturnValue({ width: 390, height: 844, scale: 3, fontScale: 1 });
     mockUseAuth.mockReturnValue({
       user: { id: 'ea-1' },
       profile: {},
@@ -114,11 +125,11 @@ describe('LiteracySessionForm', () => {
     const screen = renderForm();
 
     expect(screen.getByText('Session Date')).toBeTruthy();
-    expect(screen.getByText('Select Children')).toBeTruthy();
-    expect(screen.getByLabelText('Show children').props.accessibilityState).toEqual({ selected: true });
-    expect(screen.getByLabelText('Show groups').props.accessibilityState).toEqual({ selected: false });
+    expect(screen.getByRole('header', { name: 'Step 2: Select children' })).toBeTruthy();
+    expect(screen.getByRole('tab', { name: 'Children' }).props.accessibilityState).toEqual({ selected: true });
+    expect(screen.getByRole('tab', { name: 'Groups' }).props.accessibilityState).toEqual({ selected: false });
     expect(screen.queryByText('Select by Group')).toBeNull();
-    expect(screen.getByText('Letters Focused On')).toBeTruthy();
+    expect(screen.getByRole('header', { name: 'Step 3: Letters focused on' })).toBeTruthy();
     expect(screen.getByText('Submit Session')).toBeTruthy();
   });
 
@@ -134,13 +145,13 @@ describe('LiteracySessionForm', () => {
     });
     const screen = renderForm();
 
-    fireEvent.press(screen.getByLabelText('Show groups'));
+    fireEvent.press(screen.getByRole('tab', { name: 'Groups' }));
 
     expect(screen.getByText('Group 4')).toBeTruthy();
     expect(screen.getByText('2 children')).toBeTruthy();
-    expect(screen.getByPlaceholderText('Search groups...')).toBeTruthy();
+    expect(screen.getByPlaceholderText('Search groups…')).toBeTruthy();
     expect(screen.queryByText('Amahle Dlamini')).toBeNull();
-    expect(screen.getByLabelText('Show groups').props.accessibilityState).toEqual({ selected: true });
+    expect(screen.getByRole('tab', { name: 'Groups' }).props.accessibilityState).toEqual({ selected: true });
   });
 
   test('selecting a group chooses its children and keeps them editable in Children mode', async () => {
@@ -155,15 +166,15 @@ describe('LiteracySessionForm', () => {
     });
     const screen = renderForm();
 
-    fireEvent.press(screen.getByLabelText('Show groups'));
+    fireEvent.press(screen.getByRole('tab', { name: 'Groups' }));
     fireEvent.press(screen.getByText('Group 4'));
 
     expect(screen.getByText('2 selected')).toBeTruthy();
-    expect(screen.getByLabelText('Group 4, 2 children, selected')).toBeTruthy();
+    expect(screen.getByRole('radio', { name: 'Group 4, 2 children' }).props.accessibilityState.checked).toBe(true);
 
-    fireEvent.press(screen.getByLabelText('Show children'));
-    expect(screen.getByLabelText('Amahle Dlamini, selected')).toBeTruthy();
-    expect(screen.getByLabelText('Buhle Moyo, selected')).toBeTruthy();
+    fireEvent.press(screen.getByRole('tab', { name: 'Children' }));
+    expect(screen.getByRole('checkbox', { name: 'Amahle Dlamini, Grade 1A' }).props.accessibilityState.checked).toBe(true);
+    expect(screen.getByRole('checkbox', { name: 'Buhle Moyo, Grade 1A' }).props.accessibilityState.checked).toBe(true);
 
     fireEvent.press(screen.getByLabelText('A, not selected'));
     fireEvent.press(screen.getByText('Select a level'));
@@ -177,6 +188,123 @@ describe('LiteracySessionForm', () => {
         }),
       }),
     ));
+  });
+
+  test('child checkboxes and the chip reflect selection, including No class', () => {
+    mockUseChildren.mockReturnValue({
+      children: [{ id: 'child-1', first_name: 'Amahle', last_name: 'Dlamini', class_id: 'class-1' },
+        { id: 'child-2', first_name: 'Buhle', last_name: 'Moyo' }],
+      groups: [], getChildrenInGroup: () => [],
+    });
+    const screen = renderForm();
+    expect(screen.getByText('0 selected')).toBeTruthy();
+    expect(screen.getByRole('checkbox', { name: 'Amahle Dlamini, Grade 1A' }).props.accessibilityState.checked).toBe(false);
+    fireEvent.press(screen.getByRole('checkbox', { name: 'Amahle Dlamini, Grade 1A' }));
+    expect(screen.getByText('1 selected')).toBeTruthy();
+    expect(screen.getByRole('checkbox', { name: 'Amahle Dlamini, Grade 1A' }).props.accessibilityState.checked).toBe(true);
+    expect(screen.getByRole('checkbox', { name: 'Buhle Moyo, No class' })).toBeTruthy();
+    expect(screen.getByRole('header', { name: 'Step 2: Select children, complete' })).toBeTruthy();
+  });
+
+  test('a group replaces the selection and tapping the selected group clears it', () => {
+    const children = [
+      { id: 'child-1', first_name: 'Amahle', last_name: 'Dlamini', class_id: 'class-1' },
+      { id: 'child-2', first_name: 'Buhle', last_name: 'Moyo', class_id: 'class-1' },
+      { id: 'child-3', first_name: 'Zola', last_name: 'Moyo', class_id: 'class-1' },
+    ];
+    mockUseChildren.mockReturnValue({ children, groups: [{ id: 'g4', name: 'Group 4' }], getChildrenInGroup: () => children.slice(0, 2) });
+    const screen = renderForm();
+    expect(screen.queryByText('Choosing a group replaces your selection.')).toBeNull();
+    fireEvent.press(screen.getByRole('checkbox', { name: 'Zola Moyo, Grade 1A' }));
+    fireEvent.press(screen.getByRole('tab', { name: 'Groups' }));
+    expect(screen.getByText('Choosing a group replaces your selection.')).toBeTruthy();
+    const group = () => screen.getByRole('radio', { name: 'Group 4, 2 children' });
+    fireEvent.press(group());
+    expect(screen.getByText('2 selected')).toBeTruthy();
+    expect(group().props.accessibilityState.checked).toBe(true);
+    fireEvent.press(group());
+    expect(screen.getByText('0 selected')).toBeTruthy();
+    expect(group().props.accessibilityState.checked).toBe(false);
+  });
+
+  test('missing children alert precedes the tabs in the step-2 section', () => {
+    const screen = renderForm();
+    fireEvent.press(screen.getByText('Submit Session'));
+    expect(screen.getByRole('header', { name: 'Step 2: Select children, needs attention' })).toBeTruthy();
+    expect(screen.getByText('Select at least one child')).toBeTruthy();
+    expect(screen.getAllByRole('alert').some((note) => within(note).queryByText('Select at least one child'))).toBe(true);
+    const section = screen.getByTestId('children-section');
+    const note = section.findByType(InlineNote);
+    const tabs = section.findByType(SegmentedControl);
+    expect(section.children.indexOf(note.parent)).toBeLessThan(section.children.indexOf(tabs));
+  });
+
+  test('empty search and empty groups keep their exact copy', () => {
+    const screen = renderForm();
+    fireEvent.changeText(screen.getByPlaceholderText('Search children…'), 'no match');
+    expect(screen.getByText('No children match your search')).toBeTruthy();
+    fireEvent.press(screen.getByRole('tab', { name: 'Groups' }));
+    expect(screen.getByText('No groups available')).toBeTruthy();
+    expect(screen.getByPlaceholderText('Search groups…').props.value).toBe('');
+    fireEvent.changeText(screen.getByPlaceholderText('Search groups…'), 'no match');
+    expect(screen.getByText('No groups match your search')).toBeTruthy();
+  });
+
+  test('roster getItemLayout uses the uniform 74dp height at font scale 1.3', () => {
+    useWindowDimensions.mockReturnValue({ width: 390, height: 844, scale: 3, fontScale: 1.3 });
+    const screen = renderForm();
+    expect(screen.UNSAFE_getByType(FlatList).props.getItemLayout(null, 2)).toEqual({ length: 74, offset: 148, index: 2 });
+  });
+
+  test('roster forwards refs and scroll and reports visible and empty body measurements', () => {
+    const onMetrics = jest.fn();
+    const onScroll = jest.fn();
+    const listRef = React.createRef();
+    const childrenStepRef = React.createRef();
+    const screen = render(<ChildSelector selectedChildren={[]} onSelectionChange={jest.fn()}
+      listRef={listRef} childrenStepRef={childrenStepRef} onScroll={onScroll} onMetrics={onMetrics} />);
+    expect(listRef.current).toBeTruthy();
+    expect(childrenStepRef.current).toBeTruthy();
+    expect(screen.UNSAFE_getByType(FlatList).props.onScroll).toBe(onScroll);
+    expect(screen.UNSAFE_getByType(FlatList).props.scrollEventThrottle).toBe(16);
+    fireEvent(screen.getByTestId('roster-header'), 'layout', { nativeEvent: { layout: { height: 400 } } });
+    fireEvent(screen.getByTestId('children-section'), 'layout', { nativeEvent: { layout: { y: 140 } } });
+    expect(onMetrics).toHaveBeenLastCalledWith({ headerHeight: 400, childrenSectionY: 140, bodyHeight: 64 });
+    fireEvent.changeText(screen.getByPlaceholderText('Search children…'), 'no match');
+    fireEvent(screen.getByTestId('roster-empty'), 'layout', { nativeEvent: { layout: { height: 58 } } });
+    expect(onMetrics).toHaveBeenLastCalledWith({ headerHeight: 400, childrenSectionY: 140, bodyHeight: 58 });
+    fireEvent.changeText(screen.getByPlaceholderText('Search children…'), '');
+    expect(onMetrics).toHaveBeenLastCalledWith({ headerHeight: 400, childrenSectionY: 140, bodyHeight: 64 });
+  });
+
+  test('letters are lowercase with capital spoken names and complete when selected', () => {
+    const screen = renderForm();
+    expect(screen.getByRole('header', { name: 'Step 3: Letters focused on' })).toBeTruthy();
+    expect(screen.getByText('Tap to select')).toBeTruthy();
+    expect(screen.queryByText('Tap letters to select')).toBeNull();
+    const tile = screen.getByLabelText('M, not selected');
+    expect(tile.props.accessibilityState.selected).toBe(false);
+    expect(within(tile).getByText('m')).toBeTruthy();
+    fireEvent.press(tile);
+    const selected = screen.getByLabelText('M, selected');
+    expect(selected.props.accessibilityState.selected).toBe(true);
+    expect(StyleSheet.flatten(selected.props.style).backgroundColor).toBe(colors.text);
+    expect(screen.getByRole('header', { name: 'Step 3: Letters focused on, complete' })).toBeTruthy();
+  });
+
+  test('missing letters alert sits above the grid and clears on selection', () => {
+    const screen = renderForm();
+    fireEvent.press(screen.getByText('Submit Session'));
+    const header = screen.getByRole('header', { name: 'Step 3: Letters focused on, needs attention' });
+    const section = screen.getByTestId('letters-section');
+    const note = section.findByType(InlineNote);
+    const grid = section.findByType(LetterToggleGrid);
+    expect(header).toBeTruthy();
+    expect(within(section).getByRole('alert')).toHaveTextContent('Select at least one letter');
+    expect(section.children.indexOf(note.parent)).toBeLessThan(section.children.indexOf(grid));
+    fireEvent.press(screen.getByLabelText('M, not selected'));
+    expect(screen.queryByText('Select at least one letter')).toBeNull();
+    expect(screen.getByRole('header', { name: 'Step 3: Letters focused on, complete' })).toBeTruthy();
   });
 
   describe('unsaved-changes leave guard', () => {
