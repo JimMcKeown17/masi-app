@@ -105,7 +105,7 @@ function ChildrenStackNavigator() {
       <ChildrenStack.Screen
         name="ClassDetail"
         component={ClassDetailScreen}
-        options={{ title: 'Class details' }}
+        options={{ title: '' }}
       />
       <ChildrenStack.Screen
         name="ChildResults"

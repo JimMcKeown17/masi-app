@@ -9,3 +9,7 @@ export const GROUP_COLORS = [
   { bg: '#FFF8E1', text: '#F57F17' }, // Amber
   { bg: '#E8EAF6', text: '#283593' }, // Indigo
 ];
+
+export const GROUP_DOT_COLORS = GROUP_COLORS
+  .filter(({ text }) => text !== '#C62828' && text !== '#F57F17')
+  .map(({ text }) => text);

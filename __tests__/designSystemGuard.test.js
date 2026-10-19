@@ -26,8 +26,6 @@ const RATCHETED_PAPER = ['TextInput', 'Searchbar', 'SegmentedButtons', 'Card', '
 const BOARD_RATCHET = {
   'src/screens/auth/LoginScreen.js': { rawType: 0, paperImports: ['TextInput', 'Button'] },
   'src/screens/auth/ForgotPasswordScreen.js': { rawType: 0, paperImports: ['TextInput', 'Button'] },
-  'src/screens/main/ChildrenListScreen.js': { rawType: 2, paperImports: ['Searchbar', 'Button', 'Card', 'Banner'] },
-  'src/screens/children/ClassDetailScreen.js': { rawType: 5, paperImports: ['Card', 'FAB', 'Button'] },
   'src/screens/sessions/SessionFormScreen.js': { rawType: 0, paperImports: ['Button'] },
   'src/screens/sessions/LiteracySessionForm.js': { rawType: 0, paperImports: ['TextInput', 'Button', 'Card', 'Menu'] },
   'src/screens/sessions/SessionCompleteScreen.js': { rawType: 2, paperImports: ['Button'] },

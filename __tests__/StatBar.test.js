@@ -7,6 +7,12 @@ jest.mock('@expo/vector-icons', () => ({ Ionicons: 'Ionicons' }), { virtual: tru
 const flat = (node) => StyleSheet.flatten(node.props.style);
 import StatBar from '../src/components/dashboard/StatBar';
 
+test('a non-action stat can expose one accessible count without becoming a button', () => {
+  const ui = render(<StatBar items={[{ label: 'Children', value: 19, accessibilityLabel: '19 children' }]} />);
+  expect(ui.getByLabelText('19 children').props.accessible).toBe(true);
+  expect(ui.queryByRole('button')).toBeNull();
+});
+
 test('numerals use ink, action red or an explicit semantic colour', () => {
   const ui = render(<StatBar items={[{ label: 'Total', value: 8 }, { label: 'Unassessed', value: 3, onPress: jest.fn() }, { label: 'Known', value: 5, color: colors.successText }]} />);
   expect(flat(ui.getByText('8')).color).toBe(colors.text);

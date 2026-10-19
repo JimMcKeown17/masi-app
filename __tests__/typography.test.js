@@ -63,3 +63,11 @@ describe('typography roles', () => {
     }
   });
 });
+
+test.each([
+  ['textInitialsSm', 11, 14, 0.33],
+  ['textInitialsMd', 14, 18, 0.42],
+  ['textInitialsLg', 22, 28, 0.66],
+])('%s pins initials geometry without fontWeight', (name, fontSize, lineHeight, letterSpacing) => {
+  expect(typeRoles[name]).toEqual({ fontFamily: fontFamilies.textHeavy, fontSize, lineHeight, letterSpacing });
+});

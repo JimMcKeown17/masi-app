@@ -1,27 +1,55 @@
 import { useSignedInEA } from '../../context/SignedInEAContext';
 import React, { useState, useCallback, useMemo, useRef } from 'react';
-import { View, StyleSheet, FlatList, RefreshControl, TouchableOpacity } from 'react-native';
-import {
-  Text,
-  Searchbar,
-  Button,
-  Card,
-  Banner,
-  List,
-  ActivityIndicator,
-} from 'react-native-paper';
+import { View, Text, StyleSheet, FlatList, RefreshControl } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect } from '@react-navigation/native';
 import { useAuth } from '../../context/AuthContext';
-import { colors, spacing } from '../../constants/colors';
-import { fontFamilies } from '../../constants/typography';
+import { colors } from '../../constants/colors';
+import { typeRoles } from '../../constants/typography';
 import { useChildren } from '../../context/ChildrenContext';
 import { useClasses } from '../../context/ClassesContext';
 import { useOffline } from '../../context/OfflineContext';
-
 import { getChildrenTabStats } from '../../utils/dashboardStats';
 import { getChildrenLanding } from '../../utils/childrenLanding';
+import { classMonogram, childMetaLine, countLabel } from '../../utils/childrenPresentation';
+import { describeSyncBanner } from '../../utils/syncStatusPresenter';
+import { getInitials } from '../../utils/initials';
 import StatBar from '../../components/dashboard/StatBar';
-import { NO_TEXT_SUGGESTIONS } from '../../constants/textInputProps';
+import SearchField from '../../components/common/SearchField';
+import SyncBanner from '../../components/common/SyncBanner';
+import ListGroup, { listGroupItemFrame, ListGroupDivider } from '../../components/common/ListGroup';
+import ListRow from '../../components/common/ListRow';
+import Avatar from '../../components/common/Avatar';
+import SectionHeader from '../../components/common/SectionHeader';
+import EmptyState from '../../components/common/EmptyState';
+import InlineLoading from '../../components/common/InlineLoading';
+import BrandButton from '../../components/common/BrandButton';
+import { useHeaderHairline } from '../../components/common/ScreenHeader';
+import { FAB_OVERHANG } from '../../components/navigation/LockedBottomTabBar';
+import ClassRow from '../../components/children/ClassRow';
+
+// Keep this component type stable so filtering and background pulls preserve the input.
+function ChildrenListHeader({ isLoading, tabStats, hasClasses, searchTerm, onSearch, showClasses, onAssess, onSyncNow }) {
+  const hasBanner = Boolean(describeSyncBanner(useOffline()));
+  return <View>
+    {!isLoading && tabStats ? <View style={styles.statBarWrapper}>
+      <StatBar items={[
+        { label: 'Children', value: tabStats.childrenCount, accessibilityLabel: countLabel(tabStats.childrenCount, 'child', 'children') },
+        { label: 'Classes', value: tabStats.classCount, accessibilityLabel: countLabel(tabStats.classCount, 'class', 'classes') },
+        {
+          label: 'Unassessed', value: tabStats.unassessedCount,
+          onPress: tabStats.unassessedCount > 0 ? onAssess : undefined,
+          accessibilityLabel: `${countLabel(tabStats.unassessedCount, 'unassessed child', 'unassessed children')}${tabStats.unassessedCount > 0 ? '. Open Assess' : ''}`,
+        },
+      ]} />
+    </View> : null}
+    {hasClasses ? <View style={styles.gutter}>
+      <SearchField value={searchTerm} onChangeText={onSearch} placeholder="Search classes…" accessibilityLabel="Search classes" />
+    </View> : null}
+    {!isLoading && hasBanner ? <View style={styles.banner}><SyncBanner onSyncNow={onSyncNow} /></View> : null}
+    {showClasses ? <SectionHeader title="Classes" style={styles.classesSection} /> : null}
+  </View>;
+}
 
 export default function ChildrenListScreen({ navigation }) {
   const { repositories } = useSignedInEA();
@@ -30,7 +58,6 @@ export default function ChildrenListScreen({ navigation }) {
   const { user } = useAuth();
   const {
     children,
-    groups,
     childrenGroups,
     loading,
     loadChildren: pullChildrenFromServer,
@@ -45,6 +72,8 @@ export default function ChildrenListScreen({ navigation }) {
     getChildrenInClass,
   } = useClasses();
   const { refreshSyncStatus, syncNow } = useOffline();
+
+  const onScroll = useHeaderHairline(navigation);
 
   const [searchTerm, setSearchTerm] = useState('');
   const [refreshing, setRefreshing] = useState(false);
@@ -98,11 +127,6 @@ export default function ChildrenListScreen({ navigation }) {
     }, [classes, classesLoading, getChildrenInClass, navigation])
   );
 
-  // Count unsynced items across classes and children
-  const unsyncedClassesCount = classes.filter(c => c.synced === false).length;
-  const unsyncedChildrenCount = children.filter(c => c.synced === false).length;
-  const totalUnsyncedCount = unsyncedClassesCount + unsyncedChildrenCount;
-
   // Filter classes by search term (searches class name, school name, teacher)
   const filteredClasses = useMemo(() => {
     if (!searchTerm) return classes;
@@ -152,310 +176,110 @@ export default function ChildrenListScreen({ navigation }) {
     return children.filter(c => !c.class_id);
   }, [children]);
 
-  const renderClassCard = ({ item: cls }) => {
+  const isLoading = (loading || classesLoading) && classes.length === 0;
+  const noMatch = Boolean(searchTerm && hasClasses && filteredClasses.length === 0);
+
+  const renderClass = ({ item: cls, index }) => {
     const school = schools.find(s => s.id === cls.school_id);
-    const childCount = getChildrenInClass(cls.id).length;
-    const groupCount = getGroupCountForClass(cls.id);
-
-    return (
-      <Card
-        style={styles.classCard}
+    const roster = getChildrenInClass(cls.id);
+    return <View style={[listGroupItemFrame(index, filteredClasses.length), styles.rowFrame]}>
+      {index > 0 ? <ListGroupDivider inset={70} /> : null}
+      <ClassRow
+        name={cls.name} grade={cls.grade} teacher={cls.teacher} language={cls.home_language}
+        monogram={classMonogram(cls, classes)} schoolName={school?.name || 'Unknown school'}
+        childCount={roster.length} groupCount={getGroupCountForClass(cls.id)}
+        rosterInitials={roster.slice(0, 3).map(c => getInitials(c.first_name, c.last_name))}
+        unsynced={!cls.synced}
         onPress={() => navigation.navigate('ClassDetail', { classId: cls.id })}
-      >
-        <Card.Content>
-          <View style={styles.cardHeader}>
-            <Text variant="titleMedium">{cls.name}</Text>
-            {!cls.synced && (
-              <Text variant="labelSmall" style={styles.unsyncedBadge}>
-                Unsynced
-              </Text>
-            )}
-          </View>
-          <Text variant="bodyMedium" style={styles.cardDetail}>
-            {school?.name || 'Unknown school'}
-          </Text>
-          <Text variant="bodySmall" style={styles.cardDetail}>
-            {cls.grade} • {cls.teacher} • {cls.home_language}
-          </Text>
-          <Text variant="bodySmall" style={styles.childCount}>
-            {childCount} {childCount === 1 ? 'child' : 'children'}
-            {groupCount > 0 && ` · ${groupCount} ${groupCount === 1 ? 'group' : 'groups'}`}
-          </Text>
-        </Card.Content>
-      </Card>
-    );
-  };
-
-  const renderFooter = () => {
-    return (
-      <View>
-        {/* Unassigned children section */}
-        {unassignedChildren.length > 0 && (
-          <View style={styles.unassignedSection}>
-            <Text variant="titleSmall" style={styles.unassignedTitle}>
-              Unassigned Children ({unassignedChildren.length})
-            </Text>
-            <Text variant="bodySmall" style={styles.unassignedHint}>
-              These children are not in a class yet. Tap to edit and assign them.
-            </Text>
-            {unassignedChildren.map(child => (
-              <List.Item
-                key={child.id}
-                title={`${child.first_name} ${child.last_name}`}
-                description={`${child.age ? `Age ${child.age}` : ''}${child.age && child.gender ? ' • ' : ''}${child.gender || ''}`}
-                left={props => <List.Icon {...props} icon="account-alert-outline" color={colors.textSecondary} />}
-                onPress={() => navigation.navigate('EditChild', { childId: child.id })}
-                style={styles.unassignedItem}
-              />
-            ))}
-          </View>
-        )}
-
-        {/* Add class link */}
-        {hasClasses && (
-          <TouchableOpacity
-            style={styles.addClassLink}
-            onPress={() => navigation.navigate('CreateClass')}
-            accessibilityRole="button"
-            accessibilityLabel="Add another class"
-          >
-            <Text style={styles.addClassLinkText}>+ Add another class</Text>
-          </TouchableOpacity>
-        )}
-      </View>
-    );
+      />
+    </View>;
   };
 
   const renderEmptyState = () => {
-    if (loading || classesLoading) {
-      return (
-        <View style={styles.emptyState}>
-          <ActivityIndicator size="large" color={colors.primary} />
-          <Text variant="bodyMedium" style={styles.loadingText}>
-            Loading classes and children...
-          </Text>
-        </View>
-      );
+    if (isLoading) {
+      return <View style={styles.loading}><InlineLoading label="Loading classes and children…" /></View>;
     }
-
-    // Distinguish "no classes exist" from "search returned nothing"
-    if (searchTerm && classes.length > 0) {
-      return (
-        <View style={styles.emptyState}>
-          <Text variant="bodyMedium" style={styles.emptyText}>
-            No matching classes for "{searchTerm}"
-          </Text>
+    if (noMatch) {
+      return <View style={styles.noMatch}>
+        <Ionicons name="search-outline" size={20} color={colors.textSecondary} />
+        <View style={styles.message}>
+          <Text accessibilityRole="header" style={styles.rowTitle}>{`No matching classes for “${searchTerm}”`}</Text>
+          <Text style={styles.hint}>Searches class name, school and teacher.</Text>
         </View>
-      );
+      </View>;
     }
-
     if (classBootstrapStatus === 'checking') {
-      return (
-        <View style={styles.emptyState}>
-          <ActivityIndicator size="large" color={colors.primary} />
-          <Text variant="bodyMedium" style={styles.loadingText}>
-            Checking for assigned classes...
-          </Text>
-        </View>
-      );
+      return <View style={styles.checking}><InlineLoading label="Checking for assigned classes…" /></View>;
     }
-
     if (classBootstrapStatus === 'no_active_programme') {
-      return (
-        <View style={styles.emptyState}>
-          <Text variant="headlineSmall" style={styles.emptyTitle}>
-            Programme setup needed
-          </Text>
-          <Text variant="bodyMedium" style={styles.emptyText}>
-            Ask Head Office to assign your active programme before creating a class.
-          </Text>
-        </View>
-      );
+      return <View style={styles.emptyState}>
+        <EmptyState title="Programme setup needed"
+          body="Ask Head Office to assign your active programme before creating a class."
+          footnote={<View style={styles.refreshNote}>
+            <Ionicons name="refresh-outline" size={16} color={colors.textSecondary} />
+            <Text style={styles.note}>Then pull down to refresh.</Text>
+          </View>}
+        />
+      </View>;
     }
-
-    return (
-      <View style={styles.emptyState}>
-        <Text style={styles.emptyIcon}>📚</Text>
-        <Text variant="headlineSmall" style={styles.emptyTitle}>
-          No classes yet
-        </Text>
-        <Text variant="bodyMedium" style={styles.emptyText}>
-          Create your first class to start adding children
-        </Text>
-        <Button
-          mode="contained"
-          onPress={() => navigation.navigate('ClassOnboarding')}
-          style={styles.emptyCreateButton}
-          icon="plus"
-        >
-          Start Setup
-        </Button>
-      </View>
-    );
+    return <View style={styles.emptyState}>
+      <EmptyState title="No classes yet" body="Create your first class to start adding children"
+        action={{ label: 'Start setup', icon: 'add', onPress: () => navigation.navigate('ClassOnboarding'), style: styles.setupAction }} />
+    </View>;
   };
 
-  return (
-    <View style={styles.container}>
-      {/* Tab Stats */}
-      {tabStats && (
-        <View style={styles.statBarWrapper}>
-          <StatBar items={[
-            { label: 'Children', value: tabStats.childrenCount },
-            { label: 'Classes', value: tabStats.classCount },
-            { label: 'Unassessed', value: tabStats.unassessedCount, color: tabStats.unassessedCount > 0 ? colors.emphasis : colors.primary, onPress: tabStats.unassessedCount > 0 ? () => navigation.navigate('MainTabs', { screen: 'Assessments' }) : undefined },
-          ]} />
-        </View>
-      )}
+  const footer = isLoading ? null : <View>
+    {unassignedChildren.length > 0 ? <View style={[styles.unassignedSection, noMatch && styles.unassignedAfterNoMatch]}>
+      <SectionHeader title={`Unassigned children (${unassignedChildren.length})`}
+        hint="These children are not in a class yet. Tap to edit and assign them." style={styles.unassignedHeading} />
+      <ListGroup>{unassignedChildren.map(child => {
+        const name = [child.first_name, child.last_name].filter(Boolean).join(' ');
+        const meta = childMetaLine(child);
+        return <ListRow key={child.id} title={name} subtitle={meta} trailing="chevron"
+          lead={<Avatar size={40} label={getInitials(child.first_name, child.last_name)} />}
+          accessibilityLabel={`${name}${meta ? `, ${meta}` : ''}. Not in a class. Edit to assign`}
+          onPress={() => navigation.navigate('EditChild', { childId: child.id })} />;
+      })}</ListGroup>
+    </View> : null}
+    {hasClasses ? <BrandButton variant="tertiary" icon="add" label="Add another class" style={styles.addClassLink}
+      onPress={() => navigation.navigate('CreateClass')} /> : null}
+  </View>;
 
-      {/* Search bar */}
-      <Searchbar
-        placeholder="Search classes..."
-        value={searchTerm}
-        onChangeText={setSearchTerm}
-        style={styles.searchBar}
-        {...NO_TEXT_SUGGESTIONS}
-      />
-
-      {/* Sync status banner */}
-      {totalUnsyncedCount > 0 && (
-        <Banner
-          visible={true}
-          icon="cloud-upload-outline"
-          actions={[
-            {
-              label: 'Sync Now',
-              onPress: () => syncNow({ force: true }),
-            },
-          ]}
-          style={styles.banner}
-        >
-          {totalUnsyncedCount} {totalUnsyncedCount === 1 ? 'item' : 'items'} waiting to sync
-        </Banner>
-      )}
-
-      {/* Classes list */}
-      <FlatList
-        data={filteredClasses}
-        keyExtractor={(item) => item.id}
-        renderItem={renderClassCard}
-        refreshControl={
-          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
-        }
-        ListEmptyComponent={renderEmptyState}
-        ListFooterComponent={renderFooter}
-        contentContainerStyle={
-          filteredClasses.length === 0 ? styles.emptyContainer : null
-        }
-      />
-    </View>
-  );
+  return <View style={styles.container}>
+    <FlatList data={filteredClasses} keyExtractor={item => item.id} renderItem={renderClass}
+      ListHeaderComponent={<ChildrenListHeader isLoading={isLoading} tabStats={tabStats} hasClasses={hasClasses}
+        searchTerm={searchTerm} onSearch={setSearchTerm} showClasses={filteredClasses.length > 0 || noMatch}
+        onAssess={() => navigation.navigate('MainTabs', { screen: 'Assessments' })}
+        onSyncNow={() => syncNow({ force: true })} />}
+      ListEmptyComponent={renderEmptyState()} ListFooterComponent={footer}
+      onScroll={onScroll} scrollEventThrottle={16}
+      keyboardShouldPersistTaps="handled" keyboardDismissMode="on-drag"
+      contentContainerStyle={styles.listContent}
+      refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.primary} colors={[colors.primary]} />}
+    />
+  </View>;
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: colors.background,
-  },
-  statBarWrapper: {
-    paddingHorizontal: spacing.md,
-    paddingTop: spacing.md,
-  },
-  searchBar: {
-    margin: spacing.md,
-    elevation: 0,
-    backgroundColor: colors.surface,
-  },
-  banner: {
-    backgroundColor: colors.accent,
-    marginHorizontal: spacing.md,
-    marginBottom: spacing.sm,
-  },
-  classCard: {
-    backgroundColor: colors.surface,
-    marginHorizontal: spacing.md,
-    marginVertical: spacing.xs,
-    borderRadius: 8,
-    elevation: 1,
-  },
-  cardHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-  cardDetail: {
-    color: colors.textSecondary,
-    marginTop: 2,
-  },
-  childCount: {
-    color: colors.primary,
-    marginTop: spacing.sm,
-    fontFamily: fontFamilies.textSemi,
-  },
-  unsyncedBadge: {
-    color: colors.warningText,
-    backgroundColor: colors.warningBg,
-    paddingHorizontal: 8,
-    paddingVertical: 2,
-    borderRadius: 4,
-    overflow: 'hidden',
-  },
-  unassignedSection: {
-    marginTop: spacing.lg,
-    marginHorizontal: spacing.md,
-    paddingTop: spacing.md,
-    borderTopWidth: 1,
-    borderTopColor: colors.border,
-  },
-  unassignedTitle: {
-    color: colors.textSecondary,
-    marginBottom: spacing.xs,
-  },
-  unassignedHint: {
-    color: colors.textSecondary,
-    marginBottom: spacing.sm,
-  },
-  unassignedItem: {
-    backgroundColor: colors.surface,
-    marginVertical: spacing.xs,
-    borderRadius: 8,
-    elevation: 1,
-  },
-  addClassLink: {
-    alignItems: 'center',
-    paddingVertical: spacing.lg,
-    marginBottom: spacing.md,
-  },
-  addClassLinkText: {
-    color: colors.primary,
-    fontSize: 14,
-  },
-  emptyContainer: {
-    flex: 1,
-  },
-  emptyState: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: spacing.xl,
-  },
-  emptyIcon: {
-    fontSize: 48,
-    marginBottom: spacing.md,
-  },
-  emptyTitle: {
-    marginBottom: spacing.sm,
-    color: colors.textSecondary,
-  },
-  emptyText: {
-    marginBottom: spacing.lg,
-    color: colors.textSecondary,
-    textAlign: 'center',
-  },
-  emptyCreateButton: {
-    paddingHorizontal: spacing.lg,
-  },
-  loadingText: {
-    color: colors.textSecondary,
-    marginTop: spacing.md,
-  },
+  container: { flex: 1, backgroundColor: colors.background },
+  gutter: { paddingHorizontal: 24 },
+  statBarWrapper: { paddingHorizontal: 24, paddingTop: 8 },
+  banner: { marginHorizontal: 24, marginTop: 12 },
+  classesSection: { marginHorizontal: 24, marginTop: 18, marginBottom: 10 },
+  rowFrame: { marginHorizontal: 24 },
+  listContent: { paddingBottom: FAB_OVERHANG + 16 },
+  loading: { paddingHorizontal: 24, marginTop: 16 },
+  checking: { paddingHorizontal: 24 },
+  emptyState: { paddingHorizontal: 24, marginTop: 16 },
+  noMatch: { paddingHorizontal: 24, marginTop: 2, flexDirection: 'row', gap: 12 },
+  message: { flex: 1 },
+  rowTitle: { ...typeRoles.textRowTitle, color: colors.text },
+  hint: { ...typeRoles.textCaption, color: colors.textSecondary, marginTop: 2 },
+  refreshNote: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 4 },
+  note: { ...typeRoles.textNote, color: colors.textSecondary, flexShrink: 1 },
+  setupAction: { marginTop: 12, alignSelf: 'flex-start' },
+  unassignedSection: { marginHorizontal: 24, marginTop: 18 },
+  unassignedAfterNoMatch: { marginTop: 28 },
+  unassignedHeading: { marginBottom: 10 },
+  addClassLink: { marginTop: 6, marginLeft: 20, alignSelf: 'flex-start' },
 });

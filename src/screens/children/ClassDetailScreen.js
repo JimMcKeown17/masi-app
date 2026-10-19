@@ -1,20 +1,19 @@
 import React, { useState, useCallback, useLayoutEffect } from 'react';
-import { View, StyleSheet, FlatList, TouchableOpacity } from 'react-native';
-import {
-  Text,
-  Card,
-  FAB,
-  List,
-  IconButton,
-  ActivityIndicator,
-} from 'react-native-paper';
-import { colors, spacing, borderRadius } from '../../constants/colors';
-import { fontFamilies } from '../../constants/typography';
+import { View, Text, StyleSheet, FlatList } from 'react-native';
+import { colors } from '../../constants/colors';
+import { typeRoles } from '../../constants/typography';
 import { useClasses } from '../../context/ClassesContext';
 import { useChildren } from '../../context/ChildrenContext';
 import GroupPickerBottomSheet from '../../components/children/GroupPickerBottomSheet';
+import ClassChildRow from '../../components/children/ClassChildRow';
 import BrandButton from '../../components/common/BrandButton';
-import { compareGroups, getGroupColor } from '../../utils/groupHelpers';
+import IconCircleButton from '../../components/common/IconCircleButton';
+import SectionHeader from '../../components/common/SectionHeader';
+import InlineLoading from '../../components/common/InlineLoading';
+import { listGroupItemFrame, ListGroupDivider } from '../../components/common/ListGroup';
+import { useHeaderHairline } from '../../components/common/ScreenHeader';
+import { FAB_OVERHANG } from '../../components/navigation/LockedBottomTabBar';
+import { compareGroups, getGroupDotColor } from '../../utils/groupHelpers';
 
 export default function ClassDetailScreen({ route, navigation }) {
   const { classId } = route.params;
@@ -30,6 +29,7 @@ export default function ClassDetailScreen({ route, navigation }) {
   // add one. (ChildrenListScreen won't re-auto-route them on return.)
   useLayoutEffect(() => {
     navigation.setOptions({
+      title: classItem?.name ?? '',
       headerRight: () => (
         // ClassDetail is a screen in the Children stack; popToTop returns to the
         // live ChildrenList root (ref intact → no re-route), so navigate() does
@@ -38,7 +38,9 @@ export default function ClassDetailScreen({ route, navigation }) {
         <BrandButton variant="tertiary" label="Manage classes" onPress={() => navigation.popToTop()} />
       ),
     });
-  }, [navigation]);
+  }, [navigation, classItem?.name]);
+
+  const onScroll = useHeaderHairline(navigation);
 
   // Bottom sheet state
   const [pickerVisible, setPickerVisible] = useState(false);
@@ -71,322 +73,73 @@ export default function ClassDetailScreen({ route, navigation }) {
     setPickerVisible(true);
   };
 
-  if (loading) {
-    return (
-      <View style={styles.container}>
-        <View style={styles.emptyState}>
-          <ActivityIndicator size="large" color={colors.primary} />
-          <Text variant="bodyMedium" style={styles.emptyText}>Loading class...</Text>
-        </View>
-      </View>
-    );
+  if (loading && !classItem) {
+    return <View style={styles.container}>
+      <View style={styles.status}><InlineLoading label="Loading class…" /></View>
+    </View>;
   }
-
   if (!classItem) {
-    return (
-      <View style={styles.container}>
-        <Text variant="bodyMedium" style={styles.emptyText}>Class not found.</Text>
-      </View>
-    );
+    return <View style={styles.container}>
+      <Text style={[styles.status, styles.notFound]}>Class not found.</Text>
+    </View>;
   }
 
-  const renderChildItem = ({ item }) => {
-    const { group, groupIndex } = getChildGroup(item.id);
-    const colorScheme = group ? getGroupColor(groupIndex) : null;
-
-    return (
-      <TouchableOpacity
-        style={styles.childCard}
-        onPress={() => navigation.navigate('ChildResults', { child: item, classItem })}
-        activeOpacity={0.7}
-        accessibilityRole="button"
-        accessibilityLabel={`View results for ${item.first_name} ${item.last_name}`}
-      >
-        {/* Left: name + details */}
-        <View style={styles.childInfo}>
-          <Text variant="bodyLarge" style={styles.childName}>
-            {item.first_name} {item.last_name}
-          </Text>
-          <View style={styles.detailRow}>
-            {item.age ? (
-              <Text variant="bodySmall" style={styles.childDetail}>
-                Age {item.age}
-              </Text>
-            ) : null}
-            {group ? (
-              <View style={styles.groupRow}>
-                {item.age ? <Text variant="bodySmall" style={styles.childDetail}>  ·  </Text> : null}
-                <Text variant="bodySmall" style={styles.groupLabel}>Group:</Text>
-                <TouchableOpacity
-                  style={[styles.groupChip, { backgroundColor: colorScheme.bg }]}
-                  onPress={() => openGroupPicker(item)}
-                  hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-                  accessibilityRole="button"
-                  accessibilityLabel={`Change group for ${item.first_name} ${item.last_name}, currently ${group.name}`}
-                >
-                  <Text style={[styles.groupChipText, { color: colorScheme.text }]}>
-                    {group.name} ▾
-                  </Text>
-                </TouchableOpacity>
-              </View>
-            ) : (
-              <View style={styles.groupRow}>
-                {item.age ? <Text variant="bodySmall" style={styles.childDetail}>  ·  </Text> : null}
-                <TouchableOpacity
-                  style={styles.assignChip}
-                  onPress={() => openGroupPicker(item)}
-                  hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-                  accessibilityRole="button"
-                  accessibilityLabel={`Assign group to ${item.first_name} ${item.last_name}`}
-                >
-                  <Text style={styles.assignChipText}>+ Group</Text>
-                </TouchableOpacity>
-              </View>
-            )}
-          </View>
-          {/* Unsynced indicator inline */}
-          {!item.synced && (
-            <View style={styles.syncRow}>
-              <List.Icon
-                icon="cloud-upload-outline"
-                color={colors.accent}
-                style={styles.syncIcon}
-              />
-              <Text variant="labelSmall" style={styles.syncText}>Syncing…</Text>
-            </View>
-          )}
-        </View>
-
-        {/* Right: action icons — large and tappable */}
-        <View style={styles.actionIcons}>
-          <IconButton
-            icon="alpha-a-box-outline"
-            size={30}
-            iconColor={colors.primary}
-            style={styles.actionIcon}
-            accessibilityLabel={`Letter tracker for ${item.first_name} ${item.last_name}`}
-            onPress={() => navigation.navigate('LetterTracker', { child: item, classItem })}
-          />
-          <IconButton
-            icon="pencil-outline"
-            size={30}
-            iconColor={colors.primary}
-            style={styles.actionIcon}
-            accessibilityLabel={`Edit ${item.first_name} ${item.last_name}`}
-            onPress={() => navigation.navigate('EditChild', { childId: item.id })}
-          />
-        </View>
-      </TouchableOpacity>
-    );
+  const renderChildItem = ({ item: child, index }) => {
+    const { group, groupIndex } = getChildGroup(child.id);
+    return <View style={[listGroupItemFrame(index, childrenInClass.length), styles.rowFrame]}>
+      {index > 0 ? <ListGroupDivider inset={68} /> : null}
+      <ClassChildRow child={child} groupName={group?.name} groupColor={group ? getGroupDotColor(groupIndex) : undefined}
+        onPressResults={() => navigation.navigate('ChildResults', { child, classItem })}
+        onPressGroup={() => openGroupPicker(child)}
+        onPressLetterTracker={() => navigation.navigate('LetterTracker', { child, classItem })}
+        onPressEdit={() => navigation.navigate('EditChild', { childId: child.id })} />
+    </View>;
   };
 
-  return (
-    <View style={styles.container}>
-      {/* Class info header */}
-      <Card style={styles.headerCard}>
-        <Card.Content>
-          <View style={styles.headerRow}>
-            <View style={styles.headerInfo}>
-              <Text variant="titleLarge">{classItem.name}</Text>
-              <Text variant="bodyMedium" style={styles.detailText}>
-                {school?.name || 'Unknown school'}
-              </Text>
-              <Text variant="bodyMedium" style={styles.detailText}>
-                {classItem.grade} • {classItem.teacher}
-              </Text>
-              <Text variant="bodySmall" style={styles.detailText}>
-                Language: {classItem.home_language}
-              </Text>
-            </View>
-            <IconButton
-              icon="pencil"
-              mode="contained-tonal"
-              accessibilityLabel="Edit class"
-              onPress={() => navigation.navigate('EditClass', { classId })}
-            />
+  return <View style={styles.container}>
+    <FlatList data={childrenInClass} keyExtractor={item => item.id} renderItem={renderChildItem}
+      onScroll={onScroll} scrollEventThrottle={16} contentContainerStyle={styles.listContent}
+      ListHeaderComponent={<View>
+        <View style={styles.classInfo}>
+          <View style={styles.infoText}>
+            <Text style={styles.school}>{school?.name || 'Unknown school'}</Text>
+            <Text style={styles.detail}>{`${classItem.grade} • ${classItem.teacher}`}</Text>
+            <Text style={styles.detail}>{`Language: ${classItem.home_language}`}</Text>
           </View>
-        </Card.Content>
-      </Card>
-
-      {/* Children list */}
-      <Text variant="titleMedium" style={styles.sectionTitle}>
-        Children ({childrenInClass.length})
-      </Text>
-
-      <FlatList
-        data={childrenInClass}
-        keyExtractor={(item) => item.id}
-        renderItem={renderChildItem}
-        ListEmptyComponent={
-          <View style={styles.emptyState}>
-            <Text variant="bodyMedium" style={styles.emptyText}>
-              No children in this class yet.
-            </Text>
-            <Text variant="bodySmall" style={styles.emptyText}>
-              Tap the + button to add a child.
-            </Text>
-          </View>
-        }
-        contentContainerStyle={
-          childrenInClass.length === 0 ? styles.emptyContainer : null
-        }
-      />
-
-      {/* FAB to add child */}
-      <FAB
-        icon="plus"
-        color={colors.onDark}
-        style={styles.fab}
-        onPress={() => navigation.navigate('AddChild', { classId })}
-      />
-
-      {/* Group Picker Bottom Sheet */}
-      {selectedChild && (
-        <GroupPickerBottomSheet
-          visible={pickerVisible}
-          onDismiss={() => {
-            setPickerVisible(false);
-            setSelectedChild(null);
-          }}
-          childId={selectedChild.id}
-          childName={`${selectedChild.first_name} ${selectedChild.last_name}`}
-          currentGroupId={getChildGroup(selectedChild.id).group?.id || null}
-          onGroupChanged={handleGroupChanged}
-        />
-      )}
-    </View>
-  );
+          <IconCircleButton icon="create-outline" accessibilityLabel="Edit class"
+            onPress={() => navigation.navigate('EditClass', { classId })} />
+        </View>
+        <SectionHeader title={`Children (${childrenInClass.length})`} style={styles.section}
+          action={{ icon: 'add', label: 'Add child', onPress: () => navigation.navigate('AddChild', { classId }) }} />
+      </View>}
+      ListEmptyComponent={<View style={styles.emptyState}>
+        <Text accessibilityRole="header" style={styles.emptyTitle}>No children in this class yet.</Text>
+        <Text style={styles.emptyHint}>Tap Add child to add a child.</Text>
+      </View>}
+    />
+    {selectedChild ? <GroupPickerBottomSheet visible={pickerVisible}
+      onDismiss={() => {
+        setPickerVisible(false);
+        setSelectedChild(null);
+      }}
+      childId={selectedChild.id} childName={`${selectedChild.first_name} ${selectedChild.last_name}`}
+      currentGroupId={getChildGroup(selectedChild.id).group?.id || null} onGroupChanged={handleGroupChanged}
+    /> : null}
+  </View>;
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: colors.background,
-  },
-  headerCard: {
-    margin: spacing.md,
-    backgroundColor: colors.surface,
-  },
-  headerRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'flex-start',
-  },
-  headerInfo: {
-    flex: 1,
-  },
-  detailText: {
-    color: colors.textSecondary,
-    marginTop: 2,
-  },
-  sectionTitle: {
-    marginHorizontal: spacing.md,
-    marginBottom: spacing.sm,
-  },
-  childCard: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    backgroundColor: colors.surface,
-    marginHorizontal: spacing.md,
-    marginVertical: spacing.xs,
-    borderRadius: borderRadius.sm,
-    padding: spacing.md,
-    elevation: 1,
-    shadowColor: colors.shadowWarm,
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05,
-    shadowRadius: 2,
-  },
-  childInfo: {
-    flex: 1,
-    marginRight: spacing.sm,
-  },
-  childName: {
-    fontFamily: fontFamilies.textBold,
-    fontSize: 16,
-  },
-  detailRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginTop: 4,
-    flexWrap: 'wrap',
-  },
-  childDetail: {
-    color: colors.textSecondary,
-  },
-  groupRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  groupLabel: {
-    color: colors.textSecondary,
-    fontSize: 12,
-    marginRight: 4,
-  },
-  syncRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginTop: 2,
-  },
-  syncIcon: {
-    margin: 0,
-    width: 18,
-    height: 18,
-  },
-  syncText: {
-    color: colors.accent,
-    fontSize: 11,
-  },
-  actionIcons: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 2,
-  },
-  actionIcon: {
-    margin: 0,
-  },
-  groupChip: {
-    paddingHorizontal: 10,
-    paddingVertical: 3,
-    borderRadius: 12,
-  },
-  groupChipText: {
-    fontSize: 12,
-    fontFamily: fontFamilies.textSemi,
-  },
-  assignChip: {
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 12,
-    borderWidth: 1.5,
-    borderStyle: 'dashed',
-    borderColor: colors.warning,
-    backgroundColor: colors.warningBg,
-  },
-  assignChipText: {
-    fontSize: 11,
-    fontFamily: fontFamilies.textSemi,
-    color: colors.warningText,
-  },
-  emptyContainer: {
-    flex: 1,
-  },
-  emptyState: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: spacing.xl,
-  },
-  emptyText: {
-    color: colors.textSecondary,
-    textAlign: 'center',
-  },
-  fab: {
-    position: 'absolute',
-    margin: spacing.lg,
-    right: 0,
-    bottom: 0,
-    backgroundColor: colors.primary,
-  },
+  container: { flex: 1, backgroundColor: colors.background },
+  status: { marginTop: 16, paddingHorizontal: 24 },
+  notFound: { ...typeRoles.textBody, color: colors.textSecondary },
+  classInfo: { marginTop: 6, paddingHorizontal: 24, flexDirection: 'row', alignItems: 'flex-start', gap: 12 },
+  infoText: { flex: 1 },
+  school: { ...typeRoles.textBodySemi, color: colors.text },
+  detail: { ...typeRoles.textSmall, color: colors.textSecondary, marginTop: 2 },
+  section: { marginHorizontal: 24, marginTop: 20, marginBottom: 10 },
+  rowFrame: { marginHorizontal: 24 },
+  listContent: { paddingBottom: FAB_OVERHANG + 16 },
+  emptyState: { paddingHorizontal: 24, marginTop: 4 },
+  emptyTitle: { ...typeRoles.textRowTitle, color: colors.text },
+  emptyHint: { ...typeRoles.textCaption, color: colors.textSecondary, marginTop: 2 },
 });

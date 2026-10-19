@@ -11,8 +11,9 @@ import { typeRoles } from '../../constants/typography';
 import { useChildren } from '../../context/ChildrenContext';
 import { useClasses } from '../../context/ClassesContext';
 import { GENDER_OPTIONS } from '../../constants/options';
+import { GroupDot } from '../../components/children/GroupChip';
 import GroupPickerBottomSheet from '../../components/children/GroupPickerBottomSheet';
-import { compareGroups, getGroupColor } from '../../utils/groupHelpers';
+import { compareGroups, getGroupDotColor } from '../../utils/groupHelpers';
 import { NO_TEXT_SUGGESTIONS } from '../../constants/textInputProps';
 import ChipSelector from '../../components/forms/ChipSelector';
 import SelectField from '../../components/common/SelectField';
@@ -63,7 +64,6 @@ export default function EditChildScreen({ route, navigation }) {
   }, [childId, groups, childrenGroups]);
 
   const { group: currentGroup, groupIndex } = getChildGroup();
-  const colorScheme = currentGroup ? getGroupColor(groupIndex) : null;
 
   // Load child data on mount
   useEffect(() => {
@@ -262,17 +262,14 @@ export default function EditChildScreen({ route, navigation }) {
           <View style={styles.groupField}>
             <Text variant="labelSmall" style={styles.groupFieldLabel}>Group</Text>
             <TouchableOpacity
-              style={[
-                styles.groupFieldInput,
-                currentGroup && styles.groupFieldSelected,
-              ]}
+              style={styles.groupFieldInput}
               onPress={() => setGroupPickerVisible(true)}
               accessibilityRole="button"
               accessibilityLabel={`Choose group for ${child.first_name} ${child.last_name}`}
             >
               {currentGroup ? (
                 <View style={styles.groupFieldValue}>
-                  <View style={[styles.groupDot, { backgroundColor: colorScheme.text }]} />
+                  <View style={styles.groupDot}><GroupDot color={getGroupDotColor(groupIndex)} size={10} /></View>
                   <Text style={[styles.groupFieldText, styles.groupFieldTextSelected]}>
                     {currentGroup.name}
                   </Text>
@@ -446,10 +443,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.md,
     backgroundColor: colors.surface,
   },
-  groupFieldSelected: {
-    borderWidth: 2,
-    borderColor: colors.text,
-  },
   groupFieldTextSelected: {
     ...typeRoles.textOptionSelected,
     color: colors.text,
@@ -459,9 +452,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   groupDot: {
-    width: 10,
-    height: 10,
-    borderRadius: 5,
     marginRight: spacing.sm,
   },
   groupFieldText: {

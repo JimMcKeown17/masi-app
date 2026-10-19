@@ -2,8 +2,10 @@ jest.mock('@expo/vector-icons', () => ({ Ionicons: 'Ionicons' }), { virtual: tru
 import React from 'react';
 import { StyleSheet } from 'react-native';
 import { colors, tints } from '../src/constants/colors';
-import { act, fireEvent, render } from '@testing-library/react-native';
+import { act, fireEvent, render, within } from '@testing-library/react-native';
 import { PaperProvider } from 'react-native-paper';
+import { GROUP_DOT_COLORS } from '../src/constants/groupColors';
+import { getGroupDotColor } from '../src/utils/groupHelpers';
 import GroupPickerBottomSheet from '../src/components/children/GroupPickerBottomSheet';
 
 // GroupPickerBottomSheet uses useSafeAreaInsets() and PaperProvider internally
@@ -126,4 +128,33 @@ test('shared group actions keep their labels, assignment and removal handlers', 
   await act(async () => fireEvent.press(remove));
   expect(contextDefaults.removeChildFromGroup).toHaveBeenCalledWith('child-1', 'g1');
   expect(onGroupChanged).toHaveBeenCalledTimes(2);
+});
+
+
+test('eight groups use the same six dot colours as Class detail', () => {
+  mockUseChildren.mockReturnValue({ ...contextDefaults,
+    groups: Array.from({ length: 8 }, (_, i) => ({ id: `g${i + 1}`, name: `Group ${i + 1}` })),
+  });
+  const screen = renderPicker();
+  const dots = screen.getAllByTestId('group-dot');
+  expect(dots).toHaveLength(8);
+  const colours = dots.map(dot => StyleSheet.flatten(dot.props.style).backgroundColor);
+  expect(colours[6]).toBe(colours[0]);
+  expect(colours[7]).toBe(colours[1]);
+  colours.forEach(colour => expect(GROUP_DOT_COLORS).toContain(colour));
+  dots.forEach(dot => expect(StyleSheet.flatten(dot.props.style)).toMatchObject({ width: 12, height: 12 }));
+});
+test('the selected row uses ink for its name, edge and checkmark', () => {
+  mockUseChildren.mockReturnValue({ ...contextDefaults, groups: [{ id: 'g1', name: 'Group 1' }] });
+  const screen = renderPicker({ currentGroupId: 'g1' });
+  const row = screen.getByRole('button', { name: 'Assign Test Child to Group 1' });
+  expect(StyleSheet.flatten(row.props.style).borderColor).toBe(colors.text);
+  expect(StyleSheet.flatten(within(row).getByText('Group 1').props.style).color).toBe(colors.text);
+  expect(StyleSheet.flatten(within(row).getByText('✓').props.style).color).toBe(colors.text);
+});
+test('zero-group virtual rows use the first four shared dot colours', () => {
+  mockUseChildren.mockReturnValue({ ...contextDefaults, groups: [] });
+  const screen = renderPicker();
+  const colours = screen.getAllByTestId('group-dot').map(dot => StyleSheet.flatten(dot.props.style).backgroundColor);
+  expect(colours).toEqual([0, 1, 2, 3].map(getGroupDotColor));
 });

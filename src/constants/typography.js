@@ -21,6 +21,9 @@ export const typeRoles = {
     textTransform: 'uppercase',
   },
   textButton: { fontFamily: fontFamilies.textHeavy, fontSize: 15, lineHeight: 20 },
+  textInitialsSm: { fontFamily: fontFamilies.textHeavy, fontSize: 11, lineHeight: 14, letterSpacing: 0.33 },
+  textInitialsMd: { fontFamily: fontFamilies.textHeavy, fontSize: 14, lineHeight: 18, letterSpacing: 0.42 },
+  textInitialsLg: { fontFamily: fontFamilies.textHeavy, fontSize: 22, lineHeight: 28, letterSpacing: 0.66 },
 
   display3XL: { fontFamily: fontFamilies.display, fontSize: 44, lineHeight: 46, letterSpacing: -1.54 },
   display2XL: { fontFamily: fontFamilies.display, fontSize: 38, lineHeight: 42, letterSpacing: -1.14 },
