@@ -170,6 +170,11 @@ export default function BottomSheet({
     </Animated.View>
   );
 
+  // The wrapper must have a definite height: under a content-sized parent,
+  // Yoga resolves the panel's percentage maxHeight by growing the parent to
+  // panel / fraction and pinning the panel to its top, so the sheet floats.
+  const wrapperStyle = [styles.sheetWrapper, { paddingTop: insets.top + spacing.sm }];
+
   // Rendered through Paper's Portal (hosted by the root PaperProvider) instead
   // of React Native's <Modal>: the native transparent modal positions its
   // content off-screen under the new architecture in this environment
@@ -188,15 +193,11 @@ export default function BottomSheet({
           style={StyleSheet.absoluteFill}
         />
         {keyboardAvoiding ? (
-          <KeyboardAvoidingView
-            behavior="padding"
-            pointerEvents="box-none"
-            style={[styles.sheetWrapper, styles.keyboardWrapper, { paddingTop: insets.top + spacing.sm }]}
-          >
+          <KeyboardAvoidingView behavior="padding" pointerEvents="box-none" style={wrapperStyle}>
             {panel}
           </KeyboardAvoidingView>
         ) : (
-          <View pointerEvents="box-none" style={styles.sheetWrapper}>
+          <View pointerEvents="box-none" style={wrapperStyle}>
             {panel}
           </View>
         )}
@@ -219,8 +220,6 @@ const styles = StyleSheet.create({
   },
   sheetWrapper: {
     width: '100%',
-  },
-  keyboardWrapper: {
     flex: 1,
     justifyContent: 'flex-end',
   },

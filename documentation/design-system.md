@@ -451,8 +451,11 @@ platforms. Its wrapper fills the overlay (`flex: 1`, `justifyContent: 'flex-end'
 with top padding `insets.top + spacing.sm`. The panel keeps flexbox anchoring; never position it
 with an absolute bottom. When `useKeyboardHeight() > 0`, panel bottom padding is `spacing.xs`
 (4dp), because the safe-area inset lies behind the keyboard. Keyboard-down padding stays
-`max(insets.bottom, spacing.lg)`; sheets opting out of avoidance keep that padding and their
-existing wrapper. The default `maxHeight` remains `'80%'`; the password sheet alone passes
+`max(insets.bottom, spacing.lg)`; sheets opting out of avoidance keep that padding. Both wrappers (keyboard-avoiding or
+not) fill the overlay below `insets.top + spacing.sm` with `flex: 1` and `justifyContent:
+'flex-end'`: a percentage `maxHeight` needs a parent of definite height, or Yoga grows the
+wrapper to panel ÷ fraction and the sheet floats 25% of its height above the bottom (polish,
+A03s). The default `maxHeight` remains `'80%'`; the password sheet alone passes
 `'100%'` to use the remaining space above the keyboard.
 
 **C11 landed in Profile Task 2.** Jim reproduced Create class → School search results under the
