@@ -1,3 +1,5 @@
+import { useHeaderHairline } from '../../components/common/ScreenHeader';
+import { typeRoles } from '../../constants/typography';
 import { useSignedInEA } from '../../context/SignedInEAContext';
 import React, { useState, useCallback } from 'react';
 import { View, StyleSheet, FlatList } from 'react-native';
@@ -13,6 +15,7 @@ import StatBar from '../../components/dashboard/StatBar';
 import { colors, spacing } from '../../constants/colors';
 
 export default function SessionCountRankingScreen() {
+  const onScroll = useHeaderHairline();
   const { repositories } = useSignedInEA();
   const { sessions: sessionsRepository } = repositories;
 
@@ -66,7 +69,7 @@ export default function SessionCountRankingScreen() {
 
   return (
     <View style={styles.container}>
-      <FlatList
+      <FlatList onScroll={onScroll} scrollEventThrottle={16}
         data={ranking}
         keyExtractor={(item) => item.child.id}
         renderItem={renderItem}
@@ -79,7 +82,7 @@ export default function SessionCountRankingScreen() {
             <StatBar items={[
               { label: 'Total Sessions', value: totalSessions },
               { label: 'Avg / Child', value: avgPerChild },
-              { label: '0 Sessions', value: zeroSessions, color: zeroSessions > 0 ? colors.emphasis : colors.primary },
+              { label: '0 Sessions', value: zeroSessions, color: colors.primary },
             ]} />
           </View>
         }
@@ -107,7 +110,7 @@ const styles = StyleSheet.create({
     paddingBottom: spacing.xxl,
   },
   subtitle: {
-    fontSize: 12,
+    ...typeRoles.textCaption,
     color: colors.textSecondary,
     marginBottom: spacing.md,
   },

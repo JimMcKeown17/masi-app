@@ -1,5 +1,7 @@
+import { colors } from '../src/constants/colors';
+jest.mock('@expo/vector-icons', () => ({ Ionicons: 'Ionicons' }), { virtual: true });
 import React from 'react';
-import { Alert } from 'react-native';
+import { Alert, StyleSheet } from 'react-native';
 import { act, fireEvent, render, waitFor } from '@testing-library/react-native';
 import SequentialAssessmentScreen from '../src/screens/assessments/SequentialAssessmentScreen';
 import { useAuth } from '../src/context/AuthContext';
@@ -91,10 +93,17 @@ describe('SequentialAssessmentScreen', () => {
     jest.clearAllMocks();
   });
 
+  test('decision buttons use the contrasting success and destructive fills', () => {
+    const screen = renderScreen();
+    fireEvent.press(screen.getByText(/Start assessment/i));
+    expect(StyleSheet.flatten(screen.getByRole('button', { name: 'Correct' }).props.style).backgroundColor).toBe(colors.successText);
+    expect(StyleSheet.flatten(screen.getByRole('button', { name: 'Incorrect' }).props.style).backgroundColor).toBe(colors.error);
+  });
+
   test('completing all items saves a sequential record', async () => {
     const { getByText } = renderScreen();
 
-    fireEvent.press(getByText('Start Assessment'));
+    fireEvent.press(getByText('Start assessment'));
     fireEvent.press(getByText('Correct'));
     fireEvent.press(getByText('Incorrect'));
     await act(async () => {
@@ -111,7 +120,7 @@ describe('SequentialAssessmentScreen', () => {
   test('R2 race does not overshoot when the final item is pressed twice in one act', async () => {
     const { getByText } = renderScreen();
 
-    fireEvent.press(getByText('Start Assessment'));
+    fireEvent.press(getByText('Start assessment'));
     fireEvent.press(getByText('Correct'));
     fireEvent.press(getByText('Incorrect'));
     await act(async () => {
@@ -128,7 +137,7 @@ describe('SequentialAssessmentScreen', () => {
   test('Back is disabled at cursor 0 and decrements otherwise', async () => {
     const { getByText } = renderScreen();
 
-    fireEvent.press(getByText('Start Assessment'));
+    fireEvent.press(getByText('Start assessment'));
     fireEvent.press(getByText('Back'));
     fireEvent.press(getByText('Correct'));
     fireEvent.press(getByText('Back'));

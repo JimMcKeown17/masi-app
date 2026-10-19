@@ -1,8 +1,11 @@
+import { useHeaderHairline } from '../../components/common/ScreenHeader';
+import SurfaceCard from '../../components/common/SurfaceCard';
+import { fontFamilies, typeRoles } from '../../constants/typography';
 import React from 'react';
 import { View, StyleSheet, ScrollView } from 'react-native';
 import { Text } from 'react-native-paper';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { colors, spacing, borderRadius, shadows } from '../../constants/colors';
+import { colors, spacing, shadows } from '../../constants/colors';
 import { getItemSetById } from '../../constants/egraConstants';
 import AssessmentDetailGrid from '../../components/assessment/AssessmentDetailGrid';
 
@@ -11,7 +14,7 @@ function getFeedback(accuracy) {
   if (accuracy >= 75) return { message: 'Great job!', color: colors.success };
   if (accuracy >= 60) return { message: 'Good effort!', color: colors.primary };
   if (accuracy >= 40) return { message: 'Nice try!', color: colors.accent };
-  return { message: 'Keep practicing!', color: colors.emphasis };
+  return { message: 'Keep practicing!', color: colors.primary, graphicColor: colors.emphasis };
 }
 
 function formatDate(dateString) {
@@ -27,14 +30,15 @@ function formatDate(dateString) {
 
 function StatCard({ value, label, accentColor }) {
   return (
-    <View style={[styles.statCard, { borderTopColor: accentColor }]}>
-      <Text style={[styles.statValue, { color: accentColor }]}>{value}</Text>
+    <SurfaceCard style={[styles.statCard, { borderTopColor: accentColor }]}>
+      <Text style={[styles.statValue, { color: accentColor === colors.emphasis ? colors.primary : accentColor }]}>{value}</Text>
       <Text style={styles.statLabel}>{label}</Text>
-    </View>
+    </SurfaceCard>
   );
 }
 
 export default function AssessmentDetailScreen({ route }) {
+  const onScroll = useHeaderHairline();
   const { assessment, childName } = route.params;
   const insets = useSafeAreaInsets();
   const isWordAssessment = assessment.assessment_type === 'word_egra';
@@ -53,7 +57,7 @@ export default function AssessmentDetailScreen({ route }) {
   const feedback = getFeedback(assessment.accuracy);
 
   return (
-    <ScrollView
+    <ScrollView onScroll={onScroll} scrollEventThrottle={16}
       style={styles.container}
       contentContainerStyle={[styles.scrollContent, { paddingBottom: Math.max(insets.bottom, spacing.lg) }]}
     >
@@ -64,7 +68,7 @@ export default function AssessmentDetailScreen({ route }) {
 
       {/* Hero accuracy section */}
       <View style={styles.heroSection}>
-        <View style={[styles.accuracyRing, { borderColor: feedback.color }]}>
+        <View style={[styles.accuracyRing, { borderColor: feedback.graphicColor ?? feedback.color }]}>
           <Text style={[styles.accuracyNumber, { color: feedback.color }]}>
             {assessment.accuracy}%
           </Text>
@@ -109,7 +113,7 @@ const styles = StyleSheet.create({
   },
   childName: {
     color: colors.primary,
-    fontWeight: '600',
+    fontFamily: fontFamilies.textSemi,
     marginBottom: spacing.xs,
   },
   meta: {
@@ -133,12 +137,10 @@ const styles = StyleSheet.create({
     ...shadows.elevated,
   },
   accuracyNumber: {
-    fontSize: 34,
-    fontWeight: '800',
+    ...typeRoles.displayXL,
     fontVariant: ['tabular-nums'],
   },
   feedbackText: {
-    fontWeight: '700',
     marginBottom: spacing.xs,
     textAlign: 'center',
   },
@@ -152,23 +154,18 @@ const styles = StyleSheet.create({
   },
   statCard: {
     flex: 1,
-    backgroundColor: colors.surface,
-    borderRadius: borderRadius.md,
     borderTopWidth: 3,
     paddingVertical: spacing.md,
     alignItems: 'center',
-    ...shadows.card,
   },
   statValue: {
-    fontSize: 24,
-    fontWeight: '700',
+    ...typeRoles.displayTitle,
     fontVariant: ['tabular-nums'],
     marginBottom: spacing.xs,
   },
   statLabel: {
-    fontSize: 12,
+    ...typeRoles.textLabel,
     color: colors.textSecondary,
-    fontWeight: '500',
   },
   gridSection: {
     width: '100%',

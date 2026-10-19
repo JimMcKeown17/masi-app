@@ -1,3 +1,4 @@
+import { fontFamilies, typeRoles } from '../../constants/typography';
 import { useSignedInEA } from '../../context/SignedInEAContext';
 import React, { useState, useCallback } from 'react';
 import { View, StyleSheet, Pressable, useWindowDimensions } from 'react-native';
@@ -281,9 +282,8 @@ const styles = StyleSheet.create({
     borderRadius: 10,
   },
   languageBadgeText: {
-    color: '#FFFFFF',
-    fontSize: 12,
-    fontWeight: '600',
+    color: colors.onDark,
+    ...typeRoles.textNote,
   },
   progressText: {
     color: colors.textSecondary,
@@ -341,6 +341,6 @@ const styles = StyleSheet.create({
     opacity: 0.9,
   },
   cellText: {
-    fontWeight: '700',
+    fontFamily: fontFamilies.textBold,
   },
 });

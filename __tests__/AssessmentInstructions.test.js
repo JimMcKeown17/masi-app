@@ -1,3 +1,4 @@
+jest.mock('@expo/vector-icons', () => ({ Ionicons: 'Ionicons' }), { virtual: true });
 import React from 'react';
 import { fireEvent, render } from '@testing-library/react-native';
 import AssessmentInstructions from '../src/components/assessment/AssessmentInstructions';
@@ -32,7 +33,7 @@ describe('AssessmentInstructions', () => {
     expect(getByText('English - Attempt #2')).toBeTruthy();
     expect(getAllByText(/instruction$/).map((node) => node.props.children)).toEqual(steps);
 
-    fireEvent.press(getByText('Start Assessment'));
+    fireEvent.press(getByText('Start assessment'));
     fireEvent.press(getByText('Cancel'));
 
     expect(onStart).toHaveBeenCalledTimes(1);

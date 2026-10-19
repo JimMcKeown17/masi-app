@@ -7,6 +7,7 @@ import { useChildren } from '../src/context/ChildrenContext';
 import { useSessionHistoryStatus } from '../src/services/sessionHistoryStatus';
 
 jest.mock('@react-navigation/native', () => ({
+  NavigationContext: require('react').createContext(undefined),
   useFocusEffect: (callback) => {
     const React = require('react');
     React.useEffect(() => callback(), [callback]);

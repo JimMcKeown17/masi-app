@@ -1,5 +1,16 @@
+jest.mock('@expo/vector-icons', () => new Proxy({}, {
+  get: (target, prop) => {
+    if (prop === '__esModule') return true;
+    if (!target[prop]) target[prop] = () => null;
+    return target[prop];
+  },
+}), { virtual: true });
+import { StyleSheet } from 'react-native';
+import { colors } from '../src/constants/colors';
+import StatusBadge from '../src/components/common/StatusBadge';
+import { renderWithProviders as render } from '../test-support/renderWithProviders';
 import React from 'react';
-import { render, waitFor } from '@testing-library/react-native';
+import { waitFor } from '@testing-library/react-native';
 import { SectionList } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import TimeEntriesListScreen from '../src/screens/main/TimeEntriesListScreen';
@@ -9,6 +20,7 @@ import { timeEntriesRepository } from '../src/db/repositories/timeEntriesReposit
 import { supabase } from '../src/services/supabaseClient';
 
 jest.mock('@react-navigation/native', () => ({
+  NavigationContext: require('react').createContext(undefined),
   useFocusEffect: (callback) => {
     const React = require('react');
     React.useEffect(() => callback(), [callback]);
@@ -38,6 +50,7 @@ jest.mock('../src/services/supabaseClient', () => ({
 }));
 
 jest.mock('react-native-safe-area-context', () => ({
+  ...jest.requireActual('react-native-safe-area-context'),
   SafeAreaProvider: ({ children }) => children,
   useSafeAreaInsets: () => ({ top: 0, right: 0, bottom: 0, left: 0 }),
 }));
@@ -86,6 +99,13 @@ describe('TimeEntriesListScreen Plan 5 behavior', () => {
     jest.clearAllMocks();
   });
 
+  test('load failures in the empty branch appear in the root toast', async () => {
+    timeEntriesRepository.getTimeEntries.mockRejectedValueOnce(new Error('read failed'));
+    const screen = render(<TimeEntriesListScreen />);
+    await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent('Failed to load entries'));
+    expect(screen.getByRole('button', { name: 'Dismiss message' })).toBeTruthy();
+  });
+
   test('shows No location for both ends of a completed shift without coordinates', async () => {
     timeEntriesRepository.getTimeEntries.mockResolvedValue([{
       id: 'no-location', user_id: 'user-1', sign_in_time: '2026-10-15T08:00:00Z',
@@ -109,6 +129,10 @@ describe('TimeEntriesListScreen Plan 5 behavior', () => {
 
     expect(getByText('3.00')).toBeTruthy();
     expect(getByText('Unsynced')).toBeTruthy();
+    expect(UNSAFE_getByType(StatusBadge).props.tone).toBe('warning');
+    let badge = getByText('Unsynced').parent;
+    while (badge.type !== 'View') badge = badge.parent;
+    expect(StyleSheet.flatten(badge.props.style).backgroundColor).toBe(colors.warningBg);
     expect(getByText('Showing last 60 days')).toBeTruthy();
     expect(UNSAFE_getByType(SectionList).props.sections).toEqual([
       expect.objectContaining({ title: '2026-05-21' }),

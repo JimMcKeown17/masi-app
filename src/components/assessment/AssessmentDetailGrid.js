@@ -1,3 +1,4 @@
+import { fontFamilies, typeRoles } from '../../constants/typography';
 import React from 'react';
 import { View, StyleSheet } from 'react-native';
 import { Text } from 'react-native-paper';
@@ -88,7 +89,7 @@ const styles = StyleSheet.create({
   },
   title: {
     color: colors.text,
-    fontWeight: '600',
+    fontFamily: fontFamilies.textSemi,
     alignSelf: 'flex-start',
     marginBottom: spacing.sm,
   },
@@ -120,21 +121,20 @@ const styles = StyleSheet.create({
     opacity: 0.5,
   },
   tileText: {
-    fontSize: 15,
-    fontWeight: '600',
+    ...typeRoles.textBodySemi,
     color: colors.text,
   },
   tileTextWhite: {
-    color: '#FFFFFF',
+    color: colors.onDark,
   },
   tileTextMuted: {
     color: colors.textSecondary,
   },
   tileTextDigraph: {
-    fontSize: 12,
+    ...typeRoles.textNote,
   },
   tileTextWord: {
-    fontSize: 10,
+    ...typeRoles.textNavInactive,
   },
   legend: {
     flexDirection: 'row',

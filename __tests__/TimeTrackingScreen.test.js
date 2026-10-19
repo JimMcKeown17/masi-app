@@ -13,7 +13,9 @@ jest.mock('../src/hooks/useTimeTracking', () => ({
 }));
 
 import React from 'react';
-import { render } from '@testing-library/react-native';
+import { StyleSheet } from 'react-native';
+import { colors } from '../src/constants/colors';
+import { render, fireEvent } from '@testing-library/react-native';
 import { PaperProvider, Snackbar } from 'react-native-paper';
 import TimeTrackingScreen from '../src/screens/main/TimeTrackingScreen';
 
@@ -59,9 +61,9 @@ describe('TimeTrackingScreen signed-out branch', () => {
     const screen = renderTimeTracking();
 
     expect(screen.getByText('Current Status')).toBeTruthy();
-    expect(screen.getByText('Clock In')).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Clock in' })).toBeTruthy();
     expect(screen.getByText('How Time Tracking Works')).toBeTruthy();
-    expect(screen.getByText('View Work History')).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'View work history' })).toBeTruthy();
   });
 });
 
@@ -84,7 +86,10 @@ describe('TimeTrackingScreen signed-in branch', () => {
   test('renders the clock-out action for an active time entry', () => {
     const screen = renderTimeTracking();
 
-    expect(screen.getByText('Clock Out')).toBeTruthy();
+    const button = screen.getByRole('button', { name: 'Clock out' });
+    expect(StyleSheet.flatten(button.props.style).backgroundColor).toBe(colors.surface);
+    fireEvent.press(button);
+    expect(mockUseTimeTracking().handleSignOut).toHaveBeenCalledTimes(1);
   });
 });
 
@@ -98,5 +103,5 @@ test('an active shift without coordinates renders No location and Clock Out', ()
   }));
   const screen = renderTimeTracking();
   expect(screen.getByText('No location')).toBeTruthy();
-  expect(screen.getByText('Clock Out')).toBeTruthy();
+  expect(screen.getByRole('button', { name: 'Clock out' })).toBeTruthy();
 });

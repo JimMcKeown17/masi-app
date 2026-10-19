@@ -1,3 +1,4 @@
+jest.mock('@expo/vector-icons', () => ({ Ionicons: 'Ionicons' }), { virtual: true });
 import React from 'react';
 import { Alert } from 'react-native';
 import { fireEvent, render } from '@testing-library/react-native';
@@ -13,7 +14,7 @@ describe('EndAssessmentButton', () => {
     const alertSpy = jest.spyOn(Alert, 'alert').mockImplementation(() => {});
     const { getByText } = render(<EndAssessmentButton onEnd={onEnd} />);
 
-    fireEvent.press(getByText('End Assessment'));
+    fireEvent.press(getByText('End assessment'));
 
     expect(alertSpy).toHaveBeenCalledWith(
       'End Assessment?',

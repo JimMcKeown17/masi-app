@@ -85,7 +85,7 @@ export function getScoreBand({ toolCode, grade, language, rawScore } = {}, { ban
 // screen's legend labels each band. 'great' gets its own darker green, distinct
 // from the standard success green used for 'good'.
 const GREAT_GREEN = '#1E7A34'; // darker than colors.success (#3FA535)
-const OKAY_YELLOW = '#FFBB00'; // warm yellow, matching the existing ranked-bar palette
+export const OKAY_YELLOW = '#FFBB00'; // warm yellow, matching the existing ranked-bar palette
 
 const BAND_COLORS = {
   great: GREAT_GREEN,

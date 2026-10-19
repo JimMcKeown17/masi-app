@@ -1,3 +1,4 @@
+jest.mock('@expo/vector-icons', () => ({ Ionicons: 'Ionicons' }), { virtual: true });
 import React from 'react';
 import { Alert } from 'react-native';
 import { fireEvent, render } from '@testing-library/react-native';
@@ -50,7 +51,7 @@ describe('LetterAssessmentScreen render isolation (real onPress identity)', () =
 
   test('tapping one tile re-renders exactly that tile (real handleToggle identity)', () => {
     const { getByText, getByLabelText } = render(<LetterAssessmentScreen navigation={navigation} route={route} />);
-    fireEvent.press(getByText('Start Assessment'));
+    fireEvent.press(getByText('Start assessment'));
     renderSpy.mockClear();
     fireEvent.press(getByLabelText('a, not marked'));
     expect(renderSpy).toHaveBeenCalledTimes(1);

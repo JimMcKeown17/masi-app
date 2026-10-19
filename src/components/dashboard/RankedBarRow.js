@@ -1,3 +1,5 @@
+import { OKAY_YELLOW } from '../../utils/scoreBands';
+import { typeRoles } from '../../constants/typography';
 import React from 'react';
 import { View, StyleSheet, Pressable } from 'react-native';
 import { Text } from 'react-native-paper';
@@ -9,7 +11,7 @@ import { colors, spacing, borderRadius } from '../../constants/colors';
  */
 export function getBarColor(percent) {
   if (percent >= 70) return colors.success;    // #3FA535
-  if (percent >= 40) return '#FFBB00';         // warm yellow
+  if (percent >= 40) return OKAY_YELLOW;         // warm yellow
   return colors.emphasis;                       // #E72D4D
 }
 
@@ -63,14 +65,13 @@ const styles = StyleSheet.create({
     marginBottom: spacing.xs + 2,
   },
   rank: {
-    fontSize: 11,
+    ...typeRoles.textCaption,
     color: colors.textSecondary,
     width: 16,
     textAlign: 'center',
   },
   name: {
-    fontSize: 12,
-    fontWeight: '600',
+    ...typeRoles.textNote,
     width: 80,
     color: colors.text,
   },
@@ -86,8 +87,7 @@ const styles = StyleSheet.create({
     borderRadius: 3,
   },
   label: {
-    fontSize: 11,
-    fontWeight: '600',
+    ...typeRoles.textNavInactive,
     width: 48,
     textAlign: 'right',
     color: colors.text,

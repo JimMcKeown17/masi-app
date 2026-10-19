@@ -1,5 +1,11 @@
+jest.mock('@expo/vector-icons', () => ({ Ionicons: 'Ionicons' }), { virtual: true });
+import { StyleSheet } from 'react-native';
+import { colors } from '../src/constants/colors';
+import { typeRoles } from '../src/constants/typography';
+import SurfaceCard from '../src/components/common/SurfaceCard';
+import AssessmentDetailScreen from '../src/screens/assessments/AssessmentDetailScreen';
 import React from 'react';
-import { render, fireEvent, waitFor } from '@testing-library/react-native';
+import { render, fireEvent, waitFor, within } from '@testing-library/react-native';
 import { PaperProvider } from 'react-native-paper';
 import AssessmentResultsScreen from '../src/screens/assessments/AssessmentResultsScreen';
 
@@ -39,7 +45,7 @@ const letterSet = {
   letters: ['a', 'b', 'c', 'd', 'e'],
 };
 
-function renderScreen() {
+function renderScreen(overrides = {}) {
   const navigation = {
     replace: jest.fn(),
     navigate: jest.fn(),
@@ -51,7 +57,7 @@ function renderScreen() {
         navigation={navigation}
         route={{
           params: {
-            assessment,
+            assessment: { ...assessment, ...overrides },
             child,
             letterSet,
             attemptNumber: 2,
@@ -82,7 +88,7 @@ describe('AssessmentResultsScreen', () => {
     resolveAssessmentRoute.mockResolvedValueOnce({ screenName, captureMode: mode });
     const { navigation, getByText } = renderScreen();
 
-    fireEvent.press(getByText('Try Again'));
+    fireEvent.press(getByText('Try again'));
 
     await waitFor(() => {
       expect(resolveAssessmentRoute).toHaveBeenCalledTimes(1);
@@ -98,4 +104,22 @@ describe('AssessmentResultsScreen', () => {
       );
     });
   });
+});
+
+test('low-score results use action red for text and a secondary Try again button', () => {
+  const screen = renderScreen({ accuracy: 20 });
+  expect(StyleSheet.flatten(screen.getByText('Keep practicing!').props.style).color).toBe(colors.primary);
+  expect(StyleSheet.flatten(screen.getByRole('button', { name: 'Try again' }).props.style).backgroundColor).toBe(colors.surface);
+  expect(screen.UNSAFE_getAllByType(SurfaceCard)).toHaveLength(3);
+  const label = within(screen.UNSAFE_getAllByType(SurfaceCard)[2]).getByText('Incorrect');
+  expect(StyleSheet.flatten(label.props.style)).toMatchObject(typeRoles.textLabel);
+});
+
+test('assessment detail uses contrasting low-score text and shared stat cards', () => {
+  const screen = render(<AssessmentDetailScreen route={{ params: { childName: 'A Child', assessment: {
+    ...assessment, accuracy: 20, date_assessed: '2026-10-19', letter_language: 'English',
+    attempt_number: 1, items_tested: letterSet.letters,
+  } } }} />);
+  expect(StyleSheet.flatten(screen.getByText('Keep practicing!').props.style).color).toBe(colors.primary);
+  expect(screen.UNSAFE_getAllByType(SurfaceCard)).toHaveLength(3);
 });

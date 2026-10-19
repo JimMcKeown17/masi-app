@@ -1,3 +1,4 @@
+jest.mock('@expo/vector-icons', () => ({ Ionicons: 'Ionicons' }), { virtual: true });
 import React from 'react';
 import { tints } from '../src/constants/colors';
 import { BackHandler, StyleSheet } from 'react-native';

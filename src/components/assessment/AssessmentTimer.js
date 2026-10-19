@@ -1,3 +1,4 @@
+import { typeRoles } from '../../constants/typography';
 import React from 'react';
 import { View, StyleSheet } from 'react-native';
 import { Text } from 'react-native-paper';
@@ -24,7 +25,7 @@ export default function AssessmentTimer({ timeRemaining, isPaused }) {
           ]}
         />
       </View>
-      <Text style={[styles.timeText, { color: timerColor }]}>
+      <Text style={[styles.timeText, { color: timeRemaining < 10 ? colors.primary : timerColor }]}>
         {isPaused ? 'PAUSED' : `${timeRemaining}s`}
       </Text>
     </View>
@@ -50,8 +51,7 @@ const styles = StyleSheet.create({
     borderRadius: borderRadius.sm,
   },
   timeText: {
-    fontSize: 18,
-    fontWeight: '700',
+    ...typeRoles.textBodyLStrong,
     minWidth: 60,
     textAlign: 'right',
   },

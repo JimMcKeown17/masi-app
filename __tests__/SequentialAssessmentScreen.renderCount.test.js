@@ -1,3 +1,4 @@
+jest.mock('@expo/vector-icons', () => ({ Ionicons: 'Ionicons' }), { virtual: true });
 import React from 'react';
 import { Alert } from 'react-native';
 import { fireEvent, render } from '@testing-library/react-native';
@@ -50,7 +51,7 @@ describe('SequentialAssessmentScreen render isolation', () => {
 
   test('a decision re-renders exactly two tiles (decided + next current)', () => {
     const { getByText } = render(<SequentialAssessmentScreen navigation={navigation} route={route} />);
-    fireEvent.press(getByText('Start Assessment'));
+    fireEvent.press(getByText('Start assessment'));
     renderSpy.mockClear();
     fireEvent.press(getByText('Correct'));
     expect(renderSpy).toHaveBeenCalledTimes(2);

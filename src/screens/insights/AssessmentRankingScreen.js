@@ -1,7 +1,10 @@
+import { useHeaderHairline } from '../../components/common/ScreenHeader';
+import SegmentedControl from '../../components/common/SegmentedControl';
+import { typeRoles } from '../../constants/typography';
 import { useSignedInEA } from '../../context/SignedInEAContext';
 import React, { useState, useCallback, useMemo } from 'react';
 import { View, StyleSheet, FlatList } from 'react-native';
-import { Text, ActivityIndicator, SegmentedButtons } from 'react-native-paper';
+import { Text, ActivityIndicator } from 'react-native-paper';
 import { useFocusEffect } from '@react-navigation/native';
 import { useAuth } from '../../context/AuthContext';
 import { useChildren } from '../../context/ChildrenContext';
@@ -47,6 +50,7 @@ const BAND_LEGEND = [
 ];
 
 export default function AssessmentRankingScreen({ navigation }) {
+  const onScroll = useHeaderHairline();
   const { repositories } = useSignedInEA();
   const { assessments: assessmentsRepository } = repositories;
 
@@ -133,28 +137,29 @@ export default function AssessmentRankingScreen({ navigation }) {
 
   return (
     <View style={styles.container}>
-      <FlatList
+      <FlatList onScroll={onScroll} scrollEventThrottle={16}
         data={ranking}
         keyExtractor={(item) => item.child.id}
         renderItem={renderItem}
         contentContainerStyle={styles.listContent}
         ListHeaderComponent={
           <View>
-            <SegmentedButtons
-              value={mode}
-              onValueChange={setMode}
-              density="small"
-              style={styles.toggle}
-              buttons={[
-                { value: MODES.letters.value, label: MODES.letters.label, icon: 'alphabetical' },
-                { value: MODES.words.value, label: MODES.words.label, icon: 'text' },
-              ]}
-            />
+            <View style={styles.toggle}>
+              <SegmentedControl
+                role="radio"
+                value={mode}
+                onChange={setMode}
+                options={[
+                  { value: MODES.letters.value, label: MODES.letters.label, icon: 'alphabetical' },
+                  { value: MODES.words.value, label: MODES.words.label, icon: 'text' },
+                ]}
+              />
+            </View>
             <Text style={styles.subtitle}>{modeConfig.subtitle}</Text>
             <StatBar items={[
               { label: 'Avg Correct', value: avgCorrect },
               { label: 'Highest', value: highest, color: colors.success },
-              { label: 'Not Assessed', value: notAssessed.length, color: colors.emphasis },
+              { label: 'Not Assessed', value: notAssessed.length, color: colors.primary },
             ]} />
           </View>
         }
@@ -204,7 +209,7 @@ const styles = StyleSheet.create({
     marginBottom: spacing.md,
   },
   subtitle: {
-    fontSize: 12,
+    ...typeRoles.textCaption,
     color: colors.textSecondary,
     marginBottom: spacing.md,
   },
@@ -225,17 +230,16 @@ const styles = StyleSheet.create({
     borderLeftColor: colors.disabled,
   },
   unassessedName: {
-    fontSize: 12,
-    fontWeight: '600',
+    ...typeRoles.textNote,
     color: colors.textSecondary,
   },
   unassessedLabel: {
-    fontSize: 11,
+    ...typeRoles.textCaption,
     color: colors.disabled,
     fontStyle: 'italic',
   },
   keyCaption: {
-    fontSize: 10,
+    ...typeRoles.textCaption,
     color: colors.textSecondary,
     textAlign: 'center',
     marginTop: spacing.md,
@@ -261,7 +265,7 @@ const styles = StyleSheet.create({
     borderRadius: 2,
   },
   keyLabel: {
-    fontSize: 10,
+    ...typeRoles.textCaption,
     color: colors.textSecondary,
   },
 });

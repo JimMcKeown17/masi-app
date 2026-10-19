@@ -25,8 +25,12 @@ describe('domain text input audit', () => {
       "searchPlaceholder={selectionMode === 'groups' ? 'Search groups...' : 'Search children...'}"
     );
     expect(readSource('src/screens/assessments/AssessmentChildSelectScreen.js')).toMatch(
-      /<Searchbar[\s\S]*placeholder="Search children\.\.\."[\s\S]*\{\.\.\.NO_TEXT_SUGGESTIONS\}/
+      /<SearchField[\s\S]*placeholder="Search children\.\.\."/
     );
+  });
+
+  test('shared SearchField disables keyboard suggestions', () => {
+    expect(readSource('src/components/common/SearchField.js')).toContain('{...NO_TEXT_SUGGESTIONS}');
   });
 
   test('auth and password screens keep platform text assistance available', () => {

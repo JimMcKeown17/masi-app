@@ -36,6 +36,7 @@ jest.mock('react-native-safe-area-context', () => {
 });
 
 jest.mock('@react-navigation/native', () => ({
+  NavigationContext: require('react').createContext(undefined),
   useFocusEffect: (callback) => {
     const ReactForMock = require('react');
     ReactForMock.useEffect(() => callback(), [callback]);
@@ -83,6 +84,15 @@ describe('AssessmentChildSelectScreen language picker', () => {
       screenName: 'SequentialAssessment',
       captureMode: 'sequential',
     });
+  });
+
+  test('search filters children and Clear search restores them', async () => {
+    const screen = render(<PaperProvider><AssessmentChildSelectScreen navigation={{ navigate: jest.fn() }} route={{ params: {} }} /></PaperProvider>);
+    await screen.findByText('Amahle Dlamini');
+    fireEvent.changeText(screen.getByLabelText('Search children...'), 'missing');
+    expect(screen.queryByText('Amahle Dlamini')).toBeNull();
+    fireEvent.press(screen.getByRole('button', { name: 'Clear search' }));
+    expect(screen.getByText('Amahle Dlamini')).toBeTruthy();
   });
 
   test('retains a cancelled language draft and starts only after confirmation', async () => {

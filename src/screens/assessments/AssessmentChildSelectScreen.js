@@ -1,7 +1,8 @@
+import { useHeaderHairline } from '../../components/common/ScreenHeader';
 import { useSignedInEA } from '../../context/SignedInEAContext';
 import React, { useState, useCallback, useRef } from 'react';
 import { View, StyleSheet, FlatList, Pressable } from 'react-native';
-import { Text, Searchbar } from 'react-native-paper';
+import { Text } from 'react-native-paper';
 import { useFocusEffect } from '@react-navigation/native';
 import { useAuth } from '../../context/AuthContext';
 import { useChildren } from '../../context/ChildrenContext';
@@ -9,7 +10,8 @@ import { useClasses } from '../../context/ClassesContext';
 import { LETTER_SETS, WORD_SETS } from '../../constants/egraConstants';
 import { colors, spacing, borderRadius, shadows } from '../../constants/colors';
 
-import { NO_TEXT_SUGGESTIONS } from '../../constants/textInputProps';
+import SearchField from '../../components/common/SearchField';
+import { fontFamilies } from '../../constants/typography';
 import { resolveAssessmentRoute } from '../../utils/assessmentRouting';
 import { buildAssessmentMap } from '../../utils/assessmentHistoryMap';
 import { normalizeLanguageKey } from '../../utils/letterMastery';
@@ -27,6 +29,7 @@ function formatShortDate(dateStr) {
 }
 
 export default function AssessmentChildSelectScreen({ navigation, route }) {
+  const onScroll = useHeaderHairline();
   const { repositories } = useSignedInEA();
   const { assessments: assessmentsRepository } = repositories;
 
@@ -135,7 +138,7 @@ export default function AssessmentChildSelectScreen({ navigation, route }) {
         {info && (
           <Text variant="bodySmall" style={styles.subtitle}>
             Last assessed: {formatShortDate(info.date_assessed)} ·{' '}
-            <Text style={{ color: accuracyColor, fontWeight: '700' }}>{info.accuracy}%</Text>
+            <Text style={{ color: accuracyColor, fontFamily: fontFamilies.textBold }}>{info.accuracy}%</Text>
           </Text>
         )}
       </Pressable>
@@ -144,15 +147,15 @@ export default function AssessmentChildSelectScreen({ navigation, route }) {
 
   return (
     <View style={styles.container}>
-      <Searchbar
+      <View style={styles.searchbar}>
+      <SearchField
         placeholder="Search children..."
         value={searchQuery}
         onChangeText={setSearchQuery}
-        style={styles.searchbar}
-        {...NO_TEXT_SUGGESTIONS}
       />
+      </View>
 
-      <FlatList
+      <FlatList onScroll={onScroll} scrollEventThrottle={16}
         data={filteredChildren}
         keyExtractor={(item) => item.id}
         renderItem={renderChild}
@@ -188,8 +191,6 @@ const styles = StyleSheet.create({
   },
   searchbar: {
     margin: spacing.md,
-    backgroundColor: colors.surface,
-    borderRadius: borderRadius.md,
   },
   listContent: {
     paddingHorizontal: spacing.md,

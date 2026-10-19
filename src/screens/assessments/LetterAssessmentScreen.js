@@ -1,7 +1,7 @@
+import BrandButton from '../../components/common/BrandButton';
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { View, StyleSheet } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Button } from 'react-native-paper';
 import { CAPTURE_MODES } from '../../constants/egraConstants';
 import EgraLetterGrid from '../../components/assessment/EgraLetterGrid';
 import AssessmentInstructions from '../../components/assessment/AssessmentInstructions';
@@ -123,7 +123,7 @@ export default function LetterAssessmentScreen({ navigation, route }) {
 
   // --- Active / Finished Phase ---
   return (
-    <View style={[captureStyles.container, { paddingTop: insets.top }]}> 
+    <View style={[captureStyles.container, { paddingTop: insets.top }]}>
       <CaptureHeader
         getElapsedMs={getElapsedMs}
         pageLabel="Page"
@@ -146,32 +146,26 @@ export default function LetterAssessmentScreen({ navigation, route }) {
       </View>
 
       <View style={[styles.navRow, { paddingBottom: Math.max(insets.bottom, spacing.md) }]}>
-        <Button
-          mode="outlined"
+        <BrandButton size="sm"
+          variant="secondary"
           onPress={() => setCurrentPage((p) => p - 1)}
           disabled={currentPage === 0}
-          compact
-        >
-          Prev
-        </Button>
+          label="Prev"
+        />
 
         {phase === 'active' && (
           <EndAssessmentButton onEnd={handleFinish} />
         )}
 
         {isLastPage && phase === 'active' ? (
-          <Button mode="contained" onPress={handleFinish} compact>
-            Finish
-          </Button>
+          <BrandButton size="sm" variant="primary" onPress={handleFinish} label="Finish" />
         ) : (
-          <Button
-            mode="outlined"
+          <BrandButton size="sm"
+            variant="secondary"
             onPress={() => setCurrentPage((p) => p + 1)}
             disabled={isLastPage}
-            compact
-          >
-            Next
-          </Button>
+            label="Next"
+          />
         )}
       </View>
 
