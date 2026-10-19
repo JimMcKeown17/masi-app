@@ -781,6 +781,8 @@ The record spans two eras with two different shapes, both preserved as written:
 | 2026-10-19 | Bold Red PR 4 Tasks 12–13: standing docs and local automated gates | **329 suites / 3,335 unit tests; 52 suites / 543 integration tests passed twice**, all exit 0; Task 13: 27.343s / 28.197s; requested post-Task-13 runs: 30.933s / 27.985s | Tasks 1–11 shipped the helpers, shared gauge, route params, receipt, truthful sync line, celebration and guarded Done/back to Home. Commit-recorded GREEN batches: Tasks 4–6 **3,257 unit / 543 integration**, 7–9 **3,321 / 543**, 10–11 **3,335 / 543**; per-task focused RED → GREEN transcripts are not in the checked-in log and were not replayed here. Tasks 12–13 prescribe no new failing test. Build details: SessionCompleteScreen left BOARD_RATCHET in Task 10; plain navigate produces `[MainTabs, SessionComplete, MainTabs]`; BrandButton forwards its ref; StickyActionFooter adds `surface=onOverflow`, `overflowing`, `style`; receipt wrap subtracts 16dp padding; Task 4 passes `session.session_date` directly. Plan review accepted two medium findings (native-animation test harness and card-scoped subtitle query). Commands: `PATH=$HOME/.nvm/versions/node/v20.19.4/bin:$PATH npx jest`; `PATH=$HOME/.nvm/versions/node/v20.19.4/bin:$PATH npm run test:integration`. Task 13’s four scans (rg equivalents) found no matches (exit 1); branch/worktree diff checks clean; protected-path diff empty (exit 0). task5AuthRaces passed twice without retry. Inline Python integrity audit passed: four allowed docs, seven insertion-only register rows, §5-only roadmap edit, append-only learning section, 11 valid added links, four ratchet rows matching source, empty index/no untracked files. A log-update assertion refused a non-unique historical phrase before writing; the update was scoped to this new row. Non-failing React act, injected-error and teardown diagnostics remain. Branch review, EAS and Task 14 device checks remain orchestrator-owned and unrun. |
 | 2026-10-19 | Bold Red PR 4 branch review round 1 (`codex adversarial-review --base feat/bold-red-record` at `8a4a691`): 3 medium findings, all accepted and fixed by Codex test-first | Full unit **329 suites / 3,346 tests**, integration **52 suites / 543 tests**, both exit 0 | (1) **Sync spinner ignored hardware still mode** (read only `reduceMotion`; the static tier on low-memory Android kept an infinite rotation): now `!reduceMotion && motionLevel !== 'still'`, matching `SyncIndicator`. (2) **Reduce Motion mid-celebration did not cancel it** (the one-shot guard blocked the change): a full/calm → still transition stops both composites and settles every track. (3) **Receipt lost its value column at the largest text** (one-line label, always horizontal): rows stack at `fontScale >= 1.6`. Device checks: low-memory spinner, Reduce Motion mid-celebration, narrow iPhone at maximum text. |
 | 2026-10-19 | Bold Red PR 4 branch review round 2 (`codex adversarial-review --base feat/bold-red-record` at `acead94`) | **Approve, no material findings** | Round 1 fixes confirmed (spinner stops and resets in still mode; cancellation settles every track with confetti invisible; stacked receipt keeps every letter and the grouped phrases). Completion and Home share the goal service; missing legacy params fall back; Done/back share a guarded `popTo`; cleanup covers unmount. Source-level only; Task 14 device gate open. Review loop closed at two rounds. |
+| 2026-10-19 | Bold Red PR 5 branch review round 1 (`codex adversarial-review --base feat/bold-red-complete` at `029da83`): 1 high + 2 medium findings, all accepted and fixed by Codex test-first | Full unit **335 suites / 3,481 tests** (one rerun: 4 timing flakes under concurrent Codex load, green on rerun), integration **52 suites / 543 tests** | (1) **[high] Password changes could complete out of order:** verification ran outside the queue, so dismiss → reopen → submit could let the abandoned attempt overwrite the newer password the EA was told succeeded. `changePassword` now serializes verification, update and cleanup per actor (`userId:epoch`); seven AuthContext regressions assert the final stored password. (2) **Export confirmation could not scroll at large text:** ConfirmSheet body now scrolls inside BottomSheet with actions in the footer (also Record’s discard sheet). (3) **Repeated identical password error did not scroll back into view:** uses the cached measurement. |
+| 2026-10-19 | Bold Red PR 5 branch review round 2 (`codex adversarial-review` at `138b1fc`): 1 medium finding, accepted and fixed test-first (`passwordVerificationClient.test.js` RED 3 failed, then GREEN) | Full unit **336 suites / 3,484 tests**, integration **52 suites / 543 tests**; `task5AuthRaces` 40/40 | **Hung private auth request would block the new password queue:** the private verification client used raw `fetch` with no deadline, so a never-settling `/token` or `/logout` kept every later change for that EA waiting. Its transport now uses `authRequestFetch` (30 s, aborts the SDK request). Round 2 otherwise confirmed: sign-out and a new actor stay independent; ConfirmSheet footer, `alertdialog`, SheetAccessibilityContext and Record’s keyboard dismiss intact. Review loop closed at two rounds; the remaining checks are native (keyboard, accessibility). |
 
 ### Organisation label v1 — 18 PostgreSQL checks
 
@@ -1599,3 +1601,74 @@ src/screens/sessions/LiteracySessionForm.js:              await storage.updateLe
 - `documentation/archive/sync-reliability-build-log.md` — Items 1 and 2 (sync reliability), 12 TDD tasks, device-verified 2026-06-17.
 - `documentation/sqlite-refactor-log.md` — now a redirect stub; its content was merged into this file on 2026-07-13.
 - (fork) `zazi-izandi-app/documentation/*build-log*.md` — companion-app history referenced by the ports.
+
+
+### 2026-10-19 — Bold Red Profile Task 6 password integration gate
+
+`PATH=$HOME/.nvm/versions/node/v20.19.4/bin:$PATH npm run test:integration -- __tests__/task5AuthRaces.test.js -t "password|Profile verification"` — PASS, 1 suite / 11 cases (29 skipped). The plan expected 10; the existing isolated-session-disposal case also matches. Initial migration run failed because a redundant inner PaperProvider put the sheet inside the accessibility-hidden background; removing that wrapper fixed it without changing the existing assertions, barriers or timers.
+
+Cases: delayed password response/manual; delayed admitted storage write/manual; delayed admitted storage write/SIGNED_OUT; Profile password session preservation through revoke-others/token refresh; late Profile verification after switching to B; late Profile verification after reopening A; changePassword result dropped during isolated-session disposal; sign-in independent of a late password update; password response between B storage commit and callback; late shared password update after switching to B; never-settling password PUT bounded across sign-out/sign-in.
+
+`PATH=$HOME/.nvm/versions/node/v20.19.4/bin:$PATH npm run test:integration -- __tests__/task5AuthRaces.test.js __tests__/task5ActionsBinding.test.js` — PASS, 2 suites / 44 tests. Local real-SQLite evidence only. Small spec repair: read-only ListRow now renders its supplied lead tile (regression RED 1 failed / 13 passed, GREEN 14 passed); its documentation update remains in Task 8.
+
+### 2026-10-19 — Bold Red Profile Task 8
+
+#### Verification Register (focused reruns of committed Tasks 1–7)
+
+All commands below ran with Node 20.19.4; these are fresh GREEN checks, not reconstructed RED evidence.
+
+| Gate | Command | Result |
+|---|---|---|
+| Task 1 primitives/Home | `PATH=$HOME/.nvm/versions/node/v20.19.4/bin:$PATH npx jest __tests__/ListRow.test.js __tests__/BrandButton.test.js __tests__/HomeScreen.test.js __tests__/designSystemGuard.test.js` | 4 suites / 298 tests passed; exit 0 |
+| Task 2 shared sheets | `PATH=$HOME/.nvm/versions/node/v20.19.4/bin:$PATH npx jest __tests__/BottomSheet.test.js __tests__/GroupPickerBottomSheet.test.js __tests__/LastAttemptedBottomSheet.test.js __tests__/LetterTrackerBottomSheet.test.js __tests__/LetterTrackerBottomSheet.plan5.test.js __tests__/signOutFlow.test.js` | 6 suites / 67 tests passed; exit 0 |
+| Task 3 pure helpers | `PATH=$HOME/.nvm/versions/node/v20.19.4/bin:$PATH npx jest __tests__/passwordChange.test.js __tests__/scrollIntoView.test.js` | 2 suites / 33 tests passed; exit 0 |
+| Task 4 Profile components | `PATH=$HOME/.nvm/versions/node/v20.19.4/bin:$PATH npx jest __tests__/profileComponents.test.js` | 1 suite / 11 tests passed; exit 0 |
+| Task 5 password sheet | `PATH=$HOME/.nvm/versions/node/v20.19.4/bin:$PATH npx jest __tests__/ChangePasswordSheet.test.js __tests__/domainTextInputAudit.test.js` | 2 suites / 36 tests passed; exit 0 |
+| Task 6 screen/navigation | `PATH=$HOME/.nvm/versions/node/v20.19.4/bin:$PATH npx jest __tests__/ProfileScreen.releaseMetadata.test.js __tests__/ProfileScreen.layout.test.js __tests__/profileCaptureModeToggle.test.js __tests__/ChangePasswordSheet.test.js __tests__/signOutFlow.test.js __tests__/designSystemGuard.test.js __tests__/domainTextInputAudit.test.js __tests__/AppNavigator.headers.test.js` | 8 suites / 359 tests passed; exit 0 |
+| Task 6 password races | `PATH=$HOME/.nvm/versions/node/v20.19.4/bin:$PATH npm run test:integration -- __tests__/task5AuthRaces.test.js -t "password\|Profile verification"` | 1 suite / 11 passed, 29 skipped; exit 0. Same 11 cases listed above; plan's expected 10 omits the isolated-session-disposal case |
+| Task 6 full race/binding files | `PATH=$HOME/.nvm/versions/node/v20.19.4/bin:$PATH npm run test:integration -- __tests__/task5AuthRaces.test.js __tests__/task5ActionsBinding.test.js` | 2 suites / 44 tests passed; exit 0 |
+| Task 7 sheets/flow | `PATH=$HOME/.nvm/versions/node/v20.19.4/bin:$PATH npx jest __tests__/SignOutSheets.style.test.js __tests__/signOutFlow.test.js __tests__/ProfileScreen.releaseMetadata.test.js __tests__/designSystemGuard.test.js` | 4 suites / 275 tests passed; exit 0 |
+| Task 7 frozen working files | `PATH=$HOME/.nvm/versions/node/v20.19.4/bin:$PATH git diff --exit-code -- __tests__/signOutFlow.test.js src/hooks/useSignOutFlow.js` | No diff; exit 0 |
+| Task 8 docs | Source/committed-diff inspection; `PATH=$HOME/.nvm/versions/node/v20.19.4/bin:$PATH git diff --check` | Exit 0. Design system, PRD, roadmap and C11 learning updated. No domain term changed; CONTEXT.md unchanged. Documentation/verification only: no new behavior or RED test required |
+
+#### Decision Register
+
+| Decision | Contract / evidence |
+|---|---|
+| Password attempt outlives its form | Dismissal resets the form; an abandoned outcome, including after leaving Profile, publishes one actor-scoped 4000ms toast. A reopened form stays usable; stale handles publish nothing. Password tests moved from ProfileScreen.releaseMetadata.test.js to ChangePasswordSheet.test.js |
+| Keyboard-up space | Shared BottomSheet uses 4dp panel bottom padding while avoiding an open keyboard; keyboard-down remains max(bottom inset, 24). Header/footer stay fixed while password fields/errors scroll |
+| Shared primitive changes | ListRow gained wrapping titleAccessory in Task 1 and the read-only lead-tile repair in Task 6. expanded/busy and BrandButton testID/variant-coloured spinner already existed; BrandButton needed no source change. BottomSheet gained footerStyle. jest.setup.js now mocks @expo/vector-icons globally so frozen flow tests render shared primitives |
+| C11 ownership | Reproduced on A03s build 15 (Jim-supplied device evidence); the shared padding/full-overlay-wrapper fix landed in Profile Task 2, not PR 1. A03s/iPhone no-double-lift verification remains Task 10 |
+
+#### Bug And Gap Register
+
+| Gap | Evidence / remaining gate |
+|---|---|
+| C11 School search under keyboard | Create class → School search results were under the keyboard on A03s build 15. Task 2 fixes BottomSheet; local regression checks pass. No post-fix device claim: no-double-lift, small-phone password layout and the Android “BackMy Profile” row remain open |
+| Local test diagnostics | Focused runs pass with non-failing Paper icon warnings, React act warnings and intentional auth/export failure logs. No package or test changes made in Task 8 |
+
+### 2026-10-19 — Bold Red Profile Task 9 (local automated gates)
+
+| Gate | Command | Result |
+|---|---|---|
+| Full unit suite | `PATH=$HOME/.nvm/versions/node/v20.19.4/bin:$PATH npx jest` | 335 suites / 3,470 tests passed; exit 0 |
+| Full integration suite | `PATH=$HOME/.nvm/versions/node/v20.19.4/bin:$PATH npm run test:integration` | 52 suites / 543 tests passed; exit 0 |
+| Guard/theme/input audits | `PATH=$HOME/.nvm/versions/node/v20.19.4/bin:$PATH npx jest __tests__/designSystemGuard.test.js __tests__/paperTheme.test.js __tests__/colors.test.js __tests__/contrast.test.js __tests__/typography.test.js __tests__/domainTextInputAudit.test.js` | 6 suites / 326 tests passed; exit 0 |
+| Frozen files against base | `PATH=$HOME/.nvm/versions/node/v20.19.4/bin:$PATH git diff --exit-code feat/bold-red-complete -- __tests__/signOutFlow.test.js src/hooks/useSignOutFlow.js src/context/AuthContext.js src/utils/debugExport.js src/services/deviceSettings.js src/services/observability.js` | No diff; exit 0 |
+| Profile source scan | `PATH=$HOME/.nvm/versions/node/v20.19.4/bin:$PATH rg -n "Alert\|Snackbar\|SegmentedButtons\|KeyboardAvoidingView\|fontWeight\|#[0-9A-Fa-f]{3,8}\b" src/screens/main/ProfileScreen.js src/components/profile/*.js` | No matches; expected exit 1. rg replaces the plan's grep with the same pattern/scope |
+
+No auth-race retry needed. Non-failing React/Paper and intentional failure-path diagnostics remain.
+Per Jim's scope, branch review, EAS builds and device gates were not run; Task 10 was not started.
+All changes remain uncommitted for the orchestrator; no Git write attempted.
+
+#### Post-Task-9 full-suite repeat (requested final gate)
+
+| Command | Result |
+|---|---|
+| `PATH=$HOME/.nvm/versions/node/v20.19.4/bin:$PATH npx jest` | 335 suites / 3,470 tests passed; exit 0 |
+| `PATH=$HOME/.nvm/versions/node/v20.19.4/bin:$PATH npm run test:integration` | 52 suites / 543 tests passed; exit 0; no auth-race retry |
+
+Node 20.19.4 scope assertions passed: exactly five documentation paths, empty index, unchanged
+CONTEXT.md, append-only build log, and unchanged roadmap before §5 (including “BackMy Profile”).
+The full unit run also logged an undefined `.catch` error from ChildrenContextPendingDelete.integration.test.js
+without failing assertions; recorded for the orchestrator, not investigated in this documentation scope.

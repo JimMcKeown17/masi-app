@@ -1,10 +1,10 @@
 # Design System — Bold Red
 
-**Standing reference, reconciled through Session complete PR 4 on `feat/bold-red-complete`, 2026-10-19.** This describes
+**Standing reference, reconciled through Profile PR 5 on `feat/bold-red-profile`, 2026-10-19.** This describes
 the implementation, including the remaining board-screen exceptions. Update it in the same branch
 as a change to the system. Automated verification is recorded in [build-log.md](./build-log.md);
 native visual acceptance remains the shared-look plan's Task 34, the Children plan's Task 11,
-the Record plan's Task 14 and the Session complete plan's Task 14.
+the Record plan's Task 14, the Session complete plan's Task 14 and the Profile plan's Task 10.
 
 The design source is the Design Round 4 `RedSystemSheet` and chosen `red-*-components` boards.
 The [overview](../docs/superpowers/specs/2026-10-18-bold-red-app-design.md) resolves conflicts in
@@ -265,12 +265,14 @@ Labels wrap. Buttons stretch by default; accent/onRed tertiary links align to th
 | `warning` | D8 caution action: warningBg/warningText, warningControl edge, warning-outline glyph, textButtonM. |
 | `success` | Sequential assessment “Correct”: successText/white (plan addition for contrast). |
 
-`icon` is an Ionicons name (20 at lg, 18 otherwise). Loading substitutes an 18dp spinner and
+`icon` is an Ionicons name (20 at lg, 18 otherwise). Loading substitutes one 18dp native
+`ActivityIndicator` in the variant's label colour (`colors.error` for `destructiveQuiet`) and
 `loadingLabel ?? label`, keeps the active fill, and blocks taps. Disabled and busy accessibility
 state are exposed; the accessible label follows the loading label unless overridden. Press scale
 is 0.98 unless `reduceMotion`; there is no scale animation timeline. Primary pressed/disabled
 styles drop the shadow. `style` applies to the button container. `BrandButton` forwards its ref
-to the native `Pressable`, allowing Session complete to focus Done for screen readers.
+to the native `Pressable`, allowing Session complete to focus Done for screen readers; `testID`
+also reaches that Pressable.
 
 **`IconCircleButton`** — `icon, onPress, accessibilityLabel, surface='canvas', disabled=false,
 testID`. Fixed 44dp circular target with a 22dp Ionicons glyph; white/ink/control-edge on canvas,
@@ -323,14 +325,41 @@ state for changing displayed content.
 |---|---|
 | `SurfaceCard({ children, style, testID })` | White, rule edge, radius 18, padding 16, no shadow. Replace Paper Card; put actions in a right-aligned row of md BrandButtons with gap 8. |
 | `ListGroup({ children, style })` | White grouped surface, rule edge, radius 18, clipped corners, no shadow. Clones valid child elements with showDivider true except the last; custom row children must honour that prop. |
-| `ListRow({ title, subtitle, lead, trailing, onPress, variant='action', busy=false, expanded, disabled=false, showDivider=false, accessibilityLabel, accessibilityRole, style, accessibilityState, titleNumberOfLines })` | Action rows min 64, padding 10/16, 40dp lead and wrapping title/subtitle. Default spoken label combines both. Busy disables press and replaces trailing content with a spinner. trailing accepts chevron, external, share, send, disclosure or an element. Disclosure uses expanded for arrow and accessibility state. Optional style composes onto the row; accessibilityState supplies caller state while busy/disabled/expanded stay owned by ListRow; titleNumberOfLines defaults to wrapping and lets roster rows request one line. |
-| `ListRow variant='readOnly'` | title is the caps label; subtitle is the value. An accessible View, no action, lead or trailing glyph. |
+| `ListRow({ title, subtitle, lead, trailing, onPress, variant='action', busy=false, expanded, disabled=false, showDivider=false, accessibilityLabel, accessibilityRole, style, accessibilityState, titleNumberOfLines, titleAccessory })` | Action rows min 64, padding 10/16, 40dp lead and wrapping title/subtitle. Default spoken label combines both. Busy disables press and replaces trailing content with a 20dp textSecondary spinner. trailing accepts chevron, external, share, send, disclosure or an element. Disclosure uses expanded for arrow and accessibility state. titleAccessory follows the title in a centred, wrapping row with an 8dp gap. Optional style composes onto the row; accessibilityState supplies caller state while busy/disabled/expanded stay owned by ListRow; titleNumberOfLines defaults to wrapping and lets roster rows request one line. |
+| `ListRow variant='readOnly'` | title is the caps label; subtitle is the value. An accessible View with an optional supplied lead tile, no action or trailing glyph; label and value wrap. |
 | `ListRow variant='nested'` | Min 56, left padding 68, 24dp lead and strong-body title. Dividers start at 104 for nested, otherwise 68 with a lead or 16 without. |
 | `IconTile({ icon, tone='canvas', iconSize })` | Decorative 40dp tile, radius 14. canvas: background/ink/20dp; red: red50/red700/22dp; warning: warningBg/warningText/22dp. iconSize preserves Home's 22dp canvas glyph. |
 | `StatusBadge({ label, tone='neutral' })` | Min 22, pill, textBadge, horizontal padding 8. Tones: neutral border/ink; warning warningBg/warningText; success successBg/successText; successStrong successText/white; error errorBg/error. |
 | `EmptyState({ title, body, footnote, action })` | Left-aligned, type-led state without an illustration. displaySheetTitle/header, paragraph body; footnote accepts text (caption styling) or a React element rendered directly. action forwards BrandButton props, including icon, variant and style; size is always md, primary by default, with action.style composed after the default top margin. NoActiveProgrammeNotice uses this. |
 | `SectionHeader({ title, hint, action, style })` | Caps textSectionLabel/header and optional caption hint. action is BrandButton props, forced tertiary with negative vertical margin to retain its 44dp target without enlarging the label row. Use hint, not the retired subtitle prop. |
 | `dashboard/StatBar({ items })` | Bare stat columns. Items: { label, value, color?, onPress?, accessibilityLabel? }. An explicit accessibilityLabel groups a column into one accessible element; onPress gives it the button role, with the existing “View {label}: {value}” fallback when no label is supplied. displayTitle/tabular numeral, caps textLabel; actions use primary plus an 18dp chevron. color overrides the numeral for score meaning. Current compact labels retain one line, fit-to-size (floor 0.85), and 1.2 scaling caps on label/value. |
+
+### Settings lists (Bold Red Profile)
+
+Use `SectionHeader` above a `ListGroup`. Read-only rows pass the label as `title`, the value as
+`subtitle`, and an optional `IconTile` as `lead`; each is one accessible “label, value” element.
+Profile names, emails, schools and row titles wrap without `titleNumberOfLines`.
+
+A disclosure uses `trailing="disclosure"` and `expanded` for both its glyph and spoken state.
+Profile's Support tools starts collapsed. Its open panel uses `colors.background` and a 1dp
+`colors.border` top edge, with `variant="nested"` rows: min height 56, left padding 68, a bare
+20dp lead glyph in a 24dp column, and dividers inset 104. The nested panel owns those dividers.
+The Share database row passes `titleAccessory={<StatusBadge label="Sensitive" tone="warning" />}`;
+the 8dp wrapping title line lets the badge drop below the title when space runs out.
+
+| Destination | `trailing` | Glyph |
+|---|---|---|
+| Opens inside the app | `chevron` | `chevron-forward` |
+| Expands a nested panel | `disclosure` | `chevron-down` closed; `chevron-up` open |
+| OS share action, including database export confirmation | `share` | `share-outline` |
+| Crash-reporting test | `send` | `send-outline` |
+| Browser | `external` | `open-outline`; use link role and “opens in browser” label |
+
+Trailing glyphs use `colors.textSecondary`, except the expanded disclosure's ink arrow.
+`busy` replaces the glyph with a spinner, exposes `busy: true, disabled: true` and blocks presses.
+Other support actions remain independent; collapsing the panel does not suppress their outcome
+toasts. Database export first opens `ExportDatabaseSheet`, a `ConfirmSheet` wrapper with the
+Sensitive title accessory and `confirmVariant="destructive"`.
 
 ### Children components (Bold Red PR 2)
 
@@ -361,23 +390,33 @@ gap above the meta row so GroupChip's negative margins cannot overlap the result
 
 ### Sheets
 
-**`BottomSheet`** — `visible, onDismiss, title, subtitle, dismissLabel, headerExtras, footer,
+**`BottomSheet`** — `visible, onDismiss, title, subtitle, dismissLabel, headerExtras, footer, footerStyle,
 scrollable=true, keyboardAvoiding=true, maxHeight='80%', bodyContentStyle, scrollViewProps={},
 panelRole, children`. Uses Paper `Portal`, flexbox bottom anchoring, a scrim and explicit Android-back
 dismissal while visible. Supply a meaningful backdrop `dismissLabel`. Title is
 `displaySheetTitle`, subtitle `textParagraph`, radius 22, grabber 36×4/control, `shadows.sheet`,
-sides 24 and bottom padding `max(insets.bottom, 24)`. The footer has a divider; optional content
-styles compose with the scroll container. Set `scrollable=false` for a child `FlatList`.
+sides 24 and keyboard-down bottom padding `max(insets.bottom, 24)`. The footer has a divider;
+`footerStyle` merges last onto its View, allowing a caller to remove the divider or change padding.
+Optional content styles compose with the scroll container. Set `scrollable=false` for a child `FlatList`.
 Optional `panelRole` sets the panel's role and `accessibilityViewIsModal`; `ConfirmSheet` uses
 `alertdialog`.
 
 The sheet measures its panel to determine slide distance (window height until measured), retains
 the exit animation, and ignores touches/hides accessibility content as soon as `visible` becomes
 false. Cancelling an old animation cannot unmount a newly reopened sheet. See motion below.
-**C11 is still unverified:** keyboard avoidance uses `padding` on iOS and `undefined` on Android;
-the wrapper is width 100%, not the conditional Task 35 full-overlay wrapper. Task 34's A03s
-Create class → School search determines whether Task 35 is needed. No keyboard fix or device
-pass is implied by the restyle.
+
+With `keyboardAvoiding=true`, `KeyboardAvoidingView` uses `behavior="padding"` on **both**
+platforms. Its wrapper fills the overlay (`flex: 1`, `justifyContent: 'flex-end'`, width 100%)
+with top padding `insets.top + spacing.sm`. The panel keeps flexbox anchoring; never position it
+with an absolute bottom. When `useKeyboardHeight() > 0`, panel bottom padding is `spacing.xs`
+(4dp), because the safe-area inset lies behind the keyboard. Keyboard-down padding stays
+`max(insets.bottom, spacing.lg)`; sheets opting out of avoidance keep that padding and their
+existing wrapper. The default `maxHeight` remains `'80%'`; the password sheet alone passes
+`'100%'` to use the remaining space above the keyboard.
+
+**C11 landed in Profile Task 2.** Jim reproduced Create class → School search results under the
+keyboard on the Galaxy A03s, build 15. Local tests pin the shared fix; the A03s/iPhone “no double
+lift” row remains open in Profile Task 10. This is not a post-fix device pass.
 
 **`SelectSheet`** — `visible, onDismiss, title, subtitle, dismissLabel, options, selectedKey,
 onSelect, confirmLabel, cancelLabel, emptyMessage, maxHeight, searchable=false,
@@ -393,6 +432,31 @@ The D8 launch-guard sheet: primary “Clock in now”, md warning note, warning 
 clocking in”, then ink tertiary “Cancel”. It keeps its existing warning copy and handlers and
 opts out of scrolling/keyboard avoidance. Other domain sheets compose `BottomSheet` rather than
 introducing another overlay host.
+
+### Password sheets (Bold Red Profile)
+
+[`ChangePasswordSheet`](../src/components/profile/ChangePasswordSheet.js) takes
+`visible, onClose, changePassword, handle`. Its `BottomSheet` header (title and Show/Hide passwords)
+and footer (Change password and Cancel) stay outside the scrolling body. `footerStyle` removes
+the rule and sets 16dp top padding; the action gap is 8dp. The body contains three `TextField`s,
+the hint and any form error, with `keyboardShouldPersistTaps="handled"`. Current focuses on open;
+Next moves Current → New → Confirm, and Done uses the same submit path as the button. Password
+manager assistance remains enabled. Field errors use `TextField.error`; form errors use `InlineNote`.
+
+[`computeScrollTarget({ blockY, blockHeight, scrollY, viewportHeight })`](../src/utils/scrollIntoView.js)
+returns `null` when a field-plus-error block is fully visible, its top when above the viewport or
+taller than it, and its bottom minus viewport height when below it. The sheet caches block,
+viewport and scroll measurements: focus scrolls immediately, missing measurements defer until
+layout, error growth waits for the changed block's layout, and a keyboard-induced viewport
+resize retries the pending or focused block. This preserves the fixed submit area on small phones;
+native visibility and Next-key behavior at 360×640/font scale 1.3 still need Task 10.
+
+Validation remains required → length → match → verification → update. Loading disables fields
+and duplicate submits; Show/Hide and dismissal remain usable. Dismissal clears values, errors,
+password visibility and loading state so reopening starts empty. A result from an abandoned
+attempt, including after leaving Profile, produces one 4000ms success/error toast without changing
+a reopened form. A stale handle produces no feedback. Active-form failures stay inline; success
+closes and resets the sheet and publishes the success toast through the actor-scoped root host.
 
 ## Forms (Bold Red, 2026-10)
 
@@ -749,16 +813,15 @@ line once both categories are zero**; the guard fails if a fully clean file stay
 |---|---|---|---|
 | screens/auth/LoginScreen.js | 0 | TextInput, Button | Login |
 | screens/auth/ForgotPasswordScreen.js | 0 | TextInput, Button | Login |
-| screens/main/ProfileScreen.js | 2 | TextInput, Button, Card, SegmentedButtons | Profile |
-| components/profile/SignOutSheets.js | 5 | None | Profile |
 
 ## Remaining delivery boundaries
 
 Children list and Class detail are built on `feat/bold-red-children`; Record Tasks 1–12 are built
 on `feat/bold-red-record`. LiteracySessionForm, ChildSelector, LetterTrackerBottomSheet and
 SessionFormScreen pass the full guard without ratchet entries. Session complete Tasks 1–11 are
-built on `feat/bold-red-complete`; its screen left `BOARD_RATCHET` in Task 10. Profile and
-Login/reset retain their board PRs. CountChip, StickyActionFooter (including surface='onOverflow'),
+built on `feat/bold-red-complete`; its screen left `BOARD_RATCHET` in Task 10. Profile Tasks 1–7
+are built on `feat/bold-red-profile`; ProfileScreen and SignOutSheets have left `BOARD_RATCHET`.
+Login/reset retain their board PR. CountChip, StickyActionFooter (including surface='onOverflow'),
 ConfirmSheet and the celebration components are available above.
 Avatar, SyncBanner and InlineLoading are available; SyncStatusBanner and its test are removed.
 
@@ -766,10 +829,14 @@ The dead SessionsScreen, SessionsTodayRing, ProfileGearButton and HeaderBackButt
 removed. The shared Home gauge lives at `src/components/sessions/SegmentedSessionGauge.js`.
 The remaining native
 gates are Task 34's EAS preview checks, including fonts, 360dp/large text, keyboard/toast/sheet
-ordering, navigation gestures, Home comparison and C11. Task 35 is conditional on the C11 repro.
+ordering, navigation gestures and Home comparison. C11's shared fix landed in Profile Task 2;
+its no-double-lift device check belongs to Profile Task 10.
 Record's Task 14 preview/device gate and branch review remain orchestrator-owned: board screenshots,
 native discard gestures, keyboard visibility, large text, screen-reader focus/announcements,
 Reduce Motion, A03s scrolling and Home comparison are not proved by local Jest results.
 Session complete’s Task 13 branch review and Task 14 EAS preview/device gate remain
 orchestrator-owned: native animation timing, large-text wrapping, screen readers, footer/toast
 placement, exit behaviour and Home comparison still need those checks.
+Profile's Task 9 branch review and Task 10 preview/device gate remain orchestrator-owned:
+keyboard visibility, no double lift, large-text wrapping, screen-reader behavior, native share/toast
+placement, the Android Profile header and Home comparison are not proved by local Jest results.

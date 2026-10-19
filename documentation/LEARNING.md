@@ -1849,3 +1849,25 @@ earlier route unless `pop: true` is requested. Done and Android back use the exp
 `popTo('MainTabs', { screen: 'Home' })`, guarded against duplicate taps. The
 [real-navigator regression](../__tests__/sessionCompleteNavigation.test.js) checks both the
 Home destination and the remaining single `MainTabs` route, so Back cannot reveal the receipt.
+
+## Keyboard space belongs to the shared sheet (Profile C11, 2026-10-19)
+
+Jim reproduced School search results hidden under the keyboard on the Galaxy A03s, build 15.
+The app is edge-to-edge on Android, so relying on the window to resize left keyboard-avoiding
+sheets without a usable space budget. Profile Task 2 fixes the owner of that budget:
+[`BottomSheet`](../src/components/common/BottomSheet.js), shared by the School search and password forms.
+
+Its keyboard wrapper now fills the overlay and applies padding avoidance on both platforms,
+while flexbox still anchors the panel at the bottom. The panel's percentage maximum height can
+then resolve against the space above the keyboard. With the keyboard open, 4dp bottom padding
+replaces the safe-area minimum: the inset is behind the keyboard, and retaining that extra
+space would take room away from the focused field. Keyboard-down padding and the default 80%
+maximum stay intact; only the password sheet requests 100%.
+
+Avoidance and scrolling solve different problems. The shared sheet reserves visible space;
+[`ChangePasswordSheet`](../src/components/profile/ChangePasswordSheet.js) keeps its header/footer
+fixed and scrolls the focused field plus its error within the remaining body. Cached geometry
+lets Next-key focus scroll immediately, while layout changes retry after an error or keyboard
+resize. Jest proves those props and scroll targets. It cannot prove native keyboard geometry:
+the A03s/iPhone School-search no-double-lift check and the small-phone password checks remain
+Profile Task 10 gates.

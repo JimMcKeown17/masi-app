@@ -1,16 +1,21 @@
 import React from 'react';
-import { Alert, StyleSheet, TextInput as NativeTextInput } from 'react-native';
+import { Alert, StyleSheet } from 'react-native';
 import { act, fireEvent, waitFor, within } from '@testing-library/react-native';
 import { renderWithProviders as render } from '../test-support/renderWithProviders';
-import { Button } from 'react-native-paper';
 import ProfileScreen from '../src/screens/main/ProfileScreen';
 import { colors } from '../src/constants/colors';
+import { exportDatabase, exportLogs } from '../src/utils/debugExport';
+import { sendObservabilityTest } from '../src/services/observability';
 const mockChangePassword = jest.fn();
 const mockSignOut = jest.fn(async () => ({ error: null }));
 const mockCountUnsent = jest.fn(async () => ({ total: 2, byTable: {} }));
 const mockClockOut = jest.fn(async () => true);
-import { exportDatabase, exportLogs } from '../src/utils/debugExport';
-
+const mockHandle = { isCurrent: () => true, userId: 'ea-1', epoch: 1 };
+const deferred = () => {
+  let resolve; let reject;
+  const promise = new Promise((yes, no) => { resolve = yes; reject = no; });
+  return { promise, resolve, reject };
+};
 jest.mock('@expo/vector-icons', () => ({ Ionicons: () => null }), { virtual: true });
 
 jest.mock('../src/hooks/useTimeTracking', () => ({
@@ -21,7 +26,7 @@ jest.mock('../src/context/OfflineContext', () => ({
 }));
 jest.mock('../src/context/SignedInEAContext', () => ({
   useSignedInEA: () => ({
-    handle: { isCurrent: () => true },
+    handle: mockHandle,
     repositories: { syncOutbox: { countUnsent: mockCountUnsent } },
   }),
 }));
@@ -80,7 +85,6 @@ jest.mock('../src/context/AuthContext', () => ({
       jobTitleName: 'Education Assistant',
       schoolName: 'Masi Primary',
     },
-    updatePassword: jest.fn(),
     changePassword: mockChangePassword,
     signOut: mockSignOut,
   }),
@@ -104,193 +108,125 @@ jest.mock('../src/services/observability', () => ({
   sendObservabilityTest: jest.fn(async () => ({ success: true })),
 }));
 
-describe('ProfileScreen', () => {
-  beforeEach(() => {
-    jest.clearAllMocks();
+
+const renderProfile = () => render(<ProfileScreen navigation={{ goBack: jest.fn() }} />);
+const openSupport = (screen) => fireEvent.press(screen.getByRole('button', { name: 'Support tools' }));
+const openExport = (screen) => fireEvent.press(screen.getByRole('button', { name: 'Share database, sensitive' }));
+const expectToast = (screen, message, tone) => {
+  expect(within(screen.getByTestId('toast')).getByText(message)).toBeTruthy();
+  expect(StyleSheet.flatten(screen.getByTestId('toast-status', { includeHiddenElements: true }).props.style).backgroundColor)
+    .toBe(tone === 'success' ? colors.success : colors.errorBg);
+  if (tone === 'error') expect(screen.getByRole('alert')).toHaveTextContent(message);
+  else expect(screen.queryByRole('alert')).toBeNull();
+};
+
+beforeEach(() => jest.clearAllMocks());
+afterEach(() => jest.restoreAllMocks());
+
+test('shows app build and backend identity for support screenshots', () => {
+  const screen = renderProfile();
+  for (const fact of [/Version\s1\.2\.0\s\(Build\s7\)/, /Backend\ssqlite-staging/,
+    /Project\ssegygjzpujphwvrubusm/, /Device\siPhone/, /Update\sEmbedded/]) {
+    expect(screen.getByText(fact)).toBeTruthy();
+  }
+});
+
+test('Sign out asks about the shift before reading the signed-in handle unsent count', async () => {
+  const screen = renderProfile();
+  await act(async () => { fireEvent.press(screen.getByRole('button', { name: 'Sign out' })); });
+  expect(screen.getByText("You're still clocked in.")).toBeTruthy();
+  expect(mockCountUnsent).not.toHaveBeenCalled();
+  expect(mockSignOut).not.toHaveBeenCalled();
+  await act(async () => { fireEvent.press(screen.getByText('Stay clocked in and sign out')); });
+  expect(mockCountUnsent).toHaveBeenCalledTimes(1);
+  expect(screen.getByText("2 items haven't uploaded yet.")).toBeTruthy();
+  expect(mockClockOut).not.toHaveBeenCalled();
+  expect(mockSignOut).not.toHaveBeenCalled();
+  await act(async () => { fireEvent.press(screen.getByText('Sign out anyway')); });
+  expect(mockSignOut).toHaveBeenCalledTimes(1);
+});
+
+test('keeps the database export available while logs are exporting', async () => {
+  const pending = deferred();
+  exportLogs.mockReturnValueOnce(pending.promise);
+  const screen = renderProfile();
+  openSupport(screen);
+  fireEvent.press(screen.getByRole('button', { name: 'Share logs' }));
+  expect(screen.getByRole('button', { name: 'Share logs' }).props.accessibilityState).toMatchObject({ busy: true, disabled: true });
+  expect(screen.getByRole('button', { name: 'Share database, sensitive' }).props.accessibilityState).toMatchObject({ busy: false, disabled: false });
+  openExport(screen);
+  expect(screen.getByText('Export database')).toBeTruthy();
+  fireEvent.press(screen.getByRole('button', { name: 'Cancel' }));
+  await act(async () => { pending.resolve({ success: true }); });
+});
+
+test('keeps the logs export available while the database is exporting and refuses to reopen its sheet', async () => {
+  const pending = deferred();
+  exportDatabase.mockReturnValueOnce(pending.promise);
+  const screen = renderProfile();
+  openSupport(screen);
+  openExport(screen);
+  fireEvent.press(screen.getByRole('button', { name: 'Export' }));
+  await waitFor(() => expect(screen.queryByText('Export database')).toBeNull());
+  expect(screen.getByRole('button', { name: 'Share database, sensitive' }).props.accessibilityState).toMatchObject({ busy: true, disabled: true });
+  expect(screen.getByRole('button', { name: 'Share logs' }).props.accessibilityState).toMatchObject({ busy: false, disabled: false });
+  openExport(screen);
+  expect(screen.queryByText('Export database')).toBeNull();
+  await act(async () => { pending.resolve({ success: true }); });
+});
+
+test('Share database opens the export sheet instead of an alert', async () => {
+  const alert = jest.spyOn(Alert, 'alert');
+  const screen = renderProfile();
+  openSupport(screen);
+  openExport(screen);
+  expect(screen.getByText('Export database')).toBeTruthy();
+  expect(screen.getAllByText('Sensitive').length).toBeGreaterThan(0);
+  expect(alert).not.toHaveBeenCalled();
+  fireEvent.press(screen.getByRole('button', { name: 'Cancel' }));
+  await waitFor(() => expect(screen.queryByText('Export database')).toBeNull());
+  expect(screen.queryByText('This will export all local data including sensitive information. Only share with Masi support staff.')).toBeNull();
+  expect(exportDatabase).not.toHaveBeenCalled();
+});
+
+test.each([
+  ['success', { success: true }, 'Database exported successfully', 'success'],
+  ['failure', { success: false }, 'Failed to export database', 'error'],
+  ['reported error', { success: false, error: 'Disk full' }, 'Disk full', 'error'],
+  ['rejection', null, 'Failed to export database', 'error'],
+])('Export closes the sheet, exports once and toasts: %s', async (outcome, result, message, tone) => {
+  jest.spyOn(console, 'error').mockImplementation(() => {});
+  const pending = deferred();
+  exportDatabase.mockReturnValueOnce(pending.promise);
+  const screen = renderProfile();
+  openSupport(screen);
+  openExport(screen);
+  const button = screen.getByRole('button', { name: 'Export' });
+  act(() => { fireEvent.press(button); fireEvent.press(button); });
+  expect(exportDatabase).toHaveBeenCalledTimes(1);
+  expect(exportDatabase).toHaveBeenCalledWith({ handle: mockHandle });
+  await waitFor(() => expect(screen.queryByText('Export database')).toBeNull());
+  await act(async () => { if (outcome === 'rejection') pending.reject(new Error('disk')); else pending.resolve(result); });
+  expectToast(screen, message, tone);
+});
+
+test.each([
+  ['Share logs', 'success', 'Logs exported successfully', 'success'],
+  ['Share logs', 'failure', 'Disk full', 'error'],
+  ['Test crash reporting', 'success', 'Crash reporting test sent', 'success'],
+  ['Test crash reporting', 'rejection', 'Could not send crash reporting test', 'error'],
+])('%s toasts its %s outcome even after collapsing support', async (label, outcome, message, tone) => {
+  jest.spyOn(console, 'error').mockImplementation(() => {});
+  const pending = deferred();
+  (label === 'Share logs' ? exportLogs : sendObservabilityTest).mockReturnValueOnce(pending.promise);
+  const screen = renderProfile();
+  openSupport(screen);
+  fireEvent.press(screen.getByRole('button', { name: label }));
+  expect(screen.getByRole('button', { name: label }).props.accessibilityState).toMatchObject({ busy: true, disabled: true });
+  openSupport(screen);
+  await act(async () => {
+    if (outcome === 'rejection') pending.reject(new Error('offline'));
+    else pending.resolve(outcome === 'success' ? { success: true } : { success: false, error: message });
   });
-
-  test('shows app build and backend identity for support screenshots', () => {
-    const { getByText } = render(
-      <ProfileScreen navigation={{ goBack: jest.fn() }} />
-    );
-
-    expect(getByText(/Version 1\.2\.0/)).toBeTruthy();
-    expect(getByText(/Backend sqlite-staging/)).toBeTruthy();
-    expect(getByText(/Project segygjzpujphwvrubusm/)).toBeTruthy();
-  });
-
-  test('Sign Out asks about the shift before reading the signed-in handle unsent count', async () => {
-    const screen = render(
-      <ProfileScreen navigation={{ goBack: jest.fn() }} />
-    );
-    await act(async () => { fireEvent.press(screen.getByText('Sign Out')); });
-    expect(screen.getByText("You're still clocked in.")).toBeTruthy();
-    expect(mockCountUnsent).not.toHaveBeenCalled();
-    expect(mockSignOut).not.toHaveBeenCalled();
-
-    await act(async () => { fireEvent.press(screen.getByText('Stay clocked in and sign out')); });
-    expect(mockCountUnsent).toHaveBeenCalledTimes(1);
-    expect(screen.getByText("2 items haven't uploaded yet.")).toBeTruthy();
-    expect(mockClockOut).not.toHaveBeenCalled();
-    expect(mockSignOut).not.toHaveBeenCalled();
-
-    await act(async () => { fireEvent.press(screen.getByText('Sign out anyway')); });
-    expect(mockSignOut).toHaveBeenCalledTimes(1);
-  });
-
-  test('does not blame the current password when verification fails over the network', async () => {
-    const consoleError = jest.spyOn(console, 'error').mockImplementation(() => {});
-    mockChangePassword.mockResolvedValueOnce({
-      phase: 'verification',
-      error: { message: 'Network request failed', status: 0 },
-    });
-    const screen = render(
-      <ProfileScreen navigation={{ goBack: jest.fn() }} />
-    );
-
-    const passwordInputs = screen.UNSAFE_getAllByType(NativeTextInput);
-    fireEvent.changeText(passwordInputs[0], 'current-secret');
-    fireEvent.changeText(passwordInputs[1], 'new-secret-123');
-    fireEvent.changeText(passwordInputs[2], 'new-secret-123');
-    fireEvent.press(screen.getAllByText('Change Password')[1]);
-
-    await waitFor(() => {
-      expect(screen.getByText(
-        'Could not verify your current password. Check your connection and try again.'
-      )).toBeTruthy();
-    });
-    expect(screen.queryByText('Current password is incorrect')).toBeNull();
-
-    consoleError.mockRestore();
-  });
-
-  test('reports an explicitly identified invalid credential as an incorrect current password', async () => {
-    const consoleError = jest.spyOn(console, 'error').mockImplementation(() => {});
-    mockChangePassword.mockResolvedValueOnce({
-      phase: 'verification',
-      error: {
-        code: 'invalid_credentials',
-        message: 'Invalid login credentials',
-        status: 400,
-      },
-    });
-    const screen = render(
-      <ProfileScreen navigation={{ goBack: jest.fn() }} />
-    );
-
-    const passwordInputs = screen.UNSAFE_getAllByType(NativeTextInput);
-    fireEvent.changeText(passwordInputs[0], 'wrong-secret');
-    fireEvent.changeText(passwordInputs[1], 'new-secret-123');
-    fireEvent.changeText(passwordInputs[2], 'new-secret-123');
-    fireEvent.press(screen.getAllByText('Change Password')[1]);
-
-    await waitFor(() => {
-      expect(screen.getByText('Current password is incorrect')).toBeTruthy();
-    });
-    expect(screen.getByRole('alert')).toHaveTextContent('Current password is incorrect');
-
-    consoleError.mockRestore();
-  });
-
-  test.each([
-    ['', '', '', 'All password fields are required'],
-    ['current-secret', 'short', 'short', 'New password must be at least 8 characters'],
-    ['current-secret', 'new-secret-123', 'different-secret', 'New passwords do not match'],
-  ])('password validation uses an error toast: %s / %s / %s', (current, next, confirm, message) => {
-    const screen = render(<ProfileScreen navigation={{ goBack: jest.fn() }} />);
-    const inputs = screen.UNSAFE_getAllByType(NativeTextInput);
-    [current, next, confirm].forEach((value, index) => fireEvent.changeText(inputs[index], value));
-
-    fireEvent.press(screen.getByRole('button', { name: 'Change Password' }));
-
-    expect(screen.getByRole('alert')).toHaveTextContent(message);
-    expect(within(screen.getByTestId('toast')).getByText(message)).toBeTruthy();
-    expect(mockChangePassword).not.toHaveBeenCalled();
-  });
-
-  test('an export error keeps its error tone even when its wording does not start with Failed', async () => {
-    exportLogs.mockResolvedValueOnce({ success: false, error: 'Sharing is unavailable on this device' });
-    const screen = render(<ProfileScreen navigation={{ goBack: jest.fn() }} />);
-
-    fireEvent.press(screen.getByRole('button', { name: 'Share Logs' }));
-
-    expect(await screen.findByRole('alert')).toHaveTextContent('Sharing is unavailable on this device');
-    expect(within(screen.getByTestId('toast')).getByText('Sharing is unavailable on this device')).toBeTruthy();
-  });
-
-  test('a successful export keeps its success tone at the root toast host', async () => {
-    exportLogs.mockResolvedValueOnce({ success: true });
-    const screen = render(<ProfileScreen navigation={{ goBack: jest.fn() }} />);
-
-    fireEvent.press(screen.getByRole('button', { name: 'Share Logs' }));
-
-    expect(await screen.findByText('Logs exported successfully')).toBeTruthy();
-    expect(within(screen.getByTestId('toast')).getByText('Logs exported successfully')).toBeTruthy();
-    expect(StyleSheet.flatten(screen.getByTestId('toast-status', { includeHiddenElements: true }).props.style).backgroundColor).toBe(colors.success);
-    expect(screen.queryByRole('alert')).toBeNull();
-  });
-
-  test('keeps the database export available while logs are exporting', async () => {
-    let finishLogsExport;
-    exportLogs.mockImplementationOnce(() => new Promise((resolve) => {
-      finishLogsExport = resolve;
-    }));
-    const screen = render(
-      <ProfileScreen navigation={{ goBack: jest.fn() }} />
-    );
-    const getButton = (label) => screen.UNSAFE_getAllByType(Button)
-      .find((button) => button.props.children === label);
-    const logsButton = screen.getByRole('button', { name: 'Share Logs' });
-
-    fireEvent.press(logsButton);
-
-    await waitFor(() => {
-      expect(getButton('Share Logs').props).toEqual(expect.objectContaining({
-        loading: true,
-        disabled: true,
-      }));
-    });
-    expect(getButton('Share Database (Contains Sensitive Data)').props).toEqual(expect.objectContaining({
-      loading: false,
-      disabled: false,
-    }));
-
-    await act(async () => {
-      finishLogsExport({ success: true });
-    });
-  });
-
-  test('keeps the logs export available while the database is exporting', async () => {
-    let finishDatabaseExport;
-    exportDatabase.mockImplementationOnce(() => new Promise((resolve) => {
-      finishDatabaseExport = resolve;
-    }));
-    const alert = jest.spyOn(Alert, 'alert').mockImplementation((title, message, actions) => {
-      actions.find((action) => action.text === 'Export').onPress();
-    });
-    const screen = render(
-      <ProfileScreen navigation={{ goBack: jest.fn() }} />
-    );
-    const getButton = (label) => screen.UNSAFE_getAllByType(Button)
-      .find((button) => button.props.children === label);
-
-    fireEvent.press(screen.getByRole('button', {
-      name: 'Share Database (Contains Sensitive Data)',
-    }));
-
-    await waitFor(() => {
-      expect(getButton('Share Database (Contains Sensitive Data)').props).toEqual(
-        expect.objectContaining({ loading: true, disabled: true })
-      );
-    });
-    expect(getButton('Share Logs').props).toEqual(expect.objectContaining({
-      loading: false,
-      disabled: false,
-    }));
-
-    await act(async () => {
-      finishDatabaseExport({ success: true });
-    });
-    alert.mockRestore();
-  });
+  expectToast(screen, message, tone);
 });

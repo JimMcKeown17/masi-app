@@ -9,6 +9,16 @@ import { MotionProvider } from '../src/context/MotionContext';
 jest.mock('@expo/vector-icons', () => ({ Ionicons: 'Ionicons' }), { virtual: true });
 const flat = (node) => StyleSheet.flatten(node.props.style);
 
+test('forwards testID to its pressable button', () => {
+  const ui = render(<BrandButton testID="x" label="Go" onPress={jest.fn()} />);
+  expect(ui.getByTestId('x')).toBe(ui.getByRole('button', { name: 'Go' }));
+});
+
+test('destructiveQuiet loading spinner uses the error colour', () => {
+  const ui = render(<BrandButton label="Sign out" variant="destructiveQuiet" loading />);
+  expect(ui.UNSAFE_getByType(ActivityIndicator).props.color).toBe(colors.error);
+});
+
 test('renders a solid accessible primary CTA and handles presses', () => {
   const onPress = jest.fn();
   const ui = render(<BrandButton label="Record Session" onPress={onPress} />);

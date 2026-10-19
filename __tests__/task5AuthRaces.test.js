@@ -1,7 +1,7 @@
 import React from 'react';
-import { Text, TextInput } from 'react-native';
+import { Text } from 'react-native';
 import { act, cleanup, fireEvent, render, waitFor } from '@testing-library/react-native';
-import { PaperProvider, Button } from 'react-native-paper';
+import { PaperProvider } from 'react-native-paper';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { createClient } from '@supabase/supabase-js';
 import { AuthProvider, useAuth } from '../src/context/AuthContext';
@@ -63,7 +63,7 @@ function Tree({ profile = false, rosters = false, sessionForm = false }) {
     <ToastActorScope handle={auth.handle}>
     <ProfileProbe />
     {sessionForm ? <PaperProvider><SessionFormScreen navigation={navigation} /></PaperProvider> : null}
-    {profile ? <PaperProvider><ProfileScreen navigation={{ navigate: jest.fn() }} /></PaperProvider> : null}
+    {profile ? <ProfileScreen navigation={{ navigate: jest.fn() }} /> : null}
     {rosters ? <OfflineProvider><ChildrenProvider><ClassesProvider><Roster /></ClassesProvider></ChildrenProvider></OfflineProvider> : null}
     </ToastActorScope>
   </SignedInEAProvider>}</AllProviders>;
@@ -326,10 +326,12 @@ test.each([
     if (key === storageKey && phase === 'admitted storage write') { entered.resolve(); await release.promise; }
     return write(key, value);
   });
-  const inputs = view.UNSAFE_getAllByType(TextInput);
-  ['secret', 'new-secret-123', 'new-secret-123'].forEach((value, i) => fireEvent.changeText(inputs[i], value));
+  fireEvent.press(view.getByRole('button', { name: 'Change password' }));
+  ['secret', 'new-secret-123', 'new-secret-123'].forEach((value, i) =>
+    fireEvent.changeText(view.getByLabelText(['Current password', 'New password', 'Confirm new password'][i]), value));
   let change;
-  act(() => { change = view.UNSAFE_getAllByType(Button).find(node => node.props.children === 'Change Password').props.onPress(); });
+  act(() => { change = fireEvent.press(view.getByTestId('change-password-submit')); });
+  expect(change).toBeInstanceOf(Promise);
   await entered.promise;
   try {
     await act(async () => {
@@ -395,9 +397,12 @@ test('Profile password change preserves the app session through revoke-others an
   await signIn(A);
   const appHandle = getCurrentHandle();
   expect((await readPersistedSession()).access_token).toBe('S1');
-  const inputs = view.UNSAFE_getAllByType(TextInput);
-  ['secret', 'new-secret-123', 'new-secret-123'].forEach((value, i) => fireEvent.changeText(inputs[i], value));
-  await act(async () => { await view.UNSAFE_getAllByType(Button).find(node => node.props.children === 'Change Password').props.onPress(); });
+  fireEvent.press(view.getByRole('button', { name: 'Change password' }));
+  ['secret', 'new-secret-123', 'new-secret-123'].forEach((value, i) =>
+    fireEvent.changeText(view.getByLabelText(['Current password', 'New password', 'Confirm new password'][i]), value));
+  const change = fireEvent.press(view.getByTestId('change-password-submit'));
+  expect(change).toBeInstanceOf(Promise);
+  await act(async () => { await change; });
   expect(view.getByText('Password changed successfully')).toBeTruthy();
   expect(nextSessionId).toBe(2);
   let refreshed;
@@ -426,10 +431,12 @@ test.each([B, A])('late Profile verification cannot replace the new handle for %
     if (String(url).includes('/user')) return json(session(A).user);
     return json({});
   });
-  const inputs = view.UNSAFE_getAllByType(TextInput);
-  ['current-secret', 'new-secret-123', 'new-secret-123'].forEach((value, i) => fireEvent.changeText(inputs[i], value));
+  fireEvent.press(view.getByRole('button', { name: 'Change password' }));
+  ['current-secret', 'new-secret-123', 'new-secret-123'].forEach((value, i) =>
+    fireEvent.changeText(view.getByLabelText(['Current password', 'New password', 'Confirm new password'][i]), value));
   let verification;
-  act(() => { verification = view.UNSAFE_getAllByType(Button).find(node => node.props.children === 'Change Password').props.onPress(); });
+  act(() => { verification = fireEvent.press(view.getByTestId('change-password-submit')); });
+  expect(verification).toBeInstanceOf(Promise);
   await entered.promise;
   await act(async () => { await auth.signOut(); await mockClient.auth.getSession(); });
   await signIn(nextActor);
@@ -587,10 +594,12 @@ test('a late shared password update cannot publish A or show feedback after swit
     if (String(url).includes('/user') && init.method === 'PUT') { entered.resolve(); await release.promise; }
     return originalTransport(url, init);
   });
-  const inputs = view.UNSAFE_getAllByType(TextInput);
-  ['secret', 'new-secret-123', 'new-secret-123'].forEach((value, i) => fireEvent.changeText(inputs[i], value));
+  fireEvent.press(view.getByRole('button', { name: 'Change password' }));
+  ['secret', 'new-secret-123', 'new-secret-123'].forEach((value, i) =>
+    fireEvent.changeText(view.getByLabelText(['Current password', 'New password', 'Confirm new password'][i]), value));
   let change;
-  act(() => { change = view.UNSAFE_getAllByType(Button).find(node => node.props.children === 'Change Password').props.onPress(); });
+  act(() => { change = fireEvent.press(view.getByTestId('change-password-submit')); });
+  expect(change).toBeInstanceOf(Promise);
   await entered.promise;
   let signingIn;
   try {
@@ -623,10 +632,12 @@ test('a never-settling password PUT cannot block sign-out then B beyond the requ
     }
     return originalTransport(url, init);
   });
-  const inputs = view.UNSAFE_getAllByType(TextInput);
-  ['secret', 'new-secret-123', 'new-secret-123'].forEach((value, i) => fireEvent.changeText(inputs[i], value));
+  fireEvent.press(view.getByRole('button', { name: 'Change password' }));
+  ['secret', 'new-secret-123', 'new-secret-123'].forEach((value, i) =>
+    fireEvent.changeText(view.getByLabelText(['Current password', 'New password', 'Confirm new password'][i]), value));
   let change; let signingIn;
-  act(() => { change = view.UNSAFE_getAllByType(Button).find(node => node.props.children === 'Change Password').props.onPress(); });
+  act(() => { change = fireEvent.press(view.getByTestId('change-password-submit')); });
+  expect(change).toBeInstanceOf(Promise);
   await entered.promise;
   const started = Date.now();
   try {

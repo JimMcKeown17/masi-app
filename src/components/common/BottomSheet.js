@@ -5,7 +5,6 @@ import {
   BackHandler,
   findNodeHandle,
   KeyboardAvoidingView,
-  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -19,6 +18,7 @@ import { borderRadius, colors, shadows, spacing, tints } from '../../constants/c
 import { typeRoles } from '../../constants/typography';
 import { useMotion } from '../../context/MotionContext';
 import { useSheetAccessibility } from '../../context/SheetAccessibilityContext';
+import { useKeyboardHeight } from '../../hooks/useKeyboardHeight';
 import { duration, easing } from '../../constants/motion';
 
 export default function BottomSheet({
@@ -30,6 +30,7 @@ export default function BottomSheet({
   panelRole,
   headerExtras,
   footer,
+  footerStyle,
   scrollable = true,
   keyboardAvoiding = true,
   maxHeight = '80%',
@@ -39,6 +40,7 @@ export default function BottomSheet({
 }) {
   useSheetAccessibility(visible);
   const insets = useSafeAreaInsets();
+  const keyboardHeight = useKeyboardHeight();
   const { height: windowHeight } = useWindowDimensions();
   const { motionLevel } = useMotion();
   const still = motionLevel === 'still';
@@ -124,7 +126,7 @@ export default function BottomSheet({
         still ? { opacity: panelOpacity } : { transform: [{ translateY }] },
         {
           maxHeight,
-          paddingBottom: Math.max(insets.bottom, spacing.lg),
+          paddingBottom: keyboardAvoiding && keyboardHeight > 0 ? spacing.xs : Math.max(insets.bottom, spacing.lg),
         },
       ]}
     >
@@ -164,7 +166,7 @@ export default function BottomSheet({
         </View>
       )}
 
-      {footer ? <View style={styles.footer}>{footer}</View> : null}
+      {footer ? <View style={[styles.footer, footerStyle]}>{footer}</View> : null}
     </Animated.View>
   );
 
@@ -187,9 +189,9 @@ export default function BottomSheet({
         />
         {keyboardAvoiding ? (
           <KeyboardAvoidingView
-            behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+            behavior="padding"
             pointerEvents="box-none"
-            style={styles.sheetWrapper}
+            style={[styles.sheetWrapper, styles.keyboardWrapper, { paddingTop: insets.top + spacing.sm }]}
           >
             {panel}
           </KeyboardAvoidingView>
@@ -217,6 +219,10 @@ const styles = StyleSheet.create({
   },
   sheetWrapper: {
     width: '100%',
+  },
+  keyboardWrapper: {
+    flex: 1,
+    justifyContent: 'flex-end',
   },
   sheet: {
     backgroundColor: colors.surface,

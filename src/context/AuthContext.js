@@ -20,6 +20,7 @@ export const AuthProvider = ({ children }) => {
   const generationRef = useRef(0);
   const signOutOperationRef = useRef(null);
   const authMutationRef = useRef(Promise.resolve());
+  const passwordChangeRef = useRef(null);
   const signInPendingRef = useRef(null);
   const localSignOutCommittedRef = useRef(false);
   const pendingSignOutTimeoutRef = useRef(null);
@@ -229,46 +230,59 @@ export const AuthProvider = ({ children }) => {
   }, []);
 
   const changePassword = useCallback(async ({ currentPassword, newPassword, handle: origin }) => {
-    let verificationClient;
-    let outcome;
-    let phase = 'verification';
     const assertCurrent = () => {
       if (!mountedRef.current || !origin.isCurrent() || localSignOutCommittedRef.current
         || currentUserRef.current?.id !== origin.userId) throw new StaleActorError();
     };
-    try {
-      assertCurrent();
-      verificationClient = createPasswordVerificationClient(origin);
-      const { data, error } = await verificationClient.auth.signInWithPassword({
-        email: currentUserRef.current.email, password: currentPassword,
-      });
-      assertCurrent();
-      if (error) throw error;
-      if (data.user?.id !== origin.userId) throw new StaleActorError();
-      phase = 'update';
-      outcome = await runAuthMutation(async () => {
-        assertCurrent();
-        const { data: current, error: sessionError } = await supabase.auth.getSession();
-        assertCurrent();
-        if (sessionError) throw sessionError;
-        if (current.session?.user?.id !== origin.userId) throw new StaleActorError();
-        // The server retains the requesting session on password change. Use S1,
-        // the app's persisted session, rather than the verification session S2.
-        const result = await supabase.auth.updateUser({ password: newPassword });
-        assertCurrent();
-        return { error: result.error, phase };
-      });
-    } catch (error) {
-      outcome = { error, phase };
-    } finally {
-      if (verificationClient) {
-        try { await verificationClient.auth.signOut({ scope: 'local' }); }
-        catch (error) { console.warn('[Auth] Password verification cleanup failed:', error?.message); }
-      }
+    // A stale caller must not replace the current actor's queue. A new handle
+    // gets its own tail, even when the same EA signs back in.
+    try { assertCurrent(); } catch (error) { return { error, phase: 'verification' }; }
+    const actorKey = `${origin.userId}:${origin.epoch}`;
+    if (passwordChangeRef.current?.actorKey !== actorKey) {
+      passwordChangeRef.current = { actorKey, tail: Promise.resolve() };
     }
-    // Disposing the private session can itself yield across an account switch.
-    try { assertCurrent(); } catch (error) { return { error, phase }; }
-    return outcome;
+    // Queue verification through cleanup, so each attempt checks the password
+    // left by its predecessor. Keep network sign-in outside runAuthMutation.
+    const operation = passwordChangeRef.current.tail.then(async () => {
+      let verificationClient;
+      let outcome;
+      let phase = 'verification';
+      try {
+        assertCurrent();
+        verificationClient = createPasswordVerificationClient(origin);
+        const { data, error } = await verificationClient.auth.signInWithPassword({
+          email: currentUserRef.current.email, password: currentPassword,
+        });
+        assertCurrent();
+        if (error) throw error;
+        if (data.user?.id !== origin.userId) throw new StaleActorError();
+        phase = 'update';
+        outcome = await runAuthMutation(async () => {
+          assertCurrent();
+          const { data: current, error: sessionError } = await supabase.auth.getSession();
+          assertCurrent();
+          if (sessionError) throw sessionError;
+          if (current.session?.user?.id !== origin.userId) throw new StaleActorError();
+          // The server retains the requesting session on password change. Use S1,
+          // the app's persisted session, rather than the verification session S2.
+          const result = await supabase.auth.updateUser({ password: newPassword });
+          assertCurrent();
+          return { error: result.error, phase };
+        });
+      } catch (error) {
+        outcome = { error, phase };
+      } finally {
+        if (verificationClient) {
+          try { await verificationClient.auth.signOut({ scope: 'local' }); }
+          catch (error) { console.warn('[Auth] Password verification cleanup failed:', error?.message); }
+        }
+      }
+      // Disposing the private session can itself yield across an account switch.
+      try { assertCurrent(); } catch (error) { return { error, phase }; }
+      return outcome;
+    });
+    passwordChangeRef.current.tail = operation.catch(() => {});
+    return operation;
   }, [runAuthMutation]);
 
   const signOut = useCallback(async () => {

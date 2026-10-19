@@ -13,6 +13,9 @@ jest.mock('@react-native-async-storage/async-storage', () =>
 // Individual SQLite foundation tests can still reset and replace this factory.
 jest.mock('expo-sqlite', () => require('./test-support/expoSQLiteMock'));
 
+// Shared primitives also render in frozen flow suites without per-file icon mocks.
+jest.mock('@expo/vector-icons', () => ({ Ionicons: 'Ionicons' }), { virtual: true });
+
 // Suppress MaterialCommunityIcon font-loading warnings in tests
 jest.mock('react-native-paper/src/components/MaterialCommunityIcon', () => {
   const { Text } = require('react-native');

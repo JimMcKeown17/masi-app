@@ -37,8 +37,24 @@ test('renders the copy, shared button treatments and paragraph body', () => {
   });
   expect(sheet.getByText('Discard')).toHaveStyle({ color: colors.error });
   expect(sheet.getByText('Keep editing')).toHaveStyle({ ...typeRoles.textButtonM, color: colors.text });
-  expect(sheet.UNSAFE_queryByType(ScrollView)).toBeNull();
+  expect(sheet.UNSAFE_getByType(ScrollView)).toBeTruthy();
   expect(sheet.UNSAFE_queryByType(KeyboardAvoidingView)).toBeNull();
+});
+
+test('body and title accessory can scroll within the bounded sheet while both actions stay reachable', () => {
+  const onConfirm = jest.fn();
+  const onCancel = jest.fn();
+  const sheet = renderSheet({ titleAccessory: <Text>Sensitive</Text>, onConfirm, onCancel });
+  const scroll = sheet.UNSAFE_getByType(ScrollView);
+  expect(StyleSheet.flatten(scroll.props.style)).toMatchObject({ flexShrink: 1 });
+  expect(StyleSheet.flatten(sheet.getByTestId('bottom-sheet-panel').props.style)).toMatchObject({ maxHeight: '80%' });
+  expect(scroll.findAllByProps({ children: BODY }).length).toBeGreaterThan(0);
+  expect(scroll.findAllByProps({ children: 'Sensitive' }).length).toBeGreaterThan(0);
+  expect(scroll.findAllByProps({ accessibilityRole: 'button' })).toHaveLength(0);
+  fireEvent.press(sheet.getByRole('button', { name: 'Discard' }));
+  fireEvent.press(sheet.getByRole('button', { name: 'Keep editing' }));
+  expect(onConfirm).toHaveBeenCalledTimes(1);
+  expect(onCancel).toHaveBeenCalledTimes(1);
 });
 
 test('confirm calls onConfirm exactly once without cancelling', () => {

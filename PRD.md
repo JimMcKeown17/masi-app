@@ -180,7 +180,7 @@ insight flows where specified by the locked navigation contract.
 - Publish a refreshable persisted same-user session quickly enough for offline cold start.
 - Reject stale auth events from an older session attempt.
 - Keep job title, school, Programme assignment, release identity, and backend identity visible.
-- Allow password change and explicit sign-out.
+- Allow password change (a bottom sheet with inline errors; an outcome after the sheet closes arrives as a message) and explicit sign-out.
 - Never let one EA's pending outbox work push under another EA's session.
 - Zero-class onboarding must distinguish confirmed empty, unconfirmed empty, available data, and no
   active Programme assignment.
@@ -332,7 +332,7 @@ Profile support tools must:
 - export rolling local logs;
 - export SQLite-aware support diagnostics with schema, counts, sync state, release, device, Expo
   Update, backend, and representative failed/terminal operations;
-- warn that exports can contain sensitive child/session/assessment data;
+- warn, in a confirmation sheet before export, that exports can contain sensitive child/session/assessment data;
 - provide a safe handled-error Sentry verification action;
 - preserve local evidence when cloud telemetry is unavailable.
 
