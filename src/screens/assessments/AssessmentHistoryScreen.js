@@ -26,7 +26,8 @@ function formatDate(dateString) {
 
 export default function AssessmentHistoryScreen({ navigation }) {
   const onScroll = useHeaderHairline();
-  const paddingBottom = useScrollBottomPadding();
+  // The list scrolls inside the card, so the card (not the list) clears the bottom inset.
+  const cardBottom = useScrollBottomPadding(spacing.md);
   const toast = useToast();
   const { repositories } = useSignedInEA();
   const { assessments: assessmentsRepository } = repositories;
@@ -166,13 +167,12 @@ export default function AssessmentHistoryScreen({ navigation }) {
 
   return (
     <View style={styles.container}>
-      <ListGroup style={styles.group}>
+      <ListGroup style={[styles.group, { marginBottom: cardBottom }]}>
         <FlatList onScroll={onScroll} scrollEventThrottle={16}
           data={assessments}
           keyExtractor={(item) => item.id}
           renderItem={renderItem}
           style={styles.list}
-          contentContainerStyle={{ paddingBottom }}
           ListEmptyComponent={
             <View style={styles.emptyContainer}>
               <Text variant="bodyMedium" style={styles.emptyText}>

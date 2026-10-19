@@ -33,7 +33,8 @@ function formatSessionDate(dateString) {
 
 export default function SessionHistoryScreen() {
   const onScroll = useHeaderHairline();
-  const paddingBottom = useScrollBottomPadding();
+  // The list scrolls inside the card, so the card (not the list) clears the bottom inset.
+  const cardBottom = useScrollBottomPadding(spacing.md);
   const toast = useToast();
   const { repositories, services } = useSignedInEA();
   const { sessions: sessionsRepository } = repositories;
@@ -167,14 +168,13 @@ export default function SessionHistoryScreen() {
     <View style={styles.container}>
       {history.detail && <Text variant="bodySmall" style={styles.historyDetail}>{history.detail}</Text>}
       <Text variant="bodySmall" style={styles.historyDetail}>Showing sessions you recorded in the last 30 days.</Text>
-      <ListGroup style={styles.group}>
+      <ListGroup style={[styles.group, { marginBottom: cardBottom }]}>
         <FlatList onScroll={onScroll} scrollEventThrottle={16}
           refreshControl={<RefreshControl refreshing={running} onRefresh={() => services.sessionHistory.start({ userId: user?.id, force: true })} />}
           data={sessions}
           keyExtractor={(item) => item.id}
           renderItem={renderItem}
           style={styles.list}
-          contentContainerStyle={{ paddingBottom }}
           ListEmptyComponent={
             <View style={styles.emptyContainer}>
               <Text variant="bodyMedium" style={styles.emptyText}>
@@ -195,7 +195,8 @@ const styles = StyleSheet.create({
   },
   historyDetail: {
     color: colors.textSecondary,
-    margin: spacing.sm,
+    marginHorizontal: spacing.md,
+    marginTop: spacing.sm,
   },
   group: { margin: spacing.md, flexShrink: 1 },
   list: { flexGrow: 0 },
