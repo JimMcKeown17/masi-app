@@ -608,6 +608,42 @@ describe('LiteracySessionForm', () => {
     ['Reading Levels', 'Letter Tracker', 'Update Child Progress (Optional)'].forEach(copy => expect(screen.queryByText(copy)).toBeNull());
   });
 
+  // Branch review round 1: an open form that crosses programme midnight must not keep calling
+  // yesterday "Today" or refuse the new day; the selected date itself stays as chosen.
+  test('crossing programme midnight refreshes Today and the calendar without moving the selected date', async () => {
+    jest.useFakeTimers();
+    jest.setSystemTime(new Date('2026-10-31T21:59:00Z')); // 23:59 SAST
+    const screen = renderForm();
+    expect(screen.getByRole('button', { name: 'Session date, Today · Sat 31 Oct. Change date' })).toBeTruthy();
+    act(() => { jest.advanceTimersByTime(2 * 60 * 1000); });
+    const field = screen.getByRole('button', { name: 'Session date, Sat 31 Oct 2026. Change date' });
+    fireEvent.press(field);
+    const next = screen.getByRole('button', { name: 'Next month' });
+    expect(next.props.accessibilityState?.disabled).not.toBe(true);
+    fireEvent.press(next);
+    expect(screen.getByRole('button', { name: 'Sun 1 November 2026' }).props.accessibilityState?.disabled).not.toBe(true);
+    fireEvent.press(screen.getByRole('button', { name: 'Cancel' }));
+    submitValidForm(screen);
+    await waitFor(() => expect(mockPersistLiteracySession).toHaveBeenCalledWith(expect.objectContaining({
+      session: expect.objectContaining({ session_date: '2026-10-31' }),
+    })));
+    await act(async () => { jest.runOnlyPendingTimers(); });
+  });
+
+  test('two immediately rejected saves are each announced', async () => {
+    jest.replaceProperty(Platform, 'OS', 'ios');
+    const announce = jest.spyOn(AccessibilityInfo, 'announceForAccessibility');
+    jest.spyOn(console, 'error').mockImplementation(() => {});
+    mockPersistLiteracySession.mockRejectedValue(new Error('boom'));
+    const screen = renderForm();
+    submitValidForm(screen);
+    await screen.findByRole('alert');
+    await act(async () => { fireEvent.press(screen.getByText('Submit session')); });
+    await waitFor(() => expect(mockPersistLiteracySession).toHaveBeenCalledTimes(2));
+    const saveFailures = () => announce.mock.calls.filter(([text]) => text === 'Failed to save session. Please try again.');
+    await waitFor(() => expect(saveFailures()).toHaveLength(2));
+  });
+
   describe('unsaved-changes leave guard', () => {
     const goBack = (screen) => act(() => { screen.navigationRef.goBack(); });
     const dirty = (screen) => fireEvent.changeText(screen.getByPlaceholderText(COMMENTS_PLACEHOLDER), 'worked on m sounds');
@@ -621,6 +657,15 @@ describe('LiteracySessionForm', () => {
       expect(screen.getByText('Your session details have not been saved. Leaving now will discard them.')).toBeTruthy();
       expect(screen.getByText('Discard')).toBeTruthy();
       expect(screen.getByText('Keep editing')).toBeTruthy();
+    });
+
+    test('opening the discard sheet dismisses the keyboard so both choices are reachable', () => {
+      const dismiss = jest.spyOn(Keyboard, 'dismiss');
+      const screen = renderForm();
+      dirty(screen);
+      goBack(screen);
+      expect(screen.getByText('Discard this session?')).toBeTruthy();
+      expect(dismiss).toHaveBeenCalled();
     });
 
     test('"Keep editing" hides the sheet, keeps every value, and the guard stays armed', () => {

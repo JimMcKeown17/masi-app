@@ -1,6 +1,6 @@
 import { useSignedInEA } from '../../context/SignedInEAContext';
 import React, { useCallback, useState, useMemo, useRef, useEffect } from 'react';
-import { AccessibilityInfo, findNodeHandle, View, StyleSheet, Text, Platform } from 'react-native';
+import { AccessibilityInfo, findNodeHandle, Keyboard, View, StyleSheet, Text, Platform } from 'react-native';
 import { usePreventRemove } from '@react-navigation/native';
 import { useAuth } from '../../context/AuthContext';
 import { typeRoles } from '../../constants/typography';
@@ -20,7 +20,7 @@ import { useLookupsContext } from '../../context/LookupsContext';
 import { buildSessionTypeFields } from '../../utils/sessionTypeResolver';
 import { persistLiteracySession } from '../../services/literacySessionPersistence';
 import { NO_TEXT_SUGGESTIONS } from '../../constants/textInputProps';
-import { toLocalDateString } from '../../utils/localDate';
+import { useProgrammeTodayKey } from '../../hooks/useProgrammeTodayKey';
 import { validateLiteracySession } from '../../utils/literacySessionValidation';
 import { stepScrollOffset } from '../../utils/sessionFormLayout';
 import { v4 as uuidv4 } from 'uuid';
@@ -132,8 +132,8 @@ export default function LiteracySessionForm({ navigation }) {
   const { jobTitles } = useLookupsContext();
 
   const [sessionId] = useState(() => uuidv4());
-  const [sessionDateKey, setSessionDateKey] = useState(() => toLocalDateString(new Date()));
-  const todayKey = toLocalDateString(new Date());
+  const todayKey = useProgrammeTodayKey();
+  const [sessionDateKey, setSessionDateKey] = useState(todayKey);
   const [dateMenuVisible, setDateMenuVisible] = useState(false);
   const [selectedChildren, setSelectedChildren] = useState([]);
   const [selectedLetters, setSelectedLetters] = useState([]);
@@ -148,6 +148,7 @@ export default function LiteracySessionForm({ navigation }) {
   const [comments, setComments] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [saveError, setSaveError] = useState(null);
+  const saveFailureCountRef = useRef(0);
   const submittingRef = useRef(false);
   const [validationErrors, setValidationErrors] = useState({});
 
@@ -195,6 +196,8 @@ export default function LiteracySessionForm({ navigation }) {
   const pendingCompletionRef = useRef(null);
   usePreventRemove(preventLeave, ({ data }) => {
     storedActionRef.current = data.action;
+    // The sheet sits at the screen bottom; a keyboard left open from Comments would cover it.
+    Keyboard.dismiss();
     setDiscardVisible(true);
   });
 
@@ -324,7 +327,10 @@ export default function LiteracySessionForm({ navigation }) {
     } catch (error) {
       submittingRef.current = false;
       console.error('Error saving session:', error);
-      setSaveError('Failed to save session. Please try again.');
+      // A new attempt id remounts the note, so an identical message is announced again even
+      // when the clear and the next failure land in one batched render.
+      saveFailureCountRef.current += 1;
+      setSaveError({ message: 'Failed to save session. Please try again.', attempt: saveFailureCountRef.current });
     } finally {
       setSubmitting(false);
     }
@@ -393,7 +399,7 @@ export default function LiteracySessionForm({ navigation }) {
       <StickyActionFooter hideOnKeyboard>
         <View style={styles.summary}><RequirementSummary items={summaryItems} /></View>
         {saveError ? <View style={styles.saveError}>
-          <InlineNote tone="error" live="assertive">{saveError}</InlineNote>
+          <InlineNote key={saveError.attempt} tone="error" live="assertive">{saveError.message}</InlineNote>
         </View> : null}
         <BrandButton variant="primary" size="lg" label="Submit session"
           loading={submitting} loadingLabel="Saving…" onPress={handleSubmit} />
