@@ -77,8 +77,8 @@ describe('describeSyncState copy (the trust voice is the deliverable; exact stri
 
   test('offline keeps the reassurance and the calm palette', () => {
     const view = describeSyncState('offline', { waitingCount: 2 });
-    expect(view.message).toBe("Saved on your phone · 2 will sync when you're online");
-    expect(view.accessibilityLabel).toBe("Saved on your phone. 2 items will sync when you're online");
+    expect(view.message).toBe("Saved on your phone · 2 will sync when you’re online");
+    expect(view.accessibilityLabel).toBe("Saved on your phone. 2 items will sync when you’re online");
     expect(view.icon).toBe('cloud-offline-outline');
     expect(view.color).toBe(colors.info);
     expect(view.badgeCount).toBe(2);

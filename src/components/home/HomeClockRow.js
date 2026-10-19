@@ -110,8 +110,8 @@ const styles = StyleSheet.create({
   statusCopy: { flexShrink: 1 },
   labelRow: { flexDirection: 'row', alignItems: 'center', gap: 2 },
   label: { ...typeRoles.textLabel, color: colors.red50 },
-  elapsed: { ...typeRoles.displayM, lineHeight: 24, color: colors.onDark, fontVariant: ['tabular-nums'] },
-  statusStrong: { ...typeRoles.textButton, fontSize: 17, lineHeight: 22, color: colors.onDark, flexShrink: 1 },
+  elapsed: { ...typeRoles.displayCount, color: colors.onDark, fontVariant: ['tabular-nums'] },
+  statusStrong: { ...typeRoles.textOptionSelected, color: colors.onDark, flexShrink: 1 },
   action: {
     minHeight: 44, minWidth: 106, paddingHorizontal: 18, borderRadius: 999,
     alignItems: 'center', justifyContent: 'center',

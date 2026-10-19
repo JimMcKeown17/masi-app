@@ -2,15 +2,21 @@ jest.mock('@expo/vector-icons', () => ({ Ionicons: () => null }), { virtual: tru
 
 import React from 'react';
 import { render } from '@testing-library/react-native';
+import { StyleSheet } from 'react-native';
+import { colors } from '../src/constants/colors';
 import BottomTabIcon, { getTabIconName } from '../src/components/navigation/BottomTabIcon';
 
 describe('BottomTabIcon — active indicator', () => {
-  test('shows the active indicator only when focused', () => {
-    const focused = render(<BottomTabIcon routeName="Home" focused color="#000" size={24} />);
-    expect(focused.queryByTestId('tab-active-indicator')).toBeTruthy();
+  test('the focused destination shows the red50 pill and no dot', () => {
+    const focused = render(<BottomTabIcon routeName="Home" focused color={colors.tabActive} size={24} />);
+    expect(focused.queryByTestId('tab-active-indicator')).toBeNull();
+    expect(StyleSheet.flatten(focused.getByTestId('tab-icon-pill').props.style)).toMatchObject({
+      width: 56, height: 30, borderRadius: 15, backgroundColor: colors.red50,
+    });
 
-    const idle = render(<BottomTabIcon routeName="Home" focused={false} color="#000" size={24} />);
+    const idle = render(<BottomTabIcon routeName="Home" focused={false} color={colors.tabInactive} size={24} />);
     expect(idle.queryByTestId('tab-active-indicator')).toBeNull();
+    expect(StyleSheet.flatten(idle.getByTestId('tab-icon-pill').props.style).backgroundColor).toBe('transparent');
   });
 });
 

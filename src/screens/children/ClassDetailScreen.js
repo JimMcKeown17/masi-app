@@ -6,13 +6,13 @@ import {
   FAB,
   List,
   IconButton,
-  Button,
   ActivityIndicator,
 } from 'react-native-paper';
 import { colors, spacing, borderRadius } from '../../constants/colors';
 import { useClasses } from '../../context/ClassesContext';
 import { useChildren } from '../../context/ChildrenContext';
 import GroupPickerBottomSheet from '../../components/children/GroupPickerBottomSheet';
+import BrandButton from '../../components/common/BrandButton';
 import { compareGroups, getGroupColor } from '../../utils/groupHelpers';
 
 export default function ClassDetailScreen({ route, navigation }) {
@@ -34,9 +34,7 @@ export default function ClassDetailScreen({ route, navigation }) {
         // live ChildrenList root (ref intact → no re-route), so navigate() does
         // not remount the tab, reset hasAutoRouted, or bounce a single-class EA
         // straight back here.
-        <Button compact onPress={() => navigation.popToTop()}>
-          Manage classes
-        </Button>
+        <BrandButton variant="tertiary" label="Manage classes" onPress={() => navigation.popToTop()} />
       ),
     });
   }, [navigation]);

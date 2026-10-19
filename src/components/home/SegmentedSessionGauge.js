@@ -53,7 +53,7 @@ const styles = StyleSheet.create({
   // shifting the numeral off the gauge's centre line.
   suffixAnchor: { width: 0, overflow: 'visible' },
   suffix: {
-    ...typeRoles.textBodyStrong, fontSize: 17, lineHeight: 22, color: colors.textSecondary,
+    ...typeRoles.textBodyLStrong, color: colors.textSecondary,
     width: 40, marginLeft: 2, marginBottom: 4,
   },
 });

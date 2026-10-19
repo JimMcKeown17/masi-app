@@ -4,9 +4,9 @@ import { NavigationContainer, useNavigationContainerRef } from '@react-navigatio
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { useAuth } from '../context/AuthContext';
-import { View } from 'react-native';
+import { colors } from '../constants/colors';
 import LockedBottomTabBar from '../components/navigation/LockedBottomTabBar';
-import HeaderBackButton from './HeaderBackButton';
+import ScreenHeader from '../components/common/ScreenHeader';
 import SyncIndicator from '../components/common/SyncIndicator';
 import {
   registerNavigationContainer,
@@ -64,15 +64,20 @@ const ChildrenStack = createNativeStackNavigator();
 
 function AuthNavigator() {
   return (
-    <Stack.Navigator screenOptions={{ headerShown: false, headerTitleAlign: 'center' }}>
+    <Stack.Navigator
+      screenOptions={{
+        headerShown: false,
+        header: (props) => <ScreenHeader {...props} />,
+        contentStyle: { backgroundColor: colors.background },
+      }}
+    >
       <Stack.Screen name="Login" component={LoginScreen} />
       <Stack.Screen
         name="ForgotPassword"
         component={ForgotPasswordScreen}
         options={{
           headerShown: true,
-          title: 'Reset Password',
-          headerBackTitle: 'Back',
+          title: 'Reset password',
         }}
       />
     </Stack.Navigator>
@@ -82,34 +87,30 @@ function AuthNavigator() {
 function ChildrenStackNavigator() {
   return (
     <ChildrenStack.Navigator
-      screenOptions={({ navigation }) => ({
-        headerTitleAlign: 'center',
-        headerLeft: navigation.canGoBack()
-          ? () => <HeaderBackButton onPress={() => navigation.goBack()} />
-          : undefined,
-      })}
+      screenOptions={{
+        header: (props) => <ScreenHeader {...props} />,
+        contentStyle: { backgroundColor: colors.background },
+      }}
     >
       <ChildrenStack.Screen
         name="ChildrenList"
         component={ChildrenListScreen}
         options={({ navigation }) => ({
-          title: 'My Children',
+          title: 'Children',
           headerRight: () => (
-            <View style={{ marginRight: 16 }}>
-              <SyncIndicator onPress={() => navigation.navigate('SyncStatus')} />
-            </View>
+            <SyncIndicator onPress={() => navigation.navigate('SyncStatus')} />
           ),
         })}
       />
       <ChildrenStack.Screen
         name="ClassDetail"
         component={ClassDetailScreen}
-        options={{ title: 'Class Details', headerBackTitle: 'Back' }}
+        options={{ title: 'Class details' }}
       />
       <ChildrenStack.Screen
         name="ChildResults"
         component={ChildResultsScreen}
-        options={{ title: 'Child Results', headerBackTitle: 'Back' }}
+        options={{ title: 'Child results' }}
       />
     </ChildrenStack.Navigator>
   );
@@ -120,10 +121,10 @@ export function MainTabNavigator() {
     <Tab.Navigator
       tabBar={(props) => <LockedBottomTabBar {...props} />}
       screenOptions={({ navigation }) => ({
+        header: (props) => <ScreenHeader {...props} />,
+        sceneStyle: { backgroundColor: colors.background },
         headerRight: () => (
-          <View style={{ marginRight: 16 }}>
-            <SyncIndicator onPress={() => navigation.navigate('SyncStatus')} />
-          </View>
+          <SyncIndicator onPress={() => navigation.navigate('SyncStatus')} />
         ),
       })}
     >
@@ -139,7 +140,7 @@ export function MainTabNavigator() {
       <Tab.Screen
         name="Children"
         component={ChildrenStackNavigator}
-        options={{ title: 'My Children', tabBarLabel: 'Children', headerShown: false }}
+        options={{ title: 'Children', tabBarLabel: 'Children', headerShown: false }}
       />
       <Tab.Screen
         name="Insights"
@@ -158,12 +159,10 @@ export function MainTabNavigator() {
 function MainNavigator() {
   return (
     <Stack.Navigator
-      screenOptions={({ navigation }) => ({
-        headerTitleAlign: 'center',
-        headerLeft: navigation.canGoBack()
-          ? () => <HeaderBackButton onPress={() => navigation.goBack()} />
-          : undefined,
-      })}
+      screenOptions={{
+        header: (props) => <ScreenHeader {...props} />,
+        contentStyle: { backgroundColor: colors.background },
+      }}
     >
       <Stack.Screen
         name="MainTabs"
@@ -174,47 +173,42 @@ function MainNavigator() {
         name="Profile"
         component={ProfileScreen}
         options={{
-          title: 'My Profile',
-          headerBackTitle: 'Back',
+          title: 'Profile',
         }}
       />
       <Stack.Screen
         name="TimeTracking"
         component={TimeTrackingScreen}
         options={{
-          title: 'Time Tracking',
-          headerBackTitle: 'Back',
+          title: 'Time tracking',
         }}
       />
       <Stack.Screen
         name="TimeEntriesList"
         component={TimeEntriesListScreen}
         options={{
-          title: 'Work History',
-          headerBackTitle: 'Back',
+          title: 'Work history',
         }}
       />
       <Stack.Screen
         name="ClassOnboarding"
         component={ClassOnboardingScreen}
         options={{
-          title: 'Set Up Your Class',
-          headerBackTitle: 'Back',
+          title: 'Set up your class',
         }}
       />
       <Stack.Screen
         name="CreateClass"
         component={CreateClassScreen}
         options={{
-          title: 'Create Class',
-          headerBackTitle: 'Back',
+          title: 'Create class',
         }}
       />
       <Stack.Screen
         name="ChildOnboarding"
         component={ChildOnboardingScreen}
         options={{
-          title: 'Add Your Children',
+          title: 'Add your children',
           headerBackVisible: false,
           gestureEnabled: false,
         }}
@@ -223,32 +217,29 @@ function MainNavigator() {
         name="EditClass"
         component={EditClassScreen}
         options={{
-          title: 'Edit Class',
-          headerBackTitle: 'Back',
+          title: 'Edit class',
         }}
       />
       <Stack.Screen
         name="AddChild"
         component={AddChildScreen}
         options={{
-          title: 'Add Child',
-          headerBackTitle: 'Back',
+          title: 'Add child',
         }}
       />
       <Stack.Screen
         name="EditChild"
         component={EditChildScreen}
         options={{
-          title: 'Edit Child',
-          headerBackTitle: 'Back',
+          title: 'Edit child',
         }}
       />
       <Stack.Screen
         name="SessionForm"
         component={SessionFormScreen}
         options={{
-          title: 'New Session',
-          headerBackTitle: 'Back',
+          title: 'New session',
+          headerLeftIcon: 'close',
         }}
       />
       <Stack.Screen
@@ -258,7 +249,7 @@ function MainNavigator() {
           title: 'Session saved',
           // The form is replaced by this screen, so there's nothing to go "back"
           // to but the launch context; "Done" is the single, clear way out.
-          headerLeft: () => null,
+          headerLeftIcon: 'none',
           gestureEnabled: false,
         }}
       />
@@ -266,16 +257,14 @@ function MainNavigator() {
         name="SessionHistory"
         component={SessionHistoryScreen}
         options={{
-          title: 'Session History',
-          headerBackTitle: 'Back',
+          title: 'Session history',
         }}
       />
       <Stack.Screen
         name="AssessmentChildSelect"
         component={AssessmentChildSelectScreen}
         options={{
-          title: 'Select Child',
-          headerBackTitle: 'Back',
+          title: 'Select child',
         }}
       />
       <Stack.Screen
@@ -297,56 +286,49 @@ function MainNavigator() {
         name="AssessmentHistory"
         component={AssessmentHistoryScreen}
         options={{
-          title: 'Assessment History',
-          headerBackTitle: 'Back',
+          title: 'Assessment history',
         }}
       />
       <Stack.Screen
         name="LetterTracker"
         component={LetterTrackerScreen}
         options={{
-          title: 'Letter Tracker',
-          headerBackTitle: 'Back',
+          title: 'Letter tracker',
         }}
       />
       <Stack.Screen
         name="AssessmentDetail"
         component={AssessmentDetailScreen}
         options={{
-          title: 'Assessment Detail',
-          headerBackTitle: 'Back',
+          title: 'Assessment detail',
         }}
       />
       <Stack.Screen
         name="LetterMasteryRanking"
         component={LetterMasteryRankingScreen}
         options={{
-          title: 'Letter Mastery',
-          headerBackTitle: 'Back',
+          title: 'Letter mastery',
         }}
       />
       <Stack.Screen
         name="AssessmentRanking"
         component={AssessmentRankingScreen}
         options={{
-          title: 'Assessment Scores',
-          headerBackTitle: 'Back',
+          title: 'Assessment scores',
         }}
       />
       <Stack.Screen
         name="SessionCountRanking"
         component={SessionCountRankingScreen}
         options={{
-          title: 'Session Count',
-          headerBackTitle: 'Back',
+          title: 'Session count',
         }}
       />
       <Stack.Screen
         name="SyncStatus"
         component={SyncStatusScreen}
         options={{
-          title: 'Sync Status',
-          headerBackTitle: 'Back',
+          title: 'Sync status',
         }}
       />
     </Stack.Navigator>

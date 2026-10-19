@@ -27,7 +27,7 @@ describe('SyncIndicator hero variant', () => {
   test.each([
     [offline({}), 'All saved and synced. Sync status', 'icon:cloud-done-outline', null],
     [offline({ waitingCount: 3 }), 'Saved on your phone. 3 items waiting to sync. Sync status', 'icon:cloud-upload-outline', '3'],
-    [offline({ isOnline: false, waitingCount: 2 }), "Saved on your phone. 2 items will sync when you're online. Sync status", 'icon:cloud-offline-outline', '2'],
+    [offline({ isOnline: false, waitingCount: 2 }), "Saved on your phone. 2 items will sync when you’re online. Sync status", 'icon:cloud-offline-outline', '2'],
     [offline({ needsAttentionCount: 2 }), '2 items need attention. Sync status', 'icon:cloud-outline', '2'],
     [offline({ waitingCount: 140 }), 'Saved on your phone. 140 items waiting to sync. Sync status', 'icon:cloud-upload-outline', '99+'],
   ])('state %#', (state, label, icon, badge) => {

@@ -2,12 +2,11 @@
 import React from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { colors } from '../../constants/colors';
+import { colors, tints } from '../../constants/colors';
 import { typeRoles } from '../../constants/typography';
+import IconTile from '../common/IconTile';
 
 const ICONS = { sync_attention: 'cloud-outline', auto_clock_out: 'alarm-outline', assessment_due: 'clipboard-outline' };
-// Ink at ~12% (0x1F), the same token-plus-alpha pattern as the pressed fill.
-const CARD_BORDER = colors.text + '1F';
 
 function AttentionCard({ item, onOpen, onDismiss }) {
   const warning = item.tone === 'warning';
@@ -19,9 +18,7 @@ function AttentionCard({ item, onOpen, onDismiss }) {
         accessibilityLabel={item.accessibilityLabel}
         style={({ pressed }) => [styles.main, pressed ? styles.pressed : null]}
       >
-        <View style={[styles.tile, warning ? styles.tileWarning : null]}>
-          <Ionicons name={ICONS[item.kind]} size={22} color={warning ? colors.warningText : colors.text} />
-        </View>
+        <IconTile icon={ICONS[item.kind]} tone={warning ? 'warning' : 'canvas'} iconSize={22} />
         <View style={styles.copy}>
           <Text style={styles.title}>{item.title}</Text>
           <Text style={styles.subtitle}>{item.subtitle}</Text>
@@ -57,12 +54,10 @@ const styles = StyleSheet.create({
   area: { gap: 8 },
   card: {
     flexDirection: 'row', alignItems: 'center', minHeight: 60, borderRadius: 18,
-    backgroundColor: colors.surface, borderWidth: 1, borderColor: CARD_BORDER, overflow: 'hidden',
+    backgroundColor: colors.surface, borderWidth: 1, borderColor: tints.rule, overflow: 'hidden',
   },
   main: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 10, paddingLeft: 10, paddingRight: 11 },
-  pressed: { transform: [{ scale: 0.98 }], backgroundColor: colors.text + '0F' },
-  tile: { width: 40, height: 40, borderRadius: 14, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.background },
-  tileWarning: { backgroundColor: colors.warningBg },
+  pressed: { transform: [{ scale: 0.98 }], backgroundColor: tints.pressed },
   copy: { flex: 1, gap: 2 },
   title: { ...typeRoles.textBodyStrong, color: colors.text },
   subtitle: { ...typeRoles.textCaption, color: colors.textSecondary },
