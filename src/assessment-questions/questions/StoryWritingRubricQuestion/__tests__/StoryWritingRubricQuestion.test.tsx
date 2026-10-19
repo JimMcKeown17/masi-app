@@ -424,6 +424,23 @@ describe('StoryWritingRubricQuestion — itemSet override', () => {
     expect(onComplete.mock.calls[0][0].derived).toMatchObject({ ea_rubric_total: 40, max: 40, percent: 100 });
   });
 
+  test('11-chip rows wrap with equal gaps and preserve 48 px touch targets', () => {
+    const r = render(
+      <StoryWritingRubricQuestion language="en" instructions="." onComplete={jest.fn()}
+        itemSet={{ ...SET, score_range: { min: 0, max: 10 } }} />,
+    );
+    fireEvent.press(r.getByText('Start'));
+
+    for (const dimension of SET.dimensions) {
+      expect(r.getByTestId(`rubric-chips-${dimension.code}`)).toHaveStyle({
+        flexDirection: 'row', flexWrap: 'wrap', gap: 8,
+      });
+      const chips = r.getAllByTestId(new RegExp(`^chip-${dimension.code}-`));
+      expect(chips).toHaveLength(11);
+      for (const chip of chips) expect(chip).toHaveStyle({ width: 48, height: 48 });
+    }
+  });
+
   test.each([0, 2])('accepts equal range bounds at %s and emits a finite percentage', (score) => {
     const onComplete = jest.fn();
     const r = render(

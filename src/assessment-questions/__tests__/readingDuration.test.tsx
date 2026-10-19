@@ -45,6 +45,38 @@ describe.each([
     return { screen, onComplete };
   }
 
+  describe.each([false, true])('End with an overdue callback (earlier End cancelled: %s)', (cancelEarlierEnd) => {
+    test.each([60000, 65000])('End at %i ms resolves the deadline before delayed confirmation', (elapsedMs) => {
+      const { screen, onComplete } = startReading(60);
+      const startedAt = Date.now();
+      if (cancelEarlierEnd) {
+        act(() => jest.advanceTimersByTime(20000));
+        fireEvent.press(screen.getByText('End'));
+        act(() => jest.advanceTimersByTime(10000));
+        fireEvent.press(screen.getByText('Cancel'));
+      }
+
+      // Move wall time to/past the deadline without running any timer callbacks.
+      act(() => jest.setSystemTime(startedAt + elapsedMs));
+      expect(screen.queryByText('Last item attempted')).toBeNull();
+      fireEvent.press(screen.getByText('End'));
+      expect(screen.getByText('Last item attempted')).toBeTruthy();
+      const canCancel = screen.queryByText('Cancel') !== null;
+      act(() => jest.advanceTimersByTime(30000));
+      expect(onComplete).not.toHaveBeenCalled();
+      fireEvent.press(screen.getByText('Confirm'));
+
+      expect(onComplete).toHaveBeenCalledTimes(1);
+      const result = onComplete.mock.calls[0][0];
+      expect(result.duration_ms).toBe(60000);
+      expect(result.stopped_reason).toBe('timer');
+      expect(result.derived.total_correct).toBe(labels.length);
+      expect(result.derived.was_timed).toBe(true);
+      expect(result.derived.correct_words_per_minute).toBe(reportsWpm ? labels.length : undefined);
+      expect(canCancel).toBe(false);
+    });
+  });
+
   test.each([0, 5000])('timer freezes at its deadline despite a %i ms callback delay and delayed confirmation', (callbackDelay) => {
     const { screen, onComplete } = startReading(60);
     // Jump wall time without running callbacks, then let the first interval run.

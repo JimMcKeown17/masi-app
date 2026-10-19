@@ -104,6 +104,11 @@ export function ReadWordsQuestion(
   const startTimeMsRef = useRef<number | null>(null);
   const stopTimeMsRef = useRef<number | null>(null);
 
+  const getDeadlineMs = useCallback(() => {
+    if (startTimeMsRef.current === null || durationSec === undefined) return null;
+    return startTimeMsRef.current + durationSec * 1000;
+  }, [durationSec]);
+
   const words = effectiveItemSet.words;
   const indexedWords = words.map((word, idx) => ({ word, idx }));
   const wordRows = effectiveItemSet.row_lengths
@@ -164,8 +169,8 @@ export function ReadWordsQuestion(
     if (startTimeMsRef.current === null) {
       startTimeMsRef.current = Date.now();
     }
-    if (durationSec === undefined) return undefined;
-    const deadlineMs = startTimeMsRef.current + durationSec * 1000;
+    const deadlineMs = getDeadlineMs();
+    if (deadlineMs === null) return undefined;
     const interval = setInterval(() => {
       if (Date.now() >= deadlineMs) {
         clearInterval(interval);
@@ -176,7 +181,7 @@ export function ReadWordsQuestion(
       }
     }, 250);
     return () => clearInterval(interval);
-  }, [phase, durationSec]);
+  }, [phase, getDeadlineMs]);
 
   const handleToggle = useCallback(
     (idx: number, item_key: string, word: string) => {
@@ -306,9 +311,14 @@ export function ReadWordsQuestion(
         <Pressable
           accessibilityRole="button"
           onPress={() => {
-            // Timed scores measure reading, not time spent confirming the marker.
-            if (durationSec !== undefined) stopTimeMsRef.current = Date.now();
-            setMarkReason('ea_ended');
+            const nowMs = Date.now();
+            const deadlineMs = getDeadlineMs();
+            const deadlineReached = deadlineMs !== null && nowMs >= deadlineMs;
+            // Resolve expiry here too: End can arrive before a delayed timer callback.
+            if (deadlineMs !== null) {
+              stopTimeMsRef.current = deadlineReached ? deadlineMs : nowMs;
+            }
+            setMarkReason(deadlineReached ? 'timer' : 'ea_ended');
             setPhase('mark-last');
           }}
         >

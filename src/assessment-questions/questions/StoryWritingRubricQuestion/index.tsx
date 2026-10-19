@@ -354,7 +354,7 @@ export function StoryWritingRubricQuestion(props: QuestionProps) {
                   <Text style={styles.viewRubricText}>View full rubric</Text>
                 </Pressable>
               </View>
-              <View style={styles.chipRow}>
+              <View testID={`rubric-chips-${d.code}`} style={styles.chipRow}>
                 {chipScores.map((s) => {
                   const isSelected = selectedScore === s;
                   return (
@@ -526,6 +526,7 @@ const styles = StyleSheet.create({
   viewRubricText: { fontSize: 12, color: tokens.color.primary, fontWeight: '600' },
   chipRow: {
     flexDirection: 'row',
+    flexWrap: 'wrap',
     gap: 8,
     marginBottom: 6,
   },
