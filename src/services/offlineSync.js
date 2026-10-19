@@ -731,6 +731,34 @@ const makeFailedRecord = (outboxRecord, reason) => ({
   reason,
 });
 
+const buildOperationPatch = (tableName, operation, payload) => {
+  if (operation === 'archive' || operation === 'restore') {
+    const archiveColumns = ARCHIVE_SERVER_COLUMNS[tableName] || [];
+    const patch = Object.fromEntries(
+      archiveColumns
+        .filter((column) => Object.prototype.hasOwnProperty.call(payload, column))
+        .map((column) => [column, payload[column]])
+    );
+    if (VERSIONED_TABLES.has(tableName) && Object.prototype.hasOwnProperty.call(payload, 'row_version')) {
+      patch.row_version = payload.row_version;
+    }
+    return patch;
+  }
+  if (operation === 'update' && UPDATE_BY_ID_TABLES.has(tableName)) {
+    // Full stored snapshots may predate an archive/restore. Ordinary edits must
+    // not replay that lifecycle state. Mastery reactivation is intentionally an
+    // update with deleted_at:null (masteryRepository.enqueueMasteryWrite).
+    const lifecycleColumns = tableName === 'letter_mastery'
+      ? [] : (ARCHIVE_SERVER_COLUMNS[tableName] || []);
+    return Object.fromEntries(
+      Object.entries(payload).filter(([column]) => (
+        !UPDATE_PATCH_EXCLUDED_COLUMNS.has(column) && !lifecycleColumns.includes(column)
+      ))
+    );
+  }
+  return payload;
+};
+
 const runServerOperation = async (supabaseClient, config, outboxRecord) => {
   if (outboxRecord.operation !== 'hard_delete' && outboxRecord.payload == null) {
     return {
@@ -783,15 +811,7 @@ const runServerOperation = async (supabaseClient, config, outboxRecord) => {
   }
 
   if (outboxRecord.operation === 'archive' || outboxRecord.operation === 'restore') {
-    const archiveColumns = ARCHIVE_SERVER_COLUMNS[config.tableName] || [];
-    const archivePatch = Object.fromEntries(
-      archiveColumns
-        .filter((column) => Object.prototype.hasOwnProperty.call(payload, column))
-        .map((column) => [column, payload[column]])
-    );
-    if (VERSIONED_TABLES.has(config.tableName) && Object.prototype.hasOwnProperty.call(payload, 'row_version')) {
-      archivePatch.row_version = payload.row_version;
-    }
+    const archivePatch = buildOperationPatch(config.tableName, outboxRecord.operation, payload);
     const { data, error } = await supabaseClient
       .from(config.tableName)
       .update(archivePatch)
@@ -815,16 +835,7 @@ const runServerOperation = async (supabaseClient, config, outboxRecord) => {
     // buildSyncPayload has already re-derived deterministic ids (letter_mastery), so the server id
     // is the payload id, not the outbox record_id.
     const serverId = payload.id || outboxRecord.record_id;
-    // Full stored snapshots may predate an archive/restore. Ordinary edits must
-    // not replay that lifecycle state. Mastery reactivation is intentionally an
-    // update with deleted_at:null (masteryRepository.enqueueMasteryWrite).
-    const lifecycleColumns = config.tableName === 'letter_mastery'
-      ? [] : (ARCHIVE_SERVER_COLUMNS[config.tableName] || []);
-    const patch = Object.fromEntries(
-      Object.entries(payload).filter(([column]) => (
-        !UPDATE_PATCH_EXCLUDED_COLUMNS.has(column) && !lifecycleColumns.includes(column)
-      ))
-    );
+    const patch = buildOperationPatch(config.tableName, outboxRecord.operation, payload);
     const { data, error } = await supabaseClient
       .from(config.tableName)
       .update(patch)
@@ -915,6 +926,7 @@ const finalizeSuccess = async ({
   database,
   outboxRecord,
   tableName,
+  applyAcknowledgedPayload,
 }) => runRepositoryTransaction(database, async (txn) => {
   const deleteResult = await txn.runAsync(`
     delete from sync_outbox
@@ -939,6 +951,9 @@ const finalizeSuccess = async ({
       syncStatus: hasRemainingOutbox ? 'pending' : 'synced',
       lastSyncError: null,
     });
+    if (!hasRemainingOutbox && applyAcknowledgedPayload) {
+      await applyAcknowledgedPayload(txn, tableName, outboxRecord.record_id, outboxRecord.operation, outboxRecord.payload);
+    }
   }
   return true;
 });
@@ -1018,7 +1033,7 @@ const finalizeOutboxOnlyTerminalFailure = async ({
   return true;
 });
 
-const finalizeManySuccess = async ({ database, records, tableName }) => {
+const finalizeManySuccess = async ({ database, records, tableName, applyAcknowledgedPayload }) => {
   for (const chunk of chunkArray(records, 200)) {
     await runRepositoryTransaction(database, async (txn) => {
       for (const outboxRecord of chunk) {
@@ -1040,6 +1055,9 @@ const finalizeManySuccess = async ({ database, records, tableName }) => {
             syncStatus: hasRemainingOutbox ? 'pending' : 'synced',
             lastSyncError: null,
           });
+          if (!hasRemainingOutbox) {
+            await applyAcknowledgedPayload(txn, tableName, outboxRecord.record_id, outboxRecord.operation, outboxRecord.payload);
+          }
         }
       }
     });
@@ -1113,6 +1131,27 @@ export const createOutboxSyncEngine = ({
   enqueueRequest,
   getAuthSession = () => supabaseClient.auth.getSession(),
 } = {}) => {
+  const localColumnsByTable = new Map();
+  // A terminal pull may replace domain content while retaining the queued correction.
+  // Apply the accepted patch after bookkeeping, since upserts can normalize the id.
+  const applyAcknowledgedPayload = async (txn, tableName, recordId, operation, payload) => {
+    if (!isStampedOperation(tableName, operation)) return;
+    if (!localColumnsByTable.has(tableName)) {
+      const columns = await txn.getAllAsync('select name from pragma_table_info(?)', tableName);
+      localColumnsByTable.set(tableName, new Set(columns.map(column => column.name)));
+    }
+    const localColumns = localColumnsByTable.get(tableName);
+    const patch = buildOperationPatch(tableName, operation, buildSyncPayload(tableName, payload, operation));
+    const entries = Object.entries(patch).filter(([column]) => (
+      localColumns.has(column) && !LOCAL_ONLY_COLUMNS.includes(column)
+    ));
+    if (entries.length === 0) return;
+    await txn.runAsync(`
+      update ${quoteIdentifier(tableName)}
+      set ${entries.map(([column]) => `${quoteIdentifier(column)} = ?`).join(', ')}
+      where id = ?
+    `, ...entries.map(([, value]) => value), recordId);
+  };
   const safeDuplicateTables = new Set(safeDuplicateSuccessTables.map(normalizeTableName));
   const getConfig = (tableName) => {
     const normalized = normalizeTableName(tableName);
@@ -1176,6 +1215,7 @@ export const createOutboxSyncEngine = ({
           database,
           outboxRecord: inFlightRecord,
           tableName: config.tableName,
+          applyAcknowledgedPayload,
           outboxRepository,
         });
         return { success: true };
@@ -1383,7 +1423,7 @@ export const createOutboxSyncEngine = ({
         return await processBatchFallback(outboxRecords, passUserId, fallbackBudget);
       }
 
-      await finalizeManySuccess({ database, records: inFlightRecords, tableName: config.tableName });
+      await finalizeManySuccess({ database, records: inFlightRecords, tableName: config.tableName, applyAcknowledgedPayload });
 
       return outboxRecords.map(() => ({ success: true }));
     } catch (error) {

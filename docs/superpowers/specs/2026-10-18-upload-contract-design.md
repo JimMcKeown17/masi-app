@@ -170,9 +170,10 @@ stays separate pending work: it changes the slot's `updated_at`, so `finalizeSuc
 - Skipped numbers (a send that never reached the server) are harmless: the rule only compares.
 - `insertOutboxRecord` does not change.
 
-**Only two places write `row_version` locally:** the stamping point and the download save. Local
-edits never set it. A local-write upsert keeps the stored value on conflict, so a stale in-memory
-object cannot move it backwards.
+**Only the stamping point and the download save advance `row_version` locally;** success
+finalization reapplies the acknowledged content and its sent version when no newer outbox work
+owns the row. Local edits never set it. A local-write upsert keeps the stored value on conflict,
+so a stale in-memory object cannot move it backwards.
 
 ### Carrying it to the server (`offlineSync.js`)
 

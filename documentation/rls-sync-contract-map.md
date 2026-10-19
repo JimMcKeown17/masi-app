@@ -323,7 +323,8 @@ is still a pilot gate. `time_entries` uses the forward-only rule below instead o
 ### Local writes, claim snapshot, and pulls
 
 SQLite migration 14 adds `row_version integer not null default 1` to the same 11 local tables.
-Only the claim stamp and download save write the local version. `upsertDomainRecord` removes
+Only the claim stamp and download save advance the local version; success finalization reapplies
+the sent version. `upsertDomainRecord` removes
 `row_version` from normalized records whose `sync_status` is not `synced`: local inserts take the
 default and local edits preserve the stored version, even when a stale object contains a version.
 All nine roster download savers retain the server version, including the field-by-field
@@ -346,6 +347,10 @@ Single sends, batches, and batch fallback send the snapshot returned by `markInF
 A coalesced edit after claim changes the slot's `updated_at`; stale finalization returns the
 replacement to pending for its own send without changing the already-claimed request. Claiming a
 terminal domain row makes it pending so an overlapping pull cannot replace that forced retry.
+After an unchanged slot is acknowledged, single and batch success finalization apply the sent
+operation's content and `row_version` in the same transaction, restricted to local domain columns
+and the request's shared patch rules, unless another outbox slot for that record owns newer local
+content.
 The 11 `SERVER_COLUMNS` allowlists retain `row_version`; archive/restore patches include it, and
 `UPDATE_PATCH_EXCLUDED_COLUMNS` does not remove it. Payload construction receives the operation
 and strips the version from operations that must remain unstamped.

@@ -20,8 +20,9 @@ const childPayload = (id = CHILD_ID) => ({
 });
 
 // A synthetic server enforcing the version rule; PostgreSQL is a separate gate.
-const createVersionedServer = (initialRows = []) => {
+const createVersionedServer = (initialRows = [], { firstUpdateError = null } = {}) => {
   const rows = new Map(initialRows.map(row => [row.id, row]));
+  let updateError = firstUpdateError;
   const accept = (id, patch) => {
     const existing = rows.get(id);
     if (patch.row_version < (existing?.row_version ?? 1)) {
@@ -34,9 +35,14 @@ const createVersionedServer = (initialRows = []) => {
     rows,
     ...createSupabaseMock({
       upsertResults: { children: ({ payload }) => accept(payload.id, payload) },
-      updateResults: { children: ({ value, payload }) => (
-        rows.has(value) ? accept(value, payload) : { data: [], error: null }
-      ) },
+      updateResults: { children: ({ value, payload }) => {
+        if (updateError) {
+          const error = updateError;
+          updateError = null;
+          return { error };
+        }
+        return rows.has(value) ? accept(value, payload) : { data: [], error: null };
+      } },
     }),
   };
 };
@@ -104,6 +110,97 @@ describe('row versions at upload claim', () => {
     }
   });
 
+  test.each(['single', 'batch'])('insert success applies the sent content: %s', async mode => {
+    const ids = mode === 'batch' ? [CHILD_ID, SIBLING_ID] : [CHILD_ID];
+    for (const id of ids) {
+      await seedChild(id);
+      await enqueue('insert', {
+        ...childPayload(id), first_name: 'Recovered', age: 8, updated_at: ARCHIVED_AT,
+        history_reference: 1, server_updated_at: ARCHIVED_AT, sync_status: 'terminal',
+      });
+    }
+    const { supabaseClient, calls } = createSupabaseMock();
+    expect(await makeEngine(supabaseClient).syncAll()).toMatchObject({ totalSynced: ids.length, totalFailed: 0 });
+    expect(calls).toHaveLength(1);
+    expect(Array.isArray(calls[0].payload)).toBe(mode === 'batch');
+    for (const id of ids) {
+      expect(await readChild(id)).toMatchObject({
+        first_name: 'Recovered', age: 8, updated_at: ARCHIVED_AT, row_version: 2, sync_status: 'synced',
+        history_reference: 0, server_updated_at: null,
+      });
+    }
+    expect(await outbox.countUnsent()).toMatchObject({ total: 0 });
+  });
+
+  test.each(['single', 'batch'])('newer queued edit is not overwritten: %s', async mode => {
+    const ids = mode === 'batch' ? [CHILD_ID, SIBLING_ID] : [CHILD_ID];
+    for (const id of ids) await children.saveChildRecord(childPayload(id));
+    const { supabaseClient, calls } = createSupabaseMock({ upsertResults: {
+      children: async () => {
+        await children.updateChild(CHILD_ID, { first_name: 'Newer edit' });
+        return { error: null };
+      },
+    } });
+    const engine = makeEngine(supabaseClient);
+    expect(await engine.syncAll()).toMatchObject({ totalSynced: ids.length, totalFailed: 0 });
+    expect(calls).toHaveLength(1);
+    expect(Array.isArray(calls[0].payload)).toBe(mode === 'batch');
+    expect(await outbox.getById(`children:${CHILD_ID}:insert`)).toBeNull();
+    expect(await outbox.getById(`children:${CHILD_ID}:update`)).toMatchObject({
+      status: 'pending', payload: { first_name: 'Newer edit' },
+    });
+    expect(await readChild()).toMatchObject({ first_name: 'Newer edit', row_version: 2, sync_status: 'pending' });
+    expect(await engine.syncAll()).toMatchObject({ totalSynced: 1, totalFailed: 0 });
+    expect(calls[1].payload).toMatchObject({ first_name: 'Newer edit', row_version: 3 });
+    expect(await readChild()).toMatchObject({ first_name: 'Newer edit', row_version: 3, sync_status: 'synced' });
+    expect(await outbox.countUnsent()).toMatchObject({ total: 0 });
+  });
+
+  test.each(['archive', 'restore'])('%s success applies only lifecycle columns', async operation => {
+    await children.saveChildRecord({
+      ...childPayload(), archived_at: ARCHIVED_AT, archive_reason: 'Keep reason', sync_status: 'synced',
+    });
+    const archivedAt = operation === 'archive' ? REPLACEMENT_ARCHIVED_AT : null;
+    await enqueue(operation, {
+      ...childPayload(), first_name: 'Stale name', created_by: 'other-user',
+      archived_at: archivedAt, archived_by_user_id: 'user-1',
+    });
+    const { supabaseClient, calls } = createSupabaseMock();
+    expect(await makeEngine(supabaseClient).syncAll()).toMatchObject({ totalSynced: 1, totalFailed: 0 });
+    expect(calls[0].payload).toEqual({ archived_at: archivedAt, archived_by_user_id: 'user-1', row_version: 2 });
+    expect(await readChild()).toMatchObject({
+      first_name: 'Original', created_by: 'user-1', archived_at: archivedAt,
+      archived_by_user_id: 'user-1', archive_reason: 'Keep reason', row_version: 2, sync_status: 'synced',
+    });
+    expect(await outbox.countUnsent()).toMatchObject({ total: 0 });
+  });
+
+  test('update success applies only the accepted patch', async () => {
+    await children.saveChildRecord({
+      ...childPayload(), archived_at: ARCHIVED_AT, archived_by_user_id: 'user-1',
+      archive_reason: 'Keep reason', sync_status: 'synced',
+    });
+    const before = await readChild();
+    await enqueue('update', {
+      ...childPayload(), first_name: 'Corrected', created_by: 'other-user', created_at: '2000-01-01T00:00:00.000Z',
+      updated_at: REPLACEMENT_ARCHIVED_AT,
+      archived_at: null, archived_by_user_id: null, archive_reason: null,
+      history_reference: 1, server_updated_at: ARCHIVED_AT,
+    });
+    const { supabaseClient, calls } = createSupabaseMock();
+    expect(await makeEngine(supabaseClient).syncAll()).toMatchObject({ totalSynced: 1, totalFailed: 0 });
+    expect(calls[0].payload).toEqual({
+      first_name: 'Corrected', last_name: 'Child', updated_at: REPLACEMENT_ARCHIVED_AT, row_version: 2,
+    });
+    expect(await readChild()).toMatchObject({
+      first_name: 'Corrected', created_by: before.created_by, created_at: before.created_at,
+      archived_at: ARCHIVED_AT, archived_by_user_id: 'user-1', archive_reason: 'Keep reason',
+      updated_at: REPLACEMENT_ARCHIVED_AT,
+      history_reference: 0, server_updated_at: null, row_version: 2, sync_status: 'synced',
+    });
+    expect(await outbox.countUnsent()).toMatchObject({ total: 0 });
+  });
+
   test.each(['insert', 'update', 'archive', 'restore'])('each operation carries row_version: %s', async operation => {
     await seedChild();
     const archivedAt = operation === 'archive' ? ARCHIVED_AT : null;
@@ -122,6 +219,7 @@ describe('row versions at upload claim', () => {
     await seedChild();
     await children.saveStaffChild({
       id: 'assignment-1', child_id: CHILD_ID, user_id: 'user-1', created_by: 'user-1',
+      assigned_at: '2026-10-18T07:00:00.000Z',
     });
     const assignment = await db.getFirstAsync('select * from child_ea_assignments');
     const { supabaseClient, calls } = createSupabaseMock();
@@ -236,6 +334,7 @@ describe('row versions at upload claim', () => {
         ? { archived_at: REPLACEMENT_ARCHIVED_AT, row_version: claimedVersion + 1 }
         : { first_name: 'Replacement', row_version: claimedVersion + 1 });
       expect(await outbox.getById(slotId)).toBeNull();
+      expect(await db.getAllAsync('select id, status, last_error from sync_outbox')).toEqual([]);
       expect(await outbox.countUnsent()).toMatchObject({ total: 0 });
       expect(await readChild()).toMatchObject({ sync_status: 'synced' });
     });
@@ -250,6 +349,34 @@ describe('row versions at upload claim', () => {
     expect(result.totalTerminal).toBe(0);
     expect(server.calls.map(call => [call.type, call.payload.row_version])).toEqual([['upsert', 2], ['update', 3]]);
     expect(server.rows.get(CHILD_ID)).toMatchObject({ first_name: 'Edited', row_version: 3 });
+    expect(await outbox.countUnsent()).toMatchObject({ total: 0 });
+  });
+
+  test.each(['MV001', '42501'])('terminal recovery keeps the recovered edit after %s', async code => {
+    const localVersion = code === '42501' ? 7 : 1;
+    await children.saveChildRecord({ ...childPayload(), row_version: localVersion, sync_status: 'synced' });
+    await children.updateChild(CHILD_ID, { first_name: 'Corrected' });
+    const server = createVersionedServer([{ ...childPayload(), row_version: 7 }], {
+      firstUpdateError: code === '42501' ? { code, message: 'row-level security policy denied update' } : null,
+    });
+    const engine = makeEngine(server.supabaseClient);
+
+    expect(await engine.syncAll()).toMatchObject({ totalSynced: 0, totalTerminal: 1 });
+    expect(await readChild()).toMatchObject({ first_name: 'Corrected', row_version: localVersion + 1, sync_status: 'terminal' });
+    expect(await children.saveServerChildRows([{ ...server.rows.get(CHILD_ID), sync_status: 'synced' }]))
+      .toMatchObject({ applied: 1, failed: 0 });
+    expect(await readChild()).toMatchObject({ first_name: 'Original', row_version: 7, sync_status: 'synced' });
+    expect((await outbox.getTerminalRecords())[0].payload.first_name).toBe('Corrected');
+
+    expect(await engine.syncAll({ force: true })).toMatchObject({ totalSynced: 1, totalFailed: 0 });
+    expect(server.calls[1].payload).toMatchObject({ first_name: 'Corrected', row_version: 8 });
+    expect(server.rows.get(CHILD_ID)).toMatchObject({ first_name: 'Corrected', row_version: 8 });
+    expect(await readChild()).toMatchObject({ first_name: 'Corrected', row_version: 8, sync_status: 'synced' });
+
+    await children.updateChild(CHILD_ID, { age: 8 });
+    expect(await engine.syncAll()).toMatchObject({ totalSynced: 1, totalFailed: 0 });
+    expect(server.calls[2].payload).toMatchObject({ first_name: 'Corrected', age: 8, row_version: 9 });
+    expect(server.rows.get(CHILD_ID)).toMatchObject({ first_name: 'Corrected', age: 8, row_version: 9 });
     expect(await outbox.countUnsent()).toMatchObject({ total: 0 });
   });
 
