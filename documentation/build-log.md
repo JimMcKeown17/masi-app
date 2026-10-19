@@ -1672,3 +1672,55 @@ Node 20.19.4 scope assertions passed: exactly five documentation paths, empty in
 CONTEXT.md, append-only build log, and unchanged roadmap before §5 (including “BackMy Profile”).
 The full unit run also logged an undefined `.catch` error from ChildrenContextPendingDelete.integration.test.js
 without failing assertions; recorded for the orchestrator, not investigated in this documentation scope.
+
+### 2026-10-19 — Bold Red Login Tasks 8–9
+
+#### Verification Register
+
+Local Node 20.19.4 gates below; Tasks 2–7 are focused reruns of the inherited implementation.
+Every command uses `PATH=$HOME/.nvm/versions/node/v20.19.4/bin:$PATH`.
+
+| Gate | Command (after the Node prefix) | Result |
+|---|---|---|
+| Incoming baseline | `npx jest` | PASS: 340 suites / 3,554 tests; exit 0 |
+| Incoming integration baseline | `npm run test:integration` | PASS: 52 suites / 543 tests; exit 0 |
+| Task 2 type | `npx jest __tests__/typography.test.js __tests__/designSystemGuard.test.js` | PASS: 2 suites / 284 tests; exit 0 |
+| Task 3 art | `npx jest __tests__/loginHeroGeometry.test.js __tests__/LoginBrand.test.js __tests__/designSystemGuard.test.js` | PASS: 3 suites / 250 tests; exit 0 |
+| Task 4 fields | `npx jest __tests__/TextField.test.js __tests__/ChangePasswordSheet.test.js __tests__/domainTextInputAudit.test.js` | PASS: 3 suites / 53 tests; exit 0 |
+| Task 5 network | `npx jest __tests__/useNetworkOffline.test.js` | PASS: 1 suite / 7 tests; exit 0 |
+| Task 6 Login | `npx jest __tests__/LoginScreen.test.js __tests__/designSystemGuard.test.js __tests__/domainTextInputAudit.test.js __tests__/authErrorCopy.test.js` | PASS: 4 suites / 298 tests; exit 0 |
+| Task 7 layout | `npx jest __tests__/loginLayout.test.js __tests__/LoginScreen.test.js __tests__/loginHeroGeometry.test.js __tests__/designSystemGuard.test.js` | PASS: 4 suites / 283 tests; exit 0 |
+| Task 8 Reset/real stack | `npx jest __tests__/ForgotPasswordScreen.test.js __tests__/AuthNavigator.test.js` | RED: 14 failed (old UI, missing export). First implementation: 12 passed / 2 failed (test harness: composite/host Text identity and unavailable matcher). Corrected assertions preserve render-order/busy checks; GREEN: 2 suites / 14 tests; exit 0. Real native stack mounted; no router fallback |
+| Task 8 empty header and inherited Reset assertions | `npx jest __tests__/ScreenHeader.test.js __tests__/AppNavigator.headers.test.js __tests__/LoginScreen.test.js` | RED: 5 failed / 75 passed (empty headers and old Reset copy); GREEN: 3 suites / 80 tests; exit 0 |
+| Task 8 required neighbors | `npx jest __tests__/ForgotPasswordScreen.test.js __tests__/AuthNavigator.test.js __tests__/AppNavigator.headers.test.js __tests__/designSystemGuard.test.js __tests__/domainTextInputAudit.test.js` | First run: 1 failed / 288 passed (last ratchet removal left empty test.each). Replaced with explicit empty-ratchet assertion; GREEN: 5 suites / 289 tests; exit 0 |
+| Native gate | Not run; orchestrator/Jim owns Login Task 11 | D1–D9, sign-out/status-bar and Home comparison remain open; Reset D10 deferred to #78 |
+
+#### Decision Register
+
+| Decision | Contract / evidence |
+|---|---|
+| Forgot hidden | Jim, 2026-10-19: no Login link until recovery works; registered/restyled Reset remains unreachable. Recovery issue [#78](https://github.com/JimMcKeown17/masi-app/issues/78) already filed by orchestrator |
+| Lockup and panel | Typeset MASI/NYUSANE; Bricolage 700 `displayBold` because the supplied logotype is only 106×41 px. `lockupTop = max(insets.top + 9, 40)` (+10 would give 57 rather than board 56). Without Forgot, Sign in is 20 below Password / 12 after a form note; the offset moves art down about 36dp at height 844, anchored to the note-free rest panel. Keyboard-mode bottom padding 24 |
+| Shared names and gaps | Shipped names match the plan map; AuthNavigator already had Reset options, so only its export changed. Empty ScreenHeader title now omits the heading while preserving Back/right-slot spacing. Two inherited Reset cases in LoginScreen.test.js needed new copy/navigation fixtures. Last ratchet removal requires an explicit empty-ratchet assertion instead of empty test.each |
+
+#### Bug And Gap Register
+
+| Gap | Evidence / remaining gate |
+|---|---|
+| Recovery dead end | #78 owns deep-link exchange, set-new-password screen, restored Login link and deferred Reset D10 (small phone/keyboard/long email). No backend or device recovery claim |
+| Login double-tap boundary | Login checks React `loading` state. Source inspection corrects the handoff's stronger claim: AuthContext's `signInPendingRef` tracks latest-attempt admission/rollback, but `signIn` does not reject/coalesce a second same-frame call before `signInWithPassword`. Post-render pending taps/return are tested; same-frame transport deduplication remains a follow-up. No AuthContext change |
+| Slow existing test | `LiteracySessionForm.test.js` takes about 8s alone (reported handoff) and can exceed the 5s per-test timeout under parallel load. Incoming full-suite run passed (file took 52.95s under load). Follow-up remains; no timeout raised |
+
+Task 9 updates only design-system.md, ROADMAP.md §5, PRD.md §6.1 and this append-only log.
+Task 10 branch review and Task 11 were not started. Changes remain uncommitted for orchestrator review.
+
+#### Post-Task-9 requested full-suite gates
+
+| Gate | Command | Result |
+|---|---|---|
+| Full unit suite | `PATH=$HOME/.nvm/versions/node/v20.19.4/bin:$PATH npx jest` | PASS: 342 suites / 3,569 tests, 0 skipped; exit 0 (40.275s) |
+| Full integration suite | `PATH=$HOME/.nvm/versions/node/v20.19.4/bin:$PATH npm run test:integration` | PASS: 52 suites / 543 tests, 0 skipped; exit 0 (31.618s); no auth-race rerun |
+| Whitespace / scope | `PATH=$HOME/.nvm/versions/node/v20.19.4/bin:$PATH git diff --check`; read-only Python/Git assertions | PASS: exactly 13 scoped files, unchanged branch, empty index, append-only log, ROADMAP §5 and PRD §6.1 boundaries preserved |
+
+Existing React/Paper and intentional failure-path diagnostics remain non-failing. No timeout,
+package, auth/data/sync/backend or Login production-code changes; no Git write or gh command.

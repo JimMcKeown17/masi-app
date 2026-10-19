@@ -176,7 +176,7 @@ insight flows where specified by the locked navigation contract.
 
 ### 6.1 Authentication and profile
 
-- Email/password sign-in and password reset.
+- Email/password sign-in. Password reset is built but hidden from Log in until password recovery works end to end ([#78](https://github.com/JimMcKeown17/masi-app/issues/78)).
 - Publish a refreshable persisted same-user session quickly enough for offline cold start.
 - Reject stale auth events from an older session attempt.
 - Keep job title, school, Programme assignment, release identity, and backend identity visible.

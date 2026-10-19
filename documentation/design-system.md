@@ -1,10 +1,11 @@
 # Design System — Bold Red
 
-**Standing reference, reconciled through Profile PR 5 on `feat/bold-red-profile`, 2026-10-19.** This describes
-the implementation, including the remaining board-screen exceptions. Update it in the same branch
+**Standing reference, reconciled through Login PR 6 Task 8 on `feat/bold-red-login`, 2026-10-19.** This describes
+the implementation, with all board-screen exceptions removed. Update it in the same branch
 as a change to the system. Automated verification is recorded in [build-log.md](./build-log.md);
 native visual acceptance remains the shared-look plan's Task 34, the Children plan's Task 11,
-the Record plan's Task 14, the Session complete plan's Task 14 and the Profile plan's Task 10.
+the Record plan's Task 14, the Session complete plan's Task 14, the Profile plan's Task 10 and
+the Login plan's Task 11 (Reset D10 is deferred to recovery issue #78).
 
 The design source is the Design Round 4 `RedSystemSheet` and chosen `red-*-components` boards.
 The [overview](../docs/superpowers/specs/2026-10-18-bold-red-app-design.md) resolves conflicts in
@@ -88,7 +89,7 @@ base colours in `colors.js`; the exact set is pinned by the colour tests.
 | `control` | `text + '33'` | `#221A1B33` | Secondary controls, chip/segment track, grabber |
 | `pressed` | `text + '0F'` | `#221A1B0F` | Row pressed fill, canvas focus halo |
 | `onRedTile` | `surface + '24'` | `#FFFFFF24` | Translucent red-surface control fill |
-| `onRedHalo` | `surface + '52'` | `#FFFFFF52` | Reserved red-field focus halo |
+| `onRedHalo` | `surface + '52'` | `#FFFFFF52` | Red-field focus halo |
 | `onRedKeyline` | `surface + 'B8'` | `#FFFFFFB8` | Login artwork keyline |
 | `onRedOutline` | `surface + 'D9'` | `#FFFFFFD9` | Secondary button edge on red |
 | `onRedDisabled` | `surface + '61'` | `#FFFFFF61` | Disabled primary fill on red |
@@ -120,12 +121,13 @@ All x offsets are zero. Shared `SurfaceCard` and `ListGroup` have no shadow. The
 ## Typography
 
 Import `{ fontFamilies, typeRoles }` from `src/constants/typography`. The legacy `typography`
-export is retired. `App.js` loads Bricolage Grotesque 800 and Figtree 500/600/700/800 while the
+export is retired. `App.js` loads Bricolage Grotesque 700/800 and Figtree 500/600/700/800 while the
 splash is held; a load error is logged and releases the splash with system-font fallback.
 
 | Family key | Registered face |
 |---|---|
 | `display` | `BricolageGrotesque_800ExtraBold` |
+| `displayBold` | `BricolageGrotesque_700Bold` (lockup only) |
 | `textMedium` | `Figtree_500Medium` |
 | `textSemi` | `Figtree_600SemiBold` |
 | `textBold` | `Figtree_700Bold` |
@@ -190,6 +192,11 @@ exemption is necessary.
 | `textData` | textBold | 15 / 20 | — | Times/counts in rows; tabular numerals |
 
 `displayStat` is `displayTitle`; `textToast` is `textBodySemi`. Neither old name is exported.
+
+`logoType.wordmark` (display, 26/24, tracking 0.26) and `logoType.wordmarkSub` (displayBold,
+12/15, tracking 1.56) are exported separately for `auth/BrandLockup`. They and the new
+`fontFamilies.displayBold` face are lockup styling, not reading roles; do not use their sizes
+for UI copy. The white mark plus typeset MASI/NYUSANE is one accessible “Masinyusane” element.
 
 ## Themes
 
@@ -279,16 +286,28 @@ testID`. Fixed 44dp circular target with a 22dp Ionicons glyph; white/ink/contro
 red700/white on red. Disabled uses a rule edge and disabled glyph. Supply the accessible label
 (the component logs an error when it is missing).
 
-**`TextField`** — `label, value, onChangeText, icon, placeholder, error, disabled=false,
+**`TextField`** — `label, value, onChangeText, icon, placeholder, error, errorPlacement='field', disabled=false,
 secureTextEntry, onToggleSecure, multiline=false, surface='canvas', inputRef, accessibilityLabel,
 onFocus, onBlur, style, ...textInputProps`. A native input inside a min-60dp box, radius 14,
-constant 2dp edge, inside caps label and `textInput` value. Focus uses ink plus an absolute 4dp
-halo; an error uses the error edge, no halo, and an `InlineNote` 8dp below. Error accessible name
+constant 2dp edge, inside caps label and `textInput` value. On canvas, focus uses ink plus an
+absolute 4dp `tints.pressed` halo; an error uses the error edge without a halo. Error accessible name
 is `'{label}, error: {error}'`. Tapping the box focuses the input. `inputRef` accepts a callback
 or ref object; `style` styles the input, not the box. The secure toggle is a 44dp Show/Hide
 password button; a nonempty masked value uses `textMasked`. Multiline raises the box minimum to
-112 and the input minimum to 66. Disabled makes the input noneditable with border fill and disabled
-foreground. **`surface='red'` currently renders the same canvas appearance; Login owns that variant.**
+112 and the input minimum to 66. Disabled makes the input noneditable; canvas uses border fill,
+transparent edge and disabled foreground. Red keeps the white box and dims its contents:
+
+| `surface='red'` state | Edge and halo | Contents |
+|---|---|---|
+| Rest | Transparent 2dp edge; no halo | Muted label; ink value; icon muted when empty, ink when filled |
+| Focus | Ink edge; `tints.onRedHalo` at −4dp | Ink icon and value |
+| Error | Error edge; `colors.errorBg` at −4dp | Error label/icon; ink value |
+| Disabled/loading | Retains the current edge/halo and white fill | Value opacity 0.7; label/icon/toggle opacity 0.5; input and toggle disabled |
+
+`errorPlacement='field'` renders the field's `InlineNote` 8dp below. `errorPlacement='form'`
+keeps the ring and accessible error but leaves the note to the form, for one message covering
+several fields. A message about one field sits 8dp below that field; a form or server message
+sits above the primary button. Form errors never use a toast.
 It does not apply `NO_TEXT_SUGGESTIONS` automatically: domain-entry callers must pass that contract.
 
 **`SelectField`** — `label, value, placeholder, icon, error, onPress, accessibilityLabel,
@@ -318,6 +337,28 @@ Options are `{ value, label }`; presses call `onChange(option.value)`. A white m
 track with an ink selected thumb inset 4.5; selected `textButton`, unselected `textBodyStrong`.
 Radio mode exposes radiogroup/radio with checked state; `role='tab'` uses tablist/tab with selected
 state for changing displayed content.
+
+### Signed-out Login and Reset
+
+`useNetworkOffline()` (`src/hooks/useNetworkOffline.js`) is a read-only NetInfo subscription for
+signed-out Login: only an explicit `false` connectivity or reachability value means offline;
+unknown is treated as online to avoid flashing the caption at launch. It unsubscribes on unmount.
+Signed-in screens keep `useOffline()`, whose `isConnected: null` means offline for sync policy.
+Login cannot consume that provider because it exists only in the signed-in tree.
+
+`auth/loginHeroGeometry.js` owns the artwork's scale, offsets and hide rule. Scale clamps to
+0.74–1 between heights 640–844; `offsetX = windowWidth - 390 * scale`;
+`offsetY = max(-43.8 * (1 - scale), anchorPanelTop - 446 * scale)`.
+The anchor is the note-free rest panel top, so an error or offline caption covers more art without
+moving its crop. Hide the decorative art when less than 120dp remains above the current panel
+from the learner's top (`offsetY + 110 * scale`). `computeLoginLayout` owns rest, keyboard and
+compact-keyboard mode; keyboard-mode bottom padding is 24dp.
+
+Login renders no “Forgot password?” link. `ForgotPassword` remains registered in `AuthNavigator`
+with the navigator's “Reset password” header, canvas TextField and inline errors. Its sent state
+sets `title: ''`, shows “Check your email” as the sole heading, and uses `popTo('Login')` so Back
+cannot reopen Reset. Recovery and Reset's native D10 gate are tracked in
+[#78](https://github.com/JimMcKeown17/masi-app/issues/78).
 
 ### Surfaces, rows and supporting text
 
@@ -525,7 +566,9 @@ Back needs a `back` entry and `headerBackVisible !== false`. Close/Back call `go
 
 Geometry: canvas, top inset +9, sides 24, bottom 6, min-44 row, gap 12, title top padding 6.
 Title is left-aligned `displayTitle`, header role, wrapping without `numberOfLines`, capped at
-1.3 font scaling. `options.headerScrolled` adds a 1dp rule hairline.
+1.3 font scaling. An empty resolved title renders no header-role element; a spacer preserves
+the trailing action's position, and the Back circle remains. `options.headerScrolled` adds a
+1dp rule hairline.
 
 `useHeaderHairline(navigation?)`, a named export from `ScreenHeader.js`, returns an `onScroll`
 handler. It uses an explicit navigation argument or `NavigationContext`, and safely does nothing
@@ -560,8 +603,8 @@ only while its navigator is focused. Home's content padding is consequently 4dp 
 before PR 1; Home's hero gear remains its existing implementation, not `IconCircleButton`.
 
 The root status bar is dark. **`FocusAwareStatusBar({ style })`** renders Expo's StatusBar only
-while the screen is focused; Home and Session complete use style='light'. Future red-field board screens use the
-same pattern when built, rather than leaving a status-bar override active after navigation.
+while the screen is focused; Home, Login and Session complete use style='light'. Reset uses
+the root dark style on its canvas.
 
 ## One actor-scoped root toast
 
@@ -576,7 +619,7 @@ toast.show({ message: 'Class updated', tone: 'success', duration: 3000 });
 
 `tone` must be neutral, success or error; invalid/missing tone logs an error and falls back
 to neutral. Duration defaults to 3000ms; a new message replaces the old one, with no queue.
-Preserve an existing host's timing/copy: auth and Profile use 4000ms. Choose tone from the outcome
+Preserve an existing host's timing/copy: Profile uses 4000ms. Choose tone from the outcome
 at the call site (failure error, confirmation success, other neutral), not message-text matching.
 Profile forwards its existing `type` classification. `useToast()` throws without a provider;
 `useToastObstruction(height, active=true)` is safe without one and registers only positive active
@@ -612,7 +655,8 @@ Auth copy is centralised in `describeAuthError(error, action)` (`src/utils/authE
 action='sign_in' or 'reset'). Suspended sign-in says **“Your access is paused. Please contact
 your supervisor.”** Known network, server and rate-limit errors have mapped copy; unknown errors
 use the action-specific safe fallback rather than raw server messages. “Invalid login credentials”
-is the retained sign-in wording. Auth errors remain toasts here; the Login PR moves them inline.
+is the retained sign-in wording. Login and Reset render this copy inline. Reset maps the original
+response error before storing its message, preserving code/status/retryable-fetch classification.
 
 ## Motion contract
 
@@ -783,7 +827,7 @@ The spinner uses `tints.spinnerTrack`, stroke 2.6, radius 7.7 and a 1000ms linea
 Message changes cross-fade old/new layers for 150ms, stopping on cleanup. The line is neither
 pressable nor a live region.
 
-## Guard rules and the remaining board ratchet
+## Guard rules and the completed board ratchet
 
 `designSystemGuard.test.js` strips comments and scans `App.js` plus `src/**/*.js`, excluding
 `src/assessment-questions/**` (WelaPLUS owns separate TypeScript tokens). `PENDING_SWEEP` and its
@@ -793,26 +837,19 @@ temporary test/filter are deleted: every included source file is checked.
   navigationTheme may set 'normal' and must use four fontFamilies faces; paperTheme may set
   only undefined to erase MD3 weights. Theme tests also check the resulting fonts.
 - No string-literal fontFamily outside typography.js; reference a face or spread a role.
-- No raw numeric fontSize, lineHeight or letterSpacing outside typography.js except the
-  existing board ceilings below. The typography test separately pins roles, a size floor of 11,
+- No raw numeric fontSize, lineHeight or letterSpacing outside typography.js; there are
+  no remaining board exceptions. The typography test separately pins roles, a size floor of 11,
   no role weights and a Bricolage floor of 18.
 - No hex, rgb( or rgba( outside src/constants/** and src/utils/scoreBands.js.
   There is no decorative-colour exception. Use tokens for UI and the existing data palettes for
   score/group/letter semantics. Retired blue #294A99 and yellow #FFDD00 must not return.
 - No Paper Snackbar named import anywhere. No new named Paper TextInput, Searchbar,
   SegmentedButtons, Card, Chip, FAB, Banner, Menu, Button or HelperText imports
-  outside the listed per-file allowances. Button and HelperText are plan additions to the guard.
+  anywhere in the scanned sources. Button and HelperText are plan additions to the guard.
 
-`BOARD_RATCHET` in the guard is the only remaining adoption exception. Raw counts may fall but
-not rise; only the listed Paper component names are permitted. This is a migration ceiling,
-not permission for a new screen to copy legacy controls. It never exempts colour or font-weight
-violations. A board PR finishes its file's roles/control replacements and **deletes its ratchet
-line once both categories are zero**; the guard fails if a fully clean file stays listed.
-
-| File under `src/` | Raw-type ceiling | Permitted ratcheted Paper imports | Owner |
-|---|---|---|---|
-| screens/auth/LoginScreen.js | 0 | TextInput, Button | Login |
-| screens/auth/ForgotPasswordScreen.js | 0 | TextInput, Button | Login |
+`BOARD_RATCHET` is empty after Login Tasks 6 and 8 removed its final two entries. The guard
+explicitly requires it to stay empty, and every scanned file now meets the same type/control
+rules without per-screen allowances.
 
 ## Remaining delivery boundaries
 
@@ -821,7 +858,8 @@ on `feat/bold-red-record`. LiteracySessionForm, ChildSelector, LetterTrackerBott
 SessionFormScreen pass the full guard without ratchet entries. Session complete Tasks 1–11 are
 built on `feat/bold-red-complete`; its screen left `BOARD_RATCHET` in Task 10. Profile Tasks 1–7
 are built on `feat/bold-red-profile`; ProfileScreen and SignOutSheets have left `BOARD_RATCHET`.
-Login/reset retain their board PR. CountChip, StickyActionFooter (including surface='onOverflow'),
+Login and Reset are built through Task 8 on `feat/bold-red-login`; the Forgot link stays hidden
+pending #78. CountChip, StickyActionFooter (including surface='onOverflow'),
 ConfirmSheet and the celebration components are available above.
 Avatar, SyncBanner and InlineLoading are available; SyncStatusBanner and its test are removed.
 
@@ -840,3 +878,6 @@ placement, exit behaviour and Home comparison still need those checks.
 Profile's Task 9 branch review and Task 10 preview/device gate remain orchestrator-owned:
 keyboard visibility, no double lift, large-text wrapping, screen-reader behavior, native share/toast
 placement, the Android Profile header and Home comparison are not proved by local Jest results.
+Login's Task 10 branch review and Task 11 preview/device gate remain orchestrator-owned:
+art crop, fonts, keyboard/compact layouts, large text, screen-reader order, sign-out/status-bar
+transitions and Home comparison need native checks. Reset D10 is deferred to #78.
