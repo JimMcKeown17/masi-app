@@ -674,11 +674,12 @@ Additional Head Office behavior retained from the Sprint 4 follow-up:
   its Task 11 preview/device gate remains open. Record is built on `feat/bold-red-record`; its
   Task 14 branch review and preview/device gate remain open. Session complete is built on
   `feat/bold-red-complete`; its Task 13 branch review and Task 14 preview/device gate remain open.
-  Remaining per-screen PRs, in order: Profile, Login and reset password. Approved behaviour decisions are in
+  Profile is built on `feat/bold-red-profile`; its Task 9 branch review and Task 10 preview/device
+  gate remain open. Remaining per-screen PR: Login and reset password. Approved behaviour decisions are in
   `docs/superpowers/specs/2026-10-18-bold-red-app-design.md` §6. PR 1's Task 34 EAS preview/device
-  gate remains open. **C11:** A03s Create class → School search has not been run in this task;
-  record its outcome after Task 34, then decide whether conditional Task 35 is needed. Each later
-  board PR also needs its own preview/device check.
+  gate remains open. **C11:** reproduced on the A03s, build 15 (Create class → School search
+  results under the keyboard), and fixed in Profile Task 2. The A03s/iPhone no-double-lift row
+  remains open in Profile Task 10. Each later board PR also needs its own preview/device check.
 - [x] Roll typography tokens out or retire the incomplete token system. Built 2026-10-19 on
   `feat/bold-red-app`: legacy export retired, 42 `typeRoles`, Figtree 600, mapped themes and
   fail-closed typography/source guards. Ten board files retain only their explicit raw-type/Paper

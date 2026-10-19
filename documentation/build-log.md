@@ -1608,3 +1608,65 @@ src/screens/sessions/LiteracySessionForm.js:              await storage.updateLe
 Cases: delayed password response/manual; delayed admitted storage write/manual; delayed admitted storage write/SIGNED_OUT; Profile password session preservation through revoke-others/token refresh; late Profile verification after switching to B; late Profile verification after reopening A; changePassword result dropped during isolated-session disposal; sign-in independent of a late password update; password response between B storage commit and callback; late shared password update after switching to B; never-settling password PUT bounded across sign-out/sign-in.
 
 `PATH=$HOME/.nvm/versions/node/v20.19.4/bin:$PATH npm run test:integration -- __tests__/task5AuthRaces.test.js __tests__/task5ActionsBinding.test.js` — PASS, 2 suites / 44 tests. Local real-SQLite evidence only. Small spec repair: read-only ListRow now renders its supplied lead tile (regression RED 1 failed / 13 passed, GREEN 14 passed); its documentation update remains in Task 8.
+
+### 2026-10-19 — Bold Red Profile Task 8
+
+#### Verification Register (focused reruns of committed Tasks 1–7)
+
+All commands below ran with Node 20.19.4; these are fresh GREEN checks, not reconstructed RED evidence.
+
+| Gate | Command | Result |
+|---|---|---|
+| Task 1 primitives/Home | `PATH=$HOME/.nvm/versions/node/v20.19.4/bin:$PATH npx jest __tests__/ListRow.test.js __tests__/BrandButton.test.js __tests__/HomeScreen.test.js __tests__/designSystemGuard.test.js` | 4 suites / 298 tests passed; exit 0 |
+| Task 2 shared sheets | `PATH=$HOME/.nvm/versions/node/v20.19.4/bin:$PATH npx jest __tests__/BottomSheet.test.js __tests__/GroupPickerBottomSheet.test.js __tests__/LastAttemptedBottomSheet.test.js __tests__/LetterTrackerBottomSheet.test.js __tests__/LetterTrackerBottomSheet.plan5.test.js __tests__/signOutFlow.test.js` | 6 suites / 67 tests passed; exit 0 |
+| Task 3 pure helpers | `PATH=$HOME/.nvm/versions/node/v20.19.4/bin:$PATH npx jest __tests__/passwordChange.test.js __tests__/scrollIntoView.test.js` | 2 suites / 33 tests passed; exit 0 |
+| Task 4 Profile components | `PATH=$HOME/.nvm/versions/node/v20.19.4/bin:$PATH npx jest __tests__/profileComponents.test.js` | 1 suite / 11 tests passed; exit 0 |
+| Task 5 password sheet | `PATH=$HOME/.nvm/versions/node/v20.19.4/bin:$PATH npx jest __tests__/ChangePasswordSheet.test.js __tests__/domainTextInputAudit.test.js` | 2 suites / 36 tests passed; exit 0 |
+| Task 6 screen/navigation | `PATH=$HOME/.nvm/versions/node/v20.19.4/bin:$PATH npx jest __tests__/ProfileScreen.releaseMetadata.test.js __tests__/ProfileScreen.layout.test.js __tests__/profileCaptureModeToggle.test.js __tests__/ChangePasswordSheet.test.js __tests__/signOutFlow.test.js __tests__/designSystemGuard.test.js __tests__/domainTextInputAudit.test.js __tests__/AppNavigator.headers.test.js` | 8 suites / 359 tests passed; exit 0 |
+| Task 6 password races | `PATH=$HOME/.nvm/versions/node/v20.19.4/bin:$PATH npm run test:integration -- __tests__/task5AuthRaces.test.js -t "password\|Profile verification"` | 1 suite / 11 passed, 29 skipped; exit 0. Same 11 cases listed above; plan's expected 10 omits the isolated-session-disposal case |
+| Task 6 full race/binding files | `PATH=$HOME/.nvm/versions/node/v20.19.4/bin:$PATH npm run test:integration -- __tests__/task5AuthRaces.test.js __tests__/task5ActionsBinding.test.js` | 2 suites / 44 tests passed; exit 0 |
+| Task 7 sheets/flow | `PATH=$HOME/.nvm/versions/node/v20.19.4/bin:$PATH npx jest __tests__/SignOutSheets.style.test.js __tests__/signOutFlow.test.js __tests__/ProfileScreen.releaseMetadata.test.js __tests__/designSystemGuard.test.js` | 4 suites / 275 tests passed; exit 0 |
+| Task 7 frozen working files | `PATH=$HOME/.nvm/versions/node/v20.19.4/bin:$PATH git diff --exit-code -- __tests__/signOutFlow.test.js src/hooks/useSignOutFlow.js` | No diff; exit 0 |
+| Task 8 docs | Source/committed-diff inspection; `PATH=$HOME/.nvm/versions/node/v20.19.4/bin:$PATH git diff --check` | Exit 0. Design system, PRD, roadmap and C11 learning updated. No domain term changed; CONTEXT.md unchanged. Documentation/verification only: no new behavior or RED test required |
+
+#### Decision Register
+
+| Decision | Contract / evidence |
+|---|---|
+| Password attempt outlives its form | Dismissal resets the form; an abandoned outcome, including after leaving Profile, publishes one actor-scoped 4000ms toast. A reopened form stays usable; stale handles publish nothing. Password tests moved from ProfileScreen.releaseMetadata.test.js to ChangePasswordSheet.test.js |
+| Keyboard-up space | Shared BottomSheet uses 4dp panel bottom padding while avoiding an open keyboard; keyboard-down remains max(bottom inset, 24). Header/footer stay fixed while password fields/errors scroll |
+| Shared primitive changes | ListRow gained wrapping titleAccessory in Task 1 and the read-only lead-tile repair in Task 6. expanded/busy and BrandButton testID/variant-coloured spinner already existed; BrandButton needed no source change. BottomSheet gained footerStyle. jest.setup.js now mocks @expo/vector-icons globally so frozen flow tests render shared primitives |
+| C11 ownership | Reproduced on A03s build 15 (Jim-supplied device evidence); the shared padding/full-overlay-wrapper fix landed in Profile Task 2, not PR 1. A03s/iPhone no-double-lift verification remains Task 10 |
+
+#### Bug And Gap Register
+
+| Gap | Evidence / remaining gate |
+|---|---|
+| C11 School search under keyboard | Create class → School search results were under the keyboard on A03s build 15. Task 2 fixes BottomSheet; local regression checks pass. No post-fix device claim: no-double-lift, small-phone password layout and the Android “BackMy Profile” row remain open |
+| Local test diagnostics | Focused runs pass with non-failing Paper icon warnings, React act warnings and intentional auth/export failure logs. No package or test changes made in Task 8 |
+
+### 2026-10-19 — Bold Red Profile Task 9 (local automated gates)
+
+| Gate | Command | Result |
+|---|---|---|
+| Full unit suite | `PATH=$HOME/.nvm/versions/node/v20.19.4/bin:$PATH npx jest` | 335 suites / 3,470 tests passed; exit 0 |
+| Full integration suite | `PATH=$HOME/.nvm/versions/node/v20.19.4/bin:$PATH npm run test:integration` | 52 suites / 543 tests passed; exit 0 |
+| Guard/theme/input audits | `PATH=$HOME/.nvm/versions/node/v20.19.4/bin:$PATH npx jest __tests__/designSystemGuard.test.js __tests__/paperTheme.test.js __tests__/colors.test.js __tests__/contrast.test.js __tests__/typography.test.js __tests__/domainTextInputAudit.test.js` | 6 suites / 326 tests passed; exit 0 |
+| Frozen files against base | `PATH=$HOME/.nvm/versions/node/v20.19.4/bin:$PATH git diff --exit-code feat/bold-red-complete -- __tests__/signOutFlow.test.js src/hooks/useSignOutFlow.js src/context/AuthContext.js src/utils/debugExport.js src/services/deviceSettings.js src/services/observability.js` | No diff; exit 0 |
+| Profile source scan | `PATH=$HOME/.nvm/versions/node/v20.19.4/bin:$PATH rg -n "Alert\|Snackbar\|SegmentedButtons\|KeyboardAvoidingView\|fontWeight\|#[0-9A-Fa-f]{3,8}\b" src/screens/main/ProfileScreen.js src/components/profile/*.js` | No matches; expected exit 1. rg replaces the plan's grep with the same pattern/scope |
+
+No auth-race retry needed. Non-failing React/Paper and intentional failure-path diagnostics remain.
+Per Jim's scope, branch review, EAS builds and device gates were not run; Task 10 was not started.
+All changes remain uncommitted for the orchestrator; no Git write attempted.
+
+#### Post-Task-9 full-suite repeat (requested final gate)
+
+| Command | Result |
+|---|---|
+| `PATH=$HOME/.nvm/versions/node/v20.19.4/bin:$PATH npx jest` | 335 suites / 3,470 tests passed; exit 0 |
+| `PATH=$HOME/.nvm/versions/node/v20.19.4/bin:$PATH npm run test:integration` | 52 suites / 543 tests passed; exit 0; no auth-race retry |
+
+Node 20.19.4 scope assertions passed: exactly five documentation paths, empty index, unchanged
+CONTEXT.md, append-only build log, and unchanged roadmap before §5 (including “BackMy Profile”).
+The full unit run also logged an undefined `.catch` error from ChildrenContextPendingDelete.integration.test.js
+without failing assertions; recorded for the orchestrator, not investigated in this documentation scope.
