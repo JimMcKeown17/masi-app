@@ -259,7 +259,9 @@ describe('SQLite sync outbox repository', () => {
     expect(records.every((record) => record.status === 'in_flight')).toBe(true);
     expect(new Set(records.map((record) => record.updated_at))).toHaveProperty('size', 1);
     expect(runSpy).toHaveBeenCalledTimes(1);
-    expect(getAllSpy).toHaveBeenCalledTimes(1);
+    // One metadata read decides which rows need stamping; one returns the claimed snapshots.
+    expect(getAllSpy).toHaveBeenCalledTimes(2);
+    expect(getAllSpy.mock.calls.map(([, ...params]) => params)).toEqual([requestedOrder, requestedOrder]);
   });
 
   test('failed and terminal rows are visible while in-flight rows do not inflate unsynced count', async () => {

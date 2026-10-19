@@ -172,8 +172,8 @@ describe('ordinary edits preserve server lifecycle state', () => {
     await engine.syncAll();
 
     expect(calls.filter(call => call.tableName === 'groups').map(call => call.payload)).toEqual([
-      { archived_at: ARCHIVED_AT },
-      expect.objectContaining({ name: 'Edited' }),
+      { archived_at: ARCHIVED_AT, row_version: 2 },
+      expect.objectContaining({ name: 'Edited', row_version: 3 }),
     ]);
     expect(serverGroup).toEqual(expect.objectContaining({ name: 'Edited', archived_at: ARCHIVED_AT }));
     expect(await db.getAllAsync('select * from sync_outbox')).toEqual([]);

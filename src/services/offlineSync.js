@@ -2,7 +2,7 @@ import { isStaleActorError, StaleActorError } from '../session/staleActor';
 import { buildIncidentEnvelope, drainSupportIncidents } from './supportIncidents';
 import { getConnectionActor } from '../session/signedInHandle';
 import { resolveDatabase, runRepositoryTransaction } from '../db/repositories/repositoryRuntime';
-import { IMMUTABLE_ASSIGNMENT_TABLES, isStampedOperation } from '../db/repositories/rowVersion';
+import { VERSIONED_TABLES, IMMUTABLE_ASSIGNMENT_TABLES, isStampedOperation } from '../db/repositories/rowVersion';
 import {
   chunkArray,
   quoteIdentifier,
@@ -780,6 +780,9 @@ const runServerOperation = async (supabaseClient, config, outboxRecord) => {
         .filter((column) => Object.prototype.hasOwnProperty.call(payload, column))
         .map((column) => [column, payload[column]])
     );
+    if (VERSIONED_TABLES.has(config.tableName) && Object.prototype.hasOwnProperty.call(payload, 'row_version')) {
+      archivePatch.row_version = payload.row_version;
+    }
     const { data, error } = await supabaseClient
       .from(config.tableName)
       .update(archivePatch)
@@ -1141,10 +1144,8 @@ export const createOutboxSyncEngine = ({
       return { success: false, terminal: true, failedRecord: makeFailedRecord(outboxRecord, reason) };
     }
 
-    await outboxRepository.markInFlight([outboxRecord.id]);
-    let inFlightRecord = null;
+    const [inFlightRecord] = await outboxRepository.markInFlightAndGet([outboxRecord.id]);
     try {
-      inFlightRecord = await outboxRepository.getById(outboxRecord.id);
       if (!inFlightRecord) {
         const reason = `Outbox record disappeared before sync: ${outboxRecord.id}`;
         return { success: false, terminal: false, failedRecord: makeFailedRecord(outboxRecord, reason) };
@@ -1257,7 +1258,7 @@ export const createOutboxSyncEngine = ({
       return { success: false, terminal: false, failedRecord: makeFailedRecord(outboxRecord, reason) };
     } catch (error) {
       if (isStaleActorError(error)) throw error;
-      // Any post-markInFlight throw (server request, getById, or a finalize) must not strand the
+      // Any post-claim throw (server request or a finalize) must not strand the
       // row in_flight. finalize-retriable with inFlightRecord when we have it (its updated_at makes
       // the CAS HIT → row marked failed+backoff, correct for a real attempt); else the original
       // record (CAS MISSES on the changed updated_at → restorePendingAfterStaleFinalize → pending).

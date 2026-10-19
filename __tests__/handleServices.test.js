@@ -93,7 +93,7 @@ test.each(['update', 'batch'])('T3 / whole-pass: stale %s stops the pass without
 });
 
 test.each(['upsert', 'UPDATE', 'lifecycle archive'])('T5: abort and replay of %s proves idempotent replay only (ruling 11)', async (operation) => {
-  // Identical replay is harmless. This does NOT prove ordering of late old commits against newer edits.
+  // Replayed content is harmless and carries a fresh version. This does NOT prove late-commit ordering.
   const entered = deferred();
   const server = new Map();
   let first = true;
@@ -120,7 +120,8 @@ test.each(['upsert', 'UPDATE', 'lifecycle archive'])('T5: abort and replay of %s
   expect(await pending(again)).toEqual([expect.objectContaining({ status: 'pending', retry_count: 0, next_retry_at: null })]);
   expect(await again.services.syncEngine.syncAll()).toMatchObject({ success: true, totalSynced: 1 });
   expect(transport).toHaveBeenCalledTimes(2);
-  expect(server.get(CHILD)).toEqual(landed);
+  expect(landed.row_version).toBe(2);
+  expect(server.get(CHILD)).toEqual({ ...landed, row_version: 3 });
   expect(await again.services.syncEngine.syncAll()).toMatchObject({ success: true, totalSynced: 0 });
   expect(transport).toHaveBeenCalledTimes(2);
 });

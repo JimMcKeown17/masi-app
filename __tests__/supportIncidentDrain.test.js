@@ -15,6 +15,7 @@ import { buildIncidentEnvelope, drainSupportIncidents } from '../src/services/su
 import { INSTALL_ID_KEY, resetInstallIdForTests } from '../src/services/installId';
 import { getRuntimeDiagnostics } from '../src/utils/runtimeDiagnostics';
 import { StaleActorError } from '../src/session/staleActor';
+import { requestOpen, resetHandleRegistryForTests } from '../src/session/signedInHandle';
 
 jest.mock('../src/utils/runtimeDiagnostics', () => ({ getRuntimeDiagnostics: jest.fn() }));
 
@@ -49,6 +50,7 @@ beforeEach(async () => {
   });
 });
 afterEach(async () => {
+  await resetHandleRegistryForTests();
   await sqlite.__resetMockDatabases();
   resetInstallIdForTests();
   jest.restoreAllMocks();
@@ -179,7 +181,14 @@ test('the incident RPC runs after the domain outbox has uploaded', async () => {
   await seedCoreData(db);
   await outboxRepository.enqueue({ tableName: 'classes', recordId: 'class-1', operation: 'update', payload: { id: 'class-1', name: 'Updated' } });
   await queue();
-  expect(await engine().syncAll()).toMatchObject({ success: true, totalSynced: 1, incidents: { sent: 1, rejected: 0, failed: 0 } });
+  const handle = await requestOpen({ userId: A, openDatabase: sqlite.openDatabaseAsync, discover: async () => {} });
+  const syncEngine = engine({
+    database: handle,
+    outboxRepository: createSyncOutboxRepository({ database: handle }),
+    stateRepository: createSyncStateRepository({ database: handle }),
+    supportIncidentRepository: createSupportIncidentRepository({ database: handle }),
+  });
+  expect(await syncEngine.syncAll()).toMatchObject({ success: true, totalSynced: 1, incidents: { sent: 1, rejected: 0, failed: 0 } });
   expect(calls.map(call => call.type)).toEqual(['update', 'rpc']);
 });
 

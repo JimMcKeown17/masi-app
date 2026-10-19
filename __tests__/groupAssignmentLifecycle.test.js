@@ -236,7 +236,7 @@ describe('group assignment lifecycle (spec §6.5b)', () => {
       tableName: 'group_ea_assignments',
       column: 'id',
       value: ASSIGNMENT,
-      payload: { unassigned_at: null, handover_reason: null },
+      payload: { unassigned_at: null, handover_reason: null, row_version: 2 },
     })]);
   });
 
