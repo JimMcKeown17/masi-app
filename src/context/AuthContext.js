@@ -141,6 +141,11 @@ export const AuthProvider = ({ children }) => {
           && currentUserRef.current.id !== nextSession.user.id) return;
         if ((event === 'SIGNED_IN' && pendingSignIn) || event === 'INITIAL_SESSION') {
           admitAuthSessionUser({ id: nextSession.user.id });
+          if (event === 'SIGNED_IN') {
+            // Only accepted admission protects overlapping attempts from rollback.
+            // A superseded SDK success rejected above has committed nothing.
+            ++signInSuccessGenerationRef.current;
+          }
         }
         ++generationRef.current;
         setLatestAuthSession(nextSession);
@@ -219,7 +224,6 @@ export const AuthProvider = ({ children }) => {
       });
 
       if (error) throw error;
-      ++signInSuccessGenerationRef.current;
       return { data, error: null };
     } catch (error) {
       // Another attempt may have established admission after this snapshot.
