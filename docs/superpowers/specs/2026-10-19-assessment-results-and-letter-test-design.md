@@ -1,7 +1,7 @@
 # Assessment results, one letter test, and WelaPLUS data — Design
 
 **Date:** 2026-10-19
-**Status:** Draft for Jim's review. Jim asked for the design without a question round
+**Status:** Draft for Jim's review. Codex adversarial review round 1: 11 findings, all verified and addressed (2026-10-19). Jim asked for the design without a question round
 ("I think you can just design", 2026-10-19). Section 3 lists the two decisions only Jim can make,
 plus the calls I made that he should check.
 **Covers:**
@@ -98,9 +98,11 @@ goes onto test phones lets us skip that code entirely. Nothing in the field is a
    results.** These now come from the standalone test or WelaPLUS Q1. Today they count any
    assessment, including word tests (9.3).
 6. **A standalone test is not a battery run.** Its result has no `battery_run_id` (7.1).
-7. **WelaPLUS runs are pulled to other devices with their Questions,** and the owning EA can
-   resume an unfinished run on a new phone. This closes the WelaPLUS spec's "device-local
-   unfinished runs" risk at little cost (11.4).
+7. **WelaPLUS runs are pulled to other devices with their Questions, read-only.** The owning EA
+   can abandon an unfinished run from a new phone but cannot resume it. Resuming safely would
+   need proof that every decided Question had downloaded, plus a rule for two phones deciding
+   the same Question (Codex review). The WelaPLUS spec's "device-local unfinished runs" risk
+   stays accepted for Release 1 (11.4).
 8. **`battery_runs` is not row-versioned.** Its status only moves forward, so a late, stale write
    is ignored instead of refused (8.2).
 9. **HQ calibration never edits an EA row.** `hq_rubric_total` is dropped from the WelaPLUS
@@ -301,6 +303,16 @@ numbers are no longer stored: a screen that shows "Attempt 3" counts the child's
 for that test when it reads them. A client-computed attempt number was never unique across
 devices anyway.
 
+**Normalising items from the package.** Not every component emits a full, contiguous item list.
+- `StoryWritingRubricQuestion` keeps each dimension's position but leaves out unscored
+  dimensions.
+- `ListenAndAnswerStoryQuestion` emits items without `metadata`.
+
+So the save stores items **exactly as emitted**: it keeps their positions, which may have gaps,
+and defaults a missing `metadata` to `{}`. `total_items` is the number of stored items, not the
+highest position plus one. A test saves a real result from **every** package component,
+including a partly scored Q11, and sends it through the write call's checks.
+
 **Item identity is unchanged** (ADR-0007, D9): `assessmentItemDomainId(assessment_id, position,
 correct|incorrect)`. Every new item has a position.
 
@@ -311,6 +323,13 @@ correct|incorrect)`. Every new item has a position.
 - `language`, `started_at`, `completed_at`;
 - `status` ∈ `in_progress`/`completed`/`abandoned`, `notes`, timestamps;
 - the local sync columns.
+
+**Locally, `battery_runs.class_id` is a plain column, not a foreign key.** A new phone can pull
+an owned run whose class it no longer holds. Its class assignment may have ended, and
+`ClassesContext` downloads only active ones. The value must stay exact, because the server
+treats it as run identity (8.2). Nulling it, as CAP-004 does for sessions, would make a later
+abandon fail with `MA001`. Screens show the class name only when the class is present locally.
+The server keeps its foreign key.
 
 **`programmes`**: `default_battery_code` and `default_battery_version`, both-or-neither, set for
 Core Literacy R–3 by a data statement after a read-only preflight. Both columns are added to the
@@ -361,25 +380,30 @@ The function is `security definer`, with `set search_path = ''`. It is granted t
    - `language` matches `^[a-z]{2}$`;
    - `stopped_reason` is in the CHECK set;
    - `p_items` is an array whose length equals `total_items`;
-   - every item has the parent's id, a unique position from 0 to n−1, a non-empty `item_key`, a
-     boolean `is_correct`, and an object `metadata`.
-3. **Authority.** These are the same checks today's INSERT policy makes, now inside the function:
+   - every item has the parent's id, a non-negative integer position that is unique within the
+     family (gaps are allowed, see 7.1), a non-empty `item_key`, a boolean `is_correct`, and an
+     object `metadata`.
+3. **Already stored?** If the id exists, go straight to step 6. A lost-acknowledgement retry
+   must be confirmed **before** current authority is checked. Otherwise a family that committed,
+   lost its response, and then had its child or programme assignment revoked would be
+   quarantined as terminal even though it is safely on the server.
+4. **Authority, for a new id only.** These are the same checks today's INSERT policy makes, now
+   inside the function:
    - `private.current_user_can_write_for_child(child_id)`;
    - an active `staff_programme_assignments` row for `programme_id`.
 
    Either failing raises `42501`.
-4. **Run link.** If `battery_run_id` is set, the run must exist, belong to the caller, and have
-   the same `child_id` and `programme_id` (else `42501`). There is no status condition: a Question
-   may arrive after its run is finalized (WelaPLUS spec §7.3 principle, kept).
-5. **Insert or confirm.**
-   - **A new id:** insert the parent and all items, with server timestamps.
-   - **The id already exists:** compare it with the incoming payload.
-     - The stored item-id set and the parent's identity columns (`user_id`, `child_id`,
-       `programme_id`, `battery_run_id`, `question_code`, `item_set_id`) match → return
-       `already_present`. This is a lost-acknowledgement retry.
-     - Anything else raises `MA001` (family mismatch).
-   - **A different id for an already-decided `(battery_run_id, question_code)`** raises `23505`.
-6. **The function reads only known columns from the JSON.** It is the payload allowlist on the
+5. **Run link, for a new id only.** If `battery_run_id` is set, the run must exist, belong to the
+   caller, and have the same `child_id` and `programme_id` (else `42501`). There is no status
+   condition: a Question may arrive after its run is finalized (WelaPLUS spec §7.3 principle,
+   kept). Then insert the parent and all items, with server timestamps, and return `inserted`.
+   A different id for an already-decided `(battery_run_id, question_code)` raises `23505`.
+6. **Confirm an existing id.**
+   - The stored row is owned by the caller, its item-id set equals the incoming set, and its
+     identity columns (`user_id`, `child_id`, `programme_id`, `battery_run_id`, `question_code`,
+     `item_set_id`) match → return `already_present`.
+   - Anything else raises `MA001` (family mismatch).
+7. **The function reads only known columns from the JSON.** It is the payload allowlist on the
    server side.
 
 **The function does not check:** that the score agrees with the items, any question-specific
@@ -553,11 +577,20 @@ lookup by id all go.
 - `id` = `uuidv5(child_id, letter, language)`;
 - `child_id`, `letter` (lowercase, one letter), `language` (`en`/`xh`/`zu`);
 - `confirmed` boolean;
-- `changed_at`: the correction time, from the phone, clamped by the server;
+- `changed_at`: the effective correction time of the winning correction (10.2);
+- `correction_id`: the id of the winning correction;
 - `changed_by`: the last writer;
 - `programme_id`: the last writer's programme, kept as context, not identity;
 - `created_at`, `updated_at` (server-stamped);
-- the local sync columns.
+- the local sync columns. **Locally only**, `server_changed_at` holds the `changed_at` of the
+  server state this row last reflected. It comes from an acknowledgement or a pull, and it makes
+  local merges monotonic (10.2, 11.3).
+
+**`letter_mastery_corrections`** is new and server-side only. Its columns are `correction_id`
+(primary key), `child_id`, `letter`, `language`, `confirmed`, `requested_at` (sent by the phone),
+`effective_at`, `changed_by`, `programme_id` and `received_at`. It fixes each correction's
+effective time **once**, so a retry cannot move it. It is also the audit trail for "who changed
+it last". EAs have no direct access to it.
 
 **Constraints**
 - Unique on `(child_id, letter, language)`.
@@ -574,39 +607,66 @@ lookup by id all go.
 ### 10.2 Writing: `set_letter_mastery`
 
 ```
-public.set_letter_mastery(p_child_id uuid, p_letter text, p_language text,
-                          p_confirmed boolean, p_changed_at timestamptz) returns text  -- 'applied' | 'superseded'
+public.set_letter_mastery(p_correction_id uuid, p_child_id uuid, p_letter text, p_language text,
+                          p_confirmed boolean, p_changed_at timestamptz)
+  returns table (outcome text, confirmed boolean, changed_at timestamptz,
+                 correction_id uuid, changed_by uuid)   -- outcome: 'applied' | 'superseded'
 ```
 
 **Authority.** The caller must currently deliver to the child, meaning an active
-`child_ea_assignments` row; otherwise `42501`. Class-only assessors and former deliverers cannot
-write.
+`child_ea_assignments` row; otherwise `42501`. A retry of a correction already in
+`letter_mastery_corrections` from the same caller skips this check, for the same reason as 8.1
+step 3. Class-only assessors and former deliverers cannot write.
 
-**Ordering rule (D1).** The effective time is `least(p_changed_at, now())`. The function runs:
+**Ordering rule (D1)**
+1. **Fix the effective time once.** Insert the correction into `letter_mastery_corrections` with
+   `effective_at = least(p_changed_at, now())`, `on conflict (correction_id) do nothing`. Then
+   read its stored `effective_at` back. A retry, even hours later, therefore uses the time fixed
+   at first arrival.
 
-```sql
-insert … on conflict (child_id, letter, language) do update
-  set confirmed, changed_at, changed_by, programme_id
-  where excluded.changed_at > letter_mastery.changed_at
-```
+   Codex's case shows why: a phone with its clock an hour fast confirms at T1 and loses the
+   acknowledgement. Another phone then un-confirms at T2. If the retry at T3 were clamped again,
+   it would beat T2 and undo the newer correction.
+2. **Apply only if newer.**
+   ```sql
+   insert … on conflict (child_id, letter, language) do update
+     set confirmed, changed_at = effective_at, correction_id, changed_by, programme_id
+     where (effective_at, correction_id) > (letter_mastery.changed_at, letter_mastery.correction_id)
+   ```
+   The id breaks exact ties deterministically.
+3. **Return the current record** for either outcome:
+   - `applied`: this correction now holds;
+   - `superseded`: a newer one holds.
 
-- A newer correction applies (`applied`).
-- An older or equal one changes nothing (`superseded`), which counts as success.
-- A lost-acknowledgement retry is therefore harmless.
+   Both count as success.
+
+**Why it is safe**
+- A lost-acknowledgement retry is harmless.
 - The natural key resolves inside the one statement. That makes Zazi's ZZ-BUG-20260813-006 race
   (two inserts for the same key) the regression case: the second insert becomes a conflict
   update, not a crash.
+
+**Acknowledgement on the phone.** It runs in one transaction, with the existing CAS.
+- **No newer local change is queued** (the local `correction_id` is still the one sent). The
+  local row becomes the returned record, with `server_changed_at` set to the returned
+  `changed_at`, and is marked `synced`.
+  - On `superseded`, the phone therefore shows the winning value at once. It does not keep
+    displaying its own losing value as synced, and this holds before any mastery pull exists.
+- **A newer local change is queued.** Only `server_changed_at` is updated. The local values and
+  the outbox row stay.
 
 **Direct writes.** Direct INSERT, UPDATE and DELETE on `letter_mastery` are revoked. This closes
 Ruling 11 for the table: a late, stale write cannot overwrite a newer correction, because of the
 `where` clause.
 
 **On the phone**
-- One outbox row per record id carries the latest local state (`confirmed`, `changed_at`).
-- Toggling on, off, on while offline coalesces into one call.
+- Each local change gets a new `correction_id`.
+- One outbox row per record id carries the latest local state (`correction_id`, `confirmed`,
+  `changed_at`).
+- Toggling on, off, on while offline coalesces into one call with the last correction id.
 - `LetterMasteryPanel` and the session-form tracker write through
   `masteryRepository.setLetterMastery({ childId, letter, language, confirmed })`. It stamps
-  `changed_at = now` and `changed_by`.
+  `changed_at = now`, a new `correction_id`, and `changed_by`.
 - The insert, update, archive and reactivate branches go away.
 
 ### 10.3 Reading
@@ -673,40 +733,70 @@ ordered and limited before the merge, and an `(updated_at, id)` keyset with serv
 
 **`get_assessment_history_page(p_programme_id, p_page_size, p_after_updated_at, p_after_id,
 p_overlap_seconds)`**
-- Returns assessment parents in scope.
+- Returns one row per assessment in scope. Each row carries:
+  - the parent columns;
+  - `items` as a **jsonb array holding the whole family**;
+  - `battery_run` as jsonb, the run header when `battery_run_id` is set;
+  - the child identity projection.
+- **This shape is what stops truncation.** Hosted PostgREST caps responses at 1,000 rows
+  (contract map). A separate item call would return about 3,000 rows for 50 letter tests, and
+  they would be cut off silently. With items inside each parent row, the row count is the page
+  size, at most 200. The phone rejects the whole page if any parent's `items` length differs
+  from its `total_items`.
+- An authenticated HTTP test proves the shape with a page whose families total more than 1,000
+  items. A direct-SQL harness case cannot show the cap.
 - The year comes from the server, because it is part of authorization.
 - The owner arm uses the same year bound so the pull stays a current-year pull.
 
-**`get_assessment_items(p_assessment_ids uuid[])`**
-- Re-checks authorization per id.
-- Returns every item of each requested family. A family is never paged.
+**`get_battery_run_history_page(p_programme_id, p_page_size, p_after_updated_at, p_after_id,
+p_overlap_seconds)`** is the runs' own delta walk.
+- It is keyed on the run's server-stamped `updated_at`, which changes on every lifecycle step.
+- It uses the same predicate, with the run's `started_at` date as the year test.
+- It finds runs with no saved Question yet and status-only changes, neither of which moves an
+  assessment cursor.
 
-**`get_battery_runs(p_run_ids uuid[])`** returns the runs referenced by a page.
-
-**Child identity.** Each page call returns an identity projection (first, last and preferred
-name) for every child on the page. The phone creates a history reference child for any child it
-does not already hold, as CAP-004 does. That child carries identity only; it is never roster,
-assessment scope, or write authority (CONTEXT).
+**Child identity.** Each page row carries an identity projection (first, last and preferred
+name) of its child. The phone creates a history reference child for any child it does not
+already hold, as CAP-004 does. That child carries identity only; it is never roster, assessment
+scope, or write authority (CONTEXT).
 
 **`get_letter_mastery_page(p_after_updated_at, p_after_id, p_page_size, p_overlap_seconds)`**
-- Returns records for children the caller currently delivers to, including `confirmed = false`
-  rows.
+- Uses the **same predicate as the SELECT policy** (10.3): the caller is the last writer, or
+  currently delivers to the child.
+- Includes `confirmed = false` rows and the child identity projection.
 - It is not programme-scoped.
 
 ### 11.3 Applying a page on the phone
 
-**Assessments, runs and items: one transaction per page, cursor included.**
+**Assessments and items: one transaction per page, cursor included.**
 - Immutable families make this cheap: insert-or-ignore by id, with one batched existence lookup
   per page and prepared statements. There is no row comparison (Z2).
 - A family arrives complete or the page fails.
-- Runs are applied before assessments, and children before both.
+- Children are applied first, then run headers, then assessments.
 - A local pending row with the same id is left alone; it is the same immutable fact.
 - Absence never deletes.
 
-**Mastery**
-- A server row replaces the local row unless the local row is pending with a later
-  `changed_at`. In that case the local row wins until its upload, and the server's rule settles
-  it.
+**Runs: never insert-or-ignore, because runs change.** A run header from either walk is merged
+like this:
+- **Absent locally:** insert it.
+- **Present and synced:** take the incoming status only if it is further along
+  (`in_progress` → `completed`/`abandoned`), together with its `completed_at`.
+- **Pending, failed or in flight locally:** leave it alone. Its upload settles it.
+
+The run walk runs before the assessment walk in each pass. Either order converges, because an
+assessment page always carries its own run header.
+
+**Mastery: a monotonic merge.**
+- **Absent locally:** insert the pulled row.
+- **Pending, failed or in flight locally:** leave it alone. Its acknowledgement brings back the
+  authoritative record (10.2).
+- **Otherwise:** apply the pulled row only if `(changed_at, correction_id)` is greater than the
+  local `(server_changed_at, correction_id)`.
+
+This stops one race in particular. A pull reads an older server value; a newer local correction
+then uploads and is acknowledged; then the old page is applied. Without the check, the newer
+correction would be rolled back. The check is the same rule the server uses, applied to
+server-fixed times, so a phone with a wrong clock cannot block convergence.
 
 **Completeness and re-walks.** These copy `sessionHistoryPull`:
 - deadline from enqueue;
@@ -722,8 +812,12 @@ Start at 50 parents.
 
 ### 11.4 Runs on another device (call 7)
 
-- A pulled `in_progress` run the caller owns can be resumed. Its decided Questions are the pulled
-  results, and the partial unique index prevents a duplicate.
+- A pulled run is read-only on any device that did not start it.
+- **The owner may abandon** a pulled `in_progress` run. That status only moves forward and
+  touches no Question, so it is safe from any device.
+- **Resuming on another device is out of scope.** It would need proof that every decided
+  Question had downloaded, plus a rule for two phones deciding the same Question, where today
+  the second upload would be quarantined with `23505`. Revisit with durable drafts.
 - Another EA's run is read-only.
 
 ### 11.5 Status
@@ -779,8 +873,8 @@ records the clear.
 
 | Plan | Contents | Hosted apply | Ends with |
 |---|---|---|---|
-| **1. Results and upload** | Migration: 7.1 columns, `battery_runs`, `programmes` columns, 8.1–8.4. SQLite version: 7.1, plus clearing. Package and app: 6.1–6.4 (content as data, component changes, standalone letter and word tests, old stack deleted). Phone: 7.2, 8.5, section 9. Docs. | Yes | A03 device gate: standalone letter test with stop rule, word test, offline queue of 30 families, airplane toggled mid-upload, server holds only complete families. |
-| **2. Letter mastery** | Section 10: migration, SQLite version, `set_letter_mastery`, the repository and both write surfaces, evidence from stored items. | Yes | Two-phone correction-order gate: an offline older confirm loses to a newer un-confirm. |
+| **1. Results and upload** | Migration: 7.1 columns, `battery_runs`, `programmes` columns, 8.1–8.4. SQLite version: 7.1, plus clearing. Package and app: 6.1–6.4 (content as data, component changes, standalone letter and word tests, old stack deleted). Phone: 7.2, 8.5, section 9, **and 10.4**: assessment evidence computed from stored items, plus every mastery reader that reads results. Without 10.4, a new-format letter result would yield no mastery until Plan 2 (Codex review). Docs. | Yes | A03 device gate: standalone letter test with stop rule, word test, offline queue of 30 families, airplane toggled mid-upload, server holds only complete families. The new result shows as mastery in the child tracker, the session-form tracker, and the mastery ranking. |
+| **2. Mastery confirmations** | 10.1–10.3: re-key migration and corrections table, SQLite version, `set_letter_mastery`, the acknowledgement that writes the winning record back, the repository and both write surfaces. | Yes | Two-phone correction-order gate, checking **both phones' SQLite rows and screens**: an offline older confirm loses to a newer un-confirm, including with one phone's clock an hour fast and a lost acknowledgement. |
 | **3. History pull** | Section 11: predicate, SELECT policies, page RPCs, page apply, triggers, status. The ROADMAP §1 history checklist and device gates. | Yes | New-phone, reinstall, and second-EA gates on iPhone and the A03; the ROADMAP CAP-004-style gates for assessments. |
 
 **Then WelaPLUS Plan 3** (host screens), after Bold Red. Bold Red changes only screens, so it
@@ -789,7 +883,9 @@ does not block Plans 1–3. If Bold Red's assessment screens are restyled before
 
 **Why this order**
 - Plan 1 fixes the shape everything else reads.
-- Mastery (Plan 2) needs results stored with their letters.
+- Plan 1 also moves assessment evidence, so every plan can be installed on its own and still
+  show correct mastery.
+- Plan 2 changes only the stored confirmations.
 - The pull (Plan 3) needs both, and its predicate tightens read scope, which is easiest to prove
   last.
 
@@ -813,10 +909,26 @@ Per `AGENTS.md`: Codex implements each task, and Claude reviews the diff and tes
   - a duplicate run Question is refused;
   - a skipped result saves;
   - the family plus one outbox row land in one transaction.
+- A round trip for **every package component**: a real result is saved, the payload is built,
+  and it passes the write call's shape checks. This includes a partly scored Q11 (sparse
+  positions) and a Listen-and-answer result (no metadata).
 - Family acknowledgement in one transaction.
 - The mastery re-key migration, with coalescing and ordering.
-- Page apply: idempotent replay, pending-local preserved, history reference child created, and a
-  page with 50 families of 61 items each.
+- Mastery acknowledgement:
+  - `superseded` replaces the local value with the winner;
+  - a newer queued change survives an older acknowledgement.
+- Page apply:
+  - idempotent replay, pending-local preserved, history reference child created;
+  - a page with 50 families of 61 items each;
+  - a page with a short `items` array is rejected whole.
+- Run merge:
+  - an `in_progress` header followed by `completed` converges;
+  - a run with no Questions arrives through the run walk;
+  - a pending local run is untouched;
+  - an owned run whose class is not on the phone keeps its exact `class_id`, and a later abandon
+    succeeds.
+- Mastery merge: a stale page applied after a newer acknowledged correction does not roll it
+  back.
 
 **Disposable PostgreSQL harness:** new `assessment-results-postgres-harness.cjs`; all harnesses
 rerun.
@@ -824,7 +936,9 @@ rerun.
 **`submit_assessment` cases**
 - complete insert;
 - replay returns `already_present`;
+- commit, lost response, assignment revoked, replay: still `already_present`;
 - mismatched replay raises `MA001`;
+- sparse positions are accepted, and duplicate positions raise `22023`;
 - a short items array raises `22023`, and nothing lands;
 - unauthorized child;
 - no programme assignment;
@@ -844,10 +958,24 @@ rerun.
 
 **`set_letter_mastery` cases**
 - newer applies;
-- older is superseded;
+- older is superseded, and the winner is returned;
 - a future time is clamped;
+- **this sequence:**
+  1. a phone with its clock an hour fast confirms;
+  2. its acknowledgement is lost;
+  3. another phone un-confirms;
+  4. the first phone retries.
+
+  The un-confirm still holds, because the retry keeps its first effective time;
 - the concurrent same-key insert race;
-- a non-deliverer is denied.
+- a non-deliverer is denied;
+- a retry after the assignment is revoked is still accepted.
+
+**Pull calls**
+- The mastery pager returns the last writer's records after a delivery handover.
+- It denies a former deliverer who is not the last writer.
+- An authenticated HTTP test proves a page whose families total more than 1,000 items arrives
+  whole.
 
 **Read predicate cases** (the six-actor matrix plus):
 - the old-class EA after a mid-year move;
