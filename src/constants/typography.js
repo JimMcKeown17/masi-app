@@ -3,10 +3,17 @@
 // makes Android fall back to the system font).
 export const fontFamilies = {
   display: 'BricolageGrotesque_800ExtraBold',
+  displayBold: 'BricolageGrotesque_700Bold',
   textMedium: 'Figtree_500Medium',
   textSemi: 'Figtree_600SemiBold',
   textBold: 'Figtree_700Bold',
   textHeavy: 'Figtree_800ExtraBold',
+};
+
+// Logo styles, not reading text: the lockup is the brand mark.
+export const logoType = {
+  wordmark: { fontFamily: fontFamilies.display, fontSize: 26, lineHeight: 24, letterSpacing: 0.26 },
+  wordmarkSub: { fontFamily: fontFamilies.displayBold, fontSize: 12, lineHeight: 15, letterSpacing: 1.56 },
 };
 
 export const typeRoles = {

@@ -1,167 +1,113 @@
-import React, { useState } from 'react';
-import { View, StyleSheet, KeyboardAvoidingView, Platform, ScrollView } from 'react-native';
-import { TextInput, Button, Text } from 'react-native-paper';
+import React, { useLayoutEffect, useRef, useState } from 'react';
+import { KeyboardAvoidingView, Platform, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuth } from '../../context/AuthContext';
-import { useToast } from '../../context/ToastContext';
+import BrandButton from '../../components/common/BrandButton';
+import InlineNote from '../../components/common/InlineNote';
+import TextField from '../../components/common/TextField';
 import { describeAuthError } from '../../utils/authErrorCopy';
-import { colors, spacing } from '../../constants/colors';
+import { borderRadius, colors, spacing, tints } from '../../constants/colors';
+import { fontFamilies, typeRoles } from '../../constants/typography';
 
 export default function ForgotPasswordScreen({ navigation }) {
+  const { resetPassword } = useAuth();
+  const insets = useSafeAreaInsets();
   const [email, setEmail] = useState('');
+  const [error, setError] = useState(null);
   const [loading, setLoading] = useState(false);
-  const toast = useToast();
+  const submittingRef = useRef(false);
   const [success, setSuccess] = useState(false);
 
-  const { resetPassword } = useAuth();
+  useLayoutEffect(() => {
+    if (success) navigation.setOptions({ title: '' });
+  }, [navigation, success]);
 
-  const handleResetPassword = async () => {
+  const handleReset = async () => {
+    if (submittingRef.current) return;
     if (!email || !email.includes('@')) {
-      toast.show({ message: 'Please enter a valid email address', tone: 'error', duration: 4000 });
+      setError({ kind: 'format' });
       return;
     }
 
+    submittingRef.current = true;
+    setError(null);
     setLoading(true);
-    toast.hide();
-
     const { error: resetError } = await resetPassword(email);
-
-    setLoading(false);
-
     if (resetError) {
-      toast.show({ message: describeAuthError(resetError, 'reset'), tone: 'error', duration: 4000 });
+      submittingRef.current = false;
+      setError({ kind: 'server', message: describeAuthError(resetError, 'reset') });
+      setLoading(false);
     } else {
       setSuccess(true);
+      setLoading(false);
     }
   };
 
   if (success) {
     return (
       <View style={styles.container}>
-        <View style={styles.successContent}>
-          <Text variant="headlineMedium" style={styles.successTitle}>
-            Check Your Email
+        <View style={styles.sentContent}>
+          <View testID="reset-sent-tile" style={styles.sentTile}
+            accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
+            <Ionicons name="mail-outline" size={40} color={colors.text} accessible={false} />
+          </View>
+          <Text accessibilityRole="header" style={styles.sentTitle}>Check your email</Text>
+          <Text style={styles.sentMessage}>
+            If an account exists with{'\n'}<Text style={styles.email}>{email}</Text>,{'\n'}
+            you will receive a password reset link shortly.
           </Text>
-          <Text variant="bodyLarge" style={styles.successMessage}>
-            If an account exists with {email}, you will receive a password reset link shortly.
-          </Text>
-          <Text variant="bodyMedium" style={styles.successNote}>
+          <Text style={styles.sentNote}>
             Please check your email and follow the instructions to reset your password.
           </Text>
-          <Button
-            mode="contained"
-            onPress={() => navigation.navigate('Login')}
-            style={styles.button}
-          >
-            Back to Login
-          </Button>
+        </View>
+        <View testID="reset-sent-footer" style={[styles.sentFooter, { paddingBottom: Math.max(insets.bottom, spacing.lg) }]}>
+          <BrandButton variant="primary" label="Back to sign in" onPress={() => navigation.popTo('Login')} />
         </View>
       </View>
     );
   }
 
   return (
-    <KeyboardAvoidingView
-      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-      style={styles.container}
-    >
-      <ScrollView contentContainerStyle={styles.scrollContent}>
-        <View style={styles.content}>
-          <Text variant="headlineLarge" style={styles.title}>
-            Reset Password
-          </Text>
-          <Text variant="bodyLarge" style={styles.subtitle}>
-            Enter your email address and we'll send you instructions to reset your password.
-          </Text>
-
-          <TextInput
-            label="Email"
-            value={email}
-            onChangeText={setEmail}
-            autoCapitalize="none"
-            keyboardType="email-address"
-            mode="outlined"
-            style={styles.input}
-            disabled={loading}
-            autoFocus
-          />
-
-          <Button
-            mode="contained"
-            onPress={handleResetPassword}
-            loading={loading}
-            disabled={loading}
-            style={styles.button}
-          >
-            Send Reset Link
-          </Button>
-
-          <Button
-            mode="text"
-            onPress={() => navigation.goBack()}
-            disabled={loading}
-            style={styles.backButton}
-          >
-            Back to Login
-          </Button>
+    <KeyboardAvoidingView behavior="padding" enabled={Platform.OS === 'ios'} style={styles.container}>
+      <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={styles.formContent}>
+        <Text style={styles.paragraph}>
+          Enter your email address and we’ll send you instructions to reset your password.
+        </Text>
+        <View style={styles.field}>
+          <TextField surface="canvas" label="Email" icon="mail-outline" value={email}
+            onChangeText={(value) => { setEmail(value); setError(null); }}
+            autoFocus keyboardType="email-address" autoCapitalize="none" returnKeyType="send"
+            onSubmitEditing={handleReset} disabled={loading}
+            error={error?.kind === 'format' ? 'Please enter a valid email address' : undefined} />
         </View>
+        {error?.kind === 'server' ? (
+          <View style={styles.serverNote}><InlineNote tone="error">{error.message}</InlineNote></View>
+        ) : null}
+        <BrandButton variant="primary" label="Send reset link" loadingLabel="Sending…"
+          loading={loading} onPress={handleReset}
+          style={error?.kind === 'server' ? styles.sendAfterNote : styles.send} />
+        <BrandButton variant="tertiary" tone="ink" label="Back to sign in"
+          style={styles.back} disabled={loading} onPress={() => navigation.goBack()} />
       </ScrollView>
-
     </KeyboardAvoidingView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: colors.background,
-  },
-  scrollContent: {
-    flexGrow: 1,
-    justifyContent: 'center',
-  },
-  content: {
-    padding: spacing.lg,
-  },
-  successContent: {
-    padding: spacing.lg,
-    justifyContent: 'center',
-    alignItems: 'center',
-    flex: 1,
-  },
-  title: {
-    textAlign: 'center',
-    marginBottom: spacing.sm,
-    color: colors.primary,
-  },
-  subtitle: {
-    textAlign: 'center',
-    marginBottom: spacing.xl,
-    color: colors.textSecondary,
-  },
-  successTitle: {
-    textAlign: 'center',
-    marginBottom: spacing.md,
-    color: colors.primary,
-  },
-  successMessage: {
-    textAlign: 'center',
-    marginBottom: spacing.md,
-    color: colors.text,
-  },
-  successNote: {
-    textAlign: 'center',
-    marginBottom: spacing.xl,
-    color: colors.textSecondary,
-    fontStyle: 'italic',
-  },
-  input: {
-    marginBottom: spacing.md,
-  },
-  button: {
-    marginTop: spacing.md,
-    paddingVertical: spacing.sm,
-  },
-  backButton: {
-    marginTop: spacing.sm,
-  },
+  container: { flex: 1, backgroundColor: colors.background },
+  formContent: { paddingTop: 10, paddingHorizontal: spacing.lg, paddingBottom: spacing.lg },
+  paragraph: { ...typeRoles.textParagraph, color: colors.textSecondary, maxWidth: 330 },
+  field: { marginTop: spacing.ml },
+  serverNote: { marginTop: spacing.ml },
+  send: { marginTop: spacing.ml },
+  sendAfterNote: { marginTop: spacing.ms },
+  back: { marginTop: spacing.sm },
+  sentContent: { flex: 1, justifyContent: 'center', alignItems: 'center', paddingHorizontal: spacing.lg, paddingBottom: spacing.xxl },
+  sentTile: { width: 80, height: 80, borderRadius: borderRadius.xl, backgroundColor: colors.surface, borderWidth: 1, borderColor: tints.rule, alignItems: 'center', justifyContent: 'center' },
+  sentTitle: { ...typeRoles.displayTitle, color: colors.text, marginTop: 28, textAlign: 'center' },
+  sentMessage: { ...typeRoles.textParagraph, color: colors.text, marginTop: spacing.ms, textAlign: 'center' },
+  email: { fontFamily: fontFamilies.textHeavy },
+  sentNote: { ...typeRoles.textParagraph, color: colors.textSecondary, marginTop: 14, maxWidth: 300, textAlign: 'center' },
+  sentFooter: { paddingHorizontal: spacing.lg },
 });

@@ -783,6 +783,9 @@ The record spans two eras with two different shapes, both preserved as written:
 | 2026-10-19 | Bold Red PR 4 branch review round 2 (`codex adversarial-review --base feat/bold-red-record` at `acead94`) | **Approve, no material findings** | Round 1 fixes confirmed (spinner stops and resets in still mode; cancellation settles every track with confetti invisible; stacked receipt keeps every letter and the grouped phrases). Completion and Home share the goal service; missing legacy params fall back; Done/back share a guarded `popTo`; cleanup covers unmount. Source-level only; Task 14 device gate open. Review loop closed at two rounds. |
 | 2026-10-19 | Bold Red PR 5 branch review round 1 (`codex adversarial-review --base feat/bold-red-complete` at `029da83`): 1 high + 2 medium findings, all accepted and fixed by Codex test-first | Full unit **335 suites / 3,481 tests** (one rerun: 4 timing flakes under concurrent Codex load, green on rerun), integration **52 suites / 543 tests** | (1) **[high] Password changes could complete out of order:** verification ran outside the queue, so dismiss → reopen → submit could let the abandoned attempt overwrite the newer password the EA was told succeeded. `changePassword` now serializes verification, update and cleanup per actor (`userId:epoch`); seven AuthContext regressions assert the final stored password. (2) **Export confirmation could not scroll at large text:** ConfirmSheet body now scrolls inside BottomSheet with actions in the footer (also Record’s discard sheet). (3) **Repeated identical password error did not scroll back into view:** uses the cached measurement. |
 | 2026-10-19 | Bold Red PR 5 branch review round 2 (`codex adversarial-review` at `138b1fc`): 1 medium finding, accepted and fixed test-first (`passwordVerificationClient.test.js` RED 3 failed, then GREEN) | Full unit **336 suites / 3,484 tests**, integration **52 suites / 543 tests**; `task5AuthRaces` 40/40 | **Hung private auth request would block the new password queue:** the private verification client used raw `fetch` with no deadline, so a never-settling `/token` or `/logout` kept every later change for that EA waiting. Its transport now uses `authRequestFetch` (30 s, aborts the SDK request). Round 2 otherwise confirmed: sign-out and a new actor stay independent; ConfirmSheet footer, `alertdialog`, SheetAccessibilityContext and Record’s keyboard dismiss intact. Review loop closed at two rounds; the remaining checks are native (keyboard, accessibility). |
+| 2026-10-19 | Bold Red PR 6 branch review round 1 (`codex adversarial-review --base feat/bold-red-profile` at `642152a`): 1 high + 1 medium, accepted and fixed by Codex test-first | Full unit **342 suites / 3,575 tests**, integration **52 suites / 543 tests** | (1) **[high] Double sign-in broke credential persistence** (reproduced with the real SDK): Sign in + keyboard Go in one frame started two sign-ins; first succeeded, second failed and rolled back admission, so later token refreshes were not persisted. `signIn` now skips the rollback when any sign-in succeeded since the attempt began (success generation); Login and Reset take a synchronous ref guard. The orchestrator had rated the state-based guard low risk on the assumption that `signInPendingRef` coalesced attempts; it does not. (2) **Login had no keyboard avoidance on edge-to-edge Android:** `KeyboardAvoidingView` now uses padding on both platforms (same class as C11). |
+| 2026-10-19 | Bold Red PR 6 branch review round 2 (at `ddd6c8f`): 1 high, introduced by the round 1 fix, accepted and fixed by Codex test-first (RED: signed-out case persisted B; signed-in-as-C case kept C’s old tokens) | Full unit **3,577 tests**, integration **543 tests**; `task5AuthRaces` 40/40 | The round 1 success generation advanced on every successful SDK response, including a superseded different-email success the storage fence had rejected, so a failing later attempt skipped its rollback and stayed admitted. It now advances only in the accepted `SIGNED_IN` branch right after `admitAuthSessionUser` (no await between check, admission and increment; the SDK awaits subscribers before returning). Screen guards confirmed: validation takes no guard; credential, SDK and offline errors release Login and Reset for retry. |
+| 2026-10-19 | Bold Red PR 6 branch review round 3 (at `299ebb7`, scoped to sign-in admission; round cap): 2 high, both pre-existing on the base branch, **recorded as known risks, not fixed** | Reviewer ran 48 two-attempt orderings with the real auth SDK; no repository change | (1) A late `SIGNED_IN` that arrives after the pending attempt clears (newer attempt already settled, or after sign-out) is accepted without an ownership check, so the UI can show A while storage holds B. (2) An older attempt whose storage write commits before a newer attempt fails leaves that session persisted while rollback restores admission in memory only. **Disposition:** both need two shared-client `signIn` calls in flight. The only caller is LoginScreen, which now takes a synchronous `submittingRef` guard; the password check uses a separate private client; sign-out is unreachable from the signed-out Login stack. Round 1 and 2 fixes stand and their tests stay green. Follow-up: serialise shared-client sign-in commits (one ownership rule for persistence and admission) if a second caller is ever added. Login and Reset guard release verified by the reviewer on every failure path. |
 
 ### Organisation label v1 — 18 PostgreSQL checks
 
@@ -1672,3 +1675,55 @@ Node 20.19.4 scope assertions passed: exactly five documentation paths, empty in
 CONTEXT.md, append-only build log, and unchanged roadmap before §5 (including “BackMy Profile”).
 The full unit run also logged an undefined `.catch` error from ChildrenContextPendingDelete.integration.test.js
 without failing assertions; recorded for the orchestrator, not investigated in this documentation scope.
+
+### 2026-10-19 — Bold Red Login Tasks 8–9
+
+#### Verification Register
+
+Local Node 20.19.4 gates below; Tasks 2–7 are focused reruns of the inherited implementation.
+Every command uses `PATH=$HOME/.nvm/versions/node/v20.19.4/bin:$PATH`.
+
+| Gate | Command (after the Node prefix) | Result |
+|---|---|---|
+| Incoming baseline | `npx jest` | PASS: 340 suites / 3,554 tests; exit 0 |
+| Incoming integration baseline | `npm run test:integration` | PASS: 52 suites / 543 tests; exit 0 |
+| Task 2 type | `npx jest __tests__/typography.test.js __tests__/designSystemGuard.test.js` | PASS: 2 suites / 284 tests; exit 0 |
+| Task 3 art | `npx jest __tests__/loginHeroGeometry.test.js __tests__/LoginBrand.test.js __tests__/designSystemGuard.test.js` | PASS: 3 suites / 250 tests; exit 0 |
+| Task 4 fields | `npx jest __tests__/TextField.test.js __tests__/ChangePasswordSheet.test.js __tests__/domainTextInputAudit.test.js` | PASS: 3 suites / 53 tests; exit 0 |
+| Task 5 network | `npx jest __tests__/useNetworkOffline.test.js` | PASS: 1 suite / 7 tests; exit 0 |
+| Task 6 Login | `npx jest __tests__/LoginScreen.test.js __tests__/designSystemGuard.test.js __tests__/domainTextInputAudit.test.js __tests__/authErrorCopy.test.js` | PASS: 4 suites / 298 tests; exit 0 |
+| Task 7 layout | `npx jest __tests__/loginLayout.test.js __tests__/LoginScreen.test.js __tests__/loginHeroGeometry.test.js __tests__/designSystemGuard.test.js` | PASS: 4 suites / 283 tests; exit 0 |
+| Task 8 Reset/real stack | `npx jest __tests__/ForgotPasswordScreen.test.js __tests__/AuthNavigator.test.js` | RED: 14 failed (old UI, missing export). First implementation: 12 passed / 2 failed (test harness: composite/host Text identity and unavailable matcher). Corrected assertions preserve render-order/busy checks; GREEN: 2 suites / 14 tests; exit 0. Real native stack mounted; no router fallback |
+| Task 8 empty header and inherited Reset assertions | `npx jest __tests__/ScreenHeader.test.js __tests__/AppNavigator.headers.test.js __tests__/LoginScreen.test.js` | RED: 5 failed / 75 passed (empty headers and old Reset copy); GREEN: 3 suites / 80 tests; exit 0 |
+| Task 8 required neighbors | `npx jest __tests__/ForgotPasswordScreen.test.js __tests__/AuthNavigator.test.js __tests__/AppNavigator.headers.test.js __tests__/designSystemGuard.test.js __tests__/domainTextInputAudit.test.js` | First run: 1 failed / 288 passed (last ratchet removal left empty test.each). Replaced with explicit empty-ratchet assertion; GREEN: 5 suites / 289 tests; exit 0 |
+| Native gate | Not run; orchestrator/Jim owns Login Task 11 | D1–D9, sign-out/status-bar and Home comparison remain open; Reset D10 deferred to #78 |
+
+#### Decision Register
+
+| Decision | Contract / evidence |
+|---|---|
+| Forgot hidden | Jim, 2026-10-19: no Login link until recovery works; registered/restyled Reset remains unreachable. Recovery issue [#78](https://github.com/JimMcKeown17/masi-app/issues/78) already filed by orchestrator |
+| Lockup and panel | Typeset MASI/NYUSANE; Bricolage 700 `displayBold` because the supplied logotype is only 106×41 px. `lockupTop = max(insets.top + 9, 40)` (+10 would give 57 rather than board 56). Without Forgot, Sign in is 20 below Password / 12 after a form note; the offset moves art down about 36dp at height 844, anchored to the note-free rest panel. Keyboard-mode bottom padding 24 |
+| Shared names and gaps | Shipped names match the plan map; AuthNavigator already had Reset options, so only its export changed. Empty ScreenHeader title now omits the heading while preserving Back/right-slot spacing. Two inherited Reset cases in LoginScreen.test.js needed new copy/navigation fixtures. Last ratchet removal requires an explicit empty-ratchet assertion instead of empty test.each |
+
+#### Bug And Gap Register
+
+| Gap | Evidence / remaining gate |
+|---|---|
+| Recovery dead end | #78 owns deep-link exchange, set-new-password screen, restored Login link and deferred Reset D10 (small phone/keyboard/long email). No backend or device recovery claim |
+| Login double-tap boundary | Login checks React `loading` state. Source inspection corrects the handoff's stronger claim: AuthContext's `signInPendingRef` tracks latest-attempt admission/rollback, but `signIn` does not reject/coalesce a second same-frame call before `signInWithPassword`. Post-render pending taps/return are tested; same-frame transport deduplication remains a follow-up. No AuthContext change |
+| Slow existing test | `LiteracySessionForm.test.js` takes about 8s alone (reported handoff) and can exceed the 5s per-test timeout under parallel load. Incoming full-suite run passed (file took 52.95s under load). Follow-up remains; no timeout raised |
+
+Task 9 updates only design-system.md, ROADMAP.md §5, PRD.md §6.1 and this append-only log.
+Task 10 branch review and Task 11 were not started. Changes remain uncommitted for orchestrator review.
+
+#### Post-Task-9 requested full-suite gates
+
+| Gate | Command | Result |
+|---|---|---|
+| Full unit suite | `PATH=$HOME/.nvm/versions/node/v20.19.4/bin:$PATH npx jest` | PASS: 342 suites / 3,569 tests, 0 skipped; exit 0 (40.275s) |
+| Full integration suite | `PATH=$HOME/.nvm/versions/node/v20.19.4/bin:$PATH npm run test:integration` | PASS: 52 suites / 543 tests, 0 skipped; exit 0 (31.618s); no auth-race rerun |
+| Whitespace / scope | `PATH=$HOME/.nvm/versions/node/v20.19.4/bin:$PATH git diff --check`; read-only Python/Git assertions | PASS: exactly 13 scoped files, unchanged branch, empty index, append-only log, ROADMAP §5 and PRD §6.1 boundaries preserved |
+
+Existing React/Paper and intentional failure-path diagnostics remain non-failing. No timeout,
+package, auth/data/sync/backend or Login production-code changes; no Git write or gh command.

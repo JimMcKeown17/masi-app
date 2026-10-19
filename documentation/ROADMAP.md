@@ -675,15 +675,17 @@ Additional Head Office behavior retained from the Sprint 4 follow-up:
   Task 14 branch review and preview/device gate remain open. Session complete is built on
   `feat/bold-red-complete`; its Task 13 branch review and Task 14 preview/device gate remain open.
   Profile is built on `feat/bold-red-profile`; its Task 9 branch review and Task 10 preview/device
-  gate remain open. Remaining per-screen PR: Login and reset password. Approved behaviour decisions are in
+  gate remain open. Login and reset password are built through Task 8 on `feat/bold-red-login`;
+  its Task 10 branch review and Task 11 preview/device gate remain open. All board screens are
+  implemented; the overall item remains open for review, merge and native acceptance. Approved behaviour decisions are in
   `docs/superpowers/specs/2026-10-18-bold-red-app-design.md` §6. PR 1's Task 34 EAS preview/device
   gate remains open. **C11:** reproduced on the A03s, build 15 (Create class → School search
   results under the keyboard), and fixed in Profile Task 2. The A03s/iPhone no-double-lift row
   remains open in Profile Task 10. Each later board PR also needs its own preview/device check.
 - [x] Roll typography tokens out or retire the incomplete token system. Built 2026-10-19 on
   `feat/bold-red-app`: legacy export retired, 42 `typeRoles`, Figtree 600, mapped themes and
-  fail-closed typography/source guards. Ten board files retain only their explicit raw-type/Paper
-  allowances until their per-screen PRs remove the corresponding `BOARD_RATCHET` entries.
+  fail-closed typography/source guards. All ten board files have now removed their raw-type/Paper
+  allowances; `BOARD_RATCHET` is empty after Login Tasks 6 and 8.
 - [x] Replace the 14 screen-local Snackbar hosts with one root host. Built 2026-10-19 on
   `feat/bold-red-app` as **`ToastProvider`**, not `SnackbarContext`: actor-scoped publishers,
   keyboard/obstruction placement and a host after the Paper tree. Native layering remains Task 34.
@@ -695,10 +697,13 @@ Additional Head Office behavior retained from the Sprint 4 follow-up:
 - [ ] Decide the fate of `session_type_id` and `activities.__legacySession`: promote a real synced
   contract or remove the machinery.
 - [ ] Push notifications and a durable message inbox remain unbuilt.
+- [ ] **Password recovery dead-ends; “Forgot password?” is hidden on Log in** until a deep link
+  and set-new-password screen exist ([#78](https://github.com/JimMcKeown17/masi-app/issues/78),
+  Jim 2026-10-19). Reset is restyled and registered but unreachable from Log in; D10 is deferred to #78.
 - [x] **Suspended sign-in copy:** build 14's raw "User is banned"/purple-action Snackbar finding
   (2026-10-18) is addressed on `feat/bold-red-app`, 2026-10-19. `describeAuthError` now gives
-  "Your access is paused. Please contact your supervisor." in a root error toast. The Login PR
-  moves errors inline; Task 34 still owns native acceptance.
+  "Your access is paused. Please contact your supervisor." Login now shows it inline on
+  `feat/bold-red-login`; Task 34 and the Login preview/device gate still own native acceptance.
 - [ ] **Bold Red clock row at large font:** at One UI's largest font (1.3), "Not clocked in" wraps to
   two lines at 411dp and three at 360dp, making the row tall. Text stays complete and the action
   tappable; consider a shorter label or stacking the button. Found on build 14, 2026-10-18.

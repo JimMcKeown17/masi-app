@@ -76,8 +76,12 @@ beforeEach(() => {
 
 test.each(Object.entries(TITLES))('%s renders its exact title and navigation action', (name, title) => {
   const screen = renderChrome(name);
-  expect(screen.getByRole('header')).toHaveTextContent(title);
-  expect(StyleSheet.flatten(screen.getByRole('header').props.style).textAlign).toBe('left');
+  if (title === '') {
+    expect(screen.queryByRole('header')).toBeNull();
+  } else {
+    expect(screen.getByRole('header')).toHaveTextContent(title);
+    expect(StyleSheet.flatten(screen.getByRole('header').props.style).textAlign).toBe('left');
+  }
   if (name === 'ChildOnboarding') {
     expect(screen.queryByRole('button', { name: 'Back' })).toBeNull();
     expect(screen.queryByRole('button', { name: 'Close' })).toBeNull();

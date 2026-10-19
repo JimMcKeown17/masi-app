@@ -21,12 +21,8 @@ const NAV_THEME = 'src/theme/navigationTheme.js';
 const PAPER_THEME = 'src/theme/paperTheme.js';
 const RATCHETED_PAPER = ['TextInput', 'Searchbar', 'SegmentedButtons', 'Card', 'Chip', 'FAB', 'Banner', 'Menu', 'Button', 'HelperText'];
 
-// The 10 board files keep their raw type sizes and Paper inputs until their own PR.
-// A count may fall but never rise; a line whose file is clean must be deleted.
-const BOARD_RATCHET = {
-  'src/screens/auth/LoginScreen.js': { rawType: 0, paperImports: ['TextInput', 'Button'] },
-  'src/screens/auth/ForgotPasswordScreen.js': { rawType: 0, paperImports: ['TextInput', 'Button'] },
-};
+// All board PRs have completed their type and control replacements.
+const BOARD_RATCHET = {};
 
 const rawTypeCount = (s) => (s.match(/\b(fontSize|lineHeight|letterSpacing)\s*:\s*-?\d/g) || []).length;
 const paperImports = (s) => [...s.matchAll(/import\s*\{([^}]*)\}\s*from\s*['"]react-native-paper['"]/g)]
@@ -56,11 +52,8 @@ describe('design-system guard', () => {
   test.each(FILES)('%s follows the token rules', (f) => {
     expect(violations(f)).toEqual([]);
   });
-  test.each(Object.keys(BOARD_RATCHET))('%s ratchet line is still needed', (f) => {
-    expect(FILES).toContain(f);
-    const s = source(f);
-    const stillUsed = rawTypeCount(s) > 0 || paperImports(s).some((i) => BOARD_RATCHET[f].paperImports.includes(i));
-    expect(stillUsed).toBe(true);
+  test('all board screens have left the ratchet', () => {
+    expect(BOARD_RATCHET).toEqual({});
   });
   test('the theme exceptions hold', () => {
     const nav = source(NAV_THEME);

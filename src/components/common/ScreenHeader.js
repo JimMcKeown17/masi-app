@@ -23,7 +23,9 @@ export default function ScreenHeader({ navigation, route, options, back }) {
             onPress={() => navigation.goBack()}
           />
         ) : null}
-        <Text accessibilityRole="header" maxFontSizeMultiplier={1.3} style={styles.title}>{title}</Text>
+        {title === '' ? <View style={styles.titleSpacer} /> : (
+          <Text accessibilityRole="header" maxFontSizeMultiplier={1.3} style={styles.title}>{title}</Text>
+        )}
         {headerRight?.({ canGoBack: Boolean(back), tintColor: colors.text })}
       </View>
       {headerScrolled ? <View testID="screen-header-hairline" style={styles.hairline} /> : null}
@@ -48,5 +50,6 @@ const styles = StyleSheet.create({
   container: { backgroundColor: colors.background, paddingHorizontal: 24, paddingBottom: 6 },
   row: { minHeight: 44, flexDirection: 'row', alignItems: 'flex-start', gap: 12 },
   title: { ...typeRoles.displayTitle, color: colors.text, paddingTop: 6, flex: 1, textAlign: 'left' },
+  titleSpacer: { flex: 1 },
   hairline: { position: 'absolute', left: 0, right: 0, bottom: 0, height: 1, backgroundColor: tints.rule },
 });
