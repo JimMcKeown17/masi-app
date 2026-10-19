@@ -287,8 +287,8 @@ Each workflow still awaits the result it needs before constructing the next depe
 
 ## Row versions (upload contract)
 
-The upload contract is built on `feat/upload-contract`; hosted application and the Galaxy A03s
-D2/D3 checks remain open. The server migration is
+The upload contract shipped in #77 and was applied to `masi-app-sqlite` on 2026-10-19; the Galaxy
+A03s D2/D3 checks passed. The server migration is
 [`20261018180000_upload_contract_row_version.sql`](../supabase/migrations/20261018180000_upload_contract_row_version.sql).
 It adds `row_version bigint not null default 1` to exactly these 11 tables:
 
