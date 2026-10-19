@@ -87,13 +87,13 @@ describe('ChildOnboardingScreen', () => {
       'Finish with fewer than 10 children?',
       expect.stringContaining('1 child'),
       expect.arrayContaining([
-        expect.objectContaining({ text: 'Keep Adding' }),
-        expect.objectContaining({ text: 'Finish Setup' }),
+        expect.objectContaining({ text: 'Keep adding' }),
+        expect.objectContaining({ text: 'Finish setup' }),
       ])
     );
 
     const finishAction = alertSpy.mock.calls[0][2]
-      .find(action => action.text === 'Finish Setup');
+      .find(action => action.text === 'Finish setup');
     await act(async () => finishAction.onPress());
     expect(mockCompleteClassOnboarding).toHaveBeenCalledWith('class-new');
     expect(mockPopToTop).toHaveBeenCalledTimes(1);
@@ -129,7 +129,7 @@ describe('ChildOnboardingScreen', () => {
 
     fireEvent.press(screen.getByRole('button', { name: 'Finish setup' }));
     const finishAction = alertSpy.mock.calls[0][2]
-      .find(action => action.text === 'Finish Setup');
+      .find(action => action.text === 'Finish setup');
     await act(async () => finishAction.onPress());
 
     expect(mockPopToTop).not.toHaveBeenCalled();

@@ -11,12 +11,26 @@ jest.mock('../src/db/repositories/assessmentsRepository', () => ({
   assessmentsRepository: { getAssessments: jest.fn(async () => []) },
 }));
 import React from 'react';
+import { FlatList, StyleSheet } from 'react-native';
 import { fireEvent, within } from '@testing-library/react-native';
 import { renderWithProviders } from '../test-support/renderWithProviders';
 import AssessmentRankingScreen from '../src/screens/insights/AssessmentRankingScreen';
 import { assessmentsRepository } from '../src/db/repositories/assessmentsRepository';
 import { getBarColor } from '../src/components/dashboard/RankedBarRow';
 import { OKAY_YELLOW, getBandColor } from '../src/utils/scoreBands';
+
+beforeEach(() => jest.clearAllMocks());
+
+test('assessment scores keep their existing gap above the bottom safe area', async () => {
+  const screen = renderWithProviders(<AssessmentRankingScreen navigation={{ navigate: jest.fn() }} />, {
+    insets: { top: 24, right: 0, bottom: 48, left: 0 },
+  });
+  await screen.findByTestId('segmented-control');
+  expect(StyleSheet.flatten(screen.UNSAFE_getByType(FlatList).props.contentContainerStyle)).toEqual({
+    padding: 16,
+    paddingBottom: 96,
+  });
+});
 
 test('the radio group changes the ranking mode without fetching again', async () => {
   const screen = renderWithProviders(<AssessmentRankingScreen navigation={{ navigate: jest.fn() }} />);

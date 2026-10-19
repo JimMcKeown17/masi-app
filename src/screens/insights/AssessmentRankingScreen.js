@@ -1,4 +1,5 @@
 import { useHeaderHairline } from '../../components/common/ScreenHeader';
+import { useScrollBottomPadding } from '../../hooks/useScrollBottomPadding';
 import SegmentedControl from '../../components/common/SegmentedControl';
 import { typeRoles } from '../../constants/typography';
 import { useSignedInEA } from '../../context/SignedInEAContext';
@@ -51,6 +52,7 @@ const BAND_LEGEND = [
 
 export default function AssessmentRankingScreen({ navigation }) {
   const onScroll = useHeaderHairline();
+  const paddingBottom = useScrollBottomPadding(spacing.xxl);
   const { repositories } = useSignedInEA();
   const { assessments: assessmentsRepository } = repositories;
 
@@ -141,7 +143,7 @@ export default function AssessmentRankingScreen({ navigation }) {
         data={ranking}
         keyExtractor={(item) => item.child.id}
         renderItem={renderItem}
-        contentContainerStyle={styles.listContent}
+        contentContainerStyle={[styles.listContent, { paddingBottom }]}
         ListHeaderComponent={
           <View>
             <View style={styles.toggle}>
@@ -203,7 +205,6 @@ const styles = StyleSheet.create({
   },
   listContent: {
     padding: spacing.md,
-    paddingBottom: spacing.xxl,
   },
   toggle: {
     marginBottom: spacing.md,

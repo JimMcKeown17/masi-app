@@ -4,7 +4,7 @@ import { fontFamilies, typeRoles } from '../../constants/typography';
 import React from 'react';
 import { View, StyleSheet, ScrollView } from 'react-native';
 import { Text } from 'react-native-paper';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useScrollBottomPadding } from '../../hooks/useScrollBottomPadding';
 import { colors, spacing, shadows } from '../../constants/colors';
 import { getItemSetById } from '../../constants/egraConstants';
 import AssessmentDetailGrid from '../../components/assessment/AssessmentDetailGrid';
@@ -40,7 +40,7 @@ function StatCard({ value, label, accentColor }) {
 export default function AssessmentDetailScreen({ route }) {
   const onScroll = useHeaderHairline();
   const { assessment, childName } = route.params;
-  const insets = useSafeAreaInsets();
+  const paddingBottom = useScrollBottomPadding();
   const isWordAssessment = assessment.assessment_type === 'word_egra';
 
   // Prefer items_tested (self-contained) → fall back to set lookup
@@ -59,7 +59,7 @@ export default function AssessmentDetailScreen({ route }) {
   return (
     <ScrollView onScroll={onScroll} scrollEventThrottle={16}
       style={styles.container}
-      contentContainerStyle={[styles.scrollContent, { paddingBottom: Math.max(insets.bottom, spacing.lg) }]}
+      contentContainerStyle={[styles.scrollContent, { paddingBottom }]}
     >
       <Text variant="bodyLarge" style={styles.childName}>{childName}</Text>
       <Text variant="bodyMedium" style={styles.meta}>

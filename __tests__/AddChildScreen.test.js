@@ -1,5 +1,6 @@
 jest.mock('@expo/vector-icons', () => ({ Ionicons: 'Ionicons' }), { virtual: true });
 import React from 'react';
+import { ScrollView, StyleSheet } from 'react-native';
 import { render, fireEvent, waitFor } from '@testing-library/react-native';
 import { AllProviders } from '../test-support/renderWithProviders';
 import AddChildScreen from '../src/screens/children/AddChildScreen';
@@ -52,6 +53,18 @@ beforeEach(() => {
 });
 
 describe('AddChildScreen', () => {
+  test('the form keeps its 16dp gap above a 48dp bottom safe area', () => {
+    const screen = render(
+      <AllProviders insets={{ top: 24, right: 0, bottom: 48, left: 0 }}>
+        <AddChildScreen route={route} navigation={navigation} />
+      </AllProviders>
+    );
+    expect(StyleSheet.flatten(screen.UNSAFE_getByType(ScrollView).props.contentContainerStyle)).toEqual({
+      padding: 16,
+      paddingBottom: 64,
+    });
+  });
+
   test('renders expected fields (first name, last name, age, gender)', () => {
     const { getAllByText } = renderScreen();
     // React Native Paper TextInput renders labels in multiple nodes

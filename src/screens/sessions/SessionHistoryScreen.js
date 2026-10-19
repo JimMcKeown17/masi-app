@@ -1,4 +1,5 @@
 import { useHeaderHairline } from '../../components/common/ScreenHeader';
+import { useScrollBottomPadding } from '../../hooks/useScrollBottomPadding';
 import ListGroup from '../../components/common/ListGroup';
 import { fontFamilies, typeRoles } from '../../constants/typography';
 import { useToast } from '../../context/ToastContext';
@@ -32,6 +33,7 @@ function formatSessionDate(dateString) {
 
 export default function SessionHistoryScreen() {
   const onScroll = useHeaderHairline();
+  const paddingBottom = useScrollBottomPadding();
   const toast = useToast();
   const { repositories, services } = useSignedInEA();
   const { sessions: sessionsRepository } = repositories;
@@ -172,6 +174,7 @@ export default function SessionHistoryScreen() {
           keyExtractor={(item) => item.id}
           renderItem={renderItem}
           style={styles.list}
+          contentContainerStyle={{ paddingBottom }}
           ListEmptyComponent={
             <View style={styles.emptyContainer}>
               <Text variant="bodyMedium" style={styles.emptyText}>

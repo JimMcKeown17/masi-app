@@ -1,3 +1,4 @@
+import { useScrollBottomPadding } from '../../hooks/useScrollBottomPadding';
 import React, { useEffect, useRef, useState } from 'react';
 import { View, StyleSheet, ScrollView, KeyboardAvoidingView, Platform } from 'react-native';
 import { Text } from 'react-native-paper';
@@ -33,6 +34,7 @@ export default function CreateClassScreen({ route, navigation }) {
   const [loading, setLoading] = useState(false);
   const toast = useToast();
   const onScroll = useHeaderHairline();
+  const paddingBottom = useScrollBottomPadding(spacing.md);
   const schoolTouchedRef = useRef(false);
 
   useEffect(() => {
@@ -100,7 +102,7 @@ export default function CreateClassScreen({ route, navigation }) {
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       keyboardVerticalOffset={90}
     >
-      <ScrollView contentContainerStyle={styles.scrollContent} onScroll={onScroll} scrollEventThrottle={16}>
+      <ScrollView contentContainerStyle={[styles.scrollContent, { paddingBottom }]} onScroll={onScroll} scrollEventThrottle={16}>
         <SurfaceCard style={styles.card}>
           {noSchools && (
             <Text variant="bodySmall" style={styles.warningText}>
@@ -137,7 +139,7 @@ export default function CreateClassScreen({ route, navigation }) {
               value={className}
               onChangeText={setClassName}
               {...NO_TEXT_SUGGESTIONS}
-              placeholder='e.g. "1A", "2B"'
+              placeholder='e.g. “1A”, “2B”'
               error={errors.className}
             />
           </View>
@@ -156,7 +158,7 @@ export default function CreateClassScreen({ route, navigation }) {
           {/* Home Language picker */}
           <View style={styles.input}>
             <SelectField
-              label="Home Language *"
+              label="Home language *"
               value={homeLanguage}
               onPress={() => setLanguagePickerVisible(true)}
               error={errors.homeLanguage}
@@ -178,7 +180,7 @@ export default function CreateClassScreen({ route, navigation }) {
       <SelectSheet
         visible={schoolPickerVisible}
         onDismiss={() => setSchoolPickerVisible(false)}
-        title="Select School"
+        title="Select school"
         dismissLabel="Dismiss school picker"
         searchable
         options={schools.map(school => ({ key: school.id, label: school.name }))}
@@ -195,7 +197,7 @@ export default function CreateClassScreen({ route, navigation }) {
       <SelectSheet
         visible={gradePickerVisible}
         onDismiss={() => setGradePickerVisible(false)}
-        title="Select Grade"
+        title="Select grade"
         dismissLabel="Dismiss grade picker"
         options={GRADES.map(value => ({ key: value, label: value }))}
         selectedKey={grade}
@@ -205,7 +207,7 @@ export default function CreateClassScreen({ route, navigation }) {
       <SelectSheet
         visible={languagePickerVisible}
         onDismiss={() => setLanguagePickerVisible(false)}
-        title="Select Home Language"
+        title="Select home language"
         dismissLabel="Dismiss home language picker"
         options={HOME_LANGUAGES.map(value => ({ key: value, label: value }))}
         selectedKey={homeLanguage}

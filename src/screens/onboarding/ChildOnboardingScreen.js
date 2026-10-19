@@ -1,3 +1,4 @@
+import { useScrollBottomPadding } from '../../hooks/useScrollBottomPadding';
 import React, { useEffect, useState } from 'react';
 import { Alert, ScrollView, StyleSheet } from 'react-native';
 import { Text } from 'react-native-paper';
@@ -14,6 +15,7 @@ const RECOMMENDED_CHILD_COUNT = 10;
 
 export default function ChildOnboardingScreen({ route, navigation }) {
   const onScroll = useHeaderHairline();
+  const paddingBottom = useScrollBottomPadding(spacing.lg);
   const { classId } = route.params;
   const { children } = useChildren();
   const { classes, completeClassOnboarding } = useClasses();
@@ -56,8 +58,8 @@ export default function ChildOnboardingScreen({ route, navigation }) {
         'Finish with fewer than 10 children?',
         `You have added ${childCount} ${childLabel}. You can finish now and add more children later.`,
         [
-          { text: 'Keep Adding', style: 'cancel' },
-          { text: 'Finish Setup', onPress: completeAndExit },
+          { text: 'Keep adding', style: 'cancel' },
+          { text: 'Finish setup', onPress: completeAndExit },
         ]
       );
       return;
@@ -68,7 +70,7 @@ export default function ChildOnboardingScreen({ route, navigation }) {
   return (
     <ScrollView
       style={styles.container}
-      contentContainerStyle={styles.content}
+      contentContainerStyle={[styles.content, { paddingBottom }]}
       keyboardShouldPersistTaps="handled"
       onScroll={onScroll}
       scrollEventThrottle={16}

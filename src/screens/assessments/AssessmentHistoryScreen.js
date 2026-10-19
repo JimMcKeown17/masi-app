@@ -1,4 +1,5 @@
 import { useHeaderHairline } from '../../components/common/ScreenHeader';
+import { useScrollBottomPadding } from '../../hooks/useScrollBottomPadding';
 import ListGroup from '../../components/common/ListGroup';
 import { fontFamilies, typeRoles } from '../../constants/typography';
 import { useToast } from '../../context/ToastContext';
@@ -25,6 +26,7 @@ function formatDate(dateString) {
 
 export default function AssessmentHistoryScreen({ navigation }) {
   const onScroll = useHeaderHairline();
+  const paddingBottom = useScrollBottomPadding();
   const toast = useToast();
   const { repositories } = useSignedInEA();
   const { assessments: assessmentsRepository } = repositories;
@@ -170,6 +172,7 @@ export default function AssessmentHistoryScreen({ navigation }) {
           keyExtractor={(item) => item.id}
           renderItem={renderItem}
           style={styles.list}
+          contentContainerStyle={{ paddingBottom }}
           ListEmptyComponent={
             <View style={styles.emptyContainer}>
               <Text variant="bodyMedium" style={styles.emptyText}>

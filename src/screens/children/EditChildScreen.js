@@ -1,3 +1,4 @@
+import { useScrollBottomPadding } from '../../hooks/useScrollBottomPadding';
 import React, { useState, useEffect, useCallback } from 'react';
 import { View, StyleSheet, ScrollView, KeyboardAvoidingView, Platform, Alert, TouchableOpacity } from 'react-native';
 import { Text } from 'react-native-paper';
@@ -46,6 +47,7 @@ export default function EditChildScreen({ route, navigation }) {
   const [loading, setLoading] = useState(false);
   const toast = useToast();
   const onScroll = useHeaderHairline();
+  const paddingBottom = useScrollBottomPadding(spacing.md);
   const [, setRefreshKey] = useState(0);
 
   /**
@@ -172,7 +174,7 @@ export default function EditChildScreen({ route, navigation }) {
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       keyboardVerticalOffset={90}
     >
-      <ScrollView contentContainerStyle={styles.scrollContent} onScroll={onScroll} scrollEventThrottle={16}>
+      <ScrollView contentContainerStyle={[styles.scrollContent, { paddingBottom }]} onScroll={onScroll} scrollEventThrottle={16}>
         {/* Class info (tappable to change) */}
         <TouchableOpacity
           onPress={() => setClassPickerVisible(true)}
@@ -247,7 +249,7 @@ export default function EditChildScreen({ route, navigation }) {
 
           <View style={styles.readingLevelField}>
             <SelectField
-              label="Current Reading Level"
+              label="Current reading level"
               value={readingLevel}
               placeholder="Not set"
               onPress={() => setReadingLevelPickerVisible(true)}
@@ -316,7 +318,7 @@ export default function EditChildScreen({ route, navigation }) {
       <SelectSheet
         visible={classPickerVisible}
         onDismiss={() => setClassPickerVisible(false)}
-        title="Choose Class"
+        title="Choose class"
         subtitle={`${child.first_name} ${child.last_name}`}
         dismissLabel="Dismiss class picker"
         options={[
@@ -344,7 +346,7 @@ export default function EditChildScreen({ route, navigation }) {
       <SelectSheet
         visible={readingLevelPickerVisible}
         onDismiss={() => setReadingLevelPickerVisible(false)}
-        title="Current Reading Level"
+        title="Current reading level"
         subtitle={`${child.first_name} ${child.last_name}`}
         dismissLabel="Dismiss reading level picker"
         options={READING_LEVEL_OPTIONS}

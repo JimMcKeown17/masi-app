@@ -132,7 +132,7 @@ test.each([
 ])('clock-in records %s and tells the EA why', async (status, reason) => {
   if (status === 'denied') {
     Location.getForegroundPermissionsAsync.mockResolvedValue({ status: 'denied', canAskAgain: false });
-    Alert.alert.mockImplementation((_title, _message, actions) => actions.find(item => item.text === 'Continue Without Location').onPress());
+    Alert.alert.mockImplementation((_title, _message, actions) => actions.find(item => item.text === 'Continue without location').onPress());
   } else if (status === 'services_off') Location.hasServicesEnabledAsync.mockResolvedValue(false);
   else Location.getCurrentPositionAsync.mockRejectedValue(new Error('native failure'));
   const result = await mount();

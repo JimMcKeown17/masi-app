@@ -582,6 +582,15 @@ screen title. Done and Android back share one guarded `popTo('MainTabs', { scree
 Child onboarding suppresses back and gestures; Home, Login and the three assessment capture/results
 surfaces retain hidden headers. Insights row titles use the sentence-case titles of their routes.
 
+Root-stack scroll screens cover the tab bar. Their `contentContainerStyle` uses
+[`useScrollBottomPadding(extra = spacing.lg)`](../src/hooks/useScrollBottomPadding.js), which
+returns `insets.bottom + extra`. Preserve the existing bottom gap as `extra` and leave top and
+horizontal padding unchanged. Time tracking keeps its inner content padding and passes zero;
+Profile keeps its 40dp gap. Do not add this inset to tab-owned screens or scroll content above
+an inset-aware sibling footer: Record, Session complete, assessment capture and Assessment
+results already have one. Reset password uses the helper only on its form; its sent-state footer
+and Login's panel already handle the inset. BottomSheet owns its own inset independently.
+
 **`SyncIndicator({ onPress, variant='default' })`** uses `useOffline()` and the shared sync
 presenter. The default is the canvas header pill; there is no variant='pill' API. Its outer
 target is at least 44×44 and the visual pill at least 32 high/36 wide. Synced shows the success

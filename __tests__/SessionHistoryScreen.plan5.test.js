@@ -54,12 +54,6 @@ jest.mock('../src/services/supabaseClient', () => ({
   },
 }));
 
-jest.mock('react-native-safe-area-context', () => ({
-  ...jest.requireActual('react-native-safe-area-context'),
-  SafeAreaProvider: ({ children }) => children,
-  useSafeAreaInsets: () => ({ top: 0, right: 0, bottom: 0, left: 0 }),
-}));
-
 describe('SessionHistoryScreen Plan 5 behavior', () => {
   beforeEach(() => {
     jest.useFakeTimers();
@@ -101,6 +95,16 @@ describe('SessionHistoryScreen Plan 5 behavior', () => {
   afterEach(() => {
     jest.useRealTimers();
     jest.clearAllMocks();
+  });
+
+  test('history content clears the 48dp bottom safe area with a 24dp gap', async () => {
+    const screen = render(<SessionHistoryScreen navigation={{ navigate: jest.fn() }} />, {
+      insets: { top: 24, right: 0, bottom: 48, left: 0 },
+    });
+    await screen.findByText('Pending sync');
+    expect(StyleSheet.flatten(screen.UNSAFE_getByType(FlatList).props.contentContainerStyle)).toEqual({
+      paddingBottom: 72,
+    });
   });
 
   test('load errors appear as root toasts', async () => {
