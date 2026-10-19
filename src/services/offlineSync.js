@@ -574,6 +574,14 @@ const classifyError = (
     return { terminal: true, markAsSynced: false };
   }
 
+  if (code === 'MV001') {
+    return {
+      terminal: true,
+      markAsSynced: false,
+      reason: 'Server has a newer version of this record (stale_version)',
+    };
+  }
+
   return { terminal: false, markAsSynced: false };
 };
 
@@ -685,13 +693,14 @@ const errorMessage = (error) => (
 );
 
 // child_class_memberships recurs (class moves) and needs its distinct archived rows for audit
-// history, so it cannot use a deterministic-pair id. Before an insert, reconcile against the
+// history, so it cannot use a deterministic-pair id. Before an active insert, reconcile against the
 // server's active (child_id, academic_year_id) row: if a DIFFERENT membership already holds the
 // pair (a seed/head-office row the device never archived), archive it first so the insert does
 // not 23505 on the partial-unique index. Device-move-wins, audit-preserving. Local state is not
 // enough here -- this is the one place a pre-push SERVER read is warranted. Conservative: any
 // error falls through to the normal upsert (then #48 classifies the outcome).
 const reconcileChildClassMembership = async (supabaseClient, payload) => {
+  if (payload?.exited_at) return;
   if (!payload?.child_id || !payload?.academic_year_id) return;
   try {
     const { data, error } = await supabaseClient

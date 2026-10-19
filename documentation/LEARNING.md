@@ -9,6 +9,29 @@ This document chronicles the architectural decisions, engineering patterns, and 
 
 ---
 
+## 2026-10-19: A Retry Must Preserve the Meaning of History
+
+A lost response leaves two different facts: the server may have committed the write, while the
+phone still owes an acknowledgement. Retrying by record id is only safe if every side effect of
+the request is safe to repeat. A class-membership upload first closes a conflicting active
+membership. That is correct when placing a child in a new class, but an already-exited membership
+only records history. Retrying historical A after current B has uploaded must leave B active.
+Checking `exited_at` before that server reconcile preserves this distinction.
+
+An empty outbox alone cannot prove convergence. The regression tests assert the server's active
+membership as well as the phone's membership and queue state. Their stateful fake applies the
+pre-upload UPDATE when awaited without `.select()`, matching the actual request. Removing the
+guard makes both class-move timings close B with no queue error; restoring it keeps B active.
+A fake that omitted that update would make the same broken code appear correct.
+
+Versions also have to follow the server operation. An immutable assignment insert retries with
+duplicate-ignore, so the server keeps its original version. The phone must keep that version too;
+otherwise its pull guard can reject the active server assignment after an interleaved reconcile
+ends the local copy. A stale-version refusal (`MV001`) has a different meaning from a lost response:
+it becomes terminal needs-attention work, leaving the local row available to converge on a pull.
+These tests establish local SQLite and synthetic-server behavior; PostgreSQL and device checks
+remain separate evidence.
+
 ## 2026 SQLite Clean-Slate Architecture
 
 The early chapters describe the original AsyncStorage design. That was the right first version for a smaller field app, but Masi now needs relational local data: children belong to classes, groups, programmes, academic years, and assignment relationships, and those relationships must survive offline writes and mid-year changes. The app therefore moved domain data and sync metadata to SQLite; the cutover completed on 2026-05-26.

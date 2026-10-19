@@ -291,6 +291,7 @@ Classification is a pure decision in `classifyError` from `(code, tableName, par
 
 | Server error | Classification | Evidence checked |
 | --- | --- | --- |
+| `MV001` | Terminal, never marked synced; reason `Server has a newer version of this record (stale_version)` | none; ordinary passes do not retry it, and the terminal local row can converge through a pull |
 | `23514` on `child_ea_assignments` / `class_ea_assignments` / `group_ea_assignments` | Terminal, reason `Immutable identity or check constraint rejected the update (23514)` | none (neither drifted identity nor a check violation is satisfiable by re-push) |
 | `23514` on any other table | Retriable (unchanged, out of #48 scope) | none |
 | `23503` | Retriable while FK parent is pending in the outbox, terminal otherwise | `PARENT_FK_COLUMNS` via `hasPendingRecord` |
@@ -324,7 +325,7 @@ The four deterministic-id tables neutralize their partial-unique `23505` by cons
 | `child_programme_enrollments` | `(child_id, programme_id) where ended_at is null` | deterministic id `f(child_id, programme_id)` |
 | `class_ea_assignments` | `(class_id, ea_user_id, programme_id) where unassigned_at is null` | deterministic id `f(class_id, ea_user_id, programme_id)` |
 | `group_ea_assignments` | `(group_id) where unassigned_at is null` | deterministic id `f(group_id)` (one active EA per group; server-wins on conflict) |
-| `child_class_memberships` | `(child_id, academic_year_id) where exited_at is null` | reconcile-before-upsert (archive the conflicting server-active row, then insert) |
+| `child_class_memberships` | `(child_id, academic_year_id) where exited_at is null` | reconcile-before-upsert for an active payload only (archive the conflicting server-active row, then insert); skip reconcile when `payload.exited_at` is set |
 
 **Cross-writer id-derivation contract (the linchpin).** The multi-writer neutralization only works if EVERY writer derives the identical id. Any writer of these four tables -- the mobile app today, the future Head-Office seed script, the HO NextJS dashboard -- MUST use: UUIDv5, namespace `09dcf4b2-6c53-4c46-917f-33bc7f2df4d2`, parts joined by the unit-separator character (`U+001F`), parts = `[<table_name>, <key columns in the order above>]`, each part stringified as `String(part ?? '')`. This mirrors `deterministicDomainId` (`src/db/repositories/domainRepositoryUtils.js:14-17`). The seed-script author MUST reproduce this exactly, or seeded rows will collide with device rows instead of matching them.
 
@@ -332,7 +333,12 @@ The four deterministic-id tables neutralize their partial-unique `23505` by cons
 
 **ccm reconcile boundary (RLS).** The reconcile archives the conflicting server row with an UPDATE that is itself RLS-gated on that row's class (`child_class_memberships_update_write_child_class`). It succeeds for a same-school move; a cross-school Head-Office reassignment (child in a class the device cannot access) is RLS-denied, the reconcile falls back conservatively, and the insert lands terminal (classified by Item 10). Acceptable while HO central reassignment is deferred; a complete fix would be a `SECURITY DEFINER` archive+insert RPC (follow-up, schema change). `group_ea_assignments` is now pulled and persisted. An assignment-scoped pull can therefore reactivate the deterministic local row when the server returns it again.
 
-Guarded by `__tests__/activePairDomainIds.test.js`, the deterministic-id + archive-preservation tests in `__tests__/offlineSyncOutbox.test.js`, the per-repository mint tests, and `__tests__/childClassMembershipReconcile.test.js` (real second-SQLite server; note: runs no RLS, so the cross-school boundary above is not exercised in tests).
+An already-exited membership is history. Replaying it must never close the server's current
+membership: after an offline A-to-B move, A can commit with its response lost, B can acknowledge,
+and A can then retry. The `exited_at` guard runs before the pre-upload server read. The same rule
+holds when the move replaces A's payload while its insert is in flight.
+
+Guarded by `__tests__/activePairDomainIds.test.js`, the deterministic-id + archive-preservation tests in `__tests__/offlineSyncOutbox.test.js`, the per-repository mint tests, and `__tests__/childClassMembershipReconcile.test.js` (real second-SQLite server; note: runs no RLS, so the cross-school boundary above is not exercised in tests). `__tests__/rowVersionRefusal.test.js` adds real-SQLite lost-response regressions using `test-support/statefulMembershipServer.js`, whose awaited updates apply even without `.select()`. Removing the guard makes both move timings close B incorrectly. The same suite verifies `MV001` through the real PostgREST client with mocked HTTP and assignment reactivation after an ignored duplicate insert and interleaved reconcile; these are local tests, not PostgreSQL, hosted, or device proof.
 
 ## Grouping-Flow Collision-Proofing (Item 12)
 
@@ -458,10 +464,16 @@ The 11 server payload allowlists include `row_version`. `rowVersion.js` shares t
 immutable-assignment table sets and `isStampedOperation`: only `insert`, `update`, `archive`, and
 `restore` on versioned tables qualify, excluding immutable-assignment inserts. Both single and
 batch payload construction receive the operation and strip the version for other operations.
-This is the Task 3 foundation of the [upload-contract design](../docs/superpowers/specs/2026-10-18-upload-contract-design.md):
-send-time stamping and lifecycle-patch version carriage are still later tasks, so current
-payloads retain only the version already present in the enqueue snapshot. Local real-SQLite
-coverage lives in `rowVersionLocal.test.js`; this does not establish PostgreSQL or device proof.
+At claim, `updateInFlight` increments the local row version and stamps the outbox payload in the
+same transaction. Single sends and batch fallback use `markInFlightAndGet`, preserving the claimed
+snapshot if an edit replaces the queued payload. Archive/restore patches carry the claimed version.
+Claiming a terminal domain row makes it pending so an overlapping pull cannot replace that retry.
+Immutable-assignment inserts remain unstamped: a duplicate retry does not update the server, so
+incrementing only the phone's version would block a later pull from restoring an active assignment
+that reconcile ended locally. Local coverage for the
+[upload-contract design](../docs/superpowers/specs/2026-10-18-upload-contract-design.md) lives in
+`rowVersionLocal.test.js`, `rowVersionSend.test.js`, and `rowVersionRefusal.test.js`; this does not
+establish PostgreSQL or device proof.
 
 ### Stale active-pair supersede (2026-07-22)
 
