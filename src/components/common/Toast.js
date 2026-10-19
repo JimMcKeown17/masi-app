@@ -14,9 +14,11 @@ function ToastCard({ toast, bottom, onDismiss, onExited }) {
   const translateY = useRef(new Animated.Value(16)).current;
   const { id, message, tone, dismissing, duration: lifetime } = toast;
 
+  // iOS has no live regions and does not announce the alert role, so every tone is announced
+  // explicitly. Android speaks through the live regions below.
   useEffect(() => {
-    if (Platform.OS === 'ios' && tone !== 'error') AccessibilityInfo.announceForAccessibility(message);
-  }, [id, message, tone]);
+    if (Platform.OS === 'ios') AccessibilityInfo.announceForAccessibility(message);
+  }, [id, message]);
   useEffect(() => {
     const timer = setTimeout(() => onDismiss(id), lifetime);
     return () => clearTimeout(timer);
@@ -58,7 +60,11 @@ function ToastCard({ toast, bottom, onDismiss, onExited }) {
 export default function ToastHost({ toast, maxObstruction = 0, onDismiss, onExited }) {
   const insets = useSafeAreaInsets();
   const keyboardHeight = useKeyboardHeight();
-  const bottom = 8 + Math.max(insets.bottom, 8, maxObstruction, keyboardHeight);
+  // RN Android reports the IME inset minus the bottom system-bar inset, and edge-to-edge does not
+  // resize the root, so the keyboard's top is that height plus the navigation bar. iOS reports the
+  // full height from the screen bottom.
+  const keyboardTop = Platform.OS === 'android' && keyboardHeight > 0 ? keyboardHeight + insets.bottom : keyboardHeight;
+  const bottom = 8 + Math.max(insets.bottom, 8, maxObstruction, keyboardTop);
   return (
     <View testID="toast-host" pointerEvents="box-none" style={StyleSheet.absoluteFill}>
       {toast ? <ToastCard key={toast.id} toast={toast} bottom={bottom} onDismiss={onDismiss} onExited={onExited} /> : null}

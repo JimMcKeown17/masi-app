@@ -118,6 +118,48 @@ test('the toast sits 8 above the keyboard', () => {
   expect(toastStyle().bottom).toBe(16);
 });
 
+// RN 0.81 Android reports keyboard height as the IME inset minus the bottom system-bar inset
+// (ReactRootView: imeInsets.bottom - barInsets.bottom). Edge-to-edge does not resize the root,
+// so the keyboard's top sits that height plus the navigation bar above the screen bottom.
+test.each([
+  ['android', 48, 276, 8 + 276 + 48],
+  ['android', 24, 300, 8 + 300 + 24],
+  ['ios', 34, 336, 8 + 336],
+])('on %s with a %ddp bottom inset and a reported %ddp keyboard the toast clears the keyboard top', (os, inset, reported, expected) => {
+  jest.replaceProperty(Platform, 'OS', os);
+  const listeners = {};
+  jest.spyOn(Keyboard, 'addListener').mockImplementation((event, listener) => {
+    listeners[event] = listener;
+    return { remove: jest.fn() };
+  });
+  renderWithProviders(<Publisher />, { insets: { top: 0, left: 0, right: 0, bottom: inset } });
+  publish();
+  act(() => listeners[os === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow']({ endCoordinates: { height: reported } }));
+  expect(toastStyle().bottom).toBe(expected);
+  act(() => listeners[os === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide']());
+  expect(toastStyle().bottom).toBe(8 + inset);
+});
+
+test('iOS announces error toasts too, once per message, including a replacement with the same text', () => {
+  jest.replaceProperty(Platform, 'OS', 'ios');
+  const announce = jest.spyOn(AccessibilityInfo, 'announceForAccessibility');
+  const view = renderWithProviders(<Publisher message="Failed to save session. Please try again." tone="error" />);
+  publish();
+  expect(announce).toHaveBeenCalledWith('Failed to save session. Please try again.');
+  view.rerender(<Publisher message="Failed to save session. Please try again." tone="error" />);
+  expect(announce).toHaveBeenCalledTimes(1);
+  publish();
+  expect(announce).toHaveBeenCalledTimes(2);
+});
+
+test('Android relies on live regions and does not double-announce', () => {
+  jest.replaceProperty(Platform, 'OS', 'android');
+  const announce = jest.spyOn(AccessibilityInfo, 'announceForAccessibility');
+  renderWithProviders(<Publisher tone="error" message="Nope" />);
+  publish();
+  expect(announce).not.toHaveBeenCalled();
+});
+
 test.each([false, true])('the host renders after the whole Paper subtree with sheet-first=%s', (sheetFirst) => {
   function SheetPublisher() {
     const [open, setOpen] = useState(sheetFirst);

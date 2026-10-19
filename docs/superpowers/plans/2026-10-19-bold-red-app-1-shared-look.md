@@ -1288,6 +1288,8 @@ This is a manual gate. The orchestrator builds the EAS preview for this branch (
 11. **Home row:** pixel-identical to build 14 except the content's bottom padding, which is 4dp shorter (`FAB_OVERHANG` 28 → 24).
 12. **C11 repro (A03s):** Children → Create class → School → type in the search field. Record whether the search field and the first results sit above the keyboard. If they are covered, run Task 35 in this PR and repeat this row; if not, record "did not reproduce; the Profile PR verifies with the password sheet".
 
+13. **Screen readers (added after branch review round 1):** with VoiceOver on, a failed session save (airplane mode does not fail a save, so use the suspended EA's sign-in error) is spoken; Insights → Assessment scores: Letters and Words are each focusable, announce selected/not selected, and double-tap switches mode. With TalkBack on Android, the same error is spoken once, not twice. On a 3-button-nav Android phone, focus Add child → First name and fire a toast (submit with a blank name): the whole toast, including Dismiss, sits above the keyboard.
+
 - [ ] Jim signs off each row (or files the failures as fixes in this PR before merge).
 
 ---

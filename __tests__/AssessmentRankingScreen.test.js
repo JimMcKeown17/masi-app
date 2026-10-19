@@ -20,7 +20,7 @@ import { OKAY_YELLOW, getBandColor } from '../src/utils/scoreBands';
 
 test('the radio group changes the ranking mode without fetching again', async () => {
   const screen = renderWithProviders(<AssessmentRankingScreen navigation={{ navigate: jest.fn() }} />);
-  const group = await screen.findByRole('radiogroup');
+  const group = await screen.findByTestId('segmented-control');
   const letters = within(group).getByRole('radio', { name: 'Letters' });
   const words = within(group).getByRole('radio', { name: 'Words' });
   expect(letters.props.accessibilityState.checked).toBe(true);

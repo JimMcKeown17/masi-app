@@ -3,9 +3,11 @@ import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { borderRadius, colors, tints } from '../../constants/colors';
 import { typeRoles } from '../../constants/typography';
 
-export default function SegmentedControl({ options, value, onChange, role = 'radio', accessibilityLabel }) {
+// The track is a plain container, not an accessibility element: VoiceOver cannot reach
+// accessible children inside an accessible parent, so each segment carries its own role and state.
+export default function SegmentedControl({ options, value, onChange, role = 'radio', accessibilityLabel, testID = 'segmented-control' }) {
   const tabs = role === 'tab';
-  return <View accessible accessibilityRole={tabs ? 'tablist' : 'radiogroup'} accessibilityLabel={accessibilityLabel} style={styles.track}>
+  return <View testID={testID} accessibilityRole={tabs ? 'tablist' : 'radiogroup'} accessibilityLabel={accessibilityLabel} style={styles.track}>
     {options.map((option) => {
       const selected = option.value === value;
       return <Pressable key={option.value} accessibilityRole={role} accessibilityLabel={option.label}
