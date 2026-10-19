@@ -1,3 +1,4 @@
+jest.mock('@expo/vector-icons', () => ({ Ionicons: 'Ionicons' }), { virtual: true });
 import React from 'react';
 import { fireEvent, render, waitFor } from '@testing-library/react-native';
 import AssessmentChildSelectScreen from '../src/screens/assessments/AssessmentChildSelectScreen';

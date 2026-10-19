@@ -42,7 +42,7 @@ export default function InsightsScreen({ navigation }) {
     >
       <SectionHeader
         title="Insights"
-        subtitle="Review learner progress and participation."
+        hint="Review learner progress and participation."
       />
 
       <View style={styles.list}>

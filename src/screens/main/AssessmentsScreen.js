@@ -71,7 +71,7 @@ export default function AssessmentsScreen({ navigation }) {
         ]} />
       )}
 
-      <SectionHeader title="Assessments" subtitle="Run timed assessments and view results." />
+      <SectionHeader title="Assessments" hint="Run timed assessments and view results." />
 
       <Card style={styles.card}>
         <Card.Content>

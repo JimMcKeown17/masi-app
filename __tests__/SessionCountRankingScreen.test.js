@@ -1,3 +1,4 @@
+jest.mock('@expo/vector-icons', () => ({ Ionicons: 'Ionicons' }), { virtual: true });
 import React from 'react';
 import { render, waitFor, within } from '@testing-library/react-native';
 import SessionCountRankingScreen from '../src/screens/insights/SessionCountRankingScreen';

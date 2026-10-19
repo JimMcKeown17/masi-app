@@ -1,3 +1,4 @@
+jest.mock('@expo/vector-icons', () => ({ Ionicons: 'Ionicons' }), { virtual: true });
 import React from 'react';
 import { render, fireEvent, waitFor } from '@testing-library/react-native';
 import { PaperProvider } from 'react-native-paper';
@@ -177,9 +178,9 @@ describe('EditChildScreen', () => {
     const { getByTestId } = renderScreen();
 
     expect(getByTestId('edit-child-gender-female').props.accessibilityState)
-      .toEqual(expect.objectContaining({ selected: false }));
+      .toEqual(expect.objectContaining({ checked: false }));
     expect(getByTestId('edit-child-gender-male').props.accessibilityState)
-      .toEqual(expect.objectContaining({ selected: false }));
+      .toEqual(expect.objectContaining({ checked: false }));
   });
 
   test('overwrites a historic gender value only after choosing a male or female chip', async () => {

@@ -1,3 +1,4 @@
+jest.mock('@expo/vector-icons', () => ({ Ionicons: 'Ionicons' }), { virtual: true });
 const mockUseChildren = jest.fn();
 const mockUseClasses = jest.fn();
 const mockUseOffline = jest.fn();
