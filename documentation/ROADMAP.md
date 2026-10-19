@@ -54,15 +54,17 @@ These horizons summarize the ordered register below. They are not a second backl
    idempotent, privacy-safe incidents need stable causal identity, a reader, an action, and exact
    backend/app/runtime/protocol provenance.
 5. **P0: settle the upload contract and local-database ownership before the candidate build.**
-   Put a deadline and release on every request in the shared queue, uploads included. Upload the
-   assessment family all-or-nothing. Reject stale edits on records more than one writer can change.
-   Make submit duplicate-proof. One database per EA is built (Plan 2; its sign-out UX is Plan 3).
+   U1's bounded requests and send-order protection are built on `feat/upload-contract`; hosted
+   apply and D2/D3 remain open (§2). Upload the assessment family all-or-nothing and complete D1
+   with the mastery re-key. Multi-writer stale-edit rejection (U3) is deferred until Head Office
+   edits EA records. Duplicate-proof submit and one database per EA are built (Plan 2; its
+   sign-out UX is Plan 3).
    The newer-schema guard and minimum revocation tooling are built, and the revocation migration is
    applied to `masi-app-sqlite` and device-proven on Android build 14 (2026-10-18, §0). Evidence:
    [`zazi-sync-lessons-for-masi-2026-10-08.md`](./zazi-sync-lessons-for-masi-2026-10-08.md) Part 2.
 6. **P0: settle field-continuity contracts before the candidate build.** Make location fallback
-   truthful, build the server-side ten-hour clock-out and verify the built Android backup exclusion
-   on device (both decided by Jim on 2026-10-17), and complete the credential/PII and provisioning preflight.
+   truthful, apply and verify the built server-side ten-hour clock-out, verify Android backup
+   exclusion on device (both decided by Jim on 2026-10-17), and complete the credential/PII and provisioning preflight.
    Unfinished-form loss is accepted for the pilot (Jim, 2026-10-17).
 7. **P1: close reachable correctness gaps.** Fix session-attendee removal before saved-session
    editing ships and resolve the remaining auth-diagnostic ambiguity. The newer-schema fail-safe
@@ -143,13 +145,15 @@ shape.
   (2026-10-17, grants verified against S2), and D1 passed on the Galaxy A03s with Android build 8.
   **Still open before the field:**
   - **Sign-out copy:** a wording pass with Jim; the current sheet copy is provisional.
-  - **Ruling 11, field-release prerequisite owned by the upload-contract spec:** abort-on-sign-out
-    can re-send an upload the server already accepted. Identical replay is proven harmless; the
-    ordering of an uncertain older write against a newer one is not yet closed.
+  - **Ruling 11: implementation closed for the 11 tables in the upload contract.** Send-time
+    versions prevent an uncertain earlier send from overwriting a later one. Hosted apply and
+    D2 remain release gates. It stays open for `letter_mastery` until D1 ships with the mastery
+    re-key (§1/§2).
   - **Device gates:** D2–D7 on the build intended to ship
     ([actor lifecycle spec §9](../docs/superpowers/specs/2026-10-09-actor-lifecycle-and-mutation-ownership-design.md);
-    D7 is native close under load, iOS and Android) and D3's ten-hour half, which changes with
-    the server-side clock-out. iOS D1, native discovery on both platforms and both sheets passed
+    D7 is native close under load, iOS and Android). D3's ten-hour half is now the server-close
+    check under [Upload contract](#upload-contract-before-pilot-priority-item-5), replacing the
+    earlier phone-only expectation. iOS D1, native discovery on both platforms and both sheets passed
     on builds 9 and 10 (2026-10-17, build log). The Android header fix ("BackMy Profile") is built; verify it on the next build.
     A new EAS build needs Jim's yes.
   - **Legacy export gap:** spec §4.5 says Profile → Export Database can export `masi.db`.
@@ -440,12 +444,10 @@ the current-state model better than Zazi's per-session carry-forward.
   on 2026-10-17). Before release, run the extended local upload-contract PostgreSQL harness and
   pass Android/iOS denial, services-off, indoor-timeout, stale-cache, offline, Settings return,
   double-tap, and successful-fix device scenarios. Controller owns hosted application and release.
-- [ ] **Server-side ten-hour clock-out (decided by Jim 2026-10-17: the server closes it).** Today
-  the close is device-owned and runs only while the app is active or when the open entry is next
-  loaded. Build a scheduled server close for entries open more than ten hours, marked
-  `auto_clocked_out`, fenced so a stale offline write from the phone cannot reopen the entry, and
-  reconcile the phone's own close with the server's. Spec §7.1's "Stay clocked in" text and device
-  gate D3 assume the phone-side close and must be updated with this change.
+- [x] **Server-side ten-hour clock-out — built on `feat/upload-contract`.** The migration adds
+  the 15-minute job and owner-write forward-only rule, including the cap on offline closed inserts.
+  The phone checks the cap before and after location capture. Hosted apply, cron verification and
+  D3 remain open under [Upload contract](#upload-contract-before-pilot-priority-item-5).
 - [x] **Newer-schema fail-safe (before pilot; priority item 5):** refuses to open a file whose SQLite
   `user_version` exceeds the bundle's `CURRENT_SCHEMA_VERSION` and shows an update screen with
   Sign out instead of Retry. Discovery skips too-new foreign files ([F2](./zazi-sync-lessons-for-masi-2026-10-08.md)).
@@ -519,51 +521,41 @@ the current-state model better than Zazi's per-session carry-forward.
   - Test A→B and A→B→A switches for delayed uploads and roster persistence. This is required
     whichever way D2 is decided.
 
-**Design spec written and Codex-approved (2026-10-18), awaiting Jim's review:** [`2026-10-18-upload-contract-design.md`](../docs/superpowers/specs/2026-10-18-upload-contract-design.md). It covers uncertain-outcome recovery and same-record ordering (send-time `row_version` on 11 tables), the server ten-hour clock-out with a forward-only time-entry rule, and the tests and rollout. Stale-edit rejection between two writers (U3) is deferred until Head Office edits EA records; the column and trigger built here take its base-version branch without rework.
+**Built on `feat/upload-contract` (Tasks 1–6).** The
+[upload-contract design](../docs/superpowers/specs/2026-10-18-upload-contract-design.md) is implemented:
+send-time `row_version` on 11 tables, terminal `MV001`, guarded pulls and historical membership
+retries, plus the server and phone ten-hour clock-out rules. The
+[contract map](./rls-sync-contract-map.md#row-versions-upload-contract) owns the current behavior;
+the [Verification Register](./build-log.md#verification-register) owns the local results.
 
-The requirements below were the input to that spec.
-Round 2 showed that a naive version introduces new failures:
-
-- Releasing a timed-out upload lets an older whole-row upsert commit after a newer acknowledged
-  one. Codex's probe reopened a closed time entry on the server while the phone showed it synced.
-- A `stale_base` comparison has no base to compare against today. Pushes return no server
-  version, finalization writes phone time, and offline create→edit queues have no base.
-
-The spec must define, together:
-
-- uncertain-outcome recovery and same-record ordering (idempotent acknowledgements or
-  equivalent server fencing for mutable writes, single-writer tables such as time entries
-  included);
-- the full version lifecycle (base captured per pending mutation, compared atomically,
-  authoritative versions returned for single, batch, archive, and insert-or-ignore operations,
-  successor bases advanced);
-- the assessment bundle as the *exclusive* insertion boundary.
-
-Zazi's per-record generations do address the single-writer reordering case, so the spec should
-weigh them honestly rather than dismiss them.
-
-Masi's upload path is close to the one Zazi's July audit overturned. Zazi's replacement, about
-4,700 lines of client protocol, guards the wrong risk for Masi: its generations stop one install
-overtaking itself, while Masi's exposure is several writers editing one record. Build this smaller
-contract ([U1–U7](./zazi-sync-lessons-for-masi-2026-10-08.md)):
-
-- [ ] **Bounded completion for every shared-queue request, uploads included (U1; Codex 2026-10-08,
-  high). Prerequisite (round 2): uncertain-outcome recovery and same-record ordering must exist
-  before a timed-out upload is released.**
-  - Single and batch pushes enqueue with no deadline (`offlineSync.js:1014-1016, 1203-1205`), and
-    the queue holds every successor behind an unresolved task. A hung push therefore:
-    - leaves its rows `in_flight`;
-    - blocks every later pull;
-    - pins `activeSyncPromise`, so a manual retry joins the hung pass.
-  - The queue itself must abort and release a task at its deadline. A caller-side race alone
-    reports failure without freeing the queue.
-  - A timeout is an *uncertain* outcome: retried, never counted toward the deterministic-error cap.
-  - Test a hung upload, queue release, uncertain server acceptance, a late response after release,
-    and a safe outbox retry.
-- [ ] **Reject stale edits on records more than one writer can change (U3).** The client sends the
-  server `updated_at` it last saw, and the server rejects a mismatch as `stale_base`, which the phone
-  surfaces as needs-attention. Scope: children, assignments, and groups that Head Office or another
-  EA can also edit. Never compare phone clocks. This depends on server-owned timestamps (§1).
+- [x] **Bounded completion for every signed-in EA request, uploads included (U1).** Plan 2's
+  per-handle client aborts requests at its deadline and releases the queue. The upload contract now
+  fences uncertain late writes for the 11 tables; time entries cannot reopen after a close.
+  Timeouts remain retryable uncertain outcomes and do not consume the deterministic-error cap.
+  Ruling 11 is closed for the 11 tables at the implementation boundary; hosted apply and D2/D3
+  remain open. Letter mastery retains its separate D1 pilot gate below.
+- [ ] **Controller and release gates for the built upload contract.**
+  - Final `npm test`, `npm run test:integration`, and all five `verify:*:postgres` harnesses;
+    whole-branch adversarial review against `origin/main`, then push/PR and green CI.
+  - With Jim's explicit yes at the time: merge, read-only confirmation that `pg_cron` is offered
+    on `masi-app-sqlite`, hosted apply through the isolated helper, then read-only verification
+    of `cron.job` (named `masi_close_overdue_time_entries`, 15-minute schedule, `postgres` owner)
+    and one successful `cron.job_run_details` run.
+  - Drain or reinstall test phones on builds 13/14 before applying the server migration; install
+    the new build only after apply. EAS builds and the A03s D2/D3 checks need Jim's yes at the time.
+    This is server-first rollout: a versioned phone against the old server fails with `PGRST204`.
+  - **D3 (Galaxy A03s), rewritten per spec §4.** Clock in, choose "Stay clocked in and sign out",
+    and leave the phone off. Within 15 minutes after the ten hours the server row is closed at
+    `sign_in + 10 h` with `auto_clocked_out = true` (read-only query through the
+    `sqlite-staging-sql` helper). When the EA signs back in, the phone's own close runs, its upload
+    is accepted with no needs-attention, and the server row is unchanged.
+  - **D2 (Galaxy A03s).** Sign out during an upload of an edited child, then sign back in. The
+    server holds the newest edit and nothing needs attention.
+- [ ] **Reject stale edits on records more than one writer can change (U3), deferred until
+  Head Office edits EA records.** Send the server version last downloaded as a base, reject a
+  base behind the stored version, and make Head Office writes bump `row_version`. The current
+  counter only orders one phone's sends; it does not establish multi-writer conflict protection.
+  The column and trigger accept that additional comparison without a replacement protocol.
 - [ ] **Letter mastery: the most recently *made* correction wins (D1, decided by Jim
   2026-10-08; reconfirmed 2026-10-14).**
   - The server keeps whichever confirmation has the later correction time and treats a future

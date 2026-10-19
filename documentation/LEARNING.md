@@ -9,6 +9,33 @@ This document chronicles the architectural decisions, engineering patterns, and 
 
 ---
 
+## Numbering writes when they leave, not when they are made
+
+A version is useful only if it measures the order we need to protect. One record can have several
+outbox slots, and the engine sends them by dependency, push rank and creation time. If we numbered
+edits when queued, a slot numbered v2 could legitimately send after one numbered v3. The server
+would refuse v2 as stale even though this phone was the only writer. Queue order and send order
+are different facts.
+
+We number each eligible write at claim instead. In one SQLite transaction, `updateInFlight`
+increments the local row's version and stamps the outbox payload. `markInFlightAndGet` returns
+that exact snapshot for the request. The first send carries v2, the next v3, regardless of which
+slot was created first. If an edit replaces a slot after claim, it stays pending for its own send;
+the request already claimed cannot silently pick up the replacement's unstamped content.
+
+A timeout means the server's outcome is unknown. A retry gets a higher number, so if the original
+request arrives after the retry, the server refuses the older version with `MV001`. Numbers skipped
+by a request that never arrived are harmless: the server compares order, not continuity. Local
+edits never assign a version, and a download cannot roll a synced row back to a lower one.
+Immutable assignment inserts are excluded because an ignored duplicate changes nothing on the
+server; advancing only the phone's version would make it reject a useful later pull.
+
+This counter protects one phone's send order. It cannot decide which of two writers made the
+newest correction, and it cannot repair a queue that sends operations in the wrong semantic order.
+Letter mastery therefore keeps its D1 correction-order rule with the mastery re-key. The
+[upload contract](./rls-sync-contract-map.md#row-versions-upload-contract) records the exact table
+scope, exclusions and remaining rollout gates.
+
 ## 2026-10-19: A Retry Must Preserve the Meaning of History
 
 A lost response leaves two different facts: the server may have committed the write, while the
