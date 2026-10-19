@@ -900,7 +900,48 @@ export const TIMELINE = {
 
 - [ ] **Step 1: Write the failing tests** in `__tests__/celebrationTimeline.test.js` with `renderHook` from `@testing-library/react-native`, `jest.useFakeTimers()`, and `act(() => { jest.advanceTimersByTime(ms); })`. Build views with `deriveSessionCompleteView` (Task 3). Read values with `value.__getValue()`.
 
+**Why this file needs its own animation harness.** React Native 0.81.5's Jest mock of the native animated module (`node_modules/react-native/jest/mocks/NativeModules.js:96–98`) ends every native-driven animation 16ms after it starts by calling `endCallback({ finished: true })`, with no `value`. `Animation.js:149–151` writes the final value back to the JS `Animated.Value` only when the callback carries `value`, so under the default mock a native track "finishes" early and its value stays at 0. Asserting `flip` or `confettiFade` reaches 1 therefore fails against a correct implementation, and `settled` arrives about 300ms early. Production code keeps `useNativeDriver: true` on every track except `earned`; **do not change production animation code to suit the mock.** Instead the test file sets up two things:
+
 ```js
+import { Animated } from 'react-native';
+import NativeAnimatedHelper from 'react-native/src/private/animated/NativeAnimatedHelper';
+
+// Harness (test-local): Animation's constructor asks
+// NativeAnimatedHelper.shouldUseNativeDriver(config) whether to go native
+// (Animation.js:55). Answering false runs every track on the JS driver, which
+// honours delays (setTimeout), durations and easing (frames under fake
+// timers), final values and stop(). Restored after each test, so nothing leaks.
+let timingSpy;
+beforeEach(() => {
+  jest.useFakeTimers();
+  jest.spyOn(NativeAnimatedHelper, 'shouldUseNativeDriver').mockReturnValue(false);
+  timingSpy = jest.spyOn(Animated, 'timing'); // calls through; records each track's config
+});
+afterEach(() => { jest.useRealTimers(); jest.restoreAllMocks(); });
+
+const configFor = (value) => timingSpy.mock.calls.find(([v]) => v === value)?.[1];
+```
+
+The spy changes only what the driver decision returns; the hook still passes its real configs, and the config test below asserts them. Before writing the rest, run one probe test (a 150ms `Animated.timing(v, { toValue: 1, duration: 150, delay: 50, useNativeDriver: true })` under the harness is 0 at 40ms, between 0 and 1 at 120ms, 1 at 260ms, and a `stop()` at 120ms freezes it). If the probe fails, stop and report to the orchestrator rather than loosening the tests: the fallback is to assert scheduling and cleanup only (the config test, `settled`, and the unmount test), never values on native tracks.
+
+```js
+test('the harness drives native-configured timings to their final value', () => {
+  // the probe above, kept as a test so an RN upgrade that changes Animation.js fails here first
+});
+
+test('native tracks ask for the native driver; only the earned sweep is JS-driven', () => {
+  const view = viewFor(goal(3), 'full');
+  const { result, rerender } = renderHook((props) => useCelebrationTimeline(props), { initialProps: { view, goalStatus: 'loading' } });
+  rerender({ view, goalStatus: 'ready' });
+  const v = result.current.values;
+  for (const key of ['cardEnter', 'pillEnter', 'content', 'flip', 'confettiLayer', 'confettiTravel', 'confettiFade', 'headline']) {
+    expect(configFor(v[key])).toEqual(expect.objectContaining({ toValue: 1, useNativeDriver: true }));
+  }
+  expect(configFor(v.earned)).toEqual(expect.objectContaining({ toValue: 1, useNativeDriver: false, duration: TIMELINE.earned.duration }));
+  expect(configFor(v.flip).duration).toBe(TIMELINE.flip.duration);
+  expect(configFor(v.confettiFade).duration).toBe(TIMELINE.confettiFade.duration);
+});
+
 test('3/3 today: flip holds until 650 and is done by 800; settles after 1300', () => {
   const view = viewFor(goal(3), 'full');
   const { result, rerender } = renderHook((props) => useCelebrationTimeline(props), { initialProps: { view, goalStatus: 'loading' } });
@@ -910,7 +951,9 @@ test('3/3 today: flip holds until 650 and is done by 800; settles after 1300', (
   act(() => { jest.advanceTimersByTime(250); }); // 850
   expect(result.current.values.flip.__getValue()).toBe(1);
   expect(result.current.settled).toBe(false);
-  act(() => { jest.advanceTimersByTime(500); }); // 1350
+  act(() => { jest.advanceTimersByTime(440); }); // 1290: confettiFade still running
+  expect(result.current.settled).toBe(false);
+  act(() => { jest.advanceTimersByTime(60); }); // 1350
   expect(result.current.settled).toBe(true);
   expect(result.current.values.confettiFade.__getValue()).toBe(1);
 });
@@ -930,13 +973,13 @@ test('a goal that fails still fades the headline in (headlineOther)', () => {
 
 test('unmounting at 400ms stops everything without warnings', () => {
   const error = jest.spyOn(console, 'error').mockImplementation(() => {});
-  // ready, advance 400, unmount(), advance 2000
+  // ready, advance 400, record flip/earned/confettiFade values, unmount(), advance 2000:
+  // the recorded values are unchanged (the composites were stopped, not left running)
   expect(error).not.toHaveBeenCalled();
-  error.mockRestore();
 });
 ```
 
-(Fill the commented tests with real assertions. If a native-driven value does not advance under fake timers in this Jest setup, assert the boundary values only — before the delay and after delay + duration — never mid-track for native tracks.)
+(Fill the commented tests with real assertions. Every value assertion relies on the harness above; the JS-driven `earned` sweep test would pass without it and stays as the check that the SVG-prop track really animates part-way. Native smoothness and real timing are not provable in Jest: Task 14 rows 1–2 are the gate for them.)
 
 - [ ] **Step 2: Run tests to verify they fail**
 
@@ -947,7 +990,7 @@ Expected: FAIL with "Cannot find module '../src/components/sessions/celebrationT
 
 - [ ] **Step 4: Run tests to verify they pass**
 
-Run: the Step 2 command. Expected: PASS, no act warnings.
+Run: the Step 2 command. Expected: PASS, no act warnings. Then `grep -n "useNativeDriver" src/components/sessions/celebrationTimeline.js`: every track but `earned` is `true`.
 
 - [ ] **Step 5: Commit**
 
@@ -980,7 +1023,12 @@ git commit -m "feat(session-complete): one timeline hook for the celebration and
 
 Tests (each a `test(...)` with these exact assertions):
 1. `'pill and receipt'`: `getByText('Saved for 2 children')`; accessible labels include `'Children: Anelisa and Athenkosi'`, `'Letters: M, L, N, S'`, `'Reading level: 3 Letter Blends'`.
-2. `'3/3 today reads "Daily target reached." once, as the headline'`: goal `{ target: 3, ceiling: 5, count: 3, state: 'met' }` → `await findByText('Daily target\nreached.')` with role `header`; `queryByText('Daily target reached.')` is null; `getByText('3 of 3 sessions today')`.
+2. `'3/3 today reads "Daily target reached." once, as the headline'`: goal `{ target: 3, ceiling: 5, count: 3, state: 'met' }`. React Native Testing Library 13.3.3 trims and collapses whitespace in both the query and the rendered text (`build/matches.js`), so `'Daily target\nreached.'` and `'Daily target reached.'` match the same node; a screen-wide "subtitle is null" query would always find the headline. Assert instead:
+   - `const headline = await findByRole('header', { name: 'Daily target reached.' })` (the hero headline is the screen's only `header`);
+   - `getAllByText('Daily target\nreached.', { normalizer: (t) => t })` has length 1 (the identity normalizer pins the literal line break);
+   - `within(getByTestId('session-complete-card')).queryByText('Daily target reached.')` is null (the card's sub-line is absent; `showSub` is false);
+   - `getAllByText('Daily target reached.')` has length exactly 1 across the screen (the duplicate-copy regression check: the headline and nothing else);
+   - `within(getByTestId('session-complete-card')).getByText('3 of 3 sessions today')`.
 3. `'2/3 shows "Session captured." and the sub-line'`: `findByText('Session\ncaptured.')`, `getByText('One more pair reaches your target.')`.
 4. `'back-dated: date on the pill, static gauge'`: `sessionDate: '2026-10-13'` with the system time faked to `2026-10-15T10:00:00+02:00` → `getByText('Saved for 2 children · Tue 13 Oct')`; with `motionLevel 'full'`, `queryByTestId('gauge-earned')` is null.
 5. `'goal null and goal rejected both drop the card and the halo'`: for `mockResolvedValue(null)` and `mockRejectedValue(new Error('read failed'))` (spy `console.error`): after settle, no `session-complete-card`, no `session-complete-halo`, headline `'Session\ncaptured.'`, `console.error` called once for the rejection.
@@ -991,7 +1039,7 @@ Tests (each a `test(...)` with these exact assertions):
 10. **Review Focus 1** `'unmount before the goal resolves: no update, no announcement'`: hold the goal promise, press Done, `unmount()`, then resolve and also run a rejection variant; spy `console.error` → no React warnings ("unmounted component"/"not wrapped in act"), announce not called, no unhandled rejection.
 11. `'never says synced from stale counters while its refresh is pending'`: offline mock with `waitingCount: 0` and a never-resolving `refreshSyncStatus` → `queryByText('All saved and synced')` is null.
 12. `'the gauge carries the final label from the first frame (full motion)'`: `motionLevel 'full'`, goal 3/3 → right after the goal resolves, `getByLabelText('3 of 3 sessions today. Goal met.')`.
-13. `'full motion: numeral 2 before 650ms, 3 after 800ms; confetti only for the exact target'`: fake timers, `motionLevel 'full'`, goal 3/3: after the goal resolves and 600ms, `gauge-numeral-to` has opacity 0 and `gauge-numeral-from` shows '2'; after 1400ms, no `gauge-numeral-from`, `getByText('3')`; `confetti-layer` exists at 750ms. Repeat with 2/3: `confetti-layer` never exists.
+13. `'full motion: numeral 2 before 650ms, 3 after 800ms; confetti only for the exact target'`: fake timers, `motionLevel 'full'`, goal 3/3: after the goal resolves and 600ms, `gauge-numeral-to` has opacity 0 and `gauge-numeral-from` shows '2'; after 1400ms, no `gauge-numeral-from`, `getByText('3')`; `confetti-layer` exists at 750ms. Repeat with 2/3: `confetti-layer` never exists. This file runs under the default native-animation mock (see Task 9), so it asserts only facts that hold there: values before a track starts, `settled`-driven structure after 1400ms, and which layers mount. It never asserts a native-driven value after its track starts; if a future assertion needs one, copy Task 9's harness into this file rather than changing the screen.
 14. `'footer turns sticky only when the content overflows'`: fire `layout` on `session-complete-scroll` with height 500 and `contentSizeChange` (390, 400) → footer bare; then `contentSizeChange` (390, 900) → footer has `backgroundColor: colors.surface` and `borderTopColor: colors.border`.
 15. `'light status bar and a red strip behind the inset'`: the `FocusAwareStatusBar` receives `style="light"`; a view with `height: 47` and `backgroundColor: colors.red600` exists.
 
@@ -1160,3 +1208,13 @@ Expected: every grep empty; `git diff --check` clean; the last command shows **n
 - [ ] **8. Sync line live:** waiting → "Syncing…" (about 1s, the debounce) → "All saved and synced", cross-fading, with the footer height steady. Offline: the offline copy, never "synced".
 - [ ] **9. Toast over the footer:** trigger a toast while on Session complete (for example clock-out from a notification path, or any toast the build can raise): it sits 8 above the footer and Dismiss works.
 - [ ] **10. Home row (every PR):** Home is pixel-identical to PR 3's build (gauge, card, bottom padding); the status bar goes red/light on Complete and stays light on Home with no flash.
+
+---
+
+## Codex plan review (2026-10-19)
+
+Adversarial review of this plan (verdict: needs-attention); both findings accepted and checked against the installed versions.
+
+1. **[medium] Native-driven values never update under the default Jest mock (Task 9).** Confirmed in `node_modules/react-native` 0.81.5: `jest/mocks/NativeModules.js:96–98` ends native animations after 16ms with `{ finished: true }` only, and `Animation.js:149–151` syncs the JS value only when `value` is present, so `flip`/`confettiFade` stay 0 and `settled` comes early. Task 9 now specifies a test-local harness (spy `NativeAnimatedHelper.shouldUseNativeDriver` to `false`, so every track runs on the JS driver with real delays, durations, final values and `stop()`), a probe test that proves the harness, a config test asserting production `useNativeDriver: true` on every track but `earned` and the TIMELINE durations, a tighter settle check (false at 1290, true at 1350), and an unmount test that checks values freeze. The old "boundary values only" fallback is replaced. Production animation code is unchanged; the JS-driven sweep test and the Task 14 device timing gates stay. Task 10 test 13 is annotated to assert only facts that hold under the default mock.
+2. **[medium] Whole-screen subtitle query always matches the headline (Task 10).** Confirmed in `@testing-library/react-native` 13.3.3 `build/matches.js` (trim + collapse whitespace on both sides; role `name` goes through the same text query). Test 2 now finds the headline by `header` role, pins the literal line break with an identity normalizer, asserts the sub-line absent with `within(session-complete-card)` (the card already has that `testID`), and asserts exactly one normalized match for 'Daily target reached.' on the screen.
+

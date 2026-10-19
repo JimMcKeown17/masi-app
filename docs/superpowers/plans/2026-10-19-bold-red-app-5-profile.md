@@ -260,7 +260,7 @@ Overview C11: if PR 1 already landed the Android fix, do only Step 1's `footerSt
 Layout (part 5 "Change password sheet"; overview roles):
 - `BottomSheet` with `title="Change password"`, `dismissLabel="Dismiss change password"`, `maxHeight="100%"`, `keyboardAvoiding` (default), `scrollable`, `scrollViewProps={{ ref: scrollRef, keyboardShouldPersistTaps: 'handled', onLayout, onScroll, scrollEventThrottle: 16 }}` (React 19 passes `ref` through the spread).
 - `headerExtras`: the toggle, `BrandButton variant="tertiary" tone="accent" size="sm"`, icon `eye-outline` / `eye-off-outline`, label "Show passwords" / "Hide passwords", inside a wrapper with `alignSelf: 'flex-start', marginVertical: -12` so its 44 target adds no height. It stays usable while loading.
-- Body: three field blocks 12 apart, each a `View` whose `onLayout` records `{ y, height }`. `TextField` props: `icon="lock-closed-outline"`, `secureTextEntry={!showPasswords}` (no `onToggleSecure`), `autoCapitalize="none"`, `autoCorrect={false}`, `disabled={loading}`, `error` = the field error for that field, `inputRef`.
+- Body: three field blocks 12 apart, each a `View` (`testID` `password-block-current`, `-new`, `-confirm`; the hint + form-error block is `password-block-notes`) whose `onLayout` records `{ y, height }`. `TextField` props (each also gets `onFocus` and `onBlur` for the scroll rule below; if PR 1's `TextField` does not pass them through to its input while keeping its own focus styling, add that as an optional, default-preserving passthrough with a test in `TextField`'s test file, Gap rule): `icon="lock-closed-outline"`, `secureTextEntry={!showPasswords}` (no `onToggleSecure`), `autoCapitalize="none"`, `autoCorrect={false}`, `disabled={loading}`, `error` = the field error for that field, `inputRef`.
   - Current: label "Current password", placeholder "Enter current password", `textContentType="password"`, `autoComplete="current-password"`, `autoFocus`, `returnKeyType="next"` → focus New.
   - New: "New password" / "Enter new password", `textContentType="newPassword"`, `autoComplete="new-password"`, `returnKeyType="next"` → focus Confirm.
   - Confirm: "Confirm new password" / "Re-enter new password", same content type as New, `returnKeyType="done"`, `onSubmitEditing` = submit.
@@ -276,7 +276,12 @@ Behaviour (part 5 "States"; today's checks at `ProfileScreen.js:194-243`):
 - `setLoading(false)` only if the attempt is still live and the component is mounted.
 - Dismissal (`onDismiss` of the sheet and Cancel): always allowed, including while loading; clears the three fields, all errors, `showPasswords` → false, `loading` → false, `liveAttemptRef` → null (the attempt becomes abandoned), then `onClose()`.
 - Error clearing: editing a field clears that field's error and the form error.
-- Scroll: keep `pendingScrollRef` (a block key). On a field's focus, and when an error is set for a block (the field's block, or the hint + form-error block for a form error), set it pending; each block's `onLayout` stores its layout and, if it is pending, calls `scrollRef.current?.scrollTo({ y: target, animated: true })` with `computeScrollTarget` (skip when `null`) and clears it. Viewport height comes from the ScrollView `onLayout`, `scrollY` from `onScroll`.
+- Scroll (part 5 focus-visibility rule). Moving focus between fields that are already laid out does **not** fire `onLayout` (React Native fires it on mount and on geometry change, and `TextField` keeps its border width constant across focus states), so the scroll must not wait for a layout event. Cache measurements and act on focus immediately:
+  - Refs: `layoutsRef` (block key → `{ y, height }`, written by each block's `onLayout`), `viewportHeightRef` (ScrollView `onLayout`), `scrollYRef` (ScrollView `onScroll`, `contentOffset.y`), `focusedKeyRef` (the focused field's block, set on focus, cleared on blur), `pendingKeyRef` (a block that still owes a scroll).
+  - `ensureVisible(key)`: if `layoutsRef[key]` or `viewportHeightRef` is missing, set `pendingKeyRef = key` and return. Otherwise compute `computeScrollTarget({ blockY, blockHeight, scrollY: scrollYRef, viewportHeight })`; when non-null call `scrollRef.current?.scrollTo({ y: target, animated: true })` and set `scrollYRef` to the target; then clear `pendingKeyRef` if it equals `key`.
+  - Call it: on a field's focus, **immediately**, with that field's block (`ensureVisible('new')`); when an error is set, mark its block pending (the field's block, or `notes` for a form error), because the error text changes that block's height and the cached layout is stale until it re-lays out.
+  - Retry: a block's `onLayout` stores its layout, then calls `ensureVisible(key)` if `key === pendingKeyRef`. The ScrollView's `onLayout` stores the viewport height, then calls `ensureVisible(pendingKeyRef ?? focusedKeyRef)` (the keyboard rising shrinks the viewport after the focus event has already run).
+  - Reset all five refs' focus/pending state (not the layouts) when the sheet is dismissed.
 
 - [ ] **Step 1: Write the failing tests**
 
@@ -297,6 +302,14 @@ Behaviour (part 5 "States"; today's checks at `ProfileScreen.js:194-243`):
   - `a stale handle shows nothing`: hold, set `handle.isCurrent` to return false, resolve success → no toast, `onClose` not called; same for `error: new StaleActorError()`.
   - `Show passwords toggles all three fields`: initially all `secureTextEntry === true`; press "Show passwords" → all false and the label reads "Hide passwords".
   - `Current password is focused on open`: the Current input's `autoFocus === true`.
+  - `focusing an already-measured field scrolls it into view without another layout event` (the Next-key path at 360×640). The ScrollView jest mock's `scrollTo` is a `jest.fn` on its prototype (`node_modules/react-native/jest/mocks/ScrollView.js`): read it from `UNSAFE_getByType(ScrollView).instance.scrollTo` and `mockClear()` it after setup. Fire `layout` once on the ScrollView (height 120) and once on each block (`password-block-current` y 0 h 102, `-new` y 114 h 102, `-confirm` y 228 h 102, `-notes` y 342 h 40). Then, with **no further `layout` events**:
+    - `fireEvent(getByLabelText('New password'), 'focus')` → `scrollTo` last called with `{ y: 96, animated: true }` (114 + 102 − 120);
+    - fire `scroll` on the ScrollView at `contentOffset.y` 96, then focus Confirm → `{ y: 210, animated: true }`;
+    - focus Current → `{ y: 0, animated: true }` (block above);
+    - focusing a field that is already fully visible calls `scrollTo` no more times.
+  - `a focus before measurement scrolls once the layouts arrive`: focus New before any `layout` → `scrollTo` not called; fire the block and ScrollView `layout` events → called once with the computed target.
+  - `the keyboard shrinking the viewport re-checks the focused field`: viewport 400, focus New (visible, no call); fire ScrollView `layout` with height 120 → `{ y: 96, animated: true }`.
+  - `an error re-scrolls its block after it grows`: produce "New passwords do not match" (Confirm's block pending); fire `layout` on `password-block-confirm` with height 130 → `scrollTo` called with that block's new target.
 
   `domainTextInputAudit.test.js`, in "auth and password screens keep platform text assistance available", add:
   ```js
@@ -328,7 +341,7 @@ Behaviour (part 5 "States"; today's checks at `ProfileScreen.js:194-243`):
 - Modify: `__tests__/designSystemGuard.test.js` (delete the `src/screens/main/ProfileScreen.js` ratchet line)
 - Rewrite: `__tests__/ProfileScreen.releaseMetadata.test.js`, `__tests__/profileCaptureModeToggle.test.js`
 - Create: `__tests__/ProfileScreen.layout.test.js`
-- Modify (interaction helpers only, assertions unchanged): `__tests__/task5AuthRaces.test.js`, `__tests__/task5ActionsBinding.test.js`
+- Modify (interaction helpers and render wrapper only, assertions unchanged): `__tests__/task5AuthRaces.test.js` (all five screen-driven password-test definitions, eight cases; inventory in Step 4), `__tests__/task5ActionsBinding.test.js`
 - Modify if it asserts Profile's title: PR 1's rewrite of `__tests__/AppNavigator.headers.test.js`
 
 **Interfaces:**
@@ -393,14 +406,27 @@ Behaviour:
 - [ ] **Step 3: Rewrite `ProfileScreen.js`**, set `title: 'Profile'` in `AppNavigator.js`, and delete the `ProfileScreen.js` ratchet line in `designSystemGuard.test.js`.
 
 - [ ] **Step 4: Update the two integration tests' interactions** (no assertion changes):
-  - `task5AuthRaces.test.js` (both Profile password tests, `:388` and `:421`): press the "Change password" row (`getByRole('button', { name: 'Change password' })` before the sheet opens), find the three inputs by their labels, and press `getByTestId('change-password-submit')` with `fireEvent.press` inside `act`. In the race test, keep the barriers: start the press in a non-awaited `act`, `await entered.promise`, switch actor, then `await act(async () => { release.resolve(); })` and flush (`await waitFor(...)` on the existing assertions) instead of awaiting the handler's promise.
+  - `task5AuthRaces.test.js` has **five** test definitions that drive the inline password form, eight cases in all. Each one fills `UNSAFE_getAllByType(TextInput)` by index before any sheet exists and calls `UNSAFE_getAllByType(Button).find(node => node.props.children === 'Change Password').props.onPress()`, keeping its returned promise as `change` / `verification`. All five must be migrated; once the inline fields and the Paper button are gone, an unmigrated one fails before it reaches its auth barrier, and these are the tests that guard delayed password updates, sign-out persistence, account switching and the request timeout. Line numbers are from `feat/bold-red-app` at plan time; re-find them by name:
+    1. `:305–355` `test.each` (3 cases) `delayed password %s and logout 503 cannot restore A after provider remount (%s)`: fill at `:326–327`, press at `:328`, `await change` in the release `act` and the `finally`.
+    2. `:357–407` `Profile password change preserves the app session through revoke-others and token refresh`: fill `:394–395`, awaited press `:396`, then `getByText('Password changed successfully')`.
+    3. `:409–441` `test.each([B, A])` (2 cases) `late Profile verification cannot replace the new handle for %s or update a password`: fill `:426–427`, press `:428` (as `verification`).
+    4. `:577–607` `a late shared password update cannot publish A or show feedback after switching to B`: fill `:587–588`, press `:589`.
+    5. `:609–647` `a never-settling password PUT cannot block sign-out then B beyond the request bound`: fill `:623–624`, press `:625`, under the file's fake timers (`AUTH_REQUEST_TIMEOUT_MS`).
+  - The same mechanical change in each, with every barrier, transport mock, timer advance, `try/finally` and assertion kept exactly where it is:
+    - **Open the sheet:** `fireEvent.press(view.getByRole('button', { name: 'Change password' }))` (only the row has that name before the sheet opens; after it opens, the submit button shares the text, which is why it has a `testID`).
+    - **Fill by label:** `fireEvent.changeText(view.getByLabelText('Current password'), …)`, then `'New password'`, then `'Confirm new password'` (exact matches; the values are the test's existing three).
+    - **Submit and keep the promise:** `change = fireEvent.press(view.getByTestId('change-password-submit'))`, then `expect(change).toBeInstanceOf(Promise)`. RNTL 13's `fireEvent` returns the handler's return value, so this works when the sheet passes its async `submit` straight to the button's `onPress` and `BrandButton` hands `onPress` to its `Pressable` unchanged (as `BrandButton.js:16` does today). If PR 1's `BrandButton` wraps `onPress` and drops the return value, make the wrapper `return onPress?.(event)` (Task 1, additive, with a `BrandButton.test.js` case). The `toBeInstanceOf` guard matters: `await undefined` would let every "no toast / no PUT after switching" assertion pass without the attempt ever settling. Definition 2's awaited press becomes `const change = fireEvent.press(…); await act(async () => { await change; });`. Everywhere else the existing `await change` / `await verification` lines stay.
+    - **Toast host:** Profile's messages are toasts now, and `useToast()` throws outside a `ToastProvider` (`src/context/ToastContext.js`). Use the provider wrapping PR 1 gave `Tree` if it exists; otherwise give `Tree` the production shape from `App.js`: one `ToastProvider` around the whole `Tree` output (above the keyed `SignedInEAProvider`, so it survives the actor switch) and `<ToastActorScope handle={auth.handle}>` inside `SignedInEAProvider`. Placement is what makes the negative checks real: `Tree` unmounts the Profile subtree on sign-out, so a host inside that subtree would hide a stale toast instead of catching it.
+    - Remove the now-unused `Button` (Paper) and `TextInput` imports only if no other test in the file uses them.
   - `task5ActionsBinding.test.js` "A saved Export Database confirmation never reads or shares B data" (`:63-80`): open Support tools, press "Share database", press "Export" for the first export (`shareAsync` once). For the saved confirmation, reopen the sheet, capture `view.UNSAFE_getByType(ExportDatabaseSheet).props.onExport` while it is open, then `view.unmount()`, switch to B, and `await act(async () => { await onExport(); })`. The assertions (`getReader` not called on B, `shareAsync` not called) stay.
 
 - [ ] **Step 5: Run the screen, guard, navigator and integration tests**
 
   Run: `PATH=$HOME/.nvm/versions/node/v20.19.4/bin:$PATH npx jest __tests__/ProfileScreen.releaseMetadata.test.js __tests__/ProfileScreen.layout.test.js __tests__/profileCaptureModeToggle.test.js __tests__/ChangePasswordSheet.test.js __tests__/signOutFlow.test.js __tests__/designSystemGuard.test.js __tests__/domainTextInputAudit.test.js __tests__/AppNavigator.headers.test.js`
+  Run: `PATH=$HOME/.nvm/versions/node/v20.19.4/bin:$PATH npm run test:integration -- __tests__/task5AuthRaces.test.js -t "password|Profile verification"`
+  Expected: ten cases run and PASS. Eight are the migrated ones: the three `delayed password … after provider remount` cases, `Profile password change preserves the app session…`, the two `late Profile verification…` cases, `a late shared password update…` and `a never-settling password PUT…`. The other two, `sign-in does not wait for a password update…` and `A password response between B storage commit…`, also match the filter; they render `Tree` without Profile and call `auth.changePassword` directly, so they must pass unchanged. Record the case list in the build log.
   Run: `PATH=$HOME/.nvm/versions/node/v20.19.4/bin:$PATH npm run test:integration -- __tests__/task5AuthRaces.test.js __tests__/task5ActionsBinding.test.js`
-  Expected: PASS.
+  Expected: PASS, the whole files.
 
 - [ ] **Step 6: Commit**
 
@@ -518,7 +544,7 @@ Build a cloud EAS preview for iOS and Android (sqlite backend is the default; a 
 
 - [ ] Page top and end against `red-profile-p1-compact` and `red-profile-final` (top); Support tools open against `red-profile-p1-support-open`.
 - [ ] Password sheet, keyboard up, against `red-profile-p2-password-sheet` on both platforms; each error state (`-s-password-error`, `-s-password-verify` offline) and loading (`-s-password-loading`) inside the sheet; the success toast.
-- [ ] 360×640, keyboard up: "next" through each field; each focused field and its error are fully visible and "Change password" stays above the keyboard; repeat at font scale 1.3.
+- [ ] 360×640, keyboard up: "next" through each field (Current → New → Confirm with the keyboard's Next key, no taps); each focused field and its error are fully visible and "Change password" stays above the keyboard; repeat at font scale 1.3.
 - [ ] Dismiss the password sheet mid-request (airplane mode to stall it, then reconnect): the outcome arrives as a toast; reopening starts empty.
 - [ ] **C11 "no double lift":** Create class → School search sheet on the A03s and the iPhone: the search field sits just above the keyboard, not lifted twice.
 - [ ] Export database sheet; the OS share sheet opens after Export; the toast clears the home indicator (iOS), gesture bar and 3-button navigation (Android).
@@ -528,3 +554,13 @@ Build a cloud EAS preview for iOS and Android (sqlite backend is the default; a 
 - [ ] Profile reached from the Home settings button; Back returns to Home; the Android header shows a single back control and "Profile" (closes ROADMAP §0 "BackMy Profile": tick it).
 - [ ] Home row: Home is pixel-identical to the previous build.
 - [ ] Record results and screenshots in `documentation/build-log.md` and commit (`docs(build-log): Profile device gate`).
+
+---
+
+## Codex plan review (2026-10-19)
+
+Adversarial review of this plan (verdict: needs-attention); both findings accepted and checked against the code.
+
+1. **[medium] Three password-test definitions left unmigrated (Task 6).** Confirmed: `__tests__/task5AuthRaces.test.js` has five definitions (eight cases) that fill `TextInput`s by index and call the Paper `Change Password` button's `onPress`, not two (`:305–355` ×3, `:357–407`, `:409–441` ×2, `:577–607`, `:609–647`). Step 4 now inventories all five, prescribes one mechanical migration (open the sheet by its row, fill by label, `fireEvent.press` the `change-password-submit` button and keep its returned promise, guarded by `toBeInstanceOf(Promise)`), keeps every barrier and assertion, and adds the `ToastProvider` / `ToastActorScope` shape `Tree` needs now that `useToast()` throws without a provider (placed above the keyed subtree so the "no feedback after switching" checks stay meaningful). Step 5's integration gate now runs the password cases by name and records them, then both files whole.
+2. **[medium] Focus on an already-measured field did not scroll (Task 5).** The old rule scrolled only from a block's next `onLayout`, which a focus change does not fire. Task 5 now caches block, viewport and scroll measurements and calls `ensureVisible` immediately on focus, keeps a pending block when measurements are missing or an error changes a block's height, and retries on that block's layout or any viewport layout (the keyboard shrinking the sheet). Four component tests pin it: Next-key focus of New and Confirm with no further layout events (exact `scrollTo` targets), focus before measurement, viewport shrink, and an error that grows its block. `TextField` gains an `onFocus`/`onBlur` passthrough if PR 1 lacks one. The Task 10 device row now names the Next-key path.
+

@@ -503,6 +503,7 @@ git commit -m "feat(children): AvatarStack, GroupChip and SyncBanner (replaces t
   - Each press calls only its own handler.
 - The results button holds an `Avatar` with "AD" at 40, the name in `textRowTitle`, and an 18dp `chevron-forward`.
 - "Age 7" renders. Age `null` renders no "Age" text and no separator.
+- `the group chip's 44dp target stays off the results button`: the meta row (`testID="child-row-meta"`) flattens to `marginTop: 8`, and `marginTop + chipButton.marginVertical >= 0`, where `chipButton` is the chip's outer `Pressable` (its `marginVertical` is −8). The 8dp gap is exactly what absorbs the chip target's 8dp upward reach (part 2 "The 8 gap between the name line and the meta line keeps the chip's 44 target off the results button"). `fireEvent.press` on each handler cannot see hit-target overlap, so this geometry pin plus the Task 11 boundary-tap gate are the checks.
 - `groupName={null}` gives the "Assign group to Amahle Dlamini" chip.
 - "Syncing…" (style `textNote`, Muted) with a 16dp `SpinnerArc` renders only for `synced: false`, and is not a live region.
 - The two right-column buttons are `minWidth`/`minHeight` 44, with MaterialCommunityIcons `format-letter-case` 22 and Ionicons `create-outline` 24, both `colors.text`.
@@ -525,7 +526,7 @@ Expected: FAIL (modules missing).
 - `ClassChildRow`: a container `View` (`flexDirection: 'row'`, `alignItems: 'flex-start'`, `minHeight: 72`, padding 6 6 10 16, gap 4), not a touchable.
   - Left column (`flex: 1`):
     - the results `Pressable` (`minHeight: 44`, row, gap 12, pressed `tints.pressed`): `Avatar`, then the name and chevron, gap 2;
-    - the meta row (`paddingLeft: 52`, row, gap 8, `flexWrap: 'wrap'`, `alignItems: 'center'`), directly under the results button as the board draws it;
+    - the meta row (`testID="child-row-meta"`, **`marginTop: 8`**, `paddingLeft: 52`, row, gap 8, `flexWrap: 'wrap'`, `alignItems: 'center'`). The 8dp gap is required, not decorative: `GroupChip`'s outer button is 44 high with `marginVertical: -8`, so its touch target reaches 8dp above the meta row's box. Without the gap that 8dp lands inside the results `Pressable` and a tap on the bottom of the name opens the group picker. Do not remove the gap or the chip's negative margins to "tighten" the row; if the board looks tighter, the spec's 8dp wins;
     - the "Syncing…" row (`marginTop: 8`, `paddingLeft: 52`, gap 6).
   - Right column: two 44×44 `Pressable`s, radius 22, pressed `tints.pressed`.
   - The name has `numberOfLines={fontScale > 1 ? undefined : 1}`, as in `ClassRow`.
@@ -549,7 +550,7 @@ git commit -m "feat(children): class row and class-detail child row with sibling
 - Modify: `src/screens/main/ChildrenListScreen.js` (full view rewrite; the hooks and effects at lines 25–152 keep their logic)
 - Modify: `src/navigation/AppNavigator.js` (`ChildrenList` option `title: 'Children'`; keep PR 1's `headerRight` sync pill)
 - Modify: `__tests__/designSystemGuard.test.js` (delete the `src/screens/main/ChildrenListScreen.js` ratchet entry)
-- Modify: `__tests__/ChildrenListScreenRefresh.test.js` (copy updates only)
+- Modify: `__tests__/ChildrenListScreenRefresh.test.js` (render harness migrated to the new screen's dependencies, plus copy; every test and assertion stays)
 - Test: `__tests__/ChildrenListScreen.test.js` (new), `__tests__/ChildrenStackOptions.test.js` (new)
 
 **Interfaces:**
@@ -565,7 +566,8 @@ git commit -m "feat(children): class row and class-detail child row with sibling
 
 `__tests__/ChildrenListScreen.test.js`:
 - Mocks as in `ChildrenListScreenRefresh.test.js`, plus:
-  - `@react-navigation/native` exposing `useNavigation: () => navigation` (for `useHeaderHairline`) and `useFocusEffect: (cb) => require('react').useEffect(() => cb(), [cb])`;
+  - `@react-navigation/native` as `{ ...jest.requireActual('@react-navigation/native'), useFocusEffect: (cb) => require('react').useEffect(() => cb(), [cb]) }`. The spread is required: PR 1's `useHeaderHairline` lives in `ScreenHeader.js` and reads `NavigationContext` from this module, so a mock that exports only `useFocusEffect` hands `useContext` an `undefined` context and the render throws;
+  - a `navigation` stub `{ navigate: jest.fn(), setOptions: jest.fn() }` passed as the screen prop (the screen passes it to `useHeaderHairline(navigation)`, which calls `setOptions` when the scroll offset flips);
   - `../src/context/SignedInEAContext` returning `repositories.assessments.getAssessments` resolving `[]`;
   - a full `useOffline` value (`isOnline`, `isSyncing`, `waitingCount`, `needsAttentionCount`, `syncNow`, `refreshSyncStatus`).
 - Render inside `PaperProvider` and `MotionProvider value`.
@@ -613,7 +615,13 @@ Tests, each named after the behaviour:
 
 `__tests__/ChildrenStackOptions.test.js`: mock `@react-navigation/native-stack` with a `Screen` that records `{ name, options }` (pattern: `__tests__/AppNavigator.headers.test.js`). Render `<AppNavigator signedIn />` and assert that `ChildrenList`'s options (resolved with a stub navigation) have `title: 'Children'` and a `headerRight`.
 
-In `ChildrenListScreenRefresh.test.js`, change only `'Loading classes and children...'` → `'Loading classes and children…'` and `'Start Setup'` → `'Start setup'`. Every test stays.
+`ChildrenListScreenRefresh.test.js` is a retained suite (pull-to-refresh order, onboarding auto-entry, durable child-step resume, the two neutral loading states). Migrate its harness so it renders the rewritten screen, then change its copy. Every test and every assertion stays; none is deleted or weakened:
+- The navigation mock (lines 6–8) becomes `{ ...jest.requireActual('@react-navigation/native'), useFocusEffect: (...args) => mockUseFocusEffect(...args) }`, so `NavigationContext` (read by `useHeaderHairline`) exists. Keep `mockUseFocusEffect` and each test's `mockImplementation((callback) => callback())`.
+- Every navigation stub (`{ navigate: jest.fn() }`, five places) becomes `{ navigate: jest.fn(), setOptions: jest.fn() }`.
+- `mockUseOffline` returns the full value the screen and `SyncBanner` now read: `{ isOnline: true, isSyncing: false, waitingCount: 0, needsAttentionCount: 0, refreshSyncStatus, syncNow }`. With `waitingCount: 0` the banner renders nothing, so no assertion changes.
+- Render through PR 1's `renderWithProviders` (`test-support/renderWithProviders.js`: SafeArea, Motion, Toast, Paper with `paperTheme`) instead of a bare `PaperProvider`, so `InlineLoading`'s spinner and any primitive that reads insets or the theme render as on device.
+- Copy: `'Loading classes and children...'` → `'Loading classes and children…'` and `'Start Setup'` → `'Start setup'`.
+- If any further dependency of the rewritten screen makes this suite fail before its own assertions (for example `useSignedInEA` once the stats load), add the mock or provider it needs here; never delete a test to get green. Record each harness change in the Task 9 build-log row.
 
 - [ ] **Step 2: Run to verify they fail**
 
@@ -623,6 +631,8 @@ Expected: FAIL on the new copy and structure.
 - [ ] **Step 3: Implement**
 
 Keep the four `useFocusEffect` blocks, `filteredClasses`, `getGroupCountForClass`, `onRefresh` and `unassignedChildren` exactly. Delete `totalUnsyncedCount` and its two counts: the banner reads `waitingCount` itself.
+
+Hooks rule: add `const onScroll = useHeaderHairline(navigation);` with the screen's other hooks, above any conditional `return`, and pass `onScroll` to the `FlatList`. Never call the hook inline inside JSX: the call would sit behind whichever branch renders the list, and a change in branch would change the hook order.
 
 View, top to bottom, with spacing from part 2:
 - `ChildrenListHeader`:
@@ -653,7 +663,7 @@ View, top to bottom, with spacing from part 2:
     - `onPress` → `navigate('EditChild', { childId })`;
   - then, when `hasClasses`, `BrandButton variant="tertiary" icon="add" label="Add another class"` 6 below, `alignSelf: 'flex-start'`, `marginLeft: 20` (the 24 gutter less 4), → `navigate('CreateClass')`.
 - `FlatList`:
-  - `onScroll={useHeaderHairline()}`, `scrollEventThrottle={16}`;
+  - `onScroll={onScroll}` (the hook result from the top of the component), `scrollEventThrottle={16}`;
   - `keyboardShouldPersistTaps="handled"`, `keyboardDismissMode="on-drag"`;
   - `contentContainerStyle={{ paddingBottom: FAB_OVERHANG + 16 }}`;
   - `RefreshControl` with `tintColor={colors.primary} colors={[colors.primary]}` and today's `onRefresh`.
@@ -692,13 +702,16 @@ git commit -m "feat(children): Bold Red My Children list"
 - Consumes: `ClassChildRow`, `listGroupItemFrame`, `ListGroupDivider`, `IconCircleButton`, `SectionHeader`, `BrandButton`, `InlineLoading`, `getGroupDotColor`, `useHeaderHairline`, `FAB_OVERHANG`.
 - Produces: nothing new.
 
-- [ ] **Step 1: Write the failing tests** (in `ClassDetailScreen.test.js`; keep all four existing tests and update their copy)
+- [ ] **Step 1: Write the failing tests** (in `ClassDetailScreen.test.js`; keep all four existing tests, migrate them to the new screen and update their copy)
 
-- Add mocks:
-  - `@react-navigation/native` with `...jest.requireActual(...)` and `useNavigation: () => navigation`;
-  - `navigation.goBack`;
-  - a render helper that wraps the screen in `MotionProvider value`.
-- `'Loading class...'` → `'Loading class…'`.
+- Harness:
+  - `@react-navigation/native` is not mocked (the real module supplies `NavigationContext`); if a later need forces a mock, it must spread `jest.requireActual('@react-navigation/native')`;
+  - add `goBack: jest.fn()` to the `navigation` stub (it already has `setOptions`, `navigate`, `popToTop`); the screen passes this prop to `useHeaderHairline(navigation)`;
+  - `renderClassDetail` renders through PR 1's `renderWithProviders` (Motion, SafeArea, Toast, Paper), and returns the RNTL result so a test can call `rerender(<ClassDetailScreen navigation={navigation} route={route} />)` on the same instance.
+- Migrate the retained tests:
+  - `renders class name and empty message…` (line 64 today asserts `getByText('Grade R Blue')` inside the screen body). The rewrite moves the class name out of the body and into the navigator header, so the assertion moves to the header contract: `expect(navigation.setOptions).toHaveBeenLastCalledWith(expect.objectContaining({ title: 'Grade R Blue' }))`, plus `expect(screen.queryByText('Grade R Blue')).toBeNull()` (the body no longer repeats the title). Its empty-class assertion stays: "No children in this class yet." renders.
+  - `renders not-found message…` and `opens child results from the row…` stay unchanged.
+  - `shows a neutral loading state…`: `'Loading class...'` → `'Loading class…'`; the `queryByText('Class not found.')` null check stays.
 - New tests:
   1. `header options carry the class name and Manage classes`:
      - `navigation.setOptions` was last called with `expect.objectContaining({ title: 'Grade R Blue' })`;
@@ -719,6 +732,11 @@ git commit -m "feat(children): Bold Red My Children list"
   7. `four separate controls per row`: the existing "opens child results from the row…" test passes unchanged, and "Letter tracker for Amahle Dlamini" navigates `('LetterTracker', { child, classItem })`.
   8. `Syncing… only for an unsynced child`.
   9. `list padding`: `contentContainerStyle` flattens to `paddingBottom: FAB_OVERHANG + 16`.
+  10. `loading → loaded → loading on the same mounted screen keeps the hook order, and a cached class never blanks` (a pull sets `ClassesContext.loading` even with the class cached, `ClassesContext.js:147`, so this happens on every ordinary pull). **The loading state shows only when `loading && !classItem`** (orchestrator decision 2026-10-19, matching the list screen's Review Focus 1: a background pull must not blank a cached class):
+      - render with `loading: true` and the class **not** in `classes` → "Loading class…";
+      - change `mockUseClasses` to `loading: false` with the class present and `rerender` → the class info ("Masi Primary") and the list render, and the `FlatList`'s `onScroll` is a function; fire a scroll event at y 20 on it → `navigation.setOptions` was called with `{ headerScrolled: true }`;
+      - change to `loading: true` with the class **still cached** and `rerender` → the class info and list stay on screen and "Loading class…" is absent;
+      - the test spies on `console.error` and asserts it was never called (React reports a hook-order change there as "Rendered more/fewer hooks" or "change in the order of Hooks"), and no render throws.
 - `ChildrenStackOptions.test.js`: `ClassDetail` options `title` is `''`.
 
 - [ ] **Step 2: Run to verify they fail**
@@ -728,6 +746,8 @@ Expected: FAIL on the new tests.
 
 - [ ] **Step 3: Implement**
 
+- **Loading condition (orchestrator decision 2026-10-19):** today's `if (loading)` return becomes `if (loading && !classItem)`, so a background pull with the class cached never blanks the screen (same rule as the list screen's Review Focus 1). With no cached class it shows "Loading class…" as before; `if (!classItem)` still shows "Class not found." once loading ends.
+- Hooks rule: every hook runs before the `if (loading && !classItem)` and `if (!classItem)` returns (today's lines 75–92). Add `const onScroll = useHeaderHairline(navigation);` next to the `useState`/`useCallback` hooks, above both early returns, and pass `onScroll` to the `FlatList`. Do **not** write `onScroll={useHeaderHairline()}` in the `FlatList` JSX: that call only runs on the populated branch, so the hook count changes each time `loading` flips. Test 10 pins this.
 - Replace today's `useLayoutEffect` with one that depends on `[navigation, classItem?.name]`:
 
 ```js
@@ -755,14 +775,14 @@ navigation.setOptions({
     - letter tracker → `navigate('LetterTracker', { child, classItem })`;
     - edit → `navigate('EditChild', { childId })`.
   - `ListEmptyComponent`: 14 below the section row, padding 0 24, "No children in this class yet." (`textRowTitle`, ink), then "Tap Add child to add a child." (`textCaption`, Muted, 2 above).
-  - `onScroll={useHeaderHairline()}` and `contentContainerStyle={{ paddingBottom: FAB_OVERHANG + 16 }}`.
+  - `onScroll={onScroll}` (from the top of the component), `scrollEventThrottle={16}` and `contentContainerStyle={{ paddingBottom: FAB_OVERHANG + 16 }}`.
 - Delete the `FAB` and every Paper import except what `GroupPickerBottomSheet` needs (none). Delete the `#000` shadow styles.
 - Delete the ratchet entry.
 
 - [ ] **Step 4: Run to verify they pass**
 
-Run: `PATH=$HOME/.nvm/versions/node/v20.19.4/bin:$PATH npx jest __tests__/ClassDetailScreen.test.js __tests__/ChildrenStackOptions.test.js __tests__/designSystemGuard.test.js __tests__/childrenLanding.test.js`
-Expected: PASS.
+Run: `PATH=$HOME/.nvm/versions/node/v20.19.4/bin:$PATH npx jest __tests__/ClassDetailScreen.test.js __tests__/ChildrenStackOptions.test.js __tests__/designSystemGuard.test.js __tests__/childrenLanding.test.js __tests__/ChildrenListScreenRefresh.test.js __tests__/ChildrenListScreen.test.js`
+Expected: PASS, including all four retained `ClassDetailScreen` tests and every retained `ChildrenListScreenRefresh` test.
 
 - [ ] **Step 5: Commit**
 
@@ -925,5 +945,16 @@ Build a cloud EAS preview for iOS and Android (memory "Device-testing the SQLite
   - avatars and monograms are skipped;
   - the banner is not announced.
 - [ ] **Bottom clearance:** the last row and "Add another class" clear the Record button at rest.
-- [ ] **Touch overlap:** the group chip's 44 target and the results button do not steal each other's taps (tap the chip's top edge and the name's bottom edge).
+- [ ] **Touch overlap (boundary taps):** the group chip's 44 target and the results button do not steal each other's taps. On a row with an assigned chip and on one with the amber "Group" chip: tap the bottom edge of the name and the avatar's bottom edge (opens results, never the picker), then tap just above the pill's top edge, inside its 44 target (opens the picker, never results). Repeat at the largest font. A wrong destination fails the gate: the 8dp meta-row gap (Task 5) has been lost.
 - [ ] **Home row:** Home is pixel-identical to the PR 1 build.
+
+---
+
+## Codex plan review (2026-10-19)
+
+Adversarial review of this plan (verdict: needs-attention); all three findings accepted and checked against the code.
+
+1. **[high] `useHeaderHairline()` behind Class detail's early returns.** Today's `ClassDetailScreen.js:75–92` returns early for loading and not-found, and `ClassesContext.js:147` sets `loading` on ordinary pulls, so an inline `onScroll={useHeaderHairline()}` in the populated branch changes the hook order on every pull. Task 7 now calls `const onScroll = useHeaderHairline(navigation)` with the other hooks, above both returns, and adds test 10 (same instance, loading → loaded → loading, scroll fires `setOptions`, no hook-order `console.error`). Task 6 applies the same rule to the list screen. The screens pass their `navigation` prop so the hook and the test stubs share one object.
+2. **[medium] Group chip target overlapping the results button.** `GroupChip`'s button is 44 high with `marginVertical: -8`, and the plan put the meta row directly under the results `Pressable`. Task 5 restores part 2's 8dp gap (`marginTop: 8` on `child-row-meta`), explains why it must stay, and pins it with a geometry test (`marginTop + chip marginVertical >= 0`). Task 11's touch-overlap gate is now explicit boundary taps on both chip variants and at the largest font.
+3. **[medium] Retained suites not migrated.** `ChildrenListScreenRefresh.test.js` mocks `@react-navigation/native` with only `useFocusEffect` (lines 6–8) and its stubs have no `setOptions`; PR 1's hook reads `NavigationContext` from that module. Task 6 now migrates its harness (`requireActual` spread, `setOptions` on every stub, full `useOffline` value, `renderWithProviders`) and keeps every test. The new `ChildrenListScreen.test.js` mock is corrected the same way (it previously named `useNavigation`, which PR 1's hook does not use). Task 7 moves `ClassDetailScreen.test.js:64`'s body `getByText('Grade R Blue')` to the `setOptions` title contract, keeps its empty-class assertion and the other three tests, and Task 7's gate now runs both retained suites.
+

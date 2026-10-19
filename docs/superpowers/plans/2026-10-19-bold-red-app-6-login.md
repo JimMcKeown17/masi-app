@@ -601,11 +601,12 @@ The screen is unreachable from Log in after Task 6, but it is restyled and teste
 - Produces: `export function AuthNavigator()` (named export; `AppNavigator` still renders it). Screens: `Login` (initial) and `ForgotPassword` with `options={{ headerShown: true, title: 'Reset password' }}` (the `header` comes from PR 1's stack `screenOptions`; drop `headerBackTitle`).
 
 **Screen (part 6 "Reset password", with the name map):**
-- Form state: `error: { kind: 'format' } | { kind: 'server', message } | null`; `loading`; `success`. Validation unchanged (`!email || !email.includes('@')` → `format`).
+- Form state: `error: { kind: 'format' } | { kind: 'server', message: string } | null`; `loading`; `success`. Validation unchanged (`!email || !email.includes('@')` → `format`).
+- `handleReset` (the same shape as Task 6's `handleLogin`): return if `loading`; on a format failure `setError({ kind: 'format' })` and return; else `setError(null)`, `setLoading(true)`, `const { error: resetError } = await resetPassword(email)`; on `resetError` → `setError({ kind: 'server', message: describeAuthError(resetError, 'reset') })` and `setLoading(false)`; on success `setSuccess(true)` and `setLoading(false)`. The mapping happens **here, at response time**, on the original error: `AuthContext.resetPassword` returns it intact (`src/context/AuthContext.js:281–290`), and `describeAuthError` reads its `code`, retryable-fetch identity and `status`, none of which the stored state keeps. State only ever holds the finished copy.
 - Form (canvas `colors.background`, `KeyboardAvoidingView behavior="padding" enabled={Platform.OS === 'ios'}` around a `ScrollView keyboardShouldPersistTaps="handled"`, content padding top 10, sides 24):
   - Paragraph "Enter your email address and we’ll send you instructions to reset your password." `typeRoles.textParagraph`, `colors.textSecondary`, `maxWidth: 330`.
   - `TextField surface="canvas"` label "Email", icon `mail-outline`, no placeholder, `autoFocus`, `keyboardType="email-address"`, `autoCapitalize="none"`, `returnKeyType="send"`, `onSubmitEditing={handleReset}`, `marginTop: 20`, `disabled={loading}`; `format` → `error="Please enter a valid email address"`. Editing clears any error.
-  - `server` → `InlineNote tone="error"` with `describeAuthError(error, 'reset')`, `marginTop: 20`.
+  - `server` → `InlineNote tone="error"` rendering `error.message` directly, `marginTop: 20`. Never call `describeAuthError` in render: passing it the `{ kind, message }` state object loses `code` and `status`, so rate-limit and connection failures would fall through to the generic reset copy.
   - `BrandButton variant="primary" label="Send reset link" loadingLabel="Sending…"`, `marginTop`: 12 after the server note, else 20. Ignores taps while loading.
   - `BrandButton variant="tertiary" tone="ink" label="Back to sign in"`, `marginTop: 8`, `onPress={() => navigation.goBack()}`, disabled while loading.
 - Sent (`success`): `useLayoutEffect` → `navigation.setOptions({ title: '' })` (the header keeps only its Back circle). Body:
@@ -620,7 +621,7 @@ The screen is unreachable from Log in after Task 6, but it is restyled and teste
   1. `form content`: paragraph text with the curly "we’ll"; field labelled Email; buttons "Send reset link" and "Back to sign in"; paragraph style matches `typeRoles.textParagraph` + `colors.textSecondary`.
   2. `invalid email`: "asanda.mbeki" → press Send → one note "Please enter a valid email address" (the field's own note); `mockResetPassword` not called; editing clears it.
   3. `rate limited`: `mockResetPassword.mockResolvedValue({ error: { code: 'over_email_send_rate_limit', status: 429 } })` → "Too many reset emails were requested. Please wait a while and try again." above the button (the note precedes "Send reset link" in render order); no Snackbar.
-  4. `no connection`: `new AuthRetryableFetchError('Network request failed', 0)` → "Couldn’t reach Masi. Check your internet connection and try again."
+  4. `no connection`: `new AuthRetryableFetchError('Network request failed', 0)` → "Couldn’t reach Masi. Check your internet connection and try again." (Tests 3 and 4 are the guard for the response-time mapping: both fail if the screen maps the stored state instead of the original error.)
   5. `pending`: deferred → button "Sending…" with `busy`; the input `editable === false`; a second press leaves one call.
   6. `sent`: resolve `{ error: null }` for "asanda.mbeki@masinyusane.org" → header "Check your email"; `getByText(/If an account exists with\s+asanda\.mbeki@masinyusane\.org,\s+you will receive a password reset link shortly\./)`; the address is a nested `Text` with `fontFamily: fontFamilies.textHeavy`; the note text is not italic; `navigation.setOptions` called with `{ title: '' }`; exactly one element with role header on the screen body; "Back to sign in" calls `navigation.popTo('Login')` (not `navigate`).
   7. `form Back to sign in` calls `navigation.goBack()`.
@@ -763,3 +764,12 @@ Build a cloud EAS preview for iOS and Android (the sqlite backend is the default
 - [ ] **Sign-out → Log in:** sign out from Profile; Log in appears on the red field with light status-bar icons and no provider error; after signing in, the status bar is light on Home and dark on canvas tabs.
 - [ ] **Home row:** Home is unchanged from the previous PR's build.
 - [ ] **Gate:** Jim approves, or the failures become fixes on this branch before the PR merges.
+
+---
+
+## Codex plan review (2026-10-19)
+
+Adversarial review of this plan (verdict: needs-attention); the one finding is accepted and checked against the code.
+
+1. **[medium] Reset errors mapped after their classification fields were discarded (Task 8).** The form state stored `{ kind: 'server', message }` while the renderer passed that state to `describeAuthError(error, 'reset')`, which reads the original error's `code`, retryable-fetch identity and `status` (`src/utils/authErrorCopy.js`); `AuthContext.resetPassword` returns the original error intact (`src/context/AuthContext.js:281–290`). Task 8 now spells out `handleReset`: it stores `{ kind: 'server', message: describeAuthError(resetError, 'reset') }` at response time (the same pattern as Task 6's `handleLogin`), and the `InlineNote` renders `error.message` directly. The rate-limit and connection tests (3 and 4) are unchanged and are noted as the guard for this contract.
+

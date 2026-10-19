@@ -1033,7 +1033,7 @@ git commit -m "feat(nav): canvas header sync pill; curly apostrophes in sync cop
 - Consumes: `IconCircleButton` (Task 9), `SyncIndicator` (Task 18).
 - Produces:
   - `ScreenHeader(props)` (default export): the navigators' `header` render prop. Reads `navigation`, `route`, `options`, `back` (native stack only). Options read: `title` (or a string `headerTitle`), `headerRight` (a function, called with `{ canGoBack: Boolean(back), tintColor: colors.text }`), `headerLeftIcon` (`'back'` default, `'close'`, `'none'`), `headerBackVisible`, `headerScrolled`.
-  - `export function useHeaderHairline(navigation?)`: returns an `onScroll` handler. It uses `navigation ?? useContext(NavigationContext)`; with no navigation object (screen tests) the handler does nothing. It calls `navigation.setOptions({ headerScrolled })` only when `contentOffset.y > 0` flips, never every frame.
+  - `export function useHeaderHairline(navigation?)`: returns an `onScroll` handler. It calls `const contextNavigation = useContext(NavigationContext)` **unconditionally** (hooks must run on every render), then uses `navigation ?? contextNavigation`; with no navigation object (screen tests) the handler does nothing. It calls `navigation.setOptions({ headerScrolled })` only when `contentOffset.y > 0` flips, never every frame.
 
 Spec (overview §1.1, C1–C3):
 - Container `colors.background`, `paddingTop: insets.top + 9`, `paddingHorizontal: 24`, `paddingBottom: 6`. Content row `minHeight: 44`, `flexDirection: 'row'`, `alignItems: 'flex-start'`, gap 12. Total height at one-line titles is inset + 59.
@@ -1208,7 +1208,9 @@ Board files get only the mechanical pass (part 1 §9 "Board screens"): `fontWeig
 
 ### Task 30: Board files, mechanical pass B (Record, Session complete, Profile, sign-out)
 
-**Files:** Modify `src/screens/sessions/LiteracySessionForm.js`, `src/screens/sessions/SessionCompleteScreen.js` (no change expected), `src/components/sessions/SessionsTodayRing.js`, `src/screens/main/ProfileScreen.js`, `src/components/profile/SignOutSheets.js`; tests `__tests__/LiteracySessionForm.test.js`, `__tests__/LiteracySessionForm.submit.test.js` (integration), `__tests__/SessionsTodayRing.test.js`, `__tests__/SessionCompleteScreen.test.js`, `__tests__/ProfileScreen.releaseMetadata.test.js`, `__tests__/profileCaptureModeToggle.test.js`, `__tests__/signOutFlow.test.js` (must stay byte-identical).
+**Files:** Modify `src/screens/sessions/LiteracySessionForm.js`, `src/screens/sessions/SessionCompleteScreen.js` (no change expected), `src/components/sessions/SessionsTodayRing.js`, `src/screens/main/ProfileScreen.js`, `src/components/profile/SignOutSheets.js`; tests `__tests__/LiteracySessionForm.test.js`, `__tests__/LiteracySessionForm.submit.test.js` (integration), `__tests__/SessionsTodayRing.test.js`, `__tests__/SessionCompleteScreen.test.js`, `__tests__/ProfileScreen.releaseMetadata.test.js`, `__tests__/profileCaptureModeToggle.test.js`, `__tests__/signOutFlow.test.js` (must stay byte-identical), `__tests__/task5AuthRaces.test.js` (integration).
+
+**`task5AuthRaces.test.js`:** `ProfileScreen` now calls `useToast()`, which throws outside a `ToastProvider`, and that file's `Tree` renders Profile with none. Wrap its `Tree` as `App.js` does: `ToastProvider` **above** the keyed `SignedInEAProvider`, with `ToastActorScope handle={handle}` inside it, so a stale toast after sign-out or an account switch is caught by the actor scope rather than hidden by an unmount. Change nothing else in that file; the whole file must stay green.
 
 - `LiteracySessionForm`: `fontWeight` → faces; `'#FFFFFF'` (`:767`) → `colors.onDark`; its Snackbar (the save failure) → `toast.show({ message, tone: 'error' })`, copy and duration unchanged (the Record PR moves it inline).
 - `SessionsTodayRing` (not a board file; deleted by the Session complete PR): full sweep (roles for its raw sizes, faces), so it leaves `PENDING_SWEEP` with zero violations.
