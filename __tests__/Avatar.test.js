@@ -15,13 +15,16 @@ jest.mock('@expo/vector-icons', () => new Proxy({}, {
 const flat = (node) => StyleSheet.flatten(node.props.style);
 const hidden = { includeHiddenElements: true };
 
-test.each([[28, 'textInitialsSm'], [40, 'textInitialsMd'], [64, 'textInitialsLg']])('size %s uses %s in a decorative red disc', (size, role) => {
+// The 28dp stack disc is a fixed graphic and its neighbour covers 6dp of it, so its initials do not
+// scale with the system font (A03s at 360dp, font 1.3: 1.2x initials ran into the next disc).
+test.each([[28, 'textInitialsSm', 1], [40, 'textInitialsMd', 1.2], [64, 'textInitialsLg', 1.2]])('size %s uses %s in a decorative red disc, one line, capped at %sx', (size, role, cap) => {
   const ui = render(<Avatar label="AD" size={size} />);
   const disc = ui.getByTestId('avatar', hidden);
   expect(flat(disc)).toMatchObject({ width: size, height: size, borderRadius: size / 2, backgroundColor: colors.red50 });
   const label = ui.getByText('AD', hidden);
   expect(flat(label)).toMatchObject({ ...typeRoles[role], color: colors.red700 });
-  expect(label.props.maxFontSizeMultiplier).toBe(1.2);
+  expect(label.props.maxFontSizeMultiplier).toBe(cap);
+  expect(label.props.numberOfLines).toBe(1);
   expect(disc.props).toMatchObject({ importantForAccessibility: 'no-hide-descendants', accessibilityElementsHidden: true });
   expect(ui.queryByLabelText(/AD/)).toBeNull();
 });

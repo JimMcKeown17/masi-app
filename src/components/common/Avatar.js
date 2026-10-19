@@ -6,6 +6,7 @@ import { typeRoles } from '../../constants/typography';
 
 const initialsRoles = { 28: typeRoles.textInitialsSm, 40: typeRoles.textInitialsMd, 64: typeRoles.textInitialsLg };
 const iconSizes = { 28: 14, 40: 18, 64: 28 };
+// The 28dp stack disc is overlapped by its neighbour, so its initials stay at 1x.
 const decorative = { accessible: false, accessibilityElementsHidden: true, importantForAccessibility: 'no-hide-descendants' };
 
 export default function Avatar({ label = '', size = 40, shape = 'circle', icon, ring = false, testID = 'avatar', style }) {
@@ -15,8 +16,8 @@ export default function Avatar({ label = '', size = 40, shape = 'circle', icon, 
       {icon ? <Ionicons name={icon} size={iconSizes[size]} color={colors.red700} /> : (
         <Text
           style={[shape === 'tile' ? typeRoles.textButton : initialsRoles[size], styles.label]}
-          maxFontSizeMultiplier={1.2}
-          numberOfLines={shape === 'tile' ? 1 : undefined}
+          maxFontSizeMultiplier={size <= 28 ? 1 : 1.2}
+          numberOfLines={1}
           adjustsFontSizeToFit={shape === 'tile'}
         >{label}</Text>
       )}
