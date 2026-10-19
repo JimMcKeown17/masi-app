@@ -2,8 +2,8 @@ global.__MASI_NO_DEFAULT_HANDLE__ = true;
 
 import React from 'react';
 import { act, cleanup, fireEvent, waitFor } from '@testing-library/react-native';
-import { renderWithProviders as render } from '../test-support/renderWithProviders';
-import { PaperProvider } from 'react-native-paper';
+import { AllProviders } from '../test-support/renderWithProviders';
+import { renderInTestStack } from '../test-support/renderInTestStack';
 import { SignedInEAContext } from '../src/context/SignedInEAContext';
 import { requestOpen, resetHandleRegistryForTests } from '../src/session/signedInHandle';
 import * as engine from '../test-support/expoSQLiteRealEngine';
@@ -67,17 +67,28 @@ afterEach(async () => {
   await engine.__resetMockDatabases();
 });
 
-const renderForm = () => {
-  const navigation = { replace: jest.fn(), dispatch: jest.fn(), addListener: jest.fn(() => jest.fn()) };
-  const screen = render(
+const mockCompleteMounted = jest.fn();
+function HomeStub() { return null; }
+function SessionCompleteStub({ route }) {
+  React.useEffect(() => { mockCompleteMounted(route.params); }, []);
+  return null;
+}
+function FormProviders({ children }) {
+  return (
     <SignedInEAContext.Provider value={{ handle, repositories: handle.repositories, services: handle.services }}>
-      <PaperProvider settings={{ icon: () => null }}>
-        <LiteracySessionForm navigation={navigation} />
-      </PaperProvider>
+      <AllProviders>{children}</AllProviders>
     </SignedInEAContext.Provider>
   );
-  return { ...screen, navigation };
-};
+}
+const renderForm = () => renderInTestStack({
+  routes: [
+    { name: 'Home', component: HomeStub },
+    { name: 'SessionForm', component: LiteracySessionForm },
+    { name: 'SessionComplete', component: SessionCompleteStub },
+  ],
+  initialIndex: 1,
+  wrapper: FormProviders,
+});
 const fillValidForm = (screen) => {
   fireEvent.press(screen.getByText('Amahle Dlamini'));
   fireEvent.press(screen.getByLabelText('A, not selected'));
@@ -95,15 +106,17 @@ test('back-to-back submit presses persist one session and navigate once', async 
     fireEvent.press(submit);
     fireEvent.press(submit);
   });
-  await waitFor(() => expect(screen.navigation.replace).toHaveBeenCalled());
+  await waitFor(() => expect(mockCompleteMounted).toHaveBeenCalled());
   // Wait behind both submitted transactions before inspecting the durable result.
   await handle.withTransaction(async () => {});
 
   const sessions = await readSessions();
   expect(sessions).toHaveLength(1);
   expect(sessions[0].children_ids).toEqual([mockChild.id]);
-  expect(screen.navigation.replace).toHaveBeenCalledTimes(1);
-  expect(screen.navigation.replace).toHaveBeenCalledWith('SessionComplete', { childCount: 1 });
+  expect(mockCompleteMounted).toHaveBeenCalledTimes(1);
+  expect(mockCompleteMounted).toHaveBeenCalledWith({ childCount: 1 });
+  expect(screen.routeNames()).toEqual(['Home', 'SessionComplete']);
+  expect(screen.queryByText('Discard this session?')).toBeNull();
 });
 
 test('a failed save rolls back and retry persists exactly one session with the original id', async () => {
@@ -131,11 +144,20 @@ test('a failed save rolls back and retry persists exactly one session with the o
   const reader = await handle.getReader();
   expect(await reader.getAllAsync('select id from session_attendees')).toEqual([]);
   expect(await reader.getAllAsync('select id from sync_outbox')).toEqual([]);
-  expect(screen.navigation.replace).not.toHaveBeenCalled();
+  expect(mockCompleteMounted).not.toHaveBeenCalled();
+  expect(screen.routeNames()).toEqual(['Home', 'SessionForm']);
+  act(() => { screen.navigationRef.goBack(); });
+  expect(screen.getByText('Discard this session?')).toBeTruthy();
+  expect(screen.routeNames()).toEqual(['Home', 'SessionForm']);
+  fireEvent.press(screen.getByText('Keep editing'));
+  expect(screen.queryByText('Discard this session?')).toBeNull();
   nativeWrite.mockRestore();
 
   fireEvent.press(screen.getByText('Submit Session'));
-  await waitFor(() => expect(screen.navigation.replace).toHaveBeenCalledTimes(1));
+  await waitFor(() => expect(mockCompleteMounted).toHaveBeenCalledTimes(1));
+  expect(mockCompleteMounted).toHaveBeenCalledWith({ childCount: 1 });
+  expect(screen.routeNames()).toEqual(['Home', 'SessionComplete']);
+  expect(screen.queryByText('Discard this session?')).toBeNull();
 
   expect(await readSessions()).toEqual([expect.objectContaining({ id: firstAttemptId })]);
   expect(await reader.getAllAsync('select session_id, child_id from session_attendees'))
@@ -152,11 +174,14 @@ test('validation failure leaves submit available after the input is corrected', 
   expect(screen.getByText('Select at least one letter')).toBeTruthy();
   expect(screen.getByText('Select a reading level')).toBeTruthy();
   expect(await readSessions()).toEqual([]);
-  expect(screen.navigation.replace).not.toHaveBeenCalled();
+  expect(mockCompleteMounted).not.toHaveBeenCalled();
+  expect(screen.routeNames()).toEqual(['Home', 'SessionForm']);
 
   fillValidForm(screen);
   fireEvent.press(screen.getByText('Submit Session'));
-  await waitFor(() => expect(screen.navigation.replace).toHaveBeenCalledTimes(1));
+  await waitFor(() => expect(mockCompleteMounted).toHaveBeenCalledTimes(1));
+  expect(mockCompleteMounted).toHaveBeenCalledWith({ childCount: 1 });
+  expect(screen.routeNames()).toEqual(['Home', 'SessionComplete']);
 
   expect(await readSessions()).toHaveLength(1);
 });

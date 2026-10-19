@@ -47,38 +47,29 @@ jest.mock('../src/services/literacySessionPersistence', () => ({
 }));
 
 import React from 'react';
-import { renderWithProviders as render } from '../test-support/renderWithProviders';
+import { AllProviders } from '../test-support/renderWithProviders';
+import { renderInTestStack } from '../test-support/renderInTestStack';
 import { act, fireEvent, waitFor } from '@testing-library/react-native';
-import { Alert } from 'react-native';
-import { PaperProvider } from 'react-native-paper';
+import { BackHandler } from 'react-native';
 import LiteracySessionForm from '../src/screens/sessions/LiteracySessionForm';
 import { READING_LEVELS } from '../src/constants/literacyConstants';
 
-const buildNavigation = () => {
-  const listeners = {};
-  return {
-    replace: jest.fn(),
-    dispatch: jest.fn(),
-    addListener: jest.fn((event, callback) => {
-      listeners[event] = callback;
-      return jest.fn();
-    }),
-    emitBeforeRemove: () => {
-      const event = { preventDefault: jest.fn(), data: { action: { type: 'GO_BACK' } } };
-      listeners.beforeRemove?.(event);
-      return event;
-    },
-  };
-};
-
-const renderForm = (navigation = buildNavigation()) => {
-  const screen = render(
-    <PaperProvider settings={{ icon: () => null }}>
-      <LiteracySessionForm navigation={navigation} />
-    </PaperProvider>
-  );
-  return { navigation, ...screen };
-};
+const COMMENTS_PLACEHOLDER = 'Add session notes...';
+const mockCompleteMounted = jest.fn();
+function HomeStub() { return null; }
+function SessionCompleteStub({ route }) {
+  React.useEffect(() => { mockCompleteMounted(route.params); }, []);
+  return null;
+}
+const renderForm = () => renderInTestStack({
+  routes: [
+    { name: 'Home', component: HomeStub },
+    { name: 'SessionForm', component: LiteracySessionForm },
+    { name: 'SessionComplete', component: SessionCompleteStub },
+  ],
+  initialIndex: 1,
+  wrapper: AllProviders,
+});
 
 describe('LiteracySessionForm', () => {
   const originalTimeZone = process.env.TZ;
@@ -189,28 +180,77 @@ describe('LiteracySessionForm', () => {
   });
 
   describe('unsaved-changes leave guard', () => {
-    test('a dirty form blocks leaving and asks for confirmation', () => {
-      const alertSpy = jest.spyOn(Alert, 'alert').mockImplementation(() => {});
-      const { navigation, getByPlaceholderText } = renderForm();
-      fireEvent.changeText(getByPlaceholderText('Add session notes...'), 'worked on m sounds');
-      const event = navigation.emitBeforeRemove();
-      expect(event.preventDefault).toHaveBeenCalled();
-      expect(alertSpy).toHaveBeenCalled();
-      alertSpy.mockRestore();
+    const goBack = (screen) => act(() => { screen.navigationRef.goBack(); });
+    const dirty = (screen) => fireEvent.changeText(screen.getByPlaceholderText(COMMENTS_PLACEHOLDER), 'worked on m sounds');
+
+    test('a dirty form refuses removal and shows the discard sheet with the verbatim copy', () => {
+      const screen = renderForm();
+      dirty(screen);
+      goBack(screen);
+      expect(screen.routeNames()).toEqual(['Home', 'SessionForm']);
+      expect(screen.getByText('Discard this session?')).toBeTruthy();
+      expect(screen.getByText('Your session details have not been saved. Leaving now will discard them.')).toBeTruthy();
+      expect(screen.getByText('Discard')).toBeTruthy();
+      expect(screen.getByText('Keep editing')).toBeTruthy();
+    });
+
+    test('"Keep editing" hides the sheet, keeps every value, and the guard stays armed', () => {
+      const screen = renderForm();
+      dirty(screen);
+      goBack(screen);
+      fireEvent.press(screen.getByText('Keep editing'));
+      expect(screen.queryByText('Discard this session?')).toBeNull();
+      expect(screen.getByPlaceholderText(COMMENTS_PLACEHOLDER).props.value).toBe('worked on m sounds');
+      goBack(screen);
+      expect(screen.getByText('Discard this session?')).toBeTruthy();
+      expect(screen.routeNames()).toEqual(['Home', 'SessionForm']);
+    });
+
+    test('"Discard" dispatches the stored action and leaves without a second prompt', () => {
+      const screen = renderForm();
+      dirty(screen);
+      goBack(screen);
+      fireEvent.press(screen.getByText('Discard'));
+      expect(screen.routeNames()).toEqual(['Home']);
+    });
+
+    test('Android back with the sheet open keeps editing', () => {
+      const backSpy = jest.spyOn(BackHandler, 'addEventListener');
+      const screen = renderForm();
+      dirty(screen);
+      goBack(screen);
+      expect(screen.getByText('Discard this session?')).toBeTruthy();
+      const handlers = backSpy.mock.calls.filter(([event]) => event === 'hardwareBackPress');
+      act(() => { handlers[handlers.length - 1][1](); });
+      expect(screen.queryByText('Discard this session?')).toBeNull();
+      expect(screen.routeNames()).toEqual(['Home', 'SessionForm']);
+      expect(screen.getByPlaceholderText(COMMENTS_PLACEHOLDER).props.value).toBe('worked on m sounds');
+      backSpy.mockRestore();
     });
 
     test('choosing a session reading level alone makes the form dirty', () => {
-      const { navigation, getByText } = renderForm();
-      fireEvent.press(getByText('Select a level'));
-      fireEvent.press(getByText(READING_LEVELS[0]));
-      const event = navigation.emitBeforeRemove();
-      expect(event.preventDefault).toHaveBeenCalled();
+      const screen = renderForm();
+      fireEvent.press(screen.getByText('Select a level'));
+      fireEvent.press(screen.getByText(READING_LEVELS[0]));
+      goBack(screen);
+      expect(screen.getByText('Discard this session?')).toBeTruthy();
+      expect(screen.routeNames()).toEqual(['Home', 'SessionForm']);
     });
 
-    test('a clean form leaves without prompting', () => {
-      const { navigation } = renderForm();
-      const event = navigation.emitBeforeRemove();
-      expect(event.preventDefault).not.toHaveBeenCalled();
+    test('a clean form leaves without the sheet', () => {
+      const screen = renderForm();
+      goBack(screen);
+      expect(screen.routeNames()).toEqual(['Home']);
+      expect(screen.queryByText('Discard this session?')).toBeNull();
+    });
+
+    test('a successful submit leaves without the sheet', async () => {
+      const screen = renderForm();
+      submitValidForm(screen);
+      await waitFor(() => expect(mockCompleteMounted).toHaveBeenCalledTimes(1));
+      expect(mockCompleteMounted).toHaveBeenCalledWith({ childCount: 1 });
+      expect(screen.routeNames()).toEqual(['Home', 'SessionComplete']);
+      expect(screen.queryByText('Discard this session?')).toBeNull();
     });
   });
 
@@ -244,10 +284,13 @@ describe('LiteracySessionForm', () => {
 
       submitValidForm(screen);
       await waitFor(() => expect(mockPersistLiteracySession).toHaveBeenCalledTimes(1));
-      expect(screen.navigation.replace).not.toHaveBeenCalled();
+      expect(mockCompleteMounted).not.toHaveBeenCalled();
+      expect(screen.routeNames()).toEqual(['Home', 'SessionForm']);
 
-      resolvePersistence(true);
-      await waitFor(() => expect(screen.navigation.replace).toHaveBeenCalledTimes(1));
+      await act(async () => { resolvePersistence(true); });
+      await waitFor(() => expect(mockCompleteMounted).toHaveBeenCalledTimes(1));
+      expect(mockCompleteMounted).toHaveBeenCalledWith({ childCount: 1 });
+      expect(screen.routeNames()).toEqual(['Home', 'SessionComplete']);
     });
 
     test('navigates on commit without waiting for refresh and preserves completion side effects', async () => {
@@ -256,12 +299,12 @@ describe('LiteracySessionForm', () => {
 
       submitValidForm(screen);
 
-      await waitFor(() => expect(screen.navigation.replace).toHaveBeenCalledWith(
-        'SessionComplete', { childCount: 1 }
-      ));
+      await waitFor(() => expect(mockCompleteMounted).toHaveBeenCalledTimes(1));
+      expect(mockCompleteMounted).toHaveBeenCalledWith({ childCount: 1 });
+      expect(screen.routeNames()).toEqual(['Home', 'SessionComplete']);
       expect(mockRefreshSyncStatus).toHaveBeenCalledTimes(1);
       expect(mockTriggerBackgroundSync).toHaveBeenCalledTimes(1);
-      expect(screen.navigation.emitBeforeRemove().preventDefault).not.toHaveBeenCalled();
+      expect(screen.queryByText('Discard this session?')).toBeNull();
     });
 
     test('keeps navigation successful when the non-blocking refresh rejects', async () => {
@@ -272,7 +315,9 @@ describe('LiteracySessionForm', () => {
 
       submitValidForm(screen);
 
-      await waitFor(() => expect(screen.navigation.replace).toHaveBeenCalledTimes(1));
+      await waitFor(() => expect(mockCompleteMounted).toHaveBeenCalledTimes(1));
+      expect(mockCompleteMounted).toHaveBeenCalledWith({ childCount: 1 });
+      expect(screen.routeNames()).toEqual(['Home', 'SessionComplete']);
       await waitFor(() => expect(errorSpy).toHaveBeenCalledWith(
         'Error refreshing sync status after session save:', refreshError
       ));

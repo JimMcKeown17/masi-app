@@ -24,6 +24,7 @@ export default function BottomSheet({
   title,
   subtitle,
   dismissLabel,
+  panelRole,
   headerExtras,
   footer,
   scrollable = true,
@@ -100,6 +101,8 @@ export default function BottomSheet({
   const panel = (
     <Animated.View
       testID="bottom-sheet-panel"
+      role={panelRole}
+      accessibilityViewIsModal={panelRole ? true : undefined}
       onLayout={({ nativeEvent: { layout } }) => { if (layout.height > 0) setPanelHeight(layout.height); }}
       style={[
         styles.sheet,

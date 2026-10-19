@@ -65,10 +65,11 @@ jest.mock('../src/services/literacySessionPersistence', () => ({
 }));
 
 import React from 'react';
-import { renderWithProviders as render } from '../test-support/renderWithProviders';
+import { AllProviders } from '../test-support/renderWithProviders';
+import { renderInTestStack } from '../test-support/renderInTestStack';
 import { FlatList } from 'react-native';
 import { fireEvent } from '@testing-library/react-native';
-import { PaperProvider, childSelectorRowRenderSpy } from 'react-native-paper';
+import { childSelectorRowRenderSpy } from 'react-native-paper';
 import LiteracySessionForm from '../src/screens/sessions/LiteracySessionForm';
 
 const children = Array.from({ length: 60 }, (_, index) => ({
@@ -78,11 +79,8 @@ const children = Array.from({ length: 60 }, (_, index) => ({
   class_id: 'class-1',
 }));
 
-const navigation = {
-  replace: jest.fn(),
-  dispatch: jest.fn(),
-  addListener: jest.fn(() => jest.fn()),
-};
+function HomeStub() { return null; }
+function SessionCompleteStub() { return null; }
 
 function hasAncestorOfType(node, type) {
   let current = node.parent;
@@ -113,11 +111,15 @@ describe('LiteracySessionForm roster render isolation', () => {
   });
 
   function renderForm() {
-    return render(
-      <PaperProvider settings={{ icon: () => null }}>
-        <LiteracySessionForm navigation={navigation} />
-      </PaperProvider>,
-    );
+    return renderInTestStack({
+      routes: [
+        { name: 'Home', component: HomeStub },
+        { name: 'SessionForm', component: LiteracySessionForm },
+        { name: 'SessionComplete', component: SessionCompleteStub },
+      ],
+      initialIndex: 1,
+      wrapper: AllProviders,
+    });
   }
 
   test('selecting one child re-renders exactly one roster row', () => {

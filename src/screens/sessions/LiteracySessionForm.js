@@ -1,6 +1,7 @@
 import { useSignedInEA } from '../../context/SignedInEAContext';
 import React, { useCallback, useState, useMemo, useRef, useEffect } from 'react';
-import { View, StyleSheet, Pressable, Alert } from 'react-native';
+import { View, StyleSheet, Pressable } from 'react-native';
+import { usePreventRemove } from '@react-navigation/native';
 import {
   Text,
   TextInput,
@@ -25,8 +26,10 @@ import { buildSessionTypeFields } from '../../utils/sessionTypeResolver';
 import { persistLiteracySession } from '../../services/literacySessionPersistence';
 import { NO_TEXT_SUGGESTIONS } from '../../constants/textInputProps';
 import { toLocalDateString } from '../../utils/localDate';
+import { validateLiteracySession } from '../../utils/literacySessionValidation';
 import { v4 as uuidv4 } from 'uuid';
 import SelectSheet from '../../components/common/SelectSheet';
+import ConfirmSheet from '../../components/common/ConfirmSheet';
 
 const READING_LEVEL_OPTIONS = READING_LEVELS.map(level => ({ key: level, label: level }));
 
@@ -396,41 +399,53 @@ export default function LiteracySessionForm({ navigation }) {
   const submittingRef = useRef(false);
   const [validationErrors, setValidationErrors] = useState({});
 
-  // Leave guard: same field-hardened pattern as useAssessmentSession. allowLeaveRef is
-  // released only right before the success replace, so a failed save stays guarded.
   // Dirty = any save-bearing field differs from its initial value (all of these reach
   // the persisted session payload in handleSubmit).
-  const allowLeaveRef = useRef(false);
-  const initialSessionDateRef = useRef(sessionDate);
-  const isDirtyRef = useRef(false);
-  isDirtyRef.current =
+  const [initialSessionDate] = useState(sessionDate);
+  const isDirty =
     selectedChildren.length > 0 ||
     selectedLetters.length > 0 ||
     sessionReadingLevel !== null ||
     Object.keys(childReadingLevels).length > 0 ||
     Object.values(letterTrackerChanges).some((changes) => Object.keys(changes || {}).length > 0) ||
     comments.trim().length > 0 ||
-    sessionDate.getTime() !== initialSessionDateRef.current.getTime();
+    sessionDate.getTime() !== initialSessionDate.getTime();
 
+  const [allowLeave, setAllowLeave] = useState(false);
+  const preventLeave = isDirty && !allowLeave;
+  const storedActionRef = useRef(null);
+  const [discardVisible, setDiscardVisible] = useState(false);
+  const pendingCompletionRef = useRef(null);
+  usePreventRemove(preventLeave, ({ data }) => {
+    storedActionRef.current = data.action;
+    setDiscardVisible(true);
+  });
+
+  // This effect must follow usePreventRemove: its guard releases on the committed
+  // allowLeave render before we replace the form. A failed save never releases it.
   useEffect(() => {
-    const unsubscribe = navigation.addListener('beforeRemove', (event) => {
-      if (allowLeaveRef.current || !isDirtyRef.current) return;
-      event.preventDefault();
-      Alert.alert(
-        'Discard this session?',
-        'Your session details have not been saved. Leaving now will discard them.',
-        [
-          { text: 'Keep Editing', style: 'cancel' },
-          {
-            text: 'Discard',
-            style: 'destructive',
-            onPress: () => navigation.dispatch(event.data.action),
-          },
-        ],
-      );
-    });
-    return unsubscribe;
-  }, [navigation]);
+    if (!allowLeave || !pendingCompletionRef.current) return;
+    const params = pendingCompletionRef.current;
+    pendingCompletionRef.current = null;
+    navigation.replace('SessionComplete', params);
+    triggerBackgroundSync?.();
+    Promise.resolve()
+      .then(() => refreshSyncStatus())
+      .catch((error) => {
+        console.error('Error refreshing sync status after session save:', error);
+      });
+  }, [allowLeave, navigation, triggerBackgroundSync, refreshSyncStatus]);
+
+  const cancelDiscard = () => {
+    setDiscardVisible(false);
+    storedActionRef.current = null;
+  };
+  const confirmDiscard = () => {
+    const action = storedActionRef.current;
+    storedActionRef.current = null;
+    setDiscardVisible(false);
+    if (action) navigation.dispatch(action);
+  };
 
   // Derive the group ids that were implicitly used (not tracked in this simple flow,
   // so we leave group_ids as an empty array — future enhancement).
@@ -486,10 +501,7 @@ export default function LiteracySessionForm({ navigation }) {
 
   const handleSubmit = async () => {
     if (submittingRef.current) return;
-    const errors = {};
-    if (selectedChildren.length === 0) errors.children = 'Select at least one child';
-    if (selectedLetters.length === 0) errors.letters = 'Select at least one letter';
-    if (!sessionReadingLevel) errors.readingLevel = 'Select a reading level';
+    const errors = validateLiteracySession({ selectedChildren, selectedLetters, sessionReadingLevel });
     if (Object.keys(errors).length > 0) {
       setValidationErrors(errors);
       return;
@@ -529,14 +541,8 @@ export default function LiteracySessionForm({ navigation }) {
 
       // Replace (not push) so Back can't return to the just-submitted form; the
       // completion screen confirms capture and shows updated daily progress.
-      allowLeaveRef.current = true;
-      navigation.replace('SessionComplete', { childCount: selectedChildIds.length });
-      triggerBackgroundSync?.();
-      Promise.resolve()
-        .then(() => refreshSyncStatus())
-        .catch((error) => {
-          console.error('Error refreshing sync status after session save:', error);
-        });
+      pendingCompletionRef.current = { childCount: selectedChildIds.length };
+      setAllowLeave(true);
     } catch (error) {
       submittingRef.current = false;
       console.error('Error saving session:', error);
@@ -548,6 +554,17 @@ export default function LiteracySessionForm({ navigation }) {
 
   return (
     <View style={styles.outerContainer}>
+      <ConfirmSheet
+        visible={discardVisible}
+        title="Discard this session?"
+        body="Your session details have not been saved. Leaving now will discard them."
+        confirmLabel="Discard"
+        confirmVariant="destructiveQuiet"
+        cancelLabel="Keep editing"
+        dismissLabel="Dismiss discard confirmation"
+        onConfirm={confirmDiscard}
+        onCancel={cancelDiscard}
+      />
       <ChildSelector
         selectedChildren={selectedChildren}
         onSelectionChange={handleChildrenChange}
