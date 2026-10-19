@@ -1,7 +1,7 @@
 import React from 'react';
 import { ActivityIndicator, StyleSheet, Text, View } from 'react-native';
 import { fireEvent, render } from '@testing-library/react-native';
-import { colors, tints } from '../src/constants/colors';
+import { colors, spacing, tints } from '../src/constants/colors';
 import { typeRoles } from '../src/constants/typography';
 jest.mock('@expo/vector-icons', () => ({ Ionicons: 'Ionicons' }), { virtual: true });
 const flat = (node) => StyleSheet.flatten(node.props.style);
@@ -43,6 +43,27 @@ test.each([false, true])('disclosure exposes expanded=%s and the matching glyph'
   const ui = render(<ListRow title="Support" trailing="disclosure" expanded={expanded} />);
   expect(ui.getByRole('button').props.accessibilityState.expanded).toBe(expanded);
   expect(ui.UNSAFE_getByType('Ionicons').props).toMatchObject({ name: expanded ? 'chevron-up' : 'chevron-down', color: expanded ? colors.text : colors.textSecondary });
+});
+test('disclosure reflects expanded state after rerender', () => {
+  const onPress = jest.fn();
+  const row = (expanded) => <ListRow title="Support tools" trailing="disclosure"
+    expanded={expanded} onPress={onPress} accessibilityLabel="Support tools" />;
+  const ui = render(row(false));
+  expect(ui.getByRole('button', { name: 'Support tools' }).props.accessibilityState.expanded).toBe(false);
+  ui.rerender(row(true));
+  expect(ui.getByRole('button', { name: 'Support tools' }).props.accessibilityState.expanded).toBe(true);
+});
+test.each(['action', 'nested'])('%s titleAccessory renders beside the title and wraps', (variant) => {
+  const ui = render(<ListRow title="Share database" variant={variant}
+    titleAccessory={<Text>Sensitive</Text>} />);
+  const title = ui.getByText('Share database');
+  const accessory = ui.getByText('Sensitive');
+  // RN Text has a composite wrapper; inspect its nearest native View.
+  let line = accessory.parent;
+  while (line.type !== 'View') line = line.parent;
+  expect(line.findAllByType('Text').map(node => node.props.children)).toEqual(['Share database', 'Sensitive']);
+  expect(flat(line)).toMatchObject({ flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: spacing.sm });
+  expect(title.props.numberOfLines).toBeUndefined();
 });
 test('readOnly is one accessible element and has no button or trailing glyph', () => {
   const ui = render(<ListRow variant="readOnly" title="Email" subtitle="ea@masi.org" trailing="chevron" />);

@@ -14,11 +14,14 @@ import {
 import { act, fireEvent, render } from '@testing-library/react-native';
 import { PaperProvider } from 'react-native-paper';
 import { renderWithProviders } from '../test-support/renderWithProviders';
-import { colors, tints } from '../src/constants/colors';
+import { colors, spacing, tints } from '../src/constants/colors';
 import { typeRoles } from '../src/constants/typography';
 import { duration } from '../src/constants/motion';
 jest.mock('@expo/vector-icons', () => ({ Ionicons: 'Ionicons' }), { virtual: true });
 import BottomSheet from '../src/components/common/BottomSheet';
+
+let mockKeyboardHeight = 0;
+jest.mock('../src/hooks/useKeyboardHeight', () => ({ useKeyboardHeight: () => mockKeyboardHeight }));
 
 jest.mock('react-native-safe-area-context', () => {
   const ReactForMock = require('react');
@@ -117,6 +120,52 @@ describe('BottomSheet', () => {
     expect(sheet.getByText('Body content')).toBeTruthy();
   });
 
+  test.each(['android', 'ios'])('avoids the keyboard with padding on %s', platform => {
+    jest.replaceProperty(Platform, 'OS', platform);
+    const sheet = renderSheet();
+    expect(sheet.UNSAFE_getByType(KeyboardAvoidingView).props.behavior).toBe('padding');
+  });
+
+  test('the keyboard wrapper fills the overlay below the top inset', () => {
+    const sheet = renderSheet();
+    expect(StyleSheet.flatten(sheet.UNSAFE_getByType(KeyboardAvoidingView).props.style)).toMatchObject({
+      flex: 1, justifyContent: 'flex-end', paddingTop: spacing.sm,
+    });
+  });
+
+  test('drops the bottom inset padding while the keyboard is up and restores it when hidden', () => {
+    mockKeyboardHeight = 300;
+    const sheet = renderSheet();
+    const panelStyle = () => StyleSheet.flatten(sheet.getByTestId('bottom-sheet-panel').props.style);
+    expect(panelStyle()).toMatchObject({ maxHeight: '80%', paddingBottom: spacing.xs });
+    mockKeyboardHeight = 0;
+    sheet.rerender(sheetElement(true));
+    expect(panelStyle()).toMatchObject({ maxHeight: '80%', paddingBottom: spacing.lg });
+  });
+
+  test('keeps the bottom padding and wrapper when keyboard avoidance is off', () => {
+    mockKeyboardHeight = 300;
+    const sheet = renderSheet({ keyboardAvoiding: false });
+    const panel = sheet.getByTestId('bottom-sheet-panel');
+    expect(StyleSheet.flatten(panel.props.style)).toMatchObject({ maxHeight: '80%', paddingBottom: spacing.lg });
+    expect(sheet.UNSAFE_queryByType(KeyboardAvoidingView)).toBeNull();
+    let wrapper = panel.parent;
+    while (wrapper.type !== 'View') wrapper = wrapper.parent;
+    expect(StyleSheet.flatten(wrapper.props.style)).toEqual({ width: '100%' });
+  });
+
+  test('footerStyle overrides the footer rule', () => {
+    const sheet = renderSheet({
+      footer: <Text>Footer</Text>,
+      footerStyle: { borderTopWidth: 0, paddingTop: spacing.md },
+    });
+    let footer = sheet.getByText('Footer').parent;
+    while (footer.type !== 'View') footer = footer.parent;
+    expect(StyleSheet.flatten(footer.props.style)).toMatchObject({
+      borderTopWidth: 0, paddingTop: spacing.md, paddingHorizontal: spacing.lg,
+    });
+  });
+
   test('the measured panel height drives the rise without diagnostics', () => {
     const log = jest.spyOn(console, 'log').mockImplementation(() => {});
     const sheet = renderSheet();
@@ -131,6 +180,7 @@ describe('BottomSheet', () => {
 // duration elapses, and honour cancellation. No sheet internals are mocked.
 beforeEach(() => {
   jest.clearAllMocks();
+  mockKeyboardHeight = 0;
   jest.useFakeTimers();
   jest.spyOn(Animated, 'timing').mockImplementation((value, config) => {
     let timer;

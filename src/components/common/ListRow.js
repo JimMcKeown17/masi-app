@@ -1,14 +1,14 @@
 import React from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { colors, tints } from '../../constants/colors';
+import { colors, spacing, tints } from '../../constants/colors';
 import { typeRoles } from '../../constants/typography';
 
 const glyphs = { chevron: 'chevron-forward', external: 'open-outline', share: 'share-outline', send: 'send-outline' };
 export default function ListRow({
   title, subtitle, lead, trailing, onPress, variant = 'action', busy = false, expanded,
   disabled = false, showDivider = false, accessibilityLabel, accessibilityRole,
-  style, accessibilityState, titleNumberOfLines,
+  style, accessibilityState, titleNumberOfLines, titleAccessory,
 }) {
   const readOnly = variant === 'readOnly';
   const nested = variant === 'nested';
@@ -25,12 +25,13 @@ export default function ListRow({
   </View>;
   const disclosure = trailing === 'disclosure';
   const glyph = disclosure ? (expanded ? 'chevron-up' : 'chevron-down') : glyphs[trailing];
+  const titleText = <Text numberOfLines={titleNumberOfLines} ellipsizeMode="tail" style={[styles.title, nested && styles.nestedTitle]}>{title}</Text>;
   return <Pressable onPress={onPress} disabled={disabled || busy} accessibilityRole={accessibilityRole ?? 'button'}
     accessibilityLabel={label} accessibilityState={{ ...accessibilityState, busy, disabled: disabled || busy, ...(expanded === undefined ? {} : { expanded }) }}
     style={({ pressed }) => [rowStyle, pressed && styles.pressed]}>
     {lead ? <View style={nested ? styles.nestedLead : styles.lead}>{lead}</View> : null}
     <View style={styles.copy}>
-      <Text numberOfLines={titleNumberOfLines} ellipsizeMode="tail" style={[styles.title, nested && styles.nestedTitle]}>{title}</Text>
+      {titleAccessory != null ? <View style={styles.titleLine}>{titleText}{titleAccessory}</View> : titleText}
       {subtitle ? <Text style={styles.subtitle}>{subtitle}</Text> : null}
     </View>
     {busy ? <ActivityIndicator size={20} color={colors.textSecondary} />
@@ -45,6 +46,7 @@ const styles = StyleSheet.create({
   lead: { width: 40 },
   nestedLead: { width: 24 },
   copy: { flex: 1 },
+  titleLine: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: spacing.sm },
   title: { ...typeRoles.textRowTitle, color: colors.text },
   nestedTitle: { ...typeRoles.textBodyStrong },
   subtitle: { ...typeRoles.textCaption, color: colors.textSecondary, marginTop: 2 },
