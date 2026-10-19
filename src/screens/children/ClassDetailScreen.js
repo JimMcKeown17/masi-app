@@ -6,13 +6,14 @@ import {
   FAB,
   List,
   IconButton,
-  Button,
   ActivityIndicator,
 } from 'react-native-paper';
 import { colors, spacing, borderRadius } from '../../constants/colors';
+import { fontFamilies } from '../../constants/typography';
 import { useClasses } from '../../context/ClassesContext';
 import { useChildren } from '../../context/ChildrenContext';
 import GroupPickerBottomSheet from '../../components/children/GroupPickerBottomSheet';
+import BrandButton from '../../components/common/BrandButton';
 import { compareGroups, getGroupColor } from '../../utils/groupHelpers';
 
 export default function ClassDetailScreen({ route, navigation }) {
@@ -34,9 +35,7 @@ export default function ClassDetailScreen({ route, navigation }) {
         // live ChildrenList root (ref intact → no re-route), so navigate() does
         // not remount the tab, reset hasAutoRouted, or bounce a single-class EA
         // straight back here.
-        <Button compact onPress={() => navigation.popToTop()}>
-          Manage classes
-        </Button>
+        <BrandButton variant="tertiary" label="Manage classes" onPress={() => navigation.popToTop()} />
       ),
     });
   }, [navigation]);
@@ -236,6 +235,7 @@ export default function ClassDetailScreen({ route, navigation }) {
       {/* FAB to add child */}
       <FAB
         icon="plus"
+        color={colors.onDark}
         style={styles.fab}
         onPress={() => navigation.navigate('AddChild', { classId })}
       />
@@ -293,7 +293,7 @@ const styles = StyleSheet.create({
     borderRadius: borderRadius.sm,
     padding: spacing.md,
     elevation: 1,
-    shadowColor: '#000',
+    shadowColor: colors.shadowWarm,
     shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.05,
     shadowRadius: 2,
@@ -303,7 +303,7 @@ const styles = StyleSheet.create({
     marginRight: spacing.sm,
   },
   childName: {
-    fontWeight: '700',
+    fontFamily: fontFamilies.textBold,
     fontSize: 16,
   },
   detailRow: {
@@ -353,7 +353,7 @@ const styles = StyleSheet.create({
   },
   groupChipText: {
     fontSize: 12,
-    fontWeight: '600',
+    fontFamily: fontFamilies.textSemi,
   },
   assignChip: {
     paddingHorizontal: 8,
@@ -366,7 +366,7 @@ const styles = StyleSheet.create({
   },
   assignChipText: {
     fontSize: 11,
-    fontWeight: '600',
+    fontFamily: fontFamilies.textSemi,
     color: colors.warningText,
   },
   emptyContainer: {

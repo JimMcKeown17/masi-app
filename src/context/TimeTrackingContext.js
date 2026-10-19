@@ -2,6 +2,7 @@ import { useSignedInEA } from './SignedInEAContext';
 import React, { createContext, useContext, useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { useAuth } from './AuthContext';
 import { useOffline } from './OfflineContext';
+import { useToast } from './ToastContext';
 import { OPEN_TIME_ENTRY_EXISTS } from '../db/repositories/timeEntriesRepository';
 import { getCurrentPosition } from '../services/locationService';
 import { MAX_SHIFT_HOURS, MAX_SHIFT_MS } from '../constants/timeTracking';
@@ -23,8 +24,7 @@ function useTimeTrackingState() {
   const [isSignedIn, setIsSignedIn] = useState(false);
   const [activeEntry, setActiveEntry] = useState(null);
   const [loadingLocation, setLoadingLocation] = useState(false);
-  const [snackbarMessage, setSnackbarMessage] = useState('');
-  const [snackbarVisible, setSnackbarVisible] = useState(false);
+  const toast = useToast();
   const [autoClockOutNotice, setAutoClockOutNotice] = useState(null);
   const isSignedInRef = useRef(isSignedIn);
   const activeEntryRef = useRef(activeEntry);
@@ -42,10 +42,9 @@ function useTimeTrackingState() {
     setActiveEntry(value);
   }, []);
 
-  const showSnackbar = useCallback((message) => {
-    setSnackbarMessage(message);
-    setSnackbarVisible(true);
-  }, []);
+  const notify = useCallback((message, tone) => {
+    toast.show({ message, tone });
+  }, [toast]);
 
   const autoClockOut = useCallback(async (entry) => {
     const signInMs = new Date(entry.sign_in_time).getTime();
@@ -76,8 +75,8 @@ function useTimeTrackingState() {
     }
     await refreshSyncStatus();
     triggerBackgroundSync?.();
-    showSnackbar(`Auto clocked out after ${MAX_SHIFT_HOURS} hours.`);
-  }, [timeEntriesRepository, homeAttention, refreshSyncStatus, triggerBackgroundSync, showSnackbar, setActiveEntryState, setSignedInState]);
+    notify(`Auto clocked out after ${MAX_SHIFT_HOURS} hours.`, 'neutral');
+  }, [timeEntriesRepository, homeAttention, refreshSyncStatus, triggerBackgroundSync, notify, setActiveEntryState, setSignedInState]);
 
   const loadActiveEntry = useCallback(async () => {
     try {
@@ -157,7 +156,7 @@ function useTimeTrackingState() {
   const handleSignIn = useCallback(async () => {
     if (clockActionInFlight.current) return;
     if (isSignedInRef.current) {
-      showSnackbar('Already clocked in. Please clock out first.');
+      notify('Already clocked in. Please clock out first.', 'neutral');
       return;
     }
 
@@ -166,7 +165,7 @@ function useTimeTrackingState() {
     try {
       const locationResult = await getCurrentPosition();
       if (locationResult.cancelled) {
-        showSnackbar('Return from Settings and tap Clock In again, or continue without location.');
+        notify('Return from Settings and tap Clock In again, or continue without location.', 'neutral');
         return;
       }
 
@@ -191,24 +190,24 @@ function useTimeTrackingState() {
       await refreshSyncStatus();
       triggerBackgroundSync?.();
       const reasons = { timeout: 'GPS timed out', denied: 'permission denied', services_off: 'location services off', unavailable: 'location unavailable' };
-      showSnackbar(locationStatus === 'fix'
+      notify(locationStatus === 'fix'
         ? `Clocked in at ${formatTime(timeEntry.sign_in_time)}`
-        : `Clocked in without location (${reasons[locationStatus]}).`);
+        : `Clocked in without location (${reasons[locationStatus]}).`, locationStatus === 'fix' ? 'success' : 'neutral');
     } catch (error) {
       if (isStaleActorError(error)) return;
       if (error?.code === OPEN_TIME_ENTRY_EXISTS) {
         await loadActiveEntry();
-        showSnackbar('Already clocked in. Please clock out first.');
+        notify('Already clocked in. Please clock out first.', 'neutral');
         return;
       }
       console.error('Error signing in:', error);
-      showSnackbar('Failed to clock in. Please try again.');
+      notify('Failed to clock in. Please try again.', 'error');
     } finally {
       clockActionInFlight.current = false;
       setLoadingLocation(false);
     }
   }, [
-    timeEntriesRepository, refreshSyncStatus, triggerBackgroundSync, showSnackbar, formatTime,
+    timeEntriesRepository, refreshSyncStatus, triggerBackgroundSync, notify, formatTime,
     loadActiveEntry, setActiveEntryState, setSignedInState,
   ]);
 
@@ -219,7 +218,7 @@ function useTimeTrackingState() {
     if (!isSignedInRef.current || !activeEntryRef.current) {
       setActiveEntryState(null);
       setSignedInState(false);
-      showSnackbar('You must clock in first before clocking out.');
+      notify('You must clock in first before clocking out.', 'neutral');
       return true;
     }
 
@@ -234,7 +233,7 @@ function useTimeTrackingState() {
 
       const locationResult = await getCurrentPosition();
       if (locationResult.cancelled) {
-        showSnackbar('Return from Settings and tap Clock Out again, or continue without location.');
+        notify('Return from Settings and tap Clock Out again, or continue without location.', 'neutral');
         return false;
       }
 
@@ -245,7 +244,7 @@ function useTimeTrackingState() {
       if (!current) {
         setActiveEntryState(null);
         setSignedInState(false);
-        showSnackbar('You are not clocked in.');
+        notify('You are not clocked in.', 'neutral');
         return true;
       }
       if (Date.now() - new Date(current.sign_in_time).getTime() > MAX_SHIFT_MS) {
@@ -265,7 +264,7 @@ function useTimeTrackingState() {
       setActiveEntryState(null);
       setSignedInState(false);
       if (!closed) {
-        showSnackbar('You are not clocked in.');
+        notify('You are not clocked in.', 'neutral');
         return true;
       }
       const signInMs = new Date(closed.sign_in_time).getTime();
@@ -273,21 +272,21 @@ function useTimeTrackingState() {
       const hoursWorked = ((signOutMs - signInMs) / (1000 * 60 * 60)).toFixed(2);
       await refreshSyncStatus();
       triggerBackgroundSync?.();
-      showSnackbar(locationStatus === 'fix'
+      notify(locationStatus === 'fix'
         ? `Clocked out. ${hoursWorked} hours worked.`
-        : `Clocked out without location. ${hoursWorked} hours worked.`);
+        : `Clocked out without location. ${hoursWorked} hours worked.`, locationStatus === 'fix' ? 'success' : 'neutral');
       return true;
     } catch (error) {
       if (isStaleActorError(error)) return false;
       console.error('Error signing out:', error);
-      showSnackbar('Failed to clock out. Please try again.');
+      notify('Failed to clock out. Please try again.', 'error');
       return false;
     } finally {
       clockActionInFlight.current = false;
       setLoadingLocation(false);
     }
   }, [
-    timeEntriesRepository, refreshSyncStatus, triggerBackgroundSync, showSnackbar,
+    timeEntriesRepository, refreshSyncStatus, triggerBackgroundSync, notify,
     autoClockOut, setActiveEntryState, setSignedInState,
   ]);
 
@@ -305,17 +304,14 @@ function useTimeTrackingState() {
     isSignedIn,
     activeEntry,
     loadingLocation,
-    snackbarMessage,
-    snackbarVisible,
-    setSnackbarVisible,
     handleSignIn,
     handleSignOut,
     formatTime,
     autoClockOutNotice,
     dismissAutoClockOutNotice,
   }), [
-    isSignedIn, activeEntry, loadingLocation, snackbarMessage, snackbarVisible,
-    setSnackbarVisible, handleSignIn, handleSignOut, formatTime,
+    isSignedIn, activeEntry, loadingLocation,
+    handleSignIn, handleSignOut, formatTime,
     autoClockOutNotice, dismissAutoClockOutNotice,
   ]);
 }

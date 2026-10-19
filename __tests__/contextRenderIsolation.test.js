@@ -15,6 +15,8 @@ import { OfflineProvider, useOffline } from '../src/context/OfflineContext';
 import { ChildrenProvider, useChildren } from '../src/context/ChildrenContext';
 import { ClassesProvider, useClasses } from '../src/context/ClassesContext';
 import { LookupsProvider, useLookupsContext } from '../src/context/LookupsContext';
+import { AllProviders } from '../test-support/renderWithProviders';
+jest.mock('@expo/vector-icons', () => ({ Ionicons: () => null }), { virtual: true });
 import { TimeTrackingProvider, useTimeTracking } from '../src/context/TimeTrackingContext';
 import { fetchAndCacheSchools } from '../src/services/offlineSync';
 import { getSyncStatus, pullLookups } from '../test-support/handleServiceMocks';
@@ -443,12 +445,12 @@ describe('context render isolation', () => {
 
   test('an Offline status change does not re-render TimeTracking consumers', async () => {
     render(
-      <OfflineProvider>
+      <AllProviders><OfflineProvider>
         <TimeTrackingProvider>
           <OfflineTap />
           <TimeTrackingProbe />
         </TimeTrackingProvider>
-      </OfflineProvider>
+      </OfflineProvider></AllProviders>
     );
     await waitFor(() => {
       expect(getSyncStatus).toHaveBeenCalled();

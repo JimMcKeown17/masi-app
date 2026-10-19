@@ -10,8 +10,8 @@ describe('buildGaugeGeometry', () => {
       'M 50.27 18.02 A 79.5 79.5 0 0 1 125.73 18.02',
       'M 131.69 21.58 A 79.5 79.5 0 0 1 167.50 88.00',
     ]);
-    expect(g.arcs.map((arc) => arc.color)).toEqual([colors.primary, colors.primary, colors.border]);
-    expect(g.startDot.color).toBe(colors.primary);
+    expect(g.arcs.map((arc) => arc.color)).toEqual([colors.red500, colors.red500, colors.border]);
+    expect(g.startDot.color).toBe(colors.red500);
     expect(g.endDot.color).toBe(colors.border);
   });
 
@@ -45,7 +45,7 @@ describe('buildGaugeGeometry', () => {
     const g = buildGaugeGeometry({ target: 8, count: 4, state: 'below' });
     expect(g.arcs).toHaveLength(2);
     expect(g.arcs[0]).toEqual({ d: 'M 8.50 88.00 A 79.5 79.5 0 0 1 167.50 88.00', color: colors.border });
-    expect(g.arcs[1].color).toBe(colors.primary);
+    expect(g.arcs[1].color).toBe(colors.red500);
     expect(g.arcs[1].d).toBe('M 8.50 88.00 A 79.5 79.5 0 0 1 88.00 8.50');
   });
 });

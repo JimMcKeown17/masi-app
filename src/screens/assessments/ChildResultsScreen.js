@@ -1,10 +1,14 @@
+import { useHeaderHairline } from '../../components/common/ScreenHeader';
+import SurfaceCard from '../../components/common/SurfaceCard';
+import BrandButton from '../../components/common/BrandButton';
+import { fontFamilies, typeRoles } from '../../constants/typography';
 import { useSignedInEA } from '../../context/SignedInEAContext';
 import React, { useState, useCallback, useRef } from 'react';
 import { View, StyleSheet, ScrollView } from 'react-native';
-import { Text, Card, Button } from 'react-native-paper';
+import { Text } from 'react-native-paper';
 import { useFocusEffect } from '@react-navigation/native';
 import { useAuth } from '../../context/AuthContext';
-import { colors, spacing, borderRadius, shadows } from '../../constants/colors';
+import { colors, spacing } from '../../constants/colors';
 
 import { LETTER_SETS, WORD_SETS } from '../../constants/egraConstants';
 import { normalizeLanguageKey } from '../../utils/letterMastery';
@@ -25,10 +29,11 @@ function formatDate(dateString) {
 function getFeedbackColor(accuracy) {
   if (accuracy >= 75) return colors.success;
   if (accuracy >= 50) return colors.primary;
-  return colors.emphasis;
+  return colors.primary;
 }
 
 export default function ChildResultsScreen({ navigation, route }) {
+  const onScroll = useHeaderHairline();
   const { repositories } = useSignedInEA();
   const { assessments: assessmentsRepository } = repositories;
 
@@ -93,7 +98,7 @@ export default function ChildResultsScreen({ navigation, route }) {
   );
 
   return (
-    <ScrollView style={styles.container} contentContainerStyle={styles.scrollContent}>
+    <ScrollView onScroll={onScroll} scrollEventThrottle={16} style={styles.container} contentContainerStyle={styles.scrollContent}>
       <Text variant="titleLarge" style={styles.childName}>{childName}</Text>
       <Text variant="bodyMedium" style={styles.subtitle}>Assessment Summary</Text>
       <Text variant="bodyMedium" style={styles.readingLevel}>
@@ -104,70 +109,62 @@ export default function ChildResultsScreen({ navigation, route }) {
         const assessment = latestByType[key];
 
         return (
-          <Card key={key} style={styles.card}>
-            <Card.Content>
-              <Text variant="titleMedium" style={styles.cardTitle}>{label}</Text>
-              <Text variant="bodySmall" style={styles.cardDescription}>{description}</Text>
+          <SurfaceCard key={key} style={styles.card}>
+            <Text variant="titleMedium" style={styles.cardTitle}>{label}</Text>
+            <Text variant="bodySmall" style={styles.cardDescription}>{description}</Text>
 
-              {assessment ? (
-                <View style={styles.scoreSection}>
-                  <View style={styles.scoreRow}>
-                    <View style={[styles.accuracyBadge, { backgroundColor: getFeedbackColor(assessment.accuracy) }]}>
-                      <Text style={styles.accuracyText}>{assessment.accuracy}%</Text>
-                    </View>
-                    <View style={styles.scoreDetails}>
-                      <Text variant="bodyMedium" style={styles.scoreLabel}>
-                        {assessment.correct_responses} / {assessment.letters_attempted} correct
-                      </Text>
-                      <Text variant="bodySmall" style={styles.dateText}>
-                        {formatDate(assessment.date_assessed)} - Attempt #{assessment.attempt_number}
-                      </Text>
-                    </View>
+            {assessment ? (
+              <View style={styles.scoreSection}>
+                <View style={styles.scoreRow}>
+                  <View style={[styles.accuracyBadge, { backgroundColor: getFeedbackColor(assessment.accuracy) }]}>
+                    <Text style={styles.accuracyText}>{assessment.accuracy}%</Text>
                   </View>
-
-                  <View style={styles.cardButtons}>
-                    <Button
-                      mode="outlined"
-                      compact
-                      onPress={() => navigation.navigate('AssessmentDetail', {
-                        assessment,
-                        childName,
-                      })}
-                    >
-                      View Detail
-                    </Button>
+                  <View style={styles.scoreDetails}>
+                    <Text variant="bodyMedium" style={styles.scoreLabel}>
+                      {assessment.correct_responses} / {assessment.letters_attempted} correct
+                    </Text>
+                    <Text variant="bodySmall" style={styles.dateText}>
+                      {formatDate(assessment.date_assessed)} - Attempt #{assessment.attempt_number}
+                    </Text>
                   </View>
                 </View>
-              ) : (
-                <View style={styles.notAssessed}>
-                  <Text variant="bodyMedium" style={styles.notAssessedText}>
-                    Not yet assessed
-                  </Text>
-                  <Button
-                    mode="contained"
-                    compact
-                    onPress={() => handleRunAssessment(key)}
-                    style={styles.runButton}
-                  >
-                    Run Assessment
-                  </Button>
+
+                <View style={styles.cardButtons}>
+                  <BrandButton size="md"
+                    variant="secondary"
+                    onPress={() => navigation.navigate('AssessmentDetail', {
+                      assessment,
+                      childName,
+                    })}
+                    label="View detail"
+                  />
                 </View>
-              )}
-            </Card.Content>
-          </Card>
+              </View>
+            ) : (
+              <View style={styles.notAssessed}>
+                <Text variant="bodyMedium" style={styles.notAssessedText}>
+                  Not yet assessed
+                </Text>
+                <BrandButton size="md"
+                  variant="primary"
+                  onPress={() => handleRunAssessment(key)}
+                  style={styles.runButton}
+                  label="Run assessment"
+                />
+              </View>
+            )}
+          </SurfaceCard>
         );
       })}
 
       {/* Letter mastery — embedded panel (one source of truth) */}
-      <Card style={styles.card}>
-        <Card.Content>
-          <Text variant="titleMedium" style={styles.cardTitle}>Letter Tracker</Text>
-          <Text variant="bodySmall" style={styles.cardDescription}>
-            Tap letters to mark them as taught
-          </Text>
-          <LetterMasteryPanel child={child} classItem={classItem} />
-        </Card.Content>
-      </Card>
+      <SurfaceCard style={styles.card}>
+        <Text variant="titleMedium" style={styles.cardTitle}>Letter Tracker</Text>
+        <Text variant="bodySmall" style={styles.cardDescription}>
+          Tap letters to mark them as taught
+        </Text>
+        <LetterMasteryPanel child={child} classItem={classItem} />
+      </SurfaceCard>
     </ScrollView>
   );
 }
@@ -182,7 +179,6 @@ const styles = StyleSheet.create({
   },
   childName: {
     color: colors.primary,
-    fontWeight: '700',
     marginBottom: spacing.xs,
   },
   subtitle: {
@@ -191,18 +187,15 @@ const styles = StyleSheet.create({
   },
   readingLevel: {
     color: colors.text,
-    fontWeight: '600',
+    fontFamily: fontFamilies.textSemi,
     marginBottom: spacing.lg,
   },
   card: {
-    backgroundColor: colors.surface,
-    borderRadius: borderRadius.md,
     marginBottom: spacing.md,
-    ...shadows.card,
   },
   cardTitle: {
     color: colors.text,
-    fontWeight: '600',
+    fontFamily: fontFamilies.textSemi,
     marginBottom: 2,
   },
   cardDescription: {
@@ -225,9 +218,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   accuracyText: {
-    color: '#FFFFFF',
-    fontSize: 18,
-    fontWeight: '800',
+    color: colors.onDark,
+    ...typeRoles.textButtonL,
     fontVariant: ['tabular-nums'],
   },
   scoreDetails: {
@@ -235,7 +227,7 @@ const styles = StyleSheet.create({
   },
   scoreLabel: {
     color: colors.text,
-    fontWeight: '600',
+    fontFamily: fontFamilies.textSemi,
   },
   dateText: {
     color: colors.textSecondary,

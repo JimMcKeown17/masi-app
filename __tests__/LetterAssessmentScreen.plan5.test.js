@@ -1,3 +1,4 @@
+jest.mock('@expo/vector-icons', () => ({ Ionicons: 'Ionicons' }), { virtual: true });
 import React from 'react';
 import { Alert } from 'react-native';
 import { fireEvent, render, waitFor } from '@testing-library/react-native';
@@ -78,7 +79,7 @@ describe('LetterAssessmentScreen Plan 5 behavior', () => {
       <LetterAssessmentScreen navigation={navigation} route={route} />
     );
 
-    fireEvent.press(getByText('Start Assessment'));
+    fireEvent.press(getByText('Start assessment'));
     fireEvent.press(getByLabelText('a, not marked'));
     fireEvent.press(getByLabelText('a, correct'));
     fireEvent.press(getByLabelText('a, not marked'));
@@ -114,7 +115,7 @@ describe('LetterAssessmentScreen Plan 5 behavior', () => {
       <LetterAssessmentScreen navigation={navigation} route={route} />
     );
 
-    fireEvent.press(getByText('Start Assessment'));
+    fireEvent.press(getByText('Start assessment'));
     fireEvent.press(getByLabelText('a, not marked'));
     fireEvent.press(getByText('Finish'));
 

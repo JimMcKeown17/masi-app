@@ -1,31 +1,34 @@
+import { useHeaderHairline } from '../../components/common/ScreenHeader';
 import React from 'react';
-import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { ScrollView, StyleSheet } from 'react-native';
 import { Text } from 'react-native-paper';
-import { Ionicons } from '@expo/vector-icons';
-import SectionHeader from '../../components/common/SectionHeader';
-import { borderRadius, colors, spacing } from '../../constants/colors';
+import ListGroup from '../../components/common/ListGroup';
+import ListRow from '../../components/common/ListRow';
+import IconTile from '../../components/common/IconTile';
+import { typeRoles } from '../../constants/typography';
+import { colors, spacing } from '../../constants/colors';
 
 const INSIGHTS = [
   {
-    label: 'Letter Mastery',
+    label: 'Letter mastery',
     description: 'See which letters children know and where support is needed.',
     icon: 'school-outline',
     route: 'LetterMasteryRanking',
   },
   {
-    label: 'Assessment Scores',
+    label: 'Assessment scores',
     description: 'Compare the latest literacy assessment results.',
     icon: 'clipboard-outline',
     route: 'AssessmentRanking',
   },
   {
-    label: 'Session Count',
+    label: 'Session count',
     description: 'Review how often each child has attended a session.',
     icon: 'bar-chart-outline',
     route: 'SessionCountRanking',
   },
   {
-    label: 'Session History',
+    label: 'Session history',
     description: 'Review the sessions you recorded in the last 30 days.',
     icon: 'time-outline',
     route: 'SessionHistory',
@@ -33,38 +36,24 @@ const INSIGHTS = [
 ];
 
 export default function InsightsScreen({ navigation }) {
+  const onScroll = useHeaderHairline();
   return (
-    <ScrollView
+    <ScrollView onScroll={onScroll} scrollEventThrottle={16}
       style={styles.container}
       contentContainerStyle={styles.content}
       contentInsetAdjustmentBehavior="automatic"
       showsVerticalScrollIndicator={false}
     >
-      <SectionHeader
-        title="Insights"
-        subtitle="Review learner progress and participation."
-      />
+      <Text style={styles.hint}>Review learner progress and participation.</Text>
 
-      <View style={styles.list}>
+      <ListGroup>
         {INSIGHTS.map((insight) => (
-          <Pressable
-            key={insight.route}
+          <ListRow key={insight.route} title={insight.label} subtitle={insight.description}
+            lead={<IconTile icon={insight.icon} />} trailing="chevron"
             onPress={() => navigation.navigate(insight.route)}
-            accessibilityRole="button"
-            accessibilityLabel={'Open ' + insight.label}
-            style={styles.card}
-          >
-            <View style={styles.icon}>
-              <Ionicons name={insight.icon} size={22} color={colors.primary} />
-            </View>
-            <View style={styles.copy}>
-              <Text style={styles.title}>{insight.label}</Text>
-              <Text style={styles.description}>{insight.description}</Text>
-            </View>
-            <Ionicons name="chevron-forward" size={20} color={colors.textSecondary} />
-          </Pressable>
+            accessibilityLabel={'Open ' + insight.label} />
         ))}
-      </View>
+      </ListGroup>
     </ScrollView>
   );
 }
@@ -77,42 +66,5 @@ const styles = StyleSheet.create({
   content: {
     padding: spacing.lg,
   },
-  list: {
-    gap: spacing.sm,
-  },
-  card: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.md,
-    minHeight: 88,
-    padding: spacing.md,
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: borderRadius.md,
-    borderCurve: 'continuous',
-    backgroundColor: colors.surface,
-  },
-  icon: {
-    width: 44,
-    height: 44,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderRadius: borderRadius.sm,
-    borderCurve: 'continuous',
-    backgroundColor: colors.red50,
-  },
-  copy: {
-    flex: 1,
-    gap: spacing.xs,
-  },
-  title: {
-    color: colors.text,
-    fontSize: 15,
-    fontWeight: '800',
-  },
-  description: {
-    color: colors.textSecondary,
-    fontSize: 12,
-    lineHeight: 17,
-  },
+  hint: { ...typeRoles.textParagraph, color: colors.textSecondary, marginBottom: spacing.md },
 });

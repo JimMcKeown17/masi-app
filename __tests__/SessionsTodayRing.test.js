@@ -1,6 +1,8 @@
 import React from 'react';
+import { StyleSheet } from 'react-native';
 import { render } from '@testing-library/react-native';
 import SessionsTodayRing from '../src/components/sessions/SessionsTodayRing';
+import { fontFamilies, typeRoles } from '../src/constants/typography';
 
 describe('SessionsTodayRing', () => {
   test('below target: shows the count inside the ring and is labelled below-target', () => {
@@ -9,6 +11,11 @@ describe('SessionsTodayRing', () => {
     );
 
     expect(getByText('0')).toBeTruthy(); // the live count renders inside the ring
+    expect(StyleSheet.flatten(getByText('0').props.style)).toEqual(expect.objectContaining({
+      ...typeRoles.display2XL,
+      fontFamily: fontFamilies.textBold,
+    }));
+    expect(StyleSheet.flatten(getByText('of 3').props.style)).toEqual(expect.objectContaining(typeRoles.textCaption));
     expect(getByLabelText(/0 of 3 sessions today\. below target\./i)).toBeTruthy();
   });
 

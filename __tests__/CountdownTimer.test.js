@@ -1,3 +1,5 @@
+import { StyleSheet } from 'react-native';
+import { colors } from '../src/constants/colors';
 import React from 'react';
 import { render, act } from '@testing-library/react-native';
 import CountdownTimer from '../src/components/assessment/CountdownTimer';
@@ -21,4 +23,9 @@ describe('CountdownTimer', () => {
     const { getByText } = render(<CountdownTimer getElapsedMs={getElapsedMs} />);
     expect(getByText('0s')).toBeTruthy();
   });
+});
+
+test('urgent remaining-time text uses the contrasting action red', () => {
+  const screen = render(<CountdownTimer getElapsedMs={() => 55000} />);
+  expect(StyleSheet.flatten(screen.getByText('5s').props.style).color).toBe(colors.primary);
 });

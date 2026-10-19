@@ -2,7 +2,7 @@ import React from 'react';
 import { ActivityIndicator, Text, View, StyleSheet } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { colors, spacing } from '../../constants/colors';
-import { typography } from '../../constants/typography';
+import { typeRoles } from '../../constants/typography';
 export default function LoadingScreen() {
   return (
     <SafeAreaView style={styles.safeArea}>
@@ -27,14 +27,14 @@ const styles = StyleSheet.create({
     gap: spacing.md,
   },
   title: {
-    ...typography.screenTitle,
+    ...typeRoles.displaySheetTitle,
+    color: colors.text,
     textAlign: 'center',
   },
   message: {
-    ...typography.body,
+    ...typeRoles.textParagraph,
     color: colors.textSecondary,
     textAlign: 'center',
-    lineHeight: 21,
     maxWidth: 420,
   },
 });

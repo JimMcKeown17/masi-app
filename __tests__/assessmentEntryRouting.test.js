@@ -1,3 +1,4 @@
+jest.mock('@expo/vector-icons', () => ({ Ionicons: 'Ionicons' }), { virtual: true });
 import React from 'react';
 import { fireEvent, render, waitFor } from '@testing-library/react-native';
 import AssessmentChildSelectScreen from '../src/screens/assessments/AssessmentChildSelectScreen';
@@ -63,6 +64,7 @@ jest.mock('react-native-paper', () => {
 });
 
 jest.mock('@react-navigation/native', () => ({
+  NavigationContext: require('react').createContext(undefined),
   useFocusEffect: (callback) => {
     const React = require('react');
     React.useEffect(() => callback(), [callback]);
@@ -209,7 +211,7 @@ describe('assessment entry routing', () => {
         />
       );
 
-      fireEvent.press(screen.getAllByText('Run Assessment')[0]);
+      fireEvent.press(screen.getAllByText('Run assessment')[0]);
 
       await waitFor(() => {
         expect(resolveAssessmentRoute).toHaveBeenCalledTimes(1);

@@ -1,5 +1,8 @@
+jest.mock('@expo/vector-icons', () => ({ Ionicons: 'Ionicons' }), { virtual: true });
+import { renderWithProviders as render } from '../test-support/renderWithProviders';
+import ListGroup from '../src/components/common/ListGroup';
 import React from 'react';
-import { render, waitFor } from '@testing-library/react-native';
+import { waitFor } from '@testing-library/react-native';
 import AssessmentHistoryScreen from '../src/screens/assessments/AssessmentHistoryScreen';
 import { useAuth } from '../src/context/AuthContext';
 import { useChildren } from '../src/context/ChildrenContext';
@@ -7,6 +10,7 @@ import { assessmentsRepository } from '../src/db/repositories/assessmentsReposit
 import { supabase } from '../src/services/supabaseClient';
 
 jest.mock('@react-navigation/native', () => ({
+  NavigationContext: require('react').createContext(undefined),
   useFocusEffect: (callback) => {
     const React = require('react');
     React.useEffect(() => callback(), [callback]);
@@ -36,6 +40,8 @@ jest.mock('../src/services/supabaseClient', () => ({
 }));
 
 jest.mock('react-native-safe-area-context', () => ({
+  ...jest.requireActual('react-native-safe-area-context'),
+  SafeAreaProvider: ({ children }) => children,
   useSafeAreaInsets: () => ({ top: 0, right: 0, bottom: 0, left: 0 }),
 }));
 
@@ -71,6 +77,21 @@ describe('AssessmentHistoryScreen Plan 5 behavior', () => {
   afterEach(() => {
     jest.useRealTimers();
     jest.clearAllMocks();
+  });
+
+  test('load errors appear as root toasts', async () => {
+    assessmentsRepository.getAssessments.mockRejectedValueOnce(new Error('read failed'));
+    const screen = render(<AssessmentHistoryScreen navigation={{ navigate: jest.fn() }} />);
+    await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent('Failed to load assessments'));
+    expect(screen.getByRole('button', { name: 'Dismiss message' })).toBeTruthy();
+  });
+
+  test('history rows are contained in the shared ListGroup', async () => {
+    const screen = render(<AssessmentHistoryScreen navigation={{ navigate: jest.fn() }} />);
+    await screen.findByText('Pending sync');
+    const group = screen.UNSAFE_getByType(ListGroup);
+    expect(group.findAllByType('Text').some(node => node.props.children === 'Pending sync')).toBe(true);
+    expect(screen.queryByTestId('history-row-divider')).toBeNull();
   });
 
   test('loads complete assessment history from SQLite without a hidden date cutoff', async () => {

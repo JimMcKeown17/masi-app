@@ -1,8 +1,6 @@
 import React from 'react';
 import { View, StyleSheet } from 'react-native';
-import { Text } from 'react-native-paper';
-import { Ionicons } from '@expo/vector-icons';
-import { colors, spacing, borderRadius } from '../../constants/colors';
+import EmptyState from './EmptyState';
 
 /**
  * Actionable empty-state shown on the Sessions / Assessments capture surfaces when
@@ -14,38 +12,9 @@ import { colors, spacing, borderRadius } from '../../constants/colors';
  * getActiveProgrammeGate). `action` names the blocked task for the copy.
  */
 export default function NoActiveProgrammeNotice({ action = 'record sessions or assessments' }) {
-  return (
-    <View style={styles.container} accessibilityRole="summary">
-      <Ionicons name="school-outline" size={48} color={colors.disabled} style={styles.icon} />
-      <Text variant="titleMedium" style={styles.title}>No active programme</Text>
-      <Text variant="bodyMedium" style={styles.body}>
-        You don't have a programme assigned yet. Contact your supervisor to be assigned
-        before you can {action}.
-      </Text>
-    </View>
-  );
+  return <View style={styles.container}>
+    <EmptyState title="No active programme"
+      body={`You don't have a programme assigned yet. Contact your supervisor to be assigned before you can ${action}.`} />
+  </View>;
 }
-
-const styles = StyleSheet.create({
-  container: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    padding: spacing.xl,
-    margin: spacing.lg,
-    backgroundColor: colors.surface,
-    borderRadius: borderRadius.md,
-  },
-  icon: {
-    marginBottom: spacing.md,
-  },
-  title: {
-    color: colors.text,
-    marginBottom: spacing.sm,
-    textAlign: 'center',
-  },
-  body: {
-    color: colors.textSecondary,
-    textAlign: 'center',
-    lineHeight: 20,
-  },
-});
+const styles = StyleSheet.create({ container: { padding: 24 } });

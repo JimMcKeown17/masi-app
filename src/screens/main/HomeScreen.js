@@ -1,9 +1,7 @@
 import React, { useCallback, useMemo, useRef, useState } from 'react';
 import { AppState, Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
-import { Snackbar } from 'react-native-paper';
 import { Ionicons } from '@expo/vector-icons';
-import { useFocusEffect, useIsFocused } from '@react-navigation/native';
-import { StatusBar } from 'expo-status-bar';
+import { useFocusEffect } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Svg, { Circle } from 'react-native-svg';
 import { useAuth } from '../../context/AuthContext';
@@ -16,6 +14,8 @@ import HomeClockRow from '../../components/home/HomeClockRow';
 import SegmentedSessionGauge from '../../components/home/SegmentedSessionGauge';
 import WeekStrip from '../../components/home/WeekStrip';
 import AttentionArea from '../../components/home/AttentionArea';
+import FocusAwareStatusBar from '../../components/common/FocusAwareStatusBar';
+import { FAB_OVERHANG } from '../../components/navigation/LockedBottomTabBar';
 import { getSessionsTodayGoal } from '../../services/sessionsTodayGoal';
 import { getActiveProgrammeGate } from '../../services/activeProgrammeGate';
 import { useSignedInEA } from '../../context/SignedInEAContext';
@@ -31,7 +31,6 @@ import { typeRoles } from '../../constants/typography';
 const THIRTY_DAYS_MS = 30 * 24 * 60 * 60 * 1000;
 const SIDE = 24;
 const CARD_STRADDLE = 56; // the red field ends this far below the card's top
-const FAB_OVERHANG = 28; // LockedBottomTabBar recordAction marginTop
 const RING = { stroke: 50, r: 236, dxFromRight: 170, cy: 40 };
 
 export default function HomeScreen({ navigation }) {
@@ -46,7 +45,7 @@ export default function HomeScreen({ navigation }) {
   const { classBootstrapStatus, incompleteOnboardingClassId } = useClasses();
   const { needsAttentionCount = 0 } = useOffline();
   const {
-    isSignedIn, activeEntry, loadingLocation, snackbarMessage, snackbarVisible, setSnackbarVisible,
+    isSignedIn, activeEntry, loadingLocation,
     handleSignIn, handleSignOut, autoClockOutNotice, dismissAutoClockOutNotice,
   } = useTimeTracking();
   const onboardingEnteredRef = useRef(false);
@@ -123,12 +122,6 @@ export default function HomeScreen({ navigation }) {
       return () => sub.remove();
     }, [loadStats])
   );
-  // Declarative and focus-scoped: React Native's StatusBar keeps a stack, so a
-  // mounted <StatusBar> wins over App.js's root <StatusBar style="auto"> and
-  // unmounting on blur restores it. The imperative setter would be overwritten
-  // by the next root update.
-  const isFocused = useIsFocused();
-
   const attentionItems = useMemo(() => deriveHomeAttentionItems({
     needsAttentionCount,
     autoClockOut: autoClockOutNotice,
@@ -157,7 +150,7 @@ export default function HomeScreen({ navigation }) {
 
   return (
     <View style={styles.screen}>
-      {isFocused ? <StatusBar style="light" /> : null}
+      <FocusAwareStatusBar style="light" />
       <ScrollView
         style={styles.scroll}
         contentContainerStyle={{ paddingBottom: FAB_OVERHANG + 16 }}
@@ -264,9 +257,6 @@ export default function HomeScreen({ navigation }) {
         style={{ position: 'absolute', top: 0, left: 0, right: 0, height: insets.top, backgroundColor: colors.red600 }}
       />
 
-      <Snackbar visible={snackbarVisible} onDismiss={() => setSnackbarVisible(false)} duration={3000}>
-        {snackbarMessage}
-      </Snackbar>
     </View>
   );
 }

@@ -1,7 +1,6 @@
+import BrandButton from '../common/BrandButton';
 import React from 'react';
 import { Alert } from 'react-native';
-import { Button } from 'react-native-paper';
-import { colors } from '../../constants/colors';
 
 export default function EndAssessmentButton({ onEnd }) {
   const handlePress = () => {
@@ -16,13 +15,10 @@ export default function EndAssessmentButton({ onEnd }) {
   };
 
   return (
-    <Button
-      mode="text"
+    <BrandButton
+      variant="tertiary" size="sm"
       onPress={handlePress}
-      textColor={colors.emphasis}
-      compact
-    >
-      End Assessment
-    </Button>
+      label="End assessment"
+    />
   );
 }

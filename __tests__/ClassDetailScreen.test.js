@@ -19,8 +19,10 @@ jest.mock('../src/context/ChildrenContext', () => ({
 
 import React from 'react';
 import { fireEvent, render } from '@testing-library/react-native';
-import { PaperProvider } from 'react-native-paper';
+import { FAB, PaperProvider } from 'react-native-paper';
+import { colors } from '../src/constants/colors';
 import ClassDetailScreen from '../src/screens/children/ClassDetailScreen';
+import BrandButton from '../src/components/common/BrandButton';
 
 const navigation = {
   setOptions: jest.fn(),
@@ -63,6 +65,7 @@ describe('ClassDetailScreen', () => {
 
     expect(screen.getByText('Grade R Blue')).toBeTruthy();
     expect(screen.getByText('No children in this class yet.')).toBeTruthy();
+    expect(screen.UNSAFE_getByType(FAB).props.color).toBe(colors.onDark);
   });
 
   test('renders not-found message when class is not in the classes array', () => {
@@ -75,6 +78,17 @@ describe('ClassDetailScreen', () => {
     const screen = renderClassDetail();
 
     expect(screen.getByText('Class not found.')).toBeTruthy();
+  });
+
+  test('the header uses a tertiary Manage classes button that returns to the class list', () => {
+    mockUseClasses.mockReturnValue({ classes: [], schools: [], getChildrenInClass: () => [] });
+    renderClassDetail();
+    const { headerRight } = navigation.setOptions.mock.calls.at(-1)[0];
+    const screen = render(headerRight());
+    expect(screen.UNSAFE_getByType(BrandButton).props.variant).toBe('tertiary');
+    fireEvent.press(screen.getByRole('button', { name: 'Manage classes' }));
+    expect(navigation.popToTop).toHaveBeenCalledTimes(1);
+    expect(navigation.navigate).not.toHaveBeenCalled();
   });
 
   test('shows a neutral loading state before deciding the class is missing', () => {

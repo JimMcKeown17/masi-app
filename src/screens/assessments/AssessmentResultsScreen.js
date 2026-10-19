@@ -1,8 +1,12 @@
+import { useHeaderHairline } from '../../components/common/ScreenHeader';
+import BrandButton from '../../components/common/BrandButton';
+import SurfaceCard from '../../components/common/SurfaceCard';
+import { fontFamilies, typeRoles } from '../../constants/typography';
 import React, { useRef } from 'react';
 import { View, StyleSheet, ScrollView } from 'react-native';
-import { Text, Button } from 'react-native-paper';
+import { Text } from 'react-native-paper';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { colors, spacing, borderRadius, shadows } from '../../constants/colors';
+import { colors, spacing, shadows } from '../../constants/colors';
 import AssessmentDetailGrid from '../../components/assessment/AssessmentDetailGrid';
 import { resolveAssessmentRoute } from '../../utils/assessmentRouting';
 
@@ -11,21 +15,22 @@ function getFeedback(accuracy) {
   if (accuracy >= 75) return { message: 'Great job!', color: colors.success };
   if (accuracy >= 60) return { message: 'Good effort!', color: colors.primary };
   if (accuracy >= 40) return { message: 'Nice try!', color: colors.accent };
-  return { message: 'Keep practicing!', color: colors.emphasis };
+  return { message: 'Keep practicing!', color: colors.primary, graphicColor: colors.emphasis };
 }
 
 function StatCard({ value, label, accentColor }) {
   return (
-    <View style={[styles.statCard, { borderTopColor: accentColor }]}>
-      <Text style={[styles.statValue, { color: accentColor }]}>
+    <SurfaceCard style={[styles.statCard, { borderTopColor: accentColor }]}>
+      <Text style={[styles.statValue, { color: accentColor === colors.emphasis ? colors.primary : accentColor }]}>
         {value}
       </Text>
       <Text style={styles.statLabel}>{label}</Text>
-    </View>
+    </SurfaceCard>
   );
 }
 
 export default function AssessmentResultsScreen({ navigation, route }) {
+  const onScroll = useHeaderHairline();
   const { assessment, child, letterSet, attemptNumber, assessmentType = 'letter_egra' } = route.params;
   const incorrect = assessment.letters_attempted - assessment.correct_responses;
   const feedback = getFeedback(assessment.accuracy);
@@ -55,7 +60,7 @@ export default function AssessmentResultsScreen({ navigation, route }) {
 
   return (
     <View style={[styles.container, { paddingTop: insets.top }]}>
-      <ScrollView contentContainerStyle={styles.scrollContent}>
+      <ScrollView onScroll={onScroll} scrollEventThrottle={16} contentContainerStyle={styles.scrollContent}>
         <Text variant="headlineSmall" style={styles.title}>Assessment Complete</Text>
         <Text variant="bodyLarge" style={styles.childName}>
           {child.first_name} {child.last_name}
@@ -66,7 +71,7 @@ export default function AssessmentResultsScreen({ navigation, route }) {
 
         {/* Hero result section */}
         <View style={styles.heroSection}>
-          <View style={[styles.accuracyRing, { borderColor: feedback.color }]}>
+          <View style={[styles.accuracyRing, { borderColor: feedback.graphicColor ?? feedback.color }]}>
             <Text
               accessibilityLabel="Assessment main result"
               style={[styles.accuracyNumber, { color: feedback.color }]}
@@ -110,12 +115,8 @@ export default function AssessmentResultsScreen({ navigation, route }) {
       </ScrollView>
 
       <View style={[styles.buttonRow, { paddingBottom: Math.max(insets.bottom, spacing.md) }]}>
-        <Button mode="outlined" onPress={handleTryAgain} style={styles.button}>
-          Try Again
-        </Button>
-        <Button mode="contained" onPress={handleDone} style={styles.button}>
-          Done
-        </Button>
+        <BrandButton variant="secondary" onPress={handleTryAgain} style={styles.button} label="Try again" />
+        <BrandButton variant="primary" onPress={handleDone} style={styles.button} label="Done" />
       </View>
     </View>
   );
@@ -138,7 +139,7 @@ const styles = StyleSheet.create({
   },
   childName: {
     color: colors.primary,
-    fontWeight: '600',
+    fontFamily: fontFamilies.textSemi,
     marginBottom: spacing.xs,
   },
   meta: {
@@ -162,12 +163,10 @@ const styles = StyleSheet.create({
     ...shadows.elevated,
   },
   accuracyNumber: {
-    fontSize: 40,
-    fontWeight: '800',
+    ...typeRoles.display2XL,
     fontVariant: ['tabular-nums'],
   },
   feedbackText: {
-    fontWeight: '700',
     marginBottom: spacing.xs,
     textAlign: 'center',
   },
@@ -190,23 +189,18 @@ const styles = StyleSheet.create({
   },
   statCard: {
     flex: 1,
-    backgroundColor: colors.surface,
-    borderRadius: borderRadius.md,
     borderTopWidth: 3,
     paddingVertical: spacing.md,
     alignItems: 'center',
-    ...shadows.card,
   },
   statValue: {
-    fontSize: 28,
-    fontWeight: '700',
+    ...typeRoles.displayTitle,
     fontVariant: ['tabular-nums'],
     marginBottom: spacing.xs,
   },
   statLabel: {
-    fontSize: 12,
+    ...typeRoles.textLabel,
     color: colors.textSecondary,
-    fontWeight: '500',
   },
   // Buttons
   buttonRow: {

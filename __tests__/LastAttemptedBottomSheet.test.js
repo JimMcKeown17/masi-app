@@ -1,4 +1,6 @@
+jest.mock('@expo/vector-icons', () => ({ Ionicons: 'Ionicons' }), { virtual: true });
 import React from 'react';
+import { tints } from '../src/constants/colors';
 import { BackHandler, StyleSheet } from 'react-native';
 import { act, fireEvent, render } from '@testing-library/react-native';
 import { PaperProvider } from 'react-native-paper';
@@ -33,8 +35,8 @@ describe('LastAttemptedBottomSheet', () => {
     const sheet = renderSheet({ onCancel });
     const backdrop = sheet.getByLabelText('Dismiss last attempted selector');
 
-    expect(StyleSheet.flatten(backdrop.props.style).backgroundColor)
-      .toBe('rgba(0, 0, 0, 0.5)');
+    expect(StyleSheet.flatten(sheet.getByTestId('bottom-sheet-scrim').props.style).backgroundColor)
+      .toBe(tints.scrim);
 
     fireEvent.press(backdrop);
 

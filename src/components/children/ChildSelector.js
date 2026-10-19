@@ -6,6 +6,7 @@ import {
   Text,
 } from 'react-native-paper';
 import { borderRadius, colors, shadows, spacing } from '../../constants/colors';
+import { fontFamilies } from '../../constants/typography';
 import { useChildren } from '../../context/ChildrenContext';
 import { useClasses } from '../../context/ClassesContext';
 import { NO_TEXT_SUGGESTIONS } from '../../constants/textInputProps';
@@ -321,7 +322,7 @@ const styles = StyleSheet.create({
   },
   sectionLabel: {
     color: colors.primary,
-    fontWeight: '600',
+    fontFamily: fontFamilies.textSemi,
   },
   sectionHeading: {
     flexDirection: 'row',
@@ -330,7 +331,7 @@ const styles = StyleSheet.create({
   },
   selectedCount: {
     color: colors.textSecondary,
-    fontWeight: '600',
+    fontFamily: fontFamilies.textSemi,
   },
   modeToggle: {
     flexDirection: 'row',
@@ -355,7 +356,7 @@ const styles = StyleSheet.create({
   },
   modeOptionText: {
     color: colors.textSecondary,
-    fontWeight: '600',
+    fontFamily: fontFamilies.textSemi,
   },
   modeOptionTextSelected: {
     color: colors.primary,
@@ -393,7 +394,7 @@ const styles = StyleSheet.create({
   },
   selectionPillText: {
     color: colors.textSecondary,
-    fontWeight: '600',
+    fontFamily: fontFamilies.textSemi,
   },
   selectionPillTextSelected: {
     color: colors.primary,

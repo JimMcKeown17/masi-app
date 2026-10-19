@@ -1,17 +1,25 @@
+import { useHeaderHairline } from '../../components/common/ScreenHeader';
+import { fontFamilies, typeRoles } from '../../constants/typography';
+import SurfaceCard from '../../components/common/SurfaceCard';
+import StatusBadge from '../../components/common/StatusBadge';
+import SectionHeader from '../../components/common/SectionHeader';
+import { useToast } from '../../context/ToastContext';
 import { useSignedInEA } from '../../context/SignedInEAContext';
 import React, { useState, useCallback } from 'react';
 import { View, StyleSheet, ScrollView, SectionList, RefreshControl } from 'react-native';
-import { Card, Text, Divider, Chip, Snackbar } from 'react-native-paper';
+import { Text, Divider } from 'react-native-paper';
 import { useFocusEffect } from '@react-navigation/native';
 import { useAuth } from '../../context/AuthContext';
 import { useOffline } from '../../context/OfflineContext';
-import { colors, spacing, borderRadius, shadows } from '../../constants/colors';
+import { colors, spacing } from '../../constants/colors';
 
 import { formatCoordinates } from '../../services/locationService';
 import { describeSyncState } from '../../utils/syncStatusPresenter';
 import { formatDisplayDate, toLocalDateString } from '../../utils/localDate';
 
 export default function TimeEntriesListScreen() {
+  const onScroll = useHeaderHairline();
+  const toast = useToast();
   const { repositories } = useSignedInEA();
   const { timeEntries: timeEntriesRepository } = repositories;
 
@@ -22,13 +30,6 @@ export default function TimeEntriesListScreen() {
   const [sections, setSections] = useState([]);
   const [refreshing, setRefreshing] = useState(false);
   const [loading, setLoading] = useState(true);
-  const [snackbarMessage, setSnackbarMessage] = useState('');
-  const [snackbarVisible, setSnackbarVisible] = useState(false);
-
-  const showSnackbar = (message) => {
-    setSnackbarMessage(message);
-    setSnackbarVisible(true);
-  };
 
   /**
    * Load completed time entries from the local SQLite cache. Network sync runs
@@ -52,11 +53,11 @@ export default function TimeEntriesListScreen() {
       groupEntriesByDate(cachedUserEntries);
     } catch (error) {
       console.error('Error loading time entries:', error);
-      showSnackbar('Failed to load entries');
+      toast.show({ message: 'Failed to load entries', tone: 'error', duration: 3000 });
     } finally {
       setLoading(false);
     }
-  }, [user?.id]);
+  }, [user?.id, toast]);
 
   useFocusEffect(
     useCallback(() => {
@@ -95,26 +96,26 @@ export default function TimeEntriesListScreen() {
 
         if (syncResult.totalSynced > 0) {
           // Pass-level count (syncNow uploads every table), so "items", not "entries".
-          showSnackbar(`${syncResult.totalSynced} ${syncResult.totalSynced === 1 ? 'item' : 'items'} synced`);
+          toast.show({ message: `${syncResult.totalSynced} ${syncResult.totalSynced === 1 ? 'item' : 'items'} synced`, tone: 'success', duration: 3000 });
         }
 
         // Trust voice (Finding 6): retriable items are safe and waiting, not "failed";
         // only terminal items are called out. The presenter owns the wording.
         if (syncResult.totalTerminal > 0) {
-          showSnackbar(describeSyncState('needs_attention', { needsAttentionCount: syncResult.totalTerminal }).message);
+          toast.show({ message: describeSyncState('needs_attention', { needsAttentionCount: syncResult.totalTerminal }).message, tone: 'error', duration: 3000 });
         } else if (syncResult.totalRetriable > 0) {
-          showSnackbar(describeSyncState('waiting', { waitingCount: syncResult.totalRetriable }).message);
+          toast.show({ message: describeSyncState('waiting', { waitingCount: syncResult.totalRetriable }).message, tone: 'neutral', duration: 3000 });
         }
       }
 
       await loadTimeEntries();
     } catch (error) {
       console.error('Refresh error:', error);
-      showSnackbar('Sync failed');
+      toast.show({ message: 'Sync failed', tone: 'error', duration: 3000 });
     }
 
     setRefreshing(false);
-  }, [loadTimeEntries, syncNow]);
+  }, [loadTimeEntries, syncNow, toast]);
 
   /**
    * Format date as "Monday, Jan 27, 2026"
@@ -166,7 +167,7 @@ export default function TimeEntriesListScreen() {
   if (!loading && timeEntries.length === 0) {
     return (
       <View style={styles.outerContainer}>
-        <ScrollView
+        <ScrollView onScroll={onScroll} scrollEventThrottle={16}
           style={styles.container}
           contentContainerStyle={styles.emptyContainer}
           refreshControl={
@@ -180,21 +181,13 @@ export default function TimeEntriesListScreen() {
             Your completed work sessions will appear here after you sign in and sign out.
           </Text>
         </ScrollView>
-
-        <Snackbar
-          visible={snackbarVisible}
-          onDismiss={() => setSnackbarVisible(false)}
-          duration={3000}
-        >
-          {snackbarMessage}
-        </Snackbar>
       </View>
     );
   }
 
   return (
     <View style={styles.outerContainer}>
-      <SectionList
+      <SectionList onScroll={onScroll} scrollEventThrottle={16}
         style={styles.container}
         testID="time-entries-scroll"
         sections={sections}
@@ -216,65 +209,48 @@ export default function TimeEntriesListScreen() {
         renderSectionHeader={({ section }) => (
           <View style={styles.dateGroup}>
             <View style={styles.dateHeader}>
-              <Text variant="titleMedium" style={styles.dateHeaderText}>
-                {formatDateHeader(section.title)}
-              </Text>
+              <SectionHeader title={formatDateHeader(section.title)} />
               {isToday(section.title) && (
-                <Chip
-                  mode="flat"
-                  style={styles.todayChip}
-                  textStyle={styles.todayChipText}
-                >
-                  Today
-                </Chip>
+                <StatusBadge label="Today" tone="neutral" />
               )}
             </View>
           </View>
         )}
         renderItem={({ item: entry }) => (
-          <Card style={styles.entryCard}>
-            <Card.Content>
-              <View style={styles.entryHeader}>
-                <View style={styles.hoursContainer}>
-                  <Text variant="headlineMedium" style={styles.hoursText}>
-                    {calculateHours(entry.sign_in_time, entry.sign_out_time)}
-                  </Text>
-                  <Text variant="bodySmall" style={styles.hoursLabel}>hours</Text>
-                </View>
-                {!entry.synced && (
-                  <Chip
-                    mode="outlined"
-                    icon="cloud-upload-outline"
-                    style={styles.unsyncedChip}
-                    textStyle={styles.unsyncedChipText}
-                  >
-                    Unsynced
-                  </Chip>
-                )}
+          <SurfaceCard style={styles.entryCard}>
+            <View style={styles.entryHeader}>
+              <View style={styles.hoursContainer}>
+                <Text variant="headlineMedium" style={styles.hoursText}>
+                  {calculateHours(entry.sign_in_time, entry.sign_out_time)}
+                </Text>
+                <Text variant="bodySmall" style={styles.hoursLabel}>hours</Text>
               </View>
-              <Divider style={styles.divider} />
-              <View style={styles.detailsRow}>
-                <View style={styles.detailColumn}>
-                  <Text variant="labelSmall" style={styles.detailLabel}>Clock In</Text>
-                  <Text variant="bodyMedium" style={styles.detailValue}>
-                    {formatTime(entry.sign_in_time)}
-                  </Text>
-                  <Text variant="bodySmall" style={styles.coordsText}>
-                    {formatCoordinates(entry.sign_in_lat, entry.sign_in_lon)}
-                  </Text>
-                </View>
-                <View style={styles.detailColumn}>
-                  <Text variant="labelSmall" style={styles.detailLabel}>Clock Out</Text>
-                  <Text variant="bodyMedium" style={styles.detailValue}>
-                    {formatTime(entry.sign_out_time)}
-                  </Text>
-                  <Text variant="bodySmall" style={styles.coordsText}>
-                    {formatCoordinates(entry.sign_out_lat, entry.sign_out_lon)}
-                  </Text>
-                </View>
+              {!entry.synced && (
+                <StatusBadge label="Unsynced" tone="warning" />
+              )}
+            </View>
+            <Divider style={styles.divider} />
+            <View style={styles.detailsRow}>
+              <View style={styles.detailColumn}>
+                <Text variant="labelSmall" style={styles.detailLabel}>Clock In</Text>
+                <Text variant="bodyMedium" style={styles.detailValue}>
+                  {formatTime(entry.sign_in_time)}
+                </Text>
+                <Text variant="bodySmall" style={styles.coordsText}>
+                  {formatCoordinates(entry.sign_in_lat, entry.sign_in_lon)}
+                </Text>
               </View>
-            </Card.Content>
-          </Card>
+              <View style={styles.detailColumn}>
+                <Text variant="labelSmall" style={styles.detailLabel}>Clock Out</Text>
+                <Text variant="bodyMedium" style={styles.detailValue}>
+                  {formatTime(entry.sign_out_time)}
+                </Text>
+                <Text variant="bodySmall" style={styles.coordsText}>
+                  {formatCoordinates(entry.sign_out_lat, entry.sign_out_lon)}
+                </Text>
+              </View>
+            </View>
+          </SurfaceCard>
         )}
         ListFooterComponent={(
           <View style={styles.footer}>
@@ -285,14 +261,6 @@ export default function TimeEntriesListScreen() {
           </View>
         )}
       />
-
-      <Snackbar
-        visible={snackbarVisible}
-        onDismiss={() => setSnackbarVisible(false)}
-        duration={3000}
-      >
-        {snackbarMessage}
-      </Snackbar>
     </View>
   );
 }
@@ -325,7 +293,6 @@ const styles = StyleSheet.create({
   },
   pageTitle: {
     color: colors.primary,
-    fontWeight: 'bold',
     marginBottom: spacing.xs,
   },
   subtitle: {
@@ -342,24 +309,8 @@ const styles = StyleSheet.create({
     marginBottom: spacing.sm,
     paddingHorizontal: spacing.xs,
   },
-  dateHeaderText: {
-    color: colors.text,
-    fontWeight: '600',
-  },
-  todayChip: {
-    backgroundColor: colors.primary + '20',
-    height: 28,
-  },
-  todayChipText: {
-    color: colors.primary,
-    fontSize: 12,
-    fontWeight: 'bold',
-  },
   entryCard: {
     marginBottom: spacing.sm,
-    backgroundColor: colors.surface,
-    borderRadius: borderRadius.lg,
-    ...shadows.card,
   },
   entryHeader: {
     flexDirection: 'row',
@@ -373,19 +324,10 @@ const styles = StyleSheet.create({
   },
   hoursText: {
     color: colors.primary,
-    fontWeight: 'bold',
     marginRight: spacing.xs,
   },
   hoursLabel: {
     color: colors.textSecondary,
-  },
-  unsyncedChip: {
-    borderColor: colors.accent,
-    backgroundColor: colors.accent + '10',
-  },
-  unsyncedChipText: {
-    color: colors.accent,
-    fontSize: 11,
   },
   divider: {
     marginVertical: spacing.sm,
@@ -404,13 +346,12 @@ const styles = StyleSheet.create({
   },
   detailValue: {
     color: colors.text,
-    fontWeight: '500',
+    fontFamily: fontFamilies.textMedium,
     marginBottom: spacing.xs,
   },
   coordsText: {
     color: colors.textSecondary,
-    fontFamily: 'monospace',
-    fontSize: 11,
+    ...typeRoles.textData,
   },
   footer: {
     paddingVertical: spacing.lg,

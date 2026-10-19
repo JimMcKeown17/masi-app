@@ -1,34 +1,22 @@
 import React from 'react';
-import { View, StyleSheet } from 'react-native';
-import { Text } from 'react-native-paper';
-import { colors, spacing } from '../../constants/colors';
+import { View, StyleSheet, Text } from 'react-native';
+import { colors } from '../../constants/colors';
+import { typeRoles } from '../../constants/typography';
+import BrandButton from './BrandButton';
 
-/**
- * Shared in-content section heading: a title with an optional subtitle, styled
- * consistently across screens. Replaces the ad-hoc `<Text variant="titleLarge">`
- * + description pairs each screen used to hand-roll, so headings look and space
- * the same app-wide.
- */
-export default function SectionHeader({ title, subtitle, style }) {
-  return (
-    <View style={[styles.container, style]}>
-      <Text variant="titleLarge" style={styles.title}>{title}</Text>
-      {subtitle ? (
-        <Text variant="bodyMedium" style={styles.subtitle}>{subtitle}</Text>
-      ) : null}
+export default function SectionHeader({ title, hint, action, style }) {
+  return <View style={[styles.container, style]}>
+    <View style={styles.row}>
+      <Text accessibilityRole="header" style={styles.title}>{title}</Text>
+      {action ? <BrandButton {...action} variant="tertiary" style={[styles.action, action.style]} /> : null}
     </View>
-  );
+    {hint ? <Text style={styles.hint}>{hint}</Text> : null}
+  </View>;
 }
-
 const styles = StyleSheet.create({
-  container: {
-    marginBottom: spacing.md,
-  },
-  title: {
-    color: colors.text,
-    marginBottom: spacing.xs,
-  },
-  subtitle: {
-    color: colors.textSecondary,
-  },
+  container: { marginBottom: 12 },
+  row: { minHeight: 20, flexDirection: 'row', alignItems: 'center', gap: 12 },
+  title: { ...typeRoles.textSectionLabel, color: colors.textSecondary, flex: 1 },
+  hint: { ...typeRoles.textCaption, color: colors.textSecondary, marginTop: 4 },
+  action: { marginVertical: -12 },
 });

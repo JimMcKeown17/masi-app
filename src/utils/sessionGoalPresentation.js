@@ -10,7 +10,7 @@ export function getGaugeColor({ state, count }) {
     default:
       if (count <= 0) return colors.ringNeutral;
       if (count === 1) return colors.ringStart;
-      return colors.primary;
+      return colors.red500;
   }
 }
 

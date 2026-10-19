@@ -1,8 +1,12 @@
 // __tests__/AttentionArea.test.js
-jest.mock('@expo/vector-icons', () => ({ Ionicons: () => null }), { virtual: true });
+jest.mock('@expo/vector-icons', () => ({ Ionicons: jest.fn(() => null) }), { virtual: true });
 import React from 'react';
 import { fireEvent, render } from '@testing-library/react-native';
 import AttentionArea from '../src/components/home/AttentionArea';
+import IconTile from '../src/components/common/IconTile';
+import { Ionicons } from '@expo/vector-icons';
+import { StyleSheet } from 'react-native';
+import { colors, tints } from '../src/constants/colors';
 
 const items = [
   { key: 'auto_clock_out:time-1', kind: 'auto_clock_out', tone: 'warning', title: 'Clocked out after 10 hours',
@@ -27,4 +31,27 @@ test('cards open and dismiss independently', () => {
   fireEvent.press(screen.getByLabelText('Dismiss: Clocked out after 10 hours'));
   expect(onOpen).toHaveBeenCalledWith(items[0]);
   expect(onDismiss).toHaveBeenCalledWith(items[0]);
+});
+
+test('the card border is tints.rule and the tile is a 40dp IconTile with a 22dp glyph', () => {
+  const screen = render(<AttentionArea items={items} onOpen={jest.fn()} onDismiss={jest.fn()} />);
+  const tiles = screen.UNSAFE_getAllByType(IconTile);
+  expect(tiles).toHaveLength(2);
+  for (const [index, item] of items.entries()) {
+    const button = screen.getByLabelText(item.accessibilityLabel);
+    let card = button.parent;
+    while (card && !StyleSheet.flatten(card.props.style)?.borderWidth) card = card.parent;
+    expect(StyleSheet.flatten(card.props.style).borderColor).toBe(tints.rule);
+    const tile = tiles[index];
+    expect(tile.props.iconSize).toBe(22);
+    expect(StyleSheet.flatten(tile.findByType('View').props.style)).toMatchObject({
+      width: 40, height: 40, borderRadius: 14,
+      backgroundColor: index === 0 ? colors.warningBg : colors.background,
+    });
+    expect(Ionicons.mock.calls.some(([props]) => props.name === (index === 0 ? 'alarm-outline' : 'clipboard-outline')
+      && props.size === 22 && props.color === (index === 0 ? colors.warningText : colors.text))).toBe(true);
+    const pressable = screen.UNSAFE_root.find((node) => node.props.accessibilityLabel === item.accessibilityLabel
+      && typeof node.props.style === 'function');
+    expect(StyleSheet.flatten(pressable.props.style({ pressed: true })).backgroundColor).toBe(tints.pressed);
+  }
 });

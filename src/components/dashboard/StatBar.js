@@ -1,75 +1,32 @@
 import React from 'react';
-import { View, StyleSheet, Pressable } from 'react-native';
-import { Text } from 'react-native-paper';
-import { colors, spacing, borderRadius, shadows } from '../../constants/colors';
+import { View, StyleSheet, Pressable, Text } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
+import { colors, tints } from '../../constants/colors';
+import { typeRoles } from '../../constants/typography';
 
-/**
- * A horizontal row of stat "pills" for tab screen headers.
- *
- * @param {Array<{ label: string, value: string|number, color?: string, onPress?: () => void }>} items
- */
 export default function StatBar({ items }) {
-  return (
-    <View style={styles.container}>
-      {items.map((item, i) => {
-        const pill = (
-          <View key={i} style={[styles.pill, item.onPress && styles.pillTappable]}>
-            <Text style={[styles.value, item.color && { color: item.color }]}>
-              {item.value}
-            </Text>
-            <Text style={styles.label}>{item.label}</Text>
-          </View>
-        );
-        if (item.onPress) {
-          return (
-            <Pressable
-              key={i}
-              onPress={item.onPress}
-              style={styles.pillWrapper}
-              accessibilityRole="button"
-              accessibilityLabel={`View ${item.label}: ${item.value}`}
-            >
-              {pill}
-            </Pressable>
-          );
-        }
-        return pill;
-      })}
-    </View>
-  );
+  return <View style={styles.container}>
+    {items.map((item, index) => {
+      const Column = item.onPress ? Pressable : View;
+      return <Column key={item.label} onPress={item.onPress}
+        accessibilityRole={item.onPress ? 'button' : undefined}
+        accessibilityLabel={item.onPress ? item.accessibilityLabel ?? `View ${item.label}: ${item.value}` : undefined}
+        style={[styles.column, index > 0 && styles.divider]}>
+        <View style={styles.numeralRow}>
+          <Text maxFontSizeMultiplier={1.2} style={[styles.value, { color: item.color ?? (item.onPress ? colors.primary : colors.text) }]}>{item.value}</Text>
+          {item.onPress ? <Ionicons name="chevron-forward" size={18} color={colors.primary} /> : null}
+        </View>
+        <Text numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.85} maxFontSizeMultiplier={1.2}
+          style={[styles.label, { color: item.onPress ? colors.primary : colors.textSecondary }]}>{item.label}</Text>
+      </Column>;
+    })}
+  </View>;
 }
-
 const styles = StyleSheet.create({
-  container: {
-    flexDirection: 'row',
-    gap: spacing.sm,
-    marginBottom: spacing.md,
-  },
-  pillWrapper: {
-    flex: 1,
-  },
-  pillTappable: {
-    borderBottomWidth: 2,
-    borderBottomColor: colors.primary,
-  },
-  pill: {
-    flex: 1,
-    backgroundColor: colors.surface,
-    borderRadius: borderRadius.sm,
-    paddingVertical: spacing.sm + 2,
-    paddingHorizontal: spacing.sm,
-    alignItems: 'center',
-    ...shadows.card,
-  },
-  value: {
-    fontSize: 20,
-    fontWeight: '700',
-    color: colors.primary,
-  },
-  label: {
-    fontSize: 10,
-    color: colors.textSecondary,
-    textTransform: 'uppercase',
-    marginTop: 2,
-  },
+  container: { flexDirection: 'row', marginBottom: 16 },
+  column: { flex: 1, minHeight: 56, gap: 2 },
+  divider: { paddingLeft: 16, borderLeftWidth: 1, borderLeftColor: tints.rule },
+  numeralRow: { flexDirection: 'row', alignItems: 'center', gap: 2 },
+  value: { ...typeRoles.displayTitle, fontVariant: ['tabular-nums'] },
+  label: { ...typeRoles.textLabel },
 });

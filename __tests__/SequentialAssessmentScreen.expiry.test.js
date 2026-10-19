@@ -1,3 +1,4 @@
+jest.mock('@expo/vector-icons', () => ({ Ionicons: 'Ionicons' }), { virtual: true });
 import React from 'react';
 import { Alert } from 'react-native';
 import { fireEvent, render, waitFor, act } from '@testing-library/react-native';
@@ -42,7 +43,7 @@ describe('SequentialAssessmentScreen expiry', () => {
 
   test('a decision after expiry finalizes without recording it', async () => {
     const { getByText } = render(<SequentialAssessmentScreen navigation={navigation} route={route} />);
-    fireEvent.press(getByText('Start Assessment'));       // startedAt = mockNow = 0
+    fireEvent.press(getByText('Start assessment'));       // startedAt = mockNow = 0
     act(() => { mockNow = 65000; });                      // past the deadline
     fireEvent.press(getByText('Correct'));
     await waitFor(() => expect(assessmentsRepository.saveAssessment).toHaveBeenCalled());

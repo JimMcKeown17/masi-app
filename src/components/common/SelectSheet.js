@@ -1,8 +1,10 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { FlatList, Pressable, StyleSheet, View } from 'react-native';
-import { Button, Text, TextInput } from 'react-native-paper';
-import { borderRadius, colors, spacing } from '../../constants/colors';
-import { NO_TEXT_SUGGESTIONS } from '../../constants/textInputProps';
+import { FlatList, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
+import { colors, spacing } from '../../constants/colors';
+import { typeRoles } from '../../constants/typography';
+import BrandButton from './BrandButton';
+import SearchField from './SearchField';
 import BottomSheet from './BottomSheet';
 
 const getOptionKey = option => option.key;
@@ -13,6 +15,7 @@ const SelectSheetRow = React.memo(function SelectSheetRow({
   description,
   accessibilityLabel,
   selected,
+  showDivider,
   onSelect,
 }) {
   const handlePress = useCallback(() => onSelect(optionKey), [onSelect, optionKey]);
@@ -20,20 +23,20 @@ const SelectSheetRow = React.memo(function SelectSheetRow({
   return (
     <Pressable
       onPress={handlePress}
-      style={[styles.row, selected && styles.rowSelected]}
+      style={[styles.row, showDivider && styles.divider]}
       accessibilityRole="button"
       accessibilityLabel={accessibilityLabel || label}
       accessibilityState={{ selected }}
     >
       <View style={styles.rowText}>
-        <Text variant="bodyLarge" style={[styles.label, selected && styles.labelSelected]}>
+        <Text style={[styles.label, selected && styles.labelSelected]}>
           {label}
         </Text>
         {description ? (
-          <Text variant="bodySmall" style={styles.description}>{description}</Text>
+          <Text style={styles.description}>{description}</Text>
         ) : null}
       </View>
-      {selected ? <Text style={styles.check}>✓</Text> : null}
+      {selected ? <Ionicons name="checkmark" size={22} color={colors.text} /> : null}
     </Pressable>
   );
 });
@@ -92,8 +95,9 @@ export default function SelectSheet({
     ? 'No matches found.'
     : emptyMessage;
 
-  const renderOption = useCallback(({ item: option }) => (
+  const renderOption = useCallback(({ item: option, index }) => (
     <SelectSheetRow
+      showDivider={index < filteredOptions.length - 1}
       optionKey={option.key}
       label={option.label}
       description={option.description}
@@ -101,14 +105,12 @@ export default function SelectSheet({
       selected={(confirmLabel ? draftKey : selectedKey) === option.key}
       onSelect={handleSelect}
     />
-  ), [confirmLabel, draftKey, handleSelect, selectedKey]);
+  ), [confirmLabel, draftKey, handleSelect, selectedKey, filteredOptions.length]);
 
   const footer = confirmLabel || cancelLabel ? (
     <View style={styles.actions}>
-      {cancelLabel ? <Button onPress={onDismiss}>{cancelLabel}</Button> : null}
-      {confirmLabel ? (
-        <Button mode="contained" onPress={handleConfirm}>{confirmLabel}</Button>
-      ) : null}
+      {confirmLabel ? <BrandButton variant="primary" label={confirmLabel} onPress={handleConfirm} /> : null}
+      {cancelLabel ? <BrandButton variant="tertiary" tone="ink" label={cancelLabel} onPress={onDismiss} /> : null}
     </View>
   ) : null;
 
@@ -126,15 +128,12 @@ export default function SelectSheet({
       bodyContentStyle={styles.body}
     >
       {searchable ? (
-        <TextInput
-          label="Search"
+        <View style={styles.search}><SearchField
+          placeholder="Search"
           accessibilityLabel="Search options"
           value={searchText}
           onChangeText={setSearchText}
-          {...NO_TEXT_SUGGESTIONS}
-          mode="outlined"
-          style={styles.search}
-        />
+        /></View>
       ) : null}
       <FlatList
         data={filteredOptions}
@@ -146,7 +145,7 @@ export default function SelectSheet({
         keyboardShouldPersistTaps="handled"
         style={styles.list}
         ListEmptyComponent={listEmptyMessage ? (
-          <Text variant="bodyMedium" style={styles.empty}>{listEmptyMessage}</Text>
+          <Text style={styles.empty}>{listEmptyMessage}</Text>
         ) : null}
       />
     </BottomSheet>
@@ -154,59 +153,15 @@ export default function SelectSheet({
 }
 
 const styles = StyleSheet.create({
-  row: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: spacing.md,
-    paddingHorizontal: spacing.md,
-    backgroundColor: colors.cardBackground,
-    borderRadius: borderRadius.sm,
-    marginBottom: spacing.sm,
-    borderWidth: 1,
-    borderColor: colors.border,
-  },
-  rowText: {
-    flex: 1,
-  },
-  rowSelected: {
-    borderColor: colors.primary,
-    borderWidth: 2,
-  },
-  label: {
-    color: colors.text,
-    fontWeight: '500',
-  },
-  labelSelected: {
-    color: colors.primary,
-    fontWeight: '700',
-  },
-  description: {
-    color: colors.textSecondary,
-    marginTop: 2,
-  },
-  check: {
-    color: colors.primary,
-    fontSize: 18,
-    fontWeight: '700',
-  },
-  actions: {
-    flexDirection: 'row',
-    justifyContent: 'flex-end',
-  },
-  body: {
-    flexShrink: 1,
-    minHeight: 0,
-  },
-  list: {
-    flexShrink: 1,
-  },
-  search: {
-    marginBottom: spacing.md,
-    backgroundColor: colors.surface,
-  },
-  empty: {
-    color: colors.textSecondary,
-    textAlign: 'center',
-    padding: spacing.lg,
-  },
+  row: { minHeight: 56, flexDirection: 'row', alignItems: 'center', paddingVertical: 16, paddingHorizontal: 0, gap: 12 },
+  divider: { borderBottomWidth: 1, borderBottomColor: colors.border },
+  rowText: { flex: 1 },
+  label: { ...typeRoles.textInput, color: colors.text },
+  labelSelected: { ...typeRoles.textOptionSelected },
+  description: { ...typeRoles.textCaption, color: colors.textSecondary, marginTop: 2 },
+  actions: { gap: 8 },
+  body: { flexShrink: 1, minHeight: 0 },
+  list: { flexShrink: 1 },
+  search: { marginBottom: spacing.md },
+  empty: { ...typeRoles.textBody, color: colors.textSecondary, textAlign: 'center', padding: spacing.lg },
 });

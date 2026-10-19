@@ -1,3 +1,4 @@
+jest.mock('@expo/vector-icons', () => ({ Ionicons: 'Ionicons' }), { virtual: true });
 import React from 'react';
 import { fireEvent, render, waitFor } from '@testing-library/react-native';
 import LetterTrackerScreen from '../src/screens/assessments/LetterTrackerScreen';
@@ -7,6 +8,7 @@ import { useAuth } from '../src/context/AuthContext';
 import { useOffline } from '../src/context/OfflineContext';
 
 jest.mock('@react-navigation/native', () => ({
+  NavigationContext: require('react').createContext(undefined),
   useFocusEffect: (callback) => {
     const React = require('react');
     React.useEffect(() => callback(), [callback]);

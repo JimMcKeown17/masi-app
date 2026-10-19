@@ -41,7 +41,7 @@ test('terminal backlog reads needs-attention, and wins over waiting', () => {
 test('offline with waiting work keeps the reassurance copy', () => {
   mockUseOffline.mockReturnValue(offline({ isOnline: false, waitingCount: 2 }));
   const { getByText } = render(<SyncStatusBanner onPress={() => {}} />);
-  expect(getByText("Saved on your phone · 2 will sync when you're online")).toBeTruthy();
+  expect(getByText("Saved on your phone · 2 will sync when you’re online")).toBeTruthy();
 });
 
 test('press opens sync status', () => {

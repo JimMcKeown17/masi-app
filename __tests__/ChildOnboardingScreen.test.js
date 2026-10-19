@@ -1,3 +1,4 @@
+jest.mock('@expo/vector-icons', () => ({ Ionicons: 'Ionicons' }), { virtual: true });
 import React from 'react';
 import { Alert } from 'react-native';
 import { act, fireEvent, render, waitFor } from '@testing-library/react-native';
@@ -53,7 +54,7 @@ describe('ChildOnboardingScreen', () => {
     expect(screen.getByText('0 children added')).toBeTruthy();
     expect(screen.getByText(/Add at least one child to finish setup/)).toBeTruthy();
 
-    fireEvent.press(screen.getByText('Finish Setup'));
+    fireEvent.press(screen.getByRole('button', { name: 'Finish setup' }));
     expect(mockPopToTop).not.toHaveBeenCalled();
 
     const beforeRemove = mockAddListener.mock.calls.find(([event]) => event === 'beforeRemove')[1];
@@ -65,7 +66,7 @@ describe('ChildOnboardingScreen', () => {
       expect.stringContaining('at least one child')
     );
 
-    fireEvent.press(screen.getByText('Add First Child'));
+    fireEvent.press(screen.getByRole('button', { name: 'Add first child' }));
     expect(mockNavigate).toHaveBeenCalledWith('AddChild', { classId: 'class-new' });
   });
 
@@ -77,10 +78,10 @@ describe('ChildOnboardingScreen', () => {
     expect(screen.getByText('1 child added')).toBeTruthy();
     expect(screen.getByText(/recommended 10 children/)).toBeTruthy();
 
-    fireEvent.press(screen.getByText('Add Another Child'));
+    fireEvent.press(screen.getByRole('button', { name: 'Add another child' }));
     expect(mockNavigate).toHaveBeenCalledWith('AddChild', { classId: 'class-new' });
 
-    fireEvent.press(screen.getByText('Finish Setup'));
+    fireEvent.press(screen.getByRole('button', { name: 'Finish setup' }));
     expect(mockPopToTop).not.toHaveBeenCalled();
     expect(alertSpy).toHaveBeenCalledWith(
       'Finish with fewer than 10 children?',
@@ -113,7 +114,7 @@ describe('ChildOnboardingScreen', () => {
     expect(screen.getByText('Recommended roster reached')).toBeTruthy();
     expect(screen.queryByText('Keep adding children')).toBeNull();
 
-    fireEvent.press(screen.getByText('Finish Setup'));
+    fireEvent.press(screen.getByRole('button', { name: 'Finish setup' }));
 
     expect(alertSpy).not.toHaveBeenCalled();
     await waitFor(() => expect(mockCompleteClassOnboarding).toHaveBeenCalledWith('class-new'));
@@ -126,7 +127,7 @@ describe('ChildOnboardingScreen', () => {
     const alertSpy = jest.spyOn(Alert, 'alert');
     const screen = renderScreen();
 
-    fireEvent.press(screen.getByText('Finish Setup'));
+    fireEvent.press(screen.getByRole('button', { name: 'Finish setup' }));
     const finishAction = alertSpy.mock.calls[0][2]
       .find(action => action.text === 'Finish Setup');
     await act(async () => finishAction.onPress());

@@ -1,13 +1,19 @@
 import React, { useEffect, useState } from 'react';
 import { Alert, ScrollView, StyleSheet } from 'react-native';
-import { Button, Card, Text } from 'react-native-paper';
+import { Text } from 'react-native-paper';
 import { useChildren } from '../../context/ChildrenContext';
 import { useClasses } from '../../context/ClassesContext';
-import { borderRadius, colors, shadows, spacing } from '../../constants/colors';
+import { colors, spacing } from '../../constants/colors';
+
+import BrandButton from '../../components/common/BrandButton';
+import SurfaceCard from '../../components/common/SurfaceCard';
+import { useHeaderHairline } from '../../components/common/ScreenHeader';
+import { typeRoles } from '../../constants/typography';
 
 const RECOMMENDED_CHILD_COUNT = 10;
 
 export default function ChildOnboardingScreen({ route, navigation }) {
+  const onScroll = useHeaderHairline();
   const { classId } = route.params;
   const { children } = useChildren();
   const { classes, completeClassOnboarding } = useClasses();
@@ -64,6 +70,8 @@ export default function ChildOnboardingScreen({ route, navigation }) {
       style={styles.container}
       contentContainerStyle={styles.content}
       keyboardShouldPersistTaps="handled"
+      onScroll={onScroll}
+      scrollEventThrottle={16}
     >
       <Text variant="labelLarge" style={styles.stepLabel}>STEP 2 OF 2</Text>
       <Text variant="headlineMedium" style={styles.title}>Add your children</Text>
@@ -72,61 +80,51 @@ export default function ChildOnboardingScreen({ route, navigation }) {
         a time and return here after each child.
       </Text>
 
-      <Card style={styles.countCard}>
-        <Card.Content>
-          <Text variant="headlineSmall" style={styles.count}>
-            {childCount} {childLabel} added
-          </Text>
-          <Text variant="bodyMedium" style={styles.countHint}>
-            We recommend adding at least {RECOMMENDED_CHILD_COUNT} children so the class is ready for
-            daily work.
-          </Text>
-        </Card.Content>
-      </Card>
+      <SurfaceCard style={styles.countCard}>
+        <Text variant="headlineSmall" style={styles.count}>
+          {childCount} {childLabel} added
+        </Text>
+        <Text variant="bodyMedium" style={styles.countHint}>
+          We recommend adding at least {RECOMMENDED_CHILD_COUNT} children so the class is ready for
+          daily work.
+        </Text>
+      </SurfaceCard>
 
       {childCount < RECOMMENDED_CHILD_COUNT ? (
-        <Card style={styles.warningCard}>
-          <Card.Content>
-            <Text variant="titleMedium" style={styles.warningTitle}>
-              {hasRequiredChild ? 'Keep adding children' : 'Add your first child'}
-            </Text>
-            <Text variant="bodyMedium" style={styles.warningText}>
-              {hasRequiredChild
-                ? `You have added ${childCount} of the recommended ${RECOMMENDED_CHILD_COUNT} children. You can finish now, but this warning will remain until the class reaches ${RECOMMENDED_CHILD_COUNT}.`
-                : `Add at least one child to finish setup. The warning will remain until you have added at least ${RECOMMENDED_CHILD_COUNT} children.`}
-            </Text>
-          </Card.Content>
-        </Card>
+        <SurfaceCard style={styles.warningCard}>
+          <Text variant="titleMedium" style={styles.warningTitle}>
+            {hasRequiredChild ? 'Keep adding children' : 'Add your first child'}
+          </Text>
+          <Text variant="bodyMedium" style={styles.warningText}>
+            {hasRequiredChild
+              ? `You have added ${childCount} of the recommended ${RECOMMENDED_CHILD_COUNT} children. You can finish now, but this warning will remain until the class reaches ${RECOMMENDED_CHILD_COUNT}.`
+              : `Add at least one child to finish setup. The warning will remain until you have added at least ${RECOMMENDED_CHILD_COUNT} children.`}
+          </Text>
+        </SurfaceCard>
       ) : (
-        <Card style={styles.successCard}>
-          <Card.Content>
-            <Text variant="titleMedium" style={styles.successTitle}>
-              Recommended roster reached
-            </Text>
-            <Text variant="bodyMedium" style={styles.successText}>
-              Your class has at least {RECOMMENDED_CHILD_COUNT} children. You can finish setup or add
-              more children now.
-            </Text>
-          </Card.Content>
-        </Card>
+        <SurfaceCard style={styles.successCard}>
+          <Text variant="titleMedium" style={styles.successTitle}>
+            Recommended roster reached
+          </Text>
+          <Text variant="bodyMedium" style={styles.successText}>
+            Your class has at least {RECOMMENDED_CHILD_COUNT} children. You can finish setup or add
+            more children now.
+          </Text>
+        </SurfaceCard>
       )}
 
-      <Button
-        mode="contained"
+      <BrandButton
         onPress={() => navigation.navigate('AddChild', { classId })}
         style={styles.primaryButton}
-      >
-        {hasRequiredChild ? 'Add Another Child' : 'Add First Child'}
-      </Button>
-      <Button
-        mode="outlined"
+        variant="primary" size="lg" label={hasRequiredChild ? 'Add another child' : 'Add first child'}
+      />
+      <BrandButton
         onPress={finishSetup}
         disabled={!hasRequiredChild || finishing}
         loading={finishing}
         style={styles.secondaryButton}
-      >
-        Finish Setup
-      </Button>
+        variant="secondary" size="lg" label="Finish setup"
+      />
     </ScrollView>
   );
 }
@@ -143,65 +141,59 @@ const styles = StyleSheet.create({
   },
   stepLabel: {
     color: colors.primary,
-    letterSpacing: 1,
+    ...typeRoles.textSectionLabel,
     marginBottom: spacing.sm,
   },
   title: {
     color: colors.text,
-    fontWeight: '700',
     marginBottom: spacing.md,
   },
   intro: {
     color: colors.textSecondary,
-    lineHeight: 24,
+    ...typeRoles.textBodyL,
     marginBottom: spacing.lg,
   },
   countCard: {
     backgroundColor: colors.surface,
-    borderRadius: borderRadius.md,
     marginBottom: spacing.md,
-    ...shadows.card,
   },
   count: {
     color: colors.text,
-    fontWeight: '700',
   },
   countHint: {
     color: colors.textSecondary,
-    lineHeight: 21,
+    ...typeRoles.textParagraph,
     marginTop: spacing.xs,
   },
   warningCard: {
     backgroundColor: colors.warningBg,
     borderColor: colors.warning,
-    borderRadius: borderRadius.md,
     borderWidth: 1,
     marginBottom: spacing.lg,
   },
   warningTitle: {
     color: colors.warningText,
-    fontWeight: '700',
+    ...typeRoles.textRowTitle,
     marginBottom: spacing.xs,
   },
   warningText: {
     color: colors.warningText,
-    lineHeight: 21,
+    ...typeRoles.textParagraph,
   },
   successCard: {
     backgroundColor: colors.successBg,
     borderColor: colors.successBorder,
-    borderRadius: borderRadius.md,
     borderWidth: 1,
     marginBottom: spacing.lg,
   },
   successTitle: {
     color: colors.successText,
-    fontWeight: '700',
+    ...typeRoles.textRowTitle,
     marginBottom: spacing.xs,
   },
   successText: {
     color: colors.successText,
-    lineHeight: 21,
+    ...typeRoles.textParagraph,
   },
   primaryButton: {
     marginTop: spacing.sm,

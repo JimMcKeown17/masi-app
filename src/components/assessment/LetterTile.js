@@ -1,3 +1,4 @@
+import { fontFamilies } from '../../constants/typography';
 import React from 'react';
 import { Pressable, StyleSheet } from 'react-native';
 import { Text } from 'react-native-paper';
@@ -57,7 +58,7 @@ const styles = StyleSheet.create({
   tileCurrent: { borderColor: colors.primary, borderWidth: 2 },
   tilePressed: { transform: [{ scale: 0.95 }], opacity: 0.85 },
   tileDisabled: { opacity: 0.6 },
-  tileText: { color: colors.text, fontWeight: '600' },
-  tileTextCorrect: { color: '#FFFFFF' },
-  tileTextIncorrect: { color: '#FFFFFF' },
+  tileText: { color: colors.text, fontFamily: fontFamilies.textSemi },
+  tileTextCorrect: { color: colors.onDark },
+  tileTextIncorrect: { color: colors.onDark },
 });

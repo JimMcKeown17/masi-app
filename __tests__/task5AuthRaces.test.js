@@ -5,6 +5,8 @@ import { PaperProvider, Button } from 'react-native-paper';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { createClient } from '@supabase/supabase-js';
 import { AuthProvider, useAuth } from '../src/context/AuthContext';
+import { AllProviders } from '../test-support/renderWithProviders';
+import { ToastActorScope } from '../src/context/ToastContext';
 import { SignedInEAProvider } from '../src/context/SignedInEAContext';
 import ProfileScreen from '../src/screens/main/ProfileScreen';
 import HomeScreen from '../src/screens/main/HomeScreen';
@@ -57,12 +59,14 @@ function ProfileProbe() {
 
 function Tree({ profile = false, rosters = false, sessionForm = false }) {
   auth = useAuth();
-  return <><Text testID="actor">{auth.user?.id || 'signed-out'}</Text>{auth.user && auth.handle && <SignedInEAProvider key={`${auth.handle.userId}:${auth.handle.epoch}`} handle={auth.handle}>
+  return <AllProviders><Text testID="actor">{auth.user?.id || 'signed-out'}</Text>{auth.user && auth.handle && <SignedInEAProvider key={`${auth.handle.userId}:${auth.handle.epoch}`} handle={auth.handle}>
+    <ToastActorScope handle={auth.handle}>
     <ProfileProbe />
     {sessionForm ? <PaperProvider><SessionFormScreen navigation={navigation} /></PaperProvider> : null}
     {profile ? <PaperProvider><ProfileScreen navigation={{ navigate: jest.fn() }} /></PaperProvider> : null}
     {rosters ? <OfflineProvider><ChildrenProvider><ClassesProvider><Roster /></ClassesProvider></ChildrenProvider></OfflineProvider> : null}
-  </SignedInEAProvider>}</>;
+    </ToastActorScope>
+  </SignedInEAProvider>}</AllProviders>;
 }
 const signIn = async id => {
   await act(async () => { expect((await auth.signIn(`${id}@example.org`, 'secret')).error).toBeNull(); });

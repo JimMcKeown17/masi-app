@@ -1,9 +1,9 @@
-import React, { useEffect, useRef, useState } from 'react';
-import { AccessibilityInfo, Animated, Easing, Pressable, StyleSheet, Text as RNText, View } from 'react-native';
-import { Badge, ActivityIndicator, Text } from 'react-native-paper';
+import React, { useEffect, useRef } from 'react';
+import { Animated, Easing, Pressable, StyleSheet, Text as RNText, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useOffline } from '../../context/OfflineContext';
-import { colors, spacing } from '../../constants/colors';
+import { useMotion } from '../../context/MotionContext';
+import { colors, tints } from '../../constants/colors';
 import { typeRoles } from '../../constants/typography';
 import { deriveSyncState, describeSyncState } from '../../utils/syncStatusPresenter';
 
@@ -18,22 +18,17 @@ const HERO_ICONS = {
 function HeroSyncIndicator({ onPress, state, view }) {
   const attention = state === 'needs_attention';
   const spin = useRef(new Animated.Value(0)).current;
-  const [reduceMotion, setReduceMotion] = useState(false);
+  const { reduceMotion, motionLevel } = useMotion();
+  const rotates = state === 'syncing' && !reduceMotion && motionLevel !== 'still';
 
   useEffect(() => {
-    let mounted = true;
-    AccessibilityInfo.isReduceMotionEnabled?.().then((v) => { if (mounted) setReduceMotion(Boolean(v)); });
-    return () => { mounted = false; };
-  }, []);
-
-  useEffect(() => {
-    if (state !== 'syncing' || reduceMotion) return undefined;
+    if (!rotates) return undefined;
     const loop = Animated.loop(Animated.timing(spin, {
       toValue: 1, duration: 1000, easing: Easing.linear, useNativeDriver: true,
     }));
     loop.start();
     return () => { loop.stop(); spin.setValue(0); };
-  }, [state, reduceMotion, spin]);
+  }, [rotates, spin]);
 
   const rotate = spin.interpolate({ inputRange: [0, 1], outputRange: ['0deg', '360deg'] });
   const badge = state === 'syncing' ? 0 : view.badgeCount;
@@ -45,7 +40,7 @@ function HeroSyncIndicator({ onPress, state, view }) {
       accessibilityLabel={`${view.accessibilityLabel}. Sync status`}
       style={[heroStyles.disc, attention ? heroStyles.discAttention : null]}
     >
-      <Animated.View style={state === 'syncing' ? { transform: [{ rotate }] } : null}>
+      <Animated.View style={rotates ? { transform: [{ rotate }] } : null}>
         <Ionicons
           name={HERO_ICONS[state] || HERO_ICONS.synced}
           size={state === 'syncing' ? 22 : 24}
@@ -66,89 +61,71 @@ function HeroSyncIndicator({ onPress, state, view }) {
   );
 }
 
-/**
- * Header sync indicator, driven by the shared syncStatusPresenter:
- * - Green check: everything saved and synced (including offline with a drained outbox)
- * - Calm cloud: work saved on the phone, waiting to sync (online or offline)
- * - Amber alert: terminal items that need attention (never hidden behind green)
- * - Spinner: a sync pass is running
- */
-export default function SyncIndicator({ onPress, showLabel = false, dark = false, variant = 'default' }) {
-  const { isOnline, isSyncing, waitingCount, needsAttentionCount } = useOffline();
-
-  const state = deriveSyncState({ isOnline, isSyncing, waitingCount, needsAttentionCount });
-  const view = describeSyncState(state, { waitingCount, needsAttentionCount });
-
-  if (variant === 'hero') {
-    return <HeroSyncIndicator onPress={onPress} state={state} view={view} />;
-  }
+function CanvasSyncIndicator({ onPress, state, view }) {
+  const attention = state === 'needs_attention';
+  const waiting = state === 'waiting' || state === 'offline';
+  const spin = useRef(new Animated.Value(0)).current;
+  const { reduceMotion, motionLevel } = useMotion();
+  const rotates = state === 'syncing' && !reduceMotion && motionLevel !== 'still';
+  useEffect(() => {
+    if (!rotates) return undefined;
+    const loop = Animated.loop(Animated.timing(spin, {
+      toValue: 1, duration: 1000, easing: Easing.linear, useNativeDriver: true,
+    }));
+    loop.start();
+    return () => { loop.stop(); spin.setValue(0); };
+  }, [rotates, spin]);
+  const rotate = spin.interpolate({ inputRange: [0, 1], outputRange: ['0deg', '360deg'] });
+  const count = view.badgeCount > 99 ? '99+' : String(view.badgeCount);
+  const icon = attention ? 'warning-outline' : HERO_ICONS[state];
+  const iconColor = attention ? colors.warning : state === 'synced' ? colors.success : colors.textSecondary;
 
   return (
     <Pressable
       onPress={onPress}
-      style={[
-        styles.container,
-        showLabel ? styles.labelContainer : null,
-        dark ? styles.darkContainer : { backgroundColor: view.backgroundColor },
-      ]}
+      style={styles.container}
       accessibilityRole="button"
       accessibilityLabel={`Open sync status, ${view.accessibilityLabel}`}
-      hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
     >
-      {state === 'syncing' ? (
-        <ActivityIndicator size={20} color={view.color} />
-      ) : (
-        <Ionicons name={view.icon} size={20} color={view.color} />
-      )}
-
-      {showLabel ? (
-        <Text style={[styles.message, { color: view.color }]}>{view.message}</Text>
-      ) : null}
-
-      {!showLabel && view.badgeCount > 0 ? (
-        <Badge style={[styles.badge, { backgroundColor: view.color }]} size={16}>
-          {view.badgeCount > 99 ? '99+' : view.badgeCount}
-        </Badge>
-      ) : null}
+      <View testID="sync-pill" style={[styles.pill, waiting ? styles.waiting : null, attention ? styles.attention : null]}>
+        {state === 'syncing' ? (
+          <Animated.View testID="sync-spinner" style={[styles.spinner, rotates ? { transform: [{ rotate }] } : null]} />
+        ) : <Ionicons name={icon} size={18} color={iconColor} />}
+        {waiting || attention ? (
+          <RNText maxFontSizeMultiplier={1.2} style={[styles.message, attention ? styles.attentionText : null]}>
+            {waiting ? `${count} waiting` : count}
+          </RNText>
+        ) : null}
+        {attention ? <Ionicons name="chevron-forward" size={14} color={colors.warningText} /> : null}
+      </View>
     </Pressable>
   );
 }
 
+// Both presentations share state, counts and spoken copy; only their chrome differs.
+export default function SyncIndicator({ onPress, variant = 'default' }) {
+  const { isOnline, isSyncing, waitingCount, needsAttentionCount } = useOffline();
+  const state = deriveSyncState({ isOnline, isSyncing, waitingCount, needsAttentionCount });
+  const view = describeSyncState(state, { waitingCount, needsAttentionCount });
+  return variant === 'hero'
+    ? <HeroSyncIndicator onPress={onPress} state={state} view={view} />
+    : <CanvasSyncIndicator onPress={onPress} state={state} view={view} />;
+}
+
 const styles = StyleSheet.create({
-  container: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingHorizontal: spacing.sm,
-    paddingVertical: spacing.xs,
-    borderRadius: 20,
-    minWidth: 40,
-    height: 32,
-    position: 'relative',
+  container: { minHeight: 44, minWidth: 44, alignItems: 'center', justifyContent: 'center' },
+  pill: {
+    minHeight: 32, minWidth: 36, padding: 0, borderRadius: 16,
+    backgroundColor: colors.surface, borderWidth: 1, borderColor: tints.rule,
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6,
   },
-  labelContainer: {
-    gap: spacing.xs + 2,
-    minWidth: 0,
-    height: 34,
-    paddingHorizontal: spacing.sm + 3,
-  },
-  darkContainer: {
-    borderWidth: 1,
-    borderColor: colors.heroBorder,
-    backgroundColor: colors.heroSurface,
-  },
-  message: {
-    fontSize: 11,
-    fontWeight: '700',
-  },
-  badge: {
-    position: 'absolute',
-    top: -4,
-    right: -4,
-    minWidth: 18,
-    height: 18,
-    fontSize: 10,
-    fontWeight: 'bold',
+  waiting: { paddingLeft: 9, paddingRight: 12 },
+  attention: { paddingLeft: 9, paddingRight: 6, backgroundColor: colors.warningBg, borderColor: tints.warningEdge },
+  message: { ...typeRoles.textPill, color: colors.text },
+  attentionText: { color: colors.warningText },
+  spinner: {
+    width: 18, height: 18, borderRadius: 9, borderWidth: 2,
+    borderColor: tints.spinnerTrack, borderTopColor: colors.textSecondary,
   },
 });
 
@@ -165,7 +142,7 @@ const heroStyles = StyleSheet.create({
   },
   badgeAttention: { backgroundColor: colors.warningText },
   badgeText: {
-    ...typeRoles.textButton, fontSize: 12, lineHeight: 16, color: colors.red700, fontVariant: ['tabular-nums'],
+    ...typeRoles.textBadge, color: colors.red700,
   },
   badgeTextAttention: { color: colors.surface },
 });

@@ -47,7 +47,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.red600,
     shadowColor: colors.red600, shadowOpacity: 0.26, shadowRadius: 7, shadowOffset: { width: 0, height: 6 }, elevation: 3,
   },
-  count: { ...typeRoles.displayM, lineHeight: 24, color: colors.textSecondary, fontVariant: ['tabular-nums'] },
+  count: { ...typeRoles.displayCount, color: colors.textSecondary, fontVariant: ['tabular-nums'] },
   countDone: { color: colors.successText },
   countToday: { color: colors.onDark },
 });

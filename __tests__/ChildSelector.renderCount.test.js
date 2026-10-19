@@ -65,8 +65,9 @@ jest.mock('../src/services/literacySessionPersistence', () => ({
 }));
 
 import React from 'react';
+import { renderWithProviders as render } from '../test-support/renderWithProviders';
 import { FlatList } from 'react-native';
-import { fireEvent, render } from '@testing-library/react-native';
+import { fireEvent } from '@testing-library/react-native';
 import { PaperProvider, childSelectorRowRenderSpy } from 'react-native-paper';
 import LiteracySessionForm from '../src/screens/sessions/LiteracySessionForm';
 

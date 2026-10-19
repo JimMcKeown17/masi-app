@@ -87,7 +87,7 @@ test('blocks app providers after SQLite bootstrap failure and recovers on a clea
     },
   });
 
-  fireEvent.press(view.getByText('Try Again'));
+  fireEvent.press(view.getByText('Try again'));
 
   expect(await view.findByText('App providers mounted')).toBeTruthy();
   expect(mockInitializeDatabase).toHaveBeenCalledTimes(2);
@@ -107,9 +107,9 @@ test('keeps the recovery screen usable when error-log sharing fails', async () =
   );
 
   expect(await view.findByText('We could not open your offline data')).toBeTruthy();
-  fireEvent.press(view.getByText('Share Error Logs'));
+  fireEvent.press(view.getByText('Share error logs'));
 
   expect(await view.findByText('Could not export the error logs.')).toBeTruthy();
-  expect(view.getByText('Try Again')).toBeTruthy();
+  expect(view.getByText('Try again')).toBeTruthy();
   expect(mockExportLogs).toHaveBeenCalledTimes(1);
 });

@@ -1,11 +1,15 @@
+import { useHeaderHairline } from '../../components/common/ScreenHeader';
+import ListGroup from '../../components/common/ListGroup';
+import { fontFamilies, typeRoles } from '../../constants/typography';
+import { useToast } from '../../context/ToastContext';
 import { useSignedInEA } from '../../context/SignedInEAContext';
 import React, { useState, useCallback } from 'react';
-import { View, StyleSheet, FlatList } from 'react-native';
-import { Text, Card, ActivityIndicator, Snackbar, IconButton } from 'react-native-paper';
+import { View, Pressable, StyleSheet, FlatList } from 'react-native';
+import { Text, ActivityIndicator } from 'react-native-paper';
 import { useFocusEffect } from '@react-navigation/native';
 import { useAuth } from '../../context/AuthContext';
 import { useChildren } from '../../context/ChildrenContext';
-import { colors, spacing, borderRadius, shadows } from '../../constants/colors';
+import { colors, spacing } from '../../constants/colors';
 
 
 function formatDate(dateString) {
@@ -20,6 +24,8 @@ function formatDate(dateString) {
 }
 
 export default function AssessmentHistoryScreen({ navigation }) {
+  const onScroll = useHeaderHairline();
+  const toast = useToast();
   const { repositories } = useSignedInEA();
   const { assessments: assessmentsRepository } = repositories;
 
@@ -30,8 +36,6 @@ export default function AssessmentHistoryScreen({ navigation }) {
   const { allChildren } = useChildren();
   const [assessments, setAssessments] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [snackbarMessage, setSnackbarMessage] = useState('');
-  const [snackbarVisible, setSnackbarVisible] = useState(false);
 
   useFocusEffect(
     useCallback(() => {
@@ -57,8 +61,7 @@ export default function AssessmentHistoryScreen({ navigation }) {
         } catch (error) {
           console.error('Error loading assessments:', error);
           if (active) {
-            setSnackbarMessage('Failed to load assessments');
-            setSnackbarVisible(true);
+            toast.show({ message: 'Failed to load assessments', tone: 'error', duration: 3000 });
           }
         } finally {
           if (active) {
@@ -71,7 +74,7 @@ export default function AssessmentHistoryScreen({ navigation }) {
       return () => {
         active = false;
       };
-    }, [user?.id])
+    }, [user?.id, toast])
   );
 
   const childInfoMap = React.useMemo(() => {
@@ -85,67 +88,66 @@ export default function AssessmentHistoryScreen({ navigation }) {
     return map;
   }, [allChildren]);
 
-  const renderItem = ({ item }) => {
+  const renderItem = ({ item, index }) => {
     const accuracyColor = item.accuracy >= 75
       ? colors.success
       : item.accuracy >= 50
         ? colors.primary
-        : colors.emphasis;
+        : colors.primary;
     const info = childInfoMap[item.child_id];
     const childName = info ? info.name : 'Unknown child';
     const isHidden = info?.hidden;
 
     return (
-      <Card
-        style={styles.card}
+      <Pressable accessibilityRole="button"
+        style={styles.row}
         onPress={() => navigation.navigate('AssessmentDetail', { assessment: item, childName })}
       >
-        <Card.Content>
-          <View style={styles.cardHeader}>
-            <Text variant="titleSmall" style={styles.cardDate}>
-              {formatDate(item.date_assessed)}
-            </Text>
-            <View style={styles.cardHeaderRight}>
-              <View style={[styles.syncBadge, item.synced ? styles.syncBadgeSynced : styles.syncBadgePending]}>
-                <Text variant="bodySmall" style={[styles.syncBadgeText, item.synced ? styles.syncTextSynced : styles.syncTextPending]}>
-                  {item.synced ? 'Synced' : 'Pending sync'}
-                </Text>
-              </View>
-              <Text style={styles.chevron}>{'\u203A'}</Text>
-            </View>
-          </View>
-
-          <Text variant="bodyMedium" style={styles.childName}>
-            {childName}
-            {isHidden && (
-              <Text variant="bodySmall" style={styles.removedBadge}> (removed)</Text>
-            )}
+        <View style={styles.cardHeader}>
+          <Text variant="titleSmall" style={styles.cardDate}>
+            {formatDate(item.date_assessed)}
           </Text>
-
-          <View style={styles.typeRow}>
-            <View style={[styles.typeBadge, item.assessment_type === 'word_egra' ? styles.typeBadgeWord : styles.typeBadgeLetter]}>
-              <Text variant="labelSmall" style={styles.typeBadgeText}>
-                {item.assessment_type === 'word_egra' ? 'Words' : 'Letters'}
+          <View style={styles.cardHeaderRight}>
+            <View style={[styles.syncBadge, item.synced ? styles.syncBadgeSynced : styles.syncBadgePending]}>
+              <Text variant="bodySmall" style={[styles.syncBadgeText, item.synced ? styles.syncTextSynced : styles.syncTextPending]}>
+                {item.synced ? 'Synced' : 'Pending sync'}
               </Text>
             </View>
-            <Text variant="bodyMedium" style={styles.language}>
-              {item.letter_language} - Attempt #{item.attempt_number}
-            </Text>
+            <Text style={styles.chevron}>{'\u203A'}</Text>
           </View>
+        </View>
 
-          <View style={styles.statsRow}>
-            <Text variant="bodySmall" style={styles.stat}>
-              Attempted: {item.letters_attempted}
-            </Text>
-            <Text variant="bodySmall" style={styles.stat}>
-              Correct: {item.correct_responses}
-            </Text>
-            <Text variant="bodySmall" style={[styles.stat, { color: accuracyColor, fontWeight: '700' }]}>
-              {item.accuracy}%
+        <Text variant="bodyMedium" style={styles.childName}>
+          {childName}
+          {isHidden && (
+            <Text variant="bodySmall" style={styles.removedBadge}> (removed)</Text>
+          )}
+        </Text>
+
+        <View style={styles.typeRow}>
+          <View style={[styles.typeBadge, item.assessment_type === 'word_egra' ? styles.typeBadgeWord : styles.typeBadgeLetter]}>
+            <Text variant="labelSmall" style={styles.typeBadgeText}>
+              {item.assessment_type === 'word_egra' ? 'Words' : 'Letters'}
             </Text>
           </View>
-        </Card.Content>
-      </Card>
+          <Text variant="bodyMedium" style={styles.language}>
+            {item.letter_language} - Attempt #{item.attempt_number}
+          </Text>
+        </View>
+
+        <View style={styles.statsRow}>
+          <Text variant="bodySmall" style={styles.stat}>
+            Attempted: {item.letters_attempted}
+          </Text>
+          <Text variant="bodySmall" style={styles.stat}>
+            Correct: {item.correct_responses}
+          </Text>
+          <Text variant="bodySmall" style={[styles.stat, { color: accuracyColor, fontFamily: fontFamilies.textBold }]}>
+            {item.accuracy}%
+          </Text>
+        </View>
+        {index < assessments.length - 1 && <View testID="history-row-divider" pointerEvents="none" style={styles.rowDivider} />}
+      </Pressable>
     );
   };
 
@@ -162,27 +164,21 @@ export default function AssessmentHistoryScreen({ navigation }) {
 
   return (
     <View style={styles.container}>
-      <FlatList
-        data={assessments}
-        keyExtractor={(item) => item.id}
-        renderItem={renderItem}
-        contentContainerStyle={styles.listContent}
-        ListEmptyComponent={
-          <View style={styles.emptyContainer}>
-            <Text variant="bodyMedium" style={styles.emptyText}>
-              No assessments yet. Run your first assessment!
-            </Text>
-          </View>
-        }
-      />
-
-      <Snackbar
-        visible={snackbarVisible}
-        onDismiss={() => setSnackbarVisible(false)}
-        duration={3000}
-      >
-        {snackbarMessage}
-      </Snackbar>
+      <ListGroup style={styles.group}>
+        <FlatList onScroll={onScroll} scrollEventThrottle={16}
+          data={assessments}
+          keyExtractor={(item) => item.id}
+          renderItem={renderItem}
+          style={styles.list}
+          ListEmptyComponent={
+            <View style={styles.emptyContainer}>
+              <Text variant="bodyMedium" style={styles.emptyText}>
+                No assessments yet. Run your first assessment!
+              </Text>
+            </View>
+          }
+        />
+      </ListGroup>
     </View>
   );
 }
@@ -192,15 +188,10 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: colors.background,
   },
-  listContent: {
-    padding: spacing.md,
-  },
-  card: {
-    backgroundColor: colors.surface,
-    marginBottom: spacing.md,
-    borderRadius: borderRadius.md,
-    ...shadows.card,
-  },
+  group: { margin: spacing.md, flexShrink: 1 },
+  list: { flexGrow: 0 },
+  row: { padding: spacing.md },
+  rowDivider: { position: 'absolute', left: spacing.md, right: spacing.md, bottom: 0, height: 1, backgroundColor: colors.border },
   cardHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -209,7 +200,7 @@ const styles = StyleSheet.create({
   },
   cardDate: {
     color: colors.text,
-    fontWeight: '600',
+    ...typeRoles.textData,
   },
   cardHeaderRight: {
     flexDirection: 'row',
@@ -217,9 +208,9 @@ const styles = StyleSheet.create({
     gap: spacing.sm,
   },
   chevron: {
-    fontSize: 22,
+    ...typeRoles.textLetter,
     color: colors.textSecondary,
-    fontWeight: '600',
+    fontFamily: fontFamilies.textSemi,
   },
   syncBadge: {
     paddingHorizontal: spacing.sm,
@@ -233,7 +224,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.border,
   },
   syncBadgeText: {
-    fontWeight: '600',
+    fontFamily: fontFamilies.textSemi,
   },
   syncTextSynced: {
     color: colors.success,
@@ -243,13 +234,13 @@ const styles = StyleSheet.create({
   },
   childName: {
     color: colors.text,
-    fontWeight: '600',
+    fontFamily: fontFamilies.textSemi,
     marginBottom: 2,
   },
   removedBadge: {
     color: colors.textSecondary,
     fontStyle: 'italic',
-    fontWeight: '400',
+    fontFamily: fontFamilies.textMedium,
   },
   typeRow: {
     flexDirection: 'row',
@@ -269,13 +260,12 @@ const styles = StyleSheet.create({
     backgroundColor: colors.warningBg,
   },
   typeBadgeText: {
-    fontWeight: '600',
-    fontSize: 11,
+    ...typeRoles.textNavInactive,
     color: colors.text,
   },
   language: {
     color: colors.primary,
-    fontWeight: '500',
+    fontFamily: fontFamilies.textMedium,
   },
   statsRow: {
     flexDirection: 'row',

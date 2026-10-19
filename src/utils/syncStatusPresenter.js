@@ -49,9 +49,9 @@ export const describeSyncState = (state, { waitingCount = 0, needsAttentionCount
         icon: 'cloud-offline-outline',
         color: colors.info,
         backgroundColor: colors.info + '20',
-        message: `Saved on your phone · ${waitingCount} will sync when you're online`,
+        message: `Saved on your phone · ${waitingCount} will sync when you’re online`,
         badgeCount: waitingCount,
-        accessibilityLabel: `Saved on your phone. ${waitingCount} ${plural(waitingCount, 'item', 'items')} will sync when you're online`,
+        accessibilityLabel: `Saved on your phone. ${waitingCount} ${plural(waitingCount, 'item', 'items')} will sync when you’re online`,
       };
     case 'waiting':
       return {

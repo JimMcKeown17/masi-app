@@ -1,10 +1,13 @@
+jest.mock('@expo/vector-icons', () => ({ Ionicons: 'Ionicons' }), { virtual: true });
+import { renderWithProviders as render } from '../test-support/renderWithProviders';
+import ListGroup from '../src/components/common/ListGroup';
 jest.mock('../test-support/handleServiceMocks', () => ({
 getSessionHistoryPullState: jest.fn(),
 startSessionHistoryPull: jest.fn()
 }));
 import React from 'react';
-import { render, waitFor, act } from '@testing-library/react-native';
-import { FlatList } from 'react-native';
+import { waitFor, act } from '@testing-library/react-native';
+import { FlatList, StyleSheet } from 'react-native';
 import { useSessionHistoryStatus } from '../src/services/sessionHistoryStatus';
 import { getSessionHistoryPullState, startSessionHistoryPull } from '../test-support/handleServiceMocks';
 import SessionHistoryScreen from '../src/screens/sessions/SessionHistoryScreen';
@@ -18,6 +21,7 @@ jest.mock('../src/services/sessionHistoryStatus', () => ({ ...jest.requireActual
 useSessionHistoryStatus: jest.fn() }));
 
 jest.mock('@react-navigation/native', () => ({
+  NavigationContext: require('react').createContext(undefined),
   useFocusEffect: (callback) => {
     const React = require('react');
     React.useEffect(() => callback(), [callback]);
@@ -51,6 +55,8 @@ jest.mock('../src/services/supabaseClient', () => ({
 }));
 
 jest.mock('react-native-safe-area-context', () => ({
+  ...jest.requireActual('react-native-safe-area-context'),
+  SafeAreaProvider: ({ children }) => children,
   useSafeAreaInsets: () => ({ top: 0, right: 0, bottom: 0, left: 0 }),
 }));
 
@@ -95,6 +101,23 @@ describe('SessionHistoryScreen Plan 5 behavior', () => {
   afterEach(() => {
     jest.useRealTimers();
     jest.clearAllMocks();
+  });
+
+  test('load errors appear as root toasts', async () => {
+    sessionsRepository.getSessions.mockRejectedValueOnce(new Error('read failed'));
+    const screen = render(<SessionHistoryScreen navigation={{ navigate: jest.fn() }} />);
+    await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent('Failed to load sessions'));
+    expect(screen.getByRole('button', { name: 'Dismiss message' })).toBeTruthy();
+  });
+
+  test('history rows are contained in the shared ListGroup', async () => {
+    const screen = render(<SessionHistoryScreen navigation={{ navigate: jest.fn() }} />);
+    await screen.findByText('Pending sync');
+    const group = screen.UNSAFE_getByType(ListGroup);
+    expect(group.findAllByType('Text').some(node => node.props.children === 'Pending sync')).toBe(true);
+    const dividers = screen.getAllByTestId('history-row-divider');
+    expect(dividers).toHaveLength(1);
+    expect(StyleSheet.flatten(dividers[0].props.style)).toMatchObject({ left: 16, right: 16, bottom: 0, height: 1 });
   });
 
   test('loads recent session history from SQLite without screen-owned Supabase or storage pulls', async () => {

@@ -1,6 +1,8 @@
+import { fontFamilies } from '../../constants/typography';
+import BrandButton from '../common/BrandButton';
 import React from 'react';
 import { StyleSheet, View } from 'react-native';
-import { Button, Text } from 'react-native-paper';
+import { Text } from 'react-native-paper';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { borderRadius, colors, spacing } from '../../constants/colors';
 
@@ -36,17 +38,13 @@ export default function AssessmentInstructions({
           ))}
         </View>
 
-        <Button
-          mode="contained"
+        <BrandButton
+          variant="primary"
           onPress={onStart}
           style={styles.startButton}
-          contentStyle={styles.startButtonContent}
-        >
-          Start Assessment
-        </Button>
-        <Button mode="outlined" onPress={onCancel}>
-          Cancel
-        </Button>
+          label="Start assessment"
+        />
+        <BrandButton variant="secondary" onPress={onCancel} label="Cancel" />
       </View>
     </View>
   );
@@ -70,7 +68,7 @@ const styles = StyleSheet.create({
   instructionsChild: {
     textAlign: 'center',
     color: colors.primary,
-    fontWeight: '600',
+    fontFamily: fontFamilies.textSemi,
     marginBottom: spacing.xs,
   },
   instructionsLanguage: {
@@ -90,8 +88,5 @@ const styles = StyleSheet.create({
   },
   startButton: {
     marginBottom: spacing.md,
-  },
-  startButtonContent: {
-    paddingVertical: spacing.sm,
   },
 });

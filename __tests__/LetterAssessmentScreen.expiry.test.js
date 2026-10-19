@@ -1,3 +1,4 @@
+jest.mock('@expo/vector-icons', () => ({ Ionicons: 'Ionicons' }), { virtual: true });
 import React from 'react';
 import { Alert } from 'react-native';
 import { fireEvent, render, waitFor, act } from '@testing-library/react-native';
@@ -45,7 +46,7 @@ describe('LetterAssessmentScreen expiry + timing', () => {
     const { getByText, getByLabelText } = render(
       <LetterAssessmentScreen navigation={navigation} route={route} />
     );
-    fireEvent.press(getByText('Start Assessment'));       // startedAt = mockNow = 0
+    fireEvent.press(getByText('Start assessment'));       // startedAt = mockNow = 0
     fireEvent.press(getByLabelText('a, not marked'));    // record the only letter correct (pre-expiry)
     act(() => { mockNow = 65000; });                      // past the 60s deadline, no watchdog tick fired
     fireEvent.press(getByLabelText('a, correct'));        // an expired tap would normally untoggle (a correction)
@@ -60,7 +61,7 @@ describe('LetterAssessmentScreen expiry + timing', () => {
     const { getByText, getByLabelText } = render(
       <LetterAssessmentScreen navigation={navigation} route={route} />
     );
-    fireEvent.press(getByText('Start Assessment'));
+    fireEvent.press(getByText('Start assessment'));
     fireEvent.press(getByLabelText('a, not marked'));    // record a correct so Finish saves directly
     act(() => { mockNow = 7000; });
     fireEvent.press(getByText('Finish'));

@@ -22,17 +22,11 @@ export function getTabIconName(routeName, focused) {
 }
 
 /**
- * Bottom-tab icon with a clear active indicator (a small dot above the icon when
- * focused), so the selected tab reads at a glance beyond the tint change alone.
- *
- * The indicator is absolutely positioned so it adds NO layout height — React
- * Navigation renders this inside a fixed ~24-28px icon slot, so a flow-stacked
- * indicator would overflow and clip against the label.
+ * The active pill identifies the selected destination beyond its glyph colour.
  */
 export default function BottomTabIcon({ routeName, focused, color, size }) {
   return (
-    <View style={styles.container}>
-      {focused && <View testID="tab-active-indicator" style={styles.indicator} />}
+    <View testID="tab-icon-pill" style={[styles.container, { backgroundColor: focused ? colors.red50 : 'transparent' }]}>
       <Ionicons name={getTabIconName(routeName, focused)} size={size} color={color} />
     </View>
   );
@@ -40,16 +34,10 @@ export default function BottomTabIcon({ routeName, focused, color, size }) {
 
 const styles = StyleSheet.create({
   container: {
+    width: 56,
+    height: 30,
+    borderRadius: 15,
     alignItems: 'center',
     justifyContent: 'center',
-  },
-  indicator: {
-    position: 'absolute',
-    top: -4,
-    alignSelf: 'center',
-    width: 5,
-    height: 5,
-    borderRadius: 2.5,
-    backgroundColor: colors.tabActive,
   },
 });

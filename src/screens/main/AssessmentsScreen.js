@@ -1,17 +1,19 @@
 import { useSignedInEA } from '../../context/SignedInEAContext';
 import React, { useState, useCallback } from 'react';
 import { View, StyleSheet } from 'react-native';
-import { Text, Button, Card, ActivityIndicator } from 'react-native-paper';
+import { Text, ActivityIndicator } from 'react-native-paper';
 import { useFocusEffect } from '@react-navigation/native';
 import { useAuth } from '../../context/AuthContext';
-import { colors, spacing, borderRadius, shadows } from '../../constants/colors';
+import { colors, spacing } from '../../constants/colors';
 import { useChildren } from '../../context/ChildrenContext';
 
 import { getAssessmentsTabStats } from '../../utils/dashboardStats';
 import StatBar from '../../components/dashboard/StatBar';
 import { getActiveProgrammeGate } from '../../services/activeProgrammeGate';
 import NoActiveProgrammeNotice from '../../components/common/NoActiveProgrammeNotice';
-import SectionHeader from '../../components/common/SectionHeader';
+import SurfaceCard from '../../components/common/SurfaceCard';
+import BrandButton from '../../components/common/BrandButton';
+import { typeRoles } from '../../constants/typography';
 
 export default function AssessmentsScreen({ navigation }) {
   const { handle, repositories } = useSignedInEA();
@@ -71,53 +73,48 @@ export default function AssessmentsScreen({ navigation }) {
         ]} />
       )}
 
-      <SectionHeader title="Assessments" subtitle="Run timed assessments and view results." />
+      <Text style={styles.hint}>Run timed assessments and view results.</Text>
 
-      <Card style={styles.card}>
-        <Card.Content>
-          <Text variant="titleMedium" style={styles.cardTitle}>
-            Letter Sound Assessment (EGRA)
-          </Text>
-          <Text variant="bodySmall" style={styles.cardDescription}>
-            60-second timed letter sound recognition test
-          </Text>
-        </Card.Content>
-        <Card.Actions style={styles.cardActions}>
-          <Button
-            mode="contained"
+      <SurfaceCard style={styles.card}>
+        <Text variant="titleMedium" style={styles.cardTitle}>
+          Letter Sound Assessment (EGRA)
+        </Text>
+        <Text variant="bodySmall" style={styles.cardDescription}>
+          60-second timed letter sound recognition test
+        </Text>
+        <View style={styles.cardActions}>
+          <BrandButton
+            size="md"
+            variant="primary"
             onPress={() => navigation.navigate('AssessmentChildSelect', { assessmentType: 'letter_egra' })}
-          >
-            Start Assessment
-          </Button>
-        </Card.Actions>
-      </Card>
+            label="Start assessment"
+          />
+        </View>
+      </SurfaceCard>
 
-      <Card style={styles.card}>
-        <Card.Content>
-          <Text variant="titleMedium" style={styles.cardTitle}>
-            Word Reading Assessment (EGRA)
-          </Text>
-          <Text variant="bodySmall" style={styles.cardDescription}>
-            60-second timed word reading fluency test
-          </Text>
-        </Card.Content>
-        <Card.Actions style={styles.cardActions}>
-          <Button
-            mode="contained"
+      <SurfaceCard style={styles.card}>
+        <Text variant="titleMedium" style={styles.cardTitle}>
+          Word Reading Assessment (EGRA)
+        </Text>
+        <Text variant="bodySmall" style={styles.cardDescription}>
+          60-second timed word reading fluency test
+        </Text>
+        <View style={styles.cardActions}>
+          <BrandButton
+            size="md"
+            variant="primary"
             onPress={() => navigation.navigate('AssessmentChildSelect', { assessmentType: 'word_egra' })}
-          >
-            Start Assessment
-          </Button>
-        </Card.Actions>
-      </Card>
+            label="Start assessment"
+          />
+        </View>
+      </SurfaceCard>
 
-      <Button
-        mode="outlined"
+      <BrandButton size="md"
+        variant="secondary"
         onPress={() => navigation.navigate('AssessmentHistory')}
         style={styles.historyButton}
-      >
-        View History
-      </Button>
+        label="View history"
+      />
     </View>
   );
 }
@@ -134,11 +131,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     backgroundColor: colors.background,
   },
+  hint: { ...typeRoles.textParagraph, color: colors.textSecondary, marginBottom: spacing.md },
   card: {
-    backgroundColor: colors.surface,
-    borderRadius: borderRadius.md,
     marginBottom: spacing.md,
-    ...shadows.card,
   },
   cardTitle: {
     color: colors.text,
@@ -148,8 +143,10 @@ const styles = StyleSheet.create({
     color: colors.textSecondary,
   },
   cardActions: {
-    paddingHorizontal: spacing.md,
-    paddingBottom: spacing.md,
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    gap: spacing.sm,
+    marginTop: spacing.sm,
   },
   historyButton: {
     marginTop: spacing.sm,

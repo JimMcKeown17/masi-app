@@ -3,7 +3,7 @@ import React from 'react';
 import { render } from '@testing-library/react-native';
 
 const mockUseFonts = jest.fn(() => [true, null]);
-jest.mock('expo-font', () => ({ useFonts: () => mockUseFonts() }));
+jest.mock('expo-font', () => ({ useFonts: (...args) => mockUseFonts(...args) }));
 jest.mock('expo-splash-screen', () => ({
   preventAutoHideAsync: jest.fn(() => Promise.resolve()),
   hideAsync: jest.fn(() => Promise.resolve()),
@@ -34,8 +34,8 @@ jest.mock('../src/services/observability', () => ({
 jest.mock('react-native-paper', () => {
   const React = require('react');
   return {
+    ...jest.requireActual('react-native-paper'),
     PaperProvider: ({ children }) => <>{children}</>,
-    MD3LightTheme: { colors: {} },
   };
 });
 
@@ -88,6 +88,13 @@ jest.mock('../src/navigation/AppNavigator', () => {
 });
 
 describe('App root', () => {
+  it('loads the Figtree semibold face with the app fonts', () => {
+    const App = require('../App').default;
+    const { Figtree_600SemiBold } = require('@expo-google-fonts/figtree');
+    render(<App />);
+    expect(mockUseFonts).toHaveBeenLastCalledWith(expect.objectContaining({ Figtree_600SemiBold }));
+  });
+
   it('releases the splash when fonts fail', () => {
     const App = require('../App').default;
     const { hideAsync } = require('expo-splash-screen');

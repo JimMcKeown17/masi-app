@@ -1,13 +1,18 @@
-import React from 'react';
+import React, { useContext, useEffect, useState } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
 import { Text } from 'react-native-paper';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { NavigationContext } from '@react-navigation/native';
 import { useAuth } from '../../context/AuthContext';
+import { useToastObstruction } from '../../context/ToastContext';
 import { useSessionLaunchGuard } from '../../hooks/useSessionLaunchGuard';
 import BottomTabIcon from './BottomTabIcon';
 import ClockInBeforeSessionSheet from '../sessions/ClockInBeforeSessionSheet';
 import { colors, shadows, spacing } from '../../constants/colors';
+import { typeRoles } from '../../constants/typography';
+
+export const FAB_OVERHANG = 24;
 
 const renderDestination = ({
   route,
@@ -49,9 +54,9 @@ const renderDestination = ({
         routeName={route.name}
         focused={focused}
         color={focused ? colors.tabActive : colors.tabInactive}
-        size={22}
+        size={24}
       />
-      <Text style={[styles.label, focused ? styles.labelFocused : null]}>{label}</Text>
+      <Text style={focused ? styles.labelFocused : styles.label} maxFontSizeMultiplier={1.3}>{label}</Text>
     </Pressable>
   );
 };
@@ -59,6 +64,20 @@ const renderDestination = ({
 export default function LockedBottomTabBar({ state, descriptors, navigation }) {
   const { user } = useAuth();
   const insets = useSafeAreaInsets();
+  const parentNavigation = useContext(NavigationContext);
+  const [isFocused, setIsFocused] = useState(() => parentNavigation ? parentNavigation.isFocused() : true);
+  const [barHeight, setBarHeight] = useState(0);
+  useEffect(() => {
+    if (!parentNavigation) {
+      setIsFocused(true);
+      return undefined;
+    }
+    const unsubscribeFocus = parentNavigation.addListener('focus', () => setIsFocused(true));
+    const unsubscribeBlur = parentNavigation.addListener('blur', () => setIsFocused(false));
+    setIsFocused(parentNavigation.isFocused());
+    return () => { unsubscribeFocus(); unsubscribeBlur(); };
+  }, [parentNavigation]);
+  useToastObstruction(barHeight + FAB_OVERHANG + 5, isFocused);
   const {
     warningVisible,
     requestSessionLaunch,
@@ -74,7 +93,11 @@ export default function LockedBottomTabBar({ state, descriptors, navigation }) {
 
   return (
     <>
-      <View style={[styles.bar, { paddingBottom: Math.max(insets.bottom, spacing.sm) }]}>
+      <View
+        testID="bottom-tab-bar"
+        onLayout={({ nativeEvent }) => setBarHeight(nativeEvent.layout.height)}
+        style={[styles.bar, { paddingBottom: Math.max(insets.bottom, spacing.sm) }]}
+      >
         {leftRoutes.map((route, index) => renderDestination({
           route,
           index,
@@ -83,17 +106,21 @@ export default function LockedBottomTabBar({ state, descriptors, navigation }) {
           navigation,
         }))}
 
-        <Pressable
-          onPress={() => requestSessionLaunch()}
-          accessibilityRole="button"
-          accessibilityLabel="Record a session"
-          style={styles.recordAction}
-        >
-          <View style={styles.fab}>
-            <Ionicons name="add" size={31} color={colors.onDark} />
-          </View>
-          <Text style={styles.recordLabel}>Record</Text>
-        </Pressable>
+        <View style={styles.recordSlot}>
+          <Pressable
+            onPress={() => requestSessionLaunch()}
+            accessibilityRole="button"
+            accessibilityLabel="Record a session"
+            style={styles.recordAction}
+          >
+            <View testID="record-ring" style={styles.recordRing}>
+              <View testID="record-disc" style={styles.fab}>
+                <Ionicons name="add" size={28} color={colors.onDark} />
+              </View>
+            </View>
+            <Text style={styles.recordLabel} maxFontSizeMultiplier={1.3}>Record</Text>
+          </Pressable>
+        </View>
 
         {rightRoutes.map((route, offset) => renderDestination({
           route,
@@ -117,51 +144,58 @@ export default function LockedBottomTabBar({ state, descriptors, navigation }) {
 const styles = StyleSheet.create({
   bar: {
     flexDirection: 'row',
-    alignItems: 'flex-end',
+    alignItems: 'flex-start',
     backgroundColor: colors.surface,
     borderTopWidth: 1,
     borderTopColor: colors.border,
-    paddingTop: 8,
-    paddingHorizontal: 6,
+    paddingHorizontal: 4,
+    ...shadows.nav,
   },
   destination: {
     flex: 1,
-    minHeight: 50,
+    minHeight: 56,
     alignItems: 'center',
-    justifyContent: 'flex-end',
-    gap: spacing.xs,
-    paddingBottom: 2,
+    paddingTop: 6,
+    gap: 3,
   },
   label: {
     color: colors.tabInactive,
-    fontSize: 10,
-    fontWeight: '700',
+    ...typeRoles.textNavInactive,
   },
   labelFocused: {
     color: colors.tabActive,
+    ...typeRoles.textNavActive,
+  },
+  recordSlot: {
+    flex: 1,
+    height: 56,
+    alignItems: 'center',
   },
   recordAction: {
-    flex: 1,
-    minHeight: 72,
+    position: 'absolute',
+    top: -(FAB_OVERHANG + 5),
     alignItems: 'center',
-    justifyContent: 'flex-start',
-    marginTop: -28,
   },
-  fab: {
-    width: 58,
-    height: 58,
+  recordRing: {
+    width: 70,
+    height: 70,
+    borderRadius: 35,
+    backgroundColor: colors.surface,
     alignItems: 'center',
     justifyContent: 'center',
-    borderRadius: 29,
-    borderWidth: 4,
-    borderColor: colors.surface,
+    ...shadows.fab,
+  },
+  fab: {
+    width: 60,
+    height: 60,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 30,
     backgroundColor: colors.primary,
-    ...shadows.elevated,
   },
   recordLabel: {
-    color: colors.primaryDark,
-    fontSize: 10,
-    fontWeight: '800',
-    marginTop: 2,
+    color: colors.text,
+    ...typeRoles.textNavRecord,
+    marginTop: -2,
   },
 });

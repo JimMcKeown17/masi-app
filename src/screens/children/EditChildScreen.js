@@ -1,15 +1,13 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { View, StyleSheet, ScrollView, KeyboardAvoidingView, Platform, Alert, TouchableOpacity } from 'react-native';
-import {
-  Text,
-  TextInput,
-  Button,
-  Card,
-  HelperText,
-  Snackbar,
-} from 'react-native-paper';
-import { colors, spacing, borderRadius } from '../../constants/colors';
-import SectionHeader from '../../components/common/SectionHeader';
+import { Text } from 'react-native-paper';
+import { colors, spacing, borderRadius, tints } from '../../constants/colors';
+import BrandButton from '../../components/common/BrandButton';
+import SurfaceCard from '../../components/common/SurfaceCard';
+import TextField from '../../components/common/TextField';
+import { useHeaderHairline } from '../../components/common/ScreenHeader';
+import { useToast } from '../../context/ToastContext';
+import { typeRoles } from '../../constants/typography';
 import { useChildren } from '../../context/ChildrenContext';
 import { useClasses } from '../../context/ClassesContext';
 import { GENDER_OPTIONS } from '../../constants/options';
@@ -17,6 +15,7 @@ import GroupPickerBottomSheet from '../../components/children/GroupPickerBottomS
 import { compareGroups, getGroupColor } from '../../utils/groupHelpers';
 import { NO_TEXT_SUGGESTIONS } from '../../constants/textInputProps';
 import ChipSelector from '../../components/forms/ChipSelector';
+import SelectField from '../../components/common/SelectField';
 import SelectSheet from '../../components/common/SelectSheet';
 import { READING_LEVELS } from '../../constants/literacyConstants';
 
@@ -44,7 +43,8 @@ export default function EditChildScreen({ route, navigation }) {
 
   const [errors, setErrors] = useState({});
   const [loading, setLoading] = useState(false);
-  const [snackbar, setSnackbar] = useState({ visible: false, message: '' });
+  const toast = useToast();
+  const onScroll = useHeaderHairline();
   const [, setRefreshKey] = useState(0);
 
   /**
@@ -77,11 +77,11 @@ export default function EditChildScreen({ route, navigation }) {
       setReadingLevel(child.reading_level || null);
       setInitialized(true);
     } else {
-      setSnackbar({ visible: true, message: 'Child not found' });
+      toast.show({ message: 'Child not found', tone: 'error', duration: 3000 });
       setInitialized(true);
       navigation.goBack();
     }
-  }, [child, initialized, navigation]);
+  }, [child, initialized, navigation, toast]);
 
   const validate = () => {
     const newErrors = {};
@@ -120,11 +120,11 @@ export default function EditChildScreen({ route, navigation }) {
       if (result.success) {
         navigation.goBack();
       } else {
-        setSnackbar({ visible: true, message: 'Error updating child' });
+        toast.show({ message: 'Error updating child', tone: 'error', duration: 3000 });
       }
     } catch (error) {
       console.error('Error updating child:', error);
-      setSnackbar({ visible: true, message: 'Error updating child' });
+      toast.show({ message: 'Error updating child', tone: 'error', duration: 3000 });
     } finally {
       setLoading(false);
     }
@@ -136,7 +136,7 @@ export default function EditChildScreen({ route, navigation }) {
     if (classId === (child?.class_id || null)) return;
     const result = await updateChild(childId, { class_id: classId });
     if (result.success) {
-      setSnackbar({ visible: true, message: 'Class updated' });
+      toast.show({ message: 'Class updated', tone: 'success', duration: 3000 });
     }
   };
 
@@ -154,7 +154,7 @@ export default function EditChildScreen({ route, navigation }) {
             if (result.success) {
               navigation.goBack();
             } else {
-              setSnackbar({ visible: true, message: 'Error deleting child' });
+              toast.show({ message: 'Error deleting child', tone: 'error', duration: 3000 });
             }
           },
         },
@@ -172,7 +172,7 @@ export default function EditChildScreen({ route, navigation }) {
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       keyboardVerticalOffset={90}
     >
-      <ScrollView contentContainerStyle={styles.scrollContent}>
+      <ScrollView contentContainerStyle={styles.scrollContent} onScroll={onScroll} scrollEventThrottle={16}>
         {/* Class info (tappable to change) */}
         <TouchableOpacity
           onPress={() => setClassPickerVisible(true)}
@@ -180,150 +180,130 @@ export default function EditChildScreen({ route, navigation }) {
           accessibilityRole="button"
           accessibilityLabel={`Choose class for ${child.first_name} ${child.last_name}`}
         >
-          <Card style={childClass ? styles.classInfoCard : styles.classInfoCardEmpty}>
-            <Card.Content>
-              <View style={styles.classCardRow}>
-                <View style={{ flex: 1 }}>
-                  <Text variant="labelSmall" style={styles.classLabel}>Class</Text>
-                  {childClass ? (
-                    <>
-                      <Text variant="titleMedium">{childClass.name}</Text>
-                      <Text variant="bodySmall" style={styles.classDetail}>
-                        {childSchool?.name || 'Unknown school'} • {childClass.grade} • {childClass.teacher}
-                      </Text>
-                    </>
-                  ) : (
-                    <Text variant="bodyMedium" style={styles.classDetailEmpty}>
-                      No class assigned — tap to choose
+          <SurfaceCard style={childClass ? styles.classInfoCard : styles.classInfoCardEmpty}>
+            <View style={styles.classCardRow}>
+              <View style={{ flex: 1 }}>
+                <Text variant="labelSmall" style={styles.classLabel}>Class</Text>
+                {childClass ? (
+                  <>
+                    <Text variant="titleMedium">{childClass.name}</Text>
+                    <Text variant="bodySmall" style={styles.classDetail}>
+                      {childSchool?.name || 'Unknown school'} • {childClass.grade} • {childClass.teacher}
                     </Text>
-                  )}
-                </View>
-                <Text style={styles.classChevron}>▾</Text>
+                  </>
+                ) : (
+                  <Text variant="bodyMedium" style={styles.classDetailEmpty}>
+                    No class assigned — tap to choose
+                  </Text>
+                )}
               </View>
-            </Card.Content>
-          </Card>
+              <Text style={styles.classChevron}>▾</Text>
+            </View>
+          </SurfaceCard>
         </TouchableOpacity>
 
-        <Card style={styles.card}>
-          <Card.Content>
-            <SectionHeader title="Edit Child" />
-
-            {/* First Name */}
-            <TextInput
+        <SurfaceCard style={styles.card}>
+          {/* First Name */}
+          <View style={styles.input}>
+            <TextField
               label="First Name *"
               value={firstName}
               onChangeText={setFirstName}
               {...NO_TEXT_SUGGESTIONS}
-              error={!!errors.firstName}
-              mode="outlined"
-              style={styles.input}
+              error={errors.firstName}
             />
-            {errors.firstName && (
-              <HelperText type="error">{errors.firstName}</HelperText>
-            )}
+          </View>
 
-            {/* Last Name */}
-            <TextInput
+          {/* Last Name */}
+          <View style={styles.input}>
+            <TextField
               label="Last Name *"
               value={lastName}
               onChangeText={setLastName}
               {...NO_TEXT_SUGGESTIONS}
-              error={!!errors.lastName}
-              mode="outlined"
-              style={styles.input}
+              error={errors.lastName}
             />
-            {errors.lastName && (
-              <HelperText type="error">{errors.lastName}</HelperText>
-            )}
+          </View>
 
-            {/* Age */}
-            <TextInput
+          {/* Age */}
+          <View style={styles.input}>
+            <TextField
               label="Age"
               value={age}
               onChangeText={setAge}
               {...NO_TEXT_SUGGESTIONS}
-              error={!!errors.age}
-              mode="outlined"
+              error={errors.age}
               keyboardType="numeric"
-              style={styles.input}
             />
-            {errors.age && (
-              <HelperText type="error">{errors.age}</HelperText>
-            )}
+          </View>
 
-            <Text variant="labelLarge" style={styles.fieldLabel}>Gender</Text>
-            <ChipSelector
-              options={GENDER_OPTIONS}
-              value={gender}
-              onChange={setGender}
-              testID="edit-child-gender"
-            />
+          <Text variant="labelLarge" style={styles.fieldLabel}>Gender</Text>
+          <ChipSelector
+            options={GENDER_OPTIONS}
+            value={gender}
+            onChange={setGender}
+            testID="edit-child-gender"
+          />
 
-            <Text variant="labelLarge" style={styles.readingLevelLabel}>Current Reading Level</Text>
-            <Button
-              mode="outlined"
+          <View style={styles.readingLevelField}>
+            <SelectField
+              label="Current Reading Level"
+              value={readingLevel}
+              placeholder="Not set"
               onPress={() => setReadingLevelPickerVisible(true)}
-              style={styles.readingLevelButton}
               accessibilityLabel={`Choose current reading level for ${child.first_name} ${child.last_name}`}
+            />
+          </View>
+          <Text variant="bodySmall" style={styles.readingLevelHelper}>
+            This level pre-fills the next literacy session and changes when the child progresses.
+          </Text>
+
+          {/* Group picker field */}
+          <View style={styles.groupField}>
+            <Text variant="labelSmall" style={styles.groupFieldLabel}>Group</Text>
+            <TouchableOpacity
+              style={[
+                styles.groupFieldInput,
+                currentGroup && styles.groupFieldSelected,
+              ]}
+              onPress={() => setGroupPickerVisible(true)}
+              accessibilityRole="button"
+              accessibilityLabel={`Choose group for ${child.first_name} ${child.last_name}`}
             >
-              {readingLevel || 'Not set'}
-            </Button>
-            <Text variant="bodySmall" style={styles.readingLevelHelper}>
-              This level pre-fills the next literacy session and changes when the child progresses.
+              {currentGroup ? (
+                <View style={styles.groupFieldValue}>
+                  <View style={[styles.groupDot, { backgroundColor: colorScheme.text }]} />
+                  <Text style={[styles.groupFieldText, styles.groupFieldTextSelected]}>
+                    {currentGroup.name}
+                  </Text>
+                </View>
+              ) : (
+                <Text style={styles.groupFieldPlaceholder}>No group assigned</Text>
+              )}
+              <Text style={styles.groupFieldChevron}>▾</Text>
+            </TouchableOpacity>
+            <Text variant="bodySmall" style={styles.groupFieldHelper}>
+              Tap to change group or create a new one
             </Text>
+          </View>
 
-            {/* Group picker field */}
-            <View style={styles.groupField}>
-              <Text variant="labelSmall" style={styles.groupFieldLabel}>Group</Text>
-              <TouchableOpacity
-                style={[
-                  styles.groupFieldInput,
-                  currentGroup && { borderColor: colorScheme.text },
-                ]}
-                onPress={() => setGroupPickerVisible(true)}
-                accessibilityRole="button"
-                accessibilityLabel={`Choose group for ${child.first_name} ${child.last_name}`}
-              >
-                {currentGroup ? (
-                  <View style={styles.groupFieldValue}>
-                    <View style={[styles.groupDot, { backgroundColor: colorScheme.text }]} />
-                    <Text style={[styles.groupFieldText, { color: colorScheme.text, fontWeight: '600' }]}>
-                      {currentGroup.name}
-                    </Text>
-                  </View>
-                ) : (
-                  <Text style={styles.groupFieldPlaceholder}>No group assigned</Text>
-                )}
-                <Text style={styles.groupFieldChevron}>▾</Text>
-              </TouchableOpacity>
-              <Text variant="bodySmall" style={styles.groupFieldHelper}>
-                Tap to change group or create a new one
-              </Text>
-            </View>
-
-            {/* Submit Button */}
-            <Button
-              mode="contained"
-              onPress={handleSubmit}
-              loading={loading}
-              disabled={loading}
-              style={styles.button}
-            >
-              Save Changes
-            </Button>
-          </Card.Content>
-        </Card>
+          {/* Submit Button */}
+          <BrandButton
+            onPress={handleSubmit}
+            loading={loading}
+            disabled={loading}
+            style={styles.button}
+            variant="primary" size="lg" label="Save changes"
+          />
+        </SurfaceCard>
 
         {/* Delete Button */}
-        <Button
-          mode="outlined"
+        <BrandButton
           onPress={handleDelete}
           style={styles.deleteButton}
-          textColor={colors.error}
-          icon="delete"
-        >
-          Delete Child
-        </Button>
+          icon="trash-outline"
+          variant="destructiveQuiet" size="lg" label="Delete child"
+        />
       </ScrollView>
 
       {/* Group Picker Bottom Sheet */}
@@ -375,14 +355,6 @@ export default function EditChildScreen({ route, navigation }) {
         onSelect={setReadingLevel}
         maxHeight="70%"
       />
-
-      <Snackbar
-        visible={snackbar.visible}
-        onDismiss={() => setSnackbar({ ...snackbar, visible: false })}
-        duration={3000}
-      >
-        {snackbar.message}
-      </Snackbar>
     </KeyboardAvoidingView>
   );
 }
@@ -413,13 +385,13 @@ const styles = StyleSheet.create({
   },
   classChevron: {
     color: colors.primary,
-    fontSize: 16,
+    ...typeRoles.textBodyL,
     marginLeft: spacing.sm,
   },
   classLabel: {
     color: colors.primary,
     textTransform: 'uppercase',
-    letterSpacing: 0.5,
+    ...typeRoles.textLabel,
   },
   classDetail: {
     color: colors.textSecondary,
@@ -441,13 +413,9 @@ const styles = StyleSheet.create({
     color: colors.textSecondary,
     marginBottom: spacing.xs,
   },
-  readingLevelLabel: {
-    color: colors.textSecondary,
+  readingLevelField: {
     marginTop: spacing.md,
     marginBottom: spacing.xs,
-  },
-  readingLevelButton: {
-    borderColor: colors.primary,
   },
   readingLevelHelper: {
     color: colors.textSecondary,
@@ -464,7 +432,7 @@ const styles = StyleSheet.create({
   },
   groupFieldLabel: {
     color: colors.primary,
-    fontWeight: '700',
+    ...typeRoles.textMetaStrong,
     marginBottom: spacing.xs,
   },
   groupFieldInput: {
@@ -472,11 +440,19 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
     borderWidth: 1.5,
-    borderColor: colors.primary,
+    borderColor: tints.control,
     borderRadius: 6,
     paddingVertical: spacing.sm,
     paddingHorizontal: spacing.md,
     backgroundColor: colors.surface,
+  },
+  groupFieldSelected: {
+    borderWidth: 2,
+    borderColor: colors.text,
+  },
+  groupFieldTextSelected: {
+    ...typeRoles.textOptionSelected,
+    color: colors.text,
   },
   groupFieldValue: {
     flexDirection: 'row',
@@ -489,15 +465,15 @@ const styles = StyleSheet.create({
     marginRight: spacing.sm,
   },
   groupFieldText: {
-    fontSize: 14,
+    ...typeRoles.textSmall,
   },
   groupFieldPlaceholder: {
-    fontSize: 14,
+    ...typeRoles.textSmall,
     color: colors.textSecondary,
   },
   groupFieldChevron: {
     color: colors.primary,
-    fontSize: 14,
+    ...typeRoles.textSmall,
   },
   groupFieldHelper: {
     color: colors.textSecondary,
@@ -508,6 +484,5 @@ const styles = StyleSheet.create({
   },
   deleteButton: {
     marginBottom: spacing.lg,
-    borderColor: colors.error,
   },
 });

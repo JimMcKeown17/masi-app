@@ -1,3 +1,4 @@
+jest.mock('@expo/vector-icons', () => ({ Ionicons: 'Ionicons' }), { virtual: true });
 const mockSelectSheetRowRender = jest.fn();
 
 jest.mock('react', () => {
@@ -22,6 +23,8 @@ import { FlatList, StyleSheet, View } from 'react-native';
 import { fireEvent, render } from '@testing-library/react-native';
 import { PaperProvider } from 'react-native-paper';
 import SelectSheet from '../src/components/common/SelectSheet';
+import { colors } from '../src/constants/colors';
+import { typeRoles } from '../src/constants/typography';
 
 jest.mock('react-native-safe-area-context', () => {
   const ReactForMock = require('react');
@@ -224,4 +227,20 @@ describe('SelectSheet', () => {
 
     expect(mockSelectSheetRowRender).not.toHaveBeenCalled();
   });
+});
+
+test('the selected row is ink with a checkmark and no red', () => {
+  const sheet = renderSheet({ selectedKey: 'school-1' });
+  const row = sheet.getByRole('button', { name: 'Sunrise Primary' });
+  const tree = [row, ...row.findAll(() => true)];
+  tree.forEach((node) => expect(Object.values(StyleSheet.flatten(node.props.style) ?? {})).not.toContain(colors.primary));
+  expect(StyleSheet.flatten(sheet.getByText('Sunrise Primary').props.style)).toMatchObject({ ...typeRoles.textOptionSelected, color: colors.text });
+  expect(sheet.UNSAFE_getByType('Ionicons').props).toMatchObject({ name: 'checkmark', size: 22, color: colors.text });
+});
+test('flat options have a divider only between rows', () => {
+  const sheet = renderSheet();
+  const first = StyleSheet.flatten(sheet.getByRole('button', { name: 'Sunrise Primary' }).props.style);
+  const last = StyleSheet.flatten(sheet.getByRole('button', { name: 'Hilltop School' }).props.style);
+  expect(first).toMatchObject({ minHeight: 56, paddingHorizontal: 0, borderBottomWidth: 1, borderBottomColor: colors.border });
+  expect(last.borderBottomWidth ?? 0).toBe(0);
 });

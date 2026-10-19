@@ -1,13 +1,14 @@
 import { useSignedInEA } from '../../context/SignedInEAContext';
 import React, { useState, useCallback } from 'react';
 import { View, ScrollView, StyleSheet } from 'react-native';
-import { Card, Text, Button, Snackbar } from 'react-native-paper';
+import { Text } from 'react-native-paper';
 import { Ionicons } from '@expo/vector-icons';
+import { useToast } from '../../context/ToastContext';
 import { useOffline } from '../../context/OfflineContext';
 import { useAuth } from '../../context/AuthContext';
 import { useFocusEffect } from '@react-navigation/native';
 import { useSessionHistoryStatus } from '../../services/sessionHistoryStatus';
-import { colors, spacing, borderRadius, shadows } from '../../constants/colors';
+import { colors, spacing, borderRadius } from '../../constants/colors';
 import {
   deriveSyncState,
   describeReconcileBreakerNote,
@@ -15,6 +16,11 @@ import {
   describeWaitingDetail,
   describeHistoryState,
 } from '../../utils/syncStatusPresenter';
+
+import BrandButton from '../../components/common/BrandButton';
+import SurfaceCard from '../../components/common/SurfaceCard';
+import { useHeaderHairline } from '../../components/common/ScreenHeader';
+import { typeRoles } from '../../constants/typography';
 
 const TABLE_DISPLAY_NAMES = {
   TIME_ENTRIES: 'Time Entries',
@@ -52,6 +58,7 @@ const formatSyncTime = (isoString) => {
 };
 
 export default function SyncStatusScreen() {
+  const onScroll = useHeaderHairline();
   const { services } = useSignedInEA();
 
   const { user } = useAuth();
@@ -71,8 +78,7 @@ export default function SyncStatusScreen() {
     isOnline, isSyncing, syncStatus, syncNow, refreshSyncStatus,
     waitingCount, needsAttentionCount, authorizeReconcileBreaker,
   } = useOffline();
-  const [snackbarMessage, setSnackbarMessage] = useState('');
-  const [snackbarVisible, setSnackbarVisible] = useState(false);
+  const toast = useToast();
 
   const needsAttentionItems = syncStatus.needsAttentionItems || [];
   const reconcileBreakerCards = (syncStatus.reconcileBreakerNotes || [])
@@ -86,15 +92,10 @@ export default function SyncStatusScreen() {
   const summary = describeSyncState(state, { waitingCount, needsAttentionCount });
   const waitingDetail = describeWaitingDetail({ waitingCount, backedOffCount, nextRetryAt });
 
-  const showSnackbar = (message) => {
-    setSnackbarMessage(message);
-    setSnackbarVisible(true);
-  };
-
   const handleRetry = async (table, id) => {
     if (!isOnline) return;
     const displayName = TABLE_DISPLAY_NAMES[table] || table;
-    showSnackbar(`Retrying ${displayName}...`);
+    toast.show({ message: `Retrying ${displayName}...`, tone: 'neutral', duration: 3000 });
     await services.syncEngine.retryFailedItem(table, id);
     await refreshSyncStatus();
     await syncNow({ force: true });
@@ -102,149 +103,120 @@ export default function SyncStatusScreen() {
 
   return (
     <View style={styles.outerContainer}>
-      <ScrollView style={styles.container}>
+      <ScrollView style={styles.container} onScroll={onScroll} scrollEventThrottle={16}>
         {/* Summary: the same voice as the Home banner and the header indicator */}
-        <Card style={styles.card}>
-          <Card.Content>
-            <View style={styles.summaryRow}>
-              {summary.icon && (
-                <Ionicons name={summary.icon} size={22} color={summary.color} style={styles.summaryIcon} />
-              )}
-              <Text variant="titleMedium" style={[styles.summaryText, { color: summary.color }]}>
-                {summary.message}
-              </Text>
-            </View>
-            {waitingDetail && (
-              <>
-                <Text variant="bodyMedium" style={styles.waitingText}>
-                  {waitingDetail.title}
-                </Text>
-                {waitingDetail.detail && (
-                  <Text variant="bodySmall" style={styles.waitingHint}>
-                    {waitingDetail.detail}
-                  </Text>
-                )}
-              </>
+        <SurfaceCard style={styles.card}>
+          <View style={styles.summaryRow}>
+            {summary.icon && (
+              <Ionicons name={summary.icon} size={22} color={summary.color} style={styles.summaryIcon} />
             )}
-          </Card.Content>
-        </Card>
+            <Text variant="titleMedium" style={[styles.summaryText, { color: summary.color }]}>
+              {summary.message}
+            </Text>
+          </View>
+          {waitingDetail && (
+            <>
+              <Text variant="bodyMedium" style={styles.waitingText}>
+                {waitingDetail.title}
+              </Text>
+              {waitingDetail.detail && (
+                <Text variant="bodySmall" style={styles.waitingHint}>
+                  {waitingDetail.detail}
+                </Text>
+              )}
+            </>
+          )}
+        </SurfaceCard>
 
-        <Card style={styles.card}>
-          <Card.Content>
-            <Text variant="titleMedium" style={styles.sectionTitle}>History</Text>
-            <Text variant="bodyMedium" style={styles.syncTimeText}>{history.label}</Text>
-            {history.detail && <Text variant="bodySmall" style={styles.waitingText}>{history.detail}</Text>}
-          </Card.Content>
-        </Card>
+        <SurfaceCard style={styles.card}>
+          <Text variant="titleMedium" style={styles.sectionTitle}>History</Text>
+          <Text variant="bodyMedium" style={styles.syncTimeText}>{history.label}</Text>
+          {history.detail && <Text variant="bodySmall" style={styles.waitingText}>{history.detail}</Text>}
+        </SurfaceCard>
 
         {reconcileBreakerCards.map((card) => (
-          <Card key={card.scope} style={styles.card}>
-            <Card.Content>
-              <Text variant="titleMedium" style={styles.breakerTitle}>
-                {card.title}
-              </Text>
-              <Button
-                mode="contained"
-                onPress={() => authorizeReconcileBreaker(card.scope)}
-                accessibilityLabel={card.accessibilityLabel}
-                disabled={!isOnline || isSyncing}
-                style={styles.applyButton}
-              >
-                {card.actionLabel}
-              </Button>
-            </Card.Content>
-          </Card>
+          <SurfaceCard key={card.scope} style={styles.card}>
+            <Text variant="titleMedium" style={styles.breakerTitle}>
+              {card.title}
+            </Text>
+            <BrandButton
+              onPress={() => authorizeReconcileBreaker(card.scope)}
+              accessibilityLabel={card.accessibilityLabel}
+              disabled={!isOnline || isSyncing}
+              style={styles.applyButton}
+              variant="primary" size="md" label={card.actionLabel}
+            />
+          </SurfaceCard>
         ))}
 
         {/* Network Status */}
-        <Card style={styles.card}>
-          <Card.Content>
-            <Text variant="titleMedium" style={styles.sectionTitle}>Network Status</Text>
-            <View style={styles.badgeRow}>
-              <View style={[styles.badge, isOnline ? styles.badgeOnline : styles.badgeOffline]}>
-                <Text style={[styles.badgeText, isOnline ? styles.badgeTextOnline : styles.badgeTextOffline]}>
-                  {isOnline ? 'Online' : 'Offline'}
-                </Text>
-              </View>
+        <SurfaceCard style={styles.card}>
+          <Text variant="titleMedium" style={styles.sectionTitle}>Network Status</Text>
+          <View style={styles.badgeRow}>
+            <View style={[styles.badge, isOnline ? styles.badgeOnline : styles.badgeOffline]}>
+              <Text style={[styles.badgeText, isOnline ? styles.badgeTextOnline : styles.badgeTextOffline]}>
+                {isOnline ? 'Online' : 'Offline'}
+              </Text>
             </View>
-          </Card.Content>
-        </Card>
+          </View>
+        </SurfaceCard>
 
         {/* Last Synced */}
-        <Card style={styles.card}>
-          <Card.Content>
-            <Text variant="titleMedium" style={styles.sectionTitle}>Last Synced</Text>
-            <Text variant="bodyMedium" style={styles.syncTimeText}>
-              {formatSyncTime(lastSuccessfulSyncTime)}
+        <SurfaceCard style={styles.card}>
+          <Text variant="titleMedium" style={styles.sectionTitle}>Last Synced</Text>
+          <Text variant="bodyMedium" style={styles.syncTimeText}>
+            {formatSyncTime(lastSuccessfulSyncTime)}
+          </Text>
+          {lastSyncTime && lastSyncTime !== lastSuccessfulSyncTime && (
+            <Text variant="bodySmall" style={styles.lastAttemptText}>
+              Last attempt: {formatSyncTime(lastSyncTime)}
             </Text>
-            {lastSyncTime && lastSyncTime !== lastSuccessfulSyncTime && (
-              <Text variant="bodySmall" style={styles.lastAttemptText}>
-                Last attempt: {formatSyncTime(lastSyncTime)}
-              </Text>
-            )}
-          </Card.Content>
-        </Card>
+          )}
+        </SurfaceCard>
 
         {/* Sync Now Button */}
-        <Button
-          mode="contained"
+        <BrandButton
           onPress={() => syncNow({ force: true })}
           disabled={!isOnline || isSyncing}
           loading={isSyncing}
           style={styles.syncButton}
-        >
-          Sync Now
-        </Button>
+          variant="primary" size="md" label="Sync now"
+        />
 
         {/* Needs Attention: the only itemized list; terminal rows with per-row Retry */}
         {needsAttentionItems.length > 0 && (
-          <Card style={styles.card}>
-            <Card.Content>
-              <Text variant="titleMedium" style={styles.sectionTitle}>Needs Attention</Text>
-              {!isOnline && (
-                <Text variant="bodySmall" style={styles.reconnectHint}>
-                  Reconnect to retry these items.
+          <SurfaceCard style={styles.card}>
+            <Text variant="titleMedium" style={styles.sectionTitle}>Needs Attention</Text>
+            {!isOnline && (
+              <Text variant="bodySmall" style={styles.reconnectHint}>
+                Reconnect to retry these items.
+              </Text>
+            )}
+            {needsAttentionItems.map((item) => (
+              <SurfaceCard key={`${item.table}_${item.id}`} style={styles.failedItemCard}>
+                <Text variant="bodyLarge" style={styles.failedItemTable}>
+                  {TABLE_DISPLAY_NAMES[item.table] || item.table}
                 </Text>
-              )}
-              {needsAttentionItems.map((item) => (
-                <Card key={`${item.table}_${item.id}`} style={styles.failedItemCard}>
-                  <Card.Content>
-                    <Text variant="bodyLarge" style={styles.failedItemTable}>
-                      {TABLE_DISPLAY_NAMES[item.table] || item.table}
-                    </Text>
-                    <Text variant="bodySmall" style={styles.failedItemId}>
-                      ID: {item.id.substring(0, 8)}...
-                    </Text>
-                    <Text variant="bodySmall" style={styles.failedItemReason}>
-                      {item.reason}
-                    </Text>
-                    <Text variant="bodySmall" style={styles.failedItemTime}>
-                      Failed: {formatSyncTime(item.failedAt)}
-                    </Text>
-                    <Button
-                      mode="outlined"
-                      onPress={() => handleRetry(item.table, item.id)}
-                      style={styles.retryButton}
-                      compact
-                      disabled={!isOnline}
-                    >
-                      Retry
-                    </Button>
-                  </Card.Content>
-                </Card>
-              ))}
-            </Card.Content>
-          </Card>
+                <Text variant="bodySmall" style={styles.failedItemId}>
+                  ID: {item.id.substring(0, 8)}...
+                </Text>
+                <Text variant="bodySmall" style={styles.failedItemReason}>
+                  {item.reason}
+                </Text>
+                <Text variant="bodySmall" style={styles.failedItemTime}>
+                  Failed: {formatSyncTime(item.failedAt)}
+                </Text>
+                <BrandButton
+                  onPress={() => handleRetry(item.table, item.id)}
+                  style={styles.retryButton}
+                  disabled={!isOnline}
+                  variant="secondary" size="md" label="Retry"
+                />
+              </SurfaceCard>
+            ))}
+          </SurfaceCard>
         )}
       </ScrollView>
-
-      <Snackbar
-        visible={snackbarVisible}
-        onDismiss={() => setSnackbarVisible(false)}
-        duration={3000}
-      >
-        {snackbarMessage}
-      </Snackbar>
     </View>
   );
 }
@@ -260,8 +232,6 @@ const styles = StyleSheet.create({
   card: {
     margin: spacing.md,
     backgroundColor: colors.surface,
-    borderRadius: borderRadius.lg,
-    ...shadows.card,
   },
   sectionTitle: {
     color: colors.primary,
@@ -313,11 +283,10 @@ const styles = StyleSheet.create({
     backgroundColor: colors.warningBg,
   },
   badgeText: {
-    fontWeight: 'bold',
-    fontSize: 14,
+    ...typeRoles.textSmallStrong,
   },
   badgeTextOnline: {
-    color: colors.success,
+    color: colors.successText,
   },
   badgeTextOffline: {
     color: colors.warningText,
@@ -347,11 +316,10 @@ const styles = StyleSheet.create({
   failedItemCard: {
     backgroundColor: colors.cardBackground,
     marginBottom: spacing.sm,
-    borderRadius: borderRadius.sm,
   },
   failedItemTable: {
     color: colors.text,
-    fontWeight: 'bold',
+    ...typeRoles.textRowTitle,
   },
   failedItemId: {
     color: colors.textSecondary,

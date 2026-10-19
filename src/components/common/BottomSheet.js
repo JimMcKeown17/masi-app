@@ -1,5 +1,6 @@
 import React from 'react';
 import {
+  Animated,
   BackHandler,
   KeyboardAvoidingView,
   Platform,
@@ -7,10 +8,15 @@ import {
   ScrollView,
   StyleSheet,
   View,
+  Text,
+  useWindowDimensions,
 } from 'react-native';
-import { Portal, Text } from 'react-native-paper';
+import { Portal } from 'react-native-paper';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { borderRadius, colors, spacing } from '../../constants/colors';
+import { borderRadius, colors, shadows, spacing, tints } from '../../constants/colors';
+import { typeRoles } from '../../constants/typography';
+import { useMotion } from '../../context/MotionContext';
+import { duration, easing } from '../../constants/motion';
 
 export default function BottomSheet({
   visible,
@@ -28,6 +34,51 @@ export default function BottomSheet({
   children,
 }) {
   const insets = useSafeAreaInsets();
+  const { height: windowHeight } = useWindowDimensions();
+  const { motionLevel } = useMotion();
+  const still = motionLevel === 'still';
+  const [retained, setRetained] = React.useState(visible);
+  const [panelHeight, setPanelHeight] = React.useState(null);
+  const hasOpened = React.useRef(false);
+  const scrimOpacity = React.useRef(new Animated.Value(0)).current;
+  const panelOpacity = React.useRef(new Animated.Value(0)).current;
+  // A closed fraction lets a layout measurement change the distance without
+  // restarting the animation or snapping a reopened sheet to its initial value.
+  const closedFraction = React.useRef(new Animated.Value(1)).current;
+  const translateY = closedFraction.interpolate({ inputRange: [0, 1], outputRange: [0, panelHeight ?? windowHeight] });
+
+  React.useEffect(() => {
+    if (!visible && !hasOpened.current) return undefined;
+    if (visible) {
+      hasOpened.current = true;
+      setRetained(true);
+    }
+    if (still) closedFraction.setValue(visible ? 0 : 1);
+    else panelOpacity.setValue(visible ? 1 : 0);
+    let current = true;
+    const animation = Animated.parallel([
+      Animated.timing(scrimOpacity, {
+        toValue: visible ? 1 : 0, duration: still ? duration.fade : duration.quick,
+        easing: easing.enter, useNativeDriver: true,
+      }),
+      Animated.timing(still ? panelOpacity : closedFraction, {
+        toValue: still ? (visible ? 1 : 0) : (visible ? 0 : 1),
+        duration: still ? duration.fade : duration.base, easing: easing.enter, useNativeDriver: true,
+      }),
+    ]);
+    animation.start(({ finished }) => {
+      if (current && finished && !visible) {
+        hasOpened.current = false;
+        setRetained(false);
+      }
+    });
+    return () => {
+      // Invalidate completion before stopping: a native completion queued during
+      // an exit must never unmount a sheet which has since reopened.
+      current = false;
+      animation.stop();
+    };
+  }, [visible, still, closedFraction, panelOpacity, scrimOpacity]);
   const {
     contentContainerStyle: scrollContentStyle,
     ...remainingScrollViewProps
@@ -44,12 +95,15 @@ export default function BottomSheet({
     return () => subscription.remove();
   }, [visible, onDismiss]);
 
-  if (!visible) return null;
+  if (!visible && !retained) return null;
 
   const panel = (
-    <View
+    <Animated.View
+      testID="bottom-sheet-panel"
+      onLayout={({ nativeEvent: { layout } }) => { if (layout.height > 0) setPanelHeight(layout.height); }}
       style={[
         styles.sheet,
+        still ? { opacity: panelOpacity } : { transform: [{ translateY }] },
         {
           maxHeight,
           paddingBottom: Math.max(insets.bottom, spacing.lg),
@@ -62,11 +116,11 @@ export default function BottomSheet({
 
       <View style={styles.header}>
         {/* The header's bottom gap belongs to its last element; a title-only header owns it. */}
-        <Text variant="titleMedium" style={[styles.title, !subtitle && !headerExtras && styles.titleAlone]}>
+        <Text accessibilityRole="header" style={[styles.title, !subtitle && !headerExtras && styles.titleAlone]}>
           {title}
         </Text>
         {subtitle ? (
-          <Text variant="bodySmall" style={styles.subtitle}>{subtitle}</Text>
+          <Text style={styles.subtitle}>{subtitle}</Text>
         ) : null}
         {headerExtras ? (
           <View style={styles.headerExtras}>{headerExtras}</View>
@@ -93,7 +147,7 @@ export default function BottomSheet({
       )}
 
       {footer ? <View style={styles.footer}>{footer}</View> : null}
-    </View>
+    </Animated.View>
   );
 
   // Rendered through Paper's Portal (hosted by the root PaperProvider) instead
@@ -103,12 +157,15 @@ export default function BottomSheet({
   // hierarchy where layout is reliable.
   return (
     <Portal>
-      <View style={styles.overlay} pointerEvents="box-none">
+      <View testID="bottom-sheet-overlay" style={styles.overlay} pointerEvents={visible ? 'box-none' : 'none'}
+        accessibilityElementsHidden={!visible} importantForAccessibility={visible ? 'auto' : 'no-hide-descendants'}>
+        <Animated.View testID="bottom-sheet-scrim" pointerEvents="none" style={[styles.backdrop, { opacity: scrimOpacity }]} />
         <Pressable
           onPress={onDismiss}
           accessibilityRole="button"
           accessibilityLabel={dismissLabel}
-          style={styles.backdrop}
+          disabled={!visible}
+          style={StyleSheet.absoluteFill}
         />
         {keyboardAvoiding ? (
           <KeyboardAvoidingView
@@ -138,25 +195,25 @@ const styles = StyleSheet.create({
   },
   backdrop: {
     ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    backgroundColor: tints.scrim,
   },
   sheetWrapper: {
     width: '100%',
   },
   sheet: {
     backgroundColor: colors.surface,
-    borderTopLeftRadius: borderRadius.lg,
-    borderTopRightRadius: borderRadius.lg,
+    borderTopLeftRadius: borderRadius.xl,
+    borderTopRightRadius: borderRadius.xl,
+    ...shadows.sheet,
   },
   handleContainer: {
     alignItems: 'center',
     paddingTop: spacing.sm,
-    paddingBottom: spacing.xs,
   },
   handle: {
     width: 36,
     height: 4,
-    backgroundColor: colors.border,
+    backgroundColor: tints.control,
     borderRadius: 2,
   },
   header: {
@@ -164,13 +221,15 @@ const styles = StyleSheet.create({
   },
   title: {
     color: colors.text,
-    fontWeight: '700',
-    marginTop: spacing.sm,
+    ...typeRoles.displaySheetTitle,
+    marginTop: 20,
   },
   titleAlone: {
     marginBottom: spacing.md,
   },
   subtitle: {
+    ...typeRoles.textParagraph,
+    marginTop: 6,
     color: colors.textSecondary,
     marginBottom: spacing.md,
   },

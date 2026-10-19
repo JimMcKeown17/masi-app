@@ -3,7 +3,7 @@ import { render } from '@testing-library/react-native';
 
 // @expo/vector-icons resolves from a nested path jest-expo doesn't reach; the icon
 // is decorative and irrelevant to this component's behaviour, so stub it out.
-jest.mock('@expo/vector-icons', () => ({ Ionicons: () => null }), { virtual: true });
+jest.mock('@expo/vector-icons', () => ({ Ionicons: 'Ionicons' }), { virtual: true });
 
 import NoActiveProgrammeNotice from '../src/components/common/NoActiveProgrammeNotice';
 
@@ -15,4 +15,11 @@ describe('NoActiveProgrammeNotice', () => {
     // The action the EA can actually take.
     expect(getByText(/contact your supervisor/i)).toBeTruthy();
   });
+});
+
+test.each([undefined, 'record sessions'])('keeps the exact body copy for action %s without a school illustration', (action) => {
+  const ui = render(<NoActiveProgrammeNotice action={action} />);
+  expect(ui.getByRole('header', { name: 'No active programme' })).toBeTruthy();
+  expect(ui.getByText(`You don't have a programme assigned yet. Contact your supervisor to be assigned before you can ${action ?? 'record sessions or assessments'}.`)).toBeTruthy();
+  expect(ui.UNSAFE_queryByType('Ionicons')).toBeNull();
 });

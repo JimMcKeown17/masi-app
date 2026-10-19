@@ -1,7 +1,9 @@
 import React, { useState } from 'react';
 import { View, StyleSheet, KeyboardAvoidingView, Platform, ScrollView, Image } from 'react-native';
-import { TextInput, Button, Text, Snackbar } from 'react-native-paper';
+import { TextInput, Button, Text } from 'react-native-paper';
 import { useAuth } from '../../context/AuthContext';
+import { useToast } from '../../context/ToastContext';
+import { describeAuthError } from '../../utils/authErrorCopy';
 import { colors, spacing } from '../../constants/colors';
 import BrandButton from '../../components/common/BrandButton';
 
@@ -9,30 +11,30 @@ export default function LoginScreen({ navigation }) {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState('');
+  const toast = useToast();
   const [showPassword, setShowPassword] = useState(false);
 
   const { signIn } = useAuth();
 
   const handleLogin = async () => {
     if (!email || !password) {
-      setError('Please enter both email and password');
+      toast.show({ message: 'Please enter both email and password', tone: 'error', duration: 4000 });
       return;
     }
 
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     if (!emailRegex.test(email)) {
-      setError('Please enter a valid email address');
+      toast.show({ message: 'Please enter a valid email address', tone: 'error', duration: 4000 });
       return;
     }
 
     setLoading(true);
-    setError('');
+    toast.hide();
 
     const { error } = await signIn(email, password);
 
     if (error) {
-      setError(error.message || 'Failed to sign in');
+      toast.show({ message: describeAuthError(error, 'sign_in'), tone: 'error', duration: 4000 });
       setLoading(false);
     }
   };
@@ -98,17 +100,6 @@ export default function LoginScreen({ navigation }) {
         </View>
       </ScrollView>
 
-      <Snackbar
-        visible={!!error}
-        onDismiss={() => setError('')}
-        duration={4000}
-        action={{
-          label: 'Dismiss',
-          onPress: () => setError(''),
-        }}
-      >
-        {error}
-      </Snackbar>
     </KeyboardAvoidingView>
   );
 }

@@ -1,10 +1,12 @@
+import { typeRoles } from '../../constants/typography';
+import BrandButton from '../common/BrandButton';
 import React, { useState } from 'react';
 import {
   View,
   StyleSheet,
   Pressable,
 } from 'react-native';
-import { Text, Button } from 'react-native-paper';
+import { Text } from 'react-native-paper';
 import { colors, spacing, borderRadius } from '../../constants/colors';
 import BottomSheet from '../common/BottomSheet';
 
@@ -49,13 +51,12 @@ export default function LastAttemptedBottomSheet({
           <Text variant="bodySmall" style={styles.selectedLabel}>
             Selected: {isWord ? 'word' : 'letter'} "{letters[selectedIndex]}" (#{selectedIndex + 1} of {letters.length})
           </Text>
-          <Button
-            mode="contained"
+          <BrandButton
+            variant="primary"
             onPress={() => onConfirm(selectedIndex)}
             style={styles.confirmButton}
-          >
-            Confirm
-          </Button>
+            label="Confirm"
+          />
         </>
       )}
     >
@@ -139,17 +140,16 @@ const styles = StyleSheet.create({
   },
   tileText: {
     color: colors.text,
-    fontWeight: '600',
-    fontSize: 16,
+    ...typeRoles.textDay,
   },
   tileTextCorrect: {
-    color: '#FFFFFF',
+    color: colors.onDark,
   },
   tileTextDigraph: {
-    fontSize: 13,
+    ...typeRoles.textNote,
   },
   tileTextWord: {
-    fontSize: 11,
+    ...typeRoles.textNavInactive,
   },
   selectedLabel: {
     color: colors.textSecondary,

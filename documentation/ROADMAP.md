@@ -666,11 +666,28 @@ Additional Head Office behavior retained from the Sprint 4 follow-up:
 
 ## 5. Product and UX
 
+- [ ] **Bold Red for the rest of the app (Jim, 2026-10-18: build all of it).** Shared look built
+  on `feat/bold-red-app` (2026-10-19), following Home (#70). Design source: the Design Round 4
+  canvas (https://claude.ai/artifact/8gQRtyqZ5Q1vTCTdSkz6zc, private to Jim), Bold Red (B) boards on
+  the Log in, Children, Record / New session, Session complete and Profile pages, plus the Bold Red
+  system sheet. Remaining per-screen PRs, in order: Children (My Children and Class detail),
+  Record, Session complete, Profile, Login and reset password. Approved behaviour decisions are in
+  `docs/superpowers/specs/2026-10-18-bold-red-app-design.md` §6. PR 1's Task 34 EAS preview/device
+  gate remains open. **C11:** A03s Create class → School search has not been run in this task;
+  record its outcome after Task 34, then decide whether conditional Task 35 is needed. Each later
+  board PR also needs its own preview/device check.
 - [ ] Session completion should return to the Home payoff state instead of a bare `goBack()`.
-- [ ] Add a `deviceTier`/reduced-motion contract before celebratory animation work.
-- [ ] Roll typography tokens out or retire the incomplete token system. Current tree: two importers
-  and 97 raw `fontSize:` declarations. Add a fail-closed floor/allowed-scale guard if rolling out.
-- [ ] Replace the 14 screen-local Snackbar hosts with `SnackbarContext` and one root host.
+- [x] Add a `deviceTier`/reduced-motion contract before celebratory animation work. Built
+  2026-10-19 on `feat/bold-red-app`: `MotionProvider`, `useMotion()` (`tier`, `reduceMotion`,
+  `motionLevel`) and `classifyTier`; full/calm/still consumers are in place. Celebration and native
+  motion acceptance remain their own gates.
+- [x] Roll typography tokens out or retire the incomplete token system. Built 2026-10-19 on
+  `feat/bold-red-app`: legacy export retired, 42 `typeRoles`, Figtree 600, mapped themes and
+  fail-closed typography/source guards. Ten board files retain only their explicit raw-type/Paper
+  allowances until their per-screen PRs remove the corresponding `BOARD_RATCHET` entries.
+- [x] Replace the 14 screen-local Snackbar hosts with one root host. Built 2026-10-19 on
+  `feat/bold-red-app` as **`ToastProvider`**, not `SnackbarContext`: actor-scoped publishers,
+  keyboard/obstruction placement and a host after the Paper tree. Native layering remains Task 34.
 - [ ] Add class/group context to assessment child rows.
 - [ ] Decide how Session History names attendees: full list, truncated `"Amahle +3"`, or count only.
 - [ ] Remove the cosmetic selected checkmark from the "No class" picker row, or give the row a
@@ -679,9 +696,10 @@ Additional Head Office behavior retained from the Sprint 4 follow-up:
 - [ ] Decide the fate of `session_type_id` and `activities.__legacySession`: promote a real synced
   contract or remove the machinery.
 - [ ] Push notifications and a durable message inbox remain unbuilt.
-- [ ] **Suspended sign-in copy:** a banned EA sees Supabase's raw "User is banned" in a Snackbar whose
-  Dismiss action uses Paper's default purple. Show Masi wording (for example, "Your access is paused.
-  Please contact your coordinator.") in brand colours. Found on build 14, 2026-10-18.
+- [x] **Suspended sign-in copy:** build 14's raw "User is banned"/purple-action Snackbar finding
+  (2026-10-18) is addressed on `feat/bold-red-app`, 2026-10-19. `describeAuthError` now gives
+  "Your access is paused. Please contact your supervisor." in a root error toast. The Login PR
+  moves errors inline; Task 34 still owns native acceptance.
 - [ ] **Bold Red clock row at large font:** at One UI's largest font (1.3), "Not clocked in" wraps to
   two lines at 411dp and three at 360dp, making the row tall. Text stays complete and the action
   tappable; consider a shorter label or stacking the button. Found on build 14, 2026-10-18.

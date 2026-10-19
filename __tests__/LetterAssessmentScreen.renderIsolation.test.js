@@ -1,3 +1,4 @@
+jest.mock('@expo/vector-icons', () => ({ Ionicons: 'Ionicons' }), { virtual: true });
 import React from 'react';
 import { Alert } from 'react-native';
 import { fireEvent, render, act } from '@testing-library/react-native';
@@ -45,7 +46,7 @@ describe('LetterAssessmentScreen render isolation', () => {
 
   test('advancing the countdown does not re-render the grid', () => {
     const { getByText } = render(<LetterAssessmentScreen navigation={navigation} route={route} />);
-    fireEvent.press(getByText('Start Assessment'));
+    fireEvent.press(getByText('Start assessment'));
     gridRenderSpy.mockClear();
     act(() => { jest.advanceTimersByTime(3000); }); // three 1 Hz ticks
     expect(gridRenderSpy).not.toHaveBeenCalled();

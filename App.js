@@ -2,10 +2,12 @@ import 'react-native-get-random-values';
 import React, { useEffect } from 'react';
 import { View, Text, StyleSheet as RNStyleSheet } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
-import { PaperProvider, MD3LightTheme } from 'react-native-paper';
+import { PaperProvider } from 'react-native-paper';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { AuthProvider, useAuth } from './src/context/AuthContext';
 import { SignedInEAProvider } from './src/context/SignedInEAContext';
+import { MotionProvider } from './src/context/MotionContext';
+import { ToastActorScope, ToastProvider } from './src/context/ToastContext';
 import HandleOpenError from './src/components/bootstrap/HandleOpenError';
 import LoadingScreen from './src/components/bootstrap/LoadingScreen';
 import { OfflineProvider } from './src/context/OfflineContext';
@@ -17,6 +19,8 @@ import AppNavigator from './src/navigation/AppNavigator';
 import BrandButton from './src/components/common/BrandButton';
 import DatabaseBootstrapGate from './src/components/bootstrap/DatabaseBootstrapGate';
 import { colors } from './src/constants/colors';
+import { typeRoles } from './src/constants/typography';
+import { paperTheme } from './src/theme/paperTheme';
 import {
   captureOperationalError,
   flushObservability,
@@ -27,7 +31,7 @@ import {
 import * as SplashScreen from 'expo-splash-screen';
 import { useFonts } from 'expo-font';
 import { BricolageGrotesque_800ExtraBold } from '@expo-google-fonts/bricolage-grotesque';
-import { Figtree_500Medium, Figtree_700Bold, Figtree_800ExtraBold } from '@expo-google-fonts/figtree';
+import { Figtree_500Medium, Figtree_600SemiBold, Figtree_700Bold, Figtree_800ExtraBold } from '@expo-google-fonts/figtree';
 
 // Keep the native splash up until the fonts settle, so a cold start never shows
 // an empty root. Called at module scope, before the first render.
@@ -61,7 +65,7 @@ export class ErrorBoundary extends React.Component {
             The app ran into an unexpected error. Please try again.
           </Text>
           <BrandButton
-            label="Try Again"
+            label="Try again"
             onPress={() => this.setState({ hasError: false })}
             style={errorStyles.button}
           />
@@ -81,56 +85,26 @@ const errorStyles = RNStyleSheet.create({
     padding: 32,
   },
   emoji: {
-    fontSize: 48,
-    fontWeight: 'bold',
+    ...typeRoles.display2XL,
     color: colors.primary,
     marginBottom: 16,
   },
   title: {
-    fontSize: 22,
-    fontWeight: '700',
-    color: colors.primary,
+    ...typeRoles.displaySheetTitle,
+    color: colors.text,
     marginBottom: 12,
     textAlign: 'center',
   },
   message: {
-    fontSize: 16,
+    ...typeRoles.textParagraph,
     color: colors.textSecondary,
     textAlign: 'center',
     marginBottom: 24,
-    lineHeight: 22,
   },
   button: {
     minWidth: 180,
   },
 });
-
-// Custom theme using Masinyusane brand colors
-const theme = {
-  ...MD3LightTheme,
-  colors: {
-    ...MD3LightTheme.colors,
-    primary: colors.primary,           // brand red
-    primaryContainer: colors.red50,    // soft brand surface
-    secondary: colors.accent,          // caution accent
-    secondaryContainer: colors.warningBg, // warning surface
-    tertiary: colors.emphasis,         // emphasis red
-    tertiaryContainer: colors.red50,   // soft emphasis surface
-    error: colors.error,               // semantic error
-    errorContainer: colors.errorBg,
-    background: colors.background,     // warm canvas
-    surface: colors.surface,           // plain surface
-    surfaceVariant: colors.cardBackground, // card surface
-    onPrimary: '#FFFFFF',              // text on primary surfaces
-    onSecondary: '#000000',            // black for AA contrast on amber secondary
-    onTertiary: '#FFFFFF',             // text on tertiary surfaces
-    onBackground: colors.text,         // text on canvas
-    onSurface: colors.text,            // text on surfaces
-    outline: colors.border,            // warm divider
-    outlineVariant: colors.border,
-    success: colors.success,           // semantic success
-  },
-};
 
 export function AppRoot() {
   const { user, loading, handle, handleStatus, handleError, retryOpenHandle, signOut } = useAuth();
@@ -139,17 +113,19 @@ export function AppRoot() {
   if (!handle) return <AppNavigator signedIn={false} />;
   return (
     <SignedInEAProvider key={`${handle.userId}:${handle.epoch}`} handle={handle}>
-      <OfflineProvider>
-        <TimeTrackingProvider>
-          <LookupsProvider>
-            <ChildrenProvider>
-              <ClassesProvider>
-                <AppNavigator signedIn />
-              </ClassesProvider>
-            </ChildrenProvider>
-          </LookupsProvider>
-        </TimeTrackingProvider>
-      </OfflineProvider>
+      <ToastActorScope handle={handle}>
+        <OfflineProvider>
+          <TimeTrackingProvider>
+            <LookupsProvider>
+              <ChildrenProvider>
+                <ClassesProvider>
+                  <AppNavigator signedIn />
+                </ClassesProvider>
+              </ChildrenProvider>
+            </LookupsProvider>
+          </TimeTrackingProvider>
+        </OfflineProvider>
+      </ToastActorScope>
     </SignedInEAProvider>
   );
 }
@@ -158,6 +134,7 @@ export function App() {
   const [fontsLoaded, fontError] = useFonts({
     BricolageGrotesque_800ExtraBold,
     Figtree_500Medium,
+    Figtree_600SemiBold,
     Figtree_700Bold,
     Figtree_800ExtraBold,
   });
@@ -178,12 +155,16 @@ export function App() {
   return (
     <ErrorBoundary>
       <SafeAreaProvider>
-        <PaperProvider theme={theme}>
-          <DatabaseBootstrapGate>
-            <AuthProvider><AppRoot /></AuthProvider>
-          </DatabaseBootstrapGate>
-          <StatusBar style="auto" />
-        </PaperProvider>
+        <MotionProvider>
+          <ToastProvider>
+            <PaperProvider theme={paperTheme}>
+              <DatabaseBootstrapGate>
+                <AuthProvider><AppRoot /></AuthProvider>
+              </DatabaseBootstrapGate>
+              <StatusBar style="dark" />
+            </PaperProvider>
+          </ToastProvider>
+        </MotionProvider>
       </SafeAreaProvider>
     </ErrorBoundary>
   );

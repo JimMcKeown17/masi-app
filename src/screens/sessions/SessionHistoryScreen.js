@@ -1,10 +1,14 @@
+import { useHeaderHairline } from '../../components/common/ScreenHeader';
+import ListGroup from '../../components/common/ListGroup';
+import { fontFamilies, typeRoles } from '../../constants/typography';
+import { useToast } from '../../context/ToastContext';
 import { useSignedInEA } from '../../context/SignedInEAContext';
 import React, { useState, useCallback } from 'react';
 import { View, StyleSheet, FlatList, RefreshControl } from 'react-native';
-import { Text, Card, ActivityIndicator, Snackbar } from 'react-native-paper';
+import { Text, ActivityIndicator } from 'react-native-paper';
 import { useFocusEffect } from '@react-navigation/native';
 import { useAuth } from '../../context/AuthContext';
-import { colors, spacing, borderRadius, shadows } from '../../constants/colors';
+import { colors, spacing } from '../../constants/colors';
 
 import { useLookupsContext } from '../../context/LookupsContext';
 import { useSessionHistoryStatus } from '../../services/sessionHistoryStatus';
@@ -27,6 +31,8 @@ function formatSessionDate(dateString) {
 }
 
 export default function SessionHistoryScreen() {
+  const onScroll = useHeaderHairline();
+  const toast = useToast();
   const { repositories, services } = useSignedInEA();
   const { sessions: sessionsRepository } = repositories;
 
@@ -37,13 +43,6 @@ export default function SessionHistoryScreen() {
   const history = describeHistoryState({ running, pullState });
   const [sessions, setSessions] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [snackbarMessage, setSnackbarMessage] = useState('');
-  const [snackbarVisible, setSnackbarVisible] = useState(false);
-
-  const showSnackbar = (message) => {
-    setSnackbarMessage(message);
-    setSnackbarVisible(true);
-  };
 
   /**
    * Load recent session history from local SQLite. Network sync runs through
@@ -77,7 +76,7 @@ export default function SessionHistoryScreen() {
         } catch (error) {
           console.error('Error loading sessions:', error);
           if (active) {
-            showSnackbar('Failed to load sessions');
+            toast.show({ message: 'Failed to load sessions', tone: 'error', duration: 3000 });
           }
         } finally {
           if (active) {
@@ -90,10 +89,10 @@ export default function SessionHistoryScreen() {
       return () => {
         active = false;
       };
-    }, [user?.id, pageVersion, runVersion])
+    }, [user?.id, pageVersion, runVersion, toast])
   );
 
-  const renderItem = ({ item }) => {
+  const renderItem = ({ item, index }) => {
     const lettersDisplay =
       item.activities?.letters_focused?.length > 0
         ? item.activities.letters_focused.map((l) => l.toUpperCase()).join(', ')
@@ -106,47 +105,46 @@ export default function SessionHistoryScreen() {
       'Session';
 
     return (
-      <Card style={styles.card}>
-        <Card.Content>
-          <View style={styles.cardHeader}>
-            <Text variant="titleSmall" style={styles.cardDate}>
-              {formatSessionDate(item.session_date)}
-            </Text>
-            <View style={[styles.syncBadge, item.synced ? styles.syncBadgeSynced : styles.syncBadgePending]}>
-              <Text variant="bodySmall" style={[styles.syncBadgeText, item.synced ? styles.syncBadgeTextSynced : styles.syncBadgeTextPending]}>
-                {item.synced ? 'Synced' : 'Pending sync'}
-              </Text>
-            </View>
-          </View>
-
-          <Text variant="bodyMedium" style={styles.sessionType}>
-            {sessionLabel}
+      <View style={styles.row}>
+        <View style={styles.cardHeader}>
+          <Text variant="titleSmall" style={styles.cardDate}>
+            {formatSessionDate(item.session_date)}
           </Text>
-
-          <View style={styles.detailRow}>
-            <Text variant="bodySmall" style={styles.detailLabel}>Children:</Text>
-            <Text variant="bodySmall" style={styles.detailValue}>
-              {item.children_ids?.length || 0}
+          <View style={[styles.syncBadge, item.synced ? styles.syncBadgeSynced : styles.syncBadgePending]}>
+            <Text variant="bodySmall" style={[styles.syncBadgeText, item.synced ? styles.syncBadgeTextSynced : styles.syncBadgeTextPending]}>
+              {item.synced ? 'Synced' : 'Pending sync'}
             </Text>
           </View>
+        </View>
 
+        <Text variant="bodyMedium" style={styles.sessionType}>
+          {sessionLabel}
+        </Text>
+
+        <View style={styles.detailRow}>
+          <Text variant="bodySmall" style={styles.detailLabel}>Children:</Text>
+          <Text variant="bodySmall" style={styles.detailValue}>
+            {item.children_ids?.length || 0}
+          </Text>
+        </View>
+
+        <View style={styles.detailRow}>
+          <Text variant="bodySmall" style={styles.detailLabel}>Letters:</Text>
+          <Text variant="bodySmall" style={styles.detailValue}>
+            {lettersDisplay}
+          </Text>
+        </View>
+
+        {item.activities?.session_reading_level && (
           <View style={styles.detailRow}>
-            <Text variant="bodySmall" style={styles.detailLabel}>Letters:</Text>
+            <Text variant="bodySmall" style={styles.detailLabel}>Reading Level:</Text>
             <Text variant="bodySmall" style={styles.detailValue}>
-              {lettersDisplay}
+              {item.activities.session_reading_level}
             </Text>
           </View>
-
-          {item.activities?.session_reading_level && (
-            <View style={styles.detailRow}>
-              <Text variant="bodySmall" style={styles.detailLabel}>Reading Level:</Text>
-              <Text variant="bodySmall" style={styles.detailValue}>
-                {item.activities.session_reading_level}
-              </Text>
-            </View>
-          )}
-        </Card.Content>
-      </Card>
+        )}
+        {index < sessions.length - 1 && <View testID="history-row-divider" pointerEvents="none" style={styles.rowDivider} />}
+      </View>
     );
   };
 
@@ -167,28 +165,22 @@ export default function SessionHistoryScreen() {
     <View style={styles.container}>
       {history.detail && <Text variant="bodySmall" style={styles.historyDetail}>{history.detail}</Text>}
       <Text variant="bodySmall" style={styles.historyDetail}>Showing sessions you recorded in the last 30 days.</Text>
-      <FlatList
-        refreshControl={<RefreshControl refreshing={running} onRefresh={() => services.sessionHistory.start({ userId: user?.id, force: true })} />}
-        data={sessions}
-        keyExtractor={(item) => item.id}
-        renderItem={renderItem}
-        contentContainerStyle={styles.listContent}
-        ListEmptyComponent={
-          <View style={styles.emptyContainer}>
-            <Text variant="bodyMedium" style={styles.emptyText}>
-              No sessions yet. Record your first session!
-            </Text>
-          </View>
-        }
-      />
-
-      <Snackbar
-        visible={snackbarVisible}
-        onDismiss={() => setSnackbarVisible(false)}
-        duration={3000}
-      >
-        {snackbarMessage}
-      </Snackbar>
+      <ListGroup style={styles.group}>
+        <FlatList onScroll={onScroll} scrollEventThrottle={16}
+          refreshControl={<RefreshControl refreshing={running} onRefresh={() => services.sessionHistory.start({ userId: user?.id, force: true })} />}
+          data={sessions}
+          keyExtractor={(item) => item.id}
+          renderItem={renderItem}
+          style={styles.list}
+          ListEmptyComponent={
+            <View style={styles.emptyContainer}>
+              <Text variant="bodyMedium" style={styles.emptyText}>
+                No sessions yet. Record your first session!
+              </Text>
+            </View>
+          }
+        />
+      </ListGroup>
     </View>
   );
 }
@@ -198,19 +190,14 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: colors.background,
   },
-  listContent: {
-    padding: spacing.md,
-  },
   historyDetail: {
     color: colors.textSecondary,
     margin: spacing.sm,
   },
-  card: {
-    backgroundColor: colors.surface,
-    marginBottom: spacing.md,
-    borderRadius: borderRadius.md,
-    ...shadows.card,
-  },
+  group: { margin: spacing.md, flexShrink: 1 },
+  list: { flexGrow: 0 },
+  row: { padding: spacing.md },
+  rowDivider: { position: 'absolute', left: spacing.md, right: spacing.md, bottom: 0, height: 1, backgroundColor: colors.border },
   cardHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -219,7 +206,7 @@ const styles = StyleSheet.create({
   },
   cardDate: {
     color: colors.text,
-    fontWeight: '600',
+    ...typeRoles.textData,
   },
   syncBadge: {
     paddingHorizontal: spacing.sm,
@@ -233,7 +220,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.border,
   },
   syncBadgeText: {
-    fontWeight: '600',
+    fontFamily: fontFamilies.textSemi,
   },
   syncBadgeTextSynced: {
     color: colors.success,
@@ -244,7 +231,7 @@ const styles = StyleSheet.create({
   sessionType: {
     color: colors.primary,
     marginBottom: spacing.sm,
-    fontWeight: '500',
+    fontFamily: fontFamilies.textMedium,
   },
   detailRow: {
     flexDirection: 'row',

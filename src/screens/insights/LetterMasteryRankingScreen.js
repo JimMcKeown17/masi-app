@@ -1,3 +1,6 @@
+import { useHeaderHairline } from '../../components/common/ScreenHeader';
+import { OKAY_YELLOW } from '../../utils/scoreBands';
+import { typeRoles } from '../../constants/typography';
 import { useSignedInEA } from '../../context/SignedInEAContext';
 import React, { useState, useCallback } from 'react';
 import { View, StyleSheet, FlatList } from 'react-native';
@@ -14,6 +17,7 @@ import StatBar from '../../components/dashboard/StatBar';
 import { colors, spacing, borderRadius } from '../../constants/colors';
 
 export default function LetterMasteryRankingScreen({ navigation }) {
+  const onScroll = useHeaderHairline();
   const { repositories } = useSignedInEA();
   const { assessments: assessmentsRepository, mastery: masteryRepository } = repositories;
 
@@ -74,7 +78,7 @@ export default function LetterMasteryRankingScreen({ navigation }) {
 
   return (
     <View style={styles.container}>
-      <FlatList
+      <FlatList onScroll={onScroll} scrollEventThrottle={16}
         data={ranking}
         keyExtractor={(item) => item.child.id}
         renderItem={renderItem}
@@ -87,7 +91,7 @@ export default function LetterMasteryRankingScreen({ navigation }) {
             <StatBar items={[
               { label: 'Avg Mastery', value: `${avgPercent}%` },
               { label: 'Above 70%', value: above70, color: colors.success },
-              { label: 'Below 40%', value: below40, color: colors.emphasis },
+              { label: 'Below 40%', value: below40, color: colors.primary },
             ]} />
           </View>
         }
@@ -108,7 +112,7 @@ function ColorKey() {
         <Text style={styles.keyLabel}>70%+</Text>
       </View>
       <View style={styles.keyItem}>
-        <View style={[styles.keySwatch, { backgroundColor: '#FFBB00' }]} />
+        <View style={[styles.keySwatch, { backgroundColor: OKAY_YELLOW }]} />
         <Text style={styles.keyLabel}>40–69%</Text>
       </View>
       <View style={styles.keyItem}>
@@ -135,7 +139,7 @@ const styles = StyleSheet.create({
     paddingBottom: spacing.xxl,
   },
   subtitle: {
-    fontSize: 12,
+    ...typeRoles.textCaption,
     color: colors.textSecondary,
     marginBottom: spacing.md,
   },
@@ -164,7 +168,7 @@ const styles = StyleSheet.create({
     borderRadius: 2,
   },
   keyLabel: {
-    fontSize: 10,
+    ...typeRoles.textCaption,
     color: colors.textSecondary,
   },
 });

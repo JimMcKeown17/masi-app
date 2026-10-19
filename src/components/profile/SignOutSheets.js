@@ -1,6 +1,7 @@
 import React from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, View } from 'react-native';
 import { Text } from 'react-native-paper';
+import { fontFamilies } from '../../constants/typography';
 import BottomSheet from '../common/BottomSheet';
 import { borderRadius, colors, spacing } from '../../constants/colors';
 
@@ -114,7 +115,7 @@ const styles = StyleSheet.create({
   primaryButtonText: {
     color: colors.onDark,
     fontSize: 14,
-    fontWeight: '800',
+    fontFamily: fontFamilies.textHeavy,
   },
   warning: {
     flexDirection: 'row',
@@ -129,7 +130,7 @@ const styles = StyleSheet.create({
     flex: 1,
     color: colors.warningText,
     fontSize: 12,
-    fontWeight: '600',
+    fontFamily: fontFamilies.textSemi,
     lineHeight: 18,
   },
   secondaryButton: {
@@ -145,7 +146,7 @@ const styles = StyleSheet.create({
   secondaryButtonText: {
     color: colors.warningText,
     fontSize: 13,
-    fontWeight: '800',
+    fontFamily: fontFamilies.textHeavy,
   },
   cancelButton: {
     minHeight: 42,
@@ -155,6 +156,6 @@ const styles = StyleSheet.create({
   cancelText: {
     color: colors.textSecondary,
     fontSize: 13,
-    fontWeight: '700',
+    fontFamily: fontFamilies.textBold,
   },
 });

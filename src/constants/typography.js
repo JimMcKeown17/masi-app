@@ -1,21 +1,10 @@
-import { colors } from './colors';
-
-export const typography = {
-  screenTitle:  { fontSize: 26, fontWeight: '800', letterSpacing: -0.5, color: colors.text },
-  cardTitle:    { fontSize: 16, fontWeight: '800', color: colors.text },
-  body:         { fontSize: 14, fontWeight: '600', color: colors.text },
-  caption:      { fontSize: 12, fontWeight: '500', color: colors.textSecondary },
-  statValue:    { fontSize: 26, fontWeight: '800', color: colors.text },
-  sectionLabel: { fontSize: 12, fontWeight: '800', letterSpacing: 0.5, textTransform: 'uppercase', color: colors.textSecondary },
-};
-
-// Bold Red type roles (Home first; other screens adopt them as they are
-// redesigned). Android rule: a custom family is chosen per weight, so roles set
+// Bold Red type roles. Android rule: a custom family is chosen per weight, so roles set
 // the weight-specific face and never fontWeight (fontWeight + custom family
 // makes Android fall back to the system font).
 export const fontFamilies = {
   display: 'BricolageGrotesque_800ExtraBold',
   textMedium: 'Figtree_500Medium',
+  textSemi: 'Figtree_600SemiBold',
   textBold: 'Figtree_700Bold',
   textHeavy: 'Figtree_800ExtraBold',
 };
@@ -32,4 +21,39 @@ export const typeRoles = {
     textTransform: 'uppercase',
   },
   textButton: { fontFamily: fontFamilies.textHeavy, fontSize: 15, lineHeight: 20 },
+
+  display3XL: { fontFamily: fontFamilies.display, fontSize: 44, lineHeight: 46, letterSpacing: -1.54 },
+  display2XL: { fontFamily: fontFamilies.display, fontSize: 38, lineHeight: 42, letterSpacing: -1.14 },
+  displayNumeralXL: { fontFamily: fontFamilies.display, fontSize: 64, lineHeight: 64, letterSpacing: -1.28 },
+  displayTitle: { fontFamily: fontFamilies.display, fontSize: 28, lineHeight: 32, letterSpacing: -0.56 },
+  displaySheetTitle: { fontFamily: fontFamilies.display, fontSize: 24, lineHeight: 28, letterSpacing: -0.48 },
+  displayHeading: { fontFamily: fontFamilies.display, fontSize: 18, lineHeight: 24, letterSpacing: -0.27 },
+  displayCount: { fontFamily: fontFamilies.display, fontSize: 20, lineHeight: 24, letterSpacing: -0.4 },
+  textRowTitle: { fontFamily: fontFamilies.textBold, fontSize: 16, lineHeight: 22 },
+  textBodyL: { fontFamily: fontFamilies.textMedium, fontSize: 16, lineHeight: 22 },
+  textBodyLStrong: { fontFamily: fontFamilies.textBold, fontSize: 17, lineHeight: 22 },
+  textBodySemi: { fontFamily: fontFamilies.textSemi, fontSize: 15, lineHeight: 20 },
+  textParagraph: { fontFamily: fontFamilies.textMedium, fontSize: 15, lineHeight: 22 },
+  textInput: { fontFamily: fontFamilies.textMedium, fontSize: 17, lineHeight: 22 },
+  textOptionSelected: { fontFamily: fontFamilies.textHeavy, fontSize: 17, lineHeight: 22 },
+  textButtonL: { fontFamily: fontFamilies.textHeavy, fontSize: 17, lineHeight: 20 },
+  textButtonM: { fontFamily: fontFamilies.textHeavy, fontSize: 16, lineHeight: 20 },
+  textLink: { fontFamily: fontFamilies.textHeavy, fontSize: 14, lineHeight: 20 },
+  textSearch: { fontFamily: fontFamilies.textMedium, fontSize: 16, lineHeight: 20 },
+  textMasked: { fontFamily: fontFamilies.textMedium, fontSize: 20, lineHeight: 24, letterSpacing: 2.8 },
+  textSmall: { fontFamily: fontFamilies.textMedium, fontSize: 14, lineHeight: 20 },
+  textSmallStrong: { fontFamily: fontFamilies.textBold, fontSize: 14, lineHeight: 20 },
+  textPill: { fontFamily: fontFamilies.textHeavy, fontSize: 14, lineHeight: 18, fontVariant: ['tabular-nums'] },
+  textNote: { fontFamily: fontFamilies.textSemi, fontSize: 13, lineHeight: 18 },
+  textChip: { fontFamily: fontFamilies.textBold, fontSize: 13, lineHeight: 18 },
+  textBadge: { fontFamily: fontFamilies.textHeavy, fontSize: 12, lineHeight: 16, fontVariant: ['tabular-nums'] },
+  textMetaStrong: { fontFamily: fontFamilies.textBold, fontSize: 12, lineHeight: 16 },
+  textSectionLabel: { fontFamily: fontFamilies.textHeavy, fontSize: 12, lineHeight: 16, letterSpacing: 0.96, textTransform: 'uppercase' },
+  textNavActive: { fontFamily: fontFamilies.textHeavy, fontSize: 11, lineHeight: 13 },
+  textNavInactive: { fontFamily: fontFamilies.textSemi, fontSize: 11, lineHeight: 13 },
+  textNavRecord: { fontFamily: fontFamilies.textBold, fontSize: 11, lineHeight: 13 },
+  textMicroStrong: { fontFamily: fontFamilies.textBold, fontSize: 11, lineHeight: 14 },
+  textLetter: { fontFamily: fontFamilies.textBold, fontSize: 20, lineHeight: 24 },
+  textDay: { fontFamily: fontFamilies.textSemi, fontSize: 16, lineHeight: 20 },
+  textData: { fontFamily: fontFamilies.textBold, fontSize: 15, lineHeight: 20, fontVariant: ['tabular-nums'] },
 };

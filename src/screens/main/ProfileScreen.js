@@ -1,9 +1,11 @@
 import { useSignedInEA } from '../../context/SignedInEAContext';
 import React, { useCallback, useContext, useState } from 'react';
 import { View, StyleSheet, ScrollView, KeyboardAvoidingView, Platform, Linking, Alert } from 'react-native';
-import { TextInput, Button, Text, Card, Divider, Snackbar, SegmentedButtons } from 'react-native-paper';
+import { TextInput, Button, Text, Card, Divider, SegmentedButtons } from 'react-native-paper';
 import { NavigationContext, useFocusEffect } from '@react-navigation/native';
 import { useAuth } from '../../context/AuthContext';
+import { useToast } from '../../context/ToastContext';
+import { fontFamilies } from '../../constants/typography';
 import { useOffline } from '../../context/OfflineContext';
 import { useTimeTracking } from '../../hooks/useTimeTracking';
 import { useSignOutFlow } from '../../hooks/useSignOutFlow';
@@ -41,6 +43,7 @@ function CaptureModeFocusLoader({ loadCaptureMode }) {
 
 export default function ProfileScreen({ navigation }) {
   const { handle, repositories } = useSignedInEA();
+  const toast = useToast();
 
   const { user, profile, signOut, changePassword } = useAuth();
   const { isSignedIn, handleSignOut } = useTimeTracking();
@@ -65,9 +68,6 @@ export default function ProfileScreen({ navigation }) {
   const [databaseExportLoading, setDatabaseExportLoading] = useState(false);
   const [reportTestLoading, setReportTestLoading] = useState(false);
 
-  // Feedback state
-  const [snackbar, setSnackbar] = useState({ visible: false, message: '', type: 'success' });
-
   const [captureMode, setCaptureMode] = useState(CAPTURE_MODES.SEQUENTIAL);
   const loadCaptureMode = useCallback(() => {
     let active = true;
@@ -81,7 +81,11 @@ export default function ProfileScreen({ navigation }) {
   }, []);
 
   const showMessage = (message, type = 'success') => {
-    setSnackbar({ visible: true, message, type });
+    toast.show({
+      message,
+      tone: type === 'error' ? 'error' : type === 'success' ? 'success' : 'neutral',
+      duration: 4000,
+    });
   };
 
   const handleChangeCaptureMode = async (mode) => {
@@ -482,7 +486,7 @@ export default function ProfileScreen({ navigation }) {
           onPress={signOutFlow.start}
           loading={signOutFlow.busy === 'signing_out'}
           style={styles.signOutButton}
-          textColor={colors.emphasis}
+          textColor={colors.primary}
           icon="logout"
         >
           Sign Out
@@ -490,19 +494,6 @@ export default function ProfileScreen({ navigation }) {
       </ScrollView>
 
       <SignOutSheets {...signOutFlow} isOnline={isOnline} />
-
-      <Snackbar
-        visible={snackbar.visible}
-        onDismiss={() => setSnackbar({ ...snackbar, visible: false })}
-        duration={4000}
-        action={{
-          label: 'Dismiss',
-          onPress: () => setSnackbar({ ...snackbar, visible: false }),
-        }}
-        style={snackbar.type === 'error' ? styles.errorSnackbar : styles.successSnackbar}
-      >
-        {snackbar.message}
-      </Snackbar>
     </KeyboardAvoidingView>
   );
 }
@@ -541,7 +532,7 @@ const styles = StyleSheet.create({
   },
   infoValue: {
     color: colors.text,
-    fontWeight: '500',
+    fontFamily: fontFamilies.textMedium,
   },
   divider: {
     marginVertical: spacing.md,
@@ -573,11 +564,5 @@ const styles = StyleSheet.create({
     color: colors.textSecondary,
     marginBottom: spacing.sm,
     fontStyle: 'italic',
-  },
-  successSnackbar: {
-    backgroundColor: colors.success,  // Brand green
-  },
-  errorSnackbar: {
-    backgroundColor: colors.error,    // Brand red
   },
 });

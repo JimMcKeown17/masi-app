@@ -1,3 +1,4 @@
+jest.mock('@expo/vector-icons', () => ({ Ionicons: 'Ionicons' }), { virtual: true });
 const mockUseClasses = jest.fn();
 
 jest.mock('../src/context/ClassesContext', () => ({
@@ -5,7 +6,7 @@ jest.mock('../src/context/ClassesContext', () => ({
 }));
 
 import React from 'react';
-import { fireEvent, render } from '@testing-library/react-native';
+import { act, fireEvent, render } from '@testing-library/react-native';
 import { PaperProvider } from 'react-native-paper';
 import ClassOnboardingScreen from '../src/screens/onboarding/ClassOnboardingScreen';
 
@@ -49,4 +50,23 @@ describe('ClassOnboardingScreen', () => {
     expect(screen.getByText('Next: add your children.')).toBeTruthy();
     expect(screen.queryByText(/groups/i)).toBeNull();
   });
+});
+
+test.each([
+  ['no_active_programme', 'Check again'],
+  ['unconfirmed_empty', 'Retry backend check'],
+])('%s keeps the retry handler on %s', async (classBootstrapStatus, label) => {
+  const loadClasses = jest.fn().mockResolvedValue(undefined);
+  mockUseClasses.mockReturnValue({ classBootstrapStatus, loadClasses });
+  const screen = renderScreen();
+  await act(async () => fireEvent.press(screen.getByRole('button', { name: label })));
+  expect(loadClasses).toHaveBeenCalledTimes(1);
+});
+
+test('Create my class keeps the confirmed-empty navigation', () => {
+  mockUseClasses.mockReturnValue({ classBootstrapStatus: 'confirmed_empty', loadClasses: jest.fn() });
+  const navigation = { replace: jest.fn(), goBack: jest.fn() };
+  const screen = renderScreen(navigation);
+  fireEvent.press(screen.getByRole('button', { name: 'Create my class' }));
+  expect(navigation.replace).toHaveBeenCalledWith('CreateClass', { onboarding: true, acknowledgedDuplicateRisk: false });
 });

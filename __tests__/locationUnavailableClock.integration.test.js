@@ -15,16 +15,18 @@ jest.mock('../src/context/OfflineContext', () => ({
 }));
 
 import React from 'react';
+import { AllProviders } from '../test-support/renderWithProviders';
+jest.mock('@expo/vector-icons', () => ({ Ionicons: () => null }), { virtual: true });
 import { Alert, Linking } from 'react-native';
 import * as Location from 'expo-location';
-import { act, renderHook, cleanup } from '@testing-library/react-native';
+import { act, renderHook, cleanup, screen, waitFor } from '@testing-library/react-native';
 import { __reset, __setDatabaseFactory } from 'expo-sqlite';
 import { TimeTrackingProvider, useTimeTracking } from '../src/context/TimeTrackingContext';
 import { closeDefaultTestHandle, initializeTestDatabase } from '../test-support/testDatabase';
 import { createBetterSqliteTestDatabase } from '../test-support/betterSqliteAdapter';
 import { timeEntriesRepository } from '../src/db/repositories/timeEntriesRepository';
 
-const wrapper = ({ children }) => <TimeTrackingProvider>{children}</TimeTrackingProvider>;
+const wrapper = ({ children }) => <AllProviders><TimeTrackingProvider>{children}</TimeTrackingProvider></AllProviders>;
 const POSITION = { coords: { latitude: -33.9, longitude: 25.6, accuracy: 50 }, timestamp: 1000 };
 let db;
 const flush = async () => { for (let i = 0; i < 80; i += 1) await Promise.resolve(); };
@@ -82,7 +84,7 @@ test('unavailable location closes a synced shift and enqueues one update with th
   expect(JSON.parse(queued[0].payload)).toMatchObject({
     id: entry.id, sign_out_lat: null, sign_out_lon: null, sign_out_location_status: 'unavailable',
   });
-  expect(result.current.snackbarMessage).toBe('Clocked out without location. 1.00 hours worked.');
+  await waitFor(() => expect(screen.getByText('Clocked out without location. 1.00 hours worked.')).toBeTruthy());
 });
 
 test('airplane-mode clock-in finishes at the deadline and queues one null-pair timeout insert', async () => {
@@ -104,7 +106,7 @@ test('airplane-mode clock-in finishes at the deadline and queues one null-pair t
   expect(queued).toHaveLength(1);
   expect(queued[0].operation).toBe('insert');
   expect(JSON.parse(queued[0].payload)).toMatchObject(expected);
-  expect(result.current.snackbarMessage).toBe('Clocked in without location (GPS timed out).');
+  await waitFor(() => expect(screen.getByText('Clocked in without location (GPS timed out).')).toBeTruthy());
 });
 
 test.each(['In', 'Out'])('double tap Clock %s starts only one capture and queues one write', async action => {
@@ -138,7 +140,7 @@ test.each([
   const [entry] = await timeEntriesRepository.getTimeEntries({ userId: 'user-1' });
   expect(entry).toMatchObject({ sign_in_lat: null, sign_in_lon: null, sign_in_location_status: status });
   expect(result.current.isSignedIn).toBe(true);
-  expect(result.current.snackbarMessage).toBe(`Clocked in without location (${reason}).`);
+  await waitFor(() => expect(screen.getByText(`Clocked in without location (${reason}).`)).toBeTruthy());
   expect(await outbox()).toHaveLength(1);
 });
 
@@ -158,7 +160,7 @@ test.each(['In', 'Out'])('Settings handoff from Clock %s writes nothing; a fresh
   expect(await timeEntriesRepository.getTimeEntries({ userId: 'user-1' })).toEqual(before);
   expect(await outbox()).toEqual([]);
   expect(result.current.loadingLocation).toBe(false);
-  expect(result.current.snackbarMessage).toBe(`Return from Settings and tap Clock ${action} again, or continue without location.`);
+  await waitFor(() => expect(screen.getByText(`Return from Settings and tap Clock ${action} again, or continue without location.`)).toBeTruthy());
   expect(Linking.openSettings).toHaveBeenCalledTimes(1);
   expect(Location.getCurrentPositionAsync).not.toHaveBeenCalled();
   expect(mockTriggerBackgroundSync).not.toHaveBeenCalled();

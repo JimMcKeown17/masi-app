@@ -1,7 +1,7 @@
+import BrandButton from '../../components/common/BrandButton';
 import React, { useReducer, useEffect, useCallback, useRef } from 'react';
 import { View, StyleSheet } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Button } from 'react-native-paper';
 import { CAPTURE_MODES } from '../../constants/egraConstants';
 import EgraLetterGrid from '../../components/assessment/EgraLetterGrid';
 import AssessmentInstructions from '../../components/assessment/AssessmentInstructions';
@@ -95,7 +95,7 @@ export default function SequentialAssessmentScreen({ navigation, route }) {
 
   const finished = phase === 'finished';
   return (
-    <View style={[captureStyles.container, { paddingTop: insets.top }]}> 
+    <View style={[captureStyles.container, { paddingTop: insets.top }]}>
       <CaptureHeader
         getElapsedMs={getElapsedMs}
         pageLabel="Grid"
@@ -111,10 +111,10 @@ export default function SequentialAssessmentScreen({ navigation, route }) {
       </View>
       <View style={[styles.controls, { paddingBottom: Math.max(insets.bottom, spacing.md) }]}>
         <View style={styles.decisionRow}>
-          <Button mode="contained" buttonColor={colors.success} onPress={() => decide(true)} disabled={finished} style={styles.decisionButton} contentStyle={styles.decisionButtonContent} icon="check">Correct</Button>
-          <Button mode="contained" buttonColor={colors.error} onPress={() => decide(false)} disabled={finished} style={styles.decisionButton} contentStyle={styles.decisionButtonContent} icon="close">Incorrect</Button>
+          <BrandButton variant="success" size="lg" onPress={() => decide(true)} disabled={finished} style={styles.decisionButton} icon="checkmark" label="Correct" />
+          <BrandButton variant="destructive" size="lg" onPress={() => decide(false)} disabled={finished} style={styles.decisionButton} icon="close" label="Incorrect" />
         </View>
-        <Button mode="outlined" onPress={goBack} disabled={finished || state.cursor === 0} textColor={colors.text} contentStyle={styles.backButtonContent} icon="arrow-left">Back</Button>
+        <BrandButton variant="secondary" onPress={goBack} disabled={finished || state.cursor === 0} icon="arrow-back" label="Back" />
         {phase === 'active' && <EndAssessmentButton onEnd={handleEndAssessment} />}
       </View>
     </View>
@@ -125,6 +125,4 @@ const styles = StyleSheet.create({
   controls: { padding: spacing.md, backgroundColor: colors.surface, borderTopWidth: 1, borderTopColor: colors.border, gap: spacing.sm },
   decisionRow: { flexDirection: 'row', gap: spacing.md },
   decisionButton: { flex: 1 },
-  decisionButtonContent: { paddingVertical: spacing.md },
-  backButtonContent: { paddingVertical: spacing.sm },
 });
