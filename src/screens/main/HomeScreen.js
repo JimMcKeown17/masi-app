@@ -11,7 +11,7 @@ import { useOffline } from '../../context/OfflineContext';
 import { useTimeTracking } from '../../hooks/useTimeTracking';
 import SyncIndicator from '../../components/common/SyncIndicator';
 import HomeClockRow from '../../components/home/HomeClockRow';
-import SegmentedSessionGauge from '../../components/home/SegmentedSessionGauge';
+import SegmentedSessionGauge from '../../components/sessions/SegmentedSessionGauge';
 import WeekStrip from '../../components/home/WeekStrip';
 import AttentionArea from '../../components/home/AttentionArea';
 import FocusAwareStatusBar from '../../components/common/FocusAwareStatusBar';
