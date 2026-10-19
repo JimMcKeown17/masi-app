@@ -21,7 +21,7 @@ export default function SelectField({ label, value, placeholder, icon, error, on
       </View>
       <Ionicons name="chevron-down" size={20} color={disabled ? colors.disabled : colors.textSecondary} />
     </Pressable>
-    {error ? <View style={styles.note}><InlineNote>{error}</InlineNote></View> : null}
+    {typeof error === 'string' && error ? <View style={styles.note}><InlineNote>{error}</InlineNote></View> : null}
   </View>;
 }
 const styles = StyleSheet.create({

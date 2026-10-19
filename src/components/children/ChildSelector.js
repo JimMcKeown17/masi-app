@@ -73,6 +73,7 @@ function ChildSelector({
   listRef,
   childrenStepRef,
   onScroll,
+  automaticallyAdjustKeyboardInsets = false,
   onMetrics,
 }) {
   const { children, groups, getChildrenInGroup } = useChildren();
@@ -228,6 +229,7 @@ function ChildSelector({
     <FlatList
       ref={listRef}
       onScroll={onScroll}
+      automaticallyAdjustKeyboardInsets={automaticallyAdjustKeyboardInsets}
       scrollEventThrottle={16}
       style={style}
       contentContainerStyle={contentContainerStyle}

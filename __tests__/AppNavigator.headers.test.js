@@ -96,6 +96,12 @@ test('the title table covers every visible stack header', () => {
   ].sort());
 });
 
+test('SessionForm configures only the New session title and Close action', () => {
+  expect(mockScreens.find(({ name }) => name === 'SessionForm').options).toEqual({
+    title: 'New session', headerLeftIcon: 'close',
+  });
+});
+
 test.each(['ChildrenList', 'Insights', 'Assessments'])('%s tab root shows the sync pill, which opens SyncStatus', (name) => {
   const options = optionsFor(name);
   const screen = renderChrome(name, null);

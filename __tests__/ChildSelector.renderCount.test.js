@@ -123,21 +123,21 @@ describe('LiteracySessionForm roster render isolation', () => {
     const screen = renderForm();
     selectableRowRenderSpy.mockClear();
 
-    fireEvent.changeText(screen.getByPlaceholderText('Add session notes...'), 'a');
+    fireEvent.changeText(screen.getByPlaceholderText('Add session notes…'), 'a');
 
     expect(selectableRowRenderSpy).not.toHaveBeenCalled();
   });
 
   test('typing several comment characters keeps the focused input mounted with its text', () => {
     const screen = renderForm();
-    const focusedInput = screen.getByPlaceholderText('Add session notes...');
+    const focusedInput = screen.getByPlaceholderText('Add session notes…');
     fireEvent(focusedInput, 'focus');
 
     let value = '';
     for (const character of 'focus') {
       value += character;
-      fireEvent.changeText(screen.getByPlaceholderText('Add session notes...'), value);
-      expect(screen.getByPlaceholderText('Add session notes...')).toBe(focusedInput);
+      fireEvent.changeText(screen.getByPlaceholderText('Add session notes…'), value);
+      expect(screen.getByPlaceholderText('Add session notes…')).toBe(focusedInput);
     }
 
     expect(focusedInput.props.value).toBe('focus');

@@ -10,7 +10,7 @@ describe('domain text input audit', () => {
   test('literacy session comments disable keyboard suggestions', () => {
     const source = readSource('src/screens/sessions/LiteracySessionForm.js');
 
-    expect(source).toMatch(/placeholder="Add session notes\.\.\."[\s\S]*\{\.\.\.NO_TEXT_SUGGESTIONS\}/);
+    expect(source).toMatch(/placeholder="Add session notes…"[\s\S]*\{\.\.\.NO_TEXT_SUGGESTIONS\}/);
   });
 
   test('search fields for child and class names disable keyboard suggestions', () => {

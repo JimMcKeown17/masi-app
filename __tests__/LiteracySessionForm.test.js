@@ -50,7 +50,7 @@ import React from 'react';
 import { AllProviders } from '../test-support/renderWithProviders';
 import { renderInTestStack } from '../test-support/renderInTestStack';
 import { act, fireEvent, waitFor, within } from '@testing-library/react-native';
-import { BackHandler, FlatList, StyleSheet } from 'react-native';
+import { BackHandler, FlatList, Platform, StyleSheet } from 'react-native';
 import SegmentedControl from '../src/components/common/SegmentedControl';
 import InlineNote from '../src/components/common/InlineNote';
 import { colors } from '../src/constants/colors';
@@ -64,7 +64,7 @@ jest.mock('react-native/Libraries/Utilities/useWindowDimensions', () => ({
 import LiteracySessionForm from '../src/screens/sessions/LiteracySessionForm';
 import { READING_LEVELS } from '../src/constants/literacyConstants';
 
-const COMMENTS_PLACEHOLDER = 'Add session notes...';
+const COMMENTS_PLACEHOLDER = 'Add session notes…';
 const mockCompleteMounted = jest.fn();
 function HomeStub() { return null; }
 function SessionCompleteStub({ route }) {
@@ -124,13 +124,80 @@ describe('LiteracySessionForm', () => {
   test('renders the session-capture form scaffold', () => {
     const screen = renderForm();
 
-    expect(screen.getByText('Session Date')).toBeTruthy();
+    expect(screen.getByRole('header', { name: 'Step 1: Session date, complete' })).toBeTruthy();
     expect(screen.getByRole('header', { name: 'Step 2: Select children' })).toBeTruthy();
     expect(screen.getByRole('tab', { name: 'Children' }).props.accessibilityState).toEqual({ selected: true });
     expect(screen.getByRole('tab', { name: 'Groups' }).props.accessibilityState).toEqual({ selected: false });
     expect(screen.queryByText('Select by Group')).toBeNull();
     expect(screen.getByRole('header', { name: 'Step 3: Letters focused on' })).toBeTruthy();
     expect(screen.getByText('Submit Session')).toBeTruthy();
+  });
+
+  test('selects a calendar key, cancels without changing it, and guards a changed date', () => {
+    jest.useFakeTimers();
+    jest.setSystemTime(new Date('2026-10-15T08:00:00Z'));
+    const screen = renderForm();
+    fireEvent.press(screen.getByRole('button', { name: 'Session date, Today · Thu 15 Oct. Change date' }));
+    expect(within(screen.getByTestId('bottom-sheet-panel')).getByRole('header', { name: 'Session date' })).toBeTruthy();
+    fireEvent.press(screen.getByRole('button', { name: 'Mon 12 October 2026' }));
+    expect(screen.queryByLabelText('Dismiss session date picker')).toBeNull();
+    const dateField = () => screen.getByRole('button', { name: 'Session date, Mon 12 Oct 2026. Change date' });
+    fireEvent.press(dateField());
+    fireEvent.press(screen.getByRole('button', { name: 'Previous month' }));
+    fireEvent.press(screen.getByRole('button', { name: 'Cancel' }));
+    expect(dateField()).toBeTruthy();
+    fireEvent.press(dateField());
+    expect(screen.getByRole('header', { name: 'October 2026' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Mon 12 October 2026' }).props.accessibilityState.selected).toBe(true);
+    fireEvent.press(screen.getByRole('button', { name: 'Cancel' }));
+    act(() => { screen.navigationRef.goBack(); });
+    expect(screen.getByText('Discard this session?')).toBeTruthy();
+  });
+
+  test('Auckland field, calendar and saved session all keep the selected programme day', async () => {
+    process.env.TZ = 'Pacific/Auckland';
+    jest.useFakeTimers();
+    jest.setSystemTime(new Date('2026-10-18T10:00:00Z'));
+    const screen = renderForm();
+    fireEvent.press(screen.getByRole('button', { name: 'Session date, Today · Sun 18 Oct. Change date' }));
+    expect(screen.getByRole('button', { name: 'Sun 18 October 2026' }).props.accessibilityState.selected).toBe(true);
+    fireEvent.press(screen.getByRole('button', { name: 'Fri 16 October 2026' }));
+    fireEvent.press(screen.getByRole('button', { name: 'Session date, Fri 16 Oct 2026. Change date' }));
+    expect(screen.getByRole('button', { name: 'Fri 16 October 2026' }).props.accessibilityState.selected).toBe(true);
+    fireEvent.press(screen.getByRole('button', { name: 'Cancel' }));
+    submitValidForm(screen);
+    await waitFor(() => expect(mockPersistLiteracySession).toHaveBeenCalledWith(expect.objectContaining({
+      session: expect.objectContaining({ session_date: '2026-10-16' }),
+    })));
+    await act(async () => { jest.runOnlyPendingTimers(); });
+  });
+
+  test('scrolling updates the navigator hairline at the top boundary', () => {
+    const screen = renderForm();
+    const list = screen.UNSAFE_getByType(FlatList);
+    const scrollTo = y => fireEvent.scroll(list, { nativeEvent: {
+      contentOffset: { y, x: 0 }, contentSize: { width: 390, height: 1800 },
+      layoutMeasurement: { width: 390, height: 700 },
+    } });
+    scrollTo(1);
+    expect(screen.navigationRef.getCurrentOptions().headerScrolled).toBe(true);
+    scrollTo(20);
+    expect(screen.navigationRef.getCurrentOptions().headerScrolled).toBe(true);
+    scrollTo(0);
+    expect(screen.navigationRef.getCurrentOptions().headerScrolled).toBe(false);
+  });
+
+  test.each(['ios', 'android'])('the canvas column and %s keyboard inset policy reach the list', platform => {
+    const replacement = jest.replaceProperty(Platform, 'OS', platform);
+    try {
+      const screen = renderForm();
+      const list = screen.UNSAFE_getByType(FlatList);
+      expect(StyleSheet.flatten(list.props.contentContainerStyle)).toMatchObject({ paddingHorizontal: 24, paddingTop: 28, paddingBottom: 34 });
+      expect(StyleSheet.flatten(screen.getByTestId('literacy-session-form').props.style)).toMatchObject({ flex: 1, backgroundColor: colors.background });
+      expect(list.props.automaticallyAdjustKeyboardInsets).toBe(platform === 'ios');
+    } finally {
+      replacement.restore();
+    }
   });
 
   test('switches the compact picker from child rows to group rows', () => {
@@ -307,6 +374,64 @@ describe('LiteracySessionForm', () => {
     expect(screen.getByRole('header', { name: 'Step 3: Letters focused on, complete' })).toBeTruthy();
   });
 
+  test('session level Cancel only dismisses, and choosing a level clears its inline error', () => {
+    const screen = renderForm();
+    const header = (name) => screen.getByRole('header', { name });
+    expect(header('Step 4: Session reading level')).toBeTruthy();
+    fireEvent.press(screen.getByRole('button', { name: 'Focused on today, Select a level' }));
+    const sheet = within(screen.getByTestId('bottom-sheet-panel'));
+    expect(sheet.getByRole('header', { name: 'Session reading level' })).toBeTruthy();
+    expect(sheet.getByText('What level did you focus on today?')).toBeTruthy();
+    fireEvent.press(sheet.getByRole('button', { name: 'Cancel' }));
+    expect(screen.getByText('Select a level')).toBeTruthy();
+    expect(header('Step 4: Session reading level')).toBeTruthy();
+    fireEvent.press(screen.getByText('Submit Session'));
+    expect(header('Step 4: Session reading level, needs attention')).toBeTruthy();
+    const section = screen.getByTestId('reading-level-section');
+    expect(within(section).getAllByRole('alert')).toHaveLength(1);
+    expect(within(section).getByRole('alert')).toHaveTextContent('Select a reading level');
+    expect(within(section.children[0]).getByRole('header')).toBeTruthy();
+    expect(within(section.children[1]).getByRole('alert')).toHaveTextContent('Select a reading level');
+    expect(within(section.children[2]).getByRole('button', { name: 'Focused on today, Select a level' })).toBeTruthy();
+    expect(StyleSheet.flatten(within(section).getByRole('button').props.style)).toMatchObject({ borderWidth: 2, borderColor: colors.error });
+    fireEvent.press(screen.getByText('Select a level'));
+    fireEvent.press(screen.getByText(READING_LEVELS[2]));
+    expect(screen.queryByLabelText('Dismiss session reading level picker')).toBeNull();
+    expect(screen.queryByText('Select a reading level')).toBeNull();
+    expect(header('Step 4: Session reading level, complete')).toBeTruthy();
+    expect(screen.getByRole('button', { name: `Focused on today, ${READING_LEVELS[2]}` })).toBeTruthy();
+  });
+
+  test('optional comments and child progress stay to-do and blocks follow selection order', () => {
+    const children = [
+      { id: 'child-1', first_name: 'Amahle', last_name: 'Dlamini', class_id: 'class-1' },
+      { id: 'child-2', first_name: 'Buhle', last_name: 'Moyo', class_id: 'class-1' },
+    ];
+    mockUseChildren.mockReturnValue({ children, groups: [], getChildrenInGroup: () => [] });
+    const screen = renderForm();
+    expect(screen.getByRole('header', { name: 'Step 5: Comments' })).toBeTruthy();
+    expect(screen.getByText('Optional')).toBeTruthy();
+    expect(screen.getByPlaceholderText(COMMENTS_PLACEHOLDER).props.accessibilityLabel).toBe('Comments, optional');
+    expect(screen.queryByRole('header', { name: 'Step 6: Update child progress' })).toBeNull();
+    fireEvent.changeText(screen.getByPlaceholderText(COMMENTS_PLACEHOLDER), 'Worked on blending');
+    fireEvent.press(screen.getByRole('checkbox', { name: 'Buhle Moyo, Grade 1A' }));
+    fireEvent.press(screen.getByRole('checkbox', { name: 'Amahle Dlamini, Grade 1A' }));
+    expect(screen.getByRole('header', { name: 'Step 6: Update child progress' })).toBeTruthy();
+    expect(screen.getAllByText('Optional')).toHaveLength(2);
+    expect(screen.getByText('Record each child’s current level and update the letters they have mastered.')).toBeTruthy();
+    const progress = within(screen.getByTestId('child-progress-section'));
+    expect(progress.getAllByRole('button').map(row => row.props.accessibilityLabel)).toEqual([
+      'Buhle Moyo, reading level, Not set', 'Buhle Moyo, letter tracker, Update',
+      'Amahle Dlamini, reading level, Not set', 'Amahle Dlamini, letter tracker, Update',
+    ]);
+    expect(progress.getAllByText('Grade 1A')).toHaveLength(2);
+    fireEvent.press(screen.getByLabelText('Buhle Moyo, reading level, Not set'));
+    fireEvent.press(screen.getByText(READING_LEVELS[1]));
+    expect(screen.queryByRole('header', { name: 'Step 5: Comments, complete' })).toBeNull();
+    expect(screen.queryByRole('header', { name: 'Step 6: Update child progress, complete' })).toBeNull();
+    ['Reading Levels', 'Letter Tracker', 'Update Child Progress (Optional)'].forEach(copy => expect(screen.queryByText(copy)).toBeNull());
+  });
+
   describe('unsaved-changes leave guard', () => {
     const goBack = (screen) => act(() => { screen.navigationRef.goBack(); });
     const dirty = (screen) => fireEvent.changeText(screen.getByPlaceholderText(COMMENTS_PLACEHOLDER), 'worked on m sounds');
@@ -467,9 +592,12 @@ describe('LiteracySessionForm', () => {
 
     fireEvent.press(screen.getByText('Amahle Dlamini'));
     fireEvent.press(screen.getByText('Buhle Moyo'));
-    fireEvent.press(screen.getAllByText('Not set')[1]);
+    fireEvent.press(screen.getByLabelText('Buhle Moyo, reading level, Not set'));
 
     expect(screen.getByLabelText('Dismiss child reading level picker')).toBeTruthy();
+    const childSheet = within(screen.getByTestId('bottom-sheet-panel'));
+    expect(childSheet.getByRole('header', { name: 'Reading level' })).toBeTruthy();
+    expect(childSheet.getByText('Buhle Moyo')).toBeTruthy();
     expect(screen.getByText('Cancel')).toBeTruthy();
     fireEvent.press(screen.getByText(READING_LEVELS[1]));
 

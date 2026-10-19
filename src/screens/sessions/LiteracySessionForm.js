@@ -1,20 +1,13 @@
 import { useSignedInEA } from '../../context/SignedInEAContext';
 import React, { useCallback, useState, useMemo, useRef, useEffect } from 'react';
-import { View, StyleSheet, Pressable } from 'react-native';
+import { View, StyleSheet, Text, Platform } from 'react-native';
 import { usePreventRemove } from '@react-navigation/native';
-import {
-  Text,
-  TextInput,
-  Button,
-  Card,
-  Menu,
-  IconButton,
-} from 'react-native-paper';
+import { Button } from 'react-native-paper';
 import { useAuth } from '../../context/AuthContext';
 import { useToast } from '../../context/ToastContext';
-import { fontFamilies } from '../../constants/typography';
+import { typeRoles } from '../../constants/typography';
 import { useOffline } from '../../context/OfflineContext';
-import { colors, spacing, borderRadius, shadows } from '../../constants/colors';
+import { colors, spacing } from '../../constants/colors';
 import { LETTER_ORDER, READING_LEVELS } from '../../constants/literacyConstants';
 import LetterToggleGrid from '../../components/sessions/LetterToggleGrid';
 import StepHeader from '../../components/forms/StepHeader';
@@ -30,202 +23,31 @@ import { NO_TEXT_SUGGESTIONS } from '../../constants/textInputProps';
 import { toLocalDateString } from '../../utils/localDate';
 import { validateLiteracySession } from '../../utils/literacySessionValidation';
 import { v4 as uuidv4 } from 'uuid';
+import { formatSessionDate } from '../../utils/sessionDateFormat';
+import MonthCalendar from '../../components/common/MonthCalendar';
+import ChildProgressBlock from '../../components/sessions/ChildProgressBlock';
+import TextField from '../../components/common/TextField';
+import SelectField from '../../components/common/SelectField';
+import BottomSheet from '../../components/common/BottomSheet';
+import BrandButton from '../../components/common/BrandButton';
 import SelectSheet from '../../components/common/SelectSheet';
 import ConfirmSheet from '../../components/common/ConfirmSheet';
+import { useHeaderHairline } from '../../components/common/ScreenHeader';
 
 const READING_LEVEL_OPTIONS = READING_LEVELS.map(level => ({ key: level, label: level }));
 
-// ---------------------------------------------------------------------------
-// Calendar helpers
-// ---------------------------------------------------------------------------
-const MONTH_NAMES = [
-  'January', 'February', 'March', 'April', 'May', 'June',
-  'July', 'August', 'September', 'October', 'November', 'December',
-];
-
-const DAY_HEADERS = ['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa'];
-
-function getDaysInMonth(year, month) {
-  return new Date(year, month + 1, 0).getDate();
-}
-
-function getFirstDayOfMonth(year, month) {
-  return new Date(year, month, 1).getDay();
-}
-
-function formatDateForDisplay(date) {
-  const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
-  const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-  return `${days[date.getDay()]}, ${months[date.getMonth()]} ${date.getDate()}, ${date.getFullYear()}`;
-}
-
-function formatDateForStorage(date) {
-  const y = date.getFullYear();
-  const m = String(date.getMonth() + 1).padStart(2, '0');
-  const d = String(date.getDate()).padStart(2, '0');
-  return `${y}-${m}-${d}`;
-}
-
-function getProgrammeCalendarDate(value = new Date()) {
-  const [year, month, day] = toLocalDateString(value).split('-').map(Number);
-  return new Date(year, month - 1, day);
-}
-
-// ---------------------------------------------------------------------------
-// InlineCalendar — renders month grid, disables future dates
-// ---------------------------------------------------------------------------
-function InlineCalendar({ selectedDate, onSelectDate }) {
-  const today = getProgrammeCalendarDate();
-  const [viewYear, setViewYear] = useState(selectedDate.getFullYear());
-  const [viewMonth, setViewMonth] = useState(selectedDate.getMonth());
-
-  const daysInMonth = getDaysInMonth(viewYear, viewMonth);
-  const firstDay = getFirstDayOfMonth(viewYear, viewMonth);
-
-  const goToPrevMonth = () => {
-    if (viewMonth === 0) {
-      setViewMonth(11);
-      setViewYear(viewYear - 1);
-    } else {
-      setViewMonth(viewMonth - 1);
-    }
-  };
-
-  const goToNextMonth = () => {
-    // Don't allow navigating past current month
-    const nextMonth = viewMonth === 11 ? 0 : viewMonth + 1;
-    const nextYear = viewMonth === 11 ? viewYear + 1 : viewYear;
-    if (nextYear > today.getFullYear() || (nextYear === today.getFullYear() && nextMonth > today.getMonth())) {
-      return;
-    }
-    setViewMonth(nextMonth);
-    setViewYear(nextYear);
-  };
-
-  const canGoNext =
-    viewYear < today.getFullYear() ||
-    (viewYear === today.getFullYear() && viewMonth < today.getMonth());
-
-  const isSelectedDay = (day) =>
-    day === selectedDate.getDate() &&
-    viewMonth === selectedDate.getMonth() &&
-    viewYear === selectedDate.getFullYear();
-
-  const isFutureDay = (day) => {
-    const candidate = new Date(viewYear, viewMonth, day);
-    const todayMidnight = new Date(today.getFullYear(), today.getMonth(), today.getDate());
-    return candidate > todayMidnight;
-  };
-
-  const handleDayPress = (day) => {
-    if (isFutureDay(day)) return;
-    onSelectDate(new Date(viewYear, viewMonth, day));
-  };
-
-  // Build grid rows
-  const cells = [];
-  for (let i = 0; i < firstDay; i++) {
-    cells.push(null); // empty leading cells
-  }
-  for (let d = 1; d <= daysInMonth; d++) {
-    cells.push(d);
-  }
-
-  const rows = [];
-  for (let i = 0; i < cells.length; i += 7) {
-    rows.push(cells.slice(i, i + 7));
-  }
-
-  return (
-    <View style={calStyles.calendar}>
-      {/* Month / Year header with arrows */}
-      <View style={calStyles.monthHeader}>
-        <IconButton icon="chevron-left" onPress={goToPrevMonth} size={20} />
-        <Text variant="titleSmall" style={calStyles.monthTitle}>
-          {MONTH_NAMES[viewMonth]} {viewYear}
-        </Text>
-        <IconButton icon="chevron-right" onPress={goToNextMonth} size={20} disabled={!canGoNext} />
-      </View>
-
-      {/* Day-of-week headers */}
-      <View style={calStyles.dayHeaderRow}>
-        {DAY_HEADERS.map((h) => (
-          <Text key={h} variant="bodySmall" style={calStyles.dayHeader}>{h}</Text>
-        ))}
-      </View>
-
-      {/* Day grid */}
-      {rows.map((row, rowIndex) => (
-        <View key={rowIndex} style={calStyles.dayRow}>
-          {row.map((day, colIndex) => {
-            if (day === null) {
-              return <View key={`empty-${colIndex}`} style={calStyles.dayCell} />;
-            }
-            const future = isFutureDay(day);
-            const selected = isSelectedDay(day);
-            return (
-              <Pressable
-                key={day}
-                onPress={() => handleDayPress(day)}
-                disabled={future}
-                accessibilityRole="button"
-                accessibilityLabel={`Select ${formatDateForDisplay(new Date(viewYear, viewMonth, day))}`}
-                accessibilityState={{ disabled: future, selected }}
-                style={[
-                  calStyles.dayCell,
-                  selected && calStyles.dayCellSelected,
-                  future && calStyles.dayCellFuture,
-                ]}
-              >
-                <Text
-                  variant="bodySmall"
-                  style={[
-                    calStyles.dayText,
-                    selected && calStyles.dayTextSelected,
-                    future && calStyles.dayTextFuture,
-                  ]}
-                >
-                  {day}
-                </Text>
-              </Pressable>
-            );
-          })}
-        </View>
-      ))}
-    </View>
-  );
-}
-
-function FormHeader({
-  sessionDate,
-  dateMenuVisible,
-  onDismissDateMenu,
-  onOpenDateMenu,
-  onSelectDate,
-}) {
-  return (
-    <Card style={styles.card}>
-      <Card.Content>
-        <Text variant="titleSmall" style={styles.sectionLabel}>Session Date</Text>
-        <Menu
-          visible={dateMenuVisible}
-          onDismiss={onDismissDateMenu}
-          anchor={
-            <Button
-              mode="outlined"
-              onPress={onOpenDateMenu}
-              icon="calendar"
-              style={styles.dateButton}
-            >
-              {formatDateForDisplay(sessionDate)}
-            </Button>
-          }
-        >
-          <InlineCalendar selectedDate={sessionDate} onSelectDate={onSelectDate} />
-        </Menu>
-      </Card.Content>
-    </Card>
-  );
+function FormHeader({ sessionDateKey, todayKey, dateMenuVisible, onDismissDateMenu, onOpenDateMenu, onSelectDate }) {
+  const label = formatSessionDate(sessionDateKey, sessionDateKey === todayKey ? 'fieldToday' : 'field');
+  return <View style={styles.dateSection}>
+    <View style={styles.stepHeading}><StepHeader step={1} label="Session date" status="done" /></View>
+    <SelectField label="Day" icon="calendar-outline" value={label}
+      accessibilityLabel={`Session date, ${label}. Change date`} onPress={onOpenDateMenu} />
+    <BottomSheet visible={dateMenuVisible} onDismiss={onDismissDateMenu} title="Session date"
+      dismissLabel="Dismiss session date picker" keyboardAvoiding={false}
+      footer={<BrandButton variant="tertiary" tone="ink" label="Cancel" onPress={onDismissDateMenu} />}>
+      {dateMenuVisible ? <MonthCalendar selectedKey={sessionDateKey} todayKey={todayKey} onSelect={onSelectDate} /> : null}
+    </BottomSheet>
+  </View>;
 }
 
 function FormFooter({
@@ -238,6 +60,7 @@ function FormFooter({
   onCommentsChange,
   selectedChildren,
   childReadingLevels,
+  classes,
   onOpenChildLevelMenu,
   getTrackerChangeCount,
   onOpenLetterTracker,
@@ -260,102 +83,35 @@ function FormFooter({
         }} />
       </View>
 
-      <Card style={styles.card}>
-        <Card.Content>
-          <Text variant="titleSmall" style={styles.sectionLabel}>Session Reading Level</Text>
-          <Text variant="bodySmall" style={styles.helperText}>
-            What level did you focus on today?
-          </Text>
-          <Button
-            mode="outlined"
-            onPress={onOpenReadingLevelMenu}
-            style={styles.dropdownButton}
-          >
-            {sessionReadingLevel || 'Select a level'}
-          </Button>
-          {validationErrors.readingLevel && (
-            <Text variant="bodySmall" style={styles.errorText}>{validationErrors.readingLevel}</Text>
-          )}
-        </Card.Content>
-      </Card>
+      <View testID="reading-level-section" style={styles.section}>
+        <View style={styles.stepHeading}>
+          <StepHeader step={4} label="Session reading level"
+            status={validationErrors.readingLevel ? 'error' : sessionReadingLevel ? 'done' : 'todo'} />
+        </View>
+        {validationErrors.readingLevel ? <View style={styles.stepError}>
+          <InlineNote tone="error">{validationErrors.readingLevel}</InlineNote>
+        </View> : null}
+        <SelectField label="Focused on today" value={sessionReadingLevel} placeholder="Select a level"
+          error={Boolean(validationErrors.readingLevel)} onPress={onOpenReadingLevelMenu} />
+      </View>
 
-      <Card style={styles.card}>
-        <Card.Content>
-          <Text variant="titleSmall" style={styles.sectionLabel}>Comments (Optional)</Text>
-          <TextInput
-            multiline
-            numberOfLines={4}
-            placeholder="Add session notes..."
-            value={comments}
-            onChangeText={onCommentsChange}
-            {...NO_TEXT_SUGGESTIONS}
-            mode="outlined"
-            style={styles.commentsInput}
-          />
-        </Card.Content>
-      </Card>
+      <View style={styles.section}>
+        <View style={styles.stepHeading}><StepHeader step={5} label="Comments" right="Optional" /></View>
+        <TextField multiline label="Session notes" placeholder="Add session notes…"
+          accessibilityLabel="Comments, optional" value={comments} onChangeText={onCommentsChange}
+          {...NO_TEXT_SUGGESTIONS} />
+      </View>
 
-      {selectedChildren.length > 0 && (
-        <>
-          <View style={styles.sectionDivider}>
-            <View style={styles.dividerLine} />
-            <Text variant="labelMedium" style={styles.dividerLabel}>
-              Update Child Progress (Optional)
-            </Text>
-            <View style={styles.dividerLine} />
-          </View>
-
-          <Card style={styles.card}>
-            <Card.Content>
-              <Text variant="titleSmall" style={styles.sectionLabel}>Reading Levels</Text>
-              <Text variant="bodySmall" style={styles.helperText}>
-                Record each child's current level
-              </Text>
-              {selectedChildren.map((child) => (
-                <View key={child.id} style={styles.childLevelRow}>
-                  <Text variant="bodyMedium" style={styles.childLevelName}>
-                    {child.first_name} {child.last_name}
-                  </Text>
-                  <Button
-                    mode="outlined"
-                    onPress={() => onOpenChildLevelMenu(child.id)}
-                    style={styles.childLevelButton}
-                  >
-                    {childReadingLevels[child.id] || 'Not set'}
-                  </Button>
-                </View>
-              ))}
-            </Card.Content>
-          </Card>
-
-          <Card style={styles.card}>
-            <Card.Content>
-              <Text variant="titleSmall" style={styles.sectionLabel}>Letter Tracker</Text>
-              <Text variant="bodySmall" style={styles.helperText}>
-                Update letters each child has mastered
-              </Text>
-              {selectedChildren.map((child) => {
-                const changeCount = getTrackerChangeCount(child.id);
-                return (
-                  <View key={child.id} style={styles.childLevelRow}>
-                    <Text variant="bodyMedium" style={styles.childLevelName}>
-                      {child.first_name} {child.last_name}
-                    </Text>
-                    <Button
-                      mode="outlined"
-                      onPress={() => onOpenLetterTracker(child)}
-                      style={styles.childLevelButton}
-                      icon="alpha-a-box-outline"
-                    >
-                      {changeCount > 0 ? `+${changeCount} new` : 'Update'}
-                    </Button>
-                  </View>
-                );
-              })}
-            </Card.Content>
-          </Card>
-        </>
-      )}
+      {selectedChildren.length > 0 ? <View testID="child-progress-section" style={styles.section}>
+        <StepHeader step={6} label="Update child progress" right="Optional" />
+        <Text style={styles.progressDescription}>Record each child’s current level and update the letters they have mastered.</Text>
+        <View style={styles.progressBlocks}>
+          {selectedChildren.map(child => <ChildProgressBlock key={child.id} child={child}
+            className={classes.find(item => item.id === child.class_id)?.name}
+            readingLevel={childReadingLevels[child.id]} trackerChangeCount={getTrackerChangeCount(child.id)}
+            onOpenLevel={onOpenChildLevelMenu} onOpenTracker={onOpenLetterTracker} />)}
+        </View>
+      </View> : null}
 
       <Button
         mode="contained"
@@ -377,6 +133,7 @@ function FormFooter({
 export default function LiteracySessionForm({ navigation }) {
   const { handle } = useSignedInEA();
   const toast = useToast();
+  const onScroll = useHeaderHairline();
 
   const { user, profile } = useAuth();
   const { refreshSyncStatus, triggerBackgroundSync } = useOffline();
@@ -384,7 +141,8 @@ export default function LiteracySessionForm({ navigation }) {
   const { jobTitles } = useLookupsContext();
 
   const [sessionId] = useState(() => uuidv4());
-  const [sessionDate, setSessionDate] = useState(() => getProgrammeCalendarDate());
+  const [sessionDateKey, setSessionDateKey] = useState(() => toLocalDateString(new Date()));
+  const todayKey = toLocalDateString(new Date());
   const [dateMenuVisible, setDateMenuVisible] = useState(false);
   const [selectedChildren, setSelectedChildren] = useState([]);
   const [selectedLetters, setSelectedLetters] = useState([]);
@@ -403,7 +161,7 @@ export default function LiteracySessionForm({ navigation }) {
 
   // Dirty = any save-bearing field differs from its initial value (all of these reach
   // the persisted session payload in handleSubmit).
-  const [initialSessionDate] = useState(sessionDate);
+  const [initialSessionDateKey] = useState(sessionDateKey);
   const isDirty =
     selectedChildren.length > 0 ||
     selectedLetters.length > 0 ||
@@ -411,7 +169,7 @@ export default function LiteracySessionForm({ navigation }) {
     Object.keys(childReadingLevels).length > 0 ||
     Object.values(letterTrackerChanges).some((changes) => Object.keys(changes || {}).length > 0) ||
     comments.trim().length > 0 ||
-    sessionDate.getTime() !== initialSessionDate.getTime();
+    sessionDateKey !== initialSessionDateKey;
 
   const [allowLeave, setAllowLeave] = useState(false);
   const preventLeave = isDirty && !allowLeave;
@@ -518,7 +276,7 @@ export default function LiteracySessionForm({ navigation }) {
         id: sessionId,
         user_id: user.id,
         ...buildSessionTypeFields({ profile, jobTitlesCache: jobTitles }),
-        session_date: formatDateForStorage(sessionDate),
+        session_date: sessionDateKey,
         children_ids: selectedChildIds,
         group_ids: [],
         activities: {
@@ -555,7 +313,7 @@ export default function LiteracySessionForm({ navigation }) {
   };
 
   return (
-    <View style={styles.outerContainer}>
+    <View testID="literacy-session-form" style={styles.outerContainer}>
       <ConfirmSheet
         visible={discardVisible}
         title="Discard this session?"
@@ -573,14 +331,17 @@ export default function LiteracySessionForm({ navigation }) {
         selectionError={validationErrors.children}
         style={styles.container}
         contentContainerStyle={styles.scrollContent}
+        onScroll={onScroll}
+        automaticallyAdjustKeyboardInsets={Platform.OS === 'ios'}
         ListHeaderComponent={
           <FormHeader
-            sessionDate={sessionDate}
+            sessionDateKey={sessionDateKey}
+            todayKey={todayKey}
             dateMenuVisible={dateMenuVisible}
             onDismissDateMenu={() => setDateMenuVisible(false)}
             onOpenDateMenu={() => setDateMenuVisible(true)}
             onSelectDate={(date) => {
-              setSessionDate(date);
+              setSessionDateKey(date);
               setDateMenuVisible(false);
             }}
           />
@@ -596,6 +357,7 @@ export default function LiteracySessionForm({ navigation }) {
             onCommentsChange={setComments}
             selectedChildren={selectedChildren}
             childReadingLevels={childReadingLevels}
+            classes={classes}
             onOpenChildLevelMenu={setOpenChildLevelMenu}
             getTrackerChangeCount={getTrackerChangeCount}
             onOpenLetterTracker={setTrackerBottomSheetChild}
@@ -623,7 +385,9 @@ export default function LiteracySessionForm({ navigation }) {
       <SelectSheet
         visible={readingLevelMenuVisible}
         onDismiss={() => setReadingLevelMenuVisible(false)}
-        title="Session Reading Level"
+        title="Session reading level"
+        subtitle="What level did you focus on today?"
+        cancelLabel="Cancel"
         dismissLabel="Dismiss session reading level picker"
         options={READING_LEVEL_OPTIONS}
         selectedKey={sessionReadingLevel}
@@ -636,7 +400,8 @@ export default function LiteracySessionForm({ navigation }) {
       <SelectSheet
         visible={openChildLevelMenu !== null}
         onDismiss={() => setOpenChildLevelMenu(null)}
-        title="Reading Level"
+        title="Reading level"
+        subtitle={selectedChildren.filter(child => child.id === openChildLevelMenu).map(child => `${child.first_name} ${child.last_name}`).join('')}
         dismissLabel="Dismiss child reading level picker"
         options={READING_LEVEL_OPTIONS}
         selectedKey={openChildLevelMenu ? (childReadingLevels[openChildLevelMenu] || null) : null}
@@ -651,132 +416,30 @@ export default function LiteracySessionForm({ navigation }) {
 // Styles
 // ---------------------------------------------------------------------------
 const styles = StyleSheet.create({
+  dateSection: { marginBottom: 24 },
   lettersSection: { marginTop: 24, marginBottom: 24 },
   stepHeading: { marginBottom: 12 },
   stepError: { marginBottom: 24 },
   outerContainer: {
     flex: 1,
+    backgroundColor: colors.background,
   },
   container: {
     flex: 1,
     backgroundColor: colors.background,
   },
   scrollContent: {
-    padding: spacing.md,
-    paddingBottom: spacing.xl,
+    paddingHorizontal: 24,
+    paddingTop: 28,
+    paddingBottom: 34,
   },
-  card: {
-    backgroundColor: colors.surface,
-    marginBottom: spacing.md,
-    ...shadows.card,
-  },
-  sectionLabel: {
-    color: colors.primary,
-    marginBottom: spacing.sm,
-    fontFamily: fontFamilies.textSemi,
-  },
-  helperText: {
-    color: colors.textSecondary,
-    marginBottom: spacing.sm,
-  },
-  errorText: {
-    color: colors.error,
-    marginTop: spacing.sm,
-  },
-  dateButton: {
-    alignSelf: 'flex-start',
-  },
-  dropdownButton: {
-    alignSelf: 'flex-start',
-  },
-  childLevelRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginVertical: spacing.sm,
-  },
-  childLevelName: {
-    flex: 1,
-    color: colors.text,
-  },
-  childLevelButton: {
-    minWidth: 140,
-  },
-  sectionDivider: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginVertical: spacing.md,
-    gap: spacing.sm,
-  },
-  dividerLine: {
-    flex: 1,
-    height: 1,
-    backgroundColor: colors.border,
-  },
-  dividerLabel: {
-    color: colors.textSecondary,
-    fontFamily: fontFamilies.textSemi,
-  },
-  commentsInput: {
-    backgroundColor: colors.surface,
-  },
+  section: { marginBottom: 24 },
+  progressDescription: { ...typeRoles.textCaption, color: colors.textSecondary, marginTop: 2 },
+  progressBlocks: { marginTop: 12, gap: 12 },
   submitButton: {
     marginBottom: spacing.lg,
   },
   submitButtonContent: {
     paddingVertical: spacing.sm,
-  },
-});
-
-const calStyles = StyleSheet.create({
-  calendar: {
-    padding: spacing.sm,
-    width: 280,
-  },
-  monthHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginBottom: spacing.sm,
-  },
-  monthTitle: {
-    color: colors.text,
-    fontFamily: fontFamilies.textSemi,
-  },
-  dayHeaderRow: {
-    flexDirection: 'row',
-    marginBottom: spacing.xs,
-  },
-  dayHeader: {
-    flex: 1,
-    textAlign: 'center',
-    color: colors.textSecondary,
-    fontFamily: fontFamilies.textSemi,
-  },
-  dayRow: {
-    flexDirection: 'row',
-  },
-  dayCell: {
-    flex: 1,
-    aspectRatio: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    borderRadius: borderRadius.sm,
-  },
-  dayCellSelected: {
-    backgroundColor: colors.primary,
-  },
-  dayCellFuture: {
-    opacity: 0.3,
-  },
-  dayText: {
-    color: colors.text,
-  },
-  dayTextSelected: {
-    color: colors.onDark,
-    fontFamily: fontFamilies.textSemi,
-  },
-  dayTextFuture: {
-    color: colors.disabled,
   },
 });

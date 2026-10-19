@@ -22,3 +22,9 @@ test('supports an explicit label, error note and disabled state', () => {
   fireEvent.press(ui.getByRole('button', { name: 'Choose class' }));
   expect(onPress).not.toHaveBeenCalled();
 });
+test('a boolean error marks the field without rendering a duplicate note', () => {
+  const ui = render(<SelectField label="Focused on today" placeholder="Select a level" error />);
+  expect(flat(ui.getByRole('button'))).toMatchObject({ borderWidth: 2, borderColor: colors.error });
+  expect(flat(ui.getByText('Focused on today')).color).toBe(colors.error);
+  expect(ui.queryByRole('alert')).toBeNull();
+});
