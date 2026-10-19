@@ -422,6 +422,10 @@ Home notice. No time-entry download or server-row adoption path is added.
   the server and a regroup can become terminal. Forced Sync Now increments it on each retry;
   revisit this with grouping pulls or a pilot reinstall.
 - A late insert can recreate a hard-deleted child; revisit if Head Office deletes children.
+- After a refused edit is replaced locally by a pull, archiving the record before the forced
+  retry leaves the phone's archived copy with the old content until the next pull: the queued
+  archive owns the row, so the edit's acknowledged write-back is skipped. The server holds the
+  correction. Accepted for the pilot (Codex whole-branch round 2); revisit if seen.
 - `groups` archive ranks ahead of `groups` update. This is latent because `updateGroup` has no
   screen caller; revisit before a group-rename screen ships. Send-time numbering preserves send
   order, not the meaning of an incorrectly ordered queue.

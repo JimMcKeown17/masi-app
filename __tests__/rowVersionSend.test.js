@@ -334,6 +334,16 @@ describe('row versions at upload claim', () => {
         ? { archived_at: REPLACEMENT_ARCHIVED_AT, row_version: claimedVersion + 1 }
         : { first_name: 'Replacement', row_version: claimedVersion + 1 });
       expect(await outbox.getById(slotId)).toBeNull();
+      // A lifecycle slot queued behind its own owed insert may go in this pass or the next,
+      // depending on how equal-millisecond slots sort; it must never go before the insert.
+      for (let pass = 0; pass < 2 && (await outbox.countUnsent()).total > 0; pass += 1) {
+        expect((await engine.syncAll()).totalFailed).toBe(0);
+      }
+      const insertIndex = calls.findIndex(call => call.type === 'upsert'
+        && !Array.isArray(call.payload) && call.payload.id === CHILD_ID);
+      const archiveIndex = calls.findIndex(call => call.type === 'update'
+        && call.value === CHILD_ID && call.payload.archived_at !== undefined);
+      if (fallback && lifecycle && archiveIndex !== -1) expect(archiveIndex).toBeGreaterThan(insertIndex);
       expect(await db.getAllAsync('select id, status, last_error from sync_outbox')).toEqual([]);
       expect(await outbox.countUnsent()).toMatchObject({ total: 0 });
       expect(await readChild()).toMatchObject({ sync_status: 'synced' });

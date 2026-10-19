@@ -395,6 +395,10 @@ version and ties are accepted.
   needs-attention card. Each forced Sync Now resends one number higher, so it clears after a few
   taps. Revive when a grouping pull lands, or if a pilot reinstall happens.
 - **A late insert re-creating a hard-deleted child.** Revive if Head Office deletes children.
+- **Archive queued during a terminal recovery.** If a refused edit is replaced locally by a pull and the
+  EA then archives the record before the forced retry, the server ends with the corrected content but
+  the phone's archived copy keeps the old content until the next pull (the queued archive owns the row,
+  so the edit's write-back is skipped). Compound recovery sequence; the server is right. Revive if seen.
 - **`groups` archive is ranked ahead of `groups` update** (`offlineSync.js:289-292` vs `:155`).
   Latent: `updateGroup` has no screen caller. Noted in the contract map. Revive if a group-rename
   screen ships.
@@ -437,3 +441,4 @@ version and ties are accepted.
 | 1 | Codex adversarial review | Needs attention, 4 findings, 3 reproduced in real SQLite with the real engine; all accepted: send single requests from the claimed snapshot (`markInFlightAndGet`); carry `row_version` through every download mapper (`saveStaffChild` dropped it); do not stamp immutable-assignment inserts; apply the ten-hour cap on insert as well as update. Also: install `pg_cron` rather than assume it, verify the job after apply, and prove `MV001` through the real client. |
 | 2 | Codex adversarial review | Needs attention, 1 finding, reproduced with the real repositories and engine; accepted: skip the pre-upload active-membership reconcile when the payload is already exited, so a retried historical membership cannot close the current one. Round 1's four fixes verified against their code paths. |
 | 3 | Codex adversarial review | Approve, no material findings. Probes with the real repositories and engine confirmed the membership guard for the offline move and the move during an in-flight insert. Reinstall and late hard-delete stay accepted risks. |
+| 4 | Codex whole-branch review of the implementation | Round 1: 1 finding (forced terminal retry left stale local content), fixed by writing the acknowledged patch back when no other slot owns the row. Round 2: approve, no material findings; one rare accepted risk recorded above. |
