@@ -396,3 +396,25 @@ test('a form error scrolls the notes block after its layout changes', async () =
   layout(ui.getByTestId('password-block-notes'), 342, 80);
   expect(scrollTo).toHaveBeenLastCalledWith({ y: 302, animated: true });
 });
+
+test.each([
+  ['new', ['current', 'short', 'short'], 114, 130, 114],
+  ['confirm', ['current', '12345678', 'different'], 228, 130, 228],
+  ['notes', ['', '', ''], 342, 80, 302],
+])('resubmitting the same %s error scrolls its cached layout back into view', async (key, values, y, height, target) => {
+  const ui = renderSheet();
+  const { scroll, scrollTo } = measure(ui);
+  fill(ui, ...values);
+  await act(async () => { await submit(ui); });
+  layout(ui.getByTestId(`password-block-${key}`), y, height);
+  expect(scrollTo).toHaveBeenLastCalledWith({ y: target, animated: true });
+
+  // The EA scrolls away, then submits unchanged values. Native layout does not
+  // emit another event because the same error still occupies the same space.
+  fireEvent(scroll, 'scroll', { nativeEvent: { contentOffset: { y: 0 } } });
+  scrollTo.mockClear();
+  await act(async () => { await submit(ui); });
+  expect(scrollTo).toHaveBeenCalledTimes(1);
+  expect(scrollTo).toHaveBeenLastCalledWith({ y: target, animated: true });
+  expect(ui.changePassword).not.toHaveBeenCalled();
+});

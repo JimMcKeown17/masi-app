@@ -101,8 +101,11 @@ export default function ChangePasswordSheet({ visible, onClose, changePassword, 
     setErrors((previous) => ({ ...previous, [key]: undefined, form: undefined }));
   };
   const showError = ({ field, message }) => {
-    // Error text changes this block's height; wait for its new measurement.
-    pendingKeyRef.current = field ?? 'notes';
+    const key = field ?? 'notes';
+    // The same error may not trigger onLayout again. Use its cached measurement
+    // now, and still correct after layout if the block changes (e.g. text scale).
+    if (errors[field ?? 'form'] === message) ensureVisible(key);
+    pendingKeyRef.current = key;
     setErrors({ [field ?? 'form']: message });
   };
 

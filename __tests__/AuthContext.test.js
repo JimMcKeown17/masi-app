@@ -23,6 +23,8 @@ import { act, fireEvent, render, renderHook, waitFor } from '@testing-library/re
 import { Pressable } from 'react-native';
 import { AuthProvider, useAuth } from '../src/context/AuthContext';
 import { supabase } from '../src/services/supabaseClient';
+import { createClient } from '@supabase/supabase-js';
+jest.mock('@supabase/supabase-js', () => ({ createClient: jest.fn() }));
 const mockPullReferenceData = jest.fn();
 const mockDeviceProfile = { getUserProfile: jest.fn(), saveUserProfile: jest.fn(), clearUserProfile: jest.fn() };
 
@@ -75,6 +77,150 @@ const mockProfileQuery = (result) => {
   supabase.from.mockReturnValue({ select });
   return { select, eq, single };
 };
+
+describe('AuthContext password change ordering', () => {
+  let authCallback;
+  let result;
+  const verified = { data: { user: profileRow }, error: null };
+
+  beforeEach(async () => {
+    jest.clearAllMocks();
+    createClient.mockReset();
+    supabase.auth.onAuthStateChange.mockImplementation((callback) => {
+      authCallback = callback;
+      return { data: { subscription: { unsubscribe: jest.fn() } } };
+    });
+    supabase.auth.getSession.mockResolvedValue({ data: { session: { user: profileRow } }, error: null });
+    supabase.auth.updateUser.mockReset().mockResolvedValue({ error: null });
+    supabase.auth.signOut.mockResolvedValue({ error: null });
+    ({ result } = renderHook(() => useAuth(), { wrapper: AuthProvider }));
+    await act(async () => { authCallback('SIGNED_IN', { user: profileRow }); });
+    await waitFor(() => expect(result.current.handle?.userId).toBe(profileRow.id));
+  });
+
+  const privateClient = (verification, cleanup = Promise.resolve({ error: null })) => ({ auth: {
+    signInWithPassword: jest.fn(() => verification),
+    signOut: jest.fn(() => cleanup),
+  } });
+  const change = (currentPassword, newPassword, handle = result.current.handle) =>
+    result.current.changePassword({ currentPassword, newPassword, handle });
+
+  test('reverse verification responses cannot reorder updates or skip private-session cleanup', async () => {
+    const firstVerification = deferred();
+    const secondVerification = deferred();
+    const firstCleanup = deferred();
+    const firstClient = privateClient(firstVerification.promise, firstCleanup.promise);
+    const secondClient = privateClient(secondVerification.promise);
+    createClient.mockReturnValueOnce(firstClient).mockReturnValueOnce(secondClient);
+    const first = change('original', 'first-new');
+    const second = change('first-new', 'second-new');
+    try {
+      await act(async () => { secondVerification.resolve(verified); });
+      expect(firstClient.auth.signInWithPassword).toHaveBeenCalledTimes(1);
+      expect(secondClient.auth.signInWithPassword).not.toHaveBeenCalled();
+      expect(supabase.auth.updateUser).not.toHaveBeenCalled();
+
+      await act(async () => { firstVerification.resolve(verified); });
+      expect(supabase.auth.updateUser.mock.calls).toEqual([[{ password: 'first-new' }]]);
+      expect(firstClient.auth.signOut).toHaveBeenCalledWith({ scope: 'local' });
+      expect(secondClient.auth.signInWithPassword).not.toHaveBeenCalled();
+
+      await act(async () => { firstCleanup.resolve({ error: null }); });
+      expect(await first).toEqual({ error: null, phase: 'update' });
+      expect(await second).toEqual({ error: null, phase: 'update' });
+      expect(secondClient.auth.signInWithPassword).toHaveBeenCalledWith({ email: profileRow.email, password: 'first-new' });
+      expect(supabase.auth.updateUser.mock.calls).toEqual([[{ password: 'first-new' }], [{ password: 'second-new' }]]);
+      expect(secondClient.auth.signOut).toHaveBeenCalledWith({ scope: 'local' });
+    } finally {
+      firstVerification.resolve(verified); secondVerification.resolve(verified); firstCleanup.resolve({ error: null });
+      await Promise.allSettled([first, second]);
+    }
+  });
+
+  test.each(['original', 'first-new'])('the next verification checks the updated password store with %s', async (secondCurrent) => {
+    let storedPassword = 'original';
+    const checkedPasswords = [];
+    const invalid = { code: 'invalid_credentials' };
+    createClient.mockImplementation(() => ({ auth: {
+      signInWithPassword: jest.fn(async ({ password }) => {
+        checkedPasswords.push({ supplied: password, stored: storedPassword });
+        return password === storedPassword ? verified : { data: {}, error: invalid };
+      }),
+      signOut: jest.fn().mockResolvedValue({ error: null }),
+    } }));
+    supabase.auth.updateUser.mockImplementation(async ({ password }) => {
+      storedPassword = password;
+      return { error: null };
+    });
+    const first = change('original', 'first-new');
+    const second = change(secondCurrent, 'second-new');
+    expect(await first).toEqual({ error: null, phase: 'update' });
+    expect(await second).toEqual(secondCurrent === 'original'
+      ? { error: invalid, phase: 'verification' }
+      : { error: null, phase: 'update' });
+    expect(checkedPasswords).toEqual([
+      { supplied: 'original', stored: 'original' },
+      { supplied: secondCurrent, stored: 'first-new' },
+    ]);
+    expect(storedPassword).toBe(secondCurrent === 'original' ? 'first-new' : 'second-new');
+    expect(supabase.auth.updateUser.mock.calls.map(([input]) => input.password)).toEqual(
+      secondCurrent === 'original' ? ['first-new'] : ['first-new', 'second-new'],
+    );
+  });
+
+  test.each(['verification', 'update'])('a rejected %s does not block the next attempt', async (phase) => {
+    const failure = new Error('Request failed');
+    const firstClient = privateClient(Promise.resolve(verified));
+    const secondClient = privateClient(Promise.resolve(verified));
+    if (phase === 'verification') firstClient.auth.signInWithPassword.mockRejectedValueOnce(failure);
+    else supabase.auth.updateUser.mockRejectedValueOnce(failure);
+    createClient.mockReturnValueOnce(firstClient).mockReturnValueOnce(secondClient);
+    const first = change('original', 'first-new');
+    const second = change('original', 'second-new');
+    expect(await first).toEqual({ error: failure, phase });
+    expect(await second).toEqual({ error: null, phase: 'update' });
+    expect(firstClient.auth.signOut).toHaveBeenCalledWith({ scope: 'local' });
+    expect(secondClient.auth.signOut).toHaveBeenCalledWith({ scope: 'local' });
+    expect(supabase.auth.updateUser).toHaveBeenLastCalledWith({ password: 'second-new' });
+  });
+
+  test.each(['another EA', 'same EA, new handle'])('%s can change password before the old chain settles', async (mode) => {
+    const oldVerification = deferred();
+    const oldClient = privateClient(oldVerification.promise);
+    createClient.mockReturnValueOnce(oldClient);
+    const origin = result.current.handle;
+    const first = change('original', 'old-new', origin);
+    const queued = change('old-new', 'old-queued-new', origin);
+    let next;
+    try {
+      await act(async () => {});
+      expect(oldClient.auth.signInWithPassword).toHaveBeenCalledTimes(1);
+      await act(async () => { await result.current.signOut(); });
+      const nextUser = mode === 'another EA'
+        ? { id: '22222222-2222-4222-8222-222222222222', email: 'next@example.org' }
+        : profileRow;
+      await act(async () => { authCallback('SIGNED_IN', { user: nextUser }); });
+      await waitFor(() => expect(result.current.handle?.userId).toBe(nextUser.id));
+      expect(result.current.handle).not.toBe(origin);
+      supabase.auth.getSession.mockResolvedValue({ data: { session: { user: nextUser } }, error: null });
+      const nextClient = privateClient(Promise.resolve({ data: { user: nextUser }, error: null }));
+      createClient.mockReturnValueOnce(nextClient);
+      let nextOutcome;
+      next = change('next-original', 'next-new').then((outcome) => { nextOutcome = outcome; });
+      await waitFor(() => expect(nextOutcome).toEqual({ error: null, phase: 'update' }));
+      expect(nextClient.auth.signInWithPassword).toHaveBeenCalledWith({ email: nextUser.email, password: 'next-original' });
+      expect(supabase.auth.updateUser.mock.calls).toEqual([[{ password: 'next-new' }]]);
+      oldVerification.resolve(verified);
+      expect(await first).toMatchObject({ error: { name: 'StaleActorError' }, phase: 'verification' });
+      expect(await queued).toMatchObject({ error: { name: 'StaleActorError' }, phase: 'verification' });
+      expect(createClient).toHaveBeenCalledTimes(2);
+      expect(supabase.auth.updateUser.mock.calls).toEqual([[{ password: 'next-new' }]]);
+    } finally {
+      oldVerification.resolve(verified);
+      await Promise.allSettled([first, queued, next]);
+    }
+  });
+});
 
 describe('AuthContext Plan 5 startup discipline', () => {
   let authCallback;

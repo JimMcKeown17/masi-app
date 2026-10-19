@@ -1,6 +1,6 @@
 import React from 'react';
 import { StyleSheet, Text, View } from 'react-native';
-import { colors } from '../../constants/colors';
+import { colors, spacing } from '../../constants/colors';
 import { typeRoles } from '../../constants/typography';
 import BottomSheet from './BottomSheet';
 import BrandButton from './BrandButton';
@@ -21,23 +21,28 @@ export default function ConfirmSheet({
     <BottomSheet
       visible={visible}
       title={title}
-      headerExtras={titleAccessory}
       panelRole="alertdialog"
       onDismiss={onCancel}
       dismissLabel={dismissLabel}
-      scrollable={false}
+      scrollable
       keyboardAvoiding={false}
+      footerStyle={styles.footer}
+      footer={
+        <View style={styles.actions}>
+          <BrandButton variant={confirmVariant} size="lg" label={confirmLabel} onPress={onConfirm} />
+          <BrandButton variant="tertiary" tone="ink" label={cancelLabel} onPress={onCancel} />
+        </View>
+      }
     >
+      {titleAccessory ? <View style={styles.accessory}>{titleAccessory}</View> : null}
       <Text style={styles.body}>{body}</Text>
-      <View style={styles.actions}>
-        <BrandButton variant={confirmVariant} size="lg" label={confirmLabel} onPress={onConfirm} />
-        <BrandButton variant="tertiary" tone="ink" label={cancelLabel} onPress={onCancel} />
-      </View>
     </BottomSheet>
   );
 }
 
 const styles = StyleSheet.create({
   body: { ...typeRoles.textParagraph, color: colors.textSecondary },
-  actions: { marginTop: 24, gap: 12 },
+  accessory: { marginBottom: spacing.md },
+  footer: { borderTopWidth: 0, paddingTop: spacing.lg },
+  actions: { gap: spacing.ms },
 });
