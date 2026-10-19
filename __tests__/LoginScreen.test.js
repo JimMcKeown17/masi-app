@@ -203,6 +203,30 @@ test('while signing in: busy, disabled fields and eye; taps and go do not sign i
   await act(async () => request.resolve({ data: {}, error: null }));
 });
 
+test('button and Go before a render submit once and allow a retry after failure', async () => {
+  const request = deferred();
+  mockSignIn.mockReturnValue(request.promise);
+  renderLogin();
+  fireEvent.press(signInButton()); // Validation must not acquire the submission guard.
+  fillLogin();
+  const button = signInButton();
+  const password = passwordField();
+  act(() => {
+    fireEvent.press(button);
+    fireEvent(password, 'submitEditing');
+  });
+  try {
+    expect(mockSignIn).toHaveBeenCalledTimes(1);
+  } finally {
+    await act(async () => request.resolve({ data: null, error: { status: 503 } }));
+  }
+  expect(signInButton()).toBeEnabled();
+  mockSignIn.mockResolvedValue({ data: {}, error: null });
+  await act(async () => fireEvent(passwordField(), 'submitEditing'));
+  expect(mockSignIn).toHaveBeenCalledTimes(2);
+  expect(screen.getByRole('button', { name: 'Signing in…' })).toBeDisabled();
+});
+
 test('go with empty fields validates', () => {
   renderLogin();
   fireEvent(passwordField(), 'submitEditing');
@@ -324,6 +348,21 @@ test('panel, heading, button and footnote use board tokens with a scroll fallbac
   expect(flat(screen.getByTestId('login-panel')).paddingBottom).toBe(24);
 });
 
+test.each(['android', 'ios'])('keyboard padding is active on %s with large text and notes', (platform) => {
+  jest.replaceProperty(Platform, 'OS', platform);
+  mockWindow = { ...mockWindow, width: 360, height: 640, fontScale: 1.3 };
+  mockKeyboardHeight = 280;
+  renderLogin();
+  act(() => mockListener({ isConnected: false, isInternetReachable: null }));
+  fireEvent(passwordField(), 'submitEditing');
+  expect(screen.getByText(OFFLINE)).toBeTruthy();
+  expect(screen.getByText(EMPTY)).toBeTruthy();
+  expect(screen.UNSAFE_getByType(KeyboardAvoidingView).props).toMatchObject({
+    behavior: 'padding', enabled: true,
+  });
+  expect(screen.UNSAFE_getByType(ScrollView).props.contentContainerStyle).toEqual({ flexGrow: 1 });
+});
+
 describe('layout', () => {
   const layoutPanel = (y, contentHeight) => {
     fireEvent(screen.getByTestId('login-panel'), 'layout', { persist: jest.fn(), nativeEvent: { layout: { y, height: contentHeight + 58 } } });
@@ -434,10 +473,10 @@ describe('layout', () => {
     expect(flat(screen.getByTestId('login-hero-learner', { includeHiddenElements: true })).top).toBe(top);
   });
 
-  test('Android relies on window resize with the scroll fallback, without keyboard padding', () => {
+  test('Android uses keyboard padding with the scroll fallback under edge-to-edge', () => {
     jest.replaceProperty(Platform, 'OS', 'android');
     renderLogin();
-    expect(screen.UNSAFE_getByType(KeyboardAvoidingView).props.enabled).toBe(false);
+    expect(screen.UNSAFE_getByType(KeyboardAvoidingView).props).toMatchObject({ behavior: 'padding', enabled: true });
     expect(screen.UNSAFE_getByType(ScrollView).props.keyboardShouldPersistTaps).toBe('handled');
   });
 });

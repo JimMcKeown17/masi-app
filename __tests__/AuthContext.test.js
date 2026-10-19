@@ -19,10 +19,13 @@ beforeEach(async () => { await resetHandleRegistryForTests(); await engine.__res
 afterEach(async () => { await resetHandleRegistryForTests(); await engine.__resetMockDatabases(); });
 global.__MASI_NO_DEFAULT_HANDLE__ = true;
 import React from 'react';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { act, fireEvent, render, renderHook, waitFor } from '@testing-library/react-native';
 import { Pressable } from 'react-native';
 import { AuthProvider, useAuth } from '../src/context/AuthContext';
 import { supabase } from '../src/services/supabaseClient';
+import { createAuthSessionStorage, revokeAuthSessionAdmission } from '../src/services/authSessionStorage';
+import { getAuthStorageKey, readPersistedSession } from '../src/services/persistedAuthSession';
 import { createClient } from '@supabase/supabase-js';
 jest.mock('@supabase/supabase-js', () => ({ createClient: jest.fn() }));
 const mockPullReferenceData = jest.fn();
@@ -77,6 +80,73 @@ const mockProfileQuery = (result) => {
   supabase.from.mockReturnValue({ select });
   return { select, eq, single };
 };
+
+describe('AuthContext concurrent sign-in persistence', () => {
+  let authCallback;
+
+  beforeEach(async () => {
+    jest.clearAllMocks();
+    await AsyncStorage.clear();
+    revokeAuthSessionAdmission();
+    supabase.auth.onAuthStateChange.mockImplementation((callback) => {
+      authCallback = callback;
+      return { data: { subscription: { unsubscribe: jest.fn() } } };
+    });
+    supabase.auth.signInWithPassword.mockReset();
+  });
+
+  afterEach(async () => {
+    await AsyncStorage.clear();
+    revokeAuthSessionAdmission();
+  });
+
+  test.each(['TOKEN_REFRESHED', 'USER_UPDATED'])(
+    'a later failed attempt preserves the earlier success and persists %s', async (event) => {
+      const firstResponse = deferred();
+      const secondResponse = deferred();
+      supabase.auth.signInWithPassword
+        .mockReturnValueOnce(firstResponse.promise)
+        .mockReturnValueOnce(secondResponse.promise);
+      const { result } = renderHook(() => useAuth(), { wrapper: AuthProvider });
+      await act(async () => {}); // Let the empty mount read settle before sign-in.
+      const storageKey = getAuthStorageKey();
+      const storage = createAuthSessionStorage(storageKey);
+      const signedIn = { user: profileRow, access_token: 'first-token', refresh_token: 'first-refresh' };
+      const data = { user: profileRow, session: signedIn };
+      const failure = { message: 'Service unavailable', status: 503 };
+      let first;
+      let second;
+      act(() => {
+        first = result.current.signIn(profileRow.email, 'secret');
+        second = result.current.signIn(profileRow.email, 'secret');
+      });
+      expect(supabase.auth.signInWithPassword).toHaveBeenCalledTimes(2);
+
+      await act(async () => {
+        // The SDK saves the successful session and emits SIGNED_IN before returning.
+        await storage.setItem(storageKey, JSON.stringify(signedIn));
+        authCallback('SIGNED_IN', signedIn);
+        firstResponse.resolve({ data, error: null });
+        expect(await first).toEqual({ data, error: null });
+      });
+      await act(async () => {
+        secondResponse.resolve({ data: null, error: failure });
+        expect(await second).toEqual({ data: null, error: failure });
+      });
+      expect(result.current.user.id).toBe(profileRow.id);
+      expect(result.current.handle?.userId).toBe(profileRow.id);
+      expect(await readPersistedSession()).toEqual(signedIn);
+
+      const refreshed = { ...signedIn, access_token: 'rotated-token', refresh_token: 'rotated-refresh' };
+      await act(async () => {
+        await storage.setItem(storageKey, JSON.stringify(refreshed));
+        authCallback(event, refreshed);
+      });
+      expect(result.current.session).toEqual(refreshed);
+      expect(await readPersistedSession()).toEqual(refreshed);
+    },
+  );
+});
 
 describe('AuthContext password change ordering', () => {
   let authCallback;

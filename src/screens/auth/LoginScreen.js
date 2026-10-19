@@ -25,6 +25,7 @@ export default function LoginScreen() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
+  const submittingRef = useRef(false);
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState(null);
   const [panelTop, setPanelTop] = useState(null);
@@ -70,14 +71,16 @@ export default function LoginScreen() {
   }, [offline]);
 
   const handleLogin = async () => {
-    if (loading) return;
+    if (submittingRef.current) return;
     const validationError = validateLoginInput(email, password);
     setError(validationError);
     if (validationError) return;
 
+    submittingRef.current = true;
     setLoading(true);
     const { error: signInError } = await signIn(email, password);
     if (signInError) {
+      submittingRef.current = false;
       setError({ kind: 'server', message: describeAuthError(signInError, 'sign_in') });
       setLoading(false);
     }
@@ -99,7 +102,7 @@ export default function LoginScreen() {
           scale={art.scale} offsetX={art.offsetX} offsetY={art.offsetY} />
       ) : null}
       <FocusAwareStatusBar style="light" />
-      <KeyboardAvoidingView style={styles.fill} behavior="padding" enabled={Platform.OS === 'ios'}>
+      <KeyboardAvoidingView style={styles.fill} behavior="padding" enabled>
         <ScrollView contentContainerStyle={styles.scrollContent} keyboardShouldPersistTaps="handled" bounces={false}>
           {showLockup ? <BrandLockup style={[styles.lockup, { top: lockupTop }]} /> : null}
           <View testID="login-spacer" style={rest

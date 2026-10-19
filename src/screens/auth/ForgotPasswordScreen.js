@@ -1,4 +1,4 @@
-import React, { useLayoutEffect, useState } from 'react';
+import React, { useLayoutEffect, useRef, useState } from 'react';
 import { KeyboardAvoidingView, Platform, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -16,6 +16,7 @@ export default function ForgotPasswordScreen({ navigation }) {
   const [email, setEmail] = useState('');
   const [error, setError] = useState(null);
   const [loading, setLoading] = useState(false);
+  const submittingRef = useRef(false);
   const [success, setSuccess] = useState(false);
 
   useLayoutEffect(() => {
@@ -23,16 +24,18 @@ export default function ForgotPasswordScreen({ navigation }) {
   }, [navigation, success]);
 
   const handleReset = async () => {
-    if (loading) return;
+    if (submittingRef.current) return;
     if (!email || !email.includes('@')) {
       setError({ kind: 'format' });
       return;
     }
 
+    submittingRef.current = true;
     setError(null);
     setLoading(true);
     const { error: resetError } = await resetPassword(email);
     if (resetError) {
+      submittingRef.current = false;
       setError({ kind: 'server', message: describeAuthError(resetError, 'reset') });
       setLoading(false);
     } else {

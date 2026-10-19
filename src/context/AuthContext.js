@@ -22,6 +22,7 @@ export const AuthProvider = ({ children }) => {
   const authMutationRef = useRef(Promise.resolve());
   const passwordChangeRef = useRef(null);
   const signInPendingRef = useRef(null);
+  const signInSuccessGenerationRef = useRef(0);
   const localSignOutCommittedRef = useRef(false);
   const pendingSignOutTimeoutRef = useRef(null);
   const authListenersRef = useRef(new Set());
@@ -205,6 +206,7 @@ export const AuthProvider = ({ children }) => {
       attempt = {
         email: normalizeAuthEmail(email),
         previousAdmission: null,
+        successGeneration: signInSuccessGenerationRef.current,
       };
       const previous = admitAuthSessionUser({ email: attempt.email });
       // Snapshot admission itself, which may already be restored before the UI.
@@ -217,9 +219,13 @@ export const AuthProvider = ({ children }) => {
       });
 
       if (error) throw error;
+      ++signInSuccessGenerationRef.current;
       return { data, error: null };
     } catch (error) {
-      if (attempt && signInPendingRef.current === attempt) {
+      // Another attempt may have established admission after this snapshot.
+      // Its success owns persistence even if this is still the latest attempt.
+      if (attempt && signInPendingRef.current === attempt
+        && attempt.successGeneration === signInSuccessGenerationRef.current) {
         admitAuthSessionUser(attempt.previousAdmission);
       }
       console.error('Sign in error:', error);

@@ -115,6 +115,30 @@ test('pending disables the field and Back and refuses another press or return-ke
   await act(async () => resolve({ error: null }));
 });
 
+test('return key and button before a render send once and allow a retry after failure', async () => {
+  let resolve;
+  mockResetPassword.mockReturnValue(new Promise((done) => { resolve = done; }));
+  const screen = renderReset();
+  send(screen); // Validation must not acquire the submission guard.
+  fill(screen);
+  const email = screen.getByLabelText('Email');
+  const button = screen.getByRole('button', { name: 'Send reset link' });
+  act(() => {
+    fireEvent(email, 'submitEditing');
+    fireEvent.press(button);
+  });
+  try {
+    expect(mockResetPassword).toHaveBeenCalledTimes(1);
+  } finally {
+    await act(async () => resolve({ error: { status: 503 } }));
+  }
+  expect(screen.getByRole('button', { name: 'Send reset link' })).toBeEnabled();
+  mockResetPassword.mockResolvedValue({ error: null });
+  await act(async () => send(screen));
+  expect(mockResetPassword).toHaveBeenCalledTimes(2);
+  expect(screen.getByText('Check your email')).toBeTruthy();
+});
+
 test('sent state has one heading, emphasized email, decorative tile and pops to Login', async () => {
   const screen = renderReset();
   fill(screen);
