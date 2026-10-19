@@ -680,6 +680,13 @@ same transaction, so the notice and close commit or roll back together. `handleS
 `true` when no open shift remains, including a shift closed by the watchdog while GPS was pending;
 busy, cancelled and failed actions resolve `false`. No RLS or payload change.
 
+`handleSignOut` reads the active entry before requesting location. If it is past ten hours,
+it awaits the existing automatic close and explicitly returns `true`; `autoClockOut` itself
+resolves `undefined`. The post-location reread applies the same cap if the shift crossed ten
+hours during capture. A manual close at or before ten hours keeps its real time and location
+outcome. The capped close uses `sign_in_time + 10 h`, `auto_clocked_out = true`, all three
+sign-out location fields NULL, and the same transactional Home notice.
+
 Home attention is a handle service using that handle's `localState` repository. The local-only keys
 `home_attention.auto_clock_out` and `home_attention.assessment_due_dismissed_on` need no user suffix
 because the database file is per-EA; the notice value retains `userId` for support exports.

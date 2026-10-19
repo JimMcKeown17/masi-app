@@ -226,6 +226,12 @@ function useTimeTrackingState() {
     clockActionInFlight.current = true;
     setLoadingLocation(true);
     try {
+      const active = await timeEntriesRepository.getActiveTimeEntry(userRef.current.id);
+      if (active && Date.now() - new Date(active.sign_in_time).getTime() > MAX_SHIFT_MS) {
+        await autoClockOut(active);
+        return true;
+      }
+
       const locationResult = await getCurrentPosition();
       if (locationResult.cancelled) {
         showSnackbar('Return from Settings and tap Clock Out again, or continue without location.');
@@ -240,6 +246,10 @@ function useTimeTrackingState() {
         setActiveEntryState(null);
         setSignedInState(false);
         showSnackbar('You are not clocked in.');
+        return true;
+      }
+      if (Date.now() - new Date(current.sign_in_time).getTime() > MAX_SHIFT_MS) {
+        await autoClockOut(current);
         return true;
       }
 
@@ -278,7 +288,7 @@ function useTimeTrackingState() {
     }
   }, [
     timeEntriesRepository, refreshSyncStatus, triggerBackgroundSync, showSnackbar,
-    setActiveEntryState, setSignedInState,
+    autoClockOut, setActiveEntryState, setSignedInState,
   ]);
 
   const dismissAutoClockOutNotice = useCallback(async (entryId) => {
