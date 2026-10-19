@@ -444,23 +444,23 @@ describe('layout', () => {
 
 test('reset errors use reset copy and never reveal raw server text', async () => {
   mockResetPassword.mockResolvedValue({ error: { message: 'boom' } });
-  renderWithProviders(<ForgotPasswordScreen navigation={{ navigate: jest.fn(), goBack: jest.fn() }} />);
+  renderWithProviders(<ForgotPasswordScreen navigation={{ popTo: jest.fn(), goBack: jest.fn(), setOptions: jest.fn() }} />);
   fireEvent.changeText(screen.UNSAFE_getByType(TextInput), 'ea@example.com');
-  await act(async () => fireEvent.press(screen.getByText('Send Reset Link')));
+  await act(async () => fireEvent.press(screen.getByText('Send reset link')));
   expect(screen.getByRole('alert')).toHaveTextContent('Couldn’t send the reset link. Please try again.');
   expect(screen.queryByText('boom')).toBeNull();
 });
 
 test('reset validation uses the existing copy and successful sends keep the existing confirmation', async () => {
   mockResetPassword.mockResolvedValue({ error: null });
-  renderWithProviders(<ForgotPasswordScreen navigation={{ navigate: jest.fn(), goBack: jest.fn() }} />);
-  fireEvent.press(screen.getByText('Send Reset Link'));
+  renderWithProviders(<ForgotPasswordScreen navigation={{ popTo: jest.fn(), goBack: jest.fn(), setOptions: jest.fn() }} />);
+  fireEvent.press(screen.getByText('Send reset link'));
   expect(screen.getByRole('alert')).toHaveTextContent('Please enter a valid email address');
   expect(mockResetPassword).not.toHaveBeenCalled();
   fireEvent.changeText(screen.UNSAFE_getByType(TextInput), 'ea@example.com');
-  await act(async () => fireEvent.press(screen.getByText('Send Reset Link')));
+  await act(async () => fireEvent.press(screen.getByText('Send reset link')));
   act(() => jest.advanceTimersByTime(200));
-  expect(screen.getByText('Check Your Email')).toBeTruthy();
+  expect(screen.getByText('Check your email')).toBeTruthy();
   expect(screen.getByText('If an account exists with ea@example.com, you will receive a password reset link shortly.')).toBeTruthy();
   expect(screen.queryByRole('alert')).toBeNull();
 });

@@ -62,7 +62,7 @@ const Stack = createNativeStackNavigator();
 const Tab = createBottomTabNavigator();
 const ChildrenStack = createNativeStackNavigator();
 
-function AuthNavigator() {
+export function AuthNavigator() {
   return (
     <Stack.Navigator
       screenOptions={{

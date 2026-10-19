@@ -76,10 +76,16 @@ test('the hairline shows only when headerScrolled and takes no layout space', ()
 test.each([
   [{ headerTitle: 'Custom title', title: 'Fallback' }, 'Custom title'],
   [{ headerTitle: () => null, title: 'Fallback' }, 'Fallback'],
-  [{ title: '' }, ''],
   [{}, 'Example'],
 ])('title fallback for %o', (options, title) => {
   expect(renderHeader({ options }).getByRole('header').props.children).toBe(title);
+});
+
+test.each([{ title: '' }, { headerTitle: '', title: 'Fallback' }])('an empty title renders no header-role element: %o', (options) => {
+  const screen = renderHeader({ options, back: { title: 'Previous' } });
+  expect(screen.queryByRole('header')).toBeNull();
+  fireEvent.press(screen.getByRole('button', { name: 'Back' }));
+  expect(navigation.goBack).toHaveBeenCalledTimes(1);
 });
 
 function ScrollProbe({ navigation: explicitNavigation }) {
