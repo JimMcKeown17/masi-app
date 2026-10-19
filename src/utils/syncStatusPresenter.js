@@ -22,6 +22,16 @@ export const deriveSyncState = ({
 
 const plural = (count, singular, pluralForm) => (count === 1 ? singular : pluralForm);
 
+export const describeSyncBanner = ({ isOnline, isSyncing, waitingCount = 0, needsAttentionCount = 0 } = {}) => {
+  if (!(waitingCount > 0) || needsAttentionCount > 0) return null;
+  const state = isSyncing ? 'syncing' : !isOnline ? 'offline' : 'waiting';
+  const items = `${waitingCount} ${plural(waitingCount, 'item', 'items')}`;
+  const message = state === 'syncing' ? `Syncing ${items}…`
+    : state === 'offline' ? `${items} will sync when you’re online`
+      : `${items} waiting to sync`;
+  return { state, message, showSyncNow: state === 'waiting' };
+};
+
 export const describeSyncState = (state, { waitingCount = 0, needsAttentionCount = 0 } = {}) => {
   switch (state) {
     case 'syncing':

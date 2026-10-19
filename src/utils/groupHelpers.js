@@ -1,4 +1,9 @@
-import { GROUP_COLORS } from '../constants/groupColors';
+import { GROUP_COLORS, GROUP_DOT_COLORS } from '../constants/groupColors';
+
+export function getGroupDotColor(index) {
+  if (!Number.isFinite(index) || index < 0) return GROUP_DOT_COLORS[0];
+  return GROUP_DOT_COLORS[Math.trunc(index) % GROUP_DOT_COLORS.length];
+}
 
 /**
  * Get color for a group based on its index in the sorted groups array.

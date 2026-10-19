@@ -151,3 +151,36 @@ describe('describeReconcileBreakerNote copy (exact strings)', () => {
     });
   });
 });
+
+import { describeSyncBanner } from '../src/utils/syncStatusPresenter';
+
+describe('describeSyncBanner', () => {
+  const base = { isOnline: true, isSyncing: false, waitingCount: 3, needsAttentionCount: 0 };
+  test('waiting online', () => {
+    expect(describeSyncBanner(base)).toEqual({ state: 'waiting', message: '3 items waiting to sync', showSyncNow: true });
+  });
+  test('offline', () => {
+    expect(describeSyncBanner({ ...base, isOnline: false })).toEqual({
+      state: 'offline', message: '3 items will sync when you’re online', showSyncNow: false,
+    });
+  });
+  test('syncing', () => {
+    expect(describeSyncBanner({ ...base, isSyncing: true })).toEqual({
+      state: 'syncing', message: 'Syncing 3 items…', showSyncNow: false,
+    });
+  });
+  test('singular copy', () => {
+    expect(describeSyncBanner({ ...base, waitingCount: 1 }).message).toBe('1 item waiting to sync');
+    expect(describeSyncBanner({ ...base, waitingCount: 1, isOnline: false }).message).toBe('1 item will sync when you’re online');
+    expect(describeSyncBanner({ ...base, waitingCount: 1, isSyncing: true }).message).toBe('Syncing 1 item…');
+  });
+  test('hidden when nothing waits, including a pull-only sync pass', () => {
+    expect(describeSyncBanner({ ...base, waitingCount: 0 })).toBeNull();
+    expect(describeSyncBanner({ ...base, waitingCount: 0, isSyncing: true })).toBeNull();
+    expect(describeSyncBanner({})).toBeNull();
+  });
+  test('hidden whenever items need attention (the header pill carries it)', () => {
+    expect(describeSyncBanner({ ...base, needsAttentionCount: 1 })).toBeNull();
+    expect(describeSyncBanner({ ...base, needsAttentionCount: 1, isSyncing: true })).toBeNull();
+  });
+});

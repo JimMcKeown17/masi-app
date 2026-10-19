@@ -22,3 +22,21 @@ describe('GROUP_COLORS categorical palette', () => {
     expect(GROUP_COLORS).toHaveLength(8);
   });
 });
+
+import { GROUP_DOT_COLORS } from '../src/constants/groupColors';
+
+const luminance = (hex) => {
+  const [r, g, b] = [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16) / 255)
+    .map((c) => (c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4));
+  return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+};
+const ratioOnWhite = (hex) => 1.05 / (luminance(hex) + 0.05);
+
+describe('GROUP_DOT_COLORS', () => {
+  it('pins the six dot hues in order', () => {
+    expect(GROUP_DOT_COLORS).toEqual(['#1565C0', '#2E7D32', '#E65100', '#7B1FA2', '#00695C', '#283593']);
+  });
+  it('every dot is at least 3:1 on white (graphic)', () => {
+    GROUP_DOT_COLORS.forEach((hex) => expect(ratioOnWhite(hex)).toBeGreaterThanOrEqual(3));
+  });
+});
