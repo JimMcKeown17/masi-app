@@ -3,6 +3,7 @@ import { StyleSheet } from 'react-native';
 import { fireEvent, render } from '@testing-library/react-native';
 import BrandButton from '../src/components/common/BrandButton';
 import { colors } from '../src/constants/colors';
+import { typeRoles } from '../src/constants/typography';
 
 jest.mock('@expo/vector-icons', () => ({ Ionicons: () => null }), { virtual: true });
 
@@ -31,6 +32,7 @@ describe('BrandButton', () => {
     );
 
     expect(getByText('Record Session')).toBeTruthy();
+    expect(StyleSheet.flatten(getByText('Record Session').props.style)).toEqual(expect.objectContaining(typeRoles.textButtonL));
 
     const button = getByLabelText('Record Session');
     expect(button.props.accessibilityRole).toBe('button');

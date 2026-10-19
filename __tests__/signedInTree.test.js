@@ -51,7 +51,7 @@ jest.mock('../src/services/observability', () => ({
   captureOperationalError: jest.fn(), flushObservability: jest.fn(), reportSyncStatus: jest.fn(), reportSyncResult: jest.fn(),
 }));
 jest.mock('@expo/vector-icons', () => ({ Ionicons: () => null }), { virtual: true });
-jest.mock('react-native-paper', () => ({ PaperProvider: ({ children }) => children, MD3LightTheme: { colors: {} } }));
+jest.mock('react-native-paper', () => ({ ...jest.requireActual('react-native-paper'), PaperProvider: ({ children }) => children }));
 jest.mock('react-native-safe-area-context', () => ({ SafeAreaProvider: ({ children }) => children, SafeAreaView: ({ children }) => children, useSafeAreaInsets: () => ({ top: 0 }) }));
 jest.mock('../src/navigation/AppNavigator', () => {
   const React = require('react'); const { Text } = require('react-native');
@@ -179,7 +179,7 @@ test('a failed handle open shows the extracted failure UI and Retry opens again'
   await emit('SIGNED_IN', A);
   await waitFor(() => expect(view.getByText('We could not open your offline data')).toBeTruthy());
   sqlite.__setDatabaseFactory(engine.openDatabaseAsync);
-  fireEvent.press(view.getByText('Try Again'));
+  fireEvent.press(view.getByText('Try again'));
   await waitFor(() => expect(view.getByText(A)).toBeTruthy());
 });
 

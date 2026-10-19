@@ -1,3 +1,4 @@
+import { navigationTheme } from '../theme/navigationTheme';
 import React, { useEffect } from 'react';
 import { NavigationContainer, useNavigationContainerRef } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
@@ -362,6 +363,7 @@ export default function AppNavigator({ signedIn }) {
 
   return (
     <NavigationContainer
+      theme={navigationTheme}
       ref={navigationRef}
       onReady={() => registerNavigationContainer(navigationRef)}
     >

@@ -1,15 +1,13 @@
 import React, { useCallback, useState } from 'react';
 import {
-  ActivityIndicator,
-  Pressable,
   StyleSheet,
   Text,
   View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { exportLogs } from '../../utils/debugExport';
-import { borderRadius, colors, spacing } from '../../constants/colors';
-import { typography } from '../../constants/typography';
+import { colors, spacing } from '../../constants/colors';
+import { typeRoles } from '../../constants/typography';
 import { isSchemaTooNewError } from '../../db/migrations';
 import BrandButton from '../common/BrandButton';
 
@@ -54,28 +52,16 @@ export default function HandleOpenError({ error, onRetry, onSignOut }) {
         {showActions ? (
           <View style={styles.actions}>
             <BrandButton
-              label={schemaTooNew ? 'Sign out' : 'Try Again'}
+              label={schemaTooNew ? 'Sign out' : 'Try again'}
               onPress={schemaTooNew ? onSignOut : onRetry}
             />
             {!schemaTooNew ? (
-              <Pressable
-                accessibilityRole="button"
-                accessibilityLabel="Share Error Logs"
-                accessibilityState={{ disabled: exportState.loading, busy: exportState.loading }}
-                disabled={exportState.loading}
+              <BrandButton
+                label="Share error logs"
+                variant="secondary"
+                loading={exportState.loading}
                 onPress={handleExportLogs}
-                style={({ pressed }) => [
-                  styles.secondaryButton,
-                  pressed && !exportState.loading && styles.secondaryButtonPressed,
-                  exportState.loading && styles.secondaryButtonDisabled,
-                ]}
-              >
-                {exportState.loading ? (
-                  <ActivityIndicator size="small" color={colors.primary} />
-                ) : (
-                  <Text style={styles.secondaryButtonText}>Share Error Logs</Text>
-                )}
-              </Pressable>
+              />
             ) : null}
           </View>
         ) : null}
@@ -109,22 +95,23 @@ const styles = StyleSheet.create({
     backgroundColor: colors.errorBg,
   },
   errorMarkText: {
-    ...typography.screenTitle,
+    ...typeRoles.displaySheetTitle,
     color: colors.error,
   },
   title: {
-    ...typography.screenTitle,
+    ...typeRoles.displaySheetTitle,
+    color: colors.text,
     textAlign: 'center',
   },
   message: {
-    ...typography.body,
+    ...typeRoles.textParagraph,
     color: colors.textSecondary,
     textAlign: 'center',
-    lineHeight: 21,
     maxWidth: 420,
   },
   supportCode: {
-    ...typography.caption,
+    ...typeRoles.textCaption,
+    color: colors.textSecondary,
     textAlign: 'center',
   },
   actions: {
@@ -133,31 +120,9 @@ const styles = StyleSheet.create({
     gap: spacing.sm,
     marginTop: spacing.sm,
   },
-  secondaryButton: {
-    minHeight: 52,
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingHorizontal: spacing.lg,
-    paddingVertical: spacing.md,
-    borderWidth: 1,
-    borderColor: colors.primary,
-    borderRadius: borderRadius.md,
-    borderCurve: 'continuous',
-    backgroundColor: colors.surface,
-  },
-  secondaryButtonPressed: {
-    backgroundColor: colors.red50,
-  },
-  secondaryButtonDisabled: {
-    opacity: 0.6,
-  },
-  secondaryButtonText: {
-    ...typography.cardTitle,
-    color: colors.primaryDark,
-    textAlign: 'center',
-  },
   exportMessage: {
-    ...typography.caption,
+    ...typeRoles.textCaption,
+    color: colors.textSecondary,
     textAlign: 'center',
   },
 });

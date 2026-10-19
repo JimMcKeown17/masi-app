@@ -2,7 +2,7 @@ import React from 'react';
 import { Pressable, StyleSheet, Text, ActivityIndicator, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { borderRadius, colors, spacing } from '../../constants/colors';
-import { typography } from '../../constants/typography';
+import { typeRoles } from '../../constants/typography';
 
 export default function BrandButton({ label, onPress, style, disabled = false, loading = false, icon }) {
   const isDisabled = disabled || loading;
@@ -39,5 +39,5 @@ const styles = StyleSheet.create({
   buttonDisabled: { opacity: 0.6 },
   content: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.xs },
   icon: {},
-  label: { ...typography.cardTitle, color: '#FFFFFF', textAlign: 'center' },
+  label: { ...typeRoles.textButtonL, color: '#FFFFFF', textAlign: 'center' },
 });

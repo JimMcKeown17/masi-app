@@ -59,7 +59,7 @@ export default function SessionCountRankingScreen() {
       name={`${item.child.first_name} ${(item.child.last_name || '').charAt(0)}.`}
       value={item.count}
       maxValue={maxCount || 1}
-      barColor={colors.primary}
+      barColor={colors.red500}
       label={`${item.count}`}
     />
   );
