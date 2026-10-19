@@ -621,6 +621,29 @@ register rows conflict (known gotcha). Each PR gets its own EAS preview build an
 
 ### 6. Questions for Jim (only ones that change the build; default built if unanswered)
 
+**Jim's answers (2026-10-19). These supersede the defaults below.**
+1. **Login assets: supplied.** Jim provided the learner photo and the white mark (Masi's own
+   material). They are built from the canvas originals, which carry the board's exact crop:
+   - `assets/login/learner-artwork.webp` at @1x, @2x and @3x (296×430 dp; 22, 56 and 102 KB,
+     lossy WebP with alpha, q80). The source PNG was 2.8 MB.
+   - `assets/brand/masi-mark-white.png` at @1x, @2x and @3x (48×41 dp).
+   - The wordmark stays typeset (MASI in Bricolage 800, NYUSANE in Bricolage 700), as the board
+     draws it. The Login PR loads `BricolageGrotesque_700Bold` from the already-installed package
+     as `fontFamilies.displayBold`.
+   - Jim's `white-logo.png` (the real logotype lockup) is only 106×41 px, too small for 2x/3x
+     screens. If Jim later wants the real logotype instead of typeset text, a lockup of at least
+     318×123 px (ideally SVG) is needed. That is a follow-up, not a blocker.
+   - The Login PR is no longer blocked.
+2. **Celebration on A03s-class phones: yes.** The default stands (`CELEBRATION_LEVELS =
+   ['full', 'calm']`). Jim will confirm smoothness on a real device when the PR is built.
+3. **Lowercase letter tiles: yes**, as the boards draw them.
+4. **Hide "Forgot password?" until reset is fixed.** The Login PR removes the link from the Log
+   in screen, and the `ForgotPassword` route stays registered but unreachable. The Reset password
+   restyle in part 6 is still built, so it is ready when recovery is fixed. The Login PR files a
+   GitHub issue: "Password recovery: deep link + set-new-password screen". It is not decided by a
+   device check any more.
+5. Sign-out (Q5) and splash (Q6) keep their defaults. Q6: the splash is out of scope.
+
 1. **Login assets and consent (blocks the Login PR).** The board's white Masi lockup and the
    learner cut-out are canvas blobs that are not in the repo. Can you supply both at full
    resolution, and confirm Masi has consent to show that child in the app? *Default:* the Login PR
