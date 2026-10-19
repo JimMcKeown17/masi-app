@@ -4,7 +4,7 @@
 // is a device check, not covered here.
 import React from 'react';
 import { render } from '@testing-library/react-native';
-import { PaperProvider } from 'react-native-paper';
+import { AllProviders } from './renderWithProviders';
 import {
   NavigationContainer,
   StackRouter,
@@ -26,7 +26,7 @@ export function renderInTestStack({
   routes,
   initialIndex = routes.length - 1,
   motion = { motionLevel: 'full', reduceMotion: false, tier: 'high' },
-  wrapper: Wrapper = React.Fragment,
+  wrapper: Wrapper = AllProviders,
 }) {
   const Stack = createTestStack();
   const navigationRef = createNavigationContainerRef();
@@ -37,15 +37,15 @@ export function renderInTestStack({
   };
   const screen = render(
     <Wrapper>
-      <PaperProvider settings={{ icon: () => null }}>
-        <MotionProvider value={motion}>
-          <NavigationContainer ref={navigationRef} initialState={initialState}>
-            <Stack.Navigator>
-              {routes.map(({ name, component }) => <Stack.Screen key={name} name={name} component={component} />)}
-            </Stack.Navigator>
-          </NavigationContainer>
-        </MotionProvider>
-      </PaperProvider>
+      {/* Wrapper owns the root Paper host. A nested host would put sheets inside
+          the accessibility-hidden app background. */}
+      <MotionProvider value={motion}>
+        <NavigationContainer ref={navigationRef} initialState={initialState}>
+          <Stack.Navigator>
+            {routes.map(({ name, component }) => <Stack.Screen key={name} name={name} component={component} />)}
+          </Stack.Navigator>
+        </NavigationContainer>
+      </MotionProvider>
     </Wrapper>,
   );
   return { ...screen, navigationRef, routeNames: () => navigationRef.getRootState().routes.map((r) => r.name) };

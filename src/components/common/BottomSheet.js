@@ -1,7 +1,9 @@
 import React from 'react';
 import {
+  AccessibilityInfo,
   Animated,
   BackHandler,
+  findNodeHandle,
   KeyboardAvoidingView,
   Platform,
   Pressable,
@@ -16,6 +18,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { borderRadius, colors, shadows, spacing, tints } from '../../constants/colors';
 import { typeRoles } from '../../constants/typography';
 import { useMotion } from '../../context/MotionContext';
+import { useSheetAccessibility } from '../../context/SheetAccessibilityContext';
 import { duration, easing } from '../../constants/motion';
 
 export default function BottomSheet({
@@ -34,6 +37,7 @@ export default function BottomSheet({
   scrollViewProps = {},
   children,
 }) {
+  useSheetAccessibility(visible);
   const insets = useSafeAreaInsets();
   const { height: windowHeight } = useWindowDimensions();
   const { motionLevel } = useMotion();
@@ -41,6 +45,7 @@ export default function BottomSheet({
   const [retained, setRetained] = React.useState(visible);
   const [panelHeight, setPanelHeight] = React.useState(null);
   const hasOpened = React.useRef(false);
+  const titleRef = React.useRef(null);
   const scrimOpacity = React.useRef(new Animated.Value(0)).current;
   const panelOpacity = React.useRef(new Animated.Value(0)).current;
   // A closed fraction lets a layout measurement change the distance without
@@ -80,6 +85,16 @@ export default function BottomSheet({
       animation.stop();
     };
   }, [visible, still, closedFraction, panelOpacity, scrimOpacity]);
+
+  React.useEffect(() => {
+    if (!visible) return undefined;
+    const frame = requestAnimationFrame(() => {
+      const node = findNodeHandle(titleRef.current);
+      if (node) AccessibilityInfo.setAccessibilityFocus(node);
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [visible]);
+
   const {
     contentContainerStyle: scrollContentStyle,
     ...remainingScrollViewProps
@@ -119,7 +134,7 @@ export default function BottomSheet({
 
       <View style={styles.header}>
         {/* The header's bottom gap belongs to its last element; a title-only header owns it. */}
-        <Text accessibilityRole="header" style={[styles.title, !subtitle && !headerExtras && styles.titleAlone]}>
+        <Text ref={titleRef} accessibilityRole="header" style={[styles.title, !subtitle && !headerExtras && styles.titleAlone]}>
           {title}
         </Text>
         {subtitle ? (

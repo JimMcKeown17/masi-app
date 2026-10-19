@@ -156,17 +156,52 @@ export default function LiteracySessionForm({ navigation }) {
   const childrenStepRef = useRef(null);
   const lettersStepRef = useRef(null);
   const levelStepRef = useRef(null);
+  const screenReaderEnabledRef = useRef(false);
+  const focusFrameRef = useRef(null);
+  useEffect(() => {
+    let mounted = true;
+    let changed = false;
+    const subscription = AccessibilityInfo.addEventListener('screenReaderChanged', enabled => {
+      changed = true;
+      if (mounted) screenReaderEnabledRef.current = Boolean(enabled);
+    });
+    AccessibilityInfo.isScreenReaderEnabled().catch(() => false).then(enabled => {
+      // A change event is newer than the asynchronous initial snapshot.
+      if (mounted && !changed) screenReaderEnabledRef.current = Boolean(enabled);
+    });
+    return () => {
+      mounted = false;
+      subscription.remove();
+      if (focusFrameRef.current !== null) cancelAnimationFrame(focusFrameRef.current);
+    };
+  }, []);
   const layoutRef = useRef({ headerHeight: 0, childrenSectionY: 0, bodyHeight: 0, footerSectionY: { 3: 0, 4: 0 } });
   const onMetrics = useCallback(metrics => { Object.assign(layoutRef.current, metrics); }, []);
   const onLettersLayout = useCallback(event => { layoutRef.current.footerSectionY[3] = event.nativeEvent.layout.y; }, []);
   const onLevelLayout = useCallback(event => { layoutRef.current.footerSectionY[4] = event.nativeEvent.layout.y; }, []);
   const jumpToStep = useCallback(step => {
+    if (focusFrameRef.current !== null) {
+      cancelAnimationFrame(focusFrameRef.current);
+      focusFrameRef.current = null;
+    }
+    const screenReaderEnabled = screenReaderEnabledRef.current;
     listRef.current?.scrollToOffset({
-      offset: stepScrollOffset({ step, paddingTop: 28, ...layoutRef.current }), animated: true,
+      offset: stepScrollOffset({ step, paddingTop: 28, ...layoutRef.current }), animated: !screenReaderEnabled,
     });
     const ref = step === 2 ? childrenStepRef : step === 3 ? lettersStepRef : levelStepRef;
-    const node = findNodeHandle(ref.current);
-    if (node) AccessibilityInfo.setAccessibilityFocus(node);
+    const focus = () => {
+      const node = findNodeHandle(ref.current);
+      if (node) AccessibilityInfo.setAccessibilityFocus(node);
+    };
+    if (screenReaderEnabled) {
+      // The nonanimated scroll reattaches clipped footer headers before focus.
+      focusFrameRef.current = requestAnimationFrame(() => {
+        focusFrameRef.current = null;
+        focus();
+      });
+    } else {
+      focus();
+    }
   }, []);
   const summaryItems = useMemo(() => {
     const errors = validateLiteracySession({ selectedChildren, selectedLetters, sessionReadingLevel });

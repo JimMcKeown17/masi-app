@@ -309,6 +309,122 @@ describe('LiteracySessionForm', () => {
     }
   });
 
+  describe('screen-reader summary jumps', () => {
+    let frames;
+    let requestFrame;
+    let cancelFrame;
+    let node;
+    let focus;
+    beforeEach(() => {
+      jest.useFakeTimers();
+      jest.spyOn(AccessibilityInfo, 'isScreenReaderEnabled').mockResolvedValue(true);
+      frames = new Map();
+      let nextFrame = 0;
+      requestFrame = jest.spyOn(global, 'requestAnimationFrame').mockImplementation(callback => {
+        frames.set(++nextFrame, callback);
+        return nextFrame;
+      });
+      cancelFrame = jest.spyOn(global, 'cancelAnimationFrame').mockImplementation(id => frames.delete(id));
+      node = jest.spyOn(ReactNative, 'findNodeHandle').mockImplementation(ref => ref ? 301 : null);
+      focus = jest.spyOn(AccessibilityInfo, 'setAccessibilityFocus');
+    });
+    afterEach(() => jest.restoreAllMocks());
+    const nextFrame = () => act(() => {
+      const pending = [...frames.values()];
+      frames.clear();
+      pending.forEach(callback => callback());
+    });
+
+    test.each([
+      ['letters', 28 + 400 + 60 * 64 - 12, 'Step 3: Letters focused on'],
+      ['readingLevel', 28 + 400 + 60 * 64 + 520 - 12, 'Step 4: Session reading level'],
+    ])('with a screen reader, %s jumps past a long roster before focusing on the next frame', async (key, offset, label) => {
+      mockUseChildren.mockReturnValue({
+        children: Array.from({ length: 60 }, (_, i) => ({ id: `child-${i}`, first_name: `Child ${i}`, last_name: 'Learner', class_id: 'class-1' })),
+        groups: [], getChildrenInGroup: () => [],
+      });
+      const screen = renderForm();
+      await act(async () => {});
+      const scroll = jest.spyOn(screen.UNSAFE_getByType(FlatList).instance, 'scrollToOffset').mockImplementation(() => {});
+      measureSteps(screen);
+      fireEvent.press(screen.getByRole('button', { name: summaryLabels[key] }));
+      expect(scroll).toHaveBeenCalledWith({ offset, animated: false });
+      expect(node).not.toHaveBeenCalled();
+      expect(focus).not.toHaveBeenCalled();
+      nextFrame();
+      expect(node).toHaveBeenCalledTimes(1);
+      expect(node.mock.calls[0][0].props.accessibilityLabel).toBe(label);
+      expect(focus).toHaveBeenCalledWith(301);
+      expect(screen.queryByRole('alert')).toBeNull();
+    });
+
+    test('with the screen reader off, a jump keeps the animated scroll', async () => {
+      AccessibilityInfo.isScreenReaderEnabled.mockResolvedValue(false);
+      const screen = renderForm();
+      await act(async () => {});
+      const scroll = jest.spyOn(screen.UNSAFE_getByType(FlatList).instance, 'scrollToOffset').mockImplementation(() => {});
+      measureSteps(screen);
+      fireEvent.press(screen.getByRole('button', { name: summaryLabels.letters }));
+      expect(scroll).toHaveBeenCalledWith({ offset: 480, animated: true });
+      expect(requestFrame).not.toHaveBeenCalled();
+    });
+
+    test('unmount cancels pending focus and removes the screen-reader listener', async () => {
+      const subscribe = jest.spyOn(AccessibilityInfo, 'addEventListener');
+      const screen = renderForm();
+      await act(async () => {});
+      jest.spyOn(screen.UNSAFE_getByType(FlatList).instance, 'scrollToOffset').mockImplementation(() => {});
+      fireEvent.press(screen.getByRole('button', { name: summaryLabels.letters }));
+      const frame = requestFrame.mock.results.at(-1).value;
+      const subscriptionIndex = subscribe.mock.calls.findIndex(([event]) => event === 'screenReaderChanged');
+      const subscription = subscribe.mock.results[subscriptionIndex].value;
+      screen.unmount();
+      expect(cancelFrame).toHaveBeenCalledWith(frame);
+      expect(subscription.remove).toHaveBeenCalled();
+      nextFrame();
+      expect(node).not.toHaveBeenCalled();
+      expect(focus).not.toHaveBeenCalled();
+    });
+
+    test('a new jump cancels the earlier frame and focuses only the latest step', async () => {
+      const screen = renderForm();
+      await act(async () => {});
+      jest.spyOn(screen.UNSAFE_getByType(FlatList).instance, 'scrollToOffset').mockImplementation(() => {});
+      fireEvent.press(screen.getByRole('button', { name: summaryLabels.letters }));
+      const frame = requestFrame.mock.results.at(-1).value;
+      fireEvent.press(screen.getByRole('button', { name: summaryLabels.readingLevel }));
+      expect(cancelFrame).toHaveBeenCalledWith(frame);
+      expect(focus).not.toHaveBeenCalled();
+      nextFrame();
+      expect(node).toHaveBeenCalledTimes(1);
+      expect(node.mock.calls[0][0].props.accessibilityLabel).toBe('Step 4: Session reading level');
+      expect(focus).toHaveBeenCalledTimes(1);
+    });
+
+    test('screen-reader changes win over a late initial read and are cached for each jump', async () => {
+      let resolveInitial;
+      AccessibilityInfo.isScreenReaderEnabled.mockReturnValue(new Promise(resolve => { resolveInitial = resolve; }));
+      const subscribe = jest.spyOn(AccessibilityInfo, 'addEventListener');
+      const screen = renderForm();
+      const scroll = jest.spyOn(screen.UNSAFE_getByType(FlatList).instance, 'scrollToOffset').mockImplementation(() => {});
+      const onChange = subscribe.mock.calls.find(([event]) => event === 'screenReaderChanged')[1];
+      act(() => onChange(true));
+      await act(async () => { resolveInitial(false); });
+      fireEvent.press(screen.getByRole('button', { name: summaryLabels.letters }));
+      expect(scroll).toHaveBeenLastCalledWith(expect.objectContaining({ animated: false }));
+      const frame = requestFrame.mock.results.at(-1).value;
+      act(() => onChange(false));
+      fireEvent.press(screen.getByRole('button', { name: summaryLabels.readingLevel }));
+      expect(cancelFrame).toHaveBeenCalledWith(frame);
+      expect(scroll).toHaveBeenLastCalledWith(expect.objectContaining({ animated: true }));
+      expect(AccessibilityInfo.isScreenReaderEnabled).toHaveBeenCalledTimes(1);
+      expect(node.mock.calls.at(-1)[0].props.accessibilityLabel).toBe('Step 4: Session reading level');
+      expect(focus).toHaveBeenCalledTimes(1);
+      nextFrame();
+      expect(focus).toHaveBeenCalledTimes(1);
+    });
+  });
+
   test('selects a calendar key, cancels without changing it, and guards a changed date', () => {
     jest.useFakeTimers();
     jest.setSystemTime(new Date('2026-10-15T08:00:00Z'));
@@ -678,6 +794,29 @@ describe('LiteracySessionForm', () => {
       goBack(screen);
       expect(screen.getByText('Discard this session?')).toBeTruthy();
       expect(screen.routeNames()).toEqual(['Home', 'SessionForm']);
+    });
+
+    test.each(['ios', 'android'])('the discard confirmation hides the %s form until Keep editing', platform => {
+      const replacement = jest.replaceProperty(Platform, 'OS', platform);
+      try {
+        const screen = renderForm();
+        dirty(screen);
+        goBack(screen);
+        expect(screen.getByTestId('sheet-accessibility-background', { includeHiddenElements: true }).props)
+          .toMatchObject({ accessibilityElementsHidden: true, importantForAccessibility: 'no-hide-descendants' });
+        expect(screen.queryByTestId('literacy-session-form')).toBeNull();
+        expect(screen.queryByRole('button', { name: 'Submit session' })).toBeNull();
+        expect(screen.getByTestId('bottom-sheet-panel').props.role).toBe('alertdialog');
+        expect(screen.getByRole('header', { name: 'Discard this session?' })).toBeTruthy();
+        fireEvent.press(screen.getByRole('button', { name: 'Keep editing' }));
+        expect(screen.getByTestId('sheet-accessibility-background').props)
+          .toMatchObject({ accessibilityElementsHidden: false, importantForAccessibility: 'auto' });
+        expect(screen.getByTestId('literacy-session-form')).toBeTruthy();
+        expectSubmitAvailable(screen);
+        expect(screen.getByPlaceholderText(COMMENTS_PLACEHOLDER).props.value).toBe('worked on m sounds');
+      } finally {
+        replacement.restore();
+      }
     });
 
     test('"Discard" dispatches the stored action and leaves without a second prompt', () => {
