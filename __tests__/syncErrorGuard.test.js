@@ -100,7 +100,7 @@ it('one record fails while the healthy record still syncs and meta is written', 
   await db.closeAsync();
 });
 
-it('a getById throw after markInFlight does not strand the row in_flight and the pass completes', async () => {
+it('a claim snapshot throw after commit does not strand the row in_flight and the pass completes', async () => {
   const db = bindTestActor(createBetterSqliteTestDatabase(':memory:'), 'test-user');
   await runMigrations(db);
   await seedClass(db, 'class-good');
@@ -108,11 +108,16 @@ it('a getById throw after markInFlight does not strand the row in_flight and the
 
   const badId = 'time_entries:time-getbyid-boom:insert';
   const real = createSyncOutboxRepository({ database: db });
+  let claimFaults = 0;
   const wrapped = {
     ...real,
-    getById: async (id) => {
-      if (id === badId) throw new Error('getById boom');
-      return real.getById(id);
+    markInFlightAndGet: async (ids) => {
+      const claimed = await real.markInFlightAndGet(ids);
+      if (ids.length === 1 && ids[0] === badId) {
+        claimFaults += 1;
+        throw new Error('claim snapshot boom after commit');
+      }
+      return claimed;
     },
   };
 
@@ -122,12 +127,13 @@ it('a getById throw after markInFlight does not strand the row in_flight and the
   // Must not throw.
   const result = await engine.syncAll();
   expect(result).toBeTruthy();
+  expect(claimFaults).toBe(1);
 
   // The healthy record still synced.
   expect(await db.getFirstAsync('select sync_status from classes where id = ?', 'class-good'))
     .toEqual({ sync_status: 'synced' });
 
-  // The getById-throwing row is NOT in_flight (pending or failed — both acceptable; we never strand).
+  // The claim-throwing row is NOT in_flight (pending or failed — both acceptable; we never strand).
   const badOutbox = await db.getFirstAsync('select status from sync_outbox where id = ?', badId);
   expect(badOutbox).toBeTruthy();
   expect(badOutbox.status).not.toBe('in_flight');
@@ -151,11 +157,15 @@ it('sync meta is written even when a loop-body path throws', async () => {
 
   const badId = 'time_entries:time-loop-throw:insert';
   const real = createSyncOutboxRepository({ database: db });
+  let claimFaults = 0;
   const wrapped = {
     ...real,
-    getById: async (id) => {
-      if (id === badId) throw new Error('getById boom');
-      return real.getById(id);
+    markInFlightAndGet: async (ids) => {
+      if (ids.length === 1 && ids[0] === badId) {
+        claimFaults += 1;
+        throw new Error('claim boom');
+      }
+      return real.markInFlightAndGet(ids);
     },
   };
 
@@ -171,6 +181,7 @@ it('sync meta is written even when a loop-body path throws', async () => {
   });
 
   await expect(engine.syncAll()).resolves.toBeTruthy();
+  expect(claimFaults).toBe(1);
 
   expect(updateSpy).toHaveBeenCalled();
   expect(updateSpy.mock.calls[0][0]).toEqual(expect.objectContaining({ lastSyncTime: expect.any(String) }));
@@ -182,7 +193,7 @@ it('sync meta is written even when a loop-body path throws', async () => {
   await db.closeAsync();
 });
 
-// ─── Fix 2: await batch fallback so processBatch's catch owns markInFlight throws ───
+// ─── Fix 2: await batch fallback so processBatch's catch owns markInFlightAndGet throws ───
 
 // Position is used as the domain-id key in assessmentItemDomainId (position ?? itemKey).
 // Each item MUST have a unique position within the same assessment to avoid uuid collisions.
@@ -215,7 +226,7 @@ const seedAssessmentItem = async (db, itemId, position, assessmentId = 'assessme
   await enqueue(db, 'assessment_items', itemId, 'insert', item);
 };
 
-it('Fix 2 (Test A): a fallback processRecord markInFlight throw is owned by processBatch — no in_flight, no double-process', async () => {
+it('Fix 2 (Test A): a fallback processRecord markInFlightAndGet throw is owned by processBatch — no in_flight, no double-process', async () => {
   const db = bindTestActor(createBetterSqliteTestDatabase(':memory:'), 'test-user');
   await runMigrations(db);
 
@@ -235,7 +246,7 @@ it('Fix 2 (Test A): a fallback processRecord markInFlight throw is owned by proc
     await seedAssessmentItem(db, itemIds[i], i);
   }
 
-  // The outbox id for the "bad" item — used to identify which markInFlight call to sabotage.
+  // The outbox id for the "bad" item — used to identify which markInFlightAndGet call to sabotage.
   const badItemId = 'item-fix2-b';
   const badOutboxId = outboxRecordId('assessment_items', badItemId, 'insert');
 
@@ -263,16 +274,18 @@ it('Fix 2 (Test A): a fallback processRecord markInFlight throw is owned by proc
     rpc: async () => ({ data: true, error: null }),
   };
 
-  // The batch uses markInFlightAndGet. Per-record fallback uses markInFlight with one id, so inject
-  // the error only at that public fallback boundary.
+  // Batch and per-record fallback use markInFlightAndGet; inject only for the single bad id at
+  // the public fallback boundary.
   const real = createSyncOutboxRepository({ database: db });
+  let claimFaults = 0;
   const wrapped = {
     ...real,
-    markInFlight: async (ids) => {
+    markInFlightAndGet: async (ids) => {
       if (ids.length === 1 && ids[0] === badOutboxId) {
-        throw new Error('markInFlight boom for bad item');
+        claimFaults += 1;
+        throw new Error('markInFlightAndGet boom for bad item');
       }
-      return real.markInFlight(ids);
+      return real.markInFlightAndGet(ids);
     },
   };
 
@@ -286,9 +299,11 @@ it('Fix 2 (Test A): a fallback processRecord markInFlight throw is owned by proc
     enqueueRequest: (task) => freshQueue.enqueue(task),
   });
 
-  // Must not throw — processBatch's catch (via await) owns the markInFlight rejection.
+  // Must not throw — processBatch's catch (via await) owns the markInFlightAndGet rejection.
   const result = await engine.syncAll();
   expect(result).toBeTruthy();
+  expect(claimFaults).toBe(1);
+  expect(await real.getById(badOutboxId)).toMatchObject({ status: expect.stringMatching(/^(pending|failed)$/) });
 
   // No row left in_flight.
   const inFlightRows = await db.getAllAsync(`select id from sync_outbox where status = 'in_flight'`);
@@ -304,7 +319,7 @@ it('Fix 2 (Test A): a fallback processRecord markInFlight throw is owned by proc
   for (const [, count] of Object.entries(upsertCallIdCounts)) {
     expect(count).toBeLessThanOrEqual(1);
   }
-  // 1 batch call + at most 2 per-row calls (item-a and item-c; item-b's markInFlight threw before
+  // 1 batch call + at most 2 per-row calls (item-a and item-c; item-b's markInFlightAndGet threw before
   // reaching the server). If the batch fallback weren't awaited, a rejected per-record processRecord
   // could escape processBatch's catch and bubble to syncAll, which might re-reach the same records
   // → more than 2 per-row calls.
@@ -325,7 +340,7 @@ it('Fix 2 (Test A): a fallback processRecord markInFlight throw is owned by proc
 
 // ─── Task 9 convergence: allSettled sibling race (Promise.all → Promise.allSettled) ──────────────
 //
-// Scenario: batch upsert fails → per-record fallback fires. Item A's markInFlight throws BEFORE
+// Scenario: batch upsert fails → per-record fallback fires. Item A's markInFlightAndGet throws BEFORE
 // A reaches the server. Item B's per-row upsert succeeds (but via a deferred promise so, under
 // the OLD fail-fast Promise.all, A's rejection would settle the batch promise before B resolved).
 //
@@ -336,7 +351,7 @@ it('Fix 2 (Test A): a fallback processRecord markInFlight throw is owned by proc
 // New behaviour: processBatchFallback uses Promise.allSettled — waits for every record to settle,
 // handles each independently. B synced, A pending/failed, none in_flight, B not re-sent.
 
-it('Task 9 (allSettled race): sibling B synced even when A markInFlight throws before B upload settles', async () => {
+it('Task 9 (allSettled race): sibling B synced even when A markInFlightAndGet throws before B upload settles', async () => {
   const db = bindTestActor(createBetterSqliteTestDatabase(':memory:'), 'test-user');
   await runMigrations(db);
 
@@ -370,6 +385,8 @@ it('Task 9 (allSettled race): sibling B synced even when A markInFlight throws b
   // rejects, exercising the OLD fail-fast race window.
   let resolveBUpsert;
   const bUpsertPromise = new Promise((resolve) => { resolveBUpsert = resolve; });
+  let signalBStarted;
+  const bStarted = new Promise((resolve) => { signalBStarted = resolve; });
 
   let totalUpsertCalls = 0;
   let bUpsertCallCount = 0;
@@ -382,15 +399,11 @@ it('Task 9 (allSettled race): sibling B synced even when A markInFlight throws b
           // First call is the batch upsert — fail it to force per-record fallback.
           return { data: null, error: { message: 'batch server error task9' } };
         }
-        // Per-row fallback. Determine which item this is by payload.
-        // buildSyncPayload derives a deterministic UUID; we can't easily match by original id,
-        // so instead track "which per-row call number" this is.
-        const callIndex = totalUpsertCalls - 1; // 1 = A's row, 2 = B's row (or reverse)
-        // We want B to be "delayed". We don't know which per-row call is B vs A because both
-        // processRecord calls run concurrently under Promise.allSettled. So we delay the SECOND
-        // per-row call (whichever arrives second) to ensure both are in-flight simultaneously.
-        if (callIndex === 2) {
+        // A fails before dispatch, so B is the only per-row request. Match its position,
+        // which survives deterministic id mapping, and hold the response until released.
+        if (payload.position === 1) {
           bUpsertCallCount += 1;
+          signalBStarted();
           await bUpsertPromise;
         }
         return { data: null, error: null };
@@ -401,14 +414,16 @@ it('Task 9 (allSettled race): sibling B synced even when A markInFlight throws b
   };
 
   const real = createSyncOutboxRepository({ database: db });
+  let claimFaults = 0;
   const wrapped = {
     ...real,
-    markInFlight: async (ids) => {
-      // Batch claiming uses markInFlightAndGet. This single-id call is A's fallback processRecord.
+    markInFlightAndGet: async (ids) => {
+      // Let the batch claim pass; this single-id call is A's fallback processRecord.
       if (ids.length === 1 && ids[0] === aOutboxId) {
-        throw new Error('markInFlight boom for A task9');
+        claimFaults += 1;
+        throw new Error('markInFlightAndGet boom for A task9');
       }
-      return real.markInFlight(ids);
+      return real.markInFlightAndGet(ids);
     },
   };
 
@@ -421,17 +436,17 @@ it('Task 9 (allSettled race): sibling B synced even when A markInFlight throws b
     enqueueRequest: (task) => freshQueue.enqueue(task),
   });
 
-  // Start syncAll — it will reach per-record fallback. A rejects immediately (markInFlight throws);
+  // Start syncAll — it will reach per-record fallback. A rejects immediately (markInFlightAndGet throws);
   // B starts its delayed upload. Resolve B's deferred so B's upload completes.
   const syncPromise = engine.syncAll();
-  // Let A and B's processRecord calls enter the per-row upsert stage before resolving B.
-  // A doesn't reach upsert (markInFlight throws), B is awaiting bUpsertPromise.
-  // Use setImmediate to let the microtask queue drain (both concurrent processRecord calls start).
-  await new Promise((resolve) => setImmediate(resolve));
+  await bStarted;
+  expect(claimFaults).toBe(1);
   resolveBUpsert(); // B's upload completes successfully.
 
   const result = await syncPromise;
   expect(result).toBeTruthy();
+  expect(claimFaults).toBe(1);
+  expect(bUpsertCallCount).toBe(1);
 
   // Load-bearing: B ended synced (upload succeeded, not reverted to pending).
   const bDomainRow = await db.getFirstAsync('select sync_status from assessment_items where id = ?', bId);
@@ -439,7 +454,7 @@ it('Task 9 (allSettled race): sibling B synced even when A markInFlight throws b
   const bOutboxRow = await db.getFirstAsync('select id from sync_outbox where id = ?', bOutboxId);
   expect(bOutboxRow).toBeNull(); // outbox entry deleted on success
 
-  // A ended pending or failed (markInFlight threw — its outbox row was never in_flight successfully).
+  // A ended pending or failed (markInFlightAndGet threw — its outbox row was never in_flight successfully).
   const aOutboxRow = await db.getFirstAsync('select status from sync_outbox where id = ?', aOutboxId);
   expect(aOutboxRow).toBeTruthy();
   expect(aOutboxRow.status).not.toBe('in_flight');
@@ -453,6 +468,8 @@ it('Task 9 (allSettled race): sibling B synced even when A markInFlight throws b
   const upsertCallsBeforeSecondPass = totalUpsertCalls;
   const result2 = await engine.syncAll({ force: true });
   expect(result2).toBeTruthy();
+  expect(claimFaults).toBe(2);
+  expect(bUpsertCallCount).toBe(1);
   // B's outbox row is gone — no new upsert for B's uuid.
   const bOutboxRowAfter = await db.getFirstAsync('select id from sync_outbox where id = ?', bOutboxId);
   expect(bOutboxRowAfter).toBeNull();

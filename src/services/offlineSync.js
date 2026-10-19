@@ -2,6 +2,7 @@ import { isStaleActorError, StaleActorError } from '../session/staleActor';
 import { buildIncidentEnvelope, drainSupportIncidents } from './supportIncidents';
 import { getConnectionActor } from '../session/signedInHandle';
 import { resolveDatabase, runRepositoryTransaction } from '../db/repositories/repositoryRuntime';
+import { VERSIONED_TABLES, IMMUTABLE_ASSIGNMENT_TABLES, isStampedOperation } from '../db/repositories/rowVersion';
 import {
   chunkArray,
   quoteIdentifier,
@@ -71,51 +72,62 @@ export const SERVER_COLUMNS = {
     'id', 'school_id', 'name', 'grade', 'teacher', 'teacher_id', 'home_language',
     'academic_year', 'academic_year_id', 'archived_at', 'archived_by_user_id',
     'archive_reason', 'created_by', 'created_at', 'updated_at',
+    'row_version',
   ],
   children: [
     'id', 'first_name', 'last_name', 'preferred_name', 'date_of_birth', 'age',
     'gender', 'reading_level', 'class_id', 'hidden_at', 'archived_at', 'archived_by_user_id',
     'archive_reason', 'created_by', 'created_at', 'updated_at',
+    'row_version',
   ],
   child_ea_assignments: [
     'id', 'user_id', 'child_id', 'assigned_at', 'unassigned_at', 'created_by',
     'created_at', 'updated_at',
+    'row_version',
   ],
   child_programme_enrollments: [
     'id', 'child_id', 'programme_id', 'enrolled_at', 'ended_at', 'created_by',
     'created_at', 'updated_at',
+    'row_version',
   ],
   child_class_memberships: [
     'id', 'child_id', 'class_id', 'academic_year_id', 'enrolled_at', 'exited_at',
     'created_by', 'created_at', 'updated_at',
+    'row_version',
   ],
   class_ea_assignments: [
     'id', 'class_id', 'ea_user_id', 'programme_id', 'assigned_at', 'unassigned_at',
     'handover_reason', 'created_by', 'created_at', 'updated_at',
+    'row_version',
   ],
   grouping_versions: [
     'id', 'class_id', 'academic_year_id', 'version_number', 'status',
     'accepted_at', 'accepted_by_user_id', 'archived_at', 'archived_by_user_id',
     'archive_reason', 'created_by', 'created_at', 'updated_at',
+    'row_version',
   ],
   class_grouping_state: [
     'id', 'class_id', 'academic_year_id', 'class_list_status',
     'class_list_completed_at', 'class_list_completed_by_user_id',
     'class_list_reopened_at', 'class_list_reopened_by_user_id',
     'active_grouping_version_id', 'created_at', 'updated_at',
+    'row_version',
   ],
   groups: [
     'id', 'name', 'programme_id', 'class_id', 'grouping_version_id',
     'display_number', 'archived_at', 'archived_by_user_id', 'archive_reason',
     'created_by', 'created_at', 'updated_at',
+    'row_version',
   ],
   group_ea_assignments: [
     'id', 'group_id', 'ea_user_id', 'programme_id', 'assigned_at', 'unassigned_at',
     'handover_reason', 'created_by', 'created_at', 'updated_at',
+    'row_version',
   ],
   child_group_memberships: [
     'id', 'child_id', 'group_id', 'grouping_version_id', 'joined_at', 'removed_at',
     'created_by', 'created_at', 'updated_at',
+    'row_version',
   ],
   sessions: [
     'id', 'user_id', 'programme_id', 'class_id', 'session_date', 'started_at',
@@ -315,11 +327,6 @@ export const SYNC_BATCH_LIMITS = Object.freeze({
   maxFallbackRecordsPerPass: 25,
   maxFallbackConcurrency: 5,
 });
-const IMMUTABLE_ASSIGNMENT_TABLES = new Set([
-  'child_ea_assignments',
-  'class_ea_assignments',
-  'group_ea_assignments',
-]);
 
 // Edits change a row the server already has. PostgreSQL checks INSERT WITH CHECK on every upsert
 // row, even one that conflicts, so sending an edit as an upsert asks for insert permission that an
@@ -567,6 +574,14 @@ const classifyError = (
     return { terminal: true, markAsSynced: false };
   }
 
+  if (code === 'MV001') {
+    return {
+      terminal: true,
+      markAsSynced: false,
+      reason: 'Server has a newer version of this record (stale_version)',
+    };
+  }
+
   return { terminal: false, markAsSynced: false };
 };
 
@@ -584,9 +599,10 @@ const isHealableRlsError = (record) => {
   return RLS_ERROR_SIGNATURE.test(err);
 };
 
-const buildSyncPayload = (tableName, record) => {
+const buildSyncPayload = (tableName, record, operation) => {
   const tableLegacyKeys = LEGACY_KEYS_TO_STRIP[tableName] || [];
   const keysToStrip = new Set([...LOCAL_ONLY_KEYS_TO_STRIP, ...tableLegacyKeys]);
+  if (!isStampedOperation(tableName, operation)) keysToStrip.add('row_version');
   const allowlist = SERVER_COLUMNS[tableName] ? new Set(SERVER_COLUMNS[tableName]) : null;
 
   const payload = {};
@@ -677,13 +693,14 @@ const errorMessage = (error) => (
 );
 
 // child_class_memberships recurs (class moves) and needs its distinct archived rows for audit
-// history, so it cannot use a deterministic-pair id. Before an insert, reconcile against the
+// history, so it cannot use a deterministic-pair id. Before an active insert, reconcile against the
 // server's active (child_id, academic_year_id) row: if a DIFFERENT membership already holds the
 // pair (a seed/head-office row the device never archived), archive it first so the insert does
 // not 23505 on the partial-unique index. Device-move-wins, audit-preserving. Local state is not
 // enough here -- this is the one place a pre-push SERVER read is warranted. Conservative: any
 // error falls through to the normal upsert (then #48 classifies the outcome).
 const reconcileChildClassMembership = async (supabaseClient, payload) => {
+  if (payload?.exited_at) return;
   if (!payload?.child_id || !payload?.academic_year_id) return;
   try {
     const { data, error } = await supabaseClient
@@ -714,6 +731,34 @@ const makeFailedRecord = (outboxRecord, reason) => ({
   reason,
 });
 
+const buildOperationPatch = (tableName, operation, payload) => {
+  if (operation === 'archive' || operation === 'restore') {
+    const archiveColumns = ARCHIVE_SERVER_COLUMNS[tableName] || [];
+    const patch = Object.fromEntries(
+      archiveColumns
+        .filter((column) => Object.prototype.hasOwnProperty.call(payload, column))
+        .map((column) => [column, payload[column]])
+    );
+    if (VERSIONED_TABLES.has(tableName) && Object.prototype.hasOwnProperty.call(payload, 'row_version')) {
+      patch.row_version = payload.row_version;
+    }
+    return patch;
+  }
+  if (operation === 'update' && UPDATE_BY_ID_TABLES.has(tableName)) {
+    // Full stored snapshots may predate an archive/restore. Ordinary edits must
+    // not replay that lifecycle state. Mastery reactivation is intentionally an
+    // update with deleted_at:null (masteryRepository.enqueueMasteryWrite).
+    const lifecycleColumns = tableName === 'letter_mastery'
+      ? [] : (ARCHIVE_SERVER_COLUMNS[tableName] || []);
+    return Object.fromEntries(
+      Object.entries(payload).filter(([column]) => (
+        !UPDATE_PATCH_EXCLUDED_COLUMNS.has(column) && !lifecycleColumns.includes(column)
+      ))
+    );
+  }
+  return payload;
+};
+
 const runServerOperation = async (supabaseClient, config, outboxRecord) => {
   if (outboxRecord.operation !== 'hard_delete' && outboxRecord.payload == null) {
     return {
@@ -728,7 +773,7 @@ const runServerOperation = async (supabaseClient, config, outboxRecord) => {
   const payloadSource = outboxRecord.operation === 'hard_delete'
     ? (outboxRecord.payload || { id: outboxRecord.record_id })
     : outboxRecord.payload;
-  const payload = buildSyncPayload(config.tableName, payloadSource);
+  const payload = buildSyncPayload(config.tableName, payloadSource, outboxRecord.operation);
 
   if (payload.programme_id === LEGACY_PROGRAMME_ID) {
     return {
@@ -766,12 +811,7 @@ const runServerOperation = async (supabaseClient, config, outboxRecord) => {
   }
 
   if (outboxRecord.operation === 'archive' || outboxRecord.operation === 'restore') {
-    const archiveColumns = ARCHIVE_SERVER_COLUMNS[config.tableName] || [];
-    const archivePatch = Object.fromEntries(
-      archiveColumns
-        .filter((column) => Object.prototype.hasOwnProperty.call(payload, column))
-        .map((column) => [column, payload[column]])
-    );
+    const archivePatch = buildOperationPatch(config.tableName, outboxRecord.operation, payload);
     const { data, error } = await supabaseClient
       .from(config.tableName)
       .update(archivePatch)
@@ -795,16 +835,7 @@ const runServerOperation = async (supabaseClient, config, outboxRecord) => {
     // buildSyncPayload has already re-derived deterministic ids (letter_mastery), so the server id
     // is the payload id, not the outbox record_id.
     const serverId = payload.id || outboxRecord.record_id;
-    // Full stored snapshots may predate an archive/restore. Ordinary edits must
-    // not replay that lifecycle state. Mastery reactivation is intentionally an
-    // update with deleted_at:null (masteryRepository.enqueueMasteryWrite).
-    const lifecycleColumns = config.tableName === 'letter_mastery'
-      ? [] : (ARCHIVE_SERVER_COLUMNS[config.tableName] || []);
-    const patch = Object.fromEntries(
-      Object.entries(payload).filter(([column]) => (
-        !UPDATE_PATCH_EXCLUDED_COLUMNS.has(column) && !lifecycleColumns.includes(column)
-      ))
-    );
+    const patch = buildOperationPatch(config.tableName, outboxRecord.operation, payload);
     const { data, error } = await supabaseClient
       .from(config.tableName)
       .update(patch)
@@ -841,7 +872,7 @@ const runServerOperation = async (supabaseClient, config, outboxRecord) => {
 
 const runBatchServerOperation = async (supabaseClient, config, outboxRecords) => {
   const payloads = outboxRecords.map((outboxRecord) => (
-    buildSyncPayload(config.tableName, outboxRecord.payload)
+    buildSyncPayload(config.tableName, outboxRecord.payload, outboxRecord.operation)
   ));
 
   const { error } = await supabaseClient
@@ -895,6 +926,7 @@ const finalizeSuccess = async ({
   database,
   outboxRecord,
   tableName,
+  applyAcknowledgedPayload,
 }) => runRepositoryTransaction(database, async (txn) => {
   const deleteResult = await txn.runAsync(`
     delete from sync_outbox
@@ -919,6 +951,9 @@ const finalizeSuccess = async ({
       syncStatus: hasRemainingOutbox ? 'pending' : 'synced',
       lastSyncError: null,
     });
+    if (!hasRemainingOutbox && applyAcknowledgedPayload) {
+      await applyAcknowledgedPayload(txn, tableName, outboxRecord.record_id, outboxRecord.operation, outboxRecord.payload);
+    }
   }
   return true;
 });
@@ -998,7 +1033,7 @@ const finalizeOutboxOnlyTerminalFailure = async ({
   return true;
 });
 
-const finalizeManySuccess = async ({ database, records, tableName }) => {
+const finalizeManySuccess = async ({ database, records, tableName, applyAcknowledgedPayload }) => {
   for (const chunk of chunkArray(records, 200)) {
     await runRepositoryTransaction(database, async (txn) => {
       for (const outboxRecord of chunk) {
@@ -1020,6 +1055,9 @@ const finalizeManySuccess = async ({ database, records, tableName }) => {
             syncStatus: hasRemainingOutbox ? 'pending' : 'synced',
             lastSyncError: null,
           });
+          if (!hasRemainingOutbox) {
+            await applyAcknowledgedPayload(txn, tableName, outboxRecord.record_id, outboxRecord.operation, outboxRecord.payload);
+          }
         }
       }
     });
@@ -1093,6 +1131,27 @@ export const createOutboxSyncEngine = ({
   enqueueRequest,
   getAuthSession = () => supabaseClient.auth.getSession(),
 } = {}) => {
+  const localColumnsByTable = new Map();
+  // A terminal pull may replace domain content while retaining the queued correction.
+  // Apply the accepted patch after bookkeeping, since upserts can normalize the id.
+  const applyAcknowledgedPayload = async (txn, tableName, recordId, operation, payload) => {
+    if (!isStampedOperation(tableName, operation)) return;
+    if (!localColumnsByTable.has(tableName)) {
+      const columns = await txn.getAllAsync('select name from pragma_table_info(?)', tableName);
+      localColumnsByTable.set(tableName, new Set(columns.map(column => column.name)));
+    }
+    const localColumns = localColumnsByTable.get(tableName);
+    const patch = buildOperationPatch(tableName, operation, buildSyncPayload(tableName, payload, operation));
+    const entries = Object.entries(patch).filter(([column]) => (
+      localColumns.has(column) && !LOCAL_ONLY_COLUMNS.includes(column)
+    ));
+    if (entries.length === 0) return;
+    await txn.runAsync(`
+      update ${quoteIdentifier(tableName)}
+      set ${entries.map(([column]) => `${quoteIdentifier(column)} = ?`).join(', ')}
+      where id = ?
+    `, ...entries.map(([, value]) => value), recordId);
+  };
   const safeDuplicateTables = new Set(safeDuplicateSuccessTables.map(normalizeTableName));
   const getConfig = (tableName) => {
     const normalized = normalizeTableName(tableName);
@@ -1133,10 +1192,8 @@ export const createOutboxSyncEngine = ({
       return { success: false, terminal: true, failedRecord: makeFailedRecord(outboxRecord, reason) };
     }
 
-    await outboxRepository.markInFlight([outboxRecord.id]);
-    let inFlightRecord = null;
+    const [inFlightRecord] = await outboxRepository.markInFlightAndGet([outboxRecord.id]);
     try {
-      inFlightRecord = await outboxRepository.getById(outboxRecord.id);
       if (!inFlightRecord) {
         const reason = `Outbox record disappeared before sync: ${outboxRecord.id}`;
         return { success: false, terminal: false, failedRecord: makeFailedRecord(outboxRecord, reason) };
@@ -1158,6 +1215,7 @@ export const createOutboxSyncEngine = ({
           database,
           outboxRecord: inFlightRecord,
           tableName: config.tableName,
+          applyAcknowledgedPayload,
           outboxRepository,
         });
         return { success: true };
@@ -1249,7 +1307,7 @@ export const createOutboxSyncEngine = ({
       return { success: false, terminal: false, failedRecord: makeFailedRecord(outboxRecord, reason) };
     } catch (error) {
       if (isStaleActorError(error)) throw error;
-      // Any post-markInFlight throw (server request, getById, or a finalize) must not strand the
+      // Any post-claim throw (server request or a finalize) must not strand the
       // row in_flight. finalize-retriable with inFlightRecord when we have it (its updated_at makes
       // the CAS HIT → row marked failed+backoff, correct for a real attempt); else the original
       // record (CAS MISSES on the changed updated_at → restorePendingAfterStaleFinalize → pending).
@@ -1365,7 +1423,7 @@ export const createOutboxSyncEngine = ({
         return await processBatchFallback(outboxRecords, passUserId, fallbackBudget);
       }
 
-      await finalizeManySuccess({ database, records: inFlightRecords, tableName: config.tableName });
+      await finalizeManySuccess({ database, records: inFlightRecords, tableName: config.tableName, applyAcknowledgedPayload });
 
       return outboxRecords.map(() => ({ success: true }));
     } catch (error) {

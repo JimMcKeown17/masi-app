@@ -442,6 +442,7 @@ describe('SQLite outbox offline sync', () => {
       value: 'random-1',
       payload: {
         unassigned_at: archivedAt,
+        row_version: 2,
       },
     }));
     expect(updates[0].value).not.toBe(deterministicDomainId('child_ea_assignments', undefined));
@@ -488,7 +489,7 @@ describe('SQLite outbox offline sync', () => {
     expect(calls).toEqual([{
       type: 'update',
       tableName: 'child_group_memberships',
-      payload: { removed_at: removedAt },
+      payload: { removed_at: removedAt, row_version: 2 },
       column: 'id',
       value: 'membership-archive-target',
     }]);
@@ -1682,7 +1683,7 @@ describe('SQLite outbox offline sync', () => {
           expect(call.payload).not.toHaveProperty(column);
         }
       } else {
-        expect(call.payload).toEqual({ unassigned_at: unassignedAt });
+        expect(call.payload).toEqual({ unassigned_at: unassignedAt, row_version: 2 });
       }
     }
     expect(result).toEqual(expect.objectContaining({
@@ -2021,6 +2022,7 @@ describe('SQLite outbox offline sync', () => {
         tableName: 'classes',
         payload: {
           archived_at: '2026-05-21T09:00:00.000Z',
+          row_version: 2,
         },
         column: 'id',
         value: 'class-1',
@@ -2030,6 +2032,7 @@ describe('SQLite outbox offline sync', () => {
         tableName: 'children',
         payload: {
           archived_at: null,
+          row_version: 2,
         },
         column: 'id',
         value: 'child-1',

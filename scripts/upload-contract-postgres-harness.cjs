@@ -31,6 +31,7 @@ const UNASSIGNED_EA = '11000000-0000-0000-0000-000000000003';
 const SCHOOL = '21000000-0000-0000-0000-000000000001';
 const CLASS = '41000000-0000-0000-0000-000000000001';
 const CHILD = '51000000-0000-0000-0000-000000000001';
+const CHILD_ASSIGNMENT = '71200000-0000-0000-0000-000000000001';
 const GROUP = '72100000-0000-0000-0000-000000000001';
 const ACTIVE_GROUP = '72100000-0000-0000-0000-000000000002';
 const GROUP_ASSIGNMENT = '74100000-0000-0000-0000-000000000001';
@@ -58,7 +59,7 @@ VALUES ('71100000-0000-0000-0000-000000000001', '${CLASS}', '${ASSIGNED_EA}', ${
 INSERT INTO public.children (id, first_name, last_name, class_id, created_by, reading_level)
 VALUES ('${CHILD}', 'Harness', 'Child', '${CLASS}', '${HEAD_OFFICE}', 'letters');
 INSERT INTO public.child_ea_assignments (id, user_id, child_id, created_by)
-VALUES ('71200000-0000-0000-0000-000000000001', '${ASSIGNED_EA}', '${CHILD}', '${HEAD_OFFICE}');
+VALUES ('${CHILD_ASSIGNMENT}', '${ASSIGNED_EA}', '${CHILD}', '${HEAD_OFFICE}');
 INSERT INTO public.groups (id, name, programme_id, class_id, created_by)
 VALUES ('${GROUP}', 'Head Office group', ${PROGRAMME}, '${CLASS}', '${HEAD_OFFICE}');
 INSERT INTO public.group_ea_assignments (
@@ -80,9 +81,10 @@ INSERT INTO public.time_entries (id, user_id, sign_in_time, sign_in_lat, sign_in
 VALUES ('${TIME_ENTRY}', '${ASSIGNED_EA}', pg_catalog.now(), -33.96, 25.6);
 `;
 
-// Runs one statement as an authenticated actor inside a transaction that always rolls back.
-const asActor = (actorId, statement) => `
+// Setup runs as postgres before the actor's statements; the whole transaction rolls back.
+const asActor = (actorId, statement, setup = '') => `
 BEGIN;
+${setup}
 SET LOCAL ROLE authenticated;
 SET LOCAL request.jwt.claim.sub = '${actorId}';
 ${statement}
@@ -92,10 +94,10 @@ ROLLBACK;
 const returnedIds = (output) => output.split('\n').map((line) => line.trim()).filter(Boolean);
 
 // PostgREST's upsert (Prefer: resolution=merge-duplicates) for the mobile payload shape.
-const upsertSql = (table, columns, values) => `
+const upsertSql = (table, columns, values, returning = false) => `
 INSERT INTO public.${table} (${columns.join(', ')})
-VALUES (${values.join(', ')})
-ON CONFLICT (id) DO UPDATE SET ${columns.filter((c) => c !== 'id').map((c) => `${c} = EXCLUDED.${c}`).join(', ')};
+VALUES ${(Array.isArray(values[0]) ? values : [values]).map((row) => `(${row.join(', ')})`).join(', ')}
+ON CONFLICT (id) DO UPDATE SET ${columns.filter((c) => c !== 'id').map((c) => `${c} = EXCLUDED.${c}`).join(', ')}${returning ? ' RETURNING id' : ''};
 `;
 
 // PostgREST's update(...).eq('id', ...).select('id').
@@ -258,6 +260,262 @@ const runLocationCases = (databaseUrl) => {
   return { passed };
 };
 
+const runRowVersionCases = (databaseUrl) => {
+  let passed = 0;
+  const childSeed = `UPDATE public.children SET row_version = 3 WHERE id = '${CHILD}';`;
+  // Conflicting upserts still need INSERT permission; use EA-created children for those cases.
+  const upsertSeed = `${childSeed}
+    UPDATE public.children SET created_by = '${ASSIGNED_EA}' WHERE id = '${CHILD}';`;
+  const batchSeed = `${upsertSeed}
+    INSERT INTO public.children (id, first_name, last_name, class_id, created_by, reading_level)
+    VALUES ('${NEW_CHILD}', 'Harness', 'Child', '${CLASS}', '${ASSIGNED_EA}', 'letters');
+    UPDATE public.children SET row_version = 3 WHERE id = '${NEW_CHILD}';`;
+  const childUpsert = (versions, returning = true) => upsertSql(
+    'children',
+    ['id', 'first_name', 'last_name', 'class_id', 'created_by', 'reading_level',
+      ...(versions[0] === undefined ? [] : ['row_version'])],
+    versions.map((version, index) => [
+      `'${[CHILD, NEW_CHILD][index]}'`, "'Harness'", "'Child'", `'${CLASS}'`, `'${ASSIGNED_EA}'`, "'words'",
+      ...(version === undefined ? [] : [version]),
+    ]),
+    returning,
+  );
+  const versionPatch = (version) => version === undefined ? '' : `, row_version = ${version}`;
+  const cases = [
+    {
+      label: 'children-update', table: 'children', id: CHILD, setup: childSeed,
+      write: (version) => updateByIdSql('children', `reading_level = 'words'${versionPatch(version)}`, CHILD),
+      state: 'reading_level', expected: 'words',
+    },
+    {
+      label: 'children-upsert', table: 'children', id: CHILD, setup: upsertSeed,
+      write: (version) => childUpsert([version]), state: 'reading_level', expected: 'words',
+    },
+    {
+      label: 'groups-archive', table: 'groups', id: ACTIVE_GROUP,
+      setup: `UPDATE public.groups SET row_version = 3, archived_at = NULL WHERE id = '${ACTIVE_GROUP}';`,
+      write: (version) => updateByIdSql('groups', `archived_at = now()${versionPatch(version)}`, ACTIVE_GROUP),
+      state: 'archived_at IS NOT NULL', expected: 't',
+    },
+    {
+      label: 'groups-restore', table: 'groups', id: ACTIVE_GROUP,
+      setup: `UPDATE public.groups SET row_version = 3, archived_at = now() WHERE id = '${ACTIVE_GROUP}';`,
+      write: (version) => updateByIdSql('groups', `archived_at = NULL${versionPatch(version)}`, ACTIVE_GROUP),
+      state: 'archived_at IS NULL', expected: 't',
+    },
+    {
+      label: 'child-assignment-archive', table: 'child_ea_assignments', id: CHILD_ASSIGNMENT,
+      setup: `UPDATE public.child_ea_assignments SET row_version = 3 WHERE id = '${CHILD_ASSIGNMENT}';`,
+      write: (version) => updateByIdSql('child_ea_assignments',
+        `unassigned_at = now()${versionPatch(version)}`, CHILD_ASSIGNMENT),
+      state: 'unassigned_at IS NOT NULL', expected: 't',
+    },
+  ];
+  for (const testCase of cases) {
+    expectSqlState({ databaseUrl, label: `version-${testCase.label}-lower`, sqlState: 'MV001',
+      sql: asActor(ASSIGNED_EA, testCase.write(2), testCase.setup) });
+    passed += 1;
+    for (const [version, stored, label] of [[undefined, 3, 'omitted'], [4, 4, 'higher']]) {
+      const sql = `${testCase.write(version)}
+        SELECT row_version, ${testCase.state} FROM public.${testCase.table} WHERE id = '${testCase.id}';`;
+      assert.deepEqual(returnedIds(runPsql({ databaseUrl, label: `version-${testCase.label}-${label}`,
+        sql: asActor(ASSIGNED_EA, sql, testCase.setup) })), [testCase.id, `${stored}|${testCase.expected}`]);
+      passed += 1;
+    }
+  }
+
+  // Catch inside a subtransaction to inspect both rows, then rethrow the original SQLSTATE.
+  expectSqlState({ databaseUrl, label: 'version-children-batch-lower-atomic', sqlState: 'MV001',
+    sql: asActor(ASSIGNED_EA, `DO $case$ BEGIN
+      BEGIN
+        ${childUpsert([4, 2], false)}
+        RAISE EXCEPTION 'Expected the stale batch to fail';
+      EXCEPTION WHEN SQLSTATE 'MV001' THEN
+        IF (SELECT count(*) FROM public.children WHERE id IN ('${CHILD}', '${NEW_CHILD}')
+            AND row_version = 3 AND reading_level = 'letters') <> 2 THEN
+          RAISE EXCEPTION 'A refused batch changed a child';
+        END IF;
+        RAISE;
+      END;
+    END; $case$;`, batchSeed) });
+  passed += 1;
+  for (const [version, stored, label] of [[undefined, 3, 'omitted'], [4, 4, 'higher']]) {
+    const output = returnedIds(runPsql({ databaseUrl, label: `version-children-batch-${label}`,
+      sql: asActor(ASSIGNED_EA, `${childUpsert([version, version])}
+        SELECT id, row_version, reading_level FROM public.children
+        WHERE id IN ('${CHILD}', '${NEW_CHILD}') ORDER BY id;`, batchSeed) }));
+    assert.deepEqual(output.slice(0, 2).sort(), [CHILD, NEW_CHILD].sort());
+    assert.deepEqual(output.slice(2), [CHILD, NEW_CHILD].sort().map((id) => `${id}|${stored}|words`));
+    passed += 1;
+  }
+
+  expectSqlState({ databaseUrl, label: 'version-s1-after-s2', sqlState: 'MV001',
+    sql: asActor(ASSIGNED_EA, `
+      ${updateByIdSql('children', "first_name = 'B', row_version = 3", CHILD)}
+      DO $case$ BEGIN
+        BEGIN
+          UPDATE public.children SET first_name = 'A', row_version = 2 WHERE id = '${CHILD}';
+          RAISE EXCEPTION 'Expected S1 after S2 to fail';
+        EXCEPTION WHEN SQLSTATE 'MV001' THEN
+          IF NOT EXISTS (SELECT 1 FROM public.children
+              WHERE id = '${CHILD}' AND first_name = 'B' AND row_version = 3) THEN
+            RAISE EXCEPTION 'S1 overwrote S2';
+          END IF;
+          RAISE;
+        END;
+      END; $case$;`, childSeed) });
+  passed += 1;
+
+  // Run as the table owner: the point is that ON CONFLICT DO NOTHING never reaches the
+  // BEFORE UPDATE version rule; RLS on assignment inserts is covered by runCases.
+  assert.deepEqual(returnedIds(runPsql({ databaseUrl, label: 'version-assignment-insert-ignore',
+    sql: `BEGIN;
+      UPDATE public.child_ea_assignments SET row_version = 3 WHERE id = '${CHILD_ASSIGNMENT}';
+      INSERT INTO public.child_ea_assignments (id, user_id, child_id, created_by, row_version)
+      VALUES ('${CHILD_ASSIGNMENT}', '${ASSIGNED_EA}', '${CHILD}', '${ASSIGNED_EA}', 2)
+      ON CONFLICT (id) DO NOTHING RETURNING id;
+      SELECT row_version, created_by FROM public.child_ea_assignments WHERE id = '${CHILD_ASSIGNMENT}';
+      ROLLBACK;` })),
+  [`3|${HEAD_OFFICE}`]);
+  passed += 1;
+
+  assert.deepEqual(returnedIds(runPsql({ databaseUrl, label: 'version-class-delete-set-null', sql: `
+    BEGIN;
+    ${childSeed}
+    UPDATE public.groups SET row_version = 3 WHERE id IN ('${GROUP}', '${ACTIVE_GROUP}');
+    DELETE FROM public.classes WHERE id = '${CLASS}' RETURNING id;
+    SELECT row_version, class_id IS NULL FROM public.children WHERE id = '${CHILD}';
+    SELECT row_version, class_id IS NULL FROM public.groups WHERE id IN ('${GROUP}', '${ACTIVE_GROUP}') ORDER BY id;
+    ROLLBACK;` })), [CLASS, '3|t', '3|t', '3|t']);
+  passed += 1;
+
+  const membershipId = '71300000-0000-0000-0000-000000000001';
+  assert.deepEqual(returnedIds(runPsql({ databaseUrl, label: 'version-membership-exit-omitted',
+    sql: asActor(ASSIGNED_EA, `
+      ${updateByIdSql('child_class_memberships', 'exited_at = now()', membershipId)}
+      SELECT row_version, exited_at IS NOT NULL FROM public.child_class_memberships WHERE id = '${membershipId}';`, `
+      INSERT INTO public.child_class_memberships (id, child_id, class_id, academic_year_id, created_by)
+      VALUES ('${membershipId}', '${CHILD}', '${CLASS}', ${ACTIVE_YEAR}, '${HEAD_OFFICE}');
+      UPDATE public.child_class_memberships SET row_version = 3 WHERE id = '${membershipId}';`) })),
+  [membershipId, '3|t']);
+  passed += 1;
+  return { passed };
+};
+
+const runTimeEntryForwardCases = (databaseUrl) => {
+  let passed = 0;
+  const lateOpenUpsert = upsertSql('time_entries',
+    ['id', 'user_id', 'sign_in_time', 'sign_in_lat', 'sign_in_lon',
+      'sign_out_time', 'sign_out_lat', 'sign_out_lon', 'sign_out_location_status', 'auto_clocked_out'],
+    [`'${TIME_ENTRY}'`, `'${ASSIGNED_EA}'`,
+      `(SELECT sign_in_time FROM public.time_entries WHERE id = '${TIME_ENTRY}')`, '-33.96', '25.6',
+      'NULL', 'NULL', 'NULL', 'NULL', 'false'], true);
+
+  // RED on the pre-fix migrations: the open snapshot overwrites the owner's close.
+  assert.deepEqual(returnedIds(runPsql({ databaseUrl, label: 'late open write reopens a closed shift',
+    sql: asActor(ASSIGNED_EA, `
+      ${updateByIdSql('time_entries', "sign_out_time = sign_in_time + interval '6 hours'", TIME_ENTRY)}
+      ${lateOpenUpsert}
+      SELECT sign_out_time IS NOT DISTINCT FROM sign_in_time + interval '6 hours'
+        FROM public.time_entries WHERE id = '${TIME_ENTRY}';`) })),
+  [TIME_ENTRY, TIME_ENTRY, 't'], 'late open write reopens a closed shift');
+  passed += 1;
+
+  const start = "(now() - interval '11 hours')";
+  const open = { hours: null, lat: null, lon: null, status: null, auto: false };
+  const manual = { hours: 6, lat: -33.95, lon: 25.61, status: 'fix', auto: false };
+  const automatic = { ...open, hours: 10, auto: true };
+  const later = { ...manual, hours: 7, lat: -33.94, lon: 25.62 };
+  const tooLate = { ...later, hours: 11 };
+  const columns = ['sign_out_time', 'sign_out_lat', 'sign_out_lon', 'sign_out_location_status', 'auto_clocked_out'];
+  const values = (state) => [
+    state.hours === null ? 'NULL' : `${start} + interval '${state.hours} hours'`,
+    state.lat ?? 'NULL', state.lon ?? 'NULL',
+    state.status === null ? 'NULL' : `'${state.status}'`, state.auto,
+  ];
+  const assignments = (state) => columns.map((column, index) => `${column} = ${values(state)[index]}`).join(', ');
+  const setup = (state) => `UPDATE public.time_entries SET sign_in_time = ${start},
+    ${assignments(state)} WHERE id = '${TIME_ENTRY}';`;
+  const jobSetup = `${setup(open)}
+    DO $case$ BEGIN PERFORM private.close_overdue_time_entries(); END; $case$;`;
+  const snapshot = `SELECT json_build_object(
+    'hours', extract(epoch FROM (sign_out_time - sign_in_time)) / 3600,
+    'lat', sign_out_lat, 'lon', sign_out_lon, 'status', sign_out_location_status, 'auto', auto_clocked_out)
+    FROM public.time_entries WHERE id = '${TIME_ENTRY}';`;
+  const write = (kind, state) => {
+    if (kind === 'update') return updateByIdSql('time_entries', assignments(state), TIME_ENTRY);
+    const insert = `INSERT INTO public.time_entries
+      (id, user_id, sign_in_time, sign_in_lat, sign_in_lon, ${columns.join(', ')})
+      VALUES ('${TIME_ENTRY}', '${ASSIGNED_EA}', ${start}, -33.96, 25.6, ${values(state).join(', ')})`;
+    return `${insert}${kind === 'upsert' ? ` ON CONFLICT (id) DO UPDATE SET ${columns
+      .map((column) => `${column} = EXCLUDED.${column}`).join(', ')}` : ''} RETURNING id;`;
+  };
+  const expectWrite = (label, sql, seed, expected, actor = ASSIGNED_EA) => {
+    const output = returnedIds(runPsql({ databaseUrl, label,
+      sql: actor === null ? `BEGIN; ${seed} ${sql} ${snapshot} ROLLBACK;`
+        : asActor(actor, `${sql} ${snapshot}`, seed) }));
+    assert.equal(output.length, 2, `${label}: one returned id and one stored snapshot`);
+    assert.equal(output[0], TIME_ENTRY, `${label}: the write must acknowledge exactly one row`);
+    assert.deepEqual(JSON.parse(output[1]), expected, `${label}: stored clock-out fields`);
+    passed += 1;
+  };
+
+  const cases = [
+    { label: 'open-honest-close', stored: open, incoming: manual, expected: manual },
+    { label: 'open-exact-ten-hour-close', stored: open, incoming: automatic, expected: automatic },
+    { label: 'open-over-ten-hour-close', stored: open, incoming: tooLate, expected: automatic },
+    { label: 'open-retry', stored: open, incoming: open, expected: open },
+    { label: 'job-closed-exact-phone-auto-close', job: true, incoming: automatic, expected: automatic },
+    { label: 'job-closed-honest-close', job: true, incoming: manual, expected: manual },
+    { label: 'job-closed-open-retry', job: true, incoming: open, expected: automatic },
+    { label: 'job-closed-later-close', job: true, incoming: tooLate, expected: automatic },
+    { label: 'manual-closed-open-retry', stored: manual, incoming: open, expected: manual },
+    { label: 'manual-closed-later-close', stored: manual, incoming: later, expected: manual },
+    { label: 'manual-closed-earlier-close', stored: later, incoming: manual, expected: later },
+    { label: 'manual-closed-auto-close', stored: manual, incoming: automatic, expected: manual },
+    { label: 'non-ten-hour-auto-is-preserved', stored: { ...manual, auto: true },
+      incoming: { ...later, hours: 5 }, expected: { ...manual, auto: true } },
+  ];
+  for (const kind of ['update', 'upsert']) {
+    for (const testCase of cases) {
+      expectWrite(`time-entry-${kind}-${testCase.label}`, write(kind, testCase.incoming),
+        testCase.job ? jobSetup : setup(testCase.stored), testCase.expected);
+    }
+  }
+  const missing = `DELETE FROM public.time_entries WHERE id = '${TIME_ENTRY}';`;
+  expectWrite('time-entry-insert-over-ten-hour-close', write('insert', tooLate), missing, automatic);
+  expectWrite('time-entry-insert-honest-close', write('insert', manual), missing, manual);
+  expectWrite('time-entry-insert-open', write('insert', open), missing, open);
+
+  // No auth.uid(): Head Office corrections are outside the EA's forward-only rule.
+  expectWrite('time-entry-postgres-closed-update', write('update', tooLate), setup(manual), tooLate, null);
+  expectWrite('time-entry-postgres-closed-insert', write('insert', tooLate), missing, tooLate, null);
+
+  const recentEntry = '76100000-0000-0000-0000-000000000099';
+  assert.deepEqual(returnedIds(runPsql({ databaseUrl, label: 'time-entry-job-overdue-only-and-idempotent', sql: `
+    BEGIN;
+    ${setup(open)}
+    INSERT INTO public.time_entries (id, user_id, sign_in_time, sign_in_lat, sign_in_lon)
+    VALUES ('${recentEntry}', '${ASSIGNED_EA}', now() - interval '2 hours', -33.96, 25.6);
+    SELECT private.close_overdue_time_entries();
+    SELECT sign_out_time = sign_in_time + interval '10 hours', auto_clocked_out,
+      sign_out_lat IS NULL, sign_out_lon IS NULL, sign_out_location_status IS NULL
+      FROM public.time_entries WHERE id = '${TIME_ENTRY}';
+    SELECT sign_out_time IS NULL, auto_clocked_out FROM public.time_entries WHERE id = '${recentEntry}';
+    SELECT private.close_overdue_time_entries();
+    ROLLBACK;` })), ['1', 't|t|t|t|t', 't|f', '0']);
+  passed += 1;
+
+  for (const role of ['anon', 'authenticated', 'service_role']) {
+    expectSqlState({ databaseUrl, label: `time-entry-job-${role}-refused`, sqlState: '42501',
+      sql: `BEGIN; SET LOCAL ROLE ${role}; SELECT private.close_overdue_time_entries(); ROLLBACK;` });
+    assert.equal(runPsql({ databaseUrl, label: `time-entry-job-${role}-execute-revoked`,
+      sql: `SELECT has_function_privilege('${role}', 'private.close_overdue_time_entries()', 'EXECUTE');` }), 'f');
+    passed += 2;
+  }
+  return { passed };
+};
+
 const locationLegacyFixture = `
 INSERT INTO public.time_entries (id, user_id, sign_in_time, sign_in_lat, sign_in_lon,
   sign_out_time, sign_out_lat, sign_out_lon, auto_clocked_out)
@@ -301,7 +559,10 @@ const main = () => {
       if (before) assert.equal(locationSnapshot(databaseUrl), before, 'Location migration preserves legacy rows, grants, policies, indexes and triggers');
     }
     if (!seeded) runPsql({ databaseUrl, sql: fixtureSql, label: 'upload-contract-fixture' });
-    process.stdout.write(`${JSON.stringify({ ...runCases(databaseUrl), location: runLocationCases(databaseUrl) })}\n`);
+    process.stdout.write(`${JSON.stringify({
+      ...runCases(databaseUrl), location: runLocationCases(databaseUrl), rowVersion: runRowVersionCases(databaseUrl),
+      timeEntryForward: runTimeEntryForwardCases(databaseUrl),
+    })}\n`);
   } finally {
     runPsql({ databaseUrl: adminDatabaseUrl, sql: `DROP DATABASE IF EXISTS ${quotedDatabase} WITH (FORCE);`, label: 'drop-database' });
   }

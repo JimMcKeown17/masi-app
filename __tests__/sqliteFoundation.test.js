@@ -3,6 +3,7 @@ jest.mock('expo-sqlite', () => require('../test-support/expoSQLiteMock'));
 import { createBetterSqliteTestDatabase } from '../test-support/betterSqliteAdapter';
 import {
   CURRENT_SCHEMA_VERSION,
+  MIGRATIONS,
   runMigrations,
 } from '../src/db/migrations';
 import { debugDump } from '../src/db/debugDump';
@@ -138,7 +139,7 @@ describe('SQLite migration runner', () => {
       await runMigrations(db);
       await runMigrations(db);
 
-      expect(CURRENT_SCHEMA_VERSION).toBe(13);
+      expect(CURRENT_SCHEMA_VERSION).toBe(14);
       expect(await getUserVersion(db)).toBe(CURRENT_SCHEMA_VERSION);
       expect(await getTableNames(db)).toEqual(expect.arrayContaining([
         'schema_migrations',
@@ -164,10 +165,14 @@ describe('SQLite migration runner', () => {
     const db = createBetterSqliteTestDatabase();
 
     try {
-      await runMigrations(db);
-      await db.runAsync('delete from schema_migrations where version >= 7');
-      await db.execAsync('alter table children drop column reading_level');
-      await db.execAsync('alter table children drop column history_reference');
+      for (const migration of MIGRATIONS.filter(item => item.version <= 6)) {
+        await db.execAsync(migration.sql);
+        await db.runAsync(
+          'insert into schema_migrations (version, name) values (?, ?)',
+          migration.version,
+          migration.name
+        );
+      }
       await db.execAsync('PRAGMA user_version = 6');
       await db.runAsync(`
         insert into local_state (key, value)
@@ -638,6 +643,7 @@ describe('SQLite debug dump', () => {
           { version: 11, name: 'time_entry_location_optional' },
           { version: 12, name: 'sync_outbox_owner_required' },
           { version: 13, name: 'support_incident_queue' },
+          { version: 14, name: 'domain_row_versions' },
         ],
         tableCounts: expect.objectContaining({
           schools: 1,

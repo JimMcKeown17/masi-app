@@ -175,10 +175,10 @@ Before a mobile session-history pull can ship:
 7. Reference/admin tables are pulled from the server and are not mobile-writable through app-role DML.
 8. Server pulls must not overwrite pending local rows (pending-local-wins, issue #42 / ZZ F7). See "Pull Persistence & Reconcile" below.
 9. Sync auth state is part of the RLS contract (issues #43/#44). A sync pass with no Supabase session must return a structured skip (`{ success: true, skippedNoSession: true }`) before touching the outbox or sync metadata. A terminal `42501` recorded while a live session exists must store `last_error` with the `42501-authenticated:` prefix and must never be auto-healed. Unmarked RLS-terminal rows are treated as auth-loss collateral: when auth is restored through `SIGNED_IN`, `TOKEN_REFRESHED`, or sessionful `INITIAL_SESSION`, the engine requeues only rows owned by the signed-in user, and the outbox requeue plus domain `sync_status = 'pending'` reset happen in one SQLite transaction. See "Auth-Restore RLS Heal" below.
-10. Error classification is local-state-only and bounded for the classes it models (issue #48 plus audit finding #6). `23514` from the immutable-assignment identity triggers (`child_ea_assignments`, `class_ea_assignments`, `group_ea_assignments`) is immediately terminal with reason `Immutable identity or check constraint rejected the update (23514)`; inserts already avoid it via `ignoreDuplicates`, and archive patches are now lifecycle-only, so this remains a guard for other update-like paths or server check drift. `23503` is retriable while the FK parent has a `pending`/`failed`/`in_flight` `sync_outbox` row (`hasPendingRecord`), terminal otherwise. `42501` is retriable while the FK parent OR an RLS assignment grant is pending locally, terminal otherwise. Grant evidence covers a direct active, unsynced `child_ea_assignments`/`class_ea_assignments`/`group_ea_assignments` row for the record's subject and the membership-mediated child arms of `private.current_user_can_write_for_child`: an active class/group membership joined to its active assignment counts while either half is `pending`/`failed`/`in_flight`, provided neither half is terminal. The `child_class_memberships` or `child_group_memberships` row currently being inserted is excluded from this query because an INSERT cannot grant its own prerequisite authority; a different pending membership path still counts. `computeEvidencePending` resolves the runtime connection once through `resolveDatabase`, then uses that resolved handle for domain-row, direct-assignment, and membership-mediated reads, including the production engine where no database is injected. Subject and FK values resolve from the outbox payload first and the record's own local domain row second, so archive/update payloads still yield evidence. `UPDATE_NOT_APPLIED` uses the same grant evidence and is also retriable while the record's exact insert operation remains owed (`hasPendingOperation`); it is terminal when none of those evidence paths is pending. The `42501` no-session downgrade (Item 9) still applies to an otherwise-terminal `42501`. The deterministic class `PGRST204`, `42703`, `22P02`, `23502`, and non-immutable-table `23514` is retriable for attempts 1 through 7; attempt 8 becomes terminal with `retry_count = 8` and a `deterministic:` reason. `ARCHIVE_NOT_APPLIED` is terminal immediately because the server did not return the one exact updated id required to finalize the lifecycle transition. Codeless network/timeout errors remain retriable without an attempt cap. Force "Sync Now" includes terminal rows, so a repaired server condition can resurrect and finalize them. See "Error Classification" below.
-11. Active-pair identity is collision-proof by construction (issue #47). The four active-pair tables whose identity IS their server partial-unique key -- `child_ea_assignments` `(user_id, child_id)`, `child_programme_enrollments` `(child_id, programme_id)`, `class_ea_assignments` `(class_id, ea_user_id, programme_id)`, `group_ea_assignments` `(group_id)` -- use a deterministic UUIDv5 id keyed EXACTLY on those columns (local mint in the repository create path plus a force-remap on insert/update/restore push in `buildSyncPayload`, gated on all key columns). Archive operations never remap identity: they scope a lifecycle-only update by the outbox record id. Every writer (device or the future head-office seed) that means the same active pair derives the same id, so a would-be partial-index `23505` becomes an idempotent id-match. `child_class_memberships` cannot use this (it recurs on class moves and needs distinct archived rows for `deleteIfNoHistory` audit), so it uses reconcile-before-upsert: before an insert, a pre-push server read archives a conflicting active `(child_id, academic_year_id)` row (device-move-wins, audit-preserving), with a conservative fallback to the normal upsert on any error. See "Active-Pair Collision-Proofing" below.
+10. Error classification is local-state-only and bounded for the classes it models (issue #48 plus audit finding #6). `23514` from the immutable-assignment identity triggers (`child_ea_assignments`, `class_ea_assignments`, `group_ea_assignments`) is immediately terminal with reason `Immutable identity or check constraint rejected the update (23514)`; inserts already avoid it via `ignoreDuplicates`, and archive patches contain lifecycle fields plus the claimed version, so this remains a guard for other update-like paths or server check drift. `23503` is retriable while the FK parent has a `pending`/`failed`/`in_flight` `sync_outbox` row (`hasPendingRecord`), terminal otherwise. `42501` is retriable while the FK parent OR an RLS assignment grant is pending locally, terminal otherwise. Grant evidence covers a direct active, unsynced `child_ea_assignments`/`class_ea_assignments`/`group_ea_assignments` row for the record's subject and the membership-mediated child arms of `private.current_user_can_write_for_child`: an active class/group membership joined to its active assignment counts while either half is `pending`/`failed`/`in_flight`, provided neither half is terminal. The `child_class_memberships` or `child_group_memberships` row currently being inserted is excluded from this query because an INSERT cannot grant its own prerequisite authority; a different pending membership path still counts. `computeEvidencePending` resolves the runtime connection once through `resolveDatabase`, then uses that resolved handle for domain-row, direct-assignment, and membership-mediated reads, including the production engine where no database is injected. Subject and FK values resolve from the outbox payload first and the record's own local domain row second, so archive/update payloads still yield evidence. `UPDATE_NOT_APPLIED` uses the same grant evidence and is also retriable while the record's exact insert operation remains owed (`hasPendingOperation`); it is terminal when none of those evidence paths is pending. The `42501` no-session downgrade (Item 9) still applies to an otherwise-terminal `42501`. The deterministic class `PGRST204`, `42703`, `22P02`, `23502`, and non-immutable-table `23514` is retriable for attempts 1 through 7; attempt 8 becomes terminal with `retry_count = 8` and a `deterministic:` reason. `ARCHIVE_NOT_APPLIED` is terminal immediately because the server did not return the one exact updated id required to finalize the lifecycle transition. Codeless network/timeout errors remain retriable without an attempt cap. Force "Sync Now" includes terminal rows, so a repaired server condition can resurrect and finalize them. See "Error Classification" below.
+11. Active-pair identity is collision-proof by construction (issue #47). The four active-pair tables whose identity IS their server partial-unique key -- `child_ea_assignments` `(user_id, child_id)`, `child_programme_enrollments` `(child_id, programme_id)`, `class_ea_assignments` `(class_id, ea_user_id, programme_id)`, `group_ea_assignments` `(group_id)` -- use a deterministic UUIDv5 id keyed EXACTLY on those columns (local mint in the repository create path plus a force-remap on insert/update/restore push in `buildSyncPayload`, gated on all key columns). Archive operations never remap identity: they scope the lifecycle fields and claimed version by the outbox record id. Every writer (device or the future head-office seed) that means the same active pair derives the same id, so a would-be partial-index `23505` becomes an idempotent id-match. `child_class_memberships` cannot use this (it recurs on class moves and needs distinct archived rows for `deleteIfNoHistory` audit), so it uses reconcile-before-upsert: before an active membership insert, a pre-push server read archives a conflicting active `(child_id, academic_year_id)` row (device-move-wins, audit-preserving), with a conservative fallback to the normal upsert on any error. Already-exited payloads skip this reconcile; see "Row versions (upload contract)" and "Active-Pair Collision-Proofing" below.
 12. Grouping-flow collision-proofing is partial and mostly deferred (issue #46). `class_grouping_state` is a one-row-per-`(class_id, academic_year_id)` singleton, so it uses a deterministic id `f(class_id, academic_year_id)` (local mint + push-remap), same shape as Item 11. `grouping_versions` (generational -- needs an activate-new/deactivate-old reconcile) and `groups.display_number` (a partial-unique sequence never populated today) are NOT built: their collision-proofing is inseparable from the grouping/regrouping workflow, which is deferred to next year (CONTEXT.md:161, ADR-0001). Their write paths do not exist yet, so nothing collides today. See "Grouping-Flow Collision-Proofing" below.
-13. An outbox row's `created_at` is queue identity, not mutation time. Re-enqueueing the same `(table_name, record_id, operation)` refreshes its payload, owner, retry fields, status, and `updated_at`, but preserves its first `created_at`. Child INSERTs also preserve `last_error` as dispatch evidence (see no-history deletion below). Lifecycle intents are the deliberate identity exception: archive and restore share `<table>:<record>:lifecycle`, so the operation itself can change while the stream keeps its original `created_at`. Push ordering therefore remains fair when one record is edited repeatedly. Batch claiming is set-based: one local UPDATE assigns a shared in-flight timestamp, one SELECT returns the fresh records in input order, and finalization still compares each returned `updated_at` before deleting or failing the row.
+13. An outbox row's `created_at` is queue identity, not mutation time. Re-enqueueing the same `(table_name, record_id, operation)` refreshes its payload, owner, retry fields, status, and `updated_at`, but preserves its first `created_at`. Child INSERTs also preserve `last_error` as dispatch evidence (see no-history deletion below). Lifecycle intents are the deliberate identity exception: archive and restore share `<table>:<record>:lifecycle`, so the operation itself can change while the stream keeps its original `created_at`. Push ordering therefore remains fair when one record is edited repeatedly. Claiming assigns the outbox ids a shared in-flight timestamp, stamps eligible domain versions and payloads in the same transaction, then returns the claimed snapshots in input order. Finalization compares each returned `updated_at` before deleting or failing the row; see "Row versions (upload contract)".
 14. The concurrency-1 Supabase queue serializes requests, not workflows. A dependent domain pull keeps its query order but acquires one queue lease per RPC or query. No child/class preload may wrap its entire multi-request workflow in one `enqueueSupabaseRequest`. This lets a waiting auth, profile, lookup, or push request run between responses without allowing simultaneous Supabase operations.
 
 ## Operation Semantics
@@ -187,11 +187,11 @@ Before a mobile session-history pull can ship:
 | --- | --- | --- | --- |
 | Default outbox push | Most synced domain tables | `upsert(payload, { onConflict: 'id' })` | Needs both write permission and SELECT visibility for upsert. |
 | Acknowledged edit | `time_entries` and every table in `ARCHIVE_SERVER_COLUMNS` when `operation === 'update'` | `update(editPatch).eq('id', serverId).select('id')`, where `serverId` is the payload id after `buildSyncPayload` (the re-derived deterministic id for `letter_mastery`), falling back to `record_id`. `editPatch` excludes `id`, `created_by`, `created_at`, `user_id`, and `archived_by_user_id`, plus the table's archive/restore columns. `letter_mastery.deleted_at` remains writable because reactivation uses update; see the exceptions below. Success requires exactly the requested id; zero or ambiguous acknowledgments fail as `UPDATE_NOT_APPLIED`. An edit is deferred, not failed, while its own `insert` is still owed (pending, failed, or in flight). | Exercises UPDATE policy without asking for INSERT permission: PostgreSQL applies INSERT `WITH CHECK` to every upsert row, even a conflicting one, so these edits never go as upserts. S1 (`npm run verify:upload-contract:postgres`) proved the original five-table permission contract; the additional lifecycle-table routing has real-SQLite/synthetic-server regression coverage, not new PostgreSQL or hosted evidence. `class_grouping_state` is the exception and stays an upsert, because its `update` means create-or-update and its INSERT policy is authorization-based. A zero-row result stays retriable only while the row's own insert or a direct/membership-mediated authorization grant is still owed locally; otherwise it is terminal. |
-| Lifecycle archive | `classes`, `children`, assignment/enrollment/membership tables, `grouping_versions`, `groups`, `letter_mastery` | `update(lifecyclePatch).eq('id', recordId).select('id')`. `ARCHIVE_SERVER_COLUMNS` narrows even a legacy full-snapshot outbox row to its table's lifecycle fields. Success requires exactly the requested id in the returned rows; zero or ambiguous acknowledgments fail terminal as `ARCHIVE_NOT_APPLIED`. | Exercises UPDATE policy only. It must never create a missing row, run INSERT `WITH CHECK` on a partial payload, rewrite identity columns, or claim success without an exact server acknowledgment. |
-| Lifecycle restore | `group_ea_assignments` (reactivation in `groupsRepository.createMissingGroupAssignment` and `groupEaAssignmentsRepository.save`); the engine accepts `restore` for any table in `ARCHIVE_SERVER_COLUMNS` | The same lifecycle UPDATE as an archive, with the same `ARCHIVE_SERVER_COLUMNS` allowlist (for `group_ea_assignments`: `{ unassigned_at: null, handover_reason: null }`). Zero or ambiguous acknowledgments fail terminal as `RESTORE_NOT_APPLIED`. Pushed at the table's `ARCHIVE_PUSH_ORDER` position, which still precedes dependent inserts (`group_ea_assignments` 6, `child_group_memberships` inserts 11). | Archive and restore share one outbox slot per record: `<table>:<record>:lifecycle`; the slot's `operation` and payload are the latest intent. Replacing even an in-flight slot resets it to pending and changes `updated_at`, so the stale request's success, retriable-failure, or terminal-failure finalizer misses its compare-and-swap and `restorePendingAfterStaleFinalize` preserves the replacement. Reactivation always queues restore and, when its insert is still owed, also re-queues that active insert payload; lifecycle UPDATEs wait for their own owed insert. Enqueue deletes pending/failed/terminal legacy `:archive` and `:restore` rows. A legacy row already in flight is left to settle, and the slot waits while a legacy per-operation row remains pending, failed, or in flight, so an older intent cannot run after the slot. Residual out-of-scope risk: an older request that times out locally but commits on the server only after a later request is network reordering, owned by the upload-contract spec. |
+| Lifecycle archive | `classes`, `children`, assignment/enrollment/membership tables, `grouping_versions`, `groups`, `letter_mastery` | `update(lifecyclePatch).eq('id', recordId).select('id')`. `ARCHIVE_SERVER_COLUMNS` narrows even a legacy full-snapshot outbox row to its table's lifecycle fields plus the claimed `row_version` on versioned tables. Success requires exactly the requested id in the returned rows; zero or ambiguous acknowledgments fail terminal as `ARCHIVE_NOT_APPLIED`. | Exercises UPDATE policy only. It must never create a missing row, run INSERT `WITH CHECK` on a partial payload, rewrite identity columns, or claim success without an exact server acknowledgment. |
+| Lifecycle restore | `group_ea_assignments` (reactivation in `groupsRepository.createMissingGroupAssignment` and `groupEaAssignmentsRepository.save`); the engine accepts `restore` for any table in `ARCHIVE_SERVER_COLUMNS` | The same lifecycle UPDATE as an archive, with the same `ARCHIVE_SERVER_COLUMNS` allowlist (for `group_ea_assignments`: `{ unassigned_at: null, handover_reason: null }`). Zero or ambiguous acknowledgments fail terminal as `RESTORE_NOT_APPLIED`. Pushed at the table's `ARCHIVE_PUSH_ORDER` position, which still precedes dependent inserts (`group_ea_assignments` 6, `child_group_memberships` inserts 11). | Archive and restore share one outbox slot per record: `<table>:<record>:lifecycle`; the slot's `operation` and payload are the latest intent. Replacing even an in-flight slot resets it to pending and changes `updated_at`, so the stale request's success, retriable-failure, or terminal-failure finalizer misses its compare-and-swap and `restorePendingAfterStaleFinalize` preserves the replacement. Reactivation always queues restore and, when its insert is still owed, also re-queues that active insert payload; lifecycle UPDATEs wait for their own owed insert. Enqueue deletes pending/failed/terminal legacy `:archive` and `:restore` rows. A legacy row already in flight is left to settle, and the slot waits while a legacy per-operation row remains pending, failed, or in flight, so an older intent cannot run after the slot. Send-time versions fence late arrivals for the 11 versioned tables; see "Row versions (upload contract)". Letter-mastery ordering remains with D1 in the mastery re-key. |
 | Batched upsert | `assessment_items`, `session_attendees`, plus insert operations for `child_programme_enrollments`, `children`, `letter_mastery`, and `time_entries` (the three assignment tables batch their inserts too; see the next row) | `upsert(payloads, { onConflict: 'id' })` in batches of at most 100. A returned or thrown batch failure may spend at most 25 per-record fallback attempts across the entire pass, with concurrency at most five. | Parent row (`assessments` / `children` / `sessions`) must be visible/writable first for tables with parent FKs. Unattempted fallback rows return to pending without failure or retry inflation. `children` has no pre-push hook. Enrollment payloads are normalized to deterministic active-pair ids before array dispatch. Update operations for `time_entries` and every lifecycle-bearing table never enter a batch. In particular, enrollment updates cannot share a batch with inserts and replay `ended_at`. |
 | Immutable assignment insert push | `child_ea_assignments`, `class_ea_assignments`, `group_ea_assignments` when `operation === 'insert'` | One ready row uses `upsert(payload, { onConflict: 'id', ignoreDuplicates: true })`; consecutive ready rows use the same operation with `payloads`, bounded batch size, and bounded per-record fallback. | Duplicate insert retry must be insert-or-ignore, not update-capable upsert, because identity triggers reject changed identity/timestamp columns. Full payloads are normalized to deterministic active-pair ids before dispatch. |
-| Assignment archive/update | Same assignment tables | Archive and restore use the lifecycle-update contracts above; ordinary updates use acknowledged UPDATE by id with lifecycle fields excluded. | Lifecycle patches can contain only `unassigned_at` / `handover_reason`; identity columns remain immutable. |
+| Assignment archive/update | Same assignment tables | Archive and restore use the lifecycle-update contracts above; ordinary updates use acknowledged UPDATE by id with lifecycle fields excluded. | Lifecycle patches contain `unassigned_at` / `handover_reason` plus the claimed `row_version`; identity columns remain immutable. |
 | No-history child delete | `children` hard delete | RPC `delete_child_if_no_history(p_child_id)` | Local delete eligibility comes from the queued child INSERT, never the current domain `sync_status` (which an edit resets). See the no-history deletion rules below. Direct mobile child DELETE is blocked; history rows require archive instead. `20260712202409_masi_idempotent_child_delete.sql` makes a wholly absent child return `true` before authorization, so a retry after server success and pre-finalization crash is idempotent. Present but unauthorized children still raise `42501`; history-blocked children still return `false`. The migration was applied and verified against `masi-app-sqlite` on 2026-07-12. |
 | Delivery-history parent page (CAP-004) | Inbound `sessions` history (`sessionHistoryPull`) | `get_delivery_history_page(programme, window_start, page_size, after_updated_at, after_id, overlap_seconds)`; page size 1–200; overlap 0–600 s; cursor wholly null or wholly populated; **ascending `(updated_at, id)`** keyset over the server-owned family timestamp | `SECURITY DEFINER` RPC. The owner arm and the historical-delivery arm are each ordered and limited before the union, so page work is bounded by the arms, not by remaining history. Class/group/creator arms are absent. `p_programme_id` is a partition key, not a grant. The client replays `updated_at` as the raw PostgREST string, never through a `Date`, and passes a 120 s overlap only on the first page of a delta that resumes from a completed cursor. Replaces `get_delivery_history_session_page`, which the same migration drops. |
 | Delivery-history attendee page (CAP-004) | Inbound `session_attendees` plus the history-reference projection | `get_delivery_history_attendee_page(session_ids[1..200], page_size, after_session_id, after_attendee_id)`; ascending `(session_id, id)` keyset | Re-derives `private.can_read_session` per requested id at call time. Returns attendee columns plus `child_first_name`, `child_last_name` and `child_preferred_name` only: the history reference projection. Nothing else from `children` crosses this boundary. |
@@ -277,7 +277,7 @@ When the fallback budget is exhausted, unattempted rows are reset from `in_fligh
 
 `sync_outbox.created_at` orders otherwise-equal work and must remain the first-enqueue timestamp for one logical outbox id. The shared SQLite upsert helper therefore supports preserved conflict columns, and `insertOutboxRecord` preserves only `created_at`. Every mutable field still takes the newest enqueue value, including the latest domain payload and owner. Retry count, error, backoff, and status reset in the same upsert, so `syncOutboxRepository.enqueue` performs no follow-up UPDATE.
 
-For a batch, `markInFlightAndGet(ids)` runs inside one writer transaction. It changes all ids through one `UPDATE`, then reads them through one `SELECT` and restores caller order in memory. The returned records carry the exact shared `updated_at` used by `finalizeManySuccess` and `finalizeManyRetriableFailure`. This removes O(N) local claim/read work without weakening stale-finalize protection: a concurrent re-enqueue changes `updated_at`, the compare-and-swap misses, and the newer payload remains pending.
+`markInFlightAndGet(ids)` runs inside one writer transaction for single sends, batches and fallback. It updates outbox status and reads the candidate ids set-wise, stamps each eligible local row and payload, then reads the claimed snapshots and restores caller order. The returned records carry the exact shared `updated_at` used by finalization: a concurrent re-enqueue changes it, the compare-and-swap misses, and the newer payload remains pending. The version stamp and exclusions are defined under [Row versions (upload contract)](#local-writes-claim-snapshot-and-pulls).
 
 ### Request queue granularity
 
@@ -285,12 +285,169 @@ Each signed-in EA handle owns its own request queue (`handle.enqueueRequest`, co
 
 Each workflow still awaits the result it needs before constructing the next dependent query. The change is fairness, not parallelism. If another operation was queued while request A was in flight, it runs after A and before the pull submits request B. Data shaping and SQLite persistence occur outside the network lease. A pull begun under one handle cannot persist into another EA's file: its repositories are bound to its own handle, and a stale handle refuses every write. Failed or incomplete scopes retain the same fail-closed reconcile rules.
 
+## Row versions (upload contract)
+
+The upload contract is built on `feat/upload-contract`; hosted application and the Galaxy A03s
+D2/D3 checks remain open. The server migration is
+[`20261018180000_upload_contract_row_version.sql`](../supabase/migrations/20261018180000_upload_contract_row_version.sql).
+It adds `row_version bigint not null default 1` to exactly these 11 tables:
+
+| Group | Tables |
+| --- | --- |
+| Roster | `children`, `classes`, `groups` |
+| Assignments | `child_ea_assignments`, `class_ea_assignments`, `group_ea_assignments` |
+| Memberships | `child_programme_enrollments`, `child_class_memberships`, `child_group_memberships` |
+| Grouping | `grouping_versions`, `class_grouping_state` |
+
+### Server rule and scope
+
+Each table's `<table>_enforce_row_version` trigger calls `private.enforce_row_version()` before
+UPDATE. An incoming version lower than the stored version raises SQLSTATE `MV001`, message
+`stale_version`. Equal and higher versions return `NEW` unchanged, preserving the exact returned-id
+acknowledgement. The server does not increment the version. Writers that omit it on UPDATE retain
+the stored version and pass as ties: older builds, Studio edits, FK `ON DELETE SET NULL` actions,
+and the off-outbox membership exit. Conflicting single/batched upserts also reach this rule; one
+stale row refuses the whole batch, after which the engine's bounded per-record fallback can send
+the other rows. Immutable assignment inserts use `ON CONFLICT DO NOTHING` and cannot overwrite
+an existing row.
+
+This closes Ruling 11 for the 11 tables: an earlier-sent request that arrives after a later-sent
+write cannot undo it. The counter orders one phone's sends; it does not detect stale edits by a
+second writer. Before Head Office edits EA records, add the downloaded base-version comparison
+and make Head Office writes bump the version. `sessions` and `session_attendees` remain insert-only
+in the current UI; version them with saved-session editing and attendee-removal correctness.
+`assessments` and `assessment_items` belong to the immutable assessment-bundle slice.
+`letter_mastery` remains outside this rule: D1 in the mastery re-key owns correction ordering and
+is still a pilot gate. `time_entries` uses the forward-only rule below instead of a version.
+
+### Local writes, claim snapshot, and pulls
+
+SQLite migration 14 adds `row_version integer not null default 1` to the same 11 local tables.
+Only the claim stamp and download save advance the local version; success finalization reapplies
+the sent version. `upsertDomainRecord` removes
+`row_version` from normalized records whose `sync_status` is not `synced`: local inserts take the
+default and local edits preserve the stored version, even when a stale object contains a version.
+All nine roster download savers retain the server version, including the field-by-field
+`saveStaffChild` record. `grouping_versions` and `class_grouping_state` are never pulled.
+Reconcile end-row SQL and stale active-pair supersede preserve the existing version. Session-history
+reference children contain server attendee identity fields only, default to version 1, and remain
+read-only until a full roster pull replaces them.
+
+`rowVersion.js` defines the table sets and `isStampedOperation`. At claim, `updateInFlight`
+increments each eligible local row's version and writes it into the outbox JSON payload in the
+same SQLite transaction. Eligible operations are `insert`, `update`, `archive`, and `restore` on
+the 11 tables. Never stamped: `hard_delete`, operations on other tables, a missing local record,
+or `insert` on the three immutable assignment tables. Their ignored duplicate inserts leave the
+server unchanged; incrementing only the phone's version would make the pull guard reject the
+server's active assignment after an interleaved local reconcile. Assignment archive/restore
+operations are updates and are stamped normally. A new versioned phone row first sends at v2;
+each retry claims a higher version, and skipped numbers are harmless.
+
+Single sends, batches, and batch fallback send the snapshot returned by `markInFlightAndGet`.
+A coalesced edit after claim changes the slot's `updated_at`; stale finalization returns the
+replacement to pending for its own send without changing the already-claimed request. Claiming a
+terminal domain row makes it pending so an overlapping pull cannot replace that forced retry.
+After an unchanged slot is acknowledged, single and batch success finalization apply the sent
+operation's content and `row_version` in the same transaction, restricted to local domain columns
+and the request's shared patch rules, unless another outbox slot for that record owns newer local
+content.
+The 11 `SERVER_COLUMNS` allowlists retain `row_version`; archive/restore patches include it, and
+`UPDATE_PATCH_EXCLUDED_COLUMNS` does not remove it. Payload construction receives the operation
+and strips the version from operations that must remain unstamped.
+
+`serverPullWouldClobberPendingLocal` runs inside the save transaction. Pending and failed local
+rows reject pulled replacements. A synced versioned row also rejects a numeric server version
+lower than its own, so a pull that read before an upload cannot roll back a just-acknowledged
+write. Equal or higher versions still apply, including Studio edits that leave the version
+unchanged. A terminal row always remains eligible to converge to the server copy, even at a lower
+version. Skipping a pull neither changes the queued payload nor enqueues work.
+
+`MV001` is terminal with reason `Server has a newer version of this record (stale_version)`, never
+marked synced or retried by an ordinary pass; see the error table below. Force Sync Now can retry
+terminal work. A refusal can converge through a subsequent pull for tables that are downloaded.
+
+### Historical membership guard
+
+Before uploading a current `child_class_memberships` row, `reconcileChildClassMembership` may
+close the conflicting server-active membership for that child and year. This off-outbox exit
+omits the version and passes as a tie. When `payload.exited_at` is set, the guard skips reconcile
+before any server read: an already-exited membership records history and must never close the
+current one. After an offline A-to-B move, A can commit with its response lost, B can acknowledge,
+and A can then retry without ending B. The same rule holds when the move replaces A's payload
+while its insert is in flight. The existing RLS boundary is described under Active-Pair
+Collision-Proofing.
+
+### Forward-only time entries and ten-hour job
+
+`private.time_entries_forward_only()` runs before INSERT or UPDATE for the row's owner
+(`auth.uid() = NEW.user_id` on insert; `auth.uid() = OLD.user_id` on update). The job, service-role
+and other non-owner writes pass through unchanged. Only `sign_out_*` and `auto_clocked_out` are
+affected. The trigger always returns a row and never refuses a late snapshot, so exact
+acknowledgements still work.
+
+| Stored row | Incoming owner write | Stored close |
+| --- | --- | --- |
+| New insert or open row | Close at or before `sign_in_time + 10 h` | Incoming time, flag and location |
+| New insert or open row | Close later than ten hours | `sign_in_time + 10 h`, `auto_clocked_out = true`, all three sign-out location fields NULL |
+| New insert or open row | Still open | Remains open |
+| Ten-hour auto-close | Close at or before the stored auto time | Incoming honest close replaces the auto-close |
+| Ten-hour auto-close | Anything else, including open | Stored close kept |
+| Manual close, or auto-flagged close not exactly at ten hours | Any write | Stored close kept |
+
+The insert rule covers shifts opened and closed entirely offline: the close coalesces into the
+pending insert. An honest earlier close can replace the server's ten-hour auto-close, while a late
+open snapshot cannot reopen a closed shift.
+
+`private.close_overdue_time_entries()` closes only open rows with
+`sign_in_time < now() - interval '10 hours'`, using the ten-hour time, automatic flag, and NULL
+`sign_out_lat`, `sign_out_lon`, and `sign_out_location_status`. It returns the changed-row count;
+running it again changes nothing. EXECUTE is revoked from `public`, `anon`, `authenticated`, and
+`service_role`; it runs with the job owner's privileges. The migration checks
+`pg_available_extensions` for `pg_cron` and `current_database() = 'postgres'` before installing
+the extension and scheduling `masi_close_overdue_time_entries` at `*/15 * * * *`. The fixed job name
+makes rescheduling idempotent. Plain disposable PostgreSQL skips scheduling and tests the function
+directly. Hosted gates remain: read-only extension pre-check, apply, then verify `cron.job` has the
+15-minute schedule and `postgres` owner and `cron.job_run_details` contains a successful run.
+
+The phone retains its load/watchdog automatic close. `handleSignOut` reads the active entry before
+requesting location; past ten hours it awaits `autoClockOut` and explicitly returns `true`
+(`autoClockOut` resolves `undefined`). The post-location reread repeats the cap if capture crossed
+ten hours. At or before ten hours, a manual close keeps its actual time and location outcome.
+The capped close uses the same ten-hour time, automatic flag, NULL location fields and transactional
+Home notice. No time-entry download or server-row adoption path is added.
+
+### Remaining limits and verification
+
+- `class_grouping_state` has a fixed id and no pull. After reinstall its local version can trail
+  the server and a regroup can become terminal. Forced Sync Now increments it on each retry;
+  revisit this with grouping pulls or a pilot reinstall.
+- A late insert can recreate a hard-deleted child; revisit if Head Office deletes children.
+- After a refused edit is replaced locally by a pull, archiving the record before the forced
+  retry leaves the phone's archived copy with the old content until the next pull: the queued
+  archive owns the row, so the edit's acknowledged write-back is skipped. The server holds the
+  correction. Accepted for the pilot (Codex whole-branch round 2); revisit if seen.
+- `groups` archive ranks ahead of `groups` update. This is latent because `updateGroup` has no
+  screen caller; revisit before a group-rename screen ships. Send-time numbering preserves send
+  order, not the meaning of an incorrectly ordered queue.
+
+`rowVersionLocal.test.js`, `rowVersionSend.test.js`, and `rowVersionRefusal.test.js` cover local
+SQLite, claimed snapshots, rollback protection, ignored assignment retries and lost-response
+membership moves. The membership fake applies awaited updates even without `.select()`; removing
+the guard makes both move timings close B. The real PostgREST client receives `MV001` from mocked
+HTTP in these tests. `useTimeTracking.integration.test.js` covers the phone's cap. Controller-run
+disposable PostgreSQL results for the migration and all five harnesses are recorded in the
+[Verification Register](./build-log.md#verification-register); they do not establish hosted cron,
+real HTTP SQLSTATE propagation, or device proof. Apply the server migration before a versioned
+phone build (`PGRST204` otherwise), after draining or reinstalling test phones on builds 13/14.
+See [ROADMAP](./ROADMAP.md#upload-contract-before-pilot-priority-item-5) for the open rollout gates.
+
 ## Error Classification (Item 10)
 
 Classification is a pure decision in `classifyError` from `(code, tableName, parentEvidencePending)`, plus the per-record loop that computes `parentEvidencePending` from local state via `computeEvidencePending`. The resolver obtains the runtime SQLite connection once through `resolveDatabase`, so the production engine's undefined injected `database` uses the initialized client rather than dereferencing `undefined`. No server calls occur in the per-record failure path.
 
 | Server error | Classification | Evidence checked |
 | --- | --- | --- |
+| `MV001` | Terminal, never marked synced; reason `Server has a newer version of this record (stale_version)` | none; ordinary passes do not retry it, and the terminal local row can converge through a pull |
 | `23514` on `child_ea_assignments` / `class_ea_assignments` / `group_ea_assignments` | Terminal, reason `Immutable identity or check constraint rejected the update (23514)` | none (neither drifted identity nor a check violation is satisfiable by re-push) |
 | `23514` on any other table | Retriable (unchanged, out of #48 scope) | none |
 | `23503` | Retriable while FK parent is pending in the outbox, terminal otherwise | `PARENT_FK_COLUMNS` via `hasPendingRecord` |
@@ -307,7 +464,7 @@ Known limitations:
 - `staff_programme_assignments` grants are not device-produced (never pushed), so a `42501` that needs one stays terminal, which is correct: a real programme-assignment denial.
 - A parent or grant that heals through the Item 9 auth-restore after its child was already stamped terminal does not auto-rescue the child (identical to pre-#48 behavior); force "Sync Now" (`includeTerminal`) resurrects the chain.
 - Non-immutable-table `23514` follows the 8-attempt deterministic budget. A CHECK violation on an immutable-assignment table (for example, `unassigned_at >= assigned_at`) remains immediately terminal and shares the identity reason label.
-- Same-record ordering: `findBlockingDependency` defers an `update` for the five acknowledged-edit tables and every lifecycle operation while its own `insert` is owed; it also defers a newer lifecycle intent behind an older in-flight one. Ordering between a lifecycle row and a non-lifecycle `update` row for the same `letter_mastery` record (toggle off, on, off while offline) is not yet collapsed; the upload-contract spec owns it.
+- Same-record ordering: `findBlockingDependency` defers an acknowledged edit and every lifecycle operation while its own `insert` is owed; it also defers a newer lifecycle intent behind an older in-flight one. Ordering between a lifecycle row and a non-lifecycle `update` row for the same `letter_mastery` record (toggle off, on, off while offline) is not yet collapsed; D1 in the mastery re-key owns it and remains a pilot gate ([ROADMAP §2](./ROADMAP.md#upload-contract-before-pilot-priority-item-5)).
 - Legacy per-operation lifecycle rows (`<table>:<record>:archive` / `:restore`) are deferred ahead of the single lifecycle slot, and deleted at enqueue when not in flight, but are not consolidated at startup. No build before `feat/upload-path-correctness` ever queued `restore`, so the only realistic legacy row is a lone `:archive`, which the deferral orders correctly. One narrow residue remains on development devices only: a legacy archive in flight during reactivation that then goes terminal, after which the slot's restore succeeds and a forced Sync Now (`includeTerminal`) replays the terminal archive. Accepted 2026-10-10 because `masi-app-sqlite` has no field users and launch is a clean install; clear development outboxes before field launch rather than ship migration code for development data.
 - The membership-mediated query does not filter assignments to the signed-in EA, as `hasPendingActiveAssignment` never has. It can keep an edit retrying slightly longer, never drop one.
 - Evidence is deliberately local and conservative: a membership-mediated grant counts only when the active membership and active assignment both exist locally, at least one half is unacknowledged, and neither half is terminal. A grant that exists only on the server cannot make a local zero-row result retriable.
@@ -324,7 +481,7 @@ The four deterministic-id tables neutralize their partial-unique `23505` by cons
 | `child_programme_enrollments` | `(child_id, programme_id) where ended_at is null` | deterministic id `f(child_id, programme_id)` |
 | `class_ea_assignments` | `(class_id, ea_user_id, programme_id) where unassigned_at is null` | deterministic id `f(class_id, ea_user_id, programme_id)` |
 | `group_ea_assignments` | `(group_id) where unassigned_at is null` | deterministic id `f(group_id)` (one active EA per group; server-wins on conflict) |
-| `child_class_memberships` | `(child_id, academic_year_id) where exited_at is null` | reconcile-before-upsert (archive the conflicting server-active row, then insert) |
+| `child_class_memberships` | `(child_id, academic_year_id) where exited_at is null` | reconcile-before-upsert for an active payload only (archive the conflicting server-active row, then insert); skip reconcile when `payload.exited_at` is set |
 
 **Cross-writer id-derivation contract (the linchpin).** The multi-writer neutralization only works if EVERY writer derives the identical id. Any writer of these four tables -- the mobile app today, the future Head-Office seed script, the HO NextJS dashboard -- MUST use: UUIDv5, namespace `09dcf4b2-6c53-4c46-917f-33bc7f2df4d2`, parts joined by the unit-separator character (`U+001F`), parts = `[<table_name>, <key columns in the order above>]`, each part stringified as `String(part ?? '')`. This mirrors `deterministicDomainId` (`src/db/repositories/domainRepositoryUtils.js:14-17`). The seed-script author MUST reproduce this exactly, or seeded rows will collide with device rows instead of matching them.
 
@@ -332,7 +489,10 @@ The four deterministic-id tables neutralize their partial-unique `23505` by cons
 
 **ccm reconcile boundary (RLS).** The reconcile archives the conflicting server row with an UPDATE that is itself RLS-gated on that row's class (`child_class_memberships_update_write_child_class`). It succeeds for a same-school move; a cross-school Head-Office reassignment (child in a class the device cannot access) is RLS-denied, the reconcile falls back conservatively, and the insert lands terminal (classified by Item 10). Acceptable while HO central reassignment is deferred; a complete fix would be a `SECURITY DEFINER` archive+insert RPC (follow-up, schema change). `group_ea_assignments` is now pulled and persisted. An assignment-scoped pull can therefore reactivate the deterministic local row when the server returns it again.
 
-Guarded by `__tests__/activePairDomainIds.test.js`, the deterministic-id + archive-preservation tests in `__tests__/offlineSyncOutbox.test.js`, the per-repository mint tests, and `__tests__/childClassMembershipReconcile.test.js` (real second-SQLite server; note: runs no RLS, so the cross-school boundary above is not exercised in tests).
+The [historical membership guard](#historical-membership-guard) skips reconcile for an already-exited
+payload, including retries after lost responses or a class move during an in-flight insert.
+
+Guarded by `__tests__/activePairDomainIds.test.js`, the deterministic-id + archive-preservation tests in `__tests__/offlineSyncOutbox.test.js`, the per-repository mint tests, and `__tests__/childClassMembershipReconcile.test.js` (real second-SQLite server; note: runs no RLS, so the cross-school boundary above is not exercised in tests). Upload-contract regression coverage and its evidence limits are recorded under [Row versions](#row-versions-upload-contract).
 
 ## Grouping-Flow Collision-Proofing (Item 12)
 
@@ -440,7 +600,10 @@ A pull first persists returned server rows, then reconciles acknowledged relatio
 
 A repository `update*` function (`updateTimeEntry`, `updateChild`, `updateClass`, `updateGroup`, `updateLetterMasteryRecord`) records a local edit, so it always writes `sync_status = 'pending'`, `synced = false`, and `last_sync_error = null` and enqueues the edit, whatever sync bookkeeping the caller spreads in. Only the sync engine (`setDomainSyncResult`) marks a row synced, and only pull and seed paths pass `synced: true`, through `save*` functions. Before 2026-10-15 a caller that spread a stored synced row (the clock-out) won, and the edit was never queued.
 
-A pulled row is stamped `sync_status: 'synced'` before it reaches a repository save function. `serverPullWouldClobberPendingLocal` runs in the same transaction as the upsert and skips a server row when the local row is `pending` or `failed`. `synced` and `terminal` local rows may be replaced by an acknowledged server copy. Owner-scoped pending hard-delete ids are filtered out before child and relationship persistence. A skipped row never changes its queued outbox payload and never enqueues new work.
+A pulled row is stamped `sync_status: 'synced'` before it reaches a repository save function.
+The transactional pending-local and version guards are defined under
+[Row versions (upload contract)](#local-writes-claim-snapshot-and-pulls). Owner-scoped pending
+hard-delete ids are filtered out before child and relationship persistence.
 
 ### Stale active-pair supersede (2026-07-22)
 
@@ -608,7 +771,7 @@ Spec: `docs/superpowers/specs/2026-10-09-actor-lifecycle-and-mutation-ownership-
 | `class_grouping_state` | class grouping state repository | `class_id`, `academic_year_id` | Default upsert | Class write/access policy | After `classes` and `grouping_versions` when `active_grouping_version_id` is present | `offlineSyncOutbox.test.js` dependency coverage |
 | `groups` | `groupsRepository.saveGroup`; `ChildrenContext.addGroup`; Children pull persistence | `id`, `name`, `programme_id`, `created_by`; `class_id` when class-scoped | Insert uses default upsert; edit uses acknowledged UPDATE by id; archive uses acknowledged lifecycle UPDATE by id. Pulled tombstones persist, while entity absence never archives the local row. `getGroups` is assignment-scoped through an active `group_ea_assignments` join. | `groups_select_created_by`; group access helper via class/group EA assignment | After `classes` when `class_id` exists; before `group_ea_assignments` and memberships | `offlineSyncOutbox.test.js`; `offlineSyncUpdateById.test.js`; `pullReconcile.integration.test.js`; `pullReconcileOffline.integration.test.js`; `ChildrenContextPull.integration.test.js`; `sqlitePlan1Migrations.test.js`; live rollback group probes |
 | `group_ea_assignments` | `groupsRepository.saveGroup`; `groupEaAssignmentsRepository`; Children pull persistence and reconcile | `group_id`, `ea_user_id`, `programme_id`, `created_by` | Consecutive inserts batch with insert-or-ignore. Archive and reactivation (`restore`) use acknowledged lifecycle UPDATE by id and occupy the single `<table>:<record>:lifecycle` outbox slot, whose operation is the latest intent. Both repository producers use the slot; `groupEaAssignmentsRepository.save` detects reactivation from the pre-upsert local row. Reactivation always queues restore and also re-queues insert when it remains owed. In-flight replacement is protected by the existing `updated_at` stale-finalize guard; operation-keyed legacy lifecycle rows are cleaned up or ordered ahead of the slot. Full embedded server rows are pulled, persisted, and reconciled by acknowledged group ids | EA self assignment and group ownership/access; identity trigger blocks reassignment by update | Pull persistence follows `groups`; lifecycle waits for the same record's owed insert and for any still-owed legacy per-operation lifecycle row; archive otherwise follows `child_group_memberships` cleanup | `groupAssignmentLifecycle.test.js`; `offlineSyncOutbox.test.js` immutable assignment batching, lifecycle exclusion, and group archive ordering; `pullReconcile.integration.test.js`; `pullReconcileOffline.integration.test.js`; `ChildrenContextPull.integration.test.js` |
-| `child_group_memberships` | `groupsRepository.addChildToGroup`; removal/archive flows in `groupsRepository` and `childrenRepository` | Insert requires `child_id`, `group_id`, `grouping_version_id`, `created_by`; archive carries `id`, `removed_at` locally and sends only `removed_at` | Insert uses default upsert. Archive uses acknowledged lifecycle UPDATE by id, avoiding the INSERT-policy check that rejects partial archive upserts. | Active child write access plus group write/access | After `children`, `groups`, and group EA access evidence; archive before ending group EA assignment | `offlineSyncOutbox.test.js` exact RLS regression, acknowledged-update guard, ordering, and group ownership repair tests |
+| `child_group_memberships` | `groupsRepository.addChildToGroup`; removal/archive flows in `groupsRepository` and `childrenRepository` | Insert requires `child_id`, `group_id`, `grouping_version_id`, `created_by`; archive carries `id`, `removed_at` locally and sends `removed_at` plus the claimed `row_version` | Insert uses default upsert. Archive uses acknowledged lifecycle UPDATE by id, avoiding the INSERT-policy check that rejects partial archive upserts. | Active child write access plus group write/access | After `children`, `groups`, and group EA access evidence; archive before ending group EA assignment | `offlineSyncOutbox.test.js` exact RLS regression, acknowledged-update guard, ordering, and group ownership repair tests |
 | `sessions` | `sessionsRepository.saveSession`; inbound `sessionsRepository.saveHistoryPage` from `sessionHistoryPull` (CAP-004) | `user_id`, `programme_id` | Outbound default upsert. The server owns `updated_at` on insert and update (CAP-004 migration), and it means "family last written on the server". Inbound pages of 1–200 parents in ascending `(updated_at, id)`, persisted with the cursor in one SQLite transaction. A missing local `class_id` is stored as null | Direct `user_id = auth.uid()` SELECT fallback plus session read/write helpers. Hosted read authority is owner or any historical direct child delivery assignment; class/group/creator child visibility does not grant the diary | Outbound before `session_attendees`; after `classes` only when `class_id` exists. Inbound parents persist before dependent attendee pages; no history absence reconcile | `sessionsRepository.test.js`; `offlineSyncOutbox.test.js` session-before-attendees lock; `sqlitePlan1Migrations.test.js`; `historyAuthorizationPostgresHarness.test.js`; disposable and hosted PostgreSQL actor/page/plan probes; authenticated/anonymous PostgREST probes |
 | `session_attendees` | `sessionsRepository.saveSession`; inbound `saveHistoryPage` (CAP-004) | `session_id`, `child_id`, `attendance_status` | Outbound batched upsert (onConflict=id) with per-record fallback. Any attendee write re-stamps its parent (`touch_session_family`), so late attendees re-surface the family in the next delta. Inbound pages keyed `(session_id, id)`. A missing local `group_id` is stored as null. A child absent locally becomes a history reference child | Writes require parent session ownership plus active child/group/class access. Hosted historical SELECT follows the authorized parent; the accepted aggregate returns the complete attendee family | Outbound after `sessions`, `children`, and `groups` when `group_id` exists. Inbound after durable parent page; no history absence reconcile | `sessionsRepository.test.js`; `offlineSyncOutbox.test.js`; `sqlitePlan1Migrations.test.js`; disposable and hosted PostgreSQL complete-family actor matrices |
 | `assessments` | `assessmentsRepository.saveAssessment` | `user_id`, `child_id`, `programme_id` | Default upsert | Direct owner plus `private.current_user_can_read_child`; writes require active child/programme access | After `children`; before `assessment_items` | `assessmentsRepository.test.js`; `sqlitePlan1Migrations.test.js`; `captureModeMigration.test.js` (nullable `capture_mode` — see note below) |
@@ -646,6 +809,9 @@ work or run `onClosed`. The automatic close records its Home notice through `onC
 same transaction, so the notice and close commit or roll back together. `handleSignOut` resolves
 `true` when no open shift remains, including a shift closed by the watchdog while GPS was pending;
 busy, cancelled and failed actions resolve `false`. No RLS or payload change.
+
+The phone's ten-hour cap, server forward-only rule and scheduled close are defined under
+[Row versions (upload contract)](#forward-only-time-entries-and-ten-hour-job).
 
 Home attention is a handle service using that handle's `localState` repository. The local-only keys
 `home_attention.auto_clock_out` and `home_attention.assessment_due_dismissed_on` need no user suffix

@@ -53,6 +53,7 @@ beforeEach(async () => {
 
 afterEach(async () => {
   jest.restoreAllMocks();
+  jest.useRealTimers();
   await closeDefaultTestHandle();
   await testDb.closeAsync();
 });
@@ -158,6 +159,119 @@ const seedOpenEntry = async (signInTime) => {
     sync_status: 'synced',
   });
 };
+
+test('a clock-out after ten hours records the ten-hour auto-close', async () => {
+  jest.useFakeTimers();
+  jest.setSystemTime(new Date('2026-10-19T16:59:00.000Z'));
+  await seedOpenEntry('2026-10-19T07:00:00.000Z');
+  mockGetCurrentPosition.mockReturnValue(new Promise(() => {}));
+  const { result } = renderHook(() => useTimeTracking(), { wrapper });
+  await waitFor(() => expect(result.current.isSignedIn).toBe(true));
+
+  // Move the clock past ten hours without running the 30-second watchdog.
+  jest.setSystemTime(new Date('2026-10-19T17:01:00.000Z'));
+  let signOut;
+  await act(async () => { signOut = result.current.handleSignOut(); });
+  expect(mockGetCurrentPosition).not.toHaveBeenCalled();
+  await act(async () => { expect(await signOut).toBe(true); });
+
+  const [entry] = await timeEntriesRepository.getTimeEntries({ userId: 'user-1' });
+  expect(entry).toEqual(expect.objectContaining({
+    sign_out_time: '2026-10-19T17:00:00.000Z',
+    auto_clocked_out: true,
+    sign_out_lat: null,
+    sign_out_lon: null,
+    sign_out_location_status: null,
+    sync_status: 'pending',
+  }));
+  const notice = await getDefaultTestHandle().services.homeAttention.loadAutoClockOutNotice();
+  expect(notice).toEqual({
+    entryId: 'time-open',
+    userId: 'user-1',
+    signInTime: '2026-10-19T07:00:00.000Z',
+    detectedAt: '2026-10-19T17:01:00.000Z',
+    dismissedAt: null,
+  });
+  expect(result.current.autoClockOutNotice).toEqual(notice);
+  expect(result.current.isSignedIn).toBe(false);
+  expect(result.current.activeEntry).toBeNull();
+  expect(result.current.loadingLocation).toBe(false);
+  expect(result.current.snackbarMessage).toBe('Auto clocked out after 10 hours.');
+});
+
+test('a clock-out crossing ten hours during location capture records the ten-hour auto-close', async () => {
+  jest.useFakeTimers();
+  jest.setSystemTime(new Date('2026-10-19T16:59:00.000Z'));
+  await seedOpenEntry('2026-10-19T07:00:00.000Z');
+  let releaseGps;
+  mockGetCurrentPosition.mockReturnValue(new Promise((resolve) => { releaseGps = resolve; }));
+  const { result } = renderHook(() => useTimeTracking(), { wrapper });
+  await waitFor(() => expect(result.current.isSignedIn).toBe(true));
+  jest.setSystemTime(new Date('2026-10-19T16:59:00.000Z'));
+
+  let signOut;
+  await act(async () => { signOut = result.current.handleSignOut(); });
+  expect(mockGetCurrentPosition).toHaveBeenCalledTimes(1);
+  expect(await timeEntriesRepository.getActiveTimeEntry('user-1')).not.toBeNull();
+  jest.setSystemTime(new Date('2026-10-19T17:01:00.000Z'));
+  await act(async () => {
+    releaseGps({ coords: { latitude: -33.9, longitude: 25.6 }, status: 'fix' });
+    expect(await signOut).toBe(true);
+  });
+
+  const [entry] = await timeEntriesRepository.getTimeEntries({ userId: 'user-1' });
+  expect(entry).toEqual(expect.objectContaining({
+    sign_out_time: '2026-10-19T17:00:00.000Z',
+    auto_clocked_out: true,
+    sign_out_lat: null,
+    sign_out_lon: null,
+    sign_out_location_status: null,
+    sync_status: 'pending',
+  }));
+  const notice = await getDefaultTestHandle().services.homeAttention.loadAutoClockOutNotice();
+  expect(notice).toEqual({
+    entryId: 'time-open',
+    userId: 'user-1',
+    signInTime: '2026-10-19T07:00:00.000Z',
+    detectedAt: '2026-10-19T17:01:00.000Z',
+    dismissedAt: null,
+  });
+  expect(result.current.autoClockOutNotice).toEqual(notice);
+  expect(result.current.isSignedIn).toBe(false);
+  expect(result.current.activeEntry).toBeNull();
+  expect(result.current.loadingLocation).toBe(false);
+  expect(result.current.snackbarMessage).toBe('Auto clocked out after 10 hours.');
+});
+
+test.each([
+  ['at 9 h 59 m', '2026-10-19T16:59:00.000Z'],
+  ['at exactly ten hours', '2026-10-19T17:00:00.000Z'],
+])('a clock-out %s stores the real time and location', async (_, signOutTime) => {
+  jest.useFakeTimers();
+  jest.setSystemTime(new Date('2026-10-19T16:59:00.000Z'));
+  await seedOpenEntry('2026-10-19T07:00:00.000Z');
+  const { result } = renderHook(() => useTimeTracking(), { wrapper });
+  await waitFor(() => expect(result.current.isSignedIn).toBe(true));
+  jest.setSystemTime(new Date(signOutTime));
+
+  await act(async () => { expect(await result.current.handleSignOut()).toBe(true); });
+
+  const [entry] = await timeEntriesRepository.getTimeEntries({ userId: 'user-1' });
+  expect(entry).toEqual(expect.objectContaining({
+    sign_out_time: signOutTime,
+    auto_clocked_out: false,
+    sign_out_lat: -33.9,
+    sign_out_lon: 25.6,
+    sign_out_location_status: 'fix',
+    sync_status: 'pending',
+  }));
+  expect(mockGetCurrentPosition).toHaveBeenCalledTimes(1);
+  expect(await getDefaultTestHandle().services.homeAttention.loadAutoClockOutNotice()).toBeNull();
+  expect(result.current.autoClockOutNotice).toBeNull();
+  expect(result.current.isSignedIn).toBe(false);
+  expect(result.current.activeEntry).toBeNull();
+  expect(result.current.loadingLocation).toBe(false);
+});
 
 test('startup auto clock-out records and publishes the notice with the detection time', async () => {
   const elevenHoursAgo = new Date(Date.now() - 11 * 60 * 60 * 1000).toISOString();

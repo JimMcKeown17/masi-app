@@ -43,6 +43,7 @@ const CHILD_COLUMNS = [
   'sync_status',
   'last_sync_error',
   'server_updated_at',
+  'row_version',
 ];
 
 const RELATIONSHIP_COLUMNS = {
@@ -58,6 +59,7 @@ const RELATIONSHIP_COLUMNS = {
     'sync_status',
     'last_sync_error',
     'server_updated_at',
+    'row_version',
   ],
   programmeEnrollment: [
     'id',
@@ -71,6 +73,7 @@ const RELATIONSHIP_COLUMNS = {
     'sync_status',
     'last_sync_error',
     'server_updated_at',
+    'row_version',
   ],
   classMembership: [
     'id',
@@ -85,6 +88,7 @@ const RELATIONSHIP_COLUMNS = {
     'sync_status',
     'last_sync_error',
     'server_updated_at',
+    'row_version',
   ],
 };
 
@@ -568,6 +572,7 @@ export const createChildrenRepository = ({ database } = {}) => {
       unassigned_at: assignment.unassigned_at || null,
       created_by: assignment.created_by || assignment.staff_id || assignment.user_id,
       sync_status: assignment.sync_status || syncStatusFromSynced(assignment.synced),
+      row_version: assignment.row_version,
     });
     if (await serverPullWouldClobberPendingLocal(txn, 'child_ea_assignments', record)) {
       return false;

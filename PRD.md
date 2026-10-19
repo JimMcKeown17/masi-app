@@ -223,6 +223,9 @@ render-time dependency.
 - Permission recovery offers Continue Without Location and one explicit retry or Open Settings.
   A successful Settings handoff writes nothing and asks the EA to return and tap again.
 - Duplicate taps share an in-flight guard; clock-out re-resolves the active entry after capture.
+- Clock-out after ten hours records the ten-hour automatic close and Home notice, with null
+  sign-out location fields. Check before requesting location and again after capture; a manual
+  close at or before ten hours retains its actual time and location outcome.
 - Record-without-hours remains an explicit escape hatch for session capture.
 - Attribute work-day grouping to the South African Programme day.
 

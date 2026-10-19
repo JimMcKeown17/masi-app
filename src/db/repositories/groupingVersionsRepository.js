@@ -24,6 +24,7 @@ const COLUMNS = [
   'sync_status',
   'last_sync_error',
   'server_updated_at',
+  'row_version',
 ];
 
 export const createGroupingVersionsRepository = ({ database } = {}) => {

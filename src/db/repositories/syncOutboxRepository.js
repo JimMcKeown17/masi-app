@@ -1,4 +1,5 @@
 import { resolveDatabase, runRepositoryTransaction } from './repositoryRuntime';
+import { isStampedOperation } from './rowVersion';
 import { enqueueSupportIncident, incidentRepeatKey } from './supportIncidentRepository';
 import { captureOperationalError } from '../../services/observability';
 import {
@@ -167,14 +168,38 @@ export const createSyncOutboxRepository = ({ database } = {}) => {
     return rows.map(toOutboxRecord);
   };
 
-  const updateInFlight = async (txn, ids, now) => txn.runAsync(`
-    update sync_outbox
-    set status = 'in_flight',
-        last_error = case when table_name = 'children' and operation = 'insert'
-          then coalesce(last_error, 'Upload started; server outcome unknown') else last_error end,
-        updated_at = ?
-    where id in (${sqlPlaceholders(ids.length)})
-  `, now, ...ids);
+  const updateInFlight = async (txn, ids, now) => {
+    await txn.runAsync(`
+      update sync_outbox
+      set status = 'in_flight',
+          last_error = case when table_name = 'children' and operation = 'insert'
+            then coalesce(last_error, 'Upload started; server outcome unknown') else last_error end,
+          updated_at = ?
+      where id in (${sqlPlaceholders(ids.length)})
+    `, now, ...ids);
+    const rows = await txn.getAllAsync(`
+      select id, table_name, record_id, operation
+      from sync_outbox
+      where id in (${sqlPlaceholders(ids.length)})
+    `, ...ids);
+    for (const row of rows) {
+      if (!isStampedOperation(row.table_name, row.operation)) continue;
+      const table = quoteIdentifier(row.table_name);
+      // A forced terminal retry must be protected from overlapping pulls until it settles.
+      await txn.runAsync(`
+        update ${table}
+        set row_version = row_version + 1,
+            sync_status = case when sync_status = 'terminal' then 'pending' else sync_status end
+        where id = ?
+      `, row.record_id);
+      const local = await txn.getFirstAsync(`select row_version from ${table} where id = ?`, row.record_id);
+      if (local) {
+        await txn.runAsync(`
+          update sync_outbox set payload = json_set(payload, '$.row_version', ?) where id = ?
+        `, local.row_version, row.id);
+      }
+    }
+  };
 
   const markInFlight = async (ids, { transaction } = {}) => {
     if (!ids || ids.length === 0) return true;

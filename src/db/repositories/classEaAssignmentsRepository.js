@@ -29,6 +29,7 @@ const COLUMNS = [
   'sync_status',
   'last_sync_error',
   'server_updated_at',
+  'row_version',
 ];
 
 const REQUIRED_RLS_FIELDS = ['class_id', 'ea_user_id', 'programme_id', 'created_by'];
