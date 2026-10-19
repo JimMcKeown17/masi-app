@@ -1,5 +1,8 @@
+jest.mock('@expo/vector-icons', () => ({ Ionicons: 'Ionicons' }), { virtual: true });
 import React from 'react';
-import { fireEvent, render } from '@testing-library/react-native';
+import { StyleSheet } from 'react-native';
+import { colors, tints } from '../src/constants/colors';
+import { act, fireEvent, render } from '@testing-library/react-native';
 import { PaperProvider } from 'react-native-paper';
 import GroupPickerBottomSheet from '../src/components/children/GroupPickerBottomSheet';
 
@@ -98,4 +101,29 @@ describe('GroupPickerBottomSheet', () => {
 
     expect(onDismiss).toHaveBeenCalledTimes(1);
   });
+});
+
+test('shared group actions keep their labels, assignment and removal handlers', async () => {
+  mockUseChildren.mockReturnValue({ ...contextDefaults, groups: [{ id: 'g1', name: 'Group 1' }] });
+  contextDefaults.addGroup.mockResolvedValue({ success: true, group: { id: 'g2' } });
+  contextDefaults.addChildToGroup.mockResolvedValue({ success: true });
+  contextDefaults.removeChildFromGroup.mockResolvedValue({ success: true });
+  const onGroupChanged = jest.fn();
+  const screen = renderPicker({ currentGroupId: 'g1', onGroupChanged });
+  const add = screen.getByRole('button', { name: 'Add Group 2' });
+  const remove = screen.getByRole('button', { name: 'Remove Test Child from group' });
+  for (const button of [add, remove]) {
+    expect(StyleSheet.flatten(button.props.style)).toEqual(expect.objectContaining({
+      backgroundColor: colors.surface, borderColor: tints.control, borderWidth: 1.5, minHeight: 56,
+    }));
+  }
+  await act(async () => fireEvent.press(add));
+  expect(contextDefaults.addGroup).toHaveBeenCalledWith({ name: 'Group 2' });
+  expect(contextDefaults.removeChildFromGroup).toHaveBeenCalledWith('child-1', 'g1');
+  expect(contextDefaults.addChildToGroup).toHaveBeenCalledWith('child-1', 'g2');
+  expect(onGroupChanged).toHaveBeenCalledTimes(1);
+  contextDefaults.removeChildFromGroup.mockClear();
+  await act(async () => fireEvent.press(remove));
+  expect(contextDefaults.removeChildFromGroup).toHaveBeenCalledWith('child-1', 'g1');
+  expect(onGroupChanged).toHaveBeenCalledTimes(2);
 });

@@ -4,8 +4,10 @@ retryFailedItem: jest.fn()
 }));
 jest.mock('@expo/vector-icons', () => ({ Ionicons: () => null }), { virtual: true });
 
-import { render, fireEvent, waitFor } from '@testing-library/react-native';
-import { SafeAreaProvider } from 'react-native-safe-area-context';
+import { render, fireEvent, waitFor, within } from '@testing-library/react-native';
+import { AllProviders } from '../test-support/renderWithProviders';
+import { StyleSheet } from 'react-native';
+import { colors, tints } from '../src/constants/colors';
 import SyncStatusScreen from '../src/screens/main/SyncStatusScreen';
 import { retryFailedItem } from '../test-support/handleServiceMocks';
 import { useSessionHistoryStatus } from '../src/services/sessionHistoryStatus';
@@ -13,6 +15,7 @@ import { getSessionHistoryPullState } from '../test-support/handleServiceMocks';
 
 jest.mock('../src/context/AuthContext', () => ({ useAuth: () => ({ user: { id: 'user-1' } }) }));
 jest.mock('@react-navigation/native', () => ({
+  NavigationContext: require('react').createContext(null),
   useFocusEffect: (callback) => require('react').useEffect(callback, [callback]),
 }));
 jest.mock('../src/services/sessionHistoryStatus', () => ({ ...jest.requireActual('../src/services/sessionHistoryStatus'),
@@ -50,9 +53,8 @@ const terminalItem = (overrides = {}) => ({
   ...overrides,
 });
 
-const metrics = { frame: { x: 0, y: 0, width: 320, height: 640 }, insets: { top: 0, left: 0, right: 0, bottom: 0 } };
 const renderScreen = () => render(
-  <SafeAreaProvider initialMetrics={metrics}><SyncStatusScreen /></SafeAreaProvider>
+  <AllProviders><SyncStatusScreen /></AllProviders>
 );
 
 afterEach(() => jest.clearAllMocks());
@@ -81,7 +83,7 @@ test.each(['pageVersion', 'runVersion'])('History reloads on %s', async (version
   await waitFor(() => expect(getSessionHistoryPullState).toHaveBeenCalledTimes(1));
   useSessionHistoryStatus.mockReturnValue({ running: false, pageVersion: 0, runVersion: 0, [version]: 1 });
   getSessionHistoryPullState.mockResolvedValue({ lastPulledAt: null, cursor: '{"complete":false}' });
-  screen.rerender(<SafeAreaProvider initialMetrics={metrics}><SyncStatusScreen /></SafeAreaProvider>);
+  screen.rerender(<AllProviders><SyncStatusScreen /></AllProviders>);
   await waitFor(() => expect(screen.getByText('History not fully downloaded yet')).toBeTruthy());
   expect(getSessionHistoryPullState).toHaveBeenCalledTimes(2);
 });
@@ -151,7 +153,7 @@ test('a persisted reconcile breaker note renders its card and Apply requests tha
   expect(authorizeReconcileBreaker).toHaveBeenCalledWith('childEaAssignments');
 
   mockUseOffline.mockReturnValue(offline());
-  rerender(<SafeAreaProvider initialMetrics={metrics}><SyncStatusScreen /></SafeAreaProvider>);
+  rerender(<AllProviders><SyncStatusScreen /></AllProviders>);
   expect(queryByText('Large roster change from Head Office is waiting')).toBeNull();
 });
 
@@ -165,4 +167,29 @@ test('offline with terminal items shows reconnect framing and an inert Retry', (
   expect(getByText('Reconnect to retry these items.')).toBeTruthy();
   fireEvent.press(getByText('Retry'));
   expect(retryFailedItem).not.toHaveBeenCalled();
+});
+
+test('Retry is secondary and publishes its neutral progress message through the root host', async () => {
+  const state = offline({ needsAttentionCount: 1, syncStatus: { needsAttentionItems: [terminalItem({ table: 'SESSIONS' })] } });
+  mockUseOffline.mockReturnValue(state);
+  const screen = renderScreen();
+  const retry = screen.getByRole('button', { name: 'Retry' });
+  expect(StyleSheet.flatten(retry.props.style)).toEqual(expect.objectContaining({
+    backgroundColor: colors.surface, borderColor: tints.control, borderWidth: 1.5, minHeight: 44,
+  }));
+  fireEvent.press(retry);
+  await waitFor(() => expect(state.syncNow).toHaveBeenCalledWith({ force: true }));
+  expect(retryFailedItem).toHaveBeenCalledWith('SESSIONS', 'abc12345ff');
+  expect(state.refreshSyncStatus).toHaveBeenCalledTimes(1);
+  expect(within(screen.getByTestId('toast-host')).getByText('Retrying Sessions...')).toBeTruthy();
+  expect(screen.queryByRole('alert')).toBeNull();
+  expect(screen.queryByTestId('toast-status', { includeHiddenElements: true })).toBeNull();
+});
+
+test('Sync now retains its forced sync handler', () => {
+  const state = offline();
+  mockUseOffline.mockReturnValue(state);
+  const screen = renderScreen();
+  fireEvent.press(screen.getByRole('button', { name: 'Sync now' }));
+  expect(state.syncNow).toHaveBeenCalledWith({ force: true });
 });

@@ -61,6 +61,6 @@ const styles = StyleSheet.create({
     color: colors.text,
   },
   tileTextSelected: {
-    color: '#FFFFFF',
+    color: colors.onDark,
   },
 });

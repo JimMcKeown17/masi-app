@@ -1,7 +1,8 @@
 jest.mock('@expo/vector-icons', () => ({ Ionicons: 'Ionicons' }), { virtual: true });
 import React from 'react';
 import { render, fireEvent, waitFor } from '@testing-library/react-native';
-import { PaperProvider } from 'react-native-paper';
+import { TextInput as PaperTextInput } from 'react-native-paper';
+import { AllProviders } from '../test-support/renderWithProviders';
 import CreateClassScreen from '../src/screens/children/CreateClassScreen';
 
 const mockAddClass = jest.fn().mockResolvedValue({ success: true });
@@ -29,9 +30,9 @@ const navigation = {
 };
 
 const screenElement = (route) => (
-  <PaperProvider>
+  <AllProviders>
     <CreateClassScreen navigation={navigation} route={route} />
-  </PaperProvider>
+  </AllProviders>
 );
 
 const renderScreen = (route) => render(screenElement(route));
@@ -48,20 +49,19 @@ beforeEach(() => {
   mockAddClass.mockResolvedValue({ success: true });
 });
 
-const completeNonSchoolRequiredFields = ({ getAllByDisplayValue, getAllByTestId, getByText }) => {
-  fireEvent.press(getAllByTestId('right-icon-adornment')[1]);
+const completeNonSchoolRequiredFields = ({ getByLabelText, getByRole, getByText }) => {
+  fireEvent.press(getByRole('button', { name: /^Grade \*,/ }));
   fireEvent.press(getByText('Grade 1'));
 
-  let blankInputs = getAllByDisplayValue('');
-  fireEvent.changeText(blankInputs[0], '1A');
-  fireEvent.changeText(blankInputs[1], 'Noluthando Mbeki');
+  fireEvent.changeText(getByLabelText('Class Name *'), '1A');
+  fireEvent.changeText(getByLabelText('Teacher *'), 'Noluthando Mbeki');
 
-  fireEvent.press(getAllByTestId('right-icon-adornment')[2]);
+  fireEvent.press(getByRole('button', { name: /^Home Language \*,/ }));
   fireEvent.press(getByText('isiXhosa'));
 };
 
 const completeRequiredFields = (screen) => {
-  fireEvent.press(screen.getAllByTestId('right-icon-adornment')[0]);
+  fireEvent.press(screen.getByRole('button', { name: /^School \*,/ }));
   fireEvent.press(screen.getByText('Sunrise Primary'));
   completeNonSchoolRequiredFields(screen);
 };
@@ -71,9 +71,9 @@ describe('CreateClassScreen', () => {
     mockProfile = { schoolId: 'school-2', schoolName: 'Hilltop School' };
     const screen = renderScreen();
 
-    expect(screen.getByDisplayValue('Hilltop School')).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'School *, Hilltop School' })).toBeTruthy();
     completeNonSchoolRequiredFields(screen);
-    fireEvent.press(screen.getByText('Create Class'));
+    fireEvent.press(screen.getByText('Create class'));
 
     await waitFor(() => expect(mockAddClass).toHaveBeenCalledWith(expect.objectContaining({
       school_id: 'school-2',
@@ -82,26 +82,26 @@ describe('CreateClassScreen', () => {
 
   test('fills an untouched school field when the profile arrives asynchronously', () => {
     const screen = renderScreen();
-    expect(screen.getAllByTestId('text-input-outlined')[0].props.value).toBe('');
+    expect(screen.getByRole('button', { name: 'School *, ' })).toBeTruthy();
 
     mockProfile = { schoolId: 'school-2', schoolName: 'Hilltop School' };
     screen.rerender(screenElement());
 
-    expect(screen.getByDisplayValue('Hilltop School')).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'School *, Hilltop School' })).toBeTruthy();
   });
 
   test('keeps and submits a user-selected school after the profile refreshes', async () => {
     mockProfile = { schoolId: 'school-2', schoolName: 'Hilltop School' };
     const screen = renderScreen();
 
-    fireEvent.press(screen.getAllByTestId('right-icon-adornment')[0]);
+    fireEvent.press(screen.getByRole('button', { name: /^School \*,/ }));
     fireEvent.press(screen.getByText('Sunrise Primary'));
     mockProfile = { schoolId: 'school-2', schoolName: 'Hilltop School' };
     screen.rerender(screenElement());
 
-    expect(screen.getByDisplayValue('Sunrise Primary')).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'School *, Sunrise Primary' })).toBeTruthy();
     completeNonSchoolRequiredFields(screen);
-    fireEvent.press(screen.getByText('Create Class'));
+    fireEvent.press(screen.getByText('Create class'));
 
     await waitFor(() => expect(mockAddClass).toHaveBeenCalledWith(expect.objectContaining({
       school_id: 'school-1',
@@ -112,7 +112,7 @@ describe('CreateClassScreen', () => {
     mockProfile = { schoolId: null, schoolName: null };
     const screen = renderScreen();
 
-    expect(screen.getAllByTestId('text-input-outlined')[0].props.value).toBe('');
+    expect(screen.getByRole('button', { name: 'School *, ' })).toBeTruthy();
   });
 
   test('renders all form fields', () => {
@@ -125,9 +125,9 @@ describe('CreateClassScreen', () => {
   });
 
   test('validates required fields on submit', async () => {
-    const { getByText } = renderScreen();
+    const { getByText, getAllByRole, getByLabelText } = renderScreen();
 
-    fireEvent.press(getByText('Create Class'));
+    fireEvent.press(getByText('Create class'));
 
     await waitFor(() => {
       expect(getByText('School is required')).toBeTruthy();
@@ -137,12 +137,14 @@ describe('CreateClassScreen', () => {
       expect(getByText('Home language is required')).toBeTruthy();
     });
 
+    expect(getAllByRole('alert')[2]).toHaveTextContent('Class name is required');
+    expect(getByLabelText('Class Name *, error: Class name is required')).toBeTruthy();
     expect(mockAddClass).not.toHaveBeenCalled();
   });
 
-  test('renders Create Class submit button', () => {
+  test('renders Create class submit button', () => {
     const { getByText } = renderScreen();
-    expect(getByText('Create Class')).toBeTruthy();
+    expect(getByText('Create class')).toBeTruthy();
   });
 
   test('disables autocorrect, spell check, and autocomplete for typed fields', () => {
@@ -162,7 +164,7 @@ describe('CreateClassScreen', () => {
     const screen = renderScreen();
     completeRequiredFields(screen);
 
-    fireEvent.press(screen.getByText('Create Class'));
+    fireEvent.press(screen.getByText('Create class'));
 
     await waitFor(() => expect(mockAddClass).toHaveBeenCalledWith(expect.objectContaining({
       school_id: 'school-1',
@@ -173,6 +175,7 @@ describe('CreateClassScreen', () => {
     })));
     expect(mockNavigationGoBack).toHaveBeenCalledTimes(1);
     expect(mockNavigationReplace).not.toHaveBeenCalled();
+    expect(screen.queryByTestId('toast')).toBeNull();
   });
 
   test('advances onboarding to the child step with the created class', async () => {
@@ -183,7 +186,7 @@ describe('CreateClassScreen', () => {
     const screen = renderScreen({ params: { onboarding: true } });
     completeRequiredFields(screen);
 
-    fireEvent.press(screen.getByText('Create Class'));
+    fireEvent.press(screen.getByText('Create class'));
 
     await waitFor(() => expect(mockAddClass).toHaveBeenCalledWith(
       expect.objectContaining({ name: '1A' }),
@@ -193,6 +196,7 @@ describe('CreateClassScreen', () => {
       'ChildOnboarding',
       { classId: 'class-new' }
     ));
+    expect(screen.queryByTestId('toast')).toBeNull();
     expect(mockNavigationGoBack).not.toHaveBeenCalled();
   });
 
@@ -201,9 +205,16 @@ describe('CreateClassScreen', () => {
     const screen = renderScreen();
     completeRequiredFields(screen);
 
-    fireEvent.press(screen.getByText('Create Class'));
+    fireEvent.press(screen.getByText('Create class'));
 
     await waitFor(() => expect(mockAddClass).toHaveBeenCalled());
+    expect(screen.getByRole('alert')).toHaveTextContent('Error creating class');
     expect(mockNavigationGoBack).not.toHaveBeenCalled();
   });
+});
+
+test('uses shared fields without a duplicate page title', () => {
+  const screen = renderScreen();
+  expect(screen.UNSAFE_queryAllByType(PaperTextInput)).toHaveLength(0);
+  expect(screen.queryByText('Create New Class')).toBeNull();
 });

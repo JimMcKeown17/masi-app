@@ -1,7 +1,9 @@
 jest.mock('@expo/vector-icons', () => ({ Ionicons: 'Ionicons' }), { virtual: true });
 import React from 'react';
-import { render, fireEvent, waitFor } from '@testing-library/react-native';
-import { PaperProvider } from 'react-native-paper';
+import { Alert, StyleSheet } from 'react-native';
+import { colors } from '../src/constants/colors';
+import { render, fireEvent, waitFor, within } from '@testing-library/react-native';
+import { AllProviders } from '../test-support/renderWithProviders';
 import EditChildScreen from '../src/screens/children/EditChildScreen';
 import { READING_LEVELS } from '../src/constants/literacyConstants';
 
@@ -70,9 +72,9 @@ const route = { params: { childId: 'child-1' } };
 const navigation = { goBack: mockNavigationGoBack };
 
 const screenElement = () => (
-  <PaperProvider>
+  <AllProviders>
     <EditChildScreen route={route} navigation={navigation} />
-  </PaperProvider>
+  </AllProviders>
 );
 
 const renderScreen = () => render(screenElement());
@@ -126,9 +128,9 @@ describe('EditChildScreen', () => {
   });
 
   test('navigates back immediately after a successful local child update', async () => {
-    const { getByText } = renderScreen();
+    const { getByRole, queryByTestId } = renderScreen();
 
-    fireEvent.press(getByText('Save Changes'));
+    fireEvent.press(getByRole('button', { name: 'Save changes' }));
 
     await waitFor(() => expect(mockUpdateChild).toHaveBeenCalledWith('child-1', expect.objectContaining({
       first_name: 'Amahle',
@@ -136,6 +138,7 @@ describe('EditChildScreen', () => {
       gender: 'female',
     })));
     expect(mockNavigationGoBack).toHaveBeenCalledTimes(1);
+    expect(queryByTestId('toast')).toBeNull();
   });
 
   test('shows and edits the child current reading level', async () => {
@@ -144,7 +147,7 @@ describe('EditChildScreen', () => {
     fireEvent.press(screen.getByText(READING_LEVELS[4]));
     expect(screen.getByLabelText('Dismiss reading level picker')).toBeTruthy();
     fireEvent.press(screen.getByText(READING_LEVELS[5]));
-    fireEvent.press(screen.getByText('Save Changes'));
+    fireEvent.press(screen.getByRole('button', { name: 'Save changes' }));
 
     await waitFor(() => expect(mockUpdateChild).toHaveBeenCalledWith(
       'child-1',
@@ -154,19 +157,20 @@ describe('EditChildScreen', () => {
 
   test('stays on the form when local child update fails', async () => {
     mockUpdateChild.mockResolvedValueOnce({ success: false });
-    const { getByText } = renderScreen();
+    const { getByRole } = renderScreen();
 
-    fireEvent.press(getByText('Save Changes'));
+    fireEvent.press(getByRole('button', { name: 'Save changes' }));
 
     await waitFor(() => expect(mockUpdateChild).toHaveBeenCalled());
     expect(mockNavigationGoBack).not.toHaveBeenCalled();
+    expect(getByRole('alert')).toHaveTextContent('Error updating child');
   });
 
   test('preserves historic gender values when no new chip is selected', async () => {
     mockChildren = [makeChild('non_binary')];
-    const { getByText } = renderScreen();
+    const { getByRole } = renderScreen();
 
-    fireEvent.press(getByText('Save Changes'));
+    fireEvent.press(getByRole('button', { name: 'Save changes' }));
 
     await waitFor(() => expect(mockUpdateChild).toHaveBeenCalledWith('child-1', expect.objectContaining({
       gender: 'non_binary',
@@ -185,10 +189,10 @@ describe('EditChildScreen', () => {
 
   test('overwrites a historic gender value only after choosing a male or female chip', async () => {
     mockChildren = [makeChild('unknown')];
-    const { getByTestId, getByText } = renderScreen();
+    const { getByTestId, getByRole } = renderScreen();
 
     fireEvent.press(getByTestId('edit-child-gender-male'));
-    fireEvent.press(getByText('Save Changes'));
+    fireEvent.press(getByRole('button', { name: 'Save changes' }));
 
     await waitFor(() => expect(mockUpdateChild).toHaveBeenCalledWith('child-1', expect.objectContaining({
       gender: 'male',
@@ -217,6 +221,8 @@ describe('EditChildScreen', () => {
       'child-1',
       { class_id: 'class-2' },
     ));
+    expect(within(screen.getByTestId('toast')).getByText('Class updated')).toBeTruthy();
+    expect(StyleSheet.flatten(screen.getByTestId('toast-status', { includeHiddenElements: true }).props.style).backgroundColor).toBe(colors.success);
   });
 
   test('clears the current class through the explicit No class option', async () => {
@@ -240,4 +246,31 @@ describe('EditChildScreen', () => {
     expect(screen.getByLabelText('Select no class')).toBeTruthy();
     expect(screen.queryByText('No classes available. Create a class first.')).toBeNull();
   });
+});
+
+test('validation exposes an alert and the field error name', () => {
+  const screen = renderScreen();
+  fireEvent.changeText(screen.getByDisplayValue('Amahle'), '');
+  fireEvent.press(screen.getByRole('button', { name: 'Save changes' }));
+  expect(screen.getByRole('alert')).toHaveTextContent('First name is required');
+  expect(screen.getByLabelText('First Name *, error: First name is required')).toBeTruthy();
+  expect(mockUpdateChild).not.toHaveBeenCalled();
+});
+
+test('Delete child keeps the confirmation and deletes only after confirmation', async () => {
+  const alert = jest.spyOn(Alert, 'alert').mockImplementation(() => {});
+  mockDeleteChild.mockResolvedValueOnce({ success: true });
+  const screen = renderScreen();
+  fireEvent.press(screen.getByRole('button', { name: 'Delete child' }));
+  expect(mockDeleteChild).not.toHaveBeenCalled();
+  expect(alert).toHaveBeenCalledWith('Delete Child', 'Are you sure you want to remove this child?', expect.any(Array));
+  await alert.mock.calls[0][2].find(action => action.text === 'Delete').onPress();
+  expect(mockDeleteChild).toHaveBeenCalledWith('child-1');
+  expect(mockNavigationGoBack).toHaveBeenCalledTimes(1);
+  alert.mockRestore();
+});
+
+test('leaves the page title to the navigator', () => {
+  const screen = renderScreen();
+  expect(screen.queryByText('Edit Child')).toBeNull();
 });

@@ -15,6 +15,8 @@ import { colors, spacing, borderRadius } from '../../constants/colors';
 import { useChildren } from '../../context/ChildrenContext';
 import { compareGroups, getGroupColor, nextGroupNumber } from '../../utils/groupHelpers';
 import BottomSheet from '../common/BottomSheet';
+import BrandButton from '../common/BrandButton';
+import { fontFamilies, typeRoles } from '../../constants/typography';
 
 /**
  * Number of virtual preset rows to show when the user has zero groups.
@@ -226,117 +228,108 @@ export default function GroupPickerBottomSheet({
       subtitle={childName}
       dismissLabel="Dismiss group picker"
     >
-              {/* Virtual preset rows — shown only when user has no groups yet */}
-              {groups.length === 0 &&
-                Array.from({ length: PRESET_VIRTUAL_COUNT }, (_, i) => i + 1).map((n) => {
-                  const colorScheme = getGroupColor(n - 1);
-                  return (
-                    <TouchableOpacity
-                      key={`virtual-${n}`}
-                      style={styles.groupRow}
-                      onPress={() => handleSelectVirtual(n)}
-                      disabled={loading}
-                      accessibilityRole="button"
-                      accessibilityLabel={`Assign ${childName} to Group ${n}`}
-                      accessibilityState={{ disabled: loading }}
-                    >
-                      <View style={styles.groupInfo}>
-                        <View style={[styles.groupColorDot, { backgroundColor: colorScheme.text }]} />
-                        <View>
-                          <Text variant="bodyLarge" style={styles.groupName}>
-                            Group {n}
-                          </Text>
-                          <Text variant="bodySmall" style={styles.groupChildCount}>
-                            0 children
-                          </Text>
-                        </View>
-                      </View>
-                    </TouchableOpacity>
-                  );
-                })}
-
-              {/* Group list */}
-              {sortedGroups.map((group, index) => {
-                const isSelected = group.id === currentGroupId;
-                const colorScheme = getGroupColor(index);
-                const childCount = getChildrenInGroup(group.id).length;
-
-                return (
-                  <TouchableOpacity
-                    key={group.id}
-                    style={[
-                      styles.groupRow,
-                      isSelected && { borderColor: colorScheme.text, borderWidth: 2 },
-                    ]}
-                    onPress={() => handleSelectGroup(group.id)}
-                    disabled={loading}
-                    accessibilityRole="button"
-                    accessibilityLabel={`Assign ${childName} to ${group.name}`}
-                    accessibilityState={{ disabled: loading, selected: isSelected }}
-                  >
-                    <View style={styles.groupInfo}>
-                      <View style={[styles.groupColorDot, { backgroundColor: colorScheme.text }]} />
-                      <View>
-                        <Text variant="bodyLarge" style={[
-                          styles.groupName,
-                          isSelected && { color: colorScheme.text, fontWeight: '700' },
-                        ]}>
-                          {group.name}
-                        </Text>
-                        <Text variant="bodySmall" style={styles.groupChildCount}>
-                          {childCount} {childCount === 1 ? 'child' : 'children'}
-                        </Text>
-                      </View>
-                    </View>
-                    <View style={styles.groupActions}>
-                      {isSelected && (
-                        <Text style={[styles.checkmark, { color: colorScheme.text }]}>✓</Text>
-                      )}
-                      <IconButton
-                        icon="delete-outline"
-                        size={18}
-                        iconColor={colors.error}
-                        onPress={() => handleDeleteGroup(group)}
-                        style={styles.actionIcon}
-                      />
-                    </View>
-                  </TouchableOpacity>
-                );
-              })}
-
-              {/* Remove from group option */}
-              {currentGroupId && (
-                <TouchableOpacity
-                  style={styles.removeRow}
-                  onPress={handleRemoveFromGroup}
-                  disabled={loading}
-                  accessibilityRole="button"
-                  accessibilityLabel={`Remove ${childName} from group`}
-                  accessibilityState={{ disabled: loading }}
-                >
-                  <Text variant="bodyMedium" style={styles.removeText}>
-                    ✕  Remove from group
+      {/* Virtual preset rows — shown only when user has no groups yet */}
+      {groups.length === 0 &&
+        Array.from({ length: PRESET_VIRTUAL_COUNT }, (_, i) => i + 1).map((n) => {
+          const colorScheme = getGroupColor(n - 1);
+          return (
+            <TouchableOpacity
+              key={`virtual-${n}`}
+              style={styles.groupRow}
+              onPress={() => handleSelectVirtual(n)}
+              disabled={loading}
+              accessibilityRole="button"
+              accessibilityLabel={`Assign ${childName} to Group ${n}`}
+              accessibilityState={{ disabled: loading }}
+            >
+              <View style={styles.groupInfo}>
+                <View style={[styles.groupColorDot, { backgroundColor: colorScheme.text }]} />
+                <View>
+                  <Text variant="bodyLarge" style={styles.groupName}>
+                    Group {n}
                   </Text>
-                </TouchableOpacity>
-              )}
-
-              <Divider style={styles.divider} />
-
-              {/* "+ Add Group N" — hidden while virtual presets are showing */}
-              {groups.length > 0 && (
-                <TouchableOpacity
-                  style={styles.createRow}
-                  onPress={handleAddNextNumbered}
-                  disabled={loading}
-                  accessibilityRole="button"
-                  accessibilityLabel={`Add Group ${nextNumberedN}`}
-                  accessibilityState={{ disabled: loading }}
-                >
-                  <Text style={styles.createText}>
-                    +  Add Group {nextNumberedN}
+                  <Text variant="bodySmall" style={styles.groupChildCount}>
+                    0 children
                   </Text>
-                </TouchableOpacity>
+                </View>
+              </View>
+            </TouchableOpacity>
+          );
+        })}
+
+      {/* Group list */}
+      {sortedGroups.map((group, index) => {
+        const isSelected = group.id === currentGroupId;
+        const colorScheme = getGroupColor(index);
+        const childCount = getChildrenInGroup(group.id).length;
+
+        return (
+          <TouchableOpacity
+            key={group.id}
+            style={[
+              styles.groupRow,
+              isSelected && { borderColor: colorScheme.text, borderWidth: 2 },
+            ]}
+            onPress={() => handleSelectGroup(group.id)}
+            disabled={loading}
+            accessibilityRole="button"
+            accessibilityLabel={`Assign ${childName} to ${group.name}`}
+            accessibilityState={{ disabled: loading, selected: isSelected }}
+          >
+            <View style={styles.groupInfo}>
+              <View style={[styles.groupColorDot, { backgroundColor: colorScheme.text }]} />
+              <View>
+                <Text variant="bodyLarge" style={[
+                  styles.groupName,
+                  isSelected && { color: colorScheme.text, fontFamily: fontFamilies.textBold },
+                ]}>
+                  {group.name}
+                </Text>
+                <Text variant="bodySmall" style={styles.groupChildCount}>
+                  {childCount} {childCount === 1 ? 'child' : 'children'}
+                </Text>
+              </View>
+            </View>
+            <View style={styles.groupActions}>
+              {isSelected && (
+                <Text style={[styles.checkmark, { color: colorScheme.text }]}>✓</Text>
               )}
+              <IconButton
+                icon="delete-outline"
+                size={18}
+                iconColor={colors.error}
+                onPress={() => handleDeleteGroup(group)}
+                style={styles.actionIcon}
+              />
+            </View>
+          </TouchableOpacity>
+        );
+      })}
+
+      {/* Remove from group option */}
+      {currentGroupId && (
+        <BrandButton
+          variant="secondary"
+          label="✕  Remove from group"
+          style={styles.removeRow}
+          onPress={handleRemoveFromGroup}
+          disabled={loading}
+          accessibilityLabel={`Remove ${childName} from group`}
+        />
+      )}
+
+      <Divider style={styles.divider} />
+
+      {/* "+ Add Group N" — hidden while virtual presets are showing */}
+      {groups.length > 0 && (
+        <BrandButton
+          variant="secondary"
+          label={`+  Add Group ${nextNumberedN}`}
+          onPress={handleAddNextNumbered}
+          disabled={loading}
+          accessibilityLabel={`Add Group ${nextNumberedN}`}
+        />
+      )}
     </BottomSheet>
   );
 }
@@ -366,7 +359,7 @@ const styles = StyleSheet.create({
     marginRight: spacing.sm,
   },
   groupName: {
-    fontWeight: '500',
+    fontFamily: fontFamilies.textMedium,
   },
   groupChildCount: {
     color: colors.textSecondary,
@@ -376,39 +369,16 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   checkmark: {
-    fontSize: 18,
-    fontWeight: '700',
+    ...typeRoles.textLetter,
     marginRight: spacing.xs,
   },
   actionIcon: {
     margin: 0,
   },
   removeRow: {
-    paddingVertical: spacing.md,
-    paddingHorizontal: spacing.md,
-    backgroundColor: colors.cardBackground,
-    borderRadius: borderRadius.sm,
     marginBottom: spacing.sm,
-    borderWidth: 1,
-    borderColor: colors.border,
-  },
-  removeText: {
-    color: colors.textSecondary,
   },
   divider: {
     marginVertical: spacing.sm,
-  },
-  createRow: {
-    paddingVertical: spacing.md,
-    paddingHorizontal: spacing.md,
-    borderRadius: borderRadius.sm,
-    borderWidth: 1.5,
-    borderStyle: 'dashed',
-    borderColor: colors.primary,
-  },
-  createText: {
-    color: colors.primary,
-    fontWeight: '600',
-    fontSize: 14,
   },
 });

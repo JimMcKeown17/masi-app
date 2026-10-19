@@ -1,15 +1,13 @@
 import React, { useState, useEffect } from 'react';
 import { View, StyleSheet, ScrollView, KeyboardAvoidingView, Platform, Alert } from 'react-native';
-import {
-  Text,
-  TextInput,
-  Button,
-  Card,
-  HelperText,
-  Snackbar,
-} from 'react-native-paper';
+
 import { colors, spacing } from '../../constants/colors';
-import SectionHeader from '../../components/common/SectionHeader';
+import BrandButton from '../../components/common/BrandButton';
+import SurfaceCard from '../../components/common/SurfaceCard';
+import TextField from '../../components/common/TextField';
+import SelectField from '../../components/common/SelectField';
+import { useHeaderHairline } from '../../components/common/ScreenHeader';
+import { useToast } from '../../context/ToastContext';
 import { useClasses } from '../../context/ClassesContext';
 import { GRADES, HOME_LANGUAGES } from '../../constants/options';
 import { NO_TEXT_SUGGESTIONS } from '../../constants/textInputProps';
@@ -35,7 +33,8 @@ export default function EditClassScreen({ route, navigation }) {
 
   const [errors, setErrors] = useState({});
   const [loading, setLoading] = useState(false);
-  const [snackbar, setSnackbar] = useState({ visible: false, message: '' });
+  const toast = useToast();
+  const onScroll = useHeaderHairline();
   const [initialized, setInitialized] = useState(false);
 
   useEffect(() => {
@@ -51,11 +50,11 @@ export default function EditClassScreen({ route, navigation }) {
       setHomeLanguage(classItem.home_language || '');
       setInitialized(true);
     } else {
-      setSnackbar({ visible: true, message: 'Class not found' });
+      toast.show({ message: 'Class not found', tone: 'error', duration: 3000 });
       setInitialized(true);
       navigation.goBack();
     }
-  }, [classItem, initialized, navigation, schools]);
+  }, [classItem, initialized, navigation, schools, toast]);
 
   const validate = () => {
     const newErrors = {};
@@ -84,11 +83,11 @@ export default function EditClassScreen({ route, navigation }) {
       if (result.success) {
         navigation.goBack();
       } else {
-        setSnackbar({ visible: true, message: 'Error updating class' });
+        toast.show({ message: 'Error updating class', tone: 'error', duration: 3000 });
       }
     } catch (error) {
       console.error('Error updating class:', error);
-      setSnackbar({ visible: true, message: 'Error updating class' });
+      toast.show({ message: 'Error updating class', tone: 'error', duration: 3000 });
     } finally {
       setLoading(false);
     }
@@ -110,7 +109,7 @@ export default function EditClassScreen({ route, navigation }) {
           if (result.success) {
             navigation.goBack();
           } else {
-            setSnackbar({ visible: true, message: 'Error deleting class' });
+            toast.show({ message: 'Error deleting class', tone: 'error', duration: 3000 });
           }
         },
       },
@@ -125,101 +124,81 @@ export default function EditClassScreen({ route, navigation }) {
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       keyboardVerticalOffset={90}
     >
-      <ScrollView contentContainerStyle={styles.scrollContent}>
-        <Card style={styles.card}>
-          <Card.Content>
-            <SectionHeader title="Edit Class" />
-
-            {/* School picker */}
-            <TextInput
+      <ScrollView contentContainerStyle={styles.scrollContent} onScroll={onScroll} scrollEventThrottle={16}>
+        <SurfaceCard style={styles.card}>
+          {/* School picker */}
+          <View style={styles.input}>
+            <SelectField
               label="School *"
               value={schoolName}
-              {...NO_TEXT_SUGGESTIONS}
-              mode="outlined"
-              style={styles.input}
-              editable={false}
-              right={<TextInput.Icon icon="chevron-down" onPress={() => schools.length > 0 && setSchoolPickerVisible(true)} />}
-              onPressIn={() => schools.length > 0 && setSchoolPickerVisible(true)}
-              error={!!errors.school}
+              onPress={() => schools.length > 0 && setSchoolPickerVisible(true)}
+              error={errors.school}
+              placeholder=""
             />
-            {errors.school && <HelperText type="error">{errors.school}</HelperText>}
+          </View>
 
-            {/* Grade picker */}
-            <TextInput
+          {/* Grade picker */}
+          <View style={styles.input}>
+            <SelectField
               label="Grade *"
               value={grade}
-              {...NO_TEXT_SUGGESTIONS}
-              mode="outlined"
-              style={styles.input}
-              editable={false}
-              right={<TextInput.Icon icon="chevron-down" onPress={() => setGradePickerVisible(true)} />}
-              onPressIn={() => setGradePickerVisible(true)}
-              error={!!errors.grade}
+              onPress={() => setGradePickerVisible(true)}
+              error={errors.grade}
+              placeholder=""
             />
-            {errors.grade && <HelperText type="error">{errors.grade}</HelperText>}
+          </View>
 
-            {/* Class Name */}
-            <TextInput
+          {/* Class Name */}
+          <View style={styles.input}>
+            <TextField
               label="Class Name *"
               value={className}
               onChangeText={setClassName}
               {...NO_TEXT_SUGGESTIONS}
               placeholder='e.g. "1A", "2B"'
-              error={!!errors.className}
-              mode="outlined"
-              style={styles.input}
+              error={errors.className}
             />
-            {errors.className && <HelperText type="error">{errors.className}</HelperText>}
+          </View>
 
-            {/* Teacher */}
-            <TextInput
+          {/* Teacher */}
+          <View style={styles.input}>
+            <TextField
               label="Teacher *"
               value={teacher}
               onChangeText={setTeacher}
               {...NO_TEXT_SUGGESTIONS}
-              error={!!errors.teacher}
-              mode="outlined"
-              style={styles.input}
+              error={errors.teacher}
             />
-            {errors.teacher && <HelperText type="error">{errors.teacher}</HelperText>}
+          </View>
 
-            {/* Home Language picker */}
-            <TextInput
+          {/* Home Language picker */}
+          <View style={styles.input}>
+            <SelectField
               label="Home Language *"
               value={homeLanguage}
-              {...NO_TEXT_SUGGESTIONS}
-              mode="outlined"
-              style={styles.input}
-              editable={false}
-              right={<TextInput.Icon icon="chevron-down" onPress={() => setLanguagePickerVisible(true)} />}
-              onPressIn={() => setLanguagePickerVisible(true)}
-              error={!!errors.homeLanguage}
+              onPress={() => setLanguagePickerVisible(true)}
+              error={errors.homeLanguage}
+              placeholder=""
             />
-            {errors.homeLanguage && <HelperText type="error">{errors.homeLanguage}</HelperText>}
+          </View>
 
-            {/* Submit */}
-            <Button
-              mode="contained"
-              onPress={handleSubmit}
-              loading={loading}
-              disabled={loading}
-              style={styles.button}
-            >
-              Save Changes
-            </Button>
-          </Card.Content>
-        </Card>
+          {/* Submit */}
+          <BrandButton
+            onPress={handleSubmit}
+            loading={loading}
+            disabled={loading}
+            style={styles.button}
+            variant="primary" size="lg" label="Save changes"
+          />
+        </SurfaceCard>
 
         {/* Delete Button */}
-        <Button
-          mode="outlined"
+        <BrandButton
           onPress={handleDelete}
           style={styles.deleteButton}
-          textColor={colors.error}
-          icon="delete"
-        >
-          Delete Class
-        </Button>
+          icon="trash-outline"
+          variant="destructiveQuiet" size="lg" label="Delete class"
+        />
       </ScrollView>
 
       <SelectSheet
@@ -257,14 +236,6 @@ export default function EditClassScreen({ route, navigation }) {
         selectedKey={homeLanguage}
         onSelect={setHomeLanguage}
       />
-
-      <Snackbar
-        visible={snackbar.visible}
-        onDismiss={() => setSnackbar({ ...snackbar, visible: false })}
-        duration={3000}
-      >
-        {snackbar.message}
-      </Snackbar>
     </KeyboardAvoidingView>
   );
 }
@@ -290,6 +261,5 @@ const styles = StyleSheet.create({
   },
   deleteButton: {
     marginBottom: spacing.lg,
-    borderColor: colors.error,
   },
 });

@@ -1,15 +1,13 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { View, StyleSheet, ScrollView, KeyboardAvoidingView, Platform } from 'react-native';
-import {
-  Text,
-  TextInput,
-  Button,
-  Card,
-  HelperText,
-  Snackbar,
-} from 'react-native-paper';
+import { Text } from 'react-native-paper';
 import { colors, spacing } from '../../constants/colors';
-import SectionHeader from '../../components/common/SectionHeader';
+import BrandButton from '../../components/common/BrandButton';
+import SurfaceCard from '../../components/common/SurfaceCard';
+import TextField from '../../components/common/TextField';
+import SelectField from '../../components/common/SelectField';
+import { useHeaderHairline } from '../../components/common/ScreenHeader';
+import { useToast } from '../../context/ToastContext';
 import { useAuth } from '../../context/AuthContext';
 import { useClasses } from '../../context/ClassesContext';
 import { GRADES, HOME_LANGUAGES } from '../../constants/options';
@@ -33,7 +31,8 @@ export default function CreateClassScreen({ route, navigation }) {
 
   const [errors, setErrors] = useState({});
   const [loading, setLoading] = useState(false);
-  const [snackbar, setSnackbar] = useState({ visible: false, message: '' });
+  const toast = useToast();
+  const onScroll = useHeaderHairline();
   const schoolTouchedRef = useRef(false);
 
   useEffect(() => {
@@ -83,11 +82,11 @@ export default function CreateClassScreen({ route, navigation }) {
           navigation.goBack();
         }
       } else {
-        setSnackbar({ visible: true, message: 'Error creating class' });
+        toast.show({ message: 'Error creating class', tone: 'error', duration: 3000 });
       }
     } catch (error) {
       console.error('Error creating class:', error);
-      setSnackbar({ visible: true, message: 'Error creating class' });
+      toast.show({ message: 'Error creating class', tone: 'error', duration: 3000 });
     } finally {
       setLoading(false);
     }
@@ -101,96 +100,79 @@ export default function CreateClassScreen({ route, navigation }) {
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       keyboardVerticalOffset={90}
     >
-      <ScrollView contentContainerStyle={styles.scrollContent}>
-        <Card style={styles.card}>
-          <Card.Content>
-            <SectionHeader title="Create New Class" />
+      <ScrollView contentContainerStyle={styles.scrollContent} onScroll={onScroll} scrollEventThrottle={16}>
+        <SurfaceCard style={styles.card}>
+          {noSchools && (
+            <Text variant="bodySmall" style={styles.warningText}>
+              Connect to the internet to load schools before creating a class.
+            </Text>
+          )}
 
-            {noSchools && (
-              <Text variant="bodySmall" style={styles.warningText}>
-                Connect to the internet to load schools before creating a class.
-              </Text>
-            )}
-
-            {/* School picker */}
-            <TextInput
+          {/* School picker */}
+          <View style={styles.input}>
+            <SelectField
               label="School *"
               value={schoolName}
-              {...NO_TEXT_SUGGESTIONS}
-              mode="outlined"
-              style={styles.input}
-              editable={false}
-              right={<TextInput.Icon icon="chevron-down" onPress={() => !noSchools && setSchoolPickerVisible(true)} />}
-              onPressIn={() => !noSchools && setSchoolPickerVisible(true)}
-              error={!!errors.school}
+              onPress={() => !noSchools && setSchoolPickerVisible(true)}
+              error={errors.school}
+              placeholder=""
             />
-            {errors.school && <HelperText type="error">{errors.school}</HelperText>}
+          </View>
 
-            {/* Grade picker */}
-            <TextInput
+          {/* Grade picker */}
+          <View style={styles.input}>
+            <SelectField
               label="Grade *"
               value={grade}
-              {...NO_TEXT_SUGGESTIONS}
-              mode="outlined"
-              style={styles.input}
-              editable={false}
-              right={<TextInput.Icon icon="chevron-down" onPress={() => setGradePickerVisible(true)} />}
-              onPressIn={() => setGradePickerVisible(true)}
-              error={!!errors.grade}
+              onPress={() => setGradePickerVisible(true)}
+              error={errors.grade}
+              placeholder=""
             />
-            {errors.grade && <HelperText type="error">{errors.grade}</HelperText>}
+          </View>
 
-            {/* Class Name */}
-            <TextInput
+          {/* Class Name */}
+          <View style={styles.input}>
+            <TextField
               label="Class Name *"
               value={className}
               onChangeText={setClassName}
               {...NO_TEXT_SUGGESTIONS}
               placeholder='e.g. "1A", "2B"'
-              error={!!errors.className}
-              mode="outlined"
-              style={styles.input}
+              error={errors.className}
             />
-            {errors.className && <HelperText type="error">{errors.className}</HelperText>}
+          </View>
 
-            {/* Teacher */}
-            <TextInput
+          {/* Teacher */}
+          <View style={styles.input}>
+            <TextField
               label="Teacher *"
               value={teacher}
               onChangeText={setTeacher}
               {...NO_TEXT_SUGGESTIONS}
-              error={!!errors.teacher}
-              mode="outlined"
-              style={styles.input}
+              error={errors.teacher}
             />
-            {errors.teacher && <HelperText type="error">{errors.teacher}</HelperText>}
+          </View>
 
-            {/* Home Language picker */}
-            <TextInput
+          {/* Home Language picker */}
+          <View style={styles.input}>
+            <SelectField
               label="Home Language *"
               value={homeLanguage}
-              {...NO_TEXT_SUGGESTIONS}
-              mode="outlined"
-              style={styles.input}
-              editable={false}
-              right={<TextInput.Icon icon="chevron-down" onPress={() => setLanguagePickerVisible(true)} />}
-              onPressIn={() => setLanguagePickerVisible(true)}
-              error={!!errors.homeLanguage}
+              onPress={() => setLanguagePickerVisible(true)}
+              error={errors.homeLanguage}
+              placeholder=""
             />
-            {errors.homeLanguage && <HelperText type="error">{errors.homeLanguage}</HelperText>}
+          </View>
 
-            {/* Submit */}
-            <Button
-              mode="contained"
-              onPress={handleSubmit}
-              loading={loading}
-              disabled={loading || noSchools}
-              style={styles.button}
-            >
-              Create Class
-            </Button>
-          </Card.Content>
-        </Card>
+          {/* Submit */}
+          <BrandButton
+            onPress={handleSubmit}
+            loading={loading}
+            disabled={loading || noSchools}
+            style={styles.button}
+            variant="primary" size="lg" label="Create class"
+          />
+        </SurfaceCard>
       </ScrollView>
 
       <SelectSheet
@@ -229,14 +211,6 @@ export default function CreateClassScreen({ route, navigation }) {
         selectedKey={homeLanguage}
         onSelect={setHomeLanguage}
       />
-
-      <Snackbar
-        visible={snackbar.visible}
-        onDismiss={() => setSnackbar({ ...snackbar, visible: false })}
-        duration={3000}
-      >
-        {snackbar.message}
-      </Snackbar>
     </KeyboardAvoidingView>
   );
 }

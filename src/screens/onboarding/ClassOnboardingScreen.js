@@ -1,10 +1,16 @@
 import React, { useEffect, useState } from 'react';
 import { ScrollView, StyleSheet, View } from 'react-native';
-import { ActivityIndicator, Button, Card, Text } from 'react-native-paper';
+import { ActivityIndicator, Text } from 'react-native-paper';
 import { useClasses } from '../../context/ClassesContext';
-import { borderRadius, colors, shadows, spacing } from '../../constants/colors';
+import { colors, spacing } from '../../constants/colors';
+
+import BrandButton from '../../components/common/BrandButton';
+import SurfaceCard from '../../components/common/SurfaceCard';
+import { useHeaderHairline } from '../../components/common/ScreenHeader';
+import { typeRoles } from '../../constants/typography';
 
 export default function ClassOnboardingScreen({ navigation }) {
+  const onScroll = useHeaderHairline();
   const { classBootstrapStatus, loadClasses } = useClasses();
   const [retrying, setRetrying] = useState(false);
 
@@ -49,9 +55,7 @@ export default function ClassOnboardingScreen({ navigation }) {
         <Text variant="bodyMedium" style={styles.centeredText}>
           Head Office must assign your active programme before you can create a class.
         </Text>
-        <Button mode="outlined" onPress={retryCheck} loading={retrying} disabled={retrying}>
-          Check Again
-        </Button>
+        <BrandButton variant="secondary" onPress={retryCheck} loading={retrying} disabled={retrying} label="Check again" />
       </View>
     );
   }
@@ -63,6 +67,8 @@ export default function ClassOnboardingScreen({ navigation }) {
       style={styles.container}
       contentContainerStyle={styles.content}
       keyboardShouldPersistTaps="handled"
+      onScroll={onScroll}
+      scrollEventThrottle={16}
     >
       <Text variant="labelLarge" style={styles.stepLabel}>STEP 1 OF 2</Text>
       <Text variant="headlineMedium" style={styles.title}>
@@ -76,54 +82,44 @@ export default function ClassOnboardingScreen({ navigation }) {
       </Text>
 
       {backendUnconfirmed ? (
-        <Card style={styles.warningCard}>
-          <Card.Content>
-            <Text variant="titleMedium" style={styles.warningTitle}>Backend check unavailable</Text>
-            <Text variant="bodyMedium" style={styles.warningText}>
-              This phone has no cached classes, but it could not reach the backend. Head Office may
-              already have assigned a class that has not downloaded yet. Creating one now may create
-              a duplicate class when the device reconnects.
-            </Text>
-          </Card.Content>
-        </Card>
+        <SurfaceCard style={styles.warningCard}>
+          <Text variant="titleMedium" style={styles.warningTitle}>Backend check unavailable</Text>
+          <Text variant="bodyMedium" style={styles.warningText}>
+            This phone has no cached classes, but it could not reach the backend. Head Office may
+            already have assigned a class that has not downloaded yet. Creating one now may create
+            a duplicate class when the device reconnects.
+          </Text>
+        </SurfaceCard>
       ) : (
-        <Card style={styles.infoCard}>
-          <Card.Content>
-            <Text variant="titleMedium" style={styles.infoTitle}>No assigned classes found</Text>
-            <Text variant="bodyMedium" style={styles.infoText}>
-              The backend check completed successfully, so you can create your class here.
-            </Text>
-          </Card.Content>
-        </Card>
+        <SurfaceCard style={styles.infoCard}>
+          <Text variant="titleMedium" style={styles.infoTitle}>No assigned classes found</Text>
+          <Text variant="bodyMedium" style={styles.infoText}>
+            The backend check completed successfully, so you can create your class here.
+          </Text>
+        </SurfaceCard>
       )}
 
       {backendUnconfirmed ? (
         <>
-          <Button
-            mode="contained"
+          <BrandButton
             onPress={() => startClassCreation(true)}
             style={styles.primaryButton}
-          >
-            Create locally anyway
-          </Button>
-          <Button
-            mode="outlined"
+            variant="primary" size="lg" label="Create locally anyway"
+          />
+          <BrandButton
             onPress={retryCheck}
             loading={retrying}
             disabled={retrying}
             style={styles.secondaryButton}
-          >
-            Retry Backend Check
-          </Button>
+            variant="secondary" size="lg" label="Retry backend check"
+          />
         </>
       ) : (
-        <Button
-          mode="contained"
+        <BrandButton
           onPress={() => startClassCreation(false)}
           style={styles.primaryButton}
-        >
-          Create My Class
-        </Button>
+          variant="primary" size="lg" label="Create my class"
+        />
       )}
 
       <Text variant="bodySmall" style={styles.progressHint}>
@@ -162,50 +158,45 @@ const styles = StyleSheet.create({
   },
   stepLabel: {
     color: colors.primary,
-    letterSpacing: 1,
+    ...typeRoles.textSectionLabel,
     marginBottom: spacing.sm,
   },
   title: {
     color: colors.text,
-    fontWeight: '700',
     marginBottom: spacing.md,
   },
   intro: {
     color: colors.textSecondary,
-    lineHeight: 24,
+    ...typeRoles.textBodyL,
     marginBottom: spacing.lg,
   },
   warningCard: {
     backgroundColor: colors.warningBg,
     borderColor: colors.warning,
     borderWidth: 1,
-    borderRadius: borderRadius.md,
     marginBottom: spacing.lg,
-    ...shadows.card,
   },
   warningTitle: {
     color: colors.warningText,
-    fontWeight: '700',
+    ...typeRoles.textRowTitle,
     marginBottom: spacing.sm,
   },
   warningText: {
     color: colors.warningText,
-    lineHeight: 21,
+    ...typeRoles.textParagraph,
   },
   infoCard: {
     backgroundColor: colors.surface,
-    borderRadius: borderRadius.md,
     marginBottom: spacing.lg,
-    ...shadows.card,
   },
   infoTitle: {
     color: colors.text,
-    fontWeight: '700',
+    ...typeRoles.textRowTitle,
     marginBottom: spacing.sm,
   },
   infoText: {
     color: colors.textSecondary,
-    lineHeight: 21,
+    ...typeRoles.textParagraph,
   },
   primaryButton: {
     marginTop: spacing.sm,

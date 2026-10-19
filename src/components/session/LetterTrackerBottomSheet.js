@@ -12,6 +12,7 @@ import { letterStateColors } from '../../constants/letterStateColors';
 import { LETTER_SETS, PEDAGOGICAL_ORDERS } from '../../constants/egraConstants';
 import { loadMasteryState, countMastered } from '../../utils/masteryState';
 import BottomSheet from '../common/BottomSheet';
+import { typeRoles } from '../../constants/typography';
 
 const GRID_COLUMNS = 5;
 const GRID_GAP = spacing.sm;
@@ -184,7 +185,7 @@ export default function LetterTrackerBottomSheet({
               >
                 <Text style={[
                   styles.cellText,
-                  { color: cellColors.text, fontSize: Math.max(16, Math.floor(tileSize * 0.35)) },
+                  { color: cellColors.text },
                 ]}>
                   {letter.toUpperCase()}
                 </Text>
@@ -243,6 +244,6 @@ const styles = StyleSheet.create({
     opacity: 0.9,
   },
   cellText: {
-    fontWeight: '700',
+    ...typeRoles.textLetter,
   },
 });

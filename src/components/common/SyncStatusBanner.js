@@ -13,7 +13,7 @@ import { deriveSyncState, describeSyncState } from '../../utils/syncStatusPresen
 const BANNER_STYLES = {
   needs_attention: { backgroundColor: colors.warningBg, contentColor: colors.warningText },
   offline: { backgroundColor: colors.disabled, contentColor: colors.text },
-  waiting: { backgroundColor: colors.info, contentColor: '#FFFFFF' },
+  waiting: { backgroundColor: colors.info, contentColor: colors.onDark },
 };
 
 export default function SyncStatusBanner({ onPress }) {

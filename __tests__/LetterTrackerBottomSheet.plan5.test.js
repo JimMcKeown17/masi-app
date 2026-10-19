@@ -1,4 +1,6 @@
 import React from 'react';
+import { StyleSheet } from 'react-native';
+import { typeRoles } from '../src/constants/typography';
 import { render, waitFor } from '@testing-library/react-native';
 import { PaperProvider } from 'react-native-paper';
 import LetterTrackerBottomSheet from '../src/components/session/LetterTrackerBottomSheet';
@@ -96,10 +98,11 @@ describe('LetterTrackerBottomSheet Plan 5 behavior', () => {
     // The letter at EGRA position 0 was attempted and fully correct in the
     // letter assessment; the newer word assessment must not unlock it.
     const firstEgraLetter = LETTER_SETS.english.letters[0].toLowerCase();
-    const { getByLabelText } = renderSheet();
+    const { getByLabelText, getByText } = renderSheet();
 
     await waitFor(() =>
       expect(getByLabelText(`${firstEgraLetter}, mastered from assessment`)).toBeTruthy(),
     );
+    expect(StyleSheet.flatten(getByText(firstEgraLetter.toUpperCase()).props.style)).toEqual(expect.objectContaining(typeRoles.textLetter));
   });
 });

@@ -1,7 +1,7 @@
 jest.mock('@expo/vector-icons', () => ({ Ionicons: 'Ionicons' }), { virtual: true });
 import React from 'react';
 import { render, fireEvent, waitFor } from '@testing-library/react-native';
-import { PaperProvider } from 'react-native-paper';
+import { AllProviders } from '../test-support/renderWithProviders';
 import AddChildScreen from '../src/screens/children/AddChildScreen';
 import { GENDER_OPTIONS } from '../src/constants/options';
 
@@ -36,9 +36,9 @@ const navigation = { goBack: mockNavigationGoBack };
 
 const renderScreen = () =>
   render(
-    <PaperProvider>
+    <AllProviders>
       <AddChildScreen route={route} navigation={navigation} />
-    </PaperProvider>
+    </AllProviders>
   );
 
 const collectNativeTextInputs = (node) => {
@@ -98,26 +98,27 @@ describe('AddChildScreen', () => {
   });
 
   test('validates required fields', async () => {
-    const { getByText } = renderScreen();
+    const { getByRole, getAllByRole, getByText, getByLabelText } = renderScreen();
 
-    fireEvent.press(getByText('Add Child'));
+    fireEvent.press(getByRole('button', { name: 'Add child' }));
 
     await waitFor(() => {
-      expect(getByText('First name is required')).toBeTruthy();
+      expect(getAllByRole('alert')[0]).toHaveTextContent('First name is required');
       expect(getByText('Last name is required')).toBeTruthy();
     });
 
+    expect(getByLabelText('First Name *, error: First name is required')).toBeTruthy();
     expect(mockAddChild).not.toHaveBeenCalled();
   });
 
   test('navigates back immediately after a successful local child save', async () => {
     mockAddChild.mockResolvedValueOnce({ success: true });
-    const { getAllByDisplayValue, getByText } = renderScreen();
+    const { getAllByDisplayValue, getByRole, queryByTestId } = renderScreen();
     const inputs = getAllByDisplayValue('');
 
     fireEvent.changeText(inputs[0], 'Amahle');
     fireEvent.changeText(inputs[1], 'Dlamini');
-    fireEvent.press(getByText('Add Child'));
+    fireEvent.press(getByRole('button', { name: 'Add child' }));
 
     await waitFor(() => expect(mockAddChild).toHaveBeenCalledWith(expect.objectContaining({
       first_name: 'Amahle',
@@ -125,18 +126,25 @@ describe('AddChildScreen', () => {
       class_id: 'class-1',
     })));
     expect(mockNavigationGoBack).toHaveBeenCalledTimes(1);
+    expect(queryByTestId('toast')).toBeNull();
   });
 
   test('stays on the form when local child save fails', async () => {
     mockAddChild.mockResolvedValueOnce({ success: false });
-    const { getAllByDisplayValue, getByText } = renderScreen();
+    const { getAllByDisplayValue, getByRole } = renderScreen();
     const inputs = getAllByDisplayValue('');
 
     fireEvent.changeText(inputs[0], 'Amahle');
     fireEvent.changeText(inputs[1], 'Dlamini');
-    fireEvent.press(getByText('Add Child'));
+    fireEvent.press(getByRole('button', { name: 'Add child' }));
 
     await waitFor(() => expect(mockAddChild).toHaveBeenCalled());
     expect(mockNavigationGoBack).not.toHaveBeenCalled();
+    expect(getByRole('alert')).toHaveTextContent('Error adding child');
   });
+});
+
+test('leaves the page title to the navigator', () => {
+  const screen = renderScreen();
+  expect(screen.queryByText('Add New Child')).toBeNull();
 });

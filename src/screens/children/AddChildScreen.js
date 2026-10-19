@@ -1,15 +1,13 @@
 import React, { useState } from 'react';
 import { View, StyleSheet, ScrollView, KeyboardAvoidingView, Platform } from 'react-native';
-import {
-  Text,
-  TextInput,
-  Button,
-  Card,
-  HelperText,
-  Snackbar,
-} from 'react-native-paper';
+import { Text } from 'react-native-paper';
 import { colors, spacing } from '../../constants/colors';
-import SectionHeader from '../../components/common/SectionHeader';
+import BrandButton from '../../components/common/BrandButton';
+import SurfaceCard from '../../components/common/SurfaceCard';
+import TextField from '../../components/common/TextField';
+import { useHeaderHairline } from '../../components/common/ScreenHeader';
+import { useToast } from '../../context/ToastContext';
+import { typeRoles } from '../../constants/typography';
 import { useChildren } from '../../context/ChildrenContext';
 import { useClasses } from '../../context/ClassesContext';
 import { GENDER_OPTIONS } from '../../constants/options';
@@ -31,7 +29,8 @@ export default function AddChildScreen({ route, navigation }) {
 
   const [errors, setErrors] = useState({});
   const [loading, setLoading] = useState(false);
-  const [snackbar, setSnackbar] = useState({ visible: false, message: '' });
+  const toast = useToast();
+  const onScroll = useHeaderHairline();
 
   const validate = () => {
     const newErrors = {};
@@ -70,11 +69,11 @@ export default function AddChildScreen({ route, navigation }) {
       if (result.success) {
         navigation.goBack();
       } else {
-        setSnackbar({ visible: true, message: 'Error adding child' });
+        toast.show({ message: 'Error adding child', tone: 'error', duration: 3000 });
       }
     } catch (error) {
       console.error('Error adding child:', error);
-      setSnackbar({ visible: true, message: 'Error adding child' });
+      toast.show({ message: 'Error adding child', tone: 'error', duration: 3000 });
     } finally {
       setLoading(false);
     }
@@ -86,96 +85,71 @@ export default function AddChildScreen({ route, navigation }) {
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       keyboardVerticalOffset={90}
     >
-      <ScrollView contentContainerStyle={styles.scrollContent}>
+      <ScrollView contentContainerStyle={styles.scrollContent} onScroll={onScroll} scrollEventThrottle={16}>
         {/* Class info banner */}
         {classItem && (
-          <Card style={styles.classInfoCard}>
-            <Card.Content>
-              <Text variant="labelSmall" style={styles.classLabel}>Adding to class</Text>
-              <Text variant="titleMedium">{classItem.name}</Text>
-              <Text variant="bodySmall" style={styles.classDetail}>
-                {school?.name || 'Unknown school'} • {classItem.grade} • {classItem.teacher}
-              </Text>
-            </Card.Content>
-          </Card>
+          <SurfaceCard style={styles.classInfoCard}>
+            <Text variant="labelSmall" style={styles.classLabel}>Adding to class</Text>
+            <Text variant="titleMedium">{classItem.name}</Text>
+            <Text variant="bodySmall" style={styles.classDetail}>
+              {school?.name || 'Unknown school'} • {classItem.grade} • {classItem.teacher}
+            </Text>
+          </SurfaceCard>
         )}
 
-        <Card style={styles.card}>
-          <Card.Content>
-            <SectionHeader title="Add New Child" />
-
-            {/* First Name */}
-            <TextInput
+        <SurfaceCard style={styles.card}>
+          {/* First Name */}
+          <View style={styles.input}>
+            <TextField
               label="First Name *"
               value={firstName}
               onChangeText={setFirstName}
               {...NO_TEXT_SUGGESTIONS}
-              error={!!errors.firstName}
-              mode="outlined"
-              style={styles.input}
+              error={errors.firstName}
             />
-            {errors.firstName && (
-              <HelperText type="error">{errors.firstName}</HelperText>
-            )}
+          </View>
 
-            {/* Last Name */}
-            <TextInput
+          {/* Last Name */}
+          <View style={styles.input}>
+            <TextField
               label="Last Name *"
               value={lastName}
               onChangeText={setLastName}
               {...NO_TEXT_SUGGESTIONS}
-              error={!!errors.lastName}
-              mode="outlined"
-              style={styles.input}
+              error={errors.lastName}
             />
-            {errors.lastName && (
-              <HelperText type="error">{errors.lastName}</HelperText>
-            )}
+          </View>
 
-            {/* Age */}
-            <TextInput
+          {/* Age */}
+          <View style={styles.input}>
+            <TextField
               label="Age"
               value={age}
               onChangeText={setAge}
               {...NO_TEXT_SUGGESTIONS}
-              error={!!errors.age}
-              mode="outlined"
+              error={errors.age}
               keyboardType="numeric"
-              style={styles.input}
             />
-            {errors.age && (
-              <HelperText type="error">{errors.age}</HelperText>
-            )}
+          </View>
 
-            <Text variant="labelLarge" style={styles.fieldLabel}>Gender</Text>
-            <ChipSelector
-              options={GENDER_OPTIONS}
-              value={gender}
-              onChange={setGender}
-              testID="add-child-gender"
-            />
+          <Text variant="labelLarge" style={styles.fieldLabel}>Gender</Text>
+          <ChipSelector
+            options={GENDER_OPTIONS}
+            value={gender}
+            onChange={setGender}
+            testID="add-child-gender"
+          />
 
-            {/* Submit Button */}
-            <Button
-              mode="contained"
-              onPress={handleSubmit}
-              loading={loading}
-              disabled={loading}
-              style={styles.button}
-            >
-              Add Child
-            </Button>
-          </Card.Content>
-        </Card>
+          {/* Submit Button */}
+          <BrandButton
+            onPress={handleSubmit}
+            loading={loading}
+            disabled={loading}
+            style={styles.button}
+            variant="primary" size="lg" label="Add child"
+          />
+        </SurfaceCard>
       </ScrollView>
-
-      <Snackbar
-        visible={snackbar.visible}
-        onDismiss={() => setSnackbar({ ...snackbar, visible: false })}
-        duration={3000}
-      >
-        {snackbar.message}
-      </Snackbar>
     </KeyboardAvoidingView>
   );
 }
@@ -195,7 +169,7 @@ const styles = StyleSheet.create({
   classLabel: {
     color: colors.primary,
     textTransform: 'uppercase',
-    letterSpacing: 0.5,
+    ...typeRoles.textLabel,
   },
   classDetail: {
     color: colors.textSecondary,

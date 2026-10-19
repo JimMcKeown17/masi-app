@@ -25,22 +25,11 @@ const RATCHETED_PAPER = ['TextInput', 'Searchbar', 'SegmentedButtons', 'Card', '
 // Task 31 deletes this list and every reference to it.
 const PENDING_SWEEP = [
   'src/components/children/ChildSelector.js',
-  'src/components/children/GroupPickerBottomSheet.js',
-  'src/components/common/SyncStatusBanner.js',
   'src/components/profile/SignOutSheets.js',
-  'src/components/session/LetterGrid.js',
-  'src/components/session/LetterTrackerBottomSheet.js',
   'src/components/sessions/SessionsTodayRing.js',
-  'src/screens/children/AddChildScreen.js',
   'src/screens/children/ClassDetailScreen.js',
-  'src/screens/children/CreateClassScreen.js',
-  'src/screens/children/EditChildScreen.js',
-  'src/screens/children/EditClassScreen.js',
   'src/screens/main/ChildrenListScreen.js',
   'src/screens/main/ProfileScreen.js',
-  'src/screens/main/SyncStatusScreen.js',
-  'src/screens/onboarding/ChildOnboardingScreen.js',
-  'src/screens/onboarding/ClassOnboardingScreen.js',
   'src/screens/sessions/LiteracySessionForm.js',
 ];
 
