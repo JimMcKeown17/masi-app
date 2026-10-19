@@ -86,3 +86,11 @@ test('renders an icon before its label and applies caller style last', () => {
   expect(flat(ui.getByTestId('action')).minHeight).toBe(64);
   expect(ui.getByText('Action')).toBeTruthy();
 });
+
+
+test('forwards its ref to the native button for accessibility focus', () => {
+  const ref = React.createRef();
+  render(<BrandButton ref={ref} label="Done" />);
+  expect(ref.current).not.toBeNull();
+  expect(ref.current.props).toMatchObject({ accessibilityRole: 'button', accessibilityLabel: 'Done' });
+});

@@ -69,5 +69,17 @@ test('registers measured height with the root toast and unregisters on hide and 
 
 test('rejects an unsupported surface in development', () => {
   jest.spyOn(console, 'error').mockImplementation(() => {});
-  expect(() => renderWithProviders(<StickyActionFooter surface="onOverflow" />)).toThrow(/surface/);
+  expect(() => renderWithProviders(<StickyActionFooter surface="unknown" />)).toThrow(/surface/);
+});
+
+
+test.each([false, true])('onOverflow surface follows overflowing=%s and merges caller style last', overflowing => {
+  const screen = renderWithProviders(<StickyActionFooter surface="onOverflow" overflowing={overflowing}
+    style={{ paddingTop: 12, paddingHorizontal: 24 }}><Text>Done</Text></StickyActionFooter>);
+  expect(screen.getByTestId('sticky-action-footer')).toHaveStyle({
+    backgroundColor: overflowing ? colors.surface : 'transparent',
+    borderTopWidth: overflowing ? 1 : 0,
+    ...(overflowing ? { borderTopColor: colors.border } : {}),
+    paddingTop: 12, paddingHorizontal: 24,
+  });
 });

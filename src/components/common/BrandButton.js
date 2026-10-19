@@ -40,10 +40,10 @@ function appearance(variant, surface, tone, pressed, disabled) {
   return { backgroundColor: variant === 'success' ? colors.successText : colors.error, color: colors.onDark };
 }
 
-export default function BrandButton({
+const BrandButton = React.forwardRef(function BrandButton({
   label, onPress, variant = 'primary', size = 'lg', surface = 'canvas', tone = 'accent',
   icon, loading = false, loadingLabel, disabled = false, accessibilityLabel, style, testID,
-}) {
+}, ref) {
   const { reduceMotion } = useMotion();
   const isDisabled = disabled || loading;
   const tertiary = variant === 'tertiary';
@@ -54,6 +54,7 @@ export default function BrandButton({
   const look = (pressed) => appearance(variant, surface, tone, pressed && !isDisabled, disabled && !loading);
   return (
     <Pressable
+      ref={ref}
       testID={testID}
       accessibilityRole="button"
       accessibilityLabel={accessibilityLabel ?? (loading ? loadingLabel ?? label : label)}
@@ -83,7 +84,9 @@ export default function BrandButton({
       }}
     </Pressable>
   );
-}
+});
+
+export default BrandButton;
 
 const styles = StyleSheet.create({
   button: { alignItems: 'center', justifyContent: 'center', borderRadius: borderRadius.pill, paddingVertical: 10 },

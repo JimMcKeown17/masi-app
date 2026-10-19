@@ -48,7 +48,7 @@ const TITLES = {
   Profile: 'Profile', TimeTracking: 'Time tracking', TimeEntriesList: 'Work history',
   ClassOnboarding: 'Set up your class', CreateClass: 'Create class', ChildOnboarding: 'Add your children',
   EditClass: 'Edit class', AddChild: 'Add child', EditChild: 'Edit child',
-  SessionForm: 'New session', SessionComplete: 'Session saved', SessionHistory: 'Session history',
+  SessionForm: 'New session', SessionHistory: 'Session history',
   AssessmentChildSelect: 'Select child', AssessmentHistory: 'Assessment history', LetterTracker: 'Letter tracker',
   AssessmentDetail: 'Assessment detail', LetterMasteryRanking: 'Letter mastery', AssessmentRanking: 'Assessment scores',
   SessionCountRanking: 'Session count', SyncStatus: 'Sync status',
@@ -78,7 +78,7 @@ test.each(Object.entries(TITLES))('%s renders its exact title and navigation act
   const screen = renderChrome(name);
   expect(screen.getByRole('header')).toHaveTextContent(title);
   expect(StyleSheet.flatten(screen.getByRole('header').props.style).textAlign).toBe('left');
-  if (['ChildOnboarding', 'SessionComplete'].includes(name)) {
+  if (name === 'ChildOnboarding') {
     expect(screen.queryByRole('button', { name: 'Back' })).toBeNull();
     expect(screen.queryByRole('button', { name: 'Close' })).toBeNull();
     expect(optionsFor(name).gestureEnabled).toBe(false);
@@ -92,7 +92,7 @@ test('the title table covers every visible stack header', () => {
   const visible = mockScreens.filter(({ kind, name }) => kind === 'stack' && optionsFor(name).headerShown !== false).map(({ name }) => name);
   expect(visible.sort()).toEqual(Object.keys(TITLES).sort());
   expect(mockScreens.filter(({ name }) => optionsFor(name).headerShown === false).map(({ name }) => name).sort()).toEqual([
-    'Login', 'MainTabs', 'Home', 'Children', 'LetterAssessment', 'SequentialAssessment', 'AssessmentResults',
+    'Login', 'MainTabs', 'Home', 'Children', 'SessionComplete', 'LetterAssessment', 'SequentialAssessment', 'AssessmentResults',
   ].sort());
 });
 
@@ -131,4 +131,11 @@ test('the auth stack has no back title or centred title left', () => {
   });
   expect(optionsFor('Login').headerShown).toBe(false);
   expect(optionsFor('ForgotPassword').headerShown).toBe(true);
+});
+
+
+test('SessionComplete has no header and disables the native back gesture', () => {
+  expect(mockScreens.find(({ name }) => name === 'SessionComplete').options).toEqual({
+    headerShown: false, gestureEnabled: false,
+  });
 });
