@@ -38,3 +38,18 @@ test('key helpers round-trip and zero-pad', () => {
   expect(dateKeyFromParts(2026, 0, 5)).toBe('2026-01-05');
   expect(parseDateKey('2026-12-31')).toEqual({ year: 2026, monthIndex: 11, day: 31 });
 });
+
+describe('formatSessionDate pill and spoken styles', () => {
+  const originalTimeZone = process.env.TZ;
+  afterEach(() => {
+    if (originalTimeZone === undefined) delete process.env.TZ;
+    else process.env.TZ = originalTimeZone;
+  });
+
+  test.each(['Africa/Johannesburg', 'Pacific/Auckland', 'America/New_York'])('is the same day in %s', (zone) => {
+    process.env.TZ = zone;
+    expect(formatSessionDate('2026-10-13', 'pill')).toBe('Tue 13 Oct');
+    expect(formatSessionDate('2026-10-13', 'spoken')).toBe('Tuesday 13 October');
+    expect(formatSessionDate('2026-10-18', 'pill')).toBe('Sun 18 Oct');
+  });
+});

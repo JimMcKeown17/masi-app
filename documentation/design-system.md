@@ -1,10 +1,10 @@
 # Design System — Bold Red
 
-**Standing reference, reconciled through Record PR 3 on `feat/bold-red-record`, 2026-10-19.** This describes
+**Standing reference, reconciled through Session complete PR 4 on `feat/bold-red-complete`, 2026-10-19.** This describes
 the implementation, including the remaining board-screen exceptions. Update it in the same branch
 as a change to the system. Automated verification is recorded in [build-log.md](./build-log.md);
-native visual acceptance remains the shared-look plan's Task 34, the Children plan's Task 11
-and the Record plan's Task 14.
+native visual acceptance remains the shared-look plan's Task 34, the Children plan's Task 11,
+the Record plan's Task 14 and the Session complete plan's Task 14.
 
 The design source is the Design Round 4 `RedSystemSheet` and chosen `red-*-components` boards.
 The [overview](../docs/superpowers/specs/2026-10-18-bold-red-app-design.md) resolves conflicts in
@@ -69,8 +69,7 @@ The red ramp is `red50 #FDECEF`, `red100 #FBD5DC`, `red200 #F4A9B6`, `red300 #EE
 `red400 #EC5470`, `red500 #E72D4D`, `red600 #C81F3E`, `red700 #A4182F`, `red800 #7C1223`,
 `red900 #530B17`. Red fields use the ramp by name; actions use `primary`/`primaryDark`.
 Home's segmented gauge and the session-ranking bars explicitly use `red500` for progress.
-The older `SessionsTodayRing` still uses `primary` for below-target progress and is due for deletion
-in the Session complete PR; it is not the shared Home gauge.
+Session complete uses the same gauge colour rule; the older `SessionsTodayRing` is deleted.
 
 `successText` was deepened from `#2E7D27`: the old value on `successBg` was 4.4986:1 and failed
 the full-precision threshold. `contrast.test.js` checks the declared text pairs at ≥4.5:1 and
@@ -157,7 +156,7 @@ exemption is necessary.
 | `textInitialsLg` | textHeavy | 22 / 28 | 0.66 | Children PR 2: 64dp avatars for later reuse |
 | `display3XL` | display | 44 / 46 | −1.54 | Large headline; Paper displayLarge |
 | `display2XL` | display | 38 / 42 | −1.14 | Large display; Paper displayMedium |
-| `displayNumeralXL` | display | 64 / 64 | −1.28 | Reserved Session complete numeral |
+| `displayNumeralXL` | display | 64 / 64 | −1.28 | Session complete numeral |
 | `displayTitle` | display | 28 / 32 | −0.56 | Screen titles, stat numerals |
 | `displaySheetTitle` | display | 24 / 28 | −0.48 | Sheet and empty-state titles |
 | `displayHeading` | display | 18 / 24 | −0.27 | Smaller display heading |
@@ -191,10 +190,6 @@ exemption is necessary.
 | `textData` | textBold | 15 / 20 | — | Times/counts in rows; tabular numerals |
 
 `displayStat` is `displayTitle`; `textToast` is `textBodySemi`. Neither old name is exported.
-`SessionsTodayRing` is a temporary exception in composition, not in the guard: its numeral spreads
-`display2XL` (38/42, −1.14 tracking) then sets `fontFamily: fontFamilies.textBold`. There is no
-36/40 role; the Session complete PR deletes this component. Do not introduce a new shared role
-just for that retiring ring.
 
 ## Themes
 
@@ -274,7 +269,8 @@ Labels wrap. Buttons stretch by default; accent/onRed tertiary links align to th
 `loadingLabel ?? label`, keeps the active fill, and blocks taps. Disabled and busy accessibility
 state are exposed; the accessible label follows the loading label unless overridden. Press scale
 is 0.98 unless `reduceMotion`; there is no scale animation timeline. Primary pressed/disabled
-styles drop the shadow. `style` applies to the button container.
+styles drop the shadow. `style` applies to the button container. `BrandButton` forwards its ref
+to the native `Pressable`, allowing Session complete to focus Done for screen readers.
 
 **`IconCircleButton`** — `icon, onPress, accessibilityLabel, surface='canvas', disabled=false,
 testID`. Fixed 44dp circular target with a 22dp Ionicons glyph; white/ink/control-edge on canvas,
@@ -414,7 +410,7 @@ affect readiness. Submit remains enabled until a save is in flight.
 | [`CountChip`](../src/components/forms/CountChip.js) | `label, active`. Noninteractive, min 32dp pill with textChip/tabular numerals and no check icon. Active is ink/white; zero selection is surface/muted with a rule edge. Record passes “{n} selected”. |
 | [`SelectableRow`](../src/components/forms/SelectableRow.js) | `variant, title, subtitle, lead, selected, onPress, position, height, accessibilityLabel`. Supply variant as checkbox or radio; there is no default. Memoised ListRow composition; position is first/middle/last/only. Grouped-card edges and the inset divider stay inside the supplied fixed height. Rows carry checkbox/radio plus checked state; the virtualised roster has no radiogroup wrapper. Titles use one line with the full name in the accessible label. |
 | [`RequirementSummary`](../src/components/forms/RequirementSummary.js) | `items=[{ key, doneText, missingText, done, onPress, step }]`. A wrapping row, not a live region. Done items have a success disc and textSmallStrong; missing items use textLink/primary, an arrow and a min-44dp target. Labels read “{text}, done” or “{Missing text} missing. Go to step {n}”. The caller derives every done value from the same validation result as Submit. |
-| [`StickyActionFooter`](../src/components/forms/StickyActionFooter.js) | `children, surface='always', hideOnKeyboard=false`. White with a 1dp border top, 11dp top/24dp side padding and bottom padding max(insets.bottom, 16). Render as a sibling after the flexing list, never an overlay. Record passes hideOnKeyboard: the footer unmounts while the keyboard is visible and returns on dismiss. It registers its measured visible height with useToastObstruction; hidden footers do not obstruct the toast. Only surface='always' is implemented; Session complete owns onOverflow. |
+| [`StickyActionFooter`](../src/components/forms/StickyActionFooter.js) | `children, surface='always', overflowing=false, hideOnKeyboard=false, style`. White with a 1dp border top, 11dp top/24dp side padding and bottom padding max(insets.bottom, 16). With surface='onOverflow', it is transparent without a top edge until overflowing is true. style composes last; Session complete sets top padding to 12. Render as a sibling after the flexing list, never an overlay. Record passes hideOnKeyboard: the footer unmounts while the keyboard is visible and returns on dismiss. It registers its measured visible height with useToastObstruction; hidden footers do not obstruct the toast. |
 | [`ConfirmSheet`](../src/components/common/ConfirmSheet.js) | `visible, title, titleAccessory, body, confirmLabel, confirmVariant='destructiveQuiet', cancelLabel, onConfirm, onCancel, dismissLabel`. Composes BottomSheet and BrandButton instead of a native dialog. The panel has alertdialog and accessibilityViewIsModal; backdrop and Android back call onCancel. titleAccessory uses the sheet's headerExtras slot; Profile can reuse it with confirmVariant='destructive'. |
 | [`ChildProgressBlock`](../src/components/sessions/ChildProgressBlock.js) | `child, className, readingLevel, trackerChangeCount, onOpenLevel, onOpenTracker`. Avatar/name/class heading plus min-52dp ListRow actions for Reading level and Letter tracker. Unset level says “Not set”; positive changes use StatusBadge tone='successStrong' (“+{n} new”). Callbacks receive child.id for level and the child object for tracker. |
 | [`MonthCalendar`](../src/components/common/MonthCalendar.js) | `selectedKey, todayKey, onSelect`. Calendar keys only; opens on the selected month, Sunday first. Seven equal columns have no horizontal gaps, with centred 44dp day targets and 4dp row gaps. Future days and navigation beyond today's month are disabled. The caller closes the enclosing BottomSheet on selection or Cancel. |
@@ -474,7 +470,8 @@ calls `setOptions({ headerScrolled })` only when `contentOffset.y > 0` changes b
 
 Children list sets **“Children”**; Class detail sets the class name (empty while loading or
 not found) and keeps “Manage classes” calling `popToTop()`.
-Session complete still has its **“Session saved”** header without a left icon until its PR.
+Session complete sets `{ headerShown: false, gestureEnabled: false }`; its hero headline is the
+screen title. Done and Android back share one guarded `popTo('MainTabs', { screen: 'Home' })`.
 Child onboarding suppresses back and gestures; Home, Login and the three assessment capture/results
 surfaces retain hidden headers. Insights row titles use the sentence-case titles of their routes.
 
@@ -499,7 +496,7 @@ only while its navigator is focused. Home's content padding is consequently 4dp 
 before PR 1; Home's hero gear remains its existing implementation, not `IconCircleButton`.
 
 The root status bar is dark. **`FocusAwareStatusBar({ style })`** renders Expo's StatusBar only
-while the screen is focused; Home uses style='light'. Future red-field board screens use the
+while the screen is focused; Home and Session complete use style='light'. Future red-field board screens use the
 same pattern when built, rather than leaving a status-bar override active after navigation.
 
 ## One actor-scoped root toast
@@ -588,8 +585,139 @@ known recent year class is available. Tiers map to high/full, low/calm, static/s
 `easing.enter = Easing.bezier(0.2, 0.8, 0.2, 1)`, `easing.sweep = Easing.out(Easing.cubic)`.
 Sheet/toast/sync animations use the native driver and stop on cleanup. The table records the
 actual toast still-entry timing (200ms), rather than the part spec's general 150ms fade rule.
-Session complete's future celebration is approved for full and calm, still for static/Reduce
-Motion; its `CELEBRATION_LEVELS` and celebration components are not implemented by this PR.
+Session complete consumes this contract as described below. Its sync-line spinner checks only
+`reduceMotion`, so static hardware without the OS preference still gets a rotating sync glyph.
+
+## Session complete
+
+[`SessionCompleteScreen`](../src/screens/sessions/SessionCompleteScreen.js) composes
+`SessionCompleteHero`, `CapturedPill`, `CelebrationGauge`, `SessionReceipt` and `SyncStatusLine`
+from `src/components/sessions/`. The red field, card and receipt share one ScrollView; the sync
+line and `BrandButton` Done sit in a sibling `StickyActionFooter surface='onOverflow'`.
+`overflowing` is content height greater than viewport height. Done works from mount, including
+during the goal read and animation. The footer registers its height with the root toast, which
+sits 8dp above the greatest obstruction.
+
+[`deriveSessionCompleteView`](../src/utils/sessionCompleteView.js) owns copy and gating.
+The form supplies `{ childCount, childNames, letters, readingLevel, sessionDate }`, with the date
+read directly from `session.session_date`. The screen compares that key with the SAST day at
+arrival. Back-dated or missing dates get a static gauge and no confetti. A null/rejected goal
+removes both card and halo and keeps “Session\ncaptured.”. Today’s met state uses
+“Daily target\nreached.” and hides the duplicate card sub-line; confetti is only for the exact
+target today. Names stay in selection order, including duplicates and the “Child” fallback.
+
+### Celebration and still motion
+
+`CELEBRATION_LEVELS = ['full', 'calm']` uses `useMotion().motionLevel`; OS Reduce Motion maps to
+still. [`useCelebrationTimeline`](../src/components/sessions/celebrationTimeline.js) owns stable
+animated values and stops both entrance and goal composites on unmount. The `TIMELINE` contract
+is below (milliseconds). Card and pill start at mount; all other tracks start when the goal
+settles. Only tracks allowed by the view model run.
+
+| Track | Delay | Duration | Easing / effect |
+|---|---|---|---|
+| `cardEnter` | 0 | 300 | `easing.enter`; opacity and 24dp rise |
+| `pillEnter` | 0 | 200 | `easing.enter`; opacity and −8dp translation to rest |
+| `content` | 0 | 150 | Linear skeleton/content cross-fade |
+| `earned` | 250 | 300 | `easing.sweep`; earned arc dash offset |
+| `flip` | 650 | 150 | `easing.enter`; numeral/copy cross-fade and 4dp rise, stage colour layers when needed |
+| `confettiLayer` | 700 | 0 | Reveal the 22-piece layer |
+| `confettiTravel` | 700 | 300 | `easing.sweep`; 36dp along each ray |
+| `confettiFade` | 1000 | 300 | Linear opacity fade out |
+| `headlineTarget` | 800 | 300 | `easing.enter`; opacity and 8dp rise |
+| `headlineOther` | 100 | 300 | `easing.enter`; opacity and 8dp rise |
+| `still` | 0 | 150 | Linear, opacity only |
+
+All timing tracks request the native driver except `earned` (SVG `strokeDashoffset` uses JS).
+The still version places pill, receipt, footer and skeleton immediately, then reveals the final
+content and headline with one 150ms opacity fade: no sweep, flip, confetti or rise. The sync line
+continues its 150ms state cross-fades; its glyph stops rotating only under OS Reduce Motion.
+Local animation tests use a test-only JS-driver harness to verify timing and cleanup; native
+smoothness, especially calm motion on the A03s, remains the Task 14 device gate.
+
+### Shared gauge and halo geometry
+
+[`sessionGaugeGeometry.js`](../src/components/sessions/sessionGaugeGeometry.js) exports
+`GAUGE_SIZES`, `buildGaugeGeometry`, `buildEarnedArc` and `buildSkeletonGeometry`.
+[`SegmentedSessionGauge`](../src/components/sessions/SegmentedSessionGauge.js) keeps Home’s
+geometry; `CelebrationGauge` uses the larger preset.
+
+| Size | Width | Stroke | Radius | Height |
+|---|---|---|---|---|
+| `home` | 176 | 16 | 79.5 | 97 |
+| `celebration` | 232 | 22 | 104.5 | 128 |
+
+Both use `cx = cy = width/2`, `r = width/2 − stroke/2 − 0.5`,
+`height = cy + stroke/2 + 1`, 5° gaps and end dots of radius `stroke/2`.
+Targets above six use a continuous arc. `buildEarnedArc(goal, size)` returns `{ d, length }`
+for the newly earned segment/slice (`length = r × spanRadians`), or null for no target,
+count below one or count above target. The skeleton is a continuous border-coloured arc and
+two bars; the second bar’s 13dp top gap makes the padded card 218dp, equal to the with-sub-line
+card using `textSmall` 14/20. The final goal’s accessible image label is present from frame one.
+
+[`haloGeometry(W)`](../src/utils/haloGeometry.js) returns `cx = W/2`, `r = W/2 + 19`, stroke 32,
+`svgHeight = r − 9`, `cy = svgHeight + 26` and
+`headlineGap = max(112, round(W/2 − 83))`. The SVG is anchored at the field’s bottom, putting
+the centre 26dp below that edge; the card straddles it by 108dp. Halo and confetti are decorative
+and hidden from accessibility.
+
+### Receipt and type
+
+`SessionReceipt({ rows })` exports `ReceiptRow({ label, value, accessibilityLabel, isLast })`
+from the same file. Children, Letters and Reading level appear only when supplied. Rows have
+min height 52, a 16dp gap and a 1dp `tints.rule` divider except after the last row. Labels use
+`textSectionLabel`; values use `textRowTitle`. A wrapped text value becomes left-aligned with
+its label on the first line. Letters wrap at a 6dp gap, max width 246, and switch from right to
+left alignment when tile content exceeds one row. That measurement subtracts the container’s
+16dp vertical padding before comparing with the 36dp tile height.
+
+`LetterReceiptTile({ letter })` is read-only: 36×36, radius 9, `red50` fill, 1.5dp `red100`
+edge and `red700` text. Tiles draw lowercase in `LETTER_ORDER`; the grouped row’s accessibility
+label keeps capitals (“Letters: M, L, N, S”). Children are spoken with “and”, and every row is
+one accessible phrase. Values never collapse to “+N”.
+
+| Role | Use |
+|---|---|
+| `display3XL` | Hero headline |
+| `displayNumeralXL` | Gauge numeral |
+| `displayHeading` | Card heading |
+| `textPill` | Captured pill |
+| `textSectionLabel` | Receipt labels |
+| `textRowTitle` | Receipt values, letter tiles and suffix face |
+| `textSmall` | Card sub-line, 14/20 |
+| `textNote` | Sync line, Figtree 600 |
+| `textButtonL` | Done |
+
+The gauge suffix takes its 24/28 dimensions from `displaySheetTitle` while keeping the
+`textRowTitle` face. Headline, numeral, suffix and letter tiles cap scaling at 1.2; other
+content wraps. The screen announces one summary after the goal settles and focuses Done.
+Its summary calls `getGoalCopy(goal, true)`; the fallback pill’s spoken form omits the full
+stop because the summary adds it. There are no live regions on this screen.
+
+### Truthful sync line
+
+[`SyncStatusLine`](../src/components/sessions/SyncStatusLine.js) calls
+`refreshSyncStatus({ autoTrigger: false })` once on mount. Its reserved 18dp slot stays blank
+until a non-null object returns while the component is mounted and its EA handle is current.
+Only then does it follow live context through `deriveSyncState` / `describeSyncState`.
+Null, undefined, rejection or a stale handle produces “Saved on this phone” for the remainder
+of that screen’s life; later counters cannot promote an unproven read to “synced”.
+
+| Phase / state | Copy | Glyph | Glyph / text colour |
+|---|---|---|---|
+| Pending | Blank | None | — |
+| Fallback | Saved on this phone | `cloud-outline` | `textSecondary` / `textSecondary` |
+| Live / waiting | Saved on your phone · {n} waiting to sync | `cloud-upload-outline` | `textSecondary` / `textSecondary` |
+| Live / offline | Saved on your phone · {n} will sync when you’re online | `cloud-offline-outline` | `textSecondary` / `textSecondary` |
+| Live / syncing | Syncing… | 18dp spinner | `textSecondary` / `textSecondary` |
+| Live / synced | All saved and synced | `cloud-done-outline` | `successText` / `textSecondary` |
+| Live / needs_attention | 1 item needs attention / {n} items need attention | `alert-circle-outline` | `warningText` / `warningText` |
+
+Live copy comes verbatim from the presenter. The centred `textNote` Text contains an inline
+26×18 View: an 18dp glyph plus 8dp space inside the box, since nested Text ignores margins.
+The spinner uses `tints.spinnerTrack`, stroke 2.6, radius 7.7 and a 1000ms linear native loop.
+Message changes cross-fade old/new layers for 150ms, stopping on cleanup. The line is neither
+pressable nor a live region.
 
 ## Guard rules and the remaining board ratchet
 
@@ -621,7 +749,6 @@ line once both categories are zero**; the guard fails if a fully clean file stay
 |---|---|---|---|
 | screens/auth/LoginScreen.js | 0 | TextInput, Button | Login |
 | screens/auth/ForgotPasswordScreen.js | 0 | TextInput, Button | Login |
-| screens/sessions/SessionCompleteScreen.js | 2 | Button | Session complete |
 | screens/main/ProfileScreen.js | 2 | TextInput, Button, Card, SegmentedButtons | Profile |
 | components/profile/SignOutSheets.js | 5 | None | Profile |
 
@@ -629,15 +756,20 @@ line once both categories are zero**; the guard fails if a fully clean file stay
 
 Children list and Class detail are built on `feat/bold-red-children`; Record Tasks 1–12 are built
 on `feat/bold-red-record`. LiteracySessionForm, ChildSelector, LetterTrackerBottomSheet and
-SessionFormScreen pass the full guard without ratchet entries. Session complete, Profile and
-Login/reset retain their board PRs. CountChip, StickyActionFooter and ConfirmSheet are available
-above; the celebration and footer surface='onOverflow' remain Session complete work.
+SessionFormScreen pass the full guard without ratchet entries. Session complete Tasks 1–11 are
+built on `feat/bold-red-complete`; its screen left `BOARD_RATCHET` in Task 10. Profile and
+Login/reset retain their board PRs. CountChip, StickyActionFooter (including surface='onOverflow'),
+ConfirmSheet and the celebration components are available above.
 Avatar, SyncBanner and InlineLoading are available; SyncStatusBanner and its test are removed.
 
-The dead SessionsScreen, SessionsTodayGauge, ProfileGearButton and HeaderBackButton are
-removed. SessionsTodayRing survives only until the Session complete PR. The remaining native
+The dead SessionsScreen, SessionsTodayRing, ProfileGearButton and HeaderBackButton are
+removed. The shared Home gauge lives at `src/components/sessions/SegmentedSessionGauge.js`.
+The remaining native
 gates are Task 34's EAS preview checks, including fonts, 360dp/large text, keyboard/toast/sheet
 ordering, navigation gestures, Home comparison and C11. Task 35 is conditional on the C11 repro.
 Record's Task 14 preview/device gate and branch review remain orchestrator-owned: board screenshots,
 native discard gestures, keyboard visibility, large text, screen-reader focus/announcements,
 Reduce Motion, A03s scrolling and Home comparison are not proved by local Jest results.
+Session complete’s Task 13 branch review and Task 14 EAS preview/device gate remain
+orchestrator-owned: native animation timing, large-text wrapping, screen readers, footer/toast
+placement, exit behaviour and Home comparison still need those checks.

@@ -672,17 +672,13 @@ Additional Head Office behavior retained from the Sprint 4 follow-up:
   the Log in, Children, Record / New session, Session complete and Profile pages, plus the Bold Red
   system sheet. Children (My Children and Class detail) is built on `feat/bold-red-children`;
   its Task 11 preview/device gate remains open. Record is built on `feat/bold-red-record`; its
-  Task 14 branch review and preview/device gate remain open. Remaining per-screen PRs, in order:
-  Session complete, Profile, Login and reset password. Approved behaviour decisions are in
+  Task 14 branch review and preview/device gate remain open. Session complete is built on
+  `feat/bold-red-complete`; its Task 13 branch review and Task 14 preview/device gate remain open.
+  Remaining per-screen PRs, in order: Profile, Login and reset password. Approved behaviour decisions are in
   `docs/superpowers/specs/2026-10-18-bold-red-app-design.md` §6. PR 1's Task 34 EAS preview/device
   gate remains open. **C11:** A03s Create class → School search has not been run in this task;
   record its outcome after Task 34, then decide whether conditional Task 35 is needed. Each later
   board PR also needs its own preview/device check.
-- [ ] Session completion should return to the Home payoff state instead of a bare `goBack()`.
-- [x] Add a `deviceTier`/reduced-motion contract before celebratory animation work. Built
-  2026-10-19 on `feat/bold-red-app`: `MotionProvider`, `useMotion()` (`tier`, `reduceMotion`,
-  `motionLevel`) and `classifyTier`; full/calm/still consumers are in place. Celebration and native
-  motion acceptance remain their own gates.
 - [x] Roll typography tokens out or retire the incomplete token system. Built 2026-10-19 on
   `feat/bold-red-app`: legacy export retired, 42 `typeRoles`, Figtree 600, mapped themes and
   fail-closed typography/source guards. Ten board files retain only their explicit raw-type/Paper

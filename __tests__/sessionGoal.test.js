@@ -1,4 +1,4 @@
-import { getSessionGoal, filterTodaysSessionsForProgramme } from '../src/utils/sessionGoal';
+import { deriveGoalState, getSessionGoal, filterTodaysSessionsForProgramme } from '../src/utils/sessionGoal';
 
 describe('getSessionGoal', () => {
   test('below target: Core Literacy R-3 with 0 of 3 sessions today', () => {
@@ -49,6 +49,40 @@ describe('getSessionGoal', () => {
 
     const overTarget = getSessionGoal(programme, [{}, {}, {}, {}, {}, {}]);
     expect(overTarget.state).toBe('exceeded');
+  });
+});
+
+describe('deriveGoalState', () => {
+  test.each([
+    [{ target: null, ceiling: null, count: 2 }, 'no_target'],
+    [{ target: 3, ceiling: 5, count: 0 }, 'below'],
+    [{ target: 3, ceiling: 5, count: 2 }, 'below'],
+    [{ target: 3, ceiling: 5, count: 3 }, 'met'],
+    [{ target: 3, ceiling: 5, count: 5 }, 'met'],
+    [{ target: 3, ceiling: 5, count: 6 }, 'exceeded'],
+    [{ target: 3, ceiling: 3, count: 4 }, 'exceeded'],
+    [{ target: 3, ceiling: null, count: 3 }, 'met'],
+    [{ target: 3, ceiling: null, count: 4 }, 'exceeded'],
+    [{ target: 1, ceiling: 1, count: 1 }, 'met'],
+    [{ target: 3, count: 3 }, 'met'],
+    [{ target: 3, count: 4 }, 'exceeded'],
+  ])('%o → %s', (input, expected) => {
+    expect(deriveGoalState(input)).toBe(expected);
+  });
+
+  test('getSessionGoal uses the same rule for every count', () => {
+    const programmes = [
+      { daily_session_target: 3, daily_session_ceiling: 5 },
+      { daily_session_target: 3, daily_session_ceiling: 3 },
+      { daily_session_target: 1, daily_session_ceiling: null },
+      { daily_session_target: null, daily_session_ceiling: null },
+    ];
+    for (const programme of programmes) {
+      for (let count = 0; count <= 8; count += 1) {
+        const goal = getSessionGoal(programme, Array(count));
+        expect(goal.state).toBe(deriveGoalState(goal));
+      }
+    }
   });
 });
 

@@ -1,5 +1,12 @@
 import { toDateString } from './dashboardStats';
 
+export function deriveGoalState({ target, ceiling, count }) {
+  if (target == null) return 'no_target';
+  if (count < target) return 'below';
+  if (count > (ceiling ?? target)) return 'exceeded';
+  return 'met';
+}
+
 /**
  * Pure session-goal logic for the Sessions Today ring.
  *
@@ -13,11 +20,7 @@ export function getSessionGoal(programme, todaysSessions) {
   const ceiling = programme.daily_session_ceiling ?? target;
   const count = todaysSessions.length;
 
-  let state;
-  if (target == null) state = 'no_target';
-  else if (count < target) state = 'below';
-  else if (count > ceiling) state = 'exceeded';
-  else state = 'met';
+  const state = deriveGoalState({ target, ceiling, count });
 
   return { target, ceiling, count, state };
 }

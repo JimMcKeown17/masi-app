@@ -156,7 +156,7 @@ export function MainTabNavigator() {
   );
 }
 
-function MainNavigator() {
+export function MainNavigator() {
   return (
     <Stack.Navigator
       screenOptions={{
@@ -246,10 +246,7 @@ function MainNavigator() {
         name="SessionComplete"
         component={SessionCompleteScreen}
         options={{
-          title: 'Session saved',
-          // The form is replaced by this screen, so there's nothing to go "back"
-          // to but the launch context; "Done" is the single, clear way out.
-          headerLeftIcon: 'none',
+          headerShown: false,
           gestureEnabled: false,
         }}
       />

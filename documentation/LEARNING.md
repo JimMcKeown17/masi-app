@@ -1828,3 +1828,24 @@ repeat profile/reference work.
 
 The gate lives in [AuthContext](../src/context/AuthContext.js) (`resolveColdStartGate`), and the
 support-facing behaviour is in [auth session resilience](./auth-session-resilience-2026-04-24.md).
+
+## A resolved promise is not a fresh snapshot (Session complete, October 2026)
+
+A promise resolving tells us that an operation finished, not that it obtained fresh evidence.
+[`refreshSyncStatus`](../src/context/OfflineContext.js) returns `null` after a failed read or
+when the signed-in EA handle became stale, leaving the previous counters intact. If those old
+counters were zero, showing “All saved and synced” after any resolution would falsely reassure
+the EA about a session they just saved.
+
+[`SyncStatusLine`](../src/components/sessions/SyncStatusLine.js) therefore waits for its own
+non-null snapshot while the same handle is still current and the component is mounted. Then it
+can follow live counters. Without that proof it says “Saved on this phone” for the rest of the
+screen’s life. Local persistence already proves capture; upload needs its own evidence.
+
+Navigation has a similar trap: a destination name does not describe the intended stack change.
+In the installed React Navigation 7 stack, plain `navigate('MainTabs', { screen: 'Home' })`
+from Session complete produces `[MainTabs, SessionComplete, MainTabs]`; it does not pop to the
+earlier route unless `pop: true` is requested. Done and Android back use the explicit
+`popTo('MainTabs', { screen: 'Home' })`, guarded against duplicate taps. The
+[real-navigator regression](../__tests__/sessionCompleteNavigation.test.js) checks both the
+Home destination and the remaining single `MainTabs` route, so Back cannot reveal the receipt.

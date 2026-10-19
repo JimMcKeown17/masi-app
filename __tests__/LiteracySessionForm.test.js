@@ -64,6 +64,7 @@ jest.mock('react-native/Libraries/Utilities/useWindowDimensions', () => ({
 }));
 import LiteracySessionForm from '../src/screens/sessions/LiteracySessionForm';
 import { READING_LEVELS } from '../src/constants/literacyConstants';
+import { formatSessionDate } from '../src/utils/sessionDateFormat';
 
 const COMMENTS_PLACEHOLDER = 'Add session notes…';
 const mockCompleteMounted = jest.fn();
@@ -861,13 +862,47 @@ describe('LiteracySessionForm', () => {
       const screen = renderForm();
       submitValidForm(screen);
       await waitFor(() => expect(mockCompleteMounted).toHaveBeenCalledTimes(1));
-      expect(mockCompleteMounted).toHaveBeenCalledWith({ childCount: 1 });
+      expect(mockCompleteMounted).toHaveBeenCalledWith({
+        childCount: 1,
+        childNames: ['Amahle'],
+        letters: ['a'],
+        readingLevel: READING_LEVELS[0],
+        sessionDate: expect.stringMatching(/^\d{4}-\d{2}-\d{2}$/),
+      });
       expect(screen.routeNames()).toEqual(['Home', 'SessionComplete']);
       expect(screen.queryByText('Discard this session?')).toBeNull();
     });
   });
 
   describe('completion ordering', () => {
+    test('params carry the stored session_date under Auckland (picker day = stored day = pill day)', async () => {
+      process.env.TZ = 'Pacific/Auckland';
+      jest.useFakeTimers();
+      jest.setSystemTime(new Date('2026-10-18T12:00:00.000Z'));
+      const screen = renderForm();
+      submitValidForm(screen);
+
+      await waitFor(() => expect(mockCompleteMounted).toHaveBeenCalledTimes(1));
+      const [params] = mockCompleteMounted.mock.calls[0];
+      const [{ session }] = mockPersistLiteracySession.mock.calls[0];
+      expect(session.session_date).toBe('2026-10-18');
+      expect(params.sessionDate).toBe(session.session_date);
+      expect(formatSessionDate(params.sessionDate, 'pill')).toBe('Sun 18 Oct');
+    });
+
+    test('params list letters in teaching order, not tap order', async () => {
+      const screen = renderForm();
+      fireEvent.press(screen.getByLabelText('S, not selected'));
+      fireEvent.press(screen.getByLabelText('M, not selected'));
+      submitValidForm(screen);
+
+      await waitFor(() => expect(mockCompleteMounted).toHaveBeenCalledTimes(1));
+      const [params] = mockCompleteMounted.mock.calls[0];
+      expect(params.letters).toEqual(['a', 'm', 's']);
+      const [{ session }] = mockPersistLiteracySession.mock.calls[0];
+      expect(session.activities.letters_focused).toEqual(['s', 'm', 'a']);
+    });
+
     test('attributes a new session to the South African programme day outside South Africa', async () => {
       process.env.TZ = 'America/New_York';
       jest.useFakeTimers();
@@ -902,7 +937,13 @@ describe('LiteracySessionForm', () => {
 
       await act(async () => { resolvePersistence(true); });
       await waitFor(() => expect(mockCompleteMounted).toHaveBeenCalledTimes(1));
-      expect(mockCompleteMounted).toHaveBeenCalledWith({ childCount: 1 });
+      expect(mockCompleteMounted).toHaveBeenCalledWith({
+        childCount: 1,
+        childNames: ['Amahle'],
+        letters: ['a'],
+        readingLevel: READING_LEVELS[0],
+        sessionDate: expect.stringMatching(/^\d{4}-\d{2}-\d{2}$/),
+      });
       expect(screen.routeNames()).toEqual(['Home', 'SessionComplete']);
     });
 
@@ -913,7 +954,13 @@ describe('LiteracySessionForm', () => {
       submitValidForm(screen);
 
       await waitFor(() => expect(mockCompleteMounted).toHaveBeenCalledTimes(1));
-      expect(mockCompleteMounted).toHaveBeenCalledWith({ childCount: 1 });
+      expect(mockCompleteMounted).toHaveBeenCalledWith({
+        childCount: 1,
+        childNames: ['Amahle'],
+        letters: ['a'],
+        readingLevel: READING_LEVELS[0],
+        sessionDate: expect.stringMatching(/^\d{4}-\d{2}-\d{2}$/),
+      });
       expect(screen.routeNames()).toEqual(['Home', 'SessionComplete']);
       expect(mockRefreshSyncStatus).toHaveBeenCalledTimes(1);
       expect(mockTriggerBackgroundSync).toHaveBeenCalledTimes(1);
@@ -929,7 +976,13 @@ describe('LiteracySessionForm', () => {
       submitValidForm(screen);
 
       await waitFor(() => expect(mockCompleteMounted).toHaveBeenCalledTimes(1));
-      expect(mockCompleteMounted).toHaveBeenCalledWith({ childCount: 1 });
+      expect(mockCompleteMounted).toHaveBeenCalledWith({
+        childCount: 1,
+        childNames: ['Amahle'],
+        letters: ['a'],
+        readingLevel: READING_LEVELS[0],
+        sessionDate: expect.stringMatching(/^\d{4}-\d{2}-\d{2}$/),
+      });
       expect(screen.routeNames()).toEqual(['Home', 'SessionComplete']);
       await waitFor(() => expect(errorSpy).toHaveBeenCalledWith(
         'Error refreshing sync status after session save:', refreshError
