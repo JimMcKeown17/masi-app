@@ -1,9 +1,15 @@
 import React, { useState } from 'react';
-import { StyleSheet, View } from 'react-native';
+import { Platform, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { colors } from '../../constants/colors';
 import { useToastObstruction } from '../../context/ToastContext';
 import { useKeyboardHeight } from '../../hooks/useKeyboardHeight';
+
+// iOS's home-indicator inset already includes clearance; an Android 3-button bar fills its
+// whole inset, so the action keeps the footer's 11dp top padding as breathing room above it.
+function footerBottomPadding(insetBottom) {
+  return Platform.OS === 'android' ? Math.max(insetBottom + 11, 16) : Math.max(insetBottom, 16);
+}
 
 export default function StickyActionFooter({ children, surface = 'always', overflowing = false, hideOnKeyboard = false, style }) {
   const insets = useSafeAreaInsets();
@@ -18,7 +24,7 @@ export default function StickyActionFooter({ children, surface = 'always', overf
   return <View testID="sticky-action-footer"
     onLayout={event => setHeight(event.nativeEvent.layout.height)}
     style={[styles.footer, surface === 'onOverflow' && !overflowing && styles.bare,
-      { paddingBottom: Math.max(insets.bottom, 16) }, style]}>
+      { paddingBottom: footerBottomPadding(insets.bottom) }, style]}>
     {children}
   </View>;
 }

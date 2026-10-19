@@ -25,14 +25,20 @@ function keyboardEvents() {
   });
 }
 
-test.each([0, 34])('renders its children with the surface and bottom inset %s', bottom => {
+// iOS: the home-indicator inset already carries clearance, so the board's max(inset, 16) holds.
+// Android: a 3-button bar fills its whole inset with an opaque bar, so the action needs the
+// footer's own 11dp breathing room on top of it (A03s: Submit touched the bar).
+test.each([
+  ['ios', 0, 16], ['ios', 34, 34], ['android', 0, 16], ['android', 48, 59],
+])('renders its children with the surface and %s bottom inset %s', (os, bottom, paddingBottom) => {
+  jest.replaceProperty(Platform, 'OS', os);
   const screen = renderWithProviders(<StickyActionFooter><Text>Action</Text></StickyActionFooter>, {
     insets: { top: 0, left: 0, right: 0, bottom },
   });
   expect(screen.getByText('Action')).toBeTruthy();
   expect(StyleSheet.flatten(screen.getByTestId('sticky-action-footer').props.style)).toMatchObject({
     backgroundColor: colors.surface, borderTopWidth: 1, borderTopColor: colors.border,
-    paddingTop: 11, paddingHorizontal: 24, paddingBottom: Math.max(bottom, 16),
+    paddingTop: 11, paddingHorizontal: 24, paddingBottom,
   });
 });
 
