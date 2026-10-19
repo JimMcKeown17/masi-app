@@ -1,3 +1,4 @@
+import { useScrollBottomPadding } from '../../hooks/useScrollBottomPadding';
 import { useHeaderHairline } from '../../components/common/ScreenHeader';
 import { useSignedInEA } from '../../context/SignedInEAContext';
 import React, { useState, useCallback, useRef } from 'react';
@@ -30,6 +31,7 @@ function formatShortDate(dateStr) {
 
 export default function AssessmentChildSelectScreen({ navigation, route }) {
   const onScroll = useHeaderHairline();
+  const paddingBottom = useScrollBottomPadding(spacing.md);
   const { repositories } = useSignedInEA();
   const { assessments: assessmentsRepository } = repositories;
 
@@ -159,7 +161,7 @@ export default function AssessmentChildSelectScreen({ navigation, route }) {
         data={filteredChildren}
         keyExtractor={(item) => item.id}
         renderItem={renderChild}
-        contentContainerStyle={styles.listContent}
+        contentContainerStyle={[styles.listContent, { paddingBottom }]}
         ListEmptyComponent={
           <View style={styles.emptyContainer}>
             <Text variant="bodyMedium" style={styles.emptyText}>
@@ -172,7 +174,7 @@ export default function AssessmentChildSelectScreen({ navigation, route }) {
       <SelectSheet
         visible={languagePickerVisible}
         onDismiss={() => setLanguagePickerVisible(false)}
-        title="Select Language"
+        title="Select language"
         dismissLabel="Dismiss assessment language picker"
         options={LANGUAGE_OPTIONS}
         selectedKey={selectedLanguage}

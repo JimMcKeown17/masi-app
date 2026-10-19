@@ -66,6 +66,7 @@ describe('GroupPickerBottomSheet', () => {
 
     const { getByText, queryByText } = renderPicker();
 
+    expect(getByText('Assign group')).toBeTruthy();
     expect(getByText('Group 1')).toBeTruthy();
     expect(getByText('Group 2')).toBeTruthy();
     expect(getByText('Group 3')).toBeTruthy();

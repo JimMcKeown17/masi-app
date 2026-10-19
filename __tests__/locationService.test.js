@@ -196,7 +196,7 @@ describe('locationService', () => {
       const permissionPromise = requestLocationPermission();
       await waitForMockCall(Alert.alert);
       const buttons = Alert.alert.mock.calls[0][2];
-      const enableLocationButton = buttons.find((button) => button.text === 'Try Again');
+      const enableLocationButton = buttons.find((button) => button.text === 'Try again');
 
       await enableLocationButton.onPress();
       await expect(permissionPromise).resolves.toBe(true);
@@ -223,16 +223,16 @@ describe('bounded permission recovery through the public location service', () =
     Linking.openSettings.mockResolvedValue();
   });
 
-  test('repeated denial offers one explicit retry, then Settings or Continue Without Location', async () => {
+  test('repeated denial offers one explicit retry, then Settings or Continue without location', async () => {
     const pending = getCurrentPosition();
     await flush();
-    choose('Try Again');
-    choose('Try Again');
+    choose('Try again');
+    choose('Try again');
     await flush();
     expect(Location.requestForegroundPermissionsAsync).toHaveBeenCalledTimes(2);
     expect(Alert.alert).toHaveBeenCalledTimes(2);
-    expect(Alert.alert.mock.calls[1][2].map(item => item.text)).toEqual(['Open Settings', 'Continue Without Location']);
-    choose('Continue Without Location');
+    expect(Alert.alert.mock.calls[1][2].map(item => item.text)).toEqual(['Open Settings', 'Continue without location']);
+    choose('Continue without location');
     await expect(pending).resolves.toMatchObject({ status: 'denied', coords: null, cancelled: false });
     expect(Location.getCurrentPositionAsync).not.toHaveBeenCalled();
   });
@@ -245,7 +245,7 @@ describe('bounded permission recovery through the public location service', () =
     choose('Open Settings');
     await flush();
     expect(Alert.alert.mock.calls[1][0]).toBe('Could not open Settings');
-    choose('Continue Without Location');
+    choose('Continue without location');
     await expect(pending).resolves.toMatchObject({ status: 'denied', coords: null, cancelled: false });
   });
 

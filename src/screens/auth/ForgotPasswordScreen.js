@@ -2,6 +2,7 @@ import React, { useLayoutEffect, useRef, useState } from 'react';
 import { KeyboardAvoidingView, Platform, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useScrollBottomPadding } from '../../hooks/useScrollBottomPadding';
 import { useAuth } from '../../context/AuthContext';
 import BrandButton from '../../components/common/BrandButton';
 import InlineNote from '../../components/common/InlineNote';
@@ -13,6 +14,7 @@ import { fontFamilies, typeRoles } from '../../constants/typography';
 export default function ForgotPasswordScreen({ navigation }) {
   const { resetPassword } = useAuth();
   const insets = useSafeAreaInsets();
+  const paddingBottom = useScrollBottomPadding();
   const [email, setEmail] = useState('');
   const [error, setError] = useState(null);
   const [loading, setLoading] = useState(false);
@@ -70,7 +72,7 @@ export default function ForgotPasswordScreen({ navigation }) {
 
   return (
     <KeyboardAvoidingView behavior="padding" enabled={Platform.OS === 'ios'} style={styles.container}>
-      <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={styles.formContent}>
+      <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={[styles.formContent, { paddingBottom }]}>
         <Text style={styles.paragraph}>
           Enter your email address and we’ll send you instructions to reset your password.
         </Text>
@@ -96,7 +98,7 @@ export default function ForgotPasswordScreen({ navigation }) {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.background },
-  formContent: { paddingTop: 10, paddingHorizontal: spacing.lg, paddingBottom: spacing.lg },
+  formContent: { paddingTop: 10, paddingHorizontal: spacing.lg },
   paragraph: { ...typeRoles.textParagraph, color: colors.textSecondary, maxWidth: 330 },
   field: { marginTop: spacing.ml },
   serverNote: { marginTop: spacing.ml },

@@ -11,7 +11,7 @@ import StatusBadge from '../src/components/common/StatusBadge';
 import { renderWithProviders as render } from '../test-support/renderWithProviders';
 import React from 'react';
 import { waitFor } from '@testing-library/react-native';
-import { SectionList } from 'react-native';
+import { ScrollView, SectionList } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import TimeEntriesListScreen from '../src/screens/main/TimeEntriesListScreen';
 import { useAuth } from '../src/context/AuthContext';
@@ -47,12 +47,6 @@ jest.mock('../src/services/supabaseClient', () => ({
   supabase: {
     from: jest.fn(),
   },
-}));
-
-jest.mock('react-native-safe-area-context', () => ({
-  ...jest.requireActual('react-native-safe-area-context'),
-  SafeAreaProvider: ({ children }) => children,
-  useSafeAreaInsets: () => ({ top: 0, right: 0, bottom: 0, left: 0 }),
 }));
 
 describe('TimeEntriesListScreen Plan 5 behavior', () => {
@@ -97,6 +91,19 @@ describe('TimeEntriesListScreen Plan 5 behavior', () => {
   afterEach(() => {
     jest.useRealTimers();
     jest.clearAllMocks();
+  });
+
+  test.each([false, true])('work history preserves its bottom gap with 48dp inset (empty: %s)', async (empty) => {
+    if (empty) timeEntriesRepository.getTimeEntries.mockResolvedValue([]);
+    const screen = render(<TimeEntriesListScreen />, {
+      insets: { top: 24, right: 0, bottom: 48, left: 0 },
+    });
+    await screen.findByText(empty ? 'No Time Entries Yet' : 'Work History');
+    const content = screen.UNSAFE_getByType(empty ? ScrollView : SectionList).props.contentContainerStyle;
+    expect(StyleSheet.flatten(content)).toMatchObject({
+      padding: empty ? 32 : 16,
+      paddingBottom: empty ? 80 : 64,
+    });
   });
 
   test('load failures in the empty branch appear in the root toast', async () => {

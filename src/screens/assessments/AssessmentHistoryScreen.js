@@ -1,4 +1,5 @@
 import { useHeaderHairline } from '../../components/common/ScreenHeader';
+import { useScrollBottomPadding } from '../../hooks/useScrollBottomPadding';
 import ListGroup from '../../components/common/ListGroup';
 import { fontFamilies, typeRoles } from '../../constants/typography';
 import { useToast } from '../../context/ToastContext';
@@ -25,6 +26,8 @@ function formatDate(dateString) {
 
 export default function AssessmentHistoryScreen({ navigation }) {
   const onScroll = useHeaderHairline();
+  // The list scrolls inside the card, so the card (not the list) clears the bottom inset.
+  const cardBottom = useScrollBottomPadding(spacing.md);
   const toast = useToast();
   const { repositories } = useSignedInEA();
   const { assessments: assessmentsRepository } = repositories;
@@ -164,7 +167,7 @@ export default function AssessmentHistoryScreen({ navigation }) {
 
   return (
     <View style={styles.container}>
-      <ListGroup style={styles.group}>
+      <ListGroup style={[styles.group, { marginBottom: cardBottom }]}>
         <FlatList onScroll={onScroll} scrollEventThrottle={16}
           data={assessments}
           keyExtractor={(item) => item.id}

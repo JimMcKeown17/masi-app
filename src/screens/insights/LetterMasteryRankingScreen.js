@@ -1,3 +1,4 @@
+import { useScrollBottomPadding } from '../../hooks/useScrollBottomPadding';
 import { useHeaderHairline } from '../../components/common/ScreenHeader';
 import { OKAY_YELLOW } from '../../utils/scoreBands';
 import { typeRoles } from '../../constants/typography';
@@ -18,6 +19,7 @@ import { colors, spacing, borderRadius } from '../../constants/colors';
 
 export default function LetterMasteryRankingScreen({ navigation }) {
   const onScroll = useHeaderHairline();
+  const paddingBottom = useScrollBottomPadding(spacing.xxl);
   const { repositories } = useSignedInEA();
   const { assessments: assessmentsRepository, mastery: masteryRepository } = repositories;
 
@@ -82,7 +84,7 @@ export default function LetterMasteryRankingScreen({ navigation }) {
         data={ranking}
         keyExtractor={(item) => item.child.id}
         renderItem={renderItem}
-        contentContainerStyle={styles.listContent}
+        contentContainerStyle={[styles.listContent, { paddingBottom }]}
         ListHeaderComponent={
           <View>
             <Text style={styles.subtitle}>
@@ -136,7 +138,6 @@ const styles = StyleSheet.create({
   },
   listContent: {
     padding: spacing.md,
-    paddingBottom: spacing.xxl,
   },
   subtitle: {
     ...typeRoles.textCaption,

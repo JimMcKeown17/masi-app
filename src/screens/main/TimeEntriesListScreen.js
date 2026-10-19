@@ -1,4 +1,5 @@
 import { useHeaderHairline } from '../../components/common/ScreenHeader';
+import { useScrollBottomPadding } from '../../hooks/useScrollBottomPadding';
 import { fontFamilies, typeRoles } from '../../constants/typography';
 import SurfaceCard from '../../components/common/SurfaceCard';
 import StatusBadge from '../../components/common/StatusBadge';
@@ -19,6 +20,8 @@ import { formatDisplayDate, toLocalDateString } from '../../utils/localDate';
 
 export default function TimeEntriesListScreen() {
   const onScroll = useHeaderHairline();
+  const paddingBottom = useScrollBottomPadding(spacing.md);
+  const emptyPaddingBottom = useScrollBottomPadding(spacing.xl);
   const toast = useToast();
   const { repositories } = useSignedInEA();
   const { timeEntries: timeEntriesRepository } = repositories;
@@ -169,7 +172,7 @@ export default function TimeEntriesListScreen() {
       <View style={styles.outerContainer}>
         <ScrollView onScroll={onScroll} scrollEventThrottle={16}
           style={styles.container}
-          contentContainerStyle={styles.emptyContainer}
+          contentContainerStyle={[styles.emptyContainer, { paddingBottom: emptyPaddingBottom }]}
           refreshControl={
             <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
           }
@@ -192,7 +195,7 @@ export default function TimeEntriesListScreen() {
         testID="time-entries-scroll"
         sections={sections}
         keyExtractor={(item) => item.id}
-        contentContainerStyle={styles.content}
+        contentContainerStyle={[styles.content, { paddingBottom }]}
         refreshControl={
           <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
         }

@@ -126,9 +126,15 @@ describe('BottomSheet', () => {
     expect(sheet.UNSAFE_getByType(KeyboardAvoidingView).props.behavior).toBe('padding');
   });
 
-  test('the keyboard wrapper fills the overlay below the top inset', () => {
-    const sheet = renderSheet();
-    expect(StyleSheet.flatten(sheet.UNSAFE_getByType(KeyboardAvoidingView).props.style)).toMatchObject({
+  // A percentage maxHeight needs a parent with a definite height. Under a
+  // content-sized wrapper Yoga grows the wrapper to panel / 0.8 and pins the
+  // panel to its top, so the sheet floats 25% of its height above the screen
+  // bottom (seen on the A03s). Both wrappers must fill the overlay.
+  test.each([true, false])('the sheet wrapper fills the overlay below the top inset (keyboardAvoiding %s)', keyboardAvoiding => {
+    const sheet = renderSheet({ keyboardAvoiding });
+    let wrapper = sheet.getByTestId('bottom-sheet-panel').parent;
+    while (typeof wrapper.type !== 'string' && wrapper.type !== KeyboardAvoidingView) wrapper = wrapper.parent;
+    expect(StyleSheet.flatten(wrapper.props.style)).toMatchObject({
       flex: 1, justifyContent: 'flex-end', paddingTop: spacing.sm,
     });
   });
@@ -149,9 +155,6 @@ describe('BottomSheet', () => {
     const panel = sheet.getByTestId('bottom-sheet-panel');
     expect(StyleSheet.flatten(panel.props.style)).toMatchObject({ maxHeight: '80%', paddingBottom: spacing.lg });
     expect(sheet.UNSAFE_queryByType(KeyboardAvoidingView)).toBeNull();
-    let wrapper = panel.parent;
-    while (wrapper.type !== 'View') wrapper = wrapper.parent;
-    expect(StyleSheet.flatten(wrapper.props.style)).toEqual({ width: '100%' });
   });
 
   test('footerStyle overrides the footer rule', () => {

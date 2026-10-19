@@ -14,8 +14,8 @@ const choosePermissionRecovery = (canRetry) => new Promise((resolve) => {
       ? 'Location helps verify you are at the school. You can try the permission request again, or clock in or out without location.'
       : 'Open Settings to allow location while using this app. Then return and tap Clock In or Clock Out again. You can also continue without location.',
     [
-      { text: canRetry ? 'Try Again' : 'Open Settings', onPress: () => resolve(canRetry ? 'retry' : 'settings') },
-      { text: 'Continue Without Location', style: 'cancel', onPress: () => resolve('continue') },
+      { text: canRetry ? 'Try again' : 'Open Settings', onPress: () => resolve(canRetry ? 'retry' : 'settings') },
+      { text: 'Continue without location', style: 'cancel', onPress: () => resolve('continue') },
     ],
     { cancelable: false }
   );
@@ -51,7 +51,7 @@ export const requestLocationPermission = async () => {
         Alert.alert(
           'Could not open Settings',
           'You can allow location later in your phone settings. You can still clock in or out without location.',
-          [{ text: 'Continue Without Location', onPress: resolve }],
+          [{ text: 'Continue without location', onPress: resolve }],
           { cancelable: false }
         );
       });

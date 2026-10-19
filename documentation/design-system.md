@@ -451,8 +451,11 @@ platforms. Its wrapper fills the overlay (`flex: 1`, `justifyContent: 'flex-end'
 with top padding `insets.top + spacing.sm`. The panel keeps flexbox anchoring; never position it
 with an absolute bottom. When `useKeyboardHeight() > 0`, panel bottom padding is `spacing.xs`
 (4dp), because the safe-area inset lies behind the keyboard. Keyboard-down padding stays
-`max(insets.bottom, spacing.lg)`; sheets opting out of avoidance keep that padding and their
-existing wrapper. The default `maxHeight` remains `'80%'`; the password sheet alone passes
+`max(insets.bottom, spacing.lg)`; sheets opting out of avoidance keep that padding. Both wrappers (keyboard-avoiding or
+not) fill the overlay below `insets.top + spacing.sm` with `flex: 1` and `justifyContent:
+'flex-end'`: a percentage `maxHeight` needs a parent of definite height, or Yoga grows the
+wrapper to panel ÷ fraction and the sheet floats 25% of its height above the bottom (polish,
+A03s). The default `maxHeight` remains `'80%'`; the password sheet alone passes
 `'100%'` to use the remaining space above the keyboard.
 
 **C11 landed in Profile Task 2.** Jim reproduced Create class → School search results under the
@@ -515,7 +518,7 @@ affect readiness. Submit remains enabled until a save is in flight.
 | [`CountChip`](../src/components/forms/CountChip.js) | `label, active`. Noninteractive, min 32dp pill with textChip/tabular numerals and no check icon. Active is ink/white; zero selection is surface/muted with a rule edge. Record passes “{n} selected”. |
 | [`SelectableRow`](../src/components/forms/SelectableRow.js) | `variant, title, subtitle, lead, selected, onPress, position, height, accessibilityLabel`. Supply variant as checkbox or radio; there is no default. Memoised ListRow composition; position is first/middle/last/only. Grouped-card edges and the inset divider stay inside the supplied fixed height. Rows carry checkbox/radio plus checked state; the virtualised roster has no radiogroup wrapper. Titles use one line with the full name in the accessible label. |
 | [`RequirementSummary`](../src/components/forms/RequirementSummary.js) | `items=[{ key, doneText, missingText, done, onPress, step }]`. A wrapping row, not a live region. Done items have a success disc and textSmallStrong; missing items use textLink/primary, an arrow and a min-44dp target. Labels read “{text}, done” or “{Missing text} missing. Go to step {n}”. The caller derives every done value from the same validation result as Submit. |
-| [`StickyActionFooter`](../src/components/forms/StickyActionFooter.js) | `children, surface='always', overflowing=false, hideOnKeyboard=false, style`. White with a 1dp border top, 11dp top/24dp side padding and bottom padding max(insets.bottom, 16). With surface='onOverflow', it is transparent without a top edge until overflowing is true. style composes last; Session complete sets top padding to 12. Render as a sibling after the flexing list, never an overlay. Record passes hideOnKeyboard: the footer unmounts while the keyboard is visible and returns on dismiss. It registers its measured visible height with useToastObstruction; hidden footers do not obstruct the toast. |
+| [`StickyActionFooter`](../src/components/forms/StickyActionFooter.js) | `children, surface='always', overflowing=false, hideOnKeyboard=false, style`. White with a 1dp border top, 11dp top/24dp side padding and bottom padding max(insets.bottom, 16) on iOS, max(insets.bottom + 11, 16) on Android (an opaque 3-button bar fills its whole inset; on the A03s the action otherwise touched the bar). With surface='onOverflow', it is transparent without a top edge until overflowing is true. style composes last; Session complete sets top padding to 12. Render as a sibling after the flexing list, never an overlay. Record passes hideOnKeyboard: the footer unmounts while the keyboard is visible and returns on dismiss. It registers its measured visible height with useToastObstruction; hidden footers do not obstruct the toast. |
 | [`ConfirmSheet`](../src/components/common/ConfirmSheet.js) | `visible, title, titleAccessory, body, confirmLabel, confirmVariant='destructiveQuiet', cancelLabel, onConfirm, onCancel, dismissLabel`. Composes BottomSheet and BrandButton instead of a native dialog. The panel has alertdialog and accessibilityViewIsModal; backdrop and Android back call onCancel. titleAccessory uses the sheet's headerExtras slot; Profile can reuse it with confirmVariant='destructive'. |
 | [`ChildProgressBlock`](../src/components/sessions/ChildProgressBlock.js) | `child, className, readingLevel, trackerChangeCount, onOpenLevel, onOpenTracker`. Avatar/name/class heading plus min-52dp ListRow actions for Reading level and Letter tracker. Unset level says “Not set”; positive changes use StatusBadge tone='successStrong' (“+{n} new”). Callbacks receive child.id for level and the child object for tracker. |
 | [`MonthCalendar`](../src/components/common/MonthCalendar.js) | `selectedKey, todayKey, onSelect`. Calendar keys only; opens on the selected month, Sunday first. Seven equal columns have no horizontal gaps, with centred 44dp day targets and 4dp row gaps. Future days and navigation beyond today's month are disabled. The caller closes the enclosing BottomSheet on selection or Cancel. |
@@ -581,6 +584,15 @@ Session complete sets `{ headerShown: false, gestureEnabled: false }`; its hero 
 screen title. Done and Android back share one guarded `popTo('MainTabs', { screen: 'Home' })`.
 Child onboarding suppresses back and gestures; Home, Login and the three assessment capture/results
 surfaces retain hidden headers. Insights row titles use the sentence-case titles of their routes.
+
+Root-stack scroll screens cover the tab bar. Their `contentContainerStyle` uses
+[`useScrollBottomPadding(extra = spacing.lg)`](../src/hooks/useScrollBottomPadding.js), which
+returns `insets.bottom + extra`. Preserve the existing bottom gap as `extra` and leave top and
+horizontal padding unchanged. Time tracking keeps its inner content padding and passes zero;
+Profile keeps its 40dp gap. Do not add this inset to tab-owned screens or scroll content above
+an inset-aware sibling footer: Record, Session complete, assessment capture and Assessment
+results already have one. Reset password uses the helper only on its form; its sent-state footer
+and Login's panel already handle the inset. BottomSheet owns its own inset independently.
 
 **`SyncIndicator({ onPress, variant='default' })`** uses `useOffline()` and the shared sync
 presenter. The default is the canvas header pill; there is no variant='pill' API. Its outer

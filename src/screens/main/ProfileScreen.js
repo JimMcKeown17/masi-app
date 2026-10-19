@@ -2,7 +2,7 @@ import React, { useCallback, useContext, useRef, useState } from 'react';
 import { View, StyleSheet, ScrollView, Text, Linking } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { NavigationContext, useFocusEffect } from '@react-navigation/native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useScrollBottomPadding } from '../../hooks/useScrollBottomPadding';
 import { useSignedInEA } from '../../context/SignedInEAContext';
 import { useAuth } from '../../context/AuthContext';
 import { useToast } from '../../context/ToastContext';
@@ -51,7 +51,7 @@ export default function ProfileScreen({ navigation }) {
   const runtimeDiagnostics = getRuntimeDiagnostics();
   const navigationContext = useContext(NavigationContext);
 
-  const insets = useSafeAreaInsets();
+  const paddingBottom = useScrollBottomPadding(40);
   const onScroll = useHeaderHairline();
   const [passwordOpen, setPasswordOpen] = useState(false);
   const [exportOpen, setExportOpen] = useState(false);
@@ -190,7 +190,7 @@ export default function ProfileScreen({ navigation }) {
       {navigationContext ? <CaptureModeFocusLoader loadCaptureMode={loadCaptureMode} /> : null}
       <ScrollView
         style={styles.container}
-        contentContainerStyle={[styles.scrollContent, { paddingBottom: 40 + insets.bottom }]}
+        contentContainerStyle={[styles.scrollContent, { paddingBottom }]}
         onScroll={navigationContext ? onScroll : undefined}
         scrollEventThrottle={16}
       >

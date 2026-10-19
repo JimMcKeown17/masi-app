@@ -56,7 +56,7 @@ const completeNonSchoolRequiredFields = ({ getByLabelText, getByRole, getByText 
   fireEvent.changeText(getByLabelText('Class Name *'), '1A');
   fireEvent.changeText(getByLabelText('Teacher *'), 'Noluthando Mbeki');
 
-  fireEvent.press(getByRole('button', { name: /^Home Language \*,/ }));
+  fireEvent.press(getByRole('button', { name: /^Home language \*,/ }));
   fireEvent.press(getByText('isiXhosa'));
 };
 
@@ -121,7 +121,7 @@ describe('CreateClassScreen', () => {
     expect(getAllByText('Grade *').length).toBeGreaterThan(0);
     expect(getAllByText('Class Name *').length).toBeGreaterThan(0);
     expect(getAllByText('Teacher *').length).toBeGreaterThan(0);
-    expect(getAllByText('Home Language *').length).toBeGreaterThan(0);
+    expect(getAllByText('Home language *').length).toBeGreaterThan(0);
   });
 
   test('validates required fields on submit', async () => {

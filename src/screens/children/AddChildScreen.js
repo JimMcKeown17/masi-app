@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { View, StyleSheet, ScrollView, KeyboardAvoidingView, Platform } from 'react-native';
+import { useScrollBottomPadding } from '../../hooks/useScrollBottomPadding';
 import { Text } from 'react-native-paper';
 import { colors, spacing } from '../../constants/colors';
 import BrandButton from '../../components/common/BrandButton';
@@ -31,6 +32,7 @@ export default function AddChildScreen({ route, navigation }) {
   const [loading, setLoading] = useState(false);
   const toast = useToast();
   const onScroll = useHeaderHairline();
+  const paddingBottom = useScrollBottomPadding(spacing.md);
 
   const validate = () => {
     const newErrors = {};
@@ -85,7 +87,7 @@ export default function AddChildScreen({ route, navigation }) {
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       keyboardVerticalOffset={90}
     >
-      <ScrollView contentContainerStyle={styles.scrollContent} onScroll={onScroll} scrollEventThrottle={16}>
+      <ScrollView contentContainerStyle={[styles.scrollContent, { paddingBottom }]} onScroll={onScroll} scrollEventThrottle={16}>
         {/* Class info banner */}
         {classItem && (
           <SurfaceCard style={styles.classInfoCard}>

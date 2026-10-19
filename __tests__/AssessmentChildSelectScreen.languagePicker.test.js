@@ -110,6 +110,7 @@ describe('AssessmentChildSelectScreen language picker', () => {
     fireEvent.press(screen.getByText('Amahle Dlamini'));
 
     expect(screen.getByLabelText('Dismiss assessment language picker')).toBeTruthy();
+    expect(screen.getByRole('header', { name: 'Select language' })).toBeTruthy();
     expect(screen.getByText('Cancel')).toBeTruthy();
     fireEvent.press(screen.getByText('isiXhosa'));
     expect(navigation.navigate).not.toHaveBeenCalled();

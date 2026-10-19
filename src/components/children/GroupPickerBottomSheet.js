@@ -225,7 +225,7 @@ export default function GroupPickerBottomSheet({
     <BottomSheet
       visible={visible}
       onDismiss={handleDismiss}
-      title="Assign Group"
+      title="Assign group"
       subtitle={childName}
       dismissLabel="Dismiss group picker"
     >

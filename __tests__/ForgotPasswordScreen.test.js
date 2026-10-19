@@ -41,6 +41,14 @@ beforeEach(() => {
 });
 afterEach(() => jest.restoreAllMocks());
 
+test('the reset form keeps its 24dp gap above a 48dp bottom safe area', () => {
+  mockInsets.bottom = 48;
+  const screen = renderReset();
+  expect(StyleSheet.flatten(screen.UNSAFE_getByType(ScrollView).props.contentContainerStyle)).toEqual({
+    paddingTop: 10, paddingHorizontal: 24, paddingBottom: 72,
+  });
+});
+
 test('form content uses canvas primitives, exact copy and paragraph type', () => {
   const screen = renderReset();
   expect(flat(screen.getByText(PARAGRAPH))).toMatchObject({
@@ -56,8 +64,9 @@ test('form content uses canvas primitives, exact copy and paragraph type', () =>
   expect(flat(screen.UNSAFE_getByType(KeyboardAvoidingView))).toMatchObject({ backgroundColor: colors.background });
   expect(screen.UNSAFE_getByType(ScrollView).props).toMatchObject({
     keyboardShouldPersistTaps: 'handled',
-    contentContainerStyle: expect.objectContaining({ paddingTop: 10, paddingHorizontal: 24 }),
   });
+  expect(StyleSheet.flatten(screen.UNSAFE_getByType(ScrollView).props.contentContainerStyle))
+    .toMatchObject({ paddingTop: 10, paddingHorizontal: 24 });
 });
 
 test.each(['', 'asanda.mbeki'])('invalid email %p has one field note and editing clears it', (email) => {

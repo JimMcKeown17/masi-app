@@ -1,4 +1,5 @@
 import { useSignedInEA } from '../../context/SignedInEAContext';
+import { useScrollBottomPadding } from '../../hooks/useScrollBottomPadding';
 import React, { useState, useCallback } from 'react';
 import { View, ScrollView, StyleSheet } from 'react-native';
 import { Text } from 'react-native-paper';
@@ -59,6 +60,7 @@ const formatSyncTime = (isoString) => {
 
 export default function SyncStatusScreen() {
   const onScroll = useHeaderHairline();
+  const paddingBottom = useScrollBottomPadding();
   const { services } = useSignedInEA();
 
   const { user } = useAuth();
@@ -103,7 +105,7 @@ export default function SyncStatusScreen() {
 
   return (
     <View style={styles.outerContainer}>
-      <ScrollView style={styles.container} onScroll={onScroll} scrollEventThrottle={16}>
+      <ScrollView style={styles.container} contentContainerStyle={{ paddingBottom }} onScroll={onScroll} scrollEventThrottle={16}>
         {/* Summary: the same voice as the Home banner and the header indicator */}
         <SurfaceCard style={styles.card}>
           <View style={styles.summaryRow}>

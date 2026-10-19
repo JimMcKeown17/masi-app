@@ -1,4 +1,5 @@
 import { useHeaderHairline } from '../../components/common/ScreenHeader';
+import { useScrollBottomPadding } from '../../hooks/useScrollBottomPadding';
 import { fontFamilies, typeRoles } from '../../constants/typography';
 import SurfaceCard from '../../components/common/SurfaceCard';
 import BrandButton from '../../components/common/BrandButton';
@@ -12,6 +13,7 @@ import ElapsedTime from '../../components/common/ElapsedTime';
 
 export default function TimeTrackingScreen({ navigation }) {
   const onScroll = useHeaderHairline();
+  const paddingBottom = useScrollBottomPadding(0);
   const {
     isSignedIn,
     activeEntry,
@@ -23,7 +25,7 @@ export default function TimeTrackingScreen({ navigation }) {
 
   return (
     <View style={styles.outerContainer}>
-      <ScrollView onScroll={onScroll} scrollEventThrottle={16} style={styles.container}>
+      <ScrollView onScroll={onScroll} scrollEventThrottle={16} style={styles.container} contentContainerStyle={{ paddingBottom }}>
         <View style={styles.content}>
         {/* Status Card */}
         <SurfaceCard style={styles.card}>

@@ -54,12 +54,6 @@ jest.mock('../src/services/supabaseClient', () => ({
   },
 }));
 
-jest.mock('react-native-safe-area-context', () => ({
-  ...jest.requireActual('react-native-safe-area-context'),
-  SafeAreaProvider: ({ children }) => children,
-  useSafeAreaInsets: () => ({ top: 0, right: 0, bottom: 0, left: 0 }),
-}));
-
 describe('SessionHistoryScreen Plan 5 behavior', () => {
   beforeEach(() => {
     jest.useFakeTimers();
@@ -101,6 +95,24 @@ describe('SessionHistoryScreen Plan 5 behavior', () => {
   afterEach(() => {
     jest.useRealTimers();
     jest.clearAllMocks();
+  });
+
+  // The list scrolls inside the card, so the card itself must end above the
+  // navigation bar; padding inside the list only adds blank card (A03s).
+  test('the history card ends 16dp above the 48dp bottom safe area', async () => {
+    const screen = render(<SessionHistoryScreen navigation={{ navigate: jest.fn() }} />, {
+      insets: { top: 24, right: 0, bottom: 48, left: 0 },
+    });
+    await screen.findByText('Pending sync');
+    expect(StyleSheet.flatten(screen.UNSAFE_getByType(ListGroup).props.style)).toMatchObject({ marginBottom: 64 });
+    expect(StyleSheet.flatten(screen.UNSAFE_getByType(FlatList).props.contentContainerStyle)?.paddingBottom).toBeUndefined();
+  });
+
+  test('the history caption shares the card gutter', async () => {
+    const screen = render(<SessionHistoryScreen navigation={{ navigate: jest.fn() }} />);
+    await screen.findByText('Pending sync');
+    expect(StyleSheet.flatten(screen.getByText('Showing sessions you recorded in the last 30 days.').props.style))
+      .toMatchObject({ marginHorizontal: 16 });
   });
 
   test('load errors appear as root toasts', async () => {

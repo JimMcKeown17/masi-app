@@ -118,6 +118,19 @@ beforeEach(() => {
 });
 
 describe('EditChildScreen', () => {
+  test('the reading-level picker button uses the domain sentence case', () => {
+    expect(renderScreen().getByText('Current reading level')).toBeTruthy();
+  });
+
+  test.each([
+    ['Choose class for Amahle Dlamini', 'Choose class'],
+    ['Choose current reading level for Amahle Dlamini', 'Current reading level'],
+  ])('uses sentence case for the sheet opened by %s', (label, title) => {
+    const screen = renderScreen();
+    fireEvent.press(screen.getByLabelText(label));
+    expect(screen.getByRole('header', { name: title })).toBeTruthy();
+  });
+
   test('disables autocorrect, spell check, and autocomplete for typed fields', () => {
     const { toJSON } = renderScreen();
     const editableInputs = collectNativeTextInputs(toJSON())

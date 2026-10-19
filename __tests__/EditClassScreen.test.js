@@ -57,6 +57,20 @@ beforeEach(() => {
 });
 
 describe('EditClassScreen', () => {
+  test.each([
+    [/^School \*,/, 'Select school'],
+    [/^Grade \*,/, 'Select grade'],
+    [/^Home language \*,/, 'Select home language'],
+  ])('uses sentence case for %s', (field, title) => {
+    const screen = renderScreen();
+    fireEvent.press(screen.getByRole('button', { name: field }));
+    expect(screen.getByRole('header', { name: title })).toBeTruthy();
+  });
+
+  test('uses curly quotes in the class-name example', () => {
+    expect(renderScreen().getByPlaceholderText('e.g. “1A”, “2B”')).toBeTruthy();
+  });
+
   test('disables autocorrect, spell check, and autocomplete for typed fields', () => {
     const { toJSON } = renderScreen();
     const editableInputs = collectNativeTextInputs(toJSON())
@@ -114,7 +128,7 @@ describe('EditClassScreen', () => {
     fireEvent.press(screen.getByRole('button', { name: /^Grade \*,/ }));
     fireEvent.press(screen.getByText('Grade 2'));
 
-    fireEvent.press(screen.getByRole('button', { name: /^Home Language \*,/ }));
+    fireEvent.press(screen.getByRole('button', { name: /^Home language \*,/ }));
     fireEvent.press(screen.getByText('English'));
 
     fireEvent.press(screen.getByText('Save changes'));

@@ -1,3 +1,4 @@
+import { useScrollBottomPadding } from '../../hooks/useScrollBottomPadding';
 import { useHeaderHairline } from '../../components/common/ScreenHeader';
 import { typeRoles } from '../../constants/typography';
 import { useSignedInEA } from '../../context/SignedInEAContext';
@@ -16,6 +17,7 @@ import { colors, spacing } from '../../constants/colors';
 
 export default function SessionCountRankingScreen() {
   const onScroll = useHeaderHairline();
+  const paddingBottom = useScrollBottomPadding(spacing.xxl);
   const { repositories } = useSignedInEA();
   const { sessions: sessionsRepository } = repositories;
 
@@ -73,7 +75,7 @@ export default function SessionCountRankingScreen() {
         data={ranking}
         keyExtractor={(item) => item.child.id}
         renderItem={renderItem}
-        contentContainerStyle={styles.listContent}
+        contentContainerStyle={[styles.listContent, { paddingBottom }]}
         ListHeaderComponent={
           <View>
             <Text style={styles.subtitle}>
@@ -107,7 +109,6 @@ const styles = StyleSheet.create({
   },
   listContent: {
     padding: spacing.md,
-    paddingBottom: spacing.xxl,
   },
   subtitle: {
     ...typeRoles.textCaption,

@@ -13,16 +13,17 @@ jest.mock('../src/hooks/useTimeTracking', () => ({
 }));
 
 import React from 'react';
-import { StyleSheet } from 'react-native';
+import { ScrollView, StyleSheet } from 'react-native';
 import { colors } from '../src/constants/colors';
 import { render, fireEvent } from '@testing-library/react-native';
-import { PaperProvider, Snackbar } from 'react-native-paper';
+import { Snackbar } from 'react-native-paper';
 import TimeTrackingScreen from '../src/screens/main/TimeTrackingScreen';
+import { AllProviders } from '../test-support/renderWithProviders';
 
-const renderTimeTracking = () => render(
-  <PaperProvider>
+const renderTimeTracking = (bottom = 0) => render(
+  <AllProviders insets={{ top: 24, right: 0, bottom, left: 0 }}>
     <TimeTrackingScreen navigation={{ navigate: jest.fn() }} />
-  </PaperProvider>
+  </AllProviders>
 );
 
 const buildTimeTrackingState = (overrides = {}) => ({
@@ -41,6 +42,12 @@ const buildTimeTrackingState = (overrides = {}) => ({
 });
 
 describe('TimeTrackingScreen signed-out branch', () => {
+  test('adds only the bottom inset outside the already padded content', () => {
+    const screen = renderTimeTracking(48);
+    expect(StyleSheet.flatten(screen.UNSAFE_getByType(ScrollView).props.contentContainerStyle)).toEqual({
+      paddingBottom: 48,
+    });
+  });
   test('renders no screen-local Snackbar', async () => {
     const screen = renderTimeTracking();
     expect(screen.UNSAFE_queryByType(Snackbar)).toBeNull();

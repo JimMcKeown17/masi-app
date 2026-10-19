@@ -12,6 +12,21 @@ jest.mock('../src/context/ClassesContext', () => ({
   }),
 }));
 
+test.each([
+  [/^School \*,/, 'Select school'],
+  [/^Grade \*,/, 'Select grade'],
+  [/^Home language \*,/, 'Select home language'],
+])('Create class uses sentence case for %s', (field, title) => {
+  const screen = render(<AllProviders><CreateClassScreen navigation={{ goBack: jest.fn() }} /></AllProviders>);
+  fireEvent.press(screen.getByRole('button', { name: field }));
+  expect(screen.getByRole('header', { name: title })).toBeTruthy();
+});
+
+test('Create class uses curly quotes in its example placeholder', () => {
+  const screen = render(<AllProviders><CreateClassScreen navigation={{ goBack: jest.fn() }} /></AllProviders>);
+  expect(screen.getByPlaceholderText('e.g. “1A”, “2B”')).toBeTruthy();
+});
+
 test('CreateClassScreen keeps the visible Cancel action on the school picker', () => {
   const screen = render(
     <AllProviders>

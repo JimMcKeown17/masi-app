@@ -2,6 +2,7 @@ jest.mock('@expo/vector-icons', () => ({ Ionicons: 'Ionicons' }), { virtual: tru
 import { renderWithProviders as render } from '../test-support/renderWithProviders';
 import ListGroup from '../src/components/common/ListGroup';
 import React from 'react';
+import { FlatList, StyleSheet } from 'react-native';
 import { waitFor } from '@testing-library/react-native';
 import AssessmentHistoryScreen from '../src/screens/assessments/AssessmentHistoryScreen';
 import { useAuth } from '../src/context/AuthContext';
@@ -39,10 +40,12 @@ jest.mock('../src/services/supabaseClient', () => ({
   },
 }));
 
+const ZERO_INSETS = { top: 0, right: 0, bottom: 0, left: 0 };
+let mockInsets = ZERO_INSETS;
 jest.mock('react-native-safe-area-context', () => ({
   ...jest.requireActual('react-native-safe-area-context'),
   SafeAreaProvider: ({ children }) => children,
-  useSafeAreaInsets: () => ({ top: 0, right: 0, bottom: 0, left: 0 }),
+  useSafeAreaInsets: () => mockInsets,
 }));
 
 describe('AssessmentHistoryScreen Plan 5 behavior', () => {
@@ -84,6 +87,18 @@ describe('AssessmentHistoryScreen Plan 5 behavior', () => {
     const screen = render(<AssessmentHistoryScreen navigation={{ navigate: jest.fn() }} />);
     await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent('Failed to load assessments'));
     expect(screen.getByRole('button', { name: 'Dismiss message' })).toBeTruthy();
+  });
+
+  test('the history card ends 16dp above the 48dp bottom safe area', async () => {
+    mockInsets = { top: 24, right: 0, bottom: 48, left: 0 };
+    try {
+      const screen = render(<AssessmentHistoryScreen navigation={{ navigate: jest.fn() }} />);
+      await screen.findByText('Pending sync');
+      expect(StyleSheet.flatten(screen.UNSAFE_getByType(ListGroup).props.style)).toMatchObject({ marginBottom: 64 });
+      expect(StyleSheet.flatten(screen.UNSAFE_getByType(FlatList).props.contentContainerStyle)?.paddingBottom).toBeUndefined();
+    } finally {
+      mockInsets = ZERO_INSETS;
+    }
   });
 
   test('history rows are contained in the shared ListGroup', async () => {

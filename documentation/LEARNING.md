@@ -1871,3 +1871,29 @@ lets Next-key focus scroll immediately, while layout changes retry after an erro
 resize. Jest proves those props and scroll targets. It cannot prove native keyboard geometry:
 the A03s/iPhone School-search no-double-lift check and the small-phone password checks remain
 Profile Task 10 gates.
+
+## A percentage needs a parent that knows its height (sheet gap, polish, 2026-10-19)
+
+On the Galaxy A03s (build 15) the Grade picker, the School search and the Assign group sheet all stopped
+short of the screen bottom, with scrim showing underneath. The size of the gap looked random
+until it was measured with `adb shell dumpsys activity top`, which prints each native view's
+real frame: the gap was exactly **25% of the panel's height** every time (141px under a 566px
+panel, 182px under 730px, 256px under 1024px). A sheet with a fixed `maxHeight={520}` sat flush.
+
+25% is 1 ÷ 0.8 − 1, and 0.8 is [`BottomSheet`](../src/components/common/BottomSheet.js)'s
+default `maxHeight: '80%'`. The panel's parent was a wrapper with no height of its own — its
+height came from the panel. "80% of a parent whose height is my height" is circular. CSS
+treats such a percentage as "no limit"; Yoga instead grew the wrapper to panel ÷ 0.8, pinned
+that taller wrapper to the bottom, and laid the panel at its top. Fabric flattens the
+layout-only wrapper away, so the inspector only ever showed the panel floating.
+
+The C11 keyboard fix had already given the keyboard-avoiding wrapper `flex: 1`, which
+happened to fix sheets with text fields. Sheets passing `keyboardAvoiding={false}`
+(ConfirmSheet, the session date picker, Last attempted, Letter tracker) kept the
+content-sized wrapper. Now both paths share one wrapper style with a definite height.
+
+Two lessons. A layout bug whose size "varies" often varies in proportion to something —
+tabulate the measurements before theorising. And a percentage size is only meaningful
+against a parent whose size does not depend on the child; Jest cannot run Yoga, so the
+regression test pins that contract (every wrapper is `flex: 1`) rather than a pixel position.
+

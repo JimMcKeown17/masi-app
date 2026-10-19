@@ -1,3 +1,4 @@
+import { useScrollBottomPadding } from '../../hooks/useScrollBottomPadding';
 import React, { useEffect, useState } from 'react';
 import { ScrollView, StyleSheet, View } from 'react-native';
 import { ActivityIndicator, Text } from 'react-native-paper';
@@ -11,6 +12,7 @@ import { typeRoles } from '../../constants/typography';
 
 export default function ClassOnboardingScreen({ navigation }) {
   const onScroll = useHeaderHairline();
+  const paddingBottom = useScrollBottomPadding(spacing.lg);
   const { classBootstrapStatus, loadClasses } = useClasses();
   const [retrying, setRetrying] = useState(false);
 
@@ -65,7 +67,7 @@ export default function ClassOnboardingScreen({ navigation }) {
   return (
     <ScrollView
       style={styles.container}
-      contentContainerStyle={styles.content}
+      contentContainerStyle={[styles.content, { paddingBottom }]}
       keyboardShouldPersistTaps="handled"
       onScroll={onScroll}
       scrollEventThrottle={16}
