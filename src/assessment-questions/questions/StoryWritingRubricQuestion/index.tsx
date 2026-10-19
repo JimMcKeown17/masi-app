@@ -60,9 +60,10 @@ function isValidScoreRange(value: unknown): value is ScoreRange {
   if (!value || typeof value !== 'object') return false;
   const o = value as Record<string, unknown>;
   return (
-    typeof o.min === 'number' && Number.isInteger(o.min) &&
-    typeof o.max === 'number' && Number.isInteger(o.max) &&
-    o.min >= 0 && o.min <= o.max
+    typeof o.min === 'number' && Number.isSafeInteger(o.min) &&
+    typeof o.max === 'number' && Number.isSafeInteger(o.max) &&
+    o.min >= 0 && o.min <= o.max &&
+    o.max - o.min + 1 <= 11
   );
 }
 

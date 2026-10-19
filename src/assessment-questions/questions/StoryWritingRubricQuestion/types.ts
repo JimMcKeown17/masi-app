@@ -27,7 +27,10 @@ export interface StoryWritingRubricPicture {
 
 export interface StoryWritingRubricItemSet {
   picture?: StoryWritingRubricPicture;
-  /** Inclusive integer score bounds, with 0 <= min <= max. */
+  /**
+   * Inclusive safe-integer score bounds: 0 <= min <= max, at most 11 chips
+   * (max - min + 1 <= 11). Invalid ranges use the bundled language default.
+   */
   score_range: { min: number; max: number };
   dimensions: StoryWritingRubricDimension[];
 }

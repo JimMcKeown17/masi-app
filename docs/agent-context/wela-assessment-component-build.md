@@ -47,7 +47,7 @@ This is not a backend-only design or a paper-replacement scanner. It is **in-app
 | 08 | Read Passage (ORF) | C — Reading | tap-correct (default; escape hatch prop) | yes (durSec TBD, default 60s) | n/a | **Designed** |
 | 09 | CVC Writing | D — Paper-marked + photo (live cadence, single-column layout) | tap-correct | no | n/a | **Designed** |
 | 10 | Dictation / Sentence Writing | D — Paper-marked + photo (live cadence, single-column layout) | tap-correct | no | n/a | **Designed** |
-| 11 | Story Writing (rubric) | E — Discrete rubric | segmented chips (0–4) per dimension | no | n/a | **Designed** |
+| 11 | Story Writing (rubric) | E — Discrete rubric | segmented chips per dimension over the item set's `score_range` (interim 1–4) | no | n/a | **Designed** |
 
 The six "Patterns" (A through F) are capture archetypes; multiple Questions share the same Pattern with different content / prop values. The user explicitly chose "one component per major question" (DRY violation) for clarity to OSS contributors. Shared logic lives in internal hooks (e.g. `useToggleMark`), not in a shared "binary list" component.
 
@@ -147,9 +147,9 @@ The six "Patterns" (A through F) are capture archetypes; multiple Questions shar
 ### Pattern E — Story Writing rubric (Question 11)
 
 - **Single component:** `<StoryWritingRubricQuestion>`.
-- **Layout:** picture prompt as a small inline thumbnail at the top (tap-to-enlarge to full-screen sheet); four dimension cards stacked vertically (Meaning Making, Spelling, Length, Vocabulary). Each card: dimension name header with a "View full rubric" button on the right; row of five tappable chips (0–4); end-anchored gloss line beneath (e.g. "no attempt → partial → sophisticated"). Running total beneath the cards; "Finish Question 11" primary action.
-- **"View full rubric" sheet:** opens non-destructively per dimension, listing all five anchor descriptions as a vertical list. Dismiss returns to the scoring screen with selections preserved. This is the inter-rater reliability lever — EAs reach for it when undecided between adjacent scores.
-- **Marking convention:** Pattern E is the **only** Pattern that diverges from A/B/C/D/F's unified tap-correct primitive. Still tap-once-to-commit, but EA picks one of five values per dimension rather than toggling a binary mark. Re-score by tapping a different chip — no "tap to clear" because 0 is itself a valid score. `assessment_items.is_correct` stays `false` for Q11 rows; `metadata.score` is the carrier.
+- **Layout:** picture prompt as a small inline thumbnail at the top (tap-to-enlarge to full-screen sheet); four dimension cards stacked vertically (Meaning Making, Spelling, Length, Vocabulary). Each card: dimension name header with a "View full rubric" button on the right; row of tappable chips from the item set's `score_range` (interim 1–4, at most 11 chips); end-anchored gloss line beneath (e.g. "no attempt → partial → sophisticated"). Running total beneath the cards; "Finish Question 11" primary action.
+- **"View full rubric" sheet:** opens non-destructively per dimension, listing the dimension's anchor descriptions as a vertical list (none yet under the interim scale: it shows "Rubric descriptions coming soon"). Dismiss returns to the scoring screen with selections preserved. This is the inter-rater reliability lever — EAs reach for it when undecided between adjacent scores.
+- **Marking convention:** Pattern E is the **only** Pattern that diverges from A/B/C/D/F's unified tap-correct primitive. Still tap-once-to-commit, but EA picks one of five values per dimension rather than toggling a binary mark. Re-score by tapping a different chip — no "tap to clear", so a chosen score stays distinct from an unscored dimension. `assessment_items.is_correct` stays `false` for Q11 rows; `metadata.score` is the carrier.
 - **Item-set shape:** `{ picture: { uri, alt: { en, xh } }, dimensions: [{ code, label: { en, xh }, anchors: { en: [{ score, text }, …], xh: [{ score, text }, …] }, end_anchor_gloss: { en, xh } }, …] }`. Dimension count driven by `dimensions.length` (not hardcoded at 4) — supports 3- or 5-dimension variants without code change. Picture bundled by default in the OSS package, overridable via `itemSet.picture`. **One picture per Run** for v1; Battery config picks which. EA-time picture choice is deferred.
 - **Calibration column shape (hybrid-normalized — load-bearing for the future HQ NextJS dashboard):**
   - `assessments.ea_rubric_total INTEGER NULL` — set by host on EA completion.
@@ -194,10 +194,16 @@ window tagging.
 
 **Progress (2026-10-14):** Plan 1, the Question package, is built: real 2024.1 English and
 isiXhosa content, the `wela_plus_full@2024.1` battery and `evaluateBatteryState`, one terminal
-callback per Question, the last-attempted marker, per-letter Q9 and per-word Q10, untimed Q6/Q8,
-and package tokens. Plan 2 (data foundation) waits for the in-flight sync redesign
-(`feat/upload-path-correctness` and the actor-lifecycle plans); Plan 3 (host Run flow) follows
-Plan 2. Pending pedagogy content is machine-readable in
+callback per Question, the last-attempted marker, per-letter Q9 and per-word Q10, and package tokens.
+
+**Content answers (Jim, 2026-10-19):** Q6 and Q8 are timed at 60 s, and every timed Question
+freezes its reading time when reading stops (End or the deadline), not when the EA confirms the
+last-attempted marker. isiXhosa Q9 scores the whole word (/18). isiXhosa Q5 uses isiXhosa
+picture names, and the x cell is scored as a clock (*ixesha*). Q11 uses an interim 1–4 scale held
+in item-set data (`score_range`). The sync redesign has merged, so Plan 2 (data foundation) is
+next, designed together with the assessment slice (bundle upload, ADR-0007 immutability, letter
+mastery) because both write `assessments` and `assessment_items`. Plan 3 (host Run flow) follows,
+after the Bold Red redesign merges. Pending pedagogy content is machine-readable in
 `src/assessment-questions/itemsets/contentStatus.ts`.
 
 **Then:** build and deploy the host schema/sync contract, wire Run lifecycle and photos, and extract

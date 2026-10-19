@@ -380,6 +380,50 @@ describe('StoryWritingRubricQuestion — Skip flow', () => {
 });
 
 describe('StoryWritingRubricQuestion — itemSet override', () => {
+  describe.each(['en', 'xh'])('bounded score ranges in %s', (language) => {
+    test.each([
+      ['12 chips', { min: 0, max: 11 }],
+      ['array length overflow', { min: 0, max: 4294967296 }],
+      ['unsafe maximum', { min: Number.MAX_SAFE_INTEGER, max: Number.MAX_SAFE_INTEGER + 1 }],
+      ['unsafe equal bounds', { min: 1e308, max: 1e308 }],
+    ])('falls back for %s and emits finite scored results', (_name, score_range) => {
+      const onComplete = jest.fn();
+      const r = render(
+        <StoryWritingRubricQuestion language={language} instructions="." onComplete={onComplete}
+          itemSet={{ ...SET, score_range }} />,
+      );
+      fireEvent.press(r.getByText('Start'));
+      // Score the rendered range to test the actual result, not just a skip.
+      for (const dimension of SET.dimensions) {
+        const chips = r.getAllByTestId(new RegExp(`^chip-${dimension.code}-`));
+        fireEvent.press(chips[chips.length - 1]);
+      }
+      fireEvent.press(r.getByText('Finish'));
+      expect(onComplete).toHaveBeenCalledTimes(1);
+      const result = onComplete.mock.calls[0][0];
+      expect(result.item_set_id).toBe(`wela_plus_story_writing@2024.1.${language}`);
+      expect(result.question_version).toBe('2024.1');
+      expect(result.derived).toMatchObject({ ea_rubric_total: 16, max: 16, percent: 100 });
+      for (const value of [result.derived.ea_rubric_total, result.derived.max, result.derived.percent]) {
+        expect(Number.isFinite(value)).toBe(true);
+      }
+    });
+  });
+
+  test('accepts the inclusive limit of 11 chips', () => {
+    const onComplete = jest.fn();
+    const r = render(
+      <StoryWritingRubricQuestion language="en" instructions="." onComplete={onComplete}
+        itemSet={{ ...SET, score_range: { min: 0, max: 10 } }} />,
+    );
+    fireEvent.press(r.getByText('Start'));
+    expect(r.getAllByTestId(/^chip-/)).toHaveLength(44);
+    for (const dimension of SET.dimensions) fireEvent.press(r.getByTestId(`chip-${dimension.code}-10`));
+    fireEvent.press(r.getByText('Finish'));
+    expect(onComplete.mock.calls[0][0].item_set_id).toBe(SET.item_set_id);
+    expect(onComplete.mock.calls[0][0].derived).toMatchObject({ ea_rubric_total: 40, max: 40, percent: 100 });
+  });
+
   test.each([0, 2])('accepts equal range bounds at %s and emits a finite percentage', (score) => {
     const onComplete = jest.fn();
     const r = render(

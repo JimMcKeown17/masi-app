@@ -79,6 +79,7 @@ export function LetterSoundsQuestion(props: QuestionProps) {
   }, [isMarked]);
   const hasFinishedRef = useRef(false);
   const startTimeMsRef = useRef<number | null>(null);
+  const stopTimeMsRef = useRef<number | null>(null);
 
   const letters = effectiveItemSet.letters;
   const columns = effectiveItemSet.columns;
@@ -111,7 +112,7 @@ export function LetterSoundsQuestion(props: QuestionProps) {
         duration_ms:
           startTimeMsRef.current === null
             ? 0
-            : Date.now() - startTimeMsRef.current,
+            : (stopTimeMsRef.current ?? Date.now()) - startTimeMsRef.current,
         stopped_reason: stoppedReason,
         items,
         derived: {
@@ -142,13 +143,12 @@ export function LetterSoundsQuestion(props: QuestionProps) {
       startTimeMsRef.current = Date.now();
     }
     if (durationSec === undefined) return undefined;
+    const deadlineMs = startTimeMsRef.current + durationSec * 1000;
     const interval = setInterval(() => {
-      const elapsed =
-        startTimeMsRef.current === null
-          ? 0
-          : Date.now() - startTimeMsRef.current;
-      if (elapsed >= durationSec * 1000) {
+      if (Date.now() >= deadlineMs) {
         clearInterval(interval);
+        // Reading ends at the deadline, even if this callback runs late.
+        stopTimeMsRef.current = deadlineMs;
         setMarkReason('timer');
         setPhase('mark-last');
       }
@@ -218,7 +218,12 @@ export function LetterSoundsQuestion(props: QuestionProps) {
         defaultIndex={highestMarkedIndex()}
         onConfirm={(idx) => finish(markReason, idx)}
         onCancel={
-          markReason === 'ea_ended' ? () => setPhase('active') : undefined
+          markReason === 'ea_ended'
+            ? () => {
+                stopTimeMsRef.current = null;
+                setPhase('active');
+              }
+            : undefined
         }
       />
     );
@@ -272,6 +277,8 @@ export function LetterSoundsQuestion(props: QuestionProps) {
         <Pressable
           accessibilityRole="button"
           onPress={() => {
+            // Timed scores measure reading, not time spent confirming the marker.
+            if (durationSec !== undefined) stopTimeMsRef.current = Date.now();
             setMarkReason('ea_ended');
             setPhase('mark-last');
           }}
