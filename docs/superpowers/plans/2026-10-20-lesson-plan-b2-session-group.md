@@ -3,17 +3,20 @@
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** A saved session carries its group to the server on the session and on every attendee; the
-server accepts it when the EA holds or has held an assignment to that group in the session's
-programme; and a phone keeps a session's group id even when it does not have that group.
+server accepts it when the group belongs to the session's programme and the EA holds or has held an
+assignment to that group; a phone keeps a session's group id even when it does not have that group;
+and a session whose upload response was lost still lands in ordinary sync passes.
 
 **Architecture:** One server migration replaces the two forward-prep pins with RESTRICTIVE policies
 that keep `state = 'completed'` and accept a non-null group only through
-`private.current_user_has_held_group_assignment` (any `group_ea_assignments` row, ended or not); the
-attendee table gets the same group check. On the phone, a local migration rebuilds `sessions`
-without its `group_id → groups` foreign key, so a pulled session keeps its group id as a historical
-reference with no `groups` row. `saveSession` writes the group on the session and every attendee and
-the payload carries it. The sync engine orders a session after its group and treats an owed insert
-of the EA's assignment to that group as retry evidence, even after that assignment has ended.
+`private.current_user_has_held_group_assignment` (the group's own `groups.programme_id` equals the
+session's, and the EA has any `group_ea_assignments` row for it, ended or not); the attendee table
+gets the same group check. On the phone, a local migration rebuilds `sessions` without its
+`group_id → groups` foreign key, so a pulled session keeps its group id as a historical reference
+with no `groups` row. `saveSession` writes the group on the session and every attendee and the
+payload carries it. The sync engine orders a session after its group, treats an owed insert of the
+EA's assignment to that group as retry evidence even after that assignment has ended, and sends a
+session insert as insert-or-ignore by id, so a retry after a lost response never needs UPDATE rights.
 
 **Tech Stack:** Expo/React Native, expo-sqlite (better-sqlite3 in tests), Jest (jest-expo),
 Supabase PostgreSQL 17 + PostgREST, disposable PostgreSQL harness scripts.
@@ -27,12 +30,23 @@ tripwire in ROADMAP). Cross-plan names: `/private/tmp/claude-501/-Users-jimmckeo
 
 **Refreshed:** 2026-10-20 against origin/main f27b347 (#90) and spec rev 2 (2bb103a).
 
+**Codex round 1:** folded in 2026-10-20 (a session retried after a lost response could go terminal; new Task 6 sends session inserts as insert-or-ignore and is a release prerequisite; the C19 helper now reads the group's own programme instead of trusting `group_ea_assignments.programme_id`).
+
 ## Global Constraints
 
 - **C19, the server rule:** the session's group is accepted when "the EA **holds or has held** an
   assignment to that group in the session's programme (any `group_ea_assignments` row, ended or
   not)". Keep the `state = 'completed'` guard. `session_attendees.group_id` gets the same check.
   `private.current_user_can_write_for_child` is unchanged.
+- **Programme provenance (Codex round 1):** "in the session's programme" is read from the group's
+  own `groups.programme_id`, never from `group_ea_assignments.programme_id`. The assignment insert
+  policy `group_ea_assignments_insert_self` checks group ownership and an active staff assignment to
+  the supplied programme separately and never compares that programme with the group's
+  (`supabase/migrations/20260521144901_masi_zazi_alignment_schema.sql:778-795`), so an EA can write
+  an ended assignment row that names the wrong programme.
+- **Release prerequisite (Codex round 1):** a session retried after a lost response converges in
+  ordinary passes, with no terminal row and no manual retry (Task 6). B2 does not merge, and the
+  lesson release (C3) does not ship, without it.
 - **Client evidence (C19):** "an owed insert of the EA's assignment to that group counts **even when
   the local assignment has since ended**". Every other existing grant keeps active-only evidence.
 - **Nullable:** `sessions.group_id` and `session_attendees.group_id` stay nullable on the server and
@@ -47,7 +61,7 @@ tripwire in ROADMAP). Cross-plan names: `/private/tmp/claude-501/-Users-jimmckeo
   migration (today the newest is `20261021120000_assessment_results_contract.sql`, already applied
   to hosted). Session-level `SET lock_timeout = '10s'; SET statement_timeout = '60s';` first and both
   `RESET` last; never `SET LOCAL`. Hosted target is `masi-app-sqlite` (`segygjzpujphwvrubusm`) only,
-  never `jcqrlwetutnpuchjoyyd`, and only in Task 7 with Jim's yes.
+  never `jcqrlwetutnpuchjoyyd`, and only in Task 8 with Jim's yes.
 - **Handle rule (ADR-0008):** production code reaches SQLite and the server only through the
   signed-in EA handle. This plan adds no repository singleton and no shared-client data call.
 - **Tests:** prefix every command with `PATH="$HOME/.nvm/versions/node/v20.19.4/bin:$PATH"`.
@@ -86,6 +100,13 @@ tripwire in ROADMAP). Cross-plan names: `/private/tmp/claude-501/-Users-jimmckeo
 5. **A failed group insert holds back only that group's lessons, and only for one pass.** Pinned by
    Task 5's `the group's own insert fails once: its lesson waits in that pass and lands in the next`
    and `sessions without a group are not held back by an unrelated failed group`.
+6. **A session whose upload response was lost lands in ordinary passes** (release prerequisite).
+   Its retry is insert-or-ignore, needs no UPDATE rights, and still passes the INSERT checks.
+   Pinned by Task 6's `a session whose response was lost is retried before its attendees, and the
+   family lands in ordinary passes`, and by the harness cases `session-insert-retry-before-attendees`
+   and `session-insert-retry-still-checks-the-row`.
+7. **The server takes a session group's programme from the group, not from an assignment row the
+   EA can write.** Pinned by Task 1's harness case `session-group-forged-assignment-programme`.
 
 ## Key decision: the historical group reference (plan call)
 
@@ -127,7 +148,7 @@ decision; it adds a precedent for it.
 - Create: `supabase/migrations/20261021140000_session_group_authorization.sql` (plan call: it sorts
   after `20261021120000_assessment_results_contract.sql`, the newest file on `main` and already on
   hosted; if any migration on `main` or applied to hosted sorts after it at build time, give it a
-  later timestamp and update the name in Task 4's `INTENTIONALLY_UNSYNCED` message and Task 7,
+  later timestamp and update the name in Task 4's `INTENTIONALLY_UNSYNCED` message and Task 8,
   because `db push` expects new files to sort last)
 - Create: `__tests__/sessionGroupAuthorizationMigration.test.js` (static SQL checks, style of
   `__tests__/uploadContractRowVersionMigration.test.js`)
@@ -147,7 +168,9 @@ decision; it adds a precedent for it.
 **Interfaces:**
 - Produces: `private.current_user_has_held_group_assignment(p_group_id uuid, p_programme_id uuid) returns boolean`
   (`language sql stable security definer set search_path = ''`; EXECUTE revoked from `public, anon`,
-  granted to `authenticated`).
+  granted to `authenticated`). True when the group's own `groups.programme_id` is `p_programme_id`
+  **and** the caller has any `group_ea_assignments` row for that group, ended or not. It never reads
+  `group_ea_assignments.programme_id` (Global Constraints, programme provenance).
 - Produces policies, all `as restrictive ... to authenticated`:
   `sessions_state_completed_group_held_insert`, `sessions_state_completed_group_held_update`,
   `session_attendees_group_held_insert`, `session_attendees_group_held_update`.
@@ -165,8 +188,8 @@ decision; it adds a precedent for it.
     `RESET statement_timeout; RESET lock_timeout;` (case-insensitive); it has no `SET LOCAL`;
   - `create or replace function private.current_user_has_held_group_assignment(p_group_id uuid, p_programme_id uuid)`
     with `security definer` and `set search_path = ''`; the function body contains
-    `ea_user_id = (select auth.uid())` and `programme_id = p_programme_id`, and does **not** contain
-    `unassigned_at`;
+    `g.programme_id = p_programme_id` and `gea.ea_user_id = (select auth.uid())`, and contains
+    **neither** `gea.programme_id` nor `unassigned_at`;
   - `revoke execute on function private.current_user_has_held_group_assignment(uuid, uuid) from public, anon`
     and `grant execute ... to authenticated`;
   - each of the four policy names appears in `create policy <name>` followed by `as restrictive`;
@@ -183,7 +206,8 @@ decision; it adds a precedent for it.
   no assignment to `EA_A` (and `EA_A` holds no class assignment, so `D` is not writable through a
   class); group `G1` (literacy, created by Head Office) with an active assignment for `EA_A` and an
   active membership for `C`; group `G3` (numeracy) whose only assignment is `EA_A`'s, in programme
-  numeracy; group `G_UNHELD` (literacy) with no assignment for `EA_A`. Programmes come from the seed
+  numeracy; group `G_UNHELD` (literacy) with no assignment for `EA_A`; group `G5` (numeracy,
+  `created_by = EA_A`, so `EA_A` owns it) with no assignment. Programmes come from the seed
   (`(SELECT id FROM public.programmes WHERE code = 'literacy')`, and `'numeracy'`). Every case runs in
   its own rolled-back transaction through `asActor`, with setup run as `postgres`. Cases (label →
   expected):
@@ -194,12 +218,25 @@ decision; it adds a precedent for it.
     upsert the session with `G1` and its attendee `C` with `G1` → both accepted.
   - `session-group-never-held`: `EA_B` upserts a session with `G1` → `42501`.
   - `session-group-other-programme`: `EA_A` upserts a literacy session with `G3` → `42501`.
+  - `session-group-forged-assignment-programme` (Codex round 1): three transactions, each as `EA_A`
+    and each starting with the same forged row,
+    `INSERT INTO public.group_ea_assignments (id, group_id, ea_user_id, programme_id, created_by, unassigned_at) VALUES (<new id>, G5, EA_A, <literacy id>, EA_A, pg_catalog.now()) RETURNING id`
+    (an ended literacy assignment for a numeracy group):
+    (a) that insert alone → one id. This pins the policy gap: `group_ea_assignments_insert_self`
+    accepts it, and being ended it escapes the one-active-row index
+    (`idx_group_ea_assignments_active_unique`, `20260521144901_masi_zazi_alignment_schema.sql:228-230`);
+    (b) the forged row, then a literacy session with `group_id = G5` → `42501`;
+    (c) setup inserts `EA_A`'s literacy session `S_PLAIN` with no group; the forged row, then
+    attendee `C` on `S_PLAIN` with `group_id = G5` → `42501`.
+    (a) makes (b) and (c) non-vacuous: the refusal must come from the session or attendee write,
+    because the forged insert on its own succeeds.
   - `session-group-unheld`: `EA_A` with `G_UNHELD` → `42501`.
   - `session-group-null`: `EA_A` upserts a session without `group_id` (older build) → one id.
   - `session-state-guard-kept`: `state = 'in_progress'` → `42501`, both with no group and with `G1`.
   - `session-upsert-conflict-after-end`: setup inserts `EA_A`'s session with `G1` plus attendee `C`,
-    then ends the assignment; `EA_A` upserts the same session again → one row, `group_id` still
-    `G1`. This proves upsert SELECT visibility and the UPDATE checks.
+    then ends the assignment; `EA_A` upserts the same session again (the merge shape older builds
+    send; B2's phone sends insert-or-ignore, Task 6) → one row, `group_id` still `G1`. This proves
+    upsert SELECT visibility and the UPDATE checks.
   - `session-update-to-unheld-group`: setup inserts `EA_A`'s session with `G1` plus attendee `C`
     (so the permissive UPDATE's USING passes and the refusal comes from the new WITH CHECK);
     `EA_A` updates its `group_id` to `G_UNHELD` → `42501`.
@@ -222,12 +259,8 @@ decision; it adds a precedent for it.
     case fails without the revoke.)
   - `pins-replaced`: `pg_policies` has no `sessions_forward_prep_pin_defaults_%`, and the four new
     policies have `permissive = 'RESTRICTIVE'`.
-  - `known-gap-session-retry-before-attendees` (deliberate tripwire for a pre-existing gap, see
-    Task 6): setup inserts `EA_A`'s session with **no** attendees; `EA_A` re-upserts it (the retry
-    after a lost response) → `42501` from the existing `sessions_update_active_assignment_after_attendee`
-    USING clause (`supabase/migrations/20260521144901_masi_zazi_alignment_schema.sql:933-950`). If the
-    controller observes success instead, delete this case and the ROADMAP gap in Task 6 and say so in
-    the build log.
+
+  Task 6 adds the lost-response retry cases to this harness.
 
   `main()` follows `scripts/assessment-results-postgres-harness.cjs:533-566`: drop and create the
   database, bootstrap, the same Supabase-style public default privileges, apply every `.sql` file in
@@ -240,12 +273,19 @@ decision; it adds a precedent for it.
 
   ```sql
   select exists (
-    select 1 from public.group_ea_assignments gea
-    where gea.group_id = p_group_id
-      and gea.programme_id = p_programme_id
+    select 1
+    from public.groups g
+    join public.group_ea_assignments gea on gea.group_id = g.id
+    where g.id = p_group_id
+      and g.programme_id = p_programme_id
       and gea.ea_user_id = (select auth.uid())
   );
   ```
+
+  The programme comes from the group (`groups.programme_id` is NOT NULL,
+  `supabase/migrations/20260521115412_masi_clean_base_schema.sql:157`), not from the assignment
+  row, which the EA can write with any programme it has access to (Global Constraints). As a
+  definer function it sees archived groups and ended assignments.
 
   Then the four policies. `drop policy if exists` comes before each `create`, and the two pins are
   dropped last:
@@ -270,8 +310,10 @@ decision; it adds a precedent for it.
 - [ ] **Step 7: Contract map.** Add a top-level section `## Session group authorization (B2)` after
   "Assessment results: one complete family per write" and before `## Row versions (upload contract)`
   (`:383`) (plan call: #90 set the precedent of one top-level section per write contract; the
-  "Pre-Live History Authorization" section is about reads). It covers: the C19 rule and helper; the
-  four restrictive policies and the dropped pins; the kept `state` guard; that
+  "Pre-Live History Authorization" section is about reads). It covers: the C19 rule and helper; that
+  the helper takes the programme from `groups.programme_id` and why (`group_ea_assignments_insert_self`
+  does not tie the assignment's programme to the group's; harness case
+  `session-group-forged-assignment-programme`); the four restrictive policies and the dropped pins; the kept `state` guard; that
   `current_user_can_write_for_child` is unchanged; upsert visibility unchanged; the one-row-per-group
   caveat ("if grouping work later lets a group change EA, the old holder's ended assignment must
   survive (today there is one row per group, `groupEaAssignmentDomainId`), or this check moves to a
@@ -444,7 +486,8 @@ decision; it adds a precedent for it.
     group is allowed, so a lesson finished after its group was deleted still saves.
   - `updateSession` has no production caller (the only `saveSession` caller is
     `src/services/literacySessionPersistence.js:56`). Re-saving a pulled session whose group is
-    absent would be refused, which matches spec §8 (editing a saved session is not in v1).
+    absent would be refused, which matches spec §8 (editing a saved session is not in v1). Task 6
+    deletes `updateSession`.
 - Produces: `SERVER_COLUMNS.sessions` includes `'group_id'`. `INTENTIONALLY_UNSYNCED.sessions` is
   `{ state: 'Forward-prep; server RLS keeps state = completed (migration 20261021140000_session_group_authorization).' }`.
   `mapSession`'s `group_ids` is unchanged.
@@ -454,16 +497,20 @@ decision; it adds a precedent for it.
   wraps it; `calls` is the mock's own list (`{ type, tableName, payload, options }`). It is a
   stateful fake that models only the FK and the C19 rule; the real policies are proved by Task 1's
   harness. Rules:
-  - `rows` is a `Map` per table, seeded from `initialRows` (`{ [table]: row[] }`; seed every server
-    row a lifecycle update will target, e.g. memberships, or the update goes `ARCHIVE_NOT_APPLIED`);
+  - `rows` is `{ [table]: Map<id, row> }`, with a Map (empty unless seeded) for every table the fake
+    serves, seeded from `initialRows` (`{ [table]: row[] }`; seed
+    every server row a lifecycle update will target, e.g. memberships, or the update goes
+    `ARCHIVE_NOT_APPLIED`);
   - `upsert` (single or array) stores rows. It honours `ignoreDuplicates` (insert-or-ignore) for
     `group_ea_assignments`. The `fail*` counters make the next N `groups` / `group_ea_assignments`
     upsert calls return the codeless `{ error: { message: 'Network request failed' } }`;
   - a `sessions` or `session_attendees` row whose `group_id` is not in `rows.groups` returns
-    `{ error: { code: '23503', ... } }`. A non-null group with no `group_ea_assignments` row for
-    (`group_id`, `ea_user_id = actorId`, the session's `programme_id`), ended or not, returns
-    `{ error: { code: '42501', message: 'new row violates row-level security policy for table "<table>"' } }`.
-    An attendee's programme is its stored session's. An array call is all-or-nothing;
+    `{ error: { code: '23503', ... } }`. A non-null group whose stored `groups` row has a different
+    `programme_id` from the session's, or for which no `group_ea_assignments` row has (`group_id`,
+    `ea_user_id = actorId`), ended or not, returns
+    `{ error: { code: '42501', message: 'new row violates row-level security policy for table "<table>"' } }`
+    (the server helper's rule; the assignment's own `programme_id` is not read). An attendee's
+    programme is its stored session's. An array call is all-or-nothing;
   - `update(patch).eq('id', id).select('id')` merges into an existing row and returns `[{ id }]`,
     or `[]` when absent;
   - every other table accepts writes; `rpc` keeps the mock's `{ data: true, error: null }` (the
@@ -664,7 +711,238 @@ decision; it adds a precedent for it.
     the lesson plan's C16 keeps it deferred and adds no new group write (plan call).
 - [ ] **Step 6: Commit** `feat(sync): sessions wait for their group; an owed assignment insert is retry evidence`.
 
-### Task 6: Branch gates and records
+### Task 6: Sync engine — a session's retried insert needs no UPDATE rights (release prerequisite)
+
+**Why (Codex round 1, finding 1; pre-existing, fixed here).** When the server commits a session but
+its response is lost, the engine marks the session `failed` and holds its attendees back for that
+pass only (`findBlockingDependency` reads this pass's `failedRecordsByTable`,
+`src/services/offlineSync.js:1539-1629`). The first retry delay is 5 s (`BASE_RETRY_DELAY`, `:34`),
+so by the next pass the parent is usually due again and, by push order, runs before its attendees.
+It goes as a merge upsert. The server row exists, so PostgreSQL takes the UPDATE path, and
+`sessions_update_active_assignment_after_attendee` refuses it, because its USING clause needs a
+landed attendee (`private.has_active_session_attendee_assignment`,
+`supabase/migrations/20260521144901_masi_zazi_alignment_schema.sql:561-575, 933-950`). Nothing is
+owed locally, so `computeEvidencePending` finds no evidence and `processRecord` marks the session
+`terminal` (`offlineSync.js:1196-1251`). Ordinary passes skip terminal rows
+(`src/db/repositories/syncOutboxRepository.js:89-116`), so the attendees then land while the
+session's terminal row waits for a manual Sync Now. That breaks the no-manual-retry promise
+(spec §7.1).
+
+**Fix: send a session insert as insert-or-ignore by id**, as the immutable assignment inserts already
+are (`offlineSync.js:825-833`; AGENTS.md "Immutable Assignment Inserts"). Checked against the code:
+- **Only inserts.** The phone queues a session only as `insert` (`sessionsRepository.js:223`), and
+  `updateSession` (`:325-342`, no production caller) re-saves through `saveSession`, so it queues
+  `insert` too. No producer emits `update`, `archive` or `hard_delete` for `sessions`. Once inserts
+  are ignored on conflict, an `updateSession` edit of an acknowledged session would be marked
+  `synced` on the phone and silently dropped by the server, leaving the two copies different. This
+  task therefore deletes `updateSession` (plan call; spec §8 puts editing a saved session out of v1).
+- **No version fencing to break.** `sessions` is not in `VERSIONED_TABLES`
+  (`src/db/repositories/rowVersion.js:1-13`), has no `enforce_row_version` trigger
+  (`supabase/migrations/20261018180000_upload_contract_row_version.sql:47-100`), and the upload
+  contract leaves it out of scope (`docs/superpowers/specs/2026-10-18-upload-contract-design.md:46-48`).
+  `isStampedOperation` is false for it, so no `row_version` is sent, `MV001` cannot arise, and
+  `applyAcknowledgedPayload` returns early.
+- **INSERT checks still apply; UPDATE checks are never reached.** PostgreSQL applies INSERT
+  `WITH CHECK` to the proposed row before it looks for a conflict (`offlineSync.js:248-252`;
+  contract map "Acknowledged edit", proved by S1). A retry therefore still needs
+  `sessions_insert_active_programme` (`20260521120147_masi_rls_advisor_cleanup.sql:361-372`) and
+  B2's restrictive insert policy, and never needs an UPDATE policy. `DO NOTHING` never changes a
+  stored session, so real content changes stay behind the UPDATE policies.
+- **SELECT visibility.** The session SELECT policy's direct `user_id = auth.uid()` arm
+  (`20260828004500_history_session_authorization_scope.sql:53-60`) makes the writer's own row
+  visible whatever the conflict check needs. Assignment inserts already use the same PostgREST call
+  (`Prefer: resolution=ignore-duplicates`) against this server.
+- **Acknowledgement.** As for assignment inserts, a call with no error is acknowledged
+  (`finalizeSuccess`). The id is the phone's own UUID and the proposed row passed
+  `user_id = auth.uid()`, so a conflicting row is this EA's committed insert. No read-back is added:
+  an ignore-duplicates call returns only the rows it inserted, so a read-back cannot tell "already
+  there" from "absent".
+- **`session_attendees` has no matching hazard** and keeps its batched merge upsert. Its UPDATE
+  policy (`session_attendees_update_own_session_active_assignment`,
+  `20260521144901_masi_zazi_alignment_schema.sql:979-989`) asks for the same owned session and child
+  authority as its INSERT policy (`:966-977`). B2's attendee UPDATE check accepts an ended
+  assignment, and `can_read_session_attendee` follows the owner arm. So a retried attendee passes
+  whenever its first insert would (harness case `attendee-merge-retry-after-commit`).
+- A session already `terminal` from this bug before the update clears with Sync Now, which includes
+  terminal rows. The `masi-app-sqlite` backend has no field users yet.
+
+**Files:**
+- Modify: `src/services/offlineSync.js` (a new `INSERT_OR_IGNORE_TABLES` after `BATCHABLE_UPSERT_TABLES`,
+  `:232-241`; the `ignoreDuplicates` conditions in `runServerOperation`, `:830-832`, and
+  `runBatchServerOperation`, `:847-849`)
+- Modify: `src/db/repositories/sessionsRepository.js` (delete `updateSession`, `:325-342`, and its
+  entry in the returned object, `:356`)
+- Modify: `__tests__/sessionsRepository.test.js` (replace `editing a %s session resets and queues its
+  parent and rewritten attendees`, `:13-58`)
+- Modify: `test-support/sessionGroupServer.js`, `__tests__/sessionGroupSync.test.js`
+- Modify: `scripts/session-group-postgres-harness.cjs` (four cases)
+- Modify: `documentation/rls-sync-contract-map.md`, `documentation/LEARNING.md`,
+  `documentation/build-log.md` (Step 7)
+
+**Interfaces:**
+- Consumes: `createSessionGroupServer` (Task 4); Task 5's `GRANT_SUBJECTS.sessions`.
+- Produces: module-private
+  `const INSERT_OR_IGNORE_TABLES = new Set([...IMMUTABLE_ASSIGNMENT_TABLES, 'sessions'])`, with a
+  comment giving both reasons (assignment identity triggers; a session's UPDATE policy needs a
+  landed attendee, so a retry must never take the UPDATE path). `runServerOperation` sends
+  `ignoreDuplicates: outboxRecord.operation === 'insert' && INSERT_OR_IGNORE_TABLES.has(config.tableName)`;
+  `runBatchServerOperation` sends
+  `INSERT_OR_IGNORE_TABLES.has(config.tableName) && outboxRecords.every((record) => record.operation === 'insert')`.
+  `IMMUTABLE_ASSIGNMENT_TABLES` keeps its other uses (the `23514` classifier `:471`, `canBatchRecord`
+  `:1084`, `isStampedOperation`). `sessions` stays out of `BATCHABLE_UPSERT_TABLES`.
+- Removes: `sessionsRepository.updateSession`. `saveSession` is unchanged here.
+- Produces (extends Task 4's fake): `createSessionGroupServer(...)` also returns
+  `loseNextResponse(tableName, id)`. New rules:
+  - `loseNextResponse(tableName, id)`: the next upsert in that table that carries that id commits as
+    usual, then throws `new Error('Network request failed: response lost after commit')` (the shape
+    of `test-support/statefulMembershipServer.js:61, 67`);
+  - the FK and C19 checks run on every proposed `sessions` and `session_attendees` row first, even
+    one that will be ignored (PostgreSQL's order);
+  - `ignoreDuplicates` applies on every table: a proposed row whose id is stored leaves the stored
+    row unchanged and returns `{ error: null }`;
+  - a merge upsert (no `ignoreDuplicates`) of a stored `sessions` row returns
+    `{ error: { code: '42501', message: 'new row violates row-level security policy (USING expression) for table "sessions"' } }`
+    unless `rows.session_attendees` holds a row whose `session_id` is that id. This is the
+    `sessions_update_active_assignment_after_attendee` USING clause; the fake models only whether an
+    attendee is present.
+
+- [ ] **Step 1: Write the failing tests.**
+  - In `sessionGroupSync.test.js`, with the Task 4 seed and the same engine wiring:
+
+    ```js
+    test('a session whose response was lost is retried before its attendees, and the family lands in ordinary passes', async () => {
+      jest.useFakeTimers();
+      jest.setSystemTime(new Date('2026-10-20T08:00:00.000Z'));
+      await createSessionsRepository({ database: db }).saveSession(LESSON); // the Task 4 lesson, group-1
+      server.loseNextResponse('sessions', 'lesson-1');
+      const terminalCount = async () => (
+        await db.getFirstAsync("select count(*) as count from sync_outbox where status = 'terminal'")
+      ).count;
+
+      await engine.syncAll(); // pass 1: committed on the server, response lost
+      expect(server.rows.sessions.has('lesson-1')).toBe(true);
+      expect(await db.getFirstAsync("select status, retry_count from sync_outbox where table_name = 'sessions'"))
+        .toEqual({ status: 'failed', retry_count: 1 });
+      expect(await db.getAllAsync("select status, retry_count from sync_outbox where table_name = 'session_attendees'"))
+        .toEqual([{ status: 'pending', retry_count: 0 }, { status: 'pending', retry_count: 0 }]);
+      expect(server.rows.session_attendees.size).toBe(0);
+      expect(await terminalCount()).toBe(0);
+
+      jest.setSystemTime(new Date('2026-10-20T08:16:00.000Z')); // the parent is due before its attendees
+      await engine.syncAll(); // pass 2
+      expect(await terminalCount()).toBe(0);
+      expect(await db.getFirstAsync('select count(*) as count from sync_outbox')).toEqual({ count: 0 });
+      expect(server.rows.sessions.get('lesson-1').group_id).toBe('group-1');
+      expect([...server.rows.session_attendees.values()]
+        .map(({ child_id, group_id }) => ({ child_id, group_id }))
+        .sort((a, b) => a.child_id.localeCompare(b.child_id)))
+        .toEqual([{ child_id: 'child-1', group_id: 'group-1' }, { child_id: 'child-2', group_id: 'group-1' }]);
+      expect(await db.getAllAsync(
+        "select sync_status from sessions where id = 'lesson-1' union all select sync_status from session_attendees where session_id = 'lesson-1'",
+      )).toEqual([{ sync_status: 'synced' }, { sync_status: 'synced' }, { sync_status: 'synced' }]);
+      const sessionCalls = server.calls.filter((call) => call.tableName === 'sessions');
+      expect(sessionCalls).toHaveLength(2);
+      for (const call of sessionCalls) {
+        expect(call.options).toEqual(expect.objectContaining({ onConflict: 'id', ignoreDuplicates: true }));
+      }
+    });
+    ```
+
+    `afterEach` restores real timers. `LESSON` is the Task 4 `saveSession` argument, and `engine` is
+    the Task 4 `createOutboxSyncEngine` call.
+  - In `sessionsRepository.test.js`, replace the `editing a %s session ...` test (`:13-58`) with:
+
+    ```js
+    test('sessions are insert-only on this phone: the repository has no edit method', async () => {
+      const db = await createMigratedDatabase(runMigrations);
+      try {
+        // Session inserts are insert-or-ignore (B2 Task 6): the server would ignore a re-saved edit
+        // of an acknowledged session. Saved-session editing must add an `update` operation.
+        expect(createSessionsRepository({ database: db }).updateSession).toBeUndefined();
+      } finally {
+        await db.closeAsync();
+      }
+    });
+    ```
+  - Extend `test-support/sessionGroupServer.js` per the Interfaces block. Task 4's and Task 5's
+    scenarios never re-send a stored session, so the new merge rule leaves them unchanged.
+- [ ] **Step 2: Run** `npm run test:integration -- __tests__/sessionGroupSync.test.js __tests__/sessionsRepository.test.js`
+  → FAIL. Pass 2's `sessions` call carries `ignoreDuplicates: false`. The fake answers `42501`
+  because `lesson-1` has no stored attendee, nothing is owed, and the lesson's row goes `terminal`
+  with `last_error` matching `/row-level security/` (`terminalCount()` is `1`). The repository test
+  fails because `updateSession` exists.
+- [ ] **Step 3: Implement** per the Interfaces block: add `INSERT_OR_IGNORE_TABLES`, switch both
+  conditions to it, and delete `updateSession`.
+- [ ] **Step 4: Run** the Step 2 command, then
+  `npx jest offlineSync syncOutboxRepository rowVersionSend activePairDomainIds` and
+  `npm run test:integration` → PASS. `__tests__/offlineSync.pendingSessions.test.js:78` asserts
+  `expect.objectContaining({ onConflict: 'id' })`, so the added `ignoreDuplicates: true` does not
+  break it.
+- [ ] **Step 5: Harness cases** in `scripts/session-group-postgres-harness.cjs`. Add the shape of
+  PostgREST's `Prefer: resolution=ignore-duplicates` (precedent:
+  `scripts/upload-contract-postgres-harness.cjs:369-379`):
+
+  ```js
+  // PostgREST's upsert with Prefer: resolution=ignore-duplicates (supabase-js ignoreDuplicates: true).
+  const insertOrIgnoreSql = (table, columns, values) => `
+  INSERT INTO public.${table} (${columns.join(', ')})
+  VALUES (${values.join(', ')})
+  ON CONFLICT (id) DO NOTHING RETURNING id;
+  `;
+  ```
+
+  Cases (label → expected), each in its own rolled-back transaction, with setup as `postgres`:
+  - `session-insert-retry-before-attendees`: setup inserts `EA_A`'s literacy session `S_RETRY`
+    with `group_id = G1` and **no** attendees, then ends `EA_A`'s `G1` assignment (the deleted-group
+    case). `EA_A` re-sends the same row with `insertOrIgnoreSql`, then runs
+    `SELECT id || '|' || group_id FROM public.sessions WHERE id = 'S_RETRY'` → no error, and
+    `returnedIds` is exactly `['<S_RETRY>|<G1>']`: the insert returned no id, so the row was ignored.
+  - `session-insert-retry-still-checks-the-row`: the same setup without ending the assignment.
+    `EA_A` re-sends `S_RETRY` with `insertOrIgnoreSql` but `group_id = G_UNHELD` → `42501`. INSERT
+    `WITH CHECK` runs on the proposed row before the conflict, so the retry path keeps C19.
+  - `session-merge-retry-before-attendees` (why the phone stopped sending a merge for sessions;
+    older builds still send it): the same setup. `EA_A` re-sends `S_RETRY` with `upsertSql` →
+    `42501`, from the USING clause of `sessions_update_active_assignment_after_attendee`.
+  - `attendee-merge-retry-after-commit` (why attendees keep their merge upsert): setup inserts
+    `EA_A`'s session with `G1` and attendee `C` with `G1`, then ends the `G1` assignment. `EA_A`
+    re-sends attendee `C` with `upsertSql(..., true)` → one id.
+- [ ] **Step 6 (controller): run** `npm run -s verify:session-group:postgres` (env as in Task 1
+  Step 6) → every case passes, including these four. If `session-insert-retry-still-checks-the-row`
+  succeeds instead, stop and report it rather than editing the case. The retry would still be safe,
+  because nothing is written, but the contract map's INSERT `WITH CHECK` claim would need correcting.
+- [ ] **Step 7: Docs.**
+  - Contract map:
+    - Operation Semantics (`documentation/rls-sync-contract-map.md:185-199`): add a row after
+      "Immutable assignment insert push". Operation: "Session insert push". Tables: `sessions` when
+      `operation === 'insert'` (its only operation). Server call:
+      `upsert(payload, { onConflict: 'id', ignoreDuplicates: true })`, one row at a time (sessions do
+      not batch). RLS implication: "A retry after a lost response needs only INSERT authority. The
+      merge upsert's UPDATE path met `sessions_update_active_assignment_after_attendee`, which needs
+      a landed attendee, and went terminal when the parent was retried first (B2, Codex round 1).
+      INSERT `WITH CHECK` still runs on the ignored row; `DO NOTHING` never changes a stored session.
+      No error acknowledges, as for assignment inserts. `session_attendees` keeps its merge upsert,
+      because its UPDATE policy asks for no more than its INSERT policy."
+    - Replace the "**Local session edits.**" paragraph (`:335-339`) with "**Sessions are
+      insert-only (B2).** `saveSession` is the only session producer, and it queues `insert`. B2
+      deleted the unused `updateSession`, because the server would now ignore its re-saved edit.
+      Saved-session editing (spec §8; the upload contract's Out list) must add an `update` operation
+      sent as UPDATE by id with a row version, never a re-sent insert."
+    - Table Contract Map `sessions` row (as Task 4 Step 9 rewrote it): its operation reads
+      "Outbound insert-or-ignore by id (B2)".
+    - The B2 section: a "Retry after a lost response" bullet naming this task's test and the four
+      harness cases.
+  - `documentation/LEARNING.md`: a short chapter, "Retrying an insert must not ask for edit
+    rights". It covers the lost response; why the merge upsert reached an UPDATE policy that needs
+    an attendee; why insert-or-ignore is safe for an insert-only table and still runs the INSERT
+    checks; why `updateSession` had to go; and why attendees differ.
+  - `documentation/build-log.md`: a Decision Register row (`:1069`): "Session inserts are
+    insert-or-ignore by id; `updateSession` deleted". Give the reasons above and the revisit trigger
+    ("saved-session editing ships"). Also a Bug and Gap Register row (`:1227`): the pre-existing gap
+    (since `20260521140331_masi_rls_review_fixes.sql:89`), found by Codex round 1 of this plan, with
+    its cause, its fix in this task, and the tests that pin it.
+- [ ] **Step 8: Commit** `fix(sync): a session's retried insert needs no update rights`.
+
+### Task 7: Branch gates and records
 
 **Files:**
 - Modify: `documentation/build-log.md`, `documentation/ROADMAP.md`, `documentation/rls-sync-contract-map.md`
@@ -672,16 +950,14 @@ decision; it adds a precedent for it.
 - [ ] **Step 1:** `npm test` and `npm run test:integration` → all pass. Record suite and test counts.
 - [ ] **Step 2 (controller):** all seven `verify:*:postgres` harnesses (history-authorization,
   upload-contract, organisation-label, support-incident, assessment-results, ea-access,
-  session-group) → pass. Record each result and the Task 1 Step 6 RED observation.
+  session-group) → pass. Record each result, the Task 1 Step 6 RED observation and the Task 6 Step 6
+  result.
 - [ ] **Step 3:** run a Codex adversarial review of the branch (`--base origin/main`). Engage each
   finding; fix and re-run until approved, or until the remaining findings are rare and recorded as
   accepted risks.
 - [ ] **Step 4: Records.**
   - Build log Verification Register (`documentation/build-log.md:39`) rows for every command above.
-  - Build log Bug and Gap Register (`:1227`) row, plus a ROADMAP §1 item, for the pre-existing gap
-    pinned by `known-gap-session-retry-before-attendees`. A session upsert retried after a lost
-    response, before any attendee has landed, is refused by
-    `sessions_update_active_assignment_after_attendee` and goes to needs-attention. B2 does not fix it.
+    The lost-response session gap is fixed in Task 6 and recorded there, so it gets no ROADMAP item.
   - ROADMAP §4 (`:651-669`): note that item 3's session-group contract (`:658`) is built (B2), with
     the hosted apply still pending.
   - Contract map invariant, in the B2 section: the history pull's delivery arm follows
@@ -692,7 +968,7 @@ decision; it adds a precedent for it.
     and a seed that breaks this needs a contract change first.
 - [ ] **Step 5: Commit** `docs: B2 session group — gates, gaps and roadmap`.
 
-### Task 7: Hosted apply and device gate (Jim approves before running)
+### Task 8: Hosted apply and device gate (Jim approves before running)
 
 Nothing in this task runs without Jim's explicit yes at the time. Only the SQLite project:
 `segygjzpujphwvrubusm`. Use the `sqlite-staging-sql` skill's helper; never run raw Supabase CLI from
@@ -708,8 +984,9 @@ the repo root.
   - `has_function_privilege` for the helper is `t` for `authenticated` and `f` for `anon`.
 - [ ] **Step 4: Rollback-only actor probe (Jim's yes).** Use the skill's non-interactive psql
   fallback. In one `BEGIN ... ROLLBACK` as a staging tester EA: a session with a group the EA holds
-  is accepted; one with a group the EA never held gives `42501` (inside a savepoint). Afterwards a
-  count shows zero residue.
+  is accepted; re-sending that session as `INSERT ... ON CONFLICT (id) DO NOTHING` before any
+  attendee gives no error (Task 6); one with a group the EA never held gives `42501` (inside a
+  savepoint). Afterwards a count shows zero residue.
 - [ ] **Step 5: Device gate**, on a Galaxy A03s (360dp) and an iPhone, with an EAS preview build of
   this branch (sqlite backend). B2 changes no screen, so the 1.0x/1.3x text checks do not apply
   (plan call).
@@ -725,5 +1002,7 @@ the repo root.
     ranking counts that session for `C`; Export Database shows `sessions` ≥ 1 and `groups` = 0.
   - Record both platforms' results in the build log Verification Register. Rollout note: the hosted
     migration must be applied before any build that writes a group (the C3 Lesson release). B2's
-    own build sends only `group_id: null`, which the old pins also accept.
+    own build sends only `group_id: null`, which the old pins also accept. Task 6 is client-only and
+    uses the existing INSERT policies, so it needs no server step. It is a release prerequisite and
+    reaches the lesson release because C2–C3 depend on B2.
 - [ ] **Step 6: Commit** `docs: B2 hosted apply and device gate results`.
