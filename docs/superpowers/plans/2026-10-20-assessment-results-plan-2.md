@@ -21,7 +21,9 @@ the phone shows the winning record as soon as the server answers.
   the returned winner back, or deletes the row on `acknowledged`, or moves only the ordering
   columns when a newer local change is queued.
 - **Readers** read with no `user_id` or programme filter and never show a refused correction.
-  Both tracker surfaces re-read after a sync pass that sent mastery corrections (Task 6).
+  The Child Results tracker panel re-reads after a sync pass that sent mastery corrections. The
+  session-form tracker sheet loads when it opens, as today, and does not re-read while open
+  (Task 6; Codex round 2, accepted risk A1).
 
 **Tech Stack:**
 - Expo / React Native, JavaScript;
@@ -44,6 +46,11 @@ AF, C1 and B2 may move them, so locate edits by content when they differ.
 and named conflict targets; an older save keeps this phone's newer unsent correction; the
 session-form tracker sheet re-reads after a mastery sync pass, as the panel does, without a
 spinner flash).
+
+**Codex round 2:** folded in 2026-10-20 (round 1's sheet refresh is removed, because a tap that
+cancels a pending mark could be undone by the refreshed baseline; the sheet loads when it opens
+and the panel keeps its refresh; the stale open sheet and the clock-rollback sheet save are
+accepted risks A1 and A2, with no code change).
 
 ## Global Constraints
 
@@ -139,7 +146,8 @@ spinner flash).
       or `in_flight`);
     - that correction's `changed_at` is later than the incoming one.
 
-    Otherwise it replaces both, as AR says. Details are in Task 3, step 4.
+    Otherwise it replaces both, as AR says. Details are in Task 3, step 4. One order after a
+    clock is set back is not covered, and is accepted risk A2.
   - `getLetterMastery` has no `user_id` and no programme filter and excludes `terminal` rows.
 - **Language re-key map** (AR §10.1 plus ask 2):
   - `English` → `en`, `isiXhosa` → `xh`, `Afrikaans` → `af`;
@@ -170,6 +178,11 @@ spinner flash).
 - Completeness and lesson-plan asks 3 and 5.
 - **(plan call)** Ask 4, C23's current-year bound on letter evidence. It belongs with Plan 3's
   academic-year predicate and assessment pull, and is not built here.
+- **Plan 3 must not extend `useLetterMasterySyncRefresh` to `LetterTrackerBottomSheet` (Codex
+  round 2).** A re-read under the sheet's pending marks lets a tap that cancels a pending mark,
+  judged against the old baseline, be undone by the refreshed one (accepted risk A1). Plan 3 may
+  add its pull signal to the hook, which then reaches the panel only. The sheet keeps loading
+  when it opens.
 
 **Guards that stay green**
 - `__tests__/productionBindingStatic.test.js`: production code takes repositories from the handle.
@@ -203,7 +216,8 @@ spinner flash).
    save. The phone never sends a time later than its own now. The server clamps once, and a retry
    keeps that first effective time, so the fast phone cannot undo a newer correction. Tests:
    Task 3, `changedAt is the tap time, never later than now`; Task 1, the fast-clock lost-reply
-   sequence.
+   sequence. One order is not covered on the phone, a corrected clock followed by a later sheet
+   tap saved after a delay, and it is accepted risk A2.
 3. **A child is handed to another EA while this EA's correction is queued.**
    - If it never reached the server, the result is `42501` → terminal with the authenticated
      marker. It never shows as mastery and is visible in needs attention.
@@ -220,16 +234,16 @@ spinner flash).
    - Sync then sends nothing stale: no `MISSING_OUTBOX_PAYLOAD`, unknown-op or terminal rows.
 
    Test: Task 2.
-5. **An EA watches a tracker while a sync supersedes or refuses their tap.** This covers both
-   surfaces: Child Results → Letter tracker (the panel) and the session form's tracker sheet.
-   - After that pass, each surface shows the winner, or drops a refused confirmation, while it
-     stays open.
-   - The sheet keeps the EA's unsaved marks.
-   - Neither surface flashes its loading state.
+5. **An EA watches Child Results → Letter tracker (the panel) while a sync supersedes or
+   refuses their tap.**
+   - After that pass, the panel shows the winner, or drops a refused confirmation, without
+     leaving the screen and without flashing its loading state.
+   - The session form's tracker sheet does not re-read while open (Codex round 2). It loads when
+     it opens, so it shows the truth when reopened (accepted risk A1).
 
    Tests: Task 6, `the panel re-reads after a sync pass that touched letter_mastery` and
-   `an open sheet re-reads its baseline after superseded and refused corrections and keeps unsaved marks`.
-   Device: Task 7 G1 (panel, Android) and G1r (sheet, iOS).
+   `a sync pass that sent no mastery does not re-read`. Device: Task 7 G1 (panel, Android) and
+   G1r (panel, iOS).
 6. **An older save arrives after a newer unsent correction for the same letter.** For example,
    Tuesday's un-confirm is queued offline, then Monday's draft mark is saved on Wednesday.
    - The phone keeps Tuesday's correction queued, unchanged, and that is what uploads.
@@ -248,6 +262,53 @@ spinner flash).
    Tests: Task 1, `variable-conflict-default`, `newer-applies` and `same-id-concurrent` on PG17;
    Task 2's static pins.
 
+## Accepted risks (Codex round 2; no code change)
+
+Both are recorded in the build log Decision Register with their revisit triggers (Task 7 Step 9).
+
+- **A1. An open session tracker sheet can show a stale tile or n/26.** This happens after a sync
+  supersedes or refuses one of that child's confirmations. Nothing is saved wrongly (a tap
+  records the EA's desired value; the server and `setLetterMastery`'s ordering decide), and
+  reopening the sheet shows the truth.
+  - **Why the sheet does not refresh.** Round 1 added a background re-read of the sheet's
+    baseline. Codex round 2 showed it can undo a tap.
+    - The handler deletes a pending entry when a tap returns a letter to the displayed baseline
+      (`LetterTrackerBottomSheet.js:86-103`).
+    - So a tap made against the old baseline while a re-read is in flight can delete the
+      pending mark. The refreshed baseline then shows the letter in the state the EA just tapped
+      away from, and the save sends nothing. Codex's case: a pending confirm of `s` on an
+      unconfirmed baseline, a re-read that brings another EA's confirm of `s`, and an off tap in
+      between.
+  - **With the baseline fixed while open**, a tap that cancels the EA's own unsaved mark means
+    "no change from what I saw". The save sends nothing for that letter, and any newer
+    correction stands. That is D1's outcome, since the EA made no correction.
+  - **Revisit if** EAs report a session sheet that disagreed with the panel. The fix would keep
+    an explicit desired value per tap, including cancellations, rather than deleting entries.
+- **A2. A clock set back, then an explicitly timed sheet tap saved after a delay.** The sheet's
+  later correction is kept back by Task 3 step 4, and is never queued.
+  1. The phone's clock runs an hour fast. At real 09:30 the EA confirms `k`, stamped `10:30`,
+     and the correction stays queued (offline).
+  2. The clock is corrected.
+  3. At 09:31 the EA un-confirms `k` in a session's tracker sheet (`madeAt` 09:31).
+  4. The session saves at 09:32 with `changedAt = 09:31`. Task 3 step 4 evaluates
+     `min(10:30, 09:32) = 09:32 > 09:31` and keeps the queued confirmation. The session saves,
+     the un-confirm is never queued, and the 10:30 confirmation uploads.
+
+  - **Why it is rare.** It needs all of these, in this order:
+    - a wrong (fast) clock;
+    - a correction of that clock;
+    - an unsent correction for the same child and letter;
+    - a later sheet tap on that letter, inside the clock's error, and its save a moment or more
+      after the tap.
+  - **The panel path is covered.** A tap made now always replaces
+    (`a tap made now replaces a queued correction stamped ahead of the clock`, Task 3).
+  - **Recovery.** Reopening the tracker shows the kept confirmation. A panel tap replaces it at
+    once. Another sheet tap is kept back too, until the queued correction uploads or unless the
+    tap is made after the queued stamp's time.
+  - **Revisit if** it shows up in the field. The fix is a durable local tap sequence: a per-phone
+    counter in SQLite, stamped at each tap and on each queued correction, so that this phone
+    orders its own corrections by sequence rather than by wall clock.
+
 ---
 
 ## File structure
@@ -264,7 +325,7 @@ spinner flash).
 | `src/services/offlineSync.js`, `src/services/syncServerColumns.js` (modify) | One RPC per correction; acknowledgement in the finalize transaction | 4 |
 | `src/utils/masteryState.js`, `src/utils/dashboardStats.js`, `src/screens/insights/LetterMasteryRankingScreen.js`, `src/db/debugDump.js` (modify) | Readers on codes and `confirmed`; support export shows mastery rows | 5 |
 | `src/services/literacySessionPersistence.js`, `src/components/assessment/LetterMasteryPanel.js` (modify) | The two write surfaces | 6 |
-| `src/hooks/useLetterMasterySyncRefresh.js` (create), `src/components/session/LetterTrackerBottomSheet.js` (modify) | One trigger that makes a visible tracker re-read after a sync pass that sent mastery corrections; the sheet's baseline refresh | 6 |
+| `src/hooks/useLetterMasterySyncRefresh.js` (create) | The panel's trigger: re-read after a sync pass that sent mastery corrections. `LetterTrackerBottomSheet.js` is not modified (Codex round 2) | 6 |
 
 ## Tests that encode the old identity, and what happens to each
 
@@ -808,6 +869,9 @@ spinner flash).
          was corrected after a tap. Without this rule, it would refuse every later tap on that
          letter until the queued correction uploads. With it, a tap made now (no `changedAt`)
          always replaces.
+       - **It does not cover an explicitly timed tap after such a correction.** A sheet tap made
+         after the clock was corrected, and saved later, is kept back while the queued stamp is
+         ahead of it. This is accepted risk A2 (Codex round 2), and is not built for.
        - Otherwise (no row, no owed slot, or an incoming time at least as late) continue.
     5. `programme_id = programmeId ?? await getActiveProgrammeId(txn, changed_by)`, which may be
        null. It never throws and never uses the legacy programme.
@@ -1072,7 +1136,8 @@ spinner flash).
       - the single slot and payload;
       - the ordering-aware slot (Task 3 step 4). An older save keeps a newer correction that is
         still owed (`pending`, `failed` or `in_flight`, the set Plan 3's merge also uses). A
-        queued time ahead of the phone's clock counts as now;
+        queued time ahead of the phone's clock counts as now. State the one order it leaves
+        uncovered, accepted risk A2, with its sequence;
       - send-time args;
       - the acknowledgement table from Task 3;
       - error classes (`42501` evidence = direct assignment only; `MA001`, `22023` and
@@ -1186,18 +1251,18 @@ spinner flash).
   - the mastery block (today `:75-144`) becomes one `setLetterMastery` call per attendee change;
   - the `findMasteryRecord`, `LANGUAGE_LABELS` and `createMasteryRepository` lookups for reads go.
 - Modify: `src/components/assessment/LetterMasteryPanel.js:11, :26, :34-35, :37-57, :65-150`.
-- Create: `src/hooks/useLetterMasterySyncRefresh.js` **(Codex round 1)**.
-- Modify: `src/components/session/LetterTrackerBottomSheet.js:1-2` (imports) and `:46-65` (the
-  load effect) **(Codex round 1)**.
+- Create: `src/hooks/useLetterMasterySyncRefresh.js` **(Codex round 1; the panel only since
+  round 2)**.
+- Not modified: `src/components/session/LetterTrackerBottomSheet.js` **(Codex round 2)**. Its
+  open-time load (`:46-65`) reads through `loadMasteryState`, which Task 5 moves to codes and
+  `confirmed`. So it needs no change of its own.
 - Test:
   - `__tests__/literacySessionPersistence.test.js`;
   - `__tests__/completionPathBudget.test.js:102-158`;
   - `__tests__/foreignKeyEnforcement.test.js:61-108`;
   - `__tests__/LiteracySessionForm.submit.test.js`;
   - `__tests__/LetterMasteryPanel.test.js`;
-  - `__tests__/LetterTrackerScreen.plan5.test.js`;
-  - `__tests__/LetterTrackerBottomSheet.test.js` (the sync-refresh cases; Task 5 already moved
-    its rows to codes).
+  - `__tests__/LetterTrackerScreen.plan5.test.js`.
 - Docs:
   - `CONTEXT.md` (Letter mastery, `:113-114`; the access rule, `:261`);
   - `documentation/rls-sync-contract-map.md:879` (table row);
@@ -1218,24 +1283,27 @@ spinner flash).
       AR §10.1 keeps the un-confirm as a record of that correction.
     - A change that Task 3 step 4 keeps out (a newer correction is still owed) writes nothing.
       The session and its other changes still save.
-  - **`useLetterMasterySyncRefresh({ enabled, onRefresh })`** (`src/hooks/useLetterMasterySyncRefresh.js`).
-    **Plan call, Codex round 1:** this is the one trigger both tracker surfaces use. AR §10.2
-    names the panel and the sheet as write surfaces but says nothing about refreshing them.
+  - **`useLetterMasterySyncRefresh(onRefresh)`** (`src/hooks/useLetterMasterySyncRefresh.js`).
+    **Plan call, Codex round 1, narrowed in round 2:** this is the panel's trigger. AR §10.2
+    names the panel and the sheet as write surfaces but says nothing about refreshing them. The
+    sheet does not use it (accepted risk A1). Round 1's `enabled` argument existed only for the
+    sheet's `visible`, so it goes.
 
     ```js
     import { useEffect, useRef } from 'react';
     import { useOffline } from '../context/OfflineContext';
 
-    // A tracker on screen re-reads after a sync pass that sent letter_mastery corrections, so a
-    // superseded or refused tap never stays displayed (Assessment Results Plan 2).
-    export default function useLetterMasterySyncRefresh({ enabled, onRefresh }) {
+    // The letter tracker panel re-reads after a sync pass that sent letter_mastery corrections,
+    // so a superseded or refused tap never stays displayed (Assessment Results Plan 2). Not for
+    // the session tracker sheet: a re-read under its pending marks can undo a cancelling tap.
+    export default function useLetterMasterySyncRefresh(onRefresh) {
       const { lastSyncResult } = useOffline();
       const seen = useRef(lastSyncResult);
       useEffect(() => {
         if (lastSyncResult === seen.current) return;
         seen.current = lastSyncResult;
-        if (enabled && lastSyncResult?.tableResults?.letter_mastery) onRefresh();
-      }, [lastSyncResult, enabled, onRefresh]);
+        if (lastSyncResult?.tableResults?.letter_mastery) onRefresh();
+      }, [lastSyncResult, onRefresh]);
     }
     ```
 
@@ -1245,9 +1313,11 @@ spinner flash).
     - `tableResults.letter_mastery` exists whenever the pass processed or skipped a mastery slot
       (`offlineSync.js:1631-1663`, `:1698-1712`). That covers `applied`, `superseded`,
       `acknowledged`, retriable and terminal outcomes.
-    - A result that arrives while `enabled` is false is still marked as seen. So opening a
-      surface never loads twice, and a pass with no mastery never re-reads.
-    - It covers uploads only. Mastery rows applied by Plan 3's pull need their own signal.
+    - The result already published when the panel mounts counts as seen. So mounting loads once,
+      from `useFocusEffect`, and a pass with no mastery never re-reads. A new `onRefresh`
+      identity alone never re-reads.
+    - It covers uploads only. Mastery rows applied by Plan 3's pull need their own signal. Plan 3
+      may add it here, for the panel only (Out of scope).
   - **`LetterMasteryPanel`**:
     - a tap calls
       `masteryRepository.setLetterMastery({ childId: child.id, letter, language: languageCode, confirmed: !taughtLetters[letter] })`,
@@ -1255,9 +1325,11 @@ spinner flash).
     - the sync nudges (`refreshSyncStatus`, `triggerBackgroundSync`) and the `updatingLetter`
       guard stay;
     - the cached-id and soft-delete branches go;
-    - **(plan call, Review Focus 5)** the panel calls
-      `useLetterMasterySyncRefresh({ enabled: true, onRefresh })`, with
-      `onRefresh = useCallback(() => loadData({ background: true }), [loadData])`.
+    - **(plan call, Review Focus 5)** the panel calls `useLetterMasterySyncRefresh(onRefresh)`,
+      with `onRefresh = useCallback(() => loadData({ background: true }), [loadData])`.
+      - The panel has no pending map, because each tap writes at once. So a re-read can change
+        only what is displayed, never what is saved. The sheet's pending map is what made its
+        refresh unsafe (A1).
       - `loadData({ background = false } = {})` keeps today's dependency list
         (`child.id`, `languageCode`, `user.id`).
       - A background load leaves `loading` unchanged, so the grid stays on screen. Without this,
@@ -1266,24 +1338,11 @@ spinner flash).
       - A `useRef` counter numbers each load. Only the latest load applies its results and
         clears `loading`.
       - `useFocusEffect` keeps calling `loadData()` in the foreground, as today.
-  - **`LetterTrackerBottomSheet`** **(plan call, Codex round 1)**:
-    - **The load.** The effect at `:46-65` becomes `loadBaseline({ background = false } = {})`.
-      - It is a `useCallback` over today's dependencies (`child?.id`, `languageCode`, `userId`).
-      - `repositories` stays out of that list, as it does today. In component tests,
-        `useSignedInEA()` returns a new `repositories` object on every render
-        (`test-support/legacyHandleMocks.js:22-27`), so listing it would reload on every render.
-      - It has the same latest-load counter and background rule as the panel.
-    - **Opening** (`visible` with a `child`) calls `loadBaseline()`, which shows the spinner as
-      today, from `useEffect(..., [visible, loadBaseline])`.
-    - **The refresh.**
-      `useLetterMasterySyncRefresh({ enabled: Boolean(visible && child), onRefresh })`, with
-      `onRefresh = useCallback(() => loadBaseline({ background: true }), [loadBaseline])`.
-    - **Unsaved marks.** `pendingChanges` is a prop that the form owns (AF's
-      `{ [letter]: { mastered, languageCode, madeAt } }`). A refresh never touches it.
-      - `getCellState`, `handleCellTap` and `countMastered` already read it over the refreshed
-        baseline.
-      - So each tap still produces the state the tile then shows, measured against the current
-        stored record.
+  - **`LetterTrackerBottomSheet`** is unchanged **(plan call, Codex round 2)**. Today's effect
+    (`:46-65`) loads the baseline when the sheet opens (`visible` with a `child`), with the
+    spinner, and not again while it stays open on that child. AF's pending map
+    (`{ [letter]: { mastered, languageCode, madeAt } }`) is judged against that one baseline. A
+    sync while it is open leaves it stale until reopened (accepted risk A1).
 
 - [ ] **Step 1: Write the failing tests.**
   - `literacySessionPersistence.test.js`:
@@ -1363,76 +1422,23 @@ spinner flash).
         round 1).
       - Resolve it with `s` now `confirmed: false`. Then `s, not mastered` shows, and so does
         `1 / 26 letters mastered`.
-    - `a sync pass that sent no mastery does not re-read`: rerender with
-      `lastSyncResult: { tableResults: { children: { success: true, synced: 1, failed: 0 } } }`.
-      `getLetterMastery` was still called once.
+    - `a sync pass that sent no mastery does not re-read`:
+      - mount with `lastSyncResult` already holding
+        `{ tableResults: { letter_mastery: { success: true, synced: 1, failed: 0 } } }`. This
+        result counts as seen (Codex round 2 moves this check from the sheet's test);
+      - then rerender with
+        `lastSyncResult: { tableResults: { children: { success: true, synced: 1, failed: 0 } } }`;
+      - `getLetterMastery` was still called once.
   - `LetterTrackerScreen.plan5.test.js:37-90`: the mocks become `setLetterMastery`.
-  - **`LetterTrackerBottomSheet.test.js`** (Review Focus 5, Codex round 1).
-    - Add `jest.mock('../src/context/OfflineContext', () => ({ useOffline: jest.fn() }))`, and
-      `useOffline.mockReturnValue({ lastSyncResult: null })` in `beforeEach`.
-    - Split `renderSheet` into an element factory, `sheet(props)`, and `render(sheet(props))`,
-      so that `screen.rerender(sheet(props))` keeps the same instance.
-    - Use AF's `change` helper and Task 5's code-shaped `stored()` rows.
-
-    ```js
-    const masteryPass = (failed = 0) => ({ tableResults: { letter_mastery: { success: failed === 0, synced: 1 - failed, failed } } });
-
-    test('an open sheet re-reads its baseline after superseded and refused corrections and keeps unsaved marks', async () => {
-      const onDismiss = jest.fn();
-      const props = { pendingChanges: { e: change(true) }, onDismiss };
-      masteryRepository.getLetterMastery.mockResolvedValueOnce([stored('a'), stored('s'), stored('t')]);
-      const screen = renderSheet(props);
-      await waitFor(() => expect(screen.getByText('Amahle Dlamini · 4/26 letters')).toBeTruthy());
-
-      // superseded: another EA's newer un-confirm of s now holds the record
-      let release;
-      masteryRepository.getLetterMastery.mockReturnValueOnce(new Promise((resolve) => { release = resolve; }));
-      useOffline.mockReturnValue({ lastSyncResult: masteryPass() });
-      screen.rerender(sheet(props));
-      expect(screen.getByLabelText('s, taught by coach')).toBeTruthy(); // the grid stays during the re-read
-      expect(screen.UNSAFE_queryByType(ActivityIndicator)).toBeNull();
-      await act(async () => { release([stored('a'), { ...stored('s'), confirmed: false }, stored('t')]); });
-      expect(screen.getByLabelText('s, not mastered')).toBeTruthy();
-      expect(screen.getByText('Amahle Dlamini · 3/26 letters')).toBeTruthy();
-
-      // refused: this phone's confirmation of t went terminal, so getLetterMastery no longer returns it
-      masteryRepository.getLetterMastery.mockResolvedValueOnce([stored('a'), { ...stored('s'), confirmed: false }]);
-      useOffline.mockReturnValue({ lastSyncResult: masteryPass(1) });
-      screen.rerender(sheet(props));
-      await waitFor(() => expect(screen.getByLabelText('t, not mastered')).toBeTruthy());
-      expect(screen.getByText('Amahle Dlamini · 2/26 letters')).toBeTruthy();
-
-      expect(screen.getByLabelText('e, taught, added this session')).toBeTruthy(); // the unsaved mark survives both
-      expect(masteryRepository.getLetterMastery).toHaveBeenCalledTimes(3);
-      expect(onDismiss).not.toHaveBeenCalled();
-    });
-
-    test('a pass with no mastery, or one that arrives while the sheet is closed, does not re-read', async () => {
-      const screen = renderSheet();
-      await waitFor(() => expect(masteryRepository.getLetterMastery).toHaveBeenCalledTimes(1));
-      useOffline.mockReturnValue({ lastSyncResult: { tableResults: { children: { success: true, synced: 1, failed: 0 } } } });
-      screen.rerender(sheet());
-      useOffline.mockReturnValue({ lastSyncResult: masteryPass() });
-      screen.rerender(sheet({ visible: false }));
-      await act(async () => {});
-      expect(masteryRepository.getLetterMastery).toHaveBeenCalledTimes(1);
-      screen.rerender(sheet()); // reopening loads once, from the open effect
-      await waitFor(() => expect(masteryRepository.getLetterMastery).toHaveBeenCalledTimes(2));
-    });
-    ```
-
-    Some test files render the sheet with no `OfflineContext` mock
-    (`LetterTrackerBottomSheet.plan5.test.js`, which gets the default context's `null`). Others
-    use a `useOffline` mock with no `lastSyncResult` (`LiteracySessionForm.submit.test.js:18`,
-    `LiteracySessionForm.test.js:96`, `ChildSelector.renderCount.test.js`). These files are
-    unchanged, and they never re-read.
-- [ ] **Step 2: Run** the seven files, with the real-SQLite ones through `npm run test:integration -- …`.
+- [ ] **Step 2: Run** the six files, with the real-SQLite ones through `npm run test:integration -- …`.
   Expected: FAIL.
-- [ ] **Step 3: Implement** both writers, the hook and the sheet's refresh.
+- [ ] **Step 3: Implement** both writers and the panel's hook.
 - [ ] **Step 4: Static checks.** Each of these must match nothing:
   - `grep -rn "Plan 2 re-keys letter_mastery" src`;
   - `grep -rn "saveLetterMasteryRecord\|updateLetterMasteryRecord\|removeLetterMasteryRecord" src __tests__ test-support`;
-  - `grep -rn "getLetterMastery({[^}]*userId" src __tests__`.
+  - `grep -rn "getLetterMastery({[^}]*userId" src __tests__`;
+  - `grep -n "useLetterMasterySyncRefresh\|useOffline" src/components/session/LetterTrackerBottomSheet.js`
+    (Codex round 2: the sheet does not re-read while open, accepted risk A1).
 
   `grep -rn "LANGUAGE_LABELS" src` matches only display code: `assessmentRegistry.js`,
   `AssessmentHistoryScreen.js`, `AssessmentDetailScreen.js`, `StandaloneTestScreen.js` and
@@ -1529,8 +1535,8 @@ task's files.
 
 | Case | Steps | Pass when |
 |---|---|---|
-| **G1: an offline older confirm loses** (letter `s`) | (1) A03 offline: Child Results → Letter tracker, tap `s`. (2) At least 1 min later, iPhone online: tap `s`, wait for "All saved and synced", tap `s` again, wait. (3) A03 Wi-Fi on, Sync now, stay on the tracker | **A03:** `s` turns grey within that sync pass without leaving the screen. The count is one lower. The session-form tracker sheet also shows `s` grey. The export's `s` row has `confirmed: false`, `changedBy` = EA-B, `correctionId` = `serverCorrectionId` = EA-B's second correction, `changedAt` = `serverChangedAt` = the server's `changed_at`, and `syncStatus: synced`; `tableCounts.sync_outbox` is `0`. **iPhone:** `s` grey; its `s` row carries the same correction id, `synced`. **Server:** one `s` record held by EA-B's un-confirm; three receipts; A03's `effective_at` equals its tap time (earlier than both of EA-B's) |
-| **G1r: the same with roles swapped** (letter `t`) | The iPhone is the offline older phone (Airplane Mode, with Wi-Fi also switched off in Settings); the A03 confirms and un-confirms online. **In step (3), the iPhone waits on the session-form tracker sheet instead of the panel (Codex round 1).** Before reconnecting, start a literacy session, select the gate child, open its letter tracker, and mark one other letter (`v`) without saving. Then reconnect from Control Centre with the sheet still open. Reconnecting with queued work starts the sync on its own (`OfflineContext.js:288-295`), so no Sync now is needed | The same criteria, with the phones swapped, read on the open sheet. `t` turns grey and the `n/26` count drops by one without closing the sheet, and `v` still shows "added this session". No spinner appears during the pass. Then discard the session. This runs the `superseded` write-back on iOS and the sheet's refresh on a device |
+| **G1: an offline older confirm loses** (letter `s`) | (1) A03 offline: Child Results → Letter tracker, tap `s`. (2) At least 1 min later, iPhone online: tap `s`, wait for "All saved and synced", tap `s` again, wait. (3) A03 Wi-Fi on, Sync now, stay on the tracker | **A03:** `s` turns grey within that sync pass without leaving the screen. The count is one lower. The session-form tracker sheet, opened after the pass, also shows `s` grey. The export's `s` row has `confirmed: false`, `changedBy` = EA-B, `correctionId` = `serverCorrectionId` = EA-B's second correction, `changedAt` = `serverChangedAt` = the server's `changed_at`, and `syncStatus: synced`; `tableCounts.sync_outbox` is `0`. **iPhone:** `s` grey; its `s` row carries the same correction id, `synced`. **Server:** one `s` record held by EA-B's un-confirm; three receipts; A03's `effective_at` equals its tap time (earlier than both of EA-B's) |
+| **G1r: the same with roles swapped** (letter `t`) | The iPhone is the offline older phone (Airplane Mode, with Wi-Fi also switched off in Settings); the A03 confirms and un-confirms online | The same criteria, with the phones swapped. This runs the `superseded` write-back on iOS. The sheet does not re-read while open (Codex round 2, accepted risk A1), so, as in G1, it is checked by opening it after the pass |
 | **G2: an hour-fast clock and a lost reply** (letter `m`) | (1) A03: automatic time off, clock +1 h, online. Tap `m` and, within about 1 s, turn Wi-Fi off. (2) Server read: A03's receipt for `m` exists, with `effective_at` ≈ real arrival time (not +1 h), and the record is confirmed by EA-A. The A03 export shows `m` `pending`, and Sync status shows 1 waiting. That is a lost reply. **If** the receipt is missing or the A03 shows `m` synced, repeat with a fresh letter (`n`, `l`, `o`, `u`), at most five attempts. (3) iPhone: tap `m` (green), sync, tap `m` (grey), sync. (4) A03, clock still +1 h and within the hour: Wi-Fi on, Sync now | **A03:** `m` grey, with the export row `confirmed: false`, `changedBy` EA-B and the server tuple = EA-B's un-confirm, `synced`. **iPhone:** `m` grey. **Server:** the record is EA-B's un-confirm. A03's correction id has exactly one receipt, and its `effective_at` is unchanged since step 2. If five attempts give no lost reply, record that, and the harness's `fast-clock-lost-reply` case stands as the proof for that half (orchestrator call, 2026-10-20); the rest of G2 must still pass on device. Afterwards, turn automatic time back on |
 | **G3: screens** | Letter tracker panel and session-form tracker sheet on both phones, text size 1.0x and 1.3x | No clipping. The `n / 26` count matches the green tiles. Locked assessment tiles are unchanged |
 
@@ -1545,8 +1551,13 @@ task's files.
     - clearing unsynced keys;
     - the fresh reinstall after G0;
     - ask 4 deferred to Plan 3;
-    - both tracker surfaces' reload on a mastery sync pass, through
-      `useLetterMasterySyncRefresh` (uploads only; Plan 3's pull needs its own signal);
+    - the panel's background reload on a mastery sync pass, through
+      `useLetterMasterySyncRefresh` (uploads only; Plan 3's pull needs its own signal). The
+      session sheet loads only when it opens (Codex round 2);
+    - accepted risk A1, the stale open sheet. Revisit if EAs report a session sheet that
+      disagreed with the panel;
+    - accepted risk A2, the clock rollback followed by a delayed sheet save. Revisit if it shows
+      up in the field; the fix is a durable local tap sequence;
     - an older save keeps a newer still-owed correction, with the clamp to the phone's now and
       the strict comparison on `changed_at` (deviates from AR §10.2 "On the phone");
     - named conflict targets in `set_letter_mastery` (deviates from AR §10.2's
