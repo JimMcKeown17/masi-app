@@ -65,6 +65,9 @@ when the printed copy is missing. Picture pages come later, book by book.
 | J15 | In-app books: **text pages now, picture pages later** (per book, once its art is approved). |
 | J16 | About 6 suggested blends (the blending block is ~15 minutes). Approved as part of the Lesson-screen playback. |
 | J17 | Only native-speaker-approved words reach EAs in field builds; test builds may use unreviewed candidates. Approved as part of the word-bank playback. |
+| J18 | When an EA has no groups, or some children are in none, the picker offers **+ Make a group** (pick the children, done) and lists ungrouped children under "Not in a group yet" with **Put in a group**. Every lesson belongs to a group, and the old Record form retires. One-on-one tutoring is a later question (§8). |
+| J19 | Words on Masi's assessments may appear in blends and books. *umama* is too common to avoid, automaticity is part of what is measured, and children are assessed three times a year. The app must not encourage explicit teaching to the test. Assessment words rotate, so the word bank never depends on the assessment word list. |
+| J20 | Afrikaans classes are assessed on a copy of Zazi's Afrikaans letter sheet for now, and every Afrikaans gap in the app is fixed (track AF, §9). |
 
 ---
 
@@ -81,16 +84,18 @@ These are marked **(my call)** where they appear below.
 | C5 | 2-letter items are **syllables** (*ma*, *lo*) supplied per step by the content pack; 3-letter and longer items are words from the approved word bank. | The bank holds whole words; the books design already defines per-step blends. |
 | C6 | One book is suggested: the highest-step readable book that no present child read in their last 5 sessions, else the least recently read. | Rereading is good practice; variety still matters. |
 | C7 | One lesson in progress per EA at a time. It survives app close, force-quit and upgrade. | Masi sessions last ~55 minutes; today's form is lost on discard, process death or force-quit. Zazi's single active-session key let a second group overwrite an unfinished session (ZZ-BUG-20260922-001, `documentation/ROADMAP.md:487-490`), so a second start is refused, not overwritten. |
-| C8 | Classes whose grade is `ECD` get the same Lesson screen **without** the book row. | `CONTEXT.md`: ECD sessions have no pair-reading block. The class grade is the signal, because the database still holds one literacy programme row for R–3 and ECD. |
+| C8 | A lesson whose class (C18) has grade `ECD` gets the same Lesson screen **without** the book row. | `CONTEXT.md`: ECD sessions have no pair-reading block. The class grade is the signal, because the database still holds one literacy programme row for R–3 and ECD. |
 | C9 | When every letter is known, the letters row says "All letters known" and blends and books use everything unlocked. Sound steps (isiXhosa *th*, *ph* …) and the move to Level 8+ are out of scope for v1. | Few groups reach 26 letters during early testing; both need their own pedagogy decision. |
-| C10 | A language without a published pack still uses the Lesson screen: the EA picks letters from that language's alphabet, and the blends and book rows say no content is available yet. Until its real order is set, English keeps today's tracker order (`ENGLISH_PEDAGOGICAL_ORDER`, `a m s t │ n i │ …`: first four letters as step 1, then pairs) as an interim letters-only pack. Afrikaans gets no suggestions until its pack exists. | One code path for every language, as J10 requires. English EAs see no change in order until the real one lands. |
-| C11 | `session_reading_level` keeps being written, as the ladder label of the tier the blends were practised at: 2-letter → "2 Letter Blends", 3 → "3 Letter Blends", 4 → "4 Letter Blends", words → "Word Reading". | Session History and teaching-quality analytics read it today. Because the default tier is the lowest present child's, the "session pitched above a child" check (`teaching-quality-analytics.md`) now only fires when the EA chose "show higher". That is the intended behaviour. |
+| C10 | A language without a published pack still uses the Lesson screen; the blends and book rows say no content is available yet. Until their real orders are set, English and Afrikaans each get an **interim letters-only pack**: English keeps today's tracker order (`ENGLISH_PEDAGOGICAL_ORDER`, `a m s t │ n i │ …`), and Afrikaans takes Zazi's provisional `AFRIKAANS_PEDAGOGICAL_ORDER` (`a s m e │ k i │ …`, Zazi `origin/main` `src/constants/egraConstants.js:262`). In both, the first four letters are step 1, then pairs. If no pack loads at all, the EA picks letters from the language's alphabet (§4.2) and nothing is suggested. | One code path for every language, as J10 requires. English EAs see no change in order until the real one lands; Afrikaans EAs get letter advice from the first build instead of none. |
+| C11 | `session_reading_level` keeps being written, now **derived from the blends ticked**: the highest tier among them, each item counted by its own letter count (2 → "2 Letter Blends", 3 → "3 Letter Blends", 4 → "4 Letter Blends", 5+ → "Word Reading"), so top-up items count at their own tier. No blends ticked → `null`. The suggested tier and the tier on screen at save are stored separately in `lesson` (§6). | Session History and teaching-quality analytics read it today, and Session History already hides an empty value (`SessionHistoryScreen.js:141`). Deriving it means it can never name a tier nobody practised. Because the default tier is the lowest present child's, the "session pitched above a child" check (`teaching-quality-analytics.md`) now mostly fires when the EA chose "show higher". |
 | C13 | Only present children are saved as attendees, as today. A member marked absent is not written. | Absence can be derived from the session's group and its membership history. Writing `absent` rows would change every count that reads attendees today (history cards, receipt, hydration). |
-| C14 | A lesson dated in the past saves `plan: null` with reason `past_date`. | Zazi rev 4.1's rule: mastery on a past date cannot be rebuilt, so today's advice is not evidence of what was advised then. |
+| C14 | A plan belongs to the day it was made. The draft keeps its lesson date (the day it started) and the plan records `made_on`. At save, the plan is kept when the lesson date equals `made_on`, however late the save: a Monday lesson finished on Wednesday keeps Monday's date and plan. It becomes `plan: null` with reason `past_date` only when the dates differ, because the EA changed the date or is logging a past lesson. An unfrozen plan is recomputed only on its own day. | Zazi rev 4.1's rule: mastery on a past date cannot be rebuilt, so advice computed later is not evidence of what was advised then. Advice frozen on the day itself is evidence, and a late save must not throw it away. |
 | C15 | Masi reads the **same** catalogue file the books project produces for Zazi (`integrated-sequence-<lang>-v<N>.json`), with Masi's extra needs added as new fields that Zazi ignores. | One emitter, one checker, one set of printed books for both programmes. The vendored checker lints the shared shape unchanged. |
 | C16 | B2 (group on the session) covers only what a non-null `sessions.group_id` needs (§7.1). Collision-proof grouping versions and display numbers stay deferred, as `rls-sync-contract-map.md:180, 501-503` already plans. | This feature creates no new kind of group write; EAs can already make "Group N" today. Pulling regrouping work forward would put it on the critical path for no benefit here. |
 | C17 | "+ Record" keeps today's gates (active programme, then the clock-in sheet, `src/hooks/useSessionLaunchGuard.js:36-63`) and today's routing by job title (`SessionFormScreen.js:22`). The Lesson flow replaces `LiteracySessionForm` behind that route. | Moving routing to programme delivery mode is separate open work (`CONTEXT.md`); mixing it in widens the slice. |
 | C12 | Every build loads only **release** packs. **Preview** packs (which may contain unreviewed words) load only when an explicit developer setting is on, and a build check refuses that setting in pilot and production artifacts. | Enforces J17. The EAS channel cannot be used: the `pilot` profile ships store builds on the `preview` channel (`eas.json:34-48`). |
+| C18 | Each lesson has one **class**, fixed when its draft starts and stored in the draft: the group's `class_id` if set; else the one class all the group's current members share; else (members in different classes, rare for pairs) the EA picks the class once on the Lesson screen before suggestions show. The class gives the language (`home_language`), the ECD check (C8) and `sessions.class_id`. Who is present, and children added for the day, never change it; a child added from another class is taught, and their tracker marks saved, in the lesson's language. Groups this feature creates (J18) record the class when their children share one. | Today's form takes the class from whichever child was picked first (`LiteracySessionForm.js:308`), and "Group N" groups are created without a class (`GroupPickerBottomSheet.js:150`), so the language would otherwise depend on tap order. |
+| C19 | B2's server check accepts a session's group when the EA **holds or has held** an assignment to that group in the session's programme (any `group_ea_assignments` row, ended or not), not only an active one. | A lesson records something that already happened. Deleting a group ends its assignment and queues that end at sync rank 6, ahead of sessions (`groupsRepository.js:435-481`, `offlineSync.js:301-310`), so an active-only check would refuse a lesson saved offline before the group was deleted, or before Head Office ended the assignment. Session reads already use historical grants this way (`private.can_read_session`), and the one-row-per-group assignment id keeps the ended row as evidence. |
 
 ---
 
@@ -185,8 +190,8 @@ Rules:
   panel), the session letter grid, the Session complete receipt sort (its route params carry no
   language today, `sessionCompleteView.js:21-29`, so the language is added), and the engine.
   Mastery counts that only test membership (e.g. `dashboardStats.js`) do not need the order.
-- isiXhosa switches to the books' order (J1). English uses the interim English pack until its real
-  order is set (C10). Afrikaans gets its own order with its pack.
+- isiXhosa switches to the books' order (J1). English and Afrikaans use their interim packs until
+  their real orders are set (C10).
 - `normalizeLanguageKey` returns `afrikaans` for Afrikaans classes and `null` for unknown ones, never
   `english` by default.
 - **The tracker's alphabet and mastery language are separated from the EGRA letter sets.** Today
@@ -194,24 +199,28 @@ Rules:
   (`src/services/literacySessionPersistence.js:29`, the `!letterSet` return) depend on
   `LETTER_SETS`, which has only English and isiXhosa (`src/constants/egraConstants.js`). For
   Afrikaans that silently drops every EA confirmation on both read and write. After this change:
-  - EA confirmations are read and written for any language with a teaching order, keyed by a
-    language value that does not come from `LETTER_SETS`;
+  - each language has a small fixed entry, independent of any pack: its key, the `language` value
+    stored on `letter_mastery` rows (`isiXhosa`, `English`, `Afrikaans`; the server column is free
+    text with no check), and its 26-letter alphabet. The tracker, mastery reads and writes, and the
+    manual letter picker use this entry, so they work even when no pack loads. A pack (real or
+    interim) adds only the teaching order and the content;
+  - EA confirmations are read and written for every language in that registry;
   - assessment evidence is added only where an EGRA letter set exists for that language;
   - mastery counts (`dashboardStats.js` and the "n/26" displays) use the language's own alphabet.
 - **Existing mislabelled rows are not migrated.** Afrikaans confirmations written so far carry
   `'English'`. `masi-app-sqlite` has no field users and its practice data is wiped after the
   mastery re-key (ROADMAP §1), so they are dropped with that wipe rather than relabelled (relabelling
   could not tell them from genuine English evidence). The re-key slice states this.
-- Tests: an Afrikaans class saves and reloads tracker marks with and without its pack.
+- Tests: an Afrikaans class saves and reloads tracker marks with its interim pack, and with no pack
+  loaded at all (the registry alone).
 - `letter_mastery` rows do not depend on order, so changing the isiXhosa order needs no data
   migration. PRD §6.8 and `teaching-quality-analytics.md` are updated to name the pack as the single
   source.
 - EGRA assessment forms keep their own fixed item order, and assessment evidence for English and
   isiXhosa is unchanged. `normalizeLanguageKey` also chooses which assessment sheet a child gets
   (`AssessmentChildSelectScreen.js:107`, `ChildResultsScreen.js:46`, `dashboardStats.js:172`), and
-  `LiteracySessionForm.js:306` falls back to `'english'`. So A2 keeps Afrikaans assessment routing
-  exactly as it is today until open question Q3 settles which sheet Afrikaans classes use, and no
-  caller may index `LETTER_SETS[null]`.
+  `LiteracySessionForm.js:306` falls back to `'english'`. Afrikaans classes move to a copy of
+  Zazi's Afrikaans letter sheet (J20, track AF), and no caller may index `LETTER_SETS[null]`.
 
 ### 4.3 Which group is "Up next"
 
@@ -270,6 +279,9 @@ In v1 only single-letter sounds can be unlocked, so words containing a multi-let
      `blendingAdvice.js` uses), so the list changes day to day.
 - **"+ more"** opens every item in the pool for the chosen tier, ticked items first.
 - A tier with fewer than six items is topped up from the nearest lower tier (C4).
+- **Assessment words are ordinary words** (J19). The engine never reads the assessment word lists:
+  no filter, no boost, no label. Rotating an assessment's words never touches the word bank or the
+  packs.
 
 ### 4.7 Book
 
@@ -290,7 +302,7 @@ The engine returns exactly one reason, which the Lesson screen explains in plain
 | `first_session` | §4.4 | the step-1 letters not yet known (usually four) |
 | `ok` | normal | two letters |
 | `all_letters_known` | nothing left | "All letters known" |
-| `no_pack` | the language has no published pack | "Choose the letters you teach" (whole alphabet) |
+| `no_pack` | no pack loads for the language (all three have at least an interim pack, C10) | "Choose the letters you teach" (the language's alphabet, §4.2) |
 | `no_children` | everyone marked absent | nothing; Save is blocked |
 
 ---
@@ -313,14 +325,19 @@ job-title routing (C17).
   **Start lesson** button.
 - **Other groups**: one row per group with names, last seen and next letters. Tapping a row opens
   its Lesson screen.
-- **No groups, or children in no group**: pending open question Q1.
+- **No groups, or children in no group** (J18): a **+ Make a group** row (pick the children, done;
+  it uses today's group creation and records the class when the children share one, C18), and a
+  "Not in a group yet" list with **Put in a group** on each child. An EA with no groups sees only
+  these.
 - If a lesson is already in progress, "+ Record" goes straight back to it after the same gates (C7).
 
 ### 5.2 Lesson screen
 
 One scrolling screen, kept open for the whole session.
 
-- **Header**: children's names, grade, language, last seen.
+- **Header**: children's names, grade, language, last seen. The class and language come from C18;
+  when the group's children are in different classes, the header asks for the class once, before
+  suggestions show.
 - **Who's here**: one chip per child, all present by default; tap to mark absent. "+ Add a child"
   adds a child from another group for today only (an attendance difference, never a membership
   change).
@@ -332,8 +349,8 @@ One scrolling screen, kept open for the whole session.
 - **3 · Pair reading · 5 min**: the suggested book with a cover tile, a **Read** tick, **Open in app**
   and **Other book**. Hidden for ECD classes (C8).
 - **Footer**: "Wrap up →".
-- The plan is recomputed when attendance changes, until the EA ticks anything (C1). After that it is
-  fixed for this lesson.
+- The plan is recomputed when attendance changes, until the EA ticks anything (C1), and only on the
+  lesson's own date (C14). After that it is fixed for this lesson.
 - Every change is saved to the local lesson draft (§7.2).
 
 ### 5.3 Wrap up
@@ -343,7 +360,9 @@ One scrolling screen, kept open for the whole session.
 - Per present child: one chip per ticked letter (assessment-mastered letters show locked), a
   "No one new yet" button, the child's reading-level pill (opens the existing ladder sheet), and
   "7/26 ›" opening the full `LetterTrackerBottomSheet` in the language's teaching order.
-- **Date**: today by default; a past date can be chosen (the only way to log a past lesson, as today).
+- **Date**: the lesson's date: today for a new lesson, the day it started for a resumed one (shown
+  as "Started Mon 19 Oct"). A past date can be chosen (the only way to log a past lesson, as today);
+  changing the date drops the plan (C14).
 - Notes (optional).
 - **Save session**. Never blocked except when no child is present. If letters, blends and book are
   all empty, a one-step confirm asks "Save without letters, blends or a book?" (capture and flag;
@@ -379,7 +398,7 @@ Everything new goes inside `sessions.activities`, which the server passes throug
 {
   // existing keys, same meaning
   "letters_focused": ["k"],                         // may now be empty (closes #54)
-  "session_reading_level": "2 Letter Blends",       // the tier the blends were practised at (C11)
+  "session_reading_level": "2 Letter Blends",       // highest tier among the blends ticked; null if none (C11)
   "child_reading_levels": { "<child_id>": "3 Letter Blends" },
   "comments": "…",
 
@@ -389,8 +408,10 @@ Everything new goes inside `sessions.activities`, which the server passes throug
     "pack_id": "isixhosa-integrated-v1",
     "language": "isixhosa",
     "plan": {                                       // frozen when the plan is fixed (§5.2), never recomputed on retry;
-                                                    // null for a past-date lesson (C14), with "plan_reason": "past_date"
+                                                    // null when the lesson date differs from made_on (C14),
+                                                    // with "plan_reason": "past_date"
       "engine_version": 1,
+      "made_on": "2026-10-19",
       "reason": "ok",
       "history_complete": true,
       "present_child_ids": ["…","…"],
@@ -403,6 +424,7 @@ Everything new goes inside `sessions.activities`, which the server passes throug
       "suggested_book": "xh-int-v1-r03",
       "up_next_group_id": "…"                       // what the picker suggested, even if the EA chose another
     },
+    "blend_tier_shown": "2 Letter Blends",          // the tier on screen at save ("show higher" changes it)
     "blends_done": ["ku","mu"],                     // pack item texts
     "books_read": [ { "id": "xh-int-v1-r03", "how": "printed" } ],
     "tracker_check": "marked"                       // marked | none | null (skipped)
@@ -416,6 +438,7 @@ Everything new goes inside `sessions.activities`, which the server passes throug
 - Tracker marks and reading-level changes are written as today (`letter_mastery` rows and
   `children.reading_level`) in the same SQLite transaction as the session and its outbox row.
 - `sessions.group_id` carries the chosen group once track B2 lands (§7.1).
+- `sessions.class_id` is the lesson's class (C18), not the first child's class as today.
 
 ---
 
@@ -428,7 +451,7 @@ The session must carry the group (J3), and `group-session-workflow.md` forbids w
 screen:
 
 - the workflow spec's prerequisite 3: server authorization for a non-null `sessions.group_id`
-  (the EA must hold an active assignment to that group in that programme), replacing the two
+  (the EA holds or **has held** an assignment to that group in that programme, C19), replacing the two
   RESTRICTIVE pins in the same migration **while keeping their `state = 'completed'` guard**;
 - prerequisite 1 is largely built: `GRANT_SUBJECTS` already has `membershipMediatedChild` entries
   (`src/services/offlineSync.js:256-287`), so the ROADMAP tripwire is stale. It has **no `sessions`
@@ -447,7 +470,16 @@ screen:
   Test: a fresh phone whose EA never held the historical group keeps the session's group id;
 - `session_attendees.group_id`: the session's group for every attendee, including a child added
   from another group for the day (their own membership is unchanged, and the session's group says
-  which block they joined). The server's attendee policy gains the same group check;
+  which block they joined). The server's attendee policy gains the same historical group check.
+  Its existing child check (`current_user_can_write_for_child`, active access) is unchanged: a
+  child reachable only through a deleted group was already refused before this feature, and Core
+  Literacy children normally have a direct assignment;
+- **deleting a group never strands a saved lesson.** Test: save a lesson offline, delete its group,
+  reconnect; the session and attendees upload with the group id. Repeat with the family
+  half-uploaded (session sent, attendees pending) and with Head Office ending the assignment while
+  the phone is offline. If grouping work later lets a group change EA, the old holder's ended
+  assignment must survive (today there is one row per group, `groupEaAssignmentDomainId`), or this
+  check moves to a history table;
 - the column stays **nullable**: older builds keep sending none.
 
 Its own plan, following `rls-sync-contract-map.md`, with real-SQLite and disposable-Postgres RLS tests.
@@ -459,6 +491,8 @@ Its own plan, following `rls-sync-contract-map.md`, with real-SQLite and disposa
 - One draft per EA at a time (C7). Starting another group while one exists asks to finish or
   discard the first.
 - A draft is created on the first change, not when the screen opens.
+- **The draft keeps its lesson context**: class (C18), language, pack id and lesson date (the day it
+  started). Resuming on a later day changes none of them (C14).
 - **Tracker marks keep the time they were made.** A draft can be resumed days later, and under the
   D1 rule (ROADMAP §1, "the most recently *made* correction wins") the correction time decides
   conflicts. So each pending mark or unmark is stored in the draft with the time the EA tapped it,
@@ -488,11 +522,11 @@ Its own plan, following `rls-sync-contract-map.md`, with real-SQLite and disposa
 | Input | Source |
 | --- | --- |
 | Group list and members | `groups`, `child_group_memberships`, `group_ea_assignments` (already pulled) |
-| Language | the class's `home_language` via `normalizeLanguageKey` |
+| Class, language, grade | the lesson's class (C18): its `home_language` via `normalizeLanguageKey`, and its grade for C8 |
 | Letter mastery per child | `masteryState` union. **Complete only after track B1**, which must deliver both halves: EA confirmations (re-key, D1, download) **and** assessments with their items (`masteryState` reads assessments from local SQLite only, and no assessment pull exists yet; ROADMAP §1 lists it separately) |
 | Reading level per child | `children.reading_level` |
 | Each child's past lessons | `session_attendees` + `sessions.activities` (already pulled) |
-| How complete that history is | `sessionHistoryStatus` (the pull already tracks incomplete walks and failures) |
+| How complete that history is | the session-history pull state, read through the predicate below |
 | Content | the bundled pack |
 
 The engine is a **pure module**: it receives these as plain data and returns the plan. It never reads
@@ -504,8 +538,20 @@ seen", "first session", "last 3 sessions", "last 5 sessions") uses only that pro
 the current academic year, ordered by `session_date` then `created_at`, counted per child. A phone
 that kept older sessions ignores them, so a fresh phone and an old phone give the same advice.
 
-**Incomplete history.** When the history pull has not finished (fresh install, interrupted pull),
-"no lessons on record" may simply mean "not downloaded yet". Then:
+**Complete history** is checked per lesson, when the plan is computed. It is not the Sync screen's
+"Up to date" label, which ignores the year and the children covered
+(`src/utils/syncStatusPresenter.js:106-114`). History is complete only when the stored
+session-history state for the active programme:
+- has finished a walk with no failure since;
+- has the current academic year's `windowStart` (a walk from last year does not count; the pull
+  resets its state only when it next runs, `sessionHistoryPull.js:98`); and
+- covered every present child (each is in the walk's covered set, `rescanChildIds`).
+
+A child the walk cannot cover (the known gap below) keeps history incomplete for any lesson they
+attend. Tests: year rollover before the next pull; a child newly assigned between walks.
+
+**Incomplete history.** When history is not complete (fresh install, interrupted pull, new year,
+new child), "no lessons on record" may simply mean "not downloaded yet". Then:
 - `first_session` is never inferred from missing history (only from complete history);
 - Up next and recency still run on what the phone has, and the picker and Lesson screen show a small
   note: "Still downloading past lessons. Suggestions may repeat."
@@ -541,6 +587,7 @@ The workflow doc is updated in the same branch to say so.
 - Any server report on plan versus what was taught (the data is captured from day one).
 - A session timer (not needed: no clock in Masi's session).
 - Editing a saved session.
+- One-on-one tutoring as its own mode (J18). A group of one child already works with these rules.
 - Other programmes (Numeracy, 1000 Stories). The engine is literacy-specific; the group picker and
   draft are written so other programmes can reuse them later.
 
@@ -556,10 +603,10 @@ Three tracks run in parallel (J12). Implementation goes through Codex (`gpt-5.6-
 | **A1** Content pack contract | Vendored checker + vectors (as its README directs); pack loader and registry; Masi lint on top of the shared lint; fixture packs (an isiXhosa test pack made by a script from the books repo's candidates, the interim English letters-only pack, a small Afrikaans test fixture) | — | inert |
 | **A2** Letter order + language key | `getTeachingOrder`; isiXhosa switches to the books' order in the tracker, letter grid and receipt; Afrikaans stops falling back to English | A1 | visible: new isiXhosa order |
 | **A3** Engine | Pure `lessonPlan` module: up next, letters, unlocked set, blends, book, reasons; TDD vectors | A1 | inert |
-| **B1** Mastery inputs complete | ROADMAP §1: re-key, D1 (with the correction time the draft carries, §7.2), mastery download, cross-EA assessment read, **and the assessment + item download**. Its plan must also exclude or support installed builds that still mint the old mastery identity (`rls-sync-contract-map.md`, obsolete identities; the minimum-version revocation tooling exists). Fresh-device test: another EA's assessment alone supplies a child's mastered letters | — (own plan) | gate for field testing |
+| **B1** Mastery inputs complete | ROADMAP §1: re-key, D1 (with the correction time the draft carries, §7.2), mastery download, cross-EA assessment read, **and the assessment + item download**. Its plan must also state the cutover from builds that still mint the old mastery identity (`rls-sync-contract-map.md:779`). No tool can block an old app version (the access tooling suspends whole accounts, `scripts/ea-access.cjs`), so the default is: B1 lands before pilot provisioning; practice data is wiped (ROADMAP §1) and every test device is reinstalled fresh (ROADMAP §0); after the cutover the server refuses or safely absorbs an old-identity mastery write (B1 decides which), and B1 tests one. Fresh-device test: another EA's assessment alone supplies a child's mastered letters | — (own plan) | gate for field testing |
 | **B2** Group on the session | §7.1 | — (own plan) | gate for the Lesson screen release |
 | **C1** Lesson draft | §7.2 local table, resume, Home attention card | — | inert until C3 |
-| **C2–C3** Picker, Lesson screen, Wrap up, save path | §5.1–5.3, §6; replaces `LiteracySessionForm` behind today's route (C17) | A2, A3, C1, B2, Q1 | the feature |
+| **C2–C3** Picker, Lesson screen, Wrap up, save path | §5.1–5.3, §6; replaces `LiteracySessionForm` behind today's route (C17) | A2, A3, C1, B2 | the feature |
 | **C4** In-app reader + Other book | §5.4, §4.7 | A1 | with C3 |
 | **C5** History and receipt | §5.5 | C3 | with C3 |
 | **D** Content | Real packs for isiXhosa, then English and Afrikaans (books project) | books project | data swap, no code |
@@ -574,10 +621,15 @@ isiXhosa content released in the shared file**, not the engine.
 - **TDD** with the repo's `tdd` skill, red-green-refactor in vertical slices.
 - **Engine vectors** (JSON): first session; pair with one child absent; out-of-order mastery;
   all letters known; unlocked set per state; tier mapping and "show higher" for each ladder level;
-  top-up of a thin tier; book choice with recency; retired book; no pack; Afrikaans key.
+  top-up of a thin tier; book choice with recency; retired book; no pack; Afrikaans key; a
+  classless group, a mixed-class group and a child added from another class (C18); history complete
+  vs last year's window vs an uncovered child (§7.3); `session_reading_level` for no blends, top-up
+  items only, mixed tiers and "show higher" (C11); a Monday draft saved on Wednesday keeps its plan,
+  and a changed date drops it (C14).
 - **Checker vectors** from the books project run unchanged.
 - **Real SQLite** (`better-sqlite3`) for the draft table, the save transaction and force-quit
-  recovery; **disposable Postgres** RLS tests for `sessions.group_id` (B2).
+  recovery; **disposable Postgres** RLS tests for `sessions.group_id` (B2), including save offline → delete the
+  group → reconnect (§7.1).
 - **Screen tests** through the public screen interface: tick/untick, absent child recomputes the plan,
   plan frozen after first tick, confirm-on-empty save, resume after restart.
 - **Device gates**: Galaxy A03s (360dp) and an iPhone, at 1.0x and 1.3x text; low-end performance of
@@ -597,7 +649,8 @@ isiXhosa content released in the shared file**, not the engine.
 - `documentation/open-decisions-backlog.md`, `documentation/ROADMAP.md` (including the stale
   `GRANT_SUBJECTS` tripwire), `documentation/build-log.md`.
 - `documentation/rls-sync-contract-map.md` for B2.
-- `documentation/teaching-quality-analytics.md` (canonical order, new `lesson` keys).
+- `documentation/teaching-quality-analytics.md` (canonical order, new `lesson` keys; Check 2 skips
+  sessions whose `session_reading_level` is null, meaning no blending was recorded).
 - An ADR for "one teaching order per language, from the content pack" and for "advice from children,
   record with the group" (via `grill-with-docs`).
 
@@ -642,13 +695,6 @@ The app needs these in the pack before field testing:
 
 ---
 
-## 14. Open questions for Jim
+## 14. Open questions
 
-- **Q1. Groups the EA doesn't have yet.** About half of EAs set up their own class and children, and
-  onboarding creates no groups (`CONTEXT.md`); EAs can already make "Group N" in the app. What should
-  the picker do when an EA has no groups, or some children are in none?
-- **Q2. Masi's own word test.** Masi's isiXhosa word assessment includes *umama*, *ubisi*, *isonka*,
-  *intombi* and *ibhola* (`src/constants/egraConstants.js:57-71`). Drill them in blends, or keep them
-  out of the suggestions so the test stays a fair measure?
-- **Q3. Afrikaans letter assessment.** Afrikaans classes are assessed on the English letter sheet
-  today, and Masi has no Afrikaans sheet. Which sheet should they use?
+None open. Jim answered Q1–Q3 on 2026-10-20 (J18–J20).
