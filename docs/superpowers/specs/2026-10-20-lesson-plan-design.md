@@ -1,6 +1,8 @@
 # Lesson plan: suggested group, letters, blends and early reader
 
-Status: **draft for Jim's review. Not approved for build.**
+Status: **approved by Jim, 2026-10-20.** Plans: `docs/superpowers/plans/2026-10-20-lesson-plan-*.md`.
+Open, non-blocking: which paper letter sheets Masi's assessors hold (C20; and whether Masi's English
+and isiXhosa paper sheets match the app's v1 forms).
 
 - Written 2026-10-20 on branch `feat/lesson-plan`, from `origin/main` `97e088c` (Bold Red 1–7 merged).
 - Source conversation: Jim and Claude, 2026-10-19/20, with mockups (flow shape, entry point, book
