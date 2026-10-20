@@ -77,6 +77,17 @@ of §14 only. Mastery confirmations (§10.1–10.3) and the history pull (§11) 
 - UI: bottom sheets, not dialogs. Use Bold Red tokens and the shared components from
   `documentation/design-system.md`.
 
+## Checkpoints
+
+Each task ends green: its own tests, then the full jest suite and `npm run test:types`.
+- **Between Task 9 and Task 12 the app is not releasable.** The old capture screens still call
+  `saveAssessment`, whose per-row outbox rows the new dispatch no longer sends. No build is made
+  before Task 14.
+- **One reviewable branch.** Tasks 8–12 land on one branch and are reviewed as one cutover.
+  Within it:
+  - Task 9 updates the existing sync tests for the per-row assessment path;
+  - Task 11 deletes the old APIs together with their last callers.
+
 ## Review Focus
 
 1. **A class whose `home_language` is null or unknown** (e.g. "Afrikaans"). The EA gets the
@@ -429,8 +440,12 @@ any language other than `xh`.
    - Drop the policies `assessments_insert_active_assignment`,
      `assessments_update_active_assignment`, `assessments_delete_active_assignment` and
      `assessment_items_{insert,update,delete}_own_active_assessment`.
-   - `battery_runs`: `grant select … to authenticated`, plus a SELECT policy copying
-     `assessments_select_assigned_child_history`'s predicate.
+   - `battery_runs`:
+     - `alter table public.battery_runs enable row level security`;
+     - `revoke all on public.battery_runs from anon, authenticated`, then
+       `grant select … to authenticated`;
+     - a SELECT policy copying `assessments_select_assigned_child_history`'s predicate.
+   - **`private.child_has_delete_blocking_history`** also counts `battery_runs` rows.
 
 **Harness cases.** Copy the structure of `scripts/upload-contract-postgres-harness.cjs`: the
 `assertDisposableAdminTarget`, `runPsql`, `asActor` and `expectSqlState` helpers, and replaying
@@ -448,7 +463,10 @@ every migration. Every case from spec §15's `submit_assessment` and `save_batte
 - a run whose child differs → `42501`;
 - a Question after its run completed → accepted;
 - a duplicate run Question with a different id → `23505`;
-- direct INSERT, UPDATE and DELETE on both tables, as `authenticated` → `42501`;
+- direct INSERT, UPDATE and DELETE on both tables, and on `battery_runs`, as `authenticated` →
+  `42501`;
+- another EA with no relation to the child selects zero `battery_runs` rows. RLS must be on;
+- `delete_child_if_no_history` refuses a child that has only a zero-Question run;
 - `updated_at` equals the transaction's `now()` on insert, even when the payload carries an old
   time;
 - run insert, forward update, stale `in_progress` after `completed` → `unchanged`;
@@ -462,8 +480,10 @@ and exactly one parent and n items exist. The same case runs for `save_battery_r
 
 - [ ] **Step 1:** Write the harness with all cases.
 - [ ] **Step 2:** Controller runs
-  `HISTORY_RLS_ADMIN_DATABASE_URL=postgresql://postgres:postgres@127.0.0.1:55432/postgres HISTORY_RLS_DATABASE_NAME=masi_assessment_results HISTORY_RLS_DISPOSABLE_CONFIRM=I_UNDERSTAND_THIS_IS_DISPOSABLE PGTZ=UTC PATH=$HOME/.nvm/versions/node/v20.19.4/bin:$PATH npm run verify:assessment-results:postgres`.
-  Expected: FAIL (functions missing).
+  `HISTORY_RLS_ADMIN_DATABASE_URL=postgresql://postgres:postgres@127.0.0.1:55432/postgres HISTORY_RLS_DATABASE_NAME=masi_history_rls_assessment_results HISTORY_RLS_DISPOSABLE_CONFIRM=I_UNDERSTAND_THIS_IS_DISPOSABLE PGTZ=UTC PATH=$HOME/.nvm/versions/node/v20.19.4/bin:$PATH npm run verify:assessment-results:postgres`.
+  Expected: FAIL in an executed SQL assertion, because the functions are missing. A guard error
+  is not RED. The database name must keep the `masi_history_rls_` prefix the shared guard
+  requires; use the same name in CI.
 - [ ] **Step 3:** Write the migration.
 - [ ] **Step 4:** Controller re-runs the new harness, then **all five existing harnesses**
   (`verify:*:postgres`) against the same disposable server. Expected: every harness prints its
@@ -476,6 +496,9 @@ and exactly one parent and n items exist. The same case runs for `save_battery_r
 
 **Files:**
 - Modify: `src/db/migrations.js` (append version 15, `'assessment_results'`)
+- Modify: `src/db/repositories/referenceDataRepository.js` (programmes columns)
+- Modify: `src/db/repositories/childrenRepository.js` (`deleteIfNoHistory` also checks
+  `battery_runs`)
 - Test: `__tests__/migrations.assessmentResults.test.js` (`better-sqlite3`, following
   `__tests__/captureModeMigration.test.js`)
 
@@ -497,6 +520,10 @@ and exactly one parent and n items exist. The same case runs for `save_battery_r
    - `idx_battery_runs_user_status on battery_runs(user_id, status)`.
 5. **`programmes` columns:** `default_battery_code` and `default_battery_version`.
 
+Also add both columns to `REFERENCE_TABLES.programmes.columns` in
+`src/db/repositories/referenceDataRepository.js`. Its explicit allowlist would otherwise drop them
+on every reference pull.
+
 SQLite cannot add a column with a foreign key to an existing table in every form, so use
 `alter table … add column battery_run_id text references battery_runs(id)`. If expo-sqlite
 rejects that, rebuild `assessments` (the table is empty after step 1) and say so in the report.
@@ -507,7 +534,11 @@ rejects that, rebuild `assessments` (the table is empty after step 1) and say so
   - `PRAGMA foreign_key_check` is empty;
   - the partial unique index rejects a second `(run, question)` row;
   - `battery_runs.class_id` accepts an id with no `classes` row;
-  - `CURRENT_SCHEMA_VERSION === 15`.
+  - `deleteIfNoHistory` refuses a child with only an unsynced, zero-Question run, and the child,
+    run and outbox row remain;
+  - `CURRENT_SCHEMA_VERSION === 15`;
+  - `replaceFromServer` for `programmes`, with `default_battery_code: 'wela_plus_full'` and
+    `default_battery_version: '2024.1'`, reads both values back.
 - [ ] **Step 2:** Run the test. Expected: FAIL.
 - [ ] **Step 3:** Implement it.
 - [ ] **Step 4:** Run `npx jest __tests__/migrations` and the schema-guard tests (grep for
@@ -520,7 +551,11 @@ rejects that, rebuild `assessments` (the table is empty after step 1) and say so
 
 **Files:**
 - Modify: `src/db/repositories/assessmentsRepository.js`
-- Create: `src/db/repositories/batteryRunsRepository.js` (wire it wherever repositories are
+- Create: `src/db/repositories/batteryRunsRepository.js`
+- Create: `src/utils/assessmentRegistry.js`, holding `LETTER_EVIDENCE_CODES` only. Task 10 adds
+  the rest.
+- Create: `src/services/assessmentFamilyPayload.js`, holding `assertSubmitShape` only. Task 9
+  adds `toSubmitArgs`. (wire it wherever repositories are
   assembled; grep `createAssessmentsRepository(`)
 - Test: `__tests__/assessmentsRepository.questionResults.test.js` and
   `__tests__/batteryRunsRepository.test.js` (`better-sqlite3`)
@@ -532,14 +567,22 @@ rejects that, rebuild `assessments` (the table is empty after step 1) and say so
   - Resolves the programme (`resolveProgrammeId`; the hard gate is unchanged).
   - Writes the assessment with:
     - `assessment_type = question_code`;
-    - `score = derived.total_correct ?? derived.rubric_total ?? 0`;
+    - `score = derived.ea_rubric_total ?? derived.total_correct ?? 0`. Q11 emits `total_correct: 0`
+      and its real score in `ea_rubric_total` (`StoryWritingRubricQuestion/index.tsx:216-222`),
+      so the rubric total must come first;
     - `total_items = items.length`;
     - `derived` JSON;
     - `assessment_date` = local date;
     - `created_at`/`updated_at` = now.
   - Writes items exactly as emitted, with `metadata ?? {}` and ids from `assessmentItemDomainId`.
-  - Enqueues **one** outbox row: `enqueueDomainOutbox(txn, 'assessments', id, 'insert', { assessment, items })`,
-    where `assessment` and `items` are the server-allowlisted column objects.
+  - Enqueues **one** outbox row:
+    `enqueueDomainOutbox(txn, 'assessments', id, 'insert', { ...assessmentColumns, items })`.
+    - The payload stays **flat**: the parent's columns at the top level, plus an `items` array.
+    - This keeps existing code working unchanged. Reference-ID repair
+      (`referenceDataRepository.retargetOutboxPayloadReferences`, which rewrites
+      `payload.programme_id`) and `dependenciesForRecord` (which reads `payload.battery_run_id`)
+      both read top-level fields.
+    - The same holds for the run payload.
   - **Throws `ASSESSMENT_ALREADY_SAVED`** if the id exists, and
     **`QUESTION_ALREADY_DECIDED`** if `(batteryRunId, question_code)` exists.
   - `assessmentId` is required, because `result` carries no id. The screen creates it once per
@@ -551,7 +594,7 @@ rejects that, rebuild `assessments` (the table is empty after step 1) and say so
   results are those whose `stopped_reason` starts with `skipped_`.
 - **`getLetterResults(args)`** is `getQuestionResults({ ...args, questionCodes: LETTER_EVIDENCE_CODES })`,
   with `LETTER_EVIDENCE_CODES = ['letter_sounds']` exported from
-  `src/utils/assessmentRegistry.js` (created in Task 10).
+  `src/utils/assessmentRegistry.js` (created here).
 - **`latestLetterResult({ userId, childId, language })`** returns `Promise<QuestionResult|null>`:
   the most recent non-skipped letter result with at least one `metadata.reached !== false` item,
   ordered by `assessment_date desc, created_at desc`.
@@ -566,8 +609,8 @@ rejects that, rebuild `assessments` (the table is empty after step 1) and say so
   - Each write coalesces into the single outbox row `battery_runs:<id>:insert` until it is
     acknowledged. After that, it uses `battery_runs:<id>:update`. Both carry the full run header
     as payload.
-- **Delete:** `saveAssessment`, `buildSummary`, `SUMMARY_ITEM_KEY`, `hydrateAssessments`'
-  summary merge, and `countAssessments`. Their callers move in Tasks 10–12.
+- **Old APIs stay for now.** `saveAssessment`, `countAssessments` and the summary-row reads are
+  deleted in Task 11, together with their last callers and their tests.
 
 - [ ] **Step 1: Write the failing tests** (`better-sqlite3`, using the repository test helpers):
   - a real `LetterSoundsQuestion`-shaped result saves 1 assessment, 60 items and exactly one
@@ -581,6 +624,8 @@ rejects that, rebuild `assessments` (the table is empty after step 1) and say so
     `assertSubmitShape(payload)`. That is a JS mirror of the RPC's shape checks, exported from
     `src/services/assessmentFamilyPayload.js` (Task 9). It covers a partly scored Q11 (sparse
     positions) and a Listen-and-answer result (metadata defaulted);
+  - a partly scored Q11 with `ea_rubric_total: 12` stores `score === 12` in SQLite and in the
+    outbox payload;
   - `getLetterResults` returns a standalone result and a battery Q1 result, and excludes a
     `word_reading` result;
   - `latestLetterResult` skips a newer skipped Q1;
@@ -603,8 +648,12 @@ rejects that, rebuild `assessments` (the table is empty after step 1) and say so
   the style of `__tests__/rowVersionRefusal.test.js`)
 
 **Interfaces:**
-- **`assertSubmitShape({ assessment, items })`** throws `TypeError` on anything
-  `submit_assessment` would reject with `22023`.
+- **`toSubmitArgs(payload)`** returns `{ p_assessment, p_items }`. It splits the flat payload,
+  applies `SERVER_COLUMNS.assessments` and `SERVER_COLUMNS.assessment_items`, and drops
+  `updated_at`. **`assertSubmitShape(payload)`** throws `TypeError` on anything
+  `submit_assessment` would reject with `22023`. Both live in
+  `src/services/assessmentFamilyPayload.js`, which **Task 8 creates** with `assertSubmitShape`.
+  Task 9 adds `toSubmitArgs`.
 - **`runServerOperation`** gains branches before the generic upsert:
   - **`assessments` insert:**
     `supabaseClient.rpc('submit_assessment', { p_assessment, p_items })`. `'inserted'` and
@@ -617,6 +666,8 @@ rejects that, rebuild `assessments` (the table is empty after step 1) and say so
   - `PUSH_ORDER`: insert `'battery_runs'` before `'assessments'` and remove `'assessment_items'`.
   - `TABLE_DEPENDENCIES`: `battery_runs: ['children']`; `assessments: ['children', 'battery_runs']`.
     Remove `assessment_items`.
+  - `dependenciesForRecord`: for `assessments` with no `payload.battery_run_id`, delete
+    `battery_runs`, following the existing optional-parent pattern for `class_id`/`group_id`.
   - `PARENT_FK_COLUMNS`: `battery_runs: { children: 'child_id' }`;
     `assessments: { children: 'child_id', battery_runs: 'battery_run_id' }`. The class is not a
     local FK.
@@ -628,8 +679,10 @@ rejects that, rebuild `assessments` (the table is empty after step 1) and say so
   - `MA001`, `MA002` and `22023` are terminal.
   - `28000` is retriable.
   - Existing `42501`/`23503` evidence logic is unchanged.
-- **`buildSyncPayload`** passes the family payload through the column allowlist for parent and
-  items. It never sends `updated_at`; the server stamps it.
+- **`buildSyncPayload`** for `assessments` delegates to `toSubmitArgs`. It never sends
+  `updated_at`; the server stamps it.
+- **Reference repair.** In `referenceDataRepository.js`, add
+  `{ tableName: 'battery_runs', column: 'programme_id' }` to `programmes.foreignKeyRetargets`.
 
 - [ ] **Step 1: Write the failing tests:**
   - one family of 61 items results in one `rpc('submit_assessment')` call, with `p_items.length === 61`;
@@ -646,7 +699,13 @@ rejects that, rebuild `assessments` (the table is empty after step 1) and say so
   - **`unchanged`** is success;
   - **`MA002`** is terminal;
   - in `assessmentFamilyRpcError.test.js`, a PostgREST error body `{code:'MA001'}` reaches
-    `classifyError` as terminal.
+    `classifyError` as terminal;
+  - **reference repair:** a queued family and a queued run whose `programme_id` is replaced by
+    the canonical server id (`replaceFromServer` with a conflicting programme row) upload with
+    the new id;
+  - **optional run:** a failed (`failed` or `terminal`) battery run blocks only the families
+    whose `battery_run_id` is that run. A standalone family (`battery_run_id: null`) in the same
+    pass uploads.
 - [ ] **Step 2:** Run the tests. Expected: FAIL.
 - [ ] **Step 3:** Implement it.
 - [ ] **Step 4:** Run `npx jest __tests__/assessmentFamily* __tests__/offlineSync* __tests__/batch*`
@@ -660,10 +719,16 @@ rejects that, rebuild `assessments` (the table is empty after step 1) and say so
 
 **Files:**
 - Create: `src/utils/assessmentRegistry.js`
-- Modify: `src/utils/letterMastery.js`, `src/utils/masteryState.js`, `src/utils/dashboardStats.js`
-  (`getLetterMasteryRanking`), `src/components/assessment/LetterMasteryPanel.js`,
-  `src/components/session/LetterTrackerBottomSheet.js` (grep for its real path), and
-  `src/utils/literacySessionPersistence.js`
+- Modify:
+  - `src/utils/letterMastery.js`, `src/utils/masteryState.js`, and `src/utils/dashboardStats.js`
+    (`getLetterMasteryRanking`);
+  - `src/components/assessment/LetterMasteryPanel.js`;
+  - the session tracker: `LetterTrackerBottomSheet.js` (grep for its path) and
+    `LiteracySessionForm.js`. Today the form derives `'english'`/`'isixhosa'` at lines ~304–308
+    and passes it to the tracker and persistence; it moves to `languageCodeForHomeLanguage`;
+  - `src/services/literacySessionPersistence.js`. It resolves `LETTER_SETS[trackerLanguageKey]`
+    today, and moves to `PEDAGOGICAL_ORDERS[code]` with `LANGUAGE_LABELS[code]` for the stored
+    confirmation.
 - Test: `__tests__/assessmentRegistry.test.js` and `__tests__/letterMastery.storedItems.test.js`;
   update `__tests__/masteryState.test.js` and `__tests__/LetterMasteryPanel.test.js`
 
@@ -697,7 +762,10 @@ rejects that, rebuild `assessments` (the table is empty after step 1) and say so
     - a letter outside the order is ignored;
     - a result whose rows are reordered gives the same answer, because positions are not read;
   - `loadMasteryState` takes evidence from a battery Q1 result written by another user id, and
-    unions it with a confirmation stored under label `isiXhosa`.
+    unions it with a confirmation stored under label `isiXhosa`;
+  - **session flow** (extend `__tests__/LiteracySessionForm.submit.test.js`): an isiXhosa class
+    shows a stored letter result's mastered letters in the tracker, and submitting a new
+    confirmation persists `language: 'isiXhosa'` (the Plan 1 label).
 - [ ] **Step 2:** Run the tests. Expected: FAIL.
 - [ ] **Step 3:** Implement it, and move all three mastery readers to it.
 - [ ] **Step 4:** Run the mastery, panel and tracker tests plus the full suite. Expected: PASS.
