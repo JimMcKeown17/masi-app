@@ -34,8 +34,8 @@ Four pieces of work touch the same tables, so they are designed together.
    The 2026-10-14 spec planned them against a sync layer that has since been rebuilt.
 3. **One letter test.** Jim decided on 2026-10-19 that the standalone EGRA letter assessment and
    WelaPLUS Question 1 are the same test. Its letters must be data that is easy to replace and
-   reorder, and single letters in mixed case. It has a stop rule, which Jim set on 2026-10-20 to
-   Zazi's 10-in-a-row rule. The child reads a printed card, and a WelaPLUS Q1 result counts as a
+   reorder, and single letters in mixed case. It has a stop rule, which Jim set on 2026-10-20 to a
+   clean stop at 10 wrong in a row. The child reads a printed card, and a WelaPLUS Q1 result counts as a
    letter assessment.
 4. **New assessment types later.** The government isiZulu EGRA (letters, words, passage,
    comprehension) is the known next one. Adding it should be content plus, at most, one new
@@ -57,7 +57,7 @@ uploading must be invisible and must never lose or half-save a result.
 | WelaPLUS spec D1, D2, D3, D5, D6, D8, D9 | Kept as written. D4 (soft stop rules) is reversed for Question 1 only. D10 is delivered by this design. |
 | Jim, 2026-10-19 | The letter test decisions in §1 item 3. Any future assessment type must be addable. |
 | Jim, 2026-09-23 and 2026-10-20 | Practice data on `masi-app-sqlite` is wiped **before** rollout (section 13). |
-| Jim, 2026-10-20 | Step-by-step marking. The stop rule is "10 in a row wrong = stop", as the Zazi app does it (6.2). |
+| Jim, 2026-10-20 | Step-by-step marking. The stop rule is a clean stop at 10 wrong in a row: no warning "for this app, no need to offer the warning right now" (6.2). |
 
 ## 3. For Jim
 
@@ -66,8 +66,10 @@ uploading must be invisible and must never lose or half-save a result.
 **A. Marking: step-by-step.** The EA gives a tick or a cross for every letter, as in today's
 default mode. "The stop rule should work with the step-by-step approach. 10 in a row wrong =
 stop. The zazi app does that."
-- The stop rule follows Zazi's implementation, checked in `zazi-izandi-app`
-  (`src/utils/assessmentStopRule.js` and `sequentialAssessmentReducer.js`). See 6.2.
+- The stop rule takes its counting rule and queued-tap guard from Zazi's implementation, checked
+  in `zazi-izandi-app` (`src/utils/assessmentStopRule.js` and `sequentialAssessmentReducer.js`).
+- Jim then chose a **clean stop at 10** (2026-10-20). Zazi's warning at 5, its switch-off after 10
+  correct, and its "child was distracted — resume" override are not ported. See 6.2.
 - Step-by-step becomes the **only** mechanic for the letter and word tests. The "tap the correct
   letters" grid mode and the device capture-mode setting retire.
 - Zazi arms its rule only in step-by-step mode for the same reason: a tap-correct grid cannot tell
@@ -181,13 +183,12 @@ type LetterSoundsItemSet = ItemSetMeta & {      // item_set_id, question_code, q
 
 type ConsecutiveWrongStopRule = {
   kind: 'consecutive_wrong';
-  warn_at: number;              // 5: offer to stop
-  stop_at: number;              // 10: stop
-  disarm_after_correct: number; // 10: once the child has this many correct, the rule switches off
+  stop_at: number;              // 10: stop after this many wrong in a row
 };
 ```
 
-`kind` leaves room for other rules later. One example is EGRA's "whole first row wrong", which the
+`kind` leaves room for other rules later, and new fields can add a warning without changing the
+shape. One example is EGRA's "whole first row wrong", which the
 government isiZulu form uses (section 12). Only `consecutive_wrong` is built now.
 
 **Rules**
@@ -214,8 +215,7 @@ government isiZulu form uses (section 12). Only `consecutive_wrong` is built now
   references `letter_sounds` and that same version. A package test fails if the two ever differ,
   so "identical" is enforced, not remembered.
 - **Interim content (call 2).** Version `2026.1` holds the 2024 WelaPLUS Q1 lists as five rows of
-  twelve, lowercase, with `stop_rule: { kind: 'consecutive_wrong', warn_at: 5, stop_at: 10,
-  disarm_after_correct: 10 }`. The isiXhosa list
+  twelve, lowercase, with `stop_rule: { kind: 'consecutive_wrong', stop_at: 10 }`. The isiXhosa list
   is already identical to today's EGRA list. `contentStatus.ts` gets one entry per language:
   "Masi team to supply the mixed-case single-letter list and card layout." When the lists
   arrive, they become `2026.2`, a content-only change.
@@ -238,13 +238,14 @@ government isiZulu form uses (section 12). Only `consecutive_wrong` is built now
 | Grid | One visual row per item-set row. Long cards scroll vertically, and rows never re-wrap. |
 | Marking | **Step-by-step** (decision A). A cursor highlights the current letter, and the EA taps **Correct** or **Incorrect**. The cursor moves on, scrolling to the letter's row. **Back** clears the previous decision and counts a correction. This ports today's `SequentialAssessmentScreen` and Zazi's `sequentialAssessmentReducer` into the package as a pure reducer with its own tests. |
 | Timer | `durationSec` from the test definition (60 for both entry points). Reading time freezes at the deadline, at End, or at a stop (#88 behaviour), and pauses while a stop-rule prompt is open. |
-| Stop rule | Ported from Zazi (`assessmentStopRule.js`), with its values in item-set data (6.1). After each forward decision, count the run of consecutive Incorrect decisions back from the current letter. The count never reaches below the resume floor, defined in the last two bullets.<ul><li>**5 in a row:** a bottom sheet says *"⟨Child⟩ has missed 5 in a row. Would you like to keep going or stop the test here?"*, with **Keep going** (primary) and **Stop here**. It is shown once per run of wrong letters.</li><li>**10 in a row:** the test stops. A card says *"⟨Child⟩ has missed 10 in a row"*, with **Save result** (primary) and **Child was distracted — resume**.</li><li>**Switching off:** once the child has 10 correct in total, the rule switches off for the rest of the test.</li><li>**While a prompt is open,** Correct, Incorrect and Back are ignored. This is Zazi's queued-tap guard.</li><li>**Resume** sets the floor to the current letter, so the count starts again from there. Back cannot go below the floor.</li></ul> |
-| Stopped reason | Uses the package's existing 10 values, so there is no new database CHECK.<ul><li>`stop_rule` covers both Stop here and Save result.</li><li>`timer`, `ea_ended` and `completed` are as today.</li><li>`derived.stop_rule` records which stop it was (`warn_accepted` or `hard`), plus Zazi's telemetry: `armed`, `warnings_shown`, `warnings_declined`, `overrides` and `max_consecutive_wrong`.</li></ul> |
+| Stop rule | The values come from item-set data (6.1). After each forward decision, count the run of consecutive Incorrect decisions back from the current letter, across row ends. **When it reaches `stop_at` (10), the test stops**, and the reading time freezes. A card says *"⟨Child⟩ got 10 in a row wrong. The test has stopped."*, with **Save result** (primary) and **Undo last mark**.<ul><li>Undo exists only for a mis-tapped tenth Incorrect: it clears that decision and returns to the test. It is not a way to continue past the rule.</li><li>While the card is open, Correct, Incorrect and Back are ignored. This is Zazi's queued-tap guard, so a tap queued behind the tenth Incorrect cannot slip through.</li><li>There is no warning, no switch-off and no resume override (Jim, 2026-10-20).</li></ul> |
+| Stopped reason | Uses the package's existing 10 values, so there is no new database CHECK.<ul><li>A stop is `stop_rule`.</li><li>`timer`, `ea_ended` and `completed` are as today.</li><li>`derived.max_consecutive_wrong` is recorded for every result.</li></ul> |
 | Last attempted | It is the letter before the cursor. Step-by-step marking always knows it, so the last-attempted sheet is not needed for this test. Letters after it are not reached. |
 | Result | Each item is `{ position, item_key: letter, prompt: letter, is_correct, metadata: { row, reached } }`. There is one item per card position, including not-reached ones (`reached: false`, `is_correct: false`). `derived` keeps `total_correct`, `total_attempted`, `percent`, `last_attempted_position`, `was_timed`, `tracks_progress`, `capture_mode: 'sequential'` and `correction_count`. |
-| Validator | `contractTest/validateResult` gains one rule: a `stop_rule` result without a resume must end in at least `warn_at` consecutive wrong letters. |
+| Validator | `contractTest/validateResult` gains one rule: a `stop_rule` result must end in exactly `stop_at` consecutive wrong letters. |
 
-**Not ported from Zazi:** its device setting that turns the stop rule off (default on). The rule is
+**Not ported from Zazi:** the warning, switch-off and resume (above), and its device setting that
+turns the stop rule off (default on). The rule is
 part of the test definition, so every EA's results are comparable. Turning it off for a test is a
 content change: `stop_rule: null` in a new version.
 
@@ -958,15 +959,13 @@ Per `AGENTS.md`: Codex implements each task, and Claude reviews the diff and tes
 **Package** (jest)
 - Item-set validation over every bundled set.
 - The battery-and-standalone same-version test.
-- The stop-rule sheet: fire, Stop, and Keep going.
-- The stop-rule reducer, ported from Zazi's tests:
-  - a warning at 5 wrong in a row, shown once per run of wrong letters;
-  - a stop at 10, with Save result or resume; resume moves the floor, and Back is blocked below
-    it;
-  - switched off after 10 correct;
+- The stop-rule reducer:
+  - stops at exactly 10 wrong in a row, and not at 9;
+  - a correct answer resets the count;
   - a run of wrong letters that crosses a row end;
-  - taps ignored while a prompt is open;
-  - the timer paused while the warning is open.
+  - Undo on the stop card clears the tenth mark and returns to the test;
+  - taps ignored while the card is open;
+  - the reading time frozen at the tenth mark.
 - The validator rule for `stop_rule` results.
 - An unknown language renders the error state.
 - Every component's `question_code` comes from its item set.
@@ -1074,7 +1073,7 @@ at 360 dp and on iPhone.
   - "Assessment Question" example becomes "Letter Sounds";
   - Letter mastery evidence now includes WelaPLUS Q1, with case folding;
   - Capture mode: step-by-step is the only mechanic for the letter and word tests;
-  - add the **stop rule** (10 wrong in a row, warning at 5, off after 10 correct);
+  - add the **stop rule** (a clean stop at 10 wrong in a row);
   - add **Letter result** and **Item set**.
 - **New ADR-0009:** "Assessment results are written through one type-agnostic call, as complete
   families". It covers the exclusive write boundary, the single result shape, and selection by
