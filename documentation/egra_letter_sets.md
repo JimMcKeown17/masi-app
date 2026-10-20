@@ -7,20 +7,27 @@ not a duplicated list in this document or the old capture constants.
 A saved result retains its `item_set_id` and item prompts so later content changes cannot reinterpret it.
 There is no English fallback for an unknown language or a missing set.
 
-Current standalone **Letter Sounds** and **WelaPLUS Q1** share `letter_sounds@2026.1.en` and
-`letter_sounds@2026.1.xh`. Each interim set uses its language's 2024 WelaPLUS Q1 sequence of 60 lowercase letters, arranged
-as five rows of twelve, with a stop at ten consecutive wrong marks. The old English digraph card is
-not the current test. New card layout must come from item-set data, not a hard-coded column count.
+Current standalone **Letter Sounds** and **WelaPLUS Q1** share `letter_sounds@2026.2.en` and
+`letter_sounds@2026.2.xh`. Both use the same Zazi iZandi Grid A card: 60 mixed-case letters in six
+printed rows of ten, with a stop at ten consecutive wrong marks. One frozen rows constant supplies
+both languages, so the two cards cannot drift. The old English digraph card is not the current test.
+Card layout must come from item-set data, not a hard-coded column count.
+
+The interim `letter_sounds@2026.1.en` and `letter_sounds@2026.1.xh` sets remain bundled for
+historical reference and old practice results. Changing the current alias does not reinterpret a
+saved result: each result retains its item-set id and stored prompts.
 
 Standalone **Word Reading** uses `word_reading@2026.1.en` / `word_reading@2026.1.xh`, with
 `row_lengths` carried by the set. Neither standalone word set configures a stop rule. These lists
 remain placeholders; they are not the WelaPLUS Q6 sets.
 
 See [contentStatus.ts](../src/assessment-questions/itemsets/contentStatus.ts) for the maintained
-content-status entries. Masi still needs to supply mixed-case single-letter cards (rows of ten or
-fewer and a font that distinguishes I/l) and real standalone word lists. The file also tracks
-pending WelaPLUS pictures, story-writing rubric anchors and isiXhosa language review. Do not treat
-passing code tests as pedagogy approval. Word score bands remain unset; see
+content-status entries. Grid A is supplied; the app still needs a typeface that makes capital I and
+lowercase l distinguishable (the printed card uses a serifed capital I), and a designer will
+recreate the printed card from the bundled rows. Masi still needs real standalone word lists. The
+file also tracks pending WelaPLUS pictures, story-writing rubric anchors and isiXhosa language
+review. Do not treat passing code tests as typography, print or pedagogy approval. Word score bands
+remain unset; see
 [the score-band configuration](./assessment-score-bands-config.md).
 
 ## Pedagogical letter orders (26 unique letters)

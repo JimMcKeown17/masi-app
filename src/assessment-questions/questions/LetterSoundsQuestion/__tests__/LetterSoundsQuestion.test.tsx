@@ -2,13 +2,13 @@ import React from 'react';
 import { ScrollView, StyleSheet } from 'react-native';
 import { render, fireEvent, act, within } from '@testing-library/react-native';
 import { LetterSoundsQuestion } from '..';
-import { LETTER_SOUNDS_2026_1_EN } from '../../../itemsets/letter_sounds@2026.1.en';
+import { LETTER_SOUNDS_2026_2_EN } from '../../../itemsets/letter_sounds@2026.2.en';
 import { FIXTURE_LETTER_SOUNDS_EN } from '../../../testFixtures';
 import { validateResult } from '../../../contractTest/validateResult';
 import { tokens } from '../../../theme/tokens';
 import type { QuestionProps } from '../../../types/QuestionProps';
 
-const SET = LETTER_SOUNDS_2026_1_EN;
+const SET = LETTER_SOUNDS_2026_2_EN;
 const STOP_TITLE = 'The child got 10 in a row wrong. The test has stopped.';
 
 beforeEach(() => {
@@ -109,15 +109,17 @@ test('ten Incorrect decisions open one bottom stop card and Save freezes the ten
   expect(onComplete).toHaveBeenCalledTimes(1);
   expect(onItemMarked).toHaveBeenCalledTimes(10);
   const result = onComplete.mock.calls[0][0];
-  expect(result).toMatchObject({ question_code: 'letter_sounds', question_version: '2026.1',
+  expect(result).toMatchObject({ question_code: 'letter_sounds', question_version: '2026.2',
     item_set_id: SET.item_set_id, stopped_reason: 'stop_rule', duration_ms: 40000,
     derived: { total_correct: 0, total_attempted: 10, percent: 0, last_attempted_position: 9,
       was_timed: true, tracks_progress: true, capture_mode: 'sequential', correction_count: 0, max_consecutive_wrong: 10 } });
   expect(result.items).toHaveLength(60);
   expect(result.items.slice(0, 10).every((item: any) => item.metadata.reached && !item.is_correct)).toBe(true);
   expect(result.items.slice(10).every((item: any) => item.metadata.reached === false && item.is_correct === false)).toBe(true);
+  const positioned = SET.rows.flatMap((row, rowIndex) => row.map((prompt) => ({ prompt, rowIndex })));
   [0, 11, 12, 59].forEach((position) => expect(result.items[position]).toMatchObject({
-    position, item_key: SET.rows.flat()[position], prompt: SET.rows.flat()[position], metadata: { row: Math.floor(position / 12) },
+    position, item_key: String(position), prompt: positioned[position].prompt,
+    metadata: { row: positioned[position].rowIndex },
   }));
   expect(validateResult(result, { stopAt: 10 })).toEqual({ valid: true, errors: [] });
 });
@@ -212,7 +214,7 @@ test('Skip defaults to allowed; cancel retains decisions and a chosen reason emi
   fireEvent.press(r.getByText('Skip question'));
   fireEvent.press(r.getByText('Cancel'));
   expect(onComplete).not.toHaveBeenCalled();
-  expect(r.getByLabelText('a, correct')).toBeTruthy();
+  expect(r.getByLabelText('l, correct')).toBeTruthy();
   fireEvent.press(r.getByText('Skip question'));
   const tired = r.getByText('Child tired');
   act(() => { fireEvent.press(tired); fireEvent.press(tired); });
@@ -242,9 +244,9 @@ test('Correct and Incorrect notify exactly once per forward decision, including 
   fireEvent.press(r.getByRole('button', { name: 'Back' }));
   decide(r, true);
   expect(onItemMarked.mock.calls.map(([item]) => item)).toEqual([
-    { position: 0, item_key: 'a', prompt: 'a', is_correct: true, metadata: { row: 0, reached: true } },
-    { position: 1, item_key: 'n', prompt: 'n', is_correct: false, metadata: { row: 0, reached: true } },
-    { position: 1, item_key: 'n', prompt: 'n', is_correct: true, metadata: { row: 0, reached: true } },
+    { position: 0, item_key: '0', prompt: 'l', is_correct: true, metadata: { row: 0, reached: true } },
+    { position: 1, item_key: '1', prompt: 'a', is_correct: false, metadata: { row: 0, reached: true } },
+    { position: 1, item_key: '1', prompt: 'a', is_correct: true, metadata: { row: 0, reached: true } },
   ]);
 });
 
@@ -286,7 +288,7 @@ test('Cancel on End retains decisions and the original deadline, including time 
   fireEvent.press(r.getByTestId('letter-end'));
   act(() => jest.advanceTimersByTime(10000));
   fireEvent.press(r.getByText('Cancel'));
-  expect(r.getByLabelText('a, correct')).toBeTruthy();
+  expect(r.getByLabelText('l, correct')).toBeTruthy();
   act(() => jest.advanceTimersByTime(30000));
   expect(onComplete).toHaveBeenCalledTimes(1);
   expect(onComplete.mock.calls[0][0]).toMatchObject({ duration_ms: 60000, stopped_reason: 'timer' });
@@ -358,7 +360,7 @@ test('the current row scrolls into view when the cursor moves forward or Back', 
   const { r } = startQ();
   fireEvent(r.getByTestId('letter-row-0'), 'layout', { nativeEvent: { layout: { y: 0 } } });
   fireEvent(r.getByTestId('letter-row-1'), 'layout', { nativeEvent: { layout: { y: 80 } } });
-  decide(r, true, 12);
+  decide(r, true, 10);
   expect(scrollTo).toHaveBeenLastCalledWith({ y: 80, animated: true });
   fireEvent.press(r.getByRole('button', { name: 'Back' }));
   expect(scrollTo).toHaveBeenLastCalledWith({ y: 0, animated: true });

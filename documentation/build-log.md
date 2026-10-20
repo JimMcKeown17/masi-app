@@ -1054,8 +1054,15 @@ gate). The dry run listed only this file against `segygjzpujphwvrubusm`. Verifie
   than CORRECT. A five-word row flows as three plus two. The tracker shows `Last assessed` as an
   ISO date.
 
-**Still open before merge:** the iPhone checks (letter test and mastery on iOS build 15) and a
-comparison of the letter grid against the printed 2024 card.
+**Closed before merge (Jim, 2026-10-20):**
+- **iPhone (iOS build 15):** Jim ran a letter test; the letter tracker updated correctly.
+- **Unexplained server rows:** the Kunaal and Alunamida tests at 15:12 and 15:13 were Jim's iPhone.
+- **Printed card:** the comparison found the 2026.1 list was wrong. The test must mix upper and
+  lower case. The card is Zazi iZandi Grid A, which shipped as `letter_sounds@2026.2` (next
+  section). A professional designer will recreate the printed card, so only the letters must match.
+- **Design:** Jim judged the test screen functional but not clean enough. A follow-up redesign
+  will use the Zazi layout in Masi colours: 20 letters per page, rounded tiles coloured by mark,
+  and a timer bar. It must also use a typeface where capital I and lowercase l differ.
 
 ---
 
@@ -1972,3 +1979,30 @@ Task 10 branch review and Task 11 were not started. Changes remain uncommitted f
 
 Existing React/Paper and intentional failure-path diagnostics remain non-failing. No timeout,
 package, auth/data/sync/backend or Login production-code changes; no Git write or gh command.
+
+### 2026-10-20 — Letter Sounds Grid A content version 2026.2
+
+Jim supplied the printed Zazi iZandi Grid A letter-sound card: one mixed-case six-by-ten card for
+English and isiXhosa. `letter_sounds@2026.2.en` and `.xh` now share one frozen rows constant;
+`2026.1` remains bundled for historical reference. The current registry, Letter Sounds fallback
+and WelaPLUS Q1 all select `2026.2`.
+
+The mixed-case safety pass found that persisted assessment-item UUIDs were already derived from
+the item position, so `E`, `e` and repeated `E` prompts could not collide at the payload boundary.
+The public Question result still used the prompt as `item_key`, however, leaving repeated keys.
+That root defect was fixed by emitting a positional string key and keeping the printed letter in
+`prompt`; mastery remains prompt-based and case-folded.
+
+| Gate | Command | Result |
+|---|---|---|
+| Content RED | `PATH=$HOME/.nvm/versions/node/v20.19.4/bin:$PATH npx jest src/assessment-questions/__tests__/letterTestContent.test.ts --runInBand` | RED as required: 1 suite failed; 6 failed / 11 passed. Current sets were five-by-twelve `2026.1`, EN/XH rows differed, and `2026.2` exports did not exist |
+| Content GREEN | Same command | PASS: 1 suite / 17 tests |
+| Mixed-case identity RED | `PATH=$HOME/.nvm/versions/node/v20.19.4/bin:$PATH npx jest __tests__/assessmentsRepository.questionResults.test.js --runInBand -t "full mixed-case Grid A"` | RED as required: a full 60-mark Grid A run produced only 50 unique result keys |
+| Mixed-case identity GREEN | Same command | PASS: 1 selected test; the capture result had 60 unique positional keys, the real SQLite family had 60 unique case-folded UUIDs, and `assertSubmitShape` accepted the outbox payload |
+| Focused requested gate | `PATH=$HOME/.nvm/versions/node/v20.19.4/bin:$PATH npx jest src/assessment-questions src/utils src/services src/screens/assessments 2>&1 \| tail -30` | PASS: 43 suites / 477 tests |
+| Full Jest | `PATH=$HOME/.nvm/versions/node/v20.19.4/bin:$PATH npx jest 2>&1 \| tail -15` | PASS: 347 suites / 4,202 tests |
+| TypeScript | `PATH=$HOME/.nvm/versions/node/v20.19.4/bin:$PATH npm run -s test:types` | PASS: exit 0, no output |
+
+Local Jest, real test-SQLite and TypeScript evidence only. No device, visual/typeface, printed-card,
+Supabase/PostgreSQL, hosted, release or field verification was run. The capital-I/l typeface and
+designer recreation of the printed card remain explicitly pending in `contentStatus.ts`.

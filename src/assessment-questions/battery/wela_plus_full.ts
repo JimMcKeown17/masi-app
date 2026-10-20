@@ -5,7 +5,7 @@ const MARK = 'If the child gets an item correct, tap it (it turns green). If the
 const both = (text: string) => ({ en: text, xh: text });
 
 const Q: BatteryQuestion[] = [
-  { question_code: 'letter_sounds', question_version: '2026.1', durationSec: 60,
+  { question_code: 'letter_sounds', question_version: '2026.2', durationSec: 60,
     materials: { item: 'reading_card', side: 'A' },
     instructions: both('Hand the child Reading Card side A. Point to each letter and ask the child for its sound. Mark each letter Correct or Incorrect. The test stops by itself after 10 wrong in a row. Otherwise STOP at 1 minute.') },
   { question_code: 'wela_plus_listen_and_answer_story', question_version: V, materials: null,

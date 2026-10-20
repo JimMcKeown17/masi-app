@@ -5,6 +5,14 @@ import type { LetterSoundsItemSet, StopRule } from '../index';
 
 const LANGUAGES = ['en', 'xh'] as const;
 const STOP_RULE: StopRule = { kind: 'consecutive_wrong', stop_at: 10 };
+const GRID_A_ROWS = [
+  'l a m E p n L s o e',
+  'Y i K N d H f U b v',
+  'F y C I T k D Z f d',
+  't z O J P r c W p o',
+  'w A E x Q I g O U z',
+  'X r V B j h q u R G',
+];
 const WORDS = {
   en: [
     'the', 'and', 'is', 'it', 'to', 'in', 'he', 'was', 'on', 'at',
@@ -22,7 +30,7 @@ const WORDS = {
   ],
 };
 
-describe.each(LANGUAGES)('letter_sounds interim content (%s)', (language) => {
+describe.each(LANGUAGES)('letter_sounds Grid A content (%s)', (language) => {
   test('every item is a single Unicode letter', () => {
     const itemSet: LetterSoundsItemSet = CURRENT_ITEM_SETS.letter_sounds[language];
     for (const letter of itemSet.rows.flat()) {
@@ -30,19 +38,19 @@ describe.each(LANGUAGES)('letter_sounds interim content (%s)', (language) => {
     }
   });
 
-  test('has five non-empty rows of twelve letters', () => {
+  test('has the six printed rows of ten letters', () => {
     const { rows } = CURRENT_ITEM_SETS.letter_sounds[language];
-    expect(rows).toHaveLength(5);
+    expect(rows).toHaveLength(6);
     for (const row of rows) {
-      expect(row.length).toBeGreaterThan(0);
-      expect(row).toHaveLength(12);
+      expect(row).toHaveLength(10);
     }
+    expect(rows.map((row) => row.join(' '))).toEqual(GRID_A_ROWS);
   });
 
   test('the item-set id matches its code, version, and language', () => {
     const itemSet = CURRENT_ITEM_SETS.letter_sounds[language];
     expect(itemSet.question_code).toBe('letter_sounds');
-    expect(itemSet.question_version).toBe('2026.1');
+    expect(itemSet.question_version).toBe('2026.2');
     expect(itemSet.item_set_id).toBe(
       `${itemSet.question_code}@${itemSet.question_version}.${itemSet.language}`,
     );
@@ -69,23 +77,11 @@ describe.each(LANGUAGES)('letter_sounds interim content (%s)', (language) => {
   });
 });
 
-test('English interim content preserves the complete 2024 letter list', () => {
-  expect(CURRENT_ITEM_SETS.letter_sounds.en.rows.flat().join(' ')).toBe(
-    'a n i t m s p e b c i u f l d h o k g f r u f s e s i a y u w c z m o f n p q j t v x y a n t n k b m s p e b l d g a d',
-  );
-});
-
-test('isiXhosa interim content preserves the complete 2024 letter list', () => {
-  const letters2024 = [
-    'l', 'a', 'm', 'e', 's', 'n', 'l', 's', 'm', 'e', 'y', 'i',
-    'k', 'n', 'd', 'h', 'f', 'u', 'h', 'v', 'f', 'y', 'c', 'i',
-    't', 'k', 'd', 'z', 'f', 'd', 't', 'z', 'o', 'j', 'p', 'r',
-    'c', 'w', 'p', 'o', 'w', 'a', 'e', 'x', 'q', 'l', 'g', 'o',
-    'u', 'z', 'x', 'r', 'v', 'b', 'j', 'b', 'q', 'u', 'r', 'g',
-  ];
-  expect(CURRENT_ITEM_SETS.letter_sounds.xh.rows.flat().join('')).toBe(
-    letters2024.join(''),
-  );
+test('English and isiXhosa use the same Grid A rows and cover all 26 letters case-insensitively', () => {
+  const { en, xh } = CURRENT_ITEM_SETS.letter_sounds;
+  expect(en.rows).toBe(xh.rows);
+  expect(en.rows).toEqual(xh.rows);
+  expect(new Set(en.rows.flat().map((letter) => letter.toLowerCase())).size).toBe(26);
 });
 
 test.each(LANGUAGES)('word_reading (%s) preserves all fifty placeholder words in order', (language) => {
@@ -104,13 +100,15 @@ test.each(LANGUAGES)('word_reading (%s) preserves all fifty placeholder words in
   expect(itemSet).not.toHaveProperty('stop_rule');
 });
 
-test('the package exports the current registry and all four versioned sets', () => {
+test('the package exports the current registry and old and new versioned sets', () => {
   expect(Package.CURRENT_ITEM_SETS).toBe(CURRENT_ITEM_SETS);
   expect(Object.keys(CURRENT_ITEM_SETS)).toEqual(['letter_sounds', 'word_reading']);
   expect(Object.keys(CURRENT_ITEM_SETS.letter_sounds)).toEqual(['en', 'xh']);
   expect(Object.keys(CURRENT_ITEM_SETS.word_reading)).toEqual(['en', 'xh']);
-  expect(Package.LETTER_SOUNDS_2026_1_EN).toBe(CURRENT_ITEM_SETS.letter_sounds.en);
-  expect(Package.LETTER_SOUNDS_2026_1_XH).toBe(CURRENT_ITEM_SETS.letter_sounds.xh);
+  expect(Package.LETTER_SOUNDS_2026_2_EN).toBe(CURRENT_ITEM_SETS.letter_sounds.en);
+  expect(Package.LETTER_SOUNDS_2026_2_XH).toBe(CURRENT_ITEM_SETS.letter_sounds.xh);
+  expect(Package.LETTER_SOUNDS_2026_1_EN.question_version).toBe('2026.1');
+  expect(Package.LETTER_SOUNDS_2026_1_XH.question_version).toBe('2026.1');
   expect(Package.WORD_READING_2026_1_EN).toBe(CURRENT_ITEM_SETS.word_reading.en);
   expect(Package.WORD_READING_2026_1_XH).toBe(CURRENT_ITEM_SETS.word_reading.xh);
 });

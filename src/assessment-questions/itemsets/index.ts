@@ -2,6 +2,8 @@ export { WELA_PLUS_FIRST_SOUND_EN } from './wela_plus_first_sound.en';
 export { WELA_PLUS_FIRST_SOUND_XH } from './wela_plus_first_sound.xh';
 export { LETTER_SOUNDS_2026_1_EN } from './letter_sounds@2026.1.en';
 export { LETTER_SOUNDS_2026_1_XH } from './letter_sounds@2026.1.xh';
+export { LETTER_SOUNDS_2026_2_EN } from './letter_sounds@2026.2.en';
+export { LETTER_SOUNDS_2026_2_XH } from './letter_sounds@2026.2.xh';
 export { WORD_READING_2026_1_EN } from './word_reading@2026.1.en';
 export { WORD_READING_2026_1_XH } from './word_reading@2026.1.xh';
 export { CURRENT_ITEM_SETS } from './current';

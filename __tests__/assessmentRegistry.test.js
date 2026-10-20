@@ -40,7 +40,7 @@ describe('assessment language and standalone test registry', () => {
       for (const language of ['en', 'xh']) {
         expect(CURRENT_ITEM_SETS[test.code][language]).toMatchObject({
           question_code: test.code, language,
-          item_set_id: `${test.code}@2026.1.${language}`,
+          item_set_id: `${test.code}@${CURRENT_ITEM_SETS[test.code][language].question_version}.${language}`,
         });
       }
       expect(CURRENT_ITEM_SETS[test.code].zu).toBeUndefined();

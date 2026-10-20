@@ -786,7 +786,7 @@ EA's 1–4). Release 1 scope and decisions:
   WelaPLUS release plans, not the Assessment Results plans. See the
   [Assessment Results plan](../docs/superpowers/plans/2026-10-20-assessment-results-plan-1.md) and
   [verification log](./build-log.md). WelaPLUS Plan 1 (Question package: 2024.1 EN/XH content,
-  battery/evaluator and component contract) is complete; Q1 is now `letter_sounds@2026.1`.
+  battery/evaluator and component contract) is complete; Q1 is now `letter_sounds@2026.2`.
 - [ ] Build `battery_run_artifacts`, the local photo queue and Storage bucket/RLS, including their
   payload declarations and upload ordering. None is supplied by the completed family/run-header RPCs.
 - [ ] Build host integration: Run create/resume/finalize/results, Question sequencing, skip reasons,

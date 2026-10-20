@@ -11,6 +11,7 @@ import { bindTestActor } from '../test-support/actorTestUtils';
 import { runContractTest } from '../src/assessment-questions/contractTest/runContractTest';
 import * as fixtures from '../src/assessment-questions/testFixtures';
 import { LetterSoundsQuestion } from '../src/assessment-questions/questions/LetterSoundsQuestion';
+import { CURRENT_ITEM_SETS } from '../src/assessment-questions/itemsets/current';
 import { ReadWordsQuestion } from '../src/assessment-questions/questions/ReadWordsQuestion';
 import { ReadSentencesQuestion } from '../src/assessment-questions/questions/ReadSentencesQuestion';
 import { ReadPassageQuestion } from '../src/assessment-questions/questions/ReadPassageQuestion';
@@ -144,13 +145,15 @@ describe('question result persistence through real SQLite', () => {
     }
   });
 
-  test('a real 60-item letter result saves one pending family and one flat outbox payload', async () => {
-    const itemSet = { ...fixtures.FIXTURE_LETTER_SOUNDS_EN,
-      rows: Array.from({ length: 5 }, () => fixtures.FIXTURE_LETTER_SOUNDS_EN.rows[0]) };
+  test('a full mixed-case Grid A run keeps every result key and persisted id unique', async () => {
+    const itemSet = CURRENT_ITEM_SETS.letter_sounds.en;
     const result = await emitResult(LetterSoundsQuestion, itemSet, r => {
-      press(r, 'Start', 'Correct');
-      endSequential(r);
+      press(r, 'Start');
+      for (let position = 0; position < 60; position += 1) press(r, 'Correct');
     });
+    expect(result).toMatchObject({ question_version: '2026.2', stopped_reason: 'completed',
+      derived: { total_correct: 60, total_attempted: 60, last_attempted_position: 59 } });
+    expect(new Set(result.items.map(item => item.item_key)).size).toBe(60);
     const assessmentId = uuid();
     expect(await save({ assessmentId, result, captureMode: 'sequential' })).toEqual({ id: assessmentId });
     const [parents, items] = await snapshot();
@@ -166,6 +169,8 @@ describe('question result persistence through real SQLite', () => {
     expect(rows).toHaveLength(1);
     expect(rows[0]).toMatchObject({ id: `assessments:${assessmentId}:insert`, table_name: 'assessments', owner_user_id: userId });
     expect(rows[0].payload.items).toHaveLength(60);
+    expect(new Set(rows[0].payload.items.map(item => item.item_key)).size).toBe(60);
+    expect(new Set(rows[0].payload.items.map(item => item.id.toLowerCase())).size).toBe(60);
     expect(rows[0].payload).not.toHaveProperty('items_tested');
     expect(rows[0].payload.items.every(i => typeof i.is_correct === 'boolean')).toBe(true);
     expect(() => assertShape(rows[0].payload)).not.toThrow();

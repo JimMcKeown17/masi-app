@@ -1,4 +1,5 @@
 import { computeAssessmentMastery } from '../src/utils/letterMastery';
+import { PEDAGOGICAL_ORDERS } from '../src/utils/assessmentRegistry';
 
 const item = (prompt, is_correct, reached = true) => ({ prompt, is_correct, metadata: { reached } });
 
@@ -6,6 +7,15 @@ describe('mastery from the recorded prompts and reached occurrences', () => {
   test('A correct and a correct master lowercase a, case-folding the order too', () => {
     expect(computeAssessmentMastery({ items: [item('A', true), item('a', true)] }, ['A', 'B']))
       .toEqual(new Set(['a']));
+  });
+
+  test('mixed-case E and e contribute to one lowercase letter on the 26-letter tracker', () => {
+    expect(PEDAGOGICAL_ORDERS.en).toHaveLength(26);
+    expect(new Set(PEDAGOGICAL_ORDERS.en.map(letter => letter.toLowerCase())).size).toBe(26);
+    expect(computeAssessmentMastery(
+      { items: [item('E', true), item('e', true)] },
+      PEDAGOGICAL_ORDERS.en,
+    )).toEqual(new Set(['e']));
   });
 
   test('one wrong reached occurrence prevents mastery, regardless of case', () => {

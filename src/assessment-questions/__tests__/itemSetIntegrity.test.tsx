@@ -8,12 +8,9 @@ const { CURRENT_ITEM_SETS, ...bundledSets } = S;
 const all = Object.values(bundledSets) as Array<Record<string, any>>;
 
 test('every bundled item set has its expected version and identity', () => {
-  expect(all).toHaveLength(24);
-  const current = Object.values(CURRENT_ITEM_SETS).flatMap(Object.values);
+  expect(all).toHaveLength(26);
   for (const s of all) {
-    const version = current.some((itemSet) => itemSet === s) ? '2026.1' : '2024.1';
-    expect(s.question_version).toBe(version);
-    expect(s.item_set_id).toBe(`${s.question_code}@${version}.${s.language}`);
+    expect(s.item_set_id).toBe(`${s.question_code}@${s.question_version}.${s.language}`);
     expect(['en', 'xh']).toContain(s.language);
   }
 });
@@ -27,6 +24,7 @@ const count = {
 
 test.each([
   ['LETTER_SOUNDS_2026_1_EN', count.letters, 60], ['LETTER_SOUNDS_2026_1_XH', count.letters, 60],
+  ['LETTER_SOUNDS_2026_2_EN', count.letters, 60], ['LETTER_SOUNDS_2026_2_XH', count.letters, 60],
   ['WORD_READING_2026_1_EN', count.words, 50], ['WORD_READING_2026_1_XH', count.words, 50],
   ['WELA_PLUS_READ_WORDS_EN', count.words, 40], ['WELA_PLUS_READ_WORDS_XH', count.words, 40],
   ['WELA_PLUS_READ_SENTENCES_EN', count.sentenceWords, 20], ['WELA_PLUS_READ_SENTENCES_XH', count.sentenceWords, 11],
@@ -78,6 +76,8 @@ test('isiXhosa Q5 picture names match the scoring grid, including the clock for 
 test('card layouts', () => {
   expect(S.LETTER_SOUNDS_2026_1_EN.rows.map((row) => row.length)).toEqual([12, 12, 12, 12, 12]);
   expect(S.LETTER_SOUNDS_2026_1_XH.rows.map((row) => row.length)).toEqual([12, 12, 12, 12, 12]);
+  expect(S.LETTER_SOUNDS_2026_2_EN.rows.map((row) => row.length)).toEqual([10, 10, 10, 10, 10, 10]);
+  expect(S.LETTER_SOUNDS_2026_2_XH.rows).toBe(S.LETTER_SOUNDS_2026_2_EN.rows);
   expect(S.WELA_PLUS_READ_WORDS_EN.row_lengths).toEqual([7, 7, 7, 7, 7, 5]);
   expect(S.WELA_PLUS_READ_WORDS_XH.row_lengths).toEqual([7, 7, 7, 7, 7, 5]);
   expect(S.WELA_PLUS_READ_PASSAGE_EN.paragraph_starts).toEqual([0, 24, 40, 66]);
@@ -100,8 +100,8 @@ test('pending content lists exactly the remaining picture, rubric, language-revi
     { item_set_id: 'wela_plus_story_writing@2024.1.en', field: 'dimensions.anchors', note: 'Interim scale: score each dimension 1–4 with no anchor descriptions. The rubric is expected to be redesigned.' },
     { item_set_id: 'wela_plus_story_writing@2024.1.xh', field: 'dimensions.anchors', note: 'Interim scale: score each dimension 1–4 with no anchor descriptions; isiXhosa labels still needed. The rubric is expected to be redesigned.' },
     { item_set_id: 'all@2024.1.xh', field: 'strings', note: 'First-language review of every isiXhosa string.' },
-    { item_set_id: 'letter_sounds@2026.1.en', field: 'rows', note: 'Masi team to supply the mixed-case single-letter list and card layout (rows of 10 or fewer; a typeface where I and l differ).' },
-    { item_set_id: 'letter_sounds@2026.1.xh', field: 'rows', note: 'Masi team to supply the mixed-case single-letter list and card layout (rows of 10 or fewer; a typeface where I and l differ).' },
+    { item_set_id: 'letter_sounds@2026.2.en', field: 'typeface', note: 'Grid A letters supplied. The app must render capital I and lowercase l distinguishably (the card uses a serifed capital I); pending the test-screen redesign. A designer will recreate the printed card from these rows.' },
+    { item_set_id: 'letter_sounds@2026.2.xh', field: 'typeface', note: 'Grid A letters supplied. The app must render capital I and lowercase l distinguishably (the card uses a serifed capital I); pending the test-screen redesign. A designer will recreate the printed card from these rows.' },
     { item_set_id: 'word_reading@2026.1.en', field: 'words', note: 'Placeholder word lists — replace with real EGRA word lists.' },
     { item_set_id: 'word_reading@2026.1.xh', field: 'words', note: 'Placeholder word lists — replace with real EGRA word lists.' },
   ]);

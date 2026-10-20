@@ -2,8 +2,8 @@ import React, { useMemo } from 'react';
 import type { QuestionProps } from '../../types/QuestionProps';
 import type { LetterSoundsItemSet } from './types';
 import { resolveItemSet } from '../../itemsets/resolveItemSet';
-import { LETTER_SOUNDS_2026_1_EN } from '../../itemsets/letter_sounds@2026.1.en';
-import { LETTER_SOUNDS_2026_1_XH } from '../../itemsets/letter_sounds@2026.1.xh';
+import { LETTER_SOUNDS_2026_2_EN } from '../../itemsets/letter_sounds@2026.2.en';
+import { LETTER_SOUNDS_2026_2_XH } from '../../itemsets/letter_sounds@2026.2.xh';
 import { MissingItemSet } from '../../progress/MissingItemSet';
 import { buildSequentialCard, SequentialCapture } from '../../progress/SequentialCapture';
 
@@ -22,14 +22,20 @@ function isFullItemSet(value: unknown): value is LetterSoundsItemSet {
 
 export function LetterSoundsQuestion(props: QuestionProps) {
   const itemSet = resolveItemSet(props.language, props.itemSet,
-    { en: LETTER_SOUNDS_2026_1_EN, xh: LETTER_SOUNDS_2026_1_XH }, isFullItemSet);
+    { en: LETTER_SOUNDS_2026_2_EN, xh: LETTER_SOUNDS_2026_2_XH }, isFullItemSet);
   if (!itemSet) return <MissingItemSet language={props.language} />;
   return <LetterSoundsQuestionContent {...props} itemSet={itemSet} />;
 }
 
 function LetterSoundsQuestionContent(props: QuestionProps & { itemSet: LetterSoundsItemSet }) {
-  const card = useMemo(() => buildSequentialCard(
-    props.itemSet.rows.map((row) => row.map((letter) => ({ item_key: letter, prompt: letter }))),
-  ), [props.itemSet.rows]);
+  const card = useMemo(() => {
+    let position = 0;
+    return buildSequentialCard(
+      props.itemSet.rows.map((row) => row.map((letter) => ({
+        item_key: String(position++),
+        prompt: letter,
+      }))),
+    );
+  }, [props.itemSet.rows]);
   return <SequentialCapture {...props} {...card} stopRule={props.itemSet.stop_rule} testIDPrefix="letter" />;
 }

@@ -1,4 +1,5 @@
 import { WELA_PLUS_FULL_2024_1 as B } from '../wela_plus_full';
+import { CURRENT_ITEM_SETS } from '../../itemsets/current';
 
 test('2024.1 battery shape', () => {
   expect(B.battery_code).toBe('wela_plus_full');
@@ -11,7 +12,11 @@ test('2024.1 battery shape', () => {
     'wela_plus_read_sentences', 'wela_plus_read_passage', 'wela_plus_write_cvcs',
     'wela_plus_write_sentences_dictation', 'wela_plus_story_writing',
   ]);
-  expect(B.questions[0].question_version).toBe('2026.1');
+  for (const language of ['en', 'xh'] as const) {
+    expect(B.questions[0].question_version)
+      .toBe(CURRENT_ITEM_SETS.letter_sounds[language].question_version);
+  }
+  expect(B.questions[0].question_version).toBe('2026.2');
   expect(B.questions.slice(1).every((q) => q.question_version === '2024.1')).toBe(true);
   expect(B.questions.filter((q) => q.paper_marked).map((q) => q.question_code)).toEqual([
     'wela_plus_letter_writing', 'wela_plus_write_cvcs', 'wela_plus_write_sentences_dictation', 'wela_plus_story_writing',
