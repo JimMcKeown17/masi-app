@@ -15,11 +15,13 @@ the phone shows the winning record as soon as the server answers.
 - **Phone storage and writes.** A local migration rebuilds `letter_mastery` under the same
   identity: codes, `uuidv5(child, letter, language)` ids, and two server-ordering columns.
   `masteryRepository.setLetterMastery` is the only writer. It mints a new correction id per
-  change and keeps one outbox row per record.
+  change and keeps one outbox row per record. A save with an older tap time never replaces a
+  newer correction this phone still owes the server. It keeps that newer one (Task 3).
 - **Phone sync.** The engine sends that row as one RPC call. One SQLite transaction then writes
   the returned winner back, or deletes the row on `acknowledged`, or moves only the ordering
   columns when a newer local change is queued.
 - **Readers** read with no `user_id` or programme filter and never show a refused correction.
+  Both tracker surfaces re-read after a sync pass that sent mastery corrections (Task 6).
 
 **Tech Stack:**
 - Expo / React Native, JavaScript;
@@ -37,6 +39,11 @@ and §7.5 (pending-change shape) with it. Assessment history and the mastery pul
 
 **Refreshed:** 2026-10-20 against `origin/main` `f27b347` (#90). Line numbers cite that tree.
 AF, C1 and B2 may move them, so locate edits by content when they differ.
+
+**Codex round 1:** folded in 2026-10-20 (`set_letter_mastery` gets `#variable_conflict use_column`
+and named conflict targets; an older save keeps this phone's newer unsent correction; the
+session-form tracker sheet re-reads after a mastery sync pass, as the panel does, without a
+spinner flash).
 
 ## Global Constraints
 
@@ -122,6 +129,17 @@ AF, C1 and B2 may move them, so locate edits by content when they differ.
     `correction_id` and `changed_by`.
   - Lesson-plan ask 1: an optional `changedAt` (the tap time) replaces `now`, and is never later
     than now on the phone.
+  - **(plan call, deviates from AR §10.2 "On the phone", Codex round 1).** AR has every local
+    change replace the record's outbox slot. With ask 1's tap time, that lets an older save
+    replace a newer correction this phone has not uploaded yet. For example, Monday's draft mark
+    saved on Wednesday would replace Tuesday's queued un-confirm, and the server would never see
+    Tuesday's correction. So `setLetterMastery` checks, in the same SQLite transaction. It keeps
+    the local row and its slot unchanged, and returns that retained record, when both hold:
+    - the row has a correction still owed to the server (its outbox row is `pending`, `failed`
+      or `in_flight`);
+    - that correction's `changed_at` is later than the incoming one.
+
+    Otherwise it replaces both, as AR says. Details are in Task 3, step 4.
   - `getLetterMastery` has no `user_id` and no programme filter and excludes `terminal` rows.
 - **Language re-key map** (AR §10.1 plus ask 2):
   - `English` → `en`, `isiXhosa` → `xh`, `Afrikaans` → `af`;
@@ -137,7 +155,8 @@ AF, C1 and B2 may move them, so locate edits by content when they differ.
   CHECKs and the RPC's `22023` enforce codes from now on.
 - **Outbox (plan call).** One slot per record: `letter_mastery:<id>:update`, with payload
   `{ id, child_id, letter, language, confirmed, changed_at, correction_id, changed_by, programme_id }`.
-  Every local change replaces it. `letter_mastery` is not row-versioned and never batched.
+  Every local change replaces it, except an older save that a newer still-owed correction keeps
+  out (above). `letter_mastery` is not row-versioned and never batched.
 - **Rollout** (AR §13), in order, each with Jim's yes:
   1. test phones sync completely;
   2. practice mastery on `masi-app-sqlite` is wiped, with counts recorded first;
@@ -201,9 +220,33 @@ AF, C1 and B2 may move them, so locate edits by content when they differ.
    - Sync then sends nothing stale: no `MISSING_OUTBOX_PAYLOAD`, unknown-op or terminal rows.
 
    Test: Task 2.
-5. **An EA watches Child Results → Letter tracker while a sync supersedes their tap.** The panel
-   shows the winner after that pass, without leaving the screen. Test: Task 6,
-   `the panel re-reads after a sync pass that touched letter_mastery`.
+5. **An EA watches a tracker while a sync supersedes or refuses their tap.** This covers both
+   surfaces: Child Results → Letter tracker (the panel) and the session form's tracker sheet.
+   - After that pass, each surface shows the winner, or drops a refused confirmation, while it
+     stays open.
+   - The sheet keeps the EA's unsaved marks.
+   - Neither surface flashes its loading state.
+
+   Tests: Task 6, `the panel re-reads after a sync pass that touched letter_mastery` and
+   `an open sheet re-reads its baseline after superseded and refused corrections and keeps unsaved marks`.
+   Device: Task 7 G1 (panel, Android) and G1r (sheet, iOS).
+6. **An older save arrives after a newer unsent correction for the same letter.** For example,
+   Tuesday's un-confirm is queued offline, then Monday's draft mark is saved on Wednesday.
+   - The phone keeps Tuesday's correction queued, unchanged, and that is what uploads.
+   - A `terminal` slot is not owed, so a new save replaces it.
+   - A tap made now always replaces, even when the queued time is ahead of the phone's clock.
+
+   Tests: Task 3, the `an older save keeps a newer correction that is still owed` table; Task 4,
+   `an older save never replaces this phone's newer unsent correction, and the newer one uploads`;
+   Task 6, the persistence case.
+7. **`set_letter_mastery` under the default `plpgsql.variable_conflict = error`.** The
+   `returns table` names are plpgsql variables, so an unqualified `on conflict (correction_id)`
+   raises `42702` on every new correction. The fix has two parts:
+   - the body starts with `#variable_conflict use_column`;
+   - both conflict targets name their constraint.
+
+   Tests: Task 1, `variable-conflict-default`, `newer-applies` and `same-id-concurrent` on PG17;
+   Task 2's static pins.
 
 ---
 
@@ -221,6 +264,7 @@ AF, C1 and B2 may move them, so locate edits by content when they differ.
 | `src/services/offlineSync.js`, `src/services/syncServerColumns.js` (modify) | One RPC per correction; acknowledgement in the finalize transaction | 4 |
 | `src/utils/masteryState.js`, `src/utils/dashboardStats.js`, `src/screens/insights/LetterMasteryRankingScreen.js`, `src/db/debugDump.js` (modify) | Readers on codes and `confirmed`; support export shows mastery rows | 5 |
 | `src/services/literacySessionPersistence.js`, `src/components/assessment/LetterMasteryPanel.js` (modify) | The two write surfaces | 6 |
+| `src/hooks/useLetterMasterySyncRefresh.js` (create), `src/components/session/LetterTrackerBottomSheet.js` (modify) | One trigger that makes a visible tracker re-read after a sync pass that sent mastery corrections; the sheet's baseline refresh | 6 |
 
 ## Tests that encode the old identity, and what happens to each
 
@@ -311,13 +355,18 @@ AF, C1 and B2 may move them, so locate edits by content when they differ.
     and granted to `authenticated` only.
   - `public.letter_mastery`:
     - columns `id uuid pk, child_id, letter, language, confirmed boolean not null, changed_at timestamptz not null, correction_id uuid not null, changed_by uuid not null, programme_id uuid null, created_at, updated_at`;
-    - unique index `letter_mastery_child_letter_language_key`, index `letter_mastery_changed_by_idx`;
+    - unique **constraint** `letter_mastery_child_letter_language_key`, `unique (child_id, letter, language)`,
+      which also creates its index. It must be a constraint, not a bare `create unique index`,
+      so that `on conflict on constraint` can name it (Codex round 1);
+    - index `letter_mastery_changed_by_idx`;
     - `letter_mastery_language_code_chk` (`language ~ '^[a-z]{2}$'`);
     - `letter_mastery_letter_chk` (`char_length(letter) = 1 and letter = pg_catalog.lower(letter)`);
     - `letter_mastery_changed_by_fkey → auth.users(id) on delete restrict`;
     - the Plan 1 `letter_mastery_set_updated_at` trigger is kept.
   - `public.letter_mastery_corrections`:
-    - `correction_id uuid pk, child_id → children on delete cascade, letter, language, confirmed, requested_at, effective_at, changed_by → auth.users on delete restrict, programme_id → programmes null, received_at default now()`;
+    - `correction_id uuid not null, child_id → children on delete cascade, letter, language, confirmed, requested_at, effective_at, changed_by → auth.users on delete restrict, programme_id → programmes null, received_at default now()`;
+    - primary key named in the DDL, `constraint letter_mastery_corrections_pkey primary key (correction_id)`,
+      because the receipt insert names it (Codex round 1);
     - index `(child_id, letter, language)`;
     - RLS enabled with **no policies**;
     - all privileges revoked from `anon, authenticated`; `service_role` has
@@ -371,16 +420,48 @@ AF, C1 and B2 may move them, so locate edits by content when they differ.
    5. `update public.letter_mastery set id = private.letter_mastery_id(child_id, letter, language);`
    6. Drop the columns `user_id`, `source`, `mastered_at` and `deleted_at`.
 6. Constraints and indexes from Interfaces:
-   - each new constraint in a `pg_constraint` existence check (Plan 1's pattern);
+   - each new constraint in a `pg_constraint` existence check (Plan 1's pattern). This includes
+     `alter table public.letter_mastery add constraint letter_mastery_child_letter_language_key unique (child_id, letter, language);`;
    - `set not null` on the four new columns;
    - `alter column programme_id drop not null` **(plan call: programme is context; the caller may
      have no active programme)**.
-7. `public.letter_mastery_corrections`, its index, RLS, revokes and service-role grants.
+7. `public.letter_mastery_corrections`, its index, RLS, revokes and service-role grants. It is
+   `create table if not exists`, and its column list ends with
+   `constraint letter_mastery_corrections_pkey primary key (correction_id)`.
 8. On `letter_mastery`: `revoke insert, update, delete … from anon, authenticated`, then the new
    SELECT policy (`drop policy if exists` first).
-9. `set_letter_mastery`. **Qualify every column reference with a table alias**: the
-   `returns table` names `confirmed`, `changed_at`, `correction_id` and `changed_by` are plpgsql
-   variables that shadow columns. The body runs in this order:
+9. `set_letter_mastery`. **Name resolution (Codex round 1).** The `returns table` names
+   `confirmed`, `changed_at`, `correction_id` and `changed_by` are plpgsql variables that collide
+   with column names.
+   - Under the default `plpgsql.variable_conflict = error`, every unqualified collision raises
+     `42702`.
+   - An `on conflict (correction_id)` target is one such collision. Qualifying the other
+     references does not fix it, because a conflict target cannot be qualified.
+
+   All three rules below are required:
+   - **The body text starts with `#variable_conflict use_column`**, on the line after `as $$` and
+     before `declare`, as `supabase/migrations/20260925120000_session_history_family_delta.sql:165-167`
+     does. The body never reads an output variable inside SQL, so the column is always the
+     intended meaning.
+   - **Every conflict target names its constraint**, as `20261017120000_mobile_support_incidents.sql:61`
+     does:
+     - `on conflict on constraint letter_mastery_corrections_pkey do nothing` for the receipt;
+     - `on conflict on constraint letter_mastery_child_letter_language_key do update` for the
+       record.
+
+     **(plan call, deviates from AR §10.2's text `on conflict (correction_id) do nothing`; the
+     semantics are the same.)**
+   - **Every column in an expression is qualified:**
+     - `lm.` for the record. The `insert … as lm` alias hides the table name, so write `lm.x`,
+       never `letter_mastery.x`.
+     - `excluded.` on the right-hand side of `set`.
+     - a table alias in every `select`.
+
+     `set` targets and insert column lists are bare column names. PostgreSQL does not allow them
+     to be qualified, and plpgsql does not substitute variables there.
+
+   Locals are `v_`-prefixed (the stored receipt is the record variable `v_receipt`) and
+   parameters are `p_`-prefixed, so neither collides with a column. The body runs in this order:
    1. `auth.uid()` must be present, else `28000`.
    2. Validate, else `22023`:
       - no argument is null;
@@ -388,20 +469,24 @@ AF, C1 and B2 may move them, so locate edits by content when they differ.
       - `p_language ~ '^[a-z]{2}$'`.
    3. If no receipt has `p_correction_id`:
       - `private.current_user_delivers_to_child(p_child_id)` must hold, else `42501`;
-      - then `insert … on conflict (correction_id) do nothing`, with
-        `effective_at = least(p_changed_at, now())`, `changed_by = auth.uid()`,
-        `received_at = now()`;
+      - then
+        `insert into public.letter_mastery_corrections (correction_id, child_id, letter, language, confirmed, requested_at, effective_at, changed_by, programme_id, received_at) values (p_correction_id, …) on conflict on constraint letter_mastery_corrections_pkey do nothing`,
+        with `requested_at = p_changed_at`, `effective_at = least(p_changed_at, now())`,
+        `changed_by = auth.uid()` and `received_at = now()`;
       - `programme_id` = the caller's active `staff_programme_assignments.programme_id`, or null.
         **Plan call:** the signature has no programme. The partial unique index
         `idx_staff_programme_assignments_active_user_unique` guarantees at most one row.
-   4. Read the stored receipt and compare the six fields, else `MA001`. Use its `effective_at`.
+   4. Read the stored receipt into `v_receipt`
+      (`select r.* into v_receipt from public.letter_mastery_corrections r where r.correction_id = p_correction_id`).
+      Compare the six fields, else `MA001`. Use its `effective_at`.
    5. Upsert the record from the receipt:
 
       ```sql
       insert into public.letter_mastery as lm (id, child_id, letter, language, confirmed, changed_at, correction_id, changed_by, programme_id)
-      values (private.letter_mastery_id(r.child_id, r.letter, r.language), r.child_id, r.letter, r.language,
-              r.confirmed, r.effective_at, r.correction_id, r.changed_by, r.programme_id)
-      on conflict (child_id, letter, language) do update
+      values (private.letter_mastery_id(v_receipt.child_id, v_receipt.letter, v_receipt.language),
+              v_receipt.child_id, v_receipt.letter, v_receipt.language, v_receipt.confirmed,
+              v_receipt.effective_at, v_receipt.correction_id, v_receipt.changed_by, v_receipt.programme_id)
+      on conflict on constraint letter_mastery_child_letter_language_key do update
         set confirmed = excluded.confirmed, changed_at = excluded.changed_at, correction_id = excluded.correction_id,
             changed_by = excluded.changed_by, programme_id = excluded.programme_id
         where (excluded.changed_at, excluded.correction_id) > (lm.changed_at, lm.correction_id);
@@ -436,9 +521,18 @@ AF, C1 and B2 may move them, so locate edits by content when they differ.
 - `overlappingCalls` runs `SELECT ${call}` and compares the printed values. Pass each call as
   `(select outcome from public.set_letter_mastery(…))`, so the outputs are outcome strings.
 - The node cross-check uses `const { v5 } = await import('uuid')`. `uuid@13` is ESM-only.
+- **Default name resolution (Codex round 1).** The harness never sets `plpgsql.variable_conflict`.
+  `runPsql` passes `-X` (`history-authorization-postgres-harness.cjs:98-106`), so no psqlrc can
+  set it either. Every case therefore runs under PG17's default `error`.
+  - `newer-applies` sends a new correction through the receipt insert.
+  - `same-id-concurrent` makes two overlapping same-id calls, so one of them replays.
+
+  These are the cases that raise `42702` if either name-resolution rule in step 9 is missing.
 
 | Case | Expected |
 |---|---|
+| `variable-conflict-default` (runs first) | One `runPsql` call: `do $$ begin null; end $$; select pg_catalog.current_setting('plpgsql.variable_conflict');` prints `error`. The `do` block loads plpgsql into the session. If it prints anything else, the harness fails, because the remaining cases would not prove step 9 |
+| `named-conflict-targets` | `select conname, contype from pg_catalog.pg_constraint where conname in ('letter_mastery_child_letter_language_key', 'letter_mastery_corrections_pkey') order by conname` prints `letter_mastery_child_letter_language_key\|u` and `letter_mastery_corrections_pkey\|p` |
 | `newer-applies` | A confirms `k` at MON → `applied`, returned `(true, MON, cA, A)`; one record whose `id = private.letter_mastery_id(CHILD,'k','xh')`; then B un-confirms at TUE → `applied`, record `changed_by = B`, `programme_id` = numeracy (C23: same record across programmes) |
 | `older-superseded-returns-winner` | after B's TUE un-confirm, A confirms at MON → `superseded`, returned `(false, TUE, cB, B)`. **This is ask 1's "Monday mark saved on Wednesday loses to another EA's Tuesday correction" at the server.** Run the two calls as separate committed transactions. The record's `updated_at` still equals B's transaction time, so no update fired |
 | `future-clamped` | `p_changed_at = '2099-01-01'` → the receipt's `effective_at = now()` and the record's `changed_at = now()`, both inside the same transaction |
@@ -626,7 +720,19 @@ AF, C1 and B2 may move them, so locate edits by content when they differ.
       `/concat_ws\(pg_catalog\.chr\(31\), 'letter_mastery', p_child_id::text, p_letter, p_language\)/`;
     - expects the file to contain no `set local`;
     - expects `letterMasteryDomainId({ childId: 'ABC', letter: 'k', language: 'xh' })` to equal
-      the `'abc'` value.
+      the `'abc'` value;
+    - **(Codex round 1) pins Task 1 step 9's name resolution**, so the sandbox catches a
+      regression without PostgreSQL (`sql` is the migration file's text):
+
+      ```js
+      const body = sql.slice(sql.search(/create or replace function public\.set_letter_mastery\(/i));
+      expect(body).toMatch(/\bas \$\$\s*\n\s*#variable_conflict use_column\s*\n\s*declare\b/i);
+      expect(body).toMatch(/on conflict on constraint letter_mastery_corrections_pkey do nothing/i);
+      expect(body).toMatch(/on conflict on constraint letter_mastery_child_letter_language_key do update/i);
+      expect(sql).not.toMatch(/on conflict\s*\(/i);
+      expect(sql).toMatch(/constraint letter_mastery_corrections_pkey primary key \(correction_id\)/i);
+      expect(sql).toMatch(/add constraint letter_mastery_child_letter_language_key unique \(child_id, letter, language\)/i);
+      ```
 - [ ] **Step 2: Run them.**
   `npm run test:integration -- __tests__/letterMasteryCurrentStateMigration.test.js` and
   `npx jest __tests__/letterMasteryIdParity.test.js`. Expected: FAIL (no migration or module).
@@ -665,22 +771,59 @@ AF, C1 and B2 may move them, so locate edits by content when they differ.
        - `PEDAGOGICAL_ORDERS[language]` is missing or does not include `letter`;
        - `confirmed` is not a boolean;
        - `changedAt` is present but is not a string with a finite `Date.parse`.
-    2. `changed_at = new Date(Math.min(Date.parse(changedAt ?? now), Date.now())).toISOString()`
+    2. Read `nowMs = Date.now()` once. Then
+       `changed_at = new Date(Math.min(changedAt === undefined ? nowMs : Date.parse(changedAt), nowMs)).toISOString()`
        (ask 1).
     3. `changed_by = getConnectionActor(txn)`. A null actor throws
        `Error('letter_mastery.changed_by requires the signed-in EA')`.
-    4. `programme_id = programmeId ?? await getActiveProgrammeId(txn, changed_by)`, which may be
+    4. **Keep a newer correction this phone still owes (plan call, deviates from AR §10.2 "On
+       the phone", Codex round 1; see Global Constraints).** Make one keyed read in the same
+       transaction:
+
+       ```sql
+       select lm.*, o.status as outbox_status
+       from letter_mastery lm
+       left join sync_outbox o
+         on o.table_name = 'letter_mastery' and o.record_id = lm.id
+        and o.status in ('pending', 'failed', 'in_flight')
+       where lm.id = ?
+       ```
+
+       - **What "still owed" means.** It is the status set of `syncOutboxRepository.hasPendingRecord`
+         (`src/db/repositories/syncOutboxRepository.js:119-130`), and Plan 3's mastery merge
+         skips on the same set. A `terminal` slot is not owed, so a new save replaces a refused
+         correction.
+       - **When to keep.** If `outbox_status` is non-null and
+         `Math.min(Date.parse(row.changed_at), nowMs) > Date.parse(changed_at)`, return the
+         mapped row unchanged and write nothing. `nowMs` is the value step 2 read.
+         - In every path Plan 2 builds, an owed slot's `row.changed_at` is this phone's own
+           `toISOString()` value. An acknowledgement that writes a server time also deletes the
+           slot, and `ordering_only` leaves `changed_at` alone. If a parse ever fails, `NaN > x`
+           is false and the save replaces, which is AR's behaviour.
+       - **Compare `changed_at` alone, strictly.** At an equal time the later call wins, so on,
+         off, on within one millisecond keeps the last. That happens under fake timers and with
+         quick test calls. A tie-break on the freshly minted random `correction_id` would keep a
+         random one instead.
+       - **A queued time ahead of the phone's clock counts as now.** Suppose a phone's fast clock
+         was corrected after a tap. Without this rule, it would refuse every later tap on that
+         letter until the queued correction uploads. With it, a tap made now (no `changedAt`)
+         always replaces.
+       - Otherwise (no row, no owed slot, or an incoming time at least as late) continue.
+    5. `programme_id = programmeId ?? await getActiveProgrammeId(txn, changed_by)`, which may be
        null. It never throws and never uses the legacy programme.
-    5. Upsert by `id = letterMasteryDomainId(...)` with a new `correction_id = uuidv4()`:
+    6. Upsert by `id = letterMasteryDomainId(...)` with a new `correction_id = uuidv4()`:
        - `sync_status = 'pending'`, `last_sync_error = null`, `updated_at = now`;
        - `created_at` is preserved on conflict;
        - the `server_*` columns are untouched.
-    6. `enqueueDomainOutbox(txn, 'letter_mastery', id, 'update', payload)`, with the payload in
+    7. `enqueueDomainOutbox(txn, 'letter_mastery', id, 'update', payload)`, with the payload in
        Global Constraints.
-    7. Return the written fields, without a read-back.
+    8. Return the written fields. In step 4's case, return the retained record instead: a
+       `MasteryRecord` with its own `confirmed`, `changed_at` and `correction_id`, without
+       `outbox_status`. Callers display what is returned.
 
-    The budget is two writes per call, plus at most one programme read when `programmeId` is
-    omitted.
+    The budget is one keyed read and two writes per call, plus at most one programme read when
+    `programmeId` is omitted. A retained call is one read and no writes. **(Codex round 1 relaxes
+    the earlier no-read budget.)**
   - **`getLetterMastery({ transaction, childId, childIds, language } = {}) → Promise<MasteryRecord[]>`**:
     - `sync_status <> 'terminal'`, with optional child, children and language filters;
     - ordered by `child_id, letter`;
@@ -710,8 +853,37 @@ AF, C1 and B2 may move them, so locate edits by content when they differ.
     - `correction_id` matches the uuid v4 pattern.
   - `each change gets a new correction id and replaces the single slot`: on, off, on gives three
     distinct correction ids, one outbox row, and payload `confirmed: true` with the third id.
-  - `changedAt is the tap time, never later than now` (Review Focus 2). Under
+  - **`an older save keeps a newer correction that is still owed`** (Review Focus 6), as a
+    `test.each` over the outbox state of a Tuesday correction.
+    - Write it with `setLetterMastery({ childId, letter: 'k', language: 'en', confirmed: false, changedAt: TUE })`.
+    - Set the state:
+      - for a status row, `update sync_outbox set status = ? where table_name = 'letter_mastery'`.
+        For `failed` and `terminal`, also set the domain row's `sync_status` to the same value,
+        as the finalizers do;
+      - for "synced", delete the outbox row and set the domain row `sync_status = 'synced'`.
+    - Snapshot `select * from letter_mastery` and `select * from sync_outbox`.
+    - Then call `const result = await setLetterMastery({ …same key, confirmed: true, changedAt: MON })`.
+    - `MON = '2026-10-19T08:00:00.000Z'` and `TUE = '2026-10-20T08:00:00.000Z'`.
+
+    | Tuesday's slot | `result` | Afterwards |
+    |---|---|---|
+    | `pending`, `failed`, `in_flight` (three rows) | `confirmed: false`, `changed_at: TUE`, Tuesday's `correction_id`, and no `outbox_status` key | both snapshots are unchanged (`toEqual` the before values), including the slot's `status` and `updated_at` |
+    | `terminal` | `confirmed: true`, `changed_at: MON`, a new `correction_id` | the row is `confirmed: 1`, `changed_at: MON`, `pending`; the slot is `pending` with Monday's payload |
+    | none (the row is `synced`) | the same as `terminal` | the same as `terminal`. The server decides (Task 4's Monday/Tuesday case) |
+  - `a tap made now replaces a queued correction stamped ahead of the clock`. Under
     `jest.useFakeTimers({ now: new Date('2026-10-21T09:30:00.000Z') })`:
+    - write `confirmed: true` with no `changedAt`;
+    - then set the row's `changed_at` and the slot payload's `changed_at` to
+      `'2026-10-21T10:30:00.000Z'` by SQL. This stands for a fast clock that has since been
+      corrected.
+    - `setLetterMastery({ …, confirmed: false })` with no `changedAt` replaces both. The row is
+      `confirmed: 0` with `changed_at: '2026-10-21T09:30:00.000Z'`, and the payload carries the
+      new `correction_id`.
+  - `on, off, on in one millisecond keeps the last`: under the same frozen time, three calls
+    leave `confirmed: 1`, the third call's `correction_id`, and one slot carrying it.
+  - `changedAt is the tap time, never later than now` (Review Focus 2). Under
+    `jest.useFakeTimers({ now: new Date('2026-10-21T09:30:00.000Z') })`, with each value on its
+    own letter (so step 4 never applies):
     - `'2026-10-19T08:00:00.000Z'` is stored as is;
     - `'2099-01-01T00:00:00.000Z'` and an omitted value store `'2026-10-21T09:30:00.000Z'`;
     - `'not a time'` throws `TypeError`, and no row or outbox row exists.
@@ -832,6 +1004,37 @@ AF, C1 and B2 may move them, so locate edits by content when they differ.
       server tuple from the reply;
     - the next `syncAll` sends the new correction id.
   - `on, off, on offline is one call with the last correction id`;
+  - **`an older save never replaces this phone's newer unsent correction, and the newer one uploads`**.
+    This is Review Focus 6 and the regression for Codex round 1's data-loss finding. The suite
+    defines `MON = '2026-10-19T08:00:00.000Z'` and `TUE = '2026-10-20T08:00:00.000Z'`, as Task 3
+    does. Both are past instants, so this test needs no fake timers.
+
+    ```js
+    const tuesday = await mastery.setLetterMastery({ childId: f.childId, letter: 'k', language: 'en', confirmed: false, changedAt: TUE });
+    const kept = await mastery.setLetterMastery({ childId: f.childId, letter: 'k', language: 'en', confirmed: true, changedAt: MON });
+    expect(kept).toMatchObject({ confirmed: false, changed_at: TUE, correction_id: tuesday.correction_id });
+    const slots = await f.db.getAllAsync("select payload from sync_outbox where table_name = 'letter_mastery'");
+    expect(slots.map((s) => JSON.parse(s.payload))).toEqual([
+      expect.objectContaining({ confirmed: false, changed_at: TUE, correction_id: tuesday.correction_id })]);
+    client.rpc.mockResolvedValueOnce({ data: [winner({ confirmed: false, changed_at: TUE, correction_id: tuesday.correction_id, changed_by: f.userId })], error: null });
+    expect(await f.engine(client).syncAll()).toMatchObject({ totalSynced: 1, totalFailed: 0 });
+    expect(client.rpc).toHaveBeenCalledTimes(1);
+    expect(client.rpc).toHaveBeenCalledWith('set_letter_mastery', expect.objectContaining({
+      p_correction_id: tuesday.correction_id, p_confirmed: false, p_changed_at: TUE }));
+    expect(await f.db.getFirstAsync("select confirmed, sync_status from letter_mastery where letter = 'k'"))
+      .toEqual({ confirmed: 0, sync_status: 'synced' });
+    expect(await f.db.getAllAsync('select * from sync_outbox')).toEqual([]);
+    ```
+
+  - `an older save made while the newer correction is in flight is kept back too`.
+    - The first `rpc` mock awaits
+      `setLetterMastery({ …same key, confirmed: true, changedAt: MON })` before it resolves
+      `applied` for Tuesday's id.
+    - After the pass, the row is Tuesday's (`confirmed: 0`), `synced`, with the reply's server
+      tuple.
+    - The outbox is empty, and `rpc` was called once.
+    - This proves an `in_flight` slot counts as owed. The compare-and-swap still matches,
+      because the kept-back save wrote nothing.
   - `two letters are two calls; letter_mastery is never batched or upserted`;
   - `a Monday mark saved on Wednesday is sent with Monday's time and shows Tuesday's winning correction`
     (ask 1, phone side):
@@ -867,6 +1070,9 @@ AF, C1 and B2 may move them, so locate edits by content when they differ.
   - **Contract map.**
     - Append the phone half to Task 1's section:
       - the single slot and payload;
+      - the ordering-aware slot (Task 3 step 4). An older save keeps a newer correction that is
+        still owed (`pending`, `failed` or `in_flight`, the set Plan 3's merge also uses). A
+        queued time ahead of the phone's clock counts as now;
       - send-time args;
       - the acknowledgement table from Task 3;
       - error classes (`42501` evidence = direct assignment only; `MA001`, `22023` and
@@ -887,7 +1093,12 @@ AF, C1 and B2 may move them, so locate edits by content when they differ.
     - D1;
     - the fast clock with a lost reply, and why re-clamping would undo the newer correction;
     - why a losing phone must not display its own value as synced;
-    - resolving the natural key inside the statement (ZZ-BUG-20260813-006).
+    - why an older save must not replace a newer correction the phone still owes: the slot holds
+      one correction, so replacing it loses the newer one before the server can order them;
+    - resolving the natural key inside the statement (ZZ-BUG-20260813-006);
+    - why the RPC names its conflict targets: `returns table` columns are plpgsql variables, and
+      an unqualified `on conflict (correction_id)` raises `42702` under the default
+      `plpgsql.variable_conflict`.
   - **Build log:** a Verification row, plus a Decision row: "one RPC per correction, never
     batched; volume is a few rows per session".
 - [ ] **Step 6: Commit:** `feat(sync): letter mastery uploads through set_letter_mastery and writes back the winner`.
@@ -960,7 +1171,7 @@ AF, C1 and B2 may move them, so locate edits by content when they differ.
     (AF's Afrikaans case: `'af'`).
   - `debugExport.test.js`: one stored row appears in `database.letterMastery` with exactly the
     keys above. `sqliteFoundation.test.js:621-655` expects `letterMastery: []`.
-- [ ] **Step 2: Run** the six files. Expected: FAIL.
+- [ ] **Step 2: Run** the seven files. Expected: FAIL.
 - [ ] **Step 3: Implement.**
 - [ ] **Step 4: Run** them. Expected: PASS. `grep -rn "Plan 2 re-keys letter_mastery" src/utils`
   matches nothing.
@@ -974,14 +1185,19 @@ AF, C1 and B2 may move them, so locate edits by content when they differ.
 - Modify: `src/services/literacySessionPersistence.js`, as AF leaves it:
   - the mastery block (today `:75-144`) becomes one `setLetterMastery` call per attendee change;
   - the `findMasteryRecord`, `LANGUAGE_LABELS` and `createMasteryRepository` lookups for reads go.
-- Modify: `src/components/assessment/LetterMasteryPanel.js:11, :26, :34-35, :65-150`.
+- Modify: `src/components/assessment/LetterMasteryPanel.js:11, :26, :34-35, :37-57, :65-150`.
+- Create: `src/hooks/useLetterMasterySyncRefresh.js` **(Codex round 1)**.
+- Modify: `src/components/session/LetterTrackerBottomSheet.js:1-2` (imports) and `:46-65` (the
+  load effect) **(Codex round 1)**.
 - Test:
   - `__tests__/literacySessionPersistence.test.js`;
   - `__tests__/completionPathBudget.test.js:102-158`;
   - `__tests__/foreignKeyEnforcement.test.js:61-108`;
   - `__tests__/LiteracySessionForm.submit.test.js`;
   - `__tests__/LetterMasteryPanel.test.js`;
-  - `__tests__/LetterTrackerScreen.plan5.test.js`.
+  - `__tests__/LetterTrackerScreen.plan5.test.js`;
+  - `__tests__/LetterTrackerBottomSheet.test.js` (the sync-refresh cases; Task 5 already moved
+    its rows to codes).
 - Docs:
   - `CONTEXT.md` (Letter mastery, `:113-114`; the access rule, `:261`);
   - `documentation/rls-sync-contract-map.md:879` (table row);
@@ -1000,6 +1216,38 @@ AF, C1 and B2 may move them, so locate edits by content when they differ.
     - `idFactory` is no longer used for mastery.
     - An un-mark with no stored record still writes a `confirmed: false` record. **Plan call:**
       AR §10.1 keeps the un-confirm as a record of that correction.
+    - A change that Task 3 step 4 keeps out (a newer correction is still owed) writes nothing.
+      The session and its other changes still save.
+  - **`useLetterMasterySyncRefresh({ enabled, onRefresh })`** (`src/hooks/useLetterMasterySyncRefresh.js`).
+    **Plan call, Codex round 1:** this is the one trigger both tracker surfaces use. AR §10.2
+    names the panel and the sheet as write surfaces but says nothing about refreshing them.
+
+    ```js
+    import { useEffect, useRef } from 'react';
+    import { useOffline } from '../context/OfflineContext';
+
+    // A tracker on screen re-reads after a sync pass that sent letter_mastery corrections, so a
+    // superseded or refused tap never stays displayed (Assessment Results Plan 2).
+    export default function useLetterMasterySyncRefresh({ enabled, onRefresh }) {
+      const { lastSyncResult } = useOffline();
+      const seen = useRef(lastSyncResult);
+      useEffect(() => {
+        if (lastSyncResult === seen.current) return;
+        seen.current = lastSyncResult;
+        if (enabled && lastSyncResult?.tableResults?.letter_mastery) onRefresh();
+      }, [lastSyncResult, enabled, onRefresh]);
+    }
+    ```
+
+    - `syncAll` (`src/services/offlineSync.js:1431`) builds a fresh `result` for each pass
+      (`:1484`), and `OfflineContext.syncNow` publishes it (`src/context/OfflineContext.js:160`).
+      The debounced `triggerBackgroundSync` also goes through `syncNow` (`:196-209`).
+    - `tableResults.letter_mastery` exists whenever the pass processed or skipped a mastery slot
+      (`offlineSync.js:1631-1663`, `:1698-1712`). That covers `applied`, `superseded`,
+      `acknowledged`, retriable and terminal outcomes.
+    - A result that arrives while `enabled` is false is still marked as seen. So opening a
+      surface never loads twice, and a pass with no mastery never re-reads.
+    - It covers uploads only. Mastery rows applied by Plan 3's pull need their own signal.
   - **`LetterMasteryPanel`**:
     - a tap calls
       `masteryRepository.setLetterMastery({ childId: child.id, letter, language: languageCode, confirmed: !taughtLetters[letter] })`,
@@ -1007,8 +1255,35 @@ AF, C1 and B2 may move them, so locate edits by content when they differ.
     - the sync nudges (`refreshSyncStatus`, `triggerBackgroundSync`) and the `updatingLetter`
       guard stay;
     - the cached-id and soft-delete branches go;
-    - **(plan call, Review Focus 5)** it reads `lastSyncResult` from `useOffline()`. When it
-      changes to a result with `tableResults.letter_mastery`, it calls `loadData()` again.
+    - **(plan call, Review Focus 5)** the panel calls
+      `useLetterMasterySyncRefresh({ enabled: true, onRefresh })`, with
+      `onRefresh = useCallback(() => loadData({ background: true }), [loadData])`.
+      - `loadData({ background = false } = {})` keeps today's dependency list
+        (`child.id`, `languageCode`, `user.id`).
+      - A background load leaves `loading` unchanged, so the grid stays on screen. Without this,
+        every tap would flash the full-panel spinner: the tap's own background sync pass touches
+        `letter_mastery`, and `if (loading)` (`:158-164`) replaces the whole panel.
+      - A `useRef` counter numbers each load. Only the latest load applies its results and
+        clears `loading`.
+      - `useFocusEffect` keeps calling `loadData()` in the foreground, as today.
+  - **`LetterTrackerBottomSheet`** **(plan call, Codex round 1)**:
+    - **The load.** The effect at `:46-65` becomes `loadBaseline({ background = false } = {})`.
+      - It is a `useCallback` over today's dependencies (`child?.id`, `languageCode`, `userId`).
+      - `repositories` stays out of that list, as it does today. In component tests,
+        `useSignedInEA()` returns a new `repositories` object on every render
+        (`test-support/legacyHandleMocks.js:22-27`), so listing it would reload on every render.
+      - It has the same latest-load counter and background rule as the panel.
+    - **Opening** (`visible` with a `child`) calls `loadBaseline()`, which shows the spinner as
+      today, from `useEffect(..., [visible, loadBaseline])`.
+    - **The refresh.**
+      `useLetterMasterySyncRefresh({ enabled: Boolean(visible && child), onRefresh })`, with
+      `onRefresh = useCallback(() => loadBaseline({ background: true }), [loadBaseline])`.
+    - **Unsaved marks.** `pendingChanges` is a prop that the form owns (AF's
+      `{ [letter]: { mastered, languageCode, madeAt } }`). A refresh never touches it.
+      - `getCellState`, `handleCellTap` and `countMastered` already read it over the refreshed
+        baseline.
+      - So each tap still produces the state the tile then shows, measured against the current
+        stored record.
 
 - [ ] **Step 1: Write the failing tests.**
   - `literacySessionPersistence.test.js`:
@@ -1034,9 +1309,34 @@ AF, C1 and B2 may move them, so locate edits by content when they differ.
     ```
 
     Task 4 proves the other half of ask 1's test: the server's Tuesday winner shows.
-  - `completionPathBudget.test.js`: `literacy persistence writes each tracker change as one record and one outbox upsert, with no mastery read`.
-    - With three changes for one child: zero `getAllAsync` calls touch `from letter_mastery`.
-    - At most 6 writes touch `letter_mastery` or `sync_outbox` for mastery.
+
+    Also add the same-phone half (Review Focus 6, Codex round 1). It uses the suite's mastery
+    repository on `db`:
+
+    ```js
+    test("a Monday mark saved on Wednesday leaves this phone's newer unsent Tuesday correction queued", async () => {
+      // seed child-1, clear the outbox
+      const tuesday = await mastery.setLetterMastery({ childId: 'child-1', letter: 'm', language: 'en',
+        confirmed: false, changedAt: '2026-10-20T08:00:00.000Z' });
+      await persistLiteracySession({ database: db,
+        session: { id: 'session-wed', user_id: 'user-1', programme_id: 'programme-a', session_date: '2026-10-21',
+          children_ids: ['child-1'], activities: { letters_focused: ['a'] }, synced: false },
+        letterTrackerChanges: { 'child-1': { m: { mastered: true, languageCode: 'en', madeAt: '2026-10-19T08:00:00.000Z' } } },
+        nowIso: '2026-10-21T09:30:00.000Z', idFactory: () => 'unused' });
+      expect(await db.getFirstAsync("select changed_at, confirmed, correction_id, sync_status from letter_mastery where letter = 'm'"))
+        .toEqual({ changed_at: '2026-10-20T08:00:00.000Z', confirmed: 0, correction_id: tuesday.correction_id, sync_status: 'pending' });
+      const slots = await db.getAllAsync("select payload from sync_outbox where table_name = 'letter_mastery'");
+      expect(slots.map((s) => JSON.parse(s.payload))).toEqual([expect.objectContaining({
+        confirmed: false, changed_at: '2026-10-20T08:00:00.000Z', correction_id: tuesday.correction_id })]);
+      expect(await db.getFirstAsync("select id from sessions where id = 'session-wed'")).toEqual({ id: 'session-wed' });
+    });
+    ```
+  - `completionPathBudget.test.js`: `literacy persistence writes each tracker change with one keyed read, one record and one outbox upsert`.
+    **(Codex round 1 relaxes round 0's no-read budget; see Task 3 step 4.)**
+    - With three changes for one child, exactly three `getFirstAsync` calls touch
+      `from letter_mastery`, and each one's `compactSql` contains `where lm.id = ?`.
+    - Zero `getAllAsync` calls touch `from letter_mastery`.
+    - At most 6 `runAsync` writes touch `letter_mastery` or `sync_outbox` for mastery.
     - Each of the three outbox rows is `operation = 'update'`.
   - `foreignKeyEnforcement.test.js`: the committed rows have `language: 'en'` and `confirmed: 1`.
   - `LiteracySessionForm.submit.test.js`:
@@ -1054,13 +1354,81 @@ AF, C1 and B2 may move them, so locate edits by content when they differ.
     - A rejected save shows `Letter update was not saved. Please try again.` and leaves the cell
       grey.
     - A sync-status refresh failure shows no error.
-    - `the panel re-reads after a sync pass that touched letter_mastery`: rerender with
-      `lastSyncResult: { tableResults: { letter_mastery: { synced: 1 } } }`. `getLetterMastery` is
-      called again, and the cell shows the newly returned state.
+    - `the panel re-reads after a sync pass that touched letter_mastery`.
+      - Load with stored `a` and `s` confirmed, which shows `2 / 26 letters mastered`.
+      - Make the next `getLetterMastery` a deferred promise. Rerender with `useOffline` returning
+        `lastSyncResult: { tableResults: { letter_mastery: { success: true, synced: 1, failed: 0 } } }`.
+      - While the promise is pending, `a, taught by coach` is still on screen and
+        `UNSAFE_queryByType(ActivityIndicator)` is `null`. There is no spinner flash (Codex
+        round 1).
+      - Resolve it with `s` now `confirmed: false`. Then `s, not mastered` shows, and so does
+        `1 / 26 letters mastered`.
+    - `a sync pass that sent no mastery does not re-read`: rerender with
+      `lastSyncResult: { tableResults: { children: { success: true, synced: 1, failed: 0 } } }`.
+      `getLetterMastery` was still called once.
   - `LetterTrackerScreen.plan5.test.js:37-90`: the mocks become `setLetterMastery`.
-- [ ] **Step 2: Run** the six files, with the real-SQLite ones through `npm run test:integration -- …`.
+  - **`LetterTrackerBottomSheet.test.js`** (Review Focus 5, Codex round 1).
+    - Add `jest.mock('../src/context/OfflineContext', () => ({ useOffline: jest.fn() }))`, and
+      `useOffline.mockReturnValue({ lastSyncResult: null })` in `beforeEach`.
+    - Split `renderSheet` into an element factory, `sheet(props)`, and `render(sheet(props))`,
+      so that `screen.rerender(sheet(props))` keeps the same instance.
+    - Use AF's `change` helper and Task 5's code-shaped `stored()` rows.
+
+    ```js
+    const masteryPass = (failed = 0) => ({ tableResults: { letter_mastery: { success: failed === 0, synced: 1 - failed, failed } } });
+
+    test('an open sheet re-reads its baseline after superseded and refused corrections and keeps unsaved marks', async () => {
+      const onDismiss = jest.fn();
+      const props = { pendingChanges: { e: change(true) }, onDismiss };
+      masteryRepository.getLetterMastery.mockResolvedValueOnce([stored('a'), stored('s'), stored('t')]);
+      const screen = renderSheet(props);
+      await waitFor(() => expect(screen.getByText('Amahle Dlamini · 4/26 letters')).toBeTruthy());
+
+      // superseded: another EA's newer un-confirm of s now holds the record
+      let release;
+      masteryRepository.getLetterMastery.mockReturnValueOnce(new Promise((resolve) => { release = resolve; }));
+      useOffline.mockReturnValue({ lastSyncResult: masteryPass() });
+      screen.rerender(sheet(props));
+      expect(screen.getByLabelText('s, taught by coach')).toBeTruthy(); // the grid stays during the re-read
+      expect(screen.UNSAFE_queryByType(ActivityIndicator)).toBeNull();
+      await act(async () => { release([stored('a'), { ...stored('s'), confirmed: false }, stored('t')]); });
+      expect(screen.getByLabelText('s, not mastered')).toBeTruthy();
+      expect(screen.getByText('Amahle Dlamini · 3/26 letters')).toBeTruthy();
+
+      // refused: this phone's confirmation of t went terminal, so getLetterMastery no longer returns it
+      masteryRepository.getLetterMastery.mockResolvedValueOnce([stored('a'), { ...stored('s'), confirmed: false }]);
+      useOffline.mockReturnValue({ lastSyncResult: masteryPass(1) });
+      screen.rerender(sheet(props));
+      await waitFor(() => expect(screen.getByLabelText('t, not mastered')).toBeTruthy());
+      expect(screen.getByText('Amahle Dlamini · 2/26 letters')).toBeTruthy();
+
+      expect(screen.getByLabelText('e, taught, added this session')).toBeTruthy(); // the unsaved mark survives both
+      expect(masteryRepository.getLetterMastery).toHaveBeenCalledTimes(3);
+      expect(onDismiss).not.toHaveBeenCalled();
+    });
+
+    test('a pass with no mastery, or one that arrives while the sheet is closed, does not re-read', async () => {
+      const screen = renderSheet();
+      await waitFor(() => expect(masteryRepository.getLetterMastery).toHaveBeenCalledTimes(1));
+      useOffline.mockReturnValue({ lastSyncResult: { tableResults: { children: { success: true, synced: 1, failed: 0 } } } });
+      screen.rerender(sheet());
+      useOffline.mockReturnValue({ lastSyncResult: masteryPass() });
+      screen.rerender(sheet({ visible: false }));
+      await act(async () => {});
+      expect(masteryRepository.getLetterMastery).toHaveBeenCalledTimes(1);
+      screen.rerender(sheet()); // reopening loads once, from the open effect
+      await waitFor(() => expect(masteryRepository.getLetterMastery).toHaveBeenCalledTimes(2));
+    });
+    ```
+
+    Some test files render the sheet with no `OfflineContext` mock
+    (`LetterTrackerBottomSheet.plan5.test.js`, which gets the default context's `null`). Others
+    use a `useOffline` mock with no `lastSyncResult` (`LiteracySessionForm.submit.test.js:18`,
+    `LiteracySessionForm.test.js:96`, `ChildSelector.renderCount.test.js`). These files are
+    unchanged, and they never re-read.
+- [ ] **Step 2: Run** the seven files, with the real-SQLite ones through `npm run test:integration -- …`.
   Expected: FAIL.
-- [ ] **Step 3: Implement** both writers.
+- [ ] **Step 3: Implement** both writers, the hook and the sheet's refresh.
 - [ ] **Step 4: Static checks.** Each of these must match nothing:
   - `grep -rn "Plan 2 re-keys letter_mastery" src`;
   - `grep -rn "saveLetterMasteryRecord\|updateLetterMasteryRecord\|removeLetterMasteryRecord" src __tests__ test-support`;
@@ -1162,7 +1530,7 @@ task's files.
 | Case | Steps | Pass when |
 |---|---|---|
 | **G1: an offline older confirm loses** (letter `s`) | (1) A03 offline: Child Results → Letter tracker, tap `s`. (2) At least 1 min later, iPhone online: tap `s`, wait for "All saved and synced", tap `s` again, wait. (3) A03 Wi-Fi on, Sync now, stay on the tracker | **A03:** `s` turns grey within that sync pass without leaving the screen. The count is one lower. The session-form tracker sheet also shows `s` grey. The export's `s` row has `confirmed: false`, `changedBy` = EA-B, `correctionId` = `serverCorrectionId` = EA-B's second correction, `changedAt` = `serverChangedAt` = the server's `changed_at`, and `syncStatus: synced`; `tableCounts.sync_outbox` is `0`. **iPhone:** `s` grey; its `s` row carries the same correction id, `synced`. **Server:** one `s` record held by EA-B's un-confirm; three receipts; A03's `effective_at` equals its tap time (earlier than both of EA-B's) |
-| **G1r: the same with roles swapped** (letter `t`) | The iPhone is the offline older phone (Airplane Mode, with Wi-Fi also switched off in Settings); the A03 confirms and un-confirms online | The same criteria, with the phones swapped. This runs the `superseded` write-back on iOS |
+| **G1r: the same with roles swapped** (letter `t`) | The iPhone is the offline older phone (Airplane Mode, with Wi-Fi also switched off in Settings); the A03 confirms and un-confirms online. **In step (3), the iPhone waits on the session-form tracker sheet instead of the panel (Codex round 1).** Before reconnecting, start a literacy session, select the gate child, open its letter tracker, and mark one other letter (`v`) without saving. Then reconnect from Control Centre with the sheet still open. Reconnecting with queued work starts the sync on its own (`OfflineContext.js:288-295`), so no Sync now is needed | The same criteria, with the phones swapped, read on the open sheet. `t` turns grey and the `n/26` count drops by one without closing the sheet, and `v` still shows "added this session". No spinner appears during the pass. Then discard the session. This runs the `superseded` write-back on iOS and the sheet's refresh on a device |
 | **G2: an hour-fast clock and a lost reply** (letter `m`) | (1) A03: automatic time off, clock +1 h, online. Tap `m` and, within about 1 s, turn Wi-Fi off. (2) Server read: A03's receipt for `m` exists, with `effective_at` ≈ real arrival time (not +1 h), and the record is confirmed by EA-A. The A03 export shows `m` `pending`, and Sync status shows 1 waiting. That is a lost reply. **If** the receipt is missing or the A03 shows `m` synced, repeat with a fresh letter (`n`, `l`, `o`, `u`), at most five attempts. (3) iPhone: tap `m` (green), sync, tap `m` (grey), sync. (4) A03, clock still +1 h and within the hour: Wi-Fi on, Sync now | **A03:** `m` grey, with the export row `confirmed: false`, `changedBy` EA-B and the server tuple = EA-B's un-confirm, `synced`. **iPhone:** `m` grey. **Server:** the record is EA-B's un-confirm. A03's correction id has exactly one receipt, and its `effective_at` is unchanged since step 2. If five attempts give no lost reply, record that, and the harness's `fast-clock-lost-reply` case stands as the proof for that half (orchestrator call, 2026-10-20); the rest of G2 must still pass on device. Afterwards, turn automatic time back on |
 | **G3: screens** | Letter tracker panel and session-form tracker sheet on both phones, text size 1.0x and 1.3x | No clipping. The `n / 26` count matches the green tiles. Locked assessment tiles are unchanged |
 
@@ -1177,7 +1545,12 @@ task's files.
     - clearing unsynced keys;
     - the fresh reinstall after G0;
     - ask 4 deferred to Plan 3;
-    - the panel's reload on sync;
+    - both tracker surfaces' reload on a mastery sync pass, through
+      `useLetterMasterySyncRefresh` (uploads only; Plan 3's pull needs its own signal);
+    - an older save keeps a newer still-owed correction, with the clamp to the phone's now and
+      the strict comparison on `changed_at` (deviates from AR §10.2 "On the phone");
+    - named conflict targets in `set_letter_mastery` (deviates from AR §10.2's
+      `on conflict (correction_id)` text);
     - `isiZulu` → `zu`.
   - **ROADMAP:** close Ruling 11 for `letter_mastery` (`:149-152`). Mark D1 done (`:551-558`) and
     the re-key half of `:391-403` done, with its pull left to Plan 3. Update priority 5 (`:60`).
