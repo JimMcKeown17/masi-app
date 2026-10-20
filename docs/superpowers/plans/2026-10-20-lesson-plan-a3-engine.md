@@ -14,6 +14,8 @@
 
 **Refreshed:** 2026-10-20 against origin/main f27b347 (#90) and spec rev 2 (2bb103a).
 
+**Codex round 1:** folded in 2026-10-20 (a frozen plan keeps its default tier, six blends and Suggested book while browse lists refresh; the 2-letter tier admits only two-letter items; non-prefix unlocked-content vectors).
+
 ## Global Constraints
 
 - Branch `feat/lesson-plan-a3-engine` from `main`. Commit after every task; never push without Jim. What each task needs from A1 (`docs/superpowers/plans/2026-10-20-lesson-plan-a1-content-packs.md`), merged first or stacked under this branch:
@@ -42,6 +44,8 @@
 3. **A session dated after `today`** (another phone with a wrong clock) or before the academic year. It must not make a group "Today ✓", move "last seen" forward, or end a first session. Pinned in Task 2 (F6, F8) and Task 3 (G11, G12).
 4. **Malformed or mixed-case history from other phones and older builds.** A `lesson` object without `blends_done`, a non-object `lesson`, `blends_done` in capitals, and `books_read` entries that are `null`, have no `id`, or name a book this pack does not have. These are matched after normalising or ignored, never thrown on. Pinned in Task 2 (R4, R5), Task 6 (B6) and Task 7 (K11).
 5. **A child whose inputs are missing, oddly cased or repeated, or a session listed twice.** A group member absent from `children` counts as knowing nothing with incomplete history. Known letters in capitals (an older build's confirmation, or a caller that skips the loader) are lower-cased. A child listed twice as present, or the same session row twice (a local row plus a pulled copy), counts once in mastery, recency and week counts. Pinned in Task 1 (R2, R3) and Task 3 (G13, G17).
+6. **A frozen plan meets refreshed inputs.** After the first tick, a pull can change reading levels or bring in blend and book history, and a draft can be resumed on a later day. The default tier, the six suggested blends and the Suggested book stay the plan's. Only the browse lists refresh: "+ more", "Show higher", and the Read tags in "Other book" ("Uses letters not learned yet" follows the frozen letters). Pinned in Task 6 (Z1–Z3) and Task 7 (K12, K13).
+7. **Content beyond the step prefix, and a pack that skipped A1's lint.** Unlocked content is a sound set, not a step range (§4.5): a letter mastered out of order makes later steps' blends, words and books usable. A three-letter item in a step's `blends`, which A1's `step_blend_length` rejects, never enters the 2-letter tier. Pinned in Task 6 (N1, B17) and Task 7 (N2).
 
 ---
 
@@ -93,7 +97,7 @@ These are JSDoc typedefs in `src/lessonPlan/engine/index.js`. The input shapes a
  *  up_next_group_id */
 
 /** @typedef {{ text: string, display: string, tier: BlendTier }} BlendItem   text = pack item text (what blends_done stores); display = word_bank syllables, else text; tier = by the item's own letter count */
-/** @typedef {{ tier: BlendTier, childIds: string[], suggested: BlendItem[], pool: BlendItem[] }} TierChoice */
+/** @typedef {{ tier: BlendTier, childIds: string[], suggested: BlendItem[], pool: BlendItem[] }} TierChoice   LessonChoices.tiers[0] is the default tier; later entries are higher tiers ("show higher"), ascending */
 /** @typedef {{ id: string, title: string, step: number, readable: boolean, suggested: boolean, lastReadOn: string|null }} BookChoice */
 /** @typedef {{ letterChoices: string[], tiers: TierChoice[], books: BookChoice[], contentAvailable: { blends: boolean, books: boolean } }} LessonChoices */
 
@@ -117,7 +121,7 @@ These are JSDoc typedefs in `src/lessonPlan/engine/index.js`. The input shapes a
 | `BLEND_TIERS` | 5 | frozen `READING_LEVELS.slice(1, 5)` |
 | `blendTierForReadingLevel` | 5 | `(level: string\|null) → BlendTier` |
 | `deriveSessionReadingLevel` | 5 | `(blendsDone: string[]) → BlendTier\|null`. Rev 1 of the sheet wrote `(blendsDone, pack)`. There is no `pack` argument, because a letter count after the vendored `normalizeToken` does not depend on the pack (C11: "each item counted by its own letter count"). |
-| `computeLessonChoices` | 6 | `(input: LessonInput, options?: { plan?: Plan }) → LessonChoices`. Given a frozen `plan`, the letter state comes from the plan (see Task 6). |
+| `computeLessonChoices` | 6 | `(input: LessonInput, options?: { plan?: Plan }) → LessonChoices`. Given a frozen `plan`, the letters, the default tier, its six suggestions and the Suggested book come from the plan; only the browse lists use refreshed inputs (shared Frozen plan rule; Tasks 6–7). |
 
 ### Shared rules (one definition each; tasks implement them where named)
 
@@ -134,6 +138,20 @@ These are JSDoc typedefs in `src/lessonPlan/engine/index.js`. The input shapes a
 - **Letter counts and sounds** (Tasks 5–7, `sounds.js`): `letterCount(text) = [...normalizeToken(String(text ?? ''))].length` (code points, after the checker's normalisation, so hyphens do not count). `soundsOf(text, pack) = splitSounds(normalizeToken(text), pack.sound_inventory ?? [])`. An item or token is usable when `soundsOf` is non-null and non-empty and every sound is in the unlocked set. In v1 only single letters can be unlocked, so any multi-letter sound (`th`) keeps an item out (§4.5, C9).
 - **Never mutate inputs.** A1 deep-freezes bundled packs, so sort copies (`[...steps].sort(...)`), never the arrays you were given. The runner deep-freezes every fixture and input, so a mutation fails the vectors.
 - **Tokenise once.** `computeLessonPlan` and `computeLessonChoices` share one internal `evaluateLesson(input, plan = null)`. It tokenises each pack item and page at most once per call (a function-local `Map`), and both public functions read from its result, so they agree by construction.
+- **Frozen plan** (C1, C14, §5.2: "After that it is fixed for this lesson"; Tasks 6–7). `computeLessonChoices(input, { plan })` keeps the plan's advice and refreshes only what the EA browses.
+  - Always from the plan: `reason`, `suggested_letters`, `unlocked_letters`, and `made_on` as the rotation day. `input.today` still bounds the history window.
+  - When `plan.blend_tier` is a `BLEND_TIERS` label (every plan made with a usable pack and children present), the plan's advice wins over refreshed reading levels and history:
+    - `tiers[0].tier` is `plan.blend_tier`, even when no present child is at that tier any more;
+    - `tiers[0].suggested` is `plan.suggested_blends`, in plan order. Each text becomes the pack's `BlendItem` for it, matched by normalised text across the four tiers' item lists (before the unlocked filter). A text the pack does not hold is dropped, so nothing is invented (it cannot happen with the draft's own `pack_id`);
+    - the one book with `suggested: true` is `plan.suggested_book`, and none when it is `null`.
+  - Refreshed from `input` (children, reading levels, history):
+    - `tiers[0].pool` ("+ more"): the frozen suggestions first, then the rest of that tier's ranked pool in ranked order. Pool membership depends only on the tier, the unlocked letters and the pack, so the frozen suggestions are always in it and `suggested` stays `pool.slice(0, suggested.length)`;
+    - the later tiers ("Show higher"): one per present-child tier strictly above `tiers[0].tier`, ascending, each ranked as without a plan. A lower tier is not offered;
+    - `childIds`: `tiers[0]` names the present children at or below its tier, and each later entry the children at its tier. Without a frozen tier, `tiers[0]` is the lowest tier, so this is the same rule;
+    - the books list ("Other book"): `readable` from the frozen unlocked letters, `lastReadOn` from refreshed history.
+  - When `plan.blend_tier` is `null` (a plan made with no children or no pack, or the partial plans in Task 6's vectors), the tiers and the Suggested book are computed as without a plan, from the plan's letters.
+  - With no usable pack, or no present children, `tiers` and `books` are `[]` whatever the plan says.
+  - So `computeLessonChoices(input, { plan: computeLessonPlan(input) })` always equals `computeLessonChoices(input)` (the agreement check, Task 6 Step 6).
 
 ### Building the inputs (wave 2's job, recorded here so the contract is complete)
 
@@ -152,14 +170,14 @@ A3 builds none of this. The wave-2 Lesson flow (`c2-c3-lesson-flow`, written "C3
 
 - Build `sessions` with `repositories.sessions.getSessions({ userId, programmeId, sinceDate: academicYearStart })` (`src/db/repositories/sessionsRepository.js:125-156`). `sinceDate` is only an optimisation; the engine windows again.
 - Fill `GroupInput.displayNumber` from `groups.display_number`, else the N of a `Group N` name (`NUMBERED_GROUP`, `src/utils/groupHelpers.js:12`), else `null`. Pass each group's own `languageCode` and `pack`, resolved through `resolveLessonClass` (C18). Pass `pack: null` while a mixed-class group's class is undecided.
-- Call `isPlanRecomputable` before recomputing (C1, C14). The C1 lesson draft stores only the plan (an opaque `plan` field). After the plan freezes:
-  - call `computeLessonChoices(input, { plan })` with the frozen plan;
+- Call `isPlanRecomputable` before recomputing (C1, C14). The C1 lesson draft stores only the plan (an opaque `plan` field). Whenever it returns `false` (the plan froze, or the draft is resumed on a later day, frozen or not):
+  - call `computeLessonChoices(input, { plan })` with the stored plan;
   - build `presentChildren` for `plan.present_child_ids`.
 
-  Then "+ more", "Show higher" and "Other book" follow the frozen letters, even if a pull changes what the children know mid-lesson.
+  Then the letters, the default tier, its six suggested blends and the Suggested book are the plan's, even if a pull changes what the children know, their reading levels or their history mid-lesson, and when a draft is resumed on a later day. "+ more", "Show higher" and "Other book" (with its Read tags) follow the frozen letters but refresh their ranking, their tiers and their tags (the shared Frozen plan rule).
 - At save: merge `planForSave({ plan, lessonDate })` into `activities.lesson`, and write `session_reading_level: deriveSessionReadingLevel(blendsDone)` (C11).
 - Pass to `resolveLessonClass` only the group's current members' class ids; children added for the day never change the class (C18). When `choices` is empty and `classId` is null, offer the EA's own classes.
-- The "Show 3-letter (Lulu is ahead)" control: `tiers[0]` is the default tier, and each later entry names the children at that tier. With pairs there are at most two.
+- The "Show 3-letter (Lulu is ahead)" control: `tiers[0]` is the default tier, and each later entry is a higher tier and names the children at it. With pairs there are at most two. After the plan freezes, `tiers[0]` stays the plan's tier even when its `childIds` is empty (every present child has moved up), and it stays selectable.
 - Letters the EA adds today are not an engine input, so they cannot change suggestions (C3).
 - A2's `getTeachingOrder` should reuse `teachingOrderFromPack` (or A1's equivalent, if A1 ships one first) rather than re-deriving the order.
 
@@ -285,6 +303,14 @@ A3 builds none of this. The wave-2 Lesson flow (`c2-c3-lesson-flow`, written "C3
         { "step": 3, "new_letters": ["e","n"] }, { "step": 2, "new_letters": ["k","u"] }, { "step": 1, "new_letters": ["o","m","l","a"] }
       ]
     },
+    "xh-long-blend": {
+      "id": "xh-long-blend-v1", "language": "isixhosa", "channel": "release",
+      "sound_inventory": ["a","b","c","d","e","f","g","h","i","j","k","l","m","n","o","p","q","r","s","t","u","v","w","x","y","z"],
+      "letter_steps": [
+        { "step": 1, "new_letters": ["o","m","l","a"], "blends": ["mo","ma","lam","lo","la"] },
+        { "step": 2, "new_letters": ["k","u"] }
+      ]
+    },
     "en-interim": {
       "id": "english-interim-v1", "language": "english", "channel": "release",
       "sound_inventory": ["a","b","c","d","e","f","g","h","i","j","k","l","m","n","o","p","q","r","s","t","u","v","w","x","y","z"],
@@ -311,7 +337,7 @@ A3 builds none of this. The wave-2 Lesson flow (`c2-c3-lesson-flow`, written "C3
 }
 ```
 
-The fixtures keep the shared file's `language` names (`isixhosa`, `english`, `afrikaans`; spec §4.1), while vector inputs use codes. The interim fixtures follow C10: English is `ENGLISH_PEDAGOGICAL_ORDER` (`src/constants/egraConstants.js:76-80`, served as `PEDAGOGICAL_ORDERS.en` by `src/utils/assessmentRegistry.js:19-22` since #90), and Afrikaans is Zazi's provisional order (Zazi `origin/main` `src/constants/egraConstants.js:262`). Each takes four letters for step 1, then pairs. `xh-letters-reversed` is a letters-only isiXhosa pack in the J1 order, like A1's interim isiXhosa release pack (rev 2), with its steps listed backwards.
+The fixtures keep the shared file's `language` names (`isixhosa`, `english`, `afrikaans`; spec §4.1), while vector inputs use codes. The interim fixtures follow C10: English is `ENGLISH_PEDAGOGICAL_ORDER` (`src/constants/egraConstants.js:76-80`, served as `PEDAGOGICAL_ORDERS.en` by `src/utils/assessmentRegistry.js:19-22` since #90), and Afrikaans is Zazi's provisional order (Zazi `origin/main` `src/constants/egraConstants.js:262`). Each takes four letters for step 1, then pairs. `xh-letters-reversed` is a letters-only isiXhosa pack in the J1 order, like A1's interim isiXhosa release pack (rev 2), with its steps listed backwards. `xh-long-blend` is deliberately invalid: `lam` is a three-letter item in step 1's `blends` that decodes at step 1, so the shared lint accepts it and A1's `step_blend_length` rejects it. It stands for a pack that reached the engine without A1's lint (Task 6, B17).
 
 - [ ] **Step 2: Write the runner.**
 
@@ -750,8 +776,9 @@ git commit -m "feat(lesson-plan): blend tiers and the derived session reading le
     - `books: []` and `contentAvailable.books: false` until Task 7;
     - `contentAvailable.blends` = the **usable** pack has any step `blends` or any `word_bank` entry (`false` under `no_pack`, whatever pack was passed; plan call).
   - `plan.blend_tier = tiers[0]?.tier ?? null` and `plan.suggested_blends = tiers[0].suggested` texts.
-  - **Frozen-plan anchor:** `computeLessonChoices(input, { plan })`.
+  - **Frozen-plan anchor:** `computeLessonChoices(input, { plan })` implements the shared Frozen plan rule for blends. Task 7 adds its book part.
     - It takes `reason`, `suggested_letters`, `unlocked_letters` and `made_on` (as the rotation day) from the plan, instead of recomputing them.
+    - When `plan.blend_tier` is a `BLEND_TIERS` label, `tiers[0]` is that tier with `plan.suggested_blends` as its suggestions. Its pool, the higher tiers and every `childIds` are refreshed from `input`.
     - Children, reading levels, history and the pack still come from `input`.
     - With no usable pack, or no present children, `tiers` and `books` are `[]` whatever the plan says.
     - So `computeLessonChoices(input, { plan: computeLessonPlan(input) })` always equals `computeLessonChoices(input)`.
@@ -763,7 +790,10 @@ Pool and ranking (§4.6, C4, C5; not determined by the signatures):
 
 ```js
 // Items of one tier, in pack order, first occurrence of each normalised text wins:
-//   2 Letter Blends → every letter_steps[].blends syllable (steps in step order, then list order); display = text
+//   2 Letter Blends → every letter_steps[].blends item with letterCount(text) === 2 (steps in step order, then list order); display = text
+//                     (C5: syllables. A1's step_blend_length rejects any other length in a linted pack; the engine re-checks it,
+//                      so a pack that skipped the lint cannot offer a longer item at this tier. Such an item is in no tier:
+//                      3/4/Word read only the word bank.)
 //   3/4/Word        → word_bank entries whose letterCount maps to that tier (3, 4, ≥5); display = syllables || text
 // Keep items whose sounds are all unlocked (shared rule). Then:
 const rotationOffset = (groupId, today, count) => {             // Zazi blendingAdvice.js suggestionOffset, day from the SAST key
@@ -779,15 +809,21 @@ const rotationOffset = (groupId, today, count) => {             // Zazi blending
 //   "recent" = normalised text in blends_done of any present child's last BLEND_RECENT_SESSIONS (3) sessions
 // TierChoice.pool = ranked(tier); while pool.length < 6, append ranked(next lower tier) (nearest first, whole tiers)
 // TierChoice.suggested = pool.slice(0, BLEND_SUGGESTION_COUNT)
+// Frozen plan whose blend_tier is a BLEND_TIERS label (shared Frozen plan rule):
+//   tiers[0]  = { tier: plan.blend_tier, childIds: present children at or below it,
+//                 suggested: plan.suggested_blends as BlendItems, pool: suggested, then pool(tier) without them }
+//   tiers[1…] = one per present-child tier above plan.blend_tier, ascending, built as above
 ```
 
 - [ ] **Step 1: Write the first case** in `blends.vectors.json` (`defaults.computeLessonChoices` and `defaults.computeLessonPlan` both equal Task 1's defaults): "2-letter tier on a first session: unlocked syllables only" (C5, §4.5). `fn: computeLessonChoices`, `view: summary`; input `kid(A, —)`, `kid(B, —, @C)`. Expect `tiers: [{ tier: "2 Letter Blends", childIds: ["A","B"], suggested: ["la","mo","ma","lo"], pool: ["la","mo","ma","lo"] }]`.
 - [ ] **Step 2: Run to verify it fails.**
 `PATH="$HOME/.nvm/versions/node/v20.19.4/bin:$PATH" npx jest __tests__/lessonPlanEngine.vectors.test.js -t "blends"`
 Expected: FAIL (not exported).
-- [ ] **Step 3: Implement** `evaluateLesson`, `computeLessonChoices` and the plan's blend fields per the block above. Tokenise once (shared rule).
+- [ ] **Step 3: Implement** `evaluateLesson`, `computeLessonChoices` (with the frozen-plan anchor) and the plan's blend fields per the block above. Tokenise once (shared rule).
 - [ ] **Step 4: Run to verify it passes.** Expected: PASS.
-- [ ] **Step 5: Add the remaining cases one at a time** (`view: summary` unless the row says otherwise):
+- [ ] **Step 5: Add the remaining cases one at a time** (`view: summary` unless the row says otherwise).
+
+  Rows Z1–Z3 freeze `P`, the plan `computeLessonPlan` returns on 2026-10-19 for `kid(A, o m l a, @2)`, `kid(B, o m l a k, @3)` with no sessions (Task 7's "the full §6 plan" case), and then change one input. The JSON writes `P` out in full: `{ "engine_version": 1, "made_on": "2026-10-19", "reason": "ok", "history_complete": true, "mastery_complete": true, "present_child_ids": ["A","B"], "known_letters": ["o","m","l","a"], "suggested_letters": ["k","u"], "review_letters": ["o","m","l","a"], "unlocked_letters": ["o","m","l","a","k","u"], "blend_tier": "2 Letter Blends", "suggested_blends": ["ku","ka","ko","mu","lu","lo"], "suggested_book": "xh-mini-r03", "up_next_group_id": "g1" }`. Unchanged, `P` gives exactly the "show higher" tiers. These rows assert only `tiers`, so Task 7's books leave them green.
 
 | Name | Spec | Input | Expect |
 | --- | --- | --- | --- |
@@ -808,8 +844,13 @@ Expected: FAIL (not exported).
 | B16 no language: no tiers and nothing to choose, never another language's pack | Review Focus 2, §4.2 | `languageCode: null`, `pack: xh-mini`, `alphabet: null`; `kid(A, a)` | tiers `[]`; `books: []`; `letterChoices: []`; `contentAvailable: { blends: false, books: false }` (Task 7 must keep this green: `xh-mini` has readers) |
 | no children: no tiers | §4.8 | `presentChildren: []` | tiers `[]`; `letterChoices` `XH26` |
 | letter choices follow the teaching order | §4.2, §5.2 | `kid(A, —)` | `letterChoices` `XH26` |
-| after the plan freezes, choices follow the frozen letters | C1 | `today: 2026-10-21`; `kid(A, o m l a k u e n, @2)`, `kid(B, o m l a k, @3)`; `options: { plan: { engine_version: 1, made_on: "2026-10-19", reason: "ok", suggested_letters: ["k","u"], unlocked_letters: ["o","m","l","a","k","u"] } }` | tiers exactly as in "show higher" above (`ku ka ko mu lu lo` / `kum oku alo lam ala ku`, same pools). Without the plan, A's newer letters would give `u e` |
+| after the plan freezes, choices follow the frozen letters | C1 | `today: 2026-10-21`; `kid(A, o m l a k u e n, @2)`, `kid(B, o m l a k, @3)`; `options: { plan: { engine_version: 1, made_on: "2026-10-19", reason: "ok", suggested_letters: ["k","u"], unlocked_letters: ["o","m","l","a","k","u"] } }` | tiers exactly as in "show higher" above (`ku ka ko mu lu lo` / `kum oku alo lam ala ku`, same pools). Without the plan, A's newer letters would give `u e`. The plan has no blend fields, so the Frozen plan rule's `null` branch builds the tiers from the frozen letters |
 | a frozen plan without a usable pack gives no tiers | C1, §4.1 | `pack: null`; `kid(A, o m l a)`; `options: { plan: { made_on: "2026-10-19", reason: "ok", suggested_letters: ["k","u"], unlocked_letters: ["o","m","l","a","k","u"] } }` | tiers `[]`; `letterChoices` `a–z` |
+| Z1 a frozen plan keeps its tier after the reading levels change | C1, J7, Review Focus 6 | `kid(A, o m l a, @3)`, `kid(B, o m l a k, @3)`; `options: { plan: P }` | tiers `[{ tier: 2 Letter Blends, childIds: [], suggested: ku ka ko mu lu lo, pool: ku ka ko mu lu lo la mo ma }, { tier: 3 Letter Blends, childIds: [A,B], suggested: kum oku alo lam ala ku, pool: kum oku alo lam ala ku ka ko mu lu lo la mo ma }]`. No present child is at 2-letter any more, but it stays the default and selectable. Without the frozen tier, A's new level would make 3-letter the only tier |
+| Z2 a frozen plan keeps its six blends after new blend history arrives | C1, §4.6 rank 2, Review Focus 6 | `kid(A, o m l a, @2)`, `kid(B, o m l a k, @3)`; `S(s1,10-16,A,lesson[ku ka])`; `options: { plan: P }` | tiers `[{ tier: 2 Letter Blends, childIds: [A], suggested: ku ka ko mu lu lo, pool: ku ka ko mu lu lo la mo ma }, { tier: 3 Letter Blends, childIds: [B], suggested: kum oku alo lam ala ko, pool: kum oku alo lam ala ko mu lu ku ka lo la mo ma }]`. Re-ranked, the default tier would suggest `ko mu lu ku ka lo`; the higher tier is a browse list and does re-rank |
+| Z3 a draft resumed on a later day keeps its frozen blends | C1, C14, Review Focus 6 | `today: 2026-10-21`; `kid(A, o m l a, @2)`, `kid(B, o m l a k, @3)`; `S(s1,10-20,B,lesson[ko mu])` (another EA's lesson, pulled; it is inside the window only because today is now 10-21); `options: { plan: P }` | tiers `[{ tier: 2 Letter Blends, childIds: [A], suggested: ku ka ko mu lu lo, pool: ku ka ko mu lu lo la mo ma }, { tier: 3 Letter Blends, childIds: [B], suggested: kum oku alo lam ala ku, pool: kum oku alo lam ala ku ka lu ko mu lo la mo ma }]`. Re-ranked, the default tier would suggest `ku ka lu ko mu lo` |
+| N1 a letter mastered out of order unlocks later steps' blends and words (sound set, not step) | §4.5, C3, Review Focus 7 | `kid(A, o m l a n, @2)`, `kid(B, o m l a n, @3)`, `kid(C, o m l a n, @4)` | tiers `[{ tier: 2 Letter Blends, childIds: [A], suggested: nu ku ka ko mu lu, pool: nu ku ka ko mu lu mo ma lo la na no }, { tier: 3 Letter Blends, childIds: [B], suggested: kum oku mna lam ala alo, pool: kum oku mna lam ala alo }, { tier: 4 Letter Blends, childIds: [C], suggested: kulo lula nalo molo mama lala, pool: kulo lula nalo molo mama lala }]`. Suggested letters are `k u` (step 2), yet step 3's `na no nu`, `mna` and `nalo` are in, because `n` is known. `e` stays locked, so `ne` and `onke` are out |
+| B17 a three-letter item in a step's blends never enters the 2-letter tier | §4.6, C5, Review Focus 7 | `pack: xh-long-blend`; `kid(A, —, @C)`, `kid(B, —)` | tiers `[{ tier: 2 Letter Blends, childIds: [A,B], suggested: la mo ma lo, pool: la mo ma lo }]`: the first case's list, with no `lam`. A pool without the length check gives `lam lo la mo ma` |
 
 J19 is visible here: `umama` is on Masi's own isiXhosa word test (`src/assessment-questions/itemsets/word_reading@2026.1.xh.ts:11`, since #90), `umama` and `lala` are outcome-test words in the books project's word bank (`languages/xh/wordbank.csv`, `outcome_tests` = `grid-b-v2`), and both are suggested like any other word.
 
@@ -863,15 +904,18 @@ Rules:
 - **Recent.** A book id in `books_read` of any present child's last `BOOK_RECENT_SESSIONS` (5) sessions.
 - **`lastReadOn`.** The latest windowed `session_date` on which any present child read the book (whole window).
 - **Suggested.** The readable book with the highest step that is not recent; ties go to catalogue order. If every readable book is recent, take the one whose latest read is oldest (by `session_date`, `created_at`, `id`); ties go to the higher step, then catalogue order. No readable book → `null`.
+- **Frozen plan** (the shared Frozen plan rule): when `plan.blend_tier` is a `BLEND_TIERS` label, the Suggested tag goes to `plan.suggested_book` (to no book when it is `null`), whatever refreshed history says. The list itself, `readable` and `lastReadOn` still come from the catalogue, the frozen unlocked letters and refreshed history.
 - **ECD (C8):** `books: []` and `suggested_book: null`. `no_pack` and `no_children` give the same.
 
 - [ ] **Step 1: Write the first case.** In `books.vectors.json`, set `defaults.computeLessonChoices` and `defaults.computeLessonPlan` to Task 1's defaults with `presentChildren: [kid(A, o m l a k u), kid(B, o m l a k u)]`, so `e n` are suggested and steps 1–3 are unlocked. The case is "the highest-step readable book no one read recently" (C6). `fn: computeLessonChoices`, `view: summary`. Expect books `[{ id: xh-mini-r01, readable: true, suggested: false, lastReadOn: null }, { r02, true, false, null }, { r03, true, false, null }, { r04, true, true, null }]`. `r04` is readable because its tricky word `ewe` is excluded; `r05` is retired and absent.
 - [ ] **Step 2: Run to verify it fails.**
 `PATH="$HOME/.nvm/versions/node/v20.19.4/bin:$PATH" npx jest __tests__/lessonPlanEngine.vectors.test.js -t "books"`
 Expected: FAIL (`books` is `[]`).
-- [ ] **Step 3: Implement** `books.js` and wire it into `evaluateLesson`.
+- [ ] **Step 3: Implement** `books.js` and wire it into `evaluateLesson`, including the Frozen plan rule's Suggested tag.
 - [ ] **Step 4: Run to verify it passes.** Expected: PASS.
 - [ ] **Step 5: Add the remaining cases one at a time.** Each uses `view: summary`. Books are written `id readable suggested lastReadOn`, and a non-empty `books` array lists the four non-retired books in catalogue order (`r01 r02 r03 r04`). Entries a row does not show are `T F null`, as in the first case.
+
+  Rows K12 and K13 freeze `P7`, the plan `computeLessonPlan` returns for this file's defaults (the first case's children on 2026-10-19, no sessions). The JSON writes it out in full: `{ "engine_version": 1, "made_on": "2026-10-19", "reason": "ok", "history_complete": true, "mastery_complete": true, "present_child_ids": ["A","B"], "known_letters": ["o","m","l","a","k","u"], "suggested_letters": ["e","n"], "review_letters": ["o","m","l","a","k","u"], "unlocked_letters": ["o","m","l","a","k","u","e","n"], "blend_tier": "2 Letter Blends", "suggested_blends": ["me","le","ke","ne","na","no"], "suggested_book": "xh-mini-r04", "up_next_group_id": "g1" }`. Unchanged, `P7` gives the first case's books.
 
 | Name | Spec | Input | Expect |
 | --- | --- | --- | --- |
@@ -885,6 +929,9 @@ Expected: FAIL (`books` is `[]`).
 | ECD plans suggest no book | C8 | `isEcd: true`; `fn: computeLessonPlan` | `suggested_book: null`; `suggested_letters: ["e","n"]` |
 | K10 a letters-only pack has no books | C10, Review Focus 1 | `languageCode: en`, `pack: en-interim`; `kid(A, a m s t)` | `books: []`; `contentAvailable: { blends: false, books: false }` |
 | K11 malformed reading records are ignored | Review Focus 4 | `S(s1,10-16,A)` with `books_read: [null, {"how":"app"}, {"id":"xh-other-r09","how":"printed"}]` | same as the first case: `r04` suggested, every `lastReadOn` null |
+| K12 a frozen Suggested book survives a pull showing it was read recently | C1, C6, Review Focus 6 | `S(s1,10-16,A,books[r04])`; `options: { plan: P7 }` | `r04 T T 2026-10-16` (and `r03 T F null`). Without the plan, the same input is the case "a book read in a present child's last 5 sessions is skipped", which gives `r03 T T`; the Read date still refreshes |
+| K13 a draft resumed on a later day keeps its Suggested book | C1, C14, Review Focus 6 | `today: 2026-10-21`; `S(s1,10-20,B,books[r04])` (another EA's lesson, pulled); `options: { plan: P7 }` | `r04 T T 2026-10-20`. Re-chosen, `r03` would take the tag |
+| N2 a letter mastered out of order makes a later step's book readable | §4.5, §4.7, Review Focus 7 | both `o m l a n` | `r04 T T null`. Suggested letters are `k u`, so step 3 is not unlocked, but every non-tricky token of `r04` uses `n a l o u m` (its one `e` word, `ewe`, is tricky) |
 | the full §6 plan | §6 | `fn: computeLessonPlan`; `kid(A, o m l a, @2)`, `kid(B, o m l a k, @3)` | **exact** `{ engine_version: 1, made_on: "2026-10-19", reason: "ok", history_complete: true, mastery_complete: true, present_child_ids: ["A","B"], known_letters: ["o","m","l","a"], suggested_letters: ["k","u"], review_letters: ["o","m","l","a"], unlocked_letters: ["o","m","l","a","k","u"], blend_tier: "2 Letter Blends", suggested_blends: ["ku","ka","ko","mu","lu","lo"], suggested_book: "xh-mini-r03", up_next_group_id: "g1" }` |
 
 - [ ] **Step 6: Run** the vectors and purity guard. Expected: PASS, including every agreement row.
@@ -974,7 +1021,7 @@ Expected: PASS. If one fails, the engine and the checker disagree (an engine bug
   - why the real-pack smoke uses the books project's checker as an independent oracle.
 - [ ] **Step 5: Append dated rows to the build log's three registers**, as its "Where to append" rule says (`documentation/build-log.md:6-8`; plan call: rows, not a free-standing `###` entry). Prefix each row "Lesson plan A3:".
   - **Verification Register:** every command run in this plan with its result, including the baseline counts and the real-pack timings.
-  - **Decision Register:** this plan's calls (see the plan's Engine contract and task rules), including `PACK_LANGUAGE_BY_CODE` and the dropped `pack` argument of `deriveSessionReadingLevel`.
+  - **Decision Register:** this plan's calls (see the plan's Engine contract and task rules), including `PACK_LANGUAGE_BY_CODE`, the dropped `pack` argument of `deriveSessionReadingLevel`, the Frozen plan rule (what stays the plan's and what refreshes), and the 2-letter tier's own length check behind A1's `step_blend_length`.
   - **Bug And Gap Register**, four rows:
     - the §7.3 completeness predicate is tested in the C1 lesson-draft plan, not here;
     - C23's current-year bound and AR Plan 2's confirmation re-key arrive with AR Plans 2–3 (§7.6 asks 2–4), and `masteryInputsComplete` with AR Plan 3 (ask 3). Until then, wave 2's `knownLetters` follow today's `loadMasteryState`, and every plan records `mastery_complete: false`;
@@ -1004,8 +1051,8 @@ git commit -m "test(lesson-plan): real-pack smoke for the engine; docs and build
 | --- | --- |
 | §4.3 Up next, C2 | 3 |
 | §4.4 letters, group mastery, first session, review letters | 1, 2 |
-| §4.5 unlocked letters and sound-set filtering, C3 | 1, 6 |
-| §4.6 blends, tiers, ranking, rotation, top-up, J16, J19, C4, C5 | 5, 6 |
+| §4.5 unlocked letters and sound-set filtering (beyond the step prefix), C3 | 1, 6, 7 |
+| §4.6 blends, tiers, ranking, rotation, top-up, J16, J19, C4, C5 (2-letter items only) | 5, 6 |
 | §4.7 book, readable, retired, Other book tags, C6 | 7 |
 | §4.8 the five reasons | 1, 2 |
 | §6 `lesson.plan` shape, `engine_version` | 1, 7 |
@@ -1013,12 +1060,12 @@ git commit -m "test(lesson-plan): real-pack smoke for the engine; docs and build
 | §4.2 no-pack fallback to the language's 26 letters; a `null` language never becomes English (rev 2, #90) | 1, 6 |
 | §7.6 ask 3 `mastery_complete` from per-child `masteryComplete` (AR Plan 3 supplies it) | 1; the source is recorded in "Building the inputs" |
 | C23 at the engine boundary: `knownLetters` is an input; the rule lives in the shared loader and AR Plans 2–3 | Engine contract; 8 (build-log gap) |
-| C1 present children, recompute rule | 1, 4 |
+| C1 present children, recompute rule; frozen advice (tier, six blends, Suggested book) after the first tick | 1, 4, 6, 7 |
 | C8 ECD (input flag) | 7 |
 | C9 all letters known, sound steps out of scope | 1, 6 |
 | C10 interim letters-only packs for all three languages (isiXhosa added in rev 2) | 1, 6, 7, 8 |
 | C11 `deriveSessionReadingLevel` | 5 |
-| C14 `planForSave` | 4 |
+| C14 `planForSave`; a draft resumed on a later day keeps its frozen advice | 4, 6, 7 |
 | C18 class resolution and added children (§10 vectors) | 2, 4 |
 | §10 engine vectors, one runner | 1–7 |
 | §11 docs for this slice (`CONTEXT.md` terms, build log) | 8 |

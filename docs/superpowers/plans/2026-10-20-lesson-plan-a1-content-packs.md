@@ -13,6 +13,8 @@
 **Build path:** Codex (gpt-5.6-sol) builds each task; Claude reviews the diff and runs the tests (AGENTS.md). Codex usually cannot run git commit in its sandbox, so the orchestrator runs the commit steps.
 **Refreshed:** 2026-10-20 against origin/main f27b347 (#90) and spec rev 2 (2bb103a).
 
+**Codex round 1:** folded in 2026-10-20 (new Masi lint rule `step_blend_length`: every letter-step blend has exactly two letters after normalising, since the shared lint accepts any decodable item there).
+
 ## Global Constraints
 
 - Branch `feat/lesson-plan-a1-content-packs`. Make it from the branch that holds the approved spec (`feat/lesson-plan`), or from `main` once that has merged. Commit after every task. Never push without Jim. End every commit message with the session's attribution trailer.
@@ -38,7 +40,7 @@
 1. **A developer has the preview setting on during an OTA to a field channel.** Example: the developer's shell or `.env.local` holds `MASI_PREVIEW_CONTENT=1` when they publish. On SDK 54, `eas update` without `--environment` reads local `.env` files. A pilot or production phone must still load only release packs. Task 4 pins this with `isPreviewContentAllowed` cases on channels `'preview'` and `'production'`.
 2. **A caller passes a name instead of a code, a prototype key, `null` options or an id that isn't bundled.** Examples: `getPack('isixhosa')` (the file's name, not the code), `getPack('English')`, `getPack('constructor')`, `getPack('zu')` (a registry language with no pack), `getPack('xh', null)`, and `getPackById('isixhosa-integrated-v1')` before that pack is adopted. Each call returns `null` or the release pack, and never throws. Pinned in Task 3.
 3. **A consumer mutates a returned pack.** Example: it sorts `letter_steps` in place or pushes into `word_bank`. The write must throw, and later reads must be unchanged. Task 3 pins this with deep-freeze tests.
-4. **A future books release has a defect.** Examples: a Masi field is missing, `language` is the code `'xh'` instead of the shared name, a reader has no details, a `page_lines` text has drifted from `pages`, a word contains `ê` or an apostrophe, or a word's step was computed under another order. Jest must fail and name the code, and a device must never crash. Pinned in Task 2 (one test per rule) and Task 3 (every bundled pack lints; released files are hash-pinned).
+4. **A future books release has a defect.** Examples: a Masi field is missing, `language` is the code `'xh'` instead of the shared name, a reader has no details, a `page_lines` text has drifted from `pages`, a word contains `ê` or an apostrophe, a word's step was computed under another order, or a letter step's `blends` holds a three-letter word such as `lam` (the shared lint accepts any decodable item there). Jest must fail and name the code, and a device must never crash. Pinned in Task 2 (one test per rule) and Task 3 (every bundled pack lints; released files are hash-pinned).
 5. **The test-pack generator runs on a drifted books repo, or the checker misbehaves on Hermes.** For the generator: the order differs from J1, `pack.yaml`'s `code` is not `xh`, a CSV step disagrees with the vendored checker, the repo has uncommitted content, or a speaker is not in the cast. The generator refuses, names the rows and writes nothing. Pinned in Task 5. Whether Hermes matches Node on NFC and `\p{L}` is a device question, gated in Task 7. Even if the checker module cannot load on a device, the support export must still succeed and report `content_diagnostics.error`. Pinned in Task 6.
 
 ---
@@ -163,14 +165,18 @@ git commit -m "feat(lesson-plan): vendor the early reader books decodability che
 | `reader_details_missing` | every key of `readers` has `reader_details` (plan call: every book must carry the `retired` flag) |
 | `reader_details_text` | `page_lines.length === pages.length`, and `page_lines[i].map(l => l.text).join('\n') === pages[i]` |
 | `reader_details_speaker` | every line's `speaker` is a key of that reader's `speakers` |
+| `step_blend_length` | every string item of every `letter_steps[].blends` has exactly two letters after the vendored normaliser: `[...normalizeToken(item)].length === 2` (C5: a step's blends are the 2-letter tier's syllables, and A3 reads them as such). Message: `Step <step> blend "<item>" has <n> letters; letter-step blends must have exactly 2.` Plan call. |
 
   `analyzeToken` iterates `letter_steps[].new_letters` without guards. So run the word-bank checks against a sanitized `{ sound_inventory, letter_steps, sound_steps }`, which keeps only entries with an integer `step` and a string-array unit list. This is how `lintSequence` builds its `seq`. A malformed pack then reports `malformed` and can never make `analyzeToken` throw.
+
+  `step_blend_length` reads the raw `letter_steps` the same careful way. It skips a non-array `letter_steps`, a non-object step, a step without an integer `step`, a non-array `blends` and non-string items, because `lintSequence` already reports each of those as `malformed`, and `normalizeToken` throws on a non-string. It checks letter steps only. A sound step's syllable, such as *tha*, has three letters, and sound steps are unused in v1 (C9). Why the rule is needed: the shared lint accepts any decodable item in `blends`, so `lam` in step 1 lints clean (checked against the vendored lint on 2026-10-20).
 
 - [ ] **Step 1: Write the failing tests.** The fixture is the vector sequence (J1 order plus the 11 sounds) with the Masi fields added. It was checked against the real checker on 2026-10-20: `lintSequence` gives zero errors and zero warnings, and the steps are `molo` 1, `umama` 2 and `thina` 13.
 
 ```js
 import vectors from '../src/constants/contracts/decodability-v1.json';
-import { lintMasiPack, PACK_LANGUAGE_CODES } from '../src/lessonPlan/packs/lintMasiPack';
+import { lintSequence } from '../src/utils/decodability/index.js';
+import { lintMasiPack, MASI_LINT_OPTIONS, PACK_LANGUAGE_CODES } from '../src/lessonPlan/packs/lintMasiPack';
 
 const codes = r => r.errors.map(e => e.split(':')[0]);
 const validPack = () => {
@@ -222,11 +228,26 @@ test.each([
   ['reader_details_text', p => { p.reader_details['xh-test-r01'].page_lines[0][0].text = 'Molo Lolo!'; }],
   ['reader_details_text', p => { p.reader_details['xh-test-r01'].page_lines.push([]); }],
   ['reader_details_speaker', p => { p.reader_details['xh-test-r01'].page_lines[1][0].speaker = 'kiki'; }],
+  ['step_blend_length', p => { p.letter_steps[0].blends = ['mo', 'ma', 'lam']; }],  // three letters, decodable at step 1
+  ['step_blend_length', p => { p.letter_steps[1].blends = ['u']; }],                // one letter
 ])('%s', (code, mutate) => {
   const pack = validPack(); mutate(pack);
   const result = lintMasiPack(pack);
   expect(result.ok).toBe(false);
   expect(codes(result)).toContain(code);
+});
+test("step_blend_length catches a three-letter blend that the shared lint accepts", () => {
+  const pack = validPack();
+  pack.letter_steps[0].blends = ['mo', 'ma', 'lam'];      // the vector sequence's steps carry no blends, so assign, never push
+  expect(lintSequence(pack, MASI_LINT_OPTIONS)).toEqual({ errors: [], warnings: [] });
+  expect(lintMasiPack(pack)).toEqual({ ok: false,
+    errors: ['step_blend_length: Step 1 blend "lam" has 3 letters; letter-step blends must have exactly 2.'] });
+});
+test('two-letter blends pass', () => {
+  const pack = validPack();
+  pack.letter_steps[0].blends = ['mo', 'ma', 'lo', 'la'];
+  pack.letter_steps[1].blends = ['ku', 'ka', 'ko', 'mu', 'lu'];
+  expect(lintMasiPack(pack)).toEqual({ ok: true, errors: [] });
 });
 test('does not mutate its input and accepts a deeply frozen pack', () => { /* deep-equal before/after; frozen copy → ok */ });
 ```
@@ -238,7 +259,7 @@ test('does not mutate its input and accepts a deeply frozen pack', () => { /* de
 
 ```bash
 git add src/lessonPlan/packs/lintMasiPack.js __tests__/lintMasiPack.test.js
-git commit -m "feat(lesson-plan): lintMasiPack adds Masi's word bank and reader rules to the shared lint"
+git commit -m "feat(lesson-plan): lintMasiPack adds Masi's word bank, reader and blend-length rules to the shared lint"
 ```
 
 ---
@@ -751,7 +772,7 @@ The interim isiXhosa release pack was a plan call in the first draft. It is now 
 1. **Ids.** The ids are `<name>-interim-letters-v<N>` and `isixhosa-candidates-preview-v<N>`. They use the shared file's language name, like the books' `<name>-integrated-v<N>`, and can never collide with it. A pack id is not a language code. "Current" is the explicit `CURRENT_PACK_IDS` map, keyed by code, not version arithmetic.
 2. **Names map to codes inside A1**, through `PACK_LANGUAGE_CODES`, not `languageCodeForHomeLanguage`. The file's `language` is a strict contract, while a class's `home_language` is free text in any case, and A1 must not wait for AF's `af`. Task 3's tests tie the map and the interim orders to AR's registry, and tighten automatically once AF lands. All lookups are own-property only.
 3. **C12 uses two checks.** The build-time setting `MASI_PREVIEW_CONTENT=1` is refused on EAS for the `pilot` and `production` profiles. The runtime gate refuses preview on the native `preview` and `production` update channels, which covers OTAs. A `preview-content` EAS profile exists for test builds. There is no in-app toggle: a toggle could be switched on in a field build, and a build check cannot refuse a runtime switch. (#90 also removed the device-settings module and its Profile section.)
-4. **Lint strictness.** A word's `step` must equal its first decodable step. `text` must be normalised, and syllables must match the word. Every reader needs `reader_details`. Colours are any non-empty string; C4 maps them to tokens. The lint uses `a–z` and `a e i o u` for all three languages.
+4. **Lint strictness.** A word's `step` must equal its first decodable step. `text` must be normalised, and syllables must match the word. Every reader needs `reader_details`. Every letter step's `blends` item has exactly two letters after normalising (`step_blend_length`, round 1), because C5 makes those items the 2-letter tier's syllables and books design §5.8 defines them as consonant–vowel pairs; the shared lint checks only that they decode. Colours are any non-empty string; C4 maps them to tokens. The lint uses `a–z` and `a e i o u` for all three languages.
 5. **Immutability.** Packs are deep-frozen. Release pack files are hash-pinned and never removed, so "old versions stay bundled" holds forever, since saved sessions are permanent. Preview packs are replaced on regeneration and not pinned.
 6. **Test pack generation.** Blends follow books design §5.8: consonant-vowel pairs that use a new letter. Headline words are up to 12 of at least 3 letters, ranked by corpus count. Speaker colours are red for voice A, blue for voice B and grey for others. The generator refuses on any drift (language code, order, CSV step, cast) and on a books repo with uncommitted content.
 7. **The Hermes check goes in the support export**, not a new screen. The export loads the diagnostics lazily and fences them, so A1 adds nothing to app start and a broken checker cannot break the export.
@@ -767,6 +788,7 @@ The interim isiXhosa release pack was a plan call in the first draft. It is now 
   - It imports the tokeniser from `src/utils/decodability/index.js`.
   - It takes packs by code: `getPack('xh', { allowPreview: true })` for the preview test pack, and `getPack(code)` for the letters-only cases.
   - Steps may omit `blends`, `words` and `readers`, so default them with `?? []`.
+  - In every linted pack, each letter step's `blends` item has exactly two letters (`step_blend_length`). A3's 2-letter tier still checks the length itself, so a pack that skipped this lint cannot offer a longer item there.
 - **C3, C4 and C5**:
   - `getPackById(id)` without `allowPreview` returns `null` for a preview pack. A draft or session that names one shows the C10 fallback, never unreviewed content.
   - `lesson.pack_id` stores the in-file id, and `lesson.language` stores the code (§6).
