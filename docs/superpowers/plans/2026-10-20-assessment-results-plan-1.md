@@ -622,7 +622,7 @@ rejects that, rebuild `assessments` (the table is empty after step 1) and say so
   - **a round trip for every package component.** Build each component's result through
     `runContractTest` fixtures, save it, and assert that the outbox payload passes
     `assertSubmitShape(payload)`. That is a JS mirror of the RPC's shape checks, exported from
-    `src/services/assessmentFamilyPayload.js` (Task 9). It covers a partly scored Q11 (sparse
+    `src/services/assessmentFamilyPayload.js` (created here). It covers a partly scored Q11 (sparse
     positions) and a Listen-and-answer result (metadata defaulted);
   - a partly scored Q11 with `ea_rubric_total: 12` stores `score === 12` in SQLite and in the
     outbox payload;
@@ -640,8 +640,9 @@ rejects that, rebuild `assessments` (the table is empty after step 1) and say so
 ### Task 9: Sync — one family, one call, one acknowledgement
 
 **Files:**
-- Create: `src/services/assessmentFamilyPayload.js`
+- Modify: `src/services/assessmentFamilyPayload.js` (adds `toSubmitArgs`)
 - Modify: `src/services/offlineSync.js`
+- Modify: `src/db/repositories/referenceDataRepository.js` (`battery_runs` programme retarget)
 - Test: `__tests__/assessmentFamilySync.test.js` (real SQLite plus a stubbed supabase client, in
   the style of `__tests__/batchFailureSemantics.test.js`) and
   `__tests__/assessmentFamilyRpcError.test.js` (a real `PostgrestClient` with stubbed `fetch`, in
