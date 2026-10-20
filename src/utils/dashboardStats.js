@@ -263,7 +263,7 @@ export function getAssessmentRanking(children, assessments) {
  * is never applied to a word-reading score. Legacy rows without an
  * assessment_type are treated as letters, per the idiom used across the app.
  */
-export function getLetterAssessmentRanking(children, assessments) {
+export function getLetterScoreRanking(children, assessments) {
   const letterAssessments = (assessments || []).filter(
     (a) => (a.assessment_type || 'letter_egra') === 'letter_egra'
   );

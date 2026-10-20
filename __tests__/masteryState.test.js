@@ -39,11 +39,13 @@ describe('loadMasteryState', () => {
   });
 
   test('legacy summaries do not provide evidence without stored Question result items', async () => {
-    await f.assessments.saveAssessment({
-      id: uuid(), user_id: f.userId, child_id: f.childId, assessment_type: 'letter_egra',
-      date_assessed: '2026-07-01', letter_language: 'English',
-      last_letter_attempted: { index: 0 }, correct_letters: [{ index: 0, letter: 'a' }],
-    });
+    const id = uuid();
+    await f.db.runAsync(`insert into assessments (id, user_id, child_id, programme_id, assessment_type, assessment_date)
+      values (?, ?, ?, ?, 'letter_egra', '2026-07-01')`, id, f.userId, f.childId, f.programmeId);
+    await f.db.runAsync(`insert into assessment_items (id, assessment_id, item_key, metadata)
+      values (?, ?, '__summary__', ?)`, uuid(), id, JSON.stringify({
+      letter_language: 'English', last_letter_attempted: { index: 0 }, correct_letters: [{ index: 0, letter: 'a' }],
+    }));
     const state = await load('en');
     expect(state.latestAssessment).toBeNull();
     expect(state.assessmentMastered).toEqual(new Set());

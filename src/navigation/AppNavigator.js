@@ -42,8 +42,7 @@ import SessionHistoryScreen from '../screens/sessions/SessionHistoryScreen';
 
 // Assessment screens
 import AssessmentChildSelectScreen from '../screens/assessments/AssessmentChildSelectScreen';
-import LetterAssessmentScreen from '../screens/assessments/LetterAssessmentScreen';
-import SequentialAssessmentScreen from '../screens/assessments/SequentialAssessmentScreen';
+import StandaloneTestScreen from '../screens/assessments/StandaloneTestScreen';
 import AssessmentResultsScreen from '../screens/assessments/AssessmentResultsScreen';
 import AssessmentHistoryScreen from '../screens/assessments/AssessmentHistoryScreen';
 import AssessmentDetailScreen from '../screens/assessments/AssessmentDetailScreen';
@@ -265,13 +264,8 @@ export function MainNavigator() {
         }}
       />
       <Stack.Screen
-        name="LetterAssessment"
-        component={LetterAssessmentScreen}
-        options={{ headerShown: false }}
-      />
-      <Stack.Screen
-        name="SequentialAssessment"
-        component={SequentialAssessmentScreen}
+        name="StandaloneTest"
+        component={StandaloneTestScreen}
         options={{ headerShown: false }}
       />
       <Stack.Screen

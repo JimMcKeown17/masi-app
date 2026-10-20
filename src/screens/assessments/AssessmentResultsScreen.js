@@ -2,13 +2,14 @@ import { useHeaderHairline } from '../../components/common/ScreenHeader';
 import BrandButton from '../../components/common/BrandButton';
 import SurfaceCard from '../../components/common/SurfaceCard';
 import { fontFamilies, typeRoles } from '../../constants/typography';
-import React, { useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { View, StyleSheet, ScrollView } from 'react-native';
 import { Text } from 'react-native-paper';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { colors, spacing, shadows } from '../../constants/colors';
-import AssessmentDetailGrid from '../../components/assessment/AssessmentDetailGrid';
-import { resolveAssessmentRoute } from '../../utils/assessmentRouting';
+import { useAuth } from '../../context/AuthContext';
+import { useSignedInEA } from '../../context/SignedInEAContext';
+import { STANDALONE_TESTS } from '../../utils/assessmentRegistry';
 
 function getFeedback(accuracy) {
   if (accuracy >= 90) return { message: 'Excellent work!', color: colors.success };
@@ -31,32 +32,47 @@ function StatCard({ value, label, accentColor }) {
 
 export default function AssessmentResultsScreen({ navigation, route }) {
   const onScroll = useHeaderHairline();
-  const { assessment, child, letterSet, attemptNumber, assessmentType = 'letter_egra' } = route.params;
-  const incorrect = assessment.letters_attempted - assessment.correct_responses;
-  const feedback = getFeedback(assessment.accuracy);
+  const { assessmentId, testCode, child, languageCode } = route.params;
+  const { user } = useAuth();
+  const { repositories } = useSignedInEA();
+  const [assessment, setAssessment] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState(false);
   const insets = useSafeAreaInsets();
   const launchingRef = useRef(false);
 
-  const handleTryAgain = async () => {
+  useEffect(() => {
+    let active = true;
+    setLoading(true);
+    setLoadError(false);
+    repositories.assessments.getQuestionResults({ userId: user.id, assessmentId })
+      .then(results => { if (active) setAssessment(results[0] ?? null); })
+      .catch(() => { if (active) setLoadError(true); })
+      .finally(() => { if (active) setLoading(false); });
+    return () => { active = false; };
+  }, [assessmentId, repositories, user.id]);
+
+  const handleTryAgain = () => {
     if (launchingRef.current) return;
     launchingRef.current = true;
-    try {
-      const { screenName, captureMode } = await resolveAssessmentRoute();
-      navigation.replace(screenName, {
-        child,
-        letterSet,
-        attemptNumber: attemptNumber + 1,
-        assessmentType,
-        captureMode,
-      });
-    } finally {
-      launchingRef.current = false;
-    }
+    navigation.replace('StandaloneTest', { testCode, child, languageCode });
   };
 
   const handleDone = () => {
     navigation.navigate('MainTabs', { screen: 'Assessments' });
   };
+
+  if (loading || loadError || !assessment) {
+    return <View style={[styles.container, styles.scrollContent, { paddingTop: insets.top }]}>
+      <Text style={styles.meta}>{loading ? 'Loading result…' : loadError ? "Couldn't load this result." : 'Result not found.'}</Text>
+    </View>;
+  }
+
+  const attempted = assessment.derived.total_attempted ?? assessment.items.filter(item => item.metadata?.reached !== false).length;
+  const accuracy = assessment.derived.percent ?? (attempted ? assessment.score / attempted * 100 : 0);
+  const incorrect = attempted - assessment.score;
+  const feedback = getFeedback(accuracy);
+  const testTitle = STANDALONE_TESTS.find(test => test.code === testCode)?.title;
 
   return (
     <View style={[styles.container, { paddingTop: insets.top }]}>
@@ -66,7 +82,7 @@ export default function AssessmentResultsScreen({ navigation, route }) {
           {child.first_name} {child.last_name}
         </Text>
         <Text variant="bodyMedium" style={styles.meta}>
-          {letterSet.language} - Attempt #{attemptNumber}
+          {testTitle}
         </Text>
 
         {/* Hero result section */}
@@ -76,29 +92,32 @@ export default function AssessmentResultsScreen({ navigation, route }) {
               accessibilityLabel="Assessment main result"
               style={[styles.accuracyNumber, { color: feedback.color }]}
             >
-              {assessment.correct_responses}
+              {assessment.score} / {assessment.total_items}
             </Text>
           </View>
           <Text variant="headlineSmall" style={[styles.feedbackText, { color: feedback.color }]}>
             {feedback.message}
           </Text>
           <Text variant="bodyMedium" style={styles.accuracyText}>
-            {assessment.accuracy}% correct
+            {Math.round(accuracy)}% correct
           </Text>
+          {assessment.stopped_reason === 'stop_rule' && (
+            <Text variant="bodyMedium" style={styles.stopReason}>Stopped: 10 in a row wrong</Text>
+          )}
           <Text variant="bodyMedium" style={styles.timeText}>
-            Completed in {assessment.completion_time}s
+            Completed in {Math.round((assessment.duration_ms ?? 0) / 1000)}s
           </Text>
         </View>
 
         {/* Supporting stat cards */}
         <View style={styles.statsRow}>
           <StatCard
-            value={assessment.letters_attempted}
+            value={attempted}
             label="Attempted"
             accentColor={colors.primary}
           />
           <StatCard
-            value={assessment.correct_responses}
+            value={assessment.score}
             label="Correct"
             accentColor={colors.success}
           />
@@ -107,10 +126,6 @@ export default function AssessmentResultsScreen({ navigation, route }) {
             label="Incorrect"
             accentColor={colors.emphasis}
           />
-        </View>
-
-        <View style={styles.gridSection}>
-          <AssessmentDetailGrid assessment={assessment} letterSet={letterSet} />
         </View>
       </ScrollView>
 
@@ -122,7 +137,7 @@ export default function AssessmentResultsScreen({ navigation, route }) {
   );
 }
 
-const RING_SIZE = 140;
+const RING_SIZE = 180;
 
 const styles = StyleSheet.create({
   container: {
@@ -163,12 +178,17 @@ const styles = StyleSheet.create({
     ...shadows.elevated,
   },
   accuracyNumber: {
-    ...typeRoles.display2XL,
+    ...typeRoles.displayXL,
     fontVariant: ['tabular-nums'],
   },
   feedbackText: {
     marginBottom: spacing.xs,
     textAlign: 'center',
+  },
+  stopReason: {
+    color: colors.primary,
+    textAlign: 'center',
+    marginBottom: spacing.sm,
   },
   timeText: {
     color: colors.textSecondary,
@@ -182,10 +202,6 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     gap: spacing.sm,
     width: '100%',
-  },
-  gridSection: {
-    width: '100%',
-    marginTop: spacing.xl,
   },
   statCard: {
     flex: 1,

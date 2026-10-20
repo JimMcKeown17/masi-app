@@ -1,7 +1,7 @@
-import React, { useCallback, useContext, useRef, useState } from 'react';
+import React, { useContext, useRef, useState } from 'react';
 import { View, StyleSheet, ScrollView, Text, Linking } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { NavigationContext, useFocusEffect } from '@react-navigation/native';
+import { NavigationContext } from '@react-navigation/native';
 import { useScrollBottomPadding } from '../../hooks/useScrollBottomPadding';
 import { useSignedInEA } from '../../context/SignedInEAContext';
 import { useAuth } from '../../context/AuthContext';
@@ -14,7 +14,6 @@ import IconTile from '../../components/common/IconTile';
 import ListGroup from '../../components/common/ListGroup';
 import ListRow from '../../components/common/ListRow';
 import SectionHeader from '../../components/common/SectionHeader';
-import SegmentedControl from '../../components/common/SegmentedControl';
 import StatusBadge from '../../components/common/StatusBadge';
 import { useHeaderHairline } from '../../components/common/ScreenHeader';
 import ProfileIdentity from '../../components/profile/ProfileIdentity';
@@ -26,15 +25,8 @@ import { colors, spacing } from '../../constants/colors';
 import { typeRoles } from '../../constants/typography';
 import { exportDatabase, exportLogs } from '../../utils/debugExport';
 import { getReleaseMetadata } from '../../utils/releaseMetadata';
-import { deviceSettings } from '../../services/deviceSettings';
-import { CAPTURE_MODES } from '../../constants/egraConstants';
 import { getRuntimeDiagnostics } from '../../utils/runtimeDiagnostics';
 import { sendObservabilityTest } from '../../services/observability';
-
-function CaptureModeFocusLoader({ loadCaptureMode }) {
-  useFocusEffect(loadCaptureMode);
-  return null;
-}
 
 export default function ProfileScreen({ navigation }) {
   const { handle, repositories } = useSignedInEA();
@@ -63,35 +55,12 @@ export default function ProfileScreen({ navigation }) {
   const [databaseExportLoading, setDatabaseExportLoading] = useState(false);
   const [reportTestLoading, setReportTestLoading] = useState(false);
 
-  const [captureMode, setCaptureMode] = useState(CAPTURE_MODES.SEQUENTIAL);
-  const loadCaptureMode = useCallback(() => {
-    let active = true;
-    (async () => {
-      const mode = await deviceSettings.getCaptureMode();
-      if (active) setCaptureMode(mode);
-    })();
-    return () => {
-      active = false;
-    };
-  }, []);
-
   const showMessage = (message, type = 'success') => {
     toast.show({
       message,
       tone: type,
       duration: 4000,
     });
-  };
-
-  const handleChangeCaptureMode = async (mode) => {
-    const previous = captureMode;
-    setCaptureMode(mode);
-    try {
-      await deviceSettings.setCaptureMode(mode);
-    } catch (error) {
-      console.error('Set capture mode error:', error);
-      setCaptureMode(previous);
-    }
   };
 
   const handleShareLogs = async () => {
@@ -187,7 +156,6 @@ export default function ProfileScreen({ navigation }) {
 
   return (
     <View style={styles.container}>
-      {navigationContext ? <CaptureModeFocusLoader loadCaptureMode={loadCaptureMode} /> : null}
       <ScrollView
         style={styles.container}
         contentContainerStyle={[styles.scrollContent, { paddingBottom }]}
@@ -209,16 +177,6 @@ export default function ProfileScreen({ navigation }) {
               style={styles.footnoteIcon} accessible={false} />
             <Text style={styles.footnoteText}>Profile information is managed by administrators</Text>
           </View>
-        </View>
-
-        <View style={styles.section}>
-          <SectionHeader title="Assessment capture" hint="How you mark each item during an EGRA assessment." />
-          <SegmentedControl role="radio" accessibilityLabel="Assessment capture"
-            options={[
-              { value: CAPTURE_MODES.GRID, label: 'Grid' },
-              { value: CAPTURE_MODES.SEQUENTIAL, label: 'Step-by-step' },
-            ]}
-            value={captureMode} onChange={handleChangeCaptureMode} />
         </View>
 
         <View style={styles.section}>

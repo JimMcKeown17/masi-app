@@ -11,7 +11,7 @@ import { useAuth } from '../../context/AuthContext';
 import { useChildren } from '../../context/ChildrenContext';
 import { useClasses } from '../../context/ClassesContext';
 
-import { getLetterAssessmentRanking, getWordAssessmentRanking } from '../../utils/dashboardStats';
+import { getLetterScoreRanking, getWordAssessmentRanking } from '../../utils/dashboardStats';
 import { getScoreBand, getBandColor } from '../../utils/scoreBands';
 import RankedBarRow from '../../components/dashboard/RankedBarRow';
 import StatBar from '../../components/dashboard/StatBar';
@@ -26,7 +26,7 @@ const MODES = {
     label: 'Letters',
     toolCode: 'letter_sounds',
     maxValue: 60,
-    rank: getLetterAssessmentRanking,
+    rank: getLetterScoreRanking,
     subtitle: 'Ranked by letters correct on the most recent EGRA letter assessment',
     benchmarked: true,
   },

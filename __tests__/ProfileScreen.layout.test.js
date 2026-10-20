@@ -147,7 +147,7 @@ test('the footnote is plain, not italic', () => {
 });
 test('section labels are headers', () => {
   const screen = renderProfile();
-  for (const name of ['Profile info', 'Assessment capture', 'Account & support', 'Legal']) {
+  for (const name of ['Profile info', 'Account & support', 'Legal']) {
     expect(screen.getByRole('header', { name })).toBeTruthy();
   }
 });

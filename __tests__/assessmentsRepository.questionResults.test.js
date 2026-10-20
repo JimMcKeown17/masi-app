@@ -276,12 +276,26 @@ describe('question result persistence through real SQLite', () => {
     expect(await repository.countResults({ userId, childId, questionCode: 'word_reading' })).toBe(1);
   });
 
+  test('exposes only the Question result write API', () => {
+    expect(repository.saveAssessment).toBeUndefined();
+    expect(repository.saveQuestionResult).toEqual(expect.any(Function));
+  });
+
+  test('reads one saved family by assessmentId without crossing programme scope', async () => {
+    const first = await save();
+    const second = await save();
+    expect((await repository.getQuestionResults({ userId, assessmentId: second.id })).map(row => row.id))
+      .toEqual([second.id]);
+    expect(await repository.getQuestionResults({ userId, assessmentId: uuid() })).toEqual([]);
+    const otherProgramme = uuid();
+    await db.runAsync('insert into programmes (id, code, name) values (?, ?, ?)', otherProgramme, 'other-id', 'Other');
+    await db.runAsync('update assessments set programme_id = ? where id = ?', otherProgramme, first.id);
+    expect(await repository.getQuestionResults({ userId, assessmentId: first.id })).toEqual([]);
+  });
+
   test('new result reads exclude legacy summary assessments while legacy reads still see them', async () => {
-    await repository.saveAssessment({
-      id: uuid(), user_id: userId, child_id: childId, programme_id: programmeId,
-      assessment_type: 'letter_egra', assessment_date: '2026-10-20',
-      correct_letters: [], incorrect_letters: [], synced: false,
-    });
+    await db.runAsync(`insert into assessments (id, user_id, child_id, programme_id, assessment_type, assessment_date)
+      values (?, ?, ?, ?, 'letter_egra', '2026-10-20')`, uuid(), userId, childId, programmeId);
     expect(await repository.getQuestionResults({ userId, includeSkipped: true })).toEqual([]);
     expect(await repository.getAssessments({ userId })).toHaveLength(1);
     expect(await repository.countAssessments({ userId, childId })).toBe(1);

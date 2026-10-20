@@ -1,44 +1,17 @@
 import { resolveDatabase, runRepositoryTransaction } from './repositoryRuntime';
 import {
-  assertRlsRequiredFields,
   assessmentItemDomainId,
   enqueueDomainOutbox,
   getActiveProgrammeId,
   mapDomainRow,
-  normalizeSyncFields,
   resolveProgrammeId,
-  shouldEnqueueOutbox,
   upsertDomainRecord,
 } from './domainRepositoryUtils';
-import { chunkArray, decodeJson, sqlPlaceholders, syncStatusFromSynced } from './sqliteRepositoryUtils';
+import { chunkArray, decodeJson, sqlPlaceholders } from './sqliteRepositoryUtils';
 import { validateResult } from '../../assessment-questions/contractTest/validateResult';
 import { assertSubmitShape } from '../../services/assessmentFamilyPayload';
 import { LETTER_EVIDENCE_CODES } from '../../utils/assessmentRegistry';
 import { toLocalDateString } from '../../utils/localDate';
-
-const ASSESSMENT_COLUMNS = [
-  'id',
-  'user_id',
-  'child_id',
-  'programme_id',
-  'assessment_tool_id',
-  'assessment_window_id',
-  'assessment_purpose',
-  'grade_snapshot',
-  'teacher_name_snapshot',
-  'assessment_type',
-  'capture_mode',
-  'assessment_date',
-  'score',
-  'total_items',
-  'items_tested',
-  'notes',
-  'created_at',
-  'updated_at',
-  'sync_status',
-  'last_sync_error',
-  'server_updated_at',
-];
 
 const ITEM_COLUMNS = [
   'id',
@@ -56,7 +29,7 @@ const ITEM_COLUMNS = [
   'server_updated_at',
 ];
 
-// Question families have their own storage shape; the legacy summary writer stays unchanged.
+// Question results and their items are persisted as one family.
 const QUESTION_RESULT_COLUMNS = [
   'id', 'user_id', 'child_id', 'programme_id', 'assessment_type', 'assessment_date',
   'assessment_purpose', 'assessment_window_id', 'capture_mode', 'score', 'total_items',
@@ -65,22 +38,6 @@ const QUESTION_RESULT_COLUMNS = [
 ];
 
 const SUMMARY_ITEM_KEY = '__summary__';
-
-const buildSummary = (assessment) => ({
-  attempt_number: assessment.attempt_number,
-  correction_count: assessment.correction_count ?? 0,
-  letter_set_id: assessment.letter_set_id,
-  letter_language: assessment.letter_language,
-  completion_time: assessment.completion_time,
-  letters_attempted: assessment.letters_attempted,
-  correct_responses: assessment.correct_responses,
-  accuracy: assessment.accuracy,
-  correct_letters: assessment.correct_letters || [],
-  incorrect_letters: assessment.incorrect_letters || [],
-  last_letter_attempted: assessment.last_letter_attempted || null,
-  date_assessed: assessment.date_assessed || assessment.assessment_date,
-  device_info: assessment.device_info || {},
-});
 
 const mapAssessment = (row, summary = {}) => {
   if (!row) return null;
@@ -291,7 +248,7 @@ export const createAssessmentsRepository = ({ database } = {}) => {
   };
 
   const getQuestionResults = async ({
-    userId, programmeId, childId, childIds, questionCodes, language, sinceDate,
+    userId, programmeId, assessmentId, childId, childIds, questionCodes, language, sinceDate,
     recordedByUserId, includeSkipped = false, order = 'asc',
   } = {}) => {
     if (childIds?.length === 0 || questionCodes?.length === 0) return [];
@@ -301,7 +258,7 @@ export const createAssessmentsRepository = ({ database } = {}) => {
     const clauses = ['question_code is not null'];
     const params = [];
     for (const [column, value] of [
-      ['programme_id', activeProgrammeId], ['child_id', childId],
+      ['programme_id', activeProgrammeId], ['id', assessmentId], ['child_id', childId],
       ['user_id', recordedByUserId], ['language', language],
     ]) {
       if (value) { clauses.push(`${column} = ?`); params.push(value); }
@@ -358,92 +315,6 @@ export const createAssessmentsRepository = ({ database } = {}) => {
     return Number(row?.count || 0);
   };
 
-  const saveAssessment = async (assessment, { transaction } = {}) => runWrite(transaction, async (txn) => {
-    assertRlsRequiredFields('assessments', assessment, ['user_id']);
-    const programmeId = await resolveProgrammeId(txn, {
-      programmeId: assessment.programme_id,
-      userId: assessment.user_id,
-    });
-    const summary = buildSummary(assessment);
-    const record = normalizeSyncFields({
-      ...assessment,
-      programme_id: programmeId,
-      assessment_date: assessment.assessment_date || assessment.date_assessed,
-      score: assessment.score ?? assessment.correct_responses ?? null,
-      total_items: assessment.total_items ?? assessment.letters_attempted ?? null,
-      assessment_purpose: assessment.assessment_purpose || 'progress_check',
-      items_tested: assessment.items_tested || [],
-      sync_status: assessment.sync_status || syncStatusFromSynced(assessment.synced),
-    });
-
-    await upsertDomainRecord(txn, {
-      tableName: 'assessments',
-      columns: ASSESSMENT_COLUMNS,
-      jsonColumns: ['items_tested'],
-    }, record);
-    if (shouldEnqueueOutbox(record)) {
-      await enqueueDomainOutbox(txn, 'assessments', assessment.id, 'insert', record);
-    }
-
-    const itemRows = [
-      {
-        id: assessmentItemDomainId({
-          assessmentId: assessment.id,
-          itemKey: SUMMARY_ITEM_KEY,
-        }),
-        assessment_id: assessment.id,
-        item_key: SUMMARY_ITEM_KEY,
-        metadata: summary,
-      },
-      ...(assessment.correct_letters || []).map((item) => ({
-        id: assessmentItemDomainId({
-          assessmentId: assessment.id,
-          itemKey: item.letter,
-          position: item.index,
-          isCorrect: true,
-        }),
-        assessment_id: assessment.id,
-        item_key: item.letter,
-        prompt: item.letter,
-        is_correct: true,
-        position: item.index,
-        metadata: item,
-      })),
-      ...(assessment.incorrect_letters || []).map((item) => ({
-        id: assessmentItemDomainId({
-          assessmentId: assessment.id,
-          itemKey: item.letter,
-          position: item.index,
-          isCorrect: false,
-        }),
-        assessment_id: assessment.id,
-        item_key: item.letter,
-        prompt: item.letter,
-        is_correct: false,
-        position: item.index,
-        metadata: item,
-      })),
-    ];
-
-    for (const item of itemRows) {
-      const itemRecord = normalizeSyncFields({
-        ...item,
-        sync_status: assessment.sync_status || syncStatusFromSynced(assessment.synced),
-      });
-      await upsertDomainRecord(txn, {
-        tableName: 'assessment_items',
-        columns: ITEM_COLUMNS,
-        booleanColumns: ['is_correct'],
-        jsonColumns: ['metadata'],
-      }, itemRecord);
-      if (shouldEnqueueOutbox(itemRecord)) {
-        await enqueueDomainOutbox(txn, 'assessment_items', item.id, 'insert', itemRecord);
-      }
-    }
-
-    return true;
-  });
-
   const getUnsyncedRecords = async () => {
     const db = await resolveDatabase(database);
     const rows = await db.getAllAsync("select * from assessments where sync_status <> 'synced' order by created_at");
@@ -454,7 +325,6 @@ export const createAssessmentsRepository = ({ database } = {}) => {
     getAssessments,
     getAssessmentCountsSince,
     countAssessments,
-    saveAssessment,
     getUnsyncedRecords,
     saveQuestionResult,
     getQuestionResults,

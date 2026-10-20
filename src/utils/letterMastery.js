@@ -25,16 +25,3 @@ export function computeAssessmentMastery(result, pedagogicalOrder) {
   }
   return new Set([...allReachedCorrect].filter(([, correct]) => correct).map(([letter]) => letter));
 }
-
-/**
- * Normalize a home_language string to a key for LETTER_SETS / PEDAGOGICAL_ORDERS.
- * Handles variations like 'English', 'english', 'isiXhosa', 'isixhosa', 'Xhosa'.
- *
- * @param {string} homeLanguage - The class home_language value
- * @returns {string} 'english' or 'isixhosa'
- */
-export function normalizeLanguageKey(homeLanguage) {
-  const lower = (homeLanguage || '').toLowerCase().trim();
-  if (lower.includes('xhosa')) return 'isixhosa';
-  return 'english';
-}

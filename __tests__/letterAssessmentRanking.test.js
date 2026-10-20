@@ -1,4 +1,4 @@
-import { getLetterAssessmentRanking, getWordAssessmentRanking } from '../src/utils/dashboardStats';
+import { getLetterScoreRanking, getWordAssessmentRanking } from '../src/utils/dashboardStats';
 
 // Codex P2 regression guard + Letters/Words toggle: the assessment ranking screen
 // switches between a "letters correct" ranking (60-letter scale, grade-referenced
@@ -10,7 +10,7 @@ import { getLetterAssessmentRanking, getWordAssessmentRanking } from '../src/uti
 const lettersCorrect = (n) =>
   Array.from({ length: n }, (_, i) => ({ index: i, letter: 'x' }));
 
-describe('getLetterAssessmentRanking — ranks letters only, ignores word assessments', () => {
+describe('getLetterScoreRanking — ranks letters only, ignores word assessments', () => {
   test('ranks by the latest LETTER assessment even when a word assessment is more recent', () => {
     const children = [{ id: 'c1', first_name: 'A', last_name: 'B', class_id: 'cls1' }];
     const assessments = [
@@ -26,7 +26,7 @@ describe('getLetterAssessmentRanking — ranks letters only, ignores word assess
       },
     ];
 
-    const ranked = getLetterAssessmentRanking(children, assessments);
+    const ranked = getLetterScoreRanking(children, assessments);
 
     expect(ranked[0].correct).toBe(22);        // the letter assessment, not the later word (5)
     expect(ranked[0].assessment.id).toBe('l1');
@@ -42,7 +42,7 @@ describe('getLetterAssessmentRanking — ranks letters only, ignores word assess
       },
     ];
 
-    const ranked = getLetterAssessmentRanking(children, assessments);
+    const ranked = getLetterScoreRanking(children, assessments);
 
     expect(ranked[0].accuracy).toBeNull();
     expect(ranked[0].assessment).toBeNull();
@@ -58,7 +58,7 @@ describe('getLetterAssessmentRanking — ranks letters only, ignores word assess
       },
     ];
 
-    const ranked = getLetterAssessmentRanking(children, assessments);
+    const ranked = getLetterScoreRanking(children, assessments);
 
     expect(ranked[0].assessment.id).toBe('legacy');
   });

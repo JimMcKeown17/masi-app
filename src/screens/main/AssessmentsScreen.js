@@ -14,6 +14,7 @@ import NoActiveProgrammeNotice from '../../components/common/NoActiveProgrammeNo
 import SurfaceCard from '../../components/common/SurfaceCard';
 import BrandButton from '../../components/common/BrandButton';
 import { typeRoles } from '../../constants/typography';
+import { STANDALONE_TESTS } from '../../utils/assessmentRegistry';
 
 export default function AssessmentsScreen({ navigation }) {
   const { handle, repositories } = useSignedInEA();
@@ -75,39 +76,22 @@ export default function AssessmentsScreen({ navigation }) {
 
       <Text style={styles.hint}>Run timed assessments and view results.</Text>
 
-      <SurfaceCard style={styles.card}>
-        <Text variant="titleMedium" style={styles.cardTitle}>
-          Letter Sound Assessment (EGRA)
-        </Text>
-        <Text variant="bodySmall" style={styles.cardDescription}>
-          60-second timed letter sound recognition test
-        </Text>
-        <View style={styles.cardActions}>
-          <BrandButton
-            size="md"
-            variant="primary"
-            onPress={() => navigation.navigate('AssessmentChildSelect', { assessmentType: 'letter_egra' })}
-            label="Start assessment"
-          />
-        </View>
-      </SurfaceCard>
-
-      <SurfaceCard style={styles.card}>
-        <Text variant="titleMedium" style={styles.cardTitle}>
-          Word Reading Assessment (EGRA)
-        </Text>
-        <Text variant="bodySmall" style={styles.cardDescription}>
-          60-second timed word reading fluency test
-        </Text>
-        <View style={styles.cardActions}>
-          <BrandButton
-            size="md"
-            variant="primary"
-            onPress={() => navigation.navigate('AssessmentChildSelect', { assessmentType: 'word_egra' })}
-            label="Start assessment"
-          />
-        </View>
-      </SurfaceCard>
+      {STANDALONE_TESTS.map(test => (
+        <SurfaceCard key={test.code} style={styles.card}>
+          <Text variant="titleMedium" style={styles.cardTitle}>{test.title}</Text>
+          <Text variant="bodySmall" style={styles.cardDescription}>
+            {test.code === 'letter_sounds' ? '60-second letter sound test' : '60-second word reading test'}
+          </Text>
+          <View style={styles.cardActions}>
+            <BrandButton
+              size="md"
+              variant="primary"
+              onPress={() => navigation.navigate('AssessmentChildSelect', { testCode: test.code })}
+              label="Start assessment"
+            />
+          </View>
+        </SurfaceCard>
+      ))}
 
       <BrandButton size="md"
         variant="secondary"
