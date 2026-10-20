@@ -25,7 +25,9 @@ function StatCard({ value, label, accentColor }) {
       <Text style={[styles.statValue, { color: accentColor === colors.emphasis ? colors.primary : accentColor }]}>
         {value}
       </Text>
-      <Text style={styles.statLabel}>{label}</Text>
+      <Text style={styles.statLabel} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.75}>
+        {label}
+      </Text>
     </SurfaceCard>
   );
 }

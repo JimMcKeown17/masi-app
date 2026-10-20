@@ -1,7 +1,7 @@
 jest.mock('expo-sqlite', () => require('../test-support/expoSQLiteMock'));
 
 import React from 'react';
-import { act, fireEvent, render } from '@testing-library/react-native';
+import { act, fireEvent, render, within } from '@testing-library/react-native';
 import { v4 as uuid } from 'uuid';
 import { runMigrations } from '../src/db/migrations';
 import { createAssessmentsRepository } from '../src/db/repositories/assessmentsRepository';
@@ -33,6 +33,10 @@ const resultFor = (overrides = {}) => ({
   ...overrides,
 });
 const press = (rendered, ...labels) => labels.forEach(label => fireEvent.press(rendered.getByText(label)));
+const endSequential = rendered => {
+  fireEvent.press(rendered.getByTestId('letter-end'));
+  fireEvent.press(within(rendered.getByTestId('end-confirmation')).getByText('End test'));
+};
 
 // Use the same real components, fixtures and verdict as the package contract tests.
 // The wrapper also captures the emitted Result for the repository round trip.
@@ -54,7 +58,7 @@ const emitResult = async (Component, itemSet, interact) => {
 
 const componentCases = [
   ['LetterSoundsQuestion', LetterSoundsQuestion, fixtures.FIXTURE_LETTER_SOUNDS_EN,
-    r => press(r, 'Start', 'Correct', 'End', 'End test')],
+    r => { press(r, 'Start', 'Correct'); endSequential(r); }],
   ['ReadWordsQuestion', ReadWordsQuestion, fixtures.FIXTURE_READ_WORDS_EN,
     r => { press(r, 'Start'); fireEvent.press(r.getByLabelText('cat, idle')); press(r, 'End', 'Reached the end'); }],
   ['ReadSentencesQuestion', ReadSentencesQuestion, fixtures.FIXTURE_READ_SENTENCES_EN,
@@ -143,7 +147,10 @@ describe('question result persistence through real SQLite', () => {
   test('a real 60-item letter result saves one pending family and one flat outbox payload', async () => {
     const itemSet = { ...fixtures.FIXTURE_LETTER_SOUNDS_EN,
       rows: Array.from({ length: 5 }, () => fixtures.FIXTURE_LETTER_SOUNDS_EN.rows[0]) };
-    const result = await emitResult(LetterSoundsQuestion, itemSet, r => press(r, 'Start', 'Correct', 'End', 'End test'));
+    const result = await emitResult(LetterSoundsQuestion, itemSet, r => {
+      press(r, 'Start', 'Correct');
+      endSequential(r);
+    });
     const assessmentId = uuid();
     expect(await save({ assessmentId, result, captureMode: 'sequential' })).toEqual({ id: assessmentId });
     const [parents, items] = await snapshot();

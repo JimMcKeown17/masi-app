@@ -6,6 +6,7 @@ import type { ItemSetMeta } from '../types/ItemSet';
 import type { ResultItem, StoppedReason } from '../types/Result';
 import { initStepState, stepReducer, type StepAction, type StopRule } from './stepByStep';
 import { StopCard } from './StopCard';
+import { Countdown } from './Countdown';
 import { SkipReasonPicker } from '../skip/SkipReasonPicker';
 import { tokens } from '../theme/tokens';
 
@@ -26,7 +27,7 @@ export function buildSequentialCard(promptRows: SequentialPrompt[][]) {
 
 export function SequentialCapture({
   language, itemSet, items: cardItems, rows, stopRule, testIDPrefix,
-  instructions, durationSec, childName, allowSkip = true, onItemMarked, onComplete,
+  instructions, durationSec, childName, allowSkip = true, onItemMarked, onStart, onComplete,
 }: QuestionProps & {
   itemSet: ItemSetMeta;
   items: SequentialItem[];
@@ -54,6 +55,12 @@ export function SequentialCapture({
     durationSec === undefined || startTimeMsRef.current === null
       ? null : startTimeMsRef.current + durationSec * 1000
   ), [durationSec]);
+
+  const getRemainingMs = useCallback(() => {
+    const deadline = getDeadlineMs();
+    if (deadline === null) return 0;
+    return Math.max(0, deadline - (stopTimeMsRef.current ?? monotonicNow()));
+  }, [getDeadlineMs]);
 
   const finish = useCallback((reason: StoppedReason) => {
     if (hasFinishedRef.current) return;
@@ -150,13 +157,14 @@ export function SequentialCapture({
   };
 
   if (phase === 'intro') {
-    return <View>
-      {instructions ? <Text>{instructions}</Text> : null}
+    return <View testID={`${testIDPrefix}-intro`} style={styles.intro}>
+      {instructions ? <Text style={styles.instructions}>{instructions}</Text> : null}
       <Pressable accessibilityRole="button" onPress={() => {
         if (phaseRef.current !== 'intro') return;
         startTimeMsRef.current = monotonicNow();
+        onStart?.();
         transition('active');
-      }} style={styles.primaryButton}><Text style={styles.onPrimary}>Start</Text></Pressable>
+      }} style={[styles.primaryButton, styles.startButton]}><Text style={styles.onPrimary}>Start</Text></Pressable>
     </View>;
   }
   if (phase === 'finished') return <View />;
@@ -169,9 +177,16 @@ export function SequentialCapture({
     <View style={styles.root}>
       <View style={styles.root} pointerEvents={covered ? 'none' : 'auto'}
         accessibilityElementsHidden={covered} importantForAccessibility={covered ? 'no-hide-descendants' : 'auto'}>
-        <ScrollView ref={scrollRef} style={styles.root} contentContainerStyle={styles.grid} testID={`${testIDPrefix}-grid`}>
+        <View style={styles.statusRow}>
+          {durationSec === undefined ? null : <Countdown getRemainingMs={getRemainingMs} />}
+          <Text style={styles.progress}>{state.cursor} / {cardItems.length}</Text>
+        </View>
+        <ScrollView ref={scrollRef} style={styles.root}
+          contentContainerStyle={[styles.grid, testIDPrefix === 'word' && styles.wordGrid]}
+          testID={`${testIDPrefix}-grid`}>
           {rows.map((row, rowIndex) => (
-            <View key={rowIndex} testID={`${testIDPrefix}-row-${rowIndex}`} style={styles.row} onLayout={(event) => {
+            <View key={rowIndex} testID={`${testIDPrefix}-row-${rowIndex}`}
+              style={[styles.row, testIDPrefix === 'word' && styles.wordRow]} onLayout={(event) => {
               const y = event.nativeEvent.layout.y;
               rowOffsetsRef.current[rowIndex] = y;
               if (cardItems[stateRef.current.cursor]?.row === rowIndex) scrollRef.current?.scrollTo({ y, animated: true });
@@ -183,9 +198,14 @@ export function SequentialCapture({
                 const label = current ? 'current' : decision === true ? 'correct' : decision === false ? 'incorrect' : 'not reached';
                 return <View key={position} accessible accessibilityRole="text" accessibilityLabel={`${prompt}, ${label}`}
                   accessibilityState={{ selected: current }}
-                  style={[styles.tile, decision === true && styles.correctTile, decision === false && styles.incorrectTile,
+                  style={[styles.tile, testIDPrefix === 'letter' ? styles.letterTile : styles.wordTile,
+                    decision === true && styles.correctTile, decision === false && styles.incorrectTile,
                     current && styles.currentTile]}>
-                  <Text style={[styles.prompt, current && styles.currentPrompt]}>{prompt}</Text>
+                  <Text numberOfLines={1}
+                    adjustsFontSizeToFit={testIDPrefix === 'letter'} minimumFontScale={testIDPrefix === 'letter' ? 0.7 : undefined}
+                    style={[styles.prompt, testIDPrefix === 'word' && styles.wordPrompt, current && styles.currentPrompt]}>
+                    {prompt}
+                  </Text>
                 </View>;
               })}
             </View>
@@ -198,15 +218,17 @@ export function SequentialCapture({
             <Pressable accessibilityRole="button" accessibilityLabel="Incorrect" onPress={() => dispatch({ type: 'decide', correct: false })}
               style={[styles.decisionButton, styles.incorrectButton]}><Text style={styles.onPrimary}>Incorrect</Text></Pressable>
           </View>
-          <Pressable accessibilityRole="button" accessibilityLabel="Back" disabled={state.cursor === 0}
-            accessibilityState={{ disabled: state.cursor === 0 }} onPress={() => dispatch({ type: 'back' })}
-            style={styles.backButton}><Text style={[styles.link, state.cursor === 0 && styles.disabled]}>Back</Text></Pressable>
-          <View style={styles.nav}>
-            <Pressable accessibilityRole="button" onPress={handleEnd} style={styles.backButton}><Text style={styles.link}>End</Text></Pressable>
+          <View testID={`${testIDPrefix}-navigation`} style={styles.navigationRow}>
+            <Pressable accessibilityRole="button" accessibilityLabel="Back" disabled={state.cursor === 0}
+              accessibilityState={{ disabled: state.cursor === 0 }} onPress={() => dispatch({ type: 'back' })}
+              style={styles.backButton}><Text style={[styles.link, state.cursor === 0 && styles.disabled]}>Back</Text></Pressable>
             {allowSkip ? <Pressable accessibilityRole="button" style={styles.backButton} onPress={() => {
               if (hasFinishedRef.current || phaseRef.current !== 'active' || stateRef.current.stopped) return;
               transition('skip-picker');
             }}><Text style={styles.link}>Skip question</Text></Pressable> : null}
+            <Pressable testID={`${testIDPrefix}-end`} accessibilityRole="button" onPress={handleEnd} style={styles.backButton}>
+              <Text style={styles.link}>End test</Text>
+            </Pressable>
           </View>
         </View>
       </View>
@@ -234,14 +256,25 @@ export function SequentialCapture({
 
 const styles = StyleSheet.create({
   root: { flex: 1 },
-  grid: { gap: tokens.space.xs },
+  intro: { flex: 1, padding: tokens.space.lg },
+  instructions: { color: tokens.color.ink, fontSize: tokens.font.body, lineHeight: 24 },
+  startButton: { marginTop: 'auto' },
+  statusRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
+    paddingHorizontal: tokens.space.lg, paddingVertical: tokens.space.sm },
+  progress: { marginLeft: 'auto', color: tokens.color.muted, fontSize: tokens.font.caption },
+  grid: { gap: tokens.space.xs, paddingHorizontal: tokens.space.lg },
+  wordGrid: { gap: tokens.space.sm },
   row: { flexDirection: 'row', flexWrap: 'nowrap' },
-  tile: { flex: 1, minWidth: 0, alignItems: 'center', justifyContent: 'center', paddingVertical: tokens.space.lg,
+  wordRow: { flexWrap: 'wrap', gap: tokens.space.xs },
+  tile: { alignItems: 'center', justifyContent: 'center', paddingVertical: tokens.space.lg,
     borderWidth: 1, borderColor: tokens.color.line, backgroundColor: tokens.color.surface },
+  letterTile: { flex: 1, minWidth: 0 },
+  wordTile: { minWidth: 56, paddingHorizontal: tokens.space.md },
   correctTile: { backgroundColor: tokens.color.markedSoft },
   incorrectTile: { backgroundColor: tokens.color.errorSoft },
   currentTile: { backgroundColor: tokens.color.ink },
   prompt: { fontSize: tokens.font.markingItem, fontWeight: '600', color: tokens.color.ink },
+  wordPrompt: { fontSize: tokens.font.markingWord },
   currentPrompt: { color: tokens.color.surface },
   controls: { padding: tokens.space.lg, gap: tokens.space.sm, backgroundColor: tokens.color.surface },
   decisionRow: { flexDirection: 'row', gap: tokens.space.md },
@@ -252,7 +285,7 @@ const styles = StyleSheet.create({
   backButton: { minHeight: 44, padding: tokens.space.sm, alignItems: 'center', justifyContent: 'center' },
   link: { color: tokens.color.primaryPressed, fontSize: tokens.font.body, fontWeight: '600' },
   disabled: { color: tokens.color.notReached },
-  nav: { flexDirection: 'row', justifyContent: 'space-between' },
+  navigationRow: { flexDirection: 'row', justifyContent: 'space-between' },
   sheetOverlay: { ...StyleSheet.absoluteFillObject, justifyContent: 'flex-end', backgroundColor: tokens.color.scrim },
   sheetPanel: { padding: tokens.space.xl, gap: tokens.space.md, backgroundColor: tokens.color.surface,
     borderTopLeftRadius: tokens.radius.card, borderTopRightRadius: tokens.radius.card },

@@ -34,8 +34,8 @@ function decide(screen: Screen, correct: boolean, count = 1) {
   }
 }
 function end(screen: Screen) {
-  fireEvent.press(screen.getByText('End'));
-  fireEvent.press(screen.getByText('End test'));
+  fireEvent.press(screen.getByTestId('word-end'));
+  fireEvent.press(within(screen.getByTestId('end-confirmation')).getByText('End test'));
 }
 
 test('50 Correct decisions auto-complete with all fifty item-set keys and sequential results', () => {
@@ -100,18 +100,29 @@ test('a stop-rule override stops at ten across rows, guards queued taps, and fre
   expect(validateResult(result, { stopAt: 10 }).valid).toBe(true);
 });
 
-test('rows follow the ten row_lengths of five without wrapping and controls use large side-by-side targets', () => {
+test('card rows keep their identity while word tiles wrap and size to whole-word content', () => {
   const { screen } = start();
   const rows = screen.getAllByTestId(/^word-row-/);
   expect(rows).toHaveLength(10);
+  expect(StyleSheet.flatten(screen.getByTestId('word-grid').props.contentContainerStyle).paddingHorizontal)
+    .toBe(tokens.space.lg);
   rows.forEach((row, rowIndex) => {
-    expect(StyleSheet.flatten(row.props.style)).toMatchObject({ flexDirection: 'row', flexWrap: 'nowrap' });
+    expect(StyleSheet.flatten(row.props.style)).toMatchObject({ flexDirection: 'row', flexWrap: 'wrap' });
     const cells = within(row).getAllByLabelText(/, (current|not reached)$/);
     expect(cells.map((cell) => cell.props.accessibilityLabel)).toEqual(
       SET.words.slice(rowIndex * 5, rowIndex * 5 + 5).map(({ word }, column) =>
         `${word}, ${rowIndex === 0 && column === 0 ? 'current' : 'not reached'}`),
     );
+    cells.forEach((cell) => {
+      expect(StyleSheet.flatten(cell.props.style)).toMatchObject({
+        minWidth: 56, paddingHorizontal: tokens.space.md,
+      });
+      expect(StyleSheet.flatten(cell.props.style).flex).toBeUndefined();
+    });
   });
+  const firstWord = screen.getByText(SET.words[0].word);
+  expect(firstWord.props.numberOfLines).toBe(1);
+  expect(StyleSheet.flatten(firstWord.props.style).fontSize).toBe(tokens.font.markingWord);
   expect(within(screen.getByTestId('word-grid')).queryAllByRole('button')).toHaveLength(0);
   const decisions = screen.getByTestId('word-decisions');
   expect(StyleSheet.flatten(decisions.props.style).flexDirection).toBe('row');
@@ -186,12 +197,12 @@ test('End confirmation freezes reading at the tap even when confirmation is dela
   const { screen, onComplete } = start();
   decide(screen, true, 3);
   act(() => jest.advanceTimersByTime(12345));
-  fireEvent.press(screen.getByText('End'));
+  fireEvent.press(screen.getByTestId('word-end'));
   expect(screen.getByTestId('end-confirmation')).toBeTruthy();
   expect(screen.queryByText('Last item attempted')).toBeNull();
   act(() => jest.advanceTimersByTime(90000));
   expect(onComplete).not.toHaveBeenCalled();
-  fireEvent.press(screen.getByText('End test'));
+  fireEvent.press(within(screen.getByTestId('end-confirmation')).getByText('End test'));
   expect(onComplete.mock.calls[0][0]).toMatchObject({ duration_ms: 12345, stopped_reason: 'ea_ended',
     derived: { total_correct: 3, total_attempted: 3, last_attempted_position: 2 } });
 });
@@ -200,7 +211,7 @@ test('cancelling End retains decisions and the original deadline', () => {
   const { screen, onComplete } = start();
   decide(screen, true);
   act(() => jest.advanceTimersByTime(20000));
-  fireEvent.press(screen.getByText('End'));
+  fireEvent.press(screen.getByTestId('word-end'));
   act(() => jest.advanceTimersByTime(10000));
   fireEvent.press(screen.getByText('Cancel'));
   expect(screen.getByLabelText('the, correct')).toBeTruthy();
@@ -209,7 +220,7 @@ test('cancelling End retains decisions and the original deadline', () => {
     derived: { total_correct: 1, total_attempted: 1 } });
 });
 
-test.each(['Correct', 'Incorrect', 'Back', 'End'])('%s resolves a delayed timer before changing decisions', (control) => {
+test.each(['Correct', 'Incorrect', 'Back', 'End test'])('%s resolves a delayed timer before changing decisions', (control) => {
   const { screen, onComplete, onItemMarked } = start();
   decide(screen, true);
   // Elapsed time advances while the interval callback is delayed.

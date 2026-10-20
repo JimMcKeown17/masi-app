@@ -33,8 +33,8 @@ function decide(r: Screen, correct: boolean, count = 1) {
   for (let i = 0; i < count; i += 1) fireEvent.press(r.getByRole('button', { name: correct ? 'Correct' : 'Incorrect' }));
 }
 function end(r: Screen) {
-  fireEvent.press(r.getByText('End'));
-  fireEvent.press(r.getByText('End test'));
+  fireEvent.press(r.getByTestId('letter-end'));
+  fireEvent.press(within(r.getByTestId('end-confirmation')).getByText('End test'));
 }
 
 test('renders instructions and starts the timer only on Start', () => {
@@ -49,6 +49,46 @@ test('renders instructions and starts the timer only on Start', () => {
   act(() => jest.advanceTimersByTime(1));
   expect(onComplete).toHaveBeenCalledTimes(1);
   expect(onComplete.mock.calls[0][0]).toMatchObject({ stopped_reason: 'timer', duration_ms: 60000 });
+});
+
+test('intro uses a padded full-height layout with instructions above a bottom-pinned Start', () => {
+  const r = render(<LetterSoundsQuestion language="en" itemSet={SET}
+    instructions="Read the sounds." onComplete={jest.fn()} />);
+
+  expect(StyleSheet.flatten(r.getByTestId('letter-intro').props.style)).toMatchObject({
+    flex: 1, padding: tokens.space.lg,
+  });
+  expect(StyleSheet.flatten(r.getByText('Read the sounds.').props.style)).toMatchObject({
+    color: tokens.color.ink, fontSize: tokens.font.body, lineHeight: 24,
+  });
+  expect(StyleSheet.flatten(r.getByRole('button', { name: 'Start' }).props.style).marginTop).toBe('auto');
+});
+
+test('active capture shows the timed status row and updates its countdown', () => {
+  const { r } = startQ();
+
+  expect(r.getByText('1:00')).toBeTruthy();
+  expect(r.getByLabelText('Time left, 60 seconds')).toBeTruthy();
+  expect(r.getByText('0 / 60')).toBeTruthy();
+
+  act(() => jest.advanceTimersByTime(10000));
+
+  expect(r.getByText('0:50')).toBeTruthy();
+  expect(r.getByLabelText('Time left, 50 seconds')).toBeTruthy();
+  decide(r, true, 13);
+  expect(r.getByText('13 / 60')).toBeTruthy();
+});
+
+test('Start notifies the host exactly once', () => {
+  const onStart = jest.fn();
+  const onComplete = jest.fn();
+  const r = render(<LetterSoundsQuestion language="en" itemSet={SET} durationSec={60}
+    onStart={onStart} onComplete={onComplete} />);
+  const start = r.getByRole('button', { name: 'Start' });
+
+  act(() => { fireEvent.press(start); fireEvent.press(start); });
+
+  expect(onStart).toHaveBeenCalledTimes(1);
 });
 
 test('ten Incorrect decisions open one bottom stop card and Save freezes the tenth-tap time', () => {
@@ -108,6 +148,20 @@ test('Undo moves the deadline by the paused interval', () => {
   expect(onComplete).toHaveBeenCalledTimes(1);
   expect(onComplete.mock.calls[0][0]).toMatchObject({ stopped_reason: 'timer', duration_ms: 60000,
     derived: { total_attempted: 9, last_attempted_position: 8, max_consecutive_wrong: 9 } });
+});
+
+test('countdown freezes on the stop card and resumes after Undo', () => {
+  const { r } = startQ();
+  act(() => jest.advanceTimersByTime(10000));
+  decide(r, false, 10);
+  expect(r.getByText('0:50', { includeHiddenElements: true })).toBeTruthy();
+
+  act(() => jest.advanceTimersByTime(5000));
+  expect(r.getByText('0:50', { includeHiddenElements: true })).toBeTruthy();
+
+  fireEvent.press(r.getByText('Undo last mark'));
+  act(() => jest.advanceTimersByTime(1000));
+  expect(r.getByText('0:49')).toBeTruthy();
 });
 
 test('same-tick tenth and eleventh Incorrect taps stop once; all queued marking controls are ignored', () => {
@@ -212,13 +266,13 @@ test('End confirms in a bottom sheet, freezing subsecond duration and scores at 
   decide(r, false);
   const correct = r.getByRole('button', { name: 'Correct' });
   act(() => jest.advanceTimersByTime(375));
-  fireEvent.press(r.getByText('End'));
+  fireEvent.press(r.getByTestId('letter-end'));
   const sheet = r.getByTestId('end-confirmation');
   expect(StyleSheet.flatten(sheet.props.style)).toMatchObject({ justifyContent: 'flex-end', backgroundColor: tokens.color.scrim });
   fireEvent.press(correct);
   act(() => jest.advanceTimersByTime(90000));
   expect(onComplete).not.toHaveBeenCalled();
-  const confirm = r.getByText('End test');
+  const confirm = within(sheet).getByText('End test');
   act(() => { fireEvent.press(confirm); fireEvent.press(confirm); });
   expect(onComplete).toHaveBeenCalledTimes(1);
   expect(onComplete.mock.calls[0][0]).toMatchObject({ duration_ms: 375, stopped_reason: 'ea_ended',
@@ -229,7 +283,7 @@ test('Cancel on End retains decisions and the original deadline, including time 
   const { r, onComplete } = startQ();
   decide(r, true);
   act(() => jest.advanceTimersByTime(20000));
-  fireEvent.press(r.getByText('End'));
+  fireEvent.press(r.getByTestId('letter-end'));
   act(() => jest.advanceTimersByTime(10000));
   fireEvent.press(r.getByText('Cancel'));
   expect(r.getByLabelText('a, correct')).toBeTruthy();
@@ -238,7 +292,7 @@ test('Cancel on End retains decisions and the original deadline, including time 
   expect(onComplete.mock.calls[0][0]).toMatchObject({ duration_ms: 60000, stopped_reason: 'timer' });
 });
 
-test.each(['Correct', 'Incorrect', 'Back', 'End'])('%s resolves an overdue deadline before changing any decisions', (control) => {
+test.each(['Correct', 'Incorrect', 'Back', 'End test'])('%s resolves an overdue deadline before changing any decisions', (control) => {
   const { r, onComplete, onItemMarked } = startQ();
   decide(r, true);
   // Elapsed time advances while the interval callback is delayed.
@@ -263,23 +317,31 @@ test('deadline expiry without marks emits -1, zero attempted, and no last-attemp
 
 test('untimed End freezes reading time and reports was_timed=false', () => {
   const { r, onComplete } = startQ({ durationSec: undefined });
+  expect(r.queryByLabelText(/Time left/)).toBeNull();
   act(() => jest.advanceTimersByTime(120000));
   expect(onComplete).not.toHaveBeenCalled();
-  fireEvent.press(r.getByText('End'));
+  fireEvent.press(r.getByTestId('letter-end'));
   act(() => jest.advanceTimersByTime(30000));
-  fireEvent.press(r.getByText('End test'));
+  fireEvent.press(within(r.getByTestId('end-confirmation')).getByText('End test'));
   expect(onComplete.mock.calls[0][0]).toMatchObject({ duration_ms: 120000, derived: { was_timed: false } });
 });
 
 test('unequal rows stay intact, highlight the current letter, and preserve duplicate positions', () => {
   const { r, onComplete } = startQ({ itemSet: { ...SET, rows: [['a', 'b'], ['c', 'a', 'd'], ['e']], stop_rule: null } });
   const rows = r.getAllByTestId(/^letter-row-/);
+  expect(StyleSheet.flatten(r.getByTestId('letter-grid').props.contentContainerStyle).paddingHorizontal)
+    .toBe(tokens.space.lg);
   expect(rows).toHaveLength(3);
   expect(rows.map((row) => within(row).getAllByLabelText(/, (current|not reached)$/).length)).toEqual([2, 3, 1]);
   rows.forEach((row) => expect(StyleSheet.flatten(row.props.style)).toMatchObject({ flexDirection: 'row', flexWrap: 'nowrap' }));
   const current = r.getByLabelText('a, current');
   expect(current.props.accessibilityState.selected).toBe(true);
-  expect(StyleSheet.flatten(current.props.style).backgroundColor).not.toBe(tokens.color.surface);
+  expect(StyleSheet.flatten(current.props.style)).toMatchObject({
+    backgroundColor: tokens.color.ink, flex: 1,
+  });
+  expect(r.getAllByText('a')[0].props).toMatchObject({
+    numberOfLines: 1, adjustsFontSizeToFit: true, minimumFontScale: 0.7,
+  });
   expect(StyleSheet.flatten(r.getAllByText('a')[0].props.style).fontSize).toBe(tokens.font.markingItem);
   expect(within(r.getByTestId('letter-grid')).queryAllByRole('button')).toHaveLength(0);
   decide(r, false, 3);
@@ -302,7 +364,7 @@ test('the current row scrolls into view when the cursor moves forward or Back', 
   expect(scrollTo).toHaveBeenLastCalledWith({ y: 0, animated: true });
 });
 
-test('Correct/Incorrect are side by side with large pill targets and Back below', () => {
+test('Correct/Incorrect stay side by side and Back/End test share one navigation row', () => {
   const { r } = startQ();
   const row = r.getByTestId('letter-decisions');
   expect(StyleSheet.flatten(row.props.style).flexDirection).toBe('row');
@@ -310,7 +372,16 @@ test('Correct/Incorrect are side by side with large pill targets and Back below'
     expect(StyleSheet.flatten(within(row).getByRole('button', { name }).props.style)).toMatchObject({ flex: 1, minHeight: 56, borderRadius: tokens.radius.pill });
   }
   expect(within(row).queryByRole('button', { name: 'Back' })).toBeNull();
-  expect(StyleSheet.flatten(r.getByRole('button', { name: 'Back' }).props.style).minHeight).toBeGreaterThanOrEqual(44);
+  const navigation = r.getByTestId('letter-navigation');
+  expect(StyleSheet.flatten(navigation.props.style)).toMatchObject({
+    flexDirection: 'row', justifyContent: 'space-between',
+  });
+  expect(within(navigation).getByRole('button', { name: 'Back' })).toBeDisabled();
+  expect(within(navigation).getByText('End test')).toBeTruthy();
+  for (const name of ['Back', 'End test']) {
+    expect(StyleSheet.flatten(within(navigation).getByRole('button', { name }).props.style).minHeight)
+      .toBeGreaterThanOrEqual(44);
+  }
 });
 
 test('an incomplete override resolves to the requested bundled set', () => {

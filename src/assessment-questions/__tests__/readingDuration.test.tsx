@@ -1,5 +1,5 @@
 import React from 'react';
-import { act, fireEvent, render } from '@testing-library/react-native';
+import { act, fireEvent, render, within } from '@testing-library/react-native';
 import { LetterSoundsQuestion } from '../questions/LetterSoundsQuestion';
 import { ReadWordsQuestion } from '../questions/ReadWordsQuestion';
 import { ReadPassageQuestion } from '../questions/ReadPassageQuestion';
@@ -52,13 +52,23 @@ describe.each([
     return { screen, onComplete };
   }
 
+  function pressEnd(screen: ReturnType<typeof render>) {
+    fireEvent.press(sequential ? screen.getByTestId('letter-end') : screen.getByText('End'));
+  }
+
+  function confirmEnd(screen: ReturnType<typeof render>) {
+    fireEvent.press(sequential
+      ? within(screen.getByTestId('end-confirmation')).getByText('End test')
+      : screen.getByText('Confirm'));
+  }
+
   describe.each([false, true])('End with an overdue callback (earlier End cancelled: %s)', (cancelEarlierEnd) => {
     test.each([60000, 65000])('End at %i ms resolves the deadline before delayed confirmation', (elapsedMs) => {
       const { screen, onComplete } = startReading(60);
       const startedAt = globalThis.performance.now();
       if (cancelEarlierEnd) {
         act(() => jest.advanceTimersByTime(20000));
-        fireEvent.press(screen.getByText('End'));
+        pressEnd(screen);
         act(() => jest.advanceTimersByTime(10000));
         fireEvent.press(screen.getByText('Cancel'));
       }
@@ -69,7 +79,7 @@ describe.each([
       const delayedMs = startedAt + elapsedMs - now();
       jest.spyOn(globalThis.performance, 'now').mockImplementation(() => now() + delayedMs);
       expect(screen.queryByText('Last item attempted')).toBeNull();
-      fireEvent.press(screen.getByText('End'));
+      pressEnd(screen);
       if (!sequential) expect(screen.getByText('Last item attempted')).toBeTruthy();
       const canCancel = screen.queryByText('Cancel') !== null;
       act(() => jest.advanceTimersByTime(30000));
@@ -114,11 +124,12 @@ describe.each([
   test('early End freezes duration before confirmation delayed past the deadline', () => {
     const { screen, onComplete } = startReading(60);
     act(() => jest.advanceTimersByTime(20000));
-    fireEvent.press(screen.getByText('End'));
+    pressEnd(screen);
     expect(screen.getByText(sequential ? 'End the test?' : 'Last item attempted')).toBeTruthy();
     act(() => jest.advanceTimersByTime(70000));
     expect(onComplete).not.toHaveBeenCalled();
-    fireEvent.press(screen.getByText(sequential ? 'End test' : 'Reached the end'));
+    if (sequential) confirmEnd(screen);
+    else fireEvent.press(screen.getByText('Reached the end'));
     const result = onComplete.mock.calls[0][0];
     expect(result.duration_ms).toBe(20000);
     expect(result.stopped_reason).toBe('ea_ended');
@@ -128,7 +139,7 @@ describe.each([
   test.each(['End', 'timer', 'skip'])('Cancel resumes the original clock before the next %s', (nextStop) => {
     const { screen, onComplete } = startReading(60);
     act(() => jest.advanceTimersByTime(20000));
-    fireEvent.press(screen.getByText('End'));
+    pressEnd(screen);
     act(() => jest.advanceTimersByTime(10000));
     fireEvent.press(screen.getByText('Cancel'));
     expect(screen.queryByText('Last item attempted')).toBeNull();
@@ -141,10 +152,11 @@ describe.each([
       if (!sequential) fireEvent.press(screen.getByText('Confirm'));
     } else {
       act(() => jest.advanceTimersByTime(10000));
-      fireEvent.press(screen.getByText(nextStop === 'End' ? 'End' : 'Skip question'));
+      if (nextStop === 'End') pressEnd(screen);
+      else fireEvent.press(screen.getByText('Skip question'));
       act(() => jest.advanceTimersByTime(30000));
-      fireEvent.press(screen.getByText(nextStop === 'End'
-        ? (sequential ? 'End test' : 'Confirm') : 'Child refused'));
+      if (nextStop === 'End') confirmEnd(screen);
+      else fireEvent.press(screen.getByText('Child refused'));
     }
 
     const elapsed = nextStop === 'timer' ? 60000 : nextStop === 'End' ? 40000 : 70000;
@@ -164,9 +176,9 @@ describe.each([
     act(() => jest.advanceTimersByTime(120000));
     expect(screen.queryByText('Last item attempted')).toBeNull();
     expect(onComplete).not.toHaveBeenCalled();
-    fireEvent.press(screen.getByText('End'));
+    pressEnd(screen);
     act(() => jest.advanceTimersByTime(30000));
-    fireEvent.press(screen.getByText(sequential ? 'End test' : 'Confirm'));
+    confirmEnd(screen);
     const result = onComplete.mock.calls[0][0];
     expect(result.duration_ms).toBe(sequential ? 120000 : 150000);
     expect(result.stopped_reason).toBe('ea_ended');

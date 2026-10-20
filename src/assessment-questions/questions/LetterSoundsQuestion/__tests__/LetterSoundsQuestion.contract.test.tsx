@@ -1,4 +1,4 @@
-import { fireEvent, act } from '@testing-library/react-native';
+import { fireEvent, act, within } from '@testing-library/react-native';
 import { runContractTest } from '../../../contractTest/runContractTest';
 import { LetterSoundsQuestion } from '..';
 import { FIXTURE_LETTER_SOUNDS_EN } from '../../../testFixtures';
@@ -14,8 +14,8 @@ describe('LetterSoundsQuestion — OSS contract', () => {
 
     fireEvent.press(rendered.getByText('Start'));
     fireEvent.press(rendered.getByText('Correct'));
-    fireEvent.press(rendered.getByText('End'));
-    fireEvent.press(rendered.getByText('End test'));
+    fireEvent.press(rendered.getByTestId('letter-end'));
+    fireEvent.press(within(rendered.getByTestId('end-confirmation')).getByText('End test'));
 
     const v = await verdict;
     expect(v.valid).toBe(true);

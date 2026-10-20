@@ -91,6 +91,11 @@ test('low-score results keep action red text, a secondary Try again button and s
   expect(screen.UNSAFE_getAllByType(SurfaceCard)).toHaveLength(3);
   const label = within(screen.UNSAFE_getAllByType(SurfaceCard)[2]).getByText('Incorrect');
   expect(StyleSheet.flatten(label.props.style)).toMatchObject(typeRoles.textLabel);
+  for (const statLabel of ['Attempted', 'Correct', 'Incorrect']) {
+    expect(screen.getByText(statLabel).props).toMatchObject({
+      numberOfLines: 1, adjustsFontSizeToFit: true, minimumFontScale: 0.75,
+    });
+  }
 });
 
 test('a missing saved result shows an honest empty state', async () => {

@@ -20,8 +20,21 @@ describe('assessment language and standalone test registry', () => {
     expect(registry.LANGUAGE_LABELS).toEqual({ en: 'English', xh: 'isiXhosa', zu: 'isiZulu' });
     expect(registry.LETTER_EVIDENCE_CODES).toEqual(['letter_sounds']);
     expect(registry.STANDALONE_TESTS).toEqual([
-      { code: 'letter_sounds', title: 'Letter Sounds', durationSec: 60, component: 'LetterSoundsQuestion' },
-      { code: 'word_reading', title: 'Word Reading', durationSec: 60, component: 'ReadWordsQuestion' },
+      {
+        code: 'letter_sounds', title: 'Letter Sounds', durationSec: 60, component: 'LetterSoundsQuestion',
+        instructions: '1. Tap Start to begin the 60-second timer.\n'
+          + '2. The highlighted letter is the one the child is reading.\n'
+          + '3. Tap Correct or Incorrect. The next letter is highlighted automatically.\n'
+          + '4. Tap Back to fix a mistake.\n'
+          + '5. After 10 wrong in a row, the test stops.',
+      },
+      {
+        code: 'word_reading', title: 'Word Reading', durationSec: 60, component: 'ReadWordsQuestion',
+        instructions: '1. Tap Start to begin the 60-second timer.\n'
+          + '2. The highlighted word is the one the child is reading.\n'
+          + '3. Tap Correct or Incorrect. The next word is highlighted automatically.\n'
+          + '4. Tap Back to fix a mistake.',
+      },
     ]);
     for (const test of registry.STANDALONE_TESTS) {
       for (const language of ['en', 'xh']) {

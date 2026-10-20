@@ -19,13 +19,18 @@ const mockResult = {
 };
 jest.mock('../src/assessment-questions', () => {
   const actual = jest.requireActual('../src/assessment-questions');
-  const { Pressable, Text } = require('react-native');
+  const { Pressable, Text, View } = require('react-native');
   const question = name => props => {
     mockQuestionName = name;
     mockQuestionProps = props;
-    return <Pressable accessibilityRole="button" onPress={() => props.onComplete(mockResult)}>
-      <Text>Finish test</Text>
-    </Pressable>;
+    return <View>
+      <Pressable accessibilityRole="button" onPress={() => props.onStart?.()}>
+        <Text>Start test</Text>
+      </Pressable>
+      <Pressable accessibilityRole="button" onPress={() => { props.onStart?.(); props.onComplete(mockResult); }}>
+        <Text>Finish test</Text>
+      </Pressable>
+    </View>;
   };
   return {
     ...actual,
@@ -98,12 +103,54 @@ test.each([
   if (testCode === 'word_reading') expect(mockQuestionProps.captureMode).toBe('sequential');
 });
 
+test('shows the standalone header and passes the registry instructions', () => {
+  const asanda = { ...child, first_name: 'Asanda', last_name: 'Moose' };
+  const screen = renderHost(makeNavigation(), { ...params, child: asanda });
+
+  expect(screen.getByText('Letter Sounds')).toBeTruthy();
+  expect(screen.getByText('Asanda Moose · isiXhosa')).toBeTruthy();
+  expect(screen.getByRole('button', { name: 'Close test' })).toBeTruthy();
+  expect(mockQuestionProps.instructions).toBe(
+    '1. Tap Start to begin the 60-second timer.\n'
+    + '2. The highlighted letter is the one the child is reading.\n'
+    + '3. Tap Correct or Incorrect. The next letter is highlighted automatically.\n'
+    + '4. Tap Back to fix a mistake.\n'
+    + '5. After 10 wrong in a row, the test stops.',
+  );
+});
+
+test('Close before Start leaves immediately without an end sheet', () => {
+  const screen = renderHost();
+
+  fireEvent.press(screen.getByRole('button', { name: 'Close test' }));
+
+  expect(screen.navigation.goBack).toHaveBeenCalledTimes(1);
+  expect(screen.queryByText('End the test?')).toBeNull();
+});
+
+test('Close after Start is guarded by the End the test sheet', () => {
+  const wrapper = ({ children }) => <AllProviders>{withData(children)}</AllProviders>;
+  const screen = renderInTestStack({
+    routes: [
+      { name: 'Entry', component: EmptyScreen },
+      { name: 'StandaloneTest', component: StandaloneTestScreen, params },
+    ],
+    initialIndex: 1, wrapper,
+  });
+  fireEvent.press(screen.getByText('Start test'));
+
+  fireEvent.press(screen.getByRole('button', { name: 'Close test' }));
+
+  expect(screen.routeNames()).toEqual(['Entry', 'StandaloneTest']);
+  expect(screen.getByText('End the test?')).toBeTruthy();
+});
+
 test('double completion before save resolves saves and navigates once; the guard lasts until commit', async () => {
   const pending = deferred();
   saveQuestionResult.mockReturnValue(pending.promise);
   const screen = renderHost();
   const complete = mockQuestionProps.onComplete;
-  act(() => { complete(mockResult); complete(mockResult); });
+  act(() => { mockQuestionProps.onStart(); complete(mockResult); complete(mockResult); });
   expect(saveQuestionResult).toHaveBeenCalledTimes(1);
   expect(saveQuestionResult).toHaveBeenCalledWith({
     assessmentId: expect.any(String), result: mockResult,
@@ -182,6 +229,7 @@ test('a save failure while confirming leave keeps one sheet open and offers retr
 
 test('Discard before completion shows End the test? and leaves without saving', () => {
   const screen = renderHost();
+  act(() => { mockQuestionProps.onStart(); });
   const event = beforeRemove(screen.navigation);
   expect(event.preventDefault).toHaveBeenCalledTimes(1);
   expect(screen.getByText('End the test?')).toBeTruthy();
@@ -193,6 +241,7 @@ test('Discard before completion shows End the test? and leaves without saving', 
 
 test('cancelling discard keeps the leave guard active', () => {
   const screen = renderHost();
+  act(() => { mockQuestionProps.onStart(); });
   beforeRemove(screen.navigation);
   fireEvent.press(screen.getByRole('button', { name: 'Keep testing' }));
   expect(screen.navigation.dispatch).not.toHaveBeenCalled();
@@ -250,7 +299,7 @@ test('the real navigation stack blocks back during save and replaces the route o
   expect(screen.routeNames()).toEqual(['Entry', 'AssessmentResults']);
 });
 
-test('native dismissal stays prevented from test start through save failure and releases only after a successful retry', async () => {
+test('native dismissal is free before Start, then stays prevented through save failure until retry succeeds', async () => {
   const firstSave = deferred();
   const retrySave = deferred();
   saveQuestionResult.mockReturnValueOnce(firstSave.promise).mockReturnValueOnce(retrySave.promise);
@@ -273,10 +322,11 @@ test('native dismissal stays prevented from test start through save failure and 
     initialIndex: 1, wrapper,
   });
   const routeKey = screen.navigationRef.getRootState().routes[1].key;
-  expect(nativeGuards[routeKey]?.preventRemove).toBe(true);
+  expect(nativeGuards[routeKey]).toBeUndefined();
 
-  fireEvent.press(screen.getByText('Finish test'));
+  fireEvent.press(screen.getByText('Start test'));
   expect(nativeGuards[routeKey]?.preventRemove).toBe(true);
+  fireEvent.press(screen.getByText('Finish test'));
   await act(async () => { firstSave.reject(new Error('disk full')); });
   expect(nativeGuards[routeKey]?.preventRemove).toBe(true);
   act(() => { screen.navigationRef.goBack(); });
