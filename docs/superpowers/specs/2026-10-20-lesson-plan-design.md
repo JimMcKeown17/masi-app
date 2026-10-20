@@ -99,6 +99,7 @@ These are marked **(my call)** where they appear below.
 | C20 | The Afrikaans letter sheet is Zazi's **active** `afrikaans_60_v2`, copied exactly with its id. Zazi's older `afrikaans_60` is never copied or reused. | It is what Zazi assesses Afrikaans on today, and what is on paper (Zazi `documentation/egra_letter_sets.md:26-43`). It is one printed 60-letter sequence that Zazi shared across all three languages in its January and June 2026 rounds, not an Afrikaans-specific instrument. The only Afrikaans-shaped sheet (`afrikaans_60`) was a provisional guess that was never approved. A form id must mean the same items in both apps forever. |
 | C21 | Afrikaans word tests use a copy of Zazi's provisional `afrikaans_words_50`, with the same id. | Today Afrikaans children are asked to read English words (`english_words_50`), the most misleading Afrikaans gap. A provisional Afrikaans list is better than an English one; a reviewed list later gets a new id. |
 | C22 | WelaPLUS is not offered to Afrikaans classes until its battery has Afrikaans (it is `en`/`xh` only, `battery/wela_plus_full.ts:49`); the launch shows "Not available in Afrikaans yet". Recorded as a requirement on the WelaPLUS Release 1 work, not built here. | Otherwise its Questions' `language === 'xh' ? XH : EN` would silently give Afrikaans children the English battery. |
+| C23 | **One letter-evidence rule**, shared by the download, the mastery loader (`masteryState.js`) and the dashboards (`dashboardStats.js`). A child knows a letter in a language if either: (a) their latest `letter_egra` assessment in that language **from the current academic year**, by any EA in any programme, shows it; or (b) their current EA confirmation for that letter and language says so, whichever programme recorded it. Programme records where evidence was captured; it is not part of the evidence's identity. | Letter knowledge belongs to the child, and B1's identity is child, letter and language. Today both reads filter by the active programme, and the loader uses assessments from any year the phone happens to hold (`masteryState.js:30-41`). A phone that kept last year's data and a fresh phone (which downloads the current year only, ADR-0005) would then disagree. Cost: early in a new year, before the baseline assessment, assessment letters drop out and only EA confirmations count. |
 
 ---
 
@@ -463,7 +464,10 @@ screen:
 - prerequisite 1 is largely built: `GRANT_SUBJECTS` already has `membershipMediatedChild` entries
   (`src/services/offlineSync.js:256-287`), so the ROADMAP tripwire is stale. It has **no `sessions`
   entry**, so this slice adds group-grant evidence for a session's group (otherwise a session whose
-  only valid grant is a pending group assignment can be marked terminal);
+  only valid grant is a pending group assignment can be marked terminal). That evidence follows C19:
+  an owed insert of the EA's assignment to that group counts **even when the local assignment has
+  since ended**. Today's check requires `unassigned_at is null` (`src/services/offlineSync.js:425-430`).
+  Other tables keep active-only evidence;
 - prerequisite 2 (collision-proof grouping versions and display numbers) stays deferred (C16);
 - `group_id` added to `SESSION_COLUMNS` and `SERVER_COLUMNS`, removed from `INTENTIONALLY_UNSYNCED`;
   `sessions → groups` in `TABLE_DEPENDENCIES` and `PARENT_FK_COLUMNS`;
@@ -484,7 +488,9 @@ screen:
 - **deleting a group never strands a saved lesson.** Test: save a lesson offline, delete its group,
   reconnect; the session and attendees upload with the group id. Repeat with the family
   half-uploaded (session sent, attendees pending) and with Head Office ending the assignment while
-  the phone is offline. If grouping work later lets a group change EA, the old holder's ended
+  the phone is offline. Repeat once more with the assignment's own insert failing and backing off
+  over several sync passes: the lesson converges with no manual retry. If grouping work later lets a
+  group change EA, the old holder's ended
   assignment must survive (today there is one row per group, `groupEaAssignmentDomainId`), or this
   check moves to a history table;
 - the column stays **nullable**: older builds keep sending none.
@@ -502,8 +508,9 @@ Its own plan, following `rls-sync-contract-map.md`, with real-SQLite and disposa
   started). Resuming on a later day changes none of them (C14).
 - **Tracker marks keep the time they were made.** A draft can be resumed days later, and under the
   D1 rule (ROADMAP §1, "the most recently *made* correction wins") the correction time decides
-  conflicts. So each pending mark or unmark is stored in the draft with the time the EA tapped it,
-  and that time is carried unchanged into the mastery write and every retry. Today's helper stamps
+  conflicts. So each pending mark or unmark is stored in the draft with the time the EA tapped it
+  **and the language it was made in**. Both are carried unchanged into the mastery write and every
+  retry; nothing re-derives the language at save. Today's helper stamps
   all marks with the submit time (`src/services/literacySessionPersistence.js:96-135`); the new save
   path must not. Test: a Monday draft saved on Wednesday does not overwrite another EA's Tuesday
   correction.
@@ -631,9 +638,15 @@ changing the key without the maps, guards and content would drop tracker marks a
   - Saving tracker marks for a language with no entry fails loudly. Today it returns silently
     (`literacySessionPersistence.js:73`).
   - "n/26" uses the alphabet's length.
-- **Mixed-language sessions.** The old form takes one language from the first child
-  (`LiteracySessionForm.js:305-310`). AF leaves that alone: C3 retires the form, and the Lesson flow
-  uses C18.
+- **Each tracker change keeps the language it was made in.**
+  - Today the old form takes one language from the first selected child and re-applies it to every
+    pending change at save (`LiteracySessionForm.js:305-310`, `literacySessionPersistence.js:85-113`).
+  - Once Afrikaans is its own language, removing the first child could relabel another child's
+    marks.
+  - AF records the language with each pending change when it is tapped, and saves it unchanged.
+    This is the same rule as the lesson draft (§7.2).
+  - Test: mark letters in an Afrikaans tracker, remove the first selected child, save. The marks
+    stay Afrikaans.
 - **Stored data.** No migration.
   - Assessments taken on the English sheets keep their labels, which are true about the sheet shown.
   - Mislabelled `'English'` tracker marks are dropped with the practice-data wipe (§4.2).
@@ -684,26 +697,37 @@ B1's plan meets these requirements, in this order:
    - **The write returns the winning row, and the phone applies it.** Otherwise, when a phone's older
      correction loses, nothing changes on the server to re-deliver the winner. The phone would show
      its losing value as synced until the next re-walk.
+   - Programme records where a mark was made; it is not part of the mark's identity (C23). Reads and
+     draft mark resolution ignore it. Today both filter by the active programme
+     (`masteryRepository.js:73-79`, `literacySessionPersistence.js:78-83`). Test: two programmes
+     read, correct and download the same mark.
    - Cutover from old builds as in §9.
 3. **B1-2 Mastery download.**
    - A positive-authority page function with keyset `(updated_at, id)` and overlap. Soft-deleted
      rows are included.
    - A re-walk when a new child is assigned to the EA.
-   - Mastery reads drop their `user_id` filter (`src/db/repositories/masteryRepository.js:81-83`).
+   - Mastery reads drop their `user_id` and `programme_id` filters (`src/db/repositories/masteryRepository.js:73-83`).
 4. **B1-3 Assessment families.**
    - **Upload first:** the all-or-nothing family upload (ROADMAP §1 item 5), so the server never
      holds a half-sent assessment.
-   - **Then download:** parents by ADR-0005's class-and-year rule, with **each parent and all its
-     items committed together**.
+   - **Then download:** current-year letter assessments, by any EA, for the children this phone
+     already holds (the EA's delivery children), with **each parent and all its items committed
+     together**.
+   - Why not the whole class: ADR-0005 also lets an EA read the whole class's assessments (control
+     children), but those children are not on the phone yet. `preloadedChildData.js:279-311`
+     downloads delivery children only, and `assessments.child_id` must reference a local child. So
+     the class-wide download waits for the whole-class roster work, which brings those children down
+     first.
    - Why together: Masi keeps the sheet id and language only in the `__summary__` item
      (`src/db/repositories/assessmentsRepository.js:55-71`). A parent without it gives no mastery,
      and as the newest assessment it would hide an older assessment's letters.
-   - A re-walk when a child enters assessment scope.
+   - A re-walk when a new child is assigned to the EA.
    - Evidence is read version-aware (§7.5).
-   - Volume is not measured yet. Class scope multiplies each EA's rows, so B1 measures it first.
+   - Volume is not measured yet, so B1 measures it first.
 5. **B1-4 Completeness.** `masteryInputsComplete(childIds)` mirrors the §7.3 rule: both walks
    finished, no failure since, current year, every present child covered. The Sync screen gains an
-   Assessments row.
+   Assessments row. The download, the mastery loader and the dashboards all use the C23 evidence
+   rule, so a phone that kept last year's assessments and a fresh phone give the same answer.
 6. **B1-5 Operations, built in from the start.** Zazi learned each of these in the field:
    - skip unchanged rows and reuse prepared statements for each page. With these (Zazi elements A
      and B), a busy account's first download on a Galaxy A03s went from 300.8 s to 46.0 s;
