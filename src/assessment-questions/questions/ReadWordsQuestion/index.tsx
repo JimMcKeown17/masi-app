@@ -4,8 +4,9 @@
  * Child reads words aloud; EA taps each pill when the child gets it right.
  * When durationSec is provided, expiry opens the last-attempted marker.
  * Pills follow card rows when row_lengths is provided and otherwise wrap.
+ * Sequential mode shares the letter test's capture flow.
  */
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { View, Text, Pressable, ScrollView, StyleSheet } from 'react-native';
 import type { QuestionProps } from '../../types/QuestionProps';
 import type { ItemSetMeta } from '../../types/ItemSet';
@@ -21,6 +22,7 @@ import { SkipReasonPicker } from '../../skip/SkipReasonPicker';
 import type { ManualSkipReason } from '../../skip/skipReasons';
 import { applyProgress, NO_ATTEMPT } from '../../progress/applyProgress';
 import { LastAttemptedSheet } from '../../progress/LastAttemptedSheet';
+import { buildSequentialCard, SequentialCapture } from '../../progress/SequentialCapture';
 
 type Phase = 'intro' | 'active' | 'mark-last' | 'skip-picker' | 'finished';
 type MarkReason = 'ea_ended' | 'timer';
@@ -76,7 +78,7 @@ function chunkByLengths<T>(items: T[], rowLengths: number[]): T[][] {
 }
 
 export function ReadWordsQuestion(
-  props: QuestionProps & { markingPolarity?: MarkingPolarity },
+  props: QuestionProps & { markingPolarity?: MarkingPolarity; captureMode?: 'grid' | 'sequential' },
 ) {
   const itemSet = resolveItemSet(
     props.language,
@@ -85,7 +87,17 @@ export function ReadWordsQuestion(
     isFullItemSet,
   );
   if (!itemSet) return <MissingItemSet language={props.language} />;
+  if (props.captureMode === 'sequential') return <ReadWordsSequentialContent {...props} itemSet={itemSet} />;
   return <ReadWordsQuestionContent {...props} itemSet={itemSet} />;
+}
+
+function ReadWordsSequentialContent(props: QuestionProps & { itemSet: FullItemSet }) {
+  const { words, row_lengths } = props.itemSet;
+  const card = useMemo(() => buildSequentialCard(
+    chunkByLengths(words, row_lengths ?? [words.length]).map((row) =>
+      row.map((word) => ({ item_key: word.item_key, prompt: word.word }))),
+  ), [words, row_lengths]);
+  return <SequentialCapture {...props} {...card} stopRule={props.itemSet.stop_rule ?? null} testIDPrefix="word" />;
 }
 
 function ReadWordsQuestionContent(
