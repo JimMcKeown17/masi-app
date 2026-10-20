@@ -1,8 +1,8 @@
 # Lesson plan: suggested group, letters, blends and early reader
 
-Status: **approved by Jim, 2026-10-20.** Plans: `docs/superpowers/plans/2026-10-20-lesson-plan-*.md`.
-Open, non-blocking: which paper letter sheets Masi's assessors hold (C20; and whether Masi's English
-and isiXhosa paper sheets match the app's v1 forms).
+Status: **approved by Jim, 2026-10-20 (rev 1).** Rev 2, the same day, aligns this design with the
+assessment-results design, which merged while this one was in review (§0.1). Jim to confirm rev 2.
+Plans: `docs/superpowers/plans/2026-10-20-lesson-plan-*.md`.
 
 - Written 2026-10-20 on branch `feat/lesson-plan`, from `origin/main` `97e088c` (Bold Red 1–7 merged).
 - Source conversation: Jim and Claude, 2026-10-19/20, with mockups (flow shape, entry point, book
@@ -43,6 +43,33 @@ published.
 
 Books exist in print first. The app also carries each book's text so an EA can read it on the phone
 when the printed copy is missing. Picture pages come later, book by book.
+
+### 0.1 Revision 2: aligned with assessment results (2026-10-20)
+
+The assessment-results design ("AR": `docs/superpowers/specs/2026-10-19-assessment-results-and-letter-test-design.md`)
+merged as #89 and its Plan 1 as #90 while this design was in review. Jim approved both the same day.
+AR already designs most of this design's track B1 and settles how languages are stored, so rev 2
+follows it:
+
+- **Languages are stored as two-letter codes** (`en`, `xh`, `zu`; AR §6.1), not labels. Afrikaans
+  becomes `af`. Every language key in this design (packs, drafts, the engine) is that code, resolved
+  by `languageCodeForHomeLanguage` (`src/utils/assessmentRegistry.js`).
+- **The letter test is one shared card.** #90 made Grid A (`letter_sounds@2026.2`, six rows of ten,
+  mixed case) the letter test for English and isiXhosa. Its 60 letters are exactly Zazi's
+  `afrikaans_60_v2`, which is the same printed card. So J20 is met by an `af` copy of Grid A (C20),
+  and rev 1's open question about paper sheets is answered: Jim supplied Grid A as Masi's card
+  (AR §6.1 status update).
+- **Track B1 is AR Plans 2–3.** #90 already built B1-0 (server stamps) and the all-or-nothing
+  assessment upload with immutability. AR Plan 2 re-keys mastery with "latest correction wins" and
+  returns the winner to the phone. AR Plan 3 downloads assessments, runs and mastery, including the
+  class arm of ADR-0005 with history-reference children, so control children are covered (rev 1 had
+  deferred them). §7.6 now lists only what the lesson plan asks of those plans.
+- **Track AF shrinks** to adding `af` to that model (§7.5). #90 already stopped Afrikaans classes
+  being treated as English: their language resolves to `null`, the assessment picker asks for
+  English or isiXhosa, and the tracker shows an empty state.
+- **isiXhosa also gets an interim letters-only pack** (C10). The isiXhosa test pack built from
+  candidate words is preview-only (J17), so without it a pilot build would have no isiXhosa order.
+- Line numbers in §3–§7 were checked on `97e088c`; #90 moved some. The plans cite current lines.
 
 ---
 
@@ -88,7 +115,7 @@ These are marked **(my call)** where they appear below.
 | C7 | One lesson in progress per EA at a time. It survives app close, force-quit and upgrade. | Masi sessions last ~55 minutes; today's form is lost on discard, process death or force-quit. Zazi's single active-session key let a second group overwrite an unfinished session (ZZ-BUG-20260922-001, `documentation/ROADMAP.md:487-490`), so a second start is refused, not overwritten. |
 | C8 | A lesson whose class (C18) has grade `ECD` gets the same Lesson screen **without** the book row. | `CONTEXT.md`: ECD sessions have no pair-reading block. The class grade is the signal, because the database still holds one literacy programme row for R–3 and ECD. |
 | C9 | When every letter is known, the letters row says "All letters known" and blends and books use everything unlocked. Sound steps (isiXhosa *th*, *ph* …) and the move to Level 8+ are out of scope for v1. | Few groups reach 26 letters during early testing; both need their own pedagogy decision. |
-| C10 | A language without a published pack still uses the Lesson screen; the blends and book rows say no content is available yet. Until their real orders are set, English and Afrikaans each get an **interim letters-only pack**: English keeps today's tracker order (`ENGLISH_PEDAGOGICAL_ORDER`, `a m s t │ n i │ …`), and Afrikaans takes Zazi's provisional `AFRIKAANS_PEDAGOGICAL_ORDER` (`a s m e │ k i │ …`, Zazi `origin/main` `src/constants/egraConstants.js:262`). In both, the first four letters are step 1, then pairs. If no pack loads at all, the EA picks letters from the language's alphabet (§4.2) and nothing is suggested. | One code path for every language, as J10 requires. English EAs see no change in order until the real one lands; Afrikaans EAs get letter advice from the first build instead of none. |
+| C10 | A language without a published pack still uses the Lesson screen; the blends and book rows say no content is available yet. Until its real pack is released, **each language gets an interim letters-only release pack**: isiXhosa with the books' order (J1), English with today's tracker order (`ENGLISH_PEDAGOGICAL_ORDER`, `a m s t │ n i │ …`), and Afrikaans with Zazi's provisional `AFRIKAANS_PEDAGOGICAL_ORDER` (`a s m e │ k i │ …`, Zazi `origin/main` `src/constants/egraConstants.js:262`). In each, the first four letters are step 1, then pairs. If no pack loads at all, the EA picks letters from the language's 26 letters (§4.2) and nothing is suggested. | One code path for every language, as J10 requires. English EAs see no change in order until the real one lands; Afrikaans EAs get letter advice from the first build instead of none. The isiXhosa test pack from candidate words is preview-only (J17), so a release build needs the interim isiXhosa pack to have the J1 order at all (rev 2). |
 | C11 | `session_reading_level` keeps being written, now **derived from the blends ticked**: the highest tier among them, each item counted by its own letter count (2 → "2 Letter Blends", 3 → "3 Letter Blends", 4 → "4 Letter Blends", 5+ → "Word Reading"), so top-up items count at their own tier. No blends ticked → `null`. The suggested tier and the tier on screen at save are stored separately in `lesson` (§6). | Session History and teaching-quality analytics read it today, and Session History already hides an empty value (`SessionHistoryScreen.js:141`). Deriving it means it can never name a tier nobody practised. Because the default tier is the lowest present child's, the "session pitched above a child" check (`teaching-quality-analytics.md`) now mostly fires when the EA chose "show higher". |
 | C13 | Only present children are saved as attendees, as today. A member marked absent is not written. | Absence can be derived from the session's group and its membership history. Writing `absent` rows would change every count that reads attendees today (history cards, receipt, hydration). |
 | C14 | A plan belongs to the day it was made. The draft keeps its lesson date (the day it started) and the plan records `made_on`. At save, the plan is kept when the lesson date equals `made_on`, however late the save: a Monday lesson finished on Wednesday keeps Monday's date and plan. It becomes `plan: null` with reason `past_date` only when the dates differ, because the EA changed the date or is logging a past lesson. An unfrozen plan is recomputed only on its own day. | Zazi rev 4.1's rule: mastery on a past date cannot be rebuilt, so advice computed later is not evidence of what was advised then. Advice frozen on the day itself is evidence, and a late save must not throw it away. |
@@ -98,21 +125,21 @@ These are marked **(my call)** where they appear below.
 | C12 | Every build loads only **release** packs. **Preview** packs (which may contain unreviewed words) load only when an explicit developer setting is on, and a build check refuses that setting in pilot and production artifacts. | Enforces J17. The EAS channel cannot be used: the `pilot` profile ships store builds on the `preview` channel (`eas.json:34-48`). |
 | C18 | Each lesson has one **class**, fixed when its draft starts and stored in the draft: the group's `class_id` if set; else the one class all the group's current members share; else (members in different classes, rare for pairs) the EA picks the class once on the Lesson screen before suggestions show. The class gives the language (`home_language`), the ECD check (C8) and `sessions.class_id`. Who is present, and children added for the day, never change it; a child added from another class is taught, and their tracker marks saved, in the lesson's language, because letter sounds differ by language and the evidence belongs to the language taught. Groups this feature creates (J18) record the class when their children share one. | Today's form takes the class from whichever child was picked first (`LiteracySessionForm.js:308`), and "Group N" groups are created without a class (`GroupPickerBottomSheet.js:150`), so the language would otherwise depend on tap order. |
 | C19 | B2's server check accepts a session's group when the EA **holds or has held** an assignment to that group in the session's programme (any `group_ea_assignments` row, ended or not), not only an active one. | A lesson records something that already happened. Deleting a group ends its assignment and queues that end at sync rank 6, ahead of sessions (`groupsRepository.js:435-481`, `offlineSync.js:301-310`), so an active-only check would refuse a lesson saved offline before the group was deleted, or before Head Office ended the assignment. Session reads already use historical grants this way (`private.can_read_session`), and the one-row-per-group assignment id keeps the ended row as evidence. |
-| C20 | The Afrikaans letter sheet is Zazi's **active** `afrikaans_60_v2`, copied exactly with its id. Zazi's older `afrikaans_60` is never copied or reused. | It is what Zazi assesses Afrikaans on today, and what is on paper (Zazi `documentation/egra_letter_sets.md:26-43`). It is one printed 60-letter sequence that Zazi shared across all three languages in its January and June 2026 rounds, not an Afrikaans-specific instrument. The only Afrikaans-shaped sheet (`afrikaans_60`) was a provisional guess that was never approved. A form id must mean the same items in both apps forever. |
-| C21 | Afrikaans word tests use a copy of Zazi's provisional `afrikaans_words_50`, with the same id. | Today Afrikaans children are asked to read English words (`english_words_50`), the most misleading Afrikaans gap. A provisional Afrikaans list is better than an English one; a reviewed list later gets a new id. |
+| C20 | The Afrikaans letter test is `letter_sounds@2026.2.af`: Grid A's rows (`GRID_A_ROWS`) and stop rule, the card #90 made the letter test for English and isiXhosa, with its own item-set id (AR §6.1: an id is provenance). Zazi's older `afrikaans_60` is never used. | Grid A's 60 letters are exactly Zazi's active `afrikaans_60_v2` (Zazi `src/constants/egraConstants.js:68-102`), one printed card Zazi used for all three languages in its January and June 2026 rounds. So this is J20's "copy of Zazi's Afrikaans sheet", and Afrikaans children read the same card as everyone else. The only Afrikaans-shaped sheet (`afrikaans_60`) was a provisional guess that was never approved. (rev 2: AR's item-set ids replace Zazi's form ids.) |
+| C21 | The Afrikaans word test is `word_reading@2026.1.af`: the 50 words of Zazi's provisional `afrikaans_words_50`, in Zazi's order, in the same shape and with the same "placeholder list" content status as the English and isiXhosa word tests. | Today an Afrikaans class can only pick the English or isiXhosa word list. A provisional Afrikaans list is better than either; a reviewed list later becomes a new version. (rev 2) |
 | C22 | WelaPLUS is not offered to Afrikaans classes until its battery has Afrikaans (it is `en`/`xh` only, `battery/wela_plus_full.ts:49`); the launch shows "Not available in Afrikaans yet". Recorded as a requirement on the WelaPLUS Release 1 work, not built here. | Otherwise its Questions' `language === 'xh' ? XH : EN` would silently give Afrikaans children the English battery. |
-| C23 | **One letter-evidence rule**, shared by the download, the mastery loader (`masteryState.js`) and the dashboards (`dashboardStats.js`). A child knows a letter in a language if either: (a) their latest `letter_egra` assessment in that language **from the current academic year**, by any EA in any programme, shows it; or (b) their current EA confirmation for that letter and language says so, whichever programme recorded it. Programme records where evidence was captured; it is not part of the evidence's identity. | Letter knowledge belongs to the child, and B1's identity is child, letter and language. Today both reads filter by the active programme, and the loader uses assessments from any year the phone happens to hold (`masteryState.js:30-41`). A phone that kept last year's data and a fresh phone (which downloads the current year only, ADR-0005) would then disagree. Cost: early in a new year, before the baseline assessment, assessment letters drop out and only EA confirmations count. |
+| C23 | **One letter-evidence rule**, shared by the mastery loader (`masteryState.js`), the dashboards (`dashboardStats.js`) and the engine's inputs. It is AR §10.3–10.4: evidence from the stored items of the child's latest letter result the phone may read, from any EA, plus confirmations read with no `user_id` or programme filter. This design adds one thing: **the letter result must be from the current academic year.** | Letter knowledge belongs to the child. AR Plan 3 downloads the current year only, so without the year bound a phone that kept last year's results and a fresh phone would disagree. Cost: early in a new year, before the baseline assessment, only EA confirmations count. (rev 2: AR now owns the rest of this rule.) |
 
 ---
 
-## 3. What exists today (verified on `origin/main` `97e088c`)
+## 3. What exists today (verified on `origin/main` `97e088c`; rev 2 updates the rows #90 changed)
 
 | Need | Masi today |
 | --- | --- |
 | Letter suggestion engine | None. |
-| Letter order | Three different orders: `LETTER_ORDER` (`src/constants/literacyConstants.js:4`, used by the session letter grid and the Session complete receipt sort), `PEDAGOGICAL_ORDERS` (`src/constants/egraConstants.js:119`, identical to Zazi's; read directly by `masteryState.js:15`, so by the tracker and mastery counts), and the books' order. |
-| Language key | `normalizeLanguageKey` (`src/utils/letterMastery.js:70-74`) maps anything that is not isiXhosa, including a missing language, to `english`. So an Afrikaans class is assessed on the English letter and word sheets, sees the English tracker order, and has its tracker marks saved as `'English'`. Zazi fixed the same bug on 2026-06-09 (`963860bf`); Masi never took the fix. |
-| Letter mastery | Union of assessment evidence and EA confirmation (`src/utils/masteryState.js`). Read per EA and never downloaded (ROADMAP §1, "Letter mastery as current state"). |
+| Letter order | Three different orders: `LETTER_ORDER` (`src/constants/literacyConstants.js:4`, used by the session letter grid and the Session complete receipt sort), `PEDAGOGICAL_ORDERS` (since #90 in `src/utils/assessmentRegistry.js`, keyed `en`/`xh`, built from `egraConstants.js`; read by the tracker, the mastery loader and the dashboards), and the books' order. |
+| Language key | Since #90, `languageCodeForHomeLanguage` (`src/utils/assessmentRegistry.js`) returns `en`, `xh`, `zu` or `null`, never English by default. An Afrikaans class gets `null`: the assessment picker asks for English or isiXhosa, and the tracker shows an empty state. Before #90 it was treated as English everywhere. |
+| Letter mastery | Union of assessment evidence and EA confirmation (`src/utils/masteryState.js`). Since #90 evidence comes from the stored items of the latest letter result, from any EA. Confirmations are still read per EA and programme and stored with labels (`English`, `isiXhosa`) until AR Plan 2; nothing is downloaded until AR Plan 3. |
 | Reading level | `children.reading_level` (current, synced) plus `activities.child_reading_levels` and `activities.session_reading_level` snapshots. Ladder: `READING_LEVELS` (`literacyConstants.js:11-19`). |
 | Word bank, blends, books | None in the app. |
 | Session capture | One long Bold Red form (`src/screens/sessions/LiteracySessionForm.js`), submit-and-go, no draft. Its child picker has a Groups mode that expands a group into its children (`src/components/children/ChildSelector.js`); the group itself is not kept. Leaving asks to discard; the form is lost on discard, process death or force-quit. Validation requires at least one letter (`src/utils/literacySessionValidation.js:4`; issue #54). |
@@ -138,7 +165,7 @@ in the app repo.
 {
   // ── shared with Zazi (books design §5.8; Zazi spec §4.1) ──
   "id": "isixhosa-integrated-v1",
-  "language": "isixhosa",                 // matches normalizeLanguageKey output
+  "language": "isixhosa",                 // the shared file's name (Zazi's key); Masi maps it to its code, xh
   "sound_inventory": ["a","b", "...", "th","ph","kh","ny","hl","bh","nc","dl","ty","sh","tsh"],
   "letter_steps": [
     { "step": 1, "new_letters": ["o","m","l","a"],
@@ -191,45 +218,37 @@ Rules:
 
 - There is **one teaching order per language**, read from that language's pack
   (`letter_steps[].new_letters`, concatenated).
-- A single resolver, `getTeachingOrder(languageKey)`, replaces direct reads of `LETTER_ORDER` and
-  `PEDAGOGICAL_ORDERS`: the shared tracker loader (`masteryState.js:15`, so the tracker sheet and
+- A single resolver, `getTeachingOrder(languageCode)`, replaces direct reads of `LETTER_ORDER` and
+  `PEDAGOGICAL_ORDERS`: the shared tracker loader (`masteryState.js`, so the tracker sheet and
   panel), the session letter grid, the Session complete receipt sort (its route params carry no
-  language today, `sessionCompleteView.js:21-29`, so the language is added), and the engine.
+  language today, `sessionCompleteView.js`, so the language is added), and the engine.
   Mastery counts that only test membership (e.g. `dashboardStats.js`) do not need the order.
 - isiXhosa switches to the books' order (J1). English and Afrikaans use their interim packs until
   their real orders are set (C10).
-- `normalizeLanguageKey` returns `afrikaans` for Afrikaans classes and `null` for unknown ones, never
-  `english` by default.
-- **The tracker's alphabet and mastery language are separated from the EGRA letter sets.** Today
-  both `loadMasteryState` (`src/utils/masteryState.js:14-23`) and `persistLiteracySession`
-  (`src/services/literacySessionPersistence.js:29`, the `!letterSet` return) depend on
-  `LETTER_SETS`, which has only English and isiXhosa (`src/constants/egraConstants.js`). Today
-  Afrikaans survives only because the key turns it into English (§3). A partial fix that returns
-  `afrikaans` before these maps and guards exist would silently drop every confirmation and crash
-  both tracker surfaces (`src/components/sessions/LetterToggleGrid.js:12`,
-  `LetterMasteryPanel.js:166`), so it lands as one slice (track AF, §7.5). After this change:
-  - each language has a small fixed entry, independent of any pack: its key, the `language` value
-    stored on `letter_mastery` rows (`isiXhosa`, `English`, `Afrikaans`; the server column is free
-    text with no check), and its 26-letter alphabet. The tracker, mastery reads and writes, and the
-    manual letter picker use this entry, so they work even when no pack loads. A pack (real or
-    interim) adds only the teaching order and the content;
+- `languageCodeForHomeLanguage` returns `af` for Afrikaans classes once AF lands, and `null` for
+  unknown ones, never English by default.
+- **The language entry is AR's registry.** #90 already separated the tracker from the letter
+  sheets: the tracker and mastery use `PEDAGOGICAL_ORDERS[code]` and `LANGUAGE_LABELS[code]` in
+  `src/utils/assessmentRegistry.js`, evidence comes from stored result items, and a `null` language
+  gives an empty state instead of a crash. That registry is the fixed, pack-independent entry per
+  language this design needs (code, label, 26 letters). AF adds `af` to it (§7.5). The tracker,
+  mastery reads and writes, and the manual letter picker use it, so they work even when no pack
+  loads. A pack (real or interim) adds only the teaching order and the content:
   - EA confirmations are read and written for every language in that registry;
-  - assessment evidence is added only where an EGRA letter set exists for that language;
-  - mastery counts (`dashboardStats.js` and the "n/26" displays) use the language's own alphabet.
-- **Existing mislabelled rows are not migrated.** Afrikaans confirmations written so far carry
-  `'English'`. `masi-app-sqlite` has no field users and its practice data is wiped after the
-  mastery re-key (ROADMAP §1), so they are dropped with that wipe rather than relabelled (relabelling
-  could not tell them from genuine English evidence). The re-key slice states this.
+  - assessment evidence is added only where a letter item set exists for that language;
+  - mastery counts (`dashboardStats.js` and the "n/26" displays) use the language's own 26 letters.
+- **Existing mislabelled rows are not migrated.** Afrikaans confirmations written before #90 carry
+  `'English'`. `masi-app-sqlite` has no field users and its practice data is wiped before AR's
+  rollout (AR §13), so they go with that wipe rather than being relabelled (relabelling could not
+  tell them from genuine English evidence).
 - Tests: an Afrikaans class saves and reloads tracker marks with its interim pack, and with no pack
   loaded at all (the registry alone).
 - `letter_mastery` rows do not depend on order, so changing the isiXhosa order needs no data
   migration. PRD §6.8 and `teaching-quality-analytics.md` are updated to name the pack as the single
   source.
-- EGRA assessment forms keep their own fixed item order, and assessment evidence for English and
-  isiXhosa is unchanged. `normalizeLanguageKey` also chooses which assessment sheet a child gets
-  (`AssessmentChildSelectScreen.js:107`, `ChildResultsScreen.js:46`, `dashboardStats.js:172`), and
-  `LiteracySessionForm.js:306` falls back to `'english'`. Afrikaans classes move to a copy of
-  Zazi's Afrikaans letter sheet (J20, track AF), and no caller may index `LETTER_SETS[null]`.
+- Letter item sets keep their own card order (AR §6.1), and assessment evidence for English and
+  isiXhosa is unchanged. `languageCodeForHomeLanguage` also chooses which item set a child gets;
+  Afrikaans classes get `letter_sounds@2026.2.af` once AF lands (C20).
 
 ### 4.3 Which group is "Up next"
 
@@ -415,7 +434,7 @@ Everything new goes inside `sessions.activities`, which the server passes throug
   "lesson": {
     "version": 1,
     "pack_id": "isixhosa-integrated-v1",
-    "language": "isixhosa",
+    "language": "xh",
     "plan": {                                       // frozen when the plan is fixed (§5.2), never recomputed on retry;
                                                     // null when the lesson date differs from made_on (C14),
                                                     // with "plan_reason": "past_date"
@@ -512,7 +531,8 @@ Its own plan, following `rls-sync-contract-map.md`, with real-SQLite and disposa
   D1 rule (ROADMAP §1, "the most recently *made* correction wins") the correction time decides
   conflicts. So each pending mark or unmark is stored in the draft with the time the EA tapped it
   **and the language it was made in**. Both are carried unchanged into the mastery write and every
-  retry; nothing re-derives the language at save. Today's helper stamps
+  retry; nothing re-derives the language at save. AR Plan 2's `setLetterMastery` takes the tap time
+  as its correction time (§7.6, ask 1). Today's helper stamps
   all marks with the submit time (`src/services/literacySessionPersistence.js:96-135`); the new save
   path must not. Test: a Monday draft saved on Wednesday does not overwrite another EA's Tuesday
   correction.
@@ -538,8 +558,8 @@ Its own plan, following `rls-sync-contract-map.md`, with real-SQLite and disposa
 | Input | Source |
 | --- | --- |
 | Group list and members | `groups`, `child_group_memberships`, `group_ea_assignments` (already pulled) |
-| Class, language, grade | the lesson's class (C18): its `home_language` via `normalizeLanguageKey`, and its grade for C8 |
-| Letter mastery per child | `masteryState` union. **Complete only after track B1**, which must deliver both halves: EA confirmations (re-key, D1, download) **and** assessments with their items (`masteryState` reads assessments from local SQLite only, and no assessment pull exists yet; ROADMAP §1 lists it separately). Plan and completeness: §7.6 |
+| Class, language, grade | the lesson's class (C18): its `home_language` via `languageCodeForHomeLanguage`, and its grade for C8 |
+| Letter mastery per child | `masteryState` union (C23). **Complete only after AR Plans 2–3**, which deliver both halves: EA confirmations (re-key, D1, download) **and** other EAs' letter results with their items (`masteryState` reads local SQLite only, and no assessment pull exists yet). Completeness: §7.6 |
 | Reading level per child | `children.reading_level` |
 | Each child's past lessons | `session_attendees` + `sessions.activities` (already pulled) |
 | How complete that history is | the session-history pull state, read through the predicate below |
@@ -600,155 +620,107 @@ The workflow doc is updated in the same branch to say so.
 
 ### 7.5 Afrikaans support (track AF)
 
-EAs can choose Afrikaans when they create a class (`src/screens/children/CreateClassScreen.js:212`),
-but the app treats it as English everywhere (§3). Zazi fixed the same bug on 2026-06-09
-(`963860bf`). AF ports that fix and the rest of Zazi's Afrikaans support. **It lands as one slice**:
-changing the key without the maps, guards and content would drop tracker marks and crash the tracker
-(§4.2).
+EAs can choose Afrikaans when they create a class (`src/screens/children/CreateClassScreen.js`).
+Before #90 the app treated it as English everywhere. #90 stopped that: `languageCodeForHomeLanguage`
+returns `null` for Afrikaans, so the assessment picker asks for English or isiXhosa and the tracker
+shows an empty state. AF makes Afrikaans a supported language in AR's model, as one slice.
+(Rev 2 replaces rev 1's port of Zazi's language key and letter forms, which #90 made unnecessary.)
 
-- **Language registry.** One entry per language with:
-  - the key (`afrikaans`);
-  - the stored label, spelled exactly `Afrikaans`, on `letter_mastery.language` and in assessment
-    metadata;
-  - the WelaPLUS code (`af`);
-  - the 26-letter alphabet;
-  - the interim teaching order (C10).
+- **The language entry**, in `src/utils/assessmentRegistry.js`:
+  - `languageCodeForHomeLanguage` returns `af` for `afrikaans` (trimmed, any case);
+  - `LANGUAGE_LABELS.af = 'Afrikaans'`;
+  - `PEDAGOGICAL_ORDERS.af` = Zazi's provisional `AFRIKAANS_PEDAGOGICAL_ORDER`, copied exactly
+    and frozen (C10).
 
-  `normalizeLanguageKey` moves here in Zazi's form (Zazi `origin/main`
-  `src/constants/egraConstants.js:274-291`). It returns `afrikaans` for Afrikaans and `null` for a
-  missing or unknown language, never English by default. Its five importers switch to it.
-- **Content copied from Zazi `origin/main`, exactly, with Zazi's ids, frozen:**
-  - the letter sheet `afrikaans_60_v2` (C20);
-  - the word list `afrikaans_words_50` (C21);
-  - the interim order (C10).
+  Callers already handle `null`, and keep doing so for unknown languages.
+- **Content, copied exactly and frozen:**
+  - `letter_sounds@2026.2.af`: `GRID_A_ROWS` with the same stop rule (C20);
+  - `word_reading@2026.1.af`: the 50 words of Zazi's `afrikaans_words_50` (C21);
+  - both in `CURRENT_ITEM_SETS`, each with a content-status entry: Grid A's typeface note for
+    letters, and "placeholder list" for words.
 
-  Zazi's rules apply: a published id is never edited or reordered, and a new form gets a new id.
-- **Forms by id, not only the active one.**
-  - `LETTER_SET_VERSIONS` and `WORD_SET_VERSIONS`, with lookups by id across versions.
-  - Assessment evidence is read version-aware (Zazi `41599b1c`): first `items_tested`, else the
-    form for the stored `letter_set_id`, else the active form. It fails closed on a malformed
-    snapshot.
-  - Why: today evidence is matched against the current form only (`src/utils/letterMastery.js:37`).
-    That breaks on the first rotation (J19), and on another EA's older assessment once B1 downloads
-    it.
-- **No caller defaults to English.**
-  - The assessment language picker builds its options from the registry, with no preselected
-    language. Today it offers only English and isiXhosa and preselects English
-    (`AssessmentChildSelectScreen.js:21-24, 47`).
-  - `ChildResultsScreen`, `masteryState` and `dashboardStats` handle `null`.
-  - The tracker sheet and panel show an empty state instead of crashing.
-  - Saving tracker marks for a language with no entry fails loudly. Today it returns silently
-    (`literacySessionPersistence.js:73`).
-  - "n/26" uses the alphabet's length.
+  AR's rule applies: a published item set is never edited, and a change is a new version.
 - **Each tracker change keeps the language it was made in.**
-  - Today the old form takes one language from the first selected child and re-applies it to every
-    pending change at save (`LiteracySessionForm.js:305-310`, `literacySessionPersistence.js:85-113`).
-  - Once Afrikaans is its own language, removing the first child could relabel another child's
-    marks.
-  - AF records the language with each pending change when it is tapped, and saves it unchanged.
-    This is the same rule as the lesson draft (§7.2).
-  - Test: mark letters in an Afrikaans tracker, remove the first selected child, save. The marks
-    stay Afrikaans.
-- **Stored data.** No migration.
-  - Assessments taken on the English sheets keep their labels, which are true about the sheet shown.
-  - Mislabelled `'English'` tracker marks are dropped with the practice-data wipe (§4.2).
-  - AF ships before any pilot device is provisioned.
+  - Today the old form takes one language from the first selected child and applies it to every
+    pending change at save (`LiteracySessionForm.js`, `trackerLanguageCode`;
+    `literacySessionPersistence.js`).
+  - Once Afrikaans is supported, a session that mixes an Afrikaans and an English class could
+    relabel marks.
+  - AF records `{ mastered, languageCode, madeAt }` for each pending change when it is tapped, and
+    saves the language unchanged. `madeAt` is recorded now. It becomes the correction time once
+    AR Plan 2 accepts one (§7.6, ask 1). The lesson draft uses the same shape (§7.2).
+  - Test: mark letters in an Afrikaans child's tracker, then change which child is selected first,
+    and save. The marks stay Afrikaans.
+- **No silent drops.** A pending change whose language has no registry entry fails the save
+  loudly. Today `literacySessionPersistence.js` skips it silently when `PEDAGOGICAL_ORDERS` has no
+  entry.
+- **Confirmations stored before AR Plan 2** use the label `Afrikaans`, as `English` and `isiXhosa`
+  do today. AR Plan 2's re-key maps labels to codes, and must include `Afrikaans → af` (§7.6, ask 2).
+- **WelaPLUS** stays English and isiXhosa (C22). Its host (WelaPLUS Plan 3) shows "Not available
+  in Afrikaans yet" for an Afrikaans class. This is recorded on that work, not built here.
+- **Stored data.** No migration. Results taken before #90 go with AR's practice-data wipe (AR §13).
 - **Tests.**
-  - Port and adapt Zazi's `egraLetterSets`, `normalizeLanguageKey` and `assessmentLanguageSelection`
-    suites. Drop Zazi's rule that every sheet mixes upper and lower case, because Masi's
-    `isixhosa_60` is all lower case.
-  - Add:
-    - an Afrikaans class starts the Afrikaans sheets without asking;
-    - real-SQLite Afrikaans tracker save and reload;
-    - a class with no language opens the picker, and the tracker shows its empty state;
-    - every registry key has an alphabet.
+  - Language resolution for every spelling, and `null` for unknown and missing.
+  - Item-set validation over the new sets.
+  - An Afrikaans class starts the Afrikaans letter and word tests without asking.
+  - Real-SQLite Afrikaans tracker save and reload.
+  - A class with no language still asks for one, and the tracker still shows its empty state.
 - **Device check.**
   - Figtree renders ê, ë and ô, which the real Afrikaans pack will use.
-  - Capital I and lower-case l are clearly different on letter tiles. `afrikaans_60_v2` has both.
-- **Not copied:** Zazi's Afrikaans blend bank and Zazi's vectors. The app never invents words (§4.1),
-  so the blend bank goes to the books project as a source for the Afrikaans pack.
-- **Kept compatible with Zazi:** same ids, same items, same label. When Zazi rotates a form, Masi
-  adds the new id and never edits an old one.
+  - Capital I and lower-case l are told apart on the letter test. Grid A has both; this is
+    already a content-status note for English and isiXhosa.
+- **Not copied:** Zazi's Afrikaans blend bank and vectors. The app never invents words (§4.1), so
+  the blend bank goes to the books project as a source for the Afrikaans pack.
 
-### 7.6 Mastery inputs (track B1): what to take from Zazi
+### 7.6 Mastery inputs (track B1): the assessment-results Plans 2–3
 
-**What Zazi's download does.** Zazi's delta pull is `mobile_pull_changes_v1`, in the field since
-2026-10-03 and on 185 EAs by 2026-10-20. It downloads only the signed-in EA's own sessions,
-assessments and mastery (Zazi `supabase/migrations/20260912190000_mobile_pull_snapshot_scope_indexes.sql:199-201`).
+The engine needs every child's letter evidence and confirmations on the phone, whoever recorded
+them. AR is the approved design for that, so this design no longer specifies it. (Rev 1's B1-0 to
+B1-5 are replaced.)
 
-**What Masi needs is different:**
-- other EAs' assessments for the child's class this year (ADR-0005);
-- current mastery from every EA who teaches the child now.
+| What B1 needed | Where it is |
+| --- | --- |
+| Server-stamped `updated_at` on insert (rev 1's B1-0) | AR §8.4, built in #90 |
+| All-or-nothing assessment upload; submitted results immutable | AR §8.1–8.5, built in #90 |
+| One confirmation per child, letter and language; the latest correction wins; the winner returned to the phone | AR Plan 2 (§10.1–10.2) |
+| Confirmations read with no `user_id` or programme filter | AR Plan 2 (§10.3) |
+| Other EAs' letter results downloaded with their items, and confirmations downloaded | AR Plan 3 (§11), including ADR-0005's class arm and history-reference children |
+| Completeness and re-walks | AR Plan 3 (§11.3, §11.5) |
 
-A timestamp cursor alone never delivers rows written before the EA took on the child. So **B1
-extends Masi's own session-history walker** (CAP-004), which already:
-- walks again when a child newly enters scope;
-- records which children each walk covered;
-- commits each page together with its cursor.
+**What the lesson plan asks of AR Plans 2–3.** Each ask is small:
 
-B1's plan meets these requirements, in this order:
+1. **Plan 2: a caller-supplied correction time.**
+   - `setLetterMastery` stamps `changed_at = now` (AR §10.2).
+   - A lesson draft can be saved days after its marks were made (§7.2), and D1 orders by when a
+     correction was *made*.
+   - So `setLetterMastery` accepts an optional `changedAt`, the tap time. It is never later than
+     now on the phone, and the server clamps it as AR already specifies.
+   - The old form's tracker passes `madeAt` too (§7.5).
+   - Test: a Monday mark saved on Wednesday loses to another EA's Tuesday correction.
+2. **Plan 2: map `Afrikaans` to `af`** in the hosted and local re-key, alongside `English` and
+   `isiXhosa`.
+3. **Plan 3: a per-child completeness answer.**
+   - AR's Sync status says whether all walks are complete. The engine needs the answer for the
+     children in one lesson.
+   - `masteryInputsComplete({ childIds })` is true when the assessment walk and the mastery walk
+     have each finished with no failure since, the assessment walk is in the current academic
+     year, and every one of those children is covered. This is the same rule as §7.3.
+   - A child in a class the EA holds no class assignment for is never covered by the assessment
+     walk (AR §11.1 gives delivery-only EAs no assessment reads), so it stays incomplete. Core
+     Literacy EAs normally hold their classes.
+4. **Plan 2 or 3: C23's year bound.** The letter result used as evidence is the latest one from
+   the current academic year.
+5. **Plan 3: Zazi's operational lessons that AR does not already have.** AR §11.3 already has the
+   deadline, the run budget, failure memory, completeness and re-walks. These are missing:
+   - a server switch per EA, to turn a download off without a new build;
+   - trigger-budget tests that name every caller of the pull and how often it runs
+     (ZZ-BUG-20261004-001: a caller that ran on every save silently became a full re-download);
+   - an A03s gate that starts a lesson mid-download (with today's form until the Lesson screen
+     exists).
 
-1. **B1-0 Server stamps.**
-   - `assessments`, `assessment_items` and `letter_mastery` get the server timestamp on insert and
-     update that sessions already have (`20260925120000_session_history_family_delta.sql:7-45`).
-   - Keyset indexes, and a one-time clean-up of future timestamps.
-   - Why first: a delta download without server stamps can lose inserts.
-2. **B1-1 Re-key and D1.**
-   - One current record per child, letter and language (ROADMAP §1). D1 keeps the most recently made
-     correction.
-   - **The write returns the winning row, and the phone applies it.** Otherwise, when a phone's older
-     correction loses, nothing changes on the server to re-deliver the winner. The phone would show
-     its losing value as synced until the next re-walk.
-   - Programme records where a mark was made; it is not part of the mark's identity (C23). Reads and
-     draft mark resolution ignore it. Today both filter by the active programme
-     (`masteryRepository.js:73-79`, `literacySessionPersistence.js:78-83`). Test: two programmes
-     read, correct and download the same mark.
-   - Cutover from old builds as in §9.
-3. **B1-2 Mastery download.**
-   - A positive-authority page function with keyset `(updated_at, id)` and overlap. Soft-deleted
-     rows are included.
-   - A re-walk when a new child is assigned to the EA.
-   - Mastery reads drop their `user_id` and `programme_id` filters (`src/db/repositories/masteryRepository.js:73-83`).
-4. **B1-3 Assessment families.**
-   - **Upload first:** the all-or-nothing family upload (ROADMAP §1 item 5), so the server never
-     holds a half-sent assessment.
-   - **Then download:** current-year letter assessments, by any EA, for the children this phone
-     already holds (the EA's delivery children), with **each parent and all its items committed
-     together**.
-   - Why not the whole class: ADR-0005 also lets an EA read the whole class's assessments (control
-     children), but those children are not on the phone yet. `preloadedChildData.js:279-311`
-     downloads delivery children only, and `assessments.child_id` must reference a local child. So
-     the class-wide download waits for the whole-class roster work, which brings those children down
-     first.
-   - Why together: Masi keeps the sheet id and language only in the `__summary__` item
-     (`src/db/repositories/assessmentsRepository.js:55-71`). A parent without it gives no mastery,
-     and as the newest assessment it would hide an older assessment's letters.
-   - A re-walk when a new child is assigned to the EA.
-   - Evidence is read version-aware (§7.5).
-   - Volume is not measured yet, so B1 measures it first.
-5. **B1-4 Completeness.** `masteryInputsComplete(childIds)` mirrors the §7.3 rule: both walks
-   finished, no failure since, current year, every present child covered. The Sync screen gains an
-   Assessments row. The download, the mastery loader and the dashboards all use the C23 evidence
-   rule, so a phone that kept last year's assessments and a fresh phone give the same answer.
-6. **B1-5 Operations, built in from the start.** Zazi learned each of these in the field:
-   - skip unchanged rows and reuse prepared statements for each page. With these (Zazi elements A
-     and B), a busy account's first download on a Galaxy A03s went from 300.8 s to 46.0 s;
-   - compare large integers safely when skipping rows (`9bf04e10`);
-   - a no-progress watchdog, and per-phase timing in the log line;
-   - a server rollout row per EA, so the download can be switched off without a new build;
-   - trigger-budget tests that name every caller and how often it runs. In ZZ-BUG-20261004-001, a
-     caller that ran on every save silently became a full re-download;
-   - an explicit list of the assessment types that count as letter evidence (`ddbdda6e`);
-   - a gate on an A03s with a class-scope fixture, including starting a lesson mid-download.
-
-**Not taken from Zazi:**
-- its old-pull fallback and pinned client;
-- its 18-table bundle;
-- its natural-key holder replacement (Masi's ids are deterministic, and assessments are immutable
-  under ADR-0007);
-- its 20-day cursor floor and 60-day periodic window.
-
-Source: Zazi `origin/main` `1f62ff34`, read 2026-10-20.
+   With skip-unchanged rows and prepared statements, Zazi's first download for a busy account
+   went from 300.8 s to 46.0 s on a Galaxy A03s. AR's insert-or-ignore families already get most
+   of that gain.
 
 ---
 
@@ -772,11 +744,11 @@ Three tracks run in parallel (J12). Implementation goes through Codex (`gpt-5.6-
 
 | Slice | What | Depends on | Ships as |
 | --- | --- | --- | --- |
-| **AF** Afrikaans support | §7.5, in one slice | — | visible: Afrikaans classes get Afrikaans sheets, order and labels |
-| **A1** Content pack contract | Vendored checker + vectors (as its README directs); pack loader and registry; Masi lint on top of the shared lint; fixture packs (an isiXhosa test pack made by a script from the books repo's candidates, the interim English letters-only pack, a small Afrikaans test fixture) | — | inert |
+| **AF** Afrikaans support | §7.5, in one slice | — | visible: Afrikaans classes get the Afrikaans letter and word tests, order and tracker |
+| **A1** Content pack contract | Vendored checker + vectors (as its README directs); pack loader and registry; Masi lint on top of the shared lint; interim letters-only release packs for isiXhosa, English and Afrikaans (C10); an isiXhosa preview test pack made by a script from the books repo's candidates | — | inert |
 | **A2** Letter order | `getTeachingOrder` reads every order from packs (real or interim); isiXhosa switches to the books' order in the tracker, letter grid and receipt | A1, AF | visible: new isiXhosa order |
 | **A3** Engine | Pure `lessonPlan` module: up next, letters, unlocked set, blends, book, reasons; TDD vectors | A1 | inert |
-| **B1** Mastery inputs complete | §7.6, slices B1-0 to B1-5: server stamps; re-key and D1 (with the correction time the draft carries, §7.2); mastery download; the assessment family upload, then its download; the completeness rule; Zazi's operational lessons. Its plan must also state the cutover from builds that still mint the old mastery identity (`rls-sync-contract-map.md:779`). No tool can block an old app version (the access tooling suspends whole accounts, `scripts/ea-access.cjs`), so the default is: B1 lands before pilot provisioning; practice data is wiped (ROADMAP §1) and every test device is reinstalled fresh (ROADMAP §0); after the cutover the server refuses or safely absorbs an old-identity mastery write (B1 decides which), and B1 tests one. Fresh-device test: another EA's assessment alone supplies a child's mastered letters | — (own plan) | gate for field testing |
+| **B1** Mastery inputs complete | AR Plans 2–3, with the lesson plan's asks (§7.6). #90 already built the server stamps and the all-or-nothing upload. AR §13 owns the rollout (practice-data wipe, hosted migration, fresh install), which replaces rev 1's cutover text. Fresh-device test: another EA's letter result alone supplies a child's mastered letters | — (AR's own plans) | gate for field testing |
 | **B2** Group on the session | §7.1 | — (own plan) | gate for the Lesson screen release |
 | **C1** Lesson draft | §7.2 local table, resume, Home attention card | — | inert until C3 |
 | **C2–C3** Picker, Lesson screen, Wrap up, save path | §5.1–5.3, §6; replaces `LiteracySessionForm` behind today's route (C17) | A2, A3, C1, B2 | the feature |
@@ -784,9 +756,9 @@ Three tracks run in parallel (J12). Implementation goes through Codex (`gpt-5.6-
 | **C5** History and receipt | §5.5 | C3 | with C3 |
 | **D** Content | Real packs for isiXhosa, then English and Afrikaans (books project) | books project | data swap, no code |
 
-Critical path to field testing: **B1 (including the assessment download), B2, and approved
-isiXhosa content released in the shared file**, not the engine. AF is small and ships first, before
-any pilot device is provisioned, so no field build saves Afrikaans marks as English.
+Critical path to field testing: **AR Plans 2–3 (B1), B2, and approved isiXhosa content released in
+the shared file**, not the engine. AF is small and ships before any pilot device is provisioned, so
+Afrikaans classes are assessed and tracked in Afrikaans from the first pilot build.
 
 ---
 
@@ -822,15 +794,18 @@ any pilot device is provisioned, so no field build saves Afrikaans marks as Engl
   product decisions (no timer; attendance toggled in capture; past dates via the Wrap up date).
 - `documentation/open-decisions-backlog.md`, `documentation/ROADMAP.md` (including the stale
   `GRANT_SUBJECTS` tripwire), `documentation/build-log.md`.
-- `documentation/rls-sync-contract-map.md` for B2 and B1. Also fix its CAP-004 note that SQLite is
-  shared by every EA (`:663-664`); ADR-0008 made it per EA.
+- `documentation/rls-sync-contract-map.md` for B2 (AR Plans 2–3 update their own rows). Also fix its
+  CAP-004 note that SQLite is shared by every EA; ADR-0008 made it per EA.
 - For AF:
-  - `documentation/egra_letter_sets.md`: an Afrikaans section with provenance, and the rule that a
-    published id is never edited;
+  - the item sets' content-status entries (`src/assessment-questions/itemsets/contentStatus.ts`),
+    with provenance (Grid A = Zazi's `afrikaans_60_v2`; words from Zazi's provisional
+    `afrikaans_words_50`). `documentation/egra_letter_sets.md` is a pointer to the item-set files
+    since #90 (AR §16);
   - `documentation/assessment-score-bands-config.md`: Afrikaans uses the `'*'` row, whose cut-offs
-    were set on a different sheet;
+    were set for other languages;
   - `PRD.md` §6.7;
-  - `documentation/ROADMAP.md:750`: word lists for three languages, not two.
+  - `documentation/ROADMAP.md`'s word-list item: three languages, not two;
+  - the WelaPLUS Release 1 / Plan 3 docs: C22's "Not available in Afrikaans yet".
 - `documentation/teaching-quality-analytics.md` (canonical order, new `lesson` keys; Check 2 skips
   sessions whose `session_reading_level` is null, meaning no blending was recorded).
 - An ADR for "one teaching order per language, from the content pack" and for "advice from children,
@@ -879,4 +854,8 @@ The app needs these in the pack before field testing:
 
 ## 14. Open questions
 
-None open. Jim answered Q1–Q3 on 2026-10-20 (J18–J20).
+Jim answered rev 1's Q1–Q3 on 2026-10-20 (J18–J20). Rev 2 raises one:
+
+- **Q4. AR Plans 2–3 and the lesson plan's asks.** Track B1 is now AR Plans 2–3, which are not yet
+  written. Who writes and builds them (the assessment-results workstream, or this one), and may
+  they take the five asks in §7.6?
