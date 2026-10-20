@@ -1,3 +1,5 @@
+import { SERVER_COLUMNS } from './syncServerColumns';
+
 // Keep this local boundary aligned with submit_assessment's JSON and cast checks.
 // Authority and immutable-family conflict checks still belong to the server.
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -112,4 +114,17 @@ export const assertSubmitShape = (payload) => {
     }
     assertTimestamp(item.created_at, `${field}.created_at`);
   }
+};
+
+export const toSubmitArgs = (payload) => {
+  assertSubmitShape(payload);
+  const selectColumns = (record, columns) => Object.fromEntries(
+    columns
+      .filter(column => column !== 'updated_at' && record[column] !== undefined)
+      .map(column => [column, record[column]])
+  );
+  return {
+    p_assessment: selectColumns(payload, SERVER_COLUMNS.assessments),
+    p_items: payload.items.map(item => selectColumns(item, SERVER_COLUMNS.assessment_items)),
+  };
 };

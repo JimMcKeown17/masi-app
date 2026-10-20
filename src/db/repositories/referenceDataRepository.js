@@ -80,6 +80,7 @@ const REFERENCE_TABLES = {
       { tableName: 'groups', column: 'programme_id' },
       { tableName: 'group_ea_assignments', column: 'programme_id' },
       { tableName: 'sessions', column: 'programme_id' },
+      { tableName: 'battery_runs', column: 'programme_id' },
       { tableName: 'assessments', column: 'programme_id' },
       { tableName: 'letter_mastery', column: 'programme_id' },
     ],

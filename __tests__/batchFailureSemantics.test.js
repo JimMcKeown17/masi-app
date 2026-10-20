@@ -35,45 +35,21 @@ const enqueue = async (db, tableName, recordId, operation, payload) => {
 };
 
 /**
- * Seeds a child + parent assessment + N assessment_items rows, all enqueued as
- * 'assessment_items' inserts. Uses seedCoreData's school-1 / programme-a as FKs.
+ * Seeds N time-entry inserts to exercise the generic batching and fallback path.
  */
-const seedAssessmentItemsForThrowTest = async (db, count = 3) => {
-  await db.runAsync(`
-    insert into children (id, first_name, last_name, sync_status)
-    values ('child-throw-test', 'Amahle', 'Dlamini', 'synced')
-  `);
-  await db.runAsync(`
-    insert into assessments (
-      id, user_id, child_id, programme_id, assessment_type, assessment_date, sync_status
-    )
-    values (
-      'assessment-throw-1', 'user-1', 'child-throw-test', 'programme-a',
-      'letter_sounds', '2026-06-16', 'synced'
-    )
-  `);
-
+const seedTimeEntriesForThrowTest = async (db, count = 3) => {
   for (let i = 0; i < count; i++) {
-    const id = `item-throw-${String(i).padStart(4, '0')}`;
-    const letter = String.fromCharCode(97 + (i % 26));
+    const id = `time-throw-${String(i).padStart(4, '0')}`;
     const item = {
       id,
-      assessment_id: 'assessment-throw-1',
-      item_key: `letter-${i + 1}`,
-      prompt: letter,
-      response: letter,
-      is_correct: 1,
-      position: i,
-      metadata: '{}',
+      user_id: 'user-1',
+      sign_in_time: '2026-06-16T08:00:00.000Z',
     };
     await db.runAsync(`
-      insert into assessment_items (
-        id, assessment_id, item_key, prompt, response, is_correct, position, metadata, sync_status
-      )
-      values (?, ?, ?, ?, ?, ?, ?, ?, 'pending')
-    `, item.id, item.assessment_id, item.item_key, item.prompt, item.response,
-      item.is_correct, item.position, item.metadata);
-    await enqueue(db, 'assessment_items', id, 'insert', item);
+      insert into time_entries (id, user_id, sign_in_time, sync_status)
+      values (?, ?, ?, 'pending')
+    `, item.id, item.user_id, item.sign_in_time);
+    await enqueue(db, 'time_entries', id, 'insert', item);
   }
 };
 
@@ -81,7 +57,7 @@ it('a thrown batch request degrades to per-record fallback (rows still sync)', a
   const db = bindTestActor(createBetterSqliteTestDatabase(':memory:'), 'test-user');
   await runMigrations(db);
   await seedCoreData(db);
-  await seedAssessmentItemsForThrowTest(db, 3);
+  await seedTimeEntriesForThrowTest(db, 3);
 
   // Discriminate batch vs per-row by payload shape:
   //   runBatchServerOperation passes an Array  → this represents the single batch call → THROW
@@ -115,7 +91,7 @@ it('a thrown per-row request in the batch fallback finalizes retriable, none lef
   const db = bindTestActor(createBetterSqliteTestDatabase(':memory:'), 'test-user');
   await runMigrations(db);
   await seedCoreData(db);
-  await seedAssessmentItemsForThrowTest(db, 3);
+  await seedTimeEntriesForThrowTest(db, 3);
 
   // First upsert call is the batch (3 items → 1 call) → returns error to trigger per-row fallback.
   // Subsequent upsert calls are the per-row fallback requests (3 calls, one per item) → each throws.
@@ -155,7 +131,7 @@ it('a thrown batch error finalizes EVERY member as retriable failed with last_er
   const db = bindTestActor(createBetterSqliteTestDatabase(':memory:'), 'test-user');
   await runMigrations(db);
   await seedCoreData(db);
-  await seedAssessmentItemsForThrowTest(db, 3);
+  await seedTimeEntriesForThrowTest(db, 3);
 
   const engine = createOutboxSyncEngine({ enqueueRequest: (task) => task(), getAuthSession: liveTestSession, database: db, supabaseClient: throwingSupabase() });
   const result = await engine.syncAll();
@@ -174,7 +150,7 @@ it('bounds failed-batch fan-out across the whole pass and leaves unattempted row
   const db = bindTestActor(createBetterSqliteTestDatabase(':memory:'), 'test-user');
   await runMigrations(db);
   await seedCoreData(db);
-  await seedAssessmentItemsForThrowTest(db, 150);
+  await seedTimeEntriesForThrowTest(db, 150);
 
   const payloadSizes = [];
   let individualCalls = 0;
@@ -228,7 +204,7 @@ it('bounds failed-batch fan-out across the whole pass and leaves unattempted row
     totalRetriable: 0,
     totalDeferred: 150 - SYNC_BATCH_LIMITS.maxFallbackRecordsPerPass,
   }));
-  expect(result.tableResults.assessment_items).toEqual(expect.objectContaining({
+  expect(result.tableResults.time_entries).toEqual(expect.objectContaining({
     synced: SYNC_BATCH_LIMITS.maxFallbackRecordsPerPass,
     failed: 0,
     deferred: 150 - SYNC_BATCH_LIMITS.maxFallbackRecordsPerPass,

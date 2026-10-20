@@ -7,6 +7,31 @@ jest.mock('../src/services/supabaseClient', () => ({
 
 describe('offline sync payload stripping', () => {
   const { validate: uuidValidate } = require('uuid');
+  const assessmentFamily = () => ({
+    id: '00000000-0000-4000-8000-000000000001',
+    child_id: '00000000-0000-4000-8000-000000000002',
+    user_id: '00000000-0000-4000-8000-000000000003',
+    programme_id: '00000000-0000-4000-8000-000000000004',
+    assessment_type: 'letter_sounds',
+    assessment_date: '2026-05-21',
+    assessment_purpose: 'progress_check',
+    question_code: 'letter_sounds',
+    question_version: '2026.1',
+    item_set_id: 'letter_sounds@2026.1.en',
+    language: 'en',
+    stopped_reason: 'completed',
+    duration_ms: 1000,
+    derived: { total_correct: 1 },
+    battery_run_id: null,
+    score: 1,
+    total_items: 1,
+    items: [{
+      id: '00000000-0000-4000-8000-000000000005',
+      assessment_id: '00000000-0000-4000-8000-000000000001',
+      item_key: 'a', position: 0, prompt: 'a', response: 'a',
+      is_correct: true, metadata: {},
+    }],
+  });
 
   test('keeps required class teacher while removing local-only fields', () => {
     const { _testBuildSyncPayload } = require('../src/services/offlineSync');
@@ -90,31 +115,27 @@ describe('offline sync payload stripping', () => {
     });
   });
 
-  test('allows only normalized assessment columns through the sync payload', () => {
+  test('allows only normalized assessment family columns through the RPC arguments', () => {
     const { _testBuildSyncPayload } = require('../src/services/offlineSync');
 
+    const family = assessmentFamily();
     const payload = _testBuildSyncPayload('assessments', {
-      id: 'assessment-1',
-      child_id: 'child-1',
-      user_id: 'user-1',
-      programme_id: 'programme-1',
-      assessment_type: 'letter_egra',
-      assessment_date: '2026-05-21',
-      score: 8,
+      ...family,
       correct_letters: [{ letter: 'a' }],
       incorrect_letters: [{ letter: 'm' }],
       attempt_number: 1,
+      items_tested: ['a'],
+      updated_at: '2026-05-21T08:00:00.000Z',
+      items: family.items.map(item => ({
+        ...item, sync_status: 'pending', updated_at: '2026-05-21T08:00:00.000Z', view_label: 'A',
+      })),
       synced: false,
     });
 
+    const { items, ...parent } = family;
     expect(payload).toEqual({
-      id: 'assessment-1',
-      child_id: 'child-1',
-      user_id: 'user-1',
-      programme_id: 'programme-1',
-      assessment_type: 'letter_egra',
-      assessment_date: '2026-05-21',
-      score: 8,
+      p_assessment: parent,
+      p_items: items,
     });
   });
 
@@ -161,6 +182,16 @@ describe('offline sync payload stripping', () => {
       item_key: '__summary__',
       metadata: { letters_attempted: 4 },
     }));
+  });
+
+  test('preserves stored assessment item UUIDs inside the family RPC payload', () => {
+    const { _testBuildSyncPayload } = require('../src/services/offlineSync');
+
+    const family = assessmentFamily();
+    const { p_items: items } = _testBuildSyncPayload('assessments', family);
+    expect(uuidValidate(items[0].id)).toBe(true);
+    expect(items[0].id).toBe(family.items[0].id);
+    expect(items).toEqual(family.items);
   });
 
 });

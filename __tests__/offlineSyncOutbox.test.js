@@ -27,6 +27,7 @@ import {
   createReferenceDataRepository,
 } from '../src/db/repositories/referenceDataRepository';
 import { createSessionsRepository } from '../src/db/repositories/sessionsRepository';
+import { createAssessmentsRepository } from '../src/db/repositories/assessmentsRepository';
 import { createSyncOutboxRepository } from '../src/db/repositories/syncOutboxRepository';
 import { createTimeEntriesRepository } from '../src/db/repositories/timeEntriesRepository';
 import { repairGroupOwnershipForSync } from '../src/db/repositories/groupsRepository';
@@ -45,62 +46,64 @@ const enqueue = async (db, tableName, recordId, operation, payload) => {
   await outbox.enqueue({ tableName, recordId, operation, payload });
 };
 
-const seedAssessmentItems = async (db, itemIds = [
-  '00000000-0000-0000-0000-000000000101',
-  '00000000-0000-0000-0000-000000000102',
-  '00000000-0000-0000-0000-000000000103',
-]) => {
+const FAMILY_IDS = {
+  userId: '00000000-0000-4000-8000-000000000201',
+  childId: '00000000-0000-4000-8000-000000000202',
+  programmeId: '00000000-0000-4000-8000-000000000203',
+  assessmentId: '00000000-0000-4000-8000-000000000204',
+};
+const familyTestSession = async () => ({
+  data: { session: { user: { id: FAMILY_IDS.userId } } },
+});
+
+const seedAssessmentFamily = async (db) => {
+  const { userId, childId, programmeId, assessmentId } = FAMILY_IDS;
+  bindTestActor(db, userId);
+  await db.runAsync(`
+    insert into programmes (id, code, name, sync_status)
+    values (?, 'family-lit', 'Family Literacy', 'synced')
+  `, programmeId);
+  await db.runAsync(`insert into staff_programme_assignments
+    (id, user_id, programme_id, assigned_at, sync_status)
+    values ('family-programme-assignment', ?, ?, '2026-01-15T00:00:00.000Z', 'synced')`,
+  userId, programmeId);
   await db.runAsync(`
     insert into children (id, first_name, last_name, sync_status)
-    values ('child-assessment-1', 'Amahle', 'Dlamini', 'synced')
-  `);
-  await db.runAsync(`
-    insert into assessments (
-      id,
-      user_id,
-      child_id,
-      programme_id,
-      assessment_type,
-      assessment_date,
-      sync_status
-    )
-    values (
-      'assessment-batch-1',
-      'user-1',
-      'child-assessment-1',
-      'programme-1',
-      'letter_sounds',
-      '2026-05-25',
-      'synced'
-    )
-  `);
+    values (?, 'Test', 'Child', 'synced')
+  `, childId);
+  await createAssessmentsRepository({ database: db }).saveQuestionResult({
+    assessmentId, userId, childId,
+    result: {
+      question_code: 'letter_sounds', question_version: '2026.1',
+      item_set_id: 'letter_sounds@2026.1.en', language: 'en',
+      duration_ms: 1000, stopped_reason: 'completed',
+      items: Array.from({ length: 3 }, (_, position) => ({
+        position, item_key: `letter-${position + 1}`,
+        prompt: String.fromCharCode(97 + position),
+        response: String.fromCharCode(97 + position), is_correct: true,
+      })),
+      derived: { total_correct: 3, total_attempted: 3, percent: 100, last_attempted_position: 2 },
+    },
+  });
+  return {
+    assessmentId,
+    itemIds: (await db.getAllAsync(
+      'select id from assessment_items where assessment_id = ? order by position', assessmentId
+    )).map(item => item.id),
+  };
+};
 
-  for (const [index, itemId] of itemIds.entries()) {
+const seedBatchTimeEntries = async (db) => {
+  const itemIds = ['time-batch-1', 'time-batch-2', 'time-batch-3'];
+  for (const itemId of itemIds) {
     const item = {
-      id: itemId,
-      assessment_id: 'assessment-batch-1',
-      item_key: `letter-${index + 1}`,
-      prompt: String.fromCharCode(97 + index),
-      response: String.fromCharCode(97 + index),
-      is_correct: 1,
-      position: index,
-      metadata: '{}',
+      id: itemId, user_id: 'user-1', sign_in_time: '2026-05-25T08:00:00.000Z',
     };
     await db.runAsync(`
-      insert into assessment_items (
-        id,
-        assessment_id,
-        item_key,
-        prompt,
-        response,
-        is_correct,
-        position,
-        metadata,
-        sync_status
-      )
-      values (?, ?, ?, ?, ?, ?, ?, ?, 'pending')
-    `, item.id, item.assessment_id, item.item_key, item.prompt, item.response, item.is_correct, item.position, item.metadata);
-    await enqueue(db, 'assessment_items', item.id, 'insert', item);
+      insert into time_entries (id, user_id, sign_in_time, sync_status)
+      values (?, ?, ?, 'pending')
+    `, item.id, item.user_id, item.sign_in_time);
+    await enqueue(db, 'time_entries', item.id, 'insert', item);
   }
 
   return itemIds;
@@ -934,28 +937,26 @@ describe('SQLite outbox offline sync', () => {
         values ('child-1', 'Amahle', 'Dlamini', 'synced')
       `);
       await db.runAsync(`
-        insert into assessments (
+        insert into sessions (
           id,
-          child_id,
           user_id,
           programme_id,
-          assessment_type,
-          assessment_date,
+          session_date,
           sync_status
         )
         values (
-          'asmt-1',
-          'child-1',
+          'session-evidence-1',
           'user-1',
           'programme-1',
-          'egra',
           '2026-07-08',
           'pending'
         )
       `);
-      await enqueue(db, 'assessments', 'asmt-1', 'insert', {
-        id: 'asmt-1',
-        child_id: 'child-1',
+      await enqueue(db, 'sessions', 'session-evidence-1', 'insert', {
+        id: 'session-evidence-1',
+        user_id: 'user-1',
+        programme_id: 'programme-1',
+        session_date: '2026-07-08',
       });
       const outboxRepository = createSyncOutboxRepository({ database: db });
 
@@ -963,9 +964,9 @@ describe('SQLite outbox offline sync', () => {
         database: db,
         outboxRepository,
         outboxRecord: {
-          table_name: 'assessment_items',
-          record_id: 'ai-1',
-          payload: { id: 'ai-1', assessment_id: 'asmt-1' },
+          table_name: 'session_attendees',
+          record_id: 'attendee-evidence-1',
+          payload: { id: 'attendee-evidence-1', session_id: 'session-evidence-1', child_id: 'child-1' },
         },
         includeGrant: false,
       });
@@ -1112,61 +1113,55 @@ describe('SQLite outbox offline sync', () => {
       values ('child-1', 'Amahle', 'Dlamini', 'synced')
     `);
     await db.runAsync(`
-      insert into assessments (
+      insert into sessions (
         id,
-        child_id,
         user_id,
         programme_id,
-        assessment_type,
-        assessment_date,
+        session_date,
         sync_status
       )
       values (
-        'asmt-1',
-        'child-1',
+        'session-evidence-1',
         'user-1',
         'programme-1',
-        'egra',
         '2026-07-08',
         'pending'
       )
     `);
-    await enqueue(db, 'assessments', 'asmt-1', 'insert', {
-      id: 'asmt-1',
-      child_id: 'child-1',
+    await enqueue(db, 'sessions', 'session-evidence-1', 'insert', {
+      id: 'session-evidence-1',
       user_id: 'user-1',
       programme_id: 'programme-1',
-      assessment_type: 'egra',
-      assessment_date: '2026-07-08',
+      session_date: '2026-07-08',
     });
     await db.runAsync(`
-      insert into assessment_items (id, assessment_id, item_key, sync_status)
-      values ('ai-1', 'asmt-1', 'letter-a', 'pending')
+      insert into session_attendees (id, session_id, child_id, sync_status)
+      values ('attendee-evidence-1', 'session-evidence-1', 'child-1', 'pending')
     `);
-    await enqueue(db, 'assessment_items', 'ai-1', 'insert', {
-      id: 'ai-1',
-      assessment_id: 'asmt-1',
-      item_key: 'letter-a',
+    await enqueue(db, 'session_attendees', 'attendee-evidence-1', 'insert', {
+      id: 'attendee-evidence-1',
+      session_id: 'session-evidence-1',
+      child_id: 'child-1',
     });
 
     let denyItem = true;
     const { supabaseClient } = createSupabaseMock({
       upsertResults: {
-        assessment_items: () => (
+        session_attendees: () => (
           denyItem
             ? { error: { code: '42501', message: 'row-level security' } }
             : { error: null }
         ),
-        assessments: { error: null },
+        sessions: { error: null },
       },
     });
     const engine = createOutboxSyncEngine({ enqueueRequest: (task) => task(), getAuthSession: liveTestSession, database: db, supabaseClient });
 
-    await engine.syncAll({ tableName: 'assessment_items' });
+    await engine.syncAll({ tableName: 'session_attendees' });
     let item = await db.getFirstAsync(`
       select status, last_error
       from sync_outbox
-      where record_id = 'ai-1'
+      where record_id = 'attendee-evidence-1'
     `);
     expect(item.status).toBe('failed');
     expect(item.last_error || '').not.toContain(AUTHENTICATED_DENIAL_MARKER);
@@ -1176,7 +1171,7 @@ describe('SQLite outbox offline sync', () => {
     item = await db.getFirstAsync(`
       select id
       from sync_outbox
-      where record_id = 'ai-1'
+      where record_id = 'attendee-evidence-1'
     `);
     expect(item).toBeFalsy();
   });
@@ -1187,21 +1182,17 @@ describe('SQLite outbox offline sync', () => {
       values ('child-2', 'Amahle', 'Dlamini', 'synced')
     `);
     await db.runAsync(`
-      insert into assessments (
+      insert into sessions (
         id,
-        child_id,
         user_id,
         programme_id,
-        assessment_type,
-        assessment_date,
+        session_date,
         sync_status
       )
       values (
-        'asmt-2',
-        'child-2',
+        'session-evidence-2',
         'user-1',
         'programme-1',
-        'egra',
         '2026-07-08',
         'synced'
       )
@@ -1211,28 +1202,28 @@ describe('SQLite outbox offline sync', () => {
       values ('cea-2', 'child-2', 'user-1', 'user-1', 'synced')
     `);
     await db.runAsync(`
-      insert into assessment_items (id, assessment_id, item_key, sync_status)
-      values ('ai-2', 'asmt-2', 'letter-b', 'pending')
+      insert into session_attendees (id, session_id, child_id, sync_status)
+      values ('attendee-evidence-2', 'session-evidence-2', 'child-2', 'pending')
     `);
-    await enqueue(db, 'assessment_items', 'ai-2', 'insert', {
-      id: 'ai-2',
-      assessment_id: 'asmt-2',
-      item_key: 'letter-b',
+    await enqueue(db, 'session_attendees', 'attendee-evidence-2', 'insert', {
+      id: 'attendee-evidence-2',
+      session_id: 'session-evidence-2',
+      child_id: 'child-2',
     });
 
     const { supabaseClient } = createSupabaseMock({
       upsertResults: {
-        assessment_items: { error: { code: '42501', message: 'row-level security' } },
+        session_attendees: { error: { code: '42501', message: 'row-level security' } },
       },
     });
     const engine = createOutboxSyncEngine({ enqueueRequest: (task) => task(), getAuthSession: liveTestSession, database: db, supabaseClient });
 
-    await engine.syncAll({ tableName: 'assessment_items' });
+    await engine.syncAll({ tableName: 'session_attendees' });
 
     const item = await db.getFirstAsync(`
       select status, last_error
       from sync_outbox
-      where record_id = 'ai-2'
+      where record_id = 'attendee-evidence-2'
     `);
     expect(item.status).toBe('terminal');
     expect(item.last_error).toContain(AUTHENTICATED_DENIAL_MARKER);
@@ -1693,14 +1684,16 @@ describe('SQLite outbox offline sync', () => {
     }));
   });
 
-  test('batches ready assessment item upserts and finalizes each local item', async () => {
-    const itemIds = await seedAssessmentItems(db);
-    const { supabaseClient, calls } = createSupabaseMock();
+  test('uploads one assessment family and finalizes its parent and every local item', async () => {
+    const { assessmentId, itemIds } = await seedAssessmentFamily(db);
+    const { supabaseClient, calls } = createSupabaseMock({
+      rpcResults: { submit_assessment: { data: 'inserted', error: null } },
+    });
     const outboxRepository = createSyncOutboxRepository({ database: db });
     const markInFlightAndGetSpy = jest.spyOn(outboxRepository, 'markInFlightAndGet');
     const getByIdSpy = jest.spyOn(outboxRepository, 'getById');
     const engine = createOutboxSyncEngine({ enqueueRequest: (task) => task(),
-      getAuthSession: liveTestSession,
+      getAuthSession: familyTestSession,
       database: db,
       supabaseClient,
       outboxRepository,
@@ -1708,23 +1701,26 @@ describe('SQLite outbox offline sync', () => {
 
     const result = await engine.syncAll();
 
-    const assessmentItemCalls = calls.filter(call => call.tableName === 'assessment_items');
-    expect(assessmentItemCalls).toHaveLength(1);
-    expect(assessmentItemCalls[0]).toEqual(expect.objectContaining({
-      type: 'upsert',
-      tableName: 'assessment_items',
-      payload: expect.arrayContaining([
-        expect.objectContaining({ item_key: 'letter-1' }),
-        expect.objectContaining({ item_key: 'letter-2' }),
-        expect.objectContaining({ item_key: 'letter-3' }),
-      ]),
-      options: expect.objectContaining({ onConflict: 'id' }),
+    expect(calls).toHaveLength(1);
+    expect(calls[0]).toEqual(expect.objectContaining({
+      type: 'rpc',
+      functionName: 'submit_assessment',
+      args: {
+        p_assessment: expect.objectContaining({ id: assessmentId }),
+        p_items: expect.arrayContaining([
+          expect.objectContaining({ item_key: 'letter-1' }),
+          expect.objectContaining({ item_key: 'letter-2' }),
+          expect.objectContaining({ item_key: 'letter-3' }),
+        ]),
+      },
     }));
     expect(result).toEqual(expect.objectContaining({
       success: true,
-      totalSynced: itemIds.length,
+      totalSynced: 1,
       totalFailed: 0,
     }));
+    expect(await db.getFirstAsync('select sync_status from assessments where id = ?', assessmentId))
+      .toEqual({ sync_status: 'synced' });
     expect(await db.getFirstAsync(`
       select count(*) as count
       from assessment_items
@@ -1732,22 +1728,20 @@ describe('SQLite outbox offline sync', () => {
     `)).toEqual({ count: itemIds.length });
     expect(await db.getFirstAsync('select count(*) as count from sync_outbox')).toEqual({ count: 0 });
     expect(markInFlightAndGetSpy).toHaveBeenCalledTimes(1);
-    expect(markInFlightAndGetSpy).toHaveBeenCalledWith(itemIds.map(
-      (itemId) => `assessment_items:${itemId}:insert`
-    ));
+    expect(markInFlightAndGetSpy).toHaveBeenCalledWith([`assessments:${assessmentId}:insert`]);
     expect(getByIdSpy).not.toHaveBeenCalled();
   });
 
-  test('falls back to per-record assessment item sync when the batch upsert fails', async () => {
-    await seedAssessmentItems(db);
+  test('falls back to per-record time-entry sync when the batch upsert fails', async () => {
+    await seedBatchTimeEntries(db);
     const { supabaseClient, calls } = createSupabaseMock({
       upsertResults: {
-        'assessment_items:batch': {
+        'time_entries:batch': {
           error: { code: '500', message: 'Batch request failed' },
         },
-        assessment_items: ({ payload }) => (
-          payload.item_key === 'letter-2'
-            ? { error: { code: '23503', message: 'Missing assessment parent' } }
+        time_entries: ({ payload }) => (
+          payload.id === 'time-batch-2'
+            ? { error: { code: '23503', message: 'Missing user parent' } }
             : { error: null }
         ),
       },
@@ -1756,13 +1750,13 @@ describe('SQLite outbox offline sync', () => {
 
     const result = await engine.syncAll();
 
-    const assessmentItemCalls = calls.filter(call => call.tableName === 'assessment_items');
-    expect(assessmentItemCalls).toHaveLength(4);
-    expect(Array.isArray(assessmentItemCalls[0].payload)).toBe(true);
-    expect(assessmentItemCalls.slice(1).map(call => call.payload.item_key)).toEqual([
-      'letter-1',
-      'letter-2',
-      'letter-3',
+    const timeEntryCalls = calls.filter(call => call.tableName === 'time_entries');
+    expect(timeEntryCalls).toHaveLength(4);
+    expect(Array.isArray(timeEntryCalls[0].payload)).toBe(true);
+    expect(timeEntryCalls.slice(1).map(call => call.payload.id)).toEqual([
+      'time-batch-1',
+      'time-batch-2',
+      'time-batch-3',
     ]);
     expect(result).toEqual(expect.objectContaining({
       success: false,
@@ -1770,18 +1764,18 @@ describe('SQLite outbox offline sync', () => {
       totalFailed: 1,
       failedRecords: [
         expect.objectContaining({
-          table: 'assessment_items',
-          reason: 'Missing assessment parent',
+          table: 'time_entries',
+          reason: 'Missing user parent',
         }),
       ],
     }));
     expect(await db.getFirstAsync(`
       select sync_status, last_sync_error
-      from assessment_items
-      where item_key = 'letter-2'
+      from time_entries
+      where id = 'time-batch-2'
     `)).toEqual({
       sync_status: 'terminal',
-      last_sync_error: 'Missing assessment parent',
+      last_sync_error: 'Missing user parent',
     });
     expect(await db.getFirstAsync('select count(*) as count from sync_outbox')).toEqual({ count: 1 });
   });
@@ -2387,17 +2381,10 @@ describe('SQLite outbox offline sync', () => {
   });
 
   test('keeps foreign-key and RLS failures visible as terminal failed items', async () => {
+    const { assessmentId } = await seedAssessmentFamily(db);
     await db.runAsync(`
       insert into children (id, first_name, last_name, sync_status)
       values ('child-1', 'Amahle', 'Dlamini', 'synced')
-    `);
-    await db.runAsync(`
-      insert into assessments (
-        id, user_id, child_id, programme_id, assessment_type, assessment_date, sync_status
-      )
-      values (
-        'assessment-1', 'user-1', 'child-1', 'programme-1', 'letter_egra', '2026-05-21', 'pending'
-      )
     `);
     await db.runAsync(`
       insert into letter_mastery (
@@ -2407,14 +2394,6 @@ describe('SQLite outbox offline sync', () => {
         'mastery-1', 'user-1', 'child-1', 'programme-1', 'a', 'en', 'taught', 'pending'
       )
     `);
-    await enqueue(db, 'assessments', 'assessment-1', 'insert', {
-      id: 'assessment-1',
-      user_id: 'user-1',
-      child_id: 'child-1',
-      programme_id: 'programme-1',
-      assessment_type: 'letter_egra',
-      assessment_date: '2026-05-21',
-    });
     await enqueue(db, 'letter_mastery', 'mastery-1', 'insert', {
       id: 'mastery-1',
       user_id: 'user-1',
@@ -2427,25 +2406,27 @@ describe('SQLite outbox offline sync', () => {
 
     const { supabaseClient } = createSupabaseMock({
       upsertResults: {
-        assessments: { error: { code: '23503', message: 'missing parent' } },
         letter_mastery: { error: { code: '42501', message: 'RLS denied' } },
       },
+      rpcResults: {
+        submit_assessment: { error: { code: '23503', message: 'missing parent' } },
+      },
     });
-    const engine = createOutboxSyncEngine({ enqueueRequest: (task) => task(), getAuthSession: liveTestSession, database: db, supabaseClient });
+    const engine = createOutboxSyncEngine({ enqueueRequest: (task) => task(), getAuthSession: familyTestSession, database: db, supabaseClient });
 
     const result = await engine.syncAll();
     const status = await engine.getSyncStatus();
     const authenticatedRlsDenied = `${AUTHENTICATED_DENIAL_MARKER} RLS denied`;
 
     expect(result.success).toBe(false);
-    expect(await db.getFirstAsync('select sync_status, last_sync_error from assessments where id = ?', 'assessment-1'))
+    expect(await db.getFirstAsync('select sync_status, last_sync_error from assessments where id = ?', assessmentId))
       .toEqual({ sync_status: 'terminal', last_sync_error: 'missing parent' });
     expect(await db.getFirstAsync('select sync_status, last_sync_error from letter_mastery where id = ?', 'mastery-1'))
       .toEqual({ sync_status: 'terminal', last_sync_error: authenticatedRlsDenied });
     expect(status.failedItems).toEqual([
       expect.objectContaining({
         table: 'assessments',
-        id: 'assessment-1',
+        id: assessmentId,
         terminal: true,
         reason: 'missing parent',
       }),
