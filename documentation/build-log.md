@@ -962,6 +962,40 @@ is Plan 3; mastery-confirmation re-keying and code-valued confirmation languages
 The migration's source and disposable PostgreSQL results do not establish hosted application or
 physical-device behavior.
 
+### 2026-10-20 — Assessment Results Plan 1, Task 14 steps 1–2 (controller)
+
+**Gate 1, local verification on `feat/assessment-results`.**
+- `npx jest` (Node 20): **345 suites / 4,189 tests PASS**. `npm run test:types`: clean.
+- All six PostgreSQL harnesses against the disposable PG17 on port 55432, `overall rc=0`:
+  history-authorization, upload-contract, organisation-label, support-incident, ea-access, and
+  assessment-results (**53/53 cases**, including both overlapping-retry cases).
+
+**Gate 2, Codex adversarial review of the whole branch (`--base origin/main`), two rounds.**
+- **Round 1, one high finding, fixed (`d66054b`).** Every package Question timed itself with
+  `Date.now()`. A backward wall-clock correction mid-test produced a negative `duration_ms`
+  (reproduced: −3,590,000 ms). `assertSubmitShape` refuses that, and Try again reuses the same
+  result, so a finished test could never be saved. A forward correction ended timed tests early.
+  - Root cause: Task 11 deleted `src/utils/monotonicClock.js` as unused, together with its
+    regression test (`useAssessmentSession.clockJump.test.js`). The protection went with them.
+  - Fix: `src/assessment-questions/progress/clock.ts` `monotonicNow()`, resolving
+    `globalThis.performance` on each call, used for every elapsed time, deadline, stop or End
+    freeze, and Undo shift in all 11 components. `duration_ms` is rounded to an integer.
+    `performance.now()` is fractional, and a fractional value would also have been refused.
+    `validateResult` now rejects negative, fractional and non-finite durations.
+  - New `clockJump.test.tsx` covers backward and forward jumps for the letter test, the
+    step-by-step word test and grid Q6. There is also a real-SQLite save of a stop-rule result
+    after a backward jump. TDD RED was 12 failures.
+- **Round 2: approve, no material findings.**
+- **Also fixed by the controller (`fix(assessments)` commit).** History run rows took their date
+  from the UTC day of `started_at`; they now use `toLocalDateString`. The regression test fails
+  without the fix.
+
+**Known risk, accepted (not fixed).** If the EA confirms Discard on the "This result isn't saved
+yet" sheet while a save is already running, the screen leaves but the save still commits, so the
+result is kept and uploads. The window is the few milliseconds of a local SQLite save. Ignoring
+leave attempts mid-save would break the designed path where a save fails while that sheet is
+open. Revisit only if it is seen in the field.
+
 ---
 
 ## Decision Register
