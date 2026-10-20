@@ -8,6 +8,9 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { View, Text, Pressable, StyleSheet } from 'react-native';
 import type { QuestionProps } from '../../types/QuestionProps';
+import type { ItemSetMeta } from '../../types/ItemSet';
+import { resolveItemSet } from '../../itemsets/resolveItemSet';
+import { MissingItemSet } from '../../progress/MissingItemSet';
 import type { ResultItem, StoppedReason } from '../../types/Result';
 import type { LetterSoundsItemSet } from './types';
 import { WELA_PLUS_LETTER_SOUNDS_EN } from '../../itemsets/wela_plus_letter_sounds.en';
@@ -22,10 +25,7 @@ import { LastAttemptedSheet } from '../../progress/LastAttemptedSheet';
 type Phase = 'intro' | 'active' | 'mark-last' | 'skip-picker' | 'finished';
 type MarkReason = 'ea_ended' | 'timer';
 
-type FullLetterSoundsItemSet = LetterSoundsItemSet & {
-  item_set_id: string;
-  question_version: string;
-};
+type FullLetterSoundsItemSet = LetterSoundsItemSet & ItemSetMeta;
 
 function isFullItemSet(value: unknown): value is FullLetterSoundsItemSet {
   if (!value || typeof value !== 'object') return false;
@@ -34,18 +34,10 @@ function isFullItemSet(value: unknown): value is FullLetterSoundsItemSet {
     Array.isArray(o.letters) &&
     typeof o.columns === 'number' &&
     typeof o.item_set_id === 'string' &&
-    typeof o.question_version === 'string'
+    typeof o.question_version === 'string' &&
+    typeof o.question_code === 'string' &&
+    typeof o.language === 'string'
   );
-}
-
-function resolveItemSet(
-  language: string,
-  override: unknown,
-): FullLetterSoundsItemSet {
-  if (isFullItemSet(override)) return override;
-  return language === 'xh'
-    ? WELA_PLUS_LETTER_SOUNDS_XH
-    : WELA_PLUS_LETTER_SOUNDS_EN;
 }
 
 function keyFor(idx: number, letter: string): string {
@@ -60,9 +52,22 @@ function chunk<T>(items: T[], size: number): T[][] {
 }
 
 export function LetterSoundsQuestion(props: QuestionProps) {
+  const itemSet = resolveItemSet(
+    props.language,
+    props.itemSet,
+    { en: WELA_PLUS_LETTER_SOUNDS_EN, xh: WELA_PLUS_LETTER_SOUNDS_XH },
+    isFullItemSet,
+  );
+  if (!itemSet) return <MissingItemSet language={props.language} />;
+  return <LetterSoundsQuestionContent {...props} itemSet={itemSet} />;
+}
+
+function LetterSoundsQuestionContent(
+  props: QuestionProps & { itemSet: FullLetterSoundsItemSet },
+) {
   const {
     language,
-    itemSet,
+    itemSet: effectiveItemSet,
     instructions,
     durationSec,
     onComplete,
@@ -71,7 +76,6 @@ export function LetterSoundsQuestion(props: QuestionProps) {
   const [phase, setPhase] = useState<Phase>('intro');
   const [markReason, setMarkReason] = useState<MarkReason>('ea_ended');
   const { isMarked, toggle } = useToggleMark();
-  const effectiveItemSet = resolveItemSet(language, itemSet);
 
   const isMarkedRef = useRef(isMarked);
   useEffect(() => {
@@ -110,7 +114,7 @@ export function LetterSoundsQuestion(props: QuestionProps) {
         : applyProgress(raw, lastAttempted);
       const totalCorrect = items.filter((i) => i.is_correct).length;
       onComplete({
-        question_code: 'wela_plus_letter_sounds',
+        question_code: effectiveItemSet.question_code,
         question_version: effectiveItemSet.question_version,
         item_set_id: effectiveItemSet.item_set_id,
         language,

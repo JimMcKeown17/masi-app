@@ -37,6 +37,8 @@ describe('ListenAndAnswerStoryQuestion — intro phase', () => {
     // story consuming all vertical space (i.e., must be outside the scroller).
     const longOverride = {
       item_set_id: 'custom@1.0.en',
+      question_code: 'custom',
+      language: 'en',
       question_version: '1.0',
       story: Array.from({ length: 200 }, (_, i) => `Line ${i}.`).join(' '),
       questions: [
@@ -348,6 +350,8 @@ describe('ListenAndAnswerStoryQuestion — itemSet override validation', () => {
     const onComplete = jest.fn();
     const malformed = {
       item_set_id: 'custom@1.0.en',
+      question_code: 'custom',
+      language: 'en',
       question_version: '1.0',
       story: 'Looks fine at the top level.',
       questions: [
@@ -375,6 +379,8 @@ describe('ListenAndAnswerStoryQuestion — itemSet override validation', () => {
     const onComplete = jest.fn();
     const malformed = {
       item_set_id: 'custom@1.0.en',
+      question_code: 'custom',
+      language: 'en',
       question_version: '1.0',
       story: 'Fine.',
       questions: [{ prompt: 'p', acceptable_answers: ['a'] }],
@@ -394,6 +400,8 @@ describe('ListenAndAnswerStoryQuestion — itemSet override validation', () => {
     const onComplete = jest.fn();
     const malformed = {
       item_set_id: 'custom@1.0.en',
+      question_code: 'custom',
+      language: 'en',
       question_version: '1.0',
       story: 12345, // wrong type
       questions: [{ item_key: 'k', prompt: 'p', acceptable_answers: ['a'] }],
@@ -417,6 +425,8 @@ describe('ListenAndAnswerStoryQuestion — itemSet override validation', () => {
     const onComplete = jest.fn();
     const goodOverride = {
       item_set_id: 'custom@1.0.en',
+      question_code: 'custom',
+      language: 'en',
       question_version: '1.0',
       story: 'A unique story about a frog.',
       questions: [
@@ -511,6 +521,8 @@ describe('ListenAndAnswerStoryQuestion — questions.length not hardcoded', () =
     const onComplete = jest.fn();
     const override = {
       item_set_id: 'custom@1.0.en',
+      question_code: 'custom',
+      language: 'en',
       question_version: '1.0',
       story: 'A short story.',
       questions: [

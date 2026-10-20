@@ -9,6 +9,9 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { View, Text, Pressable, ScrollView, StyleSheet } from 'react-native';
 import type { QuestionProps } from '../../types/QuestionProps';
+import type { ItemSetMeta } from '../../types/ItemSet';
+import { resolveItemSet } from '../../itemsets/resolveItemSet';
+import { MissingItemSet } from '../../progress/MissingItemSet';
 import type { Result, ResultItem, StoppedReason } from '../../types/Result';
 import type { ListenPhonemeBlendItemSet } from './types';
 import { WELA_PLUS_PHONEME_BLEND_EN } from '../../itemsets/wela_plus_phoneme_blend.en';
@@ -24,10 +27,7 @@ const BASE_GLOSS_FONT_SIZE = 18;
 
 type Phase = 'intro' | 'active' | 'confirm-finish' | 'skip-picker' | 'finished';
 
-type FullItemSet = ListenPhonemeBlendItemSet & {
-  item_set_id: string;
-  question_version: string;
-};
+type FullItemSet = ListenPhonemeBlendItemSet & ItemSetMeta;
 
 function isFullItemSet(value: unknown): value is FullItemSet {
   if (!value || typeof value !== 'object') return false;
@@ -35,6 +35,8 @@ function isFullItemSet(value: unknown): value is FullItemSet {
   if (!Array.isArray(o.prompts)) return false;
   if (typeof o.item_set_id !== 'string') return false;
   if (typeof o.question_version !== 'string') return false;
+  if (typeof o.question_code !== 'string') return false;
+  if (typeof o.language !== 'string') return false;
   // Defend against accidentally receiving a Q3-shaped itemset whose `prompts` lack
   // segmented/word fields; the runtime guard prevents silent shape mixups.
   return o.prompts.every(
@@ -45,17 +47,23 @@ function isFullItemSet(value: unknown): value is FullItemSet {
   );
 }
 
-function resolveItemSet(language: string, override: unknown): FullItemSet {
-  if (isFullItemSet(override)) return override;
-  return language === 'xh'
-    ? WELA_PLUS_PHONEME_BLEND_XH
-    : WELA_PLUS_PHONEME_BLEND_EN;
+export function ListenPhonemeBlendQuestion(props: QuestionProps) {
+  const itemSet = resolveItemSet(
+    props.language,
+    props.itemSet,
+    { en: WELA_PLUS_PHONEME_BLEND_EN, xh: WELA_PLUS_PHONEME_BLEND_XH },
+    isFullItemSet,
+  );
+  if (!itemSet) return <MissingItemSet language={props.language} />;
+  return <ListenPhonemeBlendQuestionContent {...props} itemSet={itemSet} />;
 }
 
-export function ListenPhonemeBlendQuestion(props: QuestionProps) {
+function ListenPhonemeBlendQuestionContent(
+  props: QuestionProps & { itemSet: FullItemSet },
+) {
   const {
     language,
-    itemSet,
+    itemSet: effectiveItemSet,
     instructions,
     onComplete,
     onItemMarked,
@@ -65,7 +73,6 @@ export function ListenPhonemeBlendQuestion(props: QuestionProps) {
   const fontScale = useChildReadingFontSize();
   const segmentedFontSize = BASE_SEGMENTED_FONT_SIZE * fontScale;
   const glossFontSize = BASE_GLOSS_FONT_SIZE * fontScale;
-  const effectiveItemSet = resolveItemSet(language, itemSet);
 
   const isMarkedRef = useRef(isMarked);
   useEffect(() => {
@@ -112,7 +119,7 @@ export function ListenPhonemeBlendQuestion(props: QuestionProps) {
           : Date.now() - startTimeMsRef.current;
 
       const result: Result = {
-        question_code: 'wela_plus_phoneme_blend',
+        question_code: effectiveItemSet.question_code,
         question_version: effectiveItemSet.question_version,
         item_set_id: effectiveItemSet.item_set_id,
         language,

@@ -9,6 +9,9 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { View, Text, Pressable, ScrollView, StyleSheet } from 'react-native';
 import type { QuestionProps } from '../../types/QuestionProps';
+import type { ItemSetMeta } from '../../types/ItemSet';
+import { resolveItemSet } from '../../itemsets/resolveItemSet';
+import { MissingItemSet } from '../../progress/MissingItemSet';
 import type { Result, ResultItem, StoppedReason } from '../../types/Result';
 import type {
   ReadSentencesItemSet,
@@ -26,10 +29,7 @@ type Phase = 'intro' | 'active' | 'confirm-finish' | 'skip-picker' | 'finished';
 
 type MarkingPolarity = 'tap_correct' | 'tap_wrong';
 
-type FullItemSet = ReadSentencesItemSet & {
-  item_set_id: string;
-  question_version: string;
-};
+type FullItemSet = ReadSentencesItemSet & ItemSetMeta;
 
 function isValidWord(w: unknown): w is ReadSentencesWord {
   if (!w || typeof w !== 'object') return false;
@@ -53,15 +53,10 @@ function isFullItemSet(value: unknown): value is FullItemSet {
   const o = value as Record<string, unknown>;
   if (typeof o.item_set_id !== 'string') return false;
   if (typeof o.question_version !== 'string') return false;
+  if (typeof o.question_code !== 'string') return false;
+  if (typeof o.language !== 'string') return false;
   if (!Array.isArray(o.sentences)) return false;
   return o.sentences.every(isValidSentence);
-}
-
-function resolveItemSet(language: string, override: unknown): FullItemSet {
-  if (isFullItemSet(override)) return override;
-  return language === 'xh'
-    ? WELA_PLUS_READ_SENTENCES_XH
-    : WELA_PLUS_READ_SENTENCES_EN;
 }
 
 interface FlatWord {
@@ -91,9 +86,25 @@ function flattenWords(sentences: ReadSentencesSentence[]): FlatWord[] {
 export function ReadSentencesQuestion(
   props: QuestionProps & { markingPolarity?: MarkingPolarity },
 ) {
+  const itemSet = resolveItemSet(
+    props.language,
+    props.itemSet,
+    { en: WELA_PLUS_READ_SENTENCES_EN, xh: WELA_PLUS_READ_SENTENCES_XH },
+    isFullItemSet,
+  );
+  if (!itemSet) return <MissingItemSet language={props.language} />;
+  return <ReadSentencesQuestionContent {...props} itemSet={itemSet} />;
+}
+
+function ReadSentencesQuestionContent(
+  props: QuestionProps & {
+    itemSet: FullItemSet;
+    markingPolarity?: MarkingPolarity;
+  },
+) {
   const {
     language,
-    itemSet,
+    itemSet: effectiveItemSet,
     instructions,
     onComplete,
     onItemMarked,
@@ -101,7 +112,6 @@ export function ReadSentencesQuestion(
   } = props;
   const [phase, setPhase] = useState<Phase>('intro');
   const { isMarked, toggle } = useToggleMark();
-  const effectiveItemSet = resolveItemSet(language, itemSet);
 
   const isMarkedRef = useRef(isMarked);
   useEffect(() => {
@@ -179,7 +189,7 @@ export function ReadSentencesQuestion(
         : computePerSentencePercent(correctnessByPosition);
 
       const result: Result = {
-        question_code: 'wela_plus_read_sentences',
+        question_code: effectiveItemSet.question_code,
         question_version: effectiveItemSet.question_version,
         item_set_id: effectiveItemSet.item_set_id,
         language,

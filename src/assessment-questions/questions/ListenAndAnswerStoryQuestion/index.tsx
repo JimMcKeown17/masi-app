@@ -9,6 +9,9 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { View, Text, Pressable, ScrollView, Modal, StyleSheet } from 'react-native';
 import type { QuestionProps } from '../../types/QuestionProps';
+import type { ItemSetMeta } from '../../types/ItemSet';
+import { resolveItemSet } from '../../itemsets/resolveItemSet';
+import { MissingItemSet } from '../../progress/MissingItemSet';
 import type { Result, ResultItem, StoppedReason } from '../../types/Result';
 import type { ListenAndAnswerStoryItemSet } from './types';
 import { WELA_PLUS_LISTEN_AND_ANSWER_STORY_EN } from '../../itemsets/wela_plus_listen_and_answer_story.en';
@@ -28,10 +31,7 @@ type Phase =
   | 'skip-picker'
   | 'finished';
 
-type FullItemSet = ListenAndAnswerStoryItemSet & {
-  item_set_id: string;
-  question_version: string;
-};
+type FullItemSet = ListenAndAnswerStoryItemSet & ItemSetMeta;
 
 function isValidComprehensionQuestion(q: unknown): boolean {
   if (!q || typeof q !== 'object') return false;
@@ -45,7 +45,7 @@ function isValidComprehensionQuestion(q: unknown): boolean {
 // Note: itemset overrides are SINGLE-LANGUAGE by codebase convention,
 // matching wela_plus_listen_and_answer_story.{en,xh}.ts. The PRD's
 // bilingual story/prompt nesting is the abstract content model;
-// `resolveItemSet(language, override)` picks the per-language file.
+// `resolveItemSet` picks only the requested per-language file.
 function isFullItemSet(value: unknown): value is FullItemSet {
   if (!value || typeof value !== 'object') return false;
   const o = value as Record<string, unknown>;
@@ -53,20 +53,28 @@ function isFullItemSet(value: unknown): value is FullItemSet {
   if (!Array.isArray(o.questions)) return false;
   if (typeof o.item_set_id !== 'string') return false;
   if (typeof o.question_version !== 'string') return false;
+  if (typeof o.question_code !== 'string') return false;
+  if (typeof o.language !== 'string') return false;
   return o.questions.every(isValidComprehensionQuestion);
 }
 
-function resolveItemSet(language: string, override: unknown): FullItemSet {
-  if (isFullItemSet(override)) return override;
-  return language === 'xh'
-    ? WELA_PLUS_LISTEN_AND_ANSWER_STORY_XH
-    : WELA_PLUS_LISTEN_AND_ANSWER_STORY_EN;
+export function ListenAndAnswerStoryQuestion(props: QuestionProps) {
+  const itemSet = resolveItemSet(
+    props.language,
+    props.itemSet,
+    { en: WELA_PLUS_LISTEN_AND_ANSWER_STORY_EN, xh: WELA_PLUS_LISTEN_AND_ANSWER_STORY_XH },
+    isFullItemSet,
+  );
+  if (!itemSet) return <MissingItemSet language={props.language} />;
+  return <ListenAndAnswerStoryQuestionContent {...props} itemSet={itemSet} />;
 }
 
-export function ListenAndAnswerStoryQuestion(props: QuestionProps) {
+function ListenAndAnswerStoryQuestionContent(
+  props: QuestionProps & { itemSet: FullItemSet },
+) {
   const {
     language,
-    itemSet,
+    itemSet: effectiveItemSet,
     instructions,
     onComplete,
     onItemMarked,
@@ -76,7 +84,6 @@ export function ListenAndAnswerStoryQuestion(props: QuestionProps) {
   const { isMarked, toggle } = useToggleMark();
   const fontScale = useChildReadingFontSize();
   const promptFontSize = BASE_PROMPT_FONT_SIZE * fontScale;
-  const effectiveItemSet = resolveItemSet(language, itemSet);
 
   const isMarkedRef = useRef(isMarked);
   useEffect(() => {
@@ -122,7 +129,7 @@ export function ListenAndAnswerStoryQuestion(props: QuestionProps) {
           : Date.now() - startTimeMsRef.current;
 
       const result: Result = {
-        question_code: 'wela_plus_listen_and_answer_story',
+        question_code: effectiveItemSet.question_code,
         question_version: effectiveItemSet.question_version,
         item_set_id: effectiveItemSet.item_set_id,
         language,

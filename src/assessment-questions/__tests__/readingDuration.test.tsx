@@ -9,6 +9,7 @@ const words = Array.from({ length: 30 }, (_, idx) => ({
 }));
 const wordSet = {
   item_set_id: 'reading-duration@fixture.en', question_version: 'fixture', words,
+  question_code: 'reading-duration', language: 'en',
 };
 
 describe.each([
@@ -24,6 +25,7 @@ describe.each([
     name: 'Q1 LetterSoundsQuestion', Component: LetterSoundsQuestion,
     itemSet: {
       item_set_id: 'letter-duration@fixture.en', question_version: 'fixture',
+      question_code: 'letter-duration', language: 'en',
       letters: ['a', 'b', 'c'], columns: 3,
     },
     labels: ['a', 'b', 'c'], reportsWpm: false,

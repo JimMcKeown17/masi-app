@@ -10,6 +10,9 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { View, Text, Pressable, Image, StyleSheet } from 'react-native';
 import type { QuestionProps } from '../../types/QuestionProps';
+import type { ItemSetMeta } from '../../types/ItemSet';
+import { resolveItemSet } from '../../itemsets/resolveItemSet';
+import { MissingItemSet } from '../../progress/MissingItemSet';
 import type { Result, ResultItem, StoppedReason } from '../../types/Result';
 import type {
   LetterWritingFromPicturesItemSet,
@@ -33,10 +36,7 @@ type Phase =
   | 'skip-picker'
   | 'finished';
 
-type FullItemSet = LetterWritingFromPicturesItemSet & {
-  item_set_id: string;
-  question_version: string;
-};
+type FullItemSet = LetterWritingFromPicturesItemSet & ItemSetMeta;
 
 function isValidPrompt(p: unknown): p is LetterWritingPrompt {
   if (!p || typeof p !== 'object') return false;
@@ -53,23 +53,31 @@ function isFullItemSet(value: unknown): value is FullItemSet {
   const o = value as Record<string, unknown>;
   if (typeof o.item_set_id !== 'string') return false;
   if (typeof o.question_version !== 'string') return false;
+  if (typeof o.question_code !== 'string') return false;
+  if (typeof o.language !== 'string') return false;
   if (typeof o.itemsPerPage !== 'number') return false;
   if (typeof o.columns !== 'number') return false;
   if (!Array.isArray(o.prompts)) return false;
   return o.prompts.every(isValidPrompt);
 }
 
-function resolveItemSet(language: string, override: unknown): FullItemSet {
-  if (isFullItemSet(override)) return override;
-  return language === 'xh'
-    ? WELA_PLUS_LETTER_WRITING_XH
-    : WELA_PLUS_LETTER_WRITING_EN;
+export function LetterWritingFromPicturesQuestion(props: QuestionProps) {
+  const itemSet = resolveItemSet(
+    props.language,
+    props.itemSet,
+    { en: WELA_PLUS_LETTER_WRITING_EN, xh: WELA_PLUS_LETTER_WRITING_XH },
+    isFullItemSet,
+  );
+  if (!itemSet) return <MissingItemSet language={props.language} />;
+  return <LetterWritingFromPicturesQuestionContent {...props} itemSet={itemSet} />;
 }
 
-export function LetterWritingFromPicturesQuestion(props: QuestionProps) {
+function LetterWritingFromPicturesQuestionContent(
+  props: QuestionProps & { itemSet: FullItemSet },
+) {
   const {
     language,
-    itemSet,
+    itemSet: effectiveItemSet,
     instructions,
     onComplete,
     onItemMarked,
@@ -80,7 +88,6 @@ export function LetterWritingFromPicturesQuestion(props: QuestionProps) {
   const fontScale = useChildReadingFontSize();
   const letterFontSize = BASE_LETTER_FONT_SIZE * fontScale;
   const altFontSize = BASE_ALT_FONT_SIZE * fontScale;
-  const effectiveItemSet = resolveItemSet(language, itemSet);
 
   const isMarkedRef = useRef(isMarked);
   useEffect(() => {
@@ -134,7 +141,7 @@ export function LetterWritingFromPicturesQuestion(props: QuestionProps) {
           : Date.now() - startTimeMsRef.current;
 
       const result: Result = {
-        question_code: 'wela_plus_letter_writing',
+        question_code: effectiveItemSet.question_code,
         question_version: effectiveItemSet.question_version,
         item_set_id: effectiveItemSet.item_set_id,
         language,

@@ -8,6 +8,9 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { View, Text, Pressable, ScrollView, StyleSheet } from 'react-native';
 import type { QuestionProps } from '../../types/QuestionProps';
+import type { ItemSetMeta } from '../../types/ItemSet';
+import { resolveItemSet } from '../../itemsets/resolveItemSet';
+import { MissingItemSet } from '../../progress/MissingItemSet';
 import type { ResultItem, StoppedReason } from '../../types/Result';
 import type { ReadPassageItemSet, ReadPassageWord } from './types';
 import { WELA_PLUS_READ_PASSAGE_EN } from '../../itemsets/wela_plus_read_passage.en';
@@ -23,10 +26,7 @@ type Phase = 'intro' | 'active' | 'mark-last' | 'skip-picker' | 'finished';
 type MarkReason = 'ea_ended' | 'timer';
 type MarkingPolarity = 'tap_correct' | 'tap_wrong';
 
-type FullItemSet = ReadPassageItemSet & {
-  item_set_id: string;
-  question_version: string;
-};
+type FullItemSet = ReadPassageItemSet & ItemSetMeta;
 
 function isValidWord(p: unknown): p is ReadPassageWord {
   if (!p || typeof p !== 'object') return false;
@@ -40,6 +40,8 @@ function isFullItemSet(value: unknown): value is FullItemSet {
   const o = value as Record<string, unknown>;
   if (typeof o.item_set_id !== 'string') return false;
   if (typeof o.question_version !== 'string') return false;
+  if (typeof o.question_code !== 'string') return false;
+  if (typeof o.language !== 'string') return false;
   const words = o.words;
   if (!Array.isArray(words)) return false;
   const paragraphStarts = o.paragraph_starts;
@@ -63,13 +65,6 @@ function isFullItemSet(value: unknown): value is FullItemSet {
   return words.every(isValidWord);
 }
 
-function resolveItemSet(language: string, override: unknown): FullItemSet {
-  if (isFullItemSet(override)) return override;
-  return language === 'xh'
-    ? WELA_PLUS_READ_PASSAGE_XH
-    : WELA_PLUS_READ_PASSAGE_EN;
-}
-
 function keyFor(idx: number, word: string): string {
   return `${idx}:${word}`;
 }
@@ -84,9 +79,25 @@ function splitParagraphs<T>(items: T[], starts?: number[]): T[][] {
 export function ReadPassageQuestion(
   props: QuestionProps & { markingPolarity?: MarkingPolarity },
 ) {
+  const itemSet = resolveItemSet(
+    props.language,
+    props.itemSet,
+    { en: WELA_PLUS_READ_PASSAGE_EN, xh: WELA_PLUS_READ_PASSAGE_XH },
+    isFullItemSet,
+  );
+  if (!itemSet) return <MissingItemSet language={props.language} />;
+  return <ReadPassageQuestionContent {...props} itemSet={itemSet} />;
+}
+
+function ReadPassageQuestionContent(
+  props: QuestionProps & {
+    itemSet: FullItemSet;
+    markingPolarity?: MarkingPolarity;
+  },
+) {
   const {
     language,
-    itemSet,
+    itemSet: effectiveItemSet,
     instructions,
     durationSec,
     onComplete,
@@ -96,7 +107,6 @@ export function ReadPassageQuestion(
   const [phase, setPhase] = useState<Phase>('intro');
   const [markReason, setMarkReason] = useState<MarkReason>('ea_ended');
   const { isMarked, toggle } = useToggleMark();
-  const effectiveItemSet = resolveItemSet(language, itemSet);
 
   const isMarkedRef = useRef(isMarked);
   useEffect(() => {
@@ -151,7 +161,7 @@ export function ReadPassageQuestion(
           ? Math.round((totalCorrect / elapsedMs) * 60000)
           : 0;
       onComplete({
-        question_code: 'wela_plus_read_passage',
+        question_code: effectiveItemSet.question_code,
         question_version: effectiveItemSet.question_version,
         item_set_id: effectiveItemSet.item_set_id,
         language,
