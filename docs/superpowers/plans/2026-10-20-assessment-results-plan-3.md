@@ -4,6 +4,8 @@
 
 **Codex round 1:** folded in 2026-10-20 (coverage drops lost grants so a regained child or class re-walks; a terminal outbox row no longer blocks the mastery merge; a delivery handover deletes the child's synced mastery; embedded run headers are an explicit read rule; programme pages carry the expected academic year).
 
+**Codex round 2:** folded in 2026-10-20 (the handover delete also drops the child from the mastery walk's covered sets in its own transaction, and every walk write bounds its coverage to the grants it reads in that transaction; new Task 7A makes the reference refresh switch the active year whatever the response order, and MR002 recovery is tested through it; the session tracker sheet no longer refreshes on pulled pages).
+
 **Goal:** A new phone, a reinstall, or a second EA in the class downloads the current-year
 assessment families, WelaPLUS runs and letter-mastery confirmations they may read. Each page lands
 whole with its cursor. Sync status says when all of it is down, and the lesson engine can ask
@@ -20,11 +22,15 @@ whether a given set of children's mastery inputs are complete.
   walker, and sessions keep their exact behaviour. Three new walks run on it, in order: runs, then
   assessments, then mastery. The walks re-walk when the EA gains a class, a child in a held class
   or a delivery child. Their coverage keeps only ids still granted, so a grant lost and later
-  regained counts as a gain and re-walks. Each page applies set-wise in one transaction through
-  the signed-in handle.
+  regained counts as a gain and re-walks. Each durable write bounds coverage to the grants it
+  reads in its own transaction. Each page applies set-wise in one transaction through the
+  signed-in handle.
 - **Phone, handover.** When the child EA reconcile ends a delivery assignment, the same
-  transaction deletes that child's synced letter-mastery rows. Rows with an outstanding or refused
+  transaction deletes that child's synced letter-mastery rows and drops the child from the
+  mastery walk's covered sets, so its return re-walks. Rows with an outstanding or refused
   correction stay.
+- **Phone, reference refresh (Task 7A, a pre-existing bug).** The active academic year switches
+  in one transaction whatever order the server lists the years in. MR002 recovery is that refresh.
 - **Phone, readers.** The Sync status History row reads all four cursors. Letter evidence is
   bounded to the current academic year (lesson-plan C23).
 
@@ -71,6 +77,11 @@ Plan 2's mastery shape.
   - Plan 2's ordering-aware `setLetterMastery` (its Codex round 1, fix 2): a local row may keep a
     newer outstanding correction and return it. Such a row always has a `pending`, `failed` or
     `in_flight` outbox row, so Task 6's merge and its handover delete both leave it alone;
+  - `useLetterMasterySyncRefresh(onRefresh)` (`src/hooks/useLetterMasterySyncRefresh.js`, no
+    `enabled` argument), mounted by `LetterMasteryPanel` only. Plan 2's Codex round 2 drops the
+    session tracker sheet's sync refresh, because a re-read under its pending marks can undo a
+    cancelling tap (Plan 2's accepted risk A1). `LetterTrackerBottomSheet` is unchanged and does
+    not call the hook;
   - the harness `verify:letter-mastery:postgres`.
 
   Plan 2 leaves the page RPCs, the mastery merge, completeness and asks 3–5 to this plan.
@@ -189,21 +200,27 @@ Plan 2's mastery shape.
 4. **A stale mastery page lands after a newer correction was acknowledged, or a phone's clock is
    wrong.** The newer correction stays. Test: Task 6.
 5. **A new academic year starts while the phone holds last year's results and cursors.** The
-   assessment and run cursors reset. Last year's results stop counting as evidence on an old phone
-   exactly as on a fresh one, and completeness is false until the new walk finishes.
-   Tests: Task 7, Task 10 and Task 11.
+   reference refresh makes the new year active whatever order the server lists the years in.
+   The assessment and run cursors reset. Last year's results stop counting as evidence on an old
+   phone exactly as on a fresh one, and completeness is false until the new walk finishes.
+   Tests: Task 7, Task 7A, Task 10 and Task 11.
 6. **A grant is lost and later regained** (a child handed away and back, a class removed and
    restored) while another EA changes that child's results or mastery. The regained child
-   re-walks, and `masteryInputsComplete` stays false until it does. Sessions keep CAP-004's rule.
-   Tests: Task 4, Task 7 and Task 11.
+   re-walks, and `masteryInputsComplete` stays false until it does. This holds when the child
+   returns before any walk has written (Codex round 2: the handover drops the child from mastery
+   coverage itself). It also holds when a walk is running across the loss, because that walk
+   cannot re-add the child. Sessions keep CAP-004's rule.
+   Tests: Task 4, Task 6, Task 7 and Task 11.
 7. **A refused correction recovers.** Its terminal outbox row stays as evidence and never blocks
    the accepted value, or a later accepted change, from landing. Test: Task 6, through the real
    terminal finalizer.
 8. **A handover removes mastery from the old EA's phone** only through the server-acknowledged
    child EA reconcile, only for synced rows with nothing owed, and never because a page was empty.
+   The same transaction drops the child from the mastery walk's covered sets.
    Tests: Task 6 and Task 7 (Gate 4's sequence).
 9. **The phone and the server disagree on the year.** A stale reference cache or a server year
-   change mid-walk never leaves a walk complete. Tests: Task 2, Task 7 and Task 8.
+   change mid-walk never leaves a walk complete. The recovery is the real reference refresh,
+   which switches the year whatever the response order. Tests: Task 2, Task 7, Task 7A and Task 8.
 10. **An embedded run header** is readable exactly when its assessment is; the run pager and
     `battery_runs` SELECT stay year-bounded. Test: Task 2.
 
@@ -215,15 +232,17 @@ Plan 2's mastery shape.
 | `scripts/assessment-history-postgres-harness.cjs` (create) | Disposable-PG proof of predicate, policies and RPCs | 1, 2 |
 | `scripts/assessment-history-http-probe.cjs` (create) | Authenticated PostgREST proof (>1,000 items), volume fixture for gates | 3 |
 | `src/services/historyWalk.js` (create) | Shared keyset walker extracted from CAP-004; coverage that drops lost grants; the year-mismatch stop | 4 |
+| `src/db/repositories/historyCoverage.js` (create) | Cursor coverage helpers: bound to current grants inside a write's transaction; drop ids at a handover | 4, 6 |
 | `src/services/sessionHistoryPull.js` (modify) | Session walk as a walker config; exports unchanged | 4 |
 | `src/utils/serverTimestamps.js` (create) | Exact microsecond comparison of server timestamps and tuples | 6 |
 | `src/db/repositories/historyPageApply.js` (create) | Set-wise apply helpers: id lookups, insert-or-ignore, reference children, run merge | 5 |
 | `src/db/repositories/assessmentsRepository.js`, `batteryRunsRepository.js`, `masteryRepository.js` (modify) | `saveHistoryPage` per family; `deleteUndeliveredLetterMastery` | 5, 6 |
 | `src/db/repositories/childrenRepository.js` (modify) | The child EA reconcile calls the handover delete in its transaction | 6 |
 | `src/services/assessmentHistoryPull.js` (create) | The three walks, their scopes and scope queries | 7 |
+| `src/db/repositories/referenceDataRepository.js` (modify) | Order-independent active academic-year switch in the reference refresh | 7A |
 | `src/services/assessmentHistoryStatus.js` (create) | Store (runs → assessments → mastery), year-mismatch refresh and restart, status hook | 8 |
 | `src/session/handleServices.js`, `src/context/{Children,Classes,Offline}Context.js`, `src/screens/assessments/AssessmentHistoryScreen.js` (modify) | Wiring and the four triggers | 8 |
-| `src/utils/syncStatusPresenter.js`, `src/screens/main/SyncStatusScreen.js`, `src/db/repositories/childrenRepository.js`, reader screens, Plan 2's `src/hooks/useLetterMasterySyncRefresh.js` (modify) | Combined History row; reference-child names in Assessment History; readers and both tracker surfaces refresh as pages land | 9 |
+| `src/utils/syncStatusPresenter.js`, `src/screens/main/SyncStatusScreen.js`, `src/db/repositories/childrenRepository.js`, reader screens, Plan 2's `src/hooks/useLetterMasterySyncRefresh.js` (modify) | Combined History row; reference-child names in Assessment History; readers and the mastery panel refresh as pages land (the session tracker sheet does not) | 9 |
 | `src/db/repositories/assessmentsRepository.js`, `src/utils/letterMastery.js`, `src/utils/dashboardStats.js`, `src/screens/insights/LetterMasteryRankingScreen.js` (modify) | C23 year bound, one picker | 10 |
 | `src/services/pullCoverage.js` (modify; C1 creates it) | `isMasteryInputsComplete` | 11 |
 
@@ -238,6 +257,9 @@ Plan 2's mastery shape.
     for SELECT. Check that the local `letter_mastery` DDL has no FK on `programme_id`.
   - If any name differs, adapt this plan's call sites and record the difference. If one is
     missing, stop: it belongs to Plan 2.
+  - `grep -n "useLetterMasterySyncRefresh" src/components/session/LetterTrackerBottomSheet.js`
+    finds nothing (Plan 2's Codex round 2). If it finds a call, stop and ask: Task 9's pulled-page
+    signal must not reach the sheet.
   - Plan 2 adds no phone-side server-timestamp comparator, so Task 6 creates one. If one has
     appeared since, reuse it.
   - AF merged.
@@ -458,7 +480,7 @@ Plan 2's mastery shape.
   | RPC equals policy | for each of the 9 actors, walking `get_assessment_history_page` to exhaustion at page size 1 returns exactly the ids that actor's direct `SELECT` sees with `programme_id = literacy and assessment_date` in 2026; the same holds for runs (by the run's SAST date), and for mastery with no filter |
   | owner year bound | `OWNER`'s assessment pages exclude `A_2025`, and its run pages exclude `RUN_PRE_YEAR` |
   | embedded header (Codex round 1) | as `CLASS_ONLY`: the assessment walk returns `A_2026_PRE_YEAR_RUN` with `battery_run.id = RUN_PRE_YEAR` and its `started_at` round-tripped; the run walk never returns `RUN_PRE_YEAR`; a direct `select count(*) from battery_runs where id = RUN_PRE_YEAR` is 0. As `UNRELATED`, no assessment row, so no header. As `OWNER`, the header arrives on the assessment page while the run page still excludes the run |
-  | year agreement (Codex round 1) | with `p_academic_year_id` = the inactive 2025 id, both programme pages raise `MR002` (`academic_year_mismatch`), for `OWNER` (rows exist) and for `UNRELATED` (the page would be empty); a random uuid also raises `MR002`. Inside a rolled-back transaction that makes 2025 the active year (`update academic_years set is_active = (id = <2025 id>)`), the 2026 id raises `MR002` and the 2025 id succeeds. The mastery page takes no year argument |
+  | year agreement (Codex round 1) | with `p_academic_year_id` = the inactive 2025 id, both programme pages raise `MR002` (`academic_year_mismatch`), for `OWNER` (rows exist) and for `UNRELATED` (the page would be empty); a random uuid also raises `MR002`. Inside a rolled-back transaction that makes 2025 the active year, the 2026 id raises `MR002` and the 2025 id succeeds. The switch is two statements, `update academic_years set is_active = false where is_active;` then `update academic_years set is_active = true where id = <2025 id>;` (Codex round 2: Postgres checks the partial unique index row by row, so a one-statement switch depends on the order it visits the rows). The mastery page takes no year argument |
   | whole family | `A_2026_LATE`'s row has `items` of length 3 = `total_items`, ordered by position, each with exactly the 7 keys; a skipped (zero-item) family has `items = []` |
   | run header | `A_2026_PRE_YEAR_RUN`'s `battery_run` has exactly the `SERVER_COLUMNS.battery_runs` keys, its `id` equals `RUN_PRE_YEAR` and `started_at` round-trips; a standalone family has `battery_run` null |
   | child projection | the row's keys beyond the parent and items are exactly `battery_run, child_first_name, child_last_name, child_preferred_name` |
@@ -556,6 +578,8 @@ suites are the guard and are not edited.
 
 **Files:**
 - Create: `src/services/historyWalk.js`
+- Create: `src/db/repositories/historyCoverage.js` (Codex round 2; the cursor's coverage fields in
+  one place, for the walker and for Task 6's handover)
 - Modify: `src/services/sessionHistoryPull.js` (becomes a walk config plus its existing exports)
 - Test: create `__tests__/historyWalk.test.js` (real SQLite); add it to `jest.integration.config.js`
 - Guard (unchanged, must stay green): `__tests__/sessionHistoryPull.test.js`,
@@ -583,7 +607,11 @@ suites are the guard and are not edited.
     - `fetchPage({ request, position, overlapSeconds, pageSize, context }) → Promise<{ rows: object[], data?: any }>`.
       `rows` must be in `(updated_at, id)` order. The walker reads the row count and the last
       row's `updated_at`/`id`, and passes `data ?? rows` to `savePage`;
-    - `savePage({ data, scope, pullState, admit }) → Promise<void>`.
+    - `savePage({ data, scope, pullState, admit }) → Promise<void>`. For a `dropLostCoverage`
+      walk, `pullState` is a function `async (txn) => ({ lastPulledAt, cursor })` (below). The
+      saver resolves it inside its own transaction, after the rows and before the cursor write,
+      through `resolveHistoryPullState(txn, pullState)`. The session walk still gets the object
+      it gets today (`sessionHistoryPull.js:174`).
   - Cursor fields are CAP-004's (`sessionHistoryPull.js:90-95`). For each coverage key `k`, the
     walker keeps `firstWalk<K>`, `rewalk<K>` and `rescan<K>`, where `K` is `ChildIds` or
     `ClassIds`. Class fields appear only when `classIds` is a coverage key, so the session cursor
@@ -596,20 +624,33 @@ suites are the guard and are not edited.
     tests assert that *some* request in the run has `position: null` and overlap 0, as
     `sessionHistoryPull.test.js:378` does, not that the first one does. Only a reset cursor (a new
     `windowStart`, or no cursor) makes the first request null.
-  - **Lost grants leave coverage (`dropLostCoverage`, Codex round 1).** When the flag is set,
-    each run, right after `readCoverage` and the window check, intersects every coverage set
-    with the current ids of its key: `rescan<K>`, and `rewalk<K>` and `firstWalk<K>` when they
-    are not null.
+  - **Lost grants leave coverage (`dropLostCoverage`, Codex rounds 1 and 2).** When the flag is
+    set, every durable write of the walk bounds the cursor's coverage sets with
+    `boundHistoryCoverage`. Those writes are a page save, including the exhausted page that
+    completes a walk, and the failure marker. The bound uses the ids that
+    `walk.readCoverage({ db: txn, userId, context })` reads **inside that write's transaction**.
+    After the commit, the walker adopts the bounded state.
     - Why: a cursor watches writes, not authorization. Codex's case: complete for children A
       and B; A is handed away; while A is hidden another EA corrects A's mastery; a delta on B
       moves the cursor past that correction; A is handed back. With A still in `rescanChildIds`
       there is no re-walk, and the walk reports complete while holding A's stale value. After
       the intersection, regaining A is a gain, so A re-walks and is not covered until it
       finishes.
-    - The intersected sets are held in memory from the run's start and written by its first
-      durable write: a page save, or the failure marker. A run with no durable write (`fresh`,
-      `dependency`, `cancelled`) writes nothing. That is safe, because the cursor moves only
-      with a durable write, which carries the intersection.
+    - **Why inside the transaction (Codex round 2).** A run holds its coverage sets in memory
+      from its start. If it bounded them only then, a grant that ended while the run was
+      waiting on a page would come back with the run's next write. SQLite serializes the two
+      writers, so the bound either sees the ended grant or runs before it ends. If it runs
+      first, the handover's own drop (Task 6) comes after it.
+    - A run with no durable write (`fresh`, `dependency`, `cancelled`) writes nothing. For the
+      walk's own cursor that is safe, because the cursor moves only with a durable write. It is
+      not safe for local data deleted outside the walk (Codex round 2's case: completed for A
+      and B; A handed away; its mastery deleted; the next run `fresh`; A back; no gain seen; the
+      delta cannot reach A's old rows). So the one such delete, the handover, drops its children
+      from the mastery cursor in its own transaction (`removeFromHistoryCoverage`, Task 6).
+    - The programme walks need no such drop. Their coverage comes from class assignments and
+      memberships, not delivery, and nothing deletes assessment or run rows on the phone
+      (Task 7, "absence never deletes"). A loss that no walk wrote down therefore hides nothing:
+      the cursor has not moved, and the rows it already passed are still on the phone.
     - This implements AR §11.3's "re-walk when the set of … assignments changes": a loss shrinks
       coverage, and the later gain re-walks.
     - **Sessions keep `dropLostCoverage: false`.** Their read grant is historical:
@@ -617,9 +658,14 @@ suites are the guard and are not edited.
       `unassigned_at` filter (`20260925120000_session_history_family_delta.sql:110-115`), so a
       lost child's sessions stay readable and nothing can hide behind the cursor. Their cursor
       JSON and suites are unchanged.
-    - **Residual risk (accepted, rare).** A loss after a run has read its coverage, a hidden
-      change, a later page of that same run passing it, and the grant returning before the next
-      run starts, all together, is not caught until the 6–8-day backstop.
+    - **Residual risks (accepted, rare; narrowed in Codex round 2).** Each is caught by the
+      6–8-day backstop re-walk:
+      - the phone never sees the loss. The server ends and restores the grant between two of
+        the phone's roster or class pulls. Another EA's change made while it was hidden is
+        passed by a page in between;
+      - the loss and the return both reach the phone inside one run, which is two roster pulls
+        within its 60 s budget. The run's next write finds the grant again and keeps the child
+        covered, although the handover deleted its mastery.
   - A `windowStart` that differs from the stored one resets the cursor (`:98-101`). A null
     `windowStart` never resets.
   - `request(rpcName, args)` keeps `withDeadline` (`:42-62`). An error with `code === 'MR001'`
@@ -636,6 +682,20 @@ suites are the guard and are not edited.
     - The end line is CAP-004's (`:213-216`). When `logTiming` is set, it adds
       ` rpcMs=<n> saveMs=<n> firstCommitMs=<n|none>` before any ` failureKind=… error=…` suffix.
     - `firstCommitMs` runs from run start to the first resolved `savePage`.
+- Produces, in `src/db/repositories/historyCoverage.js` (Codex round 2; db-level, so Task 6's
+  reconcile can use it without importing a service):
+  - `coverageFields(key) → [string, string, string]`: `rescan<K>`, `rewalk<K>` and
+    `firstWalk<K>` for `childIds` or `classIds`. Only this module and the walker name them.
+  - `boundHistoryCoverage(cursorState, current, coverageKeys) → cursorState`. It is pure. For
+    each key it intersects `rescan<K>`, and `rewalk<K>` and `firstWalk<K>` when they are not
+    null, with `current[key]`, keeping order. Every other field is returned unchanged.
+  - `resolveHistoryPullState(txn, pullState) → Promise<{ lastPulledAt, cursor }>`: it returns an
+    object as it is, and awaits a function with `txn`.
+  - `removeFromHistoryCoverage(txn, { scope, coverageKey, ids }) → Promise<boolean>`. It reads
+    that scope's `sync_state` row in `txn` and drops `ids` from the key's three sets. It writes
+    back only the `cursor`, through
+    `setPullState(scope, { lastPulledAt: <unchanged>, cursor }, { transaction: txn })`. With no
+    row, or no id to drop, it writes nothing and returns false. It never creates a row.
 - Produces, in `sessionHistoryPull.js`: every current export, with its name and value
   (`SESSION_HISTORY_*`, `sessionHistoryScope`, `createSessionHistoryState`,
   `resetSessionHistoryState`, `runSessionHistoryPull`). The session walk is
@@ -688,6 +748,24 @@ suites are the guard and are not edited.
     `child-a` is then lost. The resumed run finishes with `rescanChildIds: ['child-b']`.
   - `a run that makes no request writes nothing`. A loss within 15 minutes of completion gives
     `{ status: 'fresh' }`, and the `sync_state` row is equal, column for column, before and after.
+  - **`a child lost while a page is in flight is not re-added`** (Codex round 2). Here the Probe's
+    `readCoverage` reads a real `probe_grants (child_id text)` table through the `db` it is
+    given, and its `savePage` resolves `pullState` inside `runRepositoryTransaction`. The walk
+    completes with `rescanChildIds: ['child-a', 'child-b']`. At +16 minutes a run starts, and
+    its first fetch waits on a deferred. The test deletes `child-a` from `probe_grants`, then
+    releases an empty page. The result is `{ status: 'complete', pages: 1 }`, and the stored
+    cursor has `rescanChildIds: ['child-b']`. After `child-a` is inserted again, the next
+    unforced run makes a fetch from `position: null`.
+  - `the failure marker is bounded too`: the same, but the released fetch returns
+    `{ error: { message: 'Network request failed' } }`. The result is
+    `{ status: 'transport', pages: 0 }`,
+    and the stored cursor has `lastFailureAt` set and `rescanChildIds: ['child-b']`.
+  - `removeFromHistoryCoverage drops only the given ids`. Take a stored cursor with
+    `rescanChildIds: ['a', 'b']`, `rewalkChildIds: ['a', 'b']`, `firstWalkChildIds: null`,
+    `rescanClassIds: ['class-1']` and `last_pulled_at` `L`. Removing `['a']` from `childIds`
+    returns true. It leaves `['b']`, `['b']` and null, keeps `rescanClassIds`, and leaves every
+    other cursor field and `last_pulled_at` equal. For an absent scope it returns false, and
+    `select count(*) from sync_state` is unchanged.
   - **`the session walk keeps a lost child covered`** (its read grant is historical). The session
     walk completes for `child-a` and `child-b`; `child-a`'s assignment ends; a forced run saves a
     delta page. The cursor still has `rescanChildIds: ['child-a', 'child-b']`. After `child-a` is
@@ -699,15 +777,17 @@ suites are the guard and are not edited.
     `failureKind=year_mismatch`.
 - [ ] **Step 5: Run** `npm run test:integration -- __tests__/historyWalk.test.js`. Expected:
   FAIL.
-- [ ] **Step 6: Implement** class coverage, `firstPageSize`, `'disabled'`, `dropLostCoverage`,
-  `'year_mismatch'`, timing and the null window.
+- [ ] **Step 6: Implement** class coverage, `firstPageSize`, `'disabled'`, `dropLostCoverage`
+  with its in-transaction bound, `historyCoverage.js`, `'year_mismatch'`, timing and the null
+  window.
 - [ ] **Step 7: Run** Step 1's commands and Step 5's. Expected: PASS, with session counts
   unchanged.
 - [ ] **Step 8: Docs.**
   - Contract map, CAP-004 section (`:759`): "traversal lives in `src/services/historyWalk.js`;
     sessions are one walk config". Add: "sessions keep a lost delivery child in their covered
     set, because the session read grant is historical; walks whose grant can be lost set
-    `dropLostCoverage`".
+    `dropLostCoverage`, and each of their durable writes bounds coverage to the grants it reads
+    in its own transaction".
   - Fix `:761-763`. The scope is one row per EA and programme in the EA's **own** file
     (ADR-0008), not a file shared by every EA. Skip this if C1 or B2 already merged the fix.
   - `docs/agent-context/cap-004-session-history-hydration.md:90`: point to both files.
@@ -777,13 +857,14 @@ suites are the guard and are not edited.
          `server_updated_at = updated_at`) and their items (`assessment_id`, `created_at`,
          `updated_at` and `server_updated_at` from the parent; `is_correct` as 0/1;
          `metadata` as JSON text);
-       - the cursor;
+       - the cursor, from `resolveHistoryPullState(txn, pullState)` (Task 4), so a walk's bound
+         reads the grants inside this transaction;
        - `admit()` again, with no await after it (`sessionsRepository.js:263-267, 318-325`).
     - Present parents, whatever their `sync_status`, and their items are left alone: an
       immutable fact (ADR-0007). It writes no outbox row.
   - **`batteryRuns.saveHistoryPage(rows, { scope, pullState, admit }) → Promise<{ inserted: number, advanced: number }>`**:
-    shape check, then `admit`, children, `mergePulledRunHeaders`, cursor and `admit`, in one
-    transaction.
+    shape check, then `admit`, children, `mergePulledRunHeaders`, the cursor (resolved the same
+    way) and `admit`, in one transaction.
 
 - [ ] **Step 1: Write the failing page tests** (`assessmentHistoryPage.test.js`;
   `createMigratedDatabase` + `seedCoreData`; a `serverFamily(n, { items = 61, run = null, childId = 'child-1' })`
@@ -813,6 +894,10 @@ suites are the guard and are not edited.
   - `an actor change at the cursor write rolls back the whole page`. `admit` returns false on its
     second call, giving zero parents, zero items and no cursor
     (`sessionHistoryPull.test.js:256-281` pattern).
+  - `a pullState function is resolved inside the page's transaction` (Codex round 2). For a
+    page of 3 families, the function runs `select count(*) as n from assessments` on the `txn`
+    it receives and gets `{ n: 3 }`, and the stored cursor is the one it returned. When it
+    throws, there are zero parents and no cursor.
   - `the multi-row statements pass the signed-in facade`. Through `requestOpen` and
     `expoSQLiteRealEngine` (`sessionHistoryPullProductionRouting.test.js:1-20` pattern), a 10 × 61
     page saves through `createAssessmentsRepository({ database: handle })`.
@@ -841,8 +926,9 @@ suites are the guard and are not edited.
 
 **Files:**
 - Create: `src/utils/serverTimestamps.js`, unless Task 0 found Plan 2's equivalent
-- Modify: `src/db/repositories/masteryRepository.js` (Plan 2's version; add `saveHistoryPage` and
-  the named export `deleteUndeliveredLetterMastery`)
+- Modify: `src/db/repositories/masteryRepository.js` (Plan 2's version; add `saveHistoryPage`,
+  the named export `deleteUndeliveredLetterMastery` and the named export
+  `letterMasteryHistoryScope`, which Task 7 re-exports)
 - Modify: `src/db/repositories/childrenRepository.js` (`buildChildEaReconcile`, `:121-164`)
 - Test: create `__tests__/serverTimestamps.test.js` (unit) and
   `__tests__/letterMasteryHistoryPage.test.js` (real SQLite; add to `jest.integration.config.js`);
@@ -851,7 +937,8 @@ suites are the guard and are not edited.
   `:793-803`; the `child_ea_assignments` row of the acknowledgment table, `:750`),
   `documentation/LEARNING.md` (a short section: why the merge compares accepted server tuples and
   never the local edit's own time; why refused-correction evidence must not block recovery; why a
-  handover deletes on the grant loss and never on an empty page), build log
+  handover deletes on the grant loss and never on an empty page; why a delete outside the walk
+  must invalidate the walk's coverage in the same transaction), build log
 
 **Interfaces:**
 - Produces, in `serverTimestamps.js`:
@@ -895,30 +982,42 @@ suites are the guard and are not edited.
       `programme_id`, `created_at`, `updated_at`, `server_updated_at` and both server ordering
       columns, and sets `sync_status = 'synced', last_sync_error = null`.
     - It never touches `sync_outbox`, so a refused correction stays visible in needs-attention.
-    - Then the cursor, and `admit()`.
+    - Then the cursor, from `resolveHistoryPullState(txn, pullState)` (Task 4), and `admit()`.
+- Produces, in `masteryRepository.js`, `letterMasteryHistoryScope(userId)` →
+  `letter_mastery_pull:<userId>`. It lives here because the handover needs it, and Task 7
+  re-exports it.
 - Produces, in `masteryRepository.js`, the named export
   **`deleteUndeliveredLetterMastery(txn, { userId, childIds }) → Promise<number>`**
   **(plan call, deviates from AR §11.3: AR's only mastery removal is the `acknowledged` delete of
-  §10.2, which cannot help an EA with nothing left to upload).** One statement in the caller's
-  transaction; `childIds: []` deletes nothing and returns 0:
+  §10.2, which cannot help an EA with nothing left to upload).** It runs in the caller's
+  transaction. `childIds: []` does nothing and returns 0. Otherwise it takes three steps:
+  1. **The undelivered ids.** It runs
+     `select json_each.value as child_id from json_each(?) where not exists (select 1 from child_ea_assignments a where a.child_id = json_each.value and a.user_id = ? and a.unassigned_at is null)`.
+     If none are left, it stops and returns 0.
+  2. **The delete,** bound to those ids:
 
-  ```sql
-  delete from letter_mastery
-  where child_id in (select value from json_each(?))
-    and sync_status = 'synced'
-    and not exists (
-      select 1 from child_ea_assignments a
-      where a.child_id = letter_mastery.child_id
-        and a.user_id = ?
-        and a.unassigned_at is null
-    )
-    and not exists (
-      select 1 from sync_outbox o
-      where o.table_name = 'letter_mastery'
-        and o.record_id = letter_mastery.id
-        and o.status in ('pending', 'failed', 'in_flight')
-    )
-  ```
+     ```sql
+     delete from letter_mastery
+     where child_id in (select value from json_each(?))
+       and sync_status = 'synced'
+       and not exists (
+         select 1 from sync_outbox o
+         where o.table_name = 'letter_mastery'
+           and o.record_id = letter_mastery.id
+           and o.status in ('pending', 'failed', 'in_flight')
+       )
+     ```
+
+  3. **The coverage drop (Codex round 2).** It calls
+     `removeFromHistoryCoverage(txn, { scope: letterMasteryHistoryScope(userId), coverageKey: 'childIds', ids })`
+     (Task 4) with the undelivered ids, whether or not step 2 deleted any of their rows. A delta
+     cannot bring back a deleted row older than its 120 s overlap, so only a re-walk can. With
+     the child gone from coverage, its return is a gain and re-walks, even when no walk wrote in
+     between (a `fresh` run writes nothing).
+     - The assessment and run cursors are not touched. Their coverage is class-based, and a
+       delivery handover deletes none of their rows (Task 4).
+     - An undelivered id whose rows were all kept (pending, failed, terminal) leaves coverage
+       too. Its grant is lost, and the walk's next write would drop it anyway.
 
   - It returns the deleted count and enqueues no outbox row: the server already owns the change
     of authority.
@@ -927,15 +1026,18 @@ suites are the guard and are not edited.
   - A `synced` row whose only outbox row is `terminal` (restored by the terminal rule) is
     deleted. Its terminal outbox row stays in needs-attention as the evidence: `getSyncStatus`
     reads `sync_outbox` only (`syncOutboxRepository.js:407-484`).
-  - The active-assignment guard is redundant today (`idx_child_ea_assignments_active_unique`,
+  - Step 1's active-assignment guard is redundant today (`idx_child_ea_assignments_active_unique`,
     `src/db/migrations.js:294`, allows one active row per pair). It keeps the export correct for
-    any caller.
+    any caller, and it keeps a child that is still delivered in coverage.
+  - At most four statements: step 1's select, the delete, and `removeFromHistoryCoverage`'s one
+    read and at most one write.
 - Modifies **`buildChildEaReconcile`** (`src/db/repositories/childrenRepository.js:121-164`). Its
   `apply` (`:155-165`) now does three things in the reconcile transaction:
   1. it reads `select distinct child_id ${absentSql}` with `userId, acknowledgedIdsJson` (the
      children it is about to end);
   2. it runs today's update;
-  3. it calls `deleteUndeliveredLetterMastery(txn, { userId, childIds })`.
+  3. it calls `deleteUndeliveredLetterMastery(txn, { userId, childIds })`, which deletes and
+     drops coverage in this same transaction.
 
   It still returns the update's `changes`, so `ended` keeps its meaning and the existing
   reconcile tests stay as they are.
@@ -944,12 +1046,12 @@ suites are the guard and are not edited.
     relationship acknowledgment"). No mastery page, empty or not, deletes anything.
   - **Mass-end breaker.** The delete runs inside `apply`, which `runReconcileWithMassEndBreaker`
     (`src/db/repositories/repositoryRuntime.js:39-77`) calls only when the breaker has not tripped
-    or Apply granted the bypass. A tripped breaker ends no assignment and deletes no mastery.
-    Mastery gets no breaker of its own, for three reasons:
+    or Apply granted the bypass. A tripped breaker ends no assignment, deletes no mastery and
+    drops no coverage. Mastery gets no breaker of its own, for three reasons:
     - it deletes only accepted server state (`synced`, nothing owed);
     - it deletes it only for exactly the assignments the breaker admitted;
-    - that state comes back when the assignment does, because the regained child is a coverage
-      gain and re-walks (Task 4's `dropLostCoverage`).
+    - that state comes back when the assignment does. The same transaction dropped the child
+      from the mastery cursor (step 3), so the regained child is a coverage gain and re-walks.
   - The per-row fallback never reconciles (`runBatchWithPerRowFallback`,
     `repositoryRuntime.js:79`), so it never deletes mastery.
   - A child the EA removes on the phone (`deleteStaffChild`, `childrenRepository.js:687-709`, a
@@ -971,6 +1073,10 @@ suites are the guard and are not edited.
     is this EA for a child it no longer delivers (AR §10.3 lets the last writer read it). That row
     then waits until reassignment re-walks it. No reader shows it, and it holds only this EA's own
     write.
+  - **Residual (accepted, rare timing; Codex round 2).** A mastery page fetched before the
+    handover and saved after it re-inserts that child's rows, because the page apply does not
+    check grants. No reader shows them, and that page's bounded cursor no longer covers the
+    child (Task 4), so a return re-walks it.
 
 - [ ] **Step 1: Write the failing unit tests** (`serverTimestamps.test.js`):
 
@@ -1094,14 +1200,30 @@ expect(compareServerTuples(['2026-10-20T08:00:00Z', 'b0000000-0000-4000-8000-000
     `select letter, child_id from letter_mastery order by child_id, letter` equals exactly the
     kept rows. `select * from sync_outbox order by id` is equal before and after.
     `PRAGMA foreign_key_check` is empty.
+    - **The coverage drop (Codex round 2).** Before the reconcile, seed two `sync_state` rows:
+      - `letter_mastery_pull:user-1`, with `last_pulled_at` `L` and a cursor holding
+        `rescanChildIds: ['child-absent', 'child-kept']`, `rewalkChildIds: ['child-absent', 'child-kept']`,
+        a `rescanAfter` position, `complete: true` and the other CAP-004 fields;
+      - `assessment_history_pull:user-1:programme-a`, whose `rescanChildIds` holds
+        `child-absent`.
+
+      After the reconcile, the mastery cursor equals the seeded one except that both sets are
+      `['child-kept']`, and its `last_pulled_at` is still `L`. The assessment row is equal,
+      column for column.
   - `a tripped breaker deletes no letter mastery, and Apply's bypass deletes it`. Reuse
-    `seedChildEaAssignments` (`:651`) and give each of the 15 children one synced row. With 3
-    acknowledged, the result has `reconcileCompleted: false` and all 15 rows remain. With
-    `bypassBreaker: true`, the 12 ended children's rows are deleted and the 3 kept remain.
+    `seedChildEaAssignments` (`:651`) and give each of the 15 children one synced row, plus a
+    mastery cursor covering all 15. With 3 acknowledged, the result has
+    `reconcileCompleted: false`, all 15 rows remain and the cursor is unchanged. With
+    `bypassBreaker: true`, the 12 ended children's rows are deleted, the 3 kept remain, and the
+    cursor's `rescanChildIds` holds only the 3.
   - `a same-pair supersede deletes no letter mastery`: the `:908` case, with a synced row for
-    `child-ea-supersede`, keeps that row (`ended: 0`; the child is still delivered).
+    `child-ea-supersede` and a mastery cursor covering it, keeps that row and leaves the cursor
+    unchanged (`ended: 0`; the child is still delivered).
   - `a pending local end is not a reconcile`: `deleteStaffChild('user-1', 'child-absent')` leaves
-    `child-absent`'s synced row in place.
+    `child-absent`'s synced row and the mastery cursor in place.
+  - `a reconcile with no mastery cursor creates none`: the first case without the seeded
+    `sync_state` rows ends `child-absent`, deletes its row, and leaves
+    `select count(*) from sync_state where scope like 'letter_mastery_pull:%'` at 0.
 - [ ] **Step 4: Run**
   `npm run test:integration -- __tests__/letterMasteryHistoryPage.test.js __tests__/pullReconcile.integration.test.js`
   and `npx jest __tests__/serverTimestamps.test.js`. Expected: FAIL.
@@ -1116,7 +1238,8 @@ expect(compareServerTuples(['2026-10-20T08:00:00Z', 'b0000000-0000-4000-8000-000
     - a "Reconcile invariants and safety rails" bullet: "Ending a child EA assignment also deletes
       that child's `synced` `letter_mastery` rows that have no `pending`, `failed` or `in_flight`
       outbox row, in the same transaction and behind the same breaker. Nothing is enqueued.
-      Outstanding and refused corrections stay";
+      Outstanding and refused corrections stay. The same transaction drops the child from the
+      mastery walk's covered sets, so its return re-walks even if no walk ran in between";
     - the `child_ea_assignments` row of the acknowledgment table (`:750`) names the delete.
   - The LEARNING section.
   - Build log.
@@ -1148,7 +1271,8 @@ expect(compareServerTuples(['2026-10-20T08:00:00Z', 'b0000000-0000-4000-8000-000
   - Scope keys:
     - `assessmentHistoryScope(userId, programmeId)` → `assessment_history_pull:<userId>:<programmeId>`;
     - `batteryRunHistoryScope(userId, programmeId)` → `battery_run_history_pull:<userId>:<programmeId>`;
-    - `letterMasteryHistoryScope(userId)` → `letter_mastery_pull:<userId>`.
+    - `letterMasteryHistoryScope(userId)` → `letter_mastery_pull:<userId>`, re-exported from
+      Task 6's `masteryRepository.js`, where the handover needs it.
   - **`readAssessmentScope(db, { userId, academicYearId }) → Promise<{ classIds: string[], childIds: string[] }>`**:
     the canonical SQLite assessment-scope query (ROADMAP `:339`), sorted. **(plan call)** It
     counts only rows the server already holds:
@@ -1241,9 +1365,10 @@ expect(compareServerTuples(['2026-10-20T08:00:00Z', 'b0000000-0000-4000-8000-000
   - **`a server year change between pages stops at the saved page`.** With 15 families
     (first page 10), the fake server switches to `'year-2027'` after the first page. The result
     is `{ status: 'year_mismatch', pages: 1 }`, and the cursor holds page 1's last
-    `updatedAt`/`id` with `complete: false`. After the local active year becomes `'year-2027'`
-    (as a reference refresh leaves it), the next run's first request has `p_after_id: null` and
-    `p_academic_year_id: 'year-2027'`, because the new `windowStart` reset the cursor.
+    `updatedAt`/`id` with `complete: false`. Then the test makes `'year-2027'` the local active
+    year by SQL, which is the walk-level stand-in; Task 8 proves the real refresh gets there.
+    The next run's first request has `p_after_id: null` and `p_academic_year_id: 'year-2027'`,
+    because the new `windowStart` reset the cursor.
   - `absence never deletes`: after the server drops a family and a re-walk runs, the local family
     remains. The same for mastery: after the server stops returning a synced row (a re-walk with
     an empty page), the local row remains. Only the handover delete removes mastery.
@@ -1277,6 +1402,8 @@ expect(compareServerTuples(['2026-10-20T08:00:00Z', 'b0000000-0000-4000-8000-000
        - Result: `ended: 1`.
        - `k` is deleted, and `s` stays with its pending outbox row.
        - `childrenRepository.getMyChildren('user-1')` no longer lists `child-m`.
+       - Before any walk runs, the mastery cursor's `rescanChildIds` is already `['child-n']`
+         (Task 6's coverage drop).
     3. **EA2 un-confirms.** The fake server's `k` for `child-m` becomes `(T2, C2)`,
        `confirmed: false`, `changed_by: 'user-2'`, hidden from `user-1`. EA1's forced mastery walk
        returns `complete`. `getLetterMastery({ childId: 'child-m', language: 'en' })` returns only
@@ -1285,6 +1412,29 @@ expect(compareServerTuples(['2026-10-20T08:00:00Z', 'b0000000-0000-4000-8000-000
        shows `child-m`'s rows to `user-1`. The next unforced mastery walk makes a request with
        `p_after_id: null`. `k` is stored as `confirmed: 0` with `server_changed_at: T2`, and `s`
        is still pending with its outbox row unchanged.
+  - **`letterMasteryHandover.test.js`: a handover inside the freshness window still re-walks on
+    return** (Codex round 2's reproduction, Review Focus 6). Same setup; the fake server holds
+    `child-m`'s `k` at `(07:00, C1)` and `child-n`'s `a` at `08:00`.
+    1. The mastery walk completes at 09:00 with `rescanChildIds: ['child-m', 'child-n']`. Its
+       cursor is at `08:00`, so `k` is older than the 120 s overlap.
+    2. At 09:05 the reconcile ends `cea-m` (`ended: 1`). `k` is deleted, and the cursor's
+       `rescanChildIds` is `['child-n']`.
+    3. At 09:06 an unforced mastery walk returns `{ status: 'fresh', pages: 0 }` with no request,
+       and the `sync_state` row is equal before and after.
+    4. At 09:07 `cea-m` is active again (synced). The next unforced mastery walk makes a request
+       with `p_after_id: null`. `k` is stored with `server_changed_at` `07:00`, and
+       `rescanChildIds` is `['child-m', 'child-n']`.
+
+    Without the coverage drop, step 4's walk would return `fresh`. A forced delta would start at
+    `08:00` minus 120 s and never reach `k`.
+  - **`letterMasteryHandover.test.js`: a walk in flight across the handover cannot re-add the
+    child** (Codex round 2). Same setup and step 1. At +16 minutes an unforced mastery walk
+    starts a delta, and the fake server holds its first request on a deferred. The test runs
+    the reconcile ending `cea-m` and awaits it: `k` is deleted, and `rescanChildIds` is
+    `['child-n']`. It then releases an empty page. The walk returns `complete`, and the stored
+    `rescanChildIds` is still `['child-n']`; without Task 4's in-transaction bound it would be
+    both. After `cea-m` is reassigned, the next unforced walk makes a request with
+    `p_after_id: null` and `k` is back.
 - [ ] **Step 2: Run** `npm run test:integration -- __tests__/assessmentHistoryPull.test.js __tests__/letterMasteryHandover.test.js __tests__/ClassesContextPull.integration.test.js`.
   Expected: FAIL.
 - [ ] **Step 3: Implement** `assessmentHistoryPull.js`.
@@ -1296,6 +1446,8 @@ expect(compareServerTuples(['2026-10-20T08:00:00Z', 'b0000000-0000-4000-8000-000
     - coverage, and why it counts only synced rows;
     - re-walks on gains, with lost grants dropped from coverage (`dropLostCoverage`) so a
       regained one is a gain; sessions excepted, with the reason;
+    - the bound inside each durable write's transaction, and the handover's own coverage drop
+      (Task 6); why the programme walks need no drop (nothing deletes their rows);
     - page sizes, run order and the switch;
     - the year agreement: `p_academic_year_id`, `MR002`, and the store's refresh and restart;
     - the embedded-header rule (Task 2);
@@ -1315,6 +1467,105 @@ expect(compareServerTuples(['2026-10-20T08:00:00Z', 'b0000000-0000-4000-8000-000
 
 ---
 
+### Task 7A: The reference refresh switches the active academic year in any response order (Codex round 2)
+
+A pre-existing bug, fixed here because MR002 recovery (Task 8) is this refresh. It would also hit
+every phone at the January rollover. It needs nothing from Tasks 1–7 and can be built first.
+- `pullReferenceDataRows` fetches `academic_years` with no order (`src/services/offlineSync.js:1939-1950`).
+- `replaceAll` upserts the rows one by one in one transaction
+  (`src/db/repositories/referenceDataRepository.js:385-419`), under the partial unique index
+  `idx_academic_years_active_unique` (`src/db/migrations.js:147-149`).
+- So when the response lists the new active year before the old one, the first upsert makes a
+  second active row and fails with `SQLITE_CONSTRAINT_UNIQUE`. The table rolls back, the refresh
+  rejects before `reference_data_complete_at` is written, and the phone keeps last year active.
+  Every refresh that gets the same order fails the same way. Codex reproduced it through the real
+  repository; the reverse order succeeds.
+- The same happens when the phone's active year is missing from the response, whatever the order.
+
+**Decision (plan call): the repository keeps the one-active-year rule, inside the replace
+transaction.** Ordering the fetch alone would not cover a local active year that the response
+leaves out, and would leave every other caller order-dependent.
+
+**Files:**
+- Modify: `src/db/repositories/referenceDataRepository.js`:
+  - `REFERENCE_TABLES.academic_years` (`:134-158`) gains `singleActiveColumn: 'is_active'`;
+  - `getConfig` (`:236-255`) passes it through (`null` by default);
+  - `replaceAll` (`:385-419`).
+- Test: extend `__tests__/referenceDataRepository.test.js` (real SQLite,
+  `jest.integration.config.js:39`) and `__tests__/offlineSyncOutbox.test.js` (the real refresh,
+  `jest.integration.config.js:23`).
+- Docs:
+  - contract map, the "Profile and reference refresh" bullet (`documentation/rls-sync-contract-map.md:849`);
+  - the build log's Bug And Gap Register (`documentation/build-log.md:1227`), plus a Verification
+    Register row.
+
+**Interfaces:**
+- `replaceAll(records, { scope })`, for a table with a `singleActiveColumn`. Inside its one
+  transaction, after the scope delete and before the upsert loop, it acts on the records:
+  - **exactly one active record:** it runs
+    `update <table> set <column> = 0 where <column> = 1 and id <> ?` with that record's id, then
+    the upserts in response order;
+  - **no active record:** no clear, as today. The upserts write each carried row's own flag, and
+    a local active year the response leaves out stays active. An empty or yearless response
+    never strips the phone's year; the programme pages then answer `55000`, and the walks stay
+    incomplete, which is the true state;
+  - **two or more active records:** no clear. The second upsert still fails the index, and the
+    table keeps its last good state. The server's own unique index forbids this response.
+- The retarget by label (`retargetConflictingRows`) still runs per record, after the clear. A
+  local row with the incoming active year's label but another id is cleared first, then takes the
+  incoming id and its flag.
+- `pullReferenceDataRows` and its unordered fetch are unchanged.
+
+- [ ] **Step 1: Write the failing repository tests** (`referenceDataRepository.test.js`; rows
+  `Y2026 = { id: 'year-2026', label: '2026', starts_on: '2026-01-15', ends_on: '2026-12-15' }`
+  and `Y2025` and `Y2027` likewise, each with an explicit `is_active`):
+  - **`a refresh switches the active year whatever order the server lists the years in`**,
+    `test.each` over `[['the new year first', [Y2027 active, Y2026 inactive]], ['the old year first', [Y2026 inactive, Y2027 active]]]`.
+    It starts from `replaceFromServer([Y2026 active])` and a `classes` row on `year-2026` (as
+    `:502-530`). Then `replaceFromServer(order)` resolves `true`, and `getActive()` returns
+    `year-2027`. `select id, is_active from academic_years order by id` equals
+    `[{ id: 'year-2026', is_active: 0 }, { id: 'year-2027', is_active: 1 }]`, and the class keeps
+    `academic_year_id: 'year-2026'`. Today "the new year first" rejects with
+    `SQLITE_CONSTRAINT_UNIQUE`; "the old year first" is the control and passes today.
+  - `a local active year missing from the response is cleared`: local `year-2025` active, then
+    `replaceFromServer([Y2026 active])` gives `year-2026` active and `year-2025` kept, inactive.
+  - `a response with no active year changes only the rows it carries`: local `year-2026` active,
+    then `replaceFromServer([Y2025 inactive])` leaves `year-2026` active.
+  - `two active years in one response fail whole`: inside `try/catch`, the error's message
+    matches `/UNIQUE/`, and `select * from academic_years order by id` is equal before and after.
+- [ ] **Step 2: Write the failing refresh test** (`offlineSyncOutbox.test.js`, beside `:2682`,
+  with its `rowsByTable` builder and real reference repositories over `createMigratedDatabase`):
+  **`pullReferenceData switches the active academic year whatever the response order`**,
+  `test.each` over the same two orders. A first `pullReferenceData` holds `year-2026` active. The
+  second, with `academic_years` in the given order and the other six tables as before, resolves
+  (today it rejects for the new year first). Its result counts `academic_years: 2`, which
+  `pullReferenceDataRows` returns only after every table commits, and
+  `getActiveAcademicYear(db)` is `year-2027`.
+- [ ] **Step 3: Run**
+  `npm run test:integration -- __tests__/referenceDataRepository.test.js __tests__/offlineSyncOutbox.test.js`.
+  Expected: FAIL, in the "new year first" cases, "missing from the response" and the refresh
+  test's "new year first" only.
+- [ ] **Step 4: Implement** the config flag and the clear in `replaceAll`.
+- [ ] **Step 5: Run** Step 3's command, then `npx jest __tests__/handleServices.test.js`.
+  Expected: PASS.
+- [ ] **Step 6: Docs and commit.**
+  - Contract map `:849`: "A refresh switches the active academic year inside its one
+    `academic_years` transaction whatever order the server lists the years in. When the response
+    holds an active year, every other local year is made inactive before the upserts, so
+    `idx_academic_years_active_unique` never sees two active rows. A response with no active year
+    changes only the rows it carries. The server's index is also checked row by row, so a
+    server-side switch is two statements: clear, then set."
+  - Bug And Gap Register row (2026-10-20). Gap: the refresh could not switch the active year
+    when the server listed the new year first, or left the phone's active year out (the three
+    code references above), and kept last year active on every such refresh. Resolution: fixed
+    in AR Plan 3 Task 7A, with tests through the real repository and the real refresh; MR002
+    recovery (Task 8) depends on it. Reuse note: a one-row rule enforced by a unique index must be
+    kept inside the replace transaction, not left to the response order.
+  - Verification Register row with Step 3 and 5 counts.
+  - Commit `fix(reference): switch the active academic year whatever the response order`.
+
+---
+
 ### Task 8: Store, handle wiring, triggers and the trigger budget
 
 **Files:**
@@ -1331,8 +1582,9 @@ expect(compareServerTuples(['2026-10-20T08:00:00Z', 'b0000000-0000-4000-8000-000
   - `test-support/legacyHandleMocks.js:34-41` (clone `assessmentHistory` and its store; accept
     `mocks.startAssessmentHistoryPull`, `mocks.getAssessmentHistoryPullStates` and
     `mocks.resetAssessmentHistoryStatusForActorChange`).
-- Test: create `__tests__/assessmentHistoryStatus.test.js` and `__tests__/historyPullTriggerBudget.test.js`.
-  Add cases to `__tests__/handleServices.test.js`, `__tests__/OfflineContext.test.js`,
+- Test: create `__tests__/assessmentHistoryStatus.test.js` and `__tests__/historyPullTriggerBudget.test.js`
+  (both real SQLite, since the store runs the real walks and the real reference refresh; add both
+  to `jest.integration.config.js`). Add cases to `__tests__/handleServices.test.js`, `__tests__/OfflineContext.test.js`,
   `__tests__/ChildrenContext.test.js`, `__tests__/ClassesContext.test.js` and
   `__tests__/AssessmentHistoryScreen.plan5.test.js`.
 - Docs: the contract map subsection gets the trigger table below; ROADMAP §3 `:605` (Z8: built for
@@ -1373,7 +1625,9 @@ expect(compareServerTuples(['2026-10-20T08:00:00Z', 'b0000000-0000-4000-8000-000
   - In `handleServices.js`, the store gets `referenceDataReady` (`:71-74`) and
     `refreshReferenceData: () => { assertCurrent(); return pullReferenceData(referenceOptions); }`,
     the same refresh as `services.pullReferenceData` (`:97`). It goes through the handle's
-    single-flight barrier (`pullReferenceData`, `src/services/offlineSync.js:1988-1993`).
+    single-flight barrier (`pullReferenceData`, `src/services/offlineSync.js:1988-1993`). After
+    Task 7A it switches the active year whatever order the server lists the years in, so the
+    recovery cannot fail on the year it is meant to adopt.
 - **Trigger inventory, pinned by the budget test.** Every `.start(` of a history service in `src/`:
 
   | Service | Caller | Trigger | How often |
@@ -1400,18 +1654,30 @@ expect(compareServerTuples(['2026-10-20T08:00:00Z', 'b0000000-0000-4000-8000-000
       `sessionHistoryStatus.test.js:33-55`);
     - `getPullStates` is scoped to the user and active programme;
     - **`a year mismatch refreshes reference data once and restarts that walk`** (Review Focus
-      9). The fake server's year is `'year-2027'`. The injected `refreshReferenceData` makes
-      `'year-2027'` the local active year (`update academic_years set is_active = 0`, then insert
-      `year-2027` active). In one pass:
+      9; Codex round 2: through the real refresh, not a SQL shortcut). The fake server's year is
+      `'year-2027'`.
+      - `refreshReferenceData` wraps the real `pullReferenceData` (`src/services/offlineSync.js`)
+        in a call counter. It runs over the test database's real reference repositories (as
+        `offlineSyncOutbox.test.js:2767-2778`), with `createLocalStateRepository({ database: db })`,
+        `enqueueRequest: (task) => task()` and `userId: 'user-1'`.
+      - Its `from()` builder mock is like `offlineSyncOutbox.test.js:2744-2764`. `academic_years`
+        returns `year-2027` active and `year-2026` inactive. The other six tables return the
+        rows the seeded database holds (`select *` before the pass), so only the year changes.
+      - It runs for both response orders (`test.each`). "The new year first" fails today, inside
+        the refresh.
+
+      In one pass:
       - the run walk's first request carries `p_academic_year_id: 'year-2026'` and gets `MR002`;
       - `refreshReferenceData` is called exactly once;
       - the run walk reruns with `'year-2027'` and `p_after_id: null`;
       - the assessment walk sends `'year-2027'`;
       - `lastResults` is `complete` for all three walks.
-    - `a failed refresh restarts nothing`. `refreshReferenceData` rejects with `Error('offline')`.
+    - `a failed refresh restarts nothing`. The same real refresh, but the mock's
+      `academic_years` returns `{ data: null, error: { message: 'Network request failed' } }`.
       `lastResults.batteryRuns.status` and `lastResults.assessments.status` are
-      `'year_mismatch'`, each programme RPC was called once, `refreshReferenceData` was called
-      once, and the mastery walk still ran.
+      `'year_mismatch'`, and each programme RPC was called once. `refreshReferenceData` was
+      called once, the mastery walk still ran, and `getActiveAcademicYear(db)` is still
+      `year-2026`.
   - `historyPullTriggerBudget.test.js`:
     - a static scan of `src/**/*.js` for `/\b(sessionHistory|assessmentHistory)\.start\(/`
       equals exactly the seven rows above, as `{ file: count }` per service;
@@ -1465,15 +1731,22 @@ AR §11.5: the Sync status History row covers sessions, assessments and mastery.
   - `src/screens/main/AssessmentsScreen.js:47`;
   - `src/screens/assessments/AssessmentHistoryScreen.js:88`;
   - `src/screens/assessments/ChildResultsScreen.js:73`;
-  - the two tracker surfaces, `LetterMasteryPanel` and `LetterTrackerBottomSheet`, through Plan 2's
-    `src/hooks/useLetterMasterySyncRefresh.js` (Plan 2 Task 6, its Codex round 1 fix 3; adapt if
-    Task 0 finds another name), not through their dependency lists. Plan 2 says that hook
-    "covers uploads only. Mastery rows applied by Plan 3's pull need their own signal." The hook
-    also calls `onRefresh` when `useAssessmentHistoryStatus().pageVersion` changes while
-    `enabled`, with the same seen-ref rule. Both surfaces then refresh through their background
-    loads (`loadData({ background: true })`, `loadBaseline({ background: true })`). The panel
-    keeps its grid, and the sheet keeps the form's unsaved `pendingChanges`, which are props
-    (`LiteracySessionForm.js:451-463` today; AF may move it);
+  - `LetterMasteryPanel`, through Plan 2's `src/hooks/useLetterMasterySyncRefresh.js` (Plan 2
+    Task 6; adapt if Task 0 finds another name), not through its dependency list. Plan 2 says
+    that hook "covers uploads only. Mastery rows applied by Plan 3's pull need their own
+    signal. Plan 3 may add it here, for the panel only." The hook also calls `onRefresh` when
+    `useAssessmentHistoryStatus().pageVersion` changes, with the same seen-ref rule: the version
+    published when the panel mounts counts as seen. The panel then refreshes through its
+    background load (`loadData({ background: true })`) and keeps its grid.
+  - **Not `LetterTrackerBottomSheet` (Codex round 2, orchestrator call).** Plan 2's Codex round 2
+    drops the sheet's sync refresh, because a re-read under its pending marks can undo a
+    cancelling tap, and only the panel mounts the hook (Task 0 checks this). So pulled pages do
+    not refresh an open sheet either.
+    - **Accepted risk (the same as Plan 2's A1).** An open session tracker sheet can show stale
+      tiles, until it is reopened, when a pulled page changes that child's mastery. Nothing is
+      saved wrongly. Each tap records the state the EA chose (`{ mastered, languageCode, madeAt }`),
+      not a toggle of the stored value, and Plan 2's ordering-aware `setLetterMastery` orders it
+      by its own time. The sheet loads its baseline each time it opens;
   - `src/screens/insights/LetterMasteryRankingScreen.js:45`;
   - `src/screens/insights/AssessmentRankingScreen.js:79`;
   - `src/screens/main/ChildrenListScreen.js:116`.
@@ -1514,11 +1787,12 @@ AR §11.5: the Sync status History row covers sessions, assessments and mastery.
   - `childrenHistoryReference.test.js`: `getChildNamesByIds` returns reference and roster
     children, and `getChildren()` still excludes reference children;
   - `ChildResultsScreen.test.js`: an increment of `runVersion` reloads the results once.
-  - `LetterTrackerBottomSheet.test.js`: with the sheet open and one pending change, an increment
-    of `pageVersion` that brings a new confirmation reloads the baseline once, in the background.
-    The new letter shows as taught, the pending change still shows, and the count reads one
-    higher. A `pageVersion` change while the sheet is closed loads nothing.
-  - `LetterMasteryPanel.test.js`: the same increment re-reads once without showing the spinner.
+  - `LetterTrackerBottomSheet.test.js` (pins the accepted risk): with the sheet open and one
+    pending change, an increment of `pageVersion` reads nothing from the mastery repository, and
+    the pending change still shows. Reopening the sheet loads the baseline once.
+  - `LetterMasteryPanel.test.js`: an increment of `pageVersion` that brings a new confirmation
+    re-reads once without showing the spinner, and the new letter shows as taught. Mounting with
+    a nonzero `pageVersion` loads once, from `useFocusEffect`.
 - [ ] **Step 2: Run** them. Expected: FAIL.
 - [ ] **Step 3: Implement.**
 - [ ] **Step 4: Run** them, then `npx jest`. Expected: PASS.
@@ -1618,14 +1892,17 @@ Starts only after C1 Task 4 is on `main` (Task 0).
     - A grant lost and then regained is not covered again until a re-walk finishes. The walk
       drops a lost id from `rescan<K>` (Task 4's `dropLostCoverage`), so check 1 or 3 is false
       for that child until then, while checks 2 and 4 already pass (Codex round 1).
+    - This holds even when no walk wrote between the loss and the return (Codex round 2). The
+      handover drops a handed-away child from the mastery cursor in its own transaction (Task 6),
+      and a walk in flight cannot write the child back (Task 4's in-transaction bound).
     - A `'year_mismatch'` walk recorded `lastFailureAt`, so checks 1 and 3 fail until a walk
       under the server's year succeeds.
   - `services.assessmentHistory.masteryInputsComplete({ childIds }) → Promise<boolean>`, bound to
     the handle and its EA: the name the engine's input builder calls.
 
 - [ ] **Step 1: Write the failing tests** (cursors written by the real walks of Task 7 against an
-  empty fake server; `seedCoreData`; `child-a` and `child-b` delivery children with synced
-  memberships in `class-1`, held by a synced class assignment):
+  empty fake server unless a case says what it holds; `seedCoreData`; `child-a` and `child-b`
+  delivery children with synced memberships in `class-1`, held by a synced class assignment):
   - `before any walk it is false`.
   - `after both walks it is true for covered children and false for an uncovered one`. `child-g`
     has a delivery assignment but its only membership is in `class-9`, which the EA does not
@@ -1645,6 +1922,19 @@ Starts only after C1 Task 4 is on `main` (Task 0).
     true.
   - **`a class lost and regained is false until the assessment re-walk finishes`**: the same,
     with `class-1`'s class assignment and the assessment walk.
+  - **`a handover inside the freshness window keeps the child false until the re-walk restores
+    its row`** (Codex round 2, Review Focus 6). This runs through the real reconcile and walks.
+    The fake server holds `child-a`'s `k`, accepted at `07:00`, and `child-b`'s `a` at `08:00`.
+    1. Both walks complete at 09:00. The mastery cursor is at `08:00`, so `k` is older than the
+       120 s overlap.
+    2. At 09:05 `saveServerStaffChildRows` ends `child-a`'s assignment through the reconcile
+       (`ended: 1`), which deletes `k`.
+    3. At 09:06 an unforced mastery walk returns `fresh`.
+    4. At 09:07 `child-a` is reassigned (synced, active).
+       `isMasteryInputsComplete({ ..., childIds: ['child-a'] })` is false, and `['child-b']` is
+       true.
+    5. The next unforced mastery walk makes a request with `p_after_id: null`. `k` is back, and
+       `['child-a']` is true.
   - `a year mismatch keeps it false`: the fake server's year is `'year-2027'` while the phone
     holds `'year-2026'`. After the assessment walk returns `'year_mismatch'`, false.
   - `the run walk's state does not matter`: a failed run walk still gives true.
@@ -1750,7 +2040,7 @@ A03-only, with screenshots and exported logs attached to each build-log row.
   - EA2 un-confirms `k` and syncs.
   - Head Office gives the child back to EA1. After EA1's next foreground, EA1's tracker shows `k`
     not confirmed, and the log shows `[LetterMasteryHistory] start … mode=rewalk_due`
-    (Task 4's `dropLostCoverage`).
+    (the handover's coverage drop, Task 6).
 - [ ] **Gate 5: First commit and volume (A03-only).** The volume account, fresh install, throttled.
   - Pass: `[AssessmentHistory]`'s first page commits with `firstCommitMs` ≤ 3000.
   - The walk completes with no failed run, and the build log records `pages`, `rpcMs`, `saveMs`
@@ -1805,7 +2095,9 @@ A03-only, with screenshots and exported logs attached to each build-log row.
   - §15's page apply, run merge, mastery merge, pull calls and read predicates → Tasks 1, 2, 5,
     6 and 7;
   - §16 docs → folded into each task;
-  - asks 3, 4 and 5 → Tasks 11, 10, and 1 + 8 + 14.
+  - asks 3, 4 and 5 → Tasks 11, 10, and 1 + 8 + 14;
+  - Task 7A fixes a pre-existing reference-refresh bug that AR does not name. Task 8's MR002
+    recovery depends on it.
 - **AR §14's "triggers"** is read as pull triggers (Task 8). The server stamps were built in
   Plan 1; Task 2 re-asserts them.
 - **Plan 2 boundary:** this plan writes `letter_mastery` only through the merge (Task 6) and the
@@ -1826,8 +2118,8 @@ A03-only, with screenshots and exported logs attached to each build-log row.
     a mismatch raises `MR002` (Task 2). The store refreshes reference data and restarts the walk
     (Task 8).
   - **Residual risks, accepted as rare:**
-    - a loss, a hidden change, a page passing it and the grant's return, all within one run's
-      lifetime, waits for the 6–8-day backstop (Task 4);
+    - narrowed in Codex round 2 (below): a loss and return that the phone never sees, or that
+      both land inside one run, wait for the 6–8-day backstop (Task 4);
     - the backstop can re-download this EA's own last write for a child it no longer delivers.
       No reader shows it, and reassignment re-walks it (Task 6);
     - a year whose id is unchanged but whose dates were edited is not detected by `MR002`. The
@@ -1842,3 +2134,37 @@ A03-only, with screenshots and exported logs attached to each build-log row.
   - **Orchestrator calls on the reviser's questions (2026-10-20, Jim may override):** delete an
     EA's synced mastery for a child at handover, including its own last write (H3); keep Gate 4's
     hand-back step on devices; use `MR002` for the year mismatch.
+- **Codex round 2 (2026-10-20): what changed.** Both findings were accepted by the orchestrator.
+  - **Coverage invalidation is atomic with the handover delete.** Round 1 skipped the coverage
+    write on a run with no durable write. That was safe for the cursor but not once Task 6
+    deleted mastery on its own: a `fresh` run left the handed-away child covered, and its return
+    was not a gain. Now:
+    - `deleteUndeliveredLetterMastery` drops the undelivered children from the mastery cursor's
+      covered sets in the reconcile transaction (Task 6);
+    - every durable write of a `dropLostCoverage` walk bounds its coverage to the grants it reads
+      in that write's own transaction, so a run in flight cannot re-add a lost child (Task 4).
+      The page saves resolve a `pullState` function in their transaction (Tasks 5 and 6);
+    - the programme walks need no handover drop: their coverage is class-based, and nothing
+      deletes their rows;
+    - sessions are unchanged (`dropLostCoverage: false`, their suites untouched).
+    - Regressions: Task 4 (an in-flight loss, the failure marker, `removeFromHistoryCoverage`);
+      Task 6 (the cursor drop beside the delete, the breaker, supersede and pending end);
+      Task 7 (a handover inside the freshness window; a walk in flight across the handover);
+      Task 11 (`masteryInputsComplete` false until the re-walk restores the row).
+  - **The reference refresh switches the active year in any response order** (new Task 7A, a
+    pre-existing bug). The MR002 recovery test now runs the real refresh in both orders
+    (Task 8). Task 2's harness switches the year in two statements, because Postgres checks the
+    partial unique index row by row too.
+  - **The session tracker sheet does not refresh on pulled pages** (Task 9). Plan 2's round 2
+    keeps the hook on the panel only.
+  - **Residual risks, accepted as rare (Jim's rule: record rare timing races, do not add
+    machinery):**
+    - the phone never sees a loss: the grant is ended and restored on the server between two
+      roster or class pulls, with a hidden change passed in between (Task 4);
+    - a loss and a return both reach the phone inside one run's 60 s, so its next write keeps
+      the child covered although the handover deleted its mastery (Task 4);
+    - a mastery page fetched before a handover and saved after it re-inserts that child's rows.
+      No reader shows them, and coverage no longer holds the child (Task 6);
+    - an open session tracker sheet shows stale tiles until it is reopened, as Plan 2's A1 (Task 9).
+    - Each of the first three is caught by the 6–8-day backstop re-walk. They are recorded in the
+      build log's Bug and Gap Register when Plan 3 lands.
