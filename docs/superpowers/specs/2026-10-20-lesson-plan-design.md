@@ -97,6 +97,9 @@ follows it:
 | J18 | When an EA has no groups, or some children are in none, the picker offers **+ Make a group** (pick the children, done) and lists ungrouped children under "Not in a group yet" with **Put in a group**. Every lesson belongs to a group, and the old Record form retires. One-on-one tutoring is a later question (§8). |
 | J19 | Words on Masi's assessments may appear in blends and books. *umama* is too common to avoid, automaticity is part of what is measured, and children are assessed three times a year. The app must not encourage explicit teaching to the test. Assessment words rotate, so the word bank never depends on the assessment word list. |
 | J20 | Afrikaans classes are assessed on a copy of Zazi's Afrikaans letter sheet for now, and every Afrikaans gap in the app is fixed (track AF, §9). |
+| J21 | Track B1 is AR Plans 2–3, written and built in this workstream, with the lesson plan's asks (§7.6). (rev 2) |
+| J22 | The isiXhosa test-pack script may use `yaml@2.8.2` as an exact-pinned devDependency; it is already in `package-lock.json` through Expo tooling. (rev 2) |
+| J23 | A child in one of an EA's groups is always one of that EA's own children (a direct child assignment). There are no group-only children. (rev 2) |
 
 ---
 
@@ -597,11 +600,11 @@ The same kind of note, "Still downloading what children know. Suggestions may re
 mastery inputs are incomplete (§7.6). Letters are still suggested from what the phone has, and the
 plan records `mastery_complete: false`.
 
-**Known gap:** the history pull's delivery arm follows `child_ea_assignments`
-(`supabase/migrations/20260925120000_session_history_family_delta.sql:113`), not group assignment.
-A group member the EA delivers to only through a group (no direct child assignment) brings no other
-EA's history. The B1/B2 plans confirm whether any such child exists in Core Literacy and, if so,
-widen the arm.
+**Not a gap (J23):** the history pull's delivery arm follows `child_ea_assignments`
+(`supabase/migrations/20260925120000_session_history_family_delta.sql:110-115`), not group
+assignment. That covers every group member, because a child in an EA's group is always one of that
+EA's own children. B2 records this as an invariant in the contract map, so a future Head Office
+seed that breaks it is caught in review.
 
 ### 7.4 Reconciling `group-session-workflow.md`
 
@@ -854,8 +857,5 @@ The app needs these in the pack before field testing:
 
 ## 14. Open questions
 
-Jim answered rev 1's Q1–Q3 on 2026-10-20 (J18–J20). Rev 2 raises one:
-
-- **Q4. AR Plans 2–3 and the lesson plan's asks.** Track B1 is now AR Plans 2–3, which are not yet
-  written. Who writes and builds them (the assessment-results workstream, or this one), and may
-  they take the five asks in §7.6?
+None open. Jim answered rev 1's Q1–Q3 (J18–J20) and rev 2's three questions (J21–J23) on
+2026-10-20.
