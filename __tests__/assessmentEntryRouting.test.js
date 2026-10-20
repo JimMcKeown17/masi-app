@@ -7,7 +7,6 @@ import { useAuth } from '../src/context/AuthContext';
 import { useChildren } from '../src/context/ChildrenContext';
 import { useClasses } from '../src/context/ClassesContext';
 import { assessmentsRepository } from '../src/db/repositories/assessmentsRepository';
-import { resolveAssessmentRoute } from '../src/utils/assessmentRouting';
 
 jest.mock('react-native-paper', () => {
   const React = require('react');
@@ -86,14 +85,10 @@ jest.mock('../src/context/ClassesContext', () => ({
 jest.mock('../src/db/repositories/assessmentsRepository', () => ({
   ...jest.requireActual('../src/db/repositories/assessmentsRepository'),
   assessmentsRepository: {
-    getAssessments: jest.fn(),
-    countAssessments: jest.fn(),
+    getQuestionResults: jest.fn(),
   },
 }));
 
-jest.mock('../src/utils/assessmentRouting', () => ({
-  resolveAssessmentRoute: jest.fn(),
-}));
 
 jest.mock('../src/components/assessment/LetterMasteryPanel', () => () => null);
 
@@ -114,17 +109,6 @@ const classItem = {
   home_language: 'English',
 };
 
-const routeExpectationByMode = {
-  sequential: {
-    screenName: 'SequentialAssessment',
-    captureMode: 'sequential',
-  },
-  grid: {
-    screenName: 'LetterAssessment',
-    captureMode: 'grid',
-  },
-};
-
 const makeNavigation = () => ({
   navigate: jest.fn(),
 });
@@ -135,96 +119,42 @@ describe('assessment entry routing', () => {
     useAuth.mockReturnValue({ user: { id: 'user-1' } });
     useChildren.mockReturnValue({ children: [child] });
     useClasses.mockReturnValue({ classes: [classItem] });
-    assessmentsRepository.getAssessments.mockResolvedValue([]);
-    assessmentsRepository.countAssessments.mockResolvedValue(0);
+    assessmentsRepository.getQuestionResults.mockResolvedValue([]);
   });
 
-  test.each(['sequential', 'grid'])(
-    'AssessmentChildSelectScreen routes %s mode through the resolver',
-    async (mode) => {
-      const resolved = routeExpectationByMode[mode];
-      resolveAssessmentRoute.mockResolvedValueOnce(resolved);
+  test.each(['letter_sounds', 'word_reading'])(
+    'child select launches %s once without waiting for its history preload', async (testCode) => {
+      assessmentsRepository.getQuestionResults.mockReturnValue(new Promise(() => {}));
       const navigation = makeNavigation();
-
-      const screen = render(
-        <AssessmentChildSelectScreen
-          navigation={navigation}
-          route={{ params: { assessmentType: 'letter_egra' } }}
-        />
-      );
-
-      await waitFor(() => expect(screen.getByText('Amahle Dlamini')).toBeTruthy());
+      const screen = render(<AssessmentChildSelectScreen navigation={navigation} route={{ params: { testCode } }} />);
       fireEvent.press(screen.getByText('Amahle Dlamini'));
-
-      await waitFor(() => {
-        expect(resolveAssessmentRoute).toHaveBeenCalledTimes(1);
-        expect(navigation.navigate).toHaveBeenCalledWith(
-          resolved.screenName,
-          expect.objectContaining({
-            child,
-            captureMode: resolved.captureMode,
-            assessmentType: 'letter_egra',
-            attemptNumber: 1,
-          })
-        );
-      });
-    }
+      fireEvent.press(screen.getByText('Amahle Dlamini'));
+      expect(navigation.navigate).toHaveBeenCalledTimes(1);
+      expect(navigation.navigate).toHaveBeenCalledWith('StandaloneTest', { testCode, child, languageCode: 'en' });
+      expect(assessmentsRepository.getQuestionResults).toHaveBeenCalledWith({ userId: 'user-1', questionCodes: [testCode] });
+    },
   );
 
-  test('AssessmentChildSelectScreen resolves attempt number at launch while preload is pending', async () => {
-    assessmentsRepository.getAssessments.mockReturnValue(new Promise(() => {}));
-    assessmentsRepository.countAssessments.mockResolvedValue(3);
-    resolveAssessmentRoute.mockResolvedValue(routeExpectationByMode.sequential);
-    const navigation = makeNavigation();
-
-    const screen = render(
-      <AssessmentChildSelectScreen
-        navigation={navigation}
-        route={{ params: { assessmentType: 'letter_egra' } }}
-      />
-    );
-
-    fireEvent.press(screen.getByText('Amahle Dlamini'));
-
-    await waitFor(() => expect(navigation.navigate).toHaveBeenCalledWith(
-      'SequentialAssessment',
-      expect.objectContaining({ attemptNumber: 4 })
-    ));
-    expect(assessmentsRepository.countAssessments).toHaveBeenCalledWith({
-      userId: 'user-1',
-      childId: 'child-1',
-      assessmentType: 'letter_egra',
-    });
-  });
-
-  test.each(['sequential', 'grid'])(
-    'ChildResultsScreen routes %s mode through the resolver',
-    async (mode) => {
-      const resolved = routeExpectationByMode[mode];
-      resolveAssessmentRoute.mockResolvedValueOnce(resolved);
+  test.each(['letter_sounds', 'word_reading'])(
+    'child results launches %s once with the detected class language', async (testCode) => {
       const navigation = makeNavigation();
-
-      const screen = render(
-        <ChildResultsScreen
-          navigation={navigation}
-          route={{ params: { child, classItem } }}
-        />
-      );
-
-      fireEvent.press(screen.getAllByText('Run assessment')[0]);
-
-      await waitFor(() => {
-        expect(resolveAssessmentRoute).toHaveBeenCalledTimes(1);
-        expect(navigation.navigate).toHaveBeenCalledWith(
-          resolved.screenName,
-          expect.objectContaining({
-            child,
-            captureMode: resolved.captureMode,
-            assessmentType: 'letter_egra',
-            attemptNumber: 1,
-          })
-        );
-      });
-    }
+      const screen = render(<ChildResultsScreen navigation={navigation} route={{ params: { child, classItem } }} />);
+      const button = screen.getAllByText('Run assessment')[testCode === 'letter_sounds' ? 0 : 1];
+      fireEvent.press(button);
+      fireEvent.press(button);
+      expect(navigation.navigate).toHaveBeenCalledTimes(1);
+      expect(navigation.navigate).toHaveBeenCalledWith('StandaloneTest', { testCode, child, languageCode: 'en' });
+      await waitFor(() => expect(assessmentsRepository.getQuestionResults).toHaveBeenCalled());
+    },
   );
+
+  test('child results sends unknown languages to child select without a fallback', async () => {
+    const navigation = makeNavigation();
+    const screen = render(<ChildResultsScreen navigation={navigation} route={{ params: {
+      child, classItem: { ...classItem, home_language: 'Afrikaans' },
+    } }} />);
+    fireEvent.press(screen.getAllByText('Run assessment')[0]);
+    expect(navigation.navigate).toHaveBeenCalledWith('AssessmentChildSelect', { testCode: 'letter_sounds' });
+    await waitFor(() => expect(assessmentsRepository.getQuestionResults).toHaveBeenCalled());
+  });
 });

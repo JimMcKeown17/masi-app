@@ -1,9 +1,6 @@
 import React from 'react';
-import { fireEvent, waitFor } from '@testing-library/react-native';
 import { renderWithProviders as render } from '../test-support/renderWithProviders';
 import ProfileScreen from '../src/screens/main/ProfileScreen';
-import { CAPTURE_MODES } from '../src/constants/egraConstants';
-import { deviceSettings } from '../src/services/deviceSettings';
 
 const mockSignOut = jest.fn();
 const mockChangePassword = jest.fn();
@@ -69,75 +66,21 @@ jest.mock('../src/utils/releaseMetadata', () => ({
   }),
 }));
 
-jest.mock('../src/services/deviceSettings', () => ({
-  deviceSettings: {
-    getCaptureMode: jest.fn(),
-    setCaptureMode: jest.fn(),
-  },
-}));
-
 const renderProfile = () => render(
   <ProfileScreen navigation={{ goBack: jest.fn() }} />
 );
 
-describe('ProfileScreen assessment capture mode toggle', () => {
-  beforeEach(() => {
-    jest.clearAllMocks();
-    deviceSettings.getCaptureMode.mockResolvedValue(CAPTURE_MODES.SEQUENTIAL);
-    deviceSettings.setCaptureMode.mockResolvedValue(undefined);
-  });
+describe('ProfileScreen assessment settings', () => {
+  beforeEach(() => { jest.clearAllMocks(); });
 
-  test('loads and displays the stored grid capture mode', async () => {
-    deviceSettings.getCaptureMode.mockResolvedValue(CAPTURE_MODES.GRID);
-
+  test('has no capture-mode choice while retaining profile and support actions', () => {
     const screen = renderProfile();
 
-    expect(await screen.findByText('Assessment capture')).toBeTruthy();
-    expect(screen.getByText('Grid')).toBeTruthy();
-    // The group stays non-accessible so VoiceOver can reach its individual radios.
-    expect(screen.getByLabelText('Assessment capture').props.accessibilityRole).toBe('radiogroup');
-    await waitFor(() => {
-      expect(screen.getByRole('radio', { name: 'Grid' }).props.accessibilityState.checked).toBe(true);
-    });
-    expect(screen.getByRole('radio', { name: 'Step-by-step' }).props.accessibilityState.checked).toBe(false);
-  });
-
-  test('pressing Step-by-step saves the new capture mode', async () => {
-    deviceSettings.getCaptureMode.mockResolvedValue(CAPTURE_MODES.GRID);
-
-    const screen = renderProfile();
-
-    await waitFor(() => {
-      expect(screen.getByRole('radio', { name: 'Grid' }).props.accessibilityState.checked).toBe(true);
-    });
-
-    fireEvent.press(screen.getByText('Step-by-step'));
-
-    await waitFor(() => {
-      expect(deviceSettings.setCaptureMode).toHaveBeenCalledWith(CAPTURE_MODES.SEQUENTIAL);
-    });
-  });
-
-  test('reverts to the previous capture mode when saving fails', async () => {
-    jest.spyOn(console, 'error').mockImplementation(() => {});
-    deviceSettings.getCaptureMode.mockResolvedValue(CAPTURE_MODES.GRID);
-    deviceSettings.setCaptureMode.mockRejectedValueOnce(new Error('write failed'));
-
-    const screen = renderProfile();
-
-    await waitFor(() => {
-      expect(screen.getByRole('radio', { name: 'Grid' }).props.accessibilityState.checked).toBe(true);
-    });
-
-    fireEvent.press(screen.getByText('Step-by-step'));
-
-    await waitFor(() => {
-      expect(deviceSettings.setCaptureMode).toHaveBeenCalledWith(CAPTURE_MODES.SEQUENTIAL);
-      expect(screen.getByRole('radio', { name: 'Grid' }).props.accessibilityState.checked).toBe(true);
-    });
-    expect(screen.getByRole('radio', { name: 'Step-by-step' }).props.accessibilityState.checked).toBe(false);
-
-    console.error.mockRestore();
+    expect(screen.queryByText('Assessment capture')).toBeNull();
+    expect(screen.queryByRole('radio', { name: 'Grid' })).toBeNull();
+    expect(screen.queryByRole('radio', { name: 'Step-by-step' })).toBeNull();
+    expect(screen.getByText('Profile info')).toBeTruthy();
+    expect(screen.getByLabelText('Support tools')).toBeTruthy();
   });
 });
 

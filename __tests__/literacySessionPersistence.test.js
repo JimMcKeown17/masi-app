@@ -45,7 +45,7 @@ describe('literacySessionPersistence', () => {
           },
           synced: false,
         },
-        trackerLanguageKey: 'english',
+        trackerLanguageCode: 'en',
         nowIso: '2026-07-14T09:30:00.000Z',
         idFactory: () => 'unused-id',
       });
@@ -114,7 +114,7 @@ describe('literacySessionPersistence', () => {
           },
           synced: false,
         },
-        trackerLanguageKey: 'english',
+        trackerLanguageCode: 'en',
         nowIso: '2026-07-14T10:00:00.000Z',
         idFactory: () => 'unused-id',
       });
@@ -166,7 +166,7 @@ describe('literacySessionPersistence', () => {
           activities: { letters_focused: ['a'] },
           synced: false,
         },
-        trackerLanguageKey: 'english',
+        trackerLanguageCode: 'en',
         letterTrackerChanges: {
           'child-removed': { a: true },
         },
@@ -236,7 +236,7 @@ describe('literacySessionPersistence', () => {
           activities: { letters_focused: ['a', 'm'] },
           synced: false,
         },
-        trackerLanguageKey: 'english',
+        trackerLanguageCode: 'en',
         letterTrackerChanges: {
           'child-1': {
             a: true,
@@ -297,7 +297,7 @@ describe('literacySessionPersistence', () => {
           activities: { letters_focused: ['m'] },
           synced: false,
         },
-        trackerLanguageKey: 'english',
+        trackerLanguageCode: 'en',
         letterTrackerChanges: {
           'child-1': {
             m: true,
@@ -359,7 +359,7 @@ describe('literacySessionPersistence', () => {
           activities: { letters_focused: ['z'] },
           synced: false,
         },
-        trackerLanguageKey: 'english',
+        trackerLanguageCode: 'en',
         letterTrackerChanges: {
           'child-1': {
             z: true,

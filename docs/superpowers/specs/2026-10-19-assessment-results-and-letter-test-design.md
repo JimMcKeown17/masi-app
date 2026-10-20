@@ -214,6 +214,11 @@ government isiZulu form uses (section 12). Only `consecutive_wrong` is built now
   `CURRENT_ITEM_SETS.letter_sounds = { en: …, xh: … }`. The WelaPLUS battery's Q1 entry
   references `letter_sounds` and that same version. A package test fails if the two ever differ,
   so "identical" is enforced, not remembered.
+
+> **Status update — 2026-10-20:** Jim supplied the shared English/isiXhosa Zazi iZandi Grid A
+> mixed-case card (six rows of ten). It shipped as `letter_sounds@2026.2`; the original interim
+> decision below remains as the record of why `2026.1` exists.
+
 - **Interim content (call 2).** Version `2026.1` holds the 2024 WelaPLUS Q1 lists as five rows of
   twelve, lowercase, with `stop_rule: { kind: 'consecutive_wrong', stop_at: 10 }`. The isiXhosa list
   is already identical to today's EGRA list. `contentStatus.ts` gets one entry per language:
@@ -241,7 +246,7 @@ government isiZulu form uses (section 12). Only `consecutive_wrong` is built now
 | Stop rule | The values come from item-set data (6.1). After each forward decision, count the run of consecutive Incorrect decisions back from the current letter, across row ends. **When it reaches `stop_at` (10), the test stops**, and the reading time freezes. A card says *"⟨Child⟩ got 10 in a row wrong. The test has stopped."*, with **Save result** (primary) and **Undo last mark**.<ul><li>Undo exists only for a mis-tapped tenth Incorrect: it clears that decision and returns to the test. It is not a way to continue past the rule.</li><li>While the card is open, Correct, Incorrect and Back are ignored. This is Zazi's queued-tap guard, so a tap queued behind the tenth Incorrect cannot slip through.</li><li>There is no warning, no switch-off and no resume override (Jim, 2026-10-20).</li></ul> |
 | Stopped reason | Uses the package's existing 10 values, so there is no new database CHECK.<ul><li>A stop is `stop_rule`.</li><li>`timer`, `ea_ended` and `completed` are as today.</li><li>`derived.max_consecutive_wrong` is recorded for every result.</li></ul> |
 | Last attempted | It is the letter before the cursor. Step-by-step marking always knows it, so the last-attempted sheet is not needed for this test. Letters after it are not reached. |
-| Result | Each item is `{ position, item_key: letter, prompt: letter, is_correct, metadata: { row, reached } }`. There is one item per card position, including not-reached ones (`reached: false`, `is_correct: false`). `derived` keeps `total_correct`, `total_attempted`, `percent`, `last_attempted_position`, `was_timed`, `tracks_progress`, `capture_mode: 'sequential'` and `correction_count`. |
+| Result | Each item is `{ position, item_key: String(position), prompt: letter, is_correct, metadata: { row, reached } }`. The positional key keeps repeated and mixed-case prompts distinct; the prompt remains the evidence used for mastery. There is one item per card position, including not-reached ones (`reached: false`, `is_correct: false`). `derived` keeps `total_correct`, `total_attempted`, `percent`, `last_attempted_position`, `was_timed`, `tracks_progress`, `capture_mode: 'sequential'` and `correction_count`. |
 | Validator | `contractTest/validateResult` gains one rule: a `stop_rule` result must end in exactly `stop_at` consecutive wrong letters. |
 
 **Not ported from Zazi:** the warning, switch-off and resume (above), and its device setting that

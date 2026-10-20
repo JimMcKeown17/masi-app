@@ -8,8 +8,7 @@ import { v4 as uuidv4 } from 'uuid';
 import { colors, spacing, borderRadius } from '../../constants/colors';
 import LetterToggleGrid from '../sessions/LetterToggleGrid';
 import { letterStateColors } from '../../constants/letterStateColors';
-import { LETTER_SETS, PEDAGOGICAL_ORDERS } from '../../constants/egraConstants';
-import { normalizeLanguageKey } from '../../utils/letterMastery';
+import { LANGUAGE_LABELS, PEDAGOGICAL_ORDERS, languageCodeForHomeLanguage } from '../../utils/assessmentRegistry';
 import { loadMasteryState } from '../../utils/masteryState';
 
 import { useAuth } from '../../context/AuthContext';
@@ -30,9 +29,10 @@ export default function LetterMasteryPanel({ child, classItem }) {
   const [mutationError, setMutationError] = useState(null);
   const [updatingLetter, setUpdatingLetter] = useState(null);
 
-  const languageKey = normalizeLanguageKey(classItem?.home_language);
-  const letterSet = LETTER_SETS[languageKey];
-  const pedagogicalOrder = PEDAGOGICAL_ORDERS[languageKey];
+  const languageCode = languageCodeForHomeLanguage(classItem?.home_language);
+  const pedagogicalOrder = PEDAGOGICAL_ORDERS[languageCode];
+  // Plan 2 re-keys letter_mastery to codes
+  const confirmationLanguage = LANGUAGE_LABELS[languageCode];
 
   const loadData = useCallback(async () => {
     try {
@@ -41,9 +41,9 @@ export default function LetterMasteryPanel({ child, classItem }) {
       const { assessmentMastered: masteredSet, latestAssessment, taughtRecords } = await loadMasteryState({ repositories,
         userId: user.id,
         childId: child.id,
-        languageKey,
+        languageCode,
       });
-      setLatestAssessmentDate(latestAssessment?.date_assessed || null);
+      setLatestAssessmentDate(latestAssessment?.assessment_date || null);
       setAssessmentMastered(masteredSet);
 
       const taughtMap = {};
@@ -54,7 +54,7 @@ export default function LetterMasteryPanel({ child, classItem }) {
     } finally {
       setLoading(false);
     }
-  }, [child.id, languageKey, user.id]);
+  }, [child.id, languageCode, user.id]);
 
   useFocusEffect(
     useCallback(() => {
@@ -64,7 +64,7 @@ export default function LetterMasteryPanel({ child, classItem }) {
 
   const handleCellTap = async (letter) => {
     // Assessment-mastered cells are locked
-    if (assessmentMastered.has(letter)) return;
+    if (!pedagogicalOrder || assessmentMastered.has(letter)) return;
     if (updatingLetter) return;
 
     setMutationError(null);
@@ -81,7 +81,7 @@ export default function LetterMasteryPanel({ child, classItem }) {
           childId: child.id,
         });
         const active = allMastery.find(
-          r => r.child_id === child.id && r.letter === letter && r.language === letterSet.language && !r._deleted
+          r => r.child_id === child.id && r.letter === letter && r.language === confirmationLanguage && !r._deleted
         );
         if (active) {
           await masteryRepository.updateLetterMasteryRecord(active.id, {
@@ -107,7 +107,7 @@ export default function LetterMasteryPanel({ child, classItem }) {
           childId: child.id,
         });
         const existing = allMastery.find(
-          r => r.child_id === child.id && r.letter === letter && r.language === letterSet.language && r._deleted
+          r => r.child_id === child.id && r.letter === letter && r.language === confirmationLanguage && r._deleted
         );
         if (existing) {
           // Reactivate the soft-deleted record
@@ -128,7 +128,7 @@ export default function LetterMasteryPanel({ child, classItem }) {
             child_id: child.id,
             letter,
             source: 'taught',
-            language: letterSet.language,
+            language: confirmationLanguage,
             synced: false,
             created_at: new Date().toISOString(),
             updated_at: new Date().toISOString(),
@@ -163,7 +163,11 @@ export default function LetterMasteryPanel({ child, classItem }) {
     );
   }
 
-  const languageLabel = letterSet.language;
+  if (!pedagogicalOrder) {
+    return <Text style={styles.missingSetText}>No letter set for this class language.</Text>;
+  }
+
+  const languageLabel = classItem.home_language;
   const allMastered = new Set([...assessmentMastered, ...Object.keys(taughtLetters)]);
   const masteredCount = allMastered.size;
 
@@ -224,6 +228,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     backgroundColor: colors.background,
   },
+  missingSetText: { ...typeRoles.textBody, color: colors.textSecondary, paddingVertical: spacing.md },
   header: {
     marginBottom: spacing.md,
   },

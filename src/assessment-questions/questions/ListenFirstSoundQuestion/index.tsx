@@ -8,7 +8,11 @@
  */
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { View, Text, Pressable, ScrollView, StyleSheet } from 'react-native';
+import { monotonicNow } from '../../progress/clock';
 import type { QuestionProps } from '../../types/QuestionProps';
+import type { ItemSetMeta } from '../../types/ItemSet';
+import { resolveItemSet } from '../../itemsets/resolveItemSet';
+import { MissingItemSet } from '../../progress/MissingItemSet';
 import type { Result, ResultItem, StoppedReason } from '../../types/Result';
 import type { ListenFirstSoundItemSet } from './types';
 import { WELA_PLUS_FIRST_SOUND_EN } from '../../itemsets/wela_plus_first_sound.en';
@@ -23,10 +27,7 @@ const BASE_PROMPT_FONT_SIZE = 28;
 
 type Phase = 'intro' | 'active' | 'confirm-finish' | 'skip-picker' | 'finished';
 
-type FullItemSet = ListenFirstSoundItemSet & {
-  item_set_id: string;
-  question_version: string;
-};
+type FullItemSet = ListenFirstSoundItemSet & ItemSetMeta;
 
 function isFullItemSet(value: unknown): value is FullItemSet {
   if (!value || typeof value !== 'object') return false;
@@ -34,21 +35,29 @@ function isFullItemSet(value: unknown): value is FullItemSet {
   return (
     Array.isArray(o.prompts) &&
     typeof o.item_set_id === 'string' &&
-    typeof o.question_version === 'string'
+    typeof o.question_version === 'string' &&
+    typeof o.question_code === 'string' &&
+    typeof o.language === 'string'
   );
 }
 
-function resolveItemSet(language: string, override: unknown): FullItemSet {
-  if (isFullItemSet(override)) return override;
-  return language === 'xh'
-    ? WELA_PLUS_FIRST_SOUND_XH
-    : WELA_PLUS_FIRST_SOUND_EN;
+export function ListenFirstSoundQuestion(props: QuestionProps) {
+  const itemSet = resolveItemSet(
+    props.language,
+    props.itemSet,
+    { en: WELA_PLUS_FIRST_SOUND_EN, xh: WELA_PLUS_FIRST_SOUND_XH },
+    isFullItemSet,
+  );
+  if (!itemSet) return <MissingItemSet language={props.language} />;
+  return <ListenFirstSoundQuestionContent {...props} itemSet={itemSet} />;
 }
 
-export function ListenFirstSoundQuestion(props: QuestionProps) {
+function ListenFirstSoundQuestionContent(
+  props: QuestionProps & { itemSet: FullItemSet },
+) {
   const {
     language,
-    itemSet,
+    itemSet: effectiveItemSet,
     instructions,
     onComplete,
     onItemMarked,
@@ -57,7 +66,6 @@ export function ListenFirstSoundQuestion(props: QuestionProps) {
   const { isMarked, toggle } = useToggleMark();
   const fontScale = useChildReadingFontSize();
   const promptFontSize = BASE_PROMPT_FONT_SIZE * fontScale;
-  const effectiveItemSet = resolveItemSet(language, itemSet);
 
   const isMarkedRef = useRef(isMarked);
   useEffect(() => {
@@ -75,7 +83,7 @@ export function ListenFirstSoundQuestion(props: QuestionProps) {
 
   useEffect(() => {
     if (phase === 'active' && startTimeMsRef.current === null) {
-      startTimeMsRef.current = Date.now();
+      startTimeMsRef.current = monotonicNow();
     }
   }, [phase]);
 
@@ -100,10 +108,10 @@ export function ListenFirstSoundQuestion(props: QuestionProps) {
       const elapsedMs =
         startTimeMsRef.current === null
           ? 0
-          : Date.now() - startTimeMsRef.current;
+          : Math.round(monotonicNow() - startTimeMsRef.current);
 
       const result: Result = {
-        question_code: 'wela_plus_first_sound',
+        question_code: effectiveItemSet.question_code,
         question_version: effectiveItemSet.question_version,
         item_set_id: effectiveItemSet.item_set_id,
         language,

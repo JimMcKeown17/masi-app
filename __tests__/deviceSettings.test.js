@@ -1,6 +1,5 @@
 global.__MASI_NO_DEFAULT_HANDLE__ = true;
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { deviceSettings } from '../src/services/deviceSettings';
 import { requireCurrentHandle, requestClose, requestOpen, resetHandleRegistryForTests } from '../src/session/signedInHandle';
 
 import * as engine from '../test-support/expoSQLiteRealEngine';
@@ -22,19 +21,4 @@ test('round-trips the profile in its EA file and retains it across sign-out', as
   await requestClose({ reason: 'return to A' });
   const again = await requestOpen({ userId: a.userId, openDatabase: engine.openDatabaseAsync });
   expect(await again.services.deviceProfile.get()).toEqual(profile);
-});
-test('resolves a valid device capture mode', async () => {
-  await AsyncStorage.setItem('masi:device:captureMode', 'grid');
-  await expect(deviceSettings.getCaptureMode()).resolves.toBe('grid');
-});
-test('falls back to sequential when capture mode is unset or invalid', async () => {
-  await expect(deviceSettings.getCaptureMode()).resolves.toBe('sequential');
-  await AsyncStorage.setItem('masi:device:captureMode', 'bogus');
-  await expect(deviceSettings.getCaptureMode()).resolves.toBe('sequential');
-});
-test('validates and persists capture mode under the device-scoped key', async () => {
-  await expect(deviceSettings.setCaptureMode('bogus')).rejects.toThrow(/invalid capture mode/i);
-  await deviceSettings.setCaptureMode('sequential');
-  expect(await AsyncStorage.getItem('masi:device:captureMode')).toBe('sequential');
-  expect(await requireCurrentHandle().repositories.localState.get('assessment_capture_mode')).toBeNull();
 });

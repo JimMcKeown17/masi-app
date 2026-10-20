@@ -53,7 +53,7 @@ function ChildrenListHeader({ isLoading, tabStats, hasClasses, searchTerm, onSea
 
 export default function ChildrenListScreen({ navigation }) {
   const { repositories } = useSignedInEA();
-  const { assessments: assessmentsRepository } = repositories;
+  const { assessments: assessmentsRepository, academicYears: academicYearsRepository } = repositories;
 
   const { user } = useAuth();
   const {
@@ -105,8 +105,12 @@ export default function ChildrenListScreen({ navigation }) {
   useFocusEffect(
     useCallback(() => {
       const loadStats = async () => {
-        const assessments = await assessmentsRepository.getAssessments({ userId: user.id });
-        setTabStats(getChildrenTabStats(children, classes, assessments));
+        const [results, academicYears] = await Promise.all([
+          assessmentsRepository.getLetterResults({ userId: user.id }),
+          academicYearsRepository.getAll(),
+        ]);
+        const activeAcademicYear = academicYears.find(year => year.is_active === true || year.is_active === 1) ?? null;
+        setTabStats(getChildrenTabStats(children, classes, results, activeAcademicYear));
       };
       loadStats();
     }, [children, classes, user.id])

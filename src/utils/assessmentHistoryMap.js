@@ -1,20 +1,21 @@
-export function buildAssessmentMap(assessments, assessmentType) {
+export function buildAssessmentMap(assessments, questionCode) {
   const map = {};
   for (const assessment of assessments) {
-    if ((assessment.assessment_type || 'letter_egra') !== assessmentType) continue;
+    if (assessment.question_code !== questionCode || assessment.stopped_reason?.startsWith('skipped_')) continue;
     const existing = map[assessment.child_id];
     const attemptCount = (existing?.attemptCount || 0) + 1;
     const isLatest = !existing
-      || assessment.date_assessed > existing.date_assessed
+      || assessment.assessment_date > existing.assessment_date
       || (
-        assessment.date_assessed === existing.date_assessed
+        assessment.assessment_date === existing.assessment_date
         && assessment.created_at > existing.created_at
       );
     map[assessment.child_id] = isLatest
       ? {
-        date_assessed: assessment.date_assessed,
+        assessment_date: assessment.assessment_date,
         created_at: assessment.created_at,
-        accuracy: assessment.accuracy,
+        score: assessment.score,
+        total_items: assessment.total_items,
         attemptCount,
       }
       : { ...existing, attemptCount };

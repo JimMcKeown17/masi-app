@@ -29,7 +29,11 @@ import {
   Image,
   StyleSheet,
 } from 'react-native';
+import { monotonicNow } from '../../progress/clock';
 import type { QuestionProps } from '../../types/QuestionProps';
+import type { ItemSetMeta } from '../../types/ItemSet';
+import { resolveItemSet } from '../../itemsets/resolveItemSet';
+import { MissingItemSet } from '../../progress/MissingItemSet';
 import type { Result, StoppedReason } from '../../types/Result';
 import type {
   StoryWritingRubricItemSet,
@@ -49,10 +53,7 @@ type Phase =
   | 'skip-picker'
   | 'finished';
 
-type FullItemSet = StoryWritingRubricItemSet & {
-  item_set_id: string;
-  question_version: string;
-};
+type FullItemSet = StoryWritingRubricItemSet & ItemSetMeta;
 
 type ScoreRange = StoryWritingRubricItemSet['score_range'];
 
@@ -93,6 +94,8 @@ function isFullItemSet(value: unknown): value is FullItemSet {
   const o = value as Record<string, unknown>;
   if (typeof o.item_set_id !== 'string') return false;
   if (typeof o.question_version !== 'string') return false;
+  if (typeof o.question_code !== 'string') return false;
+  if (typeof o.language !== 'string') return false;
   const range = o.score_range;
   if (!isValidScoreRange(range)) return false;
   if (o.picture !== undefined) {
@@ -104,17 +107,23 @@ function isFullItemSet(value: unknown): value is FullItemSet {
   return o.dimensions.every((d) => isValidDimension(d, range));
 }
 
-function resolveItemSet(language: string, override: unknown): FullItemSet {
-  if (isFullItemSet(override)) return override;
-  return language === 'xh'
-    ? WELA_PLUS_STORY_WRITING_XH
-    : WELA_PLUS_STORY_WRITING_EN;
+export function StoryWritingRubricQuestion(props: QuestionProps) {
+  const itemSet = resolveItemSet(
+    props.language,
+    props.itemSet,
+    { en: WELA_PLUS_STORY_WRITING_EN, xh: WELA_PLUS_STORY_WRITING_XH },
+    isFullItemSet,
+  );
+  if (!itemSet) return <MissingItemSet language={props.language} />;
+  return <StoryWritingRubricQuestionContent {...props} itemSet={itemSet} />;
 }
 
-export function StoryWritingRubricQuestion(props: QuestionProps) {
+function StoryWritingRubricQuestionContent(
+  props: QuestionProps & { itemSet: FullItemSet },
+) {
   const {
     language,
-    itemSet,
+    itemSet: effectiveItemSet,
     instructions,
     onComplete,
     onItemMarked,
@@ -125,7 +134,6 @@ export function StoryWritingRubricQuestion(props: QuestionProps) {
   const [rubricSheetDim, setRubricSheetDim] = useState<string | null>(null);
   const [pictureEnlarged, setPictureEnlarged] = useState(false);
 
-  const effectiveItemSet = resolveItemSet(language, itemSet);
   const dimensions = effectiveItemSet.dimensions;
   const { min: minScore, max: maxScore } = effectiveItemSet.score_range;
   const chipScores = Array.from({ length: maxScore - minScore + 1 }, (_, i) => minScore + i);
@@ -140,7 +148,7 @@ export function StoryWritingRubricQuestion(props: QuestionProps) {
 
   useEffect(() => {
     if (phase === 'active' && startTimeMsRef.current === null) {
-      startTimeMsRef.current = Date.now();
+      startTimeMsRef.current = monotonicNow();
     }
   }, [phase]);
 
@@ -203,10 +211,10 @@ export function StoryWritingRubricQuestion(props: QuestionProps) {
       const elapsedMs =
         startTimeMsRef.current === null
           ? 0
-          : Date.now() - startTimeMsRef.current;
+          : Math.round(monotonicNow() - startTimeMsRef.current);
 
       const result: Result = {
-        question_code: 'wela_plus_story_writing',
+        question_code: effectiveItemSet.question_code,
         question_version: effectiveItemSet.question_version,
         item_set_id: effectiveItemSet.item_set_id,
         language,

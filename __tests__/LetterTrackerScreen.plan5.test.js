@@ -27,7 +27,7 @@ jest.mock('../src/context/OfflineContext', () => ({
 jest.mock('../src/db/repositories/assessmentsRepository', () => ({
   ...jest.requireActual('../src/db/repositories/assessmentsRepository'),
   assessmentsRepository: {
-    getAssessments: jest.fn(),
+    latestLetterResult: jest.fn(),
   },
 }));
 
@@ -56,7 +56,7 @@ describe('LetterTrackerScreen Plan 5 behavior', () => {
       refreshSyncStatus,
       triggerBackgroundSync,
     });
-    assessmentsRepository.getAssessments.mockResolvedValue([]);
+    assessmentsRepository.latestLetterResult.mockResolvedValue(null);
     masteryRepository.getLetterMastery.mockResolvedValue([]);
     masteryRepository.saveLetterMasteryRecord.mockResolvedValue(true);
     masteryRepository.updateLetterMasteryRecord.mockResolvedValue(true);

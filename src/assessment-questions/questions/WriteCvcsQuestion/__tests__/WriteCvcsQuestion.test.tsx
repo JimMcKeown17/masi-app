@@ -156,6 +156,8 @@ describe('WriteCvcsQuestion — itemSet override', () => {
         instructions="."
         itemSet={{
           item_set_id: 'bad@1.en',
+          question_code: 'bad',
+          language: 'en',
           question_version: '1',
           words: [{ item_key: 'k', word: 'foo', letters: [] }],
         }}

@@ -47,7 +47,7 @@ describe('local row versions', () => {
       }
     }
     expect(versionedTables.sort()).toEqual([...VERSIONED_TABLE_NAMES].sort());
-    expect(await db.getFirstAsync('pragma user_version')).toEqual({ user_version: 14 });
+    expect(await db.getFirstAsync('pragma user_version')).toEqual({ user_version: 15 });
     await runMigrations(db);
     expect(await db.getAllAsync('pragma foreign_key_check')).toEqual([]);
   });
@@ -134,7 +134,7 @@ test('v13 upgrade preserves existing content and queued payloads and defaults ex
     const before = await db.getFirstAsync("select * from children where id = 'child-1'");
     const outboxBefore = await db.getAllAsync('select * from sync_outbox');
     await runMigrations(db);
-    expect(await db.getFirstAsync('pragma user_version')).toEqual({ user_version: 14 });
+    expect(await db.getFirstAsync('pragma user_version')).toEqual({ user_version: 15 });
     expect(await db.getFirstAsync("select * from children where id = 'child-1'"))
       .toEqual({ ...before, row_version: 1 });
     expect(await db.getAllAsync('select * from sync_outbox')).toEqual(outboxBefore);

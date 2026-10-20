@@ -10,15 +10,9 @@ import { useFocusEffect } from '@react-navigation/native';
 import { useAuth } from '../../context/AuthContext';
 import { colors, spacing } from '../../constants/colors';
 
-import { LETTER_SETS, WORD_SETS } from '../../constants/egraConstants';
-import { normalizeLanguageKey } from '../../utils/letterMastery';
-import { resolveAssessmentRoute } from '../../utils/assessmentRouting';
+import { CURRENT_ITEM_SETS } from '../../assessment-questions';
+import { languageCodeForHomeLanguage, STANDALONE_TESTS } from '../../utils/assessmentRegistry';
 import LetterMasteryPanel from '../../components/assessment/LetterMasteryPanel';
-
-const ASSESSMENT_TYPES = [
-  { key: 'letter_egra', label: 'Letter Sound', description: 'EGRA letter sound recognition' },
-  { key: 'word_egra', label: 'Word Reading', description: 'EGRA word reading fluency' },
-];
 
 function formatDate(dateString) {
   const [y, m, d] = dateString.split('-').map(Number);
@@ -43,58 +37,40 @@ export default function ChildResultsScreen({ navigation, route }) {
   const [latestByType, setLatestByType] = useState({});
   const launchingRef = useRef(false);
 
-  const langKey = normalizeLanguageKey(classItem?.home_language);
+  const languageCode = languageCodeForHomeLanguage(classItem?.home_language);
 
-  const handleRunAssessment = async (assessmentType) => {
-    const sets = assessmentType === 'word_egra' ? WORD_SETS : LETTER_SETS;
-    const itemSet = sets[langKey];
-    if (!itemSet) {
-      navigation.navigate('AssessmentChildSelect', { assessmentType });
-      return;
-    }
+  const handleRunAssessment = (testCode) => {
     if (launchingRef.current) return;
     launchingRef.current = true;
-    try {
-      const [{ screenName, captureMode }, attemptCount] = await Promise.all([
-        resolveAssessmentRoute(),
-        assessmentsRepository.countAssessments({
-          userId: user.id,
-          childId: child.id,
-          assessmentType,
-        }),
-      ]);
-      navigation.navigate(screenName, {
-        child,
-        letterSet: itemSet,
-        attemptNumber: attemptCount + 1,
-        assessmentType,
-        captureMode,
-      });
-    } finally {
-      launchingRef.current = false;
+    if (languageCode === null || !CURRENT_ITEM_SETS[testCode]?.[languageCode]) {
+      navigation.navigate('AssessmentChildSelect', { testCode });
+      return;
     }
+    navigation.navigate('StandaloneTest', { testCode, child, languageCode });
   };
 
   useFocusEffect(
     useCallback(() => {
+      launchingRef.current = false;
       (async () => {
-        const all = await assessmentsRepository.getAssessments({
+        const all = await assessmentsRepository.getQuestionResults({
           userId: user.id,
           childId: child.id,
+          questionCodes: STANDALONE_TESTS.map(test => test.code),
         });
         const byType = {};
         for (const a of all) {
           if (a.child_id !== child.id) continue;
-          const type = a.assessment_type || 'letter_egra';
+          const type = a.question_code;
           const prev = byType[type];
-          if (!prev || a.date_assessed > prev.date_assessed ||
-              (a.date_assessed === prev.date_assessed && a.created_at > prev.created_at)) {
+          if (!prev || a.assessment_date > prev.assessment_date ||
+              (a.assessment_date === prev.assessment_date && a.created_at > prev.created_at)) {
             byType[type] = a;
           }
         }
         setLatestByType(byType);
       })();
-    }, [child.id, user.id])
+    }, [assessmentsRepository, child.id, user.id])
   );
 
   return (
@@ -105,40 +81,41 @@ export default function ChildResultsScreen({ navigation, route }) {
         Current reading level: {child.reading_level || 'Not set'}
       </Text>
 
-      {ASSESSMENT_TYPES.map(({ key, label, description }) => {
-        const assessment = latestByType[key];
+      {STANDALONE_TESTS.map(({ code, title }) => {
+        const assessment = latestByType[code];
+        const accuracy = assessment?.derived?.percent;
 
         return (
-          <SurfaceCard key={key} style={styles.card}>
-            <Text variant="titleMedium" style={styles.cardTitle}>{label}</Text>
-            <Text variant="bodySmall" style={styles.cardDescription}>{description}</Text>
+          <SurfaceCard key={code} style={styles.card}>
+            <Text variant="titleMedium" style={styles.cardTitle}>{title}</Text>
+            <Text variant="bodySmall" style={styles.cardDescription}>{code === 'letter_sounds' ? '60-second letter sound test' : '60-second word reading test'}</Text>
 
             {assessment ? (
               <View style={styles.scoreSection}>
                 <View style={styles.scoreRow}>
-                  <View style={[styles.accuracyBadge, { backgroundColor: getFeedbackColor(assessment.accuracy) }]}>
-                    <Text style={styles.accuracyText}>{assessment.accuracy}%</Text>
+                  <View style={[styles.accuracyBadge, { backgroundColor: getFeedbackColor(accuracy) }]}>
+                    <Text style={styles.accuracyText}>{accuracy != null ? `${accuracy}%` : assessment.score}</Text>
                   </View>
                   <View style={styles.scoreDetails}>
                     <Text variant="bodyMedium" style={styles.scoreLabel}>
-                      {assessment.correct_responses} / {assessment.letters_attempted} correct
+                      {assessment.score} / {assessment.total_items} correct
                     </Text>
                     <Text variant="bodySmall" style={styles.dateText}>
-                      {formatDate(assessment.date_assessed)} - Attempt #{assessment.attempt_number}
+                      {formatDate(assessment.assessment_date)}
                     </Text>
                   </View>
                 </View>
 
-                <View style={styles.cardButtons}>
+                {!assessment.battery_run_id && <View style={styles.cardButtons}>
                   <BrandButton size="md"
                     variant="secondary"
                     onPress={() => navigation.navigate('AssessmentDetail', {
-                      assessment,
+                      assessmentId: assessment.id,
                       childName,
                     })}
                     label="View detail"
                   />
-                </View>
+                </View>}
               </View>
             ) : (
               <View style={styles.notAssessed}>
@@ -147,7 +124,7 @@ export default function ChildResultsScreen({ navigation, route }) {
                 </Text>
                 <BrandButton size="md"
                   variant="primary"
-                  onPress={() => handleRunAssessment(key)}
+                  onPress={() => handleRunAssessment(code)}
                   style={styles.runButton}
                   label="Run assessment"
                 />

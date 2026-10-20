@@ -162,6 +162,8 @@ describe('ReadSentencesQuestion — itemSet override', () => {
     const onComplete = jest.fn();
     const goodOverride = {
       item_set_id: 'custom@1.0.en',
+      question_code: 'custom',
+      language: 'en',
       question_version: '1.0',
       sentences: [
         {

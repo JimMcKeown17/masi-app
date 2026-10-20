@@ -69,62 +69,22 @@ const seedPendingClass = async (db, overrides = {}) => {
   return payload;
 };
 
-const seedAssessmentItems = async (db, itemIds = [
+const seedTimeEntries = async (db, itemIds = [
   '00000000-0000-0000-0000-000000000201',
   '00000000-0000-0000-0000-000000000202',
 ]) => {
-  await db.runAsync(`
-    insert into children (id, first_name, last_name, sync_status)
-    values ('child-auth-gate-assessment', 'Amahle', 'Dlamini', 'synced')
-  `);
-  await db.runAsync(`
-    insert into assessments (
-      id,
-      user_id,
-      child_id,
-      programme_id,
-      assessment_type,
-      assessment_date,
-      sync_status
-    )
-    values (
-      'assessment-auth-gate',
-      'user-1',
-      'child-auth-gate-assessment',
-      'programme-1',
-      'letter_sounds',
-      '2026-05-25',
-      'synced'
-    )
-  `);
-
-  for (const [index, itemId] of itemIds.entries()) {
+  for (const itemId of itemIds) {
     const item = {
       id: itemId,
-      assessment_id: 'assessment-auth-gate',
-      item_key: `letter-${index + 1}`,
-      prompt: String.fromCharCode(97 + index),
-      response: String.fromCharCode(97 + index),
-      is_correct: 1,
-      position: index,
-      metadata: '{}',
+      user_id: 'user-1',
+      sign_in_time: '2026-05-25T08:00:00.000Z',
     };
     await db.runAsync(`
-      insert into assessment_items (
-        id,
-        assessment_id,
-        item_key,
-        prompt,
-        response,
-        is_correct,
-        position,
-        metadata,
-        sync_status
-      )
-      values (?, ?, ?, ?, ?, ?, ?, ?, 'pending')
-    `, item.id, item.assessment_id, item.item_key, item.prompt, item.response, item.is_correct, item.position, item.metadata);
+      insert into time_entries (id, user_id, sign_in_time, sync_status)
+      values (?, ?, ?, 'pending')
+    `, item.id, item.user_id, item.sign_in_time);
     await createSyncOutboxRepository({ database: db }).enqueue({
-      tableName: 'assessment_items',
+      tableName: 'time_entries',
       recordId: item.id,
       operation: 'insert',
       payload: item,
@@ -357,8 +317,8 @@ describe('SQLite outbox auth gate', () => {
   });
 
   test('a mid-pass user switch aborts a batch before upload and restores every row to pending', async () => {
-    const itemIds = await seedAssessmentItems(db);
-    await db.runAsync("update sync_outbox set owner_user_id = 'ea-a' where table_name = 'assessment_items'");
+    const itemIds = await seedTimeEntries(db);
+    await db.runAsync("update sync_outbox set owner_user_id = 'ea-a' where table_name = 'time_entries'");
     await setFileOwner(db, 'ea-a');
     const { supabaseClient, calls } = createSupabaseMock();
     const getAuthSession = jest.fn()
@@ -378,7 +338,7 @@ describe('SQLite outbox auth gate', () => {
     expect(calls).toEqual([]);
     expect(result).toEqual(expect.objectContaining({ totalSynced: 0, totalFailed: 0 }));
     const rows = await Promise.all(
-      itemIds.map((itemId) => outboxRepository.getById(`assessment_items:${itemId}:insert`))
+      itemIds.map((itemId) => outboxRepository.getById(`time_entries:${itemId}:insert`))
     );
     expect(rows).toHaveLength(2);
     expect(rows.every((row) => row.status === 'pending')).toBe(true);
@@ -457,13 +417,13 @@ describe('SQLite outbox auth gate', () => {
   });
 
   test('batched 42501s flow through the same downgrade and marker logic per row', async () => {
-    const itemIds = await seedAssessmentItems(db);
+    const itemIds = await seedTimeEntries(db);
     const { supabaseClient } = createSupabaseMock({
       upsertResults: {
-        'assessment_items:batch': {
+        'time_entries:batch': {
           error: { code: '42501', message: 'RLS denied batch' },
         },
-        assessment_items: {
+        time_entries: {
           error: { code: '42501', message: 'RLS denied item' },
         },
       },
@@ -479,7 +439,7 @@ describe('SQLite outbox auth gate', () => {
 
     const result = await engine.syncAll();
     const rows = await Promise.all(
-      itemIds.map((itemId) => outboxRepository.getById(`assessment_items:${itemId}:insert`))
+      itemIds.map((itemId) => outboxRepository.getById(`time_entries:${itemId}:insert`))
     );
 
     expect(result).toEqual(expect.objectContaining({
@@ -493,7 +453,7 @@ describe('SQLite outbox auth gate', () => {
     expect(rows.every((row) => row.next_retry_at === null)).toBe(true);
     const domainRows = await db.getAllAsync(`
       select sync_status, last_sync_error
-      from assessment_items
+      from time_entries
       order by id
     `);
     expect(domainRows).toEqual([

@@ -168,7 +168,7 @@ Before a mobile session-history pull can ship:
 
 1. Domain writes are local-first. A user-facing write must persist the domain row and enqueue the matching `sync_outbox` row in the same SQLite transaction.
 2. RLS-required ownership and relationship columns must be present before enqueue. Missing values should fail locally through repository guards, not hours later as terminal sync failures.
-3. Mobile inserts and create-or-update upserts require SELECT visibility. Supabase/PostgREST upsert checks row visibility while resolving conflicts, so policies must account for the exact operation shape, not only `INSERT WITH CHECK`. Edits to `time_entries` and every table in `ARCHIVE_SERVER_COLUMNS`, plus lifecycle archives and restores, are acknowledged UPDATEs rather than upserts. Ordinary edits exclude the table's lifecycle fields; `letter_mastery.deleted_at` is the explicit reactivation exception. See Operation Semantics.
+3. Generic mobile inserts and create-or-update upserts require SELECT visibility. Assessment families and battery runs instead use the exclusive RPC boundaries below, with explicit new-write authority and committed-replay identity checks. Supabase/PostgREST upsert checks row visibility while resolving conflicts, so policies must account for the exact operation shape, not only `INSERT WITH CHECK`. Edits to `time_entries` and every table in `ARCHIVE_SERVER_COLUMNS`, plus lifecycle archives and restores, are acknowledged UPDATEs rather than upserts. Ordinary edits exclude the table's lifecycle fields; `letter_mastery.deleted_at` is the explicit reactivation exception. See Operation Semantics.
 4. Parent rows that create later access evidence need direct owner SELECT fallback. This is why `children`, `classes`, `groups`, and `sessions` keep direct creator/user visibility in addition to relationship-derived policies.
 5. Relationship tables that grant access are not generic mutable rows. `child_ea_assignments`, `class_ea_assignments`, and `group_ea_assignments` have immutable identity columns protected by database triggers. Insert retries must not become identity-changing updates.
 6. Insert and archive ordering differ. Insert can create access evidence early; archive must keep access-granting assignment rows alive until protected cleanup rows have synced.
@@ -185,16 +185,111 @@ Before a mobile session-history pull can ship:
 
 | Operation shape | Tables | Server call | RLS implication |
 | --- | --- | --- | --- |
-| Default outbox push | Most synced domain tables | `upsert(payload, { onConflict: 'id' })` | Needs both write permission and SELECT visibility for upsert. |
+| Complete assessment family (`insert`) | `assessments` plus all `assessment_items` | `rpc('submit_assessment', { p_assessment, p_items })`; only `inserted` or `already_present` acknowledges the family | Exclusive authenticated write boundary; new ids require child/programme write authority, committed ids require matching identity and item-id set. No per-item DML or generic fallback. |
+| Battery header (`insert` or `update`) | `battery_runs` | `rpc('save_battery_run', { p_run })` with the full header; only `inserted`, `updated` or `unchanged` acknowledges it | New ids require child/programme authority and, when supplied, class membership at `started_at`. Existing owned runs use immutable identity and forward-only status checks, without renewed assignment checks. |
+| Default outbox push | Other synced domain tables without a special operation below | `upsert(payload, { onConflict: 'id' })` | Needs both write permission and SELECT visibility for upsert. |
 | Acknowledged edit | `time_entries` and every table in `ARCHIVE_SERVER_COLUMNS` when `operation === 'update'` | `update(editPatch).eq('id', serverId).select('id')`, where `serverId` is the payload id after `buildSyncPayload` (the re-derived deterministic id for `letter_mastery`), falling back to `record_id`. `editPatch` excludes `id`, `created_by`, `created_at`, `user_id`, and `archived_by_user_id`, plus the table's archive/restore columns. `letter_mastery.deleted_at` remains writable because reactivation uses update; see the exceptions below. Success requires exactly the requested id; zero or ambiguous acknowledgments fail as `UPDATE_NOT_APPLIED`. An edit is deferred, not failed, while its own `insert` is still owed (pending, failed, or in flight). | Exercises UPDATE policy without asking for INSERT permission: PostgreSQL applies INSERT `WITH CHECK` to every upsert row, even a conflicting one, so these edits never go as upserts. S1 (`npm run verify:upload-contract:postgres`) proved the original five-table permission contract; the additional lifecycle-table routing has real-SQLite/synthetic-server regression coverage, not new PostgreSQL or hosted evidence. `class_grouping_state` is the exception and stays an upsert, because its `update` means create-or-update and its INSERT policy is authorization-based. A zero-row result stays retriable only while the row's own insert or a direct/membership-mediated authorization grant is still owed locally; otherwise it is terminal. |
 | Lifecycle archive | `classes`, `children`, assignment/enrollment/membership tables, `grouping_versions`, `groups`, `letter_mastery` | `update(lifecyclePatch).eq('id', recordId).select('id')`. `ARCHIVE_SERVER_COLUMNS` narrows even a legacy full-snapshot outbox row to its table's lifecycle fields plus the claimed `row_version` on versioned tables. Success requires exactly the requested id in the returned rows; zero or ambiguous acknowledgments fail terminal as `ARCHIVE_NOT_APPLIED`. | Exercises UPDATE policy only. It must never create a missing row, run INSERT `WITH CHECK` on a partial payload, rewrite identity columns, or claim success without an exact server acknowledgment. |
 | Lifecycle restore | `group_ea_assignments` (reactivation in `groupsRepository.createMissingGroupAssignment` and `groupEaAssignmentsRepository.save`); the engine accepts `restore` for any table in `ARCHIVE_SERVER_COLUMNS` | The same lifecycle UPDATE as an archive, with the same `ARCHIVE_SERVER_COLUMNS` allowlist (for `group_ea_assignments`: `{ unassigned_at: null, handover_reason: null }`). Zero or ambiguous acknowledgments fail terminal as `RESTORE_NOT_APPLIED`. Pushed at the table's `ARCHIVE_PUSH_ORDER` position, which still precedes dependent inserts (`group_ea_assignments` 6, `child_group_memberships` inserts 11). | Archive and restore share one outbox slot per record: `<table>:<record>:lifecycle`; the slot's `operation` and payload are the latest intent. Replacing even an in-flight slot resets it to pending and changes `updated_at`, so the stale request's success, retriable-failure, or terminal-failure finalizer misses its compare-and-swap and `restorePendingAfterStaleFinalize` preserves the replacement. Reactivation always queues restore and, when its insert is still owed, also re-queues that active insert payload; lifecycle UPDATEs wait for their own owed insert. Enqueue deletes pending/failed/terminal legacy `:archive` and `:restore` rows. A legacy row already in flight is left to settle, and the slot waits while a legacy per-operation row remains pending, failed, or in flight, so an older intent cannot run after the slot. Send-time versions fence late arrivals for the 11 versioned tables; see "Row versions (upload contract)". Letter-mastery ordering remains with D1 in the mastery re-key. |
-| Batched upsert | `assessment_items`, `session_attendees`, plus insert operations for `child_programme_enrollments`, `children`, `letter_mastery`, and `time_entries` (the three assignment tables batch their inserts too; see the next row) | `upsert(payloads, { onConflict: 'id' })` in batches of at most 100. A returned or thrown batch failure may spend at most 25 per-record fallback attempts across the entire pass, with concurrency at most five. | Parent row (`assessments` / `children` / `sessions`) must be visible/writable first for tables with parent FKs. Unattempted fallback rows return to pending without failure or retry inflation. `children` has no pre-push hook. Enrollment payloads are normalized to deterministic active-pair ids before array dispatch. Update operations for `time_entries` and every lifecycle-bearing table never enter a batch. In particular, enrollment updates cannot share a batch with inserts and replay `ended_at`. |
+| Batched upsert | `session_attendees`, plus insert operations for `child_programme_enrollments`, `children`, `letter_mastery`, and `time_entries` (the three assignment tables batch their inserts too; see the next row) | `upsert(payloads, { onConflict: 'id' })` in batches of at most 100. A returned or thrown batch failure may spend at most 25 per-record fallback attempts across the entire pass, with concurrency at most five. | Parent row (`children` / `sessions`) must be visible/writable first for tables with parent FKs. Unattempted fallback rows return to pending without failure or retry inflation. `children` has no pre-push hook. Enrollment payloads are normalized to deterministic active-pair ids before array dispatch. Update operations for `time_entries` and every lifecycle-bearing table never enter a batch. In particular, enrollment updates cannot share a batch with inserts and replay `ended_at`. |
 | Immutable assignment insert push | `child_ea_assignments`, `class_ea_assignments`, `group_ea_assignments` when `operation === 'insert'` | One ready row uses `upsert(payload, { onConflict: 'id', ignoreDuplicates: true })`; consecutive ready rows use the same operation with `payloads`, bounded batch size, and bounded per-record fallback. | Duplicate insert retry must be insert-or-ignore, not update-capable upsert, because identity triggers reject changed identity/timestamp columns. Full payloads are normalized to deterministic active-pair ids before dispatch. |
 | Assignment archive/update | Same assignment tables | Archive and restore use the lifecycle-update contracts above; ordinary updates use acknowledged UPDATE by id with lifecycle fields excluded. | Lifecycle patches contain `unassigned_at` / `handover_reason` plus the claimed `row_version`; identity columns remain immutable. |
 | No-history child delete | `children` hard delete | RPC `delete_child_if_no_history(p_child_id)` | Local delete eligibility comes from the queued child INSERT, never the current domain `sync_status` (which an edit resets). See the no-history deletion rules below. Direct mobile child DELETE is blocked; history rows require archive instead. `20260712202409_masi_idempotent_child_delete.sql` makes a wholly absent child return `true` before authorization, so a retry after server success and pre-finalization crash is idempotent. Present but unauthorized children still raise `42501`; history-blocked children still return `false`. The migration was applied and verified against `masi-app-sqlite` on 2026-07-12. |
 | Delivery-history parent page (CAP-004) | Inbound `sessions` history (`sessionHistoryPull`) | `get_delivery_history_page(programme, window_start, page_size, after_updated_at, after_id, overlap_seconds)`; page size 1–200; overlap 0–600 s; cursor wholly null or wholly populated; **ascending `(updated_at, id)`** keyset over the server-owned family timestamp | `SECURITY DEFINER` RPC. The owner arm and the historical-delivery arm are each ordered and limited before the union, so page work is bounded by the arms, not by remaining history. Class/group/creator arms are absent. `p_programme_id` is a partition key, not a grant. The client replays `updated_at` as the raw PostgREST string, never through a `Date`, and passes a 120 s overlap only on the first page of a delta that resumes from a completed cursor. Replaces `get_delivery_history_session_page`, which the same migration drops. |
 | Delivery-history attendee page (CAP-004) | Inbound `session_attendees` plus the history-reference projection | `get_delivery_history_attendee_page(session_ids[1..200], page_size, after_session_id, after_attendee_id)`; ascending `(session_id, id)` keyset | Re-derives `private.can_read_session` per requested id at call time. Returns attendee columns plus `child_first_name`, `child_last_name` and `child_preferred_name` only: the history reference projection. Nothing else from `children` crosses this boundary. |
+
+## Assessment results: one complete family per write
+
+Implemented in Assessment Results Plan 1, Tasks 6–12, on `feat/assessment-results`.
+[ADR-0009](../docs/adr/0009-assessment-results-one-write-call-complete-families.md) records the
+boundary; the [design](../docs/superpowers/specs/2026-10-19-assessment-results-and-letter-test-design.md)
+separates upload (Plan 1), mastery confirmations (Plan 2), and history pull (Plan 3). The controller
+reported the new PostgreSQL harness GREEN, **53/53 cases**, plus all five existing harnesses GREEN
+on disposable PG17 at port 55432. Phone cutover is implemented. **Hosted application, the practice-data
+wipe, EAS builds and device gates remain Task 14, each with Jim's approval.** This is not a claim
+that the hosted schema already has the new grants or functions.
+
+**Producer and outbox family rule.** `assessmentsRepository.saveQuestionResult` saves one typed
+Question result, including a zero-item skipped result. In one SQLite transaction it resolves the
+active programme, refuses an existing assessment id (`ASSESSMENT_ALREADY_SAVED`) or an already-decided
+run/Question (`QUESTION_ALREADY_DECIDED`), validates the flat payload with `assertSubmitShape`,
+writes the parent and items as pending, and enqueues exactly one `assessments:<id>:insert` row.
+Its payload contains the parent columns and the complete `items` array. Items have no independent
+outbox rows. The writer uses `progress_check`, a null assessment window, integer score/counts,
+boolean correctness and object metadata/derived data. It does not write `items_tested` or a summary
+item. Item identity remains `assessmentItemDomainId({ assessmentId, position, isCorrect })` (ADR-0007).
+
+Dispatch takes the **claimed outbox payload snapshot**, not a fresh scan of domain rows.
+`toSubmitArgs` validates it again, splits parent/items and applies the shared allowlists in
+`src/services/syncServerColumns.js` without mutating it. A local shape failure becomes terminal
+`22023` without a network call. The legacy-programme guard also runs before either RPC and returns
+`LOCAL_ONLY_REFERENCE`. The 1,000-ready-row limit counts whole families; generic batch/fallback
+limits cannot split their items.
+
+**Server identity and replay.** `submit_assessment` requires Question version, item-set id,
+language, stopped reason and object `derived` on every family, including skipped results. It
+validates UUID/date/timestamp types, unique item ids and non-negative positions (gaps allowed),
+boolean correctness, object metadata, and `total_items === p_items.length`. New ids require current
+child write authority and an active programme assignment. An optional run must belong to the caller
+and the same child/programme; a completed or abandoned run can still receive a late Question.
+An existing assessment id is checked before current assignment authority: owner, child, programme,
+run, Question code, item-set id and the exact item-id set must match. It returns `already_present`
+without editing saved marks, or raises `MA001`. New families return `inserted`. This is an identity
+and membership check, not a comparison of every captured field. A second id for the same
+`(battery_run_id, question_code)` raises `23505`; the phone never interprets that as success.
+
+**Battery headers and order.** `batteryRunsRepository` starts runs locally with `started_here = 1`,
+`in_progress`, `progress_check` and a null window. It stores `started_at` once as an ISO string and
+sends that stored string unchanged on every write. Finalize/abandon require a locally started,
+still-open run; only `completed` has `completed_at`. Every write coalesces into the existing
+`battery_runs:<id>:insert` slot, whatever its queue status, until it is acknowledged; later writes
+use `battery_runs:<id>:update`. Both carry the full run header, without `started_here`.
+The server can insert an already-terminal header when start and finish coalesced before upload.
+On existing ids it locks the run and checks owner, child, programme, class, battery code/version,
+language and start time (`MA001` on mismatch). It advances `in_progress` to `completed`/`abandoned`,
+returns `unchanged` for a stale open write or equal terminal replay, and raises `MA002` for a
+conflicting terminal status/completion time. Only status and completion time change on finalization;
+notes remain as inserted.
+
+Push order is child/access evidence, **battery runs before assessment families**; items travel only
+inside the family. Local FK dependencies are `battery_runs → children` and
+`assessments → children, battery_runs`, with the run dependency omitted for standalone results.
+Run `class_id` is plain text locally, not an additional local FK dependency; the server validates
+its membership interval when creating the run. A failed run blocks its own Questions, not standalone
+families. Both run and assessment uploads use the existing direct/membership-mediated child grant
+evidence for `42501` retries. None of these three tables participates in send-time `row_version`.
+
+**One acknowledgement.** `finalizeSuccess` deletes the claimed outbox row only if its id,
+`updated_at` and `in_flight` status still match. Only after that delete succeeds, and no other
+outbox row remains for the record, it marks the parent and all its items synced and clears their
+errors in the **same SQLite transaction**. The item update runs before the version-stamping early
+return. A failure after deletion rolls back the outbox delete and both sync-state changes; a stale
+response cannot acknowledge a replacement payload. A replay can then succeed as `already_present`.
+
+**Error classes.** `MA001`, `MA002`, `22023` and `UNEXPECTED_RPC_RESULT` are terminal. An RPC response
+outside its explicit success set is a failure, not a silent acknowledgement. `23505` remains
+terminal and never marks assessments or runs synced. `28000` is retriable. Existing `42501`/`23503`
+local-evidence rules remain in force: pending/failed access evidence can make authority failures
+retriable. The thirty-family regression retries with `syncAll({ force: true })`, exactly like the
+manual Sync action, after the assignment succeeds.
+
+**SELECT and pull.** The migration preserves assessment/item SELECT policies (owner or child-read
+authority, with items visible through their parent). Run SELECT is owner or
+`private.current_user_can_read_child(child_id)`. Authenticated direct INSERT/UPDATE/DELETE is revoked
+for all three tables; only authenticated callers receive EXECUTE on the two RPCs. Privileged
+service-role table access remains outside the EA write contract. **No pull yet — Plan 3** owns
+assessment/run history authorization and hydration; current local readers do not establish that
+future server history scope. A zero-Question run already blocks no-history child deletion, with
+restricting server child/user/run foreign keys protecting retained history.
+
+**Server-owned change timestamps.** Migration `20261021120000_assessment_results_contract.sql`
+stamps `updated_at` on INSERT and UPDATE for `assessments`, `assessment_items`, `battery_runs` and
+`letter_mastery`. The phone never sends `updated_at` in `p_assessment`, `p_items` or `p_run`; the
+RPCs also ignore it. Capture `created_at` is preserved when supplied. These server change times are
+separate from local domain/outbox times used for queue order and compare-and-swap acknowledgement.
+The existing `letter_mastery` generic writer still sends `updated_at`, which the new trigger
+replaces; its confirmation writer/re-key belongs to Plan 2. Do not infer that Plan 1 has changed
+that writer or added a mastery pull.
 
 **No-history deletion.** `childrenRepository.deleteIfNoHistory` first checks all existing
 history guards. With history it returns `false` and `ChildrenContext.deleteChild` archives the
@@ -316,7 +411,8 @@ write cannot undo it. The counter orders one phone's sends; it does not detect s
 second writer. Before Head Office edits EA records, add the downloaded base-version comparison
 and make Head Office writes bump the version. `sessions` and `session_attendees` remain insert-only
 in the current UI; version them with saved-session editing and attendee-removal correctness.
-`assessments` and `assessment_items` belong to the immutable assessment-bundle slice.
+`assessments` and `assessment_items` use the immutable complete-family RPC; `battery_runs` uses
+its forward-only status RPC. All three remain outside the versioned-table lists.
 `letter_mastery` remains outside this rule: D1 in the mastery re-key owns correction ordering and
 is still a pilot gate. `time_entries` uses the forward-only rule below instead of a version.
 
@@ -447,6 +543,9 @@ Classification is a pure decision in `classifyError` from `(code, tableName, par
 
 | Server error | Classification | Evidence checked |
 | --- | --- | --- |
+| `MA001`, `MA002`, `22023`, `UNEXPECTED_RPC_RESULT` | Terminal; assessment/run identity conflict, terminal-status conflict, malformed family or unknown RPC acknowledgement | none; local shape failures use `22023` before any network call |
+| `23505` | Terminal; never a successful assessment/run replay | success is the RPC acknowledgement string, not a uniqueness error |
+| `28000` | Retriable | authentication can recover; no terminal family acknowledgement |
 | `MV001` | Terminal, never marked synced; reason `Server has a newer version of this record (stale_version)` | none; ordinary passes do not retry it, and the terminal local row can converge through a pull |
 | `23514` on `child_ea_assignments` / `class_ea_assignments` / `group_ea_assignments` | Terminal, reason `Immutable identity or check constraint rejected the update (23514)` | none (neither drifted identity nor a check violation is satisfiable by re-push) |
 | `23514` on any other table | Retriable (unchanged, out of #48 scope) | none |
@@ -774,8 +873,9 @@ Spec: `docs/superpowers/specs/2026-10-09-actor-lifecycle-and-mutation-ownership-
 | `child_group_memberships` | `groupsRepository.addChildToGroup`; removal/archive flows in `groupsRepository` and `childrenRepository` | Insert requires `child_id`, `group_id`, `grouping_version_id`, `created_by`; archive carries `id`, `removed_at` locally and sends `removed_at` plus the claimed `row_version` | Insert uses default upsert. Archive uses acknowledged lifecycle UPDATE by id, avoiding the INSERT-policy check that rejects partial archive upserts. | Active child write access plus group write/access | After `children`, `groups`, and group EA access evidence; archive before ending group EA assignment | `offlineSyncOutbox.test.js` exact RLS regression, acknowledged-update guard, ordering, and group ownership repair tests |
 | `sessions` | `sessionsRepository.saveSession`; inbound `sessionsRepository.saveHistoryPage` from `sessionHistoryPull` (CAP-004) | `user_id`, `programme_id` | Outbound default upsert. The server owns `updated_at` on insert and update (CAP-004 migration), and it means "family last written on the server". Inbound pages of 1–200 parents in ascending `(updated_at, id)`, persisted with the cursor in one SQLite transaction. A missing local `class_id` is stored as null | Direct `user_id = auth.uid()` SELECT fallback plus session read/write helpers. Hosted read authority is owner or any historical direct child delivery assignment; class/group/creator child visibility does not grant the diary | Outbound before `session_attendees`; after `classes` only when `class_id` exists. Inbound parents persist before dependent attendee pages; no history absence reconcile | `sessionsRepository.test.js`; `offlineSyncOutbox.test.js` session-before-attendees lock; `sqlitePlan1Migrations.test.js`; `historyAuthorizationPostgresHarness.test.js`; disposable and hosted PostgreSQL actor/page/plan probes; authenticated/anonymous PostgREST probes |
 | `session_attendees` | `sessionsRepository.saveSession`; inbound `saveHistoryPage` (CAP-004) | `session_id`, `child_id`, `attendance_status` | Outbound batched upsert (onConflict=id) with per-record fallback. Any attendee write re-stamps its parent (`touch_session_family`), so late attendees re-surface the family in the next delta. Inbound pages keyed `(session_id, id)`. A missing local `group_id` is stored as null. A child absent locally becomes a history reference child | Writes require parent session ownership plus active child/group/class access. Hosted historical SELECT follows the authorized parent; the accepted aggregate returns the complete attendee family | Outbound after `sessions`, `children`, and `groups` when `group_id` exists. Inbound after durable parent page; no history absence reconcile | `sessionsRepository.test.js`; `offlineSyncOutbox.test.js`; `sqlitePlan1Migrations.test.js`; disposable and hosted PostgreSQL complete-family actor matrices |
-| `assessments` | `assessmentsRepository.saveAssessment` | `user_id`, `child_id`, `programme_id` | Default upsert | Direct owner plus `private.current_user_can_read_child`; writes require active child/programme access | After `children`; before `assessment_items` | `assessmentsRepository.test.js`; `sqlitePlan1Migrations.test.js`; `captureModeMigration.test.js` (nullable `capture_mode` — see note below) |
-| `assessment_items` | `assessmentsRepository.saveAssessment` item producer | `assessment_id`, `item_key`, `position` / generated UUID `id` | Batched upsert with per-record fallback | Parent assessment visibility/write access | After `assessments` | `offlineSyncOutbox.test.js` batch and fallback coverage |
+| `assessments` | `assessmentsRepository.saveQuestionResult` | Owner, child, programme, Question/version, item set, language, stop reason, object derived, exact item count; optional run | `submit_assessment` only: `inserted` / `already_present`; identity or item-set membership mismatch `MA001`, malformed `22023`, duplicate run/Question `23505` never success. One family outbox/ack transaction; no pull yet — Plan 3 | Existing owner or child-read SELECT. New writes require active child/programme authority; committed retries check identity before current authority. Direct EA DML revoked | After `children` and optional `battery_runs`; items inside the same RPC, no per-row push | `assessmentsRepository.questionResults.test.js`; `assessmentFamilySync.test.js`; `assessmentFamilyRpcError.test.js`; `assessment-results-postgres-harness.cjs` |
+| `assessment_items` | `saveQuestionResult`, inside its parent transaction | Deterministic `id`, parent id, unique non-negative `position`, item key, boolean correctness, object metadata | Only `p_items` inside `submit_assessment`; no independent outbox row/upsert/fallback. Whole family is acknowledged together; no pull yet — Plan 3 | Existing parent-based SELECT; direct EA DML revoked | Same server and local acknowledgement transactions as parent; absent from `PUSH_ORDER` and batching | `assessmentFamilySync.test.js` complete 61-item send and injected acknowledgement rollback; repository and PostgreSQL family tests |
+| `battery_runs` | `batteryRunsRepository.startRun` / `finalizeRun` / `abandonRun` | Owner, child, programme, optional class, battery code/version, language and stored start time are replay identity | Full-header `save_battery_run`: `inserted` / `updated` / `unchanged`; identity `MA001`, terminal conflict `MA002`, malformed `22023`, `23505` never success; `28000` retriable. No row version; no pull yet — Plan 3 | Owner or child-read SELECT; new writes require child/programme authority and optional class membership at start; owned existing runs do not renew assignment checks | After `children`, before linked assessments; optional class is not a local FK dependency | `batteryRunsRepository.test.js`; `assessmentFamilySync.test.js`; `assessment-results-postgres-harness.cjs` |
 | `letter_mastery` | `masteryRepository.saveLetterMasteryRecord` | `user_id`, `child_id`, `programme_id`, `letter`, `language`, `source` | Inserts batch as upserts; edits use acknowledged UPDATE by the re-derived deterministic id and are excluded from batching. **Prevention, not reconciliation.** New rows get a **deterministic logical-key id** (`letterMasteryDomainId`), and `buildSyncPayload` maps **every** `letter_mastery` push to that id. Same record means the same id on every device/install, so insert-by-id is idempotent. `saveLetterMasteryRecord` returns the canonical id so callers track the persisted row; toggling off is also resolved by logical key. A soft-delete/edit whose insert is still queued coalesces into that insert; once synced, soft-delete uses an acknowledged lifecycle UPDATE carrying only `deleted_at`. **Gate completed 2026-07-14:** all 13 staging rows already matched today's deterministic formula. The enduring rollout rule is that no active old build may mint obsolete identities. | Direct owner plus `private.current_user_can_read_child`; writes require active child/programme access | After `children` | `masteryRepository.test.js`; `letterMasterySync.test.js`; `sqlitePlan1Migrations.test.js`; `offlineSyncOutbox.test.js` batch coverage; `offlineSyncUpdateById.test.js` deterministic-id and pending-grant coverage |
 
 Support incident transport uses the device-level `masi:device:installId` (one persisted UUID per
@@ -833,7 +933,7 @@ SQLite or mocked upload tests.
 >
 > The later state-machine slice must, in one migration applied **before** wiring client writes: drop both guard policies, add real per-state/per-group authorization, add the columns to the producer set and the push allowlist. Writing a column the server lacks would `PGRST204`, so the Supabase migration must land before the client begins sending these fields.
 
-> **`assessments.capture_mode` (additive, nullable, IN the push payload).** SQLite migration v4 (`assessments_capture_mode`) adds a nullable `capture_mode` TEXT column (with a `IS NULL OR IN ('grid','sequential')` CHECK where SQLite supports it on `ADD COLUMN`); Supabase migration `20260618120000_masi_assessments_capture_mode` adds the same column + a named CHECK constraint + an index. **No DB default** — `NULL` = legacy/grid captured before the column existed (a default would mislabel grid rows written by older field apps and corrupt the capture-mode A/B). Unlike the `sessions` forward-prep columns above, this column **is** written by the producer and **is** in the push allowlist: `saveAssessment` stamps the client-resolved mode, and it joins both `ASSESSMENT_COLUMNS` (local persist) and `SERVER_COLUMNS.assessments` (push). RLS authority, SELECT visibility, and outbox ordering are **unchanged** (additive column, no policy change). The per-attempt `correction_count` is **not** a column — it rides in the existing `__summary__` `assessment_items.metadata` JSON via `buildSummary`. Backwards-compat: older field apps that omit `capture_mode` upsert fine (nullable, no default); the Supabase migration must land before the new app ships (`PGRST204` otherwise). Tests: `__tests__/captureModeMigration.test.js` (real-SQLite migration + persistence + CHECK + `SERVER_COLUMNS` push-allowlist pin).
+> **`assessments.capture_mode` (nullable, included in the family payload).** The historical v4 SQLite and `20260618120000_masi_assessments_capture_mode` server migrations retain the nullable `grid`/`sequential` column without a default. Current standalone letter and word tests always pass `sequential` to `saveQuestionResult`; there is no device capture-mode setting or old summary-item writer. Capture corrections live in the result's `derived.correction_count`, not a synthetic item. v15 clears the old local practice families before this writer is used (see the Task 7 build-log entry). `captureModeMigration.test.js` is retained to test the column and allowlist; it does not restore the deleted capture stack. Hosted deployment of the new family migration is a Task 14 gate, not an old-client upsert compatibility claim.
 
 ## Future RLS Audit Checklist
 
@@ -861,14 +961,18 @@ Use this checklist instead of a static "does the table have policies" audit.
 
 - `src/session/signedInHandle.js`, `handleDataClient.js`, `handleServices.js`, `handleRequestQueue.js`, `staleActor.js`
 - `src/context/AuthContext.js`, `src/context/SignedInEAContext.js`, `src/services/authSessionStorage.js`, `src/services/authRequestFetch.js`
-- `src/services/offlineSync.js`
+- `src/services/offlineSync.js`, `assessmentFamilyPayload.js`, `syncServerColumns.js`
 - `src/db/repositories/domainRepositoryUtils.js`
 - `src/db/repositories/childrenRepository.js`
 - `src/db/repositories/classesRepository.js`
 - `src/db/repositories/classOnboardingRepository.js`
 - `src/db/repositories/groupsRepository.js`
 - `src/db/repositories/sessionsRepository.js`
-- `src/db/repositories/assessmentsRepository.js`
+- `src/db/repositories/assessmentsRepository.js`, `batteryRunsRepository.js`
+- `src/db/migrations.js` v15
+- `supabase/migrations/20261021120000_assessment_results_contract.sql`
+- `scripts/assessment-results-postgres-harness.cjs`
+- `__tests__/assessmentFamilySync.test.js`, `__tests__/assessmentFamilyRpcError.test.js`
 - `src/db/repositories/masteryRepository.js`
 - `supabase/migrations/20260522103000_masi_session_upsert_visibility.sql`
 - `supabase/migrations/20260525231506_masi_rls_contract_cleanup.sql`

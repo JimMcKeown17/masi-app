@@ -55,8 +55,9 @@ These horizons summarize the ordered register below. They are not a second backl
    backend/app/runtime/protocol provenance.
 5. **P0: settle the upload contract and local-database ownership before the candidate build.**
    U1's bounded requests and send-order protection shipped in #77 (2026-10-19), applied to
-   `masi-app-sqlite`, with D2/D3 passed on the Galaxy A03s (§2). Upload the assessment family
-   all-or-nothing and complete D1 with the mastery re-key. Multi-writer stale-edit rejection (U3) is deferred until Head Office
+   `masi-app-sqlite`, with D2/D3 passed on the Galaxy A03s (§2). Assessment-family upload is built and locally
+   verified in Assessment Results Plan 1 (§1); hosted apply/build/device gates remain Task 14.
+   Complete D1 with the mastery re-key (Assessment Results Plan 2). Multi-writer stale-edit rejection (U3) is deferred until Head Office
    edits EA records. Duplicate-proof submit and one database per EA are built (Plan 2; its
    sign-out UX is Plan 3).
    The newer-schema guard and minimum revocation tooling are built, and the revocation migration is
@@ -74,8 +75,8 @@ These horizons summarize the ordered register below. They are not a second backl
 9. **P2: settle Programme/group authority, then build group-centred sessions in contract order.**
    Access grants and identity,
    then RLS/sync, then UI and durable session drafts.
-10. **P3: resume WelaPLUS deliberately.** Wire the unwired Question island on `main` without
-   importing stale design or identity contracts.
+10. **P3: resume WelaPLUS deliberately.** Build the remaining Battery Run host and artifact flow
+   on the integrated Question/result foundation (§8), without importing stale identity contracts.
 11. **P4: polish, hygiene, and longer-horizon scale work.**
 
 The deferred Head Office importer is not in the active execution order. It begins with read-only
@@ -353,50 +354,53 @@ correctly; the missing contract is inbound hydration.
 - [x] Reshape the parent page RPC so each grant arm yields ordered, bounded candidates before the
   merge, and extend the PostgreSQL harness with dense fixtures. `get_delivery_history_page`
   replaces it; with 125,007 sessions, pages read about 0.1% of a full scan. Surfaced by the same review; no field impact today.
-- [ ] **Server-stamped `updated_at` on insert for the assessment family, before its pull.** Only
-  `sessions` and `session_attendees` are stamped `before insert or update` today
-  (`20260925120000`). `assessments`, `assessment_items`, `letter_mastery`, and every other domain
-  table set the time on update only, so an insert keeps the phone clock and can land behind
-  another device's cursor ([Z1](./zazi-sync-lessons-for-masi-2026-10-08.md)). First audit client
-  code that relies on the phone-sent value. Extend to any other table before it gets a delta.
-- [ ] **Cheap page apply before the assessment pull copies the session shape.** Assessments carry
-  up to 61 items. Batch the per-page existence and pending-local lookups, skip rows identical to
+- [x] **Server-stamped `updated_at` for assessment uploads.** Built in
+  `20261021120000_assessment_results_contract.sql`: INSERT/UPDATE triggers on `assessments`,
+  `assessment_items`, `battery_runs` and `letter_mastery`. The phone strips the timestamp from
+  assessment/run RPC payloads; the existing mastery writer still sends it and the trigger overrides
+  it. See [ADR-0009](../docs/adr/0009-assessment-results-one-write-call-complete-families.md) and the
+  [contract map](./rls-sync-contract-map.md). Controller disposable-PG17 verification is GREEN;
+  hosted migration remains Assessment Results Task 14, not completed by this checkbox.
+- [ ] Audit other tables' insert timestamps before adding a delta pull
+  ([Z1](./zazi-sync-lessons-for-masi-2026-10-08.md)); Assessment Results Plan 3 still owns the
+  assessment/run/mastery pull and its cursor/re-walk behavior.
+- [ ] **Cheap page apply before the assessment pull copies the session shape.** Assessment families have
+  variable item counts. Batch the per-page existence and pending-local lookups, skip rows identical to
   the stored row, and reuse prepared statements. Keep one transaction per page together with its
   cursor. Zazi went from 300 s to 46 s on a Galaxy A03s this way ([Z2](./zazi-sync-lessons-for-masi-2026-10-08.md);
   CAP-004 plan Task 9 Step 4e).
-- [ ] Add authenticated, Programme/current-year-class-scoped pull for `assessments` and
-  `assessment_items`.
-- [ ] **Upload the assessment family all-or-nothing ([U2](./zazi-sync-lessons-for-masi-2026-10-08.md)).**
-  - **Codex round 2:** the bundle RPC must be the *exclusive* EA insertion boundary. Revoke direct
-    INSERT on `assessments` and `assessment_items`.
-  - Dispatch the family once, regardless of the 1,000-row ready limit, with no generic per-row
-    fallback.
-  - Acknowledge the whole family locally in one transaction.
-  - Test missing members, pending child or grant evidence, malformed references, lost
-    acknowledgements, and interrupted finalization.
-  - Use one insert-or-ignore RPC for an assessment plus its items, with a member-set check, so the
-    server never holds an assessment with only some of its answers. A partial one reads as a real
-    low score.
-  - Because of ADR-0007, no version heads or generations are needed.
-  - Prove in the disposable PostgreSQL harness that:
-    - a late item insert re-surfaces its parent for the history delta, if items can ever arrive
-      separately;
-    - insert-or-ignore retries converge.
-  - Document server-owned change timestamps separately from local outbox timestamps in the contract
-    map.
-- [ ] **Enforce submitted-assessment immutability (ADR-0007) in the same slice.** Remove EA
-  `UPDATE`/`DELETE` RLS on `assessments` and `assessment_items`, push this family as
-  insert-or-ignore by `id`, and make `saveAssessment` refuse an already-saved assessment id, with
-  real-SQLite and disposable-PostgreSQL tests. Keep the current answer id; do not rekey.
+- [ ] Add authenticated, Programme/current-year-class-scoped pull for `assessments`,
+  `assessment_items` and `battery_runs` — **Assessment Results Plan 3**, not part of the upload
+  completion below. See the [Assessment Results design](../docs/superpowers/specs/2026-10-19-assessment-results-and-letter-test-design.md).
+- [x] **Upload the assessment family all-or-nothing ([U2](./zazi-sync-lessons-for-masi-2026-10-08.md)).**
+  Built in Assessment Results Plan 1, Tasks 6–9: exclusive `submit_assessment`, one complete
+  outbox payload, one call regardless of the 1,000-row ready limit, no per-item fallback, and atomic
+  parent/items acknowledgement. `save_battery_run` precedes linked families. The new disposable
+  PostgreSQL harness passed 53/53 cases and all five existing harnesses passed (controller-run);
+  real-SQLite/synthetic-network tests cover missing/malformed evidence, grant retries, lost
+  acknowledgements and interrupted finalization. Direct EA item writes are denied, so a separate
+  late-item insertion is not a supported path needing a parent timestamp touch. Server change
+  times and local outbox times are documented separately in the [contract map](./rls-sync-contract-map.md).
+  Hosted apply, practice-data wipe, EAS and device gates remain Task 14 with Jim's approval.
+- [x] **Enforce submitted-assessment immutability (ADR-0007) for upload.** Built in the same slice:
+  direct authenticated INSERT/UPDATE/DELETE on assessments/items revoked; only `submit_assessment`
+  can insert a complete family. `saveQuestionResult` refuses existing ids, and committed RPC
+  retries return `already_present` only after identity/item-id-set confirmation. `23505` never
+  counts as success. Item identity is unchanged. [ADR-0009](../docs/adr/0009-assessment-results-one-write-call-complete-families.md)
+  supersedes the older per-row insert-or-ignore proposal; hosted enforcement awaits Task 14.
 - [ ] **Letter mastery as current state (ADR-0005 2026-09-21 follow-up).** Re-key the stored EA
   confirmation to one current record per `(child, letter, language)`, recording the last writer.
   Narrow hosted read to the last writer plus current deliverers, and let current deliverers
-  insert/update/soft-delete. Latest server write wins. Resolve the natural key inside the write
+  insert/update/soft-delete. Implement the accepted correction-time ordering (clamped to server time),
+  not arrival-order wins. Resolve the natural key inside the write
   transaction; Zazi's production crash ZZ-BUG-20260813-006 is the regression case to test. Then
-  add the mastery pull. Change the mastery loader so "most recent letter assessment" means the
-  child's most recent assessment the EA may read, not only the EA's own
-  (`src/utils/masteryState.js` currently passes `userId` to both reads). Practice data is wiped
-  after this slice, so the re-key needs no field-data migration.
+  add the mastery pull. **Assessment evidence is already moved** in Assessment Results Task 10:
+  the latest non-skipped stored letter result can come from any recorder in the active programme,
+  including WelaPLUS Q1. `userId` scopes that programme, not the assessment recorder. Confirmation
+  identity and language labels remain unchanged until Assessment Results Plan 2. Its accepted
+  correction-time rule is in the [new design §10](../docs/superpowers/specs/2026-10-19-assessment-results-and-letter-test-design.md#10-letter-mastery);
+  its confirmation writer is not implemented in Plan 1.
+  Practice data is wiped at the approved release gate; no field-data re-key is planned.
 - [ ] Use bounded keyset pagination with an `id` tie-breaker and request deadline for every parent
   and child page from the first implementation. Do not ship an unpaginated intermediate path.
 - [ ] Persist each parent and its children transactionally through typed repositories, with parents
@@ -754,9 +758,11 @@ tooling (applied to hosted and device-proven 2026-10-18, §0). `scripts/loadTest
 
 ## 8. WelaPLUS
 
-The 11 Question components and their tests are on `main` under `src/assessment-questions/`
-(merged 2026-10-09 from `feature/wela-plus-battery-merge`). The package is unwired: nothing in
-`src/` or `App.js` imports it. `npm run test:types` type-checks it in CI. A literal-UUID
+The 11 Question components and their tests live under `src/assessment-questions/`
+(original package merged 2026-10-09). **Standalone Letter Sounds and Word Reading now use the
+package**, with one stored-result/upload path and updated readers (Assessment Results Plan 1,
+Tasks 1–12). WelaPLUS Q1 shares the letter component and current item sets. The full Battery Run
+host and artifact/photo flow remain open. `npm run test:types` type-checks the package in CI. A literal-UUID
 contract test pins current `assessmentItemDomainId` output. **No identity change is planned**
 (ADR-0007 keeps the id; Q11 HQ calibration rows use positions 5–8, so they never collide with the
 EA's 1–4). Release 1 scope and decisions:
@@ -764,18 +770,25 @@ EA's 1–4). Release 1 scope and decisions:
 
 ### Integration and contract work
 
-- [ ] Review the island against current design tokens, shared capture chrome, BottomSheet behavior,
-  SQLite repositories, and outbox ownership.
-- [ ] WelaPLUS Release 1 depends on ADR-0007 enforcement (the assessment-history item above). If
-  that has not landed first, Release 1 lands it (spec §7.1).
+- [ ] Finish design-token, capture-chrome and BottomSheet review for the full Battery Run host.
+  The standalone letter/word host, shared sequential capture, family repositories and outbox
+  ownership are integrated; this does not close the other Questions' host/device review.
+- [x] WelaPLUS Release 1's ADR-0007 upload dependency is implemented in Assessment Results Plan 1
+  (§1 above; [ADR-0009](../docs/adr/0009-assessment-results-one-write-call-complete-families.md)).
+  Hosted apply and device proof remain release gates.
 - [ ] Host-side Masi design conformance for the WelaPLUS screens (Plan 3). The package itself
   now has Masi-aligned tokens and a raw-hex guard (Plan 1, 2026-10-14).
-- [ ] Plan 2 (data foundation) and Plan 3 (host Run flow, docs, printout pack). Plan 1 (Question
-  package: 2024.1 EN/XH content, battery and evaluator, component contract) is complete; see
-  [`2026-10-14-welaplus-plan-1-question-package.md`](../docs/superpowers/plans/2026-10-14-welaplus-plan-1-question-package.md).
-- [ ] Build the remaining local/server schema and contract: `battery_runs`,
-  `battery_run_artifacts`, additive `assessments`/`programmes` fields, local photo queue, Storage
-  bucket/RLS, allowlists, ordering, reference data, and EGRA backfill.
+- [ ] **WelaPLUS Plan 2 (data foundation) is done in part.** Assessment Results Plan 1 implements
+  local/server `battery_runs`, additive result/programme fields, default-battery reference data,
+  the two RPCs, payload allowlists, ordering and atomic family acknowledgement. The approved v15
+  practice clear replaces the proposed EGRA backfill. The remaining artifact/photo foundation and
+  WelaPLUS Plan 3 (host Run flow, docs, printout pack) are still open. These plan numbers are the
+  WelaPLUS release plans, not the Assessment Results plans. See the
+  [Assessment Results plan](../docs/superpowers/plans/2026-10-20-assessment-results-plan-1.md) and
+  [verification log](./build-log.md). WelaPLUS Plan 1 (Question package: 2024.1 EN/XH content,
+  battery/evaluator and component contract) is complete; Q1 is now `letter_sounds@2026.2`.
+- [ ] Build `battery_run_artifacts`, the local photo queue and Storage bucket/RLS, including their
+  payload declarations and upload ordering. None is supplied by the completed family/run-header RPCs.
 - [ ] Build host integration: Run create/resume/finalize/results, Question sequencing, skip reasons,
   prerequisite gates, per-Question atomic persistence, photo capture/upload, Settings, and support
   export.

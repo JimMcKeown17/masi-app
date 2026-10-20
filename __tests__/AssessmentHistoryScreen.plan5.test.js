@@ -1,13 +1,15 @@
 jest.mock('@expo/vector-icons', () => ({ Ionicons: 'Ionicons' }), { virtual: true });
-import { renderWithProviders as render } from '../test-support/renderWithProviders';
+import { renderWithProviders } from '../test-support/renderWithProviders';
 import ListGroup from '../src/components/common/ListGroup';
 import React from 'react';
+import { SignedInEAContext } from '../src/context/SignedInEAContext';
 import { FlatList, StyleSheet } from 'react-native';
-import { waitFor } from '@testing-library/react-native';
+import { fireEvent, waitFor } from '@testing-library/react-native';
 import AssessmentHistoryScreen from '../src/screens/assessments/AssessmentHistoryScreen';
 import { useAuth } from '../src/context/AuthContext';
 import { useChildren } from '../src/context/ChildrenContext';
 import { assessmentsRepository } from '../src/db/repositories/assessmentsRepository';
+import { batteryRunsRepository } from '../src/db/repositories/batteryRunsRepository';
 import { supabase } from '../src/services/supabaseClient';
 
 jest.mock('@react-navigation/native', () => ({
@@ -29,8 +31,13 @@ jest.mock('../src/context/ChildrenContext', () => ({
 jest.mock('../src/db/repositories/assessmentsRepository', () => ({
   ...jest.requireActual('../src/db/repositories/assessmentsRepository'),
   assessmentsRepository: {
-    getAssessments: jest.fn(),
+    getQuestionResults: jest.fn(),
   },
+}));
+
+jest.mock('../src/db/repositories/batteryRunsRepository', () => ({
+  ...jest.requireActual('../src/db/repositories/batteryRunsRepository'),
+  batteryRunsRepository: { getRunsForUser: jest.fn() },
 }));
 
 jest.mock('../src/services/supabaseClient', () => ({
@@ -39,6 +46,8 @@ jest.mock('../src/services/supabaseClient', () => ({
     from: jest.fn(),
   },
 }));
+
+const render = ui => renderWithProviders(<SignedInEAContext.Provider value={{ repositories: { assessments: assessmentsRepository, batteryRuns: batteryRunsRepository } }}>{ui}</SignedInEAContext.Provider>);
 
 const ZERO_INSETS = { top: 0, right: 0, bottom: 0, left: 0 };
 let mockInsets = ZERO_INSETS;
@@ -49,6 +58,35 @@ jest.mock('react-native-safe-area-context', () => ({
 }));
 
 describe('AssessmentHistoryScreen Plan 5 behavior', () => {
+  test('battery Questions are hidden behind one read-only run row, with human-readable status and stored Question count', async () => {
+    assessmentsRepository.getQuestionResults.mockResolvedValue([
+      { id: 'q1', child_id: 'child-1', battery_run_id: 'run-1', question_code: 'letter_sounds', assessment_date: '2026-05-20' },
+      { id: 'q6', child_id: 'child-1', battery_run_id: 'run-1', question_code: 'wela_plus_read_words', assessment_date: '2026-05-20' },
+    ]);
+    batteryRunsRepository.getRunsForUser.mockResolvedValue([
+      { id: 'run-1', child_id: 'child-1', status: 'in_progress', question_count: 2, language: 'xh', started_at: '2026-05-20T10:00:00Z', sync_status: 'synced' },
+    ]);
+    const navigation = { navigate: jest.fn() };
+    const screen = render(<AssessmentHistoryScreen navigation={navigation} />);
+    await screen.findByText('WelaPLUS · In progress · 2 Questions');
+    expect(screen.getAllByTestId('assessment-history-row')).toHaveLength(1);
+    expect(screen.getByText('isiXhosa')).toBeTruthy();
+    expect(screen.queryByRole('button', { name: /WelaPLUS/ })).toBeNull();
+    fireEvent.press(screen.getByText('WelaPLUS · In progress · 2 Questions'));
+    expect(navigation.navigate).not.toHaveBeenCalled();
+  });
+
+  test('a run row is dated by the South African day it started, not the UTC day', async () => {
+    assessmentsRepository.getQuestionResults.mockResolvedValue([]);
+    batteryRunsRepository.getRunsForUser.mockResolvedValue([
+      { id: 'run-2', child_id: 'child-1', status: 'completed', question_count: 11, language: 'xh', started_at: '2026-10-19T22:30:00Z', sync_status: 'synced' },
+    ]);
+    const screen = render(<AssessmentHistoryScreen navigation={{ navigate: jest.fn() }} />);
+    await screen.findByText('WelaPLUS · Completed · 11 Questions');
+    expect(screen.getByText(/Oct 20, 2026/)).toBeTruthy();
+    expect(screen.queryByText(/Oct 19, 2026/)).toBeNull();
+  });
+
   beforeEach(() => {
     jest.useFakeTimers();
     jest.setSystemTime(new Date('2026-05-21T12:00:00.000Z'));
@@ -59,19 +97,16 @@ describe('AssessmentHistoryScreen Plan 5 behavior', () => {
         { id: 'child-1', first_name: 'Amahle', last_name: 'Dlamini' },
       ],
     });
-    assessmentsRepository.getAssessments.mockResolvedValue([
+    batteryRunsRepository.getRunsForUser.mockResolvedValue([]);
+    assessmentsRepository.getQuestionResults.mockResolvedValue([
       {
         id: 'assessment-1',
         user_id: 'user-1',
         child_id: 'child-1',
-        assessment_type: 'letter_egra',
-        date_assessed: '2026-05-20',
-        letter_language: 'English',
-        attempt_number: 1,
-        letters_attempted: 10,
-        correct_responses: 8,
-        accuracy: 80,
-        synced: false,
+        question_code: 'letter_sounds',
+        assessment_date: '2026-05-20',
+        language: 'en', score: 8, total_items: 60, sync_status: 'pending',
+        battery_run_id: null, stopped_reason: 'completed', items: [], derived: {},
         created_at: '2026-05-20T10:00:00.000Z',
       },
     ]);
@@ -83,7 +118,7 @@ describe('AssessmentHistoryScreen Plan 5 behavior', () => {
   });
 
   test('load errors appear as root toasts', async () => {
-    assessmentsRepository.getAssessments.mockRejectedValueOnce(new Error('read failed'));
+    assessmentsRepository.getQuestionResults.mockRejectedValueOnce(new Error('read failed'));
     const screen = render(<AssessmentHistoryScreen navigation={{ navigate: jest.fn() }} />);
     await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent('Failed to load assessments'));
     expect(screen.getByRole('button', { name: 'Dismiss message' })).toBeTruthy();
@@ -116,14 +151,18 @@ describe('AssessmentHistoryScreen Plan 5 behavior', () => {
     await waitFor(() => expect(getByText('Amahle Dlamini')).toBeTruthy());
 
     expect(getByText('Pending sync')).toBeTruthy();
-    expect(getByText('English - Attempt #1')).toBeTruthy();
+    expect(getByText('English')).toBeTruthy();
     expect(queryByText('No assessments yet. Run your first assessment!')).toBeNull();
-    expect(assessmentsRepository.getAssessments).toHaveBeenCalledTimes(1);
-    expect(assessmentsRepository.getAssessments).toHaveBeenCalledWith({
+    expect(assessmentsRepository.getQuestionResults).toHaveBeenCalledTimes(1);
+    expect(assessmentsRepository.getQuestionResults).toHaveBeenCalledWith({
       userId: 'user-1',
       recordedByUserId: 'user-1',
+      includeSkipped: true,
       order: 'desc',
     });
+    expect(batteryRunsRepository.getRunsForUser).toHaveBeenCalledWith('user-1');
+    fireEvent.press(getByText('Letter Sounds'));
+    expect(navigation.navigate).toHaveBeenCalledWith('AssessmentDetail', { assessmentId: 'assessment-1', childName: 'Amahle Dlamini' });
     expect(supabase.from).not.toHaveBeenCalled();
   });
 });

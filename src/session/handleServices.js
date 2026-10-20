@@ -9,6 +9,7 @@ import { createClassGroupingStateRepository } from '../db/repositories/classGrou
 import { createGroupingVersionsRepository } from '../db/repositories/groupingVersionsRepository';
 import { createSessionsRepository } from '../db/repositories/sessionsRepository';
 import { createAssessmentsRepository } from '../db/repositories/assessmentsRepository';
+import { createBatteryRunsRepository } from '../db/repositories/batteryRunsRepository';
 import { createMasteryRepository } from '../db/repositories/masteryRepository';
 import { createTimeEntriesRepository } from '../db/repositories/timeEntriesRepository';
 import { createReferenceDataRepository, createSchoolsRepository } from '../db/repositories/referenceDataRepository';
@@ -38,6 +39,7 @@ export const createHandleServices = (handle) => {
     groupingVersions: createGroupingVersionsRepository(options),
     sessions: createSessionsRepository(options),
     assessments: createAssessmentsRepository(options),
+    batteryRuns: createBatteryRunsRepository(options),
     mastery: createMasteryRepository(options),
     timeEntries: createTimeEntriesRepository(options),
     schools: createSchoolsRepository(options),

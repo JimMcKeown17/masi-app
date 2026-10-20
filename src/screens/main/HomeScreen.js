@@ -21,7 +21,7 @@ import { getActiveProgrammeGate } from '../../services/activeProgrammeGate';
 import { useSignedInEA } from '../../context/SignedInEAContext';
 import { useSessionHistoryStatus } from '../../services/sessionHistoryStatus';
 import { isStaleActorError } from '../../session/staleActor';
-import { getAssessmentCoverage, getWeekSessionCounts } from '../../utils/dashboardStats';
+import { getCoverageFromCounts, getWeekSessionCounts } from '../../utils/dashboardStats';
 import { deriveHomeAttentionItems } from '../../utils/homeAttention';
 import { getGoalCopy } from '../../utils/sessionGoalPresentation';
 import { toLocalDateString } from '../../utils/localDate';
@@ -85,6 +85,7 @@ export default function HomeScreen({ navigation }) {
     try {
       const recentCutoff = toLocalDateString(new Date(Date.now() - THIRTY_DAYS_MS));
       const [assessmentCounts, dailyGoal, sessions, programmeGate, dismissedOn] = await Promise.all([
+        // The repository counts non-skipped letter results in the active academic year, from any EA.
         assessmentsRepository.getAssessmentCountsSince({ userId: user.id }),
         getSessionsTodayGoal({ handle, userId: user.id }),
         sessionsRepository.getSessions({
@@ -95,7 +96,7 @@ export default function HomeScreen({ navigation }) {
       ]);
       if (seq !== loadSeqRef.current) return; // a newer load superseded this one
       setWeekCounts(getWeekSessionCounts(sessions));
-      setCoverage(getAssessmentCoverage(childrenList, assessmentCounts));
+      setCoverage(getCoverageFromCounts(childrenList, assessmentCounts));
       setSessionGoal(dailyGoal);
       setProgrammeName(programmeGate.programme?.name || '');
       setHasActiveProgramme(Boolean(programmeGate.hasActiveProgramme));

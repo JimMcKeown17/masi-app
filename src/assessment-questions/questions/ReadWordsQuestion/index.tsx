@@ -4,10 +4,15 @@
  * Child reads words aloud; EA taps each pill when the child gets it right.
  * When durationSec is provided, expiry opens the last-attempted marker.
  * Pills follow card rows when row_lengths is provided and otherwise wrap.
+ * Sequential mode shares the letter test's capture flow.
  */
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { View, Text, Pressable, ScrollView, StyleSheet } from 'react-native';
+import { monotonicNow } from '../../progress/clock';
 import type { QuestionProps } from '../../types/QuestionProps';
+import type { ItemSetMeta } from '../../types/ItemSet';
+import { resolveItemSet } from '../../itemsets/resolveItemSet';
+import { MissingItemSet } from '../../progress/MissingItemSet';
 import type { ResultItem, StoppedReason } from '../../types/Result';
 import type { ReadWordsItemSet, ReadWordsPrompt } from './types';
 import { WELA_PLUS_READ_WORDS_EN } from '../../itemsets/wela_plus_read_words.en';
@@ -18,16 +23,14 @@ import { SkipReasonPicker } from '../../skip/SkipReasonPicker';
 import type { ManualSkipReason } from '../../skip/skipReasons';
 import { applyProgress, NO_ATTEMPT } from '../../progress/applyProgress';
 import { LastAttemptedSheet } from '../../progress/LastAttemptedSheet';
+import { buildSequentialCard, SequentialCapture } from '../../progress/SequentialCapture';
 
 type Phase = 'intro' | 'active' | 'mark-last' | 'skip-picker' | 'finished';
 type MarkReason = 'ea_ended' | 'timer';
 
 type MarkingPolarity = 'tap_correct' | 'tap_wrong';
 
-type FullItemSet = ReadWordsItemSet & {
-  item_set_id: string;
-  question_version: string;
-};
+type FullItemSet = ReadWordsItemSet & ItemSetMeta;
 
 function isValidWord(p: unknown): p is ReadWordsPrompt {
   if (!p || typeof p !== 'object') return false;
@@ -41,6 +44,8 @@ function isFullItemSet(value: unknown): value is FullItemSet {
   const o = value as Record<string, unknown>;
   if (typeof o.item_set_id !== 'string') return false;
   if (typeof o.question_version !== 'string') return false;
+  if (typeof o.question_code !== 'string') return false;
+  if (typeof o.language !== 'string') return false;
   if (!Array.isArray(o.words)) return false;
   if (o.row_lengths !== undefined) {
     if (!Array.isArray(o.row_lengths)) return false;
@@ -60,11 +65,6 @@ function isFullItemSet(value: unknown): value is FullItemSet {
   return o.words.every(isValidWord);
 }
 
-function resolveItemSet(language: string, override: unknown): FullItemSet {
-  if (isFullItemSet(override)) return override;
-  return language === 'xh' ? WELA_PLUS_READ_WORDS_XH : WELA_PLUS_READ_WORDS_EN;
-}
-
 function keyFor(idx: number, word: string): string {
   return `${idx}:${word}`;
 }
@@ -79,11 +79,37 @@ function chunkByLengths<T>(items: T[], rowLengths: number[]): T[][] {
 }
 
 export function ReadWordsQuestion(
-  props: QuestionProps & { markingPolarity?: MarkingPolarity },
+  props: QuestionProps & { markingPolarity?: MarkingPolarity; captureMode?: 'grid' | 'sequential' },
+) {
+  const itemSet = resolveItemSet(
+    props.language,
+    props.itemSet,
+    { en: WELA_PLUS_READ_WORDS_EN, xh: WELA_PLUS_READ_WORDS_XH },
+    isFullItemSet,
+  );
+  if (!itemSet) return <MissingItemSet language={props.language} />;
+  if (props.captureMode === 'sequential') return <ReadWordsSequentialContent {...props} itemSet={itemSet} />;
+  return <ReadWordsQuestionContent {...props} itemSet={itemSet} />;
+}
+
+function ReadWordsSequentialContent(props: QuestionProps & { itemSet: FullItemSet }) {
+  const { words, row_lengths } = props.itemSet;
+  const card = useMemo(() => buildSequentialCard(
+    chunkByLengths(words, row_lengths ?? [words.length]).map((row) =>
+      row.map((word) => ({ item_key: word.item_key, prompt: word.word }))),
+  ), [words, row_lengths]);
+  return <SequentialCapture {...props} {...card} stopRule={props.itemSet.stop_rule ?? null} testIDPrefix="word" />;
+}
+
+function ReadWordsQuestionContent(
+  props: QuestionProps & {
+    itemSet: FullItemSet;
+    markingPolarity?: MarkingPolarity;
+  },
 ) {
   const {
     language,
-    itemSet,
+    itemSet: effectiveItemSet,
     instructions,
     durationSec,
     onComplete,
@@ -93,7 +119,6 @@ export function ReadWordsQuestion(
   const [phase, setPhase] = useState<Phase>('intro');
   const [markReason, setMarkReason] = useState<MarkReason>('ea_ended');
   const { isMarked, toggle } = useToggleMark();
-  const effectiveItemSet = resolveItemSet(language, itemSet);
 
   const isMarkedRef = useRef(isMarked);
   useEffect(() => {
@@ -138,14 +163,14 @@ export function ReadWordsQuestion(
         : applyProgress(raw, lastAttempted);
       const totalCorrect = items.filter((i) => i.is_correct).length;
       onComplete({
-        question_code: 'wela_plus_read_words',
+        question_code: effectiveItemSet.question_code,
         question_version: effectiveItemSet.question_version,
         item_set_id: effectiveItemSet.item_set_id,
         language,
         duration_ms:
           startTimeMsRef.current === null
             ? 0
-            : (stopTimeMsRef.current ?? Date.now()) - startTimeMsRef.current,
+            : Math.round((stopTimeMsRef.current ?? monotonicNow()) - startTimeMsRef.current),
         stopped_reason: stoppedReason,
         items,
         derived: {
@@ -167,12 +192,12 @@ export function ReadWordsQuestion(
   useEffect(() => {
     if (phase !== 'active') return undefined;
     if (startTimeMsRef.current === null) {
-      startTimeMsRef.current = Date.now();
+      startTimeMsRef.current = monotonicNow();
     }
     const deadlineMs = getDeadlineMs();
     if (deadlineMs === null) return undefined;
     const interval = setInterval(() => {
-      if (Date.now() >= deadlineMs) {
+      if (monotonicNow() >= deadlineMs) {
         clearInterval(interval);
         // Reading ends at the deadline, even if this callback runs late.
         stopTimeMsRef.current = deadlineMs;
@@ -311,7 +336,7 @@ export function ReadWordsQuestion(
         <Pressable
           accessibilityRole="button"
           onPress={() => {
-            const nowMs = Date.now();
+            const nowMs = monotonicNow();
             const deadlineMs = getDeadlineMs();
             const deadlineReached = deadlineMs !== null && nowMs >= deadlineMs;
             // Resolve expiry here too: End can arrive before a delayed timer callback.

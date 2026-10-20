@@ -1,175 +1,76 @@
 jest.mock('expo-sqlite', () => require('../test-support/expoSQLiteMock'));
+jest.mock('../src/services/supabaseClient', () => ({
+  ...require('../test-support/supabaseTestConfig'), supabase: {},
+}));
 
-import { runMigrations } from '../src/db/migrations';
-import { createAssessmentsRepository } from '../src/db/repositories/assessmentsRepository';
-import { createChildrenRepository } from '../src/db/repositories/childrenRepository';
-import { validate as uuidValidate } from 'uuid';
-import {
-  createMigratedDatabase,
-  seedCoreData,
-} from '../test-support/sqliteRepositoryTestUtils';
+import { v4 as uuid, validate as uuidValidate } from 'uuid';
+import { createFamilySyncFixture, questionResult } from '../test-support/assessmentFamilySyncTestUtils';
 
 describe('assessmentsRepository', () => {
-  test('assessment save writes parent and assessment items in one transaction and returns legacy EGRA summary fields', async () => {
-    const db = await createMigratedDatabase(runMigrations);
+  let f;
+  beforeEach(async () => { f = await createFamilySyncFixture(); });
+  afterEach(async () => { await f.db.closeAsync(); });
 
-    try {
-      await seedCoreData(db);
-      await createChildrenRepository({ database: db }).save({
-        id: 'child-1',
-        first_name: 'Amahle',
-        last_name: 'Dlamini',
-        class_id: 'class-1',
-        created_by: 'user-1',
-        synced: false,
-      }, { actorUserId: 'user-1' });
-
-      const repository = createAssessmentsRepository({ database: db });
-      await repository.saveAssessment({
-        id: 'assessment-1',
-        user_id: 'user-1',
-        child_id: 'child-1',
-        programme_id: 'programme-a',
-        assessment_type: 'letter_egra',
-        date_assessed: '2026-05-21',
-        items_tested: ['a', 'm'],
-        correct_letters: [{ index: 0, letter: 'a' }],
-        incorrect_letters: [{ index: 1, letter: 'm' }],
-        letters_attempted: 2,
-        correct_responses: 1,
-        accuracy: 50,
-        letter_language: 'isiXhosa',
-        attempt_number: 1,
-        synced: false,
-      });
-
-      expect(await db.getFirstAsync('select count(*) as count from assessments')).toEqual({ count: 1 });
-      expect(await db.getFirstAsync("select count(*) as count from assessment_items where assessment_id = 'assessment-1'"))
-        .toEqual({ count: 3 });
-      const items = await db.getAllAsync('select id from assessment_items order by item_key');
-      expect(items).toHaveLength(3);
-      for (const item of items) {
-        expect(uuidValidate(item.id)).toBe(true);
-        expect(item.id).not.toContain(':');
-      }
-      const outboxItems = await db.getAllAsync(`
-        select record_id, payload
-        from sync_outbox
-        where table_name = 'assessment_items'
-        order by record_id
-      `);
-      expect(outboxItems).toHaveLength(3);
-      for (const item of outboxItems) {
-        expect(uuidValidate(item.record_id)).toBe(true);
-        expect(uuidValidate(JSON.parse(item.payload).id)).toBe(true);
-      }
-      expect(await repository.getAssessments()).toEqual([
-        expect.objectContaining({
-          id: 'assessment-1',
-          date_assessed: '2026-05-21',
-          correct_letters: [{ index: 0, letter: 'a' }],
-          incorrect_letters: [{ index: 1, letter: 'm' }],
-          letters_attempted: 2,
-          correct_responses: 1,
-          accuracy: 50,
-          letter_language: 'isiXhosa',
-          synced: false,
-        }),
-      ]);
-    } finally {
-      await db.closeAsync();
+  test('assessment save writes one family transaction with UUID items and one outbox row', async () => {
+    const { id } = await f.save(2, { result: questionResult(2, {
+      items: [
+        { position: 0, item_key: 'a', prompt: 'a', is_correct: true },
+        { position: 1, item_key: 'm', prompt: 'm', is_correct: false },
+      ],
+    }) });
+    expect(await f.db.getFirstAsync('select count(*) as count from assessments')).toEqual({ count: 1 });
+    const items = await f.items(id);
+    expect(items).toHaveLength(2);
+    for (const item of items) {
+      expect(uuidValidate(item.id)).toBe(true);
+      expect(item.id).not.toContain(':');
     }
+    const outbox = await f.db.getAllAsync('select * from sync_outbox');
+    expect(outbox).toHaveLength(1);
+    expect(outbox[0]).toMatchObject({ table_name: 'assessments', record_id: id });
+    expect(JSON.parse(outbox[0].payload).items).toHaveLength(2);
+    expect(await f.assessments.getQuestionResults()).toEqual([
+      expect.objectContaining({ id, score: 1, total_items: 2, language: 'en', synced: false }),
+    ]);
   });
 
-  test('assessment saves require an active programme assignment when programme_id is omitted', async () => {
-    const db = await createMigratedDatabase(runMigrations);
-
-    try {
-      await seedCoreData(db);
-      await db.runAsync("update staff_programme_assignments set ended_at = '2026-05-21T00:00:00.000Z'");
-      const repository = createAssessmentsRepository({ database: db });
-
-      await expect(repository.saveAssessment({
-        id: 'assessment-without-programme',
-        user_id: 'user-1',
-        child_id: 'child-1',
-        assessment_type: 'letter_egra',
-        date_assessed: '2026-05-21',
-        synced: false,
-      })).rejects.toThrow(/No active programme assignment/i);
-
-      expect(await db.getFirstAsync('select count(*) as count from assessments')).toEqual({ count: 0 });
-      expect(await db.getFirstAsync('select count(*) as count from sync_outbox')).toEqual({ count: 0 });
-    } finally {
-      await db.closeAsync();
-    }
+  test('assessment saves require an active programme assignment', async () => {
+    await f.db.runAsync("update staff_programme_assignments set ended_at = '2026-05-21T00:00:00.000Z'");
+    await expect(f.save()).rejects.toThrow(/No active programme assignment/i);
+    expect(await f.db.getFirstAsync('select count(*) as count from assessments')).toEqual({ count: 0 });
+    expect(await f.db.getFirstAsync('select count(*) as count from sync_outbox')).toEqual({ count: 0 });
   });
 
-  test('user-scoped assessment reads only return assessments in the active programme', async () => {
-    const db = await createMigratedDatabase(runMigrations);
-
-    try {
-      await seedCoreData(db);
-      await createChildrenRepository({ database: db }).save({
-        id: 'child-1',
-        first_name: 'Amahle',
-        last_name: 'Dlamini',
-        class_id: 'class-1',
-        created_by: 'user-1',
-        synced: false,
-      }, { actorUserId: 'user-1' });
-      const repository = createAssessmentsRepository({ database: db });
-
-      await repository.saveAssessment({
-        id: 'assessment-literacy',
-        user_id: 'user-1',
-        child_id: 'child-1',
-        programme_id: 'programme-a',
-        assessment_type: 'letter_egra',
-        date_assessed: '2026-05-21',
-        synced: false,
-      });
-      await repository.saveAssessment({
-        id: 'assessment-numeracy',
-        user_id: 'user-1',
-        child_id: 'child-1',
-        programme_id: 'programme-b',
-        assessment_type: 'letter_egra',
-        date_assessed: '2026-05-22',
-        synced: false,
-      });
-
-      expect((await repository.getAssessments()).map(assessment => assessment.id))
-        .toEqual(['assessment-literacy', 'assessment-numeracy']);
-      expect(await repository.getAssessments({ userId: 'user-1' })).toEqual([
-        expect.objectContaining({ id: 'assessment-literacy', programme_id: 'programme-a' }),
-      ]);
-    } finally {
-      await db.closeAsync();
-    }
+  test('typed result reads preserve programme scope, ordering and stored parent values', async () => {
+    const otherProgramme = uuid();
+    await f.db.runAsync('insert into programmes (id, code, name) values (?, ?, ?)', otherProgramme, 'numeracy', 'Numeracy');
+    const first = await f.save(2);
+    const other = await f.save(2);
+    await f.db.runAsync("update assessments set assessment_date = '2026-05-21' where id = ?", first.id);
+    await f.db.runAsync("update assessments set programme_id = ?, assessment_date = '2026-05-22' where id = ?",
+      otherProgramme, other.id);
+    expect((await f.assessments.getQuestionResults()).map(assessment => assessment.id)).toEqual([first.id, other.id]);
+    const scoped = await f.assessments.getQuestionResults({ userId: f.userId });
+    expect(scoped).toEqual([
+      expect.objectContaining({ id: first.id, programme_id: f.programmeId,
+        assessment_date: '2026-05-21', score: 1, total_items: 2, language: 'en',
+        derived: expect.objectContaining({ total_correct: 1 }), items: expect.any(Array) }),
+    ]);
+    expect(scoped[0].items).toHaveLength(2);
+    expect(scoped[0].date_assessed).toBeUndefined();
+    expect(scoped[0].correct_letters).toBeUndefined();
   });
 
-  test('saveAssessment throws when user_id is missing (RLS contract guard)', async () => {
-    const db = await createMigratedDatabase(runMigrations);
+  test('retires all summary-row reader and untyped count APIs', () => {
+    expect(f.assessments.getAssessments).toBeUndefined();
+    expect(f.assessments.countAssessments).toBeUndefined();
+    expect(f.assessments.getUnsyncedRecords).toBeUndefined();
+  });
 
-    try {
-      await seedCoreData(db);
-      const repository = createAssessmentsRepository({ database: db });
-
-      await expect(repository.saveAssessment({
-        id: 'assessment-no-user',
-        child_id: 'child-1',
-        programme_id: 'programme-a',
-        assessment_type: 'letter_egra',
-        date_assessed: '2026-05-21',
-        synced: false,
-      })).rejects.toThrow(/assessments\.user_id is required/i);
-
-      expect(await db.getFirstAsync('select count(*) as count from assessments')).toEqual({ count: 0 });
-      expect(await db.getFirstAsync('select count(*) as count from assessment_items')).toEqual({ count: 0 });
-      expect(await db.getFirstAsync('select count(*) as count from sync_outbox')).toEqual({ count: 0 });
-    } finally {
-      await db.closeAsync();
-    }
+  test('missing user identity refuses the save without writing a family', async () => {
+    await expect(f.save(2, { userId: undefined })).rejects.toThrow(/No active programme assignment/i);
+    expect(await f.db.getFirstAsync('select count(*) as count from assessments')).toEqual({ count: 0 });
+    expect(await f.db.getFirstAsync('select count(*) as count from assessment_items')).toEqual({ count: 0 });
+    expect(await f.db.getFirstAsync('select count(*) as count from sync_outbox')).toEqual({ count: 0 });
   });
 });

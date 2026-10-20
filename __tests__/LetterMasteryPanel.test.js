@@ -4,7 +4,6 @@ import React from 'react';
 import { fireEvent, render, waitFor } from '@testing-library/react-native';
 import { StyleSheet } from 'react-native';
 import { colors } from '../src/constants/colors';
-import { LETTER_SETS } from '../src/constants/egraConstants';
 import LetterMasteryPanel from '../src/components/assessment/LetterMasteryPanel';
 import { assessmentsRepository } from '../src/db/repositories/assessmentsRepository';
 import { masteryRepository } from '../src/db/repositories/masteryRepository';
@@ -21,7 +20,7 @@ jest.mock('../src/context/AuthContext', () => ({ useAuth: jest.fn() }));
 jest.mock('../src/context/OfflineContext', () => ({ useOffline: jest.fn() }));
 jest.mock('../src/db/repositories/assessmentsRepository', () => ({
   ...jest.requireActual('../src/db/repositories/assessmentsRepository'),
-  assessmentsRepository: { getAssessments: jest.fn() },
+  assessmentsRepository: { latestLetterResult: jest.fn() },
 }));
 jest.mock('../src/db/repositories/masteryRepository', () => ({
   ...jest.requireActual('../src/db/repositories/masteryRepository'),
@@ -41,7 +40,7 @@ describe('LetterMasteryPanel', () => {
   beforeEach(() => {
     useAuth.mockReturnValue({ user: { id: 'user-1' } });
     useOffline.mockReturnValue({ refreshSyncStatus, triggerBackgroundSync });
-    assessmentsRepository.getAssessments.mockResolvedValue([]);
+    assessmentsRepository.latestLetterResult.mockResolvedValue(null);
     masteryRepository.getLetterMastery.mockResolvedValue([]);
     masteryRepository.saveLetterMasteryRecord.mockResolvedValue('saved-id-1');
     masteryRepository.updateLetterMasteryRecord.mockResolvedValue(true);
@@ -63,19 +62,29 @@ describe('LetterMasteryPanel', () => {
   });
 
   test('assessment mastery stays locked and cannot be pressed', async () => {
-    assessmentsRepository.getAssessments.mockResolvedValue([{
-      id: 'letter-assessment', child_id: child.id, assessment_type: 'letter_egra',
-      letter_language: 'English', date_assessed: '2026-07-01', created_at: '2026-07-01T10:00:00Z',
-      last_letter_attempted: { index: 0 }, correct_letters: [{ index: 0 }],
-    }]);
+    assessmentsRepository.latestLetterResult.mockResolvedValue({
+      id: 'letter-assessment', child_id: child.id, question_code: 'letter_sounds',
+      language: 'en', assessment_date: '2026-07-01',
+      items: [{ prompt: 'A', is_correct: true, metadata: { reached: true } }],
+    });
     const screen = render(<LetterMasteryPanel child={child} classItem={classItem} />);
-    const letter = LETTER_SETS.english.letters[0].toLowerCase();
+    const letter = 'a';
     const tile = await screen.findByLabelText(`${letter}, mastered from assessment, locked`);
+    expect(assessmentsRepository.latestLetterResult).toHaveBeenCalledWith({ userId: 'user-1', childId: child.id, language: 'en' });
+    expect(screen.getByText('Last assessed: 2026-07-01')).toBeTruthy();
     expect(tile.props.accessibilityState.disabled).toBe(true);
     expect(StyleSheet.flatten(tile.props.style)).toMatchObject({ backgroundColor: colors.successBg, borderColor: colors.successBorder });
     fireEvent.press(tile);
     expect(masteryRepository.saveLetterMasteryRecord).not.toHaveBeenCalled();
     expect(masteryRepository.updateLetterMasteryRecord).not.toHaveBeenCalled();
+  });
+
+  test.each([null, 'Afrikaans', 'isiZulu'])('shows no letter grid for unsupported class language %s', async (homeLanguage) => {
+    const screen = render(<LetterMasteryPanel child={child} classItem={{ home_language: homeLanguage }} />);
+    expect(await screen.findByText('No letter set for this class language.')).toBeTruthy();
+    expect(screen.queryAllByText(/^[a-z]$/)).toHaveLength(0);
+    expect(assessmentsRepository.latestLetterResult).not.toHaveBeenCalled();
+    expect(masteryRepository.getLetterMastery).not.toHaveBeenCalled();
   });
 
   test('reactivates a soft-deleted record on toggle-on instead of creating a duplicate', async () => {

@@ -195,65 +195,23 @@ it('sync meta is written even when a loop-body path throws', async () => {
 
 // ─── Fix 2: await batch fallback so processBatch's catch owns markInFlightAndGet throws ───
 
-// Position is used as the domain-id key in assessmentItemDomainId (position ?? itemKey).
-// Each item MUST have a unique position within the same assessment to avoid uuid collisions.
-const seedAssessmentItem = async (db, itemId, position, assessmentId = 'assessment-batch-fix2') => {
-  // Parent assessment row — insert once (ignore if already exists from a prior call).
-  await db.runAsync(`
-    insert or ignore into assessments (
-      id, user_id, child_id, programme_id, assessment_type, assessment_date, sync_status
-    ) values (
-      ?, 'user-1', 'child-batch-fix2', 'programme-a', 'letter_sounds', '2026-06-16', 'synced'
-    )
-  `, assessmentId);
-
-  const item = {
-    id: itemId,
-    assessment_id: assessmentId,
-    item_key: `key-${itemId}`,
-    prompt: 'a',
-    response: 'a',
-    is_correct: 1,
-    position,
-    metadata: '{}',
-  };
-  await db.runAsync(`
-    insert into assessment_items (
-      id, assessment_id, item_key, prompt, response, is_correct, position, metadata, sync_status
-    ) values (?, ?, ?, ?, ?, ?, ?, ?, 'pending')
-  `, item.id, item.assessment_id, item.item_key, item.prompt, item.response,
-    item.is_correct, item.position, item.metadata);
-  await enqueue(db, 'assessment_items', itemId, 'insert', item);
-};
-
 it('Fix 2 (Test A): a fallback processRecord markInFlightAndGet throw is owned by processBatch — no in_flight, no double-process', async () => {
   const db = bindTestActor(createBetterSqliteTestDatabase(':memory:'), 'test-user');
   await runMigrations(db);
 
-  // Seed prerequisite data: school, programme, child.
-  await db.runAsync(`insert or ignore into schools (id, name, sync_status) values ('school-1', 'Masi Primary', 'synced')`);
-  await db.runAsync(`insert or ignore into programmes (id, code, name) values ('programme-a', 'literacy', 'Literacy')`);
-  await db.runAsync(`
-    insert or ignore into children (id, first_name, last_name, sync_status)
-    values ('child-batch-fix2', 'Lebo', 'Mokoena', 'synced')
-  `);
-
-  // Three assessment_items → routes through processBatch (BATCHABLE_UPSERT_TABLES includes assessment_items).
-  // Each must have a unique position: assessmentItemDomainId uses `position ?? itemKey` as the key,
-  // so identical positions on the same assessment produce the same derived UUID → upsert collision.
+  // Three time-entry inserts exercise the generic processBatch fallback.
   const itemIds = ['item-fix2-a', 'item-fix2-b', 'item-fix2-c'];
   for (let i = 0; i < itemIds.length; i++) {
-    await seedAssessmentItem(db, itemIds[i], i);
+    await seedTimeEntry(db, itemIds[i]);
   }
 
   // The outbox id for the "bad" item — used to identify which markInFlightAndGet call to sabotage.
   const badItemId = 'item-fix2-b';
-  const badOutboxId = outboxRecordId('assessment_items', badItemId, 'insert');
+  const badOutboxId = outboxRecordId('time_entries', badItemId, 'insert');
 
   // The batch upsert returns an error to force the per-row fallback path.
   // Track per-row upsert call count by outbox record id (NOT batch call).
-  // processRecord builds payload via buildSyncPayload which may transform the id via ensureServerUuid,
-  // so we track call count by raw payload id (the derived UUID, not the original item id string).
+  // Track call count by the dispatched time-entry id.
   let totalUpsertCalls = 0;
   const upsertCallIdCounts = {};
   const batchErrorThenPerRowSupabase = {
@@ -355,31 +313,14 @@ it('Task 9 (allSettled race): sibling B synced even when A markInFlightAndGet th
   const db = bindTestActor(createBetterSqliteTestDatabase(':memory:'), 'test-user');
   await runMigrations(db);
 
-  // Prerequisite domain rows.
-  await db.runAsync(`insert or ignore into schools (id, name, sync_status) values ('school-1', 'Masi Primary', 'synced')`);
-  await db.runAsync(`insert or ignore into programmes (id, code, name) values ('programme-a', 'literacy', 'Literacy')`);
-  await db.runAsync(`
-    insert or ignore into children (id, first_name, last_name, sync_status)
-    values ('child-task9', 'Sipho', 'Dlamini', 'synced')
-  `);
-
-  const assessmentId = 'assessment-task9';
-  await db.runAsync(`
-    insert or ignore into assessments (
-      id, user_id, child_id, programme_id, assessment_type, assessment_date, sync_status
-    ) values (
-      ?, 'user-1', 'child-task9', 'programme-a', 'letter_sounds', '2026-06-16', 'synced'
-    )
-  `, assessmentId);
-
-  // Seed items A (position 0) and B (position 1) — distinct positions avoid domain-key collisions.
+  // Seed two time entries for generic batch fallback.
   const aId = 'item-task9-a';
   const bId = 'item-task9-b';
-  await seedAssessmentItem(db, aId, 0, assessmentId);
-  await seedAssessmentItem(db, bId, 1, assessmentId);
+  await seedTimeEntry(db, aId);
+  await seedTimeEntry(db, bId);
 
-  const aOutboxId = outboxRecordId('assessment_items', aId, 'insert');
-  const bOutboxId = outboxRecordId('assessment_items', bId, 'insert');
+  const aOutboxId = outboxRecordId('time_entries', aId, 'insert');
+  const bOutboxId = outboxRecordId('time_entries', bId, 'insert');
 
   // Controllable deferred for B's per-row upsert — lets us ensure B hasn't settled yet when A
   // rejects, exercising the OLD fail-fast race window.
@@ -399,9 +340,9 @@ it('Task 9 (allSettled race): sibling B synced even when A markInFlightAndGet th
           // First call is the batch upsert — fail it to force per-record fallback.
           return { data: null, error: { message: 'batch server error task9' } };
         }
-        // A fails before dispatch, so B is the only per-row request. Match its position,
-        // which survives deterministic id mapping, and hold the response until released.
-        if (payload.position === 1) {
+        // A fails before dispatch, so B is the only per-row request.
+        // Hold its response until released.
+        if (payload.id === bId) {
           bUpsertCallCount += 1;
           signalBStarted();
           await bUpsertPromise;
@@ -449,7 +390,7 @@ it('Task 9 (allSettled race): sibling B synced even when A markInFlightAndGet th
   expect(bUpsertCallCount).toBe(1);
 
   // Load-bearing: B ended synced (upload succeeded, not reverted to pending).
-  const bDomainRow = await db.getFirstAsync('select sync_status from assessment_items where id = ?', bId);
+  const bDomainRow = await db.getFirstAsync('select sync_status from time_entries where id = ?', bId);
   expect(bDomainRow.sync_status).toBe('synced');
   const bOutboxRow = await db.getFirstAsync('select id from sync_outbox where id = ?', bOutboxId);
   expect(bOutboxRow).toBeNull(); // outbox entry deleted on success

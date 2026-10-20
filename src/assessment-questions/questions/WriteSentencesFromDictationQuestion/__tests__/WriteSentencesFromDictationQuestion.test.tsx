@@ -146,6 +146,8 @@ describe('WriteSentencesFromDictationQuestion — itemSet override', () => {
         instructions="."
         itemSet={{
           item_set_id: 'bad@1.en',
+          question_code: 'bad',
+          language: 'en',
           question_version: '1',
           sentences: [
             { item_key: 's1', words: [] },

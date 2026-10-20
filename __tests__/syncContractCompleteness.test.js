@@ -3,7 +3,13 @@ jest.mock('../src/services/supabaseClient', () => ({
   ...require('../test-support/supabaseTestConfig'), supabase: {} }));
 import { createBetterSqliteTestDatabase } from '../test-support/betterSqliteAdapter';
 import { runMigrations } from '../src/db/migrations';
-import { __contract } from '../src/services/offlineSync';
+import { __contract, createOutboxSyncEngine } from '../src/services/offlineSync';
+import { createAssessmentsRepository } from '../src/db/repositories/assessmentsRepository';
+import { bindTestActor } from '../test-support/actorTestUtils';
+
+// These child rows travel only inside their parent family payload and acknowledgement.
+// They still require complete server/local column classification.
+const FAMILY_MEMBER_TABLES = ['assessment_items'];
 
 let db;
 beforeAll(async () => { db = createBetterSqliteTestDatabase(':memory:'); await runMigrations(db); });
@@ -13,9 +19,9 @@ const schemaColumns = async (table) => {
   return info.map((c) => c.name); // includes CREATE-TABLE and ALTER-ADDED columns
 };
 
-it('every PUSH_ORDER table column is synced, intentionally-unsynced, or local-only (exactly one)', async () => {
+it('every pushed table and family-member column is synced, intentionally-unsynced, or local-only (exactly one)', async () => {
   const { SERVER_COLUMNS, PUSH_ORDER, INTENTIONALLY_UNSYNCED, LOCAL_ONLY_COLUMNS } = __contract;
-  for (const table of PUSH_ORDER) {
+  for (const table of [...PUSH_ORDER, ...FAMILY_MEMBER_TABLES]) {
     const cols = await schemaColumns(table);
     expect(cols.length).toBeGreaterThan(0); // table exists in the migrated schema
     for (const col of cols) {
@@ -81,8 +87,71 @@ it('PUSH_ORDER contains every locally-written synced table (no pushable table om
     'staff_programme_assignments',
   ];
 
-  const expectedPush = syncedTables.filter((t) => !PULL_ONLY_SYNCED_TABLES.includes(t)).sort();
+  // The real family round trip below guards the family-member exception.
+  const expectedPush = syncedTables.filter((t) => (
+    !PULL_ONLY_SYNCED_TABLES.includes(t) && !FAMILY_MEMBER_TABLES.includes(t)
+  )).sort();
   expect([...PUSH_ORDER].sort()).toEqual(expectedPush);
+});
+
+it('assessment items travel in the parent family payload and are acknowledged with it', async () => {
+  const userId = '00000000-0000-4000-8000-000000000001';
+  const childId = '00000000-0000-4000-8000-000000000002';
+  const programmeId = '00000000-0000-4000-8000-000000000003';
+  const assessmentId = '00000000-0000-4000-8000-000000000004';
+  const familyDb = bindTestActor(createBetterSqliteTestDatabase(':memory:'), userId);
+  try {
+    await runMigrations(familyDb);
+    await familyDb.runAsync(
+      "insert into programmes (id, code, name, sync_status) values (?, 'lit', 'Literacy', 'synced')",
+      programmeId
+    );
+    await familyDb.runAsync(`insert into staff_programme_assignments
+      (id, user_id, programme_id, assigned_at, sync_status)
+      values ('programme-assignment', ?, ?, '2026-01-15T00:00:00.000Z', 'synced')`,
+    userId, programmeId);
+    await familyDb.runAsync(
+      "insert into children (id, first_name, last_name, sync_status) values (?, 'Test', 'Child', 'synced')",
+      childId
+    );
+    await createAssessmentsRepository({ database: familyDb }).saveQuestionResult({
+      assessmentId, userId, childId,
+      result: {
+        question_code: 'letter_sounds', question_version: '2026.1',
+        item_set_id: 'letter_sounds@2026.1.en', language: 'en',
+        duration_ms: 1000, stopped_reason: 'completed',
+        items: [{ position: 0, item_key: 'a', prompt: 'a', is_correct: true }],
+        derived: { total_correct: 1, total_attempted: 1, percent: 100, last_attempted_position: 0 },
+      },
+    });
+    const queued = await familyDb.getAllAsync('select table_name, payload from sync_outbox');
+    expect(queued).toHaveLength(1);
+    expect(queued[0].table_name).toBe('assessments');
+    const family = JSON.parse(queued[0].payload);
+    expect(family.items).toEqual([expect.objectContaining({ assessment_id: assessmentId, item_key: 'a' })]);
+    expect(__contract.PUSH_ORDER).not.toContain('assessment_items');
+
+    const supabaseClient = {
+      from: jest.fn(() => { throw new Error('family must use its RPC'); }),
+      rpc: jest.fn(async () => ({ data: 'inserted', error: null })),
+    };
+    const engine = createOutboxSyncEngine({
+      database: familyDb, supabaseClient,
+      enqueueRequest: task => task(),
+      getAuthSession: async () => ({ data: { session: { user: { id: userId } } } }),
+    });
+    expect(await engine.syncAll()).toEqual(expect.objectContaining({ totalSynced: 1, totalFailed: 0 }));
+    expect(supabaseClient.rpc).toHaveBeenCalledWith('submit_assessment', expect.objectContaining({
+      p_items: family.items,
+    }));
+    expect(await familyDb.getAllAsync('select id from sync_outbox')).toEqual([]);
+    expect(await familyDb.getFirstAsync('select sync_status from assessments where id = ?', assessmentId))
+      .toEqual({ sync_status: 'synced' });
+    expect(await familyDb.getAllAsync('select sync_status, last_sync_error from assessment_items'))
+      .toEqual([{ sync_status: 'synced', last_sync_error: null }]);
+  } finally {
+    await familyDb.closeAsync();
+  }
 });
 
 

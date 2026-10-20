@@ -1,3 +1,6 @@
+import { SERVER_COLUMNS } from './syncServerColumns';
+import { toSubmitArgs } from './assessmentFamilyPayload';
+export { SERVER_COLUMNS } from './syncServerColumns';
 import { isStaleActorError, StaleActorError } from '../session/staleActor';
 import { buildIncidentEnvelope, drainSupportIncidents } from './supportIncidents';
 import { getConnectionActor } from '../session/signedInHandle';
@@ -57,102 +60,13 @@ const INTENTIONALLY_UNSYNCED = {
     group_id: 'Forward-prep; server RLS pins group_id NULL until the state-machine slice (migration 20260529214500).',
     state: 'Forward-prep; server RLS pins state=completed until the state-machine slice (migration 20260529214500).',
   },
+  assessments: {
+    items_tested: 'Legacy summary field; Question families send assessment_items through submit_assessment.',
+  },
 };
 
 // Local-only bookkeeping columns the engine strips before push — never sent to the server.
-const LOCAL_ONLY_COLUMNS = ['synced', 'sync_status', 'last_sync_error', 'server_updated_at', 'history_reference'];
-
-export const SERVER_COLUMNS = {
-  time_entries: [
-    'id', 'user_id', 'sign_in_time', 'sign_in_lat', 'sign_in_lon', 'sign_out_time',
-    'sign_out_lat', 'sign_out_lon', 'sign_in_location_status', 'sign_out_location_status',
-    'auto_clocked_out', 'created_at', 'updated_at',
-  ],
-  classes: [
-    'id', 'school_id', 'name', 'grade', 'teacher', 'teacher_id', 'home_language',
-    'academic_year', 'academic_year_id', 'archived_at', 'archived_by_user_id',
-    'archive_reason', 'created_by', 'created_at', 'updated_at',
-    'row_version',
-  ],
-  children: [
-    'id', 'first_name', 'last_name', 'preferred_name', 'date_of_birth', 'age',
-    'gender', 'reading_level', 'class_id', 'hidden_at', 'archived_at', 'archived_by_user_id',
-    'archive_reason', 'created_by', 'created_at', 'updated_at',
-    'row_version',
-  ],
-  child_ea_assignments: [
-    'id', 'user_id', 'child_id', 'assigned_at', 'unassigned_at', 'created_by',
-    'created_at', 'updated_at',
-    'row_version',
-  ],
-  child_programme_enrollments: [
-    'id', 'child_id', 'programme_id', 'enrolled_at', 'ended_at', 'created_by',
-    'created_at', 'updated_at',
-    'row_version',
-  ],
-  child_class_memberships: [
-    'id', 'child_id', 'class_id', 'academic_year_id', 'enrolled_at', 'exited_at',
-    'created_by', 'created_at', 'updated_at',
-    'row_version',
-  ],
-  class_ea_assignments: [
-    'id', 'class_id', 'ea_user_id', 'programme_id', 'assigned_at', 'unassigned_at',
-    'handover_reason', 'created_by', 'created_at', 'updated_at',
-    'row_version',
-  ],
-  grouping_versions: [
-    'id', 'class_id', 'academic_year_id', 'version_number', 'status',
-    'accepted_at', 'accepted_by_user_id', 'archived_at', 'archived_by_user_id',
-    'archive_reason', 'created_by', 'created_at', 'updated_at',
-    'row_version',
-  ],
-  class_grouping_state: [
-    'id', 'class_id', 'academic_year_id', 'class_list_status',
-    'class_list_completed_at', 'class_list_completed_by_user_id',
-    'class_list_reopened_at', 'class_list_reopened_by_user_id',
-    'active_grouping_version_id', 'created_at', 'updated_at',
-    'row_version',
-  ],
-  groups: [
-    'id', 'name', 'programme_id', 'class_id', 'grouping_version_id',
-    'display_number', 'archived_at', 'archived_by_user_id', 'archive_reason',
-    'created_by', 'created_at', 'updated_at',
-    'row_version',
-  ],
-  group_ea_assignments: [
-    'id', 'group_id', 'ea_user_id', 'programme_id', 'assigned_at', 'unassigned_at',
-    'handover_reason', 'created_by', 'created_at', 'updated_at',
-    'row_version',
-  ],
-  child_group_memberships: [
-    'id', 'child_id', 'group_id', 'grouping_version_id', 'joined_at', 'removed_at',
-    'created_by', 'created_at', 'updated_at',
-    'row_version',
-  ],
-  sessions: [
-    'id', 'user_id', 'programme_id', 'class_id', 'session_date', 'started_at',
-    'ended_at', 'activities', 'notes', 'created_at', 'updated_at',
-  ],
-  session_attendees: [
-    'id', 'session_id', 'child_id', 'group_id', 'attendance_status',
-    'grade_snapshot', 'notes', 'created_at', 'updated_at',
-  ],
-  assessments: [
-    'id', 'user_id', 'child_id', 'programme_id', 'assessment_tool_id',
-    'assessment_window_id', 'assessment_purpose', 'grade_snapshot',
-    'teacher_name_snapshot', 'assessment_type', 'capture_mode',
-    'assessment_date', 'score', 'total_items', 'items_tested', 'notes',
-    'created_at', 'updated_at',
-  ],
-  assessment_items: [
-    'id', 'assessment_id', 'item_key', 'prompt', 'response', 'is_correct',
-    'position', 'metadata', 'created_at', 'updated_at',
-  ],
-  letter_mastery: [
-    'id', 'user_id', 'child_id', 'programme_id', 'letter', 'language', 'source',
-    'mastered_at', 'deleted_at', 'created_at', 'updated_at',
-  ],
-};
+const LOCAL_ONLY_COLUMNS = ['synced', 'sync_status', 'last_sync_error', 'server_updated_at', 'history_reference', 'started_here'];
 
 export const PUSH_ORDER = [
   'time_entries',
@@ -169,8 +83,8 @@ export const PUSH_ORDER = [
   'child_group_memberships',
   'sessions',
   'session_attendees',
+  'battery_runs',
   'assessments',
-  'assessment_items',
   'letter_mastery',
 ];
 
@@ -187,8 +101,8 @@ const TABLE_DEPENDENCIES = {
   child_group_memberships: ['children', 'groups'],
   sessions: ['classes'],
   session_attendees: ['sessions', 'children', 'groups'],
-  assessments: ['children'],
-  assessment_items: ['assessments'],
+  battery_runs: ['children'],
+  assessments: ['children', 'battery_runs'],
   letter_mastery: ['children'],
 };
 
@@ -237,8 +151,8 @@ const PARENT_FK_COLUMNS = {
   child_group_memberships: { children: 'child_id', groups: 'group_id', grouping_versions: 'grouping_version_id' },
   sessions: { classes: 'class_id' },
   session_attendees: { sessions: 'session_id', children: 'child_id', groups: 'group_id' },
-  assessments: { children: 'child_id' },
-  assessment_items: { assessments: 'assessment_id' },
+  battery_runs: { children: 'child_id' },
+  assessments: { children: 'child_id', battery_runs: 'battery_run_id' },
   letter_mastery: { children: 'child_id' },
 };
 
@@ -282,6 +196,10 @@ const GRANT_SUBJECTS = {
     { grantTable: 'child_ea_assignments', subjectColumn: 'child_id' },
     { membershipMediatedChild: 'child_id' },
   ],
+  battery_runs: [
+    { grantTable: 'child_ea_assignments', subjectColumn: 'child_id' },
+    { membershipMediatedChild: 'child_id' },
+  ],
   letter_mastery: [
     { grantTable: 'child_ea_assignments', subjectColumn: 'child_id' },
     { membershipMediatedChild: 'child_id' },
@@ -312,7 +230,6 @@ const ARCHIVE_PUSH_ORDER = {
 };
 
 const BATCHABLE_UPSERT_TABLES = new Set([
-  'assessment_items',
   'child_ea_assignments',
   'child_programme_enrollments',
   'children',
@@ -380,6 +297,9 @@ const dependenciesForRecord = (outboxRecord) => {
   if (outboxRecord.table_name === 'session_attendees' && !payload.group_id) {
     dependencies.delete('groups');
     return [...dependencies];
+  }
+  if (outboxRecord.table_name === 'assessments' && !payload.battery_run_id) {
+    dependencies.delete('battery_runs');
   }
 
   return [...dependencies];
@@ -541,6 +461,8 @@ const classifyError = (
 ) => {
   const code = error?.code;
 
+  if (code === '28000') return { terminal: false, markAsSynced: false };
+
   // Identity-immutability triggers on assignment tables raise 23514 when an
   // update-capable re-push carries drifted identity fields; native CHECK
   // constraints on the same tables (e.g. unassigned_at >= assigned_at) also
@@ -555,7 +477,8 @@ const classifyError = (
   }
 
   if (code === '23505') {
-    return { terminal: true, markAsSynced: duplicateIsSuccess };
+    const requiresRpcAcknowledgement = ['assessments', 'battery_runs'].includes(normalizeTableName(tableName));
+    return { terminal: true, markAsSynced: duplicateIsSuccess && !requiresRpcAcknowledgement };
   }
 
   if (code === '23503' || code === '42501' || code === 'UPDATE_NOT_APPLIED') {
@@ -570,6 +493,10 @@ const classifyError = (
     || code === 'RESTORE_NOT_APPLIED'
     || code === 'LOCAL_ONLY_REFERENCE'
     || code === 'MISSING_OUTBOX_PAYLOAD'
+    || code === 'MA001'
+    || code === 'MA002'
+    || code === '22023'
+    || code === 'UNEXPECTED_RPC_RESULT'
   ) {
     return { terminal: true, markAsSynced: false };
   }
@@ -600,8 +527,10 @@ const isHealableRlsError = (record) => {
 };
 
 const buildSyncPayload = (tableName, record, operation) => {
+  if (tableName === 'assessments') return toSubmitArgs(record);
   const tableLegacyKeys = LEGACY_KEYS_TO_STRIP[tableName] || [];
   const keysToStrip = new Set([...LOCAL_ONLY_KEYS_TO_STRIP, ...tableLegacyKeys]);
+  if (tableName === 'battery_runs') keysToStrip.add('updated_at');
   if (!isStampedOperation(tableName, operation)) keysToStrip.add('row_version');
   const allowlist = SERVER_COLUMNS[tableName] ? new Set(SERVER_COLUMNS[tableName]) : null;
 
@@ -773,14 +702,50 @@ const runServerOperation = async (supabaseClient, config, outboxRecord) => {
   const payloadSource = outboxRecord.operation === 'hard_delete'
     ? (outboxRecord.payload || { id: outboxRecord.record_id })
     : outboxRecord.payload;
-  const payload = buildSyncPayload(config.tableName, payloadSource, outboxRecord.operation);
-
-  if (payload.programme_id === LEGACY_PROGRAMME_ID) {
+  // Check the flat envelope before UUID validation or splitting RPC arguments. Fields the
+  // table allowlist would discard must not change the existing generic-row guard behavior.
+  const serverColumns = SERVER_COLUMNS[config.tableName];
+  if ((!serverColumns || serverColumns.includes('programme_id'))
+    && payloadSource.programme_id === LEGACY_PROGRAMME_ID) {
     return {
       success: false,
       error: {
         code: 'LOCAL_ONLY_REFERENCE',
         message: 'Record is missing an active programme assignment and cannot be synced',
+      },
+    };
+  }
+
+  let payload;
+  try {
+    payload = buildSyncPayload(config.tableName, payloadSource, outboxRecord.operation);
+  } catch (error) {
+    if (config.tableName !== 'assessments' || !(error instanceof TypeError)) throw error;
+    return { success: false, error: { code: '22023', message: error.message } };
+  }
+
+  if (config.tableName === 'assessments' && outboxRecord.operation === 'insert') {
+    const { data, error } = await supabaseClient.rpc('submit_assessment', payload);
+    if (error) return { success: false, error };
+    if (data === 'inserted' || data === 'already_present') return { success: true };
+    return {
+      success: false,
+      error: {
+        code: 'UNEXPECTED_RPC_RESULT',
+        message: `submit_assessment returned an unexpected result: ${String(data)}`,
+      },
+    };
+  }
+
+  if (config.tableName === 'battery_runs' && ['insert', 'update'].includes(outboxRecord.operation)) {
+    const { data, error } = await supabaseClient.rpc('save_battery_run', { p_run: payload });
+    if (error) return { success: false, error };
+    if (['inserted', 'updated', 'unchanged'].includes(data)) return { success: true };
+    return {
+      success: false,
+      error: {
+        code: 'UNEXPECTED_RPC_RESULT',
+        message: `save_battery_run returned an unexpected result: ${String(data)}`,
       },
     };
   }
@@ -1135,6 +1100,13 @@ export const createOutboxSyncEngine = ({
   // A terminal pull may replace domain content while retaining the queued correction.
   // Apply the accepted patch after bookkeeping, since upserts can normalize the id.
   const applyAcknowledgedPayload = async (txn, tableName, recordId, operation, payload) => {
+    if (tableName === 'assessments' && operation === 'insert') {
+      await txn.runAsync(`
+        update assessment_items set sync_status = 'synced', last_sync_error = null
+        where assessment_id = ?
+      `, recordId);
+      return;
+    }
     if (!isStampedOperation(tableName, operation)) return;
     if (!localColumnsByTable.has(tableName)) {
       const columns = await txn.getAllAsync('select name from pragma_table_info(?)', tableName);

@@ -80,7 +80,7 @@ describe('repository read-path query budgets', () => {
     expect(normalizedSql(db).some(sql => sql.includes('session_date >= ?') && sql.includes('user_id = ?'))).toBe(true);
   });
 
-  test('getAssessments batches summaries and preserves summary override and fallback semantics', async () => {
+  test('getQuestionResults batches stored items and applies scope, dates and parent values', async () => {
     db = await createDatabase();
     await seedChildren(db, 30);
     for (let index = 0; index < 30; index += 1) {
@@ -88,29 +88,26 @@ describe('repository read-path query budgets', () => {
       await db.runAsync(`
         insert into assessments (
           id, user_id, child_id, programme_id, assessment_type,
-          assessment_date, score, created_at, sync_status
-        ) values (?, 'user-1', ?, 'programme-a', 'letter_egra', ?, 1, ?, 'synced')
+          assessment_date, score, created_at, sync_status, question_code, derived
+        ) values (?, 'user-1', ?, 'programme-a', 'letter_sounds', ?, 1, ?, 'synced', 'letter_sounds', '{"total_correct":1}')
       `, `assessment-${index}`, `child-${index}`, `2026-06-${day}`, `2026-06-${day}T10:00:00.000Z`);
       await db.runAsync(`
         insert into assessment_items (
-          id, assessment_id, item_key, metadata, created_at, sync_status
-        ) values (?, ?, '__summary__', ?, ?, 'synced')
-      `, `summary-${index}`, `assessment-${index}`, JSON.stringify({
-        score: 99,
-        accuracy: index,
-        ...(index === 29 ? { date_assessed: '2026-07-01' } : {}),
-      }), `2026-06-${day}T10:01:00.000Z`);
+          id, assessment_id, item_key, prompt, position, is_correct, metadata, created_at, sync_status
+        ) values (?, ?, 'a', 'a', 4, 1, ?, ?, 'synced')
+      `, `item-${index}`, `assessment-${index}`, JSON.stringify({ row: 2, reached: true }),
+      `2026-06-${day}T10:01:00.000Z`);
     }
     await db.runAsync(`
       insert into assessments (
         id, user_id, child_id, programme_id, assessment_type,
-        assessment_date, created_at, sync_status
-      ) values ('other-ea', 'user-2', 'child-0', 'programme-a', 'letter_egra',
-        '2026-06-30', '2026-06-30T11:00:00.000Z', 'synced')
+        assessment_date, created_at, sync_status, question_code
+      ) values ('other-ea', 'user-2', 'child-0', 'programme-a', 'letter_sounds',
+        '2026-06-30', '2026-06-30T11:00:00.000Z', 'synced', 'letter_sounds')
     `);
     db.resetQueryLog();
 
-    const rows = await createAssessmentsRepository({ database: db }).getAssessments({
+    const rows = await createAssessmentsRepository({ database: db }).getQuestionResults({
       userId: 'user-1',
       recordedByUserId: 'user-1',
       sinceDate: '2026-06-01',
@@ -120,11 +117,12 @@ describe('repository read-path query budgets', () => {
     expect(rows).toHaveLength(30);
     expect(rows[0]).toEqual(expect.objectContaining({
       id: 'assessment-29',
-      score: 99,
-      accuracy: 29,
-      date_assessed: '2026-07-01',
+      score: 1,
+      derived: { total_correct: 1 },
+      assessment_date: '2026-06-30',
+      items: [expect.objectContaining({ prompt: 'a', position: 4, is_correct: true, metadata: { row: 2, reached: true } })],
     }));
-    expect(rows[1].date_assessed).toBe('2026-06-29');
+    expect(rows[1].assessment_date).toBe('2026-06-29');
     expect(db.getQueryCount()).toBeLessThanOrEqual(4);
     expect(normalizedSql(db).filter(sql => sql.includes('from assessment_items'))).toHaveLength(1);
     expect(normalizedSql(db).some(sql => sql.includes('assessment_date >= ?') && sql.includes('user_id = ?'))).toBe(true);
@@ -154,7 +152,7 @@ describe('repository read-path query budgets', () => {
     expect(normalizedSql(db)[0]).toMatch(/order by sign_in_time desc.*limit \?/);
   });
 
-  test('aggregate reads use one query each when programme scope is supplied', async () => {
+  test('aggregate reads stay bounded and resolve the active academic year for assessment counts', async () => {
     db = await createDatabase();
     await seedChildren(db, 2);
     await db.runAsync(`
@@ -167,11 +165,11 @@ describe('repository read-path query budgets', () => {
     await db.runAsync(`
       insert into assessments (
         id, user_id, child_id, programme_id, assessment_type,
-        assessment_date, created_at, sync_status
+        assessment_date, created_at, sync_status, question_code
       ) values
-        ('a1', 'user-1', 'child-1', 'programme-a', 'letter_egra', '2026-07-01', '2026-07-01T08:00:00Z', 'synced'),
-        ('a2', 'user-2', 'child-1', 'programme-a', 'word_egra', '2026-07-02', '2026-07-02T08:00:00Z', 'synced'),
-        ('a3', 'user-2', 'child-0', 'programme-a', 'letter_egra', '2026-07-03', '2026-07-03T08:00:00Z', 'synced')
+        ('a1', 'user-1', 'child-1', 'programme-a', 'letter_sounds', '2026-07-01', '2026-07-01T08:00:00Z', 'synced', 'letter_sounds'),
+        ('a2', 'user-2', 'child-1', 'programme-a', 'word_reading', '2026-07-02', '2026-07-02T08:00:00Z', 'synced', 'word_reading'),
+        ('a3', 'user-2', 'child-0', 'programme-a', 'letter_sounds', '2026-07-03', '2026-07-03T08:00:00Z', 'synced', 'letter_sounds')
     `);
     const sessions = createSessionsRepository({ database: db });
     const assessments = createAssessmentsRepository({ database: db });
@@ -189,12 +187,11 @@ describe('repository read-path query budgets', () => {
     db.resetQueryLog();
     await expect(assessments.getAssessmentCountsSince({
       programmeId: 'programme-a',
-      sinceDate: '2026-07-01',
     })).resolves.toEqual([
       { child_id: 'child-0', count: 1 },
-      { child_id: 'child-1', count: 2 },
+      { child_id: 'child-1', count: 1 },
     ]);
-    expect(db.getQueryCount()).toBe(1);
+    expect(db.getQueryCount()).toBe(2); // Active-year lookup plus the bounded aggregate.
 
     db.resetQueryLog();
     await expect(sessions.countSessionsOnDate({
@@ -207,40 +204,40 @@ describe('repository read-path query budgets', () => {
     db.resetQueryLog();
     await Promise.all([
       sessions.getSessionCountsSince({ userId: 'user-1', sinceDate: '2026-07-01' }),
-      assessments.getAssessmentCountsSince({ userId: 'user-1', sinceDate: '2026-07-01' }),
+      assessments.getAssessmentCountsSince({ userId: 'user-1' }),
       createTimeEntriesRepository({ database: db }).getTimeEntries({
         userId: 'user-1',
         sinceIso: '2026-06-30T22:00:00.000Z',
         completedOnly: true,
       }),
     ]);
-    expect(db.getQueryCount()).toBeLessThanOrEqual(6);
+    expect(db.getQueryCount()).toBeLessThanOrEqual(7); // Adds one active-year lookup.
   });
 
-  test('countAssessments resolves active programme and counts a compatible assessment type in two queries', async () => {
+  test('countResults resolves active programme and counts one Question code in two queries', async () => {
     db = await createDatabase();
     await seedChildren(db, 1);
     await db.runAsync(`
       insert into assessments (
         id, user_id, child_id, programme_id, assessment_type,
-        assessment_date, created_at, sync_status
+        assessment_date, created_at, sync_status, question_code
       ) values
-        ('a1', 'user-1', 'child-0', 'programme-a', 'letter_egra', '2026-07-01', '2026-07-01T08:00:00Z', 'synced'),
-        ('a2', 'user-2', 'child-0', 'programme-a', 'letter_egra', '2026-07-02', '2026-07-02T08:00:00Z', 'synced'),
-        ('a3', 'user-1', 'child-0', 'programme-a', 'letter_egra', '2026-07-03', '2026-07-03T08:00:00Z', 'synced'),
-        ('a4', 'user-1', 'child-0', 'programme-a', 'word_egra', '2026-07-04', '2026-07-04T08:00:00Z', 'synced')
+        ('a1', 'user-1', 'child-0', 'programme-a', 'letter_sounds', '2026-07-01', '2026-07-01T08:00:00Z', 'synced', 'letter_sounds'),
+        ('a2', 'user-2', 'child-0', 'programme-a', 'letter_sounds', '2026-07-02', '2026-07-02T08:00:00Z', 'synced', 'letter_sounds'),
+        ('a3', 'user-1', 'child-0', 'programme-a', 'letter_sounds', '2026-07-03', '2026-07-03T08:00:00Z', 'synced', 'letter_sounds'),
+        ('a4', 'user-1', 'child-0', 'programme-a', 'word_reading', '2026-07-04', '2026-07-04T08:00:00Z', 'synced', 'word_reading')
     `);
     db.resetQueryLog();
 
-    await expect(createAssessmentsRepository({ database: db }).countAssessments({
+    await expect(createAssessmentsRepository({ database: db }).countResults({
       userId: 'user-1',
       childId: 'child-0',
-      assessmentType: 'letter_egra',
+      questionCode: 'letter_sounds',
     })).resolves.toBe(3);
 
     expect(db.getQueryCount()).toBe(2);
     expect(normalizedSql(db).some(sql => (
-      sql.includes("coalesce(assessment_type, 'letter_egra') = ?")
+      sql.includes('question_code = ?')
     ))).toBe(true);
   });
 });

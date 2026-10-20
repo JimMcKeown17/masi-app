@@ -22,6 +22,7 @@
     "verify:upload-contract:postgres": "node scripts/upload-contract-postgres-harness.cjs",
     "verify:organisation-label:postgres": "node scripts/organisation-label-postgres-harness.cjs",
     "verify:support-incident:postgres": "node scripts/support-incident-postgres-harness.cjs",
+    "verify:assessment-results:postgres": "node scripts/assessment-results-postgres-harness.cjs",
     "verify:ea-access:postgres": "node scripts/ea-access-postgres-harness.cjs",
     "ea:status": "node scripts/ea-access.cjs status",
     "ea:suspend": "node scripts/ea-access.cjs suspend",

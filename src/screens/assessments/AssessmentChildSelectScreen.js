@@ -8,20 +8,13 @@ import { useFocusEffect } from '@react-navigation/native';
 import { useAuth } from '../../context/AuthContext';
 import { useChildren } from '../../context/ChildrenContext';
 import { useClasses } from '../../context/ClassesContext';
-import { LETTER_SETS, WORD_SETS } from '../../constants/egraConstants';
+import { CURRENT_ITEM_SETS } from '../../assessment-questions';
 import { colors, spacing, borderRadius, shadows } from '../../constants/colors';
 
 import SearchField from '../../components/common/SearchField';
 import { fontFamilies } from '../../constants/typography';
-import { resolveAssessmentRoute } from '../../utils/assessmentRouting';
-import { buildAssessmentMap } from '../../utils/assessmentHistoryMap';
-import { normalizeLanguageKey } from '../../utils/letterMastery';
+import { languageCodeForHomeLanguage, LANGUAGE_LABELS } from '../../utils/assessmentRegistry';
 import SelectSheet from '../../components/common/SelectSheet';
-
-const LANGUAGE_OPTIONS = [
-  { key: 'english', label: 'English' },
-  { key: 'isixhosa', label: 'isiXhosa' },
-];
 
 function formatShortDate(dateStr) {
   const [y, m, d] = dateStr.split('-').map(Number);
@@ -36,25 +29,34 @@ export default function AssessmentChildSelectScreen({ navigation, route }) {
   const { assessments: assessmentsRepository } = repositories;
 
   const { user } = useAuth();
-  const assessmentType = route.params?.assessmentType || 'letter_egra';
-  const isWordAssessment = assessmentType === 'word_egra';
-  const itemSets = isWordAssessment ? WORD_SETS : LETTER_SETS;
+  const { testCode } = route.params;
+  const itemSets = CURRENT_ITEM_SETS[testCode] ?? {};
+  const languageOptions = Object.keys(itemSets).map(code => ({ key: code, label: LANGUAGE_LABELS[code] }));
   const { children } = useChildren();
   const { classes } = useClasses();
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedChild, setSelectedChild] = useState(null);
   const [languagePickerVisible, setLanguagePickerVisible] = useState(false);
-  const [selectedLanguage, setSelectedLanguage] = useState('english');
+  const [selectedLanguage, setSelectedLanguage] = useState(null);
   const [assessmentMap, setAssessmentMap] = useState({});
   const launchingRef = useRef(false);
 
   useFocusEffect(
     useCallback(() => {
+      launchingRef.current = false;
       (async () => {
-        const allAssessments = await assessmentsRepository.getAssessments({ userId: user.id });
-        setAssessmentMap(buildAssessmentMap(allAssessments, assessmentType));
+        const results = await assessmentsRepository.getQuestionResults({ userId: user.id, questionCodes: [testCode] });
+        const latestByChild = {};
+        for (const result of results) {
+          const previous = latestByChild[result.child_id];
+          if (!previous || result.assessment_date > previous.assessment_date
+            || (result.assessment_date === previous.assessment_date && result.created_at > previous.created_at)) {
+            latestByChild[result.child_id] = result;
+          }
+        }
+        setAssessmentMap(latestByChild);
       })();
-    }, [assessmentType, user.id])
+    }, [assessmentsRepository, testCode, user.id])
   );
 
   const sortedChildren = [...children].sort((a, b) => {
@@ -63,8 +65,8 @@ export default function AssessmentChildSelectScreen({ navigation, route }) {
     if (!aInfo && !bInfo) return a.first_name.localeCompare(b.first_name);
     if (!aInfo) return -1;
     if (!bInfo) return 1;
-    if (aInfo.date_assessed !== bInfo.date_assessed) {
-      return aInfo.date_assessed < bInfo.date_assessed ? -1 : 1;
+    if (aInfo.assessment_date !== bInfo.assessment_date) {
+      return aInfo.assessment_date < bInfo.assessment_date ? -1 : 1;
     }
     return a.first_name.localeCompare(b.first_name);
   });
@@ -75,57 +77,35 @@ export default function AssessmentChildSelectScreen({ navigation, route }) {
     return fullName.includes(query);
   });
 
-  const navigateToAssessment = async (child, letterSet) => {
-    if (launchingRef.current) return;
+  const navigateToAssessment = (child, languageCode) => {
+    if (launchingRef.current || !child || !itemSets[languageCode]) return;
     launchingRef.current = true;
-    try {
-      const [{ screenName, captureMode }, attemptCount] = await Promise.all([
-        resolveAssessmentRoute(),
-        assessmentsRepository.countAssessments({
-          userId: user.id,
-          childId: child.id,
-          assessmentType,
-        }),
-      ]);
-      navigation.navigate(screenName, {
-        child,
-        letterSet,
-        attemptNumber: attemptCount + 1,
-        assessmentType,
-        captureMode,
-      });
-    } finally {
-      launchingRef.current = false;
-    }
+    navigation.navigate('StandaloneTest', { testCode, child, languageCode });
   };
 
   const handleChildPress = (child) => {
-    // Auto-detect language from the child's class
-    if (child.class_id) {
-      const childClass = classes.find((c) => c.id === child.class_id);
-      if (childClass?.home_language) {
-        const key = normalizeLanguageKey(childClass.home_language);
-        if (itemSets[key]) {
-          navigateToAssessment(child, itemSets[key]);
-          return;
-        }
-      }
+    if (launchingRef.current) return;
+    const childClass = classes.find(classItem => classItem.id === child.class_id);
+    const languageCode = languageCodeForHomeLanguage(childClass?.home_language);
+    if (languageCode !== null && itemSets[languageCode]) {
+      navigateToAssessment(child, languageCode);
+      return;
     }
-    // Fallback: show the language picker
+    if (selectedChild?.id !== child.id) setSelectedLanguage(null);
     setSelectedChild(child);
     setLanguagePickerVisible(true);
   };
 
-  const handleLanguageConfirm = (language) => {
-    setSelectedLanguage(language);
-    navigateToAssessment(selectedChild, itemSets[language]);
+  const handleLanguageConfirm = (languageCode) => {
+    if (!itemSets[languageCode]) return;
+    setSelectedLanguage(languageCode);
+    navigateToAssessment(selectedChild, languageCode);
   };
 
   const renderChild = ({ item }) => {
     const info = assessmentMap[item.id];
-    const accuracyColor = info
-      ? info.accuracy >= 75 ? colors.success : info.accuracy >= 50 ? colors.primary : colors.error
-      : null;
+    const accuracy = info?.derived?.percent;
+    const accuracyColor = accuracy >= 75 ? colors.success : accuracy >= 50 ? colors.primary : colors.error;
 
     return (
       <Pressable
@@ -139,8 +119,8 @@ export default function AssessmentChildSelectScreen({ navigation, route }) {
         </Text>
         {info && (
           <Text variant="bodySmall" style={styles.subtitle}>
-            Last assessed: {formatShortDate(info.date_assessed)} ·{' '}
-            <Text style={{ color: accuracyColor, fontFamily: fontFamilies.textBold }}>{info.accuracy}%</Text>
+            Last assessed: {formatShortDate(info.assessment_date)}
+            {accuracy != null && <Text style={{ color: accuracyColor, fontFamily: fontFamilies.textBold }}> · {accuracy}%</Text>}
           </Text>
         )}
       </Pressable>
@@ -172,11 +152,12 @@ export default function AssessmentChildSelectScreen({ navigation, route }) {
       />
 
       <SelectSheet
+        key={selectedChild?.id}
         visible={languagePickerVisible}
         onDismiss={() => setLanguagePickerVisible(false)}
         title="Select language"
         dismissLabel="Dismiss assessment language picker"
-        options={LANGUAGE_OPTIONS}
+        options={languageOptions}
         selectedKey={selectedLanguage}
         onSelect={handleLanguageConfirm}
         confirmLabel="Start"

@@ -103,6 +103,16 @@ describe('validateResult', () => {
     expect(verdict.errors.some((e) => e.includes('duration_ms'))).toBe(true);
   });
 
+  test.each([-1, 0.5, NaN, Infinity, -Infinity])('rejects duration_ms=%p outside non-negative integers', (duration_ms) => {
+    const verdict = validateResult({ ...minimalValid, duration_ms });
+    expect(verdict.valid).toBe(false);
+    expect(verdict.errors).toContain('duration_ms: must be a non-negative integer');
+  });
+
+  test.each([0, 1, 60000])('accepts non-negative integer duration_ms=%i', (duration_ms) => {
+    expect(validateResult({ ...minimalValid, duration_ms })).toEqual({ valid: true, errors: [] });
+  });
+
   test('rejects when an items entry is missing required fields', () => {
     const bad = {
       ...minimalValid,
@@ -209,5 +219,69 @@ describe('tracks_progress rule', () => {
   test('position beyond items is invalid', () => {
     const v = validateResult({ ...base, derived: { total_correct: 1, total_attempted: 6, percent: 17, last_attempted_position: 5, tracks_progress: true } });
     expect(v.valid).toBe(false);
+  });
+});
+
+describe('stop_rule evidence', () => {
+  function stopped(): Result {
+    return {
+      ...minimalValid, stopped_reason: 'stop_rule',
+      items: Array.from({ length: 60 }, (_, position) => ({
+        position, item_key: 'a', prompt: 'a', is_correct: position < 5,
+        metadata: { reached: position < 15 },
+      })),
+      derived: { total_correct: 5, total_attempted: 15, percent: 33, last_attempted_position: 14 },
+    };
+  }
+
+  test('rejects a stop whose last ten reached items include a correct decision', () => {
+    const result = stopped();
+    result.items[8].is_correct = true;
+    const verdict = validateResult(result, { stopAt: 10 });
+    expect(verdict.valid).toBe(false);
+    expect(verdict.errors.join(' ')).toMatch(/stop_rule.*10.*wrong/);
+  });
+
+  test('accepts the final ten wrong reached items by position even when array order differs', () => {
+    const result = stopped();
+    result.items.reverse();
+    expect(validateResult(result, { stopAt: 10 })).toEqual({ valid: true, errors: [] });
+  });
+
+  test('unreached false items cannot supply missing stop evidence', () => {
+    const result = stopped();
+    result.items[5].metadata = { reached: false };
+    expect(validateResult(result, { stopAt: 10 }).valid).toBe(false);
+  });
+
+  test('the wrong run must end at last_attempted_position', () => {
+    const result = stopped();
+    result.derived.last_attempted_position = 15;
+    expect(validateResult(result, { stopAt: 10 }).valid).toBe(false);
+  });
+
+  test('rejects fewer than stopAt reached decisions', () => {
+    const result = stopped();
+    result.items = result.items.slice(5, 14);
+    result.derived.last_attempted_position = 13;
+    expect(validateResult(result, { stopAt: 10 }).valid).toBe(false);
+  });
+
+  test('metadata.reached absent still counts as reached', () => {
+    const result = stopped();
+    result.items.slice(5, 15).forEach((item) => { delete item.metadata; });
+    expect(validateResult(result, { stopAt: 10 }).valid).toBe(true);
+  });
+
+  test('preserves the one-argument API and does not apply the rule to other reasons', () => {
+    const result = stopped();
+    result.items[8].is_correct = true;
+    expect(validateResult(result).valid).toBe(true);
+    result.stopped_reason = 'ea_ended';
+    expect(validateResult(result, { stopAt: 10 }).valid).toBe(true);
+  });
+
+  test('malformed stop evidence returns errors without throwing', () => {
+    expect(validateResult({ ...stopped(), items: [null], derived: null }, { stopAt: 10 }).valid).toBe(false);
   });
 });

@@ -16,12 +16,14 @@ export const tokens = {
     marked: '#2E7D27',
     onMarked: '#FFFFFF',
     markedSoft: '#E7F3E5',
+    error: '#B3261E',
+    errorSoft: '#FCEAE8',
     notReached: '#B3A8A8',
     scrim: 'rgba(34, 26, 27, 0.45)',
   },
   space: { xs: 4, sm: 8, md: 12, lg: 16, xl: 24 },
   radius: { pill: 999, card: 12, cell: 8 },
-  font: { markingItem: 28, prompt: 32, body: 16, caption: 13, heading: 20 },
+  font: { markingItem: 28, markingWord: 22, prompt: 32, body: 16, caption: 13, heading: 20 },
 } as const;
 
 export type Tokens = typeof tokens;

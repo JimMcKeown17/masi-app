@@ -1,39 +1,34 @@
-# EGRA Letter Sets
+# Letter and word item sets
 
-**Standing data reference.** The shipped values live in `src/constants/egraConstants.js`, which cites
-this file as its source. **If the two disagree, the code is truth** — this file is the human-readable
-record, not the runtime.
+The runtime source is [src/assessment-questions/itemsets/](../src/assessment-questions/itemsets/),
+not a duplicated list in this document or the old capture constants.
+[The item-set registry](../src/assessment-questions/itemsets/index.ts) exports bundled versions and
+`CURRENT_ITEM_SETS`; `assessmentRegistry.js` selects the test and language without copying prompts.
+A saved result retains its `item_set_id` and item prompts so later content changes cannot reinterpret it.
+There is no English fallback for an unknown language or a missing set.
 
-> Corrected 2026-07-13: line 2 of the isiXhosa array had a broken quote (`"M,"e",`), and the isiXhosa
-> set was recorded in mixed case while the code has always shipped it lowercase. Both fixed below to
-> match `egraConstants.js`.
+Current standalone **Letter Sounds** and **WelaPLUS Q1** share `letter_sounds@2026.2.en` and
+`letter_sounds@2026.2.xh`. Both use the same Zazi iZandi Grid A card: 60 mixed-case letters in six
+printed rows of ten, with a stop at ten consecutive wrong marks. One frozen rows constant supplies
+both languages, so the two cards cannot drift. The old English digraph card is not the current test.
+Card layout must come from item-set data, not a hard-coded column count.
 
-## The 60-letter EGRA assessment sets
+The interim `letter_sounds@2026.1.en` and `letter_sounds@2026.1.xh` sets remain bundled for
+historical reference and old practice results. Changing the current alias does not reinterpret a
+saved result: each result retains its item-set id and stored prompts.
 
-**English** — mixed case, with digraphs in the final row. Display as-is; do **not** force uppercase.
+Standalone **Word Reading** uses `word_reading@2026.1.en` / `word_reading@2026.1.xh`, with
+`row_lengths` carried by the set. Neither standalone word set configures a stop rule. These lists
+remain placeholders; they are not the WelaPLUS Q6 sets.
 
-```
-"I","a","m","E","p","n","L","s","o","e",
-"Y","i","K","N","d","H","f","U","h","v",
-"Z","b","G","r","J","T","c","F","q","W",
-"w","D","x","A","j","B","g","P","Q","y",
-"z","C","O","t","S","V","l","k","M","R",
-"X","u","X","d","ch","sh","th","wh","oo","ee"
-```
-
-**isiXhosa** — all lowercase, no digraphs. (Letters repeat by design; EGRA sets are sampled with
-replacement, so a duplicate is not a data error.)
-
-```
-"l","a","m","e","s","n","l","s","m","e",
-"y","i","k","n","d","h","f","u","h","v",
-"f","y","c","i","t","k","d","z","f","d",
-"t","z","o","j","p","r","c","w","p","o",
-"w","a","e","x","q","l","g","o","u","z",
-"x","r","v","b","j","b","q","u","r","g"
-```
-
-Both sets render 20 per page, 5 columns.
+See [contentStatus.ts](../src/assessment-questions/itemsets/contentStatus.ts) for the maintained
+content-status entries. Grid A is supplied; the app still needs a typeface that makes capital I and
+lowercase l distinguishable (the printed card uses a serifed capital I), and a designer will
+recreate the printed card from the bundled rows. Masi still needs real standalone word lists. The
+file also tracks pending WelaPLUS pictures, story-writing rubric anchors and isiXhosa language
+review. Do not treat passing code tests as typography, print or pedagogy approval. Word score bands
+remain unset; see
+[the score-band configuration](./assessment-score-bands-config.md).
 
 ## Pedagogical letter orders (26 unique letters)
 
@@ -43,13 +38,5 @@ which letters are typically taught.
 - **English:** A, M, S, T, N, I, P, C, F, D, H, O, R, B, L, K, E, G, W, V, U, J, Y, Z, Q, X
 - **isiXhosa:** a, e, i, o, u, b, l, m, k, p, s, h, z, n, d, y, f, w, v, x, g, t, q, r, c, j
 
-All comparisons are case-insensitive; the tracker stores and displays lowercase. The digraphs
-(ch, sh, th, wh, oo, ee) from the English 60-letter set are excluded from the 26-letter tracker.
-
-## Open work
-
-**The word-reading lists are placeholders.** `egraConstants.js` marks its word-reading sets
-*"Placeholder word lists — replace with real EGRA word lists when available."* Real EGRA word lists
-have never been supplied. This is why the Words tab on `AssessmentRankingScreen` has no benchmark
-(see also the unset `word_reading` score bands in `documentation/assessment-score-bands-config.md`).
-Sourcing the real lists unblocks both.
+All comparisons are case-insensitive; the tracker stores and displays lowercase. Mastery uses
+stored item prompts and these pedagogical orders, not positions in an assessment list.

@@ -1,3 +1,5 @@
+import { v4 as uuid } from 'uuid';
+import { questionResult } from '../test-support/assessmentFamilySyncTestUtils';
 import { bindTestActor } from '../test-support/actorTestUtils';
 jest.mock('expo-sqlite', () => require('../test-support/expoSQLiteMock'));
 
@@ -35,32 +37,28 @@ describe('completion-path statement budgets', () => {
     db = null;
   });
 
-  test('a 61-item assessment keeps two writes per item and performs no owner-resolution reads', async () => {
+  test('a 61-item assessment writes each item once and one family outbox, without owner-resolution reads', async () => {
     db = await createDatabase();
-    await seedChildren(db, 1);
-    const correctLetters = Array.from({ length: 60 }, (_, index) => ({
-      index,
-      letter: `letter-${index}`,
-    }));
+    const userId = uuid(), childId = uuid(), programmeId = uuid();
+    bindTestActor(db, userId);
+    await db.runAsync('insert into programmes (id, code, name) values (?, ?, ?)', programmeId, 'family-budget', 'Family budget');
+    await db.runAsync('insert into staff_programme_assignments (id, user_id, programme_id) values (?, ?, ?)', uuid(), userId, programmeId);
+    await db.runAsync("insert into children (id, first_name, last_name, created_by) values (?, 'Child', 'One', ?)", childId, userId);
     db.resetQueryLog();
 
-    await createAssessmentsRepository({ database: db }).saveAssessment({
-      id: 'assessment-61',
-      user_id: 'user-1',
-      child_id: 'child-0',
-      programme_id: 'programme-a',
-      assessment_type: 'letter_egra',
-      date_assessed: '2026-07-12',
-      correct_letters: correctLetters,
-      synced: false,
+    await createAssessmentsRepository({ database: db }).saveQuestionResult({
+      assessmentId: uuid(), userId, childId, result: questionResult(61),
     });
 
     const log = db.getQueryLog();
-    expect(log.filter(query => query.method === 'runAsync')).toHaveLength(124);
+    expect(log.filter(query => query.method === 'runAsync')).toHaveLength(63);
     expect(log.filter(query => query.method === 'transaction')).toHaveLength(1);
-    expect(log.filter(query => !['runAsync', 'transaction'].includes(query.method))).toHaveLength(0);
-    expect(log.some(query => /select .* from (assessment_items|assessments)/i.test(compactSql(query.sql))))
-      .toBe(false);
+    const reads = log.filter(query => !['runAsync', 'transaction'].includes(query.method));
+    expect(reads).toHaveLength(2);
+    expect(reads.map(query => compactSql(query.sql))).toEqual([
+      expect.stringMatching(/select \* from staff_programme_assignments/),
+      'select id from assessments where id = ?',
+    ]);
 
     db.resetQueryLog();
     const owners = await db.getAllAsync(`
@@ -68,7 +66,7 @@ describe('completion-path statement budgets', () => {
       from sync_outbox
       where table_name in ('assessments', 'assessment_items')
     `);
-    expect(owners).toEqual([{ owner_user_id: 'user-1' }]);
+    expect(owners).toEqual([{ owner_user_id: userId }]);
   });
 
   test('a 10-attendee session keeps two writes per row and performs no owner-resolution reads', async () => {
@@ -121,7 +119,7 @@ describe('completion-path statement budgets', () => {
         id: 'session-mastery', user_id: 'user-1', programme_id: 'programme-a',
         session_date: '2026-07-12', children_ids: ['child-0'], synced: false,
       },
-      trackerLanguageKey: 'english',
+      trackerLanguageCode: 'en',
       letterTrackerChanges: { 'child-0': { a: true, m: true, s: false } },
       nowIso: '2026-07-12T10:00:00.000Z',
       idFactory: () => 'ignored-by-deterministic-id',

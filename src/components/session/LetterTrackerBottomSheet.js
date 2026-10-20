@@ -7,7 +7,7 @@ import {
 import { Text, ActivityIndicator } from 'react-native-paper';
 import { colors, spacing } from '../../constants/colors';
 import { letterStateColors } from '../../constants/letterStateColors';
-import { PEDAGOGICAL_ORDERS } from '../../constants/egraConstants';
+import { PEDAGOGICAL_ORDERS } from '../../utils/assessmentRegistry';
 import { loadMasteryState, countMastered } from '../../utils/masteryState';
 import BottomSheet from '../common/BottomSheet';
 import BrandButton from '../common/BrandButton';
@@ -22,7 +22,7 @@ import { fontFamilies, typeRoles } from '../../constants/typography';
  *   visible         - boolean
  *   onDismiss       - () => void
  *   child           - child object { id, first_name, last_name }
- *   languageKey     - 'english' or 'isixhosa'
+ *   languageCode    - 'en', 'xh', 'zu' or null
  *   pendingChanges  - { [letter]: true/false } changes made this session
  *   onChangesUpdate - (changes: { [letter]: true/false }) => void
  */
@@ -31,7 +31,7 @@ export default function LetterTrackerBottomSheet({
   onDismiss,
   child,
   userId,
-  languageKey,
+  languageCode,
   pendingChanges,
   onChangesUpdate,
 }) {
@@ -41,7 +41,7 @@ export default function LetterTrackerBottomSheet({
   const [existingTaught, setExistingTaught] = useState(new Set());
   const [loading, setLoading] = useState(true);
 
-  const pedagogicalOrder = PEDAGOGICAL_ORDERS[languageKey];
+  const pedagogicalOrder = PEDAGOGICAL_ORDERS[languageCode];
 
   useEffect(() => {
     if (!visible || !child) return;
@@ -52,7 +52,7 @@ export default function LetterTrackerBottomSheet({
         const { assessmentMastered: masteredSet, taughtRecords } = await loadMasteryState({ repositories,
           userId,
           childId: child.id,
-          languageKey,
+          languageCode,
         });
         setAssessmentMastered(masteredSet);
         setExistingTaught(new Set(taughtRecords.map(r => r.letter)));
@@ -62,7 +62,7 @@ export default function LetterTrackerBottomSheet({
         setLoading(false);
       }
     })();
-  }, [visible, child?.id, languageKey, userId]);
+  }, [visible, child?.id, languageCode, userId]);
 
   const getCellState = (letter) => {
     if (assessmentMastered.has(letter)) return 'assessment';
@@ -128,7 +128,7 @@ export default function LetterTrackerBottomSheet({
     };
   };
 
-  const legend = loading ? null : (
+  const legend = loading || !pedagogicalOrder ? null : (
     <View style={styles.legend}>
       {[
         ['Taught', 'taught'], ['New this session', 'taught'],
@@ -150,7 +150,7 @@ export default function LetterTrackerBottomSheet({
       visible={visible}
       onDismiss={onDismiss}
       title="Letter tracker"
-      subtitle={<>{childName} · <Text style={styles.subtitleStrong}>{masteredCount}/26</Text> letters</>}
+      subtitle={pedagogicalOrder ? <>{childName} · <Text style={styles.subtitleStrong}>{masteredCount}/26</Text> letters</> : childName}
       dismissLabel="Dismiss letter tracker"
       headerExtras={legend}
       footer={<BrandButton variant="primary" size="lg" label="Done" onPress={onDismiss} />}
@@ -161,6 +161,8 @@ export default function LetterTrackerBottomSheet({
         <View style={styles.loadingArea}>
           <ActivityIndicator size="small" color={colors.text} />
         </View>
+      ) : !pedagogicalOrder ? (
+        <Text style={styles.missingSetText}>No letter set for this class language.</Text>
       ) : (
         <LetterToggleGrid letters={pedagogicalOrder} tileFor={tileFor} onPressLetter={handleCellTap} />
       )}
@@ -169,6 +171,7 @@ export default function LetterTrackerBottomSheet({
 }
 
 const styles = StyleSheet.create({
+  missingSetText: { ...typeRoles.textBody, color: colors.textSecondary, paddingVertical: spacing.md },
   loadingArea: { padding: spacing.xl, alignItems: 'center' },
   subtitleStrong: { fontFamily: fontFamilies.textHeavy, color: colors.text },
   // BottomSheet already gives its subtitle 16dp below; the board asks for 14.

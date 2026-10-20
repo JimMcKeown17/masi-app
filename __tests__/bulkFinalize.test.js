@@ -31,48 +31,19 @@ const enqueue = async (db, tableName, recordId, operation, payload) => {
 };
 
 /**
- * Seeds one parent assessment + N assessment_items rows (all pending, all enqueued).
- * The assessment_items table is the only BATCHABLE_UPSERT_TABLE, so this ensures
- * processBatch is exercised.
+ * Seeds N pending time-entry inserts so the generic processBatch path is exercised.
+ * Assessment items now travel only inside their parent's atomic RPC family.
  */
-const seedAssessmentItemsBulk = async (db, count = 250) => {
-  await db.runAsync(`
-    insert into programmes (id, code, name, sync_status)
-    values ('programme-bulk', 'literacy', 'Literacy Bulk', 'synced')
-  `);
-  await db.runAsync(`
-    insert into children (id, first_name, last_name, sync_status)
-    values ('child-bulk-1', 'Amahle', 'Dlamini', 'synced')
-  `);
-  await db.runAsync(`
-    insert into assessments (
-      id, user_id, child_id, programme_id, assessment_type, assessment_date, sync_status
-    )
-    values (
-      'assessment-bulk-1', 'user-1', 'child-bulk-1', 'programme-bulk',
-      'letter_sounds', '2026-06-16', 'synced'
-    )
-  `);
-
+const seedTimeEntriesBulk = async (db, count = 250) => {
   for (let i = 0; i < count; i++) {
-    const id = `item-bulk-${String(i).padStart(6, '0')}`;
-    const letter = String.fromCharCode(97 + (i % 26));
+    const id = `time-bulk-${String(i).padStart(6, '0')}`;
+    const signInTime = '2026-06-16T08:00:00.000Z';
     await db.runAsync(`
-      insert into assessment_items (
-        id, assessment_id, item_key, prompt, response, is_correct, position, metadata, sync_status
-      )
-      values (?, 'assessment-bulk-1', ?, ?, ?, 1, ?, '{}', 'pending')
-    `, id, `letter-${i + 1}`, letter, letter, i);
-
-    await enqueue(db, 'assessment_items', id, 'insert', {
-      id,
-      assessment_id: 'assessment-bulk-1',
-      item_key: `letter-${i + 1}`,
-      prompt: letter,
-      response: letter,
-      is_correct: 1,
-      position: i,
-      metadata: '{}',
+      insert into time_entries (id, user_id, sign_in_time, sync_status)
+      values (?, 'user-1', ?, 'pending')
+    `, id, signInTime);
+    await enqueue(db, 'time_entries', id, 'insert', {
+      id, user_id: 'user-1', sign_in_time: signInTime,
     });
   }
 };
@@ -81,12 +52,9 @@ it('finalizes a 250-row success batch in O(chunks) transactions (not O(N)), CAS 
   const db = bindTestActor(createBetterSqliteTestDatabase(':memory:'), 'test-user');
   await runMigrations(db);
 
-  // seed references needed by offlineSync (school, programme, academic_year exist above for
-  // the items' programme, but seedCoreData would add a duplicate 'programme-a' — seed the
-  // minimum the engine needs for the seeded assessment graph: the global school-1 row).
   await db.runAsync(`insert or ignore into schools (id, name) values ('school-1', 'Masi Primary')`);
 
-  await seedAssessmentItemsBulk(db, 250);
+  await seedTimeEntriesBulk(db, 250);
 
   // Count withExclusiveTransactionAsync calls (each call ≈ one BEGIN).
   let txnCount = 0;
@@ -109,9 +77,9 @@ it('finalizes a 250-row success batch in O(chunks) transactions (not O(N)), CAS 
   const remaining = await db.getAllAsync('select id from sync_outbox');
   expect(remaining).toHaveLength(0);
 
-  // All assessment_items must be marked synced.
+  // All time entries must be marked synced.
   const unsynced = await db.getFirstAsync(
-    `select count(*) as count from assessment_items where sync_status != 'synced'`
+    `select count(*) as count from time_entries where sync_status != 'synced'`
   );
   expect(unsynced.count).toBe(0);
 

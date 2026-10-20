@@ -1,3 +1,5 @@
+import { v4 as uuid } from 'uuid';
+import { questionResult } from '../test-support/assessmentFamilySyncTestUtils';
 import { bindTestActor } from '../test-support/actorTestUtils';
 jest.mock('expo-sqlite', () => require('../test-support/expoSQLiteMock'));
 jest.mock('../src/services/supabaseClient', () => ({
@@ -40,36 +42,39 @@ it('POSITIVE: real capture flows commit through public interfaces with FK ON', a
   const db = await migrated();
 
   try {
-    // --- Seed shared parents (schools, programmes, academic_years, classes, staff assignment) ---
     await seedCoreData(db);
+    const userId = uuid(), childId = uuid(), programmeId = uuid(), assessmentId = uuid();
+    bindTestActor(db, userId);
+    await db.runAsync('insert into programmes (id, code, name) values (?, ?, ?)', programmeId, 'family-fk', 'Family FK');
+    await db.runAsync('insert into staff_programme_assignments (id, user_id, programme_id) values (?, ?, ?)', uuid(), userId, programmeId);
 
     // --- Save a child (children → child_ea_assignments → child_programme_enrollments → child_class_memberships) ---
     await createChildrenRepository({ database: db }).save({
-      id: 'child-1',
+      id: childId,
       first_name: 'Amahle',
       last_name: 'Dlamini',
       class_id: 'class-1',
-      created_by: 'user-1',
+      created_by: userId,
       synced: false,
-    }, { actorUserId: 'user-1' });
+    }, { actorUserId: userId });
 
     // --- Persist a literacy session (sessions → session_attendees → letter_mastery) ---
     await persistLiteracySession({
       database: db,
       session: {
         id: 'session-1',
-        user_id: 'user-1',
-        programme_id: 'programme-a',
+        user_id: userId,
+        programme_id: programmeId,
         class_id: 'class-1',
         session_date: '2026-06-16',
-        children_ids: ['child-1'],
+        children_ids: [childId],
         group_ids: [],
         activities: { letters_focused: ['a', 'm'] },
         synced: false,
       },
-      trackerLanguageKey: 'english',
+      trackerLanguageCode: 'en',
       letterTrackerChanges: {
-        'child-1': {
+        [childId]: {
           a: true,
           m: true,
         },
@@ -82,47 +87,37 @@ it('POSITIVE: real capture flows commit through public interfaces with FK ON', a
     });
 
     // --- Save an assessment (assessments → assessment_items) ---
-    await createAssessmentsRepository({ database: db }).saveAssessment({
-      id: 'assessment-1',
-      user_id: 'user-1',
-      child_id: 'child-1',
-      programme_id: 'programme-a',
-      assessment_type: 'letter_egra',
-      date_assessed: '2026-06-16',
-      items_tested: ['a', 'm'],
-      correct_letters: [{ index: 0, letter: 'a' }],
-      incorrect_letters: [{ index: 1, letter: 'm' }],
-      letters_attempted: 2,
-      correct_responses: 1,
-      accuracy: 50,
-      letter_language: 'isiXhosa',
-      attempt_number: 1,
-      synced: false,
+    await createAssessmentsRepository({ database: db }).saveQuestionResult({
+      assessmentId, userId, childId,
+      result: questionResult(2, { items: [
+        { position: 0, item_key: 'a', prompt: 'a', is_correct: true },
+        { position: 1, item_key: 'm', prompt: 'm', is_correct: false },
+      ] }),
     });
 
-    // Each ordered parent→child chain must have committed FULLY (exact counts + linked parent
-    // IDs), not merely "some row" — a length>0 check would pass even if per-letter rows were
-    // dropped, since saveAssessment always writes a __summary__ item (Codex Task 5 review).
-
+    // Each ordered parent→child chain must commit fully, including every actual item.
     // sessions → session_attendees → letter_mastery
     expect(await db.getAllAsync("select id from sessions where id = 'session-1'")).toHaveLength(1);
     const attendees = await db.getAllAsync(
       "select session_id, child_id from session_attendees where session_id = 'session-1'"
     );
     expect(attendees).toHaveLength(1);
-    expect(attendees[0]).toMatchObject({ session_id: 'session-1', child_id: 'child-1' });
+    expect(attendees[0]).toMatchObject({ session_id: 'session-1', child_id: childId });
     const masteryLetters = (await db.getAllAsync(
-      "select letter from letter_mastery where child_id = 'child-1'"
+      "select letter from letter_mastery where child_id = ?", childId
     )).map((row) => row.letter).sort();
-    expect(masteryLetters).toEqual(['a', 'm']); // both tracked letters committed under child-1
+    expect(masteryLetters).toEqual(['a', 'm']); // both tracked letters committed under this child
 
     // assessments → assessment_items
-    expect(await db.getAllAsync("select id from assessments where id = 'assessment-1'")).toHaveLength(1);
+    expect(await db.getAllAsync('select id from assessments where id = ?', assessmentId)).toHaveLength(1);
     const items = await db.getAllAsync(
-      "select item_key from assessment_items where assessment_id = 'assessment-1'"
+      'select assessment_id, item_key from assessment_items where assessment_id = ? order by position', assessmentId
     );
-    expect(items).toHaveLength(3); // __summary__ + the two tested letters (a, m)
-    expect(items.some((row) => row.item_key === '__summary__')).toBe(true);
+    expect(items).toHaveLength(2);
+    expect(items).toEqual([
+      { assessment_id: assessmentId, item_key: 'a' },
+      { assessment_id: assessmentId, item_key: 'm' },
+    ]);
   } finally {
     await db.closeAsync();
   }

@@ -11,7 +11,6 @@ import {
   AUTHENTICATED_DENIAL_MARKER,
   createOutboxSyncEngine,
 } from '../src/services/offlineSync';
-import { createAssessmentsRepository } from '../src/db/repositories/assessmentsRepository';
 import { createChildrenRepository } from '../src/db/repositories/childrenRepository';
 import { createClassesRepository } from '../src/db/repositories/classesRepository';
 import { createClassGroupingStateRepository } from '../src/db/repositories/classGroupingStateRepository';
@@ -31,7 +30,6 @@ describe('requeueTerminalRlsFailures', () => {
   let engine;
   let childrenRepository;
   let classesRepository;
-  let assessmentsRepository;
   let classGroupingStateRepository;
 
   beforeEach(async () => {
@@ -47,7 +45,6 @@ describe('requeueTerminalRlsFailures', () => {
     });
     childrenRepository = createChildrenRepository({ database: db });
     classesRepository = createClassesRepository({ database: db });
-    assessmentsRepository = createAssessmentsRepository({ database: db });
     classGroupingStateRepository = createClassGroupingStateRepository({ database: db });
   });
 
@@ -190,18 +187,11 @@ describe('requeueTerminalRlsFailures', () => {
 
   test('heals owned assessment items by their stamps even when the parent is absent', async () => {
     await seedChild({ id: 'child-assessed', syncStatus: 'synced' });
-    await assessmentsRepository.saveAssessment({
-      id: 'assessment-owned',
-      user_id: 'user-1',
-      child_id: 'child-assessed',
-      programme_id: 'programme-a',
-      assessment_type: 'letter_sounds',
-      assessment_date: '2026-07-07',
-      correct_responses: 1,
-      letters_attempted: 1,
-      correct_letters: [{ letter: 'a', index: 0 }],
-      sync_status: 'pending',
-    });
+    // Seed the legacy item directly: this recovery regression must outlive its retired writer.
+    await db.runAsync(`insert into assessments (id, user_id, child_id, programme_id, assessment_type, assessment_date)
+      values ('assessment-owned', 'user-1', 'child-assessed', 'programme-a', 'letter_sounds', '2026-07-07')`);
+    await db.runAsync(`insert into assessment_items (id, assessment_id, item_key, prompt, is_correct, position)
+      values ('item-owned', 'assessment-owned', 'a', 'a', 1, 0)`);
     const ownedItem = await db.getFirstAsync(`
       select *
       from assessment_items

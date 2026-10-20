@@ -6,7 +6,11 @@
  */
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { View, Text, Pressable, ScrollView, StyleSheet } from 'react-native';
+import { monotonicNow } from '../../progress/clock';
 import type { QuestionProps } from '../../types/QuestionProps';
+import type { ItemSetMeta } from '../../types/ItemSet';
+import { resolveItemSet } from '../../itemsets/resolveItemSet';
+import { MissingItemSet } from '../../progress/MissingItemSet';
 import type { Result, ResultItem, StoppedReason } from '../../types/Result';
 import type {
   WriteSentencesFromDictationItemSet,
@@ -27,10 +31,7 @@ type Phase =
   | 'skip-picker'
   | 'finished';
 
-type FullItemSet = WriteSentencesFromDictationItemSet & {
-  item_set_id: string;
-  question_version: string;
-};
+type FullItemSet = WriteSentencesFromDictationItemSet & ItemSetMeta;
 
 function isValidWord(value: unknown): value is WriteSentencesFromDictationWord {
   if (!value || typeof value !== 'object') return false;
@@ -56,15 +57,10 @@ function isFullItemSet(value: unknown): value is FullItemSet {
   const o = value as Record<string, unknown>;
   if (typeof o.item_set_id !== 'string') return false;
   if (typeof o.question_version !== 'string') return false;
+  if (typeof o.question_code !== 'string') return false;
+  if (typeof o.language !== 'string') return false;
   if (!Array.isArray(o.sentences) || o.sentences.length === 0) return false;
   return o.sentences.every(isValidSentence);
-}
-
-function resolveItemSet(language: string, override: unknown): FullItemSet {
-  if (isFullItemSet(override)) return override;
-  return language === 'xh'
-    ? WELA_PLUS_WRITE_SENTENCES_DICTATION_XH
-    : WELA_PLUS_WRITE_SENTENCES_DICTATION_EN;
 }
 
 interface FlatWord extends WriteSentencesFromDictationWord {
@@ -93,16 +89,28 @@ function flattenWords(
 }
 
 export function WriteSentencesFromDictationQuestion(props: QuestionProps) {
+  const itemSet = resolveItemSet(
+    props.language,
+    props.itemSet,
+    { en: WELA_PLUS_WRITE_SENTENCES_DICTATION_EN, xh: WELA_PLUS_WRITE_SENTENCES_DICTATION_XH },
+    isFullItemSet,
+  );
+  if (!itemSet) return <MissingItemSet language={props.language} />;
+  return <WriteSentencesFromDictationQuestionContent {...props} itemSet={itemSet} />;
+}
+
+function WriteSentencesFromDictationQuestionContent(
+  props: QuestionProps & { itemSet: FullItemSet },
+) {
   const {
     language,
-    itemSet,
+    itemSet: effectiveItemSet,
     instructions,
     onComplete,
     onItemMarked,
   } = props;
   const [phase, setPhase] = useState<Phase>('intro');
   const { isMarked, toggle } = useToggleMark();
-  const effectiveItemSet = resolveItemSet(language, itemSet);
 
   const isMarkedRef = useRef(isMarked);
   useEffect(() => {
@@ -121,7 +129,7 @@ export function WriteSentencesFromDictationQuestion(props: QuestionProps) {
 
   useEffect(() => {
     if (phase === 'active' && startTimeMsRef.current === null) {
-      startTimeMsRef.current = Date.now();
+      startTimeMsRef.current = monotonicNow();
     }
   }, [phase]);
 
@@ -149,7 +157,7 @@ export function WriteSentencesFromDictationQuestion(props: QuestionProps) {
       const elapsedMs =
         startTimeMsRef.current === null
           ? 0
-          : Date.now() - startTimeMsRef.current;
+          : Math.round(monotonicNow() - startTimeMsRef.current);
       const perSentence = isSkipped
         ? []
         : sentences.map((sentence, sentenceIndex) => {
@@ -165,7 +173,7 @@ export function WriteSentencesFromDictationQuestion(props: QuestionProps) {
           });
 
       const result: Result = {
-        question_code: 'wela_plus_write_sentences_dictation',
+        question_code: effectiveItemSet.question_code,
         question_version: effectiveItemSet.question_version,
         item_set_id: effectiveItemSet.item_set_id,
         language,

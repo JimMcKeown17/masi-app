@@ -150,6 +150,8 @@ describe('ReadPassageQuestion — itemSet override and variable passage length',
     const onComplete = jest.fn();
     const longOverride = {
       item_set_id: 'custom@1.0.en',
+      question_code: 'custom',
+      language: 'en',
       question_version: '1.0',
       words: Array.from({ length: 100 }, (_, i) => ({
         item_key: `w${i}`,

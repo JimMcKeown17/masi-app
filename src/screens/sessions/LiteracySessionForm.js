@@ -14,7 +14,7 @@ import RequirementSummary from '../../components/forms/RequirementSummary';
 import InlineNote from '../../components/common/InlineNote';
 import ChildSelector from '../../components/children/ChildSelector';
 import LetterTrackerBottomSheet from '../../components/session/LetterTrackerBottomSheet';
-import { normalizeLanguageKey } from '../../utils/letterMastery';
+import { languageCodeForHomeLanguage } from '../../utils/assessmentRegistry';
 import { useClasses } from '../../context/ClassesContext';
 import { useLookupsContext } from '../../context/LookupsContext';
 import { buildSessionTypeFields } from '../../utils/sessionTypeResolver';
@@ -301,12 +301,12 @@ export default function LiteracySessionForm({ navigation }) {
     setLetterTrackerChanges((prev) => ({ ...prev, [childId]: changes }));
   };
 
-  // Determine language key for letter tracker from the first selected child's class
-  const trackerLanguageKey = useMemo(() => {
-    if (selectedChildren.length === 0) return 'english';
+  // Determine language code for letter tracker from the first selected child's class
+  const trackerLanguageCode = useMemo(() => {
+    if (selectedChildren.length === 0) return null;
     const firstChild = selectedChildren[0];
     const childClass = classes.find(c => c.id === firstChild.class_id);
-    return normalizeLanguageKey(childClass?.home_language);
+    return languageCodeForHomeLanguage(childClass?.home_language);
   }, [selectedChildren, classes]);
 
   // Count pending tracker changes for a child (for button label)
@@ -356,7 +356,7 @@ export default function LiteracySessionForm({ navigation }) {
 
       await persistLiteracySession({ handle,
         session,
-        trackerLanguageKey,
+        trackerLanguageCode,
         letterTrackerChanges,
         nowIso: now,
         idFactory: uuidv4,
@@ -453,7 +453,7 @@ export default function LiteracySessionForm({ navigation }) {
         onDismiss={() => setTrackerBottomSheetChild(null)}
         child={trackerBottomSheetChild}
         userId={user.id}
-        languageKey={trackerLanguageKey}
+        languageCode={trackerLanguageCode}
         pendingChanges={trackerBottomSheetChild ? (letterTrackerChanges[trackerBottomSheetChild.id] || {}) : {}}
         onChangesUpdate={(changes) => {
           if (trackerBottomSheetChild) {

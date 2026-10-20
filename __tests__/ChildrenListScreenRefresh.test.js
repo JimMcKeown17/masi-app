@@ -3,9 +3,13 @@ const mockUseChildren = jest.fn();
 const mockUseClasses = jest.fn();
 const mockUseOffline = jest.fn();
 const mockUseFocusEffect = jest.fn();
-const mockGetAssessments = jest.fn();
+const mockGetLetterResults = jest.fn();
+const mockGetAcademicYears = jest.fn();
 jest.mock('../src/context/SignedInEAContext', () => ({
-  useSignedInEA: () => ({ repositories: { assessments: { getAssessments: mockGetAssessments } } }),
+  useSignedInEA: () => ({ repositories: {
+    assessments: { getLetterResults: mockGetLetterResults },
+    academicYears: { getAll: mockGetAcademicYears },
+  } }),
 }));
 
 jest.mock('@react-navigation/native', () => ({
@@ -44,7 +48,8 @@ describe('ChildrenListScreen pull to refresh', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     mockUseFocusEffect.mockReset();
-    mockGetAssessments.mockResolvedValue([]);
+    mockGetLetterResults.mockResolvedValue([]);
+    mockGetAcademicYears.mockResolvedValue([]);
     syncNow.mockResolvedValue({ success: true });
     loadChildren.mockResolvedValue(undefined);
     loadClasses.mockResolvedValue(undefined);

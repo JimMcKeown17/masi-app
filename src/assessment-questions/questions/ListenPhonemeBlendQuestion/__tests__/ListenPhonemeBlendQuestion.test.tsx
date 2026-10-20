@@ -158,6 +158,8 @@ describe('ListenPhonemeBlendQuestion — itemSet override validation', () => {
     const onComplete = jest.fn();
     const q3Shape = {
       item_set_id: 'wela_plus_first_sound@fixture.en',
+      question_code: 'wela_plus_first_sound',
+      language: 'en',
       question_version: 'fixture',
       prompts: [{ item_key: 'k', prompt: 'apple' }],
     };
