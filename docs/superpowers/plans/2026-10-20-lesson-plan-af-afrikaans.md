@@ -46,7 +46,7 @@
 
 ## Review Focus
 
-1. **The first selected child changes after letters were marked.** This bug exists today for English and isiXhosa, and Afrikaans widens it. The marks keep the language of the tracker they were tapped in. Reopening that child's tracker shows them in that language, not the new first child's. Test: Task 1 (real SQLite, through the form), and the Afrikaans row in Task 2.
+1. **The first selected child changes after letters were marked.** This bug exists today for English and isiXhosa, and Afrikaans widens it. The marks keep the language of the tracker they were tapped in. Reopening that child's tracker shows them in that language, not the new first child's. Undoing every pending mark in that open tracker and tapping another letter still records the tracker's language, never the new first child's. Tests: Task 1 (real SQLite, through the form: both the reopen case and the undo-everything case), and the Afrikaans row in Task 2.
 2. **A pending change that is malformed or has no tracker language.** Examples: the old boolean shape `{ a: true }`, a stored label `'English'` in place of a code, `'zu'` (a label but no tracker order), a missing `madeAt`, or a letter outside the order. The whole save is refused and nothing is written, never silently skipped. Test: Task 1 (`literacySessionPersistence.test.js`).
 3. **A class whose `home_language` is spelled oddly or is unknown.** `' afrikaans '` and `'AFRIKAANS'` give `af`. `'Afrikaans and English'`, `'af'`, `''` and `null` give `null`, so the EA is asked, and the tracker keeps its empty state. Tests: Task 2 (registry table), Task 3 (picker).
 4. **An Afrikaans child who also has English-labelled confirmations or a newer English result.** The Afrikaans tracker, panel and ranking ignore them. Tests: Task 2 (real-SQLite loader, panel, ranking).
@@ -121,7 +121,7 @@ Today the session form takes one language from the first selected child (`Litera
   - `LetterTrackerBottomSheet`: the toggle rule is unchanged. A new entry is `{ mastered, languageCode: <the languageCode prop>, madeAt: new Date().toISOString() }`, stamped at the tap.
   - `LiteracySessionForm`:
     - `trackerLanguageCode` (first selected child's class) stays, as the default.
-    - **(plan call)** The sheet opens in `pendingChangesLanguageCode(letterTrackerChanges[child.id]) ?? trackerLanguageCode`. So a child's pending marks always share one language and are shown in it.
+    - **(plan call)** The sheet's language is fixed **when the EA opens it**: `pendingChangesLanguageCode(letterTrackerChanges[child.id]) ?? trackerLanguageCode`, held in form state with the open child (`trackerSheet = { childId, languageCode }`) and passed to the sheet unchanged until it closes. Emptying the pending map while the sheet is open (undoing every mark) never changes it, so the next tap is stamped in the same language (Codex AF round 1). A child's pending marks therefore always share one language and are shown in it.
     - `getTrackerChangeCount` counts entries with `mastered === true`.
   - `persistLiteracySession({ handle, database = handle, session, letterTrackerChanges = {}, nowIso, idFactory }) → Promise<true>`:
     - `trackerLanguageCode` is removed.
@@ -259,7 +259,29 @@ test.each([['isiXhosa', 'isiXhosa', 'xh']])(
       repositories: handle.repositories, userId: EA, childId: mockChild.id, languageCode: code });
     expect(reloaded.taughtRecords.map(r => r.letter).sort()).toEqual(['a', 'k', 'm']); // reloads in its own tracker
   });
+
+  // Same setup as the test above (Amahle in her class language with a seeded taught 'k'; Ben in English).
+  test('undoing every pending mark in an open tracker keeps that tracker\'s language', async () => {
+    // select Amahle, then Ben; open Amahle's tracker; mark 'a'; Done; deselect and reselect Amahle (Ben is first)
+    fireEvent.press(screen.getByLabelText('Amahle Dlamini, letter tracker, 1 new'));
+    expect(await screen.findByLabelText('k, taught by coach')).toBeTruthy();
+    fireEvent.press(screen.getByLabelText('a, taught, added this session')); // undo: her pending map is now {}
+    expect(screen.getByLabelText('k, taught by coach')).toBeTruthy(); // the open sheet did not switch to English
+    fireEvent.press(screen.getByLabelText('e, not mastered'));
+    fireEvent.press(screen.getByRole('button', { name: 'Done' }));
+    // pick a letter and a level, submit, wait for completion (as above)
+    const reader = await handle.getReader();
+    expect(await reader.getAllAsync(
+      'select letter, language from letter_mastery where child_id = ? and deleted_at is null order by letter', mockChild.id))
+      .toEqual(['e', 'k'].map(letter => ({ letter, language: label })));
+    expect(await reader.getFirstAsync(
+      "select count(*) as n from letter_mastery where child_id = ? and language = 'English'", mockChild.id))
+      .toEqual({ n: 0 });
+    const outbox = await reader.getAllAsync("select payload from sync_outbox where table_name = 'letter_mastery'");
+    expect(outbox.map(row => JSON.parse(row.payload).language)).toEqual([label]);
+  });
 ```
+  The last assertion reads `sync_outbox.payload`, the record JSON that `enqueueDomainOutbox` stores for `letter_mastery` (`masteryRepository.js:50-61`).
 
 - [ ] **Step 2: Run the tests to verify they fail.** Run `PATH="$HOME/.nvm/versions/node/v20.19.4/bin:$PATH" npx jest __tests__/LetterTrackerBottomSheet.test.js __tests__/masteryState.test.js __tests__/literacySessionPersistence.test.js __tests__/LiteracySessionForm.test.js __tests__/LiteracySessionForm.submit.test.js`. Expected: FAIL. The sheet emits booleans, `pendingChangesLanguageCode` is not a function, the refusal rows save, and the mixed-class marks are saved as `English`.
 - [ ] **Step 3: Implement** per the Interfaces block in `masteryState.js`, the sheet, the form and `literacySessionPersistence.js`. Update the sheet's prop docs (`:25-27`) and the form's state comment (`:146`) to the new shape.
