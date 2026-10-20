@@ -6,9 +6,9 @@
 
 **Refreshed:** 2026-10-20 against origin/main f27b347 (#90) and spec rev 2 (2bb103a).
 
-**Goal:** A durable, local-only lesson draft (one per EA), a Home "Lesson in progress" card that
-resumes it, and the session-history completeness predicate the lesson engine needs. All of it stays
-inert until wave 2's Lesson screen creates drafts.
+**Goal:** A durable, local-only lesson draft (one per EA), the builder for Home's "Lesson in
+progress" card, and the session-history completeness predicate the lesson engine needs. All of it
+stays inert until wave 2's Lesson screen creates drafts; Home's wiring ships with that screen.
 
 **Architecture:** An additive local SQLite table `lesson_drafts` in the EA's own file holds at most
 one row. A constant `slot` column backs the repository's refusal of a second draft.
@@ -17,9 +17,9 @@ as `repositories.lessonDrafts`. When a draft is created, the repository mints it
 fixes its lesson context, including the lesson's language **code** (`xh`, `en`, …). It validates the
 JSON fields this slice owns, and the save path can delete the draft inside its own transaction.
 `src/services/pullCoverage.js` reads the CAP-004 cursor (read-only) to say whether a lesson's
-children have complete current-year history. Home reads the draft on focus and shows a
-first-priority attention card. Tapping it navigates to the reserved `Lesson` route with
-`{ draftId }`.
+children have complete current-year history. The pure card builder in `homeAttention.js` turns a
+draft into a first-priority attention item for the reserved `Lesson` route with `{ draftId }`;
+`HomeScreen` starts reading drafts only in the change that registers `Lesson` (Task 5).
 
 **Tech Stack:** React Native 0.81.5 / Expo SDK 54, expo-sqlite 16 (better-sqlite3 12 in tests),
 uuid 13, @react-navigation/native 7.1, Jest 29 (jest-expo 54) + @testing-library/react-native 13.
@@ -27,8 +27,8 @@ uuid 13, @react-navigation/native 7.1, Jest 29 (jest-expo 54) + @testing-library
 **Spec:** `docs/superpowers/specs/2026-10-20-lesson-plan-design.md`, rev 2 (`2bb103a`). Jim approved
 rev 1 on 2026-10-20; rev 2 aligns it with the assessment-results design ("AR",
 `docs/superpowers/specs/2026-10-19-assessment-results-and-letter-test-design.md`, built in part by
-#90) and awaits his confirmation. This plan builds §7.2 in full, C7, the Home card in §5.5, and the
-history-completeness predicate in §7.3. The cross-plan names come from the wave-1 sheet, rev 2
+#90) and awaits his confirmation. This plan builds §7.2 in full, C7, the builder for §5.5's Home
+card (its wiring is handed to C2–C3), and the history-completeness predicate in §7.3. The cross-plan names come from the wave-1 sheet, rev 2
 (`plan-interfaces.md`, "From `c1-lesson-draft`"). Read the spec's §0.1, §5.5, §6, §7.2 and §7.3
 before any task.
 
@@ -102,9 +102,9 @@ before any task.
 ## Review Focus
 
 1. **The phone dies or the app is force-quit mid-lesson, then reopens offline.** The same draft
-   returns, with the same `session_id`, context, language and tap times, and Home shows the card.
-   Pinned in Task 3 (process death plus offline relaunch, real files) and Task 5 (card from a stored
-   draft).
+   returns, with the same `session_id`, context, language and tap times. Pinned in Task 3 (the row
+   is on disk at commit, and a handle reopen offline returns it unchanged) and Task 6's device gate
+   (a real force-quit). Home's card for it arrives with the Lesson route (C3, Task 5's hand-off).
 2. **A language arrives in the wrong spelling, or in another language than the lesson's.** Three
    spellings now coexist: codes (`xh`), Plan 1 confirmation labels (`isiXhosa`) and the shared pack
    file's name (`isixhosa`). The draft refuses anything that is not a registry code, and refuses a
@@ -116,12 +116,12 @@ before any task.
 4. **A second EA signs in on the same phone mid-lesson.** They never see or resume the first EA's
    lesson. The first EA gets it back on their next sign-in, and a stale repository refuses to write.
    Pinned in Task 3.
-5. **Home meets an odd draft or a failed read.** The lesson's children have left My Children, every
-   child is marked absent, or a draft column cannot be parsed: the card still shows and falls back to
-   `Resume`. The draft read fails (a stale handle at sign-out, or SQLite busy): today's sessions card
-   and the other attention cards still render, and Home never shows "Couldn’t load". Pinned in Task 2
-   (corrupt JSON reads as the empty default) and Task 5 (`lessonInProgressFromDraft` cases and the
-   failed-read screen test).
+5. **A draft column cannot be parsed, or the card meets odd children.** `getActive()` throws
+   `LessonDraftCorruptError` naming the unreadable fields, and the row stays exactly as stored until
+   an explicit `discard`, so a save can never finalize a draft whose marks or ticks were silently
+   lost (Codex C1 round 1). The card builder still reads naturally when the lesson's children have
+   left My Children or are all absent. Pinned in Task 2 (corrupt columns) and Task 5
+   (`lessonInProgressFromDraft` cases).
 
 ---
 
@@ -292,11 +292,12 @@ create table if not exists lesson_drafts (
 export class LessonDraftExistsError extends Error {}    // name 'LessonDraftExistsError', code 'LESSON_DRAFT_EXISTS', draftId
 export class LessonDraftNotFoundError extends Error {}  // name 'LessonDraftNotFoundError', code 'LESSON_DRAFT_NOT_FOUND', draftId
 export class LessonDraftContextError extends Error {}   // name 'LessonDraftContextError', code 'LESSON_DRAFT_CONTEXT_FIXED', field
+export class LessonDraftCorruptError extends Error {}   // name 'LessonDraftCorruptError', code 'LESSON_DRAFT_CORRUPT', draftId, fields (sorted)
 export const presentChildIds = (attendance) => string[]; // childIds minus absentChildIds, order kept
 export const createLessonDraftsRepository = ({ database, idFactory = uuidv4 } = {}) => ({
-  getActive: () => Promise<Draft | null>,
+  getActive: () => Promise<Draft | null>,                 // LessonDraftCorruptError when a JSON column is unreadable
   create: (input) => Promise<Draft>,                      // LessonDraftExistsError | TypeError
-  update: (id, patch) => Promise<Draft>,                  // LessonDraftNotFoundError | LessonDraftContextError | TypeError
+  update: (id, patch) => Promise<Draft>,                  // LessonDraftNotFoundError | LessonDraftContextError | LessonDraftCorruptError | TypeError
   discard: (id, { transaction } = {}) => Promise<boolean>, // true when a row was deleted
 });
 // No `lessonDraftsRepository` singleton export.
@@ -338,7 +339,12 @@ export const createLessonDraftsRepository = ({ database, idFactory = uuidv4 } = 
     order the fields arrive in.
   - A shape violation throws a `TypeError` whose message names the field path
     (e.g. `tracker_changes.c1.m.madeAt`).
-  - A column that cannot be decoded reads as its empty default, never as a throw.
+  - A JSON column that cannot be decoded is never read as empty: `getActive()` throws
+    `LessonDraftCorruptError` (`name`, `draftId`, `fields: string[]` naming every unreadable column)
+    and leaves the row untouched. `discard(id)` still deletes it (it decodes nothing), and `create`
+    still refuses while it exists (C7), so the EA must discard it explicitly (Codex C1 round 1; the
+    Lesson screen's "can't open this lesson" state is C3's). `update` on such a draft throws the same
+    error.
 
 - [ ] **Step 1 (tracer): write the failing tests** for create, read and the one-draft rule. Use
   `createMigratedDatabase(runMigrations)` (`test-support/sqliteRepositoryTestUtils.js:3`) and
@@ -489,11 +495,17 @@ test('keys wave 2 adds inside ticks survive a round trip', async () => {
   expect((await repo.getActive()).ticks).toEqual(ticks);
 });
 
-test('a column that cannot be parsed reads as its empty default', async () => {
+test('an unreadable column is reported, never read as empty, and the row survives until discard', async () => {
   const draft = await repo.create(start);
-  await db.runAsync("update lesson_drafts set attendance = 'not json', ticks = '[' where id = ?", draft.id);
-  expect(await repo.getActive()).toMatchObject({
-    attendance: { childIds: [], absentChildIds: [], addedChildIds: [] }, ticks: { letters: [], blends: [], books: [] } });
+  await db.runAsync("update lesson_drafts set tracker_changes = 'not json', ticks = '[' where id = ?", draft.id);
+  await expect(repo.getActive()).rejects.toMatchObject({
+    name: 'LessonDraftCorruptError', draftId: draft.id, fields: ['ticks', 'tracker_changes'] });
+  await expect(repo.update(draft.id, { notes: 'x' })).rejects.toMatchObject({ name: 'LessonDraftCorruptError' });
+  await expect(repo.create(start)).rejects.toMatchObject({ name: 'LessonDraftExistsError' });
+  expect(await db.getFirstAsync('select tracker_changes, ticks from lesson_drafts where id = ?', draft.id))
+    .toEqual({ tracker_changes: 'not json', ticks: '[' }); // raw evidence kept
+  expect(await repo.discard(draft.id)).toBe(true);
+  expect(await repo.getActive()).toBeNull();
 });
 
 test('updating a draft that no longer exists is refused', async () => {
@@ -577,7 +589,7 @@ test('a committed discard removes the draft and frees the slot', async () => {
   - `start` and `MONDAY_TAP` as in Task 2.
 
 ```js
-test('a lesson draft survives process death and an offline relaunch unchanged', async () => {
+test('a lesson draft is on disk at commit and survives a handle reopen offline unchanged', async () => {
   const a = await open(A, offline);
   const draft = await a.repositories.lessonDrafts.create(start);
   const saved = await a.repositories.lessonDrafts.update(draft.id, {
@@ -589,7 +601,10 @@ test('a lesson draft survives process death and an offline relaunch unchanged', 
   expect(await raw.getFirstAsync('select session_id, language_code, lesson_date from lesson_drafts'))
     .toEqual({ session_id: saved.session_id, language_code: 'xh', lesson_date: '2026-10-19' });
   await raw.closeAsync();
-  await resetHandleRegistryForTests(); // force-quit: every in-memory registry is gone
+  // An orderly close and reopen, not a process kill: resetHandleRegistryForTests requests close and
+  // awaits disposal (src/session/signedInHandle.js:457-460). The raw read above is what proves the
+  // row was committed; a real force-quit is Task 6's device gate.
+  await resetHandleRegistryForTests();
   const relaunched = await open(A, offline);
   expect(await relaunched.repositories.lessonDrafts.getActive()).toEqual(saved);
 });
@@ -795,30 +810,31 @@ test('another programme’s walk does not count', async () => {
 
 ---
 
-### Task 5: Home "Lesson in progress" card
+### Task 5: Home "Lesson in progress" card builder (Home wiring lands with the Lesson route)
+
+**Why only the builder here (Codex C1 round 1).** Home must never show a card for a route the
+running bundle does not register. "Nothing creates drafts yet" is not a guard: a C3 bundle can create
+a durable draft and then be rolled back (an OTA rollback within the same `runtimeVersion`,
+`app.config.js:85-89`) to a bundle without `Lesson`, and `readSupportedSchemaVersion`
+(`src/db/migrations.js:802-808`) lets that bundle open the file. So C1 ships only the pure, inert
+pieces. The `HomeScreen` wiring ships in **the same change that registers `Lesson`** (wave 2,
+`c2-c3-lesson-flow`), so the card and its route always travel together.
 
 **Files:**
 - Modify: `src/utils/homeAttention.js` (`deriveHomeAttentionItems` `:66-91`; new builder and helper)
 - Modify: `src/components/home/AttentionArea.js:9` (`ICONS`)
-- Modify: `src/screens/main/HomeScreen.js`. Three places: `loadStats` `:81-114`, `attentionItems`
-  `:126-132` and `openItem` `:134`.
-- Test: `__tests__/homeAttention.test.js`, `__tests__/AttentionArea.test.js`,
-  `__tests__/HomeScreen.test.js`
-- Modify: `documentation/rls-sync-contract-map.md` (Home attention paragraph `:916-918`);
-  `documentation/build-log.md`
+- Test: `__tests__/homeAttention.test.js`, `__tests__/AttentionArea.test.js`
+- Modify: `documentation/build-log.md`
 
 **Interfaces:**
-- Consumes: `repositories.lessonDrafts.getActive()` and `presentChildIds` (Task 2), and
-  `formatNameList` (`src/utils/childNames.js:1`).
+- Consumes: `presentChildIds` (Task 2) and `formatNameList` (`src/utils/childNames.js:1`).
 - Produces:
   - `deriveHomeAttentionItems({ …, lessonInProgress = null })`, where
-    `lessonInProgress: { draftId: string, childNames: string[] } | null`.
+    `lessonInProgress: { draftId: string, childNames: string[] } | null`. No caller passes it until C3.
   - `lessonInProgressFromDraft(draft, children) → { draftId, childNames } | null`. The names are
     `first_name` of the draft's present children found in `children`, in attendance order; unknown
     ids are skipped.
   - Items may carry `params`.
-  - For wave 2: register `Lesson` in `MainNavigator`'s stack (`src/navigation/AppNavigator.js:158`),
-    taking `{ draftId }`. No `Lesson` route exists today.
 
 - [ ] **Step 1: Write the failing tests** in `homeAttention.test.js` (its `base` and `notice()` are at
   `:6-21`):
@@ -853,6 +869,10 @@ test('lessonInProgressFromDraft names the present children this phone knows', ()
     .toEqual({ draftId: 'draft-1', childNames: [] }); // everyone absent: still a lesson in progress
   expect(lessonInProgressFromDraft(null, children)).toBeNull();
 });
+test('Home does not read lesson drafts until the Lesson route ships', () => {
+  const home = fs.readFileSync(path.join(__dirname, '../src/screens/main/HomeScreen.js'), 'utf8');
+  expect(home).not.toMatch(/lessonDrafts|lessonInProgress/); // C3 removes this test when it registers Lesson
+});
 ```
 
   In `AttentionArea.test.js`, add one test. A `lesson_in_progress` item renders Ionicons
@@ -866,78 +886,40 @@ test('lessonInProgressFromDraft names the present children this phone knows', ()
     `node_modules/expo/node_modules/@expo/vector-icons/build/vendor/react-native-vector-icons/glyphmaps/Ionicons.json`).
   - Tone `neutral` keeps the `canvas` tile. Not dismissible (plan call): dismissing would hide unsaved
     work, and discarding belongs to the Lesson screen behind a confirm.
-- [ ] **Step 4: Run** → PASS.
-- [ ] **Step 5: Write the failing screen tests** in `HomeScreen.test.js`, inside a new
-  `describe('lesson in progress')` nested in `describe('HomeScreen')`. Its `beforeEach` runs after
-  the suite's own `beforeEach` (`:114-166`) and does two things:
-  - creates a real draft in the default test handle:
-    `draft = await getDefaultTestHandle().repositories.lessonDrafts.create({ programme_id: 'programme-1', group_id: 'group-1', class_id: 'class-1', language_code: 'xh', pack_id: 'isixhosa-interim-letters-v1', lesson_date: '2026-10-19', attendance: { childIds: ['c1', 'c2'], absentChildIds: [], addedChildIds: [] } })`;
-  - sets `mockUseChildren` to `Amahle` (`c1`) and `Lulu` (`c2`).
+- [ ] **Step 4: Run** → PASS, plus `__tests__/homeTypeRoles.test.js __tests__/designSystemGuard.test.js`.
+- [ ] **Step 5: Build log.** A Verification row, plus a Decision row: Home's draft wiring and
+  `openItem`'s params land with the `Lesson` route (C3), so a rolled-back bundle can never show a
+  card for a route it does not register; `Lesson` with `{ draftId }` is reserved.
+- [ ] **Step 6: Commit:**
+  `feat(home): Lesson in progress card builder, first priority, inert until the Lesson route (§5.5)`.
 
-```js
-test('a lesson in progress shows first and resumes the Lesson screen with its draft', async () => {
-  mockUseOffline.mockReturnValue({ isOnline: true, waitingCount: 0, needsAttentionCount: 2, syncStatus: { failedItems: [] } });
-  const navigation = { navigate: jest.fn() };
-  const screen = renderHome(navigation);
-  const card = await screen.findByLabelText('Lesson in progress with Amahle and Lulu. Resume');
-  const labels = screen.getAllByRole('button').map((b) => b.props.accessibilityLabel);
-  const lessonAt = labels.indexOf('Lesson in progress with Amahle and Lulu. Resume');
-  expect(lessonAt).toBeGreaterThan(-1);
-  expect(lessonAt).toBeLessThan(labels.indexOf('2 items need attention. Open sync status to sort it out'));
-  fireEvent.press(card);
-  expect(navigation.navigate).toHaveBeenCalledWith('Lesson', { draftId: draft.id });
-});
-
-test('a lesson saved or discarded elsewhere leaves Home on the next foreground', async () => {
-  let foreground;
-  AppState.addEventListener.mockImplementation((event, handler) => { foreground = handler; return { remove: jest.fn() }; });
-  const screen = renderHome();
-  await screen.findByLabelText('Lesson in progress with Amahle and Lulu. Resume');
-  await getDefaultTestHandle().repositories.lessonDrafts.discard(draft.id);
-  await act(async () => { foreground('active'); });
-  await waitFor(() => expect(screen.queryByText('Lesson in progress')).toBeNull());
-});
-
-test('a failed lesson-draft read keeps today’s sessions and the other cards', async () => {
-  const consoleError = jest.spyOn(console, 'error').mockImplementation(() => {});
-  jest.spyOn(getDefaultTestHandle().repositories.lessonDrafts, 'getActive').mockRejectedValue(new Error('draft read failed'));
-  mockUseOffline.mockReturnValue({ isOnline: true, waitingCount: 0, needsAttentionCount: 1, syncStatus: { failedItems: [] } });
-  const screen = renderHome();
-  expect(await screen.findByText('2 of 3 sessions today')).toBeTruthy();
-  expect(screen.getByLabelText('1 item needs attention. Open sync status to sort it out')).toBeTruthy();
-  expect(screen.queryByText('Couldn’t load today’s sessions')).toBeNull();
-  await waitFor(() => expect(consoleError).toHaveBeenCalledWith('Error loading lesson in progress:', expect.objectContaining({ message: 'draft read failed' })));
-});
-```
-
-  The existing `sync attention card opens Sync status` test (`:423-431`) stays unchanged. It pins
-  the one-argument `navigate('SyncStatus')`.
-- [ ] **Step 6: Run** `npx jest __tests__/HomeScreen.test.js` → FAIL.
-- [ ] **Step 7: Implement in `HomeScreen.js`.**
-  - Take `lessonDrafts` from `repositories` (`:38`), and keep `lessonDraft` state.
-  - Inside `loadStats`, read `lessonDrafts.getActive()` **isolated from the statistics**. Its
-    rejection never sets `statsFailed`, and a statistics failure never clears the card. Apply the
-    result only when `seq === loadSeqRef.current`. On rejection, ignore `StaleActorError`
-    (`isStaleActorError`, already imported at `:23`); otherwise log
-    `console.error('Error loading lesson in progress:', error)` and keep the previous draft.
-  - Add `lessonDrafts` to the `useCallback` dependencies (`:114`).
-  - Pass `lessonInProgress: lessonInProgressFromDraft(lessonDraft, childrenList)` to
-    `deriveHomeAttentionItems`.
-  - Change `openItem` to call `navigation.navigate(item.route, item.params)` only when `item.params`
-    exists, and `navigation.navigate(item.route)` otherwise. This mirrors
-    `src/hooks/useSessionLaunchGuard.js:28-34`.
-- [ ] **Step 8: Run** `npx jest __tests__/HomeScreen.test.js __tests__/homeAttention.test.js
-  __tests__/AttentionArea.test.js __tests__/homeTypeRoles.test.js __tests__/designSystemGuard.test.js
-  __tests__/productionBindingStatic.test.js` → PASS.
-- [ ] **Step 9: Docs.**
-  - Contract map, Home attention paragraph: `lesson_in_progress` is derived from `lesson_drafts`
-    and has no `local_state` key. It is the highest priority and is not dismissible.
-  - Build log: a Verification row, plus a Decision row recording three things:
-    - the card is unreachable until C3, because there is no producer;
-    - `Lesson` is reserved;
-    - `openItem` passes params only when present.
-- [ ] **Step 10: Commit:**
-  `feat(home): Lesson in progress attention card, first priority, resumes by draft id (§5.5)`.
+**Hand-off to `c2-c3-lesson-flow` (copy into its plan; the same change registers `Lesson`).**
+- Register `Lesson` in `MainNavigator`'s stack (`src/navigation/AppNavigator.js:158`), taking
+  `{ draftId }`, and delete the "Home does not read lesson drafts" test above.
+- In `HomeScreen.js`:
+  - take `lessonDrafts` from `repositories` (`:38`) and keep `lessonDraft` state;
+  - inside `loadStats` (`:81-114`), read `lessonDrafts.getActive()` **isolated from the statistics**:
+    its rejection never sets `statsFailed`, a statistics failure never clears the card, the result
+    applies only when `seq === loadSeqRef.current`, `StaleActorError` is ignored, and any other error
+    is logged as `console.error('Error loading lesson in progress:', error)` with the previous draft
+    kept. A `LessonDraftCorruptError` (Task 2) still shows the card, opening the Lesson screen's
+    "can't open this lesson" state with Discard;
+  - add `lessonDrafts` to `loadStats`'s `useCallback` dependencies (`:114`);
+  - pass `lessonInProgress: lessonInProgressFromDraft(lessonDraft, childrenList)` and **add
+    `lessonDraft` and `childrenList` to `attentionItems`' `useMemo` dependencies (`:126-132`)**
+    (Codex C1 round 1: without them, a draft read that settles after the statistics never shows the
+    card, and a discarded draft's card stays);
+  - `openItem` (`:134`) calls `navigation.navigate(item.route, item.params)` only when `item.params`
+    exists, else `navigation.navigate(item.route)`, mirroring `src/hooks/useSessionLaunchGuard.js:28-34`.
+- Screen tests in `HomeScreen.test.js`: the card shows first and resumes with
+  `navigate('Lesson', { draftId })`; a lesson saved or discarded elsewhere leaves Home on the next
+  foreground; a failed draft read keeps today's sessions and the other cards; **deferred-promise
+  tests** where the statistics settle before the draft read (the card still appears) and where a
+  later read returns `null` after a discard (the card goes); and one test through the real
+  navigator with a stored draft, pressing the card and landing on `Lesson`. The existing
+  `sync attention card opens Sync status` test (`:423-431`) stays unchanged.
+- Contract map, Home attention paragraph (`:916-918`): `lesson_in_progress` is derived from
+  `lesson_drafts`, has no `local_state` key, is the highest priority and is not dismissible.
 
 ---
 
