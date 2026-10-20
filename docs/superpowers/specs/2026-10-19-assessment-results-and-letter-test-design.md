@@ -1,9 +1,12 @@
 # Assessment results, one letter test, and WelaPLUS data — Design
 
 **Date:** 2026-10-19
-**Status:** Draft for Jim's review. Codex adversarial review: three rounds (11 → 6 → 2 findings), all verified and addressed (2026-10-19). The loop stopped at round 3, per the rule on rare edge cases. Jim asked for the design without a question round
-("I think you can just design", 2026-10-19). Section 3 lists the two decisions only Jim can make,
-plus the calls I made that he should check.
+**Status:** Draft for Jim's approval.
+- Codex adversarial review: three rounds (11 → 6 → 2 findings), all verified and addressed
+  (2026-10-19). The loop stopped at round 3, per the rule on rare edge cases.
+- Jim asked for the design without a question round ("I think you can just design",
+  2026-10-19).
+- Jim answered both open decisions and accepted every call in 3.2 (2026-10-20). See section 3.
 **Covers:**
 - ROADMAP §1 P0 item 5 remainder (the assessment slice);
 - WelaPLUS Release 1 Plan 2 (data foundation);
@@ -31,8 +34,9 @@ Four pieces of work touch the same tables, so they are designed together.
    The 2026-10-14 spec planned them against a sync layer that has since been rebuilt.
 3. **One letter test.** Jim decided on 2026-10-19 that the standalone EGRA letter assessment and
    WelaPLUS Question 1 are the same test. Its letters must be data that is easy to replace and
-   reorder, single letters in mixed case, with a row stop rule. The child reads a printed card,
-   and a WelaPLUS Q1 result counts as a letter assessment.
+   reorder, and single letters in mixed case. It has a stop rule, which Jim set on 2026-10-20 to
+   Zazi's 10-in-a-row rule. The child reads a printed card, and a WelaPLUS Q1 result counts as a
+   letter assessment.
 4. **New assessment types later.** The government isiZulu EGRA (letters, words, passage,
    comprehension) is the known next one. Adding it should be content plus, at most, one new
    component. It should need no server, sync, or storage change.
@@ -52,36 +56,27 @@ uploading must be invisible and must never lose or half-save a result.
 | ADR-0005 follow-up 2 + CONTEXT (2026-09-23, 2026-10-08) | Letter mastery is current state: one record per child, letter and language. It is readable by its last writer and by current deliverers, and current deliverers may change it. When two changes conflict, the later correction time wins, and a future time counts as the server's `now()`. |
 | WelaPLUS spec D1, D2, D3, D5, D6, D8, D9 | Kept as written. D4 (soft stop rules) is reversed for Question 1 only. D10 is delivered by this design. |
 | Jim, 2026-10-19 | The letter test decisions in §1 item 3. Any future assessment type must be addable. |
-| Jim, 2026-09-23 | Practice data on `masi-app-sqlite` is wiped. This design moves the wipe to before rollout (section 13; please confirm). |
+| Jim, 2026-09-23 and 2026-10-20 | Practice data on `masi-app-sqlite` is wiped **before** rollout (section 13). |
+| Jim, 2026-10-20 | Step-by-step marking. The stop rule is "10 in a row wrong = stop", as the Zazi app does it (6.2). |
 
 ## 3. For Jim
 
-### 3.1 Two decisions only you can make
+### 3.1 Jim's answers (2026-10-20)
 
-**A. How the EA marks letters on the phone.** The row stop rule needs the app to know that every
-letter in a row was wrong. Today's "tap the correct letters" grid cannot tell *wrong* from *not
-reached yet*, so it cannot apply the rule. Two mechanics can:
+**A. Marking: step-by-step.** The EA gives a tick or a cross for every letter, as in today's
+default mode. "The stop rule should work with the step-by-step approach. 10 in a row wrong =
+stop. The zazi app does that."
+- The stop rule follows Zazi's implementation, checked in `zazi-izandi-app`
+  (`src/utils/assessmentStopRule.js` and `sequentialAssessmentReducer.js`). See 6.2.
+- Step-by-step becomes the **only** mechanic for the letter and word tests. The "tap the correct
+  letters" grid mode and the device capture-mode setting retire.
+- Zazi arms its rule only in step-by-step mode for the same reason: a tap-correct grid cannot tell
+  *wrong* from *not reached*.
 
-- **Tap only the wrong letters, like crossing them out in pencil** (recommended). It mirrors the
-  sheet EAs mark today and the international EGRA convention. It needs fewer taps at a letter a
-  second. One mechanic serves every reading Question, in both the battery and the standalone
-  tests. The package's word and passage components already support it. When time runs out or
-  the EA ends, the EA taps the last letter the child reached, as they bracket it on paper.
-- **Step-by-step: a tick or a cross for every letter** (today's default). It gives explicit
-  evidence for every letter, but it is a different habit from pencil marking and needs a tap per
-  letter. Keeping it means building a step-by-step mode into the package's letter and word
-  components.
+**B. Wipe the practice assessments before rollout:** yes. Results are stored in a new shape
+(section 7), so no conversion code is written for practice rows.
 
-If you choose the first, the step-by-step mode and the device capture-mode setting are retired
-for these tests. There is no field data on the new backend, so the grid-versus-step-by-step
-comparison loses nothing.
-
-**B. Wipe the practice assessments before rollout, not after.** Results are stored in a new shape
-(section 7). Practice rows in the old shape would need conversion code that we would then throw
-away. You already decided to wipe them after the slice. Wiping them just before the new build
-goes onto test phones lets us skip that code entirely. Nothing in the field is affected.
-
-### 3.2 Calls I made (please check while reading)
+### 3.2 Calls I made (all accepted by Jim, 2026-10-20)
 
 1. Letter content is **bundled, versioned data files**, not a synced table. Cards must be printed
    anyway, so an app release per letter change is not the bottleneck, and files are typed,
@@ -181,14 +176,26 @@ Standalone test registry                    └── assessment_items (exactly 
 ```ts
 type LetterSoundsItemSet = ItemSetMeta & {      // item_set_id, question_code, question_version, language
   rows: string[][];                             // exactly as printed, top to bottom, left to right
-  stop_rule: { kind: 'row_all_wrong'; rows: 'any' | 'first' } | null;
+  stop_rule: ConsecutiveWrongStopRule | null;
+};
+
+type ConsecutiveWrongStopRule = {
+  kind: 'consecutive_wrong';
+  warn_at: number;              // 5: offer to stop
+  stop_at: number;              // 10: stop
+  disarm_after_correct: number; // 10: once the child has this many correct, the rule switches off
 };
 ```
 
+`kind` leaves room for other rules later. One example is EGRA's "whole first row wrong", which the
+government isiZulu form uses (section 12). Only `consecutive_wrong` is built now.
+
 **Rules**
 
-- **Rows are the source of truth.** The phone grid renders these rows and nothing else, and every
-  result item records its row. Rows may differ in length.
+- **Rows are the source of truth for layout.** The phone grid renders these rows and nothing else,
+  so the EA's screen matches the child's card. Every result item records its row. Rows may differ
+  in length. The stop rule counts letters in reading order and **runs across row ends**, as in
+  Zazi.
 - **Validation.** It runs in the package and in a unit test over every bundled set:
   - every item is one letter: a single Unicode letter, either case;
   - no row is empty;
@@ -207,14 +214,16 @@ type LetterSoundsItemSet = ItemSetMeta & {      // item_set_id, question_code, q
   references `letter_sounds` and that same version. A package test fails if the two ever differ,
   so "identical" is enforced, not remembered.
 - **Interim content (call 2).** Version `2026.1` holds the 2024 WelaPLUS Q1 lists as five rows of
-  twelve, lowercase, with `stop_rule: { kind: 'row_all_wrong', rows: 'any' }`. The isiXhosa list
+  twelve, lowercase, with `stop_rule: { kind: 'consecutive_wrong', warn_at: 5, stop_at: 10,
+  disarm_after_correct: 10 }`. The isiXhosa list
   is already identical to today's EGRA list. `contentStatus.ts` gets one entry per language:
   "Masi team to supply the mixed-case single-letter list and card layout." When the lists
   arrive, they become `2026.2`, a content-only change.
 - **Content guidance for the team** (recorded in the content-status entry):
   - single letters in mixed case;
   - rows as printed;
-  - keep rows short enough to tap on a 360 dp phone (ten or fewer per row is comfortable);
+  - keep rows short enough to read on a 360 dp phone (ten or fewer per row is comfortable). The
+    EA taps the Correct and Incorrect buttons, not the letters, so this is about legibility;
   - use a typeface where capital I and lowercase l look different, and use the same face in
     the app.
 
@@ -227,15 +236,17 @@ type LetterSoundsItemSet = ItemSetMeta & {      // item_set_id, question_code, q
 | Question code | Taken from the item set (`ItemSetMeta.question_code`), never hard-coded. This applies to every component in the package. |
 | Language | The host passes the item set. If there is no set for the requested language, the component renders an error state and never falls back to English. This also applies to every component. |
 | Grid | One visual row per item-set row. Long cards scroll vertically, and rows never re-wrap. |
-| Marking | Per decision A. The recommended mechanic is **tap a letter to mark it wrong**, tap again to clear it, with a `tap_wrong` polarity like `ReadWordsQuestion`. |
-| Timer | `durationSec` from the test definition (60 for both entry points). Reading time freezes at the deadline, at End, or at the stop rule (#88 behaviour). |
-| Stop rule | When every letter in a row covered by `stop_rule` is marked wrong, the timer pauses and a bottom sheet opens: **"Whole row wrong — stop the test"**, with **Stop test** (primary) and **Keep going** (for a mis-tap). Stop ends the test with `stopped_reason = 'stop_rule'` and the last attempted letter at the end of that row. Keep going resumes the timer. |
-| Last attempted | At the timer or at End, the EA taps the last letter the child reached (today's last-attempted sheet, row-aware). Letters after it are not reached. |
-| Result | Each item is `{ position, item_key: letter, prompt: letter, is_correct, metadata: { row, reached } }`. There is one item per card position, including not-reached ones (`reached: false`, `is_correct: false`). `derived` keeps `total_correct`, `total_attempted`, `percent`, `last_attempted_position`, `was_timed` and `tracks_progress`. |
-| Validator | `contractTest/validateResult` gains one rule: `stop_rule` requires the last attempted row to have zero correct. |
+| Marking | **Step-by-step** (decision A). A cursor highlights the current letter, and the EA taps **Correct** or **Incorrect**. The cursor moves on, scrolling to the letter's row. **Back** clears the previous decision and counts a correction. This ports today's `SequentialAssessmentScreen` and Zazi's `sequentialAssessmentReducer` into the package as a pure reducer with its own tests. |
+| Timer | `durationSec` from the test definition (60 for both entry points). Reading time freezes at the deadline, at End, or at a stop (#88 behaviour), and pauses while a stop-rule prompt is open. |
+| Stop rule | Ported from Zazi (`assessmentStopRule.js`), with its values in item-set data (6.1). After each forward decision, count the run of consecutive Incorrect decisions back from the current letter. The count never reaches below the resume floor, defined in the last two bullets.<ul><li>**5 in a row:** a bottom sheet says *"⟨Child⟩ has missed 5 in a row. Would you like to keep going or stop the test here?"*, with **Keep going** (primary) and **Stop here**. It is shown once per run of wrong letters.</li><li>**10 in a row:** the test stops. A card says *"⟨Child⟩ has missed 10 in a row"*, with **Save result** (primary) and **Child was distracted — resume**.</li><li>**Switching off:** once the child has 10 correct in total, the rule switches off for the rest of the test.</li><li>**While a prompt is open,** Correct, Incorrect and Back are ignored. This is Zazi's queued-tap guard.</li><li>**Resume** sets the floor to the current letter, so the count starts again from there. Back cannot go below the floor.</li></ul> |
+| Stopped reason | Uses the package's existing 10 values, so there is no new database CHECK.<ul><li>`stop_rule` covers both Stop here and Save result.</li><li>`timer`, `ea_ended` and `completed` are as today.</li><li>`derived.stop_rule` records which stop it was (`warn_accepted` or `hard`), plus Zazi's telemetry: `armed`, `warnings_shown`, `warnings_declined`, `overrides` and `max_consecutive_wrong`.</li></ul> |
+| Last attempted | It is the letter before the cursor. Step-by-step marking always knows it, so the last-attempted sheet is not needed for this test. Letters after it are not reached. |
+| Result | Each item is `{ position, item_key: letter, prompt: letter, is_correct, metadata: { row, reached } }`. There is one item per card position, including not-reached ones (`reached: false`, `is_correct: false`). `derived` keeps `total_correct`, `total_attempted`, `percent`, `last_attempted_position`, `was_timed`, `tracks_progress`, `capture_mode: 'sequential'` and `correction_count`. |
+| Validator | `contractTest/validateResult` gains one rule: a `stop_rule` result without a resume must end in at least `warn_at` consecutive wrong letters. |
 
-With step-by-step marking (the other answer to A), the same stop rule fires when the last letter
-of a row gets a cross and the whole row is crosses. The table is otherwise unchanged.
+**Not ported from Zazi:** its device setting that turns the stop rule off (default on). The rule is
+part of the test definition, so every EA's results are comparable. Turning it off for a test is a
+content change: `stop_rule: null` in a new version.
 
 ### 6.3 Where the letter test runs
 
@@ -245,22 +256,23 @@ of a row gets a cross and the whole row is crosses. The table is otherwise uncha
   saves with `saveQuestionResult` (7.2). The "Try again" and results screens keep working against
   the new result.
 - **WelaPLUS Question 1.** Same component, same item set, saved with the run's `battery_run_id`.
-  The battery instruction copy "STOP immediately if the child gets an entire row wrong" becomes
-  enforced behaviour. This reverses D4 for Q1 only; other Questions' stop rules stay soft.
+  The battery instruction copy changes from "STOP immediately if the child gets an entire row
+  wrong" to describe the 10-in-a-row rule, and the rule is enforced. This reverses D4 for Q1
+  only; other Questions' stop rules stay soft.
 
 ### 6.4 Word reading (call 4)
 
 - The standalone word test hosts `ReadWordsQuestion` with `question_code = 'word_reading'`, which
   matches the score-band tool code. Its item set holds the existing 50 placeholder words with
   explicit `row_lengths`, and the content-status entry stays "placeholder lists".
-- Marking follows decision A. There is no stop rule, as today.
+- Marking is step-by-step (decision A), so `ReadWordsQuestion` gains the same step-by-step mode,
+  sharing the package reducer. There is no stop rule, as today (`stop_rule: null`). Zazi also
+  arms its rule only for letters.
 - The old capture stack is then deleted:
   - `LetterAssessmentScreen` and `SequentialAssessmentScreen`;
   - `useAssessmentSession` and `EgraLetterGrid`;
   - the sequential reducer and `buildAssessmentRecord`;
   - the `__summary__` row.
-- With answer B to decision A (step-by-step), `ReadWordsQuestion` also needs the step-by-step
-  mode.
 
 ---
 
@@ -287,7 +299,8 @@ of a row gets a cross and the whole row is crosses. The table is otherwise uncha
 - `score = derived.total_correct`, or the rubric total for Q11.
 - `total_items` is the number of item rows, which is the card size. The write call checks it as
   the completeness count.
-- `capture_mode` is set per decision A: `grid` for tap-wrong marking, or the mode used.
+- `capture_mode = 'sequential'` for the letter and word tests. Battery Questions that keep other
+  mechanics stamp what they used.
 - `items_tested` is no longer written.
 - `assessment_purpose = 'progress_check'` and `assessment_window_id = null` (D8).
 
@@ -881,8 +894,8 @@ Using the government isiZulu EGRA as the worked example:
 
 | Need | Where it goes | Server / sync / storage change |
 |---|---|---|
-| Letter subtask (110 letters, 11×10, first-row stop) | `letter_sounds@<v>.zu` item set with `stop_rule.rows = 'first'`. It is a letter result, so it feeds mastery. Adding `zu` also needs the isiZulu 26-letter order. | None |
-| Familiar words (50, 10×5, first-row stop) | A `ReadWordsQuestion` item set. It needs the same `stop_rule` field added to the word component. | None |
+| Letter subtask (110 letters, 11×10, first-row stop) | `letter_sounds@<v>.zu` item set. Its stop rule is a new `stop_rule` kind, `first_row_all_wrong`: one pure function next to `consecutive_wrong`, chosen by data. It is a letter result, so it feeds mastery. Adding `zu` also needs the isiZulu 26-letter order. | None |
+| Familiar words (50, 10×5, first-row stop) | A `ReadWordsQuestion` item set. It uses the same `stop_rule` field, applied by the word component's step-by-step mode. | None |
 | Passage (43 words on 13 printed lines) | A `ReadPassageQuestion` item set. It needs `line_lengths`, so the first-line rule mirrors the card. | None |
 | Comprehension (5 questions, three states, gated by how far the child read) | A new component, with a "not asked" item state (`metadata.asked = false`) and a per-question `requires_position` fed from the passage result. | None |
 | Practice items, consent, Grade R | Practice: an optional unscored item-set field. Consent: `skipped_child_refused`. Grade R: a child attribute, outside the package. | None |
@@ -946,7 +959,15 @@ Per `AGENTS.md`: Codex implements each task, and Claude reviews the diff and tes
 - Item-set validation over every bundled set.
 - The battery-and-standalone same-version test.
 - The stop-rule sheet: fire, Stop, and Keep going.
-- Validator rule `stop_rule` ⇒ last attempted row all wrong.
+- The stop-rule reducer, ported from Zazi's tests:
+  - a warning at 5 wrong in a row, shown once per run of wrong letters;
+  - a stop at 10, with Save result or resume; resume moves the floor, and Back is blocked below
+    it;
+  - switched off after 10 correct;
+  - a run of wrong letters that crosses a row end;
+  - taps ignored while a prompt is open;
+  - the timer paused while the warning is open.
+- The validator rule for `stop_rule` results.
 - An unknown language renders the error state.
 - Every component's `question_code` comes from its item set.
 
@@ -1052,7 +1073,8 @@ at 360 dp and on iPhone.
 - `CONTEXT.md`:
   - "Assessment Question" example becomes "Letter Sounds";
   - Letter mastery evidence now includes WelaPLUS Q1, with case folding;
-  - Capture mode, per decision A;
+  - Capture mode: step-by-step is the only mechanic for the letter and word tests;
+  - add the **stop rule** (10 wrong in a row, warning at 5, off after 10 correct);
   - add **Letter result** and **Item set**.
 - **New ADR-0009:** "Assessment results are written through one type-agnostic call, as complete
   families". It covers the exclusive write boundary, the single result shape, and selection by
@@ -1080,8 +1102,9 @@ at 360 dp and on iPhone.
   string goes in the card footer, and a test pins battery Q1 = standalone.
 - **Interim content.** Until the new lists arrive, the test is lowercase only. The format is
   ready, and the swap is one file per language.
-- **Tap targets.** Rows of 12 at 360 dp are tight. The device gate checks it, and content guidance
-  asks for 10 or fewer.
+- **Legibility.** Rows of 12 at 360 dp are small. The EA marks with large buttons, but they must
+  still see the highlighted letter at a glance. The device gate checks it, and content guidance
+  asks for 10 or fewer per row.
 - **Class-membership changes the phone cannot see** reach it only through the weekly re-walk. This
   is accepted, as for sessions.
 - **A history reference child created by the assessment pull is not assessable.** This is
