@@ -245,7 +245,7 @@ test('the complete repository graph, composite onboarding and profile cache are 
   expect(Object.keys(a.repositories).sort()).toEqual([
     'children', 'classes', 'groups', 'classEaAssignments', 'groupEaAssignments',
     'childClassMemberships', 'classOnboarding', 'classGroupingState', 'groupingVersions',
-    'sessions', 'assessments', 'mastery', 'timeEntries', 'schools', 'jobTitles', 'programmes',
+    'sessions', 'assessments', 'batteryRuns', 'mastery', 'timeEntries', 'schools', 'jobTitles', 'programmes',
     'staffProgrammeAssignments', 'assessmentTools', 'academicYears', 'assessmentWindows',
     'teachers', 'syncOutbox', 'syncState', 'localState', 'supportIncidents',
   ].sort());
