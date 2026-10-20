@@ -732,6 +732,68 @@ alter table grouping_versions add column row_version integer not null default 1;
 alter table class_grouping_state add column row_version integer not null default 1;
     `,
   },
+  {
+    version: 15,
+    name: 'assessment_results',
+    sql: `
+      -- Clear practice results and their old per-row writes before changing shape.
+      delete from sync_outbox where table_name in ('assessments', 'assessment_items');
+      delete from assessment_items;
+      delete from assessments;
+
+      alter table assessments add column question_code text;
+      alter table assessments add column question_version text;
+      alter table assessments add column item_set_id text;
+      alter table assessments add column language text;
+      alter table assessments add column stopped_reason text;
+      alter table assessments add column duration_ms integer;
+      alter table assessments add column derived text not null default '{}';
+
+      create table battery_runs (
+        id text primary key,
+        battery_code text not null,
+        battery_version text not null,
+        child_id text not null references children(id) on delete restrict,
+        user_id text not null,
+        programme_id text not null references programmes(id),
+        class_id text,
+        assessment_purpose text not null default 'progress_check'
+          check (assessment_purpose in ('official_window', 'progress_check', 'other')),
+        assessment_window_id text references assessment_windows(id) on delete set null,
+        language text not null,
+        started_at text not null,
+        completed_at text,
+        status text not null default 'in_progress'
+          check (status in ('in_progress', 'completed', 'abandoned')),
+        notes text,
+        created_at text not null default (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+        updated_at text not null default (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+        ${LOCAL_SYNC_COLUMNS},
+        started_here integer not null default 0 check (started_here in (0,1)),
+        check ((status = 'completed') = (completed_at is not null)),
+        check (
+          (
+            assessment_purpose = 'official_window'
+            and assessment_window_id is not null
+          )
+          or
+          (
+            assessment_purpose <> 'official_window'
+            and assessment_window_id is null
+          )
+        )
+      );
+
+      alter table assessments add column battery_run_id text references battery_runs(id) on delete restrict;
+
+      create unique index idx_assessments_run_question
+        on assessments(battery_run_id, question_code) where battery_run_id is not null;
+      create index idx_battery_runs_user_status on battery_runs(user_id, status);
+
+      alter table programmes add column default_battery_code text;
+      alter table programmes add column default_battery_version text;
+    `,
+  },
 ];
 
 // Derived from the migration list so it never drifts when a migration is added.
