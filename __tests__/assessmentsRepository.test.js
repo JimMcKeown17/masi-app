@@ -41,29 +41,30 @@ describe('assessmentsRepository', () => {
     expect(await f.db.getFirstAsync('select count(*) as count from sync_outbox')).toEqual({ count: 0 });
   });
 
-  test('legacy summary reads remain programme-scoped until their readers move in Task 12', async () => {
+  test('typed result reads preserve programme scope, ordering and stored parent values', async () => {
     const otherProgramme = uuid();
     await f.db.runAsync('insert into programmes (id, code, name) values (?, ?, ?)', otherProgramme, 'numeracy', 'Numeracy');
-    for (const [id, programmeId, date] of [
-      ['assessment-literacy', f.programmeId, '2026-05-21'],
-      ['assessment-numeracy', otherProgramme, '2026-05-22'],
-    ]) {
-      await f.db.runAsync(`insert into assessments (id, user_id, child_id, programme_id, assessment_type, assessment_date)
-        values (?, ?, ?, ?, 'letter_egra', ?)`, id, f.userId, f.childId, programmeId, date);
-      await f.db.runAsync(`insert into assessment_items (id, assessment_id, item_key, metadata)
-        values (?, ?, '__summary__', ?)`, uuid(), id, JSON.stringify({
-          correct_letters: [{ index: 0, letter: 'a' }], incorrect_letters: [{ index: 1, letter: 'm' }],
-          letters_attempted: 2, correct_responses: 1, accuracy: 50, letter_language: 'isiXhosa',
-        }));
-    }
-    expect((await f.assessments.getAssessments()).map(assessment => assessment.id))
-      .toEqual(['assessment-literacy', 'assessment-numeracy']);
-    expect(await f.assessments.getAssessments({ userId: f.userId })).toEqual([
-      expect.objectContaining({ id: 'assessment-literacy', programme_id: f.programmeId,
-        date_assessed: '2026-05-21', correct_letters: [{ index: 0, letter: 'a' }],
-        incorrect_letters: [{ index: 1, letter: 'm' }], letters_attempted: 2,
-        correct_responses: 1, accuracy: 50, letter_language: 'isiXhosa' }),
+    const first = await f.save(2);
+    const other = await f.save(2);
+    await f.db.runAsync("update assessments set assessment_date = '2026-05-21' where id = ?", first.id);
+    await f.db.runAsync("update assessments set programme_id = ?, assessment_date = '2026-05-22' where id = ?",
+      otherProgramme, other.id);
+    expect((await f.assessments.getQuestionResults()).map(assessment => assessment.id)).toEqual([first.id, other.id]);
+    const scoped = await f.assessments.getQuestionResults({ userId: f.userId });
+    expect(scoped).toEqual([
+      expect.objectContaining({ id: first.id, programme_id: f.programmeId,
+        assessment_date: '2026-05-21', score: 1, total_items: 2, language: 'en',
+        derived: expect.objectContaining({ total_correct: 1 }), items: expect.any(Array) }),
     ]);
+    expect(scoped[0].items).toHaveLength(2);
+    expect(scoped[0].date_assessed).toBeUndefined();
+    expect(scoped[0].correct_letters).toBeUndefined();
+  });
+
+  test('retires all summary-row reader and untyped count APIs', () => {
+    expect(f.assessments.getAssessments).toBeUndefined();
+    expect(f.assessments.countAssessments).toBeUndefined();
+    expect(f.assessments.getUnsyncedRecords).toBeUndefined();
   });
 
   test('missing user identity refuses the save without writing a family', async () => {

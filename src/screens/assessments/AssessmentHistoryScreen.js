@@ -10,6 +10,7 @@ import { Text, ActivityIndicator } from 'react-native-paper';
 import { useFocusEffect } from '@react-navigation/native';
 import { useAuth } from '../../context/AuthContext';
 import { useChildren } from '../../context/ChildrenContext';
+import { LANGUAGE_LABELS, STANDALONE_TESTS } from '../../utils/assessmentRegistry';
 import { colors, spacing } from '../../constants/colors';
 
 
@@ -30,7 +31,7 @@ export default function AssessmentHistoryScreen({ navigation }) {
   const cardBottom = useScrollBottomPadding(spacing.md);
   const toast = useToast();
   const { repositories } = useSignedInEA();
-  const { assessments: assessmentsRepository } = repositories;
+  const { assessments: assessmentsRepository, batteryRuns } = repositories;
 
   const { user } = useAuth();
   // Use allChildren (includes hidden) so historical assessments still resolve
@@ -53,11 +54,17 @@ export default function AssessmentHistoryScreen({ navigation }) {
 
         try {
           setLoading(true);
-          const cached = await assessmentsRepository.getAssessments({
-            userId: user.id,
-            recordedByUserId: user.id,
-            order: 'desc',
-          });
+          const [results, runs] = await Promise.all([
+            assessmentsRepository.getQuestionResults({
+              userId: user.id, recordedByUserId: user.id, includeSkipped: true, order: 'desc',
+            }),
+            batteryRuns.getRunsForUser(user.id),
+          ]);
+          const cached = [
+            ...results.filter(result => result.battery_run_id == null).map(result => ({ ...result, kind: 'result' })),
+            ...runs.map(run => ({ ...run, kind: 'run', assessment_date: run.started_at.slice(0, 10) })),
+          ].sort((a, b) => b.assessment_date.localeCompare(a.assessment_date)
+            || (b.created_at || '').localeCompare(a.created_at || ''));
           if (active) {
             setAssessments(cached);
           }
@@ -77,7 +84,7 @@ export default function AssessmentHistoryScreen({ navigation }) {
       return () => {
         active = false;
       };
-    }, [user?.id, toast])
+    }, [user?.id, toast, assessmentsRepository, batteryRuns])
   );
 
   const childInfoMap = React.useMemo(() => {
@@ -92,31 +99,30 @@ export default function AssessmentHistoryScreen({ navigation }) {
   }, [allChildren]);
 
   const renderItem = ({ item, index }) => {
-    const accuracyColor = item.accuracy >= 75
-      ? colors.success
-      : item.accuracy >= 50
-        ? colors.primary
-        : colors.primary;
+    const isRun = item.kind === 'run';
+    const synced = item.sync_status === 'synced';
+    const title = STANDALONE_TESTS.find(test => test.code === item.question_code)?.title || item.question_code;
+    const status = isRun ? item.status.replace(/_/g, ' ').replace(/^./, char => char.toUpperCase()) : null;
+    const Row = isRun ? View : Pressable;
     const info = childInfoMap[item.child_id];
     const childName = info ? info.name : 'Unknown child';
     const isHidden = info?.hidden;
 
     return (
-      <Pressable accessibilityRole="button"
-        style={styles.row}
-        onPress={() => navigation.navigate('AssessmentDetail', { assessment: item, childName })}
+      <Row testID="assessment-history-row" style={styles.row}
+        {...(!isRun && { accessibilityRole: 'button', onPress: () => navigation.navigate('AssessmentDetail', { assessmentId: item.id, childName }) })}
       >
         <View style={styles.cardHeader}>
           <Text variant="titleSmall" style={styles.cardDate}>
-            {formatDate(item.date_assessed)}
+            {formatDate(item.assessment_date)}
           </Text>
           <View style={styles.cardHeaderRight}>
-            <View style={[styles.syncBadge, item.synced ? styles.syncBadgeSynced : styles.syncBadgePending]}>
-              <Text variant="bodySmall" style={[styles.syncBadgeText, item.synced ? styles.syncTextSynced : styles.syncTextPending]}>
-                {item.synced ? 'Synced' : 'Pending sync'}
+            <View style={[styles.syncBadge, synced ? styles.syncBadgeSynced : styles.syncBadgePending]}>
+              <Text variant="bodySmall" style={[styles.syncBadgeText, synced ? styles.syncTextSynced : styles.syncTextPending]}>
+                {synced ? 'Synced' : 'Pending sync'}
               </Text>
             </View>
-            <Text style={styles.chevron}>{'\u203A'}</Text>
+            {!isRun && <Text style={styles.chevron}>{'\u203A'}</Text>}
           </View>
         </View>
 
@@ -128,29 +134,18 @@ export default function AssessmentHistoryScreen({ navigation }) {
         </Text>
 
         <View style={styles.typeRow}>
-          <View style={[styles.typeBadge, item.assessment_type === 'word_egra' ? styles.typeBadgeWord : styles.typeBadgeLetter]}>
-            <Text variant="labelSmall" style={styles.typeBadgeText}>
-              {item.assessment_type === 'word_egra' ? 'Words' : 'Letters'}
-            </Text>
-          </View>
+          <Text variant="labelSmall" style={styles.typeBadgeText}>
+            {isRun ? `WelaPLUS · ${status} · ${item.question_count} Questions` : title}
+          </Text>
           <Text variant="bodyMedium" style={styles.language}>
-            {item.letter_language} - Attempt #{item.attempt_number}
+            {LANGUAGE_LABELS[item.language] || item.language}
           </Text>
         </View>
-
-        <View style={styles.statsRow}>
-          <Text variant="bodySmall" style={styles.stat}>
-            Attempted: {item.letters_attempted}
-          </Text>
-          <Text variant="bodySmall" style={styles.stat}>
-            Correct: {item.correct_responses}
-          </Text>
-          <Text variant="bodySmall" style={[styles.stat, { color: accuracyColor, fontFamily: fontFamilies.textBold }]}>
-            {item.accuracy}%
-          </Text>
-        </View>
+        {!isRun && <View style={styles.statsRow}>
+          <Text variant="bodySmall" style={styles.stat}>{item.score} / {item.total_items}</Text>
+        </View>}
         {index < assessments.length - 1 && <View testID="history-row-divider" pointerEvents="none" style={styles.rowDivider} />}
-      </Pressable>
+      </Row>
     );
   };
 
@@ -247,6 +242,7 @@ const styles = StyleSheet.create({
   },
   typeRow: {
     flexDirection: 'row',
+    flexWrap: 'wrap',
     alignItems: 'center',
     gap: spacing.sm,
     marginBottom: spacing.sm,

@@ -12,20 +12,18 @@ import { useChildren } from '../../context/ChildrenContext';
 import { useClasses } from '../../context/ClassesContext';
 
 import { getLetterScoreRanking, getWordAssessmentRanking } from '../../utils/dashboardStats';
-import { getScoreBand, getBandColor } from '../../utils/scoreBands';
+import { getBandColor } from '../../utils/scoreBands';
 import RankedBarRow from '../../components/dashboard/RankedBarRow';
 import StatBar from '../../components/dashboard/StatBar';
 import { colors, spacing, borderRadius } from '../../constants/colors';
 
-// The screen toggles between two EGRA Questions. Each carries its own band
-// tool_code (for grade-referenced colours), bar scale, and copy. Word bands are
-// not seeded yet, so word_reading degrades to neutral grey via getScoreBand.
+// The screen toggles between two Questions. Each result carries its own scale
+// and Question code for grade-referenced bands. Word bands are not seeded yet,
+// so word results use the neutral unknown band.
 const MODES = {
   letters: {
     value: 'letters',
     label: 'Letters',
-    toolCode: 'letter_sounds',
-    maxValue: 60,
     rank: getLetterScoreRanking,
     subtitle: 'Ranked by letters correct on the most recent EGRA letter assessment',
     benchmarked: true,
@@ -33,8 +31,6 @@ const MODES = {
   words: {
     value: 'words',
     label: 'Words',
-    toolCode: 'word_reading',
-    maxValue: 50,
     rank: getWordAssessmentRanking,
     subtitle: 'Ranked by words correct on the most recent EGRA word assessment',
     benchmarked: false,
@@ -54,33 +50,44 @@ export default function AssessmentRankingScreen({ navigation }) {
   const onScroll = useHeaderHairline();
   const paddingBottom = useScrollBottomPadding(spacing.xxl);
   const { repositories } = useSignedInEA();
-  const { assessments: assessmentsRepository } = repositories;
+  const { assessments: assessmentsRepository, childClassMemberships: membershipsRepository } = repositories;
 
   const { user } = useAuth();
   const { children: childrenList } = useChildren();
   const { classes } = useClasses();
   const [assessments, setAssessments] = useState([]);
+  const [memberships, setMemberships] = useState([]);
   const [mode, setMode] = useState('letters');
   const [loading, setLoading] = useState(true);
 
   useFocusEffect(
     useCallback(() => {
+      let active = true;
       const load = async () => {
         setLoading(true);
-        const rows = await assessmentsRepository.getAssessments({ userId: user.id });
+        const [rows, membershipRows] = await Promise.all([
+          assessmentsRepository.getQuestionResults({ userId: user.id }),
+          membershipsRepository.getAll(),
+        ]);
+        if (!active) return;
         setAssessments(rows);
+        setMemberships(membershipRows);
         setLoading(false);
       };
       load();
-    }, [user.id])
+      return () => { active = false; };
+    }, [assessmentsRepository, membershipsRepository, user.id])
   );
 
   const modeConfig = MODES[mode];
   // Toggling re-ranks the already-fetched assessments — no refetch needed.
-  const ranking = useMemo(
-    () => modeConfig.rank(childrenList, assessments),
-    [modeConfig, childrenList, assessments]
+  const assessed = useMemo(
+    () => modeConfig.rank(childrenList, assessments, classes, memberships),
+    [modeConfig, childrenList, assessments, classes, memberships]
   );
+  const assessedIds = new Set(assessed.map(row => row.child.id));
+  const notAssessed = childrenList.filter(child => !assessedIds.has(child.id)).map(child => ({ child }));
+  const ranking = [...assessed, ...notAssessed];
 
   if (loading) {
     return (
@@ -90,16 +97,13 @@ export default function AssessmentRankingScreen({ navigation }) {
     );
   }
 
-  const assessed = ranking.filter(r => r.accuracy !== null);
-  const notAssessed = ranking.filter(r => r.accuracy === null);
-
   const avgCorrect = assessed.length > 0
-    ? Math.round(assessed.reduce((sum, r) => sum + r.correct, 0) / assessed.length)
+    ? Math.round(assessed.reduce((sum, r) => sum + r.score, 0) / assessed.length)
     : 0;
-  const highest = assessed.length > 0 ? assessed[0].correct : 0;
+  const highest = assessed.length > 0 ? assessed[0].score : 0;
 
   const renderItem = ({ item, index }) => {
-    if (item.accuracy === null) {
+    if (!item.assessment) {
       return (
         <View style={styles.unassessedRow}>
           <Text style={styles.unassessedName}>
@@ -111,26 +115,17 @@ export default function AssessmentRankingScreen({ navigation }) {
     }
 
     const childName = `${item.child.first_name} ${(item.child.last_name || '').charAt(0)}.`;
-    // Colour by raw-score band (grade-referenced), never accuracy percent (ADR-0003).
-    // Grade/language come from the child's class; band degrades to neutral grey
-    // for tools/grades without a configured benchmark (e.g. word_reading today).
-    const cls = classes.find((c) => c.id === item.child.class_id);
-    const band = getScoreBand({
-      toolCode: modeConfig.toolCode,
-      grade: cls?.grade,
-      language: cls?.home_language,
-      rawScore: item.correct,
-    });
+    // The helper uses the stored Question/language and grade at the result date.
     return (
       <RankedBarRow
         rank={index + 1}
         name={childName}
-        value={item.correct}
-        maxValue={modeConfig.maxValue}
-        barColor={getBandColor(band)}
-        label={`${item.correct}`}
-        onPress={item.assessment ? () => navigation.navigate('AssessmentDetail', {
-          assessment: item.assessment,
+        value={item.score}
+        maxValue={item.total}
+        barColor={getBandColor(item.band)}
+        label={`${item.score} / ${item.total}`}
+        onPress={!item.assessment.battery_run_id ? () => navigation.navigate('AssessmentDetail', {
+          assessmentId: item.assessment.id,
           childName,
         }) : undefined}
       />

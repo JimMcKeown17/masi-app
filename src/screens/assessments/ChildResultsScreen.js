@@ -106,17 +106,16 @@ export default function ChildResultsScreen({ navigation, route }) {
                   </View>
                 </View>
 
-                <View style={styles.cardButtons}>
+                {!assessment.battery_run_id && <View style={styles.cardButtons}>
                   <BrandButton size="md"
                     variant="secondary"
                     onPress={() => navigation.navigate('AssessmentDetail', {
-                      // Task 12 replaces Detail's legacy date reader.
-                      assessment: { ...assessment, date_assessed: assessment.assessment_date },
+                      assessmentId: assessment.id,
                       childName,
                     })}
                     label="View detail"
                   />
-                </View>
+                </View>}
               </View>
             ) : (
               <View style={styles.notAssessed}>

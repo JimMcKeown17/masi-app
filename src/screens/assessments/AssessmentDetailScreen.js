@@ -1,21 +1,15 @@
 import { useHeaderHairline } from '../../components/common/ScreenHeader';
 import SurfaceCard from '../../components/common/SurfaceCard';
 import { fontFamilies, typeRoles } from '../../constants/typography';
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { View, StyleSheet, ScrollView } from 'react-native';
-import { Text } from 'react-native-paper';
+import { Text, ActivityIndicator } from 'react-native-paper';
 import { useScrollBottomPadding } from '../../hooks/useScrollBottomPadding';
 import { colors, spacing, shadows } from '../../constants/colors';
-import { getItemSetById } from '../../constants/egraConstants';
+import { useAuth } from '../../context/AuthContext';
+import { useSignedInEA } from '../../context/SignedInEAContext';
+import { LANGUAGE_LABELS, STANDALONE_TESTS } from '../../utils/assessmentRegistry';
 import AssessmentDetailGrid from '../../components/assessment/AssessmentDetailGrid';
-
-function getFeedback(accuracy) {
-  if (accuracy >= 90) return { message: 'Excellent work!', color: colors.success };
-  if (accuracy >= 75) return { message: 'Great job!', color: colors.success };
-  if (accuracy >= 60) return { message: 'Good effort!', color: colors.primary };
-  if (accuracy >= 40) return { message: 'Nice try!', color: colors.accent };
-  return { message: 'Keep practicing!', color: colors.primary, graphicColor: colors.emphasis };
-}
 
 function formatDate(dateString) {
   const [year, month, day] = dateString.split('-').map(Number);
@@ -39,22 +33,32 @@ function StatCard({ value, label, accentColor }) {
 
 export default function AssessmentDetailScreen({ route }) {
   const onScroll = useHeaderHairline();
-  const { assessment, childName } = route.params;
+  const { assessmentId, childName } = route.params;
+  const { user } = useAuth();
+  const { repositories } = useSignedInEA();
+  const [assessment, setAssessment] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [readError, setReadError] = useState(false);
   const paddingBottom = useScrollBottomPadding();
-  const isWordAssessment = assessment.assessment_type === 'word_egra';
 
-  // Prefer items_tested (self-contained) → fall back to set lookup
-  const letterSet = assessment.items_tested
-    ? {
-        letters: assessment.items_tested,
-        columns: isWordAssessment ? 2 : 5,
-        type: isWordAssessment ? 'word' : 'letter',
-        language: assessment.letter_language,
-      }
-    : getItemSetById(assessment.letter_set_id);
+  useEffect(() => {
+    let active = true;
+    setLoading(true);
+    setReadError(false);
+    repositories.assessments.getQuestionResults({ userId: user.id, assessmentId, includeSkipped: true })
+      .then(results => { if (active) setAssessment(results[0] || null); })
+      .catch(() => { if (active) { setAssessment(null); setReadError(true); } })
+      .finally(() => { if (active) setLoading(false); });
+    return () => { active = false; };
+  }, [repositories.assessments, user.id, assessmentId]);
 
-  const incorrect = assessment.letters_attempted - assessment.correct_responses;
-  const feedback = getFeedback(assessment.accuracy);
+  if (loading) return <View style={styles.container}><ActivityIndicator color={colors.primary} accessibilityLabel="Loading result" /></View>;
+  if (!assessment || assessment.battery_run_id) return <View style={[styles.container, styles.scrollContent]}>
+    <Text>{readError ? 'Could not load result.' : assessment?.battery_run_id ? 'Battery Questions are shown in their run.' : 'Result not found.'}</Text>
+  </View>;
+  const attempted = assessment.derived?.total_attempted ?? assessment.items.filter(item => item.metadata?.reached !== false).length;
+  const incorrect = attempted - assessment.score;
+  const title = STANDALONE_TESTS.find(test => test.code === assessment.question_code)?.title || assessment.question_code;
 
   return (
     <ScrollView onScroll={onScroll} scrollEventThrottle={16}
@@ -63,44 +67,37 @@ export default function AssessmentDetailScreen({ route }) {
     >
       <Text variant="bodyLarge" style={styles.childName}>{childName}</Text>
       <Text variant="bodyMedium" style={styles.meta}>
-        {formatDate(assessment.date_assessed)} - {assessment.letter_language} - Attempt #{assessment.attempt_number}
+        {formatDate(assessment.assessment_date)} · {title}
       </Text>
 
-      {/* Hero accuracy section */}
+      <Text style={styles.meta}>{LANGUAGE_LABELS[assessment.language] || assessment.language}</Text>
       <View style={styles.heroSection}>
-        <View style={[styles.accuracyRing, { borderColor: feedback.graphicColor ?? feedback.color }]}>
-          <Text style={[styles.accuracyNumber, { color: feedback.color }]}>
-            {assessment.accuracy}%
+        <View style={[styles.accuracyRing, { borderColor: colors.primary }]}>
+          <Text style={[styles.accuracyNumber, { color: colors.primary }]}>
+            {assessment.score} / {assessment.total_items}
           </Text>
         </View>
-        <Text variant="headlineSmall" style={[styles.feedbackText, { color: feedback.color }]}>
-          {feedback.message}
-        </Text>
-        {assessment.completion_time != null && (
+        <Text variant="headlineSmall" style={styles.feedbackText}>Score</Text>
+        {assessment.duration_ms != null && (
           <Text variant="bodyMedium" style={styles.timeText}>
-            Completed in {assessment.completion_time}s
+            Completed in {Math.round(assessment.duration_ms / 1000)}s
           </Text>
         )}
       </View>
 
       {/* Stats row */}
       <View style={styles.statsRow}>
-        <StatCard value={assessment.letters_attempted} label="Attempted" accentColor={colors.primary} />
-        <StatCard value={assessment.correct_responses} label="Correct" accentColor={colors.success} />
+        <StatCard value={attempted} label="Attempted" accentColor={colors.primary} />
+        <StatCard value={assessment.score} label="Correct" accentColor={colors.success} />
         <StatCard value={incorrect} label="Incorrect" accentColor={colors.emphasis} />
       </View>
 
-      {/* Letter grid */}
-      {letterSet && (
-        <View style={styles.gridSection}>
-          <AssessmentDetailGrid assessment={assessment} letterSet={letterSet} />
-        </View>
-      )}
+      <View style={styles.gridSection}><AssessmentDetailGrid assessment={assessment} /></View>
     </ScrollView>
   );
 }
 
-const RING_SIZE = 120;
+const RING_SIZE = 180;
 
 const styles = StyleSheet.create({
   container: {

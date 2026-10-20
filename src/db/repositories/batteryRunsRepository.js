@@ -69,6 +69,18 @@ export const createBatteryRunsRepository = ({ database } = {}) => {
     return { id };
   });
 
+  const getRunsForUser = async (userId) => {
+    const db = await resolveDatabase(database);
+    const programmeId = await getActiveProgrammeId(db, userId);
+    if (!programmeId) return [];
+    const rows = await db.getAllAsync(`
+      select r.*, (select count(*) from assessments a where a.battery_run_id = r.id) as question_count
+      from battery_runs r where r.user_id = ? and r.programme_id = ?
+      order by r.started_at desc, r.created_at desc
+    `, userId, programmeId);
+    return rows.map(row => mapDomainRow(row));
+  };
+
   const getUnfinishedRunsForUser = async (userId) => {
     const db = await resolveDatabase(database);
     const programmeId = await getActiveProgrammeId(db, userId);
@@ -100,6 +112,7 @@ export const createBatteryRunsRepository = ({ database } = {}) => {
     startRun,
     finalizeRun: id => finishRun(id, 'completed'),
     abandonRun: id => finishRun(id, 'abandoned'),
+    getRunsForUser,
     getUnfinishedRunsForUser,
     getUnfinishedRunForChild,
     getRunWithResults,

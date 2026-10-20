@@ -5,8 +5,8 @@ import { runMigrations, CURRENT_SCHEMA_VERSION } from '../src/db/migrations';
 
 const EXPECTED_INDEXES = [
   'idx_session_attendees_session',      // sessionsRepository.mapSession per-session hydration
-  'idx_assessment_items_assessment',    // assessmentsRepository.mapAssessment per-row summary
-  'idx_assessments_programme_child',    // getAssessments: where programme_id = ? [and child_id = ?]
+  'idx_assessment_items_assessment',    // getQuestionResults batches stored items by assessment_id
+  'idx_assessments_programme_child',    // getQuestionResults: where programme_id = ? [and child_id = ?]
   'idx_sessions_programme_date',        // getSessions: where programme_id = ? order by session_date
   'idx_letter_mastery_user_child',      // getLetterMastery({ userId, childId })
   'idx_child_group_memberships_group',  // getChildrenInGroup group lookups

@@ -6,7 +6,7 @@ const mockUseTimeTracking = jest.fn();
 const mockUseSessionLaunchGuard = jest.fn();
 const mockGetTimeEntries = jest.fn();
 const mockGetSessions = jest.fn();
-const mockGetAssessments = jest.fn();
+const mockGetLetterResults = jest.fn();
 const mockGetSessionCountsSince = jest.fn();
 const mockGetAssessmentCountsSince = jest.fn();
 const mockGetSessionsTodayGoal = jest.fn();
@@ -59,7 +59,7 @@ jest.mock('../src/db/repositories/sessionsRepository', () => ({
 jest.mock('../src/db/repositories/assessmentsRepository', () => ({
   ...jest.requireActual('../src/db/repositories/assessmentsRepository'),
   assessmentsRepository: {
-    getAssessments: (...args) => mockGetAssessments(...args),
+    getLetterResults: (...args) => mockGetLetterResults(...args),
     getAssessmentCountsSince: (...args) => mockGetAssessmentCountsSince(...args),
   },
 }));
@@ -150,7 +150,7 @@ describe('HomeScreen', () => {
     });
     mockGetTimeEntries.mockResolvedValue([]);
     mockGetSessions.mockResolvedValue([]);
-    mockGetAssessments.mockResolvedValue([]);
+    mockGetLetterResults.mockResolvedValue([]);
     mockGetSessionCountsSince.mockResolvedValue([]);
     mockGetAssessmentCountsSince.mockResolvedValue([]);
     mockGetSessionsTodayGoal.mockResolvedValue({
@@ -334,7 +334,7 @@ describe('HomeScreen', () => {
     expect(navigation.navigate).not.toHaveBeenCalledWith('ClassOnboarding');
   });
 
-  test('assessment card uses complete active-roster coverage', async () => {
+  test('assessment card uses active-year letter counts for the complete active roster', async () => {
     jest.useFakeTimers();
     jest.setSystemTime(new Date('2026-07-12T08:00:00.000Z'));
     mockUseChildren.mockReturnValue({
@@ -378,7 +378,7 @@ describe('HomeScreen', () => {
     });
     expect(mockGetTimeEntries).not.toHaveBeenCalled();
     expect(mockGetSessionCountsSince).not.toHaveBeenCalled();
-    expect(mockGetAssessments).not.toHaveBeenCalled();
+    expect(mockGetLetterResults).not.toHaveBeenCalled();
     jest.useRealTimers();
   });
 

@@ -70,8 +70,18 @@ describe('ChildResultsScreen', () => {
     expect(screen.getByText('45%')).toBeTruthy();
     fireEvent.press(screen.getByText('View detail'));
     expect(navigation.navigate).toHaveBeenCalledWith('AssessmentDetail', {
-      assessment: { ...latest, date_assessed: latest.assessment_date }, childName: 'Amahle Dlamini',
+      assessmentId: latest.id, childName: 'Amahle Dlamini',
     });
+  });
+
+  test('a latest letter result from a battery still shows its score without opening standalone Detail', async () => {
+    const child = { id: 'child-1', first_name: 'Amahle', last_name: 'Dlamini' };
+    assessmentsRepository.getQuestionResults.mockResolvedValue([{ id: 'battery-q1', child_id: child.id,
+      question_code: 'letter_sounds', battery_run_id: 'run-1', assessment_date: '2026-10-20',
+      score: 9, total_items: 60, derived: { percent: 45 } }]);
+    const screen = render(<PaperProvider><ChildResultsScreen navigation={{ navigate: jest.fn() }} route={{ params: { child } }} /></PaperProvider>);
+    expect(await screen.findByText('9 / 60 correct')).toBeTruthy();
+    expect(screen.queryByText('View detail')).toBeNull();
   });
 
 });

@@ -181,6 +181,31 @@ describe('battery runs through real SQLite', () => {
     expect((await repository.getRunWithResults(id)).results).toEqual(run.results);
   });
 
+  test('history lists all own active-programme runs, including remote and empty runs, and counts stored Questions including skips', async () => {
+    const completed = uuid(), remote = uuid(), empty = uuid(), otherProgrammeRun = uuid(), otherUserRun = uuid();
+    for (const id of [completed, remote, empty, otherProgrammeRun, otherUserRun]) await start({ id });
+    await repository.finalizeRun(completed);
+    await repository.abandonRun(empty);
+    await db.runAsync('update battery_runs set started_here = 0 where id = ?', remote);
+    const assessments = createAssessmentsRepository({ database: db });
+    await assessments.saveQuestionResult({ assessmentId: uuid(), userId, childId, batteryRunId: completed, result: {
+      question_code: 'letter_sounds', question_version: '2026.1', item_set_id: 'letter_sounds@2026.1.en',
+      language: 'en', stopped_reason: 'skipped_tired', duration_ms: 0,
+      derived: { total_correct: 0, total_attempted: 0, percent: 0, last_attempted_position: null }, items: [],
+    } });
+    const otherProgrammeId = uuid();
+    await db.runAsync('insert into programmes (id, code, name) values (?, ?, ?)', otherProgrammeId, 'other', 'Other');
+    await db.runAsync('update battery_runs set programme_id = ? where id = ?', otherProgrammeId, otherProgrammeRun);
+    await db.runAsync('update battery_runs set user_id = ? where id = ?', uuid(), otherUserRun);
+    const runs = await repository.getRunsForUser(userId);
+    expect(runs.map(run => run.id).sort()).toEqual([completed, remote, empty].sort());
+    expect(runs.find(run => run.id === completed)).toMatchObject({ status: 'completed', question_count: 1 });
+    expect(runs.find(run => run.id === remote)).toMatchObject({ status: 'in_progress', question_count: 0, started_here: 0 });
+    expect(runs.find(run => run.id === empty)).toMatchObject({ status: 'abandoned', question_count: 0 });
+    await db.runAsync("update staff_programme_assignments set ended_at = '2026-10-20'");
+    expect(await repository.getRunsForUser(userId)).toEqual([]);
+  });
+
   test('handle services expose a battery repository bound to the same database', async () => {
     const handle = { userId, getReader: async () => db, withTransaction: task => db.withExclusiveTransactionAsync(task),
       isOpen: () => true, isCurrent: () => true, onClose: () => {}, dataClient: {}, enqueueRequest: task => task() };

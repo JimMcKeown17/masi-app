@@ -293,12 +293,10 @@ describe('question result persistence through real SQLite', () => {
     expect(await repository.getQuestionResults({ userId, assessmentId: first.id })).toEqual([]);
   });
 
-  test('new result reads exclude legacy summary assessments while legacy reads still see them', async () => {
+  test('typed result reads and counts exclude legacy summary assessments', async () => {
     await db.runAsync(`insert into assessments (id, user_id, child_id, programme_id, assessment_type, assessment_date)
       values (?, ?, ?, ?, 'letter_egra', '2026-10-20')`, uuid(), userId, childId, programmeId);
     expect(await repository.getQuestionResults({ userId, includeSkipped: true })).toEqual([]);
-    expect(await repository.getAssessments({ userId })).toHaveLength(1);
-    expect(await repository.countAssessments({ userId, childId })).toBe(1);
     expect(await repository.countResults({ userId, childId, questionCode: 'letter_sounds' })).toBe(0);
   });
 

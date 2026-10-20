@@ -2,14 +2,18 @@ jest.mock('@expo/vector-icons', () => ({ Ionicons: 'Ionicons' }), { virtual: tru
 const mockUseChildren = jest.fn();
 const mockUseClasses = jest.fn();
 const mockUseOffline = jest.fn();
-const mockGetAssessments = jest.fn();
+const mockGetLetterResults = jest.fn();
+const mockGetAcademicYears = jest.fn();
 jest.mock('@react-navigation/native', () => ({
   ...jest.requireActual('@react-navigation/native'),
   useFocusEffect: (cb) => require('react').useEffect(() => cb(), [cb]),
 }));
 jest.mock('../src/context/AuthContext', () => ({ useAuth: () => ({ user: { id: 'user-1' } }) }));
 jest.mock('../src/context/SignedInEAContext', () => ({
-  useSignedInEA: () => ({ repositories: { assessments: { getAssessments: mockGetAssessments } } }),
+  useSignedInEA: () => ({ repositories: {
+    assessments: { getLetterResults: mockGetLetterResults },
+    academicYears: { getAll: mockGetAcademicYears },
+  } }),
 }));
 jest.mock('../src/context/ChildrenContext', () => ({ useChildren: () => mockUseChildren() }));
 jest.mock('../src/context/ClassesContext', () => ({ useClasses: () => mockUseClasses() }));
@@ -54,7 +58,10 @@ function emptyClasses(status = 'available') {
 }
 beforeEach(() => {
   jest.clearAllMocks();
-  mockGetAssessments.mockResolvedValue([]);
+  mockGetLetterResults.mockResolvedValue([]);
+  mockGetAcademicYears.mockResolvedValue([
+    { id: 'year-2026', starts_on: '2026-01-01', ends_on: '2026-12-31', is_active: true },
+  ]);
   childState = { children, groups: [], childrenGroups: roster.slice(0, 4).map((c, i) => ({ child_id: c.id, group_id: `g-${i}` })), loading: false, loadChildren: jest.fn() };
   classState = {
     classes, schools: [{ id: 'school-1', name: 'Duna Primary' }, { id: 'school-2', name: 'Masi Primary' }],
@@ -74,8 +81,29 @@ test('renders the stat bar with accessible counts', async () => {
   fireEvent.press(screen.getByRole('button', { name: '19 unassessed children. Open Assess' }));
   expect(navigation.navigate).toHaveBeenCalledWith('MainTabs', { screen: 'Assessments' });
 });
+test('unassessed uses active-year letter results including another EA battery result', async () => {
+  mockGetLetterResults.mockResolvedValue([
+    { child_id: 'child-0', question_code: 'letter_sounds', stopped_reason: 'completed', assessment_date: '2026-01-01' },
+    { child_id: 'child-1', user_id: 'other-ea', battery_run_id: 'run-1', question_code: 'letter_sounds', stopped_reason: 'completed', assessment_date: '2026-12-31' },
+    { child_id: 'child-2', question_code: 'letter_sounds', stopped_reason: 'skipped_tired', assessment_date: '2026-04-01' },
+    { child_id: 'child-3', question_code: 'letter_sounds', stopped_reason: 'completed', assessment_date: '2025-12-31' },
+  ]);
+  const screen = await renderScreen();
+  expect(screen.getByRole('button', { name: '17 unassessed children. Open Assess' })).toBeTruthy();
+  expect(mockGetLetterResults).toHaveBeenCalledWith({ userId: 'user-1' });
+});
+test('all active children remain unassessed without an active academic year', async () => {
+  mockGetAcademicYears.mockResolvedValue([]);
+  mockGetLetterResults.mockResolvedValue(children.map(child => ({
+    child_id: child.id, question_code: 'letter_sounds', stopped_reason: 'completed', assessment_date: '2026-06-01',
+  })));
+  const screen = await renderScreen();
+  expect(screen.getByRole('button', { name: '19 unassessed children. Open Assess' })).toBeTruthy();
+});
 test('unassessed at zero is plain text, not a button', async () => {
-  mockGetAssessments.mockResolvedValue(children.map(c => ({ child_id: c.id })));
+  mockGetLetterResults.mockResolvedValue(children.map(c => ({
+    child_id: c.id, question_code: 'letter_sounds', stopped_reason: 'completed', assessment_date: '2026-06-01',
+  })));
   const screen = await renderScreen();
   expect(screen.getByLabelText('0 unassessed children')).toBeTruthy();
   expect(screen.queryByRole('button', { name: /unassessed/i })).toBeNull();

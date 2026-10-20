@@ -46,7 +46,14 @@ export const createChildClassMembershipsRepository = ({ database } = {}) => {
 
   const getAll = async () => {
     const db = await resolveDatabase(database);
-    const rows = await db.getAllAsync('select * from child_class_memberships order by enrolled_at');
+    // Historical memberships must retain their class grade even when the class
+    // is archived or no longer belongs to the EA's active classes context.
+    const rows = await db.getAllAsync(`
+      select membership.*, classes.grade as class_grade
+      from child_class_memberships membership
+      left join classes on classes.id = membership.class_id
+      order by membership.enrolled_at
+    `);
     return rows.map(mapDomainRow);
   };
 

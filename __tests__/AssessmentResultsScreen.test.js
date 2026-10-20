@@ -99,14 +99,32 @@ test('a missing saved result shows an honest empty state', async () => {
   expect(screen.queryByLabelText('Assessment main result')).toBeNull();
 });
 
-// Task 12 owns this reader; retain its existing visual regression unchanged.
-test('assessment detail uses contrasting low-score text and shared stat cards', () => {
-  const screen = renderWithProviders(<AssessmentDetailScreen route={{ params: { childName: 'A Child', assessment: {
-    letters_attempted: 31, correct_responses: 21, accuracy: 20, completion_time: 61,
-    correct_letters: [{ index: 0 }, { index: 2 }], incorrect_letters: [{ index: 1 }],
-    last_letter_attempted: { index: 2 }, date_assessed: '2026-10-19', letter_language: 'English',
-    attempt_number: 1, items_tested: ['a', 'b', 'c', 'd', 'e'],
-  } } }} />);
-  expect(StyleSheet.flatten(screen.getByText('Keep practicing!').props.style).color).toBe(colors.primary);
+test('assessment detail loads a saved id and uses contrasting raw-score text and shared stat cards', async () => {
+  const { id: assessmentId } = await fixture.save(5, { result: questionResult(5, { derived: {
+    total_correct: 1, total_attempted: 5, percent: 20, last_attempted_position: 4,
+  } }) });
+  const screen = renderWithProviders(<SignedInEAContext.Provider value={{ repositories: { assessments: fixture.assessments } }}>
+    <AssessmentDetailScreen route={{ params: { assessmentId, childName: 'A Child' } }} />
+  </SignedInEAContext.Provider>);
+  expect(StyleSheet.flatten((await screen.findByText('1 / 5')).props.style).color).toBe(colors.primary);
   expect(screen.UNSAFE_getAllByType(SurfaceCard)).toHaveLength(3);
+  expect(screen.getAllByTestId('assessment-detail-item')).toHaveLength(5);
+  expect(screen.getByText('English')).toBeTruthy();
+});
+
+test('direct navigation to a battery Question never opens standalone Detail', async () => {
+  const { id: batteryRunId } = await fixture.start();
+  const { id: assessmentId } = await fixture.save(3, { batteryRunId });
+  const screen = renderWithProviders(<SignedInEAContext.Provider value={{ repositories: { assessments: fixture.assessments } }}>
+    <AssessmentDetailScreen route={{ params: { assessmentId } }} />
+  </SignedInEAContext.Provider>);
+  expect(await screen.findByText('Battery Questions are shown in their run.')).toBeTruthy();
+  expect(screen.queryAllByTestId('assessment-detail-item')).toHaveLength(0);
+});
+
+test('Detail shows an honest missing-result state for an unknown id', async () => {
+  const screen = renderWithProviders(<SignedInEAContext.Provider value={{ repositories: { assessments: fixture.assessments } }}>
+    <AssessmentDetailScreen route={{ params: { assessmentId: uuid() } }} />
+  </SignedInEAContext.Provider>);
+  expect(await screen.findByText('Result not found.')).toBeTruthy();
 });

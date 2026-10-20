@@ -18,7 +18,7 @@ import { STANDALONE_TESTS } from '../../utils/assessmentRegistry';
 
 export default function AssessmentsScreen({ navigation }) {
   const { handle, repositories } = useSignedInEA();
-  const { assessments: assessmentsRepository } = repositories;
+  const { assessments: assessmentsRepository, academicYears: academicYearsRepository } = repositories;
 
   const { user } = useAuth();
   const { children: childrenList } = useChildren();
@@ -36,8 +36,12 @@ export default function AssessmentsScreen({ navigation }) {
           // write at save, so fall back to the usable capture UI on a read error.
           setProgrammeGate({ hasActiveProgramme: true, programme: null });
         }
-        const assessments = await assessmentsRepository.getAssessments({ userId: user.id });
-        setStats(getAssessmentsTabStats(childrenList, assessments));
+        const [results, academicYears] = await Promise.all([
+          assessmentsRepository.getLetterResults({ userId: user.id }),
+          academicYearsRepository.getAll(),
+        ]);
+        const activeAcademicYear = academicYears.find(year => year.is_active === true || year.is_active === 1) ?? null;
+        setStats(getAssessmentsTabStats(childrenList, results, activeAcademicYear));
       };
       loadStats();
     }, [childrenList, user.id])
@@ -70,7 +74,7 @@ export default function AssessmentsScreen({ navigation }) {
         <StatBar items={[
           { label: '% Assessed', value: `${stats.percentAssessed}%`, color: stats.percentAssessed >= 75 ? colors.success : colors.primary },
           { label: 'Total', value: stats.totalAssessments },
-          { label: 'Avg Accuracy', value: `${stats.avgAccuracy}%` },
+          { label: 'Avg score', value: stats.avgScore },
         ]} />
       )}
 

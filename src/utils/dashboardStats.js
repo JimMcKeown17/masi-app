@@ -13,6 +13,7 @@ import {
   PEDAGOGICAL_ORDERS,
 } from './assessmentRegistry';
 import { toLocalDateString } from './localDate';
+import { getScoreBand } from './scoreBands';
 
 // ─── Helpers ───────────────────────────────────────────────────────────
 
@@ -117,24 +118,45 @@ export function getSessionsThisMonth(sessions) {
   return count;
 }
 
-/**
- * Assessment coverage: how many children have at least one assessment.
- */
-export function getAssessmentCoverage(children, assessments) {
+function isLaterResult(candidate, existing) {
+  return !existing
+    || (candidate.assessment_date || '') > (existing.assessment_date || '')
+    || (candidate.assessment_date === existing.assessment_date
+      && (candidate.created_at || '') > (existing.created_at || ''));
+}
+
+function isLetterResultThisYear(result, academicYear) {
+  return (academicYear?.is_active === 1 || academicYear?.is_active === true)
+    && Boolean(academicYear.starts_on && academicYear.ends_on)
+    && LETTER_EVIDENCE_CODES.includes(result.question_code)
+    && !result.stopped_reason?.startsWith('skipped_')
+    && result.assessment_date >= academicYear.starts_on
+    && result.assessment_date <= academicYear.ends_on;
+}
+
+function coverageFromIds(children, assessedIds) {
   const total = children.length;
   if (total === 0) return { assessed: 0, total: 0, percent: 0 };
+  const assessed = children.filter(child => assessedIds.has(child.id)).length;
+  return { assessed, total, percent: Math.round((assessed / total) * 100) };
+}
 
-  const assessedIds = new Set();
-  for (const a of assessments) {
-    if (a.child_id) assessedIds.add(a.child_id);
-  }
+/** Letter coverage from typed results within the active academic year. */
+export function getAssessmentCoverage(children, results, academicYear) {
+  const assessedIds = new Set(results
+    .filter(result => isLetterResultThisYear(result, academicYear))
+    .map(result => result.child_id));
+  return coverageFromIds(children, assessedIds);
+}
 
-  const assessed = children.filter(c => assessedIds.has(c.id)).length;
-  return {
-    assessed,
-    total,
-    percent: Math.round((assessed / total) * 100),
-  };
+/**
+ * Coverage from getAssessmentCountsSince's already-qualified letter counts.
+ * The repository applies the year/Question/skip scope and returns no rows
+ * without an active academic year.
+ */
+export function getCoverageFromCounts(children, counts) {
+  const assessedIds = new Set(counts.filter(row => row.count > 0).map(row => row.child_id));
+  return coverageFromIds(children, assessedIds);
 }
 
 const MONTH_NAMES = [
@@ -217,68 +239,60 @@ export function getLetterMasteryRanking(children, assessments, letterMastery, cl
   return rankings.sort((a, b) => b.percent - a.percent);
 }
 
-/**
- * Rank children by most recent EGRA assessment accuracy.
- * Children with no assessment get accuracy: null and sort to bottom.
- */
-export function getAssessmentRanking(children, assessments) {
-  const rankings = [];
+function gradeAtAssessmentDate(child, assessmentDate, classes, memberships) {
+  // Use the same SAST date conversion as saveQuestionResult. Membership windows
+  // are [local enrollment day, local exit day): the move day belongs to the
+  // next class, regardless of the timestamp's clock time within that day.
+  const membership = memberships.filter(row => (
+    row.child_id === child.id
+    && toLocalDateString(row.enrolled_at) <= assessmentDate
+    && (!row.exited_at || assessmentDate < toLocalDateString(row.exited_at))
+  )).sort((a, b) => b.enrolled_at.localeCompare(a.enrolled_at))[0];
+  const historicalClass = classes.find(row => row.id === membership?.class_id);
+  // The current class can also be outside the EA's assigned-class context.
+  // Joined membership grades still supply that current-class fallback.
+  const currentMembership = memberships.find(row => (
+    row.child_id === child.id && row.class_id === child.class_id
+  ));
+  return membership?.class_grade ?? historicalClass?.grade
+    ?? currentMembership?.class_grade ?? classes.find(row => row.id === child.class_id)?.grade ?? null;
+}
 
-  for (const child of children) {
-    const childAssessments = assessments
-      .filter(a => a.child_id === child.id)
-      .sort((a, b) => {
-        const dateCmp = (b.date_assessed || '').localeCompare(a.date_assessed || '');
-        if (dateCmp !== 0) return dateCmp;
-        return (b.created_at || '').localeCompare(a.created_at || '');
-      });
-
-    const latest = childAssessments[0];
-    if (latest && latest.accuracy != null && !isNaN(latest.accuracy)) {
-      rankings.push({
-        child,
-        accuracy: Math.round(latest.accuracy),
-        correct: (latest.correct_letters || []).length,
-        attempted: latest.last_letter_attempted ? latest.last_letter_attempted.index + 1 : 0,
-        date: latest.date_assessed,
-        assessment: latest,
-      });
-    } else {
-      rankings.push({ child, accuracy: null, correct: 0, attempted: 0, date: null, assessment: null });
-    }
+function rankQuestionResults(children, assessments, questionCode, classes, memberships) {
+  const latestByChild = new Map();
+  for (const result of assessments || []) {
+    if (result.question_code !== questionCode || result.stopped_reason?.startsWith('skipped_')) continue;
+    if (isLaterResult(result, latestByChild.get(result.child_id))) latestByChild.set(result.child_id, result);
   }
-
-  // Assessed children sorted by total correct letters desc, then unassessed at bottom
-  return rankings.sort((a, b) => {
-    if (a.accuracy === null && b.accuracy === null) return 0;
-    if (a.accuracy === null) return 1;
-    if (b.accuracy === null) return -1;
-    return b.correct - a.correct;
-  });
+  return children.flatMap(child => {
+    const assessment = latestByChild.get(child.id);
+    if (!assessment) return [];
+    const grade = gradeAtAssessmentDate(child, assessment.assessment_date, classes, memberships);
+    return [{
+      child,
+      score: assessment.score,
+      total: assessment.total_items,
+      date: assessment.assessment_date,
+      assessment,
+      grade,
+      band: getScoreBand({
+        toolCode: assessment.question_code,
+        grade,
+        language: assessment.language,
+        rawScore: assessment.score,
+      }),
+    }];
+  }).sort((a, b) => b.score - a.score);
 }
 
-/**
- * Rank children by their most recent EGRA *letter* assessment. Word assessments
- * are excluded so the letters-correct ranking (and its grade-referenced colours)
- * is never applied to a word-reading score. Legacy rows without an
- * assessment_type are treated as letters, per the idiom used across the app.
- */
-export function getLetterScoreRanking(children, assessments) {
-  const letterAssessments = (assessments || []).filter(
-    (a) => (a.assessment_type || 'letter_egra') === 'letter_egra'
-  );
-  return getAssessmentRanking(children, letterAssessments);
+/** Rank the latest non-skipped letter result, including battery Questions. */
+export function getLetterScoreRanking(children, assessments, classes = [], memberships = []) {
+  return rankQuestionResults(children, assessments, 'letter_sounds', classes, memberships);
 }
 
-/**
- * Rank children by their most recent EGRA *word* assessment. Only rows explicitly
- * typed word_egra qualify (legacy untyped rows are letters, not words).
- */
-export function getWordAssessmentRanking(children, assessments) {
-  const wordAssessments = (assessments || []).filter(
-    (a) => a.assessment_type === 'word_egra'
-  );
-  return getAssessmentRanking(children, wordAssessments);
+/** Rank the latest non-skipped word result on its own stored scale. */
+export function getWordAssessmentRanking(children, assessments, classes = [], memberships = []) {
+  return rankQuestionResults(children, assessments, 'word_reading', classes, memberships);
 }
 
 /**
@@ -324,17 +338,12 @@ export function getDistinctSessionCount(children, sessions) {
 /**
  * Children tab summary stats.
  */
-export function getChildrenTabStats(children, classes, assessments) {
-  const assessedIds = new Set();
-  for (const a of assessments) {
-    if (a.child_id) assessedIds.add(a.child_id);
-  }
-  const unassessedCount = children.filter(c => !assessedIds.has(c.id)).length;
-
+export function getChildrenTabStats(children, classes, assessments, academicYear) {
+  const coverage = getAssessmentCoverage(children, assessments, academicYear);
   return {
     childrenCount: children.length,
     classCount: classes.length,
-    unassessedCount,
+    unassessedCount: children.length - coverage.assessed,
   };
 }
 
@@ -387,43 +396,23 @@ export function getSessionsTabStats(sessions, children, userId) {
 }
 
 /**
- * Assessments tab summary stats.
- * Hidden children's assessments are excluded — pass the filtered `children`
- * array (the default exposed via useChildren().children) and this function
- * scopes the assessment math to only those children. `totalAssessments` here
- * means "assessments for currently-active children", not historical totals.
+ * Assessments tab summary stats for the supplied active children.
+ * Total means the number of non-skipped letter results in the active academic
+ * year for those children; it is a result count, not a distinct-child count.
  */
-export function getAssessmentsTabStats(children, assessments) {
-  const activeChildIds = new Set(children.map(c => c.id));
-  const activeAssessments = assessments.filter(a => activeChildIds.has(a.child_id));
-
-  const coverage = getAssessmentCoverage(children, activeAssessments);
-
-  // Average accuracy across most recent assessment per active child
-  const latestByChild = {};
-  for (const a of activeAssessments) {
-    if (!a.child_id) continue;
-    const existing = latestByChild[a.child_id];
-    const isBetter = !existing
-      || (a.date_assessed || '') > (existing.date_assessed || '')
-      || ((a.date_assessed || '') === (existing.date_assessed || '')
-          && (a.created_at || '') > (existing.created_at || ''));
-    if (isBetter) {
-      latestByChild[a.child_id] = a;
-    }
+export function getAssessmentsTabStats(children, assessments, academicYear) {
+  const activeChildIds = new Set(children.map(child => child.id));
+  const activeAssessments = assessments.filter(result => (
+    activeChildIds.has(result.child_id) && isLetterResultThisYear(result, academicYear)
+  ));
+  const coverage = getAssessmentCoverage(children, activeAssessments, academicYear);
+  const latestByChild = new Map();
+  for (const result of activeAssessments) {
+    if (isLaterResult(result, latestByChild.get(result.child_id))) latestByChild.set(result.child_id, result);
   }
-
-  const accuracies = Object.values(latestByChild)
-    .map(a => a.accuracy)
-    .filter(acc => acc != null && !isNaN(acc));
-
-  const avgAccuracy = accuracies.length > 0
-    ? Math.round(accuracies.reduce((sum, a) => sum + a, 0) / accuracies.length)
+  const scores = [...latestByChild.values()].map(result => result.score).filter(Number.isFinite);
+  const avgScore = scores.length > 0
+    ? Math.round(scores.reduce((sum, score) => sum + score, 0) / scores.length)
     : 0;
-
-  return {
-    percentAssessed: coverage.percent,
-    totalAssessments: activeAssessments.length,
-    avgAccuracy,
-  };
+  return { percentAssessed: coverage.percent, totalAssessments: activeAssessments.length, avgScore };
 }

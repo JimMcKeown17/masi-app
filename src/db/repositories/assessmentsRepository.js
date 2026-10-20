@@ -2,12 +2,13 @@ import { resolveDatabase, runRepositoryTransaction } from './repositoryRuntime';
 import {
   assessmentItemDomainId,
   enqueueDomainOutbox,
+  getActiveAcademicYear,
   getActiveProgrammeId,
   mapDomainRow,
   resolveProgrammeId,
   upsertDomainRecord,
 } from './domainRepositoryUtils';
-import { chunkArray, decodeJson, sqlPlaceholders } from './sqliteRepositoryUtils';
+import { chunkArray, sqlPlaceholders } from './sqliteRepositoryUtils';
 import { validateResult } from '../../assessment-questions/contractTest/validateResult';
 import { assertSubmitShape } from '../../services/assessmentFamilyPayload';
 import { LETTER_EVIDENCE_CODES } from '../../utils/assessmentRegistry';
@@ -36,35 +37,6 @@ const QUESTION_RESULT_COLUMNS = [
   'question_code', 'question_version', 'item_set_id', 'language', 'stopped_reason',
   'duration_ms', 'derived', 'battery_run_id', 'created_at', 'updated_at', 'sync_status',
 ];
-
-const SUMMARY_ITEM_KEY = '__summary__';
-
-const mapAssessment = (row, summary = {}) => {
-  if (!row) return null;
-  const mapped = mapDomainRow(row, { jsonColumns: ['items_tested'] });
-
-  return {
-    ...mapped,
-    ...summary,
-    date_assessed: summary.date_assessed || mapped.assessment_date,
-  };
-};
-
-const hydrateAssessments = async (db, rows) => {
-  if (rows.length === 0) return [];
-  const placeholders = rows.map(() => '?').join(', ');
-  const summaryRows = await db.getAllAsync(`
-    select assessment_id, metadata
-    from assessment_items
-    where item_key = ?
-      and assessment_id in (${placeholders})
-  `, SUMMARY_ITEM_KEY, ...rows.map(row => row.id));
-  const summaries = new Map(summaryRows.map(row => [
-    row.assessment_id,
-    decodeJson(row.metadata, {}),
-  ]));
-  return rows.map(row => mapAssessment(row, summaries.get(row.id) || {}));
-};
 
 const hydrateQuestionResults = async (db, rows) => {
   const itemsByAssessment = new Map();
@@ -96,57 +68,24 @@ export const createAssessmentsRepository = ({ database } = {}) => {
     programmeId || (userId ? await getActiveProgrammeId(db, userId) : null)
   );
 
-  const getAssessments = async ({
-    userId,
-    programmeId,
-    childId,
-    recordedByUserId,
-    sinceDate,
-    order = 'asc',
-  } = {}) => {
+  const getAssessmentCountsSince = async ({ userId, programmeId } = {}) => {
     const db = await resolveDatabase(database);
     const activeProgrammeId = await resolveActiveProgrammeId(db, { userId, programmeId });
     if (userId && !activeProgrammeId) return [];
-    const clauses = [];
-    const params = [];
+    const academicYear = await getActiveAcademicYear(db);
+    if (!academicYear) return [];
+    // Home receives already-qualified counts: any recorder, standalone or battery,
+    // non-skipped letter Questions across the whole active academic year (inclusive).
+    const clauses = [
+      `question_code in (${sqlPlaceholders(LETTER_EVIDENCE_CODES.length)})`,
+      "substr(coalesce(stopped_reason, ''), 1, 8) <> 'skipped_'",
+      'assessment_date >= ?',
+      'assessment_date <= ?',
+    ];
+    const params = [...LETTER_EVIDENCE_CODES, academicYear.starts_on, academicYear.ends_on];
     if (activeProgrammeId) {
       clauses.push('programme_id = ?');
       params.push(activeProgrammeId);
-    }
-    if (childId) {
-      clauses.push('child_id = ?');
-      params.push(childId);
-    }
-    if (recordedByUserId) {
-      clauses.push('user_id = ?');
-      params.push(recordedByUserId);
-    }
-    if (sinceDate) {
-      clauses.push('assessment_date >= ?');
-      params.push(sinceDate);
-    }
-    const where = clauses.length ? `where ${clauses.join(' and ')}` : '';
-    const direction = order === 'desc' ? 'desc' : 'asc';
-    const rows = await db.getAllAsync(
-      `select * from assessments ${where} order by assessment_date ${direction}, created_at ${direction}`,
-      ...params
-    );
-    return hydrateAssessments(db, rows);
-  };
-
-  const getAssessmentCountsSince = async ({ userId, programmeId, sinceDate } = {}) => {
-    const db = await resolveDatabase(database);
-    const activeProgrammeId = await resolveActiveProgrammeId(db, { userId, programmeId });
-    if (userId && !activeProgrammeId) return [];
-    const clauses = [];
-    const params = [];
-    if (activeProgrammeId) {
-      clauses.push('programme_id = ?');
-      params.push(activeProgrammeId);
-    }
-    if (sinceDate) {
-      clauses.push('assessment_date >= ?');
-      params.push(sinceDate);
     }
     const where = clauses.length ? `where ${clauses.join(' and ')}` : '';
     const rows = await db.getAllAsync(`
@@ -157,20 +96,6 @@ export const createAssessmentsRepository = ({ database } = {}) => {
       order by child_id
     `, ...params);
     return rows.map(row => ({ ...row, count: Number(row.count) }));
-  };
-
-  const countAssessments = async ({ userId, childId, assessmentType = 'letter_egra' } = {}) => {
-    const db = await resolveDatabase(database);
-    const activeProgrammeId = await resolveActiveProgrammeId(db, { userId });
-    if (!activeProgrammeId) return 0;
-    const row = await db.getFirstAsync(`
-      select count(*) as count
-      from assessments
-      where programme_id = ?
-        and child_id = ?
-        and coalesce(assessment_type, 'letter_egra') = ?
-    `, activeProgrammeId, childId, assessmentType);
-    return Number(row?.count || 0);
   };
 
   const saveQuestionResult = async ({
@@ -315,17 +240,8 @@ export const createAssessmentsRepository = ({ database } = {}) => {
     return Number(row?.count || 0);
   };
 
-  const getUnsyncedRecords = async () => {
-    const db = await resolveDatabase(database);
-    const rows = await db.getAllAsync("select * from assessments where sync_status <> 'synced' order by created_at");
-    return hydrateAssessments(db, rows);
-  };
-
   return {
-    getAssessments,
     getAssessmentCountsSince,
-    countAssessments,
-    getUnsyncedRecords,
     saveQuestionResult,
     getQuestionResults,
     getLetterResults,
