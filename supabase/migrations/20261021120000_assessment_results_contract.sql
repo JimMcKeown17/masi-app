@@ -103,7 +103,9 @@ begin
 end;
 $$;
 
--- PREFLIGHT: Controller must confirm the Core Literacy R–3 programme's identifying column and value on the hosted DB before merge.
+-- Preflight on masi-app-sqlite (2026-10-20, read-only): Core Literacy is one row,
+-- code = 'literacy' (no separate R–3 / ECD rows yet). Match on the stable code, not
+-- the name or the per-environment uuid.
 update public.programmes set default_battery_code = 'wela_plus_full', default_battery_version = '2024.1' where code = 'literacy';
 
 -- 4. private.set_updated_at only assigns NEW.updated_at and also works on INSERT.
