@@ -36,7 +36,10 @@ describe.each([
     jest.useFakeTimers();
     jest.setSystemTime(new Date('2026-10-19T12:00:00Z'));
   });
-  afterEach(() => jest.useRealTimers());
+  afterEach(() => {
+    jest.restoreAllMocks();
+    jest.useRealTimers();
+  });
 
   function startReading(durationSec?: number) {
     const onComplete = jest.fn();
@@ -52,7 +55,7 @@ describe.each([
   describe.each([false, true])('End with an overdue callback (earlier End cancelled: %s)', (cancelEarlierEnd) => {
     test.each([60000, 65000])('End at %i ms resolves the deadline before delayed confirmation', (elapsedMs) => {
       const { screen, onComplete } = startReading(60);
-      const startedAt = Date.now();
+      const startedAt = globalThis.performance.now();
       if (cancelEarlierEnd) {
         act(() => jest.advanceTimersByTime(20000));
         fireEvent.press(screen.getByText('End'));
@@ -60,8 +63,11 @@ describe.each([
         fireEvent.press(screen.getByText('Cancel'));
       }
 
-      // Move wall time to/past the deadline without running any timer callbacks.
-      act(() => jest.setSystemTime(startedAt + elapsedMs));
+      // Move monotonic time to/past the deadline without running any timer callbacks.
+      // Keep it advancing during confirmation so this still detects a missing freeze.
+      const now = globalThis.performance.now.bind(globalThis.performance);
+      const delayedMs = startedAt + elapsedMs - now();
+      jest.spyOn(globalThis.performance, 'now').mockImplementation(() => now() + delayedMs);
       expect(screen.queryByText('Last item attempted')).toBeNull();
       fireEvent.press(screen.getByText('End'));
       if (!sequential) expect(screen.getByText('Last item attempted')).toBeTruthy();
@@ -85,9 +91,10 @@ describe.each([
 
   test.each([0, 5000])('timer freezes at its deadline despite a %i ms callback delay and delayed confirmation', (callbackDelay) => {
     const { screen, onComplete } = startReading(60);
-    // Jump wall time without running callbacks, then let the first interval run.
+    // Advance monotonic time without running callbacks, then let the first interval run.
+    const now = globalThis.performance.now.bind(globalThis.performance);
+    jest.spyOn(globalThis.performance, 'now').mockImplementation(() => now() + 60000 + callbackDelay - 250);
     act(() => {
-      jest.setSystemTime(Date.now() + 60000 + callbackDelay - 250);
       jest.advanceTimersByTime(250);
     });
     if (!sequential) expect(screen.getByText('Last item attempted')).toBeTruthy();

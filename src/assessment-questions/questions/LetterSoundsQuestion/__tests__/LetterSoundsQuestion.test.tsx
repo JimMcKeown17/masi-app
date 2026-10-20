@@ -241,7 +241,8 @@ test('Cancel on End retains decisions and the original deadline, including time 
 test.each(['Correct', 'Incorrect', 'Back', 'End'])('%s resolves an overdue deadline before changing any decisions', (control) => {
   const { r, onComplete, onItemMarked } = startQ();
   decide(r, true);
-  act(() => jest.setSystemTime(Date.now() + 65000));
+  // Elapsed time advances while the interval callback is delayed.
+  jest.spyOn(globalThis.performance, 'now').mockReturnValue(globalThis.performance.now() + 65000);
   fireEvent.press(r.getByRole('button', { name: control }));
   expect(onComplete).toHaveBeenCalledTimes(1);
   expect(onItemMarked).toHaveBeenCalledTimes(1);

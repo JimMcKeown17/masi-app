@@ -9,6 +9,7 @@
  */
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { View, Text, Pressable, ScrollView, StyleSheet } from 'react-native';
+import { monotonicNow } from '../../progress/clock';
 import type { QuestionProps } from '../../types/QuestionProps';
 import type { ItemSetMeta } from '../../types/ItemSet';
 import { resolveItemSet } from '../../itemsets/resolveItemSet';
@@ -123,7 +124,7 @@ function WriteCvcsQuestionContent(
 
   useEffect(() => {
     if (phase === 'active' && startTimeMsRef.current === null) {
-      startTimeMsRef.current = Date.now();
+      startTimeMsRef.current = monotonicNow();
     }
   }, [phase]);
 
@@ -152,7 +153,7 @@ function WriteCvcsQuestionContent(
       const elapsedMs =
         startTimeMsRef.current === null
           ? 0
-          : Date.now() - startTimeMsRef.current;
+          : Math.round(monotonicNow() - startTimeMsRef.current);
       const perWord = isSkipped
         ? []
         : scoringRows.map((row) => ({

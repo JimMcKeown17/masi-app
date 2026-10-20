@@ -7,6 +7,7 @@
  */
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { View, Text, Pressable, ScrollView, StyleSheet } from 'react-native';
+import { monotonicNow } from '../../progress/clock';
 import type { QuestionProps } from '../../types/QuestionProps';
 import type { ItemSetMeta } from '../../types/ItemSet';
 import { resolveItemSet } from '../../itemsets/resolveItemSet';
@@ -154,7 +155,7 @@ function ReadPassageQuestionContent(
       const elapsedMs =
         startTimeMsRef.current === null
           ? 0
-          : (stopTimeMsRef.current ?? Date.now()) - startTimeMsRef.current;
+          : Math.round((stopTimeMsRef.current ?? monotonicNow()) - startTimeMsRef.current);
       const wasTimed = durationSec !== undefined;
       const wpm =
         elapsedMs > 0
@@ -197,12 +198,12 @@ function ReadPassageQuestionContent(
   useEffect(() => {
     if (phase !== 'active') return undefined;
     if (startTimeMsRef.current === null) {
-      startTimeMsRef.current = Date.now();
+      startTimeMsRef.current = monotonicNow();
     }
     const deadlineMs = getDeadlineMs();
     if (deadlineMs === null) return undefined;
     const interval = setInterval(() => {
-      if (Date.now() >= deadlineMs) {
+      if (monotonicNow() >= deadlineMs) {
         clearInterval(interval);
         // Reading ends at the deadline, even if this callback runs late.
         stopTimeMsRef.current = deadlineMs;
@@ -340,7 +341,7 @@ function ReadPassageQuestionContent(
         <Pressable
           accessibilityRole="button"
           onPress={() => {
-            const nowMs = Date.now();
+            const nowMs = monotonicNow();
             const deadlineMs = getDeadlineMs();
             const deadlineReached = deadlineMs !== null && nowMs >= deadlineMs;
             // Resolve expiry here too: End can arrive before a delayed timer callback.

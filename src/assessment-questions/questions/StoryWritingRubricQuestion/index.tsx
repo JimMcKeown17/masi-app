@@ -29,6 +29,7 @@ import {
   Image,
   StyleSheet,
 } from 'react-native';
+import { monotonicNow } from '../../progress/clock';
 import type { QuestionProps } from '../../types/QuestionProps';
 import type { ItemSetMeta } from '../../types/ItemSet';
 import { resolveItemSet } from '../../itemsets/resolveItemSet';
@@ -147,7 +148,7 @@ function StoryWritingRubricQuestionContent(
 
   useEffect(() => {
     if (phase === 'active' && startTimeMsRef.current === null) {
-      startTimeMsRef.current = Date.now();
+      startTimeMsRef.current = monotonicNow();
     }
   }, [phase]);
 
@@ -210,7 +211,7 @@ function StoryWritingRubricQuestionContent(
       const elapsedMs =
         startTimeMsRef.current === null
           ? 0
-          : Date.now() - startTimeMsRef.current;
+          : Math.round(monotonicNow() - startTimeMsRef.current);
 
       const result: Result = {
         question_code: effectiveItemSet.question_code,

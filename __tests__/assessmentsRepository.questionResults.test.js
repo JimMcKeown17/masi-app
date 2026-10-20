@@ -1,7 +1,7 @@
 jest.mock('expo-sqlite', () => require('../test-support/expoSQLiteMock'));
 
 import React from 'react';
-import { fireEvent } from '@testing-library/react-native';
+import { act, fireEvent, render } from '@testing-library/react-native';
 import { v4 as uuid } from 'uuid';
 import { runMigrations } from '../src/db/migrations';
 import { createAssessmentsRepository } from '../src/db/repositories/assessmentsRepository';
@@ -110,6 +110,35 @@ describe('question result persistence through real SQLite', () => {
     id, userId, childId, programmeId);
     return id;
   };
+
+  test('a stop-rule result after a backward clock jump saves a valid ten-second outbox family', async () => {
+    jest.useFakeTimers().setSystemTime(new Date('2026-10-20T12:00:00Z'));
+    const onComplete = jest.fn();
+    const screen = render(<LetterSoundsQuestion language="en" durationSec={60} onComplete={onComplete} />);
+    try {
+      press(screen, 'Start');
+      act(() => jest.advanceTimersByTime(10000));
+      act(() => jest.setSystemTime(Date.now() - 3600000));
+      for (let i = 0; i < 10; i += 1) press(screen, 'Incorrect');
+      act(() => jest.advanceTimersByTime(90000));
+      press(screen, 'Save result');
+      expect(onComplete).toHaveBeenCalledTimes(1);
+      const result = onComplete.mock.calls[0][0];
+      const assessmentId = uuid();
+      await expect(save({ assessmentId, result, captureMode: 'sequential' })).resolves.toEqual({ id: assessmentId });
+      const [read] = await repository.getQuestionResults({ userId, assessmentId });
+      expect(read).toMatchObject({ duration_ms: 10000, stopped_reason: 'stop_rule',
+        derived: { total_attempted: 10, total_correct: 0, last_attempted_position: 9 } });
+      expect(read.items).toHaveLength(60);
+      const rows = await outbox();
+      expect(rows).toHaveLength(1);
+      expect(rows[0].payload).toMatchObject({ duration_ms: 10000, stopped_reason: 'stop_rule' });
+      expect(rows[0].payload.items).toHaveLength(60);
+      expect(() => assertShape(rows[0].payload)).not.toThrow();
+    } finally {
+      screen.unmount();
+    }
+  });
 
   test('a real 60-item letter result saves one pending family and one flat outbox payload', async () => {
     const itemSet = { ...fixtures.FIXTURE_LETTER_SOUNDS_EN,

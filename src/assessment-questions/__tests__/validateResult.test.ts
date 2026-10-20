@@ -103,6 +103,16 @@ describe('validateResult', () => {
     expect(verdict.errors.some((e) => e.includes('duration_ms'))).toBe(true);
   });
 
+  test.each([-1, 0.5, NaN, Infinity, -Infinity])('rejects duration_ms=%p outside non-negative integers', (duration_ms) => {
+    const verdict = validateResult({ ...minimalValid, duration_ms });
+    expect(verdict.valid).toBe(false);
+    expect(verdict.errors).toContain('duration_ms: must be a non-negative integer');
+  });
+
+  test.each([0, 1, 60000])('accepts non-negative integer duration_ms=%i', (duration_ms) => {
+    expect(validateResult({ ...minimalValid, duration_ms })).toEqual({ valid: true, errors: [] });
+  });
+
   test('rejects when an items entry is missing required fields', () => {
     const bad = {
       ...minimalValid,

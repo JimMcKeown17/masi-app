@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { View, Text, Pressable, ScrollView, StyleSheet } from 'react-native';
+import { monotonicNow } from './clock';
 import type { QuestionProps } from '../types/QuestionProps';
 import type { ItemSetMeta } from '../types/ItemSet';
 import type { ResultItem, StoppedReason } from '../types/Result';
@@ -73,7 +74,7 @@ export function SequentialCapture({
       item_set_id: itemSet.item_set_id,
       language,
       duration_ms: startTimeMsRef.current === null ? 0
-        : (stopTimeMsRef.current ?? Date.now()) - startTimeMsRef.current,
+        : Math.round((stopTimeMsRef.current ?? monotonicNow()) - startTimeMsRef.current),
       stopped_reason: reason,
       items,
       derived: {
@@ -92,7 +93,7 @@ export function SequentialCapture({
 
   const finishIfExpired = useCallback(() => {
     const deadline = getDeadlineMs();
-    if (deadline === null || Date.now() < deadline) return false;
+    if (deadline === null || monotonicNow() < deadline) return false;
     stopTimeMsRef.current = deadline;
     finish('timer');
     return true;
@@ -114,7 +115,7 @@ export function SequentialCapture({
     const previous = stateRef.current;
     const next = stepReducer(previous, action, { totalItems: cardItems.length, stopRule });
     if (next === stateRef.current) return;
-    const now = Date.now();
+    const now = monotonicNow();
     if (next.stopped) {
       stopTimeMsRef.current = now;
     } else if (previous.stopped) {
@@ -144,7 +145,7 @@ export function SequentialCapture({
   const handleEnd = () => {
     if (hasFinishedRef.current || phaseRef.current !== 'active' || stateRef.current.stopped) return;
     if (finishIfExpired()) return;
-    stopTimeMsRef.current = Date.now();
+    stopTimeMsRef.current = monotonicNow();
     transition('end-confirmation');
   };
 
@@ -153,7 +154,7 @@ export function SequentialCapture({
       {instructions ? <Text>{instructions}</Text> : null}
       <Pressable accessibilityRole="button" onPress={() => {
         if (phaseRef.current !== 'intro') return;
-        startTimeMsRef.current = Date.now();
+        startTimeMsRef.current = monotonicNow();
         transition('active');
       }} style={styles.primaryButton}><Text style={styles.onPrimary}>Start</Text></Pressable>
     </View>;

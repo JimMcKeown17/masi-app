@@ -55,8 +55,10 @@ export function validateResult(result: unknown, opts?: { stopAt?: number }): Val
     }
   }
 
-  if (r.duration_ms !== undefined && typeof r.duration_ms !== 'number') {
-    errors.push(`duration_ms: must be a number, got ${typeof r.duration_ms}`);
+  if (r.duration_ms !== undefined && (
+    typeof r.duration_ms !== 'number' || !Number.isInteger(r.duration_ms) || r.duration_ms < 0
+  )) {
+    errors.push('duration_ms: must be a non-negative integer');
   }
 
   for (const field of STRING_FIELDS) {

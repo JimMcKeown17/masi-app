@@ -212,7 +212,8 @@ test('cancelling End retains decisions and the original deadline', () => {
 test.each(['Correct', 'Incorrect', 'Back', 'End'])('%s resolves a delayed timer before changing decisions', (control) => {
   const { screen, onComplete, onItemMarked } = start();
   decide(screen, true);
-  act(() => jest.setSystemTime(Date.now() + 65000));
+  // Elapsed time advances while the interval callback is delayed.
+  jest.spyOn(globalThis.performance, 'now').mockReturnValue(globalThis.performance.now() + 65000);
   fireEvent.press(screen.getByRole('button', { name: control }));
   expect(onItemMarked).toHaveBeenCalledTimes(1);
   expect(onComplete).toHaveBeenCalledTimes(1);
