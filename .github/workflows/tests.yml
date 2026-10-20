@@ -59,6 +59,13 @@ jobs:
           HISTORY_RLS_DATABASE_NAME: masi_history_rls_ci
           HISTORY_RLS_DISPOSABLE_CONFIRM: I_UNDERSTAND_THIS_IS_DISPOSABLE
         run: npm run verify:support-incident:postgres
+      - name: Assessment results PostgreSQL harness
+        env:
+          PGTZ: UTC
+          HISTORY_RLS_ADMIN_DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/postgres
+          HISTORY_RLS_DATABASE_NAME: masi_history_rls_ci
+          HISTORY_RLS_DISPOSABLE_CONFIRM: I_UNDERSTAND_THIS_IS_DISPOSABLE
+        run: npm run verify:assessment-results:postgres
       - name: EA access suspension PostgreSQL harness
         env:
           PGTZ: UTC
