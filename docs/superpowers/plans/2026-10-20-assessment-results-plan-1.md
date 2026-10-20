@@ -80,6 +80,10 @@ of §14 only. Mastery confirmations (§10.1–10.3) and the history pull (§11) 
 ## Checkpoints
 
 Each task ends green: its own tests, then the full jest suite and `npm run test:types`.
+**Exception: Tasks 7–9 share one full-suite checkpoint**, at the end of Task 9.
+`__tests__/syncContractCompleteness.test.js` fails between them: Task 7 adds columns and a table
+that Task 9's sync declarations classify. Tasks 7 and 8 each still end with their own tests
+green.
 - **Between Task 9 and Task 12 the app is not releasable.** The old capture screens still call
   `saveAssessment`, whose per-row outbox rows the new dispatch no longer sends. No build is made
   before Task 14.
@@ -421,7 +425,10 @@ any language other than `xh`.
    `language text`, `stopped_reason text` with a CHECK on the 10 package values or null,
    `duration_ms integer`, `derived jsonb not null default '{}'`, and `battery_run_id uuid`.
 2. **`battery_runs` table:** columns per spec §7.1, server FKs to `children`, `programmes`,
-   `classes`, `auth.users` and `assessment_windows`. It has a purpose/window CHECK matching
+   `classes`, `auth.users` and `assessment_windows`. **`child_id` is `on delete restrict`, not
+   cascade** (Codex plan round 2). The delete RPC checks history without locking the child, so a
+   run committed between that check and the delete would otherwise be cascaded away. With
+   restrict, that race fails the delete instead of losing the run. It has a purpose/window CHECK matching
    `assessments_window_purpose_chk`, a status CHECK, and
    `completed_at is not null` iff `status = 'completed'`. Then the FK
    `assessments.battery_run_id → battery_runs(id) on delete restrict`, and the partial unique
@@ -467,6 +474,8 @@ every migration. Every case from spec §15's `submit_assessment` and `save_batte
   `42501`;
 - another EA with no relation to the child selects zero `battery_runs` rows. RLS must be on;
 - `delete_child_if_no_history` refuses a child that has only a zero-Question run;
+- a direct `delete from children` as `postgres`, for a child with a run, raises `23503`, so the
+  restrict holds;
 - `updated_at` equals the transaction's `now()` on insert, even when the payload carries an old
   time;
 - run insert, forward update, stale `in_progress` after `completed` → `unchanged`;
@@ -513,8 +522,8 @@ and exactly one parent and n items exist. The same case runs for `save_battery_r
 3. **`battery_runs` table:** the columns from spec §7.1 plus `LOCAL_SYNC_COLUMNS` and
    `started_here integer not null default 0 check (started_here in (0,1))`.
    - `class_id` is a plain `text` column, **not** a foreign key.
-   - `child_id` references `children(id) on delete cascade`, and `programme_id` references
-     `programmes(id)`.
+   - `child_id` references `children(id) on delete restrict`, matching the server, and
+     `programme_id` references `programmes(id)`.
 4. **Indexes.**
    - Unique `idx_assessments_run_question on assessments(battery_run_id, question_code) where battery_run_id is not null`.
    - `idx_battery_runs_user_status on battery_runs(user_id, status)`.
@@ -682,6 +691,16 @@ rejects that, rebuild `assessments` (the table is empty after step 1) and say so
   - Existing `42501`/`23503` evidence logic is unchanged.
 - **`buildSyncPayload`** for `assessments` delegates to `toSubmitArgs`. It never sends
   `updated_at`; the server stamps it.
+- **Sync contract test.** Update `__tests__/syncContractCompleteness.test.js` and the
+  declarations it reads:
+  - `started_here` → `LOCAL_ONLY_COLUMNS`;
+  - `items_tested` → `INTENTIONALLY_UNSYNCED.assessments`;
+  - `battery_runs` → `PUSH_ORDER` and `SERVER_COLUMNS`;
+  - the new `assessments` columns → `SERVER_COLUMNS.assessments`.
+
+  Replace the expectation that `assessment_items` sits in `PUSH_ORDER` with one asserting that
+  the `assessments` family payload carries `items` and that its acknowledgement marks them
+  synced.
 - **Reference repair.** In `referenceDataRepository.js`, add
   `{ tableName: 'battery_runs', column: 'programme_id' }` to `programmes.foreignKeyRetargets`.
 
