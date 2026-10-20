@@ -637,6 +637,7 @@ test('isiXhosa preview pack: developer builds only, same letter order as the rel
   - Then add the import and `CURRENT_PACK_IDS.preview.xh` to `index.js`, and run the file again. Expected: PASS.
   - The existing "every bundled pack lints" and "every JSON file is bundled" tests now cover the generated file.
   - Preview packs are not hash-pinned (plan call). A regeneration bumps `--version`, replaces the old preview file and updates the current id.
+  - **Accepted risk (orchestrator call, Codex A1 round 2):** a developer-build draft or session pinned to a replaced preview id resolves to `null` and shows the C10 "no content yet" state; nothing crashes or is lost. Old preview versions are not kept because every binary bundles the preview pack (it is only gated at load), so keeping each regeneration would grow field builds for a developer-only case. Spec §4.1's "old versions stay bundled" applies to release packs, which are append-only and hash-pinned.
 - [ ] **Step 7: Docs.** In `documentation/content-packs.md`, add the section "isiXhosa test pack". It covers:
   - its inputs and the regeneration command;
   - the generation rules above;

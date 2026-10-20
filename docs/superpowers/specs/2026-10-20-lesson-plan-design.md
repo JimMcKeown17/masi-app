@@ -156,7 +156,7 @@ These are marked **(my call)** where they appear below.
 ### 4.1 One content pack per language
 
 All teaching content is data. The app reads one immutable JSON file per language and version,
-bundled in the app (so OTA updates deliver it). Old versions stay bundled while any draft or saved
+bundled in the app (so OTA updates deliver it). Old **release** versions stay bundled while any draft or saved
 session references them.
 
 **It is the same file the books project releases for Zazi** (C15): `integrated-sequence-<lang>-v<N>.json`,
