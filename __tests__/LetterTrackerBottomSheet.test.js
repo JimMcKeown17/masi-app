@@ -21,7 +21,7 @@ jest.mock('react-native-safe-area-context', () => ({
 jest.mock('../src/db/repositories/assessmentsRepository', () => ({
   ...jest.requireActual('../src/db/repositories/assessmentsRepository'),
   assessmentsRepository: {
-    getAssessments: jest.fn().mockResolvedValue([]),
+    latestLetterResult: jest.fn().mockResolvedValue(null),
   },
 }));
 
@@ -36,7 +36,7 @@ const child = { id: 'child-1', first_name: 'Amahle', last_name: 'Dlamini' };
 const stored = (letter) => ({ id: `mastery-${letter}`, child_id: child.id, letter, language: 'English', _deleted: false });
 const renderSheet = (props = {}) => render(<PaperProvider settings={{ icon: () => null }}>
   <MotionProvider value={{ motionLevel: 'still', reduceMotion: true, tier: 'static' }}>
-    <LetterTrackerBottomSheet visible child={child} userId="user-1" languageKey="english"
+    <LetterTrackerBottomSheet visible child={child} userId="user-1" languageCode="en"
       pendingChanges={{}} onChangesUpdate={jest.fn()} onDismiss={jest.fn()} {...props} />
   </MotionProvider>
 </PaperProvider>);
@@ -101,7 +101,7 @@ describe('LetterTrackerBottomSheet', () => {
           onDismiss={onDismiss}
           child={{ id: 'child-1', first_name: 'Amahle', last_name: 'Dlamini' }}
           userId="user-1"
-          languageKey="english"
+          languageCode="en"
           pendingChanges={{}}
           onChangesUpdate={jest.fn()}
         />

@@ -1,76 +1,100 @@
-import { requireCurrentHandle } from '../src/session/signedInHandle';
-import { repositoriesForTest } from '../test-support/legacyHandleMocks';
+jest.mock('expo-sqlite', () => require('../test-support/expoSQLiteMock'));
+jest.mock('../src/services/supabaseClient', () => ({
+  ...require('../test-support/supabaseTestConfig'), supabase: {},
+}));
+
+import { v4 as uuid } from 'uuid';
 import { loadMasteryState, countMastered } from '../src/utils/masteryState';
-import { assessmentsRepository } from '../src/db/repositories/assessmentsRepository';
-import { masteryRepository } from '../src/db/repositories/masteryRepository';
-
-jest.mock('../src/db/repositories/assessmentsRepository', () => ({
-  ...jest.requireActual('../src/db/repositories/assessmentsRepository'),
-  assessmentsRepository: { getAssessments: jest.fn() },
-}));
-jest.mock('../src/db/repositories/masteryRepository', () => ({
-  ...jest.requireActual('../src/db/repositories/masteryRepository'),
-  masteryRepository: { getLetterMastery: jest.fn() },
-}));
-
-const letterAssessment = {
-  id: 'a-letter',
-  child_id: 'child-1',
-  assessment_type: 'letter_egra',
-  letter_language: 'English',
-  date_assessed: '2026-07-01',
-  created_at: '2026-07-01T10:00:00Z',
-  last_letter_attempted: { index: 2 },
-  correct_letters: [{ index: 0 }, { index: 1 }, { index: 2 }],
-};
-const newerWordAssessment = {
-  id: 'a-word',
-  child_id: 'child-1',
-  assessment_type: 'word_egra',
-  letter_language: 'English',
-  date_assessed: '2026-07-02',
-  created_at: '2026-07-02T10:00:00Z',
-  last_letter_attempted: { index: 5 },
-  correct_letters: [],
-};
+import { createMasteryRepository } from '../src/db/repositories/masteryRepository';
+import { createFamilySyncFixture, questionResult } from '../test-support/assessmentFamilySyncTestUtils';
+import { bindTestActor } from '../test-support/actorTestUtils';
 
 describe('loadMasteryState', () => {
-  beforeEach(() => {
-    jest.clearAllMocks();
-    masteryRepository.getLetterMastery.mockResolvedValue([]);
+  let f, repositories;
+  beforeEach(async () => {
+    f = await createFamilySyncFixture();
+    repositories = {
+      assessments: f.assessments, mastery: createMasteryRepository({ database: f.db }),
+    };
+  });
+  afterEach(async () => { await f.db.closeAsync(); });
+  const load = languageCode => loadMasteryState({
+    repositories, userId: f.userId, childId: f.childId, languageCode,
+  });
+  const confirm = (letter, language, extra = {}) => repositories.mastery.saveLetterMasteryRecord({
+    id: uuid(), user_id: f.userId, child_id: f.childId, letter, language, source: 'taught', ...extra,
   });
 
   test('picks the latest LETTER assessment even when a word assessment is newer', async () => {
-    assessmentsRepository.getAssessments.mockResolvedValue([letterAssessment, newerWordAssessment]);
-    const state = await loadMasteryState({ repositories: repositoriesForTest(requireCurrentHandle()), userId: 'user-1', childId: 'child-1', languageKey: 'english' });
-    expect(state.latestAssessment.id).toBe('a-letter');
-    expect(state.assessmentMastered.size).toBeGreaterThan(0);
+    const { id } = await f.save(1, { result: questionResult(1, {
+      items: [{ position: 0, item_key: 'a', prompt: 'A', is_correct: true }],
+    }) });
+    const word = await f.save(1, { result: questionResult(1, { question_code: 'word_reading', item_set_id: 'word_reading@2026.1.en' }) });
+    await f.db.runAsync("update assessments set assessment_date = '2099-01-01' where id = ?", word.id);
+    const latest = jest.spyOn(repositories.assessments, 'latestLetterResult');
+    const state = await load('en');
+    expect(latest).toHaveBeenCalledWith({ userId: f.userId, childId: f.childId, language: 'en' });
+    expect(state.latestAssessment.id).toBe(id);
+    expect(state.assessmentMastered).toEqual(new Set(['a']));
   });
 
-  test('legacy assessments without assessment_type still count as letter assessments', async () => {
-    const legacy = { ...letterAssessment, id: 'a-legacy' };
-    delete legacy.assessment_type;
-    assessmentsRepository.getAssessments.mockResolvedValue([legacy]);
-    const state = await loadMasteryState({ repositories: repositoriesForTest(requireCurrentHandle()), userId: 'user-1', childId: 'child-1', languageKey: 'english' });
-    expect(state.latestAssessment.id).toBe('a-legacy');
+  test('legacy summaries do not provide evidence without stored Question result items', async () => {
+    await f.assessments.saveAssessment({
+      id: uuid(), user_id: f.userId, child_id: f.childId, assessment_type: 'letter_egra',
+      date_assessed: '2026-07-01', letter_language: 'English',
+      last_letter_attempted: { index: 0 }, correct_letters: [{ index: 0, letter: 'a' }],
+    });
+    const state = await load('en');
+    expect(state.latestAssessment).toBeNull();
+    expect(state.assessmentMastered).toEqual(new Set());
   });
 
   test('taught records exclude soft-deleted rows and other languages', async () => {
-    assessmentsRepository.getAssessments.mockResolvedValue([]);
-    masteryRepository.getLetterMastery.mockResolvedValue([
-      { id: 'm1', child_id: 'child-1', letter: 'a', language: 'English', _deleted: false },
-      { id: 'm2', child_id: 'child-1', letter: 'b', language: 'English', _deleted: true },
-      { id: 'm3', child_id: 'child-1', letter: 'c', language: 'isiXhosa', _deleted: false },
-    ]);
-    const state = await loadMasteryState({ repositories: repositoriesForTest(requireCurrentHandle()), userId: 'user-1', childId: 'child-1', languageKey: 'english' });
-    expect(state.taughtRecords.map(r => r.id)).toEqual(['m1']);
+    const activeId = await confirm('a', 'English');
+    await confirm('b', 'English', { _deleted: true });
+    await confirm('c', 'isiXhosa');
+    const state = await load('en');
+    expect(state.taughtRecords.map(r => r.id)).toEqual([activeId]);
   });
 
-  test('unknown language key returns empty state without repository calls', async () => {
-    const state = await loadMasteryState({ repositories: repositoriesForTest(requireCurrentHandle()), userId: 'user-1', childId: 'child-1', languageKey: 'klingon' });
+  test.each([null, undefined, 'zu', 'klingon'])('unsupported language %p returns no evidence without repository calls', async language => {
+    const latest = jest.spyOn(repositories.assessments, 'latestLetterResult');
+    const mastery = jest.spyOn(repositories.mastery, 'getLetterMastery');
+    const state = await load(language);
     expect(state.assessmentMastered.size).toBe(0);
     expect(state.taughtRecords).toEqual([]);
-    expect(assessmentsRepository.getAssessments).not.toHaveBeenCalled();
+    expect(state.latestAssessment).toBeNull();
+    expect(latest).not.toHaveBeenCalled();
+    expect(mastery).not.toHaveBeenCalled();
+  });
+
+  test('battery Q1 evidence recorded by another EA unions with this EA’s isiXhosa confirmation', async () => {
+    const otherUserId = uuid();
+    await f.db.runAsync(`insert into staff_programme_assignments (id, user_id, programme_id, assigned_at)
+      values (?, ?, ?, '2026-01-15T00:00:00.000Z')`, uuid(), otherUserId, f.programmeId);
+    bindTestActor(f.db, otherUserId);
+    const run = await f.start({ userId: otherUserId, language: 'xh' });
+    const { id } = await f.save(3, {
+      userId: otherUserId, batteryRunId: run.id,
+      result: questionResult(3, {
+        language: 'xh', item_set_id: 'letter_sounds@2026.1.xh',
+        items: [
+          { position: 9, item_key: 'a1', prompt: 'A', is_correct: true, metadata: { reached: true } },
+          { position: 2, item_key: 'a2', prompt: 'a', is_correct: true },
+          { position: 8, item_key: 'b', prompt: 'b', is_correct: true, metadata: { reached: false } },
+        ],
+      }),
+    });
+    bindTestActor(f.db, f.userId);
+    await confirm('e', 'isiXhosa');
+    await confirm('z', 'English');
+    const state = await load('xh');
+    expect(state.latestAssessment).toMatchObject({ id, user_id: otherUserId, battery_run_id: run.id, language: 'xh' });
+    expect(state.assessmentMastered).toEqual(new Set(['a']));
+    expect(state.taughtRecords.map(r => [r.letter, r.language])).toEqual([['e', 'isiXhosa']]);
+    expect(countMastered({
+      ...state, taughtLetters: new Set(state.taughtRecords.map(r => r.letter)),
+    })).toBe(2);
   });
 });
 

@@ -1,4 +1,4 @@
-import { LETTER_SETS } from '../constants/egraConstants';
+import { LANGUAGE_LABELS, PEDAGOGICAL_ORDERS } from '../utils/assessmentRegistry';
 import { createSessionsRepository } from '../db/repositories/sessionsRepository';
 import { createChildrenRepository } from '../db/repositories/childrenRepository';
 import { createMasteryRepository } from '../db/repositories/masteryRepository';
@@ -18,7 +18,7 @@ export async function persistLiteracySession({
   handle,
   database = handle,
   session,
-  trackerLanguageKey,
+  trackerLanguageCode,
   letterTrackerChanges = {},
   nowIso = new Date().toISOString(),
   idFactory,
@@ -26,7 +26,9 @@ export async function persistLiteracySession({
   const sessionsRepository = createSessionsRepository({ database });
   const childrenRepository = createChildrenRepository({ database });
   const masteryRepository = createMasteryRepository({ database });
-  const letterSet = LETTER_SETS[trackerLanguageKey];
+  const pedagogicalOrder = PEDAGOGICAL_ORDERS[trackerLanguageCode];
+  // Plan 2 re-keys letter_mastery to codes
+  const confirmationLanguage = LANGUAGE_LABELS[trackerLanguageCode];
 
   await runRepositoryTransaction(database, async (transaction) => {
     const programmeId = await resolveProgrammeId(transaction, {
@@ -70,7 +72,7 @@ export async function persistLiteracySession({
       });
     }
 
-    if (!letterSet || Object.keys(attendeeTrackerChanges).length === 0) {
+    if (!pedagogicalOrder || Object.keys(attendeeTrackerChanges).length === 0) {
       return;
     }
 
@@ -88,7 +90,7 @@ export async function persistLiteracySession({
           const existingDeleted = findMasteryRecord(allMastery, {
             childId,
             letter,
-            language: letterSet.language,
+            language: confirmationLanguage,
             programmeId,
             deleted: true,
           });
@@ -110,7 +112,7 @@ export async function persistLiteracySession({
               programme_id: programmeId,
               letter,
               source: 'taught',
-              language: letterSet.language,
+              language: confirmationLanguage,
               synced: false,
               created_at: nowIso,
               updated_at: nowIso,
@@ -122,7 +124,7 @@ export async function persistLiteracySession({
           const existing = findMasteryRecord(allMastery, {
             childId,
             letter,
-            language: letterSet.language,
+            language: confirmationLanguage,
             programmeId,
             deleted: false,
           });

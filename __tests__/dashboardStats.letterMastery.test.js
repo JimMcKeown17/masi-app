@@ -1,0 +1,128 @@
+import { getLetterMasteryRanking } from '../src/utils/dashboardStats';
+
+const child = { id: 'child-1', class_id: 'class-1' };
+const xhosaClass = { id: 'class-1', home_language: ' isiXhosa ' };
+const item = (prompt, isCorrect, reached = true) => ({
+  prompt,
+  is_correct: isCorrect,
+  metadata: { reached },
+});
+const result = (overrides = {}) => ({
+  id: 'assessment-1',
+  child_id: child.id,
+  user_id: 'another-ea',
+  question_code: 'letter_sounds',
+  language: 'xh',
+  stopped_reason: 'completed',
+  assessment_date: '2026-10-20',
+  created_at: '2026-10-20T09:00:00.000Z',
+  items: [item('a', true)],
+  ...overrides,
+});
+
+describe('getLetterMasteryRanking — stored question items', () => {
+  test('unions another EA’s battery evidence with confirmations stored under the language label', () => {
+    const assessment = result({
+      battery_run_id: 'run-1',
+      items: [
+        item('A', true),
+        item('a', true),
+        item('b', false),
+        item('c', true),
+        item('d', true, false),
+        item('!', true),
+      ],
+    });
+    const confirmations = [
+      { child_id: child.id, language: 'isiXhosa', letter: 'a' },
+      { child_id: child.id, language: 'isiXhosa', letter: 'b' },
+      { child_id: child.id, language: 'xh', letter: 'f' },
+      { child_id: child.id, language: 'English', letter: 'd' },
+      { child_id: child.id, language: 'isiXhosa', letter: 'e', _deleted: true },
+    ];
+
+    expect(getLetterMasteryRanking([child], [assessment], confirmations, [xhosaClass]))
+      .toEqual([{ child, masteredCount: 3, total: 26, percent: 12 }]);
+  });
+
+  test('uses the newest eligible result by assessment date and created timestamp', () => {
+    const assessments = [
+      result({ id: 'older-date', assessment_date: '2026-10-19', created_at: '2026-10-21T09:00:00Z' }),
+      result({ id: 'older-time', created_at: '2026-10-20T08:00:00Z' }),
+      result({ id: 'latest', items: [item('b', true), item('c', true)] }),
+      result({ id: 'word', question_code: 'word_reading', assessment_date: '2026-10-21' }),
+      result({ id: 'english', language: 'en', assessment_date: '2026-10-21' }),
+      result({ id: 'another-child', child_id: 'child-2', assessment_date: '2026-10-21' }),
+      result({ id: 'skipped', stopped_reason: 'skipped_tired', assessment_date: '2026-10-21' }),
+      result({ id: 'unreached', items: [item('a', true, false)], assessment_date: '2026-10-21' }),
+      result({ id: 'empty', items: [], assessment_date: '2026-10-21' }),
+    ];
+
+    expect(getLetterMasteryRanking([child], assessments, [], [xhosaClass]))
+      .toEqual([{ child, masteredCount: 2, total: 26, percent: 8 }]);
+  });
+
+  test('ignores the old summary format and does not infer a letter result without a question code', () => {
+    const legacyAssessment = {
+      child_id: child.id,
+      assessment_type: 'letter_egra',
+      letter_language: 'isiXhosa',
+      date_assessed: '2026-10-21',
+      last_letter_attempted: { index: 59 },
+      correct_letters: Array.from({ length: 60 }, (_, index) => ({ index })),
+    };
+    const untypedResult = result({ question_code: undefined });
+
+    expect(getLetterMasteryRanking([child], [legacyAssessment, untypedResult], [], [xhosaClass]))
+      .toEqual([{ child, masteredCount: 0, total: 26, percent: 0 }]);
+  });
+
+  test.each([null, undefined, '', 'Afrikaans', 'isiZulu'])(
+    'keeps the 26-letter scale but no mastery when the class language has no order: %s',
+    (homeLanguage) => {
+      const englishAssessment = result({ language: 'en' });
+      const englishConfirmation = { child_id: child.id, language: 'English', letter: 'b' };
+
+      expect(getLetterMasteryRanking(
+        [child],
+        [englishAssessment],
+        [englishConfirmation],
+        [{ id: child.class_id, home_language: homeLanguage }],
+      )).toEqual([{ child, masteredCount: 0, total: 26, percent: 0 }]);
+    },
+  );
+
+  test('a missing class gives no evidence instead of choosing English', () => {
+    expect(getLetterMasteryRanking([child], [result({ language: 'en' })], [], []))
+      .toEqual([{ child, masteredCount: 0, total: 26, percent: 0 }]);
+  });
+
+  test('a wrong reached occurrence prevents mastery regardless of row order', () => {
+    const assessment = result({
+      items: [item('A', true), item('a', false), item('B', true), item('b', false, false)],
+    });
+    const expected = [{ child, masteredCount: 1, total: 26, percent: 4 }];
+
+    expect(getLetterMasteryRanking([child], [assessment], [], [xhosaClass])).toEqual(expected);
+    expect(getLetterMasteryRanking(
+      [child],
+      [{ ...assessment, items: [...assessment.items].reverse() }],
+      [],
+      [xhosaClass],
+    )).toEqual(expected);
+  });
+
+  test('ranks children by the union of stored item evidence and confirmations', () => {
+    const anotherChild = { id: 'child-2', class_id: child.class_id };
+    const assessments = [
+      result({ child_id: child.id, items: [item('a', true)] }),
+      result({ child_id: anotherChild.id, items: [item('b', true), item('c', true)] }),
+    ];
+
+    expect(getLetterMasteryRanking([child, anotherChild], assessments, [], [xhosaClass]))
+      .toEqual([
+        { child: anotherChild, masteredCount: 2, total: 26, percent: 8 },
+        { child, masteredCount: 1, total: 26, percent: 4 },
+      ]);
+  });
+});

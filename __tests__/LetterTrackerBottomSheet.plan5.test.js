@@ -6,7 +6,6 @@ import { typeRoles } from '../src/constants/typography';
 import { fireEvent, render, waitFor } from '@testing-library/react-native';
 import { PaperProvider } from 'react-native-paper';
 import LetterTrackerBottomSheet from '../src/components/session/LetterTrackerBottomSheet';
-import { LETTER_SETS } from '../src/constants/egraConstants';
 import { assessmentsRepository } from '../src/db/repositories/assessmentsRepository';
 import { masteryRepository } from '../src/db/repositories/masteryRepository';
 
@@ -21,7 +20,7 @@ jest.mock('react-native-safe-area-context', () => ({
 jest.mock('../src/db/repositories/assessmentsRepository', () => ({
   ...jest.requireActual('../src/db/repositories/assessmentsRepository'),
   assessmentsRepository: {
-    getAssessments: jest.fn(),
+    latestLetterResult: jest.fn(),
   },
 }));
 
@@ -39,7 +38,7 @@ const renderSheet = (props = {}) => render(
       onDismiss={jest.fn()}
       child={{ id: 'child-1', first_name: 'Amahle', last_name: 'Dlamini' }}
       userId="user-1"
-      languageKey="english"
+      languageCode="en"
       pendingChanges={{}}
       onChangesUpdate={jest.fn()}
       {...props}
@@ -49,7 +48,7 @@ const renderSheet = (props = {}) => render(
 
 describe('LetterTrackerBottomSheet Plan 5 behavior', () => {
   beforeEach(() => {
-    assessmentsRepository.getAssessments.mockResolvedValue([]);
+    assessmentsRepository.latestLetterResult.mockResolvedValue(null);
     masteryRepository.getLetterMastery.mockResolvedValue([
       {
         id: 'mastery-a',
@@ -72,43 +71,35 @@ describe('LetterTrackerBottomSheet Plan 5 behavior', () => {
     jest.clearAllMocks();
   });
 
-  test('a newer word assessment does not wipe rendered assessment mastery', async () => {
-    assessmentsRepository.getAssessments.mockResolvedValue([
-      {
-        id: 'a-letter',
-        child_id: 'child-1',
-        assessment_type: 'letter_egra',
-        letter_language: 'English',
-        date_assessed: '2026-07-01',
-        created_at: '2026-07-01T10:00:00Z',
-        last_letter_attempted: { index: 2 },
-        correct_letters: [{ index: 0 }, { index: 1 }, { index: 2 }],
-      },
-      {
-        id: 'a-word',
-        child_id: 'child-1',
-        assessment_type: 'word_egra',
-        letter_language: 'English',
-        date_assessed: '2026-07-02',
-        created_at: '2026-07-02T10:00:00Z',
-        last_letter_attempted: { index: 5 },
-        correct_letters: [],
-      },
-    ]);
+  test('locks stored letter-result evidence using the letter-only accessor', async () => {
+    assessmentsRepository.latestLetterResult.mockResolvedValue({
+      id: 'a-letter', child_id: 'child-1', question_code: 'letter_sounds', language: 'en',
+      assessment_date: '2026-07-01',
+      items: [
+        { prompt: 'A', is_correct: true, metadata: { reached: true } },
+        { prompt: 'm', is_correct: true, metadata: { reached: true } },
+        { prompt: 'a', is_correct: true, metadata: { reached: true } },
+      ],
+    });
     masteryRepository.getLetterMastery.mockResolvedValue([]);
-
-    // The letter at EGRA position 0 was attempted and fully correct in the
-    // letter assessment; the newer word assessment must not unlock it.
-    const firstEgraLetter = LETTER_SETS.english.letters[0].toLowerCase();
     const onChangesUpdate = jest.fn();
     const { getByLabelText, getByText } = renderSheet({ onChangesUpdate });
 
-    await waitFor(() =>
-      expect(getByLabelText(`${firstEgraLetter}, mastered from assessment, locked`)).toBeTruthy(),
-    );
-    fireEvent.press(getByLabelText(`${firstEgraLetter}, mastered from assessment, locked`));
+    await waitFor(() => expect(getByLabelText('a, mastered from assessment, locked')).toBeTruthy());
+    expect(assessmentsRepository.latestLetterResult).toHaveBeenCalledWith({
+      userId: 'user-1', childId: 'child-1', language: 'en',
+    });
+    fireEvent.press(getByLabelText('a, mastered from assessment, locked'));
     expect(onChangesUpdate).not.toHaveBeenCalled();
-    expect(getByLabelText(`${firstEgraLetter}, mastered from assessment, locked`).props.accessibilityState.disabled).toBe(true);
-    expect(StyleSheet.flatten(getByText(firstEgraLetter).props.style)).toEqual(expect.objectContaining(typeRoles.textLetter));
+    expect(getByLabelText('a, mastered from assessment, locked').props.accessibilityState.disabled).toBe(true);
+    expect(StyleSheet.flatten(getByText('a').props.style)).toEqual(expect.objectContaining(typeRoles.textLetter));
+  });
+
+  test.each([null, 'zu'])('shows an honest missing-set state for language %s', async (languageCode) => {
+    const screen = renderSheet({ languageCode });
+    expect(await screen.findByText('No letter set for this class language.')).toBeTruthy();
+    expect(screen.queryAllByText(/^[a-z]$/)).toHaveLength(0);
+    expect(assessmentsRepository.latestLetterResult).not.toHaveBeenCalled();
+    expect(masteryRepository.getLetterMastery).not.toHaveBeenCalled();
   });
 });

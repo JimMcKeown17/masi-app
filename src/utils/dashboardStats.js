@@ -5,8 +5,13 @@
  * No React, no side effects — just data in, stats out.
  */
 
-import { computeAssessmentMastery, normalizeLanguageKey } from './letterMastery';
-import { LETTER_SETS, PEDAGOGICAL_ORDERS } from '../constants/egraConstants';
+import { computeAssessmentMastery } from './letterMastery';
+import {
+  languageCodeForHomeLanguage,
+  LANGUAGE_LABELS,
+  LETTER_EVIDENCE_CODES,
+  PEDAGOGICAL_ORDERS,
+} from './assessmentRegistry';
 import { toLocalDateString } from './localDate';
 
 // ─── Helpers ───────────────────────────────────────────────────────────
@@ -158,32 +163,40 @@ export function getLetterMasteryRanking(children, assessments, letterMastery, cl
   for (const child of children) {
     // Determine language from class
     const cls = classes.find(c => c.id === child.class_id);
-    const langKey = normalizeLanguageKey(cls?.home_language);
-    const letterSet = LETTER_SETS[langKey];
-    const pedOrder = PEDAGOGICAL_ORDERS[langKey];
+    const languageCode = languageCodeForHomeLanguage(cls?.home_language);
+    const pedOrder = languageCode ? PEDAGOGICAL_ORDERS[languageCode] : null;
 
-    if (!letterSet || !pedOrder) {
+    if (!pedOrder) {
+      // Keep the ranking's display scale without choosing a language or its evidence.
       rankings.push({ child, masteredCount: 0, total: 26, percent: 0 });
       continue;
     }
 
-    // Find most recent letter assessment for this child in this language
+    // Stored letter results count regardless of recorder or battery membership.
     const childAssessments = assessments
-      .filter(a => a.child_id === child.id && normalizeLanguageKey(a.letter_language) === langKey && (a.assessment_type || 'letter_egra') === 'letter_egra')
+      .filter(a => (
+        a.child_id === child.id
+        && a.language === languageCode
+        && LETTER_EVIDENCE_CODES.includes(a.question_code)
+        && !a.stopped_reason?.startsWith('skipped_')
+        && a.items?.some(item => item.metadata?.reached !== false)
+      ))
       .sort((a, b) => {
-        const dateCmp = (b.date_assessed || '').localeCompare(a.date_assessed || '');
+        const dateCmp = (b.assessment_date || '').localeCompare(a.assessment_date || '');
         if (dateCmp !== 0) return dateCmp;
         return (b.created_at || '').localeCompare(a.created_at || '');
       });
     const latest = childAssessments[0] || null;
 
     // Assessment-mastered letters
-    const assessmentMastered = computeAssessmentMastery(latest, letterSet, pedOrder);
+    const assessmentMastered = computeAssessmentMastery(latest, pedOrder);
 
     // Coach-taught letters (not deleted, matching language)
+    // Plan 2 re-keys letter_mastery to codes
+    const confirmationLanguage = LANGUAGE_LABELS[languageCode];
     const taughtLetters = new Set();
     for (const r of letterMastery) {
-      if (r.child_id === child.id && r.language === letterSet.language && !r._deleted) {
+      if (r.child_id === child.id && r.language === confirmationLanguage && !r._deleted) {
         taughtLetters.add(r.letter);
       }
     }

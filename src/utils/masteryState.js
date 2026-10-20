@@ -7,15 +7,13 @@
  * deliberately NOT here: the panel writes immediately, the sheet defers via
  * pendingChanges. Only reads and pure counting live in this module.
  */
-import { LETTER_SETS, PEDAGOGICAL_ORDERS } from '../constants/egraConstants';
+import { LANGUAGE_LABELS, PEDAGOGICAL_ORDERS } from './assessmentRegistry';
 import { computeAssessmentMastery } from './letterMastery';
 
-export async function loadMasteryState({ repositories, userId, childId, languageKey }) {
-  const letterSet = LETTER_SETS[languageKey];
-  const pedagogicalOrder = PEDAGOGICAL_ORDERS[languageKey];
-  if (!letterSet || !pedagogicalOrder) {
+export async function loadMasteryState({ repositories, userId, childId, languageCode }) {
+  const pedagogicalOrder = PEDAGOGICAL_ORDERS[languageCode];
+  if (!pedagogicalOrder) {
     return {
-      letterSet: null,
       pedagogicalOrder: null,
       assessmentMastered: new Set(),
       latestAssessment: null,
@@ -23,29 +21,20 @@ export async function loadMasteryState({ repositories, userId, childId, language
     };
   }
 
-  // Latest LETTER assessment for this language. Word assessments also stamp
-  // letter_language, and computeAssessmentMastery returns an empty set for
-  // them, so filtering by type here is what keeps a newer word assessment
-  // from wiping tracker mastery.
-  const allAssessments = await repositories.assessments.getAssessments({ userId, childId });
-  const childAssessments = allAssessments
-    .filter(a => a.child_id === childId
-      && a.letter_language === letterSet.language
-      && (a.assessment_type || 'letter_egra') === 'letter_egra')
-    .sort((a, b) => {
-      const dateCmp = b.date_assessed.localeCompare(a.date_assessed);
-      if (dateCmp !== 0) return dateCmp;
-      return b.created_at.localeCompare(a.created_at);
-    });
-  const latestAssessment = childAssessments[0] || null;
-  const assessmentMastered = computeAssessmentMastery(latestAssessment, letterSet, pedagogicalOrder);
+  // userId resolves the active programme; evidence may have been recorded by any EA.
+  const latestAssessment = await repositories.assessments.latestLetterResult({
+    userId, childId, language: languageCode,
+  });
+  const assessmentMastered = computeAssessmentMastery(latestAssessment, pedagogicalOrder);
 
   const allMastery = await repositories.mastery.getLetterMastery({ userId, childId });
+  // Plan 2 re-keys letter_mastery to codes
+  const confirmationLanguage = LANGUAGE_LABELS[languageCode];
   const taughtRecords = allMastery.filter(
-    r => r.child_id === childId && r.language === letterSet.language && !r._deleted
+    r => r.child_id === childId && r.language === confirmationLanguage && !r._deleted
   );
 
-  return { letterSet, pedagogicalOrder, assessmentMastered, latestAssessment, taughtRecords };
+  return { pedagogicalOrder, assessmentMastered, latestAssessment, taughtRecords };
 }
 
 export function countMastered({ assessmentMastered, taughtLetters, pendingChanges = {}, pedagogicalOrder }) {
