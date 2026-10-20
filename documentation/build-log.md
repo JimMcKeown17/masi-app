@@ -996,6 +996,67 @@ result is kept and uploads. The window is the few milliseconds of a local SQLite
 leave attempts mid-save would break the designed path where a save fails while that sheet is
 open. Revisit only if it is seen in the field.
 
+### 2026-10-20 — Assessment Results Plan 1, Task 14 release gates (controller, Jim's yes for each)
+
+**Wipe of practice data on `masi-app-sqlite`.** A read-only FK check showed only
+`assessment_items` cascades from `assessments`. Deleted **39 assessments and 1,165 items** (three
+EAs, newest 2026-10-19). `letter_mastery` (46 rows) was kept. Afterwards: 0 / 0.
+
+**Migration `20261021120000_assessment_results_contract.sql` applied** through the isolated
+helper from the build worktree (`.env.local` copied in by Jim's permission and deleted after the
+gate). The dry run listed only this file against `segygjzpujphwvrubusm`. Verified:
+- the migration row is recorded;
+- `submit_assessment(p_assessment, p_items)` and `save_battery_run(p_run)` are security definer,
+  executable by `authenticated` and not by `anon`;
+- `authenticated` has no INSERT or UPDATE on `assessments`, `assessment_items` or
+  `battery_runs`;
+- the `*_set_updated_at` triggers exist on all three tables;
+- only `literacy` carries `wela_plus_full@2024.1`.
+
+**Device gate, Galaxy A03s at 360 dp (`wm density 320`).**
+- **Build 24** (first preview build): the logic passed. It saved an isiXhosa letter test that ran
+  3 right and 10 wrong to the stop card (exact copy), then Undo, then finished: 51/60, 9
+  incorrect, `max_consecutive_wrong = 9`. A word test scored 50/50. A timer expiry with no marks
+  saved 0/60 at exactly 60,000 ms. After going online, every family arrived complete (60 or 50
+  items).
+- **Mastery** agrees in all three places: the child tracker, the session-form tracker and the
+  Insights ranking show 19/26. The seven letters marked wrong are exactly the seven not mastered,
+  including `l` and `n`, which were right once and wrong once.
+- **Build 24 failed the visual gate.** There was no countdown on a 60-second test (the first run
+  timed out unseen), and the start screen was a bare Start button. There was no child, language
+  or close control, the grid ran edge to edge, and word tiles broke words mid-word (`aman|zi`)
+  and clipped `inkwenkwe`. Root cause: Task 11 deleted the host chrome (`AssessmentInstructions`,
+  `CaptureHeader`, `CountdownTimer`, `EndAssessmentButton`) with the old screens, and Plan 1 never
+  specified a replacement. That was a planning gap; the device gate caught it.
+- **Fix `cc5e0c6` (Codex, reviewed).** The package owns the clock, so it now draws an isolated
+  memo `Countdown` leaf (250 ms tick, frozen at the stop card and End sheet). It also draws a
+  marked/total count, 16 dp gutters, content-sized word tiles that never wrap, and one row with
+  Back and End test. `QuestionProps.onStart` turns on the host's leave guard, so Close before
+  Start leaves without a prompt. The host draws a header (Close, title, child · language) and the
+  per-test instructions. The results-screen stat labels no longer break mid-word. Locally:
+  347/347 suites and 4,200 tests passed, plus `test:types`.
+- **Build 26 passed the visual gate:** header, instructions and pinned Start. The countdown froze
+  at 0:55 under the stop card and resumed at 0:52 after Undo. Words never break, and the grid
+  scrolls with the current row.
+- **Offline gate on build 26.** 30 letter tests were queued with Wi-Fi off ("30 waiting"). Wi-Fi
+  was cut mid-upload: the server then held 20 families with 1,180 items and 0 partial, and the
+  phone still showed 18 waiting. After reconnecting: **38 families, 2,260 items, 0 partial, no
+  duplicate ids**, and the phone showed "All saved and synced".
+- **Dead ends in the harness.** `uiautomator dump` cannot read the screen while the 250 ms
+  countdown keeps it busy, so in-test taps use fixed coordinates. The A03 dropped off USB once
+  mid-run; `svc power stayon usb` held it.
+
+**Observations, not fixed in this branch.**
+- Reconnect upload began about 50 s after Wi-Fi returned, then ran in a batch of 12. Upload is
+  correct but slow to start, and the sync engine's reconnect path is unchanged by this branch.
+- Polish: numbered instructions lack a hanging indent. The package uses the system font next to
+  the app's display font. `adjustsFontSizeToFit` makes ATTEMPTED and INCORRECT slightly smaller
+  than CORRECT. A five-word row flows as three plus two. The tracker shows `Last assessed` as an
+  ISO date.
+
+**Still open before merge:** the iPhone checks (letter test and mastery on iOS build 15) and a
+comparison of the letter grid against the printed 2024 card.
+
 ---
 
 ## Decision Register
