@@ -8,13 +8,14 @@ describe('LetterSoundsQuestion — OSS contract', () => {
     const { rendered, verdict } = runContractTest(LetterSoundsQuestion, {
       language: 'en',
       itemSet: FIXTURE_LETTER_SOUNDS_EN,
-      instructions: 'Stop if the child gets a whole row wrong.',
+      instructions: 'Mark each letter Correct or Incorrect.',
       durationSec: 60,
     });
 
     fireEvent.press(rendered.getByText('Start'));
+    fireEvent.press(rendered.getByText('Correct'));
     fireEvent.press(rendered.getByText('End'));
-    fireEvent.press(rendered.getByText('Reached the end'));
+    fireEvent.press(rendered.getByText('End test'));
 
     const v = await verdict;
     expect(v.valid).toBe(true);
@@ -32,11 +33,10 @@ describe('LetterSoundsQuestion — OSS contract', () => {
       });
 
       fireEvent.press(rendered.getByText('Start'));
+      fireEvent.press(rendered.getByText('Incorrect'));
       act(() => {
         jest.advanceTimersByTime(60000);
       });
-      fireEvent.press(rendered.getByText('Reached the end'));
-
       const v = await verdict;
       expect(v.valid).toBe(true);
       expect(v.errors).toEqual([]);

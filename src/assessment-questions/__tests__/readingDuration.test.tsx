@@ -26,11 +26,12 @@ describe.each([
     itemSet: {
       item_set_id: 'letter-duration@fixture.en', question_version: 'fixture',
       question_code: 'letter-duration', language: 'en',
-      rows: [['a', 'b', 'c']], stop_rule: null,
+      rows: [['a', 'b', 'c', 'd']], stop_rule: null,
     },
     labels: ['a', 'b', 'c'], reportsWpm: false,
   },
 ])('$name reading duration', ({ Component, itemSet, labels, reportsWpm }) => {
+  const sequential = Component === LetterSoundsQuestion;
   beforeEach(() => {
     jest.useFakeTimers();
     jest.setSystemTime(new Date('2026-10-19T12:00:00Z'));
@@ -43,7 +44,8 @@ describe.each([
       <Component language="en" itemSet={itemSet} durationSec={durationSec} onComplete={onComplete} />,
     );
     fireEvent.press(screen.getByText('Start'));
-    labels.forEach((label) => fireEvent.press(screen.getByLabelText(`${label}, idle`)));
+    labels.forEach((label) => fireEvent.press(sequential
+      ? screen.getByText('Correct') : screen.getByLabelText(`${label}, idle`)));
     return { screen, onComplete };
   }
 
@@ -62,11 +64,13 @@ describe.each([
       act(() => jest.setSystemTime(startedAt + elapsedMs));
       expect(screen.queryByText('Last item attempted')).toBeNull();
       fireEvent.press(screen.getByText('End'));
-      expect(screen.getByText('Last item attempted')).toBeTruthy();
+      if (!sequential) expect(screen.getByText('Last item attempted')).toBeTruthy();
       const canCancel = screen.queryByText('Cancel') !== null;
       act(() => jest.advanceTimersByTime(30000));
-      expect(onComplete).not.toHaveBeenCalled();
-      fireEvent.press(screen.getByText('Confirm'));
+      if (!sequential) {
+        expect(onComplete).not.toHaveBeenCalled();
+        fireEvent.press(screen.getByText('Confirm'));
+      }
 
       expect(onComplete).toHaveBeenCalledTimes(1);
       const result = onComplete.mock.calls[0][0];
@@ -86,11 +90,11 @@ describe.each([
       jest.setSystemTime(Date.now() + 60000 + callbackDelay - 250);
       jest.advanceTimersByTime(250);
     });
-    expect(screen.getByText('Last item attempted')).toBeTruthy();
+    if (!sequential) expect(screen.getByText('Last item attempted')).toBeTruthy();
     expect(screen.queryByText('Cancel')).toBeNull();
-    expect(onComplete).not.toHaveBeenCalled();
+    if (!sequential) expect(onComplete).not.toHaveBeenCalled();
     act(() => jest.advanceTimersByTime(30000));
-    fireEvent.press(screen.getByText('Confirm'));
+    if (!sequential) fireEvent.press(screen.getByText('Confirm'));
     expect(onComplete).toHaveBeenCalledTimes(1);
     const result = onComplete.mock.calls[0][0];
     expect(result.duration_ms).toBe(60000);
@@ -100,14 +104,14 @@ describe.each([
     expect(result.derived.correct_words_per_minute).toBe(reportsWpm ? labels.length : undefined);
   });
 
-  test('early End freezes duration before a marker confirmation delayed past the deadline', () => {
+  test('early End freezes duration before confirmation delayed past the deadline', () => {
     const { screen, onComplete } = startReading(60);
     act(() => jest.advanceTimersByTime(20000));
     fireEvent.press(screen.getByText('End'));
-    expect(screen.getByText('Last item attempted')).toBeTruthy();
+    expect(screen.getByText(sequential ? 'End the test?' : 'Last item attempted')).toBeTruthy();
     act(() => jest.advanceTimersByTime(70000));
     expect(onComplete).not.toHaveBeenCalled();
-    fireEvent.press(screen.getByText('Reached the end'));
+    fireEvent.press(screen.getByText(sequential ? 'End test' : 'Reached the end'));
     const result = onComplete.mock.calls[0][0];
     expect(result.duration_ms).toBe(20000);
     expect(result.stopped_reason).toBe('ea_ended');
@@ -125,14 +129,15 @@ describe.each([
 
     if (nextStop === 'timer') {
       act(() => jest.advanceTimersByTime(30000));
-      expect(screen.getByText('Last item attempted')).toBeTruthy();
+      if (!sequential) expect(screen.getByText('Last item attempted')).toBeTruthy();
       act(() => jest.advanceTimersByTime(30000));
-      fireEvent.press(screen.getByText('Confirm'));
+      if (!sequential) fireEvent.press(screen.getByText('Confirm'));
     } else {
       act(() => jest.advanceTimersByTime(10000));
       fireEvent.press(screen.getByText(nextStop === 'End' ? 'End' : 'Skip question'));
       act(() => jest.advanceTimersByTime(30000));
-      fireEvent.press(screen.getByText(nextStop === 'End' ? 'Confirm' : 'Child refused'));
+      fireEvent.press(screen.getByText(nextStop === 'End'
+        ? (sequential ? 'End test' : 'Confirm') : 'Child refused'));
     }
 
     const elapsed = nextStop === 'timer' ? 60000 : nextStop === 'End' ? 40000 : 70000;
@@ -147,16 +152,16 @@ describe.each([
     );
   });
 
-  test('untimed reading keeps its existing finish-time duration and omits WPM', () => {
+  test('untimed reading uses its capture-mode finish time and omits WPM', () => {
     const { screen, onComplete } = startReading();
     act(() => jest.advanceTimersByTime(120000));
     expect(screen.queryByText('Last item attempted')).toBeNull();
     expect(onComplete).not.toHaveBeenCalled();
     fireEvent.press(screen.getByText('End'));
     act(() => jest.advanceTimersByTime(30000));
-    fireEvent.press(screen.getByText('Confirm'));
+    fireEvent.press(screen.getByText(sequential ? 'End test' : 'Confirm'));
     const result = onComplete.mock.calls[0][0];
-    expect(result.duration_ms).toBe(150000);
+    expect(result.duration_ms).toBe(sequential ? 120000 : 150000);
     expect(result.stopped_reason).toBe('ea_ended');
     expect(result.derived.was_timed).toBe(false);
     expect(result.derived.correct_words_per_minute).toBeUndefined();

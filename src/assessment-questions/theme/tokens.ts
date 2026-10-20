@@ -16,6 +16,8 @@ export const tokens = {
     marked: '#2E7D27',
     onMarked: '#FFFFFF',
     markedSoft: '#E7F3E5',
+    error: '#B3261E',
+    errorSoft: '#FCEAE8',
     notReached: '#B3A8A8',
     scrim: 'rgba(34, 26, 27, 0.45)',
   },

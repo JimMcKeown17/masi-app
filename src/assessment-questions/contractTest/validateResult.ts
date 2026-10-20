@@ -41,7 +41,7 @@ const STOPPED_REASONS = [
   'skipped_other',
 ] as const;
 
-export function validateResult(result: unknown): ValidationVerdict {
+export function validateResult(result: unknown, opts?: { stopAt?: number }): ValidationVerdict {
   if (typeof result !== 'object' || result === null) {
     return { valid: false, errors: ['result must be an object'] };
   }
@@ -135,6 +135,27 @@ export function validateResult(result: unknown): ValidationVerdict {
     const itemCount = Array.isArray(r.items) ? r.items.length : 0;
     if (typeof p !== 'number' || !Number.isInteger(p) || p < -1 || p >= Math.max(itemCount, 1)) {
       errors.push('last_attempted_position: tracks_progress requires an integer in [-1, items.length)');
+    }
+  }
+
+  if (r.stopped_reason === 'stop_rule' && opts?.stopAt !== undefined) {
+    const stopAt = opts.stopAt;
+    const lastPosition = derivedObj?.last_attempted_position;
+    const reached = (Array.isArray(r.items) ? r.items : [])
+      .filter((item): item is Record<string, unknown> => (
+        item !== null && typeof item === 'object' &&
+        typeof item.position === 'number' && typeof lastPosition === 'number' &&
+        item.position <= lastPosition && item.metadata?.reached !== false
+      ))
+      .sort((a, b) => (a.position as number) - (b.position as number))
+      .slice(-stopAt);
+    if (
+      !Number.isInteger(stopAt) || stopAt <= 0 ||
+      reached.length !== stopAt ||
+      reached[reached.length - 1]?.position !== lastPosition ||
+      reached.some((item) => item.is_correct !== false)
+    ) {
+      errors.push(`stop_rule: the last ${stopAt} reached items ending at last_attempted_position must all be wrong`);
     }
   }
 
