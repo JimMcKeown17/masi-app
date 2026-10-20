@@ -12,6 +12,7 @@ import { useAuth } from '../../context/AuthContext';
 import { useChildren } from '../../context/ChildrenContext';
 import { LANGUAGE_LABELS, STANDALONE_TESTS } from '../../utils/assessmentRegistry';
 import { colors, spacing } from '../../constants/colors';
+import { toLocalDateString } from '../../utils/localDate';
 
 
 function formatDate(dateString) {
@@ -62,7 +63,7 @@ export default function AssessmentHistoryScreen({ navigation }) {
           ]);
           const cached = [
             ...results.filter(result => result.battery_run_id == null).map(result => ({ ...result, kind: 'result' })),
-            ...runs.map(run => ({ ...run, kind: 'run', assessment_date: run.started_at.slice(0, 10) })),
+            ...runs.map(run => ({ ...run, kind: 'run', assessment_date: toLocalDateString(run.started_at) })),
           ].sort((a, b) => b.assessment_date.localeCompare(a.assessment_date)
             || (b.created_at || '').localeCompare(a.created_at || ''));
           if (active) {

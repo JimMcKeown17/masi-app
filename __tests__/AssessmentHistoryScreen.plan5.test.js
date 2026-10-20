@@ -76,6 +76,17 @@ describe('AssessmentHistoryScreen Plan 5 behavior', () => {
     expect(navigation.navigate).not.toHaveBeenCalled();
   });
 
+  test('a run row is dated by the South African day it started, not the UTC day', async () => {
+    assessmentsRepository.getQuestionResults.mockResolvedValue([]);
+    batteryRunsRepository.getRunsForUser.mockResolvedValue([
+      { id: 'run-2', child_id: 'child-1', status: 'completed', question_count: 11, language: 'xh', started_at: '2026-10-19T22:30:00Z', sync_status: 'synced' },
+    ]);
+    const screen = render(<AssessmentHistoryScreen navigation={{ navigate: jest.fn() }} />);
+    await screen.findByText('WelaPLUS · Completed · 11 Questions');
+    expect(screen.getByText(/Oct 20, 2026/)).toBeTruthy();
+    expect(screen.queryByText(/Oct 19, 2026/)).toBeNull();
+  });
+
   beforeEach(() => {
     jest.useFakeTimers();
     jest.setSystemTime(new Date('2026-05-21T12:00:00.000Z'));
