@@ -61,6 +61,8 @@ const REFERENCE_TABLES = {
       'is_active',
       'daily_session_target',
       'daily_session_ceiling',
+      'default_battery_code',
+      'default_battery_version',
       'created_at',
       'updated_at',
       'sync_status',

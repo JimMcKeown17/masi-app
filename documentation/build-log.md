@@ -826,6 +826,41 @@ They do not establish hosted deployment or phone behavior.
 | `authenticated-profile-one-row` | The EA's own `u.*` profile SELECT with school and job-title LEFT JOINs returns one row. |
 | `authenticated-profile-organization` | That full profile includes the expected `organization_id`. |
 
+### 2026-10-20 — Assessment Results Plan 1, Task 7: SQLite v15
+
+Task 7 only, in `feat/ar-sqlite`. Migration `15 / assessment_results` clears local practice
+`assessment_items`, `assessments`, and only their `sync_outbox` rows, before adding result
+columns, `battery_runs`, the two indexes, and programme battery defaults. Other queued work
+and `letter_mastery` remain intact. `battery_runs` is created before adding the result FK.
+`ALTER TABLE assessments ADD COLUMN battery_run_id TEXT REFERENCES battery_runs(id) ON DELETE
+RESTRICT` worked in better-sqlite3; no assessments rebuild was needed. Run class IDs remain
+plain text; child deletion is restricted, and `deleteIfNoHistory` returns false for a pending
+run with no Questions. The programme reference allowlist retains both default battery fields.
+
+The Task 6 server migration is absent from this checkout. Run status and completion checks follow
+the plan; purpose/window checks follow the existing local assessments rule. Only latest-version
+assertions were bumped in four existing test files, with v15 appended to the debug-dump migration
+ledger expectation. Historical migration-14 assertions remain unchanged. Tasks 8/9, sync
+declarations, the sync-contract test, and mastery conversion are outside this change.
+
+Every command below used `PATH=$HOME/.nvm/versions/node/v20.19.4/bin:$PATH`.
+
+| Command/check | Result | Evidence |
+| --- | --- | --- |
+| `npx jest __tests__/migrations.assessmentResults.test.js` — tests first | RED: 1 suite / 12 tests failed | First run also exposed two test-fixture mistakes: duplicating the trigger-created baseline window and calling nonexistent `getById`. Corrected to the existing window and public `getAll`, then reran before implementation: still 12 failures, now on retained old data, version 14, missing battery table, and dropped programme fields. |
+| Same command after migration only | 10 passed / 2 failed | The two repository behaviors remained RED: child deletion rejected with an FK error instead of resolving false; programme defaults read back as null. |
+| Same command after the two repository changes | PASS: 1 suite / 12 tests | Real SQLite verifies selective cleanup, unchanged other work/mastery, empty `foreign_key_check`, duplicate run-Question rejection and standalone null-run allowance, class absence, FK restrictions, `started_here`, status/completion and purpose/window checks, zero-Question history protection, version 15, and programme default round-trip. |
+| `npx jest __tests__/migrations __tests__/schemaMigrations.test.js __tests__/captureModeMigration.test.js __tests__/migrationsForeignKeysOff.test.js` | PASS: 4 suites / 21 tests | Existing migration and FK posture regressions remain green. |
+| `npx jest $(rg -l CURRENT_SCHEMA_VERSION __tests__) __tests__/outboxOwnerMigration.test.js __tests__/timeEntryLocationMigration.test.js __tests__/rowVersionLocal.test.js` | PASS: 16 suites / 208 tests | Includes newer-schema guards and the four updated latest-version expectations. |
+| `npx jest 2>&1 \| tee /tmp/masi-task7-full-jest.log \| tail -30` with `pipefail` | 348 suites passed / 2 failed; 3,810 tests passed / 3 failed | Two expected `syncContractCompleteness` failures: column classification stops at `assessments.question_code` with count 0 rather than 1, and `PUSH_ORDER` omits `battery_runs`. Additional failure: `LetterTrackerBottomSheet` / `shows existing, new and removed letters with the live count, legend and Done` exceeded its existing 5,000 ms timeout. |
+| `npx jest __tests__/LetterTrackerBottomSheet.test.js` | PASS: 1 suite / 7 tests | The timed-out case passed unchanged in 207 ms. No timeout, assertion, UI, or unrelated production-code change. |
+| `npx jest 2>&1 \| tee /tmp/masi-task7-full-jest-rerun.log \| tail -30` with `pipefail` | 349 suites passed / 1 expected failure; 3,809 tests passed / 2 expected failures | Only `syncContractCompleteness.test.js` failed: `every PUSH_ORDER table column is synced, intentionally-unsynced, or local-only (exactly one)` at `assessments.question_code` (count 0, expected 1), and `PUSH_ORDER contains every locally-written synced table (no pushable table omitted)` because `battery_runs` is absent. Every other suite passed, including the unchanged tracker suite. Exit 1 is the Task 7 checkpoint exception. |
+| `npm run test:types` | PASS, exit 0 | `tsc --noEmit -p tsconfig.assessment-questions.json`. |
+| `git diff --check`; read-only scope/index/branch assertions | PASS | Exactly nine intended files: three production files, the new Task 7 test, four existing version-expectation tests, and this required clear/verification record. Empty index; branch remains `feat/ar-sqlite`; changes left uncommitted. |
+
+Local better-sqlite3/Jest evidence only. No hosted data, migrations, device checks, or builds
+were run. The Task 9 sync classification checkpoint remains deliberately open.
+
 ---
 
 ## Decision Register
