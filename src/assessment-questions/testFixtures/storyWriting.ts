@@ -6,6 +6,7 @@ export const FIXTURE_STORY_WRITING_EN: ItemSet<StoryWritingRubricItemSet> = {
   question_code: 'wela_plus_story_writing',
   question_version: 'fixture',
   language: 'en',
+  score_range: { min: 0, max: 4 },
   picture: {
     source: null,
     alt: 'A child playing under a tree on a sunny day.',

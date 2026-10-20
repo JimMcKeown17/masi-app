@@ -79,6 +79,12 @@ export function LetterSoundsQuestion(props: QuestionProps) {
   }, [isMarked]);
   const hasFinishedRef = useRef(false);
   const startTimeMsRef = useRef<number | null>(null);
+  const stopTimeMsRef = useRef<number | null>(null);
+
+  const getDeadlineMs = useCallback(() => {
+    if (startTimeMsRef.current === null || durationSec === undefined) return null;
+    return startTimeMsRef.current + durationSec * 1000;
+  }, [durationSec]);
 
   const letters = effectiveItemSet.letters;
   const columns = effectiveItemSet.columns;
@@ -111,7 +117,7 @@ export function LetterSoundsQuestion(props: QuestionProps) {
         duration_ms:
           startTimeMsRef.current === null
             ? 0
-            : Date.now() - startTimeMsRef.current,
+            : (stopTimeMsRef.current ?? Date.now()) - startTimeMsRef.current,
         stopped_reason: stoppedReason,
         items,
         derived: {
@@ -141,20 +147,19 @@ export function LetterSoundsQuestion(props: QuestionProps) {
     if (startTimeMsRef.current === null) {
       startTimeMsRef.current = Date.now();
     }
-    if (durationSec === undefined) return undefined;
+    const deadlineMs = getDeadlineMs();
+    if (deadlineMs === null) return undefined;
     const interval = setInterval(() => {
-      const elapsed =
-        startTimeMsRef.current === null
-          ? 0
-          : Date.now() - startTimeMsRef.current;
-      if (elapsed >= durationSec * 1000) {
+      if (Date.now() >= deadlineMs) {
         clearInterval(interval);
+        // Reading ends at the deadline, even if this callback runs late.
+        stopTimeMsRef.current = deadlineMs;
         setMarkReason('timer');
         setPhase('mark-last');
       }
     }, 250);
     return () => clearInterval(interval);
-  }, [phase, durationSec]);
+  }, [phase, getDeadlineMs]);
 
   const handleToggle = useCallback(
     (idx: number, letter: string) => {
@@ -218,7 +223,12 @@ export function LetterSoundsQuestion(props: QuestionProps) {
         defaultIndex={highestMarkedIndex()}
         onConfirm={(idx) => finish(markReason, idx)}
         onCancel={
-          markReason === 'ea_ended' ? () => setPhase('active') : undefined
+          markReason === 'ea_ended'
+            ? () => {
+                stopTimeMsRef.current = null;
+                setPhase('active');
+              }
+            : undefined
         }
       />
     );
@@ -272,7 +282,14 @@ export function LetterSoundsQuestion(props: QuestionProps) {
         <Pressable
           accessibilityRole="button"
           onPress={() => {
-            setMarkReason('ea_ended');
+            const nowMs = Date.now();
+            const deadlineMs = getDeadlineMs();
+            const deadlineReached = deadlineMs !== null && nowMs >= deadlineMs;
+            // Resolve expiry here too: End can arrive before a delayed timer callback.
+            if (deadlineMs !== null) {
+              stopTimeMsRef.current = deadlineReached ? deadlineMs : nowMs;
+            }
+            setMarkReason(deadlineReached ? 'timer' : 'ea_ended');
             setPhase('mark-last');
           }}
         >

@@ -14,7 +14,7 @@ const NAMES = [
   'leaf',
   'pot',
   'table',
-  'x (figure behind sign)',
+  'x-ray',
   'cat',
   'hat',
   'moon',

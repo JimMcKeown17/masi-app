@@ -27,7 +27,7 @@ test.each([
   ['WELA_PLUS_READ_WORDS_EN', count.words, 40], ['WELA_PLUS_READ_WORDS_XH', count.words, 40],
   ['WELA_PLUS_READ_SENTENCES_EN', count.sentenceWords, 20], ['WELA_PLUS_READ_SENTENCES_XH', count.sentenceWords, 11],
   ['WELA_PLUS_READ_PASSAGE_EN', count.words, 80], ['WELA_PLUS_READ_PASSAGE_XH', count.words, 45],
-  ['WELA_PLUS_WRITE_CVCS_EN', count.cvcLetters, 12], ['WELA_PLUS_WRITE_CVCS_XH', count.cvcLetters, 16],
+  ['WELA_PLUS_WRITE_CVCS_EN', count.cvcLetters, 12], ['WELA_PLUS_WRITE_CVCS_XH', count.cvcLetters, 18],
   ['WELA_PLUS_WRITE_SENTENCES_DICTATION_EN', count.sentenceWords, 15], ['WELA_PLUS_WRITE_SENTENCES_DICTATION_XH', count.sentenceWords, 9],
 ])('%s max score', (name, fn, expected) => {
   expect(fn((S as any)[name])).toBe(expected);
@@ -43,6 +43,32 @@ test('fixed-size Questions', () => {
     expect(lw.prompts.map((p: any) => p.expected_letter).join('')).toBe('afkoswbglptxchmquydinrvzej');
     expect(lw.columns).toBe(6);
   }
+});
+
+test.each([S.WELA_PLUS_STORY_WRITING_EN, S.WELA_PLUS_STORY_WRITING_XH])(
+  '$item_set_id uses the interim 1–4 rubric with empty anchors', (itemSet) => {
+    expect(itemSet.score_range).toEqual({ min: 1, max: 4 });
+    expect(itemSet.dimensions.every((d) => d.anchors.length === 0)).toBe(true);
+  },
+);
+
+test('isiXhosa Q9 scores every letter of each full word in numbered order', () => {
+  expect(S.WELA_PLUS_WRITE_CVCS_XH.words.map((w) => [w.word, w.letters])).toEqual([
+    ['lala', ['l', 'a', 'l', 'a']],
+    ['sela', ['s', 'e', 'l', 'a']],
+    ['imali', ['i', 'm', 'a', 'l', 'i']],
+    ['idolo', ['i', 'd', 'o', 'l', 'o']],
+  ]);
+});
+
+test('isiXhosa Q5 picture names match the scoring grid, including the clock for x', () => {
+  expect(S.WELA_PLUS_LETTER_WRITING_XH.prompts.map((p) => p.picture.alt)).toEqual([
+    'i-apile (apple)', 'ufudo (tortoise)', 'ikati (cat)', 'i-orenji (orange)', 'isonka (bread)', 'iwatchi (watch)',
+    'ubisi (milk)', 'drum', 'ilanga (sun)', 'i-pere (pear)', 'itafile (table)', 'ixesha (clock)',
+    'icephe (spoon)', 'ihagu (pig)', 'imoto (car)', 'iqanda (egg)', 'umthi (tree)', 'iyeza (medicine)',
+    'idada (duck)', 'inja (dog)', 'nest', 'iroboti (traffic light)', 'ivani (van)', 'axe',
+    'i-emele (bucket)', 'ijug (jug)',
+  ]);
 });
 
 test('card layouts', () => {
@@ -63,13 +89,11 @@ test('language="xh" without an override renders isiXhosa content', () => {
   expect(r.getByLabelText('inja, idle')).toBeTruthy();
 });
 
-test('pending content is declared', () => {
-  const fields = CONTENT_PENDING.map((p) => `${p.item_set_id}#${p.field}`);
-  expect(fields).toEqual(expect.arrayContaining([
-    'wela_plus_letter_writing@2024.1.en#prompts.x,q',
-    'wela_plus_letter_writing@2024.1.xh#prompts.picture.alt',
-    'wela_plus_write_cvcs@2024.1.xh#words.letters',
-    'wela_plus_story_writing@2024.1.en#dimensions.anchors',
-    'wela_plus_story_writing@2024.1.xh#dimensions.anchors',
-  ]));
+test('pending content lists exactly the remaining picture, rubric, and language-review work', () => {
+  expect(CONTENT_PENDING).toEqual([
+    { item_set_id: 'wela_plus_letter_writing@2024.1.xh', field: 'prompts.picture', note: 'Masi team to choose better pictures for g (drum), n (nest) and z (axe) and supply their isiXhosa names; draw new clock artwork for x (ixesha).' },
+    { item_set_id: 'wela_plus_story_writing@2024.1.en', field: 'dimensions.anchors', note: 'Interim scale: score each dimension 1–4 with no anchor descriptions. The rubric is expected to be redesigned.' },
+    { item_set_id: 'wela_plus_story_writing@2024.1.xh', field: 'dimensions.anchors', note: 'Interim scale: score each dimension 1–4 with no anchor descriptions; isiXhosa labels still needed. The rubric is expected to be redesigned.' },
+    { item_set_id: 'all@2024.1.xh', field: 'strings', note: 'First-language review of every isiXhosa string.' },
+  ]);
 });
