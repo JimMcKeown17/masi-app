@@ -468,6 +468,9 @@ every migration. Every case from spec §15's `submit_assessment` and `save_batte
 - no programme assignment → `42501`;
 - another EA's run → `42501`;
 - a run whose child differs → `42501`;
+- **a run started in class A**, where the child then exits A and joins B, is accepted, because the
+  class is checked against the membership that held at `started_at`. A class the child was never
+  in at `started_at` → `42501`;
 - a Question after its run completed → accepted;
 - a duplicate run Question with a different id → `23505`;
 - direct INSERT, UPDATE and DELETE on both tables, and on `battery_runs`, as `authenticated` →
@@ -839,8 +842,13 @@ rejects that, rebuild `assessments` (the table is empty after step 1) and say so
   - On failure, it keeps the result in state and shows a bottom sheet:
     *"Couldn't save — try again"*, with **Try again**, which re-calls with the same id.
   - A second `onComplete` or double tap while saving is ignored.
-- **Leaving early.** Leaving before `onComplete` asks for confirmation in a bottom sheet (today's
-  "End Assessment?" behaviour) and discards the result.
+- **Leaving early: the guard lasts until the save commits.** The `beforeRemove` guard stays active
+  from the start of the test, through `onComplete` and while saving, and after a failed save. It
+  is lifted only when `saveQuestionResult` resolves, or after the EA confirms **Discard** in a
+  bottom sheet. Before completion the sheet reads "End the test?"; after completion,
+  "This result isn't saved yet."
+  - This ports `useAssessmentSession`'s existing protection (lines 118–129), and its regression
+    `__tests__/useAssessmentSession.test.js:92–105` moves to `StandaloneTestScreen.test.js`.
 - **Results screen.** `AssessmentResultsScreen` reads the saved result with
   `getQuestionResults({ … })` by id. It shows the raw score as the hero (`score` of
   `total_items`), with "Stopped: 10 in a row wrong" when `stopped_reason === 'stop_rule'`. **Try
@@ -857,6 +865,9 @@ rejects that, rebuild `assessments` (the table is empty after step 1) and say so
     - one `saveQuestionResult` call per completion, even when `onComplete` fires twice;
     - a save rejection shows the retry sheet, and the retry uses the same `assessmentId`
       (Review Focus 5);
+    - after a failed save, dismissing the retry sheet and pressing back shows the "isn't saved
+      yet" sheet. The screen stays until Discard is confirmed, and no navigation happens without
+      it;
     - success replaces the route to `AssessmentResults`.
   - **Child select:**
     - a class with `home_language: 'Afrikaans'` opens the picker with options exactly

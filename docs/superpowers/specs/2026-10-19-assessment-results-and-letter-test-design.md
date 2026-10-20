@@ -443,8 +443,11 @@ rule, or that the `question_code` is known. It is type-agnostic by design (secti
 public.save_battery_run(p_run jsonb) returns text   -- 'inserted' | 'updated' | 'unchanged'
 ```
 
-**A new run.** Insert it after the same caller, authority and programme checks as 8.1, plus
-"the class belongs to the child's current class membership" if `class_id` is set.
+**A new run.** Insert it after the same caller, authority and programme checks as 8.1. If
+`class_id` is set, the child must have had a `child_class_memberships` row for that class whose
+interval contains `started_at`, whether or not it has since ended. It is checked **at capture
+time, not upload time**: a run recorded offline in class A stays valid after the child moves to
+class B and that move uploads first (Codex final review).
 
 **An existing run.**
 - It must be owned by the caller and its identity columns must match. These are `user_id`,
