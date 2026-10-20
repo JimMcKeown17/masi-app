@@ -1,14 +1,14 @@
 import React from 'react';
 import { StyleSheet } from 'react-native';
-import { render, fireEvent, act } from '@testing-library/react-native';
+import { render, fireEvent, act, within } from '@testing-library/react-native';
 import { LetterSoundsQuestion } from '..';
 import { FIXTURE_LETTER_SOUNDS_EN } from '../../../testFixtures';
 import { tokens } from '../../../theme/tokens';
 
 const SET = {
-  item_set_id: 'wela_plus_letter_sounds@fixture.en', question_code: 'wela_plus_letter_sounds',
-  question_version: 'fixture', language: 'en', columns: 4,
-  letters: ['a', 'n', 'i', 't', 'm', 's', 'p', 'e'],
+  item_set_id: 'letter_sounds@fixture.en', question_code: 'letter_sounds',
+  question_version: 'fixture', language: 'en', stop_rule: null,
+  rows: [['a', 'n', 'i', 't'], ['m', 's', 'p', 'e']],
 };
 
 function startQ(onComplete = jest.fn(), durationSec?: number) {
@@ -119,7 +119,7 @@ describe('LetterSoundsQuestion — timer', () => {
     expect(result.stopped_reason).toBe('timer');
     expect(result.derived.was_timed).toBe(true);
     expect(typeof result.derived.last_attempted_position).toBe('number');
-    expect(result.question_code).toBe('wela_plus_letter_sounds');
+    expect(result.question_code).toBe('letter_sounds');
     expect(result.language).toBe('en');
   });
 
@@ -189,11 +189,37 @@ describe('LetterSoundsQuestion — End button and finalization', () => {
   });
 });
 
-test('renders every letter at once in rows of `columns`, no Next/Prev', () => {
+test('renders every letter at once in item-set rows, no Next/Prev', () => {
   const { r } = startQ();
-  for (const l of SET.letters) expect(r.getAllByText(l).length).toBeGreaterThan(0);
+  for (const l of SET.rows.flat()) expect(r.getAllByText(l).length).toBeGreaterThan(0);
   expect(r.queryByText('Next')).toBeNull();
   expect(r.getAllByTestId(/^letter-row-/)).toHaveLength(2);
+});
+
+test('unequal item-set rows preserve visual rows and flattened marking positions', () => {
+  const onComplete = jest.fn();
+  const r = render(
+    <LetterSoundsQuestion
+      language="en"
+      itemSet={{ ...SET, rows: [['a', 'b'], ['c', 'a', 'd'], ['e']] }}
+      onComplete={onComplete}
+    />,
+  );
+  fireEvent.press(r.getByText('Start'));
+  const rows = r.getAllByTestId(/^letter-row-/);
+  expect(rows).toHaveLength(3);
+  expect(rows.map((row) => within(row).getAllByRole('button').length)).toEqual([2, 3, 1]);
+  fireEvent.press(within(rows[1]).getByLabelText('a, idle'));
+  expect(within(rows[0]).getByLabelText('a, idle')).toBeTruthy();
+  fireEvent.press(r.getByText('End'));
+  fireEvent.press(r.getByLabelText('d, item 5'));
+  fireEvent.press(r.getByText('Confirm'));
+  const result = onComplete.mock.calls[0][0];
+  expect(result.items.map((item: { prompt: string }) => item.prompt)).toEqual(['a', 'b', 'c', 'a', 'd', 'e']);
+  expect(result.items[0].is_correct).toBe(false);
+  expect(result.items[3]).toMatchObject({ position: 3, prompt: 'a', is_correct: true });
+  expect(result.derived.total_correct).toBe(1);
+  expect(result.derived.total_attempted).toBe(5);
 });
 
 test('End opens the marker; picking item 5 scores positions 0..4 only', () => {
@@ -379,8 +405,8 @@ describe('LetterSoundsQuestion — itemSet override validation', () => {
   test('falls back to bundled default when override lacks item_set_id', () => {
     const onComplete = jest.fn();
     const incomplete = {
-      letters: ['fixture-only-invalid-letter'],
-      columns: 1,
+      rows: [['fixture-only-invalid-letter']],
+      stop_rule: null,
     };
     const { getByText, queryByText } = render(
       <LetterSoundsQuestion
@@ -406,8 +432,8 @@ describe('LetterSoundsQuestion — itemSet override validation', () => {
       question_code: 'custom',
       language: 'en',
       question_version: '1.0',
-      letters: ['x', 'y'],
-      columns: 5,
+      rows: [['x', 'y']],
+      stop_rule: null,
     };
     const { getByText } = render(
       <LetterSoundsQuestion
@@ -443,6 +469,6 @@ describe('LetterSoundsQuestion — fixture item set hygiene', () => {
     fireEvent.press(getByText('Reached the end'));
 
     const { item_set_id } = onComplete.mock.calls[0][0];
-    expect(item_set_id).toBe('wela_plus_letter_sounds@fixture.en');
+    expect(item_set_id).toBe('letter_sounds@fixture.en');
   });
 });

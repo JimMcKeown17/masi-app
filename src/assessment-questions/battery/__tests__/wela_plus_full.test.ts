@@ -6,17 +6,18 @@ test('2024.1 battery shape', () => {
   expect(B.languages).toEqual(['en', 'xh']);
   expect(B.prerequisites).toEqual({});
   expect(B.questions.map((q) => q.question_code)).toEqual([
-    'wela_plus_letter_sounds', 'wela_plus_listen_and_answer_story', 'wela_plus_first_sound',
+    'letter_sounds', 'wela_plus_listen_and_answer_story', 'wela_plus_first_sound',
     'wela_plus_phoneme_blend', 'wela_plus_letter_writing', 'wela_plus_read_words',
     'wela_plus_read_sentences', 'wela_plus_read_passage', 'wela_plus_write_cvcs',
     'wela_plus_write_sentences_dictation', 'wela_plus_story_writing',
   ]);
-  expect(B.questions.every((q) => q.question_version === '2024.1')).toBe(true);
+  expect(B.questions[0].question_version).toBe('2026.1');
+  expect(B.questions.slice(1).every((q) => q.question_version === '2024.1')).toBe(true);
   expect(B.questions.filter((q) => q.paper_marked).map((q) => q.question_code)).toEqual([
     'wela_plus_letter_writing', 'wela_plus_write_cvcs', 'wela_plus_write_sentences_dictation', 'wela_plus_story_writing',
   ]);
   expect(B.questions.filter((q) => q.durationSec !== undefined).map((q) => [q.question_code, q.durationSec])).toEqual([
-    ['wela_plus_letter_sounds', 60], ['wela_plus_read_words', 60], ['wela_plus_read_passage', 60],
+    ['letter_sounds', 60], ['wela_plus_read_words', 60], ['wela_plus_read_passage', 60],
   ]);
 });
 
@@ -31,7 +32,7 @@ test('Q6 and Q8 instructions include the one-minute stop and passage marker', ()
 
 test('materials per question match the printout pack (spec 9)', () => {
   const m = Object.fromEntries(B.questions.map((q) => [q.question_code, q.materials]));
-  expect(m.wela_plus_letter_sounds).toEqual({ item: 'reading_card', side: 'A' });
+  expect(m.letter_sounds).toEqual({ item: 'reading_card', side: 'A' });
   expect(m.wela_plus_read_words).toEqual({ item: 'reading_card', side: 'B' });
   expect(m.wela_plus_read_sentences).toEqual({ item: 'reading_card', side: 'B' });
   expect(m.wela_plus_read_passage).toEqual({ item: 'reading_card', side: 'C' });

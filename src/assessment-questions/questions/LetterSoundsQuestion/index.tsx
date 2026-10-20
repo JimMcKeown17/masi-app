@@ -8,13 +8,12 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { View, Text, Pressable, StyleSheet } from 'react-native';
 import type { QuestionProps } from '../../types/QuestionProps';
-import type { ItemSetMeta } from '../../types/ItemSet';
 import { resolveItemSet } from '../../itemsets/resolveItemSet';
 import { MissingItemSet } from '../../progress/MissingItemSet';
 import type { ResultItem, StoppedReason } from '../../types/Result';
 import type { LetterSoundsItemSet } from './types';
-import { WELA_PLUS_LETTER_SOUNDS_EN } from '../../itemsets/wela_plus_letter_sounds.en';
-import { WELA_PLUS_LETTER_SOUNDS_XH } from '../../itemsets/wela_plus_letter_sounds.xh';
+import { LETTER_SOUNDS_2026_1_EN } from '../../itemsets/letter_sounds@2026.1.en';
+import { LETTER_SOUNDS_2026_1_XH } from '../../itemsets/letter_sounds@2026.1.xh';
 import { useToggleMark } from '../../hooks/useToggleMark';
 import { tokens } from '../../theme/tokens';
 import { SkipReasonPicker } from '../../skip/SkipReasonPicker';
@@ -25,14 +24,18 @@ import { LastAttemptedSheet } from '../../progress/LastAttemptedSheet';
 type Phase = 'intro' | 'active' | 'mark-last' | 'skip-picker' | 'finished';
 type MarkReason = 'ea_ended' | 'timer';
 
-type FullLetterSoundsItemSet = LetterSoundsItemSet & ItemSetMeta;
-
-function isFullItemSet(value: unknown): value is FullLetterSoundsItemSet {
+function isFullItemSet(value: unknown): value is LetterSoundsItemSet {
   if (!value || typeof value !== 'object') return false;
   const o = value as Record<string, unknown>;
   return (
-    Array.isArray(o.letters) &&
-    typeof o.columns === 'number' &&
+    Array.isArray(o.rows) &&
+    o.rows.length > 0 &&
+    o.rows.every((row) =>
+      Array.isArray(row) && row.length > 0 &&
+      row.every((letter) => typeof letter === 'string'),
+    ) &&
+    (o.stop_rule === null ||
+      (typeof o.stop_rule === 'object' && !Array.isArray(o.stop_rule))) &&
     typeof o.item_set_id === 'string' &&
     typeof o.question_version === 'string' &&
     typeof o.question_code === 'string' &&
@@ -44,18 +47,11 @@ function keyFor(idx: number, letter: string): string {
   return `${idx}:${letter}`;
 }
 
-function chunk<T>(items: T[], size: number): T[][] {
-  return Array.from(
-    { length: Math.ceil(items.length / size) },
-    (_, row) => items.slice(row * size, (row + 1) * size),
-  );
-}
-
 export function LetterSoundsQuestion(props: QuestionProps) {
   const itemSet = resolveItemSet(
     props.language,
     props.itemSet,
-    { en: WELA_PLUS_LETTER_SOUNDS_EN, xh: WELA_PLUS_LETTER_SOUNDS_XH },
+    { en: LETTER_SOUNDS_2026_1_EN, xh: LETTER_SOUNDS_2026_1_XH },
     isFullItemSet,
   );
   if (!itemSet) return <MissingItemSet language={props.language} />;
@@ -63,7 +59,7 @@ export function LetterSoundsQuestion(props: QuestionProps) {
 }
 
 function LetterSoundsQuestionContent(
-  props: QuestionProps & { itemSet: FullLetterSoundsItemSet },
+  props: QuestionProps & { itemSet: LetterSoundsItemSet },
 ) {
   const {
     language,
@@ -90,10 +86,11 @@ function LetterSoundsQuestionContent(
     return startTimeMsRef.current + durationSec * 1000;
   }, [durationSec]);
 
-  const letters = effectiveItemSet.letters;
-  const columns = effectiveItemSet.columns;
-  const letterRows = chunk(letters, columns);
-  const tileBasis: `${number}%` = `${100 / columns}%`;
+  const letterRows = effectiveItemSet.rows;
+  const letters = letterRows.flat();
+  const rowStarts = letterRows.map((_, rowIndex) =>
+    letterRows.slice(0, rowIndex).reduce((offset, row) => offset + row.length, 0),
+  );
 
   const finish = useCallback(
     (stoppedReason: StoppedReason, lastAttempted: number = NO_ATTEMPT) => {
@@ -244,7 +241,8 @@ function LetterSoundsQuestionContent(
         {letterRows.map((row, r) => (
           <View key={r} testID={`letter-row-${r}`} style={styles.row}>
             {row.map((letter, i) => {
-              const idx = r * columns + i;
+              const idx = rowStarts[r] + i;
+              const tileBasis: `${number}%` = `${100 / row.length}%`;
               const key = keyFor(idx, letter);
               const marked = isMarked(key);
               const labelState = marked ? 'correct' : 'idle';

@@ -26,7 +26,7 @@ describe.each([
     itemSet: {
       item_set_id: 'letter-duration@fixture.en', question_version: 'fixture',
       question_code: 'letter-duration', language: 'en',
-      letters: ['a', 'b', 'c'], columns: 3,
+      rows: [['a', 'b', 'c']], stop_rule: null,
     },
     labels: ['a', 'b', 'c'], reportsWpm: false,
   },

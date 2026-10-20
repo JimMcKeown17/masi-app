@@ -10,6 +10,15 @@ export { WriteCvcsQuestion } from './questions/WriteCvcsQuestion';
 export { WriteSentencesFromDictationQuestion } from './questions/WriteSentencesFromDictationQuestion';
 export { StoryWritingRubricQuestion } from './questions/StoryWritingRubricQuestion';
 export type { QuestionProps } from './types/QuestionProps';
+export type { LetterSoundsItemSet } from './questions/LetterSoundsQuestion/types';
+export type { StopRule } from './progress/stepByStep';
+export {
+  LETTER_SOUNDS_2026_1_EN,
+  LETTER_SOUNDS_2026_1_XH,
+  WORD_READING_2026_1_EN,
+  WORD_READING_2026_1_XH,
+  CURRENT_ITEM_SETS,
+} from './itemsets';
 export type { Result, ResultItem, ResultDerived, StoppedReason } from './types/Result';
 export { tokens } from './theme/tokens';
 export { evaluateBatteryState } from './battery/evaluateBatteryState';
