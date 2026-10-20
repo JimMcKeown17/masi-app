@@ -863,6 +863,107 @@ were run. The Task 9 sync classification checkpoint remains deliberately open.
 
 ---
 
+### 2026-10-20 — Assessment Results Plan 1, Tasks 1–12
+
+Task 13 documentation reconciliation against committed HEAD **`c7cef5f`** on
+`feat/assessment-results` (`git log origin/main..HEAD`). The phone cutover is complete in source.
+The [plan](../docs/superpowers/plans/2026-10-20-assessment-results-plan-1.md),
+[design](../docs/superpowers/specs/2026-10-19-assessment-results-and-letter-test-design.md),
+[ADR-0009](../docs/adr/0009-assessment-results-one-write-call-complete-families.md) and
+[contract map](./rls-sync-contract-map.md) define the boundary. The preceding Task 7 entry remains
+its original branch-time record: the server migration is now merged, and the Tasks 7–9 shared
+checkpoint has passed. Its v15 selective local practice-data clear is recorded there and is not
+repeated here. Mastery confirmation conversion is Plan 2, not part of v15.
+
+Every local Jest/type-check command below uses
+`PATH=$HOME/.nvm/versions/node/v20.19.4/bin:$PATH`. **Re-verified at HEAD** means executed during
+this docs task, not a recovered historical checkpoint. Historical checkpoint counts and controller
+PostgreSQL/preflight results below were supplied by the controller; no PostgreSQL or hosted action
+was run during this reconciliation. Early-task historical full-suite counts were not retained here
+and are not inferred from today's counts.
+
+| Task | Command/check | Result | Implementation and review evidence |
+| --- | --- | --- | --- |
+| 1 | `npx jest src/assessment-questions/__tests__/itemSetResolution.test.tsx --json --outputFile=/tmp/task13-task1.json` | Re-verified at HEAD: **1 suite / 12 tests PASS**, 0 failures, exit 0 | Versioned item-set metadata and current-set resolution; missing language/set does not substitute English. |
+| 2 | `npx jest src/assessment-questions/progress/__tests__/stepByStep.test.ts --json --outputFile=/tmp/task13-task2.json` | Re-verified at HEAD: **1 suite / 10 tests PASS**, 0 failures, exit 0 | Pure step-by-step reducer and ten-wrong stop. `maxConsecutiveWrong` is recomputed from kept marks on undo/back, so undoing the stop does not save a stale maximum of ten. |
+| 3 | `npx jest src/assessment-questions/__tests__/letterTestContent.test.ts --json --outputFile=/tmp/task13-task3.json` | Re-verified at HEAD: **1 suite / 18 tests PASS**, 0 failures, exit 0 | Interim `letter_sounds@2026.1` EN/XH rows, shared with WelaPLUS Q1; standalone `word_reading@2026.1` sets and content-pending entries. |
+| 4 | `npx jest src/assessment-questions/questions/LetterSoundsQuestion/__tests__/LetterSoundsQuestion.test.tsx --json --outputFile=/tmp/task13-task4.json` | Re-verified at HEAD: **1 suite / 27 tests PASS**, 0 failures, exit 0 | Letter Sounds consumes item-set rows and stop-rule data; stop card, timer freeze, undo, stored reached/row metadata and raw result emission. |
+| 5 | `npx jest src/assessment-questions/questions/ReadWordsQuestion/__tests__/ReadWordsQuestion.stepByStep.test.tsx --json --outputFile=/tmp/task13-task5.json` | Re-verified at HEAD: **1 suite / 17 tests PASS**, 0 failures, exit 0 | The shared `progress/SequentialCapture.tsx` serves both letter and word components. Standalone word capture is sequential; its current sets do not configure a stop rule. |
+| 6 | Controller: `npm run verify:assessment-results:postgres`; existing `verify:history-authorization:postgres`, `verify:upload-contract:postgres`, `verify:organisation-label:postgres`, `verify:support-incident:postgres`, `verify:ea-access:postgres` harnesses (script entry points; exact historical launch arguments not retained) | Controller-reported disposable PG17 at port **55432**: new harness **53/53 cases GREEN**, all five existing harnesses PASS; not rerun here | Exclusive `submit_assessment` / `save_battery_run`, shape/identity checks and server timestamps. Every family, including skipped, requires `question_version`, `item_set_id`, `stopped_reason` and object `derived`. `battery_runs.user_id` references `auth.users` with `ON DELETE RESTRICT`. Read-only hosted preflight found no “Core Literacy R–3” row: `code = literacy` is the combined Literacy programme (no R–3/ECD split), so the migration attaches `wela_plus_full` / `2024.1` to that programme. The shell token was expired; preflight used the stored CLI login with `env -u SUPABASE_ACCESS_TOKEN`. **No hosted migration applied yet.** |
+| 7 | `npx jest __tests__/migrations.assessmentResults.test.js`; see preceding Task 7 entry for the complete command ledger | Historical focused **1 suite / 12 tests PASS**; historical `npm run test:types` PASS. Shared full-suite checkpoint closed at Task 9 | SQLite v15, result/run columns, restrictive run deletion, programme defaults and `started_here`. The exact clear and one observed tracker timeout/rerun are already logged immediately above. The two temporary sync-contract failures were resolved in Task 9. |
+| 8 | `npx jest __tests__/assessmentsRepository.questionResults.test.js __tests__/batteryRunsRepository.test.js --json --outputFile=/tmp/task13-task8.json` | Re-verified at HEAD: **2 suites / 210 tests PASS**, 0 failures, exit 0 | `saveQuestionResult` runs `assertSubmitShape` inside the save transaction before any family is enqueued. One parent/items outbox payload, duplicate guards and stored-item readers; `countResults` excludes skipped results. Run writes coalesce into their insert until acknowledged; unfinished-run queries return only `started_here = 1` runs. |
+| 9 | Historical checkpoint: `npx jest 2>&1 \| tail -30`; `npm run test:types` | Tasks **7–9 shared checkpoint: 358 suites / 4,125 tests PASS; tsc clean** (controller record) | One RPC and one atomic acknowledgement per family; runs precede linked Questions. `SERVER_COLUMNS` moved to `src/services/syncServerColumns.js` to avoid an import cycle. `23505` never acknowledges assessments/runs; `28000` is retriable; local shape rejection becomes terminal `22023` without network. The thirty-family grant-retry test uses `syncAll({ force: true })`, matching manual Sync. Existing-test expectation ledger summarised below. |
+| 10 | Historical checkpoint: `npx jest 2>&1 \| tail -30`; `npm run test:types` | **362 suites / 4,183 tests PASS; tsc clean** (controller record) | Code-based language/test registry; stored, case-folded item evidence includes WelaPLUS Q1 and other EAs. Review round 1 caught `LetterMasteryRankingScreen` still loading old-shape rows; it now uses `getLetterResults`. Unknown class language shows “No letter set for this class language.” with no English grid. Mastery ranking denominator remains 26; confirmations still store language labels until Plan 2. |
+| 11 | Historical checkpoint: `npx jest 2>&1 \| tail -30`; `npm run test:types` | **342 suites / 4,113 tests PASS; tsc clean** (controller record); 22 obsolete capture-stack suites deleted, 2 added | Standalone package host, language picker, result-id retry and ref-based save-once/leave guards; old capture stack removed. Explicit deviations/retained compatibility summarised below. Physical iOS swipe-back remains a device check. |
+| 12 | Historical checkpoint after review fix round 1: `npx jest 2>&1 \| tail -30`; `npm run test:types` | **344 suites / 4,158 tests PASS; tsc clean** (controller record) | History/detail/rankings/counts read typed results and stored items. Review split typed-result coverage from already-qualified count coverage, changed membership-date projection from UTC slicing to `toLocalDateString`, and removed unused `sinceDate` from `getAssessmentCountsSince`. Removed `getAssessments`, `countAssessments`, `getUnsyncedRecords`, `hydrateAssessments`, summary merging and the `__summary__` read path. Exact count/grade rules below. |
+
+**Task 9 expectation ledger.** Seven existing files changed, none deleted:
+`syncContractCompleteness.test.js`, `offlineSync.stripping.test.js`, `offlineSyncOutbox.test.js`,
+`offlineSyncAuthGate.test.js`, `bulkFinalize.test.js`, `batchFailureSemantics.test.js` and
+`syncErrorGuard.test.js`. Generic batch/fallback/auth/claim-race tests moved from independent
+`assessment_items` fixtures to `time_entries` or `session_attendees`; their failure, recovery,
+ordering, numerical-limit and race assertions were preserved. Assessment dispatch now expects one
+`submit_assessment` per family and one acknowledged outbox record, with parent and all items synced.
+Completeness still classifies every item column via the family-member list; serialization expects
+`{ p_assessment, p_items }`, filters the new fields and preserves item UUIDs. The two new family
+suites cover RPC errors, complete sends and acknowledgement rollback. This summary reconciles the
+controller's Task 9 expectation ledger; it does not describe a new test edit in Task 13.
+
+**Task 11 explicit deviations and retained compatibility.** `getQuestionResults` gained the minimal
+`assessmentId` filter for result/detail lookup. `getLetterAssessmentRanking` became
+`getLetterScoreRanking` to satisfy the retired-symbol grep; Task 12 then migrated its data shape.
+`usePreventRemove` supplements the required `allowLeave` ref, and navigation waits for the committed
+guard release; a real navigation-stack regression covers native prevention registration. Failed-save
+Discard and double-finish regressions were ported before the old hook tests were deleted; the
+pending-save Discard race remains covered. Retry/leave sheets do not overlap and language drafts
+are isolated by child. `saveAssessment`/`buildSummary` and the capture-only `deviceSettings` module
+were removed, as were orphan capture helpers after importer checks. `captureModeMigration.test.js`
+was retained for the persisted column/CHECK/allowlist. Task 11's temporary ChildResults date alias
+and legacy summary readers were removed by Task 12. Physical iOS swipe-back has not been verified.
+
+**Task 12 count and grade rules.** Assessed means a non-skipped `LETTER_EVIDENCE_CODES` result from
+any recorder, standalone or battery, dated within the active academic year's inclusive
+`starts_on..ends_on` window. Without an active year, count nothing. **Total is the number of such
+letter-result rows for active children**, not distinct children or word tests. **Avg score** is the
+rounded mean of each active child's latest qualifying raw letter score (no percent sign).
+`getAssessmentCoverage` accepts typed results and an academic year; Home uses the explicit
+`getCoverageFromCounts` helper on repository-qualified counts, with no shape sniffing.
+`getAssessmentCountsSince` retains its name but no unused `sinceDate` parameter. Ranking grade uses
+`[local enrollment day, local exit day)` via `toLocalDateString` in **Africa/Johannesburg**; the
+move day belongs to the next class, with current-class grade as fallback. The timezone regression
+covers a UTC timestamp crossing midnight in South Africa. History shows the recorder's standalone
+rows and one read-only row per run, never separate battery-Question rows; detail uses stored items
+and the stored set id.
+
+**Known machine-load flakes.** The controller reports occasional timeouts during this build in
+`LiteracySessionForm`, `EditClassScreen`, `TimeEntriesListScreen.plan5` and `LetterTrackerBottomSheet`;
+each passed unchanged when rerun alone. Only the Task 7 tracker timeout has a specific task/run
+record in the evidence above; no additional task attribution or invented rerun count is claimed.
+Task 13's focused re-verification passed without flakes.
+
+**Task 13 documentation verification (at HEAD plus these docs).** No `__tests__/docs*` guard
+exists (`rg --files __tests__ -g 'docs*'` returned no paths), so `npm test -- __tests__/docs` was
+not run. All three requested `/usr/bin/grep -o` relative-link patterns were checked on every edited
+file: **87 link occurrences / 63 distinct source-target pairs, all target paths present**. URL
+fragments were excluded from the path-existence check. Counts by file are CONTEXT 1, ADR-0009 5,
+WelaPLUS status-note spec 2, ROADMAP 53, item-set reference 4, contract map 10 and this log 12.
+Full per-link results are retained in the Task 13 handoff ledger (`/tmp/task13-link-check.md`).
+
+`PATH=$HOME/.nvm/versions/node/v20.19.4/bin:$PATH npx jest 2>&1 | tee /tmp/task13-full-jest.log | tail -8`
+with `pipefail`: **344 suites / 4,158 tests PASS**, 0 failures, exit 0, 60.579 s. This was the only
+full-suite run in Task 13; no flakes or reruns. Focused re-verification above totals **7 suites /
+294 tests PASS**. No code or test files changed; type-check results in the task table are historical,
+not a Task 13 rerun. The older WelaPLUS spec body is unchanged beneath its dated note, and the
+existing build-log records are preserved. Changes remain uncommitted in the requested worktree.
+
+**Release boundary.** Hosted migration, practice-data wipe, EAS builds and device gates are not
+done. They remain Task 14, controller-run with Jim's yes at the time. Assessment/run history pull
+is Plan 3; mastery-confirmation re-keying and code-valued confirmation languages are Plan 2.
+The migration's source and disposable PostgreSQL results do not establish hosted application or
+physical-device behavior.
+
+---
+
 ## Decision Register
 
 | Date | Decision | Rationale | Revisit Trigger |
@@ -1015,6 +1116,9 @@ were run. The Task 9 sync classification checkpoint remains deliberately open.
 | 2026-10-19 | PR 4 receipt draws lowercase tiles and speaks capital letters. | Overview S8 overrides part 4: “Letters: M, L, N, S” is one accessible row. | Screen-reader device evidence. |
 | 2026-10-19 | PR 4 fallback pill’s spoken form has no full stop. | The summary adds punctuation once; the visible pill keeps its full stop. | Announcement copy changes. |
 | 2026-10-19 | PR 4 announcement calls getGoalCopy(goal, true). | A zero-count result must not tell an EA who just saved to clock in; the summary uses signed-in copy. | Goal-copy contract changes. |
+| 2026-10-20 | **Assessment Results Plan 1: one complete Question family, one authenticated write call, one acknowledgement** (ADR-0009). Standalone and battery evidence share `question_code`; item identity stays unchanged. | Partial uploads cannot masquerade as low scores. A single durable payload and atomic local acknowledgement make replay safe; server identity checks distinguish an accepted retry from a different family. Run headers use a separate forward-only RPC and precede linked Questions. | Submitted answers become mutable, Questions stream partial evidence, or privileged writers add post-submission evidence. Hosted apply still needs Task 14 approval. |
+| 2026-10-20 | **Assessment readers use stored items and explicit scopes.** Case-folded reached-item mastery includes WelaPLUS Q1/any recorder; assessed counts use the active academic year, Total counts qualifying result rows, Avg score averages latest raw scores, and ranking grade uses local-day membership intervals with current-class fallback. | A test's evidence must survive entry-point, item-set layout, recorder and class changes. No active year or unknown language must not silently mean all-time or English. Confirmation labels/identity remain Plan 2. | A programme needs a different business timezone, count definition, assessment scope or confirmation conflict rule. |
+
 
 ---
 
@@ -1154,6 +1258,10 @@ were run. The Task 9 sync classification checkpoint remains deliberately open.
 | 2026-10-17 | **Lost update reproduced on two devices:** Jim renamed child `3382eb1c` (Amanda -> Likhanye) on the iPhone at 10:04:40 UTC while the A03s, offline, changed her age 7 -> 8; when the A03s uploaded at 10:07:13 its full stored row overwrote the rename (server: Amanda, age 8). Edits are unconditional UPDATE-by-id of the phone's whole stored row. | Not fixed here. This is ROADMAP P0 item 5 ("reject stale edits on records more than one writer can change"), owned by the upload-contract spec together with ruling 11. Now device-confirmed. | Field exposure needs two writers of one child (an EA and Head Office, or one EA on two phones). Patch only changed fields and add a server version check before release. |
 | 2026-10-17 | A manual clock-out that waited on GPS could overwrite an automatic 10-hour clock-out of the same entry (a stale snapshot written back by id) | Fixed: both paths use `timeEntriesRepository.closeOpenTimeEntry`, which only updates a row whose `sign_out_time` is null; pinned by a real-SQLite race test in `useTimeTracking.integration.test.js` | Any read-then-await-then-write on a lifecycle row needs a conditional write, not an overwrite by id |
 | 2026-10-17 | `TimeTrackingProvider` outlives sign-out, and `loadActiveEntry` publishes without checking the same user is still signed in: EA A's slow startup check can land after EA B signs in (reproduced by a Codex probe) | Open, pre-existing, rare; out of scope for the Home work. The new auto clock-out notice cannot leak across accounts (keyed by the entry's owner, read for the current user). GitHub issue pending Jim's OK | Async provider work that outlives an auth change should capture the user it started for and drop stale results |
+| 2026-10-20 | Assessment Results reviews found stale undo statistics, an old-shape mastery-ranking loader, coverage input-shape sniffing and UTC-day grade attribution. | Fixed in Tasks 2, 10 and 12: recompute maximum streak from kept marks; load typed letter results including other recorders; split `getAssessmentCoverage`/`getCoverageFromCounts`; use SAST `toLocalDateString` for membership edges. Tests/checkpoints are in the Tasks 1–12 verification section. | Verify the real screen loader and date boundary, not only a helper fed ideal fixtures. |
+| 2026-10-20 | Task 6 draft docs still said controller GREEN and phone cutover were pending; programme naming assumed a separate Core Literacy R–3 row. | Reconciled in Task 13: controller reports PG17 53/53 plus five existing harnesses GREEN, Tasks 7–12 are committed, and the read-only preflight identified combined `code = literacy`. Expired shell token was bypassed with stored CLI login (`env -u SUPABASE_ACCESS_TOKEN`) for that read-only probe. Hosted migration remains unapplied. | Source, controller-local PostgreSQL proof, hosted state and device proof remain separate evidence. |
+| 2026-10-20 | Remaining Plan 1 boundaries: SQLite v15 omits the server's stopped-reason and programme-default-pair CHECKs; the existing mastery writer still sends `updated_at`; history pull and native swipe-back are not proven by these tests. | Run status/completion/purpose-window CHECKs match; family validation enforces stopped-reason shape before enqueue. No schema or mastery writer change in Task 13. New server triggers replace mastery timestamps; Plan 2 owns its writer/re-key, Plan 3 owns pull, and Task 14 owns hosted/build/device gates. | Do not describe every SQLite/server constraint or every phone timestamp writer as identical. The omitted CHECKs remain a recorded schema difference, not a claimed fix. |
+
 
 ---
 

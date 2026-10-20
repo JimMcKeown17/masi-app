@@ -1,5 +1,12 @@
 # WelaPLUS Release 1 — Design
 
+> **Status note — 2026-10-20:** The [Assessment Results and Letter Test design](./2026-10-19-assessment-results-and-letter-test-design.md)
+> supersedes this document's §7 storage/upload design, D4's Q1 stop-rule decision and D10's
+> ADR-0007 enforcement/transport design. Q1 is now `letter_sounds`, sharing the standalone Letter Sounds item sets
+> and complete-result write contract. Assessment Results Plan 1, Tasks 1–12, implements that
+> upload/phone cutover; mastery confirmation re-keying and history pull remain its Plans 2 and 3.
+> The original body below is preserved as the 2026-10-14 design record.
+
 **Date:** 2026-10-14
 **Status:** Design approved in conversation (Jim, 2026-10-14). Codex adversarial review: three rounds (9 → 4 → 1 findings, all verified and addressed; the last round still returned needs-attention before its single fix). Written spec approved by Jim 2026-10-14.
 **Parent PRD:** [`documentation/wela-plus-battery-prd-2026.md`](../../../documentation/wela-plus-battery-prd-2026.md)
