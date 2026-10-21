@@ -318,6 +318,71 @@ test('an isiXhosa session shows stored result evidence and saves a new confirmat
   expect(JSON.parse(outbox.payload)).toEqual(expect.objectContaining({ letter: 'b', language: 'isiXhosa' }));
 });
 
+test.each([
+  ['Afrikaans', 'English', 'af', 'en'],
+  ['English', 'isiXhosa', 'en', 'xh'],
+])('each child\'s tracker uses that child\'s own class language in a mixed-language session (%s first, %s second)', async (
+  firstLanguage, secondLanguage, firstCode, secondCode
+) => {
+  mockClass.home_language = firstLanguage;
+  mockClasses = [mockClass, { ...SECOND_CLASS, home_language: secondLanguage }];
+  mockChildren = [mockChild, SECOND_CHILD];
+  await handle.withTransaction(tx => tx.runAsync(
+    'insert into children (id, first_name, last_name, created_by) values (?, ?, ?, ?)',
+    SECOND_CHILD.id, 'Ben', 'Smith', EA
+  ));
+
+  const screen = renderForm();
+  fireEvent.press(screen.getByLabelText('Amahle Dlamini, Grade 1A'));
+  fireEvent.press(screen.getByLabelText('Ben Smith, Grade 1B'));
+  fireEvent.press(screen.getByLabelText('Amahle Dlamini, letter tracker, Update'));
+  fireEvent.press(await screen.findByLabelText('a, not mastered'));
+  fireEvent.press(screen.getByRole('button', { name: 'Done' }));
+  fireEvent.press(screen.getByLabelText('Ben Smith, letter tracker, Update'));
+  fireEvent.press(await screen.findByLabelText('m, not mastered'));
+  fireEvent.press(screen.getByRole('button', { name: 'Done' }));
+  fireEvent.press(screen.getByLabelText('A, not selected'));
+  fireEvent.press(screen.getByText('Select a level'));
+  fireEvent.press(screen.getByText(READING_LEVELS[0]));
+  fireEvent.press(screen.getByText('Submit session'));
+  await waitFor(() => expect(mockCompleteMounted).toHaveBeenCalledTimes(1));
+
+  const reader = await handle.getReader();
+  expect(await reader.getAllAsync(
+    'select child_id, letter, language from letter_mastery where deleted_at is null order by child_id'
+  )).toEqual([
+    { child_id: mockChild.id, letter: 'a', language: firstLanguage },
+    { child_id: SECOND_CHILD.id, letter: 'm', language: secondLanguage },
+  ]);
+  for (const [childId, languageCode, letter] of [
+    [mockChild.id, firstCode, 'a'],
+    [SECOND_CHILD.id, secondCode, 'm'],
+  ]) {
+    const reloaded = await loadMasteryState({
+      repositories: handle.repositories, userId: EA, childId, languageCode,
+    });
+    expect(reloaded.taughtRecords.map(record => record.letter)).toEqual([letter]);
+  }
+});
+
+test('a child whose class has no known language gets no tracker letters, never another child\'s language', async () => {
+  mockClass.home_language = 'Afrikaans';
+  mockClasses = [mockClass, { ...SECOND_CLASS, home_language: null }];
+  mockChildren = [mockChild, SECOND_CHILD];
+  await handle.withTransaction(tx => tx.runAsync(
+    'insert into children (id, first_name, last_name, created_by) values (?, ?, ?, ?)',
+    SECOND_CHILD.id, 'Ben', 'Smith', EA
+  ));
+
+  const screen = renderForm();
+  fireEvent.press(screen.getByLabelText('Amahle Dlamini, Grade 1A'));
+  fireEvent.press(screen.getByLabelText('Ben Smith, Grade 1B'));
+  fireEvent.press(screen.getByLabelText('Ben Smith, letter tracker, Update'));
+  expect(await screen.findByText('No letter set for this class language.')).toBeTruthy();
+  expect(screen.queryByLabelText('a, not mastered')).toBeNull();
+  expect(screen.queryByLabelText('a, taught by coach')).toBeNull();
+});
+
 test.each([['isiXhosa', 'isiXhosa', 'xh'], ['Afrikaans', 'Afrikaans', 'af']])(
   'marks made in a %s tracker keep that language after the first selected child changes',
   async (homeLanguage, label, code) => {
