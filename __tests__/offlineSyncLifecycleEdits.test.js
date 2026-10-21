@@ -6,7 +6,6 @@ import { runMigrations } from '../src/db/migrations';
 import { createOutboxSyncEngine } from '../src/services/offlineSync';
 import { createGroupsRepository } from '../src/db/repositories/groupsRepository';
 import { createChildrenRepository } from '../src/db/repositories/childrenRepository';
-import { createMasteryRepository } from '../src/db/repositories/masteryRepository';
 import { createSyncOutboxRepository } from '../src/db/repositories/syncOutboxRepository';
 import { childProgrammeEnrollmentDomainId } from '../src/db/repositories/domainRepositoryUtils';
 import { createSupabaseMock } from '../test-support/supabaseSyncMock';
@@ -90,30 +89,6 @@ describe('ordinary edits preserve server lifecycle state', () => {
     await engine.syncAll({ force: true });
 
     expect(serverGroup).toEqual(expect.objectContaining({ name: 'Edited', archived_at: ARCHIVED_AT }));
-    expect(await db.getAllAsync('select * from sync_outbox')).toEqual([]);
-  });
-
-  test('mastery deletion and reactivation still carry deleted_at through their respective operations', async () => {
-    await createChildrenRepository({ database: db }).saveChildRecord({ id: 'child-1', first_name: 'Test', last_name: 'Child', created_by: 'user-1', synced: true });
-    const repository = createMasteryRepository({ database: db });
-    const id = await repository.saveLetterMasteryRecord({ user_id: 'user-1', child_id: 'child-1', programme_id: 'programme-a', letter: 'a', language: 'isiXhosa', source: 'taught', synced: true });
-    const serverMastery = { id, deleted_at: null };
-    const { supabaseClient, calls } = createSupabaseMock({ updateResults: { letter_mastery: ({ payload, value }) => {
-      Object.assign(serverMastery, payload);
-      return { data: [{ id: value }], error: null };
-    } } });
-    const engine = createOutboxSyncEngine({ enqueueRequest: (task) => task(), database: db, supabaseClient, getAuthSession: liveTestSession });
-
-    await repository.updateLetterMasteryRecord(id, { _deleted: true, deleted_at: ARCHIVED_AT });
-    expect(await db.getFirstAsync('select operation from sync_outbox')).toEqual({ operation: 'archive' });
-    await engine.syncAll();
-    expect(serverMastery.deleted_at).toBe(ARCHIVED_AT);
-    await repository.updateLetterMasteryRecord(id, { _deleted: false, deleted_at: null });
-    expect(await db.getFirstAsync('select operation from sync_outbox')).toEqual({ operation: 'update' });
-    await engine.syncAll();
-
-    expect(serverMastery.deleted_at).toBeNull();
-    expect(calls.filter(call => call.tableName === 'letter_mastery').map(call => call.payload.deleted_at)).toEqual([ARCHIVED_AT, null]);
     expect(await db.getAllAsync('select * from sync_outbox')).toEqual([]);
   });
 

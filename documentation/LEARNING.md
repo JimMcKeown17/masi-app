@@ -1897,3 +1897,46 @@ tabulate the measurements before theorising. And a percentage size is only meani
 against a parent whose size does not depend on the child; Jest cannot run Yoga, so the
 regression test pins that contract (every wrapper is `flex: 1`) rather than a pixel position.
 
+
+## One mark per child and letter: why the server keeps a receipt and returns the winner
+
+A letter confirmation belongs to the child, letter and language. Two EAs correcting that mark
+are changing one current record. Programme and the last writer explain the context; they do not
+create separate truths. D1 orders corrections by when they were made, with the correction UUID
+breaking an exact time tie. An older offline confirm must lose to a newer un-confirm, even if
+the older phone uploads last.
+
+There are two times to distinguish: the requested tap time and the server's effective correction
+time. A phone clock can be fast, so the server clamps a new correction to its own now. That clamp
+must happen exactly once. Suppose phone A is an hour fast, confirms at T1, and loses the reply.
+Phone B un-confirms at T2. If A's retry at T3 were clamped again, its effective time could move
+past T2 and undo B's newer correction. A server-only receipt fixes A's effective time at first
+arrival. Its correction id binds the immutable payload; a retry must match it or gets MA001.
+
+The reply is also part of correctness. Success says the server accepted a correction, but it
+does not promise that correction won. The server therefore returns the current winner. In one
+SQLite transaction the phone removes the claimed outbox slot and writes that winner back,
+including its ordering tuple. A losing phone immediately shows the newer un-confirm instead
+of displaying its own confirm as synced. If the caller no longer has read access, the reply is
+acknowledged with no record, and the phone removes its local row.
+
+A local save can happen while a request is in flight. The finalizer compares the claimed slot
+and correction id with what is still stored. If a newer local correction exists, it keeps the
+local value and owed slot, and applies only the server ordering metadata. This is the same
+separation as a receipt and a draft: learning what the server accepted does not erase work
+the phone has yet to send.
+
+That protection starts before upload. The slot holds only one correction. Replacing Tuesday's
+queued un-confirm with Monday's sheet mark saved on Wednesday would lose Tuesday's correction
+before the server could order them. The repository keeps a newer correction while it is pending,
+failed or in flight. It compares a queued timestamp ahead of the corrected phone clock as now.
+The rare clock-rollback/delayed-sheet order recorded as accepted risk A2 remains explicit in the
+[contract map](./rls-sync-contract-map.md#letter-mastery-one-current-record-the-most-recently-made-correction-wins-assessment-results-plan-2).
+
+Finally, resolving the natural key must happen inside SQL. A read-then-insert check leaves a
+race when two writers see no row, the shape of Zazi's ZZ-BUG-20260813-006. The RPC's conflict
+update resolves child × letter × language in one statement. Its conflict targets are named
+constraints for another reason: RETURNS TABLE columns are PL/pgSQL variables. An unqualified
+ON CONFLICT (correction_id) can collide with the output variable and raise 42702 under the default
+plpgsql.variable_conflict setting. Named constraints, qualified column references and the
+function-local use_column directive make that name resolution deliberate.

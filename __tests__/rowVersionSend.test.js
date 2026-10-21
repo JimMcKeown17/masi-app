@@ -421,7 +421,7 @@ describe('row versions at upload claim', () => {
     expect(await outbox.countUnsent()).toMatchObject({ total: 0 });
   });
 
-  test.each(['time_entries', 'sessions', 'letter_mastery'])('unversioned tables send no row_version: %s', async tableName => {
+  test.each(['time_entries', 'sessions'])('unversioned tables send no row_version: %s', async tableName => {
     await enqueue('insert', {
       id: CHILD_ID, user_id: 'user-1', child_id: CHILD_ID, programme_id: 'programme-1', row_version: 99,
       letter: 'a', language: 'isiXhosa', source: 'taught',

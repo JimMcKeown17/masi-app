@@ -1246,6 +1246,97 @@ The new repository's forbidden-filter errors and removed legacy methods delibera
 those remaining old-contract callers. Hosted/PostgreSQL,
 Supabase CLI, EAS, PR and device gates are outside this task.
 
+**AR Plan 2 Task 4 — one RPC per correction, one acknowledgement.**
+
+Added `letterMasteryCorrection.js`: six named RPC arguments, required-field/boolean/date
+validation, and strict single-row acknowledgement parsing with only the five returned fields.
+The raw server timestamp is preserved. The engine now routes mastery exclusively through
+`set_letter_mastery`, maps local TypeErrors to `22023`, refuses malformed replies, and carries
+the parsed winner and sent correction id into success finalization. Mastery is removed from
+batchable upserts and archive/UPDATE-by-id routing; grant evidence is direct child delivery
+assignment only. The server-column allowlist reflects current state, and the two server-ordering
+columns are classified local-only.
+
+Finalization applies Task 3's helper in the same transaction as the outbox CAS delete and normal
+sync bookkeeping. A CAS miss applies only permissible server ordering before restoring the newer
+slot to pending. Applied/superseded writes the returned winner; acknowledged removes a readable
+copy that is no longer authorized; a newer local correction keeps its content and slot. A
+content-update trigger failure rolls the delete and acknowledgement back together, then the
+existing retry handler records failure/backoff without losing the correction.
+
+Added 34 real-SQLite correction cases, three real postgrest-js/stub-fetch cases and two
+classification guards. Coverage includes all outcomes, raw microseconds/offsets, both kinds of
+in-flight acknowledgement, offline coalescing, the Monday/Tuesday delayed-save regressions,
+two separate letter calls, direct-grant evidence transitions, terminal exclusion/attention,
+seven malformed-payload variants, eleven invalid-reply shapes and write-back rollback.
+The correction suite is registered in the integration runner.
+
+Old expectations replaced exactly where Task 4 directs:
+- Deleted the old mastery sync suite's four expectations: send-time random-id remapping
+  (Task 2 now owns conversion/keying), taught/untaught coalescing into an exited INSERT
+  (now a boolean correction update slot), two-install direct-upsert convergence
+  (natural-key resolution now lives in the server RPC), and legacy-random-id 23505 collision
+  (the migration converts old keys and named SQL conflict targets resolve new collisions).
+- Deleted the outbox mastery batching test; the new two-letter test requires two RPCs and no
+  table calls. Adapted the FK/RLS attention test to the real setter, update slot, generated id
+  and `set_letter_mastery` 42501; both terminal/error/attention assertions remain.
+- Deleted UPDATE-by-id mastery identity repair and zero-row/pending-grant tests. Corrections
+  no longer use UPDATE; RPC/direct-grant transitions are covered in the new suite.
+- Deleted archive/reactivation's `deleted_at` exception test; off/on are boolean corrections.
+- Removed mastery from the generic unversioned-send parameter list; the six-argument RPC test
+  covers its exclusion of `row_version` and `updated_at`.
+- Added exact direct-grant/never-UPDATE assertions and a duplicate-success override guard.
+
+| Gate / command (every command prefixed with Node 20.19.4 PATH) | Result |
+| --- | --- |
+| RED: `npm run test:integration -- __tests__/letterMasteryCorrectionSync.test.js` | Exit 1: 1 suite / all 34 tests failed, 5.056 s; engine called no mastery RPC and kept local values as synced without winner/order write-back |
+| RED: `npx jest __tests__/letterMasteryRpcError.test.js __tests__/classifyErrorHardening.test.js` | Exit 1: 2 suites failed; 5 tests failed / 13 passed (18 total), 1.578 s; direct-table URL, membership-mediated grant arm and duplicate-success bypass exposed |
+| First GREEN attempt: same integration command | Exit 0: 1 suite / all 34 tests passed, 2.569 s |
+| First GREEN attempt: same unit command | Exit 1: 1 suite passed / 1 failed; 17 tests passed / 1 failed (18 total), 1.570 s; success-response fetch stub lacked `headers.get`, required by postgrest-js |
+| GREEN after correcting that test response: same unit command | Exit 0: 2 suites / all 18 tests passed, 1.807 s |
+| `npx jest __tests__/offlineSync* __tests__/rowVersion* __tests__/syncContract* __tests__/assessmentFamily* __tests__/batch*` | Exit 0: 15 suites / all 232 tests passed, 5.649 s |
+| `npx jest --silent --maxWorkers=25%` | Exit 1: 344 suites passed / 6 failed (350 total); 4,284 tests passed / 22 failed (4,306 total), 98.636 s |
+| `npm run test:integration --silent` | Exit 1: 53 suites passed / 2 failed (55 total); 617 tests passed / 7 failed (624 total), 85.163 s |
+| `git diff --check` | Exit 0 |
+
+Relative to Task 3, `offlineSyncOutbox`, `offlineSyncLifecycleEdits` and
+`syncContractCompleteness` turn GREEN; the failed old `letterMasterySync` suite is deleted
+and replaced by the passing correction suite. Unit failed-suite count drops 10 → 6; integration
+drops 5 → 2. All remaining failures use old mastery APIs/filters or dependent tracker assertions:
+Task 5's `masteryState`, `LetterMasteryRankingScreen`; Task 6's
+`literacySessionPersistence`, `LiteracySessionForm.submit`, `foreignKeyEnforcement` and
+`completionPathBudget`. Only the latter form and FK suites fail integration.
+No unrelated failure or timeout occurred, so no isolated rerun was required.
+`productionBindingStatic`, `moduleStateAllowlist`, `syncContractServerSchema` and
+`designSystemGuard` pass in the full unit run.
+
+Small faithful adaptations, with current source evidence:
+- The fixture exposes its actor-bound database and engine, rather than a literal handle
+  (`test-support/assessmentFamilySyncTestUtils.js:24–52`); tests create the mastery repository
+  against that same database, as its other repositories do.
+- `loadMasteryState` still passes the forbidden `userId` and filters labels
+  (`src/utils/masteryState.js:30–34`); Task 5 owns that conversion. The terminal-exclusion test
+  adapts only its repository-call arguments, preserving real SQLite/repository exclusion.
+- The existing catch after a failed finalizer records retry/backoff
+  (`src/services/offlineSync.js:1286–1308`). The rollback test therefore asserts retained
+  slot/payload and unchanged correction/server values, with failed status, rather than requiring
+  all queue bookkeeping to be byte-identical after a complete engine pass.
+- Added mastery to the existing duplicate-key acknowledgement exclusion
+  (`src/services/offlineSync.js:475–477`): otherwise an explicitly configured duplicate-success
+  table could reach finalization without the required winner. The new test was RED before this
+  addition. No other table's behavior changes.
+
+The contract map now owns the complete phone correction/acknowledgement contract, including A2,
+and removes old mastery archive, batch and re-key exceptions. LEARNING explains receipts, fixed
+effective times, winner display, the owed-slot rule, SQL natural-key resolution and PL/pgSQL
+named conflict targets. The local TDD skill and approved task order were followed; unavailable
+plan-header superpowers execution skills remain as recorded in Task 1.
+
+No PostgreSQL rerun, hosted preflight/wipe/migration,
+Supabase CLI, EAS build, device check or PR was performed. Task 1's controller PostgreSQL evidence
+is retained as such, not claimed as a new Task 4 run. Tasks 5–6 and Plan 3 pull remain separate;
+accepted risks A1/A2 and hosted/device rollout gates remain open.
+
 ### 2026-10-21 — Lesson-plan AF: Afrikaans, release gate (controller)
 
 **What shipped on `feat/lesson-plan-af`** (base `7a831fb`):
@@ -1292,6 +1383,7 @@ iOS build. Results will be recorded here.
 
 | Date | Decision | Rationale | Revisit Trigger |
 | --- | --- | --- | --- |
+| 2026-10-21 | Assessment Results Plan 2 Task 4: one RPC per correction, never batched; volume is a few rows per session. | A parsed reply returns the winner and belongs to one claimed correction; atomic acknowledgement must preserve a newer owed local correction. Mastery ordering uses correction time/UUID and receipts, not send-time row versions. | Field volume makes per-correction requests material, or a reviewed batch RPC preserves the identical per-correction receipt and acknowledgement contract. |
 | 2026-10-17 | **Field-continuity decisions (Jim).** (1) The **server** closes a time entry left open for more than ten hours; the phone-only close is not enough. (2) Android backup **excludes every SQLite database** (Claude's recommendation, accepted). (3) Losing an unfinished session or assessment form on navigate-away or process death is **accepted for the pilot**. (4) Revocation follows **Zazi's model**, operated by a script until a Head Office admin website exists. | (1) A phone that stays offline or unopened leaves the hosted row open indefinitely, so staff reports cannot tell a forgotten clock-out from a long day. (2) A restored database replays already-accepted work (Zazi ZZ-BUG-20260907-001); the server is the recovery path. (3) Drafts belong to the planned SQLite draft/run lifecycle, not a temporary patch. (4) One proven operator procedure across both apps; the website is later Head Office work. | Field reports of lost forms; the server close is found to fight legitimate long shifts; a Head Office admin surface is built. |
 | 2026-09-04 | Treat 1,000 rows as the verified hosted PostgREST response cap and require explicit bounded pagination, deadlines, and completeness accounting in the first implementation of every potentially larger pull family. | A real cap-plus-one request returned exactly 1,000 of 1,205 rows with HTTP 206 and an exact content range. A successful but capped response is incomplete replication, not a performance inconvenience; the current assessment-item estate is already close enough that a non-paginated intermediate contract would be throwaway and unsafe. | The hosted API cap is deliberately reconfigured and re-proven through an equivalent cap-plus-one probe, or a family moves behind a server operation whose response-completeness contract is independently bounded and tested. |
 | 2026-08-29 | Treat an authorized session as one complete delivery-history aggregate. Owning the session or having a historical direct delivery assignment to any attendee grants the complete parent and every attendee row. | The parent activities JSON already carries child-keyed facts for the delivery event, and a child-filtered attendee list would imply a privacy boundary that does not exist while also misrepresenting the event. Admission to the session is the authorization boundary. | Masi introduces a less-trusted reader class or genuinely sensitive per-child facts. Put such facts behind a separately authorized table or redacted projection rather than silently adding them to this aggregate. |

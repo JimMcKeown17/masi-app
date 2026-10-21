@@ -35,8 +35,20 @@ describe('classifyError 23514 immutable-identity rejection (#48 part 1)', () => 
 });
 
 const { _testEvidenceMaps } = require('../src/services/offlineSync');
+const { _testUpdateByIdTables } = require('../src/services/offlineSync');
 
 describe('evidence maps (#48 part 2)', () => {
+  test('letter mastery corrections require only direct child assignment evidence and never UPDATE by id', () => {
+    expect(_testEvidenceMaps.GRANT_SUBJECTS.letter_mastery).toEqual([
+      { grantTable: 'child_ea_assignments', subjectColumn: 'child_id' },
+    ]);
+    expect(_testUpdateByIdTables.has('letter_mastery')).toBe(false);
+  });
+
+  test('a duplicate mastery correction still requires an RPC acknowledgement', () => {
+    expect(_testClassifyError({ code: '23505' }, { tableName: 'letter_mastery', duplicateIsSuccess: true }))
+      .toMatchObject({ terminal: true, markAsSynced: false });
+  });
   test('PARENT_FK_COLUMNS covers every TABLE_DEPENDENCIES FK-parent (no drift)', () => {
     const { TABLE_DEPENDENCIES, PARENT_FK_COLUMNS } = _testEvidenceMaps;
     for (const [child, parents] of Object.entries(TABLE_DEPENDENCIES)) {
