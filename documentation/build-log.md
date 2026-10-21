@@ -1596,6 +1596,55 @@ saved state was weakened. No plan/spec edits, Git writes, hosted actions, Postgr
 rerun, EAS build, device check or PR action. Accepted risks A1–A3 and the existing hosted/device
 and Plan 3 pull gates remain open.
 
+**AR Plan 2 adversarial review round 2 — failed-save refresh recovery.**
+The controller verified a failure-path gap in the round-1 fix at `c7b1d88`: a tap invalidated
+an outstanding refresh, but a failed setter never scheduled a replacement read. The panel
+could therefore retain a confirmation already removed in storage. A non-background focus
+load completing while the write guard was held also discarded its loading cleanup, leaving
+the spinner up permanently and hiding both the grid and the save error.
+
+The replacement background read now starts in the setter's `finally`, after clearing the
+write guard and pending-letter state, on both success and failure. A successful setter still
+publishes its returned record; failure keeps the exact retry message. The newest read
+converges with storage and clears loading, including when an earlier focus load was discarded.
+Tap invalidation, read suppression during writes, invalidation by a later tap, the pending-write
+guard, locked cells and success-only sync nudges remain intact. No existing mounted/cancellation
+pattern exists in the panel; no new lifecycle machinery was added, as instructed.
+
+Two regressions use the real SQLite mastery repository, with a native trigger rejecting the
+confirmation of `m`. One holds a sync snapshot of `s` unconfirmed across the start of `m`'s
+write, then rejects that write: the panel reloads `s` unconfirmed, retains the error, exposes an
+enabled grid and completes an actual retry after the injected failure is removed. The other
+delivers a non-background focus read while the write is pending, then rejects the write and
+verifies the spinner ends and the error and retryable grid appear. The navigation test mock
+now permits explicit focus delivery; storage and setter behavior remain real. All four round-1
+regressions continue to pass. The standing contract map describes refresh after both outcomes.
+
+Every command below uses `PATH="$HOME/.nvm/versions/node/v20.19.4/bin:$PATH"`.
+
+| Gate / command | Result |
+| --- | --- |
+| RED: `npx jest __tests__/LetterMasteryPanel.test.js` | Exit 1: 1 failed suite; 2 failed / 17 passed tests (19 total), 5.996 s. Only the two new regressions fail: stale `s` and spinner hiding the retry error |
+| RED: `npm run test:integration -- __tests__/LetterMasteryPanel.test.js` | Exit 1: 1 failed suite; 2 failed / 17 passed tests (19 total), 5.935 s; same reproduced failures |
+| GREEN: same panel unit command | Exit 0: 1 suite / all 19 tests passed, 3.935 s |
+| GREEN: same panel integration command | Exit 0: 1 suite / all 19 tests passed, 3.971 s |
+| `npx jest __tests__/LetterMasteryPanel.test.js __tests__/masteryRepository.test.js __tests__/letterMasteryCorrectionSync.test.js __tests__/literacySessionPersistence.test.js __tests__/LetterTrackerScreen.plan5.test.js` | Exit 0: 5 suites / all 101 tests passed, 4.267 s |
+| `npm run test:integration -- __tests__/LetterMasteryPanel.test.js __tests__/masteryRepository.test.js __tests__/letterMasteryCorrectionSync.test.js __tests__/literacySessionPersistence.test.js` | Exit 0: 4 suites / all 100 tests passed, 7.615 s |
+| `npx jest --silent --maxWorkers=25%` | Exit 0: all 350 suites / 4,325 tests passed, 67.067 s |
+| `npm run test:integration --silent` | Exit 0: all 60 suites / 684 tests passed, 49.582 s |
+| `git diff --check` | Exit 0 |
+
+Both full suites pass on their first round-2 run; no unrelated failure or isolated rerun.
+Against the round-1 checkpoint at `c7b1d88`, suite totals are unchanged (350 unit / 60
+integration), and each tier gains exactly the two new panel regressions (4,323 → 4,325 unit
+tests; 682 → 684 integration tests). No additional test fixture or configuration changes were
+needed beyond the panel's focus simulation and native failure injection.
+
+Round 2 reaches the plan's **two-round adversarial review cap**. Final disposition and release
+remain with the controller. No Git writes, network/dependency work, plan/spec edits, PostgreSQL
+harness, hosted Supabase, EAS, device or PR action. Accepted risks A1–A3 and the existing
+hosted/device and Plan 3 pull gates remain open.
+
 ### 2026-10-21 — Lesson-plan AF: Afrikaans, release gate (controller)
 
 **What shipped on `feat/lesson-plan-af`** (base `7a831fb`):

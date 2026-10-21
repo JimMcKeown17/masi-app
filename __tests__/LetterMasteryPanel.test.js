@@ -4,6 +4,7 @@ import React from 'react';
 import { act, cleanup, fireEvent, render, waitFor } from '@testing-library/react-native';
 import { StyleSheet } from 'react-native';
 import { ActivityIndicator } from 'react-native-paper';
+import { useFocusEffect } from '@react-navigation/native';
 import { colors } from '../src/constants/colors';
 import LetterMasteryPanel from '../src/components/assessment/LetterMasteryPanel';
 import { assessmentsRepository } from '../src/db/repositories/assessmentsRepository';
@@ -17,7 +18,7 @@ jest.mock('../src/services/supabaseClient', () => ({
   ...require('../test-support/supabaseTestConfig'), supabase: {},
 }));
 jest.mock('@react-navigation/native', () => ({
-  useFocusEffect: callback => require('react').useEffect(callback, [callback]),
+  useFocusEffect: jest.fn(callback => require('react').useEffect(callback, [callback])),
 }));
 jest.mock('../src/context/AuthContext', () => ({ useAuth: jest.fn() }));
 jest.mock('../src/context/OfflineContext', () => ({ useOffline: jest.fn() }));
@@ -234,6 +235,11 @@ describe('LetterMasteryPanel read/tap ordering with real SQLite', () => {
   const mark = (letter, confirmed) => ({
     childId: f.childId, letter, language: 'en', confirmed,
   });
+  const failConfirmingM = () => f.db.execAsync(`
+    create trigger reject_panel_m before insert on letter_mastery
+    when new.letter = 'm' and new.confirmed = 1
+    begin select raise(abort, 'injected panel save failure'); end;
+  `);
   const syncRefresh = screen => {
     offline = { ...offline, lastSyncResult: {
       tableResults: { letter_mastery: { success: true, synced: 1, failed: 0 } },
@@ -373,5 +379,81 @@ describe('LetterMasteryPanel read/tap ordering with real SQLite', () => {
     expect(write.mock.calls.map(([args]) => args.confirmed)).toEqual([true, false]);
     expect(await readRecords({ childId: f.childId, language: 'en' }))
       .toEqual([expect.objectContaining({ confirmed: false })]);
+  });
+
+  test('an invalidated sync refresh followed by a failed save re-reads storage and keeps the grid retryable', async () => {
+    await writeRecord(mark('s', true));
+    const screen = render(panel());
+    await screen.findByLabelText('s, taught by coach');
+    await failConfirmingM();
+    await writeRecord(mark('s', false));
+
+    const captured = deferred(), releaseRead = deferred(), releaseWrite = deferred();
+    read.mockImplementationOnce(async args => {
+      const snapshot = await readRecords(args);
+      captured.resolve(snapshot);
+      await releaseRead.promise;
+      return snapshot;
+    });
+    syncRefresh(screen);
+    expect(await captured.promise).toContainEqual(expect.objectContaining({ letter: 's', confirmed: false }));
+    write.mockImplementationOnce(async args => {
+      await releaseWrite.promise;
+      return writeRecord(args);
+    });
+    fireEvent.press(screen.getByLabelText('m, not mastered'));
+    await act(async () => { releaseRead.resolve(); });
+    expect(screen.getByLabelText('s, taught by coach')).toBeTruthy();
+
+    await act(async () => { releaseWrite.resolve(); });
+    expect(await screen.findByText('Letter update was not saved. Please try again.')).toBeTruthy();
+    expect(await screen.findByLabelText('s, not mastered')).toBeTruthy();
+    expect(screen.UNSAFE_queryByType(ActivityIndicator)).toBeNull();
+    expect(screen.getByLabelText('m, not mastered').props.accessibilityState.disabled).toBe(false);
+    expect(offline.refreshSyncStatus).not.toHaveBeenCalled();
+    expect(offline.triggerBackgroundSync).not.toHaveBeenCalled();
+
+    await f.db.execAsync('drop trigger reject_panel_m');
+    fireEvent.press(screen.getByLabelText('m, not mastered'));
+    expect(await screen.findByLabelText('m, taught by coach')).toBeTruthy();
+    expect(screen.queryByText('Letter update was not saved. Please try again.')).toBeNull();
+    expect(write.mock.calls.map(([args]) => args.confirmed)).toEqual([true, true]);
+    expect(await readRecords({ childId: f.childId, language: 'en' })).toEqual([
+      expect.objectContaining({ letter: 'm', confirmed: true }),
+      expect.objectContaining({ letter: 's', confirmed: false }),
+    ]);
+  });
+
+  test('a focus refresh discarded during a failed save cannot leave loading stuck', async () => {
+    const screen = render(panel());
+    await screen.findByLabelText('m, not mastered');
+    await failConfirmingM();
+    const releaseWrite = deferred();
+    write.mockImplementationOnce(async args => {
+      await releaseWrite.promise;
+      return writeRecord(args);
+    });
+    fireEvent.press(screen.getByLabelText('m, not mastered'));
+
+    const captured = deferred(), releaseRead = deferred();
+    read.mockImplementationOnce(async args => {
+      const snapshot = await readRecords(args);
+      captured.resolve();
+      await releaseRead.promise;
+      return snapshot;
+    });
+    await act(async () => { useFocusEffect.mock.calls.at(-1)[0](); });
+    await captured.promise;
+    expect(screen.UNSAFE_queryByType(ActivityIndicator)).not.toBeNull();
+    await act(async () => { releaseRead.resolve(); });
+    expect(screen.UNSAFE_queryByType(ActivityIndicator)).not.toBeNull();
+
+    await act(async () => { releaseWrite.resolve(); });
+    expect(await screen.findByText('Letter update was not saved. Please try again.')).toBeTruthy();
+    expect(screen.UNSAFE_queryByType(ActivityIndicator)).toBeNull();
+    expect(screen.getByLabelText('m, not mastered').props.accessibilityState.disabled).toBe(false);
+    expect(screen.getByText('0 / 26 letters mastered')).toBeTruthy();
+    expect(offline.refreshSyncStatus).not.toHaveBeenCalled();
+    expect(offline.triggerBackgroundSync).not.toHaveBeenCalled();
   });
 });

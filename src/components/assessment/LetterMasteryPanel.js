@@ -90,8 +90,6 @@ export default function LetterMasteryPanel({ child, classItem }) {
         else delete next[letter];
         return next;
       });
-      writeInFlight.current = false;
-      loadData({ background: true });
       refreshSyncStatus().catch(() => {});
       triggerBackgroundSync?.();
     } catch (error) {
@@ -100,6 +98,7 @@ export default function LetterMasteryPanel({ child, classItem }) {
     } finally {
       writeInFlight.current = false;
       setUpdatingLetter(null);
+      loadData({ background: true });
     }
   };
 

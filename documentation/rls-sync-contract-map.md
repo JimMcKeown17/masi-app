@@ -522,10 +522,13 @@ The panel's `useLetterMasterySyncRefresh` watches newly published sync results t
 `tableResults.letter_mastery` (including refusals/skips), with the mount result already seen.
 It re-reads in the background without replacing the grid with a spinner. A load-generation
 counter permits only the latest read to publish and clear loading. A tap invalidates outstanding
-reads, and reads cannot publish while its setter is in flight. After a successful setter, the
-panel publishes the returned confirmation and starts one background re-read to converge with
-storage; a later tap invalidates that read too. Results for other tables and a changed callback
-alone do not cause a sync-triggered re-read. `LetterTrackerBottomSheet` deliberately keeps
+reads, and reads cannot publish while its setter is in flight. A successful setter publishes
+the returned confirmation. After either success or failure, the write guard is cleared and one
+background re-read starts to converge with storage; a later tap invalidates that read too.
+That newest read also clears loading if a discarded focus load left the spinner visible.
+A failed save keeps its retry message visible; the background read does not clear the error.
+Results for other tables and a changed callback alone do not cause a sync-triggered re-read.
+`LetterTrackerBottomSheet` deliberately keeps
 its open-time baseline while open: re-reading beneath its pending map can undo a cancelling
 tap (accepted risk A1). Reopening reads the new truth. Plan 3 still needs a pull signal for
 the panel only.
