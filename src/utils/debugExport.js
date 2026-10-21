@@ -7,6 +7,15 @@ import { debugDump, assertExportHandle } from '../db/debugDump';
 import { getReleaseMetadata } from './releaseMetadata';
 import { getRuntimeDiagnostics } from './runtimeDiagnostics';
 
+const readContentDiagnostics = () => {
+  try {
+    const { getContentDiagnostics } = require('../lessonPlan/packs/contentDiagnostics');
+    return getContentDiagnostics();
+  } catch (error) {
+    return { error: String(error) };
+  }
+};
+
 /**
  * Write content to a temp file and share it via the native share sheet.
  * Users will see a file attachment they can send via WhatsApp, email, etc.
@@ -44,6 +53,7 @@ export const exportDatabase = async ({ handle }) => {
       runtime_version: releaseMetadata.runtimeVersion,
       releaseMetadata,
       runtimeDiagnostics,
+      content_diagnostics: readContentDiagnostics(),
       device_info: {
         platform: Platform.OS,
         version: Platform.Version,
