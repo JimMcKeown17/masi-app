@@ -17,8 +17,10 @@ export {
   LETTER_SOUNDS_2026_1_XH,
   LETTER_SOUNDS_2026_2_EN,
   LETTER_SOUNDS_2026_2_XH,
+  LETTER_SOUNDS_2026_2_AF,
   WORD_READING_2026_1_EN,
   WORD_READING_2026_1_XH,
+  WORD_READING_2026_1_AF,
   CURRENT_ITEM_SETS,
 } from './itemsets';
 export type { Result, ResultItem, ResultDerived, StoppedReason } from './types/Result';

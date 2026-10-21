@@ -40,7 +40,7 @@ describe('assessment language and standalone test registry', () => {
       },
     ]);
     for (const test of registry.STANDALONE_TESTS) {
-      for (const language of ['en', 'xh']) {
+      for (const language of ['en', 'xh', 'af']) {
         expect(CURRENT_ITEM_SETS[test.code][language]).toMatchObject({
           question_code: test.code, language,
           item_set_id: `${test.code}@${CURRENT_ITEM_SETS[test.code][language].question_version}.${language}`,
@@ -71,6 +71,10 @@ describe('assessment language and standalone test registry', () => {
   test('every class language an EA can choose has a tracker language', () => {
     const codes = HOME_LANGUAGES.map(registry.languageCodeForHomeLanguage);
     expect(codes).toEqual(['xh', 'en', 'af']);
-    for (const code of codes) expect(registry.PEDAGOGICAL_ORDERS[code]).toHaveLength(26);
+    for (const code of codes) {
+      expect(registry.PEDAGOGICAL_ORDERS[code]).toHaveLength(26);
+      expect(CURRENT_ITEM_SETS.letter_sounds[code]).toBeDefined();
+      expect(CURRENT_ITEM_SETS.word_reading[code]).toBeDefined();
+    }
   });
 });

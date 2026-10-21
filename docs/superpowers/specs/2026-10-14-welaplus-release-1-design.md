@@ -7,6 +7,13 @@
 > upload/phone cutover; mastery confirmation re-keying and history pull remain its Plans 2 and 3.
 > The original body below is preserved as the 2026-10-14 design record.
 
+> **Status update — 2026-10-21 (lesson-plan AF):** The WelaPLUS host (Plan 3) must not offer
+> WelaPLUS to an Afrikaans class until the battery has Afrikaans (`battery/wela_plus_full.ts:49`
+> lists `en`, `xh`). Start shows "Not available in Afrikaans yet", and the WelaPLUS language picker
+> lists only the battery's languages (lesson-plan spec C22). The package now uses `MissingItemSet`
+> rather than an English fallback: an Afrikaans run would show a missing card on every Question
+> and have no instructions.
+
 **Date:** 2026-10-14
 **Status:** Design approved in conversation (Jim, 2026-10-14). Codex adversarial review: three rounds (9 → 4 → 1 findings, all verified and addressed; the last round still returned needs-attention before its single fix). Written spec approved by Jim 2026-10-14.
 **Parent PRD:** [`documentation/wela-plus-battery-prd-2026.md`](../../../documentation/wela-plus-battery-prd-2026.md)

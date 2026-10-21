@@ -204,6 +204,9 @@ government isiZulu form uses (section 12). Only `consecutive_wrong` is built now
   - `language` is a two-letter code (see the next bullet).
 - **Language codes.** `en`, `xh`, `zu`, everywhere: item sets, `assessments.language`, and
   `letter_mastery.language`. The display labels "English" and "isiXhosa" are no longer stored.
+
+> **Status update — 2026-10-21 (lesson-plan AF):** `af` (Afrikaans) joins the codes, with `letter_sounds@2026.2.af` (Grid A) and `word_reading@2026.1.af` in `CURRENT_ITEM_SETS`. The WelaPLUS battery stays `en`/`xh`.
+
 - **Ids and versions.** `question_code` is `letter_sounds` for both entry points, so a result is
   a letter result regardless of where it was taken. Each language has its own file:
   `itemsets/letter_sounds@<version>.<lang>.ts`.

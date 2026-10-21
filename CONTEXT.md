@@ -130,7 +130,7 @@ A saved Question result whose `question_code` is `letter_sounds`. Standalone Let
 _Avoid_: treating a Battery Question as a separate kind of letter evidence.
 
 **Item set**:
-The versioned data used by a Question: its `question_code`, `question_version`, language, prompts and layout (including rows where supplied), plus a stop rule where applicable. The id is `${question_code}@${question_version}.${language}` and is stored on the result. Bundled sets live in `src/assessment-questions/itemsets/`; current aliases choose new tests, while readers use stored prompts and the stored set id. Languages use `en`, `xh` and `zu`; a missing language or set means ask/show no set, never substitute English.
+The versioned data used by a Question: its `question_code`, `question_version`, language, prompts and layout (including rows where supplied), plus a stop rule where applicable. The id is `${question_code}@${question_version}.${language}` and is stored on the result. Bundled sets live in `src/assessment-questions/itemsets/`; current aliases choose new tests, while readers use stored prompts and the stored set id. Languages use `en`, `xh`, `af` and `zu`; item sets exist for `en`, `xh` and `af`, and WelaPLUS for `en` and `xh`. A missing language or set means ask/show no set, never substitute English.
 _Avoid_: treating positions in a current constant array as the meaning of saved items.
 
 **Stop rule**:
