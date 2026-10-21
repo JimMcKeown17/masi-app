@@ -36,6 +36,7 @@ module.exports = {
     '<rootDir>/__tests__/useTimeTracking.integration.test.js',
     '<rootDir>/__tests__/locationUnavailableClock.integration.test.js',
     '<rootDir>/__tests__/timeEntryLocationMigration.test.js',
+    '<rootDir>/__tests__/sessionGroupHistoryReferenceMigration.test.js',
     '<rootDir>/__tests__/referenceDataRepository.test.js',
     '<rootDir>/__tests__/ChildrenContext.test.js',
     '<rootDir>/__tests__/ChildrenContextPendingDelete.integration.test.js',

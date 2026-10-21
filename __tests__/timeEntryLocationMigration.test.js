@@ -1,4 +1,4 @@
-import { MIGRATIONS, runMigrations } from '../src/db/migrations';
+import { CURRENT_SCHEMA_VERSION, MIGRATIONS, runMigrations } from '../src/db/migrations';
 import { createBetterSqliteTestDatabase } from '../test-support/betterSqliteAdapter';
 
 let db;
@@ -25,7 +25,7 @@ test('v10 upgrade preserves every old field, indexes, foreign keys and triggers 
   const outboxBefore = await db.getAllAsync('select * from sync_outbox');
   const foreignKeys = await db.getAllAsync('pragma foreign_key_list(time_entries)');
   await runMigrations(db);
-  expect(await db.getFirstAsync('pragma user_version')).toEqual({ user_version: 15 });
+  expect(await db.getFirstAsync('pragma user_version')).toEqual({ user_version: CURRENT_SCHEMA_VERSION });
   expect(await db.getAllAsync('select * from time_entries order by id')).toEqual(before.map(row => ({
     ...row, sign_in_location_status: null, sign_out_location_status: null,
   })));

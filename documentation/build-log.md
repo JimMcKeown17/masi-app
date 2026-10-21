@@ -1066,6 +1066,32 @@ gate). The dry run listed only this file against `segygjzpujphwvrubusm`. Verifie
 
 ---
 
+### 2026-10-21 — Lesson plan B2 Task 2: historical session group reference
+
+- Implemented local schema 16, `sessions_group_history_reference`, on
+  `feat/lesson-plan-b2-session-group`. The table rebuild preserves every session column, its
+  Programme/class FKs, state constraint, three indexes, attendee FKs/cascade and queued uploads,
+  while allowing a session to retain a group id absent from the local roster. No repository,
+  pull or upload behavior changed in this task; the local-write guard is B2 Task 4.
+- Version 16 follows the orchestrator's branch-specific ruling: C1 also uses 16 on its own branch;
+  the controller reconciles versions at merge. Existing current-version assertions now use
+  `CURRENT_SCHEMA_VERSION`, assessment-results remains explicitly pinned to migration 15, and
+  the foundation ledger/tripwire include B2 version 16.
+- Every test command below used `PATH="$HOME/.nvm/versions/node/v20.19.4/bin:$PATH"`.
+  RED: `npm run test:integration -- __tests__/sessionGroupHistoryReferenceMigration.test.js`
+  exited 1, 1 suite / 5 tests failed because the named migration's version was undefined.
+  Same-command GREEN: exit 0, 1 suite / 5 tests passed. Snapshots cover all session/attendee/outbox
+  fields, normalized index definitions and attendee FK metadata; runtime assertions cover missing
+  historical groups, retained FK/CHECK constraints, FK restoration, cascade and idempotence.
+- Focused regression command: `npx jest __tests__/sqliteFoundation.test.js __tests__/hotPathIndexes.test.js __tests__/sessionsForwardPrepMigration.test.js __tests__/foreignKeyEnforcement.test.js __tests__/timeEntryLocationMigration.test.js __tests__/rowVersionLocal.test.js __tests__/outboxOwnerMigration.test.js __tests__/migrations.assessmentResults.test.js --maxWorkers=25%`
+  passed 8 suites / 103 tests, exit 0. `npm run test:integration --silent` passed
+  53 suites / 557 tests, exit 0 (49.265 s). Full unit gate:
+  `npx jest --silent --maxWorkers=25%` passed 349 suites / 4,220 tests, exit 0 (145.925 s).
+  No unrelated failures or isolated reruns were needed.
+- No plan/spec edits, dependency installs, network, hosted Supabase, PostgreSQL harness, EAS,
+  device checks, PR or Git writes. Task 1 PostgreSQL evidence remains controller-owned. Native
+  upgrade/device proof and the remaining B2 producer/pull/sync tasks remain open.
+
 ## Decision Register
 
 | Date | Decision | Rationale | Revisit Trigger |
@@ -1224,6 +1250,7 @@ gate). The dry run listed only this file against `segygjzpujphwvrubusm`. Verifie
 | 2026-10-20 | **Lesson plan design approved, then aligned with assessment results (rev 2).** Spec `docs/superpowers/specs/2026-10-20-lesson-plan-design.md`: languages are codes (`af` for Afrikaans); the Afrikaans letter test is an `af` copy of Grid A (the same 60 letters as Zazi's `afrikaans_60_v2`); track B1 (mastery inputs) is AR Plans 2–3 with five asks (§7.6). Jim: J21 this workstream writes and builds AR Plans 2–3; J22 `yaml@2.8.2` as an exact devDependency; J23 a child in an EA's group is always one of that EA's own children. | The lesson-plan spec was written against `97e088c`; #89/#90 merged the same day and settled language identity, the family upload and the mastery re-key. Adopting the approved, built design avoids two parallel ones. | AR Plans 2–3 change their contracts, or Head Office seeds a group member without a direct assignment. |
 | 2026-10-20 | **Wave-1 plans written and Codex-reviewed:** `2026-10-20-lesson-plan-{af-afrikaans,a1-content-packs,a3-engine,c1-lesson-draft,b2-session-group}.md` and `2026-10-20-assessment-results-plan-{2,3}.md`. Build order: AF first; AR Plan 2 after AF; AR Plan 3 after Plan 2 and C1's `pullCoverage.js`; A1, A3, C1 and B2 in parallel. Wave 2 (A2, C2–C3, C4, C5) is planned once wave 1 is in code. | Rounds per plan: AF 1, C1 1, B2 2 (approved), A1/A3 2, AR Plan 2 2, AR Plan 3 3. Each round's findings were verified against code before fixing; rounds stopped when findings narrowed to rare timing races, which are recorded as accepted risks in the plans. | A build task finds a plan contradicting the code it cites. |
 | 2026-10-20 | **Accepted plan risks (Codex rounds; no code change):** an open session tracker sheet can show a stale tile after a sync supersedes or refuses a confirmation (AR Plan 2 A1; its refresh was dropped because it raced with cancel taps); a clock rollback can keep back a later explicitly timed sheet tap until upload (AR Plan 2 A2); a developer-build draft pinned to a replaced preview pack shows the no-content state (A1); a refused mastery correction restored by the pull and then manually re-sent can leave the phone showing the restored value (AR Plan 3). | Each needs a rare sequence (a wrong clock and its correction, a manual retry after a refusal and a regained grant, a developer-only preview regeneration). The fixes would add machinery out of proportion to the risk. | Any of them is seen in the field or in a device gate. |
+| 2026-10-21 | Historical group reference: rebuild local `sessions` without the group FK (v 16); rejected a history-reference `groups` row. | Authorized session history can name a group the EA never held or no longer holds, while the roster pull downloads only currently assigned groups. A synthetic group needs a name the history API lacks and makes group readers, edits, archive, reconcile and ownership repair reason about a new access-bearing row kind. A plain id preserves history without creating a group or assignment, matching `battery_runs.class_id` in #90; local capture validation belongs in `saveSession` (B2 Task 4). | A screen needs a session's group name offline. |
 
 ---
 

@@ -1897,3 +1897,37 @@ tabulate the measurements before theorising. And a percentage size is only meani
 against a parent whose size does not depend on the child; Jest cannot run Yoga, so the
 regression test pins that contract (every wrapper is `flex: 1`) rather than a pixel position.
 
+## A foreign key states the present; a session's group is history
+
+A session records a past group block, while the phone's group roster records the EA's current
+assignments. Those sets need not match. After a handover, an incoming EA can read a child's old
+sessions without ever holding the old group. An ended assignment or a deleted group can also
+remove it from the working roster. The roster query in
+[`preloadedChildData`](../src/services/preloadedChildData.js) fetches only groups with an active
+assignment to this EA in the selected Programme; it cannot promise a local row for every group
+named in authorized history.
+
+A local foreign key would force the phone to discard that historical id or invent a group row.
+We rejected a history-reference `groups` row because a group is an operational object: ordinary
+group readers, pickers, edits, archive, reconcile and ownership repair would all have to learn
+to exclude it. Ownership repair can create assignments. The history API also does not supply
+the group's required name. A plain id on the session preserves the fact without adding roster
+or edit authority. Assessment Results #90 made the same call for `battery_runs.class_id`: the
+phone can retain the captured class id when its current class roster no longer contains it.
+The server keeps its foreign key in both cases.
+
+Local migration 16, `sessions_group_history_reference`, rebuilds `sessions` with all 16 columns,
+the Programme/class foreign keys, the state check and its three indexes, but no group foreign
+key. The migration runner turns foreign keys off before the transaction and restores them after
+it. Creating the replacement, copying explicit columns, dropping the old table, then renaming
+the replacement keeps the attendee foreign key pointing at `sessions`. Renaming the old table
+first would redirect that foreign key to the old name. The real-SQLite upgrade regression checks
+rows, queued uploads, index definitions and the attendee cascade across this operation.
+
+History import and new capture have different validation needs. B2 Task 4 will put the local-write
+check in `saveSession`: a chosen group must exist on this phone and belong to the session's
+Programme, including an archived group for a lesson already captured. That repository guard
+replaces the group FK for local writes; this schema task alone does not install it. If a future
+screen needs a session's group name offline, revisit the historical display data required rather
+than promoting a historical id into a working group.
+

@@ -13,7 +13,7 @@ const EXPECTED_INDEXES = [
   'idx_sync_outbox_ready',              // getReadyRecords: where status in (...) and next_retry_at <= ?
   'idx_time_entries_user_signin',       // getActiveTimeEntry: where user_id = ? order by sign_in_time desc
   'idx_sessions_class_id',              // class relationship and FK maintenance
-  'idx_sessions_group_id',              // group relationship and FK maintenance
+  'idx_sessions_group_id',              // group lookups
   'idx_session_attendees_group_id',     // attendee group relationship and FK maintenance
 ];
 
