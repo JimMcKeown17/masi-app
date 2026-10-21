@@ -110,6 +110,20 @@ const updateByIdSql = (table, assignments, id) => `
 UPDATE public.${table} SET ${assignments} WHERE id = '${id}' RETURNING id;
 `;
 
+// Catch only the required refusal in a subtransaction, then inspect the unchanged rows.
+const refusedStatementSql = (statement, sqlState) => `
+DO $case$
+BEGIN
+  BEGIN
+    ${statement}
+    RAISE EXCEPTION 'Expected SQLSTATE ${sqlState}, but the statement was allowed';
+  EXCEPTION WHEN SQLSTATE '${sqlState}' THEN
+    NULL;
+  END;
+END;
+$case$;
+`;
+
 const sessionUpsert = ({
   id,
   actor = EA_A,
@@ -305,7 +319,8 @@ const runSessionGroupCases = (databaseUrl) => {
       updateByIdSql('sessions', `group_id = '${G_UNHELD}'`, updateSession),
       `${setupSession({ id: updateSession, group: G1 })}
        ${setupAttendee({ id: attendeeId(13), session: updateSession, group: G1 })}`
-    )
+    ),
+    '23514'
   );
 
   const S_RETRY = sessionId(20);
@@ -491,6 +506,112 @@ const runSessionGroupCases = (databaseUrl) => {
       WHERE schemaname = 'public';
     `),
     ['0|4']
+  );
+
+  // Review round 1: keep destructive/mutation cases last so earlier fixtures stay valid.
+  accepts(
+    'group-hard-delete-refused',
+    asActor(EA_A, `
+      ${refusedStatementSql(`DELETE FROM public.groups WHERE id = '${G4}';`, '42501')}
+      SELECT
+        (SELECT count(*) FROM public.groups WHERE id = '${G4}'),
+        (SELECT count(*) FROM public.group_ea_assignments WHERE id = '${G4_ASSIGNMENT}');
+      RESET ROLE;
+      SET LOCAL ROLE service_role;
+      DELETE FROM public.groups WHERE id = '${G4}' RETURNING id;
+      RESET ROLE;
+      SELECT
+        (SELECT count(*) FROM public.groups WHERE id = '${G4}'),
+        (SELECT count(*) FROM public.group_ea_assignments WHERE id = '${G4_ASSIGNMENT}');
+    `, `
+      -- Match hosted service_role; the shared bootstrap creates only a plain role.
+      ALTER ROLE service_role BYPASSRLS;
+      INSERT INTO public.groups (id, name, programme_id, class_id, created_by)
+      VALUES ('${G4}', 'Disposable creator-owned group', ${LITERACY}, '${CLASS}', '${EA_A}');
+      INSERT INTO public.group_ea_assignments (id, group_id, ea_user_id, programme_id, created_by)
+      VALUES ('${G4_ASSIGNMENT}', '${G4}', '${EA_A}', ${LITERACY}, '${EA_A}');
+    `),
+    ['1|1', G4, '0|0']
+  );
+
+  const moveSession = sessionId(21);
+  const moveAttendee = attendeeId(21);
+  const unchangedIdentitySql = `
+    SELECT s.programme_id = ${LITERACY}, s.group_id = '${G1}', sa.group_id = '${G1}'
+    FROM public.sessions s JOIN public.session_attendees sa ON sa.session_id = s.id
+    WHERE s.id = '${moveSession}' AND sa.id = '${moveAttendee}';
+  `;
+  const nullGroupMoveSql = `UPDATE public.sessions SET programme_id = ${NUMERACY}, group_id = NULL
+    WHERE id = '${moveSession}'`;
+  const heldGroupMoveSql = `UPDATE public.sessions SET programme_id = ${NUMERACY}, group_id = '${G3}'
+    WHERE id = '${moveSession}'`;
+  accepts(
+    'session-programme-move-refused',
+    asActor(EA_A, `
+      ${sessionUpsert({ id: moveSession, group: G1 })}
+      ${attendeeUpsert({ id: moveAttendee, session: moveSession, group: G1 })}
+      -- Head Office moves the EA from A to B, never holding two active staff assignments.
+      -- Keep the direct child delivery assignment active: UPDATE USING still needs it.
+      RESET ROLE;
+      UPDATE public.staff_programme_assignments SET ended_at = pg_catalog.now()
+      WHERE user_id = '${EA_A}' AND programme_id = ${LITERACY} AND ended_at IS NULL;
+      INSERT INTO public.staff_programme_assignments (id, user_id, programme_id, school_id, created_by)
+      VALUES ('35000000-0000-0000-0000-000000000003', '${EA_A}', ${NUMERACY}, '${SCHOOL}', '${HEAD_OFFICE}');
+      SET LOCAL ROLE authenticated;
+      SELECT
+        (SELECT count(*) FROM public.staff_programme_assignments
+          WHERE user_id = '${EA_A}' AND ended_at IS NULL) = 1,
+        EXISTS (SELECT 1 FROM public.staff_programme_assignments
+          WHERE user_id = '${EA_A}' AND programme_id = ${NUMERACY} AND ended_at IS NULL),
+        private.has_active_session_attendee_assignment('${moveSession}'),
+        private.current_user_has_held_group_assignment('${G3}', ${NUMERACY});
+      ${refusedStatementSql(`${nullGroupMoveSql};`, '23514')}
+      ${unchangedIdentitySql}
+      ${refusedStatementSql(`${heldGroupMoveSql};`, '23514')}
+      ${unchangedIdentitySql}
+
+      -- Counterfactual controls: only postgres drops the trigger; the EA sends each PATCH.
+      -- Each savepoint restores the same original A session before the next variant.
+      -- The outer case ROLLBACK also restores the trigger for all subsequent cases.
+      RESET ROLE;
+      DROP TRIGGER sessions_prevent_identity_change ON public.sessions;
+      SET LOCAL ROLE authenticated;
+      SAVEPOINT move_without_trigger;
+      ${nullGroupMoveSql} RETURNING id;
+      SELECT s.programme_id = ${NUMERACY}, s.group_id IS NULL, sa.group_id = '${G1}'
+      FROM public.sessions s JOIN public.session_attendees sa ON sa.session_id = s.id
+      WHERE s.id = '${moveSession}' AND sa.id = '${moveAttendee}';
+      ROLLBACK TO SAVEPOINT move_without_trigger;
+      RELEASE SAVEPOINT move_without_trigger;
+      ${unchangedIdentitySql}
+
+      SAVEPOINT move_without_trigger;
+      ${heldGroupMoveSql} RETURNING id;
+      SELECT s.programme_id = ${NUMERACY}, s.group_id = '${G3}', sa.group_id = '${G1}'
+      FROM public.sessions s JOIN public.session_attendees sa ON sa.session_id = s.id
+      WHERE s.id = '${moveSession}' AND sa.id = '${moveAttendee}';
+      ROLLBACK TO SAVEPOINT move_without_trigger;
+      RELEASE SAVEPOINT move_without_trigger;
+      ${unchangedIdentitySql}
+    `),
+    [
+      moveSession, moveAttendee, 't|t|t|t', 't|t|t', 't|t|t',
+      moveSession, 't|t|t', 't|t|t', moveSession, 't|t|t', 't|t|t',
+    ]
+  );
+
+  accepts(
+    'session-update-keeping-identity-allowed',
+    asActor(EA_A, `
+      ${updateByIdSql('sessions', `programme_id = ${LITERACY}, group_id = '${G1}', notes = 'Identity unchanged'`, moveSession)}
+      SELECT notes, programme_id = ${LITERACY}, group_id = '${G1}'
+      FROM public.sessions WHERE id = '${moveSession}';
+      ${updateByIdSql('sessions', "notes = 'Identity omitted'", moveSession)}
+      SELECT notes, programme_id = ${LITERACY}, group_id = '${G1}'
+      FROM public.sessions WHERE id = '${moveSession}';
+    `, `${setupSession({ id: moveSession, group: G1 })}
+        ${setupAttendee({ id: moveAttendee, session: moveSession, group: G1 })}`),
+    [moveSession, 'Identity unchanged|t|t', moveSession, 'Identity omitted|t|t']
   );
 
   return passed;

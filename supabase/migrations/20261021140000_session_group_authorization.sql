@@ -104,5 +104,38 @@ create policy session_attendees_group_held_update
 drop policy if exists sessions_forward_prep_pin_defaults_insert on public.sessions;
 drop policy if exists sessions_forward_prep_pin_defaults_update on public.sessions;
 
+-- EAs archive groups. A hard delete would cascade away the historical assignment
+-- that authorizes sessions queued offline on another device. Privileged purges
+-- retain service_role's existing DELETE privilege.
+drop policy if exists groups_delete_created_by on public.groups;
+revoke delete on public.groups from authenticated;
+
+-- Session programme/group are captured identity: changing the parent must not
+-- silently move its already-authorized attendees into a different delivery scope.
+create or replace function private.prevent_session_identity_change()
+returns trigger
+language plpgsql
+set search_path = ''
+as $$
+begin
+  if new.programme_id is distinct from old.programme_id
+    or new.group_id is distinct from old.group_id
+  then
+    raise exception 'sessions programme_id and group_id cannot be changed after insert'
+      using errcode = '23514';
+  end if;
+
+  return new;
+end;
+$$;
+
+revoke execute on function private.prevent_session_identity_change()
+  from public, anon, authenticated;
+
+drop trigger if exists sessions_prevent_identity_change on public.sessions;
+create trigger sessions_prevent_identity_change
+  before update on public.sessions
+  for each row execute function private.prevent_session_identity_change();
+
 RESET statement_timeout;
 RESET lock_timeout;

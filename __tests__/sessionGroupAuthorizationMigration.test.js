@@ -119,4 +119,23 @@ describe('session group authorization Supabase migration', () => {
       lastCreatePolicy
     )).toBeGreaterThan(lastCreatePolicy);
   });
+
+  test('refuses authenticated group hard deletes without removing service-role privileges', () => {
+    const sql = normalizedSql();
+    expect(sql).toMatch(/drop policy if exists groups_delete_created_by on public\.groups;/i);
+    expect(sql).toMatch(/revoke delete on public\.groups from authenticated;/i);
+    expect(sql).not.toMatch(/revoke[^;]*on public\.groups from[^;]*service_role/i);
+  });
+
+  test('keeps the session programme and group immutable with an idempotent identity trigger', () => {
+    const sql = normalizedSql();
+    const match = sql.match(/create or replace function private\.prevent_session_identity_change\(\)([\s\S]*?)\$\$;/i);
+    expect(match).not.toBeNull();
+    expect(match[1]).toMatch(/returns trigger language plpgsql set search_path = ''/i);
+    expect(match[1]).toMatch(/if new\.programme_id is distinct from old\.programme_id or new\.group_id is distinct from old\.group_id then/i);
+    expect(match[1]).toMatch(/raise exception 'sessions programme_id and group_id cannot be changed after insert' using errcode = '23514';/i);
+    expect(match[1]).toMatch(/end if; return new;/i);
+    expect(sql).toMatch(/revoke execute on function private\.prevent_session_identity_change\(\) from public, anon, authenticated;/i);
+    expect(sql).toMatch(/drop trigger if exists sessions_prevent_identity_change on public\.sessions; create trigger sessions_prevent_identity_change before update on public\.sessions for each row execute function private\.prevent_session_identity_change\(\);/i);
+  });
 });

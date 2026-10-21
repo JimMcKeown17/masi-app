@@ -1255,6 +1255,91 @@ gate). The dry run listed only this file against `segygjzpujphwvrubusm`. Verifie
   350 suites / 4,240 tests (95.826 s), exit 0. `git diff --check` passed. Ten files changed:
   the nine Task 6 paths plus the one-line actor-lifecycle inventory entry required by its new set.
 
+- **2026-10-21 — B2 adversarial review, round 1: preserve group evidence and session identity.**
+  Finding 1 (high): authenticated group DELETE could cascade away the assignment evidence needed
+  by another device's queued session family. Finding 2 (medium): a permitted parent UPDATE could
+  change Programme/group without rechecking its attendees. Per the controller, the B2 migration
+  is not applied anywhere, so both fixes extend `20261021140000_session_group_authorization.sql`
+  in place; no new migration is introduced.
+- Dropped `groups_delete_created_by` and revoked group DELETE from `authenticated`, preserving
+  service-role DELETE privileges. EAs use archive. Added private
+  `prevent_session_identity_change()` / `sessions_prevent_identity_change` BEFORE UPDATE, in the
+  existing identity-trigger style: empty search path, direct EXECUTE revoked from
+  public/anon/authenticated, `IS DISTINCT FROM` on Programme/group and the clear `23514` rejection.
+  Identity-preserving notes/family timestamp updates retain their existing authorization checks.
+  The trigger applies to privileged updates too; a purge of a referenced group must account for
+  `ON DELETE SET NULL` changing immutable session identity. The service-role case uses an
+  unreferenced disposable group and does not claim a general historical purge workflow.
+- Harness cases were written first and appended after the existing cases:
+  `group-hard-delete-refused` catches exactly `42501`, checks group/assignment survival and proves
+  a service-role disposable purge; `session-programme-move-refused` inserts a valid session and
+  attendee as an EA active in Programme A, then models a sequential A-to-B staff Programme move,
+  refuses both Programme-B PATCH shapes with `23514` and checks unchanged parent/attendee identity
+  after each; trigger-dropped controls require both same-actor PATCH variants to succeed without
+  RLS changes, with savepoints restoring the A row between controls. `session-update-keeping-identity-allowed`
+  checks UPDATEs that explicitly preserve or omit identity. Caught refusals use subtransactions
+  so unchanged rows can be inspected in the same rolled-back case. The existing unheld-group
+  direct UPDATE case now expects `23514`: the identity trigger runs before the restrictive
+  policy's former `42501`. The group purge fixture sets service_role BYPASSRLS within its
+  transaction, matching hosted and the organisation-label harness; the shared bootstrap creates
+  only a plain role. **Controller PostgreSQL (local Docker PG17, port 65433, `PGTZ=UTC`):** RED against HEAD's
+  migration failed in an executed assertion (`session-update-to-unheld-group` got `42501` from the
+  restrictive policy where the trigger gives `23514`). The first GREEN exposed an invalid fixture (two
+  active staff programmes for one EA, refused by `idx_staff_programme_assignments_active_user_unique`),
+  corrected to a sequential A→B move with trigger-dropped controls. Final GREEN: `session-group` 34
+  cases; `history-authorization` 31; `upload-contract` 6 cases plus location 34, rowVersion 22 and
+  timeEntryForward 39; `organisation-label` 23; `support-incident` 18; `assessment-results` 53;
+  `ea-access` 43. All exit 0.
+- Static TDD, all commands under
+  `PATH="$HOME/.nvm/versions/node/v20.19.4/bin:$PATH"`:
+  `npx jest __tests__/sessionGroupAuthorizationMigration.test.js` RED exited 1 with
+  2 failed / 13 passed tests (15 total, 1 suite; 0.638 s), because the delete guard and identity
+  trigger were absent. Same-command GREEN passed 1 suite / 15 tests (0.512 s), exit 0.
+  `node --check scripts/session-group-postgres-harness.cjs` passed before and after the migration
+  change, exit 0. Static checks preserve the bounded timeouts and idempotent policy/trigger setup;
+  they do not establish actual SQL/RLS behavior or migration reapplication proof.
+- Focused regression commands (same Node 20 PATH):
+  `npm run test:integration -- __tests__/sessionGroupSync.test.js __tests__/sessionsRepository.test.js __tests__/groupsRepository.test.js`
+  passed 2 suites / 26 tests (1.773 s); adding the lifecycle/junction paths instead of the group
+  repository path also passed those same 2 suites / 26 tests (1.880 s). The integration runner's
+  testMatch excludes the additional paths, so they were run explicitly with unit Jest:
+  `npx jest __tests__/groupsRepository.test.js __tests__/offlineSync.pendingSessions.test.js`
+  passed 2 suites / 15 tests (1.370 s), and
+  `npx jest __tests__/groupAssignmentLifecycle.test.js __tests__/junctionRepositoryGuards.test.js`
+  passed 2 suites / 27 tests (1.696 s). All exited 0; no assertion or runner scope was weakened.
+- Updated the B2 section and groups/sessions table rows. No new phone deletion test is added:
+  `sessionGroupServer` has no stateful group DELETE and cannot prove the privilege refusal.
+  The database refusal is the guard; existing real-SQLite archive/reconnect family coverage stays
+  in place. No phone code, sync behavior, plan/spec, package or other migration changed. No
+  network, hosted Supabase, PostgreSQL execution, EAS, device, PR or Git-write action was taken.
+- Review round 1 full gates (same Node 20 PATH): `npx jest --silent --maxWorkers=25%` passed
+  350 suites / 4,242 tests (67.638 s), exit 0; `npm run test:integration --silent` passed
+  54 suites / 577 tests (42.517 s), exit 0. No unrelated failures or isolated reruns occurred.
+  `git diff --check` passed. Exactly the existing B2 migration, its static test/harness and the
+  contract map/build log changed; phone code, the synthetic server and the plan are unchanged.
+
+- **2026-10-21 — Review-round-1 harness fixture correction.** Controller PostgreSQL RED against
+  HEAD's migration was genuine (`42501` versus the expected identity-trigger `23514`). The first
+  controller GREEN failed before an assertion: the attempted second active staff Programme
+  assignment violated `idx_staff_programme_assignments_active_user_unique`. The original
+  simultaneous-A/B fixture was invalid; that run did not establish the programme-move guard.
+- Corrected only the programme-move fixture: the EA inserts its valid A session/attendee first;
+  postgres then ends its A staff assignment before inserting B. The fixture retains the active
+  direct child delivery assignment required by `has_active_session_attendee_assignment` and the
+  already-held B group. As the EA, it asserts one active staff assignment, B activation, attendee
+  write authority and held-B-group authority before attempting both refused PATCHes. The same
+  case then drops only the identity trigger as postgres and requires both PATCH variants to
+  succeed as the EA. Savepoints restore the original A row between controls and the outer
+  rollback restores the trigger. This separates trigger refusal from RLS refusal. The sibling
+  identity-preserving-update and group-delete cases use only the existing A assignment and have
+  no second-active-assignment setup problem; neither was changed. The migration is unchanged by
+  this correction. PostgreSQL execution remains controller-owned; no local rerun was attempted.
+- Fixture-correction proof, Node 20.19.4 PATH prefix:
+  `node --check scripts/session-group-postgres-harness.cjs` passed, exit 0;
+  `npx jest __tests__/sessionGroupAuthorizationMigration.test.js` passed 1 suite / 15 tests
+  (0.514 s), exit 0. `git diff --check` passed. The migration's SHA-256 was identical before and
+  after this follow-up; only the harness and this existing B2 log subsection were edited.
+
 ## Decision Register
 
 | Date | Decision | Rationale | Revisit Trigger |
