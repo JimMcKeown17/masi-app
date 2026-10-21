@@ -58,7 +58,7 @@ export {
   SUGGESTED_LETTER_COUNT,
 } from './constants';
 export { teachingOrderFromPack } from './letters';
-export { computeLessonPlan, planForSave, isPlanRecomputable } from './lessonPlan';
+export { computeLessonPlan, computeLessonChoices, planForSave, isPlanRecomputable } from './lessonPlan';
 export { rankGroups } from './groups';
 export { resolveLessonClass } from './lessonClass';
 export { blendTierForReadingLevel, deriveSessionReadingLevel } from './blends';

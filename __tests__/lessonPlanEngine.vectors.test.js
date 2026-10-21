@@ -59,3 +59,18 @@ describe.each(FILES)('%s', (name) => {
     else expect(result).toMatchObject(c.expect);
   });
 });
+
+const PLAN_CASES = FILES.flatMap((name) => {
+  const file = require(path.join(DIR, name));
+  return file.cases.filter((c) => c.fn === 'computeLessonPlan' && !c.throws).map((c) => [`${name}: ${c.name}`, file, c]);
+});
+test.each(PLAN_CASES)('plan and choices agree: %s', (_, file, c) => {
+  const input = inputFor(file, c);
+  const plan = engine.computeLessonPlan(input);
+  const choices = engine.computeLessonChoices(input);
+  expect(plan.blend_tier).toBe(choices.tiers[0]?.tier ?? null);
+  expect(plan.suggested_blends).toEqual((choices.tiers[0]?.suggested ?? []).map((i) => i.text));
+  expect(plan.suggested_blends.length).toBeLessThanOrEqual(engine.BLEND_SUGGESTION_COUNT);
+  expect(choices.books.filter((b) => b.suggested).map((b) => b.id)).toEqual(plan.suggested_book ? [plan.suggested_book] : []);
+  expect(engine.computeLessonChoices(input, { plan })).toEqual(choices);          // the frozen-plan anchor is the identity on its own plan
+});

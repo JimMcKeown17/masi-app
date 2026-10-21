@@ -1,3 +1,5 @@
+import { normalizeToken } from '../../utils/decodability';
+
 export const windowSessions = (sessions, { programmeId, academicYearStart, today }) => {
   const seen = new Set();
   return (Array.isArray(sessions) ? sessions : []).filter((session) => {
@@ -28,4 +30,12 @@ export const sessionsByChild = (windowed) => {
 export const isLessonPlanSession = (session) => {
   const lesson = session?.activities?.lesson;
   return lesson !== null && typeof lesson === 'object' && !Array.isArray(lesson);
+};
+
+export const lessonBlends = (session) => {
+  if (!isLessonPlanSession(session)) return [];
+  const blends = session.activities.lesson.blends_done;
+  return Array.isArray(blends)
+    ? blends.filter((text) => typeof text === 'string').map(normalizeToken)
+    : [];
 };
