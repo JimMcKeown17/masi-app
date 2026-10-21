@@ -302,14 +302,6 @@ export default function LiteracySessionForm({ navigation }) {
     setLetterTrackerChanges((prev) => ({ ...prev, [childId]: changes }));
   };
 
-  // Determine language code for letter tracker from the first selected child's class
-  const trackerLanguageCode = useMemo(() => {
-    if (selectedChildren.length === 0) return null;
-    const firstChild = selectedChildren[0];
-    const childClass = classes.find(c => c.id === firstChild.class_id);
-    return languageCodeForHomeLanguage(childClass?.home_language);
-  }, [selectedChildren, classes]);
-
   // Count pending tracker changes for a child (for button label)
   const getTrackerChangeCount = (childId) => {
     const changes = letterTrackerChanges[childId] || {};
@@ -319,7 +311,8 @@ export default function LiteracySessionForm({ navigation }) {
   const handleOpenLetterTracker = (child) => {
     setTrackerSheet({
       childId: child.id,
-      languageCode: pendingChangesLanguageCode(letterTrackerChanges[child.id]) ?? trackerLanguageCode,
+      languageCode: pendingChangesLanguageCode(letterTrackerChanges[child.id]) ??
+        languageCodeForHomeLanguage(classes.find(c => c.id === child.class_id)?.home_language),
     });
   };
 

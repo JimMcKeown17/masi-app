@@ -1243,8 +1243,50 @@ section remains Task 4's explicit documentation step.
 
 Tasks 4–6 still own RPC dispatch/finalization and migration of readers and write surfaces.
 The new repository's forbidden-filter errors and removed legacy methods deliberately expose
-those remaining old-contract callers. Step 5's commit is controller-owned; hosted/PostgreSQL,
+those remaining old-contract callers. Hosted/PostgreSQL,
 Supabase CLI, EAS, PR and device gates are outside this task.
+
+### 2026-10-21 — Lesson-plan AF: Afrikaans, release gate (controller)
+
+**What shipped on `feat/lesson-plan-af`** (base `7a831fb`):
+- `5f41036` Task 1: each pending tracker change carries the language and time of its tap; the
+  sheet's language is fixed when it opens; `persistLiteracySession` validates every change before
+  its transaction and refuses the whole save on an invalid one (`TRACKER_CHANGE_INVALID`).
+- `e2ab553` Task 2: `af` in `LANGUAGE_LABELS`, `case 'afrikaans'`, and Zazi's provisional
+  `AFRIKAANS_PEDAGOGICAL_ORDER` in `PEDAGOGICAL_ORDERS`.
+- `31946ee` Task 3: `letter_sounds@2026.2.af` (Grid A, the same 60 letters as Zazi's
+  `afrikaans_60_v2`) and `word_reading@2026.1.af` (Zazi's provisional, unreviewed
+  `afrikaans_words_50`, verified character for character against the Zazi source). WelaPLUS stays
+  `en`/`xh`.
+- `ca1ec6b` review round 1 fix (below).
+
+**Adversarial review** (`/codex:adversarial-review`, `gpt-6-astra`, base `7a831fb`):
+- Round 1, needs-attention, one [high] finding, verified in code: the session form took every
+  tracker's language from the **first selected child's** class, so in a mixed-language session an
+  English child's marks were stamped `af` and saved as `Afrikaans`, invisible to that child's
+  English tracker and ranking. The same bug existed for English/isiXhosa mixes; AF widened it. Fixed
+  at the root (`ca1ec6b`): each child's tracker uses that child's own class language; a pending
+  change's language still wins; an unknown class language shows the empty state, never another
+  child's language. This overrides the plan's "first selected child stays as the default" call
+  (plan line 123). RED (focused tracker/form/persistence suites): 3 failed / 109 passed, the three
+  wrong-language cases; GREEN 112/112.
+- Round 2, approve: no material findings; it confirmed the fix and that `LetterMasteryPanel`
+  derives each child's own language and saves immediately.
+
+**Suites** (`PATH="$HOME/.nvm/versions/node/v20.19.4/bin:$PATH"`, on `ca1ec6b`):
+
+| Gate | Result |
+| --- | --- |
+| `npx jest --silent --maxWorkers=25%` | 347 suites / 4,243 tests passed (baseline 4,202) |
+| `npm run test:integration --silent` | 52 suites / 558 tests passed (baseline 552) |
+| `npm run test:types` | Exit 0 |
+| `node scripts/sqlite-staging.cjs check` (main checkout, config only) | OK, `project_ref=segygjzpujphwvrubusm` |
+
+**Device gate (Step 4): not yet run.** Jim chose one combined Android preview build for all
+wave-1 plans (2026-10-21). The AF rows (Afrikaans letter test, word test, capital I vs lower-case l,
+Figtree ê ë ô, Afrikaans tracker with a hosted read-back, no-language class) run on that build on
+the Galaxy A03s, with a mixed-language session added for the round-1 fix. iPhone rows wait for an
+iOS build. Results will be recorded here.
 
 ## Decision Register
 
@@ -1404,6 +1446,7 @@ Supabase CLI, EAS, PR and device gates are outside this task.
 | 2026-10-20 | **Lesson plan design approved, then aligned with assessment results (rev 2).** Spec `docs/superpowers/specs/2026-10-20-lesson-plan-design.md`: languages are codes (`af` for Afrikaans); the Afrikaans letter test is an `af` copy of Grid A (the same 60 letters as Zazi's `afrikaans_60_v2`); track B1 (mastery inputs) is AR Plans 2–3 with five asks (§7.6). Jim: J21 this workstream writes and builds AR Plans 2–3; J22 `yaml@2.8.2` as an exact devDependency; J23 a child in an EA's group is always one of that EA's own children. | The lesson-plan spec was written against `97e088c`; #89/#90 merged the same day and settled language identity, the family upload and the mastery re-key. Adopting the approved, built design avoids two parallel ones. | AR Plans 2–3 change their contracts, or Head Office seeds a group member without a direct assignment. |
 | 2026-10-20 | **Wave-1 plans written and Codex-reviewed:** `2026-10-20-lesson-plan-{af-afrikaans,a1-content-packs,a3-engine,c1-lesson-draft,b2-session-group}.md` and `2026-10-20-assessment-results-plan-{2,3}.md`. Build order: AF first; AR Plan 2 after AF; AR Plan 3 after Plan 2 and C1's `pullCoverage.js`; A1, A3, C1 and B2 in parallel. Wave 2 (A2, C2–C3, C4, C5) is planned once wave 1 is in code. | Rounds per plan: AF 1, C1 1, B2 2 (approved), A1/A3 2, AR Plan 2 2, AR Plan 3 3. Each round's findings were verified against code before fixing; rounds stopped when findings narrowed to rare timing races, which are recorded as accepted risks in the plans. | A build task finds a plan contradicting the code it cites. |
 | 2026-10-20 | **Accepted plan risks (Codex rounds; no code change):** an open session tracker sheet can show a stale tile after a sync supersedes or refuses a confirmation (AR Plan 2 A1; its refresh was dropped because it raced with cancel taps); a clock rollback can keep back a later explicitly timed sheet tap until upload (AR Plan 2 A2); a developer-build draft pinned to a replaced preview pack shows the no-content state (A1); a refused mastery correction restored by the pull and then manually re-sent can leave the phone showing the restored value (AR Plan 3). | Each needs a rare sequence (a wrong clock and its correction, a manual retry after a refusal and a regained grant, a developer-only preview regeneration). The fixes would add machinery out of proportion to the risk. | Any of them is seen in the field or in a device gate. |
+| 2026-10-21 | **Lesson-plan AF plan calls.** (1) Package Questions keep bundled `en`/`xh` defaults only, so the battery never gets Afrikaans. (2) Dead `egraConstants.js` sets are left in place; only `AFRIKAANS_PEDAGOGICAL_ORDER` is added. (3) The tracker-change slice lands before Afrikaans enters the registry. (4) A pending change is valid only as a non-null object with boolean `mastered`, a code with a tracker order, a letter in that order and a parseable `madeAt`. (5) The tracker sheet's language is fixed when it opens, from the opened child's own class (round 1 replaced the first-selected-child default). (6) `af` is appended last in each map. (7) Item sets are typed, then frozen by statement. (8) Standalone languages are checked separately from battery languages. (9) Score-band and EGRA docs corrected for codes and step-by-step capture. | Each keeps Afrikaans additive and keeps English and isiXhosa behaviour unchanged, while closing the mixed-language mislabel at its source. | AR Plan 2 lands (labels become codes); the real Afrikaans pack lands (A2); WelaPLUS gains Afrikaans. |
 
 ---
 
@@ -1549,6 +1592,7 @@ Supabase CLI, EAS, PR and device gates are outside this task.
 
 | 2026-10-20 | **A session whose upload commits but whose reply is lost can go terminal** (found by the B2 plan writer, confirmed by Codex). The retry is an upsert; when the row exists PostgreSQL takes the UPDATE path, and `sessions_update_active_assignment_after_attendee` needs an attendee that has not landed yet, so 42501 with no pending evidence marks the session terminal. Common, not rare: the first retry is 5 s and passes run every 30 s. Pre-existing since `20260521140331`. | Not fixed yet. B2 plan Task 6 (a release prerequisite) makes session inserts insert-or-ignore by id, like the immutable assignment inserts, and deletes the unused `sessionsRepository.updateSession`; Codex approved the plan in round 2. | A retry must never need more authority than the first attempt. |
 | 2026-10-20 | **The reference refresh cannot switch the active academic year if the new year arrives first** (found by Codex on AR Plan 3). `pullReferenceDataRows` fetches years unordered and `replaceFromServer` upserts them one by one against the unique active-year index, so the transaction fails with `SQLITE_CONSTRAINT_UNIQUE` and the phone keeps the old year. Would hit every phone at a January rollover. | Not fixed yet. AR Plan 3 adds a task making the switch atomic and order-independent, tested with both response orders through the real repository. | A unique index plus row-by-row upserts hides an ordering assumption; apply deactivations before activations in one transaction. |
+| 2026-10-21 | **Mixed-language sessions stamped tracker marks with the first selected child's language** (found by the AF adversarial review, round 1). With an Afrikaans child selected first, an English child's marks were saved as `Afrikaans` and vanished from that child's English tracker and ranking; English/isiXhosa mixes had the same bug before AF. | Fixed in `ca1ec6b`: each child's tracker uses that child's own class language; unknown shows the empty state. Real-SQLite regressions cover Afrikaans/English and English/isiXhosa mixes and a null-language child. | A per-session default is a guess whenever a session can mix classes; derive per-child context from the child. |
 
 ---
 
