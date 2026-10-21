@@ -3402,6 +3402,47 @@ renumbered at the integration merge. The card gate (Step 4) is carried into the 
 Results Plan 2, then Plan 3, each with Jim's yes; the device checks run on the combined Android
 build Jim chose for wave 1.
 
+### 2026-10-21 — Lesson plan wave 1: integration branch (controller)
+
+Branch `feat/lesson-plan-wave1` merges all seven wave-1 plans for the single combined Android build
+Jim chose (2026-10-21). `origin/main` (`f27b347`) was already contained in the plans' base
+`7a831fb`, so no rebase was needed. Start: Assessment Results Plan 3's tip `bc2dd74`, which carries
+lesson-plan AF (`5b93025`), Assessment Results Plan 2 (`1272172`) and Plan 3. Then merged:
+lesson-plan A1 (`ae6219a`, `a06b67a`), A3 (`23f38ff`, `a6c8f7a`), C1 (`f0a65e5`, `05fdca8`) and B2
+(`44f86f6`, `7a299db`).
+
+**Local schema renumbering.** Three branches each claimed local version 16. On this branch:
+`letter_mastery_current_state` = 16, `lesson_drafts` = 17, `sessions_group_history_reference` = 18.
+No device had run any of these branches, so no installed database holds a conflicting number.
+Every migration test finds its migration by name or compares with `CURRENT_SCHEMA_VERSION`; the
+foundation tripwire and migration ledger now name 18 and list all three.
+
+**Merge resolutions worth knowing.**
+- `src/services/pullCoverage.js` and its test: Plan 3's copy is C1's helper (unchanged on C1 since
+  `8103e99`) plus `isMasteryInputsComplete`, so Plan 3's version was kept.
+- Contract map, merged row by row: B2 owns the `sessions`/`session_attendees` rows and the
+  held-group retry evidence; Plans 2–3 own the assessment, item, run and mastery rows; the `42501`
+  row carries both B2's held-group evidence and Plan 2's direct-arm rule for mastery. The stale
+  `updateSession` (B2 removed it) and `letter_mastery.deleted_at` (Plan 2 removed it) paragraphs
+  were dropped.
+- `package.json` and CI keep both the `letter-mastery` and `session-group` PostgreSQL harnesses.
+- B2's "a pulled session keeps its group id" test passes through Plan 3's extracted history walker.
+
+**Gates on `7a299db`** (`PATH="$HOME/.nvm/versions/node/v20.19.4/bin:$PATH"`; local Docker PG17
+on port 65433, `PGTZ=UTC`):
+
+| Gate | Result |
+| --- | --- |
+| `npx jest --silent --maxWorkers=25%` | 377 suites / 5,217 tests passed (baseline 346 / 4,202) |
+| `npm run test:integration --silent` | 76 suites / 936 tests passed (baseline 52 / 552) |
+| `npm run test:types` | Exit 0 |
+| All nine `verify:*:postgres` harnesses, every migration replayed together | `session-group` 36; `letter-mastery` 20; `assessment-history` 144; `history-authorization` 31; `upload-contract` 6 cases plus location 34, rowVersion 22 and timeEntryForward 39; `organisation-label` 23; `support-incident` 18; `assessment-results` 53; `ea-access` 43. All exit 0 |
+
+**Not yet run, each needing Jim's yes:** Assessment Results Plan 2's sync-first check and hosted
+`letter_mastery` wipe; the three hosted migrations in order (B2 `20261021140000`, Plan 2
+`20261021160000`, Plan 3 `20261022120000`); the Android EAS build of this branch; and every plan's
+device checks on the Galaxy A03s.
+
 ## Decision Register
 
 | Date | Decision | Rationale | Revisit Trigger |
