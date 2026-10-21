@@ -759,8 +759,9 @@ The client validates the schema version, completeness flag, authenticated user i
 ### Session history hydration (CAP-004)
 
 - **Scope and cursor.** One `sync_state` row per EA and Programme,
-  `session_history_pull:<userId>:<programmeId>`, because SQLite is shared by every EA who signs in on
-  the phone. The window is the active academic year's `starts_on`; a new year resets the cursor.
+  `session_history_pull:<userId>:<programmeId>`, in that EA's own SQLite file (ADR-0008), not a
+  database shared by every EA on the phone. The user id remains in the key for support exports.
+  The window is the active academic year's `starts_on`; a new year resets the cursor.
 - **Persistence.** Each parent page, its attendees, any history reference children, and the cursor
   commit in one transaction. Pending and failed local rows win. Absence never deletes, and history
   has no absence reconcile.
@@ -783,12 +784,24 @@ The client validates the schema version, completeness flag, authenticated user i
   recorded failure blocks "Up to date" until a page succeeds.
 - **Readers.** History, Home, the Sessions tab, and the daily goal stay "sessions I recorded". The
   session-count ranking counts every session a current child attended.
+  `pullCoverage.isSessionHistoryComplete` reads the cursor read-only for a lesson's present
+  children (lesson plan §7.3): `complete === true`, no failure since success, `windowStart` equal
+  to the requested/current academic year's `starts_on`, and every present child in
+  `rescanChildIds`. Missing programme, year or cursor and malformed coverage fail closed; an
+  empty child list gives the walk-level answer. It neither starts a pull nor writes state.
+  `complete`, `lastFailureAt`, `windowStart` and `rescanChildIds` are a reader contract: renaming
+  any of them must update `pullCoverage.js` and its tests. AR Plan 3's assessment/mastery walks
+  may reuse the pure `isCoverageWalkComplete` predicate with these fields (`windowStart: null`
+  skips the year check for an unbounded walk).
+  This is stricter than the Sync screen's "Up to date" (`describeHistoryState`), which ignores
+  the year and children covered. AR §11.5 will widen that row to session, assessment and mastery
+  walks; this predicate still reads only the CAP-004 session walk, not mastery completeness.
 
 Tests: `sessionHistoryFamilyDeltaMigration.test.js`, the disposable PostgreSQL harness,
 `sessionsHistoryPage.test.js`, `sessionHistoryPull.test.js`,
 `sessionHistoryPullProductionRouting.test.js`, `sessionHistoryReaders.test.js`,
-`sessionHistoryStatus.test.js`, `childrenHistoryReference.test.js`, and the ChildrenContext and
-screen tests.
+`sessionHistoryStatus.test.js`, `pullCoverage.test.js`, `childrenHistoryReference.test.js`, and the
+ChildrenContext and screen tests.
 
 ### Reconcile invariants and safety rails
 

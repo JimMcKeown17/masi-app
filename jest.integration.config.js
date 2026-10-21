@@ -61,5 +61,6 @@ module.exports = {
     '<rootDir>/__tests__/lessonDraftsMigration.test.js',
     '<rootDir>/__tests__/lessonDraftsRepository.test.js',
     '<rootDir>/__tests__/lessonDraftsDurability.test.js',
+    '<rootDir>/__tests__/pullCoverage.test.js',
   ],
 };

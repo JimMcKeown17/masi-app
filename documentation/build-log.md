@@ -1066,7 +1066,7 @@ gate). The dry run listed only this file against `segygjzpujphwvrubusm`. Verifie
 
 ---
 
-### 2026-10-21 — C1 Tasks 1–3, local schema 16, repository and signed-in EA handle
+### 2026-10-21 — C1 Tasks 1–4, local schema 16, repository, signed-in EA handle and history coverage
 
 Migration 16 adds the additive, local-only `lesson_drafts` table to each EA's SQLite file. The
 database enforces one row through a constant unique `slot`, enforces unique `session_id`, and has
@@ -1170,6 +1170,43 @@ field operation was run.
 The integration run emitted existing intentional auth/network failure-path, React/Paper,
 closed-handle and ChildrenContext undefined-`.catch` diagnostics in passing suites. No failure,
 timeout change or out-of-scope repair was needed.
+
+#### Task 4 — per-lesson session-history completeness
+
+`pullCoverage.js` adds the pure `isCoverageWalkComplete` and async, read-only
+`isSessionHistoryComplete` predicates. The latter resolves an omitted programme and academic-year
+start through the same SQLite helpers as CAP-004, reads only that EA/programme's existing session
+cursor through the bound sync-state repository, and delegates to the pure predicate. Coverage
+requires strict `complete === true`, the pull's null failure marker, the requested/current year,
+and every present child in `rescanChildIds`. Malformed coverage fails closed; an empty child list
+gives the walk-level answer. `windowStart: null` skips the pure helper's year check for a future
+unbounded walk. No new cursor, state, pull trigger, production caller or UI change was added.
+
+The tests retain all nine planned names and exercise cursors written by the actual pull into
+real SQLite: no walk, covered and group-only children, a newly assigned child, year rollover,
+explicit-year override, failure recovery and programme separation. Three additional tests cover
+malformed fields, missing programme/year, and empty-child-list/read-only behavior. The contract
+map now treats the four cursor fields as a reader contract, distinguishes this answer from Sync's
+"Up to date", and corrects the old shared-file description to ADR-0008's per-EA files.
+
+All commands below use `PATH="$HOME/.nvm/versions/node/v20.19.4/bin:$PATH"`.
+
+| Gate | Command after the Node prefix | Result |
+|---|---|---|
+| Pure predicate RED | `npm run test:integration -- __tests__/pullCoverage.test.js` | Expected FAIL: 1 suite failed to load, 0 tests executed; `Cannot find module '../src/services/pullCoverage'`; exit 1 |
+| Pure predicate GREEN | Same command | PASS: 1 suite / 3 tests; exit 0 (4.064 s) |
+| Real-pull cursor RED | Same command | Expected FAIL: 1 suite; 8 failed / 4 passed (12 total); `isSessionHistoryComplete is not a function`; exit 1 |
+| Real-pull cursor GREEN | Same command | PASS: 1 suite / 12 tests; exit 0 (2.729 s) |
+| Pull and binding neighbors | `npx jest __tests__/sessionHistoryPull.test.js __tests__/productionBindingStatic.test.js` | PASS: 2 suites / 49 tests; exit 0 (15.514 s) |
+| Full unit suite | `npx jest --silent --maxWorkers=25%` | PASS: 351 suites / 4,250 tests; exit 0 (300.603 s); no isolated rerun needed |
+| Full integration suite | `npm run test:integration --silent` | PASS: 56 suites / 596 tests; exit 0 (131.933 s); no isolated rerun needed |
+
+No plan/API adaptation was required. Evidence is local Jest and real better-sqlite3 with scripted
+server responses, not hosted authorization or device proof. No Supabase/PostgreSQL, EAS, device,
+release or field operation was run. Assessment/mastery completeness remains AR Plan 3; the
+lesson-engine caller remains wave 2. The integration run emitted intentional failure-path logs,
+React warnings, closed-handle diagnostics and the existing ChildrenContext undefined-`.catch`
+diagnostics in passing suites. No timeout change or out-of-scope repair was made.
 
 ## Decision Register
 
