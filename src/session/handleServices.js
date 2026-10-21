@@ -24,6 +24,7 @@ import { createSessionHistoryState } from '../services/sessionHistoryPull';
 import { createSessionHistoryStore } from '../services/sessionHistoryStatus';
 import { createAssessmentHistoryStates } from '../services/assessmentHistoryPull';
 import { createAssessmentHistoryStore } from '../services/assessmentHistoryStatus';
+import { isMasteryInputsComplete } from '../services/pullCoverage';
 import { getLatestAuthSession } from './signedInHandle';
 import { StaleActorError } from './staleActor';
 
@@ -121,7 +122,13 @@ export const createHandleServices = (handle) => {
     },
     fetchAndCacheSchools: () => fetchAndCacheSchools(referenceOptions),
     sessionHistory: { start: ({ force = false } = {}) => store.start({ userId: handle.userId, force }), store },
-    assessmentHistory: { start: ({ force = false } = {}) => assessmentStore.start({ userId: handle.userId, force }), store: assessmentStore },
+    assessmentHistory: {
+      start: ({ force = false } = {}) => assessmentStore.start({ userId: handle.userId, force }),
+      store: assessmentStore,
+      masteryInputsComplete: ({ childIds } = {}) => isMasteryInputsComplete({
+        database: handle, userId: handle.userId, childIds,
+      }),
+    },
     deviceProfile: {
       get: () => repositories.localState.get('user_profile', null),
       save: (profile) => repositories.localState.set('user_profile', profile),

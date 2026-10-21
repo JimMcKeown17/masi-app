@@ -2450,10 +2450,72 @@ no dependency or hosted work. The commit step is
 controller-owned; no PostgreSQL, network/hosted Supabase, EAS, device or PR action was run.
 Physical old-phone/fresh-phone agreement remains a device gate; this proof uses local SQLite.
 
+#### Task 11: mastery input completeness for the lesson engine
+
+Added `isMasteryInputsComplete({ database, userId, programmeId, childIds = [] })` to C1's
+`pullCoverage.js`. It resolves the active Programme when omitted and the active year, reads
+the assessment and mastery cursors, and delegates completed/year/failure/covered-child checks
+to the existing `isCoverageWalkComplete`. It then checks every requested child against both
+current scope queries: current-year synced class membership under an active synced class
+assignment, and an active synced direct delivery assignment. Missing dependencies or either
+cursor give false. The Battery Run cursor is irrelevant. Empty child ids give the two-walk
+answer; malformed child lists fail closed through C1's existing predicate.
+
+`services.assessmentHistory.masteryInputsComplete({ childIds })` captures the signed-in
+handle and its EA. It performs only SQLite reads, writes no cursor or outbox, starts no pull
+and caches no result. The handle-service test proves a supplied alternative user cannot
+change the captured actor, B does not borrow A's completed coverage, and A's accessor rejects
+with `StaleActorError` after switching. C1's `isCoverageWalkComplete` and
+`isSessionHistoryComplete` function bodies are unchanged, verified against HEAD.
+
+Extended `pullCoverage.test.js` with the plan's cases, including separate assessment/mastery
+failure recovery, current-year rollover, gains, immediate class/delivery loss, lost-and-regained
+grants, MR002 and an irrelevant failed run cursor. Cursors come from the real walks over real
+SQLite, with only the remote boundary fake. The 09:00/09:05/09:06/09:07 handover case uses the
+real acknowledged reconcile: it deletes `child-a`'s older 07:00 `k`, returns `fresh` without
+an RPC, leaves the returning child incomplete while `child-b` stays complete, then re-walks
+from a null keyset and restores `k`. Read-only assertions preserve sync state and an empty
+outbox and observe no RPCs. A real handle-services test covers the public engine accessor.
+
+**Adaptations and fixture choices.** The controller-authorized C1 precondition is its copied
+code/tests on this branch, rather than a main merge (plan Task 11's opening prerequisite).
+No C1 behavior was changed. The existing contract-map CAP-004 Readers bullet did not yet
+contain C1's coverage-helper explanation; it now documents those existing helpers and points
+to the new mastery completeness subsection. The rollover fixture explicitly adds 2027 class
+memberships (`__tests__/pullCoverage.test.js:195-204`), since `readAssessmentScope` requires
+memberships in the active year (`src/services/assessmentHistoryPull.js:29-38`). The first
+post-implementation run exposed a test-fixture error: the class assignment's default date
+was later than its simulated September removal, violating the lifecycle CHECK. The fixture
+now explicitly assigns it on 15 January (`__tests__/pullCoverage.test.js:159-160`); no assertion
+or production constraint was weakened. `handleServices.test.js` is the sole extra test file
+beyond Task 11's named coverage test, needed to verify the required handle-bound interface.
+
+Every command uses `PATH="$HOME/.nvm/versions/node/v20.19.4/bin:$PATH"` (Node `v20.19.4`).
+
+| Gate / command | Result |
+| --- | --- |
+| `npm run test:integration -- __tests__/pullCoverage.test.js` — RED | Exit 1: 1 failed suite, 14 failed / 12 passed tests (26 total), 2.143 s. All new cases reached the missing `isMasteryInputsComplete` export; the existing C1 tests passed. |
+| `npx jest __tests__/handleServices.test.js --maxWorkers=25%` — RED | Exit 1: 1 failed suite, 1 failed / 32 passed tests (33 total), 2.254 s. The new public handle method was missing. |
+| Same coverage command, first implementation run | Exit 1: 2 failed / 24 passed tests, 2.027 s. Both failures were the fixture assignment/removal date CHECK described above. |
+| Same coverage command — GREEN | Exit 0: 1 suite / 26 tests passed, 1.94 s. |
+| Same handle-services command — GREEN | Exit 0: 1 suite / 33 tests passed, 2.135 s. |
+| `npx jest --silent --maxWorkers=25%` | Exit 0: 362 suites / 4,547 tests passed, 78.538 s. |
+| `npm run test:integration --silent` | Exit 0: 70 suites / 844 tests passed, 64.828 s. |
+| Read-only source comparison against HEAD | PASS: both existing C1 helper bodies are unchanged. |
+| `git diff --check`; no-diff check of the plan, walkers, scopes, repositories, coverage-write helpers and integration config | PASS. |
+
+The full suites ran concurrently, with no extra simultaneous production-binding test. No
+unrelated failure or timeout occurred. The contract map contains the CAP-004 reader note
+and the four-condition mastery contract. Task 11 implementation and local verification are
+complete. The commit step is controller-owned. No dependency install, network, hosted
+Supabase action, PostgreSQL execution, EAS build, device check or PR was performed. Physical
+handover/convergence and subsequent controller branch/release gates remain separate proof.
+
 ## Decision Register
 
 | Date | Decision | Rationale | Revisit Trigger |
 | --- | --- | --- | --- |
+| 2026-10-21 | AR Plan 3 Task 11 derives mastery-input completeness from both completed cursors and both current grant sets, through one read-only handle-bound accessor. Battery Run state is excluded, and no answer is persisted or cached. | Completed coverage records what was downloaded; a live scope check detects a later grant loss. Reusing C1's predicate preserves failure/year semantics, and the existing coverage-drop/re-walk lifecycle prevents a returning child from looking complete before older mastery is restored. | Lesson-engine integration or physical handover/year-rollover gates expose missing coverage, actor leakage or a need for different completeness semantics. |
 | 2026-10-21 | AR Plan 3 Task 10 bounds assessment evidence to the active academic year's inclusive dates and shares one child/language selector between tracker reads and the mastery ranking. No active year supplies no assessment evidence; confirmations still count. | A phone retaining last year's results must agree with a fresh phone downloading only the current year. Date filtering belongs in the repository accessor; stored items still determine mastery, while confirmations remain current child state. | Physical rollover/convergence gates or lesson-engine integration expose a different evidence window or selector. |
 | 2026-10-21 | AR Plan 3 Task 9 presents one History status over all four walks and observes page/run versions only to re-read SQLite. The panel's existing background loader receives page signals; the open session sheet receives none. | Upload completion cannot establish inbound completeness, reference children need names without roster authority, and a page observer must not become another pull trigger. Preserving the panel's tap/read fences and the sheet's baseline avoids changing accepted correction intent. | Device gates expose stale displayed data, extra pulls, tap rollback or a new need to refresh an open sheet safely. |
 | 2026-10-21 | AR Plan 3 Task 8 serializes one coalesced trailing history pass and permits at most one reference refresh/restart per pass on MR002. The store and all triggers capture the signed-in handle; close/reset fences all old publications. | Joining an in-flight pass can miss a class persisted after its coverage snapshot. One follow-up closes that window while normal freshness still bounds RPC traffic; a bounded real refresh recovers year disagreement without a retry loop. | Provider/device trigger budgets, actor-close or year-rollover tests show extra requests, stranded coverage or stale publication. |

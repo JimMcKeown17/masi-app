@@ -62,6 +62,34 @@ afterEach(async () => {
   jest.restoreAllMocks();
 });
 
+test('masteryInputsComplete reads only the captured handle and EA without starting a pull', async () => {
+  const transport = jest.fn(async url => response(referenceRows(new URL(url).pathname.split('/').pop(), A)));
+  const a = await open(A, transport);
+  await a.services.referenceDataReady();
+  await a.withTransaction(async tx => {
+    await tx.runAsync("insert into children (id, first_name, last_name, sync_status) values (?, 'Test', 'Child', 'synced')", CHILD);
+    await tx.runAsync("insert into classes (id, school_id, name, grade, academic_year_id) values ('held', 'school', 'Held', '1', 'year')");
+    await tx.runAsync("insert into class_ea_assignments (id, class_id, ea_user_id, programme_id, sync_status) values ('class-ea', 'held', ?, ?, 'synced')", A, PROGRAMME);
+    await tx.runAsync("insert into child_class_memberships (id, child_id, class_id, academic_year_id, sync_status) values ('membership', ?, 'held', 'year', 'synced')", CHILD);
+    await tx.runAsync("insert into child_ea_assignments (id, user_id, child_id, sync_status) values ('delivery', ?, ?, 'synced')", A, CHILD);
+  });
+  transport.mockClear();
+  expect(await a.services.assessmentHistory.masteryInputsComplete({ childIds: [CHILD] })).toBe(false);
+  expect(transport).not.toHaveBeenCalled();
+  await a.services.assessmentHistory.start({ force: true });
+  const before = await (await a.getReader()).getAllAsync('select * from sync_state order by scope');
+  transport.mockClear();
+  expect(await a.services.assessmentHistory.masteryInputsComplete({ childIds: [CHILD], userId: B })).toBe(true);
+  expect(await (await a.getReader()).getAllAsync('select * from sync_state order by scope')).toEqual(before);
+  expect(transport).not.toHaveBeenCalled();
+  const bTransport = jest.fn(async () => response());
+  const b = await open(B, bTransport);
+  expect(await b.services.assessmentHistory.masteryInputsComplete({ childIds: [CHILD] })).toBe(false);
+  await expect(a.services.assessmentHistory.masteryInputsComplete({ childIds: [CHILD] }))
+    .rejects.toMatchObject({ name: 'StaleActorError' });
+  expect(bTransport).not.toHaveBeenCalled();
+});
+
 test.each(['update', 'batch'])('T3 / whole-pass: stale %s stops the pass without retries, fallback, metadata or sending the next record', async (mode) => {
   const entered = deferred();
   const release = deferred();

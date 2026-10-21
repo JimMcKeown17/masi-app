@@ -1067,6 +1067,13 @@ coverage-write failure, breaker, bypass, outbox evidence and missing-cursor case
   recorded failure blocks "Up to date" until a page succeeds.
 - **Readers.** History, Home, the Sessions tab, and the daily goal stay "sessions I recorded". The
   session-count ranking counts every session a current child attended.
+  `isSessionHistoryComplete({ database, userId, programmeId, childIds, academicYearStart })`
+  reads the stored session cursor through `isCoverageWalkComplete`: a finished walk, no
+  retained failure, the requested/current year window and every requested child in
+  `rescanChildIds`. Missing dependencies or malformed coverage give false; empty child ids
+  give the walk-level answer. These read-only helpers start no pull and change no state.
+  The lesson engine's separate mastery answer also checks current grants, as described in
+  “Mastery input completeness” below.
 
 Tests: `sessionHistoryFamilyDeltaMigration.test.js`, the disposable PostgreSQL harness,
 `sessionsHistoryPage.test.js`, `sessionHistoryPull.test.js`,
@@ -1243,6 +1250,43 @@ Confirmations remain current child state: no year, recorder or Programme filter 
 Real-SQLite `letterEvidenceYear.test.js` covers old/fresh agreement, both date bounds, no-year
 confirmation retention and tracker/ranking agreement. Panel read/tap ordering and the open
 sheet's accepted staleness are unchanged.
+
+**Mastery input completeness (Task 11, lesson-plan ask 3).**
+`isMasteryInputsComplete({ database, userId, programmeId, childIds = [] })` in
+`src/services/pullCoverage.js` resolves the active Programme when omitted and the active
+academic year, then requires all four conditions:
+
+1. The assessment cursor in `assessment_history_pull:<userId>:<programmeId>` passes
+   `isCoverageWalkComplete` for those children and `windowStart = year.starts_on`.
+2. Every requested child remains in `readAssessmentScope(db, { userId, academicYearId: year.id })`:
+   a synced membership in that year in a class held through an active synced assignment.
+3. The mastery cursor in `letter_mastery_pull:<userId>` passes `isCoverageWalkComplete` for
+   those children with `windowStart: null` (mastery is current state across years).
+4. Every requested child remains in `readMasteryScope(db, { userId })`: an active synced direct
+   delivery assignment.
+
+Missing actor, Programme, year or cursor gives false. So do incomplete or failed cursors, a
+previous year's assessment cursor, a child outside either completed covered set, or a lost
+current grant. A child in an unheld class stays incomplete even when currently delivered to.
+An empty child list gives the two-walk answer; the Battery Run cursor is irrelevant.
+The existing scope queries retain their exact rules, including exited current-year class
+memberships and class assignments in any Programme. This is conservative coverage of what
+the phone has downloaded, rather than a claim that it holds every server-side class member.
+
+On a loss and return, the existing transactional coverage bounds and mastery handover drop
+keep the returning child incomplete until its re-walk finishes. The freshness-window test
+uses the real acknowledged assignment reconcile: the old synced `k` row is deleted at 09:05,
+the unforced walk is still `fresh` at 09:06, and reassignment at 09:07 leaves that child
+incomplete while the unaffected child stays complete. The next unforced mastery walk
+re-walks from a null keyset, restores the older `k` and makes the child complete.
+
+The public engine accessor is
+`handle.services.assessmentHistory.masteryInputsComplete({ childIds })`, bound to that handle
+and its EA. It only reads SQLite, starts no pull, writes no cursor or outbox and caches no
+answer. A stale handle rejects through the existing actor fence. `pullCoverage.test.js`
+uses real walks and SQLite for both failures, gains/losses/returns, rollover, MR002 and the
+freshness-window handover; `handleServices.test.js` checks actor isolation and zero requests
+or state changes from the accessor. Native convergence remains a device gate.
 
 **Server switch.** Each RPC consults `private.history_pull_rollout` for its feature
 (`assessments`, `battery_runs`, `letter_mastery`): per-EA row, then everyone row, then off.
