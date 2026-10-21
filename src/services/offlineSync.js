@@ -97,7 +97,7 @@ const TABLE_DEPENDENCIES = {
   groups: ['classes'],
   group_ea_assignments: ['groups'],
   child_group_memberships: ['children', 'groups'],
-  sessions: ['classes'],
+  sessions: ['classes', 'groups'],
   session_attendees: ['sessions', 'children', 'groups'],
   battery_runs: ['children'],
   assessments: ['children', 'battery_runs'],
@@ -147,7 +147,7 @@ const PARENT_FK_COLUMNS = {
   groups: { classes: 'class_id', grouping_versions: 'grouping_version_id' },
   group_ea_assignments: { groups: 'group_id' },
   child_group_memberships: { children: 'child_id', groups: 'group_id', grouping_versions: 'grouping_version_id' },
-  sessions: { classes: 'class_id' },
+  sessions: { classes: 'class_id', groups: 'group_id' },
   session_attendees: { sessions: 'session_id', children: 'child_id', groups: 'group_id' },
   battery_runs: { children: 'child_id' },
   assessments: { children: 'child_id', battery_runs: 'battery_run_id' },
@@ -155,7 +155,8 @@ const PARENT_FK_COLUMNS = {
 };
 
 // The grant(s) each write needs, matching private.current_user_can_write_for_child/class/group
-// (migration 20260521144901 lines 368-517). The created_by half is covered by PARENT_FK_COLUMNS.
+// (migration 20260521144901 lines 368-517) and B2's held-group check.
+// The created_by half is covered by PARENT_FK_COLUMNS.
 // Entry shapes:
 //   { grantTable, subjectColumn, valueColumn? }: a direct active assignment whose subjectColumn
 //     equals this record's valueColumn (default subjectColumn). valueColumn 'id' means the
@@ -163,6 +164,8 @@ const PARENT_FK_COLUMNS = {
 //   { membershipMediatedChild: column }: the child in `column` is reachable through an active
 //     class or group membership joined to an active class or group assignment. The server needs
 //     both rows, so evidence is pending when either half is unacknowledged and not terminal.
+//   { heldGroupAssignment: column }: an owed insert of this EA's assignment to the group in
+//     `column`, even when the local assignment has ended (C19). Only sessions and attendees.
 // staff_programme_assignments is excluded (reference data, never pushed). Used for 42501 and
 // UPDATE_NOT_APPLIED.
 const GRANT_SUBJECTS = {
@@ -186,9 +189,11 @@ const GRANT_SUBJECTS = {
     { grantTable: 'group_ea_assignments', subjectColumn: 'group_id' },
     { membershipMediatedChild: 'child_id' },
   ],
+  sessions: [{ heldGroupAssignment: 'group_id' }],
   session_attendees: [
     { grantTable: 'child_ea_assignments', subjectColumn: 'child_id' },
     { membershipMediatedChild: 'child_id' },
+    { heldGroupAssignment: 'group_id' },
   ],
   assessments: [
     { grantTable: 'child_ea_assignments', subjectColumn: 'child_id' },
@@ -288,9 +293,13 @@ const dependenciesForRecord = (outboxRecord) => {
     dependencies.delete('classes');
     return [...dependencies];
   }
-  if ((outboxRecord.table_name === 'groups' || outboxRecord.table_name === 'sessions') && !payload.class_id) {
+  if (outboxRecord.table_name === 'groups' && !payload.class_id) {
     dependencies.delete('classes');
     return [...dependencies];
+  }
+  if (outboxRecord.table_name === 'sessions') {
+    if (!payload.class_id) dependencies.delete('classes');
+    if (!payload.group_id) dependencies.delete('groups');
   }
   if (outboxRecord.table_name === 'session_attendees' && !payload.group_id) {
     dependencies.delete('groups');
@@ -349,6 +358,20 @@ const hasPendingActiveAssignment = async (database, grantTable, subjectColumn, s
        limit 1`,
     subjectValue,
   );
+  return !!row;
+};
+
+const hasOwedHeldGroupAssignmentInsert = async (database, groupId, eaUserId) => {
+  if (!groupId || !eaUserId) return false;
+  const row = await database.getFirstAsync(`
+    select 1 as present
+    from sync_outbox o
+    join group_ea_assignments gea on gea.id = o.record_id
+    where o.table_name = 'group_ea_assignments' and o.operation = 'insert'
+      and o.status in ('pending', 'failed', 'in_flight')
+      and gea.group_id = ? and gea.ea_user_id = ?
+    limit 1
+  `, groupId, eaUserId);
   return !!row;
 };
 
@@ -421,6 +444,13 @@ const computeEvidencePending = async ({
 
   if (includeGrant) {
     for (const grant of GRANT_SUBJECTS[table] || []) {
+      if (grant.heldGroupAssignment) {
+        const groupId = await getField(grant.heldGroupAssignment);
+        if (groupId && await hasOwedHeldGroupAssignmentInsert(db, groupId, outboxRecord.owner_user_id)) {
+          return true;
+        }
+        continue;
+      }
       if (grant.membershipMediatedChild) {
         const childId = await getField(grant.membershipMediatedChild);
         if (childId && await hasPendingMembershipMediatedGrant(db, childId, {

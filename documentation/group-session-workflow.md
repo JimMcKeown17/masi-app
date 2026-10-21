@@ -43,10 +43,11 @@ persistence, sync payloads, session lifecycle, and reporting. The dependency ord
 
 Do not start the group-first UI before these contracts are settled:
 
-1. **Session-group contract settled by [B2](../docs/superpowers/plans/2026-10-20-lesson-plan-b2-session-group.md).**
+1. **Done — session-group grant evidence (B2 Task 5, 2026-10-21).**
    Existing `GRANT_SUBJECTS` already represents class/group-membership-mediated child grants.
-   B2 Task 5 still implements the session's group-grant evidence, counting an owed assignment
-   insert even when that assignment has ended; this implementation gate remains open.
+   [B2](../docs/superpowers/plans/2026-10-20-lesson-plan-b2-session-group.md) adds the session and
+   attendee held-group evidence: this EA's owed assignment insert counts even when it has ended.
+   Archive-only, terminal and other-EA inserts do not count; other grants remain active-only.
 2. **Deferred (lesson-plan C16).** Collision-proof identity and lifecycle rules for
    `grouping_versions`, `groups.display_number`, and `child_group_memberships` remain outside B2.
 3. **Done for the session-group server contract (B2 Task 1).** Non-null groups require a held or
@@ -54,11 +55,12 @@ Do not start the group-first UI before these contracts are settled:
    guards retained. History visibility and deleted-group writes are covered by the B2 contract.
    [ADR-0005](../docs/adr/0005-assessment-delivery-scope-two-tier-access.md) retains the wider access model.
    Hosted application remains an approved release gate.
-4. **Done for schema, history, producer and payload (B2 Tasks 1–4).** The contract map, canonical
+4. **Done — schema, history, producer, payload and dependency/evidence contract (B2 Tasks 1–5, 2026-10-21).** The contract map, canonical
    server/local migrations, repository guards, equal attendee group ids, allowlists and local
-   behavior tests implement the session-group write contract. B2 Task 5 still adds dependency
-   gates/evidence; Task 6 closes the lost-response retry prerequisite. These remaining gates must
-   pass before B2 merges and the group-first UI ships.
+   behavior tests implement the session-group write contract. Sessions wait for their own failed
+   group, not unrelated groups; the deleted-group assignment-backoff scenario converges in ordinary
+   passes without terminal rows or manual retry. Task 6's lost-response retry fix remains a separate
+   release prerequisite, and hosted/device gates still apply before B2 merges and the UI ships.
 
 ## Product requirements
 

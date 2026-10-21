@@ -1153,6 +1153,55 @@ gate). The dry run listed only this file against `segygjzpujphwvrubusm`. Verifie
   performed; those gates retain their separate owners. No plan checkboxes or other spec sections
   changed; group-workflow product sections remain for C2/C3.
 
+- **2026-10-21 — B2 Task 5: group dependencies and owed held-assignment evidence.** Sessions
+  declare class/group parents and remove their nullable edges independently. Same-pass failures
+  hold back only the exact group's lessons without advancing their retry counters. Only sessions
+  and attendees gain `{ heldGroupAssignment: 'group_id' }`: a nonterminal owed assignment insert
+  joined to this EA's local assignment counts even after it ends. The EA comes from outbox
+  `owner_user_id`; archive-only, terminal and other-EA inserts do not count. Other grant paths stay
+  active-only, and assignment archive rank 6 is unchanged. No schema, package dependency or server policy
+  change was needed.
+- Task 5 TDD uses the existing `sessionGroupServer` network boundary, real SQLite repositories
+  and engine, and the persistent terminal-observation trigger. Six evidence cases cover ended,
+  archive-only, terminal and other-EA assignments, attendee parity and other-table isolation.
+  Three scenarios cover an assignment insert failing across three passes after group deletion,
+  a group insert failing once, and class-scoped/classless sessions without a group. The deleted
+  group's family converges within six ordinary passes without manual retry, with observed
+  retryable `42501` messages and no terminal transition after any pass. The failed group holds
+  its lesson untouched in pass 1 and the family lands in pass 2.
+- Task 5 RED, all commands prefixed with
+  `PATH="$HOME/.nvm/versions/node/v20.19.4/bin:$PATH"`:
+  `npm run test:integration -- __tests__/sessionGroupSync.test.js` exited 1 with
+  4 failed / 9 passed tests (13 total, 1 suite; 5.083 s): session/attendee held-group evidence
+  returned false, the deleted-group lesson went terminal, and the failed group did not prevent
+  its session request. `npx jest __tests__/classifyErrorHardening.test.js` exited 1 with
+  1 failed / 12 passed tests (13 total, 1 suite; 8.067 s): the session grant map was absent.
+  Before that behavior-level integration RED, two fixture-only corrections were required:
+  the initial run had 8 failed / 5 passed (11.406 s), including six assignment-date CHECK
+  failures; fixing the assignment start date left 5 failed / 8 passed (6.146 s), including an
+  archive id mismatch. The archive fixture now explicitly supplies the planned `:lifecycle` id
+  because generic outbox enqueue defaults to `:archive`; neither correction changed production
+  code or weakened an expectation.
+- Task 5 same-command GREEN: integration passed 1 suite / 13 tests (6.185 s); classification
+  unit tests passed 1 suite / 13 tests (5.024 s), both exit 0. The requested focused regression
+  command `npx jest offlineSync syncOutboxRepository syncErrorGuard deterministicErrorBudget`
+  passed 10 suites / 130 tests (15.260 s), exit 0. Plan Step 4's `npm run test:integration`
+  passed 54 suites / 577 tests (137.194 s), exit 0.
+- Updated Global Contract 10, same-pass gating, error classification/limitations, the B2 session
+  contract and review file map. ROADMAP now closes the stale grant tripwire, noting that
+  membership-mediated evidence already existed; collision-proof grouping remains deferred by
+  C16 with no new group-write kind. Group-workflow prerequisites 1 and 4 now read done for
+  Tasks 1–5. Task 6's lost-response insert retry remains a separate B2 merge/release prerequisite.
+  No plan/spec checkboxes changed. Step 6's commit is controller-owned; PostgreSQL, hosted
+  Supabase, EAS, native-device and PR gates were not run in this task. Local/synthetic evidence
+  does not establish those gates.
+- Task 5 full unit gate (same Node 20 PATH): `npx jest --silent --maxWorkers=25%` passed
+  350 suites / 4,240 tests (117.428 s), exit 0. No unrelated failures or isolated reruns occurred.
+- Task 5 final integration gate (same Node 20 PATH): `npm run test:integration --silent` passed
+  54 suites / 577 tests (43.479 s), exit 0. No unrelated failures or isolated reruns occurred.
+  `git diff --check` passed. Only the engine, its two planned test files and the four named
+  standing/evidence docs changed; the plan, spec, migrations and package files are unchanged.
+
 ## Decision Register
 
 | Date | Decision | Rationale | Revisit Trigger |

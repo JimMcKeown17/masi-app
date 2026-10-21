@@ -8,7 +8,7 @@ import { createSessionsRepository } from '../src/db/repositories/sessionsReposit
 import { createGroupsRepository } from '../src/db/repositories/groupsRepository';
 import { createSyncOutboxRepository } from '../src/db/repositories/syncOutboxRepository';
 import { childEaAssignmentDomainId, groupEaAssignmentDomainId } from '../src/db/repositories/domainRepositoryUtils';
-import { createOutboxSyncEngine } from '../src/services/offlineSync';
+import { createOutboxSyncEngine, _testComputeEvidencePending } from '../src/services/offlineSync';
 import { createMigratedDatabase, seedCoreData } from '../test-support/sqliteRepositoryTestUtils';
 import { createSessionGroupServer } from '../test-support/sessionGroupServer';
 
@@ -23,10 +23,18 @@ describe('session group sync', () => {
   let db;
   let server;
   let engine;
+  let initialRows;
+  const configureServer = (options = {}) => {
+    server = createSessionGroupServer({ initialRows, ...options });
+    engine = createOutboxSyncEngine({
+      enqueueRequest: task => task(), getAuthSession: liveTestSession,
+      database: db, supabaseClient: server.supabaseClient,
+    });
+  };
   beforeEach(async () => {
     db = await createMigratedDatabase(runMigrations);
     await seedCoreData(db);
-    const initialRows = {
+    initialRows = {
       children: ['child-1', 'child-2'].map(id => ({
         id, first_name: 'Test', last_name: id, created_by: 'head-office',
       })),
@@ -59,20 +67,19 @@ describe('session group sync', () => {
       when new.status = 'terminal'
       begin insert into terminal_observations (id) values (new.id); end;
     `);
-    server = createSessionGroupServer({ initialRows });
-    engine = createOutboxSyncEngine({
-      enqueueRequest: task => task(), getAuthSession: liveTestSession,
-      database: db, supabaseClient: server.supabaseClient,
-    });
+    configureServer();
   });
-  afterEach(async () => db.closeAsync());
+  afterEach(async () => {
+    jest.useRealTimers();
+    await db.closeAsync();
+  });
 
-  const expectUploadedFamily = async () => {
-    expect(server.rows.sessions.get('lesson-1').group_id).toBe('group-1');
+  const expectUploadedFamily = async (groupId = 'group-1') => {
+    expect(server.rows.sessions.get('lesson-1').group_id).toBe(groupId);
     expect([...server.rows.session_attendees.values()]
       .map(({ child_id, group_id }) => ({ child_id, group_id }))
       .sort((a, b) => a.child_id.localeCompare(b.child_id)))
-      .toEqual([{ child_id: 'child-1', group_id: 'group-1' }, { child_id: 'child-2', group_id: 'group-1' }]);
+      .toEqual([{ child_id: 'child-1', group_id: groupId }, { child_id: 'child-2', group_id: groupId }]);
     expect(await db.getAllAsync(
       "select sync_status from sessions where id = 'lesson-1' union all select sync_status from session_attendees where session_id = 'lesson-1'"
     )).toEqual([{ sync_status: 'synced' }, { sync_status: 'synced' }, { sync_status: 'synced' }]);
@@ -120,5 +127,142 @@ describe('session group sync', () => {
     expect(call.payload).not.toHaveProperty('group_id');
     expect(server.rows.sessions.get('old-1')).not.toHaveProperty('group_id');
     expect(await db.getAllAsync('select * from sync_outbox')).toEqual([]);
+  });
+
+  const endLocalAssignment = async (eaUserId = 'user-1') => {
+    await db.runAsync(`update group_ea_assignments set assigned_at = '2026-10-19T12:00:00.000Z',
+      unassigned_at = '2026-10-20T12:00:00.000Z',
+      ea_user_id = ?, sync_status = 'pending' where id = ?`, eaUserId, GROUP_ASSIGNMENT_ID);
+  };
+  const oweAssignmentInsert = async (status = 'failed') => {
+    const outbox = createSyncOutboxRepository({ database: db });
+    await outbox.enqueue({
+      tableName: 'group_ea_assignments', recordId: GROUP_ASSIGNMENT_ID, operation: 'insert',
+      payload: { id: GROUP_ASSIGNMENT_ID, group_id: 'group-1', ea_user_id: 'user-1' },
+    });
+    await db.runAsync("update sync_outbox set status = ? where table_name = 'group_ea_assignments'", status);
+  };
+  const evidencePending = (tableName = 'sessions', payload = { group_id: 'group-1' }, includeGrant = true) => (
+    _testComputeEvidencePending({
+      database: db, outboxRepository: createSyncOutboxRepository({ database: db }),
+      outboxRecord: { table_name: tableName, record_id: 'evidence-record', owner_user_id: 'user-1', payload },
+      includeGrant,
+    })
+  );
+
+  test("a session's group grant counts an owed assignment insert even after the local assignment ended", async () => {
+    await endLocalAssignment();
+    await oweAssignmentInsert();
+    expect(await evidencePending()).toBe(true);
+    expect(await evidencePending('sessions', { group_id: 'group-1' }, false)).toBe(false);
+  });
+
+  test('an acknowledged assignment insert with only its archive owed is not evidence', async () => {
+    await endLocalAssignment();
+    await createSyncOutboxRepository({ database: db }).enqueue({
+      tableName: 'group_ea_assignments', recordId: GROUP_ASSIGNMENT_ID, operation: 'archive',
+      id: `group_ea_assignments:${GROUP_ASSIGNMENT_ID}:lifecycle`,
+      payload: { id: GROUP_ASSIGNMENT_ID, unassigned_at: '2026-10-20T12:00:00.000Z' },
+    });
+    expect(await db.getFirstAsync('select id from sync_outbox')).toEqual({
+      id: `group_ea_assignments:${GROUP_ASSIGNMENT_ID}:lifecycle`,
+    });
+    expect(await evidencePending()).toBe(false);
+  });
+
+  test('a terminal assignment insert is not evidence', async () => {
+    await endLocalAssignment();
+    await oweAssignmentInsert('terminal');
+    expect(await evidencePending()).toBe(false);
+  });
+
+  test("another EA's owed assignment insert is not evidence", async () => {
+    await endLocalAssignment('user-2');
+    await oweAssignmentInsert();
+    expect(await evidencePending()).toBe(false);
+  });
+
+  test('attendees use the same held-group evidence', async () => {
+    await createSessionsRepository({ database: db }).saveSession({ ...LESSON, synced: true });
+    await endLocalAssignment();
+    await oweAssignmentInsert();
+    expect(await evidencePending('session_attendees', {
+      session_id: 'lesson-1', child_id: 'child-2', group_id: 'group-1',
+    })).toBe(true);
+  });
+
+  test('other tables keep active-only evidence', async () => {
+    await endLocalAssignment();
+    await oweAssignmentInsert();
+    expect(await evidencePending('child_group_memberships', {
+      child_id: 'child-2', group_id: 'group-1',
+    })).toBe(false);
+  });
+
+  const saveNewGroup = (id = 'group-new') => createGroupsRepository({ database: db }).saveGroup({
+    id, name: 'Group 2', programme_id: 'programme-a', class_id: 'class-1', created_by: 'user-1', synced: false,
+  });
+  const startClock = () => {
+    jest.useFakeTimers();
+    jest.setSystemTime(new Date('2026-10-21T10:00:00.000Z'));
+  };
+  const advancePass = () => jest.setSystemTime(new Date(Date.now() + 16 * 60 * 1000));
+
+  test("the assignment's own insert fails over three passes after the group is deleted; the lesson converges with no manual retry", async () => {
+    startClock();
+    configureServer({ failGroupAssignmentInserts: 3 });
+    await saveNewGroup();
+    await createGroupsRepository({ database: db }).addChildToGroup({
+      child_id: 'child-1', group_id: 'group-new', synced: false,
+    });
+    await createSessionsRepository({ database: db }).saveSession({ ...LESSON, group_id: 'group-new' });
+    await createGroupsRepository({ database: db }).deleteGroup('group-new');
+
+    let sawRlsRetry = false;
+    for (let pass = 1; pass <= 6; pass += 1) {
+      await engine.syncAll();
+      const lesson = await db.getFirstAsync("select status, last_error from sync_outbox where table_name = 'sessions'");
+      if (lesson) {
+        expect(['pending', 'failed']).toContain(lesson.status);
+        if (lesson.status === 'failed' && /row-level security/.test(lesson.last_error)) sawRlsRetry = true;
+      }
+      expect(await db.getAllAsync('select * from terminal_observations')).toEqual([]);
+      if (!(await db.getFirstAsync('select id from sync_outbox'))) break;
+      advancePass();
+    }
+    expect(sawRlsRetry).toBe(true);
+    await expectUploadedFamily('group-new');
+    expect(server.rows.groups.get('group-new').archived_at).toBeTruthy();
+    expect(server.rows.group_ea_assignments.get(groupEaAssignmentDomainId({ groupId: 'group-new' })).unassigned_at).toBeTruthy();
+  });
+
+  test("the group's own insert fails once: its lesson waits in that pass and lands in the next", async () => {
+    startClock();
+    configureServer({ failGroupInserts: 1 });
+    await saveNewGroup();
+    await createSessionsRepository({ database: db }).saveSession({ ...LESSON, group_id: 'group-new' });
+    await engine.syncAll();
+    expect(server.calls.filter(({ tableName }) => tableName === 'sessions')).toEqual([]);
+    expect(await db.getFirstAsync("select status, retry_count from sync_outbox where table_name = 'sessions'"))
+      .toEqual({ status: 'pending', retry_count: 0 });
+    expect(await db.getAllAsync('select * from terminal_observations')).toEqual([]);
+    advancePass();
+    await engine.syncAll();
+    await expectUploadedFamily('group-new');
+  });
+
+  test('sessions without a group are not held back by an unrelated failed group', async () => {
+    startClock();
+    configureServer({ failGroupInserts: 1 });
+    await saveNewGroup('group-other');
+    for (const [id, classId] of [['lesson-class', 'class-1'], ['lesson-classless', null]]) {
+      await createSessionsRepository({ database: db }).saveSession({
+        ...LESSON, id, class_id: classId, group_id: null,
+      });
+    }
+    await engine.syncAll();
+    expect([...server.rows.sessions.keys()].sort()).toEqual(['lesson-class', 'lesson-classless']);
+    expect(await db.getAllAsync("select * from sync_outbox where table_name in ('sessions', 'session_attendees')")).toEqual([]);
+    expect(await db.getAllAsync('select * from terminal_observations')).toEqual([]);
   });
 });
