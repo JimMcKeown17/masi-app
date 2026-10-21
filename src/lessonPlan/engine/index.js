@@ -58,3 +58,4 @@ export {
 } from './constants';
 export { teachingOrderFromPack } from './letters';
 export { computeLessonPlan } from './lessonPlan';
+export { rankGroups } from './groups';
