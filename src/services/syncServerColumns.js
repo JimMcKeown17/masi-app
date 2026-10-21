@@ -67,7 +67,7 @@ export const SERVER_COLUMNS = {
     'row_version',
   ],
   sessions: [
-    'id', 'user_id', 'programme_id', 'class_id', 'session_date', 'started_at',
+    'id', 'user_id', 'programme_id', 'class_id', 'group_id', 'session_date', 'started_at',
     'ended_at', 'activities', 'notes', 'created_at', 'updated_at',
   ],
   session_attendees: [

@@ -27,6 +27,7 @@
     "assessment-history:probe": "node scripts/assessment-history-http-probe.cjs",
     "verify:ea-access:postgres": "node scripts/ea-access-postgres-harness.cjs",
     "verify:letter-mastery:postgres": "node scripts/letter-mastery-postgres-harness.cjs",
+    "verify:session-group:postgres": "node scripts/session-group-postgres-harness.cjs",
     "ea:status": "node scripts/ea-access.cjs status",
     "ea:suspend": "node scripts/ea-access.cjs suspend",
     "ea:restore": "node scripts/ea-access.cjs restore",

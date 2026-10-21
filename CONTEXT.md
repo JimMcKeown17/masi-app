@@ -231,6 +231,7 @@ The EA who made a change, stamped on its outbox row from the signed-in EA handle
 - A **Class** has many **Groups** (across one or more programmes); a **Group** may also be class-less.
 - A **Child** has many **Programme Enrollments** (a child may be in Core Literacy *and* Numeracy at once).
 - A **Session** belongs to exactly one **Programme** and optionally one **Class**.
+- A **Session** records its **Group** as history. A phone may hold a session whose group it does not have (after a handover or a deleted group); that reference grants no roster, edit or assignment access.
 - An **EA** holds a **Class assignment** (assessment scope) and, within it, a **Delivery assignment** over a subset of that class (delivery scope). A **Class** may have several active **Class assignments** — one per co-EA sharing it.
 - A **Session**, **Assessment**, **Battery Run** or **Letter mastery** record hydrated onto a phone may carry a **History reference child** outside the EA's scopes; the reference grants neither **Delivery** nor **Assessment scope** and is never uploaded.
 

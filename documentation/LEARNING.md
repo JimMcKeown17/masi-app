@@ -9,6 +9,40 @@ This document chronicles the architectural decisions, engineering patterns, and 
 
 ---
 
+## Retrying an insert must not ask for edit rights
+
+A network failure cannot tell the phone whether the server committed a request. In B2's session
+case, the server can store the session while its response disappears. The phone correctly keeps
+the insert in its durable outbox and holds back the attendees for that pass. On the next pass the
+session runs first again. The mistake was sending that retry as a merge upsert: finding the stored
+id turns an insertion attempt into an UPDATE authorization request.
+
+The session UPDATE policy, `sessions_update_active_assignment_after_attendee`, requires a landed
+attendee with active child authority. No attendee has landed yet, so that policy refuses the
+parent retry. With no pending parent or grant to explain the denial, the phone marks it terminal.
+The original insert succeeded, but the phone cannot acknowledge it without manual intervention.
+This is an operation-shape problem, not a reason to loosen the UPDATE policy or add a retry loop.
+
+Sessions are insert-only in this release. Sending their inserts with
+`upsert(payload, { onConflict: 'id', ignoreDuplicates: true })` maps to `ON CONFLICT (id) DO NOTHING`:
+a new row is inserted, while a committed id is left unchanged. INSERT `WITH CHECK` still applies
+to the proposed row; the retry does not get permission to change stored content. As for immutable
+assignment inserts, no error acknowledges the attempt. Sessions do not batch and are outside the
+row-version contract. The real-SQLite regression commits the parent, loses the response, advances
+past backoff, and proves the parent and attendees finish in two ordinary passes without a terminal
+transition. Four disposable PostgreSQL cases cover the SQL/RLS boundary; controller execution is
+a separate gate, including the assertion that an ignored retry with an unheld group is refused.
+
+The unused `updateSession` method had to go with this change. It re-saved edits as `insert`, which
+would now change SQLite but be silently ignored on the server. Saved-session editing is outside
+v1; when it ships it needs a distinct UPDATE-by-id operation, row versions and attendee-removal
+semantics, not a re-sent insert. `saveSession` itself is unchanged.
+
+Attendees differ: their UPDATE policy asks for the same owned session and active child authority
+as their INSERT policy, and B2's group check accepts a historically held assignment for both.
+Their merge upsert therefore remains appropriate. The general lesson is to match the retry's
+database operation to the original intent: retrying a creation must not acquire edit semantics.
+
 ## Numbering writes when they leave, not when they are made
 
 A version is useful only if it measures the order we need to protect. One record can have several
@@ -2053,3 +2087,37 @@ match the lesson's language and retain its original ISO tap time. Resuming never
 value at save time. Local tests prove the row is readable from a second connection before close,
 survives an offline reopen unchanged, and remains separate across EA switches. A real force-quit
 on Expo SQLite is still a device gate. C1 supplies storage; C3 supplies the user-facing lifecycle.
+
+## A foreign key states the present; a session's group is history
+
+A session records a past group block, while the phone's group roster records the EA's current
+assignments. Those sets need not match. After a handover, an incoming EA can read a child's old
+sessions without ever holding the old group. An ended assignment or a deleted group can also
+remove it from the working roster. The roster query in
+[`preloadedChildData`](../src/services/preloadedChildData.js) fetches only groups with an active
+assignment to this EA in the selected Programme; it cannot promise a local row for every group
+named in authorized history.
+
+A local foreign key would force the phone to discard that historical id or invent a group row.
+We rejected a history-reference `groups` row because a group is an operational object: ordinary
+group readers, pickers, edits, archive, reconcile and ownership repair would all have to learn
+to exclude it. Ownership repair can create assignments. The history API also does not supply
+the group's required name. A plain id on the session preserves the fact without adding roster
+or edit authority. Assessment Results #90 made the same call for `battery_runs.class_id`: the
+phone can retain the captured class id when its current class roster no longer contains it.
+The server keeps its foreign key in both cases.
+
+Local migration 16, `sessions_group_history_reference`, rebuilds `sessions` with all 16 columns,
+the Programme/class foreign keys, the state check and its three indexes, but no group foreign
+key. The migration runner turns foreign keys off before the transaction and restores them after
+it. Creating the replacement, copying explicit columns, dropping the old table, then renaming
+the replacement keeps the attendee foreign key pointing at `sessions`. Renaming the old table
+first would redirect that foreign key to the old name. The real-SQLite upgrade regression checks
+rows, queued uploads, index definitions and the attendee cascade across this operation.
+
+History import and new capture have different validation needs. B2 Task 4 will put the local-write
+check in `saveSession`: a chosen group must exist on this phone and belong to the session's
+Programme, including an archived group for a lesson already captured. That repository guard
+replaces the group FK for local writes; this schema task alone does not install it. If a future
+screen needs a session's group name offline, revisit the historical display data required rather
+than promoting a historical id into a working group.

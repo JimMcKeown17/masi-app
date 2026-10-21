@@ -203,6 +203,15 @@ Before a mobile session-history pull can ship:
 8. Server pulls must not overwrite pending local rows (pending-local-wins, issue #42 / ZZ F7). See "Pull Persistence & Reconcile" below.
 9. Sync auth state is part of the RLS contract (issues #43/#44). A sync pass with no Supabase session must return a structured skip (`{ success: true, skippedNoSession: true }`) before touching the outbox or sync metadata. A terminal `42501` recorded while a live session exists must store `last_error` with the `42501-authenticated:` prefix and must never be auto-healed. Unmarked RLS-terminal rows are treated as auth-loss collateral: when auth is restored through `SIGNED_IN`, `TOKEN_REFRESHED`, or sessionful `INITIAL_SESSION`, the engine requeues only rows owned by the signed-in user, and the outbox requeue plus domain `sync_status = 'pending'` reset happen in one SQLite transaction. See "Auth-Restore RLS Heal" below.
 10. Error classification is local-state-only and bounded for the classes it models (issue #48 plus audit finding #6). `23514` from the immutable-assignment identity triggers (`child_ea_assignments`, `class_ea_assignments`, `group_ea_assignments`) is immediately terminal with reason `Immutable identity or check constraint rejected the update (23514)`; inserts already avoid it via `ignoreDuplicates`, and archive patches contain lifecycle fields plus the claimed version, so this remains a guard for other update-like paths or server check drift. `23503` is retriable while the FK parent has a `pending`/`failed`/`in_flight` `sync_outbox` row (`hasPendingRecord`), terminal otherwise. `42501` is retriable while the FK parent OR an RLS assignment grant is pending locally, terminal otherwise. Mastery corrections use direct child delivery assignment evidence only, matching their RPC authority; they never use class/group membership-mediated grants. For other tables, grant evidence covers a direct active, unsynced `child_ea_assignments`/`class_ea_assignments`/`group_ea_assignments` row for the record's subject and the membership-mediated child arms of `private.current_user_can_write_for_child`: an active class/group membership joined to its active assignment counts while either half is `pending`/`failed`/`in_flight`, provided neither half is terminal. The `child_class_memberships` or `child_group_memberships` row currently being inserted is excluded from this query because an INSERT cannot grant its own prerequisite authority; a different pending membership path still counts. `computeEvidencePending` resolves the runtime connection once through `resolveDatabase`, then uses that resolved handle for domain-row, direct-assignment, and membership-mediated reads, including the production engine where no database is injected. Subject and FK values resolve from the outbox payload first and the record's own local domain row second, so archive/update payloads still yield evidence. `UPDATE_NOT_APPLIED` uses the same grant evidence and is also retriable while the record's exact insert operation remains owed (`hasPendingOperation`); it is terminal when none of those evidence paths is pending. The `42501` no-session downgrade (Item 9) still applies to an otherwise-terminal `42501`. The deterministic class `PGRST204`, `42703`, `22P02`, `23502`, and non-immutable-table `23514` is retriable for attempts 1 through 7; attempt 8 becomes terminal with `retry_count = 8` and a `deterministic:` reason. `ARCHIVE_NOT_APPLIED` is terminal immediately because the server did not return the one exact updated id required to finalize the lifecycle transition. Codeless network/timeout errors remain retriable without an attempt cap. Force "Sync Now" includes terminal rows, so a repaired server condition can resurrect and finalize them. See "Error Classification" below.
+
+    **B2 / C19 exception to Item 10's active-only grants:** only `sessions` and
+    `session_attendees` also use `{ heldGroupAssignment: 'group_id' }`. An owed `insert`
+    (`pending`/`failed`/`in_flight`, never terminal) joined to the local `group_ea_assignments`
+    row for that group counts even after the assignment has ended. `hasOwedHeldGroupAssignmentInsert`
+    filters `gea.ea_user_id` to the outbox's signed-in `owner_user_id`, not the content creator;
+    an archive alone is not evidence. It runs only with `includeGrant`, through the same resolved
+    database handle. Every other grant retains its existing active-only rule.
+
 11. Active-pair identity is collision-proof by construction (issue #47). The four active-pair tables whose identity IS their server partial-unique key -- `child_ea_assignments` `(user_id, child_id)`, `child_programme_enrollments` `(child_id, programme_id)`, `class_ea_assignments` `(class_id, ea_user_id, programme_id)`, `group_ea_assignments` `(group_id)` -- use a deterministic UUIDv5 id keyed EXACTLY on those columns (local mint in the repository create path plus a force-remap on insert/update/restore push in `buildSyncPayload`, gated on all key columns). Archive operations never remap identity: they scope the lifecycle fields and claimed version by the outbox record id. Every writer (device or the future head-office seed) that means the same active pair derives the same id, so a would-be partial-index `23505` becomes an idempotent id-match. `child_class_memberships` cannot use this (it recurs on class moves and needs distinct archived rows for `deleteIfNoHistory` audit), so it uses reconcile-before-upsert: before an active membership insert, a pre-push server read archives a conflicting active `(child_id, academic_year_id)` row (device-move-wins, audit-preserving), with a conservative fallback to the normal upsert on any error. Already-exited payloads skip this reconcile; see "Row versions (upload contract)" and "Active-Pair Collision-Proofing" below.
 12. Grouping-flow collision-proofing is partial and mostly deferred (issue #46). `class_grouping_state` is a one-row-per-`(class_id, academic_year_id)` singleton, so it uses a deterministic id `f(class_id, academic_year_id)` (local mint + push-remap), same shape as Item 11. `grouping_versions` (generational -- needs an activate-new/deactivate-old reconcile) and `groups.display_number` (a partial-unique sequence never populated today) are NOT built: their collision-proofing is inseparable from the grouping/regrouping workflow, which is deferred to next year (CONTEXT.md:161, ADR-0001). Their write paths do not exist yet, so nothing collides today. See "Grouping-Flow Collision-Proofing" below.
 13. An outbox row's `created_at` is queue identity, not mutation time. Re-enqueueing the same `(table_name, record_id, operation)` refreshes its payload, owner, retry fields, status, and `updated_at`, but preserves its first `created_at`. Child INSERTs also preserve `last_error` as dispatch evidence (see no-history deletion below). Lifecycle intents are the deliberate identity exception: archive and restore share `<table>:<record>:lifecycle`, so the operation itself can change while the stream keeps its original `created_at`. Push ordering therefore remains fair when one record is edited repeatedly. Claiming assigns the outbox ids a shared in-flight timestamp, stamps eligible domain versions and payloads in the same transaction, then returns the claimed snapshots in input order. Finalization compares each returned `updated_at` before deleting or failing the row; see "Row versions (upload contract)".
@@ -221,6 +230,7 @@ Before a mobile session-history pull can ship:
 | Batched upsert | `session_attendees`, plus insert operations for `child_programme_enrollments`, `children`, and `time_entries` (the three assignment tables batch their inserts too; see the next row) | `upsert(payloads, { onConflict: 'id' })` in batches of at most 100. A returned or thrown batch failure may spend at most 25 per-record fallback attempts across the entire pass, with concurrency at most five. | Parent row (`children` / `sessions`) must be visible/writable first for tables with parent FKs. Unattempted fallback rows return to pending without failure or retry inflation. `children` has no pre-push hook. Enrollment payloads are normalized to deterministic active-pair ids before array dispatch. Update operations for `time_entries` and every lifecycle-bearing table never enter a batch. In particular, enrollment updates cannot share a batch with inserts and replay `ended_at`. |
 | Letter mastery correction | `letter_mastery` single `update` slot | `rpc('set_letter_mastery', { p_correction_id, p_child_id, p_letter, p_language, p_confirmed, p_changed_at })`; one correction per call, never a batch or direct table write | All three valid outcomes succeed. The outbox CAS and returned-winner write-back (or unreadable-row deletion) share one SQLite transaction; a newer local correction keeps its content and slot. Only direct child delivery assignment is grant evidence for a `42501` retry. See the mastery contract below. |
 | Immutable assignment insert push | `child_ea_assignments`, `class_ea_assignments`, `group_ea_assignments` when `operation === 'insert'` | One ready row uses `upsert(payload, { onConflict: 'id', ignoreDuplicates: true })`; consecutive ready rows use the same operation with `payloads`, bounded batch size, and bounded per-record fallback. | Duplicate insert retry must be insert-or-ignore, not update-capable upsert, because identity triggers reject changed identity/timestamp columns. Full payloads are normalized to deterministic active-pair ids before dispatch. |
+| Session insert push | `sessions` when `operation === 'insert'` (its only operation) | `upsert(payload, { onConflict: 'id', ignoreDuplicates: true })`, one row at a time (sessions do not batch) | A retry after a lost response needs only INSERT authority. The merge upsert's UPDATE path met `sessions_update_active_assignment_after_attendee`, which needs a landed attendee, and went terminal when the parent was retried first (B2, Codex round 1). INSERT `WITH CHECK` still runs on the ignored row; `DO NOTHING` never changes a stored session. No error acknowledges, as for assignment inserts. `session_attendees` keeps its merge upsert, because its UPDATE policy asks for no more than its INSERT policy. |
 | Assignment archive/update | Same assignment tables | Archive and restore use the lifecycle-update contracts above; ordinary updates use acknowledged UPDATE by id with lifecycle fields excluded. | Lifecycle patches contain `unassigned_at` / `handover_reason` plus the claimed `row_version`; identity columns remain immutable. |
 | No-history child delete | `children` hard delete | RPC `delete_child_if_no_history(p_child_id)` | Local delete eligibility comes from the queued child INSERT, never the current domain `sync_status` (which an edit resets). See the no-history deletion rules below. Direct mobile child DELETE is blocked; history rows require archive instead. `20260712202409_masi_idempotent_child_delete.sql` makes a wholly absent child return `true` before authorization, so a retry after server success and pre-finalization crash is idempotent. Present but unauthorized children still raise `42501`; history-blocked children still return `false`. The migration was applied and verified against `masi-app-sqlite` on 2026-07-12. |
 | Delivery-history parent page (CAP-004) | Inbound `sessions` history (`sessionHistoryPull`) | `get_delivery_history_page(programme, window_start, page_size, after_updated_at, after_id, overlap_seconds)`; page size 1–200; overlap 0–600 s; cursor wholly null or wholly populated; **ascending `(updated_at, id)`** keyset over the server-owned family timestamp | `SECURITY DEFINER` RPC. The owner arm and the historical-delivery arm are each ordered and limited before the union, so page work is bounded by the arms, not by remaining history. Class/group/creator arms are absent. `p_programme_id` is a partition key, not a grant. The client replays `updated_at` as the raw PostgREST string, never through a `Date`, and passes a 120 s overlap only on the first page of a delta that resumes from a completed cursor. Replaces `get_delivery_history_session_page`, which the same migration drops. |
@@ -357,11 +367,10 @@ a batched upsert can replay stale lifecycle values or apply omitted-column inser
 Inserts retain their existing payload and retry behavior. `class_grouping_state` has no lifecycle
 columns and its create-or-update operation remains an upsert.
 
-**Local session edits.** `updateSession` applies updates and `keysToRemove`, then forces
-`sync_status: 'pending'`, `synced: false`, and `last_sync_error: null` before `saveSession` writes
-and queues the parent plus every attendee it rewrites in one transaction. Rewritten attendee
-payloads carry the same pending/unsynced/cleared-error invariant. The existing parent/attendee
-upsert operation shape and the status-trusting inbound `save*` contract are unchanged.
+**Sessions are insert-only (B2).** `saveSession` is the only session producer, and it queues
+`insert`. B2 deleted the unused `updateSession`, because the server would now ignore its re-saved
+edit. Saved-session editing (spec §8; the upload contract's Out list) must add an `update`
+operation sent as UPDATE by id with a row version, never a re-sent insert.
 
 Parent-page exhaustion is a **bounded convergence traversal**, not a transaction-wide snapshot.
 Each request is a separate database statement, so concurrent inserts or updates may appear on a
@@ -384,6 +393,12 @@ the RPC, where direct table reads could bypass it.
 Push order is necessary but not sufficient: when one row fails, only rows that depend on that exact record should wait. The sync engine tracks failed and dependency-skipped records as `{ table_name, record_id }`, not as a set of failed tables. Normal parent edges use `PARENT_FK_COLUMNS` to compare the dependent's FK with the failed parent's `record_id`. Archive ordering uses `ARCHIVE_DEPENDENCY_SUBJECT_COLUMNS` to compare the shared `child_id`, `class_id`, or `group_id`, so an access-ending assignment waits for failed cleanup about the same subject only. Fields come from the outbox payload first and the durable SQLite domain row second because lifecycle payloads are intentionally partial.
 
 A matching dependent stays pending and its table result records both `skippedDependency` and `skippedDependencyRecordId`. The skipped record itself becomes scoped blocking evidence for later records in the same pass. Unrelated records continue, including records on the same dependent table and healthy records separated by a blocked row during batch formation. Every declared direct and inverse dependency edge has a static mapping guard. If a future edge lacks resolvable identity evidence, the engine falls back to conservative blocking rather than sending out of order.
+
+Sessions now declare both `classes` and `groups` dependencies, with `class_id` and `group_id`
+resolved independently. A failed group insert or deferred group archive holds back only that
+group's sessions in that pass; their retry counters do not advance. A session without a group
+does not wait for an unrelated failed group, whether or not it has a class. The group's own
+class dependency and the assessment/battery-run clauses are unchanged.
 
 Same-record gates apply before the relationship graph. An acknowledged edit waits while its own insert is owed, and every lifecycle row (`archive` or `restore`, for every table) does the same because a lifecycle UPDATE can acknowledge only a row that exists. A terminal insert does not block. A lifecycle row also waits while a different lifecycle operation for the same record is in flight; when that older request settles unsuccessfully, the single-record failure finalizer supersedes it instead of retaining a retry that could reverse the newer intent. Lifecycle rows are never batched, so batch finalizers are deliberately unchanged.
 
@@ -569,6 +584,161 @@ its open-time baseline while open: re-reading beneath its pending map can undo a
 tap (accepted risk A1). Reopening reads the new truth. Plan 3 still needs a pull signal for
 the panel only.
 
+## Session group authorization (B2)
+
+Server migration `20261021140000_session_group_authorization.sql` implements C19 for the
+session family. A completed `sessions` row may carry a non-null group when the EA **holds or has
+held** an assignment to that group in the session's Programme: any matching
+`group_ea_assignments` row counts, whether active or ended. `session_attendees.group_id` uses the
+same rule, resolving the Programme from its parent session. Null remains accepted on both tables
+for older builds. The existing `state = 'completed'` boundary remains in force.
+
+**History invariant (spec J23, Jim 2026-10-20).** The session history pull's delivery arm follows
+`child_ea_assignments` (`supabase/migrations/20260925120000_session_history_family_delta.sql:110-115`).
+That covers every member of an EA's groups, because a child in an EA's group is always one of
+that EA's own children: app-made groups take their members from the delivery roster. A Head
+Office seed must therefore give every group member a direct assignment to the group's EA; a
+seed that breaks this needs a contract change first.
+
+`private.current_user_has_held_group_assignment(group_id, programme_id)` is the shared
+`SECURITY DEFINER` check. Its Programme provenance is deliberately `groups.programme_id`, not
+`group_ea_assignments.programme_id`. The existing `group_ea_assignments_insert_self` policy checks
+that an EA created the group and is actively assigned to the Programme supplied on the assignment,
+but it does not require that supplied Programme to equal the group's Programme. Therefore an EA
+can create an ended assignment row whose Programme is forged. The verifier case
+`session-group-forged-assignment-programme` proves that such a row can be inserted but cannot
+authorize a session or attendee in the forged Programme. Helper EXECUTE is revoked from `PUBLIC`
+and `anon` and granted only to `authenticated`.
+
+Four RESTRICTIVE policies add this invariant without replacing the existing permissive write
+policies: `sessions_state_completed_group_held_insert`,
+`sessions_state_completed_group_held_update`, `session_attendees_group_held_insert`, and
+`session_attendees_group_held_update`. The two session policies also keep the completed-state
+guard. They replace the forward-prep pins `sessions_forward_prep_pin_defaults_insert` and
+`sessions_forward_prep_pin_defaults_update`; all four replacement guards are installed before
+those pins are dropped. `private.current_user_can_write_for_child` is unchanged, so the attendee's
+ordinary child-write requirement still applies. Session and attendee SELECT policies are also
+unchanged: the direct session-owner arm and `can_read_session_attendee` retain upsert conflict
+visibility, and historical delivery reads continue to return the saved group id without making
+that group a new grant. The server does not require an attendee's group id to equal its session's;
+the phone producer owns that equality.
+
+**Group deletion (review round 1).** EAs archive groups, never hard-delete them. This B2 migration
+drops `groups_delete_created_by` and revokes `DELETE` on `public.groups` from `authenticated`,
+idempotently. A hard delete would cascade away group assignments and strand a session family
+queued offline on another device: no group or held-assignment evidence would remain to authorize
+it. Assignment DELETE was already revoked. `service_role` retains its existing group DELETE
+privileges for privileged purges; the harness proves deletion of a disposable, unreferenced group.
+
+**Session identity (review round 1).** `programme_id` and `group_id` are immutable after insert.
+`private.prevent_session_identity_change()` runs through the `sessions_prevent_identity_change`
+BEFORE UPDATE trigger, comparing both fields with `IS DISTINCT FROM` and raising `23514` with
+`sessions programme_id and group_id cannot be changed after insert`. This includes null changes
+and prevents a parent PATCH from moving already-landed attendees under another Programme/group.
+Updates keeping both fields unchanged still pass through the existing policies, including notes
+and family timestamps; no broader UPDATE right is added. The trigger follows the existing private
+identity-trigger style (empty search path, direct EXECUTE revoked from public/anon/authenticated)
+and applies to privileged updates too. Privileged purges involving referenced history must account
+for the immutable identity: a group FK's `ON DELETE SET NULL` is also a group-id change.
+
+The added PostgreSQL cases are `group-hard-delete-refused`, `session-programme-move-refused` and
+`session-update-keeping-identity-allowed`, appended after the prior cases. They check retained
+group/assignment rows after the authenticated refusal, a service-role disposable purge, both
+cross-Programme PATCH shapes with unchanged session/attendee identity, and allowed updates that
+preserve or omit the identity fields. Disposable PostgreSQL 17 proves both guards (34 session-group cases), including controls
+showing the same programme move succeeds when the trigger is absent.
+`sessionGroupServer` models group validation/upserts, not stateful group deletion, so no new
+phone-side deletion test is added: the server refusal is this failure mode's guard. Existing
+real-SQLite/synthetic-server archive-and-reconnect regressions remain, and phone sync is unchanged.
+
+The held-assignment rule currently relies on the one-row-per-group assignment identity generated
+by `groupEaAssignmentDomainId`. If grouping work later allows a group to change EA, the old
+holder's ended assignment must survive as historical evidence, or this authorization check must
+move to a history table.
+
+**Group Programme (review round 2).** A group's `programme_id` is fixed after insert, including
+for raw clients with group UPDATE authority. The B2 migration adds
+`private.prevent_group_programme_change()` and the `groups_prevent_programme_change` BEFORE
+UPDATE trigger: `IS DISTINCT FROM` rejects a changed Programme with `23514` and
+`groups programme_id cannot be changed after insert`. It follows the same private/empty-search-path/
+revoked-EXECUTE/idempotent trigger pattern as session identity. Name, class and archive/restore
+edits remain allowed under their existing policies. Without this guard, changing a group to
+Programme B could strand an offline Programme-A session or reinterpret already-uploaded history.
+
+The held-group check's trusted inputs and retained evidence are fenced together:
+
+- The proposed session's `group_id` and `programme_id` are immutable after insert (round 1).
+- The referenced group's `programme_id` is immutable (round 2), so Programme provenance stays
+  the group's own value, never the assignment's supplied Programme.
+- Assignment `group_id`, `ea_user_id` and `programme_id` are immutable under
+  `prevent_assignment_identity_change`; the helper reads only group/EA identity, not assignment
+  Programme. The actor comes from server `auth.uid()`, not payload provenance.
+- Authenticated DELETE is revoked for both groups and group assignments, preserving the rows
+  that supply historical authority. `unassigned_at` may change and is deliberately ignored by C19.
+
+On the phone, `updateGroup` and local existing-row `saveGroup` writes that will enqueue
+(`shouldEnqueueOutbox(record)`) compare the Programme with the stored group inside the write
+transaction and throw
+`groups.programme_id cannot be changed after insert` before any write/outbox enqueue. Equal
+Programmes pass; name-only edits retain the existing Programme. The guard also prevents an
+existing group being re-scoped through Programme resolution during a local re-save. Authoritative
+pull persistence bypasses this local-mutation guard: acknowledged and terminal cached groups
+converge to the server's Programme, including historical drift from before B2. The existing
+`serverPullWouldClobberPendingLocal` checks still protect pending/failed local rows and their owed
+payloads, and reject older server versions for acknowledged rows. Real-SQLite tests verify
+convergence restores the EA's Programme-scoped roster and permits a session in that Programme,
+alongside pending/failed protection and older-version rejection. The local-mutation tests still
+cover synced/pending rows, unchanged group/assignment/outbox snapshots on refusal, and accepted
+equal-Programme/name-only writes. `groupsRepository.test.js` is included in the integration gate.
+The appended PostgreSQL cases `group-programme-change-refused` and
+`group-edit-keeping-programme-allowed` include the same-EA, trigger-dropped PATCH control and
+allowed name/class/archive/restore edits. Both pass on disposable PostgreSQL 17 (36
+session-group cases), and the fixture keeps only one active staff Programme assignment throughout.
+
+**Phone history reference.** Local migration 16, `sessions_group_history_reference`, keeps all
+session columns and the Programme/class FKs while removing the session's group FK.
+`sessionsRepository.saveHistoryPage` stores the server's `group_id` verbatim through
+`SESSION_COLUMNS`, and `getSessions` returns it even when the group is absent locally. This
+creates no group, assignment, roster/picker entry or outbox work, including after ownership repair.
+Attendee `group_id` still becomes null when its group is missing; the attendee-derived `group_ids`
+is unchanged. `state` remains outside `SESSION_COLUMNS`, so the local completed default still
+applies. `saveSession` now normalizes a missing `group_id` to explicit null and writes that value
+on the parent, every attendee and all their outbox payloads. It ignores legacy `group_ids` and
+does not change group membership. Before any enqueued non-null-group write, it requires a local
+group in the resolved Programme; archived groups are allowed. Missing/wrong-Programme groups
+raise the exact repository errors before any session/attendee/outbox write. Pulled synced history
+does not need this local-write guard. `SERVER_COLUMNS.sessions` includes `group_id`; only `state`
+stays intentionally unsynced. Previously queued payloads with no `group_id` key upload unchanged.
+
+`sessionGroupSync.test.js` exercises the real SQLite repository and engine against the scoped
+`sessionGroupServer` fake: save offline then delete, delete a half-uploaded family's group, and
+Head Office ending an assignment all preserve the session/attendee group ids in ordinary passes.
+An SQLite observation trigger retains evidence of any terminal outbox transition; none occurs in
+these scenarios. This is local/synthetic-server evidence; the disposable harness proves RLS.
+Task 5 also covers a failed group insert holding its lesson for one pass and a deleted group's
+assignment insert failing across three attempts: the lesson's `42501` remains retriable on
+EA-scoped owed-insert evidence even though the local assignment has ended. Attendees use the
+same held-group evidence; other tables keep active-only grants. Archive-only, terminal and
+other-EA assignment inserts do not count.
+
+- **Retry after a lost response (B2 Task 6).** Session inserts now send insert-or-ignore by id,
+  never the merge upsert's attendee-dependent UPDATE path. The real-SQLite/synthetic-server test
+  `a session whose response was lost is retried before its attendees, and the family lands in ordinary passes`
+  commits the session, loses its response and converges in two ordinary passes with no terminal
+  row or manual retry. The unused `updateSession` is removed; `saveSession` is unchanged and
+  attendees keep their batched merge upsert. Four disposable PostgreSQL cases pin the server
+  boundary: `session-insert-retry-before-attendees`, `session-insert-retry-still-checks-the-row`,
+  `session-merge-retry-before-attendees` and `attendee-merge-retry-after-commit`. All four pass on
+  disposable PostgreSQL 17; the still-checks-the-row case returns `42501`, so an insert retry still
+  meets the INSERT `WITH CHECK`. If it ever succeeds instead, stop and reconcile that claim before
+  release; do not weaken the case.
+
+The controller-owned disposable PostgreSQL gate is `npm run verify:session-group:postgres`; it
+applies every canonical migration and exercises active, ended, archived, mismatched, forged, null,
+child-check, history-read, privilege, and policy-replacement cases. This migration is **not yet
+applied to hosted** `masi-app-sqlite`; hosted application remains a separately approved release
+gate.
+
 ## Row versions (upload contract)
 
 The upload contract shipped in #77 and was applied to `masi-app-sqlite` on 2026-10-19; the Galaxy
@@ -740,9 +910,9 @@ Classification is a pure decision in `classifyError` from `(code, tableName, par
 | `23514` on `child_ea_assignments` / `class_ea_assignments` / `group_ea_assignments` | Terminal, reason `Immutable identity or check constraint rejected the update (23514)` | none (neither drifted identity nor a check violation is satisfiable by re-push) |
 | `23514` on any other table | Retriable (unchanged, out of #48 scope) | none |
 | `23503` | Retriable while FK parent is pending in the outbox, terminal otherwise | `PARENT_FK_COLUMNS` via `hasPendingRecord` |
-| `42501` (live session) | Retriable while FK parent OR direct/membership-mediated assignment grant is pending, else terminal with the `42501-authenticated:` marker | `PARENT_FK_COLUMNS` + `GRANT_SUBJECTS`; membership-mediated evidence requires an active membership/assignment pair, either half unacknowledged, neither half terminal, excluding the membership row currently being uploaded; mastery uses only the direct child assignment arm |
+| `42501` (live session) | Retriable while FK parent OR direct/membership-mediated assignment grant is pending; sessions and attendees also count an owed held-group assignment insert, ended or not. Otherwise terminal with the `42501-authenticated:` marker | `PARENT_FK_COLUMNS` + `GRANT_SUBJECTS`; membership-mediated evidence requires an active membership/assignment pair, either half unacknowledged, neither half terminal, excluding the membership row currently being uploaded. Held-group evidence joins a nonterminal owed `insert` for the group to this signed-in EA's assignment via outbox `owner_user_id`; archive alone does not count; mastery uses only the direct child assignment arm |
 | `42501` (no session) | Retriable, unmarked (Item 9) | n/a |
-| `UPDATE_NOT_APPLIED` | Retriable while the record's own insert OR direct/membership-mediated assignment grant is pending; terminal otherwise | exact `insert` via `hasPendingOperation` + `GRANT_SUBJECTS` |
+| `UPDATE_NOT_APPLIED` | Retriable while the record's own insert OR direct/membership-mediated assignment grant is pending; sessions and attendees also count an owed insert of this EA's group assignment, ended or not. Terminal otherwise | exact `insert` via `hasPendingOperation` + `GRANT_SUBJECTS`, including the EA-scoped, nonterminal held-group insert evidence above |
 | `ARCHIVE_NOT_APPLIED` | Terminal; the server returned no exact updated-row acknowledgment | returned id set from `update(...).select('id')` |
 | `RESTORE_NOT_APPLIED` | Terminal; the server returned no exact updated-row acknowledgment for a lifecycle restore | returned id set from `update(...).select('id')` |
 | `PGRST204`, `42703`, `22P02`, `23502`, non-immutable `23514` | Retriable for attempts 1-7; terminal on attempt 8 with `deterministic:` prefix and `retry_count = 8` | persisted outbox `retry_count` |
@@ -755,10 +925,10 @@ Known limitations:
 - Non-immutable-table `23514` follows the 8-attempt deterministic budget. A CHECK violation on an immutable-assignment table (for example, `unassigned_at >= assigned_at`) remains immediately terminal and shares the identity reason label.
 - Same-record ordering: `findBlockingDependency` defers an acknowledged edit and every lifecycle operation while its own `insert` is owed; it also defers a newer lifecycle intent behind an older in-flight one. The mastery ordering gap is closed by D1: toggles share one correction slot, an older save cannot replace a newer owed correction, and the receipt-backed RPC orders uploads by correction time plus UUID.
 - Legacy per-operation lifecycle rows (`<table>:<record>:archive` / `:restore`) are deferred ahead of the single lifecycle slot, and deleted at enqueue when not in flight, but are not consolidated at startup. No build before `feat/upload-path-correctness` ever queued `restore`, so the only realistic legacy row is a lone `:archive`, which the deferral orders correctly. One narrow residue remains on development devices only: a legacy archive in flight during reactivation that then goes terminal, after which the slot's restore succeeds and a forced Sync Now (`includeTerminal`) replays the terminal archive. Accepted 2026-10-10 because `masi-app-sqlite` has no field users and launch is a clean install; clear development outboxes before field launch rather than ship migration code for development data.
-- The membership-mediated query does not filter assignments to the signed-in EA, as `hasPendingActiveAssignment` never has. It can keep an edit retrying slightly longer, never drop one.
+- The membership-mediated query does not filter assignments to the signed-in EA, as `hasPendingActiveAssignment` never has. It can keep an edit retrying slightly longer, never drop one. B2's held-group evidence is different: `hasOwedHeldGroupAssignmentInsert` filters to `outboxRecord.owner_user_id` and requires an owed insert, not merely an unsynced domain row; it ignores `unassigned_at` only for sessions and attendees. Other grants remain active-only.
 - Evidence is deliberately local and conservative: a membership-mediated grant counts only when the active membership and active assignment both exist locally, at least one half is unacknowledged, and neither half is terminal. A grant that exists only on the server cannot make a local zero-row result retriable.
 
-Guarded by `__tests__/classifyErrorHardening.test.js` (unit, via `_testClassifyError` / `_testEvidenceMaps` / `_testComputeEvidencePending`), `__tests__/deterministicErrorBudget.test.js`, and the `23514` / `42501` / evidence integration tests in `__tests__/offlineSyncOutbox.test.js`.
+Guarded by `__tests__/classifyErrorHardening.test.js` (unit, via `_testClassifyError` / `_testEvidenceMaps` / `_testComputeEvidencePending`), `__tests__/deterministicErrorBudget.test.js`, the `23514` / `42501` / evidence integration tests in `__tests__/offlineSyncOutbox.test.js`, and the real-SQLite held-group evidence/backoff scenarios in `__tests__/sessionGroupSync.test.js`.
 
 ## Active-Pair Collision-Proofing (Item 11)
 
@@ -1048,6 +1218,9 @@ coverage-write failure, breaker, bypass, outbox evidence and missing-cursor case
 - **Persistence.** Each parent page, its attendees, any history reference children, and the cursor
   commit in one transaction. Pending and failed local rows win. Absence never deletes, and history
   has no absence reconcile.
+- **Historical group reference (B2).** A pulled session keeps `group_id` even when the group is
+  not on the phone; there is no `groups` row, and nothing reads it as roster, picker, edit or
+  assignment authority. Attendee `group_id` stays null when the group is missing.
 - **Convergence.** A delta over the server family timestamp, plus a full academic-year re-walk:
   - immediately when the phone has an active delivery child absent at the last completed walk (a
     handover), because a timestamp cursor watches writes, not authorization;
@@ -1454,11 +1627,11 @@ Spec: `docs/superpowers/specs/2026-10-09-actor-lifecycle-and-mutation-ownership-
 | `child_class_memberships` | `childrenRepository` (incl. `updateChild` class-change reassignment); `childClassMembershipsRepository` | `child_id`, `class_id`, `academic_year_id`, `created_by` | Insert uses default upsert; archive/restore uses acknowledged lifecycle UPDATE by id; ordinary updates use acknowledged UPDATE excluding `exited_at`. On a class change the new membership is inserted (`insert` op) and the old active one is exited. If the old membership's original insert has already synced it is archived (`exited_at`, `archive` op); if that insert is still pending in `sync_outbox` (offline create→reassign before first sync) the reassignment **coalesces** by rewriting the pending insert to carry `exited_at` instead of queuing an archive (#35 P1) | Active child write access plus class access | Insert after `children` and `classes`; archive before ending child/class EA assignment. Membership archives sort **before** inserts (`ARCHIVE_PUSH_ORDER` 4 < `PUSH_ORDER` 5), so archiving a still-pending insert would reorder ahead of the stale active insert and recreate the old membership active — hence the unsynced case coalesces in place rather than archiving (same `updateChild` txn, #35) | `junctionRepositoryGuards.test.js`; `childrenRepository.test.js`; `childClassReassignment.test.js` (synced-archive, offline-coalesce, and end-to-end sync against a real-schema server) |
 | `grouping_versions` | grouping repositories / class grouping flows | `class_id`, `academic_year_id`, `created_by` | Default upsert for insert; ordinary updates use acknowledged UPDATE excluding lifecycle status/archive metadata; archive uses acknowledged lifecycle UPDATE by id | Class write/access policy | After `classes`; before `class_grouping_state` and groups that reference a grouping version | `sqlitePlan1Migrations.test.js`; grouping repository tests |
 | `class_grouping_state` | class grouping state repository | `class_id`, `academic_year_id` | Default upsert | Class write/access policy | After `classes` and `grouping_versions` when `active_grouping_version_id` is present | `offlineSyncOutbox.test.js` dependency coverage |
-| `groups` | `groupsRepository.saveGroup`; `ChildrenContext.addGroup`; Children pull persistence | `id`, `name`, `programme_id`, `created_by`; `class_id` when class-scoped | Insert uses default upsert; edit uses acknowledged UPDATE by id; archive uses acknowledged lifecycle UPDATE by id. Pulled tombstones persist, while entity absence never archives the local row. `getGroups` is assignment-scoped through an active `group_ea_assignments` join. | `groups_select_created_by`; group access helper via class/group EA assignment | After `classes` when `class_id` exists; before `group_ea_assignments` and memberships | `offlineSyncOutbox.test.js`; `offlineSyncUpdateById.test.js`; `pullReconcile.integration.test.js`; `pullReconcileOffline.integration.test.js`; `ChildrenContextPull.integration.test.js`; `sqlitePlan1Migrations.test.js`; live rollback group probes |
+| `groups` | `groupsRepository.saveGroup`; `ChildrenContext.addGroup`; Children pull persistence | `id`, `name`, `programme_id`, `created_by`; `class_id` when class-scoped | Insert uses default upsert; edit uses acknowledged UPDATE by id; archive uses acknowledged lifecycle UPDATE by id. Programme is fixed after insert for local mutations: `updateGroup` and existing-row `saveGroup` writes that enqueue refuse a change before writing/enqueueing; equal values and name-only edits pass. Authoritative pulls converge acknowledged/terminal caches to the server Programme, subject to existing pending/failed protection and row-version checks. EAs archive, never hard-delete groups. Pulled tombstones persist, while entity absence never archives the local row. `getGroups` is assignment-scoped through an active `group_ea_assignments` join. | `groups_select_created_by`; group access helper via class/group EA assignment. B2's BEFORE UPDATE trigger rejects Programme changes with `23514`, preserving other edits. B2 drops `groups_delete_created_by` and revokes authenticated DELETE; service-role DELETE privileges remain | After `classes` when `class_id` exists; before `group_ea_assignments` and memberships | `groupsRepository.test.js` (real SQLite); `offlineSyncOutbox.test.js`; `offlineSyncUpdateById.test.js`; `pullReconcile.integration.test.js`; `pullReconcileOffline.integration.test.js`; `ChildrenContextPull.integration.test.js`; `sqlitePlan1Migrations.test.js`; session-group PostgreSQL hard-delete, Programme-change/control and unchanged-Programme edit cases; live rollback group probes |
 | `group_ea_assignments` | `groupsRepository.saveGroup`; `groupEaAssignmentsRepository`; Children pull persistence and reconcile | `group_id`, `ea_user_id`, `programme_id`, `created_by` | Consecutive inserts batch with insert-or-ignore. Archive and reactivation (`restore`) use acknowledged lifecycle UPDATE by id and occupy the single `<table>:<record>:lifecycle` outbox slot, whose operation is the latest intent. Both repository producers use the slot; `groupEaAssignmentsRepository.save` detects reactivation from the pre-upsert local row. Reactivation always queues restore and also re-queues insert when it remains owed. In-flight replacement is protected by the existing `updated_at` stale-finalize guard; operation-keyed legacy lifecycle rows are cleaned up or ordered ahead of the slot. Full embedded server rows are pulled, persisted, and reconciled by acknowledged group ids | EA self assignment and group ownership/access; identity trigger blocks reassignment by update | Pull persistence follows `groups`; lifecycle waits for the same record's owed insert and for any still-owed legacy per-operation lifecycle row; archive otherwise follows `child_group_memberships` cleanup | `groupAssignmentLifecycle.test.js`; `offlineSyncOutbox.test.js` immutable assignment batching, lifecycle exclusion, and group archive ordering; `pullReconcile.integration.test.js`; `pullReconcileOffline.integration.test.js`; `ChildrenContextPull.integration.test.js` |
 | `child_group_memberships` | `groupsRepository.addChildToGroup`; removal/archive flows in `groupsRepository` and `childrenRepository` | Insert requires `child_id`, `group_id`, `grouping_version_id`, `created_by`; archive carries `id`, `removed_at` locally and sends `removed_at` plus the claimed `row_version` | Insert uses default upsert. Archive uses acknowledged lifecycle UPDATE by id, avoiding the INSERT-policy check that rejects partial archive upserts. | Active child write access plus group write/access | After `children`, `groups`, and group EA access evidence; archive before ending group EA assignment | `offlineSyncOutbox.test.js` exact RLS regression, acknowledged-update guard, ordering, and group ownership repair tests |
-| `sessions` | `sessionsRepository.saveSession`; inbound `sessionsRepository.saveHistoryPage` from `sessionHistoryPull` (CAP-004) | `user_id`, `programme_id` | Outbound default upsert. The server owns `updated_at` on insert and update (CAP-004 migration), and it means "family last written on the server". Inbound pages of 1–200 parents in ascending `(updated_at, id)`, persisted with the cursor in one SQLite transaction. A missing local `class_id` is stored as null | Direct `user_id = auth.uid()` SELECT fallback plus session read/write helpers. Hosted read authority is owner or any historical direct child delivery assignment; class/group/creator child visibility does not grant the diary | Outbound before `session_attendees`; after `classes` only when `class_id` exists. Inbound parents persist before dependent attendee pages; no history absence reconcile | `sessionsRepository.test.js`; `offlineSyncOutbox.test.js` session-before-attendees lock; `sqlitePlan1Migrations.test.js`; `historyAuthorizationPostgresHarness.test.js`; disposable and hosted PostgreSQL actor/page/plan probes; authenticated/anonymous PostgREST probes |
-| `session_attendees` | `sessionsRepository.saveSession`; inbound `saveHistoryPage` (CAP-004) | `session_id`, `child_id`, `attendance_status` | Outbound batched upsert (onConflict=id) with per-record fallback. Any attendee write re-stamps its parent (`touch_session_family`), so late attendees re-surface the family in the next delta. Inbound pages keyed `(session_id, id)`. A missing local `group_id` is stored as null. A child absent locally becomes a history reference child | Writes require parent session ownership plus active child/group/class access. Hosted historical SELECT follows the authorized parent; the accepted aggregate returns the complete attendee family | Outbound after `sessions`, `children`, and `groups` when `group_id` exists. Inbound after durable parent page; no history absence reconcile | `sessionsRepository.test.js`; `offlineSyncOutbox.test.js`; `sqlitePlan1Migrations.test.js`; disposable and hosted PostgreSQL complete-family actor matrices |
+| `sessions` | `saveSession` writes `group_id` explicitly (missing means null); an enqueued non-null group must exist locally in the resolved Programme, including archived groups. Inbound `saveHistoryPage` preserves history | `user_id`, `programme_id`, optional `group_id` | Outbound insert-or-ignore by id (B2); `programme_id` and `group_id` are immutable after insert. `group_id` is in `SERVER_COLUMNS.sessions` (`syncServerColumns.js`), while `state` remains intentionally unsynced. Legacy queued payloads without the key are unchanged. Server owns family `updated_at`. Inbound pages persist atomically with the cursor; missing class becomes null, historical group id is kept even when absent locally | Owner SELECT fallback and existing session write policies plus B2's RESTRICTIVE completed-state/held-group checks; Programme provenance comes from the group. BEFORE UPDATE identity trigger rejects Programme/group changes with `23514`; unchanged identity retains existing UPDATE checks. Historical reads remain owner or historical direct child delivery scope | Before attendees; after its exact `classes`/`groups` parents when their ids exist, with independent nullable edges and same-pass failed-parent gating. An owed insert of this EA's group assignment is retry evidence even after it ends. No history absence reconcile | `sessionsRepository.test.js`; `sessionGroupSync.test.js`; `sessionsHistoryPage.test.js`; `sessionHistoryPull.test.js`; `syncContractCompleteness.test.js`; session-group disposable PostgreSQL harness, including refused parent moves and allowed identity-preserving updates |
+| `session_attendees` | `saveSession` writes the session's `group_id` to every attendee, including a child visiting from another group; memberships are untouched. Inbound `saveHistoryPage` retains null-when-missing mapping | `session_id`, `child_id`, `attendance_status`, optional `group_id` | Batched merge upsert (onConflict=id), bounded fallback; group id is in `SERVER_COLUMNS.session_attendees`. Writes stamp the parent family timestamp. Inbound pages keyed `(session_id, id)`; missing group becomes null, absent child becomes a history reference child | Existing parent-ownership and active child-write checks plus B2's RESTRICTIVE held-group checks using the parent session's Programme. SELECT follows the authorized complete parent family | After `sessions`, `children`, and `groups` when `group_id` exists. Inbound after durable parent page; no history absence reconcile | `sessionsRepository.test.js`; `sessionGroupSync.test.js`; `sessionsHistoryPage.test.js`; `sessionHistoryPull.test.js`; disposable PostgreSQL session-group and complete-family actor matrices |
 | `assessments` | `assessmentsRepository.saveQuestionResult`; inbound `saveHistoryPage` | Owner, child, programme, Question/version, item set, language, stop reason, object derived, exact item count; optional run | `submit_assessment` only: `inserted` / `already_present`; identity or item-set membership mismatch `MA001`, malformed `22023`, duplicate run/Question `23505` never success. One family outbox/ack transaction. Inbound `get_assessment_history_page` through `runAssessmentHistoryPull`: first 10 then 50 complete families, insert-or-ignore with items/cursor in one transaction; no absence deletion | `assessments_select_owner_or_class_year` uses `private.can_read_assessment(user_id, child_id, assessment_date)`: owner without a year bound, or active class assignment plus any membership in that class in the active year and an assessment date inside it. New writes require active child/programme authority; committed retries check identity before current authority. Direct EA DML revoked | After `children` and optional `battery_runs`; items inside the same RPC, no per-row push | `assessmentsRepository.questionResults.test.js`; `assessmentFamilySync.test.js`; `assessmentFamilyRpcError.test.js`; `assessment-results-postgres-harness.cjs`  `assessmentHistoryPull.test.js`; `letterMasteryHandover.test.js` |
 | `assessment_items` | `saveQuestionResult` and inbound `saveHistoryPage`, inside the parent transaction | Deterministic `id`, parent id, unique non-negative `position`, item key, boolean correctness, object metadata | Only `p_items` inside `submit_assessment`; no independent outbox row/upsert/fallback. Whole family is acknowledged together. Inbound items are embedded in each assessment page, validated against `total_items`, and inserted after their parent in the same cursor transaction; no independent item pull/reconcile | `assessment_items_select_readable_assessment` follows the parent through the same `private.can_read_assessment` call; direct EA DML revoked | Same server and local acknowledgement transactions as parent; absent from `PUSH_ORDER` and batching | `assessmentFamilySync.test.js` complete 61-item send and injected acknowledgement rollback; repository and PostgreSQL family tests  `assessmentHistoryPull.test.js`; `letterMasteryHandover.test.js` |
 | `battery_runs` | `batteryRunsRepository.startRun` / `finalizeRun` / `abandonRun`; inbound `saveHistoryPage` | Owner, child, programme, optional class, battery code/version, language and stored start time are replay identity | Full-header `save_battery_run`: `inserted` / `updated` / `unchanged`; identity `MA001`, terminal conflict `MA002`, malformed `22023`, `23505` never success; `28000` retriable. No row version. Inbound `get_battery_run_history_page` through `runBatteryRunHistoryPull` (200 headers/page), plus embedded assessment headers: absent rows have `started_here = 0`, local writers stay unchanged, other runs advance only to terminal; page and cursor commit together | `battery_runs_select_owner_or_class_year` uses `private.can_read_assessment` with `(started_at at time zone 'Africa/Johannesburg')::date`; owner has no year bound, class reads are active-year bounded. New writes require child/programme authority and optional class membership at start; owned existing runs do not renew assignment checks | After `children`, before linked assessments; optional class is not a local FK dependency | `batteryRunsRepository.test.js`; `assessmentFamilySync.test.js`; `assessment-results-postgres-harness.cjs`  `assessmentHistoryPull.test.js`; `letterMasteryHandover.test.js` |
@@ -1513,11 +1686,11 @@ Local PostgreSQL execution and hosted application are separate gates; neither is
 SQLite or mocked upload tests.
 
 
-> **`sessions` forward-prep columns are not end-to-end active.** SQLite migration v3 and Supabase migration `20260529214500_masi_sessions_forward_prep_columns` add `sessions.group_id` and `sessions.state`. The local schema can store them, but `sessionsRepository.SESSION_COLUMNS` currently omits both, the server payload allowlist strips both, and RLS pins server rows to `group_id IS NULL` and `state = 'completed'`. Therefore session-level group identity/state is not currently durable even locally through the typed repository, and it cannot cross sync. (`session_attendees.group_id` is a separate per-attendee field and is active.) The group-centred session slice must activate the session producer, payload, RLS, ordering, pull, and reporting behavior together.
+> **`sessions.group_id` is active end to end in B2's producer, payload, server authorization and history contracts.** `saveSession` writes the chosen group on the session and every attendee, validates a queued non-null group against the local Programme, and sends it through `SERVER_COLUMNS`. History retains the parent group id without a local group row; attendee history mapping stays null when absent. Task 5's per-record group dependency gates and EA-scoped owed-assignment evidence are built. Task 6's lost-response retry fix passes real-SQLite/synthetic-server tests; its four new PostgreSQL harness cases remain a controller-owned release gate.
 >
-> Because the existing permissive session policies (`sessions_insert_active_programme`, `sessions_update_own`) only validate `user_id`/active programme — not these columns — the Supabase migration also adds two **RESTRICTIVE** guard policies (`sessions_forward_prep_pin_defaults_insert` / `_update`) that pin `state = 'completed' AND group_id IS NULL` at the write boundary. This prevents a direct/raw client from writing a non-default state or an unauthorized group before the feature exists. Submit-and-go writes (which omit both columns) pass the guard via the server defaults.
+> The original forward-prep server migration installed two RESTRICTIVE default pins. B2's canonical `20261021140000_session_group_authorization.sql` replaces those pins with the held-assignment group checks and preserves `state = 'completed'`; it retains the permissive session UPDATE policy `sessions_update_active_assignment_after_attendee`. Hosted application is a separate approved gate, documented in the B2 section above.
 >
-> The later state-machine slice must, in one migration applied **before** wiring client writes: drop both guard policies, add real per-state/per-group authorization, add the columns to the producer set and the push allowlist. Writing a column the server lacks would `PGRST204`, so the Supabase migration must land before the client begins sending these fields.
+> **`sessions.state` stays intentionally unsynced and pinned to `'completed'` by B2's restrictive policies.** A later state-machine slice must add per-state authorization and activate the field in producer and push allowlist together. Apply the server authorization migration before releasing client group writes.
 
 > **`assessments.capture_mode` (nullable, included in the family payload).** The historical v4 SQLite and `20260618120000_masi_assessments_capture_mode` server migrations retain the nullable `grid`/`sequential` column without a default. Current standalone letter and word tests always pass `sequential` to `saveQuestionResult`; there is no device capture-mode setting or old summary-item writer. Capture corrections live in the result's `derived.correction_count`, not a synthetic item. v15 clears the old local practice families before this writer is used (see the Task 7 build-log entry). `captureModeMigration.test.js` is retained to test the column and allowlist; it does not restore the deleted capture stack. Hosted deployment of the new family migration is a Task 14 gate, not an old-client upsert compatibility claim.
 
@@ -1554,6 +1727,12 @@ Use this checklist instead of a static "does the table have policies" audit.
 - `src/db/repositories/classOnboardingRepository.js`
 - `src/db/repositories/groupsRepository.js`
 - `src/db/repositories/sessionsRepository.js`
+- `src/services/syncServerColumns.js` (`SERVER_COLUMNS.sessions`, including `group_id`)
+- `src/db/migrations.js` v16 `sessions_group_history_reference`
+- `supabase/migrations/20261021140000_session_group_authorization.sql`
+- `scripts/session-group-postgres-harness.cjs`, `test-support/sessionGroupServer.js`
+- `__tests__/sessionGroupAuthorizationMigration.test.js`, `__tests__/sessionGroupSync.test.js`, `__tests__/classifyErrorHardening.test.js`
+- `__tests__/sessionGroupHistoryReferenceMigration.test.js`, `__tests__/sessionsHistoryPage.test.js`, `__tests__/sessionHistoryPull.test.js`
 - `src/db/repositories/assessmentsRepository.js`, `batteryRunsRepository.js`
 - `src/db/migrations.js` (through `letter_mastery_current_state`)
 - `supabase/migrations/20261021120000_assessment_results_contract.sql`

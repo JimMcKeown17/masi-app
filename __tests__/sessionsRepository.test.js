@@ -3,6 +3,7 @@ jest.mock('expo-sqlite', () => require('../test-support/expoSQLiteMock'));
 import { runMigrations } from '../src/db/migrations';
 import { createChildrenRepository } from '../src/db/repositories/childrenRepository';
 import { createSessionsRepository } from '../src/db/repositories/sessionsRepository';
+import { createGroupsRepository } from '../src/db/repositories/groupsRepository';
 import { validate as uuidValidate } from 'uuid';
 import {
   createMigratedDatabase,
@@ -10,48 +11,88 @@ import {
 } from '../test-support/sqliteRepositoryTestUtils';
 
 describe('sessionsRepository', () => {
-  test.each(['synced', 'terminal'])('editing a %s session resets and queues its parent and rewritten attendees', async (status) => {
+  describe('session group capture', () => {
+    let db;
+    let repository;
+    const lesson = {
+      id: 'session-group', user_id: 'user-1', programme_id: 'programme-a',
+      session_date: '2026-10-19', group_id: 'group-1',
+      children_ids: ['child-1', 'child-2'], synced: false,
+    };
+    beforeEach(async () => {
+      db = await createMigratedDatabase(runMigrations);
+      await seedCoreData(db);
+      await db.execAsync(`
+        insert into children (id, first_name, last_name) values
+          ('child-1', 'First', 'Child'), ('child-2', 'Second', 'Child');
+        insert into groups (id, name, programme_id, class_id) values
+          ('group-1', 'Group 1', 'programme-a', 'class-1'),
+          ('group-2', 'Group 2', 'programme-a', 'class-1'),
+          ('group-numeracy', 'Numeracy group', 'programme-b', 'class-1');
+        insert into child_group_memberships (id, child_id, group_id)
+          values ('membership-2', 'child-2', 'group-2');
+      `);
+      repository = createSessionsRepository({ database: db });
+    });
+    afterEach(async () => db.closeAsync());
+
+    test('a group session stores its group on the session and every attendee, including a child from another group', async () => {
+      expect(await repository.saveSession(lesson)).toBe(true);
+      expect(await db.getFirstAsync("select group_id from sessions where id = 'session-group'"))
+        .toEqual({ group_id: 'group-1' });
+      expect(await db.getAllAsync('select child_id, group_id from session_attendees order by child_id'))
+        .toEqual([{ child_id: 'child-1', group_id: 'group-1' }, { child_id: 'child-2', group_id: 'group-1' }]);
+      expect(await db.getAllAsync("select group_id, removed_at from child_group_memberships where child_id = 'child-2'"))
+        .toEqual([{ group_id: 'group-2', removed_at: null }]);
+      const outbox = await db.getAllAsync('select table_name, payload from sync_outbox order by table_name, record_id');
+      expect(outbox.map(({ table_name }) => table_name)).toEqual(['session_attendees', 'session_attendees', 'sessions']);
+      for (const { payload } of outbox) expect(JSON.parse(payload).group_id).toBe('group-1');
+    });
+
+    test('a session without group_id stores null, and group_ids is no longer read', async () => {
+      const { group_id, ...withoutGroup } = lesson;
+      await repository.saveSession({ ...withoutGroup, group_ids: ['group-1'] });
+      expect(await db.getFirstAsync("select group_id from sessions where id = 'session-group'"))
+        .toEqual({ group_id: null });
+      expect(await db.getAllAsync('select child_id, group_id from session_attendees order by child_id'))
+        .toEqual([{ child_id: 'child-1', group_id: null }, { child_id: 'child-2', group_id: null }]);
+      const outbox = await db.getFirstAsync("select payload from sync_outbox where table_name = 'sessions'");
+      expect(JSON.parse(outbox.payload)).toHaveProperty('group_id', null);
+    });
+
+    const expectRefused = async (groupId, message) => {
+      let caught;
+      try {
+        await repository.saveSession({ ...lesson, group_id: groupId });
+      } catch (error) { caught = error; }
+      expect(caught?.message).toBe(message);
+      for (const table of ['sessions', 'session_attendees', 'sync_outbox']) {
+        expect(await db.getFirstAsync(`select count(*) as count from ${table}`)).toEqual({ count: 0 });
+      }
+    };
+
+    test('a group that is not on this phone is refused before anything is written', async () => {
+      await expectRefused('group-missing', 'sessions.group_id must reference a group on this phone');
+    });
+
+    test('a group from another programme is refused', async () => {
+      await expectRefused('group-numeracy', 'sessions.group_id must belong to the session programme');
+    });
+
+    test('a deleted group still takes its lesson', async () => {
+      await createGroupsRepository({ database: db }).archiveGroup('group-1');
+      await repository.saveSession(lesson);
+      expect(await db.getFirstAsync("select group_id from sessions where id = 'session-group'"))
+        .toEqual({ group_id: 'group-1' });
+    });
+  });
+
+  test('sessions are insert-only on this phone: the repository has no edit method', async () => {
     const db = await createMigratedDatabase(runMigrations);
     try {
-      await seedCoreData(db);
-      await createChildrenRepository({ database: db }).saveChildRecord({
-        id: 'child-1', first_name: 'Test', last_name: 'Child', created_by: 'user-1', synced: true,
-      });
-      const repository = createSessionsRepository({ database: db });
-      await repository.saveSession({
-        id: 'session-edit', user_id: 'user-1', programme_id: 'programme-a', session_date: '2026-10-15',
-        children_ids: ['child-1'], activities: { letters_focused: ['a'] },
-        sync_status: status, last_sync_error: 'old error', _pendingJobTitleResolve: true,
-      });
-      await db.runAsync("update session_attendees set last_sync_error = 'old attendee error'");
-      expect(await db.getAllAsync('select * from sync_outbox')).toEqual([]);
-
-      for (const keysToRemove of [['_pendingJobTitleResolve'], ['sync_status', 'synced', 'last_sync_error']]) {
-        const [current] = await repository.getSessions();
-        expect(await repository.updateSession('session-edit', {
-          ...current, notes: 'Edited', sync_status: status, synced: true, last_sync_error: 'caller error',
-        }, keysToRemove)).toBe(true);
-
-        expect(await repository.getSessions()).toEqual([expect.objectContaining({
-          notes: 'Edited', sync_status: 'pending', synced: false, last_sync_error: null,
-        })]);
-        expect((await repository.getSessions())[0]).not.toHaveProperty('_pendingJobTitleResolve');
-        expect(await db.getAllAsync('select sync_status, last_sync_error from session_attendees')).toEqual([
-          { sync_status: 'pending', last_sync_error: null },
-        ]);
-        const outbox = await db.getAllAsync('select table_name, operation, owner_user_id, payload from sync_outbox order by table_name');
-        expect(outbox.map(({ table_name, operation, owner_user_id }) => ({ table_name, operation, owner_user_id }))).toEqual([
-          { table_name: 'session_attendees', operation: 'insert', owner_user_id: 'user-1' },
-          { table_name: 'sessions', operation: 'insert', owner_user_id: 'user-1' },
-        ]);
-        for (const row of outbox) {
-          expect(JSON.parse(row.payload)).toEqual(expect.objectContaining({
-            sync_status: 'pending', synced: false, last_sync_error: null,
-          }));
-        }
-        expect(JSON.parse(outbox[0].payload)).toEqual(expect.objectContaining({ session_id: 'session-edit', child_id: 'child-1' }));
-        expect(JSON.parse(outbox[1].payload)).toEqual(expect.objectContaining({ notes: 'Edited', activities: { letters_focused: ['a'] } }));
-      }
+      // Session inserts are insert-or-ignore (B2 Task 6): the server would ignore a re-saved edit
+      // of an acknowledged session. Saved-session editing must add an `update` operation.
+      expect(createSessionsRepository({ database: db }).updateSession).toBeUndefined();
     } finally {
       await db.closeAsync();
     }

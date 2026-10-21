@@ -610,11 +610,12 @@ generations, client streams, cutover and activation machinery (U7).
 
 ### Deliberate tripwires
 
-- [ ] Extend `GRANT_SUBJECTS` before membership-mediated class/group access ships. It currently
-  models only the direct child-assignment grant and can false-terminal writes whose only valid grant
-  is a pending class or group relationship.
+- [x] Extend `GRANT_SUBJECTS` before membership-mediated class/group access ships. **2026-10-21:**
+  membership-mediated child evidence already existed; B2 Task 5 adds held-group evidence for
+  sessions and attendees, counting this EA's owed assignment insert even after it has ended.
 - [ ] Define collision-proof identity for `grouping_versions`, `groups.display_number`, and
-  `child_group_memberships` before the group-centred slice.
+  `child_group_memberships` before the group-centred slice. **2026-10-21:** lesson-plan C16 keeps
+  this deferred; B2 adds no new kind of group write.
 - [ ] Decide whether leaked-password protection is required before broader external rollout.
 
 ## 3. Sync efficiency and fleet behavior
@@ -696,6 +697,10 @@ The active specification is
 4. group cards and Group Detail;
 5. group-first capture and durable session drafts;
 6. device and two-device proof.
+
+Status (2026-10-21): item 3's session-group contract is built on `feat/lesson-plan-b2-session-group`
+(lesson-plan B2: held-group authorization, local history reference, upload and ordering, the
+lost-reply fix). Its hosted migration and device gates are still pending.
 
 Additional Head Office behavior retained from the Sprint 4 follow-up:
 

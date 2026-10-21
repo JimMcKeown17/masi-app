@@ -1648,6 +1648,366 @@ hosted/device and Plan 3 pull gates remain open.
 #### Task 7 — release gates, Steps 1–2 (controller)
 
 Branch `feat/assessment-results-plan-2` at `bac9f8b` (it also carries lesson-plan AF). Commands use
+
+### 2026-10-21 — Lesson plan B2 Task 2: historical session group reference
+
+- Implemented local schema 16, `sessions_group_history_reference`, on
+  `feat/lesson-plan-b2-session-group`. The table rebuild preserves every session column, its
+  Programme/class FKs, state constraint, three indexes, attendee FKs/cascade and queued uploads,
+  while allowing a session to retain a group id absent from the local roster. No repository,
+  pull or upload behavior changed in this task; the local-write guard is B2 Task 4.
+- Version 16 follows the orchestrator's branch-specific ruling: C1 also uses 16 on its own branch;
+  the controller reconciles versions at merge. Existing current-version assertions now use
+  `CURRENT_SCHEMA_VERSION`, assessment-results remains explicitly pinned to migration 15, and
+  the foundation ledger/tripwire include B2 version 16.
+- Every test command below used `PATH="$HOME/.nvm/versions/node/v20.19.4/bin:$PATH"`.
+  RED: `npm run test:integration -- __tests__/sessionGroupHistoryReferenceMigration.test.js`
+  exited 1, 1 suite / 5 tests failed because the named migration's version was undefined.
+  Same-command GREEN: exit 0, 1 suite / 5 tests passed. Snapshots cover all session/attendee/outbox
+  fields, normalized index definitions and attendee FK metadata; runtime assertions cover missing
+  historical groups, retained FK/CHECK constraints, FK restoration, cascade and idempotence.
+- Focused regression command: `npx jest __tests__/sqliteFoundation.test.js __tests__/hotPathIndexes.test.js __tests__/sessionsForwardPrepMigration.test.js __tests__/foreignKeyEnforcement.test.js __tests__/timeEntryLocationMigration.test.js __tests__/rowVersionLocal.test.js __tests__/outboxOwnerMigration.test.js __tests__/migrations.assessmentResults.test.js --maxWorkers=25%`
+  passed 8 suites / 103 tests, exit 0. `npm run test:integration --silent` passed
+  53 suites / 557 tests, exit 0 (49.265 s). Full unit gate:
+  `npx jest --silent --maxWorkers=25%` passed 349 suites / 4,220 tests, exit 0 (145.925 s).
+  No unrelated failures or isolated reruns were needed.
+- No plan/spec edits, dependency installs, network, hosted Supabase, PostgreSQL harness, EAS,
+  device checks, PR or Git writes. Task 1 PostgreSQL evidence remains controller-owned. Native
+  upgrade/device proof and the remaining B2 producer/pull/sync tasks remain open.
+
+- **2026-10-21 — B2 Task 3: history keeps the session's group.** Added `group_id` immediately
+  after `class_id` in `SESSION_COLUMNS`; `saveHistoryPage` now retains the server value verbatim
+  and `getSessions` returns it. The attendee mapping still nulls an absent group, and attendee-derived
+  `group_ids` is unchanged. No group, assignment, picker/roster entry or outbox row is created,
+  including after `repairGroupOwnershipForSync`.
+- Task 3 TDD, Node 20.19.4: `npm run test:integration -- __tests__/sessionsHistoryPage.test.js __tests__/sessionHistoryPull.test.js`
+  RED exited 1: 2 failed suites, 3 failed / 45 passed tests (48 total), each failure receiving
+  `group_id: null` instead of the server's id. Same-command GREEN exited 0: 2 suites / 48 tests
+  passed. The fresh-phone case runs the real pull service/repository against a scripted RPC
+  boundary and real SQLite; it does not claim new server authorization proof.
+- Updated the B2/hydration/table contracts and `CONTEXT.md` Relationships. Corrected the stale
+  shared-database cursor wording to per-EA files (ADR-0008), and the directly affected forward-prep
+  note that still claimed the repository omitted both fields. Outbound `group_id` stays
+  `INTENTIONALLY_UNSYNCED` until Task 4; the Session definition's planned NOT NULL remains unchanged.
+- Task 3 remaining gates, all with `PATH="$HOME/.nvm/versions/node/v20.19.4/bin:$PATH"`:
+  `npm run test:integration -- __tests__/syncContractCompleteness.test.js` passed 1 suite / 5 tests,
+  exit 0 (3.676 s). `npx jest --silent --maxWorkers=25%` passed 349 suites / 4,222 tests,
+  exit 0 (337.112 s). `npm run test:integration --silent` passed 53 suites / 559 tests,
+  exit 0 (43.556 s). No unrelated failures or isolated reruns were needed. The same-command
+  focused RED/GREEN times were 14.812 s / 14.693 s. `git diff --check` passed. Hosted, EAS,
+  device and PR steps were not run.
+
+- **2026-10-21 — B2 Task 4: capture and upload the session group.** `saveSession` stores explicit
+  `group_id` (null when absent) on the session and every attendee, ignoring legacy `group_ids`
+  without rewriting memberships. Before an enqueued non-null-group write, the transaction checks
+  that the group exists locally and belongs to the resolved Programme; archived groups remain
+  valid. The exact missing-group and wrong-Programme errors occur before any family/outbox write.
+  `SERVER_COLUMNS.sessions` now sends `group_id`; `INTENTIONALLY_UNSYNCED.sessions` retains only
+  the prescribed completed-state message, with the assessment summary exclusion preserved.
+- Repository TDD: with the Node 20.19.4 PATH prefix,
+  `npm run test:integration -- __tests__/sessionsRepository.test.js` RED exited 1:
+  4 failed / 9 passed tests (13 total, 1 suite; 1.572 s). Failures reproduced attendee group loss,
+  legacy `group_ids` use, and missing/wrong-Programme groups being accepted. Same-command GREEN
+  exited 0: 1 suite / 13 tests passed (2.238 s).
+- Sync TDD: `npm run test:integration -- __tests__/sessionGroupSync.test.js` RED exited 1:
+  3 failed / 1 passed tests (4 total, 1 suite; 3.590 s), because session payloads stripped
+  `group_id`; the pre-update queued payload case passed. The new `sessionGroupServer` models the
+  group FK and C19 at the network boundary, including atomic batches, ended assignments,
+  assignment insert-or-ignore and exact lifecycle acknowledgements. Real SQLite regressions
+  cover save/delete/reconnect, a half-uploaded family, Head Office ending an assignment, and an
+  old queued session without the group key. A temporary SQLite observation trigger records any
+  terminal transition even if its row is later removed; none occurs in the passing scenarios.
+- Sync GREEN: `npm run test:integration -- __tests__/sessionGroupSync.test.js __tests__/syncContractCompleteness.test.js`
+  passed 2 suites / 9 tests, exit 0 (2.208 s). Focused unit command:
+  `npx jest __tests__/syncContractServerSchema.test.js __tests__/offlineSync.stripping.test.js __tests__/offlineSync.pendingSessions.test.js __tests__/literacySessionPersistence.test.js --maxWorkers=25%`
+  passed 4 suites / 22 tests, exit 0 (2.098 s). All commands use
+  `PATH="$HOME/.nvm/versions/node/v20.19.4/bin:$PATH"`.
+- Updated the session/attendee/B2 contracts, forward-prep note and group-workflow prerequisites.
+  Documentation deliberately distinguishes the completed Tasks 1–4 contract from Task 5's
+  pending failed-parent gates and historical assignment evidence, plus Task 6's lost-response
+  retry release prerequisite. Task 4 Step 9's blanket "done" wording for prerequisites 1/4 would
+  overstate those later implementations: `offlineSync` still has only the class dependency for
+  sessions and no session grant entry. No dependency/retry implementation was pulled forward.
+  Local/synthetic server proof does not replace PostgreSQL, hosted or native device gates.
+- Task 4 full gates (same Node 20 PATH): `npx jest --silent --maxWorkers=25%` passed
+  350 suites / 4,231 tests, exit 0 (98.461 s). `npm run test:integration --silent` passed
+  54 suites / 568 tests, exit 0 (55.742 s). No unrelated failures or isolated reruns occurred.
+  `git diff --check` passed. No hosted Supabase, PostgreSQL harness, EAS, device or PR work was
+  performed; those gates retain their separate owners. No plan checkboxes or other spec sections
+  changed; group-workflow product sections remain for C2/C3.
+
+- **2026-10-21 — B2 Task 5: group dependencies and owed held-assignment evidence.** Sessions
+  declare class/group parents and remove their nullable edges independently. Same-pass failures
+  hold back only the exact group's lessons without advancing their retry counters. Only sessions
+  and attendees gain `{ heldGroupAssignment: 'group_id' }`: a nonterminal owed assignment insert
+  joined to this EA's local assignment counts even after it ends. The EA comes from outbox
+  `owner_user_id`; archive-only, terminal and other-EA inserts do not count. Other grant paths stay
+  active-only, and assignment archive rank 6 is unchanged. No schema, package dependency or server policy
+  change was needed.
+- Task 5 TDD uses the existing `sessionGroupServer` network boundary, real SQLite repositories
+  and engine, and the persistent terminal-observation trigger. Six evidence cases cover ended,
+  archive-only, terminal and other-EA assignments, attendee parity and other-table isolation.
+  Three scenarios cover an assignment insert failing across three passes after group deletion,
+  a group insert failing once, and class-scoped/classless sessions without a group. The deleted
+  group's family converges within six ordinary passes without manual retry, with observed
+  retryable `42501` messages and no terminal transition after any pass. The failed group holds
+  its lesson untouched in pass 1 and the family lands in pass 2.
+- Task 5 RED, all commands prefixed with
+  `PATH="$HOME/.nvm/versions/node/v20.19.4/bin:$PATH"`:
+  `npm run test:integration -- __tests__/sessionGroupSync.test.js` exited 1 with
+  4 failed / 9 passed tests (13 total, 1 suite; 5.083 s): session/attendee held-group evidence
+  returned false, the deleted-group lesson went terminal, and the failed group did not prevent
+  its session request. `npx jest __tests__/classifyErrorHardening.test.js` exited 1 with
+  1 failed / 12 passed tests (13 total, 1 suite; 8.067 s): the session grant map was absent.
+  Before that behavior-level integration RED, two fixture-only corrections were required:
+  the initial run had 8 failed / 5 passed (11.406 s), including six assignment-date CHECK
+  failures; fixing the assignment start date left 5 failed / 8 passed (6.146 s), including an
+  archive id mismatch. The archive fixture now explicitly supplies the planned `:lifecycle` id
+  because generic outbox enqueue defaults to `:archive`; neither correction changed production
+  code or weakened an expectation.
+- Task 5 same-command GREEN: integration passed 1 suite / 13 tests (6.185 s); classification
+  unit tests passed 1 suite / 13 tests (5.024 s), both exit 0. The requested focused regression
+  command `npx jest offlineSync syncOutboxRepository syncErrorGuard deterministicErrorBudget`
+  passed 10 suites / 130 tests (15.260 s), exit 0. Plan Step 4's `npm run test:integration`
+  passed 54 suites / 577 tests (137.194 s), exit 0.
+- Updated Global Contract 10, same-pass gating, error classification/limitations, the B2 session
+  contract and review file map. ROADMAP now closes the stale grant tripwire, noting that
+  membership-mediated evidence already existed; collision-proof grouping remains deferred by
+  C16 with no new group-write kind. Group-workflow prerequisites 1 and 4 now read done for
+  Tasks 1–5. Task 6's lost-response insert retry remains a separate B2 merge/release prerequisite.
+  No plan/spec checkboxes changed. Step 6's commit is controller-owned; PostgreSQL, hosted
+  Supabase, EAS, native-device and PR gates were not run in this task. Local/synthetic evidence
+  does not establish those gates.
+- Task 5 full unit gate (same Node 20 PATH): `npx jest --silent --maxWorkers=25%` passed
+  350 suites / 4,240 tests (117.428 s), exit 0. No unrelated failures or isolated reruns occurred.
+- Task 5 final integration gate (same Node 20 PATH): `npm run test:integration --silent` passed
+  54 suites / 577 tests (43.479 s), exit 0. No unrelated failures or isolated reruns occurred.
+  `git diff --check` passed. Only the engine, its two planned test files and the four named
+  standing/evidence docs changed; the plan, spec, migrations and package files are unchanged.
+
+- **2026-10-21 — B2 Task 6: an insert retry must not ask for UPDATE rights.** Added the private
+  `INSERT_OR_IGNORE_TABLES` set (immutable assignments plus sessions) and used it in single and
+  batch dispatch. Only inserts use ignore-duplicates; sessions remain unbatched, attendees retain
+  merge upsert, and immutable-assignment classification, batching and version-stamping rules are
+  unchanged. Deleted the unused `sessionsRepository.updateSession`; `saveSession` is unchanged.
+  An edit re-saved as insert would otherwise be acknowledged locally but ignored on the server.
+- Task 6 TDD, all commands prefixed with
+  `PATH="$HOME/.nvm/versions/node/v20.19.4/bin:$PATH"` (Node v20.19.4):
+  `npm run test:integration -- __tests__/sessionGroupSync.test.js __tests__/sessionsRepository.test.js`
+  RED exited 1: 2 failed suites, 2 failed / 24 passed tests (26 total; 9.621 s). The committed
+  parent lost its response; pass 2 retried a merge before any attendee existed and left one
+  terminal session. The insert-only repository test found the old edit method. Same-command
+  GREEN exited 0: 2 suites / 26 tests passed (16.123 s). The real-SQLite regression now proves
+  first-pass committed parent/failed outbox, untouched pending attendees, then two insert-or-ignore
+  parent calls and an entirely synced family in pass 2, with no terminal transition or manual retry.
+- Extended `sessionGroupServer` with commit-then-lost-response behavior, group checks before
+  conflict handling, ignore-duplicates on every table, and the attendee-dependent session merge
+  refusal. Its scope remains a synthetic boundary, not real RLS. The requested focused command
+  `npx jest offlineSync syncOutboxRepository rowVersionSend activePairDomainIds` passed
+  10 suites / 158 tests (22.957 s), exit 0. Plan Step 4's `npm run test:integration` passed
+  54 suites / 577 tests (140.018 s), exit 0.
+- Added `insertOrIgnoreSql` and the four prescribed PostgreSQL cases:
+  `session-insert-retry-before-attendees`, `session-insert-retry-still-checks-the-row`,
+  `session-merge-retry-before-attendees`, `attendee-merge-retry-after-commit`. Each uses a separate
+  rolled-back actor transaction with setup as postgres. `node --check scripts/session-group-postgres-harness.cjs`
+  passed, exit 0. `npx jest __tests__/sessionGroupAuthorizationMigration.test.js` passed
+  1 suite / 13 tests (0.583 s), exit 0. **Step 6, controller (local Docker PG17, port 65433,
+  `PGTZ=UTC`):** `npm run -s verify:session-group:postgres` exit 0 with 31 cases, the four new ones
+  included; `session-insert-retry-still-checks-the-row` returned `42501` as required. Every other
+  PostgreSQL harness still passes: `history-authorization` 31, `upload-contract` 6 cases plus
+  location 34, rowVersion 22 and timeEntryForward 39, `organisation-label` 23, `support-incident` 18,
+  `assessment-results` 53, `ea-access` 43. PostgREST HTTP and hosted proof remain later gates.
+- Updated the operation/session/B2 contract and added the learning chapter "Retrying an insert
+  must not ask for edit rights". Added the decision row and reconciled the existing lost-response
+  Bug and Gap row rather than duplicating the same gap. Saved-session editing remains out of v1
+  and must add a versioned UPDATE-by-id operation when it ships. No plan/spec checkboxes, schema,
+  migration, package or unrelated application files changed. Step 8's commit, hosted Supabase,
+  EAS, native-device and PR work remain outside this task's implementation authority.
+- Task 6 first full unit run: `npx jest --silent --maxWorkers=25%` exited 1 with
+  1 failed / 349 passed suites, 1 failed / 4,239 passed tests (4,240 total; 72.547 s).
+  `moduleStateAllowlist.test.js` required an actor-lifecycle treatment for the plan's new
+  module-private `INSERT_OR_IGNORE_TABLES`. Isolated `npx jest __tests__/moduleStateAllowlist.test.js`
+  confirmed the same failure (1 suite / 1 test failed; 0.804 s). Added one inventory entry beside
+  the existing fixed sync-policy sets: `device-level fixed sync policy`. This is fixed table-name
+  policy, never EA runtime data; the exact-inventory guard remains unchanged. Same-command GREEN
+  passed 1 suite / 1 test (0.964 s), exit 0. This test-only addition is the plan's one omitted
+  dependency, not an unrelated failure or a change to the signed-in EA handle contract.
+- Task 6 final integration gate (same Node 20 PATH): `npm run test:integration --silent` passed
+  54 suites / 577 tests (67.530 s), exit 0. No unrelated failures or isolated reruns were needed.
+- Task 6 final full unit rerun (same Node 20 PATH): `npx jest --silent --maxWorkers=25%` passed
+  350 suites / 4,240 tests (95.826 s), exit 0. `git diff --check` passed. Ten files changed:
+  the nine Task 6 paths plus the one-line actor-lifecycle inventory entry required by its new set.
+
+- **2026-10-21 — B2 adversarial review, round 1: preserve group evidence and session identity.**
+  Finding 1 (high): authenticated group DELETE could cascade away the assignment evidence needed
+  by another device's queued session family. Finding 2 (medium): a permitted parent UPDATE could
+  change Programme/group without rechecking its attendees. Per the controller, the B2 migration
+  is not applied anywhere, so both fixes extend `20261021140000_session_group_authorization.sql`
+  in place; no new migration is introduced.
+- Dropped `groups_delete_created_by` and revoked group DELETE from `authenticated`, preserving
+  service-role DELETE privileges. EAs use archive. Added private
+  `prevent_session_identity_change()` / `sessions_prevent_identity_change` BEFORE UPDATE, in the
+  existing identity-trigger style: empty search path, direct EXECUTE revoked from
+  public/anon/authenticated, `IS DISTINCT FROM` on Programme/group and the clear `23514` rejection.
+  Identity-preserving notes/family timestamp updates retain their existing authorization checks.
+  The trigger applies to privileged updates too; a purge of a referenced group must account for
+  `ON DELETE SET NULL` changing immutable session identity. The service-role case uses an
+  unreferenced disposable group and does not claim a general historical purge workflow.
+- Harness cases were written first and appended after the existing cases:
+  `group-hard-delete-refused` catches exactly `42501`, checks group/assignment survival and proves
+  a service-role disposable purge; `session-programme-move-refused` inserts a valid session and
+  attendee as an EA active in Programme A, then models a sequential A-to-B staff Programme move,
+  refuses both Programme-B PATCH shapes with `23514` and checks unchanged parent/attendee identity
+  after each; trigger-dropped controls require both same-actor PATCH variants to succeed without
+  RLS changes, with savepoints restoring the A row between controls. `session-update-keeping-identity-allowed`
+  checks UPDATEs that explicitly preserve or omit identity. Caught refusals use subtransactions
+  so unchanged rows can be inspected in the same rolled-back case. The existing unheld-group
+  direct UPDATE case now expects `23514`: the identity trigger runs before the restrictive
+  policy's former `42501`. The group purge fixture sets service_role BYPASSRLS within its
+  transaction, matching hosted and the organisation-label harness; the shared bootstrap creates
+  only a plain role. **Controller PostgreSQL (local Docker PG17, port 65433, `PGTZ=UTC`):** RED against HEAD's
+  migration failed in an executed assertion (`session-update-to-unheld-group` got `42501` from the
+  restrictive policy where the trigger gives `23514`). The first GREEN exposed an invalid fixture (two
+  active staff programmes for one EA, refused by `idx_staff_programme_assignments_active_user_unique`),
+  corrected to a sequential A→B move with trigger-dropped controls. Final GREEN: `session-group` 34
+  cases; `history-authorization` 31; `upload-contract` 6 cases plus location 34, rowVersion 22 and
+  timeEntryForward 39; `organisation-label` 23; `support-incident` 18; `assessment-results` 53;
+  `ea-access` 43. All exit 0.
+- Static TDD, all commands under
+  `PATH="$HOME/.nvm/versions/node/v20.19.4/bin:$PATH"`:
+  `npx jest __tests__/sessionGroupAuthorizationMigration.test.js` RED exited 1 with
+  2 failed / 13 passed tests (15 total, 1 suite; 0.638 s), because the delete guard and identity
+  trigger were absent. Same-command GREEN passed 1 suite / 15 tests (0.512 s), exit 0.
+  `node --check scripts/session-group-postgres-harness.cjs` passed before and after the migration
+  change, exit 0. Static checks preserve the bounded timeouts and idempotent policy/trigger setup;
+  they do not establish actual SQL/RLS behavior or migration reapplication proof.
+- Focused regression commands (same Node 20 PATH):
+  `npm run test:integration -- __tests__/sessionGroupSync.test.js __tests__/sessionsRepository.test.js __tests__/groupsRepository.test.js`
+  passed 2 suites / 26 tests (1.773 s); adding the lifecycle/junction paths instead of the group
+  repository path also passed those same 2 suites / 26 tests (1.880 s). The integration runner's
+  testMatch excludes the additional paths, so they were run explicitly with unit Jest:
+  `npx jest __tests__/groupsRepository.test.js __tests__/offlineSync.pendingSessions.test.js`
+  passed 2 suites / 15 tests (1.370 s), and
+  `npx jest __tests__/groupAssignmentLifecycle.test.js __tests__/junctionRepositoryGuards.test.js`
+  passed 2 suites / 27 tests (1.696 s). All exited 0; no assertion or runner scope was weakened.
+- Updated the B2 section and groups/sessions table rows. No new phone deletion test is added:
+  `sessionGroupServer` has no stateful group DELETE and cannot prove the privilege refusal.
+  The database refusal is the guard; existing real-SQLite archive/reconnect family coverage stays
+  in place. No phone code, sync behavior, plan/spec, package or other migration changed. No
+  network, hosted Supabase, PostgreSQL execution, EAS, device, PR or Git-write action was taken.
+- Review round 1 full gates (same Node 20 PATH): `npx jest --silent --maxWorkers=25%` passed
+  350 suites / 4,242 tests (67.638 s), exit 0; `npm run test:integration --silent` passed
+  54 suites / 577 tests (42.517 s), exit 0. No unrelated failures or isolated reruns occurred.
+  `git diff --check` passed. Exactly the existing B2 migration, its static test/harness and the
+  contract map/build log changed; phone code, the synthetic server and the plan are unchanged.
+
+- **2026-10-21 — Review-round-1 harness fixture correction.** Controller PostgreSQL RED against
+  HEAD's migration was genuine (`42501` versus the expected identity-trigger `23514`). The first
+  controller GREEN failed before an assertion: the attempted second active staff Programme
+  assignment violated `idx_staff_programme_assignments_active_user_unique`. The original
+  simultaneous-A/B fixture was invalid; that run did not establish the programme-move guard.
+- Corrected only the programme-move fixture: the EA inserts its valid A session/attendee first;
+  postgres then ends its A staff assignment before inserting B. The fixture retains the active
+  direct child delivery assignment required by `has_active_session_attendee_assignment` and the
+  already-held B group. As the EA, it asserts one active staff assignment, B activation, attendee
+  write authority and held-B-group authority before attempting both refused PATCHes. The same
+  case then drops only the identity trigger as postgres and requires both PATCH variants to
+  succeed as the EA. Savepoints restore the original A row between controls and the outer
+  rollback restores the trigger. This separates trigger refusal from RLS refusal. The sibling
+  identity-preserving-update and group-delete cases use only the existing A assignment and have
+  no second-active-assignment setup problem; neither was changed. The migration is unchanged by
+  this correction. PostgreSQL execution remains controller-owned; no local rerun was attempted.
+- Fixture-correction proof, Node 20.19.4 PATH prefix:
+  `node --check scripts/session-group-postgres-harness.cjs` passed, exit 0;
+  `npx jest __tests__/sessionGroupAuthorizationMigration.test.js` passed 1 suite / 15 tests
+  (0.514 s), exit 0. `git diff --check` passed. The migration's SHA-256 was identical before and
+  after this follow-up; only the harness and this existing B2 log subsection were edited.
+
+- **2026-10-21 — B2 adversarial review, round 2: a group's Programme is immutable.** The controller
+  confirmed round 1 and found the final mutable persisted input to the held-group check:
+  `groups.programme_id`. Group ownership/assignment permits a raw-client PATCH without requiring
+  staff assignment to the proposed Programme. Such a change could strand a queued A-session
+  after inserts are acknowledged, or put uploaded A-history beneath a B-group. Extended the same
+  unapplied B2 migration with `prevent_group_programme_change()` / `groups_prevent_programme_change`:
+  BEFORE UPDATE, `IS DISTINCT FROM`, clear `23514`, empty search path, direct EXECUTE revoked and
+  idempotent drop/create. Name, class and archive/restore updates keep their existing checks.
+- Added one transaction-local assertion shared by `groupsRepository.updateGroup` and the
+  existing-row `saveGroup` path. A Programme mismatch throws
+  `groups.programme_id cannot be changed after insert` before writes/enqueues. Synced and pending
+  rows are covered, including a nonempty pre-existing outbox; group, assignment and outbox
+  snapshots stay unchanged after refusal. Equal Programme and name-only writes still work.
+  The existing group repository test uses better-sqlite3 directly; added it to the integration
+  testMatch so the required real-SQLite regressions also run in the normal integration gate.
+- Wrote both PostgreSQL cases first, appended after all prior cases:
+  `group-programme-change-refused` checks refusal and unchanged group/assignment Programme, then
+  drops only the trigger as postgres inside the rolled-back case and requires the identical PATCH
+  to succeed as the same EA. `group-edit-keeping-programme-allowed` checks rename with unchanged
+  Programme, class changes and archive/restore. The EA has only its existing active A staff
+  assignment throughout; no simultaneous-active-Programme fixture is used. **Controller PostgreSQL (local
+  Docker PG17, port 65433):** RED against HEAD's migration failed in the executed
+  `group-programme-change-refused` assertion ("Expected SQLSTATE 23514, but the statement was
+  allowed"); GREEN passed `session-group` 36 cases, including the trigger-dropped control, and every
+  other harness (`history-authorization` 31, `upload-contract` 6 + 34 + 22 + 39, `organisation-label`
+  23, `support-incident` 18, `assessment-results` 53, `ea-access` 43).
+- Round 2 RED, all commands under
+  `PATH="$HOME/.nvm/versions/node/v20.19.4/bin:$PATH"`:
+  `npx jest __tests__/sessionGroupAuthorizationMigration.test.js` exited 1 with
+  1 failed / 15 passed tests (16 total, 1 suite; 0.621 s): the group Programme trigger was absent.
+  `npm run test:integration -- __tests__/groupsRepository.test.js` exited 1 with
+  4 failed / 15 passed tests (19 total, 1 suite; 3.583 s): both update/re-save paths accepted the
+  forbidden change for synced and pending groups. Positive equal-Programme/name-only cases
+  passed before implementation. Same-command GREENs exited 0: static 1 suite / 16 tests
+  (0.488 s); group repository 1 suite / 19 tests (1.521 s).
+- `node --check scripts/session-group-postgres-harness.cjs` passed, exit 0.
+  Focused `npm run test:integration -- __tests__/groupsRepository.test.js __tests__/sessionsRepository.test.js __tests__/sessionGroupSync.test.js`
+  passed 3 suites / 45 tests (3.688 s), exit 0. Updated the groups table contract and B2's complete
+  input/evidence fences: immutable session group/Programme, immutable group Programme, immutable
+  assignment identity, revoked group/assignment DELETE, server-derived actor identity; assignment
+  Programme remains deliberately excluded from the helper, and ending an assignment still does
+  not erase C19 authority. No new migration, local schema version, sync-engine behavior, package,
+  plan/spec or Git write was introduced. No hosted, PostgreSQL, EAS, device or PR work was run.
+- Round 2 final gates (same Node 20 PATH): `npx jest --silent --maxWorkers=25%` passed
+  350 suites / 4,250 tests (87.704 s), exit 0; `npm run test:integration --silent` passed
+  55 suites / 596 tests (68.559 s), exit 0. No unrelated failures or isolated reruns occurred.
+  `git diff --check` and the final harness syntax recheck passed. Eight scoped files changed:
+  the existing migration/harness, group repository and its tests, static migration test,
+  integration testMatch, contract map and this B2 verification subsection.
+
+- **2026-10-21 — B2 adversarial review, round 3: authoritative group pulls converge.** The
+  round-2 local Programme guard also ran for `saveServerGroupRows`, because that persistence
+  boundary delegates to `saveGroup`. It rejected historical cached/server Programme drift before
+  the existing pending/failed and row-version checks, leaving acknowledged or terminal groups
+  outside the EA's correct Programme roster and preventing a session save. Restricted the
+  `saveGroup` assertion to local writes classified by `shouldEnqueueOutbox(record)`; `updateGroup`
+  retains its unconditional local-edit assertion. Authoritative persistence bypasses only the
+  local-mutation guard and still uses the unchanged convergence checks. The server trigger,
+  PostgreSQL harness, sync engine and pull callers are unchanged.
+- Added five real-SQLite regressions through the public repositories: acknowledged and terminal
+  B caches accept a newer A server row, return to the EA's A roster and permit an A session with
+  its attendee; pending and failed B rows skip the conflicting pull with unchanged rows and
+  complete outbox snapshots; an older server version cannot re-scope an acknowledged cache.
+  Existing local update/re-save refusal cases for synced/pending groups and accepted
+  equal-Programme/name-only edits remain green. Updated the contract map's B2 section and groups
+  row to distinguish local mutation immutability from authoritative pull convergence.
+- Round 3 RED/GREEN, under `PATH="$HOME/.nvm/versions/node/v20.19.4/bin:$PATH"`:
+  `npm run test:integration -- __tests__/groupsRepository.test.js` first exited 1 with
+  **5 failed / 19 passed tests** (24 total, 1 suite; 1.904 s). Each new case reached the
+  Programme assertion and returned `failed: 1` / `fallbackUsed: true` instead of applying or
+  deliberately skipping the row. The same command after the scoped fix exited 0 with
+  **1 suite / 24 tests passed** (2.378 s).
+  Focused `npm run test:integration -- __tests__/groupsRepository.test.js __tests__/sessionsRepository.test.js __tests__/sessionGroupSync.test.js __tests__/ChildrenContextPull.integration.test.js __tests__/pullReconcile.integration.test.js`
+  passed **5 suites / 86 tests** (5.495 s), exit 0.
+- Round 3 final gates (same Node 20 PATH): `npx jest --silent --maxWorkers=25%` passed
+  **350 suites / 4,255 tests** (68.196 s), exit 0; `npm run test:integration --silent` passed
+  **55 suites / 601 tests** (42.112 s), exit 0. No unrelated failures or isolated reruns occurred.
+  `git diff --check` passed; read-only `git diff --exit-code` confirmed no migration or harness
+  changes. Four scoped files changed: the group repository, its real-SQLite tests, the contract
+  map and this B2 verification subsection. No PostgreSQL, network, hosted, device or Git write
+  work was run.
+
+#### Task 7 — branch gates (controller)
+
+Branch `feat/lesson-plan-b2-session-group` at `f548ed0`, base `7a831fb`. Commands use
 `PATH="$HOME/.nvm/versions/node/v20.19.4/bin:$PATH"`; PostgreSQL is local Docker PG17 on port 65433
 with `PGTZ=UTC`.
 
@@ -3015,6 +3375,32 @@ this build over it; the app opens, Home is unchanged at 1.0x and 1.3x, Session H
 session, Export Database shows `lesson_drafts` at the merged schema version with 0 rows) runs on that
 build on the Galaxy A03s. The schema number is set when C1, B2 and AR Plan 2's local migrations are
 renumbered at the integration merge. The card gate (Step 4) is carried into the C2–C3 plan.
+| `npx jest --silent --maxWorkers=25%` | 350 suites / 4,255 tests passed (baseline 346 / 4,202) |
+| `npm run test:integration --silent` | 55 suites / 601 tests passed (baseline 52 / 552) |
+| `npm run test:types` | Exit 0 |
+| `verify:*:postgres`, final migration | `session-group` 36 cases; `history-authorization` 31; `upload-contract` 6 cases plus location 34, rowVersion 22 and timeEntryForward 39; `organisation-label` 23; `support-incident` 18; `assessment-results` 53; `ea-access` 43. All exit 0 |
+| Task 1 Step 6 RED | Migration moved aside: `session-group-held-active` refused by `sessions_forward_prep_pin_defaults_insert` (recorded with Task 1) |
+| Task 6 Step 6 | The four lost-reply cases pass; `session-insert-retry-still-checks-the-row` returns `42501` |
+
+**Adversarial review** (`/codex:adversarial-review`, `gpt-6-astra`, base `7a831fb`), three rounds:
+- Round 1, needs-attention: [high] an authorized hard group delete cascaded away the held
+  assignment that authorizes sessions queued on another device; [medium] a parent UPDATE could move
+  a session's programme or group under its attendees. Fixed in `2658ecb` (EA group DELETE revoked;
+  a trigger fixes a session's programme and group, `23514`).
+- Round 2, needs-attention: [high] the group's holder could change `groups.programme_id`, the last
+  mutable input of the held-group check. Fixed in `3103a4d` (a trigger on groups, and a local guard).
+  Every input of `private.current_user_has_held_group_assignment` is now immutable or archive-only.
+- Round 3, needs-attention: no new server bypass; [medium] the round-2 local guard also blocked
+  authoritative group pulls, so a phone with a stale cached programme could never converge. Fixed in
+  `f548ed0` (the guard runs only for writes that will be uploaded). No fourth round: the fix is
+  narrow and pinned by real-SQLite tests for convergence and for pending-row protection.
+- Note: a privileged (service-role) purge of a group that sessions still reference now fails,
+  because the foreign key's `ON DELETE SET NULL` would change an immutable `sessions.group_id`.
+  Session history should not silently lose its group, so this is intended.
+
+**Hosted apply and device gates (Task 8): not yet run.** The hosted order is B2, then Assessment
+Results Plan 2, then Plan 3, each with Jim's yes; the device checks run on the combined Android
+build Jim chose for wave 1.
 
 ## Decision Register
 
@@ -3036,6 +3422,7 @@ renumbered at the integration merge. The card gate (Step 4) is carried into the 
 | 2026-10-21 | Assessment Results Plan 2 Task 4: one RPC per correction, never batched; volume is a few rows per session. | A parsed reply returns the winner and belongs to one claimed correction; atomic acknowledgement must preserve a newer owed local correction. Mastery ordering uses correction time/UUID and receipts, not send-time row versions. | Field volume makes per-correction requests material, or a reviewed batch RPC preserves the identical per-correction receipt and acknowledgement contract. |
 | 2026-10-21 | Home's draft loading and `openItem` parameter forwarding ship with the `Lesson` route in C3. Reserve `Lesson` with `{ draftId }`; C1 ships only the inert card builder and icon. | A C3 bundle can leave a durable draft before an OTA rollback within the same runtime. A rolled-back bundle must never show a card for a route it does not register; card wiring and route registration must travel together. | C3 registers `Lesson` and removes the temporary Home-does-not-read-drafts guard, with real navigation and deferred-read tests plus the carried device gate. |
 | 2026-10-21 | Lesson draft context, language code and plan are fixed at the storage boundary (C14, C18); tracker changes must be in the lesson's language; the save path deletes the draft in its own transaction. | A resumed lesson must preserve its original context and correction times. `discard(id, { transaction })` joins the caller's save transaction; a failed save restores the same draft/session id. JSON validation prevents silently lost edits. | Wave 2 changes the lesson-context contract or the save transaction boundary. |
+| 2026-10-21 | **Session inserts are insert-or-ignore by id; `updateSession` deleted** (B2 Task 6). | A committed session whose response is lost retries before its attendees; merge upsert invokes `sessions_update_active_assignment_after_attendee` and can go terminal because no attendee has landed. Insert-or-ignore never changes stored content, still runs INSERT checks and acknowledges no error, as for immutable assignment inserts. Sessions remain unversioned and unbatched. The unused edit method re-saved as insert and would silently lose server edits, so it is removed; attendees retain merge upsert because their UPDATE policy needs no extra authority. Four new PostgreSQL cases retain controller execution as a separate gate. | saved-session editing ships |
 | 2026-10-17 | **Field-continuity decisions (Jim).** (1) The **server** closes a time entry left open for more than ten hours; the phone-only close is not enough. (2) Android backup **excludes every SQLite database** (Claude's recommendation, accepted). (3) Losing an unfinished session or assessment form on navigate-away or process death is **accepted for the pilot**. (4) Revocation follows **Zazi's model**, operated by a script until a Head Office admin website exists. | (1) A phone that stays offline or unopened leaves the hosted row open indefinitely, so staff reports cannot tell a forgotten clock-out from a long day. (2) A restored database replays already-accepted work (Zazi ZZ-BUG-20260907-001); the server is the recovery path. (3) Drafts belong to the planned SQLite draft/run lifecycle, not a temporary patch. (4) One proven operator procedure across both apps; the website is later Head Office work. | Field reports of lost forms; the server close is found to fight legitimate long shifts; a Head Office admin surface is built. |
 | 2026-09-04 | Treat 1,000 rows as the verified hosted PostgREST response cap and require explicit bounded pagination, deadlines, and completeness accounting in the first implementation of every potentially larger pull family. | A real cap-plus-one request returned exactly 1,000 of 1,205 rows with HTTP 206 and an exact content range. A successful but capped response is incomplete replication, not a performance inconvenience; the current assessment-item estate is already close enough that a non-paginated intermediate contract would be throwaway and unsafe. | The hosted API cap is deliberately reconfigured and re-proven through an equivalent cap-plus-one probe, or a family moves behind a server operation whose response-completeness contract is independently bounded and tested. |
 | 2026-08-29 | Treat an authorized session as one complete delivery-history aggregate. Owning the session or having a historical direct delivery assignment to any attendee grants the complete parent and every attendee row. | The parent activities JSON already carries child-keyed facts for the delivery event, and a child-filtered attendee list would imply a privacy boundary that does not exist while also misrepresenting the event. Admission to the session is the authorization boundary. | Masi introduces a less-trusted reader class or genuinely sensitive per-child facts. Put such facts behind a separately authorized table or redacted projection rather than silently adding them to this aggregate. |
@@ -3201,6 +3588,7 @@ renumbered at the integration merge. The card gate (Step 4) is carried into the 
 | 2026-10-21 | Lesson plan A3: Frozen plan rule — reason, suggested/unlocked letters and rotation day stay the plan's. A valid frozen blend tier anchors the default tier, six suggestions and Suggested book; browse pool remainder, higher tiers, child IDs and book Read dates refresh. A null frozen tier recomputes tiers/book from frozen letters; no pack/children still gives no tiers/books. | A pull or later-day resume cannot rewrite what the EA was advised. `evaluateLesson` and per-call token caches keep plan/choices aligned; the runner checks identity on the plan's own inputs. | C3 changes the freeze boundary or draft pack pinning. |
 | 2026-10-21 | Lesson plan A3: books exclude retired readers; catalogue order is step, position within that step, then ID. Readability excludes normalized tricky words and requires unlocked sounds. Choose highest-step readable non-recent book; otherwise oldest latest read by date/timestamp/ID, then higher step/catalogue ties. ECD has no book row. | The whole-window latest read supplies Read dates, independently of the five-session recent set. Multi-letter sounds stay locked in v1. | Sound-step or book-selection pedagogy changes. |
 | 2026-10-21 | Lesson plan A3: save retains a plan exactly when lesson date equals `made_on`, however late; an unfrozen plan recomputes only on its own day. Class resolution uses the group's class or its current members, never children added for the day. | C14 preserves dated advice as evidence; C18 prevents attendance from switching language. Missing plans are programmer errors, not invented advice. | Lesson-date, class or language ownership changes. |
+| 2026-10-21 | Historical group reference: rebuild local `sessions` without the group FK (v 16); rejected a history-reference `groups` row. | Authorized session history can name a group the EA never held or no longer holds, while the roster pull downloads only currently assigned groups. A synthetic group needs a name the history API lacks and makes group readers, edits, archive, reconcile and ownership repair reason about a new access-bearing row kind. A plain id preserves history without creating a group or assignment, matching `battery_runs.class_id` in #90; local capture validation belongs in `saveSession` (B2 Task 4). | A screen needs a session's group name offline. |
 
 ---
 
@@ -3347,8 +3735,7 @@ renumbered at the integration merge. The card gate (Step 4) is carried into the 
 | 2026-10-20 | Assessment Results reviews found stale undo statistics, an old-shape mastery-ranking loader, coverage input-shape sniffing and UTC-day grade attribution. | Fixed in Tasks 2, 10 and 12: recompute maximum streak from kept marks; load typed letter results including other recorders; split `getAssessmentCoverage`/`getCoverageFromCounts`; use SAST `toLocalDateString` for membership edges. Tests/checkpoints are in the Tasks 1–12 verification section. | Verify the real screen loader and date boundary, not only a helper fed ideal fixtures. |
 | 2026-10-20 | Task 6 draft docs still said controller GREEN and phone cutover were pending; programme naming assumed a separate Core Literacy R–3 row. | Reconciled in Task 13: controller reports PG17 53/53 plus five existing harnesses GREEN, Tasks 7–12 are committed, and the read-only preflight identified combined `code = literacy`. Expired shell token was bypassed with stored CLI login (`env -u SUPABASE_ACCESS_TOKEN`) for that read-only probe. Hosted migration remains unapplied. | Source, controller-local PostgreSQL proof, hosted state and device proof remain separate evidence. |
 | 2026-10-20 | Remaining Plan 1 boundaries: SQLite v15 omits the server's stopped-reason and programme-default-pair CHECKs; the existing mastery writer still sends `updated_at`; history pull and native swipe-back are not proven by these tests. | Run status/completion/purpose-window CHECKs match; family validation enforces stopped-reason shape before enqueue. No schema or mastery writer change in Task 13. New server triggers replace mastery timestamps; Plan 2 owns its writer/re-key, Plan 3 owns pull, and Task 14 owns hosted/build/device gates. | Do not describe every SQLite/server constraint or every phone timestamp writer as identical. The omitted CHECKs remain a recorded schema difference, not a claimed fix. |
-
-| 2026-10-20 | **A session whose upload commits but whose reply is lost can go terminal** (found by the B2 plan writer, confirmed by Codex). The retry is an upsert; when the row exists PostgreSQL takes the UPDATE path, and `sessions_update_active_assignment_after_attendee` needs an attendee that has not landed yet, so 42501 with no pending evidence marks the session terminal. Common, not rare: the first retry is 5 s and passes run every 30 s. Pre-existing since `20260521140331`. | Not fixed yet. B2 plan Task 6 (a release prerequisite) makes session inserts insert-or-ignore by id, like the immutable assignment inserts, and deletes the unused `sessionsRepository.updateSession`; Codex approved the plan in round 2. | A retry must never need more authority than the first attempt. |
+| 2026-10-20 | **A session whose upload commits but whose reply is lost can go terminal** (found by Codex round 1 of the B2 plan; pre-existing since `20260521140331_masi_rls_review_fixes.sql:89`). Merge upsert takes the UPDATE path, and `sessions_update_active_assignment_after_attendee` needs an attendee that has not landed yet, so `42501` with no pending evidence marks the session terminal. The first retry is 5 s and ordinary passes retry the parent first. | **2026-10-21 — fixed locally by B2 Task 6:** session inserts use insert-or-ignore by id in dispatch, and the unused `sessionsRepository.updateSession` is deleted to prevent silently ignored edits. `sessionGroupSync.test.js` pins commit/lost response/two-pass convergence with no terminal transition; `sessionsRepository.test.js` pins the absence of the edit method. Four new cases in `session-group-postgres-harness.cjs` cover ignored retry before attendees, proposed-row checks, the old merge denial and attendee merge replay; controller PostgreSQL execution remains open, separate from local proof. | A retry must never need more authority than the first attempt. Saved-session editing must add UPDATE-by-id semantics and row versions, not reuse insert. |
 | 2026-10-20 | **The reference refresh cannot switch the active academic year if the new year arrives first** (found by Codex on AR Plan 3). `pullReferenceDataRows` fetches years unordered and `replaceFromServer` upserts them one by one against the unique active-year index, so the transaction fails with `SQLITE_CONSTRAINT_UNIQUE` and the phone keeps the old year. Would hit every phone at a January rollover. | Not fixed yet. AR Plan 3 adds a task making the switch atomic and order-independent, tested with both response orders through the real repository. | A unique index plus row-by-row upserts hides an ordering assumption; apply deactivations before activations in one transaction. |
 | 2026-10-21 | **Mixed-language sessions stamped tracker marks with the first selected child's language** (found by the AF adversarial review, round 1). With an Afrikaans child selected first, an English child's marks were saved as `Afrikaans` and vanished from that child's English tracker and ranking; English/isiXhosa mixes had the same bug before AF. | Fixed in `ca1ec6b`: each child's tracker uses that child's own class language; unknown shows the empty state. Real-SQLite regressions cover Afrikaans/English and English/isiXhosa mixes and a null-language child. | A per-session default is a guess whenever a session can mix classes; derive per-child context from the child. |
 | 2026-10-21 | Lesson plan A3: the §7.3 session-history completeness predicate is not implemented or tested by this pure engine. | C1's lesson-draft plan owns the finished walk, current year, failure and present-child coverage tests. A3 consumes per-child `historyComplete` and tests engine behavior when it is false. | A local list of sessions is not proof of a complete download. |

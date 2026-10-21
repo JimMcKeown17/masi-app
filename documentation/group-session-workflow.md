@@ -8,9 +8,9 @@
 ## Why this specification exists
 
 Masi's operational unit is a group block, but the current capture flow still resolves a group
-selection into child ids and stores a child-oriented session. `sessions.group_id` exists locally,
-yet the outbound payload currently strips it. That means the server cannot answer a basic
-longitudinal question: which group received this session?
+selection into child ids and stores a child-oriented session. B2 now persists and syncs the chosen
+`sessions.group_id` on the session and every attendee, with server authorization by a held or
+historically held assignment in the group's Programme. The group-first UI remains later work.
 
 This work is not a navigation reskin. It crosses access grants, group identity, RLS, local
 persistence, sync payloads, session lifecycle, and reporting. The dependency order is load-bearing.
@@ -43,18 +43,24 @@ persistence, sync payloads, session lifecycle, and reporting. The dependency ord
 
 Do not start the group-first UI before these contracts are settled:
 
-1. Extend sync dependency evidence beyond direct `child_ea_assignments`. The current
-   `GRANT_SUBJECTS` model does not represent class- or group-membership-mediated grants.
-2. Define collision-proof identity and lifecycle rules for `grouping_versions`,
-   `groups.display_number`, and `child_group_memberships`.
-3. Define server authorization for non-null `sessions.group_id`, including creator visibility,
-   active Programme scope, assignment changes, history reads, and archive behavior. **The
-   assessment/delivery/group access model, wider-scope history split, replacement authorization,
-   and turnover behavior are now settled in [ADR-0005](../docs/adr/0005-assessment-delivery-scope-two-tier-access.md)
-   and the `CONTEXT.md` settled decisions.** What remains here is the session-specific slice:
-   authorization for a non-null `sessions.group_id` write and its archive behavior.
-4. Update `rls-sync-contract-map.md`, canonical Supabase migrations, local migrations, repository
-   producers, server-column allowlists, outbox ordering, and real-SQLite/RLS tests as one contract.
+1. **Done — session-group grant evidence (B2 Task 5, 2026-10-21).**
+   Existing `GRANT_SUBJECTS` already represents class/group-membership-mediated child grants.
+   [B2](../docs/superpowers/plans/2026-10-20-lesson-plan-b2-session-group.md) adds the session and
+   attendee held-group evidence: this EA's owed assignment insert counts even when it has ended.
+   Archive-only, terminal and other-EA inserts do not count; other grants remain active-only.
+2. **Deferred (lesson-plan C16).** Collision-proof identity and lifecycle rules for
+   `grouping_versions`, `groups.display_number`, and `child_group_memberships` remain outside B2.
+3. **Done for the session-group server contract (B2 Task 1).** Non-null groups require a held or
+   historically held assignment and the group's own Programme, with completed-state and child
+   guards retained. History visibility and deleted-group writes are covered by the B2 contract.
+   [ADR-0005](../docs/adr/0005-assessment-delivery-scope-two-tier-access.md) retains the wider access model.
+   Hosted application remains an approved release gate.
+4. **Done — schema, history, producer, payload and dependency/evidence contract (B2 Tasks 1–5, 2026-10-21).** The contract map, canonical
+   server/local migrations, repository guards, equal attendee group ids, allowlists and local
+   behavior tests implement the session-group write contract. Sessions wait for their own failed
+   group, not unrelated groups; the deleted-group assignment-backoff scenario converges in ordinary
+   passes without terminal rows or manual retry. Task 6's lost-response retry fix remains a separate
+   release prerequisite, and hosted/device gates still apply before B2 merges and the UI ships.
 
 ## Product requirements
 

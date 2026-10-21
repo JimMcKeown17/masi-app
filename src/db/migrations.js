@@ -891,6 +891,50 @@ create table if not exists lesson_drafts (
 );
     `,
   },
+  {
+    version: 18,
+    name: 'sessions_group_history_reference',
+    // A pulled session can name a group outside this phone's roster. Rebuild
+    // under the runner's FK-off transaction, keeping all other constraints.
+    // Drop before renaming so the attendee FK continues to name sessions.
+    sql: `
+      create table sessions_new (
+        id text primary key,
+        user_id text not null,
+        programme_id text not null references programmes(id) on delete restrict,
+        class_id text references classes(id) on delete set null,
+        session_date text not null,
+        started_at text,
+        ended_at text,
+        activities text not null default '{}',
+        notes text,
+        created_at text not null default (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+        updated_at text not null default (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+        ${LOCAL_SYNC_COLUMNS},
+        group_id text,
+        state text not null default 'completed'
+          check (state in ('completed', 'in_progress', 'paused', 'discarded'))
+      );
+      insert into sessions_new (
+        id, user_id, programme_id, class_id, session_date, started_at, ended_at,
+        activities, notes, created_at, updated_at, sync_status, last_sync_error,
+        server_updated_at, group_id, state
+      ) select
+        id, user_id, programme_id, class_id, session_date, started_at, ended_at,
+        activities, notes, created_at, updated_at, sync_status, last_sync_error,
+        server_updated_at, group_id, state
+      from sessions;
+      drop table sessions;
+      alter table sessions_new rename to sessions;
+      create index if not exists idx_sessions_programme_date on sessions(programme_id, session_date);
+      create index if not exists idx_sessions_class_id
+        on sessions(class_id)
+        where class_id is not null;
+      create index if not exists idx_sessions_group_id
+        on sessions(group_id)
+        where group_id is not null;
+    `,
+  },
 ];
 
 // Derived from the migration list so it never drifts when a migration is added.
