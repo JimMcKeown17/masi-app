@@ -19,7 +19,7 @@ import {
   supersedeStaleActivePairRow,
   upsertDomainRecord,
 } from './domainRepositoryUtils';
-import { syncStatusFromSynced } from './sqliteRepositoryUtils';
+import { chunkArray, sqlPlaceholders, syncStatusFromSynced } from './sqliteRepositoryUtils';
 import { normalizeGender } from '../../constants/options';
 import { deleteUndeliveredLetterMastery } from './masteryRepository';
 
@@ -286,6 +286,21 @@ export const createChildrenRepository = ({ database } = {}) => {
         `, pulledAt, pulledAt, acknowledgedChildIdsJson, acknowledgedIdsJson)
       ).changes,
     });
+  };
+
+  const getChildNamesByIds = async (ids = []) => {
+    if (!ids.length) return {};
+    const db = await resolveDatabase(database);
+    const rows = [];
+    for (const batch of chunkArray([...new Set(ids)])) {
+      rows.push(...await db.getAllAsync(
+        `select id, first_name, last_name, hidden_at from children where id in (${sqlPlaceholders(batch.length)})`,
+        ...batch
+      ));
+    }
+    return Object.fromEntries(rows.map(row => [row.id, {
+      name: `${row.first_name} ${row.last_name}`, hidden: Boolean(row.hidden_at),
+    }]));
   };
 
   const getChildren = async () => {
@@ -864,6 +879,7 @@ export const createChildrenRepository = ({ database } = {}) => {
 
   return {
     getChildren,
+    getChildNamesByIds,
     getMyChildren,
     save,
     saveChild: save,

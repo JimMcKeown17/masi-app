@@ -1168,11 +1168,56 @@ pinned by `historyPullTriggerBudget.test.js`:
 
 All starts are fire-and-forget with stale-aware error handling, so history does not delay roster
 or class publication. The assessment screen's refresh indicator follows its gesture's promise;
-screen focus remains a SQLite read. Page-driven reader refresh and combined History presentation
-are Task 9. Sync passes/completion, saves, screen focus and `isSyncing` true-to-false cache
+screen focus remains a SQLite read. Task 9 readers observe committed-page/pass versions as
+described below. Sync passes/completion, saves, screen focus and `isSyncing` true-to-false cache
 reloads never start history. No repository, component, hook, upload engine or literacy-session
 persistence path starts a pull. Real-store budget proof: +1, +7 and +14 minutes after completion
 make zero RPC calls; +16 minutes makes exactly one delta-page call per walk (three total).
+
+**Combined status and reader publication (Task 9).** Sync Status has one History row for
+session, Battery Run, assessment and mastery scopes. `describeCombinedHistoryState` applies
+the existing per-walk rule in this order:
+
+1. Either store running: `Downloading`, with `Downloading history from Head Office…`.
+2. Any missing pull state: `Not downloaded yet`, with no detail.
+3. All four have `cursor.complete`, `lastPulledAt` and no retained `lastFailureAt`:
+   `Up to date`, with no detail.
+4. Otherwise: `Incomplete since <time>`, with `History not fully downloaded yet`. The time
+   is the earliest incomplete walk's `lastFailureAt || updatedAt || lastPulledAt`, formatted
+   like the existing session-only presenter.
+
+The session-only `describeHistoryState` is unchanged for Session History. Assessment History
+uses the combined presenter over the run and assessment states and displays only its detail.
+Sync Status reloads all four states on either store's page or run version. Home keeps its
+session-version subscriptions and also observes assessment-history versions. Assess, My
+Children, Assessment History, Child Results, Letter Mastery Ranking and Assessment Ranking
+re-read SQLite when assessment-history `pageVersion` or `runVersion` changes. These are
+read subscriptions, never new pull triggers.
+
+`children.getChildNamesByIds(ids)` is a read-only, deduplicated, chunked lookup of identity
+and `hidden_at`, including history reference children. It returns `{ name, hidden }` by id,
+does not promote references or enqueue work, and does not change roster eligibility.
+Assessment History resolves ids absent from `allChildren` through this lookup; roster names
+retain precedence. A reference child's own historical result therefore renders its name after
+reinstall even though the child stays out of My Children.
+
+Only the standalone mastery panel observes pulled pages. `useLetterMasterySyncRefresh`
+retains the upload-result signal and adds a page-version seen-ref: the version present at
+mount counts as seen, and a later page invokes the existing background loader once, keeping
+the grid visible. The panel's read-generation and write-in-flight guards are unchanged:
+a tap invalidates earlier reads and the post-save read restores accepted state. The trigger
+guard permits this observer hook's import while still forbidding history starts from hooks
+and preserving the exact seven start sites.
+
+**Accepted sheet staleness:** `LetterTrackerBottomSheet` has no pulled-page subscription.
+An open sheet and its pending marks remain unchanged when pages land; reopening reads its
+baseline once. Until then tiles can be stale. Each tap retains its explicit chosen state,
+language and tap time, so nothing is saved as an implicit toggle of a newly pulled value.
+This is the same accepted trade-off as AR Plan 2 A1.
+
+Proof: presenter, Sync Status, Assessment History, Child Results, reference-child, panel and
+tracker-sheet suites; the panel's real-SQLite read/tap ordering guards remain green. Native
+visual acceptance and physical two-phone convergence remain device gates.
 
 **Complete families and identity.** Assessment pages embed the whole item array and their run
 header. The embedded header is readable exactly when its assessment is, including a run started

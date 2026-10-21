@@ -385,7 +385,7 @@ correctly; the missing contract is inbound hydration.
   `assessment_items` and `battery_runs` — **Assessment Results Plan 3**, not part of the upload
   completion below. Task 7 supplies all three walks and scope queries in
   [assessmentHistoryPull.js](../src/services/assessmentHistoryPull.js); the handle-owned store and triggers are built in Task 8.
-  Combined status/readers remain Task 9, hosted/device gates Task 14. See the [Assessment Results design](../docs/superpowers/specs/2026-10-19-assessment-results-and-letter-test-design.md).
+  Combined status/readers are built in Task 9; hosted/device gates remain Task 14. See the [Assessment Results design](../docs/superpowers/specs/2026-10-19-assessment-results-and-letter-test-design.md).
 - [x] **Upload the assessment family all-or-nothing ([U2](./zazi-sync-lessons-for-masi-2026-10-08.md)).**
   Built in Assessment Results Plan 1, Tasks 6–9: exclusive `submit_assessment`, one complete
   outbox payload, one call regardless of the 1,000-row ready limit, no per-item fallback, and atomic
@@ -410,7 +410,7 @@ correctly; the missing contract is inbound hydration.
   corrections; local acknowledgement displays the winner and terminal refusals do not count.
   **Remaining: Task 7's hosted apply/practice-data wipe and two-phone device gate.** Each external
   step needs Jim's yes. The mastery walk is built in Assessment Results Plan 3 Task 7;
-  its handle-owned store and triggers are built in Task 8; combined status/readers remain Task 9.
+  its handle-owned store and triggers are built in Task 8; combined status/readers are built in Task 9.
   Assessment evidence already uses the latest non-skipped stored letter result from any recorder
   in the active Programme, including WelaPLUS Q1; `userId` scopes that Programme, not the recorder.
   Confirmation reads have no recorder or Programme filter. The correction rule is in the
@@ -443,7 +443,10 @@ correctly; the missing contract is inbound hydration.
   Physical-device proof remains the open gates below.
 - [ ] Add two-device physical gates proving device A history appears on device B.
 - [x] Make sync status distinguish "all local writes uploaded" from "local history fully hydrated."
-  Sessions done (CAP-004 History row); assessments follow with their slice.
+  CAP-004 plus AR Plan 3 Task 9: one History row combines sessions, Battery Runs, assessments
+  and mastery; missing or incomplete walks cannot show Up to date. Readers re-read SQLite as
+  pages land, while the open session tracker sheet deliberately keeps its baseline. See the
+  [status and reader contract](./rls-sync-contract-map.md#assessment-run-and-mastery-history-ar-plan-3).
 - [x] CAP-004 hosted gate: `20260925120000` applied to `masi-app-sqlite` on 2026-09-26 through the
   isolated helper; hosted six-actor matrix and 1,205-attendee HTTP walk passed.
 - [ ] **CAP-004 device gates (new phone within a minute on iPhone and low-end Android; two-device convergence with a

@@ -19,6 +19,7 @@ import { FAB_OVERHANG } from '../../components/navigation/LockedBottomTabBar';
 import { getSessionsTodayGoal } from '../../services/sessionsTodayGoal';
 import { getActiveProgrammeGate } from '../../services/activeProgrammeGate';
 import { useSignedInEA } from '../../context/SignedInEAContext';
+import { useAssessmentHistoryStatus } from '../../services/assessmentHistoryStatus';
 import { useSessionHistoryStatus } from '../../services/sessionHistoryStatus';
 import { isStaleActorError } from '../../session/staleActor';
 import { getCoverageFromCounts, getWeekSessionCounts } from '../../utils/dashboardStats';
@@ -38,6 +39,7 @@ export default function HomeScreen({ navigation }) {
   const { sessions: sessionsRepository, assessments: assessmentsRepository } = repositories;
   const { homeAttention } = services;
   const { pageVersion, runVersion } = useSessionHistoryStatus();
+  const assessmentHistory = useAssessmentHistoryStatus();
   const insets = useSafeAreaInsets();
   const { width, fontScale } = useWindowDimensions();
   const { user, profile } = useAuth();
@@ -111,7 +113,7 @@ export default function HomeScreen({ navigation }) {
     } finally {
       if (seq === loadSeqRef.current) setStatsLoading(false);
     }
-  }, [handle, sessionsRepository, assessmentsRepository, homeAttention, childrenList, user.id, pageVersion, runVersion]);
+  }, [handle, sessionsRepository, assessmentsRepository, homeAttention, childrenList, user.id, pageVersion, runVersion, assessmentHistory.pageVersion, assessmentHistory.runVersion]);
 
   // Load on focus, roster or history changes; reload on foreground.
   useFocusEffect(

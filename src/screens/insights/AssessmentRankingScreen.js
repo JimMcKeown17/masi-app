@@ -1,3 +1,4 @@
+import { useAssessmentHistoryStatus } from '../../services/assessmentHistoryStatus';
 import { useHeaderHairline } from '../../components/common/ScreenHeader';
 import { useScrollBottomPadding } from '../../hooks/useScrollBottomPadding';
 import SegmentedControl from '../../components/common/SegmentedControl';
@@ -47,6 +48,7 @@ const BAND_LEGEND = [
 ];
 
 export default function AssessmentRankingScreen({ navigation }) {
+  const { pageVersion, runVersion } = useAssessmentHistoryStatus();
   const onScroll = useHeaderHairline();
   const paddingBottom = useScrollBottomPadding(spacing.xxl);
   const { repositories } = useSignedInEA();
@@ -76,7 +78,7 @@ export default function AssessmentRankingScreen({ navigation }) {
       };
       load();
       return () => { active = false; };
-    }, [assessmentsRepository, membershipsRepository, user.id])
+    }, [assessmentsRepository, membershipsRepository, user.id, pageVersion, runVersion])
   );
 
   const modeConfig = MODES[mode];

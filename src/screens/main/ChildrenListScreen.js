@@ -1,3 +1,4 @@
+import { useAssessmentHistoryStatus } from '../../services/assessmentHistoryStatus';
 import { useSignedInEA } from '../../context/SignedInEAContext';
 import React, { useState, useCallback, useMemo, useRef } from 'react';
 import { View, Text, StyleSheet, FlatList, RefreshControl } from 'react-native';
@@ -52,6 +53,7 @@ function ChildrenListHeader({ isLoading, tabStats, hasClasses, searchTerm, onSea
 }
 
 export default function ChildrenListScreen({ navigation }) {
+  const { pageVersion, runVersion } = useAssessmentHistoryStatus();
   const { repositories } = useSignedInEA();
   const { assessments: assessmentsRepository, academicYears: academicYearsRepository } = repositories;
 
@@ -113,7 +115,7 @@ export default function ChildrenListScreen({ navigation }) {
         setTabStats(getChildrenTabStats(children, classes, results, activeAcademicYear));
       };
       loadStats();
-    }, [children, classes, user.id])
+    }, [children, classes, user.id, pageVersion, runVersion])
   );
 
   // Count-aware landing: jump a single-class EA directly into that class. Keys off

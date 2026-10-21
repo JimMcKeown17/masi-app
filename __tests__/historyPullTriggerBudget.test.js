@@ -27,8 +27,14 @@ test('every history start belongs to the seven pinned trigger rows', () => {
 test('repositories, components, hooks, upload and literacy persistence never start history', () => {
   const forbidden = files.filter(file => /src\/(db\/repositories|components|hooks)\//.test(file)
     || /src\/services\/(offlineSync|literacySessionPersistence)\.js$/.test(file));
-  for (const file of forbidden) expect({ file: path.relative(root, file), found: /assessmentHistory|sessionHistory\.start/.test(fs.readFileSync(file, 'utf8')) })
-    .toEqual({ file: path.relative(root, file), found: false });
+  for (const file of forbidden) {
+    const relative = path.relative(root, file), source = fs.readFileSync(file, 'utf8');
+    // Task 9's panel-only hook observes page versions; it must never start a pull.
+    const pageObserver = relative === 'src/hooks/useLetterMasterySyncRefresh.js';
+    const found = /sessionHistory\.start|assessmentHistory\.start/.test(source)
+      || (!pageObserver && /assessmentHistory/.test(source));
+    expect({ file: relative, found }).toEqual({ file: relative, found: false });
+  }
 });
 test('fresh starts at +1, +7 and +14 minutes make no RPC; +16 minutes makes three delta calls', async () => {
   const initial = Date.parse('2026-10-21T09:00:00Z');

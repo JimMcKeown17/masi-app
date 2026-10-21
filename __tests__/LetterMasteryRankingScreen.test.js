@@ -1,3 +1,7 @@
+jest.mock('../src/services/assessmentHistoryStatus', () => ({
+  ...jest.requireActual('../src/services/assessmentHistoryStatus'),
+  useAssessmentHistoryStatus: () => ({ running: false, pageVersion: 0, runVersion: 0 }),
+}));
 jest.mock('@expo/vector-icons', () => ({ Ionicons: 'Ionicons' }), { virtual: true });
 
 jest.mock('@react-navigation/native', () => ({

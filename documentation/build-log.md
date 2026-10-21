@@ -2313,10 +2313,81 @@ broader domain trigger budgets remain open. Task 8 implementation and local veri
 complete. No PostgreSQL execution, hosted Supabase work,
 hosted fixture, EAS build, device check or PR was performed.
 
+#### Task 9: one History row and committed-page reader refresh
+
+Added `describeCombinedHistoryState`, leaving the session-only `describeHistoryState`
+byte-for-byte unchanged. Sync Status now reads the session, Battery Run, assessment and mastery
+states and combines both stores' running flags. Priority is running → any missing state →
+all complete/stamped/no retained failure → earliest incomplete time. The exact labels/details
+are unchanged. Assessment History uses the run and assessment states and displays only detail,
+with the same spacing as Session History.
+
+Added `children.getChildNamesByIds(ids)`: deduplicated, 200-id chunks, identity/hidden projection
+only, including history reference rows. It returns names and boolean hidden flags without
+changing roster eligibility or writing/enqueueing anything. Assessment History resolves child
+ids missing from `allChildren` through it and retains roster-name precedence. Real-SQLite
+tests exercise roster/reference/hidden/missing ids, empty input, 1,205 references, more than one
+query and at most 999 bindings per query; `getChildren` still excludes references.
+
+Home retains its session-history versions and adds assessment-history versions. Assess,
+My Children, Assessment History, Child Results and both ranking screens reload their SQLite
+reads when assessment-history `pageVersion` or `runVersion` changes. Sync Status reloads
+all four state rows on either store's versions. None of these subscriptions starts a pull.
+
+The panel-only `useLetterMasterySyncRefresh` keeps its upload-result behavior and adds a
+page-version seen-ref. A version already present at mount is seen, so the focus load happens
+once. A later page calls the existing background loader once without hiding the grid.
+`LetterMasteryPanel` itself is unchanged: taps still invalidate in-flight reads and its
+post-save load and write-in-flight guards retain their ordering. `LetterTrackerBottomSheet`
+is also unchanged and has no page signal. The new sheet test leaves a pending mark and old
+baseline untouched on a published page, then reopens and reads the baseline once. Its possible
+stale tiles while open remain the already-accepted Plan 2 A1 / Task 9 trade-off.
+
+**Small faithful adaptations.** Task 8's trigger guard rejected any lowercase
+`assessmentHistory` mention in hooks, including Task 9's explicitly required observer import.
+An executed RED found only `src/hooks/useLetterMasterySyncRefresh.js`. The guard now permits
+that one observer file through the mention check while still rejecting both history `.start`
+references there and preserving the exact seven-caller inventory and RPC budget. No start
+site changed. Six existing reader suites supplied partial repository-only handle fixtures;
+their fixtures now supply the status observer (and a real store for mixed-result history)
+without weakening production service requirements or their existing data assertions.
+
+Every recorded verification command uses
+`PATH="$HOME/.nvm/versions/node/v20.19.4/bin:$PATH"`; runtime is `v20.19.4`.
+
+| Gate / command | Result |
+| --- | --- |
+| `npx jest __tests__/syncStatusPresenter.test.js __tests__/syncStatusScreen.test.js __tests__/AssessmentHistoryScreen.plan5.test.js __tests__/ChildResultsScreen.test.js __tests__/childrenHistoryReference.test.js __tests__/LetterTrackerBottomSheet.test.js __tests__/LetterMasteryPanel.test.js --maxWorkers=25%` — RED | Exit 1: 6 failed / 1 passed suites; 14 failed / 87 passed tests (101 total), 6.368 s. Missing combined presenter/name lookup and refresh/status behavior; sheet preservation already passed |
+| Same command with a partial implementation | Exit 1: 2 failed / 5 passed suites; 3 failed / 98 passed tests, 4.987 s. An edit script had stopped at a different repository destructure; remaining screen edits were completed and the Child Results test now creates a fresh React element for rerender |
+| Same seven-suite command — GREEN | Exit 0: 7 suites / 101 tests passed, 4.613 s |
+| `npm run test:integration -- __tests__/historyPullTriggerBudget.test.js` — guard RED | Exit 1: 1 failed / 2 passed tests, 1.07 s; the new read-only hook import matched the old blanket mention ban |
+| `npm run test:integration -- __tests__/childrenHistoryReference.test.js __tests__/LetterMasteryPanel.test.js __tests__/historyPullTriggerBudget.test.js` — GREEN | Exit 0: 3 suites / 31 tests passed, 5.182 s; rerun with the explicit binding-budget assertion passed 31 tests in 4.753 s |
+| First `npx jest --silent --maxWorkers=25%` | Exit 1: 6 failed / 354 passed suites; 37 failed / 4,473 passed tests (4,510 total), 75.507 s. All failures were old partial reader fixtures missing the new status service |
+| First `npm run test:integration --silent` | Exit 1: 1 failed / 67 passed suites; 6 failed / 804 passed tests (810 total), 59.241 s. Same Letter Mastery Ranking fixture issue |
+| `npx jest __tests__/ChildrenListScreen.test.js __tests__/readers.mixedResults.test.js __tests__/LetterMasteryRankingScreen.test.js __tests__/AssessmentsScreen.test.js __tests__/AssessmentRankingScreen.test.js __tests__/ChildrenListScreenRefresh.test.js --maxWorkers=25%` after fixture adaptation | Initial adaptation hid the store factory in five mocked modules: exit 1, 5 failed / 1 passed suites, 39 failed / 12 passed tests, 3.49 s. Retaining actual exports fixed it: exit 0, 6 suites / 51 tests passed, 3.884 s |
+| `npm run test:integration -- __tests__/LetterMasteryRankingScreen.test.js` | The incomplete mock first failed all 6 tests (1.569 s); after retaining actual exports, exit 0, 1 suite / 6 tests passed, 2.003 s |
+| Final `npx jest --silent --maxWorkers=25%` | Exit 0: 360 suites / 4,510 tests passed, 73.578 s |
+| Final `npm run test:integration --silent` | Exit 0: 68 suites / 810 tests passed, 59.274 s |
+| Extra `npx jest __tests__/productionBindingStatic.test.js __tests__/sessionHistoryStatus.test.js` run concurrently with the full suite | Exit 1: 1 failed / 1 passed suites; 2 failed / 22 passed tests, 8.547 s. The duplicate binding suite raced its own `src/__binding_probe__.js` fixture (ambient-probe observation / ENOENT cleanup); the full suite's copy passed |
+| Required isolated rerun: `npx jest __tests__/productionBindingStatic.test.js` after full-suite completion | Exit 0: 1 suite / 14 tests passed, 5.972 s; no code change and no probe residue |
+| Final `npm run test:integration -- __tests__/historyPullTriggerBudget.test.js` after retaining the reference-level start ban | Exit 0: 1 suite / 3 tests passed, 0.781 s |
+| `git diff --check`; read-only no-diff checks of the plan, panel, sheet, session store/walk and shared walker; exact session presenter comparison | PASS |
+
+Both full suites ran concurrently. The extra binding-guard run was incorrectly overlapped with
+the full unit suite's copy; it was rerun alone as recorded above. No unrelated timeout occurred.
+No production fallback or test expectation was weakened to accommodate a partial fixture.
+
+The contract map records combined status, reference-name reads, page subscriptions and accepted
+sheet staleness; the roadmap now includes assessments in History. Task 9 implementation and
+local verification are complete. The commit step is controller-owned. No migration, dependency,
+network/hosted Supabase action, PostgreSQL execution, EAS build, device check or PR was performed.
+Native visual and physical two-phone gates remain open.
+
 ## Decision Register
 
 | Date | Decision | Rationale | Revisit Trigger |
 | --- | --- | --- | --- |
+| 2026-10-21 | AR Plan 3 Task 9 presents one History status over all four walks and observes page/run versions only to re-read SQLite. The panel's existing background loader receives page signals; the open session sheet receives none. | Upload completion cannot establish inbound completeness, reference children need names without roster authority, and a page observer must not become another pull trigger. Preserving the panel's tap/read fences and the sheet's baseline avoids changing accepted correction intent. | Device gates expose stale displayed data, extra pulls, tap rollback or a new need to refresh an open sheet safely. |
 | 2026-10-21 | AR Plan 3 Task 8 serializes one coalesced trailing history pass and permits at most one reference refresh/restart per pass on MR002. The store and all triggers capture the signed-in handle; close/reset fences all old publications. | Joining an in-flight pass can miss a class persisted after its coverage snapshot. One follow-up closes that window while normal freshness still bounds RPC traffic; a bounded real refresh recovers year disagreement without a retry loop. | Provider/device trigger budgets, actor-close or year-rollover tests show extra requests, stranded coverage or stale publication. |
 | 2026-10-21 | AR Plan 3 Task 7 uses synced server-known grants for assessment/run/mastery coverage, with one resolved year per Programme run and the existing transactional bounds on every durable write. Saver query classifications survive the traversal boundary. | Timestamp progress alone cannot detect authorization gains or recover a deleted old mastery row. Lost coverage makes return a gain, and expected-year agreement prevents a completed cursor for the wrong year. One extra classification branch fixes the Task 5 reporting gap without changing session traversal. | Controller review or device year-rollover/handover gates expose a mismatch in grants, cursor progress or recovery. |
 | 2026-10-21 | AR Plan 3 Task 6 orders mastery pulls against accepted server tuples and couples handover deletion with coverage removal in the acknowledged assignment transaction. Terminal outbox evidence never owns or blocks the accepted value. | A stale page must not undo a newer acknowledgement, a phone clock must not block accepted-state convergence, and an old timestamp cursor cannot recover locally deleted rows unless the returning child is a coverage gain. The existing breaker admits both assignment ending and deletion together. | Device handover, stale-page or refusal-recovery gates expose convergence or visibility behavior outside the plan's accepted residuals. |

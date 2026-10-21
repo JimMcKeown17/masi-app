@@ -113,3 +113,17 @@ export const describeHistoryState = ({ running, pullState } = {}) => {
   const time = since ? new Date(since).toLocaleString([], { day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' }) : 'the last attempt';
   return { label: `Incomplete since ${time}`, detail: 'History not fully downloaded yet' };
 };
+
+export const describeCombinedHistoryState = ({ running, pullStates = [] } = {}) => {
+  if (running) return { label: 'Downloading', detail: 'Downloading history from Head Office…' };
+  if (!pullStates.length || pullStates.some(state => !state)) return { label: 'Not downloaded yet', detail: null };
+  const incomplete = pullStates.filter(pullState => describeHistoryState({ pullState }).label !== 'Up to date');
+  if (!incomplete.length) return { label: 'Up to date', detail: null };
+  const since = incomplete.map(state => {
+    let cursor;
+    try { cursor = JSON.parse(state.cursor || '{}'); } catch { cursor = {}; }
+    return cursor.lastFailureAt || state.updatedAt || state.lastPulledAt;
+  }).filter(Boolean).sort((a, b) => Date.parse(a) - Date.parse(b))[0];
+  const time = since ? new Date(since).toLocaleString([], { day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' }) : 'the last attempt';
+  return { label: `Incomplete since ${time}`, detail: 'History not fully downloaded yet' };
+};

@@ -6,6 +6,8 @@ import { PaperProvider, ActivityIndicator } from 'react-native-paper';
 import { StyleSheet } from 'react-native';
 import { colors } from '../src/constants/colors';
 import { fontFamilies } from '../src/constants/typography';
+import { SignedInEAContext } from '../src/context/SignedInEAContext';
+import { assessmentsRepository } from '../src/db/repositories/assessmentsRepository';
 import { masteryRepository } from '../src/db/repositories/masteryRepository';
 import { MotionProvider } from '../src/context/MotionContext';
 import { PEDAGOGICAL_ORDERS } from '../src/utils/assessmentRegistry';
@@ -119,6 +121,42 @@ describe('LetterTrackerBottomSheet', () => {
     fireEvent.press(tile);
     expect(onChangesUpdate).toHaveBeenCalledWith(expected);
     jest.useRealTimers();
+  });
+
+  test('a pulled page leaves an open sheet and pending change alone; reopening reads the baseline once', async () => {
+    let snapshot = { running: false, pageVersion: 0, runVersion: 0 };
+    const listeners = new Set();
+    const store = { getSnapshot: () => snapshot, subscribe: listener => {
+      listeners.add(listener); return () => listeners.delete(listener);
+    } };
+    const value = { repositories: { assessments: assessmentsRepository, mastery: masteryRepository },
+      services: { assessmentHistory: { store } } };
+    const Harness = ({ visible = true }) => {
+      const [pending, setPending] = React.useState({});
+      return <SignedInEAContext.Provider value={value}><PaperProvider settings={{ icon: () => null }}>
+        <MotionProvider value={{ motionLevel: 'still', reduceMotion: true, tier: 'static' }}>
+          <LetterTrackerBottomSheet visible={visible} child={child} userId="user-1" languageCode="en"
+            pendingChanges={pending} onChangesUpdate={setPending} onDismiss={jest.fn()} />
+        </MotionProvider>
+      </PaperProvider></SignedInEAContext.Provider>;
+    };
+    const screen = render(<Harness />);
+    fireEvent.press(await screen.findByLabelText('e, not mastered'));
+    expect(screen.getByLabelText('e, taught, added this session')).toBeTruthy();
+    expect(masteryRepository.getLetterMastery).toHaveBeenCalledTimes(1);
+    masteryRepository.getLetterMastery.mockResolvedValue([stored('a')]);
+    await act(async () => {
+      snapshot = { ...snapshot, pageVersion: 1 };
+      listeners.forEach(listener => listener());
+    });
+    expect(masteryRepository.getLetterMastery).toHaveBeenCalledTimes(1);
+    expect(screen.getByLabelText('e, taught, added this session')).toBeTruthy();
+    expect(screen.getByLabelText('a, not mastered')).toBeTruthy();
+    screen.rerender(<Harness visible={false} />);
+    screen.rerender(<Harness visible />);
+    await screen.findByLabelText('a, taught by coach');
+    expect(masteryRepository.getLetterMastery).toHaveBeenCalledTimes(2);
+    expect(screen.getByLabelText('e, taught, added this session')).toBeTruthy();
   });
 
   test('keeps the labelled backdrop dismissal', () => {

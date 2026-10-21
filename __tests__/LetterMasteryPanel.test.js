@@ -1,3 +1,8 @@
+import { useAssessmentHistoryStatus } from '../src/services/assessmentHistoryStatus';
+jest.mock('../src/services/assessmentHistoryStatus', () => ({
+  ...jest.requireActual('../src/services/assessmentHistoryStatus'), useAssessmentHistoryStatus: jest.fn(),
+}));
+beforeEach(() => useAssessmentHistoryStatus.mockReturnValue({ running: false, pageVersion: 0, runVersion: 0 }));
 jest.mock('@expo/vector-icons', () => ({ Ionicons: 'Ionicons' }), { virtual: true });
 
 import React from 'react';
@@ -171,6 +176,28 @@ describe('LetterMasteryPanel', () => {
     fireEvent.press(await screen.findByLabelText('a, not mastered'));
     expect(await screen.findByText('1 / 26 letters mastered')).toBeTruthy();
     expect(screen.queryByText('Letter update was not saved. Please try again.')).toBeNull();
+  });
+
+  test('an increment of pageVersion re-reads once without a spinner and shows the new confirmation', async () => {
+    const screen = render(panel());
+    await screen.findByLabelText('a, not mastered');
+    let release;
+    masteryRepository.getLetterMastery.mockReturnValueOnce(new Promise(resolve => { release = resolve; }));
+    useAssessmentHistoryStatus.mockReturnValue({ running: true, pageVersion: 1, runVersion: 0 });
+    screen.rerender(panel());
+    await waitFor(() => expect(masteryRepository.getLetterMastery).toHaveBeenCalledTimes(2));
+    expect(screen.UNSAFE_queryByType(ActivityIndicator)).toBeNull();
+    expect(screen.getByLabelText('a, not mastered')).toBeTruthy();
+    await act(async () => { release([stored('a')]); });
+    expect(screen.getByLabelText('a, taught by coach')).toBeTruthy();
+    expect(masteryRepository.getLetterMastery).toHaveBeenCalledTimes(2);
+  });
+
+  test('mounting with a nonzero pageVersion loads once from useFocusEffect', async () => {
+    useAssessmentHistoryStatus.mockReturnValue({ running: false, pageVersion: 9, runVersion: 4 });
+    const screen = render(panel());
+    await screen.findByText('0 / 26 letters mastered');
+    expect(masteryRepository.getLetterMastery).toHaveBeenCalledTimes(1);
   });
 
   test('the panel re-reads after a sync pass that touched letter_mastery', async () => {

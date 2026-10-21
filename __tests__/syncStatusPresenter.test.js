@@ -1,5 +1,6 @@
 import {
   deriveSyncState,
+  describeCombinedHistoryState,
   describeReconcileBreakerNote,
   describeSyncState,
   describeWaitingDetail,
@@ -182,5 +183,29 @@ describe('describeSyncBanner', () => {
   test('hidden whenever items need attention (the header pill carries it)', () => {
     expect(describeSyncBanner({ ...base, needsAttentionCount: 1 })).toBeNull();
     expect(describeSyncBanner({ ...base, needsAttentionCount: 1, isSyncing: true })).toBeNull();
+  });
+});
+
+
+describe('combined History status', () => {
+  const complete = () => ({ lastPulledAt: '2026-10-21T10:00:00Z', cursor: '{"complete":true}' });
+  test('four complete walks give Up to date', () => {
+    expect(describeCombinedHistoryState({ running: false, pullStates: Array.from({ length: 4 }, complete) }))
+      .toEqual({ label: 'Up to date', detail: null });
+  });
+  test('complete sessions with a null mastery state give Not downloaded yet', () => {
+    expect(describeCombinedHistoryState({ running: false, pullStates: [complete(), complete(), complete(), null] }))
+      .toEqual({ label: 'Not downloaded yet', detail: null });
+  });
+  test('two incomplete walks failed at 08:00 and 09:00 give a label with 08:00 time', () => {
+    const early = '2026-10-21T08:00:00Z', late = '2026-10-21T09:00:00Z';
+    const failed = at => ({ ...complete(), cursor: JSON.stringify({ complete: true, lastFailureAt: at }) });
+    const time = new Date(early).toLocaleString([], { day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' });
+    expect(describeCombinedHistoryState({ running: false, pullStates: [complete(), failed(late), failed(early), complete()] }))
+      .toEqual({ label: 'Incomplete since ' + time, detail: 'History not fully downloaded yet' });
+  });
+  test('running wins', () => {
+    expect(describeCombinedHistoryState({ running: true, pullStates: [null, null] }))
+      .toEqual({ label: 'Downloading', detail: 'Downloading history from Head Office…' });
   });
 });
