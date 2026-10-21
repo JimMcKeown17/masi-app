@@ -53,12 +53,10 @@ const LEGACY_KEYS_TO_STRIP = {
 };
 
 // Real server columns deliberately withheld from push (reserved strictly for that — NOT a
-// catch-all). sessions.group_id/state are server-RLS-guarded out until the state-machine slice
-// (supabase/migrations/20260529214500_masi_sessions_forward_prep_columns.sql).
+// catch-all). B2 activates sessions.group_id; state stays completed until the state-machine slice.
 const INTENTIONALLY_UNSYNCED = {
   sessions: {
-    group_id: 'Forward-prep; server RLS pins group_id NULL until the state-machine slice (migration 20260529214500).',
-    state: 'Forward-prep; server RLS pins state=completed until the state-machine slice (migration 20260529214500).',
+    state: 'Forward-prep; server RLS keeps state = completed (migration 20261021140000_session_group_authorization).',
   },
   assessments: {
     items_tested: 'Legacy summary field; Question families send assessment_items through submit_assessment.',

@@ -1114,6 +1114,45 @@ gate). The dry run listed only this file against `segygjzpujphwvrubusm`. Verifie
   focused RED/GREEN times were 14.812 s / 14.693 s. `git diff --check` passed. Hosted, EAS,
   device and PR steps were not run.
 
+- **2026-10-21 — B2 Task 4: capture and upload the session group.** `saveSession` stores explicit
+  `group_id` (null when absent) on the session and every attendee, ignoring legacy `group_ids`
+  without rewriting memberships. Before an enqueued non-null-group write, the transaction checks
+  that the group exists locally and belongs to the resolved Programme; archived groups remain
+  valid. The exact missing-group and wrong-Programme errors occur before any family/outbox write.
+  `SERVER_COLUMNS.sessions` now sends `group_id`; `INTENTIONALLY_UNSYNCED.sessions` retains only
+  the prescribed completed-state message, with the assessment summary exclusion preserved.
+- Repository TDD: with the Node 20.19.4 PATH prefix,
+  `npm run test:integration -- __tests__/sessionsRepository.test.js` RED exited 1:
+  4 failed / 9 passed tests (13 total, 1 suite; 1.572 s). Failures reproduced attendee group loss,
+  legacy `group_ids` use, and missing/wrong-Programme groups being accepted. Same-command GREEN
+  exited 0: 1 suite / 13 tests passed (2.238 s).
+- Sync TDD: `npm run test:integration -- __tests__/sessionGroupSync.test.js` RED exited 1:
+  3 failed / 1 passed tests (4 total, 1 suite; 3.590 s), because session payloads stripped
+  `group_id`; the pre-update queued payload case passed. The new `sessionGroupServer` models the
+  group FK and C19 at the network boundary, including atomic batches, ended assignments,
+  assignment insert-or-ignore and exact lifecycle acknowledgements. Real SQLite regressions
+  cover save/delete/reconnect, a half-uploaded family, Head Office ending an assignment, and an
+  old queued session without the group key. A temporary SQLite observation trigger records any
+  terminal transition even if its row is later removed; none occurs in the passing scenarios.
+- Sync GREEN: `npm run test:integration -- __tests__/sessionGroupSync.test.js __tests__/syncContractCompleteness.test.js`
+  passed 2 suites / 9 tests, exit 0 (2.208 s). Focused unit command:
+  `npx jest __tests__/syncContractServerSchema.test.js __tests__/offlineSync.stripping.test.js __tests__/offlineSync.pendingSessions.test.js __tests__/literacySessionPersistence.test.js --maxWorkers=25%`
+  passed 4 suites / 22 tests, exit 0 (2.098 s). All commands use
+  `PATH="$HOME/.nvm/versions/node/v20.19.4/bin:$PATH"`.
+- Updated the session/attendee/B2 contracts, forward-prep note and group-workflow prerequisites.
+  Documentation deliberately distinguishes the completed Tasks 1–4 contract from Task 5's
+  pending failed-parent gates and historical assignment evidence, plus Task 6's lost-response
+  retry release prerequisite. Task 4 Step 9's blanket "done" wording for prerequisites 1/4 would
+  overstate those later implementations: `offlineSync` still has only the class dependency for
+  sessions and no session grant entry. No dependency/retry implementation was pulled forward.
+  Local/synthetic server proof does not replace PostgreSQL, hosted or native device gates.
+- Task 4 full gates (same Node 20 PATH): `npx jest --silent --maxWorkers=25%` passed
+  350 suites / 4,231 tests, exit 0 (98.461 s). `npm run test:integration --silent` passed
+  54 suites / 568 tests, exit 0 (55.742 s). No unrelated failures or isolated reruns occurred.
+  `git diff --check` passed. No hosted Supabase, PostgreSQL harness, EAS, device or PR work was
+  performed; those gates retain their separate owners. No plan checkboxes or other spec sections
+  changed; group-workflow product sections remain for C2/C3.
+
 ## Decision Register
 
 | Date | Decision | Rationale | Revisit Trigger |

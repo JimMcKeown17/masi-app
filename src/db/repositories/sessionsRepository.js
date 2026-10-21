@@ -211,9 +211,18 @@ export const createSessionsRepository = ({ database } = {}) => {
     const record = normalizeSyncFields({
       ...session,
       programme_id: programmeId,
+      group_id: session.group_id ?? null,
       activities: buildActivitiesPayload(session),
       sync_status: session.sync_status || syncStatusFromSynced(session.synced),
     });
+
+    if (shouldEnqueueOutbox(record) && record.group_id !== null) {
+      const group = await txn.getFirstAsync('select programme_id from groups where id = ?', record.group_id);
+      if (!group) throw new Error('sessions.group_id must reference a group on this phone');
+      if (group.programme_id !== programmeId) {
+        throw new Error('sessions.group_id must belong to the session programme');
+      }
+    }
 
     await upsertDomainRecord(txn, {
       tableName: 'sessions',
@@ -231,7 +240,7 @@ export const createSessionsRepository = ({ database } = {}) => {
         id: attendeeId,
         session_id: session.id,
         child_id: childId,
-        group_id: (session.group_ids || [])[0] || null,
+        group_id: record.group_id,
         attendance_status: 'present',
         sync_status: session.sync_status || syncStatusFromSynced(session.synced),
         synced: record.sync_status === 'synced',

@@ -26,6 +26,7 @@ module.exports = {
     '<rootDir>/__tests__/childrenHistoryReference.test.js',
     '<rootDir>/__tests__/classesRepository.test.js',
     '<rootDir>/__tests__/sessionsRepository.test.js',
+    '<rootDir>/__tests__/sessionGroupSync.test.js',
     '<rootDir>/__tests__/sessionsHistoryPage.test.js',
     '<rootDir>/__tests__/sessionHistoryReaders.test.js',
     '<rootDir>/__tests__/sessionHistoryPull.test.js',
