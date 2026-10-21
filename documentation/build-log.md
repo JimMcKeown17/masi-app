@@ -1119,7 +1119,9 @@ The read-only hosted preflight (2026-10-21, `project_ref=segygjzpujphwvrubusm`) 
 apply and fixtures, EAS, devices and the PR are later gates, each needing Jim's yes.
 
 
-### 2026-10-21 — Assessment Results Plan 3 Task 1: server history read authority
+### 2026-10-21 — Assessment Results Plan 3: server history authority and pages
+
+#### Task 1: server history read authority
 
 **Scope:** migration sections 1–4 only, the disposable PostgreSQL harness, npm/CI wiring and
 Task 1's standing docs. The controller's accepted Task 0 deviation is retained: branch
@@ -1180,10 +1182,78 @@ The plan-header superpowers execution skills are absent from the available skill
 the approved task sequence and local TDD skill were followed directly. The disposable PostgreSQL run
 above proves the RLS behavior locally; hosted deployment is not yet proven.
 
+
+#### Task 2: server page RPCs
+
+**Scope:** sections 5–7 of `20261022120000_assessment_history_pull.sql`, the existing PostgreSQL
+harness, Operation Semantics and this register. Task 1 is commit `939c29f`; its controller
+PostgreSQL RED/GREEN (39 cases) and all existing harnesses passed. The branch remains stacked on
+Plan 2's server work; its phone Tasks 2–6 are outside this task. No phone implementation changed.
+
+Built `get_assessment_history_page`, `get_battery_run_history_page` and `get_letter_mastery_page`
+with the approved signatures/defaults, stable definer execution, empty search paths and
+authenticated-only EXECUTE. Each validates auth, feature switch, arguments, then (for the two
+Programme pages) the server's active year and expected year id. No active year raises `55000`
+`no_active_academic_year`; mismatch raises `MR002` `academic_year_mismatch`, even for an empty
+page. Each positive-grant arm orders/limits before the union; the final joined page orders and
+limits again. All pages use `(updated_at, id)`, page sizes 1–200 and overlap 0–600 seconds.
+
+Assessment families carry exactly the parent allowlist, position-ordered seven-key item objects
+(or `[]`), an explicitly allowlisted run header or null, and the child identity projection.
+A readable assessment grants its embedded run header even when that run's SAST start date is
+before the year; run RLS and the run pager remain year-bounded. Mastery uses Plan 2's last-writer
+or current-deliverer grants, no year/Programme filter, nullable Programme and false confirmations.
+Task 1's sections 1–4, policies, switch and indexes are preserved.
+
+**Harness:** 39 existing cases plus 104 page cases and one dense-plan gate: **144 total**. New
+cases begin with the executed `assessment-page-exists` assertion, before any fixture depends on
+a new RPC. Includes 27 size-one actor/feature equivalence walks, owner year limits, embedded
+headers, exact payload keys, skipped/legacy families, year rollover and mismatch on empty pages,
+nullable/current mastery and handover, argument/auth/switch ordering, isolated features and user
+overrides, duplicate grants, Programme partitioning, tied microsecond keysets/overlap on all three
+streams, status-only run deltas and server stamping. The dense fixture has 20,000 noise rows and
+5,000 owner rows; it prints root shared blocks before requiring sparse-class and deep-owner pages
+to use less than one tenth of the authenticated raw-RLS baseline. Measured by the controller: raw-RLS
+baseline 51,098 root shared blocks (693.9 ms); deep owner page 2,107 blocks (11.3 ms), about 24x
+fewer; `dense-plan-buffer-gate` passed.
+
+**Adaptations:** Plan 2's `set_letter_mastery` has six scalar arguments and no `updated_at`
+payload. Its stamp case supplies a 2001 correction time and asserts server `updated_at = now()`;
+assessment/item and run payloads carry 2001 `updated_at` values. The mastery handover pager case
+repeats the transition in a rolled-back transaction with fresh correction ids, preserving Task
+1's final state. Keyset-only fixtures also roll back. The embedded-header and expected-year
+rules are approved plan calls beyond the older AR signatures, not new decisions here.
+
+Every Node/Jest command uses `PATH="$HOME/.nvm/versions/node/v20.19.4/bin:$PATH"`; the runtime
+reports `v20.19.4`.
+
+| Gate / command | Result |
+| --- | --- |
+| Controller PostgreSQL RED, Step 2 (HEAD's sections 1–4 swapped in; local Docker PG17 port 65433, `PGTZ=UTC`) | Exit 1 after Task 1's fixtures and cases succeeded: the executed `assessment-page-exists` assertion failed with `No function matches the given name and argument types` for `public.get_assessment_history_page`. Working copy restored byte-identical |
+| Controller PostgreSQL GREEN, existing harnesses and dense-plan measurements, Step 4 | All exit 0: `assessment-history` 144/144 named cases including `dense-plan-buffer-gate`; `letter-mastery` 20; `history-authorization` 31; `upload-contract` 6 cases plus location 34, rowVersion 22 and timeEntryForward 39; `organisation-label` 23; `support-incident` 18; `assessment-results` 53; `ea-access` 43 |
+| `node --check scripts/assessment-history-postgres-harness.cjs` and module loading | PASS; import does not execute the harness |
+| Inline Node static/synthetic checks | PASS: first-new-assertion ordering and injected failure propagation; construction of 39 old + 104 page cases / 152 SQL calls without undefined interpolation; 27 actor/feature walks; RPC signatures, projections, grants, guard order, three per-arm/final limits; unchanged sections 1–4 and final timeout resets. Synthetic dense-plan checks accept a valid comparison and reject both the ratio boundary and wrong deep-page count. No SQL executed; synthetic buffer values are not measurements |
+| `npx jest __tests__/syncContractServerSchema.test.js __tests__/historyAuthorizationPostgresHarness.test.js __tests__/syncRelationshipIndexesSupabaseMigration.test.js --runInBand --silent` | Exit 0: 3 suites, 37 tests passed, 1.876 s |
+| `npx jest --silent --maxWorkers=25%` | Exit 0: 347 suites, 4,240 tests passed, 62.19 s |
+| `npm run test:integration --silent` | Exit 0: 52 suites, 555 tests passed, 35.383 s |
+| `git diff --check` | PASS |
+
+Controller invocation uses local port **65433**, overriding the plan's 55432; CI remains 5432:
+
+```sh
+PATH="$HOME/.nvm/versions/node/v20.19.4/bin:$PATH" HISTORY_RLS_ADMIN_DATABASE_URL=postgresql://postgres:postgres@127.0.0.1:65433/postgres HISTORY_RLS_DATABASE_NAME=masi_history_rls_assessment_history HISTORY_RLS_DISPOSABLE_CONFIRM=I_UNDERSTAND_THIS_IS_DISPOSABLE PGTZ=UTC npm run verify:assessment-history:postgres
+```
+
+Hosted work, HTTP probes, EAS, devices and
+PRs remain controller steps. No network, dependency installation, hosted access or Supabase CLI
+was used. The controller's disposable PostgreSQL run above establishes the behaviour and the
+performance threshold locally. Hosted PostgREST family-cap proof remains Task 3/later gates.
+
 ## Decision Register
 
 | Date | Decision | Rationale | Revisit Trigger |
 | --- | --- | --- | --- |
+| 2026-10-21 | AR Plan 3 Task 2 implements the approved embedded-header read rule and expected-year check in the Programme pagers. | A readable family needs its referenced run for the local FK even when the run started before the year; the caller's expected year must agree with server authority before any page can complete. Run SELECT/pager bounds and other Question grants stay independent. | Controller PostgreSQL header/year tests, dense-plan gate or hosted HTTP proof exposes a contract mismatch. |
 | 2026-10-21 | Assessment Results Plan 3 Task 1 keeps owner reads unbounded, class reads active-year bounded, and uses the SAST run start date; mastery retains Plan 2's last-writer/current-deliverer rule. | These are separate positive grants from the approved plan. A history SELECT change must not broaden delivery/group/creator authority or change the write RPCs. Rollout seed reapply preserves controller decisions. | Controller PG17 read matrix, switch precedence/reapply or existing upload harness exposes a contract mismatch; resolve before hosted apply. |
 | 2026-10-17 | **Field-continuity decisions (Jim).** (1) The **server** closes a time entry left open for more than ten hours; the phone-only close is not enough. (2) Android backup **excludes every SQLite database** (Claude's recommendation, accepted). (3) Losing an unfinished session or assessment form on navigate-away or process death is **accepted for the pilot**. (4) Revocation follows **Zazi's model**, operated by a script until a Head Office admin website exists. | (1) A phone that stays offline or unopened leaves the hosted row open indefinitely, so staff reports cannot tell a forgotten clock-out from a long day. (2) A restored database replays already-accepted work (Zazi ZZ-BUG-20260907-001); the server is the recovery path. (3) Drafts belong to the planned SQLite draft/run lifecycle, not a temporary patch. (4) One proven operator procedure across both apps; the website is later Head Office work. | Field reports of lost forms; the server close is found to fight legitimate long shifts; a Head Office admin surface is built. |
 | 2026-09-04 | Treat 1,000 rows as the verified hosted PostgREST response cap and require explicit bounded pagination, deadlines, and completeness accounting in the first implementation of every potentially larger pull family. | A real cap-plus-one request returned exactly 1,000 of 1,205 rows with HTTP 206 and an exact content range. A successful but capped response is incomplete replication, not a performance inconvenience; the current assessment-item estate is already close enough that a non-paginated intermediate contract would be throwaway and unsafe. | The hosted API cap is deliberately reconfigured and re-proven through an equivalent cap-plus-one probe, or a family moves behind a server operation whose response-completeness contract is independently bounded and tested. |
