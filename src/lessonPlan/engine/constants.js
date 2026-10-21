@@ -1,4 +1,8 @@
+import { READING_LEVELS } from '../../constants/literacyConstants';
+
 export const ENGINE_VERSION = 1;
+
+export const BLEND_TIERS = Object.freeze(READING_LEVELS.slice(1, 5));
 
 export const PLAN_REASONS = Object.freeze([
   'first_session',

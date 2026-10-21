@@ -50,6 +50,7 @@
 export {
   BLEND_RECENT_SESSIONS,
   BLEND_SUGGESTION_COUNT,
+  BLEND_TIERS,
   BOOK_RECENT_SESSIONS,
   ENGINE_VERSION,
   PACK_LANGUAGE_BY_CODE,
@@ -60,3 +61,4 @@ export { teachingOrderFromPack } from './letters';
 export { computeLessonPlan, planForSave, isPlanRecomputable } from './lessonPlan';
 export { rankGroups } from './groups';
 export { resolveLessonClass } from './lessonClass';
+export { blendTierForReadingLevel, deriveSessionReadingLevel } from './blends';
