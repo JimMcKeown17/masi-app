@@ -380,6 +380,73 @@ Each signed-in EA handle owns its own request queue (`handle.enqueueRequest`, co
 
 Each workflow still awaits the result it needs before constructing the next dependent query. The change is fairness, not parallelism. If another operation was queued while request A was in flight, it runs after A and before the pull submits request B. Data shaping and SQLite persistence occur outside the network lease. A pull begun under one handle cannot persist into another EA's file: its repositories are bound to its own handle, and a stale handle refuses every write. Failed or incomplete scopes retain the same fail-closed reconcile rules.
 
+## Letter mastery: one current record, the most recently made correction wins (Assessment Results Plan 2)
+
+**Server half implemented; hosted migration not applied.** The migration is
+[`20261021160000_letter_mastery_current_state.sql`](../supabase/migrations/20261021160000_letter_mastery_current_state.sql).
+`npm run verify:letter-mastery:postgres` proves it on disposable PostgreSQL 17 (RED without the
+migration, then 20 cases GREEN), and every existing PostgreSQL harness still passes. The phone still uses its old mastery schema and writes until Tasks 2–6 perform the local
+cutover; the earlier operation/producer rows describe that phone, not permission to write the
+new server table directly. Do not apply this migration to hosted before the approved rollout.
+
+**Identity and conversion.** One record is unique on `(child_id, letter, language)`, independent
+of EA and Programme. `private.letter_mastery_id(uuid,text,text)` is immutable and uses UUID v5,
+namespace `09dcf4b2-6c53-4c46-917f-33bc7f2df4d2`, with
+`['letter_mastery', child_id, letter, language].join('\u001f')`; it is not executable by EAs.
+The migration lowercases letters, maps trimmed case-insensitive English → `en`,
+isiXhosa/xhosa → `xh`, isiZulu/zulu → `zu`, Afrikaans → `af`, and passes existing lowercase
+two-letter codes through. Unknown languages and multi-character letters are dropped. For each
+mapped key the latest old `(updated_at, id)` wins, including deleted rows: `confirmed = false`
+preserves an un-confirm. Mapping and ranking use one statement snapshot before the existing
+INSERT/UPDATE timestamp trigger can restamp rows. IDs become UUID v5; `user_id`, `source`,
+`mastered_at` and `deleted_at` are removed. The old `user_id` column guards this transform,
+so reapplying the migration does not rewrite current records. Programme is nullable context.
+
+**Only EA write boundary.**
+`public.set_letter_mastery(p_correction_id uuid, p_child_id uuid, p_letter text, p_language text, p_confirmed boolean, p_changed_at timestamptz)`
+is volatile, security definer, with an empty search path and authenticated-only EXECUTE. A missing
+`auth.uid()` raises `28000`; null or malformed arguments raise `22023`. A letter must match
+`^[[:alpha:]]$` and be lowercase; language must match `^[a-z]{2}$`.
+Direct INSERT, UPDATE and DELETE on `letter_mastery` are revoked from `anon` and
+`authenticated`. This table is not row-versioned.
+
+**Receipt before ordering.** The server-only `letter_mastery_corrections` table has RLS and no
+policies, no EA privileges, and service-role SELECT/INSERT/UPDATE/DELETE. A correction id binds
+six immutable payload fields: caller (`changed_by`), child, letter, language, `confirmed`, and
+`requested_at`. A replay must match all six or raises `MA001`; it uses the stored receipt.
+Only a new correction checks `private.current_user_delivers_to_child(child_id)`: the caller
+must have an active direct `child_ea_assignments` row or receives `42501`. Class/group arms do
+not grant writes. A committed replay skips this check even after revocation. Programme is captured
+from the caller's active `staff_programme_assignments` row (`ended_at is null`), or null.
+
+The first insert fixes `effective_at = least(p_changed_at, now())`. A lost-response retry never
+re-clamps it. Receipt insertion names `letter_mastery_corrections_pkey`; record upsert names
+`letter_mastery_child_letter_language_key`. The PL/pgSQL body starts with
+`#variable_conflict use_column` and qualifies expression columns, avoiding output-variable
+collisions under the default `plpgsql.variable_conflict = error`.
+
+**Winner and visibility.** Apply only when
+`(excluded.changed_at, excluded.correction_id) > (lm.changed_at, lm.correction_id)`.
+The correction UUID breaks exact time ties. A losing replay leaves `updated_at` untouched;
+inserts and applying updates use the retained Plan 1 timestamp trigger.
+
+| Outcome | Meaning | Returned record |
+| --- | --- | --- |
+| `applied` | This correction holds | Winning `confirmed, changed_at, correction_id, changed_by` |
+| `superseded` | A newer correction holds | The same four fields from the winner |
+| `acknowledged` | Receipt accepted; caller cannot read the winner | All four fields null |
+
+All three outcomes succeed. SELECT policy `letter_mastery_select_writer_or_deliverer` replaces
+the four old policies: `changed_by = auth.uid()` or a current direct delivery assignment,
+with no year or Programme bound. The RPC uses the identical predicate before returning the
+record. A former writer whose correction was superseded gets only `acknowledged` on replay.
+
+The [disposable harness](../scripts/letter-mastery-postgres-harness.cjs) checks the default
+name-resolution setting, named constraints, ordering, clamping and lost replies, concurrent
+same-id/same-key calls, authority and handover, shape, grants, SELECT scope, server stamps, UUID
+parity and old-shape conversion/reapply. Local controller runs use PostgreSQL 17 at
+`127.0.0.1:65433`; CI retains its own port. Task 4 appends the phone acknowledgement contract.
+
 ## Row versions (upload contract)
 
 The upload contract shipped in #77 and was applied to `masi-app-sqlite` on 2026-10-19; the Galaxy

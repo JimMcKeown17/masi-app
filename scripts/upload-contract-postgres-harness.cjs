@@ -42,6 +42,11 @@ const NEW_CHILD = '51000000-0000-0000-0000-000000000099';
 const PROGRAMME = "(SELECT id FROM public.programmes WHERE code = 'literacy')";
 const ACTIVE_YEAR = '(SELECT id FROM public.academic_years WHERE is_active)';
 
+const masteryFixtureSql = `INSERT INTO public.letter_mastery
+  (id, child_id, letter, language, confirmed, changed_at, correction_id, changed_by, programme_id)
+VALUES ('${MASTERY}', '${CHILD}', 'a', 'xh', false, pg_catalog.now(), '${MASTERY}', '${ASSIGNED_EA}', ${PROGRAMME});
+`;
+
 const fixtureSql = `
 INSERT INTO auth.users (id) VALUES ('${HEAD_OFFICE}'), ('${ASSIGNED_EA}'), ('${UNASSIGNED_EA}');
 INSERT INTO public.schools (id, name) VALUES ('${SCHOOL}', 'Upload contract harness school');
@@ -75,11 +80,14 @@ INSERT INTO public.group_ea_assignments (
 ) VALUES (
   '${ACTIVE_GROUP_ASSIGNMENT}', '${ACTIVE_GROUP}', '${ASSIGNED_EA}', ${PROGRAMME}, '${HEAD_OFFICE}', NULL
 );
-INSERT INTO public.letter_mastery (id, user_id, child_id, programme_id, letter, language, source, deleted_at)
-VALUES ('${MASTERY}', '${ASSIGNED_EA}', '${CHILD}', ${PROGRAMME}, 'a', 'isiXhosa', 'taught', pg_catalog.now());
+${masteryFixtureSql}
 INSERT INTO public.time_entries (id, user_id, sign_in_time, sign_in_lat, sign_in_lon)
 VALUES ('${TIME_ENTRY}', '${ASSIGNED_EA}', pg_catalog.now(), -33.96, 25.6);
 `;
+
+// The location check replays an earlier schema. Defer mastery until all migrations
+// have replayed, rather than sending new columns to the pre-cutover database.
+const preLocationFixtureSql = fixtureSql.replace(masteryFixtureSql, '');
 
 // Setup runs as postgres before the actor's statements; the whole transaction rolls back.
 const asActor = (actorId, statement, setup = '') => `
@@ -147,12 +155,6 @@ const CASES = [
       VALUES ('72100000-0000-0000-0000-000000000099', 'Fake', ${PROGRAMME}, '${CLASS}', '${HEAD_OFFICE}');`,
   },
   {
-    table: 'letter_mastery',
-    headOfficeCreated: false,
-    update: updateByIdSql('letter_mastery', 'deleted_at = NULL', MASTERY),
-    id: MASTERY,
-  },
-  {
     table: 'time_entries',
     headOfficeCreated: false,
     update: updateByIdSql('time_entries', 'sign_out_time = pg_catalog.now()', TIME_ENTRY),
@@ -204,6 +206,11 @@ const runCases = (databaseUrl) => {
     );
     summary[testCase.table] = 'passed';
   }
+  expectSqlState({
+    databaseUrl, label: 'letter-mastery-update-refused', sqlState: '42501',
+    sql: asActor(ASSIGNED_EA, updateByIdSql('letter_mastery', 'confirmed = true', MASTERY)),
+  });
+  summary['letter_mastery direct update refused'] = 'passed';
   return summary;
 };
 
@@ -551,7 +558,7 @@ const main = () => {
     for (const filename of fs.readdirSync(MIGRATIONS_DIR).filter((f) => f.endsWith('.sql')).sort()) {
       let before;
       if (filename === LOCATION_MIGRATION) {
-        runPsql({ databaseUrl, sql: fixtureSql + locationLegacyFixture, label: 'pre-location-fixture' });
+        runPsql({ databaseUrl, sql: preLocationFixtureSql + locationLegacyFixture, label: 'pre-location-fixture' });
         seeded = true;
         before = locationSnapshot(databaseUrl);
       }
@@ -559,6 +566,7 @@ const main = () => {
       if (before) assert.equal(locationSnapshot(databaseUrl), before, 'Location migration preserves legacy rows, grants, policies, indexes and triggers');
     }
     if (!seeded) runPsql({ databaseUrl, sql: fixtureSql, label: 'upload-contract-fixture' });
+    else runPsql({ databaseUrl, sql: masteryFixtureSql, label: 'post-cutover-mastery-fixture' });
     process.stdout.write(`${JSON.stringify({
       ...runCases(databaseUrl), location: runLocationCases(databaseUrl), rowVersion: runRowVersionCases(databaseUrl),
       timeEntryForward: runTimeEntryForwardCases(databaseUrl),

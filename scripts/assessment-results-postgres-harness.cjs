@@ -433,8 +433,9 @@ const runCases = (databaseUrl, programmeId) => {
     const row = table === 'assessments' ? family.assessment
       : table === 'assessment_items' ? family.items[0]
         : table === 'battery_runs' ? makeRun(programmeId) : {
-          id: randomUUID(), user_id: EA_A, child_id: CHILD, programme_id: programmeId,
-          letter: 'a', language: 'en', source: 'taught', created_at: STARTED_AT, updated_at: OLD_UPDATED_AT,
+          id: randomUUID(), child_id: CHILD, programme_id: programmeId,
+          letter: 'a', language: 'en', confirmed: true, changed_at: STARTED_AT,
+          correction_id: randomUUID(), changed_by: EA_A, created_at: STARTED_AT, updated_at: OLD_UPDATED_AT,
         };
     check(`${table}-insert-trigger-timestamp`, `
       BEGIN;
@@ -475,7 +476,8 @@ const spawnPsql = ({ databaseUrl, sql, label, onStderr = () => {} }) => {
   return { child, done };
 };
 
-const overlappingCalls = async (databaseUrl, label, call, expected) => {
+const overlappingCalls = async (databaseUrl, label, call, expected,
+  { secondCall = call, firstActor = EA_A, secondActor = EA_A } = {}) => {
   const marker = `assessment_harness_holding_${label}`;
   let second;
   let firstClosed = false;
@@ -484,7 +486,7 @@ const overlappingCalls = async (databaseUrl, label, call, expected) => {
   // output buffering. Launch the retry only after the first call has inserted.
   const first = spawnPsql({
     databaseUrl, label: `${label}-first`,
-    sql: asActor(EA_A, `
+    sql: asActor(firstActor, `
       SET LOCAL client_min_messages = notice;
       SELECT ${call};
       DO $holding$ BEGIN RAISE NOTICE '${marker}'; END; $holding$;
@@ -494,10 +496,10 @@ const overlappingCalls = async (databaseUrl, label, call, expected) => {
       if (second || !stderr.includes(marker)) return;
       second = spawnPsql({
         databaseUrl, label: `${label}-second`,
-        sql: asActor(EA_A, `
+        sql: asActor(secondActor, `
           SET LOCAL client_min_messages = notice;
           DO $retry$ BEGIN RAISE NOTICE 'assessment_harness_retry_started'; END; $retry$;
-          SELECT ${call};
+          SELECT ${secondCall};
         `, { commit: true }),
         onStderr: (output) => {
           if (output.includes('assessment_harness_retry_started') && !firstClosed) {

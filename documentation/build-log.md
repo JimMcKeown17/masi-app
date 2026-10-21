@@ -1066,6 +1066,58 @@ gate). The dry run listed only this file against `segygjzpujphwvrubusm`. Verifie
 
 ---
 
+### 2026-10-21 — Assessment Results Plan 2 Task 1: server mastery current state
+
+**Scope:** server-only implementation on `feat/assessment-results-plan-2`. No phone schema,
+repository, sync or UI changes. AF Task 1 is in the stack; AF registry Tasks 2–3 and B2's parallel
+`20261021140000` migration remain controller-owned merges. Kept the approved server migration
+timestamp `20261021160000`. Hosted status: **not applied**.
+
+Built the re-key migration, immutable-payload correction receipts, UUID v5/delivery helpers,
+writer-or-deliverer SELECT policy, authenticated-only `set_letter_mastery`, and direct-write
+revokes. A receipt fixes its effective time once; only a newer `(effective_at, correction_id)`
+can replace the current record. Replays after handover return no winner fields when unreadable.
+The Plan 1 INSERT/UPDATE stamp trigger remains. Added the two-database, 20-case disposable PG17
+harness, npm command and CI step, and adapted assessment/upload harness fixtures.
+
+**Adaptations found in source:** the upload harness seeds before
+`20261015120000_time_entry_location_optional.sql` to test preservation across that older
+migration. Its new-shape mastery fixture is therefore deferred until all migrations replay;
+the location fixture still runs at its original point. The new harness runs
+`variable-conflict-default` first, then `newer-applies`, then `named-conflict-targets`:
+the missing-RPC RED must not be preempted by the absent new constraints. Active staff Programme
+uses the existing `ended_at` field. The plan-header superpowers execution skills are not
+installed in the available skill directories; the approved task order and local TDD skill
+were followed directly. No subagents or Git mutations.
+
+| Gate / command | Result |
+| --- | --- |
+| Controller PostgreSQL RED, migration moved aside (`PGTZ=UTC`, admin URL `postgresql://postgres:postgres@127.0.0.1:65433/postgres`, `HISTORY_RLS_DATABASE_NAME=masi_history_rls_local`, local Docker PG17) | `npm run verify:letter-mastery:postgres` exit 1 after fixture setup succeeded: the executed `newer-applies` assertion failed with `No function matches the given name and argument types` for `public.set_letter_mastery(uuid, uuid, text, text, boolean, timestamptz)`. A genuine RED, not a guard or fixture error. Migration restored |
+| Controller PostgreSQL GREEN, new harness | Exit 0: `{"passed":20}`, every named case passed, including `rekey` in the second database and `variable-conflict-default` printing `error` |
+| Controller existing PostgreSQL harnesses, same server | All exit 0: `history-authorization` 31 checks; `upload-contract` 6 cases (including `letter_mastery direct update refused`) plus location 34, rowVersion 22 and timeEntryForward 39; `organisation-label` 23; `support-incident` 18; `assessment-results` 53; `ea-access` 43 |
+| Local JavaScript syntax/module checks and source checks | PASS under verified Node v20.19.4: `node --check` for all three changed harnesses; all three modules load; ESM `uuid.v5` imports. Inline static assertions pass for migration contracts, all 20 case labels, fixture expansion and npm/CI wiring. Three synthetic process checks pass for overlap defaults, actor/call overrides and second-client failure propagation; no SQL executed |
+| `npx jest __tests__/syncContractServerSchema.test.js --runInBand` | PASS: 1 suite, 5 tests |
+| `npx jest --silent --maxWorkers=25%` | Exit 1: 346 passed / 1 failed suites (347 total); 4,214 passed / 1 failed tests (4,215 total), 356.752 s. Only failure: unchanged `LiteracySessionForm.test.js` → `Saving… is busy and unavailable and ignores a second press`, 5,000 ms timeout |
+| `npx jest __tests__/LiteracySessionForm.test.js --runInBand --silent` (one isolated rerun) | Exit 0: 1 suite, 63 tests passed, 10.614 s |
+| `npm run test:integration --silent` | Exit 1: 51 passed / 1 failed suites (52 total); 553 passed / 1 failed tests (554 total), 278.57 s. Only failure: unchanged `task5AuthRaces.test.js` → `delayed password response and logout 503 cannot restore A after provider remount (manual)`, 5,000 ms timeout |
+| `npm run test:integration --silent -- __tests__/task5AuthRaces.test.js` (one isolated rerun) | Exit 0: 1 suite, 40 tests passed, 4.591 s |
+
+Final local verification explicitly uses `PATH="$HOME/.nvm/versions/node/v20.19.4/bin:$PATH"`,
+with `node --version` reporting `v20.19.4`. An initial multi-command shell block scoped the
+PATH prefix only to its first command; syntax/module checks and the focused schema check were
+rerun with each Node/Jest command explicitly prefixed (final schema rerun: 1 suite / 5 tests,
+1.18 s). Both broad suites and both isolated timeout reruns were explicitly prefixed.
+Controller PostgreSQL invocation (database name as used locally):
+
+```sh
+PATH="$HOME/.nvm/versions/node/v20.19.4/bin:$PATH" HISTORY_RLS_ADMIN_DATABASE_URL=postgresql://postgres:postgres@127.0.0.1:65433/postgres HISTORY_RLS_DATABASE_NAME=masi_history_rls_letter_mastery HISTORY_RLS_DISPOSABLE_CONFIRM=I_UNDERSTAND_THIS_IS_DISPOSABLE PGTZ=UTC npm run verify:letter-mastery:postgres
+```
+
+The read-only hosted preflight (2026-10-21, `project_ref=segygjzpujphwvrubusm`) found
+`uuid-ossp` in schema `extensions`, 47 `letter_mastery` rows all labelled `isiXhosa`, and
+`20261021120000_assessment_results_contract` as the newest applied migration. Hosted wipe,
+apply and fixtures, EAS, devices and the PR are later gates, each needing Jim's yes.
+
 ## Decision Register
 
 | Date | Decision | Rationale | Revisit Trigger |
