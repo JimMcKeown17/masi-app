@@ -2,12 +2,40 @@
 import { MAX_SHIFT_HOURS } from '../constants/timeTracking';
 import { AUTO_CLOCK_OUT_NOTICE_TTL_MS } from '../services/homeAttentionStore';
 import { formatDisplayDate, toLocalDateString } from './localDate';
+import { presentChildIds } from '../db/repositories/lessonDraftsRepository';
+import { formatNameList } from './childNames';
 
 // Home's attention area: blank by default, at most two cards, highest priority
 // first. Every rule lives here so Home only renders what this returns.
 export const MAX_ATTENTION_ITEMS = 2;
 
 const plural = (count, singular, pluralForm) => (count === 1 ? singular : pluralForm);
+
+export const lessonInProgressFromDraft = (draft, children) => {
+  if (!draft) return null;
+  const namesById = new Map(children.map((child) => [child.id, child.first_name]));
+  return {
+    draftId: draft.id,
+    childNames: presentChildIds(draft.attendance).map((id) => namesById.get(id)).filter(Boolean),
+  };
+};
+
+const lessonInProgressItem = ({ draftId, childNames }) => {
+  const names = formatNameList(childNames);
+  return {
+    key: `lesson_in_progress:${draftId}`,
+    kind: 'lesson_in_progress',
+    tone: 'neutral',
+    title: 'Lesson in progress',
+    subtitle: names ? `${names} · Resume` : 'Resume',
+    accessibilityLabel: names
+      ? `Lesson in progress with ${formatNameList(childNames, { spoken: true })}. Resume`
+      : 'Lesson in progress. Resume',
+    route: 'Lesson',
+    params: { draftId },
+    dismissible: false,
+  };
+};
 
 const syncAttentionItem = (count) => {
   const title = `${count} ${plural(count, 'item needs', 'items need')} attention`;
@@ -64,6 +92,7 @@ const isNoticeVisible = (notice, now) => {
 };
 
 export function deriveHomeAttentionItems({
+  lessonInProgress = null,
   needsAttentionCount = 0,
   autoClockOut = null,
   coverage = null,
@@ -72,6 +101,9 @@ export function deriveHomeAttentionItems({
 } = {}) {
   const items = [];
 
+  if (lessonInProgress) {
+    items.push(lessonInProgressItem(lessonInProgress));
+  }
   if (needsAttentionCount > 0) {
     items.push(syncAttentionItem(needsAttentionCount));
   }

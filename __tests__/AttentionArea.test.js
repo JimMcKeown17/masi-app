@@ -22,6 +22,30 @@ test('renders nothing when empty', () => {
   expect(screen.toJSON()).toBeNull();
 });
 
+test('a lesson in progress has a canvas play icon, a chevron, and opens without a dismiss button', () => {
+  const item = {
+    key: 'lesson_in_progress:draft-1', kind: 'lesson_in_progress', tone: 'neutral',
+    title: 'Lesson in progress', subtitle: 'Amahle & Lulu · Resume',
+    accessibilityLabel: 'Lesson in progress with Amahle and Lulu. Resume',
+    route: 'Lesson', params: { draftId: 'draft-1' }, dismissible: false,
+  };
+  const onOpen = jest.fn();
+  const onDismiss = jest.fn();
+  Ionicons.mockClear();
+  const screen = render(<AttentionArea items={[item]} onOpen={onOpen} onDismiss={onDismiss} />);
+  const tile = screen.UNSAFE_getByType(IconTile);
+  expect(tile.props).toMatchObject({ icon: 'play-circle-outline', tone: 'canvas', iconSize: 22 });
+  expect(StyleSheet.flatten(tile.findByType('View').props.style).backgroundColor).toBe(colors.background);
+  expect(Ionicons.mock.calls.some(([props]) => props.name === 'play-circle-outline' && props.size === 22)).toBe(true);
+  expect(Ionicons.mock.calls.some(([props]) => props.name === 'chevron-forward')).toBe(true);
+  expect(screen.getByText('Lesson in progress')).toBeTruthy();
+  expect(screen.getByText('Amahle & Lulu · Resume')).toBeTruthy();
+  expect(screen.queryByLabelText('Dismiss: Lesson in progress')).toBeNull();
+  fireEvent.press(screen.getByRole('button', { name: item.accessibilityLabel }));
+  expect(onOpen).toHaveBeenCalledWith(item);
+  expect(onDismiss).not.toHaveBeenCalled();
+});
+
 test('cards open and dismiss independently', () => {
   const onOpen = jest.fn();
   const onDismiss = jest.fn();

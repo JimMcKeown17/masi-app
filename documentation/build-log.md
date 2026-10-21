@@ -1066,7 +1066,7 @@ gate). The dry run listed only this file against `segygjzpujphwvrubusm`. Verifie
 
 ---
 
-### 2026-10-21 — C1 Tasks 1–4, local schema 16, repository, signed-in EA handle and history coverage
+### 2026-10-21 — C1 Tasks 1–5, local schema 16, repository, signed-in EA handle, history coverage and inert Home card builder
 
 Migration 16 adds the additive, local-only `lesson_drafts` table to each EA's SQLite file. The
 database enforces one row through a constant unique `slot`, enforces unique `session_id`, and has
@@ -1208,10 +1208,47 @@ lesson-engine caller remains wave 2. The integration run emitted intentional fai
 React warnings, closed-handle diagnostics and the existing ChildrenContext undefined-`.catch`
 diagnostics in passing suites. No timeout change or out-of-scope repair was made.
 
+#### Task 5 — Home "Lesson in progress" card builder, inert until C3
+
+`deriveHomeAttentionItems` accepts optional `lessonInProgress` data and places its neutral,
+non-dismissible card before sync attention within the existing two-item cap. The exact title,
+visual/spoken name lists, U+00B7 Resume subtitle and reserved `Lesson` / `{ draftId }` target are
+covered by tests, including three names and no known names. `lessonInProgressFromDraft` reuses
+`presentChildIds` and `formatNameList`; a name lookup follows attendance order, skips absent or
+unknown children, and retains a lesson with no names when everyone is absent. Null draft returns
+null. The existing AttentionArea gains only the `play-circle-outline` icon key: its canvas tile,
+22dp glyph, chevron, accessibility label and `onOpen(item)` behavior remain shared with the other
+cards. The requested glyph exists in the bundled Ionicons map.
+
+All five prescribed utility tests are retained verbatim, including the static guard that Home
+does not read drafts before the Lesson route ships. The added component test verifies the icon,
+canvas fill, chevron, copy, absence of a Dismiss button and the full item passed to `onOpen`.
+HomeScreen, navigation, repository/storage code and existing card behavior are unchanged. The
+React Native skill informed reuse of the existing IconTile/Text/styles; no new style or component
+was needed.
+
+All commands below use `PATH="$HOME/.nvm/versions/node/v20.19.4/bin:$PATH"`.
+
+| Gate | Command after the Node prefix | Result |
+|---|---|---|
+| Card builder/rendering RED | `npx jest __tests__/homeAttention.test.js __tests__/AttentionArea.test.js` | Expected FAIL: 2 suites; 5 failed / 11 passed (16 total); missing lesson item/helper and icon mapping, with the old priority still active; exit 1 (1.626 s) |
+| Card builder/rendering GREEN | Same command | PASS: 2 suites / 16 tests; exit 0 (1.692 s) |
+| Typography and design-system neighbors | `npx jest __tests__/homeTypeRoles.test.js __tests__/designSystemGuard.test.js` | PASS: 2 suites / 235 tests; exit 0 (1.499 s) |
+| Full unit suite | `npx jest --silent --maxWorkers=25%` | PASS: 351 suites / 4,256 tests; exit 0 (242.015 s); no isolated rerun needed |
+| Final whitespace check | `git diff --check` | PASS; exit 0 |
+
+No plan/API adaptation was required. The full integration runner was not invoked for this pure
+builder/icon-map task: no SQLite, migration, repository, sync or handle implementation changed.
+Evidence is local Jest, not native visual or screen-reader acceptance. No network, dependencies,
+Supabase/PostgreSQL, EAS, device, release or field operation was involved. C3 owns draft loading,
+navigation params, the actual Lesson route, deferred-read/routing tests and the carried device
+card/resume gates; C1 deliberately adds no production caller or route wiring.
+
 ## Decision Register
 
 | Date | Decision | Rationale | Revisit Trigger |
 | --- | --- | --- | --- |
+| 2026-10-21 | Home's draft loading and `openItem` parameter forwarding ship with the `Lesson` route in C3. Reserve `Lesson` with `{ draftId }`; C1 ships only the inert card builder and icon. | A C3 bundle can leave a durable draft before an OTA rollback within the same runtime. A rolled-back bundle must never show a card for a route it does not register; card wiring and route registration must travel together. | C3 registers `Lesson` and removes the temporary Home-does-not-read-drafts guard, with real navigation and deferred-read tests plus the carried device gate. |
 | 2026-10-21 | Lesson draft context, language code and plan are fixed at the storage boundary (C14, C18); tracker changes must be in the lesson's language; the save path deletes the draft in its own transaction. | A resumed lesson must preserve its original context and correction times. `discard(id, { transaction })` joins the caller's save transaction; a failed save restores the same draft/session id. JSON validation prevents silently lost edits. | Wave 2 changes the lesson-context contract or the save transaction boundary. |
 | 2026-10-17 | **Field-continuity decisions (Jim).** (1) The **server** closes a time entry left open for more than ten hours; the phone-only close is not enough. (2) Android backup **excludes every SQLite database** (Claude's recommendation, accepted). (3) Losing an unfinished session or assessment form on navigate-away or process death is **accepted for the pilot**. (4) Revocation follows **Zazi's model**, operated by a script until a Head Office admin website exists. | (1) A phone that stays offline or unopened leaves the hosted row open indefinitely, so staff reports cannot tell a forgotten clock-out from a long day. (2) A restored database replays already-accepted work (Zazi ZZ-BUG-20260907-001); the server is the recovery path. (3) Drafts belong to the planned SQLite draft/run lifecycle, not a temporary patch. (4) One proven operator procedure across both apps; the website is later Head Office work. | Field reports of lost forms; the server close is found to fight legitimate long shifts; a Head Office admin surface is built. |
 | 2026-09-04 | Treat 1,000 rows as the verified hosted PostgREST response cap and require explicit bounded pagination, deadlines, and completeness accounting in the first implementation of every potentially larger pull family. | A real cap-plus-one request returned exactly 1,000 of 1,205 rows with HTTP 206 and an exact content range. A successful but capped response is incomplete replication, not a performance inconvenience; the current assessment-item estate is already close enough that a non-paginated intermediate contract would be throwaway and unsafe. | The hosted API cap is deliberately reconfigured and re-proven through an equivalent cap-plus-one probe, or a family moves behind a server operation whose response-completeness contract is independently bounded and tested. |
