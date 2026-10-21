@@ -32,6 +32,7 @@ export default function LetterMasteryPanel({ child, classItem }) {
   const languageCode = languageCodeForHomeLanguage(classItem?.home_language);
   const pedagogicalOrder = PEDAGOGICAL_ORDERS[languageCode];
   const loadGeneration = useRef(0);
+  const writeInFlight = useRef(false);
 
   const loadData = useCallback(async ({ background = false } = {}) => {
     const generation = ++loadGeneration.current;
@@ -43,7 +44,7 @@ export default function LetterMasteryPanel({ child, classItem }) {
         childId: child.id,
         languageCode,
       });
-      if (generation !== loadGeneration.current) return;
+      if (generation !== loadGeneration.current || writeInFlight.current) return;
       setLatestAssessmentDate(latestAssessment?.assessment_date || null);
       setAssessmentMastered(masteredSet);
 
@@ -53,7 +54,7 @@ export default function LetterMasteryPanel({ child, classItem }) {
     } catch (error) {
       console.error('Error loading letter tracker data:', error);
     } finally {
-      if (generation === loadGeneration.current) setLoading(false);
+      if (generation === loadGeneration.current && !writeInFlight.current) setLoading(false);
     }
   }, [child.id, languageCode, user.id]);
 
@@ -69,8 +70,10 @@ export default function LetterMasteryPanel({ child, classItem }) {
   const handleCellTap = async (letter) => {
     // Assessment-mastered cells are locked
     if (!pedagogicalOrder || assessmentMastered.has(letter)) return;
-    if (updatingLetter) return;
+    if (updatingLetter || writeInFlight.current) return;
 
+    writeInFlight.current = true;
+    ++loadGeneration.current;
     setMutationError(null);
     setUpdatingLetter(letter);
 
@@ -93,7 +96,9 @@ export default function LetterMasteryPanel({ child, classItem }) {
       console.error('Error saving letter mastery:', error);
       setMutationError('Letter update was not saved. Please try again.');
     } finally {
+      writeInFlight.current = false;
       setUpdatingLetter(null);
+      loadData({ background: true });
     }
   };
 
