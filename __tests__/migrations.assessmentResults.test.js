@@ -105,15 +105,15 @@ describe('assessment results schema v15', () => {
     expect(await db.getAllAsync('select * from children')).toEqual(children);
     expect(await db.getAllAsync('select * from time_entries')).toEqual(timeEntries);
     expect(await db.getAllAsync('select * from letter_mastery')).toEqual(mastery);
-    expect(await db.getFirstAsync('PRAGMA user_version')).toEqual({ user_version: 15 });
+    expect(await db.getFirstAsync('PRAGMA user_version')).toEqual({ user_version: CURRENT_SCHEMA_VERSION });
     expect(await db.getFirstAsync('select version, name from schema_migrations where version = 15'))
       .toEqual({ version: 15, name: 'assessment_results' });
     expect(await db.getFirstAsync('PRAGMA foreign_keys')).toEqual({ foreign_keys: 1 });
     expect(await db.getAllAsync('PRAGMA foreign_key_check')).toEqual([]);
   });
 
-  test('CURRENT_SCHEMA_VERSION is 15', () => {
-    expect(CURRENT_SCHEMA_VERSION).toBe(15);
+  test('assessment_results is local schema version 15', () => {
+    expect(MIGRATIONS.find(({ name }) => name === 'assessment_results').version).toBe(15);
   });
 
   describe('after upgrading', () => {

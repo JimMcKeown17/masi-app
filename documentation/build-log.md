@@ -1066,6 +1066,33 @@ gate). The dry run listed only this file against `segygjzpujphwvrubusm`. Verifie
 
 ---
 
+### 2026-10-21 — C1 Task 1, local schema 16 `lesson_drafts` (local only, one-row slot)
+
+Migration 16 adds the additive, local-only `lesson_drafts` table to each EA's SQLite file. The
+database enforces one row through a constant unique `slot`, enforces unique `session_id`, and has
+no foreign keys or sync bookkeeping. An upgrade from the immediately previous schema preserves an
+existing session and owned outbox row; a second launch is a true migration no-op and leaves the
+stored draft byte-for-byte equivalent at the row boundary.
+
+#### Verification Register
+
+| Gate | Command | Result |
+|---|---|---|
+| Migration RED | `PATH="$HOME/.nvm/versions/node/v20.19.4/bin:$PATH" npm run test:integration -- __tests__/lessonDraftsMigration.test.js` | Expected FAIL: 1 suite / 4 tests failed because the named migration was undefined and `lesson_drafts` did not exist |
+| Migration GREEN | Same command | PASS: 1 suite / 4 tests; exit 0 |
+| Task 1 focused neighbors | `PATH="$HOME/.nvm/versions/node/v20.19.4/bin:$PATH" npx jest __tests__/sqliteFoundation.test.js __tests__/timeEntryLocationMigration.test.js __tests__/rowVersionLocal.test.js __tests__/outboxOwnerMigration.test.js __tests__/migrations.assessmentResults.test.js __tests__/syncContractCompleteness.test.js __tests__/productionBindingStatic.test.js` | PASS: 7 suites / 108 tests; exit 0 |
+| Full unit suite | `PATH="$HOME/.nvm/versions/node/v20.19.4/bin:$PATH" npx jest --silent` | PASS: 348 suites / 4,206 tests; exit 0 |
+| Full integration suite | `PATH="$HOME/.nvm/versions/node/v20.19.4/bin:$PATH" npm run test:integration --silent` | PASS: 53 suites / 556 tests; exit 0 |
+
+An earlier focused invocation overlapped a second copy of `productionBindingStatic.test.js`; both
+used its fixed temporary `src/__binding_probe__.js`, producing 2 failures / 106 passes. The required
+isolated rerun passed 1 suite / 14 tests, and the subsequent clean focused command above passed all
+7 suites / 108 tests. This was a runner-overlap artifact; no production binding changed.
+
+Evidence is local Jest and real better-sqlite3 only. No Supabase/PostgreSQL, EAS, device,
+force-quit, release, production, or field gate was run. Version 16 follows the task orchestrator's
+parallel-B2 allocation and remains subject to merge-time version reconciliation.
+
 ## Decision Register
 
 | Date | Decision | Rationale | Revisit Trigger |

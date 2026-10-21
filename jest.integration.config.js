@@ -58,5 +58,6 @@ module.exports = {
     '<rootDir>/__tests__/pullPersistenceBudget.test.js',
     '<rootDir>/__tests__/pullReconcile.integration.test.js',
     '<rootDir>/__tests__/pullReconcileOffline.integration.test.js',
+    '<rootDir>/__tests__/lessonDraftsMigration.test.js',
   ],
 };
