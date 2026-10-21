@@ -1,5 +1,7 @@
 import { ENGINE_VERSION } from './constants';
+import { tokenizeText } from '../../utils/decodability';
 import { blendChoices } from './blends';
+import { bookCatalogue, bookChoices } from './books';
 import { sessionsByChild, windowSessions } from './history';
 import { planLetters, teachingOrderFromPack, uniquePresentChildren, usablePack } from './letters';
 import { soundsOf } from './sounds';
@@ -30,6 +32,12 @@ const evaluateLesson = (input, plan = null) => {
     if (!soundCache.has(text)) soundCache.set(text, soundsOf(text, pack));
     return soundCache.get(text);
   };
+  const pageCache = new Map();
+  const tokensFor = (page) => {
+    if (!pageCache.has(page)) pageCache.set(page, tokenizeText(page));
+    return pageCache.get(page);
+  };
+  const catalogue = bookCatalogue(pack);
   const choices = {
     letterChoices: pack ? teachingOrderFromPack(pack) : (input?.alphabet ?? []),
     tiers: pack && presentChildren.length > 0 ? blendChoices({
@@ -43,7 +51,16 @@ const evaluateLesson = (input, plan = null) => {
       plan,
       soundsFor,
     }) : [],
-    books: [],
+    books: pack && presentChildren.length > 0 && !input?.isEcd ? bookChoices({
+      pack,
+      catalogue,
+      children: presentChildren,
+      childSessions,
+      unlockedLetters: letters.unlocked,
+      plan,
+      tokensFor,
+      soundsFor,
+    }) : [],
     contentAvailable: {
       blends: Boolean(pack && (
         (Array.isArray(pack.word_bank) && pack.word_bank.length > 0)
@@ -51,7 +68,7 @@ const evaluateLesson = (input, plan = null) => {
           Array.isArray(step?.blends) && step.blends.length > 0
         )))
       )),
-      books: false,
+      books: catalogue.length > 0,
     },
   };
   return { presentChildren, letters, choices };
@@ -75,7 +92,7 @@ export const computeLessonPlan = (input) => {
     unlocked_letters: letters.unlocked,
     blend_tier: choices.tiers[0]?.tier ?? null,
     suggested_blends: (choices.tiers[0]?.suggested ?? []).map((item) => item.text),
-    suggested_book: null,
+    suggested_book: choices.books.find((book) => book.suggested)?.id ?? null,
     up_next_group_id: input?.upNextGroupId ?? null,
   };
 };

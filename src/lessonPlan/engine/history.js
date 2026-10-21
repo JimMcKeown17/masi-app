@@ -39,3 +39,11 @@ export const lessonBlends = (session) => {
     ? blends.filter((text) => typeof text === 'string').map(normalizeToken)
     : [];
 };
+
+export const lessonBookIds = (session) => {
+  if (!isLessonPlanSession(session)) return [];
+  const books = session.activities.lesson.books_read;
+  return Array.isArray(books)
+    ? books.map((book) => book?.id).filter((id) => typeof id === 'string' && id.length > 0)
+    : [];
+};
