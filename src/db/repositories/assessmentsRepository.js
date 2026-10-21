@@ -13,6 +13,13 @@ import { validateResult } from '../../assessment-questions/contractTest/validate
 import { assertSubmitShape } from '../../services/assessmentFamilyPayload';
 import { LETTER_EVIDENCE_CODES } from '../../utils/assessmentRegistry';
 import { toLocalDateString } from '../../utils/localDate';
+import { SERVER_COLUMNS } from '../../services/syncServerColumns';
+import { createSyncStateRepository } from './syncStateRepository';
+import { resolveHistoryPullState } from './historyCoverage';
+import {
+  assertPulledRunShape, ensureHistoryReferenceChildren, insertOrIgnoreRows,
+  mergePulledRunHeaders, selectRowsByIds,
+} from './historyPageApply';
 
 const ITEM_COLUMNS = [
   'id',
@@ -240,6 +247,51 @@ export const createAssessmentsRepository = ({ database } = {}) => {
     return Number(row?.count || 0);
   };
 
+  const saveHistoryPage = async (rows, { scope, pullState, admit }) => {
+    // Validate the entire page before acquiring the writer. RPC items omit parent fields.
+    let families;
+    try {
+      families = rows.map((row) => {
+        const family = { ...row, items: row.items.map((item) => ({
+          ...item, assessment_id: row.id, created_at: row.created_at,
+        })) };
+        assertSubmitShape(family);
+        if (row.battery_run != null) assertPulledRunShape(row.battery_run);
+        return family;
+      });
+    } catch (error) {
+      if (error instanceof TypeError) error.kind = 'query';
+      throw error;
+    }
+    return runRepositoryTransaction(database, async (txn) => {
+      if (admit && !admit()) throw Object.assign(new Error('Assessment history run cancelled'), { kind: 'cancelled' });
+      await ensureHistoryReferenceChildren(txn, families);
+      const runs = families.map((family) => family.battery_run).filter(Boolean);
+      const merged = await mergePulledRunHeaders(txn, runs);
+      const existing = await selectRowsByIds(txn, 'assessments', families.map((family) => family.id), ['id']);
+      const absent = families.filter((family) => !existing.has(family.id));
+      await insertOrIgnoreRows(txn, {
+        table: 'assessments', columns: [...SERVER_COLUMNS.assessments, 'sync_status', 'server_updated_at'],
+        rows: absent.map((family) => ({ ...family, derived: JSON.stringify(family.derived),
+          sync_status: 'synced', server_updated_at: family.updated_at })),
+      });
+      await insertOrIgnoreRows(txn, {
+        table: 'assessment_items', columns: ITEM_COLUMNS,
+        rows: absent.flatMap((family) => family.items.map((item) => ({
+          ...item, is_correct: item.is_correct ? 1 : 0, metadata: JSON.stringify(item.metadata),
+          updated_at: family.updated_at, server_updated_at: family.updated_at,
+          sync_status: 'synced', last_sync_error: null,
+        }))),
+      });
+      await createSyncStateRepository({ database }).setPullState(
+        scope, await resolveHistoryPullState(txn, pullState), { transaction: txn }
+      );
+      if (admit && !admit()) throw Object.assign(new Error('Assessment history run cancelled'), { kind: 'cancelled' });
+      return { inserted: absent.length, present: families.length - absent.length,
+        runsInserted: merged.inserted, runsAdvanced: merged.advanced };
+    });
+  };
+
   return {
     getAssessmentCountsSince,
     saveQuestionResult,
@@ -247,6 +299,7 @@ export const createAssessmentsRepository = ({ database } = {}) => {
     getLetterResults,
     latestLetterResult,
     countResults,
+    saveHistoryPage,
   };
 };
 

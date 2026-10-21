@@ -367,11 +367,15 @@ correctly; the missing contract is inbound hydration.
 - [ ] Audit other tables' insert timestamps before adding a delta pull
   ([Z1](./zazi-sync-lessons-for-masi-2026-10-08.md)); Assessment Results Plan 3 still owns the
   assessment/run/mastery pull and its cursor/re-walk behavior.
-- [ ] **Cheap page apply before the assessment pull copies the session shape.** Assessment families have
-  variable item counts. Batch the per-page existence and pending-local lookups, skip rows identical to
-  the stored row, and reuse prepared statements. Keep one transaction per page together with its
-  cursor. Zazi went from 300 s to 46 s on a Galaxy A03s this way ([Z2](./zazi-sync-lessons-for-masi-2026-10-08.md);
-  CAP-004 plan Task 9 Step 4e).
+- [x] **Cheap page apply for assessment families and Battery Runs.** Built in Assessment Results
+  Plan 3 Task 5: batched id lookups, whole immutable-family insert-or-ignore, and forward-only run
+  merges in `historyPageApply.js`, using multi-row statements with at most 999 bindings through
+  the signed-in facade. Present families, including pending uploads, stay untouched. Each page
+  commits with its cursor; the 50-family / 3,050-item real-SQLite test uses fewer than 100
+  statements. See [page-apply rules](./rls-sync-contract-map.md#page-apply--assessments-and-runs).
+  Mastery page apply remains Task 6, traversal remains Task 7, and A03s timing remains a device
+  gate. The batching rationale is [Z2](./zazi-sync-lessons-for-masi-2026-10-08.md) and CAP-004
+  plan Task 9 Step 4e.
 - [ ] Add authenticated, Programme/current-year-class-scoped pull for `assessments`,
   `assessment_items` and `battery_runs` — **Assessment Results Plan 3**, not part of the upload
   completion below. See the [Assessment Results design](../docs/superpowers/specs/2026-10-19-assessment-results-and-letter-test-design.md).

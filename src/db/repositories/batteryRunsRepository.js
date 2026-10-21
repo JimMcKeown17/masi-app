@@ -1,5 +1,8 @@
 import { resolveDatabase, runRepositoryTransaction } from './repositoryRuntime';
 import { createAssessmentsRepository } from './assessmentsRepository';
+import { assertPulledRunShape, ensureHistoryReferenceChildren, mergePulledRunHeaders } from './historyPageApply';
+import { createSyncStateRepository } from './syncStateRepository';
+import { resolveHistoryPullState } from './historyCoverage';
 import {
   enqueueDomainOutbox, getActiveProgrammeId, mapDomainRow, resolveProgrammeId, upsertDomainRecord,
 } from './domainRepositoryUtils';
@@ -108,6 +111,25 @@ export const createBatteryRunsRepository = ({ database } = {}) => {
     return { ...mapDomainRow(run), results: results.filter(result => result.battery_run_id === id) };
   };
 
+  const saveHistoryPage = async (rows, { scope, pullState, admit }) => {
+    try {
+      rows.forEach(assertPulledRunShape);
+    } catch (error) {
+      if (error instanceof TypeError) error.kind = 'query';
+      throw error;
+    }
+    return runRepositoryTransaction(database, async (txn) => {
+      if (admit && !admit()) throw Object.assign(new Error('Battery run history cancelled'), { kind: 'cancelled' });
+      await ensureHistoryReferenceChildren(txn, rows);
+      const result = await mergePulledRunHeaders(txn, rows);
+      await createSyncStateRepository({ database }).setPullState(
+        scope, await resolveHistoryPullState(txn, pullState), { transaction: txn }
+      );
+      if (admit && !admit()) throw Object.assign(new Error('Battery run history cancelled'), { kind: 'cancelled' });
+      return result;
+    });
+  };
+
   return {
     startRun,
     finalizeRun: id => finishRun(id, 'completed'),
@@ -116,6 +138,7 @@ export const createBatteryRunsRepository = ({ database } = {}) => {
     getUnfinishedRunsForUser,
     getUnfinishedRunForChild,
     getRunWithResults,
+    saveHistoryPage,
   };
 };
 

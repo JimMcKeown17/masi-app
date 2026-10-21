@@ -39,6 +39,8 @@ module.exports = {
     '<rootDir>/__tests__/historyWalk.test.js',
     '<rootDir>/__tests__/sessionHistoryPullProductionRouting.test.js',
     '<rootDir>/__tests__/assessmentsRepository.test.js',
+    '<rootDir>/__tests__/assessmentHistoryPage.test.js',
+    '<rootDir>/__tests__/batteryRunHistoryMerge.test.js',
     '<rootDir>/__tests__/timeEntriesRepository.test.js',
     '<rootDir>/__tests__/homeAttentionStore.integration.test.js',
     '<rootDir>/__tests__/useTimeTracking.integration.test.js',

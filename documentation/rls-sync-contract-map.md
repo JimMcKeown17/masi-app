@@ -920,6 +920,49 @@ The client validates the schema version, completeness flag, authenticated user i
 
 `children`, `classes`, and `groups` entities are never archived because they are absent. Their server tombstones arrive on the rows themselves because the pull queries do not filter `archived_at`. `getGroups({ userId, programmeId })` joins an active `group_ea_assignments` row, so group state matches the assignment-scoped server read model. Memberships for an absent or unassigned group remain intact but `getVisibleChildrenGroups` excludes them from published state until the group becomes visible again.
 
+### Assessment, run and mastery history pull (AR Plan 3)
+
+#### Page apply — assessments and runs
+
+`assessmentsRepository.saveHistoryPage` and `batteryRunsRepository.saveHistoryPage` apply one
+whole page with its cursor in one signed-in handle writer transaction. Traversal/wiring and
+mastery page apply are later Plan 3 tasks; these repository methods do not fetch from the server.
+
+- **Validate before writing.** Assessment pages reconstruct each flat family from its parent
+  and embedded items and call `assertSubmitShape`, including the exact `total_items` count.
+  Run headers pass `assertPulledRunShape` (UUID identity, supported lifecycle, completion flag,
+  ISO start time and two-letter language). A shape failure rejects the whole page with a
+  `TypeError` carrying `kind = 'query'` before any page writes.
+- **Bounded SQL.** `historyPageApply.js` provides chunked id lookups and multi-row inserts,
+  bounded to 999 bindings per statement. Run advancement is also set-wise. Every call is one
+  SQL statement, compatible with the handle facade; no native prepared-statement API is needed.
+  The real-SQLite 50-family / 3,050-item test uses fewer than 100 statements.
+- **Children first.** Only absent children become `history_reference = 1`, synced rows with
+  the returned identity/display names. Existing roster and reference children are never
+  rewritten. These inserts enqueue no outbox work and create no roster relationships.
+- **Immutable families.** Run headers land before their assessments; one batched assessment-id
+  lookup identifies absent families. Absent parents and items insert as synced, with raw
+  server timestamps. Items inherit their parent's id and creation/update/server-update times;
+  booleans bind as 0/1 and metadata/derived values as JSON text. Present parents in every sync
+  status and all their items remain untouched, including pending uploads and their outbox rows.
+  Replays are idempotent. Absence never deletes and pages perform no reconcile.
+- **Run merge.** Absent headers insert with `started_here = 0`, synced state and
+  `server_updated_at = updated_at`. Locally started headers are untouched. For other headers,
+  only `in_progress` can advance to `completed` or `abandoned`, taking `status`, `completed_at`,
+  `updated_at` and `server_updated_at`; other columns stay as stored. A terminal run never
+  reopens or changes terminal status. A missing local class does not erase its plain `class_id`.
+  Embedded headers can supply an older co-EA run as the assessment's FK target without granting
+  its other Questions; user run listings remain user/Programme-scoped.
+- **Cursor and admission.** Savers check `admit` after entering the transaction, resolve an
+  object or function through `resolveHistoryPullState(txn, pullState)` after page rows, write
+  the cursor, then check `admit` again with no subsequent await inside the callback. Cancellation,
+  a rejected resolver or a database failure rolls back children, headers, families and cursor
+  together. No page apply method writes or deletes an outbox row.
+
+Real-SQLite coverage: `assessmentHistoryPage.test.js`, `batteryRunHistoryMerge.test.js`, including
+reopen, rollback, bounded statements and the signed-in production facade. Local verification
+does not close the hosted PostgREST, device first-commit or end-to-end hydration gates.
+
 ### Session history hydration (CAP-004)
 
 - **Traversal.** Traversal lives in `src/services/historyWalk.js`; sessions are one walk config

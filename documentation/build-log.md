@@ -1888,10 +1888,74 @@ step is controller-owned. Hosted Supabase, PostgreSQL execution, EAS, device che
 not performed. Task 8 still owns MR002 refresh-and-restart orchestration; this task establishes
 the real refresh's order-independent year switch. No Task 7A implementation remains open.
 
+#### Task 5: set-wise assessment-family and Battery Run page apply
+
+**Scope:** `historyPageApply.js`, `assessmentsRepository.saveHistoryPage`,
+`batteryRunsRepository.saveHistoryPage`, two new real-SQLite suites and their shared fixtures,
+integration registration, the contract map's new Page apply subsection and the ROADMAP's
+assessment/run cheap-apply checkbox. Task 7A is `3620c46`; Plan 2's phone work is merged at
+`4cb9f7f`. No schema, server, walker or handle implementation changed.
+
+Built the 999-binding helpers for chunked id selection, multi-row insert-or-ignore and absent
+history-reference children. Existing children are never rewritten. Both savers validate a whole
+page before writing, then apply children, deduplicated run headers, families/items and resolved
+cursor under one repository transaction. Entry and final actor admission checks surround every
+awaited write; cancellation and pull-state resolver errors roll back the entire page. No await
+follows the final admission check inside either callback. No page apply writes outbox work or
+reconciles absence. Raw server timestamps are retained; items inherit their parent timestamps,
+booleans bind as 0/1 and metadata/derived values serialize to JSON.
+
+Present immutable families in every sync status keep their parent, items and outbox evidence.
+Absent run headers hydrate with `started_here = 0`; locally started runs remain authoritative.
+Other runs advance only from `in_progress` to one terminal status. A bounded multi-row CTE
+updates only status/completion/update/server-update fields. Missing local classes do not erase
+plain `class_id` values. Embedded co-EA headers from before the year satisfy the assessment FK
+without entering the current EA's run listing. Set-wise SQL is the approved substitute for a
+native prepare API that the signed-in facade does not expose.
+
+**Fixture adaptation:** the plan's default `child-1`, `user-1` and `user-2` are not UUIDs, but
+`assertSubmitShape` requires UUIDs for child, user and Programme (`assessmentFamilyPayload.js:78-79`).
+Shared `assessmentHistoryFixtures.js` uses UUID equivalents and adds matching Programme and
+staff-assignment rows after `seedCoreData`; the co-EA listing test queries the matching UUID EA.
+Validation is not weakened. The two tests keep their planned fixture meaning and test names.
+
+The first GREEN revealed a fixture teardown error: it closed the handle-owned registry writer
+before handle disposal. The facade fixture now seeds through its own new connection and closes
+that connection separately; the final focused run has no disposal warnings. Added meaningful
+guards beyond the 17 planned cases: 1,200-id lookup chunking, duplicate embedded headers, eleven
+malformed-run variants, and run-page cancellation/resolver rollback. The invalid-calendar case
+first proved that `Date.parse` normalizes February 30; a calendar-date check now rejects it
+without normalizing the stored server string. The facade test also exercises the run-update CTE.
+
+Every command uses `PATH="$HOME/.nvm/versions/node/v20.19.4/bin:$PATH"`.
+
+| Gate / command | Result |
+| --- | --- |
+| Step 3: `npm run test:integration -- __tests__/assessmentHistoryPage.test.js __tests__/batteryRunHistoryMerge.test.js` — RED | Exit 1: 2 failed suites, all 17 tests failed, 6.464 s. Both factories lack `saveHistoryPage`; setup/local pending writes succeed |
+| Same command — initial GREEN | Exit 0: 2 suites, 17 tests passed, 2.461 s; fixture teardown warnings identified and corrected |
+| Same command — malformed-calendar RED | Exit 1: 1 failed / 1 passed suite, 1 failed / 30 passed tests (31 total), 2.593 s. February 30 incorrectly resolved with two inserted runs |
+| Same command — final GREEN | Exit 0: 2 suites, 31 tests passed, 2.567 s; no disposal warnings |
+| Step 5: `npx jest __tests__/productionBindingStatic.test.js` | Exit 0: 1 suite, 14 tests passed, 5.655 s |
+| `npx jest --silent --maxWorkers=25%` | Exit 0: 354 suites, 4,395 tests passed, 68.263 s |
+| `npm run test:integration --silent` | Exit 0: 62 suites, 719 tests passed, 60.6 s |
+| Statement/binding gates in the focused suite | PASS: 50 families / 3,050 items use fewer than 100 statements; every statement has at most 999 placeholders; 1,200 ids return the expected map across bounded lookups; 10 families / 610 items and run advancement pass the signed-in facade |
+| `git diff --check` | PASS |
+
+**Limits and follow-up:** no unrelated suite failures occurred, so no isolated failure rerun was
+needed. The plan file is unchanged. Local SQLite and facade results do not establish A03s
+timing, hosted cap/RLS behavior or end-to-end history hydration. Task 5's commit and any
+PostgreSQL, hosted Supabase, EAS, device or PR steps are controller-owned and were not run.
+Task 5 implementation is complete. Code inspection found an existing later-integration gap:
+`historyWalk.js:276-278` maps a saver rejection carrying `kind = 'query'` to `transport` unless
+it is an internal `HistoryRunStop`. Task 5 returns the specified query-classified TypeErrors;
+the walker remains outside this task's files. The Bug And Gap Register records this for the
+history-wiring task. The failure still blocks completeness; the gap is its reported category.
+
 ## Decision Register
 
 | Date | Decision | Rationale | Revisit Trigger |
 | --- | --- | --- | --- |
+| 2026-10-21 | AR Plan 3 Task 5 uses multi-row statements with a 999-binding ceiling for assessment-family and run page apply, including set-wise terminal run advancement. | The signed-in facade exposes individual SQL calls rather than native prepare handles. Bounded batched statements preserve one page/cursor transaction while avoiding per-item calls; present immutable families and locally started runs remain untouched. | A03s first-commit timing, production facade compatibility or larger page measurements require tuning within the same atomicity contract. |
 | 2026-10-21 | AR Plan 3 Task 4 shares CAP-004 traversal while retaining sessions as a historical-delivery config. Revocable-grant walks bound all coverage snapshots inside each page/failure write transaction; handover has a db-level removal helper. | Timestamp progress cannot establish authorization coverage. Reading grants in the committing writer prevents an in-flight page from restoring a grant lost while it waited, and preserving the session object contract keeps existing consumers stable. | Assessment/mastery integration, handover or device gates expose coverage restoration, cursor drift or a session regression. |
 | 2026-10-21 | AR Plan 3 Task 3 marks disposable Auth users with an admin-only fixture namespace and never persists fixture credentials. Recovery cleanup discovers that namespace and verifies exact zero residue; only seed-volume prints the gate credentials on a TTY. | A namespace survives a lost create response without a secret-bearing local manifest. Exact target validation and safe stage-only errors keep hosted credentials out of other output paths. Synthetic probe.1 content preserves the prescribed 61-item cap test without mislabelling published card data. | Controller hosted probe, cleanup/failure recovery or seeded device gates expose a fixture ownership or content-contract mismatch. |
 | 2026-10-21 | AR Plan 3 Task 2 implements the approved embedded-header read rule and expected-year check in the Programme pagers. | A readable family needs its referenced run for the local FK even when the run started before the year; the caller's expected year must agree with server authority before any page can complete. Run SELECT/pager bounds and other Question grants stay independent. | Controller PostgreSQL header/year tests, dense-plan gate or hosted HTTP proof exposes a contract mismatch. |
@@ -2059,6 +2123,7 @@ the real refresh's order-independent year switch. No Task 7A implementation rema
 
 | Date | Gap/Bug | Resolution | Reuse Note |
 | --- | --- | --- | --- |
+| 2026-10-21 | Code inspection during AR Plan 3 Task 5 found that `historyWalk.js:276-278` maps a page saver rejection with `kind = 'query'` to `transport`; only internal `HistoryRunStop` kinds and external cancellation are retained. | Open for the later history-wiring task/controller. Assessment/run savers return the specified query-classified TypeErrors and reject the whole malformed page. The shared walker is outside Task 5's allowed files; completeness remains blocked, but the reported failure category needs to retain query failures. | A shared traversal boundary must preserve the public error classification returned by its page-apply adapter. |
 | 2026-10-20 | Reference refresh could not switch the active academic year when the server listed the new year first, or left the phone's active year out: `pullReferenceDataRows` fetches years without ordering (`src/services/offlineSync.js`), `replaceAll` upserts in response order (`src/db/repositories/referenceDataRepository.js`), and `idx_academic_years_active_unique` checks each statement (`src/db/migrations.js`). The UNIQUE failure rolled back the year table, prevented refresh completion and kept last year active on every such refresh. | Fixed in AR Plan 3 Task 7A: with exactly one incoming active year, clear other local active flags inside the replace transaction before retargeting and upserting. Real-SQLite tests exercise the real repository and real refresh in both response orders, an omitted local active year, no-active/empty responses and whole-table rollback for two active years. MR002 recovery in Task 8 depends on this fix. | A one-row rule enforced by a unique index must be kept inside the replace transaction, not left to response order. |
 | 2026-09-04 | The session authorization/RPC contract was source- and CI-proven but not hosted; the app still has no inbound session/attendee hydration. | Applied exactly the two authorized migrations to the verified SQLite backend and passed hosted six-actor, grants, anonymous-denial, cap, plan, cleanup, and no-op gates. The server prerequisite is closed. Mobile parent paging, attendee paging, deadlines, atomic SQLite publication, incomplete-family behavior, reconnect/cold-open proof, release uptake, and field verification remain open and must not be collapsed into this result. | Persisted source, hosted schema, PostgREST behavior, mobile implementation, installed build, device convergence, and field recovery are separate evidence states. Close and label each boundary independently. |
 | 2026-09-04 | The standard staging helper was unusable in the current operator environment: its legacy-config guard raised `LegacyDbConfigLoadError`, and the inherited Supabase access token was stale. | Stopped before writes, switched to an isolated current-main worktree, revalidated non-secret link metadata against `segygjzpujphwvrubusm`, kept credentials process-only, and used canonical Supabase CLI dry-run/push/list commands. Root repair of the local env/token path is deferred because changing user credentials/config was outside this migration gate. | Release runbooks need a target-verified, noninteractive path whose config parser and CLI authentication are both exercised before the action window. A safe operational fallback still preserves canonical DDL and exact-target controls. |
