@@ -2691,6 +2691,39 @@ evidence. No migration, network, hosted Supabase action, PostgreSQL execution, E
 check or PR was performed. Git is read-only for the implementer. Controller commit and any
 remaining release/device gates remain separate from the completed two-round review.
 
+#### Task 12 — branch gate and adversarial review (controller)
+
+Branch `feat/assessment-results-plan-3` at `0b3506d`, stacked on Assessment Results Plan 2 (merged
+through `1272172`), with lesson-plan C1's `pullCoverage.js` copied byte-for-byte (`0332c93`).
+Commands use `PATH="$HOME/.nvm/versions/node/v20.19.4/bin:$PATH"`; PostgreSQL is local Docker PG17
+on port 65433 with `PGTZ=UTC`.
+
+| Gate | Result |
+| --- | --- |
+| `npx jest --silent --maxWorkers=25%` | 362 suites / 4,558 tests passed (baseline 346 / 4,202) |
+| `npm run test:integration --silent` | 70 suites / 853 tests passed (baseline 52 / 552) |
+| `npm run test:types` | Exit 0 |
+| `verify:*:postgres` | `assessment-history` 144; `letter-mastery` 20; `history-authorization` 31; `upload-contract` 6 cases plus location 34, rowVersion 22 and timeEntryForward 39; `organisation-label` 23; `support-incident` 18; `assessment-results` 53; `ea-access` 43. All exit 0 |
+| `grep -rn "current_user_can_read_child" supabase/migrations/20261022120000_assessment_history_pull.sql` | No match |
+| `grep -rn "from('assessments')\|from('letter_mastery')\|from('battery_runs')" src` | No match |
+
+**Adversarial review** (`/codex:adversarial-review`, `gpt-6-astra`, base Plan 2's tip), two rounds,
+the plan's cap:
+- Round 1, needs-attention, three reproduced failures, all fixed in `8711be4`: [high] a refused
+  correction restored by a pull and then retried successfully could leave the phone's mark
+  permanently wrong while `masteryInputsComplete` said true; [medium] a result naming an assessment
+  tool could never hydrate (the reference pull did not download `assessment_tools`); [medium] a year
+  switch during MR002 recovery left the run walk complete on the old year while status read "Up to
+  date". A residual (a result naming an inactive tool) is recorded as a known gap.
+- Round 2, needs-attention: the round-1 fixes held, including that a newer owed tap is never
+  overwritten; one new [medium] finding: cached co-EA results stayed readable after the academic
+  year rolled over. Fixed in `0b3506d` (local reads apply the server's non-owner current-year rule;
+  owner results stay unbounded).
+
+**Tasks 13–14 (rollout and device gates): not yet run.** Each step needs Jim's yes. The hosted order
+is B2, then Plan 2, then this plan; the device checks run on the combined Android build Jim chose for
+wave 1.
+
 ## Decision Register
 
 | Date | Decision | Rationale | Revisit Trigger |
