@@ -1118,10 +1118,73 @@ The read-only hosted preflight (2026-10-21, `project_ref=segygjzpujphwvrubusm`) 
 `20261021120000_assessment_results_contract` as the newest applied migration. Hosted wipe,
 apply and fixtures, EAS, devices and the PR are later gates, each needing Jim's yes.
 
+
+### 2026-10-21 — Assessment Results Plan 3 Task 1: server history read authority
+
+**Scope:** migration sections 1–4 only, the disposable PostgreSQL harness, npm/CI wiring and
+Task 1's standing docs. The controller's accepted Task 0 deviation is retained: branch
+`feat/assessment-results-plan-3` is stacked on Plan 2 (`b8c2807`), rather than `main`. Plan 2's
+server migration and AF are present; Plan 2 phone Tasks 2–6 are outside this slice. The new
+migration timestamp remains `20261022120000`, after every existing migration in this checkout.
+No phone storage, repositories, sync, handle or UI changes are part of Task 1.
+
+Built `private.can_read_assessment` with unbounded owner authority and an active-year class arm.
+An active class assignment in any Programme qualifies through any membership in that class in
+the active year, including exited memberships. Assessment date is bounded to the year's inclusive
+start/end; runs use `(started_at at time zone 'Africa/Johannesburg')::date`. Replaced only the
+assessment, item and run SELECT policies; items follow the readable parent. Delivery, historical
+delivery, group and child creator status grant no assessment reads. The exclusive write RPCs and
+Plan 2's `letter_mastery_select_writer_or_deliverer` remain unchanged.
+
+Added the private three-feature rollout table, per-user/everyone/off precedence helper,
+app-role revokes, RLS without policies, idempotent seed rows that preserve controller overrides,
+and the seven specified indexes. The migration uses session-level 10-second lock and 60-second
+statement bounds, then resets both. Page RPCs remain Task 2.
+
+**Harness:** 39 named cases (48 SQL invocations when constructed synthetically), all nine actors,
+exact parent/run visibility and complete item families, direct predicate matrix, SAST year edge,
+inclusive year boundaries, any-Programme class authority, no-active-year owner/class behavior,
+Plan 2 mastery handover/un-confirm sequence, grants, switch seed/precedence/default, reapply
+preserving overrides, and the exact SELECT-policy inventory. Fixtures use explicit historical
+`enrolled_at`/`assigned_at` values so existing date-range CHECKs do not preempt assertions.
+`UNRELATED` is the child creator to exercise the explicit no-creator-grant rule. The first SQL
+assertion is `current-delivery-denied`, with message
+`CURRENT_DELIVERY must not see A_2026_LATE through delivery alone`. It uses no new Task 1 object,
+so a controller replay without the migration reaches the intended policy regression.
+
+**Verification:** every Node/Jest command uses
+`PATH="$HOME/.nvm/versions/node/v20.19.4/bin:$PATH"`; `node --version` reports `v20.19.4`.
+
+| Gate / command | Result |
+| --- | --- |
+| Controller PostgreSQL RED, Step 3 (migration moved aside; local Docker PG17 port 65433, `PGTZ=UTC`) | Exit 1 after fixtures succeeded: the executed `current-delivery-denied` assertion raised `CURRENT_DELIVERY must not see A_2026_LATE through delivery alone`, the regression the plan predicts. Migration restored |
+| Controller PostgreSQL GREEN and all other `verify:*:postgres`, Step 5 | All exit 0: `assessment-history` 39/39 named cases; `letter-mastery` 20; `history-authorization` 31; `upload-contract` 6 cases plus location 34, rowVersion 22 and timeEntryForward 39; `organisation-label` 23; `support-incident` 18; `assessment-results` 53; `ea-access` 43 |
+| `node --check scripts/assessment-history-postgres-harness.cjs` and module load | PASS; importing the module does not invoke the harness |
+| Inline Node static/synthetic checks | PASS: first-call ordering and injected failure propagation; complete construction of 39 case labels / 48 calls; nine actor read matrices; 13 predicate/grant cases; timeout/reset syntax; seven keyset indexes; three replacement policies; no mastery-policy mutation; npm/CI wiring. No SQL executed |
+| `npx jest __tests__/syncContractServerSchema.test.js __tests__/historyAuthorizationPostgresHarness.test.js __tests__/releaseGateConfig.test.js __tests__/syncRelationshipIndexesSupabaseMigration.test.js --runInBand --silent` | PASS: 4 suites, 45 tests, 19.608 s |
+| `npx jest --silent --maxWorkers=25%` | Exit 1: 346 passed / 1 failed suites (347 total); 4,239 passed / 1 failed tests (4,240 total), 313.79 s. Only failure: unchanged `LiteracySessionForm.test.js` → `Saving… is busy and unavailable and ignores a second press`, 5,000 ms timeout |
+| `npx jest __tests__/LiteracySessionForm.test.js --runInBand --silent` (one isolated rerun) | Exit 0: 1 suite, 63 tests passed, 16.749 s |
+| `npm run test:integration --silent` | Exit 0: 52 suites, 555 tests passed, 131.964 s |
+| `git diff --check` | PASS |
+
+The local controller PostgreSQL is port **65433**, overriding the plan's **55432**; CI remains
+**5432**. Controller command (for RED replay without this migration, then GREEN with it):
+
+```sh
+PATH="$HOME/.nvm/versions/node/v20.19.4/bin:$PATH" HISTORY_RLS_ADMIN_DATABASE_URL=postgresql://postgres:postgres@127.0.0.1:65433/postgres HISTORY_RLS_DATABASE_NAME=masi_history_rls_assessment_history HISTORY_RLS_DISPOSABLE_CONFIRM=I_UNDERSTAND_THIS_IS_DISPOSABLE PGTZ=UTC npm run verify:assessment-history:postgres
+```
+
+Hosted schema preflight/apply/fixtures, HTTP probes, EAS, devices and PRs are later controller
+gates, each needing Jim's yes. No network or Supabase CLI was used.
+The plan-header superpowers execution skills are absent from the available skill directories;
+the approved task sequence and local TDD skill were followed directly. The disposable PostgreSQL run
+above proves the RLS behavior locally; hosted deployment is not yet proven.
+
 ## Decision Register
 
 | Date | Decision | Rationale | Revisit Trigger |
 | --- | --- | --- | --- |
+| 2026-10-21 | Assessment Results Plan 3 Task 1 keeps owner reads unbounded, class reads active-year bounded, and uses the SAST run start date; mastery retains Plan 2's last-writer/current-deliverer rule. | These are separate positive grants from the approved plan. A history SELECT change must not broaden delivery/group/creator authority or change the write RPCs. Rollout seed reapply preserves controller decisions. | Controller PG17 read matrix, switch precedence/reapply or existing upload harness exposes a contract mismatch; resolve before hosted apply. |
 | 2026-10-17 | **Field-continuity decisions (Jim).** (1) The **server** closes a time entry left open for more than ten hours; the phone-only close is not enough. (2) Android backup **excludes every SQLite database** (Claude's recommendation, accepted). (3) Losing an unfinished session or assessment form on navigate-away or process death is **accepted for the pilot**. (4) Revocation follows **Zazi's model**, operated by a script until a Head Office admin website exists. | (1) A phone that stays offline or unopened leaves the hosted row open indefinitely, so staff reports cannot tell a forgotten clock-out from a long day. (2) A restored database replays already-accepted work (Zazi ZZ-BUG-20260907-001); the server is the recovery path. (3) Drafts belong to the planned SQLite draft/run lifecycle, not a temporary patch. (4) One proven operator procedure across both apps; the website is later Head Office work. | Field reports of lost forms; the server close is found to fight legitimate long shifts; a Head Office admin surface is built. |
 | 2026-09-04 | Treat 1,000 rows as the verified hosted PostgREST response cap and require explicit bounded pagination, deadlines, and completeness accounting in the first implementation of every potentially larger pull family. | A real cap-plus-one request returned exactly 1,000 of 1,205 rows with HTTP 206 and an exact content range. A successful but capped response is incomplete replication, not a performance inconvenience; the current assessment-item estate is already close enough that a non-paginated intermediate contract would be throwaway and unsafe. | The hosted API cap is deliberately reconfigured and re-proven through an equivalent cap-plus-one probe, or a family moves behind a server operation whose response-completeness contract is independently bounded and tested. |
 | 2026-08-29 | Treat an authorized session as one complete delivery-history aggregate. Owning the session or having a historical direct delivery assignment to any attendee grants the complete parent and every attendee row. | The parent activities JSON already carries child-keyed facts for the delivery event, and a child-filtered attendee list would imply a privacy boundary that does not exist while also misrepresenting the event. Admission to the session is the authorization boundary. | Masi introduces a less-trusted reader class or genuinely sensitive per-child facts. Put such facts behind a separately authorized table or redacted projection rather than silently adding them to this aggregate. |

@@ -331,7 +331,9 @@ correctly; the missing contract is inbound hydration.
   complete-family behavior; authenticated PostgREST proves the RPC and anonymous denial. Local
   PostgreSQL retains the deeper same-connection, microsecond-cursor, 2,004-row exhaustion, and
   hostile-plan evidence.
-- [ ] Implement the assessment-specific current-year class predicate. **Settled 2026-09-21:** an EA
+- [x] Implement the assessment-specific current-year class predicate (Assessment Results Plan 3
+  Task 1, migration `20261022120000_assessment_history_pull.sql`; controller PostgreSQL and hosted
+  verification remain open, see the build-log entry dated 2026-10-21). **Settled 2026-09-21:** an EA
   with an active class assignment sees a child's assessments from the current academic year if
   the child was a member of that class at any point in the current academic year. After a mid-year
   move, the old-class EA and the new-class EA both see that year's assessments. Do not reuse every

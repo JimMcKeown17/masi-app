@@ -16,6 +16,12 @@ date: 2026-07-24
 > [`../../documentation/pre-live-gate0-audit-2026-08-27.md`](../../documentation/pre-live-gate0-audit-2026-08-27.md).
 > The assessment predicate must still be implemented and behavior-proven before that family hydrates.
 
+> **Implementation status — 2026-10-21 (Assessment Results Plan 3 Task 1):** Migration
+> `20261022120000_assessment_history_pull.sql` implements the owner/current-year-class predicate
+> and the assessment, item and run SELECT policies, including the 2026-09-21 mid-year-move rule.
+> The disposable PostgreSQL harness is written; controller RED/GREEN and hosted apply/verification
+> remain unrun. Plan 2's last-writer/current-deliverer mastery SELECT policy is unchanged.
+
 ## Context
 
 Masi's field model separates two things an EA does with children: they **assess** and they **deliver an intervention**. In Core Literacy an EA assesses the *whole class* but runs the intervention with a *subset* (typically 12 children in 6 pairs), and must still assess the non-delivery children at end of year as a control group. When a delivery child leaves, the EA replaces them from the wider class. EAs turn over frequently, so an incoming EA must take over a class another EA assessed at the start of the year. Sometimes several EAs share the same physical classes (e.g. two EAs across 1A/1B/1C, four children each per class) and split the assessing between them by agreement.
