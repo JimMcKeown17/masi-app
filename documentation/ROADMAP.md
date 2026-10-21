@@ -661,6 +661,10 @@ The active specification is
 5. group-first capture and durable session drafts;
 6. device and two-device proof.
 
+Status (2026-10-21): item 3's session-group contract is built on `feat/lesson-plan-b2-session-group`
+(lesson-plan B2: held-group authorization, local history reference, upload and ordering, the
+lost-reply fix). Its hosted migration and device gates are still pending.
+
 Additional Head Office behavior retained from the Sprint 4 follow-up:
 
 - [ ] Model a school pause by Programme and academic year. Schools are not hard-deleted or globally

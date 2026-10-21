@@ -404,6 +404,13 @@ held** an assignment to that group in the session's Programme: any matching
 same rule, resolving the Programme from its parent session. Null remains accepted on both tables
 for older builds. The existing `state = 'completed'` boundary remains in force.
 
+**History invariant (spec J23, Jim 2026-10-20).** The session history pull's delivery arm follows
+`child_ea_assignments` (`supabase/migrations/20260925120000_session_history_family_delta.sql:110-115`).
+That covers every member of an EA's groups, because a child in an EA's group is always one of
+that EA's own children: app-made groups take their members from the delivery roster. A Head
+Office seed must therefore give every group member a direct assignment to the group's EA; a
+seed that breaks this needs a contract change first.
+
 `private.current_user_has_held_group_assignment(group_id, programme_id)` is the shared
 `SECURITY DEFINER` check. Its Programme provenance is deliberately `groups.programme_id`, not
 `group_ea_assignments.programme_id`. The existing `group_ea_assignments_insert_self` policy checks

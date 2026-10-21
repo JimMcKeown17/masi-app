@@ -1422,6 +1422,41 @@ gate). The dry run listed only this file against `segygjzpujphwvrubusm`. Verifie
   map and this B2 verification subsection. No PostgreSQL, network, hosted, device or Git write
   work was run.
 
+#### Task 7 — branch gates (controller)
+
+Branch `feat/lesson-plan-b2-session-group` at `f548ed0`, base `7a831fb`. Commands use
+`PATH="$HOME/.nvm/versions/node/v20.19.4/bin:$PATH"`; PostgreSQL is local Docker PG17 on port 65433
+with `PGTZ=UTC`.
+
+| Gate | Result |
+| --- | --- |
+| `npx jest --silent --maxWorkers=25%` | 350 suites / 4,255 tests passed (baseline 346 / 4,202) |
+| `npm run test:integration --silent` | 55 suites / 601 tests passed (baseline 52 / 552) |
+| `npm run test:types` | Exit 0 |
+| `verify:*:postgres`, final migration | `session-group` 36 cases; `history-authorization` 31; `upload-contract` 6 cases plus location 34, rowVersion 22 and timeEntryForward 39; `organisation-label` 23; `support-incident` 18; `assessment-results` 53; `ea-access` 43. All exit 0 |
+| Task 1 Step 6 RED | Migration moved aside: `session-group-held-active` refused by `sessions_forward_prep_pin_defaults_insert` (recorded with Task 1) |
+| Task 6 Step 6 | The four lost-reply cases pass; `session-insert-retry-still-checks-the-row` returns `42501` |
+
+**Adversarial review** (`/codex:adversarial-review`, `gpt-6-astra`, base `7a831fb`), three rounds:
+- Round 1, needs-attention: [high] an authorized hard group delete cascaded away the held
+  assignment that authorizes sessions queued on another device; [medium] a parent UPDATE could move
+  a session's programme or group under its attendees. Fixed in `2658ecb` (EA group DELETE revoked;
+  a trigger fixes a session's programme and group, `23514`).
+- Round 2, needs-attention: [high] the group's holder could change `groups.programme_id`, the last
+  mutable input of the held-group check. Fixed in `3103a4d` (a trigger on groups, and a local guard).
+  Every input of `private.current_user_has_held_group_assignment` is now immutable or archive-only.
+- Round 3, needs-attention: no new server bypass; [medium] the round-2 local guard also blocked
+  authoritative group pulls, so a phone with a stale cached programme could never converge. Fixed in
+  `f548ed0` (the guard runs only for writes that will be uploaded). No fourth round: the fix is
+  narrow and pinned by real-SQLite tests for convergence and for pending-row protection.
+- Note: a privileged (service-role) purge of a group that sessions still reference now fails,
+  because the foreign key's `ON DELETE SET NULL` would change an immutable `sessions.group_id`.
+  Session history should not silently lose its group, so this is intended.
+
+**Hosted apply and device gates (Task 8): not yet run.** The hosted order is B2, then Assessment
+Results Plan 2, then Plan 3, each with Jim's yes; the device checks run on the combined Android
+build Jim chose for wave 1.
+
 ## Decision Register
 
 | Date | Decision | Rationale | Revisit Trigger |
