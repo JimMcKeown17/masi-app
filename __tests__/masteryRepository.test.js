@@ -69,9 +69,9 @@ test('setLetterMastery stores one pending record under the uuidv5 id and queues 
     id, child_id: 'child-1', letter: 'k', language: 'en', confirmed: true,
     changed_at: result.changed_at, correction_id: result.correction_id, changed_by: 'user-1', programme_id: 'programme-a',
   });
-  expect(repository.saveLetterMasteryRecord).toBeUndefined();
-  expect(repository.updateLetterMasteryRecord).toBeUndefined();
-  expect(repository.removeLetterMasteryRecord).toBeUndefined();
+  expect(Object.keys(repository).sort()).toEqual([
+    'getLetterMastery', 'getUnsyncedRecords', 'setLetterMastery',
+  ]);
 });
 
 test('each change gets a new correction id and replaces the single slot', async () => {

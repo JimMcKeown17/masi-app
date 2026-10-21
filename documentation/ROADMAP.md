@@ -57,7 +57,8 @@ These horizons summarize the ordered register below. They are not a second backl
    U1's bounded requests and send-order protection shipped in #77 (2026-10-19), applied to
    `masi-app-sqlite`, with D2/D3 passed on the Galaxy A03s (§2). Assessment-family upload is built and locally
    verified in Assessment Results Plan 1 (§1); hosted apply/build/device gates remain Task 14.
-   Complete D1 with the mastery re-key (Assessment Results Plan 2). Multi-writer stale-edit rejection (U3) is deferred until Head Office
+   D1 and the mastery re-key are built in Assessment Results Plan 2; hosted apply and device proof
+   remain its Task 7 release gate, and mastery pull remains Plan 3. Multi-writer stale-edit rejection (U3) is deferred until Head Office
    edits EA records. Duplicate-proof submit and one database per EA are built (Plan 2; its
    sign-out UX is Plan 3).
    The newer-schema guard and minimum revocation tooling are built, and the revocation migration is
@@ -148,8 +149,8 @@ shape.
   - **Sign-out copy:** a wording pass with Jim; the current sheet copy is provisional.
   - **Ruling 11: implementation closed for the 11 tables in the upload contract.** Send-time
     versions prevent an uncertain earlier send from overwriting a later one; applied and D2-proved
-    on device 2026-10-19. It stays open for `letter_mastery` until D1 ships with the mastery
-    re-key (§1/§2).
+    on device 2026-10-19. The `letter_mastery` re-key and receipt-backed D1 are built in Assessment
+    Results Plan 2; hosted application and device proof remain Task 7 (§1/§2). Mastery pull remains Plan 3.
   - **Device gates:** D2–D7 on the build intended to ship
     ([actor lifecycle spec §9](../docs/superpowers/specs/2026-10-09-actor-lifecycle-and-mutation-ownership-design.md);
     D7 is native close under load, iOS and Android). D3's ten-hour half is now the server-close
@@ -357,8 +358,8 @@ correctly; the missing contract is inbound hydration.
 - [x] **Server-stamped `updated_at` for assessment uploads.** Built in
   `20261021120000_assessment_results_contract.sql`: INSERT/UPDATE triggers on `assessments`,
   `assessment_items`, `battery_runs` and `letter_mastery`. The phone strips the timestamp from
-  assessment/run RPC payloads; the existing mastery writer still sends it and the trigger overrides
-  it. See [ADR-0009](../docs/adr/0009-assessment-results-one-write-call-complete-families.md) and the
+  assessment/run RPC payloads. The Plan 2 mastery writer sends only the correction RPC's six
+  arguments, without `updated_at`; the server advances the record timestamp only when a correction applies. See [ADR-0009](../docs/adr/0009-assessment-results-one-write-call-complete-families.md) and the
   [contract map](./rls-sync-contract-map.md). Controller disposable-PG17 verification is GREEN;
   hosted migration remains Assessment Results Task 14, not completed by this checkbox.
 - [ ] Audit other tables' insert timestamps before adding a delta pull
@@ -388,19 +389,19 @@ correctly; the missing contract is inbound hydration.
   retries return `already_present` only after identity/item-id-set confirmation. `23505` never
   counts as success. Item identity is unchanged. [ADR-0009](../docs/adr/0009-assessment-results-one-write-call-complete-families.md)
   supersedes the older per-row insert-or-ignore proposal; hosted enforcement awaits Task 14.
-- [ ] **Letter mastery as current state (ADR-0005 2026-09-21 follow-up).** Re-key the stored EA
-  confirmation to one current record per `(child, letter, language)`, recording the last writer.
-  Narrow hosted read to the last writer plus current deliverers, and let current deliverers
-  insert/update/soft-delete. Implement the accepted correction-time ordering (clamped to server time),
-  not arrival-order wins. Resolve the natural key inside the write
-  transaction; Zazi's production crash ZZ-BUG-20260813-006 is the regression case to test. Then
-  add the mastery pull. **Assessment evidence is already moved** in Assessment Results Task 10:
-  the latest non-skipped stored letter result can come from any recorder in the active programme,
-  including WelaPLUS Q1. `userId` scopes that programme, not the assessment recorder. Confirmation
-  identity and language labels remain unchanged until Assessment Results Plan 2. Its accepted
-  correction-time rule is in the [new design §10](../docs/superpowers/specs/2026-10-19-assessment-results-and-letter-test-design.md#10-letter-mastery);
-  its confirmation writer is not implemented in Plan 1.
-  Practice data is wiped at the approved release gate; no field-data re-key is planned.
+- [ ] **Release the built letter-mastery current-state contract (ADR-0005 follow-up 2).**
+  Assessment Results Plan 2 implements one current confirmation per child, letter and language
+  code, current-deliverer correction writes, last-writer/current-deliverer SELECT, and D1.
+  `set_letter_mastery` fixes a correction's effective time once in a receipt and resolves the
+  natural key inside SQL, covering the ZZ-BUG-20260813-006 race. Both tracker surfaces write
+  corrections; local acknowledgement displays the winner and terminal refusals do not count.
+  **Remaining: Task 7's hosted apply/practice-data wipe and two-phone device gate.** Each external
+  step needs Jim's yes. Mastery pull remains Assessment Results Plan 3.
+  Assessment evidence already uses the latest non-skipped stored letter result from any recorder
+  in the active Programme, including WelaPLUS Q1; `userId` scopes that Programme, not the recorder.
+  Confirmation reads have no recorder or Programme filter. The correction rule is in the
+  [design §10](../docs/superpowers/specs/2026-10-19-assessment-results-and-letter-test-design.md#10-letter-mastery).
+  Practice data is wiped only at the approved release gate; no field-data re-key is planned.
 - [ ] Use bounded keyset pagination with an `id` tie-breaker and request deadline for every parent
   and child page from the first implementation. Do not ship an unpaginated intermediate path.
 - [ ] Persist each parent and its children transactionally through typed repositories, with parents
@@ -433,9 +434,8 @@ correctly; the missing contract is inbound hydration.
 
 Until this lands, a green sync label proves outbound completion only.
 
-Zazi parity: Zazi's letter tracker has the same per-EA identity and author-only correction, and
-its mobile pulls fetch only the EA's own mastery and sessions. Converging Zazi on the same rule is
-separate Zazi work (it has field users). Masi's per-child `children.reading_level` already matches
+Zazi parity: converging Zazi on this current-state correction rule remains separate Zazi work
+(it has field users). Masi's per-child `children.reading_level` already matches
 the current-state model better than Zazi's per-session carry-forward.
 
 ## 2. Correctness and safety
@@ -548,20 +548,21 @@ the [Verification Register](./build-log.md#verification-register) owns the local
   base behind the stored version, and make Head Office writes bump `row_version`. The current
   counter only orders one phone's sends; it does not establish multi-writer conflict protection.
   The column and trigger accept that additional comparison without a replacement protocol.
-- [ ] **Letter mastery: the most recently *made* correction wins (D1, decided by Jim
-  2026-10-08; reconfirmed 2026-10-14).**
-  - The server keeps whichever confirmation has the later correction time and treats a future
-    correction time as its own `now()`.
-  - This is a narrow, single-column guard, not the general `stale_base` mechanism.
-  - Build it with the mastery re-key in §1. `CONTEXT.md` is updated.
-  - **Pilot gate (Jim, 2026-10-18).** Until it is built, a late mastery toggle can still overtake a
-    newer one (Ruling 11 for `letter_mastery`); the upload-contract spec does not cover this table.
+- [ ] **Verify the built letter-mastery D1 contract on hosted and both phones (Assessment Results
+  Plan 2 Task 7; decided by Jim 2026-10-08, reconfirmed 2026-10-14).**
+  The re-key, correction receipts/RPC, phone acknowledgement, readers and both writers are built.
+  The most recently *made* correction wins by effective time and UUID. A new future timestamp is
+  clamped once at server arrival; a lost-reply retry retains that receipt's effective time.
+  **Still open before pilot:** hosted application and the two-phone correction-order gate,
+  including the fast-clock/lost-reply case. The upload-contract row-version mechanism does not
+  cover mastery. Plan 3 owns mastery download/completeness; it is not part of this release gate.
 - [x] **Duplicate-proof submit (U5).** Literacy session capture now mints one session id per form,
   reuses it on retry, and uses a synchronous ref lock to prevent double-tap saves; assessment
   submit already guards completion with a ref and reuses its record on retry. This closes the
   per-tap identity risk behind Zazi's 302 extra session copies (ZZ-BUG-20260819-021).
-  LetterMasteryPanel's same-EA/programme double taps already converge through the repository's
-  deterministic mastery id; its broader re-key remains separate.
+  LetterMasteryPanel taps are now corrections through `setLetterMastery`, guarded while a
+  write is pending, with one child/letter/language record and one correction outbox slot.
+  The deterministic per-EA id is retired; hosted/device rollout remains Plan 2 Task 7.
 - [x] Android cloud-backup and device-transfer exclusion is built with `android.allowBackup: false`
   and explicit data-extraction exclusions (U6). A restored database replayed already-accepted work
   in Zazi (ZZ-BUG-20260907-001); the

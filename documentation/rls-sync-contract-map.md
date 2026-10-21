@@ -377,13 +377,13 @@ Each workflow still awaits the result it needs before constructing the next depe
 
 ## Letter mastery: one current record, the most recently made correction wins (Assessment Results Plan 2)
 
-**Server and phone schema/repository/sync implemented; readers and write surfaces remain Tasks 5–6.
-Hosted migration not applied.** The migration is
+**Server and phone schema, repository, sync, readers and both write surfaces implemented.
+Hosted migration not applied; rollout and device checks remain Task 7.** The migration is
 [`20261021160000_letter_mastery_current_state.sql`](../supabase/migrations/20261021160000_letter_mastery_current_state.sql).
 `npm run verify:letter-mastery:postgres` proves it on disposable PostgreSQL 17 (RED without the
 migration, then 20 cases GREEN), and every existing PostgreSQL harness still passes (controller
-record). The phone uses the rebuilt local schema and correction repository/engine; Tasks 5–6
-complete the reader and capture cutover. Do not apply this migration to hosted before the approved rollout.
+record). The phone uses the rebuilt local schema, correction repository/engine, code-valued
+readers and correction writers. Do not apply this migration to hosted before the approved rollout.
 
 **Identity and conversion.** One record is unique on `(child_id, letter, language)`, independent
 of EA and Programme. `private.letter_mastery_id(uuid,text,text)` is immutable and uses UUID v5,
@@ -493,7 +493,25 @@ live session confirms the denial; no-session denials remain retriable. `MA001`, 
 `UNEXPECTED_RPC_RESULT` are terminal; `28000` is retriable. Even an explicitly configured
 duplicate-key-success override cannot bypass the mastery acknowledgement. `getLetterMastery`
 excludes terminal rows and rejects user/Programme filters; needs-attention keeps refused slots.
-Task 5 updates all readers to the code-valued, confirmed-only interface; Task 6 updates capture.
+Both the shared loader and ranking use code-valued, confirmed-only reads, without recorder or
+Programme filters; assessment evidence alone keeps its active-Programme scope.
+
+**Capture and panel refresh.** `persistLiteracySession` validates AF's attendee changes before
+the transaction, then writes each through `setLetterMastery` in the session transaction with
+the unchanged `languageCode` and `madeAt`. An un-mark without a prior row still writes false.
+A newer owed correction can keep back an older sheet save while the session and other changes
+commit. Each child's tracker uses that child's own class language; a pending change's language
+wins, and saving never re-derives it. `LetterMasteryPanel` writes at the tap's current time,
+then displays the returned confirmation and preserves the existing sync nudges/write guard.
+
+The panel's `useLetterMasterySyncRefresh` watches newly published sync results that contain
+`tableResults.letter_mastery` (including refusals/skips), with the mount result already seen.
+It re-reads in the background without replacing the grid with a spinner. A load-generation
+counter permits only the latest read to publish and clear loading. Results for other tables
+and a changed callback alone do not re-read. `LetterTrackerBottomSheet` deliberately keeps
+its open-time baseline while open: re-reading beneath its pending map can undo a cancelling
+tap (accepted risk A1). Reopening reads the new truth. Plan 3 still needs a pull signal for
+the panel only.
 
 ## Row versions (upload contract)
 
@@ -992,7 +1010,7 @@ Spec: `docs/superpowers/specs/2026-10-09-actor-lifecycle-and-mutation-ownership-
 | `assessments` | `assessmentsRepository.saveQuestionResult` | Owner, child, programme, Question/version, item set, language, stop reason, object derived, exact item count; optional run | `submit_assessment` only: `inserted` / `already_present`; identity or item-set membership mismatch `MA001`, malformed `22023`, duplicate run/Question `23505` never success. One family outbox/ack transaction; no pull yet — Plan 3 | Existing owner or child-read SELECT. New writes require active child/programme authority; committed retries check identity before current authority. Direct EA DML revoked | After `children` and optional `battery_runs`; items inside the same RPC, no per-row push | `assessmentsRepository.questionResults.test.js`; `assessmentFamilySync.test.js`; `assessmentFamilyRpcError.test.js`; `assessment-results-postgres-harness.cjs` |
 | `assessment_items` | `saveQuestionResult`, inside its parent transaction | Deterministic `id`, parent id, unique non-negative `position`, item key, boolean correctness, object metadata | Only `p_items` inside `submit_assessment`; no independent outbox row/upsert/fallback. Whole family is acknowledged together; no pull yet — Plan 3 | Existing parent-based SELECT; direct EA DML revoked | Same server and local acknowledgement transactions as parent; absent from `PUSH_ORDER` and batching | `assessmentFamilySync.test.js` complete 61-item send and injected acknowledgement rollback; repository and PostgreSQL family tests |
 | `battery_runs` | `batteryRunsRepository.startRun` / `finalizeRun` / `abandonRun` | Owner, child, programme, optional class, battery code/version, language and stored start time are replay identity | Full-header `save_battery_run`: `inserted` / `updated` / `unchanged`; identity `MA001`, terminal conflict `MA002`, malformed `22023`, `23505` never success; `28000` retriable. No row version; no pull yet — Plan 3 | Owner or child-read SELECT; new writes require child/programme authority and optional class membership at start; owned existing runs do not renew assignment checks | After `children`, before linked assessments; optional class is not a local FK dependency | `batteryRunsRepository.test.js`; `assessmentFamilySync.test.js`; `assessment-results-postgres-harness.cjs` |
-| `letter_mastery` | `masteryRepository.setLetterMastery` (capture surfaces migrate in Task 6) | Single slot: `id, child_id, letter, language, confirmed, changed_at, correction_id, changed_by, programme_id`; code-valued language; Programme is context | Exactly one `set_letter_mastery` RPC per correction with six arguments, no batch/table write or send-time re-key. Atomic CAS acknowledgement writes the returned winner, deletes an unreadable record, or preserves a newer local correction and updates only server ordering. See the canonical mastery section above. | New correction: current direct deliverer; replay: receipt identity; SELECT: last writer or current direct deliverer, with no year/Programme bound | After `children`; only pending direct assignment counts as grant evidence | `masteryRepository.test.js`; `letterMasteryCurrentStateMigration.test.js`; `letterMasteryCorrectionSync.test.js`; `letterMasteryRpcError.test.js`; `classifyErrorHardening.test.js`; `letterMasteryPostgresHarness.test.js` and disposable PG harness |
+| `letter_mastery` | `masteryRepository.setLetterMastery`, called by `persistLiteracySession` with tap time and `LetterMasteryPanel` with now | Required: `child_id, letter, language` (code), `confirmed, changed_at, correction_id, changed_by`; the single-slot payload also has local `id` and nullable `programme_id` context | Exactly one `set_letter_mastery` call per record slot with six arguments, no batch/table write or send-time re-key. Atomic CAS acknowledgement writes the returned winner, deletes an unreadable record, or preserves a newer local correction and updates only server ordering. See the canonical mastery section above. | `letter_mastery_select_writer_or_deliverer`: last writer or current direct deliverer, no year/Programme bound. New correction requires current delivery; replay uses receipt identity; no direct DML | After `children`, D1 by correction time/UUID; only pending direct assignment counts as grant evidence | `masteryRepository.test.js`; `letterMasteryCurrentStateMigration.test.js`; `letterMasteryCorrectionSync.test.js`; `letterMasteryRpcError.test.js`; `masteryState.test.js`; `LetterMasteryRankingScreen.test.js`; `literacySessionPersistence.test.js`; `completionPathBudget.test.js`; `LiteracySessionForm.submit.test.js`; `LetterMasteryPanel.test.js` and disposable PG harness |
 
 Support incident transport uses the device-level `masi:device:installId` (one persisted UUID per
 installation, retained across sign-out). The wire repeat key is `<installId>:<repeatKey>` and the
@@ -1090,6 +1108,7 @@ Use this checklist instead of a static "does the table have policies" audit.
 - `scripts/assessment-results-postgres-harness.cjs`
 - `__tests__/assessmentFamilySync.test.js`, `__tests__/assessmentFamilyRpcError.test.js`
 - `src/db/repositories/masteryRepository.js`, `src/db/domainId.js`
+- `src/services/literacySessionPersistence.js`, `src/components/assessment/LetterMasteryPanel.js`, `src/hooks/useLetterMasterySyncRefresh.js`
 - `supabase/migrations/20261021160000_letter_mastery_current_state.sql`, `scripts/letter-mastery-postgres-harness.cjs`
 - `__tests__/letterMasteryCorrectionSync.test.js`, `__tests__/letterMasteryRpcError.test.js`, `__tests__/letterMasteryCurrentStateMigration.test.js`
 - `supabase/migrations/20260522103000_masi_session_upsert_visibility.sql`

@@ -285,7 +285,7 @@ test('a validation failure after a save failure shows only the inline errors', a
 });
 
 
-test('an isiXhosa session shows stored result evidence and saves a new confirmation using the Plan 1 label', async () => {
+test('an isiXhosa session shows stored result evidence and saves a new confirmation using its language code', async () => {
   mockClass.home_language = 'isiXhosa';
   await handle.repositories.assessments.saveQuestionResult({
     assessmentId: '44444444-4444-4444-8444-444444444444', userId: EA, childId: mockChild.id,
@@ -311,11 +311,11 @@ test('an isiXhosa session shows stored result evidence and saves a new confirmat
   fireEvent.press(screen.getByText('Submit session'));
   await waitFor(() => expect(mockCompleteMounted).toHaveBeenCalledTimes(1));
 
-  expect(await handle.repositories.mastery.getLetterMastery({ userId: EA, childId: mockChild.id }))
-    .toEqual([expect.objectContaining({ letter: 'b', language: 'isiXhosa', _deleted: false })]);
+  expect(await handle.repositories.mastery.getLetterMastery({ childId: mockChild.id, language: 'xh' }))
+    .toEqual([expect.objectContaining({ letter: 'b', language: 'xh', confirmed: true })]);
   const reader = await handle.getReader();
   const outbox = await reader.getFirstAsync("select payload from sync_outbox where table_name = 'letter_mastery'");
-  expect(JSON.parse(outbox.payload)).toEqual(expect.objectContaining({ letter: 'b', language: 'isiXhosa' }));
+  expect(JSON.parse(outbox.payload)).toEqual(expect.objectContaining({ letter: 'b', language: 'xh' }));
 });
 
 test.each([
@@ -349,10 +349,10 @@ test.each([
 
   const reader = await handle.getReader();
   expect(await reader.getAllAsync(
-    'select child_id, letter, language from letter_mastery where deleted_at is null order by child_id'
+    'select child_id, letter, language from letter_mastery where confirmed = 1 order by child_id'
   )).toEqual([
-    { child_id: mockChild.id, letter: 'a', language: firstLanguage },
-    { child_id: SECOND_CHILD.id, letter: 'm', language: secondLanguage },
+    { child_id: mockChild.id, letter: 'a', language: firstCode },
+    { child_id: SECOND_CHILD.id, letter: 'm', language: secondCode },
   ]);
   for (const [childId, languageCode, letter] of [
     [mockChild.id, firstCode, 'a'],
@@ -396,13 +396,8 @@ test.each([['isiXhosa', 'isiXhosa', 'xh'], ['Afrikaans', 'Afrikaans', 'af']])(
       'Smith',
       EA
     ));
-    await handle.repositories.mastery.saveLetterMasteryRecord({
-      id: 'stored-k',
-      user_id: EA,
-      child_id: mockChild.id,
-      letter: 'k',
-      language: label,
-      source: 'taught',
+    await handle.repositories.mastery.setLetterMastery({
+      childId: mockChild.id, letter: 'k', language: code, confirmed: true,
     });
     await handle.withTransaction(tx => tx.runAsync('delete from sync_outbox'));
 
@@ -428,9 +423,9 @@ test.each([['isiXhosa', 'isiXhosa', 'xh'], ['Afrikaans', 'Afrikaans', 'af']])(
 
     const reader = await handle.getReader();
     expect(await reader.getAllAsync(
-      'select letter, language from letter_mastery where child_id = ? and deleted_at is null order by letter',
+      'select letter, language from letter_mastery where child_id = ? and confirmed = 1 order by letter',
       mockChild.id
-    )).toEqual(['a', 'k', 'm'].map(letter => ({ letter, language: label })));
+    )).toEqual(['a', 'k', 'm'].map(letter => ({ letter, language: code })));
     const reloaded = await loadMasteryState({
       repositories: handle.repositories,
       userId: EA,
@@ -453,13 +448,8 @@ test('undoing every pending mark in an open tracker keeps that tracker\'s langua
     'Smith',
     EA
   ));
-  await handle.repositories.mastery.saveLetterMasteryRecord({
-    id: 'stored-k',
-    user_id: EA,
-    child_id: mockChild.id,
-    letter: 'k',
-    language: label,
-    source: 'taught',
+  await handle.repositories.mastery.setLetterMastery({
+    childId: mockChild.id, letter: 'k', language: 'xh', confirmed: true,
   });
   await handle.withTransaction(tx => tx.runAsync('delete from sync_outbox'));
 
@@ -486,15 +476,15 @@ test('undoing every pending mark in an open tracker keeps that tracker\'s langua
 
   const reader = await handle.getReader();
   expect(await reader.getAllAsync(
-    'select letter, language from letter_mastery where child_id = ? and deleted_at is null order by letter',
+    'select letter, language from letter_mastery where child_id = ? and confirmed = 1 order by letter',
     mockChild.id
-  )).toEqual(['e', 'k'].map(letter => ({ letter, language: label })));
+  )).toEqual(['e', 'k'].map(letter => ({ letter, language: 'xh' })));
   expect(await reader.getFirstAsync(
-    "select count(*) as n from letter_mastery where child_id = ? and language = 'English'",
+    "select count(*) as n from letter_mastery where child_id = ? and language = 'en'",
     mockChild.id
   )).toEqual({ n: 0 });
   const outbox = await reader.getAllAsync("select payload from sync_outbox where table_name = 'letter_mastery'");
-  expect(outbox.map(row => JSON.parse(row.payload).language)).toEqual([label]);
+  expect(outbox.map(row => JSON.parse(row.payload).language)).toEqual(['xh']);
 });
 
 test.each([null, 'isiZulu'])('a class with unknown language %s shows no English tracker grid', async (homeLanguage) => {

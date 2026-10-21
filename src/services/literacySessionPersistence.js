@@ -1,19 +1,9 @@
-import { LANGUAGE_LABELS } from '../utils/assessmentRegistry';
 import { assertTrackerChanges } from '../utils/masteryState';
 import { createSessionsRepository } from '../db/repositories/sessionsRepository';
 import { createChildrenRepository } from '../db/repositories/childrenRepository';
 import { createMasteryRepository } from '../db/repositories/masteryRepository';
 import { runRepositoryTransaction } from '../db/repositories/repositoryRuntime';
 import { resolveProgrammeId } from '../db/repositories/domainRepositoryUtils';
-
-const findMasteryRecord = (records, { childId, letter, language, programmeId, deleted }) => records.find(
-  (record) => record.child_id === childId &&
-    record.programme_id === programmeId &&
-    record.letter === letter &&
-    record.language === language &&
-    (deleted ? record._deleted : !record._deleted) &&
-    (record.source || 'taught') === 'taught'
-);
 
 export async function persistLiteracySession({
   handle,
@@ -70,76 +60,17 @@ export async function persistLiteracySession({
       });
     }
 
-    if (Object.keys(attendeeTrackerChanges).length === 0) {
-      return;
-    }
-
-    const changedChildIds = Object.keys(attendeeTrackerChanges);
-    const allMastery = await masteryRepository.getLetterMastery({
-      transaction,
-      userId: programmeScopedSession.user_id,
-      programmeId,
-      childIds: changedChildIds,
-    });
-
     for (const [childId, changes] of Object.entries(attendeeTrackerChanges)) {
       for (const [letter, change] of Object.entries(changes)) {
-        // Plan 2 re-keys letter_mastery to codes
-        const confirmationLanguage = LANGUAGE_LABELS[change.languageCode];
-        if (change.mastered === true) {
-          const existingDeleted = findMasteryRecord(allMastery, {
-            childId,
-            letter,
-            language: confirmationLanguage,
-            programmeId,
-            deleted: true,
-          });
-
-          if (existingDeleted) {
-            await masteryRepository.updateLetterMasteryRecord(existingDeleted.id, {
-              _deleted: false,
-              deleted_at: null,
-              synced: false,
-              updated_at: nowIso,
-            }, { transaction });
-            existingDeleted._deleted = false;
-            existingDeleted.deleted_at = null;
-          } else {
-            const record = {
-              id: idFactory(),
-              user_id: programmeScopedSession.user_id,
-              child_id: childId,
-              programme_id: programmeId,
-              letter,
-              source: 'taught',
-              language: confirmationLanguage,
-              synced: false,
-              created_at: nowIso,
-              updated_at: nowIso,
-            };
-            const savedId = await masteryRepository.saveLetterMasteryRecord(record, { transaction });
-            allMastery.push({ ...record, id: savedId });
-          }
-        } else if (change.mastered === false) {
-          const existing = findMasteryRecord(allMastery, {
-            childId,
-            letter,
-            language: confirmationLanguage,
-            programmeId,
-            deleted: false,
-          });
-
-          if (existing) {
-            await masteryRepository.updateLetterMasteryRecord(existing.id, {
-              _deleted: true,
-              deleted_at: nowIso,
-              synced: false,
-              updated_at: nowIso,
-            }, { transaction });
-            existing._deleted = true;
-            existing.deleted_at = nowIso;
-          }
-        }
+        await masteryRepository.setLetterMastery({
+          childId,
+          letter,
+          language: change.languageCode,
+          confirmed: change.mastered,
+          changedAt: change.madeAt,
+          programmeId,
+          transaction,
+        });
       }
     }
   });

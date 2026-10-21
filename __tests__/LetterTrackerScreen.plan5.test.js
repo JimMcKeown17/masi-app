@@ -35,8 +35,7 @@ jest.mock('../src/db/repositories/masteryRepository', () => ({
   ...jest.requireActual('../src/db/repositories/masteryRepository'),
   masteryRepository: {
     getLetterMastery: jest.fn(),
-    saveLetterMasteryRecord: jest.fn(),
-    updateLetterMasteryRecord: jest.fn(),
+    setLetterMastery: jest.fn(),
   },
 }));
 
@@ -58,8 +57,7 @@ describe('LetterTrackerScreen Plan 5 behavior', () => {
     });
     assessmentsRepository.latestLetterResult.mockResolvedValue(null);
     masteryRepository.getLetterMastery.mockResolvedValue([]);
-    masteryRepository.saveLetterMasteryRecord.mockResolvedValue(true);
-    masteryRepository.updateLetterMasteryRecord.mockResolvedValue(true);
+    masteryRepository.setLetterMastery.mockResolvedValue({ confirmed: true });
     refreshSyncStatus.mockResolvedValue({ unsyncedCount: 1 });
   });
 
@@ -68,7 +66,7 @@ describe('LetterTrackerScreen Plan 5 behavior', () => {
   });
 
   test('failed taught-letter save keeps the cell unsaved and shows a retryable error', async () => {
-    masteryRepository.saveLetterMasteryRecord.mockRejectedValueOnce(new Error('SQLite write failed'));
+    masteryRepository.setLetterMastery.mockRejectedValueOnce(new Error('SQLite write failed'));
 
     const { getByLabelText, queryByText } = render(<LetterTrackerScreen route={route} />);
 
@@ -81,7 +79,7 @@ describe('LetterTrackerScreen Plan 5 behavior', () => {
     expect(refreshSyncStatus).not.toHaveBeenCalled();
     expect(triggerBackgroundSync).not.toHaveBeenCalled();
 
-    masteryRepository.saveLetterMasteryRecord.mockResolvedValueOnce(true);
+    masteryRepository.setLetterMastery.mockResolvedValueOnce({ confirmed: true });
     fireEvent.press(getByLabelText('a, not mastered'));
 
     await waitFor(() => expect(queryByText('1 / 26 letters mastered')).toBeTruthy());

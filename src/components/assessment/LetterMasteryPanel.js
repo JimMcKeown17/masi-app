@@ -1,15 +1,15 @@
 import { typeRoles } from '../../constants/typography';
 import { useSignedInEA } from '../../context/SignedInEAContext';
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useRef } from 'react';
 import { View, StyleSheet } from 'react-native';
 import { Text, ActivityIndicator } from 'react-native-paper';
 import { useFocusEffect } from '@react-navigation/native';
-import { v4 as uuidv4 } from 'uuid';
 import { colors, spacing, borderRadius } from '../../constants/colors';
 import LetterToggleGrid from '../sessions/LetterToggleGrid';
 import { letterStateColors } from '../../constants/letterStateColors';
-import { LANGUAGE_LABELS, PEDAGOGICAL_ORDERS, languageCodeForHomeLanguage } from '../../utils/assessmentRegistry';
+import { PEDAGOGICAL_ORDERS, languageCodeForHomeLanguage } from '../../utils/assessmentRegistry';
 import { loadMasteryState } from '../../utils/masteryState';
+import useLetterMasterySyncRefresh from '../../hooks/useLetterMasterySyncRefresh';
 
 import { useAuth } from '../../context/AuthContext';
 import { useOffline } from '../../context/OfflineContext';
@@ -23,7 +23,7 @@ export default function LetterMasteryPanel({ child, classItem }) {
   const { refreshSyncStatus, triggerBackgroundSync } = useOffline();
 
   const [assessmentMastered, setAssessmentMastered] = useState(new Set());
-  const [taughtLetters, setTaughtLetters] = useState({}); // { letter: recordId }
+  const [taughtLetters, setTaughtLetters] = useState({}); // { letter: true }
   const [loading, setLoading] = useState(true);
   const [latestAssessmentDate, setLatestAssessmentDate] = useState(null);
   const [mutationError, setMutationError] = useState(null);
@@ -31,30 +31,34 @@ export default function LetterMasteryPanel({ child, classItem }) {
 
   const languageCode = languageCodeForHomeLanguage(classItem?.home_language);
   const pedagogicalOrder = PEDAGOGICAL_ORDERS[languageCode];
-  // Plan 2 re-keys letter_mastery to codes
-  const confirmationLanguage = LANGUAGE_LABELS[languageCode];
+  const loadGeneration = useRef(0);
 
-  const loadData = useCallback(async () => {
+  const loadData = useCallback(async ({ background = false } = {}) => {
+    const generation = ++loadGeneration.current;
+    if (!background) setLoading(true);
     try {
-      setLoading(true);
 
       const { assessmentMastered: masteredSet, latestAssessment, taughtRecords } = await loadMasteryState({ repositories,
         userId: user.id,
         childId: child.id,
         languageCode,
       });
+      if (generation !== loadGeneration.current) return;
       setLatestAssessmentDate(latestAssessment?.assessment_date || null);
       setAssessmentMastered(masteredSet);
 
       const taughtMap = {};
-      taughtRecords.forEach(r => { taughtMap[r.letter] = r.id; });
+      taughtRecords.forEach(r => { taughtMap[r.letter] = true; });
       setTaughtLetters(taughtMap);
     } catch (error) {
       console.error('Error loading letter tracker data:', error);
     } finally {
-      setLoading(false);
+      if (generation === loadGeneration.current) setLoading(false);
     }
   }, [child.id, languageCode, user.id]);
+
+  const onRefresh = useCallback(() => loadData({ background: true }), [loadData]);
+  useLetterMasterySyncRefresh(onRefresh);
 
   useFocusEffect(
     useCallback(() => {
@@ -71,76 +75,20 @@ export default function LetterMasteryPanel({ child, classItem }) {
     setUpdatingLetter(letter);
 
     try {
-      if (taughtLetters[letter]) {
-        // Currently green -> toggle OFF (soft-delete). Re-resolve the active row by its logical
-        // key rather than trusting the cached id: that id can drift under us (deterministic-id
-        // canonicalisation, or a background canonical-id adoption renaming the row), and a stale
-        // id would make the update a silent no-op, leaving the letter mastered.
-        const allMastery = await masteryRepository.getLetterMastery({
-          userId: user.id,
-          childId: child.id,
-        });
-        const active = allMastery.find(
-          r => r.child_id === child.id && r.letter === letter && r.language === confirmationLanguage && !r._deleted
-        );
-        if (active) {
-          await masteryRepository.updateLetterMasteryRecord(active.id, {
-            _deleted: true,
-            synced: false,
-            updated_at: new Date().toISOString(),
-          });
-        }
-        setTaughtLetters(prev => {
-          const next = { ...prev };
-          delete next[letter];
-          return next;
-        });
-        if (active) {
-          refreshSyncStatus().catch(() => {});
-          triggerBackgroundSync?.();
-        }
-      } else {
-        // Currently gray -> toggle ON
-        // Check for existing soft-deleted record to reuse (avoids duplicate key on sync)
-        const allMastery = await masteryRepository.getLetterMastery({
-          userId: user.id,
-          childId: child.id,
-        });
-        const existing = allMastery.find(
-          r => r.child_id === child.id && r.letter === letter && r.language === confirmationLanguage && r._deleted
-        );
-        if (existing) {
-          // Reactivate the soft-deleted record
-          await masteryRepository.updateLetterMasteryRecord(existing.id, {
-            _deleted: false,
-            deleted_at: null,
-            synced: false,
-            updated_at: new Date().toISOString(),
-          });
-          setTaughtLetters(prev => ({ ...prev, [letter]: existing.id }));
-          refreshSyncStatus().catch(() => {});
-          triggerBackgroundSync?.();
-        } else {
-          // Create new record
-          const record = {
-            id: uuidv4(),
-            user_id: user.id,
-            child_id: child.id,
-            letter,
-            source: 'taught',
-            language: confirmationLanguage,
-            synced: false,
-            created_at: new Date().toISOString(),
-            updated_at: new Date().toISOString(),
-          };
-          // saveLetterMasteryRecord canonicalises the id (deterministic logical-key id), so
-          // track the returned id — not the discarded local uuid — or toggle-off no-ops.
-          const savedId = await masteryRepository.saveLetterMasteryRecord(record);
-          setTaughtLetters(prev => ({ ...prev, [letter]: savedId }));
-          refreshSyncStatus().catch(() => {});
-          triggerBackgroundSync?.();
-        }
-      }
+      const record = await masteryRepository.setLetterMastery({
+        childId: child.id,
+        letter,
+        language: languageCode,
+        confirmed: !taughtLetters[letter],
+      });
+      setTaughtLetters(prev => {
+        const next = { ...prev };
+        if (record.confirmed) next[letter] = true;
+        else delete next[letter];
+        return next;
+      });
+      refreshSyncStatus().catch(() => {});
+      triggerBackgroundSync?.();
     } catch (error) {
       console.error('Error saving letter mastery:', error);
       setMutationError('Letter update was not saved. Please try again.');
