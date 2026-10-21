@@ -1244,6 +1244,26 @@ Supabase/PostgreSQL, EAS, device, release or field operation was involved. C3 ow
 navigation params, the actual Lesson route, deferred-read/routing tests and the carried device
 card/resume gates; C1 deliberately adds no production caller or route wiring.
 
+#### Task 6 — gates (controller)
+
+Branch `feat/lesson-plan-c1-lesson-draft` at `dc9a439` (Tasks 1–5: `93d6a27`, `e048632`, `89cf980`,
+`8103e99`, `dc9a439`), base `7a831fb`. All commands use
+`PATH="$HOME/.nvm/versions/node/v20.19.4/bin:$PATH"`.
+
+| Gate | Result |
+| --- | --- |
+| `npx jest --silent --maxWorkers=25%` | 351 suites / 4,256 tests passed, no skipped suites (baseline 346 / 4,202) |
+| `npm run test:integration --silent` | 56 suites / 596 tests passed (baseline 52 / 552) |
+| `npm run test:types` | Exit 0 |
+| `/codex:adversarial-review` (`gpt-6-astra`, base `7a831fb`), round 1 | **Approve, no material findings.** It probed the v15→v16 upgrade and replay, concurrent-create refusal, frozen-plan rejection, an atomic session/attendee/outbox/draft rollback with a successful retry, and eleven cursors written by the real pull (interrupted handover rescan, failed page, recovery, uncovered child, year rollover) |
+
+**Device gate (Step 3): not yet run.** Jim chose one combined Android preview build for all wave-1
+plans (2026-10-21). The upgrade check (install the current `main` build, record a session, install
+this build over it; the app opens, Home is unchanged at 1.0x and 1.3x, Session History keeps the
+session, Export Database shows `lesson_drafts` at the merged schema version with 0 rows) runs on that
+build on the Galaxy A03s. The schema number is set when C1, B2 and AR Plan 2's local migrations are
+renumbered at the integration merge. The card gate (Step 4) is carried into the C2–C3 plan.
+
 ## Decision Register
 
 | Date | Decision | Rationale | Revisit Trigger |
