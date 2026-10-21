@@ -2,6 +2,7 @@ import {
   PACK_LANGUAGE_BY_CODE,
   SUGGESTED_LETTER_COUNT,
 } from './constants';
+import { isLessonPlanSession } from './history';
 
 const letterStepsFromPack = (pack) => {
   const steps = Array.isArray(pack?.letter_steps) ? pack.letter_steps : [];
@@ -82,7 +83,15 @@ export const planLetters = ({ languageCode, pack, alphabet, children, childSessi
   }
 
   const knownSet = new Set(known);
-  const suggested = order.filter((letter) => !knownSet.has(letter)).slice(0, SUGGESTED_LETTER_COUNT);
+  const steps = letterStepsFromPack(resolvedPack);
+  const stepOne = steps.find((entry) => entry?.step === 1);
+  const stepOneLetters = Array.isArray(stepOne?.new_letters) ? stepOne.new_letters : [];
+  const firstSession = historyComplete
+    && stepOneLetters.some((letter) => !knownSet.has(letter))
+    && !presentChildren.some((child) => childSessions(child.id).some(isLessonPlanSession));
+  const suggested = firstSession
+    ? stepOneLetters.filter((letter) => !knownSet.has(letter))
+    : order.filter((letter) => !knownSet.has(letter)).slice(0, SUGGESTED_LETTER_COUNT);
   if (suggested.length === 0) {
     return {
       reason: 'all_letters_known',
@@ -96,9 +105,8 @@ export const planLetters = ({ languageCode, pack, alphabet, children, childSessi
     };
   }
 
-  const steps = letterStepsFromPack(resolvedPack);
   const lastSuggested = suggested[suggested.length - 1];
-  const lastSuggestedStep = steps.find((entry) => (
+  const lastSuggestedStep = firstSession ? 1 : steps.find((entry) => (
     Array.isArray(entry?.new_letters) && entry.new_letters.includes(lastSuggested)
   ))?.step;
   const unlocked = order.filter((letter) => knownSet.has(letter) || steps.some((entry) => (
@@ -109,7 +117,7 @@ export const planLetters = ({ languageCode, pack, alphabet, children, childSessi
   const suggestedSet = new Set(suggested);
 
   return {
-    reason: 'ok',
+    reason: firstSession ? 'first_session' : 'ok',
     order,
     known,
     suggested,

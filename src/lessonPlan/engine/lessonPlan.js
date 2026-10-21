@@ -1,14 +1,20 @@
 import { ENGINE_VERSION } from './constants';
+import { sessionsByChild, windowSessions } from './history';
 import { planLetters, uniquePresentChildren } from './letters';
 
 export const computeLessonPlan = (input) => {
   const presentChildren = uniquePresentChildren(input?.presentChildren);
+  const childSessions = sessionsByChild(windowSessions(input?.sessions, {
+    programmeId: input?.programmeId,
+    academicYearStart: input?.academicYearStart,
+    today: input?.today,
+  }));
   const letters = planLetters({
     languageCode: input?.languageCode,
     pack: input?.pack,
     alphabet: input?.alphabet,
     children: presentChildren,
-    childSessions: () => [],
+    childSessions,
   });
 
   return {

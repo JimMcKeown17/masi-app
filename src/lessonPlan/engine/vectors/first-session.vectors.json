@@ -1,0 +1,540 @@
+{
+  "version": 1,
+  "defaults": {
+    "computeLessonPlan": {
+      "today": "2026-10-19",
+      "academicYearStart": "2026-01-14",
+      "programmeId": "p-lit",
+      "groupId": "g1",
+      "upNextGroupId": "g1",
+      "languageCode": "xh",
+      "pack": "xh-mini",
+      "alphabet": ["a","b","c","d","e","f","g","h","i","j","k","l","m","n","o","p","q","r","s","t","u","v","w","x","y","z"],
+      "isEcd": false,
+      "presentChildren": [],
+      "sessions": []
+    }
+  },
+  "cases": [
+    {
+      "name": "first session: every step-1 letter not yet known",
+      "spec": "§4.4, J5",
+      "fn": "computeLessonPlan",
+      "input": {
+        "presentChildren": [
+          { "id": "A", "readingLevel": null, "knownLetters": [], "historyComplete": true, "masteryComplete": true },
+          { "id": "B", "readingLevel": null, "knownLetters": [], "historyComplete": true, "masteryComplete": true }
+        ]
+      },
+      "expect": {
+        "reason": "first_session",
+        "suggested_letters": ["o","m","l","a"],
+        "review_letters": [],
+        "unlocked_letters": ["o","m","l","a"],
+        "known_letters": [],
+        "history_complete": true
+      }
+    },
+    {
+      "name": "first session with l already known suggests o m a",
+      "spec": "§4.4 (Zazi rev 4.1 §4.3)",
+      "fn": "computeLessonPlan",
+      "input": {
+        "presentChildren": [
+          {
+            "id": "A",
+            "readingLevel": null,
+            "knownLetters": [
+              "l"
+            ],
+            "historyComplete": true,
+            "masteryComplete": true
+          },
+          {
+            "id": "B",
+            "readingLevel": null,
+            "knownLetters": [
+              "l"
+            ],
+            "historyComplete": true,
+            "masteryComplete": true
+          }
+        ]
+      },
+      "expect": {
+        "reason": "first_session",
+        "suggested_letters": [
+          "o",
+          "m",
+          "a"
+        ],
+        "review_letters": [
+          "l"
+        ],
+        "unlocked_letters": [
+          "o",
+          "m",
+          "l",
+          "a"
+        ],
+        "known_letters": [
+          "l"
+        ]
+      }
+    },
+    {
+      "name": "step 1 already known: the normal rule",
+      "spec": "§4.4",
+      "fn": "computeLessonPlan",
+      "input": {
+        "presentChildren": [
+          {
+            "id": "A",
+            "readingLevel": null,
+            "knownLetters": [
+              "o",
+              "m",
+              "l",
+              "a"
+            ],
+            "historyComplete": true,
+            "masteryComplete": true
+          },
+          {
+            "id": "B",
+            "readingLevel": null,
+            "knownLetters": [
+              "o",
+              "m",
+              "l",
+              "a"
+            ],
+            "historyComplete": true,
+            "masteryComplete": true
+          }
+        ]
+      },
+      "expect": {
+        "reason": "ok",
+        "suggested_letters": [
+          "k",
+          "u"
+        ]
+      }
+    },
+    {
+      "name": "a lesson-plan session this year ends the first session",
+      "spec": "§4.4",
+      "fn": "computeLessonPlan",
+      "input": {
+        "presentChildren": [
+          {
+            "id": "A",
+            "readingLevel": null,
+            "knownLetters": [],
+            "historyComplete": true,
+            "masteryComplete": true
+          },
+          {
+            "id": "B",
+            "readingLevel": null,
+            "knownLetters": [],
+            "historyComplete": true,
+            "masteryComplete": true
+          }
+        ],
+        "sessions": [
+          {
+            "id": "s1",
+            "programme_id": "p-lit",
+            "session_date": "2026-03-02",
+            "created_at": "2026-03-02T08:00:00.000Z",
+            "children_ids": [
+              "A"
+            ],
+            "activities": {
+              "letters_focused": [],
+              "lesson": {
+                "version": 1,
+                "blends_done": [],
+                "books_read": []
+              }
+            }
+          }
+        ]
+      },
+      "expect": {
+        "reason": "ok",
+        "suggested_letters": [
+          "o",
+          "m"
+        ],
+        "review_letters": [
+          "l",
+          "a"
+        ],
+        "unlocked_letters": [
+          "o",
+          "m",
+          "l",
+          "a"
+        ]
+      }
+    },
+    {
+      "name": "an old-form session is not a lesson-plan session",
+      "spec": "§4.4",
+      "fn": "computeLessonPlan",
+      "input": {
+        "presentChildren": [
+          {
+            "id": "A",
+            "readingLevel": null,
+            "knownLetters": [],
+            "historyComplete": true,
+            "masteryComplete": true
+          },
+          {
+            "id": "B",
+            "readingLevel": null,
+            "knownLetters": [],
+            "historyComplete": true,
+            "masteryComplete": true
+          }
+        ],
+        "sessions": [
+          {
+            "id": "s1",
+            "programme_id": "p-lit",
+            "session_date": "2026-03-02",
+            "created_at": "2026-03-02T08:00:00.000Z",
+            "children_ids": [
+              "A"
+            ],
+            "activities": {
+              "letters_focused": [
+                "o"
+              ]
+            }
+          }
+        ]
+      },
+      "expect": {
+        "reason": "first_session"
+      }
+    },
+    {
+      "name": "F6 last year's lesson-plan session is ignored",
+      "spec": "§7.3, Review Focus 3",
+      "fn": "computeLessonPlan",
+      "input": {
+        "presentChildren": [
+          {
+            "id": "A",
+            "readingLevel": null,
+            "knownLetters": [],
+            "historyComplete": true,
+            "masteryComplete": true
+          },
+          {
+            "id": "B",
+            "readingLevel": null,
+            "knownLetters": [],
+            "historyComplete": true,
+            "masteryComplete": true
+          }
+        ],
+        "sessions": [
+          {
+            "id": "s1",
+            "programme_id": "p-lit",
+            "session_date": "2025-10-01",
+            "created_at": "2025-10-01T08:00:00.000Z",
+            "children_ids": [
+              "A"
+            ],
+            "activities": {
+              "letters_focused": [],
+              "lesson": {
+                "version": 1,
+                "blends_done": [],
+                "books_read": []
+              }
+            }
+          }
+        ]
+      },
+      "expect": {
+        "reason": "first_session"
+      }
+    },
+    {
+      "name": "another programme's lesson-plan session is ignored",
+      "spec": "§7.3",
+      "fn": "computeLessonPlan",
+      "input": {
+        "presentChildren": [
+          {
+            "id": "A",
+            "readingLevel": null,
+            "knownLetters": [],
+            "historyComplete": true,
+            "masteryComplete": true
+          },
+          {
+            "id": "B",
+            "readingLevel": null,
+            "knownLetters": [],
+            "historyComplete": true,
+            "masteryComplete": true
+          }
+        ],
+        "sessions": [
+          {
+            "id": "s1",
+            "programme_id": "p-num",
+            "session_date": "2026-03-02",
+            "created_at": "2026-03-02T08:00:00.000Z",
+            "children_ids": [
+              "A"
+            ],
+            "activities": {
+              "letters_focused": [],
+              "lesson": {
+                "version": 1,
+                "blends_done": [],
+                "books_read": []
+              }
+            }
+          }
+        ]
+      },
+      "expect": {
+        "reason": "first_session"
+      }
+    },
+    {
+      "name": "F8 a session dated after today is ignored",
+      "spec": "Review Focus 3",
+      "fn": "computeLessonPlan",
+      "input": {
+        "presentChildren": [
+          {
+            "id": "A",
+            "readingLevel": null,
+            "knownLetters": [],
+            "historyComplete": true,
+            "masteryComplete": true
+          },
+          {
+            "id": "B",
+            "readingLevel": null,
+            "knownLetters": [],
+            "historyComplete": true,
+            "masteryComplete": true
+          }
+        ],
+        "sessions": [
+          {
+            "id": "s1",
+            "programme_id": "p-lit",
+            "session_date": "2026-10-20",
+            "created_at": "2026-10-20T08:00:00.000Z",
+            "children_ids": [
+              "A"
+            ],
+            "activities": {
+              "letters_focused": [],
+              "lesson": {
+                "version": 1,
+                "blends_done": [],
+                "books_read": []
+              }
+            }
+          }
+        ]
+      },
+      "expect": {
+        "reason": "first_session"
+      }
+    },
+    {
+      "name": "an uncovered child keeps history incomplete: no first session",
+      "spec": "§7.3",
+      "fn": "computeLessonPlan",
+      "input": {
+        "presentChildren": [
+          {
+            "id": "A",
+            "readingLevel": null,
+            "knownLetters": [],
+            "historyComplete": true,
+            "masteryComplete": true
+          },
+          {
+            "id": "B",
+            "readingLevel": null,
+            "knownLetters": [],
+            "historyComplete": false,
+            "masteryComplete": true
+          }
+        ]
+      },
+      "expect": {
+        "reason": "ok",
+        "history_complete": false,
+        "suggested_letters": [
+          "o",
+          "m"
+        ]
+      }
+    },
+    {
+      "name": "a child added for the day counts like any present child",
+      "spec": "C18",
+      "fn": "computeLessonPlan",
+      "input": {
+        "presentChildren": [
+          {
+            "id": "A",
+            "readingLevel": null,
+            "knownLetters": [],
+            "historyComplete": true,
+            "masteryComplete": true
+          },
+          {
+            "id": "X",
+            "readingLevel": null,
+            "knownLetters": [
+              "o",
+              "m",
+              "l",
+              "a"
+            ],
+            "historyComplete": true,
+            "masteryComplete": true
+          }
+        ],
+        "sessions": [
+          {
+            "id": "s1",
+            "programme_id": "p-lit",
+            "session_date": "2026-10-01",
+            "created_at": "2026-10-01T08:00:00.000Z",
+            "children_ids": [
+              "X"
+            ],
+            "activities": {
+              "letters_focused": [],
+              "lesson": {
+                "version": 1,
+                "blends_done": [],
+                "books_read": []
+              }
+            }
+          }
+        ]
+      },
+      "expect": {
+        "reason": "ok",
+        "present_child_ids": [
+          "A",
+          "X"
+        ],
+        "known_letters": [],
+        "suggested_letters": [
+          "o",
+          "m"
+        ]
+      }
+    },
+    {
+      "name": "R4 a lesson object without blends still marks a lesson-plan session",
+      "spec": "Review Focus 4",
+      "fn": "computeLessonPlan",
+      "input": {
+        "presentChildren": [
+          {
+            "id": "A",
+            "readingLevel": null,
+            "knownLetters": [],
+            "historyComplete": true,
+            "masteryComplete": true
+          },
+          {
+            "id": "B",
+            "readingLevel": null,
+            "knownLetters": [],
+            "historyComplete": true,
+            "masteryComplete": true
+          }
+        ],
+        "sessions": [
+          {
+            "id": "s1",
+            "programme_id": "p-lit",
+            "session_date": "2026-03-02",
+            "created_at": "2026-03-02T08:00:00.000Z",
+            "children_ids": [
+              "A"
+            ],
+            "activities": {
+              "letters_focused": [],
+              "lesson": {
+                "version": 1
+              }
+            }
+          }
+        ]
+      },
+      "expect": {
+        "reason": "ok",
+        "suggested_letters": [
+          "o",
+          "m"
+        ]
+      }
+    },
+    {
+      "name": "R5 a non-object lesson value is not a lesson-plan session",
+      "spec": "Review Focus 4",
+      "fn": "computeLessonPlan",
+      "input": {
+        "presentChildren": [
+          {
+            "id": "A",
+            "readingLevel": null,
+            "knownLetters": [],
+            "historyComplete": true,
+            "masteryComplete": true
+          },
+          {
+            "id": "B",
+            "readingLevel": null,
+            "knownLetters": [],
+            "historyComplete": true,
+            "masteryComplete": true
+          }
+        ],
+        "sessions": [
+          {
+            "id": "s1",
+            "programme_id": "p-lit",
+            "session_date": "2026-03-02",
+            "created_at": "2026-03-02T08:00:00.000Z",
+            "children_ids": [
+              "A"
+            ],
+            "activities": {
+              "letters_focused": [],
+              "lesson": "x"
+            }
+          }
+        ]
+      },
+      "expect": {
+        "reason": "first_session"
+      }
+    }
+  ]
+}
