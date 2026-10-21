@@ -614,6 +614,45 @@ const runSessionGroupCases = (databaseUrl) => {
     [moveSession, 'Identity unchanged|t|t', moveSession, 'Identity omitted|t|t']
   );
 
+  const ownedGroupSetupSql = `
+    INSERT INTO public.groups (id, name, programme_id, class_id, created_by)
+    VALUES ('${G4}', 'Fixed programme group', ${LITERACY}, '${CLASS}', '${EA_A}');
+    INSERT INTO public.group_ea_assignments (id, group_id, ea_user_id, programme_id, created_by)
+    VALUES ('${G4_ASSIGNMENT}', '${G4}', '${EA_A}', ${LITERACY}, '${EA_A}');
+  `;
+  const groupProgrammePatchSql = `UPDATE public.groups SET programme_id = ${NUMERACY} WHERE id = '${G4}'`;
+  accepts(
+    'group-programme-change-refused',
+    asActor(EA_A, `
+      ${refusedStatementSql(`${groupProgrammePatchSql};`, '23514')}
+      SELECT g.programme_id = ${LITERACY}, gea.programme_id = ${LITERACY}
+      FROM public.groups g JOIN public.group_ea_assignments gea ON gea.group_id = g.id
+      WHERE g.id = '${G4}' AND gea.id = '${G4_ASSIGNMENT}';
+      -- Only the trigger is removed; the same EA PATCH must still pass the unchanged RLS.
+      RESET ROLE;
+      DROP TRIGGER groups_prevent_programme_change ON public.groups;
+      SET LOCAL ROLE authenticated;
+      ${groupProgrammePatchSql} RETURNING id;
+      SELECT g.programme_id = ${NUMERACY}, gea.programme_id = ${LITERACY}
+      FROM public.groups g JOIN public.group_ea_assignments gea ON gea.group_id = g.id
+      WHERE g.id = '${G4}' AND gea.id = '${G4_ASSIGNMENT}';
+    `, ownedGroupSetupSql),
+    ['t|t', G4, 't|t']
+  );
+  accepts(
+    'group-edit-keeping-programme-allowed',
+    asActor(EA_A, `
+      ${updateByIdSql('groups', `name = 'Renamed group', programme_id = ${LITERACY}`, G4)}
+      SELECT name, programme_id = ${LITERACY} FROM public.groups WHERE id = '${G4}';
+      ${updateByIdSql('groups', 'class_id = NULL', G4)}
+      ${updateByIdSql('groups', `archived_at = pg_catalog.now(), archived_by_user_id = '${EA_A}', archive_reason = 'Harness archive'`, G4)}
+      ${updateByIdSql('groups', 'archived_at = NULL, archived_by_user_id = NULL, archive_reason = NULL', G4)}
+      SELECT class_id IS NULL, archived_at IS NULL, programme_id = ${LITERACY}
+      FROM public.groups WHERE id = '${G4}';
+    `, ownedGroupSetupSql),
+    [G4, 'Renamed group|t', G4, G4, G4, 't|t|t']
+  );
+
   return passed;
 };
 

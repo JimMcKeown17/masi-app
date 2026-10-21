@@ -127,6 +127,18 @@ describe('session group authorization Supabase migration', () => {
     expect(sql).not.toMatch(/revoke[^;]*on public\.groups from[^;]*service_role/i);
   });
 
+  test('keeps a group programme immutable with an idempotent identity trigger', () => {
+    const sql = normalizedSql();
+    const match = sql.match(/create or replace function private\.prevent_group_programme_change\(\)([\s\S]*?)\$\$;/i);
+    expect(match).not.toBeNull();
+    expect(match[1]).toMatch(/returns trigger language plpgsql set search_path = ''/i);
+    expect(match[1]).toMatch(/if new\.programme_id is distinct from old\.programme_id then/i);
+    expect(match[1]).toMatch(/raise exception 'groups programme_id cannot be changed after insert' using errcode = '23514';/i);
+    expect(match[1]).toMatch(/end if; return new;/i);
+    expect(sql).toMatch(/revoke execute on function private\.prevent_group_programme_change\(\) from public, anon, authenticated;/i);
+    expect(sql).toMatch(/drop trigger if exists groups_prevent_programme_change on public\.groups; create trigger groups_prevent_programme_change before update on public\.groups for each row execute function private\.prevent_group_programme_change\(\);/i);
+  });
+
   test('keeps the session programme and group immutable with an idempotent identity trigger', () => {
     const sql = normalizedSql();
     const match = sql.match(/create or replace function private\.prevent_session_identity_change\(\)([\s\S]*?)\$\$;/i);

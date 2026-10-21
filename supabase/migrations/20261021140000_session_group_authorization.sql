@@ -137,5 +137,30 @@ create trigger sessions_prevent_identity_change
   before update on public.sessions
   for each row execute function private.prevent_session_identity_change();
 
+-- C19 reads the group's own programme. Keep that authorization input fixed even
+-- when a raw client has UPDATE authority through group ownership/assignment.
+create or replace function private.prevent_group_programme_change()
+returns trigger
+language plpgsql
+set search_path = ''
+as $$
+begin
+  if new.programme_id is distinct from old.programme_id then
+    raise exception 'groups programme_id cannot be changed after insert'
+      using errcode = '23514';
+  end if;
+
+  return new;
+end;
+$$;
+
+revoke execute on function private.prevent_group_programme_change()
+  from public, anon, authenticated;
+
+drop trigger if exists groups_prevent_programme_change on public.groups;
+create trigger groups_prevent_programme_change
+  before update on public.groups
+  for each row execute function private.prevent_group_programme_change();
+
 RESET statement_timeout;
 RESET lock_timeout;

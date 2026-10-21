@@ -16,6 +16,82 @@ import {
 const FIXED_NOW = new Date('2026-05-21T08:00:00.000Z');
 
 describe('groupsRepository', () => {
+  describe('fixed group programme', () => {
+    test.each([
+      ['updateGroup', 'synced'], ['updateGroup', 'pending'],
+      ['saveGroup', 'synced'], ['saveGroup', 'pending'],
+    ])('%s refuses a programme change on a %s group without changing rows or outbox', async (method, status) => {
+      const db = await createMigratedDatabase(runMigrations);
+      try {
+        await seedCoreData(db);
+        const repository = createGroupsRepository({ database: db });
+        const group = {
+          id: 'fixed-group', name: 'Original group', programme_id: 'programme-a',
+          class_id: 'class-1', created_by: 'user-1', sync_status: status,
+        };
+        await repository.saveGroup(group);
+        const snapshot = async () => Promise.all(['groups', 'group_ea_assignments', 'sync_outbox']
+          .map(table => db.getAllAsync(`select * from ${table} order by id`)));
+        const before = await snapshot();
+        let caught;
+        try {
+          const updates = { programme_id: 'programme-b', name: 'Refused change' };
+          if (method === 'updateGroup') await repository.updateGroup(group.id, updates);
+          else await repository.saveGroup({ ...group, ...updates, sync_status: 'pending' });
+        } catch (error) { caught = error; }
+        expect(caught).toBeInstanceOf(Error);
+        expect(caught?.message).toBe('groups.programme_id cannot be changed after insert');
+        expect(await snapshot()).toEqual(before);
+      } finally {
+        await db.closeAsync();
+      }
+    });
+
+    test.each(['updateGroup', 'saveGroup'])('%s accepts an unchanged programme', async (method) => {
+      const db = await createMigratedDatabase(runMigrations);
+      try {
+        await seedCoreData(db);
+        const repository = createGroupsRepository({ database: db });
+        const group = {
+          id: 'fixed-group', name: 'Original group', programme_id: 'programme-a',
+          class_id: 'class-1', created_by: 'user-1', synced: true,
+        };
+        await repository.saveGroup(group);
+        const updates = { programme_id: 'programme-a', name: 'Renamed group' };
+        const result = method === 'updateGroup'
+          ? await repository.updateGroup(group.id, updates)
+          : await repository.saveGroup({ ...group, ...updates, synced: false });
+        expect(result).toBe(true);
+        expect(await db.getFirstAsync('select name, programme_id from groups where id = ?', group.id))
+          .toEqual({ name: 'Renamed group', programme_id: 'programme-a' });
+        const rows = await db.getAllAsync("select operation, payload from sync_outbox where table_name = 'groups'");
+        expect(rows).toHaveLength(1);
+        expect(rows[0].operation).toBe(method === 'updateGroup' ? 'update' : 'insert');
+        expect(JSON.parse(rows[0].payload)).toEqual(expect.objectContaining(updates));
+      } finally {
+        await db.closeAsync();
+      }
+    });
+
+    test('a name-only edit keeps the programme and enqueues its update', async () => {
+      const db = await createMigratedDatabase(runMigrations);
+      try {
+        await seedCoreData(db);
+        const repository = createGroupsRepository({ database: db });
+        await repository.saveGroup({
+          id: 'fixed-group', name: 'Original group', programme_id: 'programme-a', created_by: 'user-1', synced: true,
+        });
+        expect(await repository.updateGroup('fixed-group', { name: 'Renamed only' })).toBe(true);
+        expect(await db.getFirstAsync("select name, programme_id from groups where id = 'fixed-group'"))
+          .toEqual({ name: 'Renamed only', programme_id: 'programme-a' });
+        expect(await db.getAllAsync("select table_name, operation from sync_outbox"))
+          .toEqual([{ table_name: 'groups', operation: 'update' }]);
+      } finally {
+        await db.closeAsync();
+      }
+    });
+  });
+
   test('editing a full mapped synced group ignores caller sync bookkeeping and queues one update', async () => {
     const db = await createMigratedDatabase(runMigrations);
 

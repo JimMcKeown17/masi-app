@@ -1340,6 +1340,56 @@ gate). The dry run listed only this file against `segygjzpujphwvrubusm`. Verifie
   (0.514 s), exit 0. `git diff --check` passed. The migration's SHA-256 was identical before and
   after this follow-up; only the harness and this existing B2 log subsection were edited.
 
+- **2026-10-21 — B2 adversarial review, round 2: a group's Programme is immutable.** The controller
+  confirmed round 1 and found the final mutable persisted input to the held-group check:
+  `groups.programme_id`. Group ownership/assignment permits a raw-client PATCH without requiring
+  staff assignment to the proposed Programme. Such a change could strand a queued A-session
+  after inserts are acknowledged, or put uploaded A-history beneath a B-group. Extended the same
+  unapplied B2 migration with `prevent_group_programme_change()` / `groups_prevent_programme_change`:
+  BEFORE UPDATE, `IS DISTINCT FROM`, clear `23514`, empty search path, direct EXECUTE revoked and
+  idempotent drop/create. Name, class and archive/restore updates keep their existing checks.
+- Added one transaction-local assertion shared by `groupsRepository.updateGroup` and the
+  existing-row `saveGroup` path. A Programme mismatch throws
+  `groups.programme_id cannot be changed after insert` before writes/enqueues. Synced and pending
+  rows are covered, including a nonempty pre-existing outbox; group, assignment and outbox
+  snapshots stay unchanged after refusal. Equal Programme and name-only writes still work.
+  The existing group repository test uses better-sqlite3 directly; added it to the integration
+  testMatch so the required real-SQLite regressions also run in the normal integration gate.
+- Wrote both PostgreSQL cases first, appended after all prior cases:
+  `group-programme-change-refused` checks refusal and unchanged group/assignment Programme, then
+  drops only the trigger as postgres inside the rolled-back case and requires the identical PATCH
+  to succeed as the same EA. `group-edit-keeping-programme-allowed` checks rename with unchanged
+  Programme, class changes and archive/restore. The EA has only its existing active A staff
+  assignment throughout; no simultaneous-active-Programme fixture is used. **Controller PostgreSQL (local
+  Docker PG17, port 65433):** RED against HEAD's migration failed in the executed
+  `group-programme-change-refused` assertion ("Expected SQLSTATE 23514, but the statement was
+  allowed"); GREEN passed `session-group` 36 cases, including the trigger-dropped control, and every
+  other harness (`history-authorization` 31, `upload-contract` 6 + 34 + 22 + 39, `organisation-label`
+  23, `support-incident` 18, `assessment-results` 53, `ea-access` 43).
+- Round 2 RED, all commands under
+  `PATH="$HOME/.nvm/versions/node/v20.19.4/bin:$PATH"`:
+  `npx jest __tests__/sessionGroupAuthorizationMigration.test.js` exited 1 with
+  1 failed / 15 passed tests (16 total, 1 suite; 0.621 s): the group Programme trigger was absent.
+  `npm run test:integration -- __tests__/groupsRepository.test.js` exited 1 with
+  4 failed / 15 passed tests (19 total, 1 suite; 3.583 s): both update/re-save paths accepted the
+  forbidden change for synced and pending groups. Positive equal-Programme/name-only cases
+  passed before implementation. Same-command GREENs exited 0: static 1 suite / 16 tests
+  (0.488 s); group repository 1 suite / 19 tests (1.521 s).
+- `node --check scripts/session-group-postgres-harness.cjs` passed, exit 0.
+  Focused `npm run test:integration -- __tests__/groupsRepository.test.js __tests__/sessionsRepository.test.js __tests__/sessionGroupSync.test.js`
+  passed 3 suites / 45 tests (3.688 s), exit 0. Updated the groups table contract and B2's complete
+  input/evidence fences: immutable session group/Programme, immutable group Programme, immutable
+  assignment identity, revoked group/assignment DELETE, server-derived actor identity; assignment
+  Programme remains deliberately excluded from the helper, and ending an assignment still does
+  not erase C19 authority. No new migration, local schema version, sync-engine behavior, package,
+  plan/spec or Git write was introduced. No hosted, PostgreSQL, EAS, device or PR work was run.
+- Round 2 final gates (same Node 20 PATH): `npx jest --silent --maxWorkers=25%` passed
+  350 suites / 4,250 tests (87.704 s), exit 0; `npm run test:integration --silent` passed
+  55 suites / 596 tests (68.559 s), exit 0. No unrelated failures or isolated reruns occurred.
+  `git diff --check` and the final harness syntax recheck passed. Eight scoped files changed:
+  the existing migration/harness, group repository and its tests, static migration test,
+  integration testMatch, contract map and this B2 verification subsection.
+
 ## Decision Register
 
 | Date | Decision | Rationale | Revisit Trigger |
