@@ -44,6 +44,20 @@ The registry imports JSON files statically. `BUNDLED_PACKS` is a frozen array, e
 
 `getPack` and `getPackById` return `null` for unknown or missing keys rather than throwing, and they check own properties only. `getPackById` resolves any bundled release version, including one that is no longer current. A preview pack is available only with `{ allowPreview: true }`; other values do not opt in. `getPack` falls back to the current release pack when no preview pack exists for the code. Options may be omitted or `null`.
 
+## Release and preview
+
+Preview content may contain unreviewed candidate words, so it is off by default. Only the literal environment value `MASI_PREVIEW_CONTENT=1` enables the setting; `app.config.js` exposes the result as the boolean `extra.previewContent`. Never set `MASI_PREVIEW_CONTENT` in an EAS environment. Use a local developer shell or the dedicated `preview-content` build profile instead.
+
+Two checks enforce lesson-plan C12. At build time, `resolvePreviewContentBuildConfig` refuses the setting when `EAS_BUILD_PROFILE` is `pilot` or `production`. At runtime, `isPreviewContentEnabled()` requires `Constants.expoConfig.extra.previewContent === true` and rejects native `Updates.channel` values `preview` and `production`. It returns `false` if reading runtime configuration fails. Callers pass `{ allowPreview: isPreviewContentEnabled() }` to `getPack` and `getPackById`.
+
+Both checks are needed because an OTA evaluates app config without the build server's `EAS_BUILD_PROFILE`. An OTA published from a shell with the setting could therefore carry `extra.previewContent: true`. The runtime check still rejects it on field-channel phones: `Updates.channel` comes from the native build, and an OTA cannot change it. In particular, pilot builds use the `preview` channel and must keep release content only. A missing, null or empty channel does not opt in by itself; the boolean setting must also be true.
+
+Candidate-word cloud test builds use `--profile preview-content`. This profile uses the `preview` environment, internal distribution, automatic build-number increments and an Android APK. Its environment variables equal the regular `preview` profile's variables plus `MASI_PREVIEW_CONTENT=1`, and it has no update channel. For example:
+
+```bash
+npx eas-cli@latest build -p android --profile preview-content
+```
+
 ## Adopting a books release
 
 For track D, copy `integrated-sequence-<name>-v<N>.json` unchanged into `src/lessonPlan/packs/`. Add its static import to `index.js` and include the imported pack in the list used to build `BUNDLED_PACKS`. Point `CURRENT_PACK_IDS.release[code]` at its in-file id, keeping older release packs bundled. Compute the new file's SHA-256 and append its id and hash to `RELEASE_PACK_SHA256` in `__tests__/lessonPlanPacks.test.js`.
