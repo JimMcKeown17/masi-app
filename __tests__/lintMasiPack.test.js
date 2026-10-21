@@ -97,6 +97,55 @@ test('two lines on one page join with a newline', () => {
   expect(lintMasiPack(pack)).toEqual({ ok: true, errors: [] });
 });
 
+test.each([
+  ['zero pages', [], []],
+  ['an empty page', [''], [[{ speaker: 'malo', text: '' }]]],
+  ['a whitespace-only page', [' \t\n '], [[{ speaker: 'malo', text: ' \t\n ' }]]],
+  ['a punctuation-only page', ['— … !'], [[{ speaker: 'malo', text: '— … !' }]]],
+  ['an empty page with no lines', [''], [[]]],
+])('a non-retired reader rejects %s', (_name, pages, pageLines) => {
+  const pack = validPack();
+  pack.readers['xh-test-r01'].pages = pages;
+  pack.reader_details['xh-test-r01'].page_lines = pageLines;
+  if (pages.length === 0 || pageLines.every(page => page.length === 0)) {
+    pack.reader_details['xh-test-r01'].speakers = {};
+  }
+  const result = lintMasiPack(pack);
+  expect(result.ok).toBe(false);
+  expect(result.errors).toContain('reader_empty: readers["xh-test-r01"].pages must contain at least one normalized token for a non-retired reader.');
+});
+
+test.each([
+  [[], []],
+  [[''], [[]]],
+])('a retired empty reader passes with pages %j', (pages, pageLines) => {
+  const pack = validPack();
+  pack.readers['xh-test-r01'].pages = pages;
+  pack.reader_details['xh-test-r01'] = { retired: true, speakers: {}, page_lines: pageLines };
+  expect(lintMasiPack(pack)).toEqual({ ok: true, errors: [] });
+});
+
+test('a non-retired reader needs readable content on at least one page, not every page', () => {
+  const pack = validPack();
+  pack.readers['xh-test-r01'].pages = ['', 'Molo!'];
+  pack.reader_details['xh-test-r01'].page_lines = [[], [{ speaker: 'malo', text: 'Molo!' }]];
+  expect(lintMasiPack(pack)).toEqual({ ok: true, errors: [] });
+});
+
+test.each([
+  ['no pages of lines', []],
+  ['an empty page of lines', [[]]],
+  ['an empty text line', [[{ speaker: 'malo', text: '' }]]],
+  ['a whitespace-only text line', [[{ speaker: 'malo', text: ' \t\n ' }]]],
+])('a non-retired reader rejects page_lines with %s', (_name, pageLines) => {
+  const pack = validPack();
+  pack.readers['xh-test-r01'].pages = ['Molo!'];
+  pack.reader_details['xh-test-r01'].page_lines = pageLines;
+  const result = lintMasiPack(pack);
+  expect(result.ok).toBe(false);
+  expect(result.errors).toContain('reader_empty: reader_details["xh-test-r01"].page_lines must contain at least one non-empty text line for a non-retired reader.');
+});
+
 test.each([null, undefined, [], 'pack', 42, {}])('never throws on %p', input => {
   expect(() => lintMasiPack(input)).not.toThrow();
   expect(lintMasiPack(input).ok).toBe(false);

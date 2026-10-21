@@ -1,4 +1,4 @@
-import { lintSequence, analyzeToken, normalizeToken } from '../../utils/decodability/index.js';
+import { lintSequence, analyzeToken, normalizeToken, tokenizeText } from '../../utils/decodability/index.js';
 
 export const PACK_LANGUAGE_CODES = Object.freeze({ isixhosa: 'xh', english: 'en', afrikaans: 'af' });
 export const PACK_CHANNELS = Object.freeze(['release', 'preview']);
@@ -118,6 +118,15 @@ function lintReadablePack(pack, errors) {
       errors.push(`reader_details_shape: reader_details["${readerId}"] requires boolean retired, speakers with non-empty name and colour, and pages of speaker/text lines.`);
     }
     const reader = hasOwn(readers, readerId) ? readers[readerId] : null;
+    if (detail.retired !== true && isRecord(reader)) {
+      if (isStringArray(reader.pages) && !reader.pages.some(page => tokenizeText(page).length > 0)) {
+        errors.push(`reader_empty: readers["${readerId}"].pages must contain at least one normalized token for a non-retired reader.`);
+      }
+      if (isPageLines(detail.page_lines)
+        && !detail.page_lines.some(page => page.some(line => line.text.trim().length > 0))) {
+        errors.push(`reader_empty: reader_details["${readerId}"].page_lines must contain at least one non-empty text line for a non-retired reader.`);
+      }
+    }
     if (isPageLines(detail.page_lines) && isRecord(reader) && isStringArray(reader.pages)
       && (detail.page_lines.length !== reader.pages.length
         || detail.page_lines.some((page, index) => page.map(line => line.text).join('\n') !== reader.pages[index]))) {

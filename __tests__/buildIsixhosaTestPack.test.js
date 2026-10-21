@@ -217,6 +217,15 @@ test('runCli refuses duplicate step ids in its final lint and preserves existing
     .toThrow(/step_id_duplicate: letter_steps\[11\]\.step/);
   expect(fs.readFileSync(out, 'utf8')).toBe('existing output');
 });
+test('runCli refuses an empty reader in its final lint and preserves existing output', () => {
+  const input = fixture();
+  input.books[0].pages = [];
+  const booksRepo = writeFixture(input); const out = path.join(booksRepo, 'output.json');
+  fs.writeFileSync(out, 'existing output');
+  expect(() => runCli(['--books-repo', booksRepo, '--out', out, '--version', '1'], { readSource: () => sourceCommit }))
+    .toThrow(/reader_empty: readers\["xh-int-v1-r01"\]\.pages/);
+  expect(fs.readFileSync(out, 'utf8')).toBe('existing output');
+});
 test.each(['checker step', 'lint'])('runCli leaves an existing output unchanged on %s failure', failure => {
   const input = fixture();
   if (failure === 'checker step') input.wordbankRows[1].decodable_step = '2';
