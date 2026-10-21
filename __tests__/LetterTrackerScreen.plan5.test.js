@@ -56,8 +56,13 @@ describe('LetterTrackerScreen Plan 5 behavior', () => {
       triggerBackgroundSync,
     });
     assessmentsRepository.latestLetterResult.mockResolvedValue(null);
-    masteryRepository.getLetterMastery.mockResolvedValue([]);
-    masteryRepository.setLetterMastery.mockResolvedValue({ confirmed: true });
+    let storedRecords = [];
+    masteryRepository.getLetterMastery.mockImplementation(async () => storedRecords);
+    masteryRepository.setLetterMastery.mockImplementation(async ({ childId, letter, language, confirmed }) => {
+      const record = { child_id: childId, letter, language, confirmed };
+      storedRecords = [record];
+      return record;
+    });
     refreshSyncStatus.mockResolvedValue({ unsyncedCount: 1 });
   });
 
@@ -79,7 +84,6 @@ describe('LetterTrackerScreen Plan 5 behavior', () => {
     expect(refreshSyncStatus).not.toHaveBeenCalled();
     expect(triggerBackgroundSync).not.toHaveBeenCalled();
 
-    masteryRepository.setLetterMastery.mockResolvedValueOnce({ confirmed: true });
     fireEvent.press(getByLabelText('a, not mastered'));
 
     await waitFor(() => expect(queryByText('1 / 26 letters mastered')).toBeTruthy());

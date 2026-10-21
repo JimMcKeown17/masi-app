@@ -460,6 +460,20 @@ its queued stamp is still ahead of now; a later explicitly timed sheet tap is sa
 delay. The queued stamp counts as save-time now, which is later than that tap's time, so the
 sheet save is kept back until the queued correction uploads. No extra ordering mechanism is added.
 
+**Accepted risk A3 (controller, review round 1):** phone B, an hour slow, receives phone A's
+10:00 winner through a superseded acknowledgement. At real 10:01 the EA un-confirms on B,
+stamped 09:01. The server keeps 09:01 in that correction's receipt; the
+`(changed_at, correction_id)` comparison keeps A's 10:00 winner, and B's finalization restores
+`confirmed = true`. The un-confirm is silently reverted; repeated attempts revert until B's
+slow clock passes the winner's time. This is accepted for the current contract as a rare
+combination: two phones correcting the same child, letter and language, with one clock slow
+by more than the real gap between corrections. Fast clocks are already clamped. The root fix
+changes the approved server contract: carry the observed winner's correction id as a causal
+base in `set_letter_mastery`, and accept a correction whose base equals the current winner.
+**Revisit trigger:** a field report of a tracker mark that reverts after sync, or two EAs routinely
+co-delivering one child. The controller records this risk and raises it with Jim; no causal-base
+server change is included in this review fix.
+
 **Send and parse.** `toSetLetterMasteryArgs` selects only
 `p_correction_id, p_child_id, p_letter, p_language, p_confirmed, p_changed_at`.
 Required fields, boolean confirmation and parseable change time are checked locally; malformed
@@ -507,8 +521,11 @@ then displays the returned confirmation and preserves the existing sync nudges/w
 The panel's `useLetterMasterySyncRefresh` watches newly published sync results that contain
 `tableResults.letter_mastery` (including refusals/skips), with the mount result already seen.
 It re-reads in the background without replacing the grid with a spinner. A load-generation
-counter permits only the latest read to publish and clear loading. Results for other tables
-and a changed callback alone do not re-read. `LetterTrackerBottomSheet` deliberately keeps
+counter permits only the latest read to publish and clear loading. A tap invalidates outstanding
+reads, and reads cannot publish while its setter is in flight. After a successful setter, the
+panel publishes the returned confirmation and starts one background re-read to converge with
+storage; a later tap invalidates that read too. Results for other tables and a changed callback
+alone do not cause a sync-triggered re-read. `LetterTrackerBottomSheet` deliberately keeps
 its open-time baseline while open: re-reading beneath its pending map can undo a cancelling
 tap (accepted risk A1). Reopening reads the new truth. Plan 3 still needs a pull signal for
 the panel only.

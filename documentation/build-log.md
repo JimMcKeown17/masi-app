@@ -1539,6 +1539,63 @@ are skipped: no PostgreSQL rerun, hosted wipe/apply/fixtures, Supabase CLI, EAS,
 Hosted state is unchanged by Task 6. Local suites are fully GREEN; hosted/device proof, Plan 3 pull
 and accepted risks A1/A2 remain open.
 
+**AR Plan 2 adversarial review round 1 — panel read/tap ordering and accepted risk A3.**
+The controller reviewed Task 6 at `f88d04e`. Finding 2 reproduced through the panel and the
+real SQLite mastery repository: a pre-tap snapshot released after the tap committed changed
+the tile back to unconfirmed, and the next tap wrote true again (`[true, true]`). The panel now
+invalidates outstanding reads at tap start, refuses read publication while the setter is in
+flight, publishes the returned record, then starts one background re-read. A later tap also
+invalidates that post-save read. The existing pending-write guard, assessment locks, sync
+nudges and exact save-error copy remain covered.
+
+Four native-SQLite panel regressions cover the late pre-tap snapshot and opposite next
+correction (`[true, false]`), publication of a read started after commit, suppression of a read
+finishing during a pending tap, and invalidation of a post-save read by the next tap. Registered
+the panel suite in `jest.integration.config.js` so this native coverage runs in both test tiers.
+Panel mocks now retain saved records and the toggle test expects the mount read plus one read
+per successful tap. The full unit run exposed the same stale mock in
+`LetterTrackerScreen.plan5.test.js`: its setter claimed success but every read returned an
+empty database. The file failed alone too; its mock now retains the saved record. No production
+screen, repository, sync, server or schema change was needed beyond the panel fix.
+
+Finding 1 is **accepted risk A3**, recorded directly after A2 in the contract map and in the Bug
+And Gap Register. B's slow-clock un-confirm can lose to A's already-observed winner and silently
+revert after sync until B's clock passes the winner's time. The controller accepts this rare
+case for the current contract and raises it with Jim. The causal-base server-contract change is
+deferred; its explicit revisit trigger is a field report of a tracker mark that reverts after
+sync, or two EAs routinely co-delivering one child. Fast clocks are already clamped. This is
+a risk record, not a claim that Jim approved it or that the root problem was fixed.
+
+All commands below use `PATH="$HOME/.nvm/versions/node/v20.19.4/bin:$PATH"`; no dependencies or
+network access were used.
+
+| Gate / command | Result |
+| --- | --- |
+| RED: `npx jest __tests__/LetterMasteryPanel.test.js` | Exit 1: 1 failed suite; 5 failed / 12 passed tests (17 total), 6.900 s. The real-repository race produced `tileStillShowsCommit: false` and corrections `[true, true]`; the other failures cover missing post-save reads and publication during a pending write |
+| GREEN: same panel command | Exit 0: 1 suite / all 17 tests passed, 3.646 s |
+| `npx jest __tests__/LetterMasteryPanel.test.js __tests__/masteryRepository.test.js __tests__/letterMasteryCorrectionSync.test.js` | Exit 0: 3 suites / all 81 tests passed, 3.988 s |
+| `npm run test:integration -- __tests__/LetterMasteryPanel.test.js __tests__/masteryRepository.test.js __tests__/letterMasteryCorrectionSync.test.js` | Exit 0: 3 suites / all 81 tests passed, 12.254 s |
+| First `npx jest --silent --maxWorkers=25%` | Exit 1: 349 passed / 1 failed suites (350 total); 4,322 passed / 1 failed tests (4,323 total), 69.299 s. Only the tracker screen retry fixture failed after the new post-save read |
+| Isolated rerun: `npx jest __tests__/LetterTrackerScreen.plan5.test.js` | Exit 1: 1 failed suite / 1 failed test, 2.690 s; deterministic stale mock, not a parallel-load timeout |
+| After fixture correction: `npx jest __tests__/LetterMasteryPanel.test.js __tests__/masteryRepository.test.js __tests__/letterMasteryCorrectionSync.test.js __tests__/LetterTrackerScreen.plan5.test.js` | Exit 0: 4 suites / all 82 tests passed, 4.965 s |
+| Final `npx jest --silent --maxWorkers=25%` | Exit 0: all 350 suites / 4,323 tests passed, 65.327 s |
+| `npm run test:integration --silent` | Exit 0: all 60 suites / 682 tests passed, 57.749 s |
+| `git diff --check` | Exit 0 |
+
+Against the Task 6 checkpoint at `f88d04e`, unit totals remain 350 suites and gain four tests
+(4,319 → 4,323); integration gains the newly registered panel suite and its 17 tests
+(59 / 665 → 60 / 682). Against controller Task 0 on `7a831fb`, totals are +3 unit suites / +120
+unit tests and +8 integration suites / +130 integration tests. Against the labelled Task 5
+checkpoint, totals are unchanged at 350 unit suites with +13 tests, and +3 integration suites /
++37 tests. The Task 0 and Task 5 comparisons include AF and earlier AR Plan 2 changes; they are
+not the delta from this review fix. Both final full suites are GREEN.
+
+Test-only adaptations beyond the requested panel regressions are the integration-suite
+registration and the tracker-screen fixture correction described above; no assertion about
+saved state was weakened. No plan/spec edits, Git writes, hosted actions, PostgreSQL harness
+rerun, EAS build, device check or PR action. Accepted risks A1–A3 and the existing hosted/device
+and Plan 3 pull gates remain open.
+
 ### 2026-10-21 — Lesson-plan AF: Afrikaans, release gate (controller)
 
 **What shipped on `feat/lesson-plan-af`** (base `7a831fb`):
@@ -1748,6 +1805,7 @@ iOS build. Results will be recorded here.
 
 | Date | Gap/Bug | Resolution | Reuse Note |
 | --- | --- | --- | --- |
+| 2026-10-21 | **AR Plan 2 accepted risk A3 — slow-clock correction after observing another phone's winner.** B is an hour slow and receives A's 10:00 winner via a superseded acknowledgement. At real 10:01 B un-confirms at 09:01; its receipt keeps 09:01, ordering retains A's winner, and B finalizes back to confirmed true. The un-confirm is silently reverted and repeats until the slow clock passes the winner's time. | **Accepted by the controller in adversarial review round 1; controller to raise with Jim; not fixed here.** Rare combination of two phones correcting the same child/letter/language plus a clock slow beyond the real correction gap; fast clocks are already clamped. Root revisit: carry the observed winner's correction id as a causal base in set_letter_mastery and accept a correction whose base equals the current winner. This changes the approved server contract. | Revisit trigger: a field report of a tracker mark that reverts after sync, or two EAs routinely co-delivering one child. Wall-clock order does not express causality after a phone observes another writer's result. |
 | 2026-09-04 | The session authorization/RPC contract was source- and CI-proven but not hosted; the app still has no inbound session/attendee hydration. | Applied exactly the two authorized migrations to the verified SQLite backend and passed hosted six-actor, grants, anonymous-denial, cap, plan, cleanup, and no-op gates. The server prerequisite is closed. Mobile parent paging, attendee paging, deadlines, atomic SQLite publication, incomplete-family behavior, reconnect/cold-open proof, release uptake, and field verification remain open and must not be collapsed into this result. | Persisted source, hosted schema, PostgREST behavior, mobile implementation, installed build, device convergence, and field recovery are separate evidence states. Close and label each boundary independently. |
 | 2026-09-04 | The standard staging helper was unusable in the current operator environment: its legacy-config guard raised `LegacyDbConfigLoadError`, and the inherited Supabase access token was stale. | Stopped before writes, switched to an isolated current-main worktree, revalidated non-secret link metadata against `segygjzpujphwvrubusm`, kept credentials process-only, and used canonical Supabase CLI dry-run/push/list commands. Root repair of the local env/token path is deferred because changing user credentials/config was outside this migration gate. | Release runbooks need a target-verified, noninteractive path whose config parser and CLI authentication are both exercised before the action window. A safe operational fallback still preserves canonical DDL and exact-target controls. |
 | 2026-08-29 | The locally proven session authorization slice was product-blocked on complete-family versus child-redacted visibility. | Jim selected the complete aggregate. Ratified it in ADR-0005 and standing contracts, removed it from the open-decision backlog, reran the real PostgreSQL actor/page/plan harness plus complete unit and real-SQLite gates, and prepared the committed source for `main`. Hosted apply and authenticated hosted proof remain deliberately separate. | A shared aggregate needs one explicit admission boundary and a data-classification rule. Row filtering cannot create privacy if the parent payload already carries the same facts. |
