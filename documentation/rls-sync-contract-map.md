@@ -1262,11 +1262,33 @@ become history references: identity/display names, no roster relationships or up
 Absence never deletes and there is **no page reconcile**. Mastery's one removal path here is the
 acknowledged child EA handover delete; pending/refused work survives it.
 
+**Readers: cached assessment visibility (review round 2).**
+`getQuestionResults` applies the owner/year visibility rule in every parent SQL query, before
+hydrating items: `(user_id = reading EA OR assessment_date BETWEEN year.starts_on AND year.ends_on)`.
+The active year's dates are inclusive. Without an active year, only the reading EA's own
+results are returned. Owner history has no implicit date bound; caller-supplied dates and
+existing Programme, child, Question, recorder and skipped-result filters still narrow it.
+The active-year check is an `EXISTS` inside the result SQL, so it shares that statement's
+snapshot and adds no separate lookup query. This predicate also applies to `assessmentId`
+detail reads and inherited `getLetterResults` reads. `countResults` uses the same predicate
+in its SQL aggregate, preserving its two-query budget. Chunked parent/item reads
+remain bounded; no JavaScript post-filter or cache deletion implements visibility.
+
+Production screen callers pass the reading EA's `userId`, independently of
+`recordedByUserId`. `batteryRuns.getRunWithResults` passes the bound handle/connection actor
+alongside the run's Programme, never treating the run's recorder as the reader. An omitted
+`userId` in the canonical accessor uses the bound handle's identity (or the registered actor
+on an explicitly supplied SQLite connection); no available reader identity yields `[]`.
+Cached co-EA families and items remain stored after rollover, but ordinary, detail, letter
+and count reads stop exposing them even when the child remains on the roster. The real-SQLite
+regression switches years through the full reference refresh and verifies the cache is intact.
+
 **Readers: current-year letter evidence (C23, Task 10).**
 `assessments.getLetterEvidenceResults({ userId, childId, childIds })` reads Letter results in
 the active Programme between the active academic year's `starts_on` and `ends_on`, inclusive.
 It uses `getQuestionResults`'s `sinceDate` and `untilDate` filters; no active year yields `[]`.
-Ordinary `getLetterResults` history remains unbounded unless its caller supplies dates.
+Ordinary `getLetterResults` owner history remains unbounded unless its caller supplies dates;
+co-EA history always obeys the active-year visibility rule above.
 `latestLetterResult` and the mastery ranking share `pickLatestLetterResult`: match child and
 language, require a `LETTER_EVIDENCE_CODES` Question, exclude skipped results and those with
 no reached items, then choose the latest `assessment_date`, breaking ties by `created_at`.

@@ -1,4 +1,5 @@
 import { resolveDatabase, runRepositoryTransaction } from './repositoryRuntime';
+import { getConnectionActor } from '../../session/signedInHandle';
 import { createAssessmentsRepository } from './assessmentsRepository';
 import { assertPulledRunShape, ensureHistoryReferenceChildren, mergePulledRunHeaders } from './historyPageApply';
 import { createSyncStateRepository } from './syncStateRepository';
@@ -106,6 +107,7 @@ export const createBatteryRunsRepository = ({ database } = {}) => {
     const run = await db.getFirstAsync('select * from battery_runs where id = ?', id);
     if (!run) return null;
     const results = await assessments.getQuestionResults({
+      userId: database?.userId ?? getConnectionActor(db),
       programmeId: run.programme_id, childId: run.child_id, includeSkipped: true,
     });
     return { ...mapDomainRow(run), results: results.filter(result => result.battery_run_id === id) };

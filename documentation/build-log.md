@@ -2602,10 +2602,100 @@ verification are complete. Git remains read-only for the implementer; controller
 commit, PostgreSQL re-verification, hosted actions and physical device checks remain separate
 gates. No network, migration, hosted operation, EAS build or PR action was performed.
 
+#### Controller adversarial review round 2: cached co-EA assessment visibility at rollover
+
+Fixed the verified round-2 finding on `8711be4`: a previously downloaded co-EA family remained
+readable after the active academic year changed, even though the server's non-owner read arm
+is year-bounded. **This is the plan's second and final adversarial review round; the two-round
+review cap is reached.** No additional review round is implied by these local verification runs.
+
+The canonical `getQuestionResults` now adds an owner/year predicate to every parent SQL
+query, including `assessmentId` and chunked child/code reads. The reader's own `user_id` arm
+has no implicit date bound. A non-owner row must satisfy an `EXISTS` on the active academic
+year with inclusive `assessment_date BETWEEN starts_on AND ends_on`; no active year means
+only owner rows remain readable. Explicit caller filters still narrow the query as before.
+Item hydration receives only the visible parents. No post-filter or deletion changes cached
+family data. `getLetterResults` inherits the rule, and the independent `countResults` SQL
+aggregate shares the same private predicate.
+
+Reader identity is explicit `userId`, or the bound handle id/registered SQLite connection
+actor when omitted; without either it returns no results. The existing unscoped repository
+test API therefore has no identity bypass. The sole production nested caller omitting an EA,
+`batteryRuns.getRunWithResults`, now explicitly supplies the bound actor while retaining its
+run-Programme override. It never uses the run recorder as reading authority. No signature changes.
+
+**Production caller audit (all result-accessor calls in `src/`).**
+
+| Caller | Reading identity / outcome |
+| --- | --- |
+| `ChildResultsScreen.js:58-62` | Passes `userId: user.id` with child/Question filters; unchanged. |
+| `AssessmentDetailScreen.js:48` | Passes reading EA plus `assessmentId` and `includeSkipped`; unchanged. |
+| `AssessmentHistoryScreen.js:73-75` | Passes reading EA and own-recorder filter; unchanged. |
+| `AssessmentResultsScreen.js:50`, `AssessmentChildSelectScreen.js:48` | Both pass reading EA; unchanged. |
+| `AssessmentRankingScreen.js:71`, `LetterMasteryRankingScreen.js:39` | Both pass reading EA; mastery ranking uses the stricter current-year evidence accessor. |
+| `AssessmentsScreen.js:42`, `ChildrenListScreen.js:111` | Both pass reading EA to Letter reads; unchanged. |
+| `HomeScreen.js:91` | Passes reading EA to the already-current-year aggregate; unchanged. |
+| `masteryState.js:25-27` | Forwards supplied reading EA to `latestLetterResult`, which forwards it to bounded evidence reads; unchanged. |
+| `batteryRunsRepository.js:105-113` | Now passes `database.userId` or the registered connection actor; this was the only missing identity. |
+
+`dashboardStats` is pure and receives these scoped rows; it makes no repository call itself.
+`countResults` currently has no production caller outside its repository export, but is protected
+as a public reader. Mastery evidence remains year-bounded for owner results too (C23), while
+ordinary owner history stays readable across years.
+
+**Real-SQLite regression.** The saver downloads a co-EA family with items and a run header
+while the child has synced delivery/enrolment and current-year class membership under a held
+class. Own 2026 history is saved too. The full real reference refresh activates 2027; the
+child remains on the roster. List, child, 1,205-child chunked, detail, Letter, count, omitted-id
+bound-actor and nested run-result reads exclude the old co-EA family and retain owner history.
+Snapshots prove the assessment and item rows are unchanged. A second case covers inclusive
+year edges, adjacent excluded dates, owner results before/after the year, and no active year.
+
+**Test/implementation adaptations.** The first fixture attempt omitted the required class
+assignment Programme. It was fixed before the valid behavioral RED run; no production change
+preceded that RED. An existing filter test expected a co-EA result without creating an active
+year. It now seeds 2026 (`__tests__/assessmentsRepository.questionResults.test.js:344-346`), with
+all filter/order/item assertions unchanged. The first implementation performed a separate
+active-year lookup. The full suite and standalone `repositoryReadPath` rerun caught a count
+budget increase from two to three queries. Moving the year lookup into the shared SQL `EXISTS`
+kept the original two-query count guard and all its assertions unchanged. There is no relaxed
+budget, new persisted state, cache wipe or UI workaround.
+
+Every test command uses `PATH="$HOME/.nvm/versions/node/v20.19.4/bin:$PATH"`.
+The final focused command is
+`npx jest __tests__/assessmentsRepository.test.js __tests__/assessmentsRepository.questionResults.test.js __tests__/batteryRunsRepository.test.js __tests__/ChildResultsScreen.test.js __tests__/AssessmentDetailScreen.safeArea.test.js __tests__/AssessmentDetailGrid.test.js __tests__/AssessmentHistoryScreen.plan5.test.js __tests__/letterEvidenceYear.test.js __tests__/readers.mixedResults.test.js __tests__/dashboardStats.localDate.test.js __tests__/dashboardStats.hiddenChildren.test.js __tests__/dashboardStats.letterMastery.test.js __tests__/dashboardStats.sessionCounts.test.js __tests__/letterAssessmentRanking.test.js __tests__/LetterMasteryRankingScreen.test.js __tests__/AssessmentRankingScreen.test.js __tests__/SessionCountRankingScreen.test.js __tests__/repositoryReadPath.test.js --maxWorkers=25%`.
+Earlier 17-suite focused runs used the same command without `repositoryReadPath.test.js`.
+
+| Gate / command | Result |
+| --- | --- |
+| First fixture attempt: `npm run test:integration -- __tests__/letterEvidenceYear.test.js` | Exit 1: 2 failed / 6 passed tests, 1.554 s. Rollover case stopped at the missing Programme NOT NULL constraint; the boundary case reached the visibility assertion. Not counted as the completed rollover RED. |
+| Same command — valid RED before implementation | Exit 1: 1 failed suite, 2 failed / 6 passed tests (8 total), 1.471 s. Co-EA family still returned after the real rollover; adjacent out-of-year co-EA dates also returned. |
+| Same command — first GREEN | Exit 0: 1 suite / 8 tests passed, 1.629 s. |
+| Initial 17-suite focused unit command | Exit 1: 1 failed / 16 passed suites, 1 failed / 312 passed tests (313 total), 7.749 s. Existing co-EA filter fixture lacked an active year. |
+| Same 17-suite command after fixture adaptation | Exit 0: 17 suites / 313 tests passed, 7.277 s. |
+| `npm run test:integration -- __tests__/assessmentsRepository.test.js __tests__/letterEvidenceYear.test.js __tests__/LetterMasteryRankingScreen.test.js` | Exit 0: 3 suites / 20 tests passed, 3.152 s. |
+| First `npx jest --silent --maxWorkers=25%` | Exit 1: 1 failed / 361 passed suites, 1 failed / 4,557 passed tests (4,558 total), 80.574 s. Count query budget was three instead of two. |
+| First `npm run test:integration --silent` | Exit 0: 70 suites / 853 tests passed, 66.939 s. |
+| `npx jest __tests__/repositoryReadPath.test.js --maxWorkers=25%`, standalone before the SQL-snapshot fix | Exit 1: 1 failed / 4 passed tests, 0.947 s. Same two-query budget failure. |
+| `npm run test:integration -- __tests__/letterEvidenceYear.test.js` after SQL `EXISTS` | Exit 0: 1 suite / 8 tests passed, 1.923 s. |
+| Final 18-suite focused command above | Exit 0: 18 suites / 318 tests passed, 7.639 s, including the unchanged query-budget guard. |
+| Final `npx jest --silent --maxWorkers=25%` | Exit 0: 362 suites / 4,558 tests passed, 79.35 s. |
+| Final `npm run test:integration --silent` | Exit 0: 70 suites / 853 tests passed, 64.46 s. |
+| `git diff --check`; protected-path no-diff checks | PASS: plan, migrations, query-budget guard, history walkers/status, mastery correction and coverage code unchanged. |
+
+The full suites ran concurrently with no extra production-binding suite. The observed full
+unit failure reproduced alone and was fixed in production SQL, rather than attributed to load.
+Round-2 implementation and local verification are complete; no unrelated timeout occurred.
+The contract map now distinguishes ordinary owner history, co-EA temporal visibility and C23
+evidence. No migration, network, hosted Supabase action, PostgreSQL execution, EAS build, device
+check or PR was performed. Git is read-only for the implementer. Controller commit and any
+remaining release/device gates remain separate from the completed two-round review.
+
 ## Decision Register
 
 | Date | Decision | Rationale | Revisit Trigger |
 | --- | --- | --- | --- |
+| 2026-10-21 | AR Plan 3 review round 2 enforces cached assessment owner/year visibility in the canonical parent SQL and count aggregate. The active-year test stays inside the same statement; nested run reads supply their bound reading EA. The plan's two-round adversarial-review cap is reached. | A cached, once-authorized co-EA result must not remain readable after its year expires. Retaining rows preserves owner history, and a SQL predicate protects every accessor path before item hydration without weakening query budgets or relying on caller date filters. | A release/device gate exposes a concrete remaining visibility mismatch; further work requires explicit scope beyond this completed review cap. |
 | 2026-10-21 | AR Plan 3 review round 1 uses outbox ownership for mastery acknowledgement, permits equal-watermark display repair without owed work, hydrates tools through the existing full reference refresh, and restarts both Programme walks after a recovery year change. Combined status checks read-time active-window context. | A restored display id cannot own a refused payload's Retry, a watermark must describe the displayed accepted value, a valid FK must be hydrated before page apply, and a completed cursor from the previous year cannot establish current completeness. Existing CAS, one-refresh budget and session semantics remain load-bearing. | Controller adversarial review or physical refusal/Retry, non-null tool, or between-walk year-change gates expose a further convergence or authority mismatch. |
 | 2026-10-21 | AR Plan 3 Task 11 derives mastery-input completeness from both completed cursors and both current grant sets, through one read-only handle-bound accessor. Battery Run state is excluded, and no answer is persisted or cached. | Completed coverage records what was downloaded; a live scope check detects a later grant loss. Reusing C1's predicate preserves failure/year semantics, and the existing coverage-drop/re-walk lifecycle prevents a returning child from looking complete before older mastery is restored. | Lesson-engine integration or physical handover/year-rollover gates expose missing coverage, actor leakage or a need for different completeness semantics. |
 | 2026-10-21 | AR Plan 3 Task 10 bounds assessment evidence to the active academic year's inclusive dates and shares one child/language selector between tracker reads and the mastery ranking. No active year supplies no assessment evidence; confirmations still count. | A phone retaining last year's results must agree with a fresh phone downloading only the current year. Date filtering belongs in the repository accessor; stored items still determine mastery, while confirmations remain current child state. | Physical rollover/convergence gates or lesson-engine integration expose a different evidence window or selector. |

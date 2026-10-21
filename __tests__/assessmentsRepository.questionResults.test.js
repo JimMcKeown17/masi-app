@@ -342,6 +342,8 @@ describe('question result persistence through real SQLite', () => {
   });
 
   test('reads apply every filter, programme scope, ordering, and hydrate sparse items', async () => {
+    await db.runAsync(`insert into academic_years (id, label, starts_on, ends_on, is_active)
+      values ('year-2026', '2026', '2026-01-15', '2026-12-15', 1)`);
     const first = await save({ result: resultFor({ items: [
       { position: 4, item_key: 'm', prompt: 'm', is_correct: false, metadata: { reached: false } },
       { position: 1, item_key: 'a', prompt: 'a', is_correct: true, metadata: { reached: true } },

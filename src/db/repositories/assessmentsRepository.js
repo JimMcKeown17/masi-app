@@ -1,4 +1,5 @@
 import { resolveDatabase, runRepositoryTransaction } from './repositoryRuntime';
+import { getConnectionActor } from '../../session/signedInHandle';
 import {
   assessmentItemDomainId,
   enqueueDomainOutbox,
@@ -75,6 +76,19 @@ export const createAssessmentsRepository = ({ database } = {}) => {
   const resolveActiveProgrammeId = async (db, { userId, programmeId }) => (
     programmeId || (userId ? await getActiveProgrammeId(db, userId) : null)
   );
+
+  const readVisibility = (db, userId) => {
+    const readerId = userId ?? database?.userId ?? getConnectionActor(db);
+    if (!readerId) return null;
+    // Resolve the year in the same SQL snapshot, without adding a separate read query.
+    return {
+      clause: `(user_id = ? or exists (
+        select 1 from academic_years y where y.is_active = 1
+          and assessments.assessment_date between y.starts_on and y.ends_on
+      ))`,
+      params: [readerId],
+    };
+  };
 
   const getAssessmentCountsSince = async ({ userId, programmeId } = {}) => {
     const db = await resolveDatabase(database);
@@ -188,8 +202,10 @@ export const createAssessmentsRepository = ({ database } = {}) => {
     const db = await resolveDatabase(database);
     const activeProgrammeId = await resolveActiveProgrammeId(db, { userId, programmeId });
     if (userId && !activeProgrammeId) return [];
-    const clauses = ['question_code is not null'];
-    const params = [];
+    const visibility = readVisibility(db, userId);
+    if (!visibility) return [];
+    const clauses = ['question_code is not null', visibility.clause];
+    const params = [...visibility.params];
     for (const [column, value] of [
       ['programme_id', activeProgrammeId], ['id', assessmentId], ['child_id', childId],
       ['user_id', recordedByUserId], ['language', language],
@@ -249,11 +265,14 @@ export const createAssessmentsRepository = ({ database } = {}) => {
     const db = await resolveDatabase(database);
     const programmeId = await resolveActiveProgrammeId(db, { userId });
     if (!programmeId) return 0;
+    const visibility = readVisibility(db, userId);
+    if (!visibility) return 0;
     const row = await db.getFirstAsync(`
       select count(*) as count from assessments
       where programme_id = ? and child_id = ? and question_code = ?
         and substr(coalesce(stopped_reason, ''), 1, 8) <> 'skipped_'
-    `, programmeId, childId, questionCode);
+        and ${visibility.clause}
+    `, programmeId, childId, questionCode, ...visibility.params);
     return Number(row?.count || 0);
   };
 
