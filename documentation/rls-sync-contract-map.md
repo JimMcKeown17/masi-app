@@ -380,6 +380,49 @@ Each signed-in EA handle owns its own request queue (`handle.enqueueRequest`, co
 
 Each workflow still awaits the result it needs before constructing the next dependent query. The change is fairness, not parallelism. If another operation was queued while request A was in flight, it runs after A and before the pull submits request B. Data shaping and SQLite persistence occur outside the network lease. A pull begun under one handle cannot persist into another EA's file: its repositories are bound to its own handle, and a stale handle refuses every write. Failed or incomplete scopes retain the same fail-closed reconcile rules.
 
+## Session group authorization (B2)
+
+Server migration `20261021140000_session_group_authorization.sql` implements C19 for the
+session family. A completed `sessions` row may carry a non-null group when the EA **holds or has
+held** an assignment to that group in the session's Programme: any matching
+`group_ea_assignments` row counts, whether active or ended. `session_attendees.group_id` uses the
+same rule, resolving the Programme from its parent session. Null remains accepted on both tables
+for older builds. The existing `state = 'completed'` boundary remains in force.
+
+`private.current_user_has_held_group_assignment(group_id, programme_id)` is the shared
+`SECURITY DEFINER` check. Its Programme provenance is deliberately `groups.programme_id`, not
+`group_ea_assignments.programme_id`. The existing `group_ea_assignments_insert_self` policy checks
+that an EA created the group and is actively assigned to the Programme supplied on the assignment,
+but it does not require that supplied Programme to equal the group's Programme. Therefore an EA
+can create an ended assignment row whose Programme is forged. The verifier case
+`session-group-forged-assignment-programme` proves that such a row can be inserted but cannot
+authorize a session or attendee in the forged Programme. Helper EXECUTE is revoked from `PUBLIC`
+and `anon` and granted only to `authenticated`.
+
+Four RESTRICTIVE policies add this invariant without replacing the existing permissive write
+policies: `sessions_state_completed_group_held_insert`,
+`sessions_state_completed_group_held_update`, `session_attendees_group_held_insert`, and
+`session_attendees_group_held_update`. The two session policies also keep the completed-state
+guard. They replace the forward-prep pins `sessions_forward_prep_pin_defaults_insert` and
+`sessions_forward_prep_pin_defaults_update`; all four replacement guards are installed before
+those pins are dropped. `private.current_user_can_write_for_child` is unchanged, so the attendee's
+ordinary child-write requirement still applies. Session and attendee SELECT policies are also
+unchanged: the direct session-owner arm and `can_read_session_attendee` retain upsert conflict
+visibility, and historical delivery reads continue to return the saved group id without making
+that group a new grant. The server does not require an attendee's group id to equal its session's;
+the phone producer owns that equality.
+
+The held-assignment rule currently relies on the one-row-per-group assignment identity generated
+by `groupEaAssignmentDomainId`. If grouping work later allows a group to change EA, the old
+holder's ended assignment must survive as historical evidence, or this authorization check must
+move to a history table.
+
+The controller-owned disposable PostgreSQL gate is `npm run verify:session-group:postgres`; it
+applies every canonical migration and exercises active, ended, archived, mismatched, forged, null,
+child-check, history-read, privilege, and policy-replacement cases. This migration is **not yet
+applied to hosted** `masi-app-sqlite`; hosted application remains a separately approved release
+gate.
+
 ## Row versions (upload contract)
 
 The upload contract shipped in #77 and was applied to `masi-app-sqlite` on 2026-10-19; the Galaxy
