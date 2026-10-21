@@ -1,0 +1,189 @@
+{
+  "version": 1,
+  "defaults": {},
+  "cases": [
+    {
+      "name": "a plan is kept when the lesson date is the day it was made, however late the save",
+      "spec": "C14",
+      "fn": "planForSave",
+      "input": {
+        "plan": { "engine_version": 1, "made_on": "2026-10-19", "reason": "ok" },
+        "lessonDate": "2026-10-19"
+      },
+      "exact": true,
+      "expect": {
+        "plan": { "engine_version": 1, "made_on": "2026-10-19", "reason": "ok" },
+        "plan_reason": null
+      }
+    },
+    {
+      "name": "a changed lesson date drops the plan",
+      "spec": "C14",
+      "fn": "planForSave",
+      "input": {
+        "plan": {
+          "engine_version": 1,
+          "made_on": "2026-10-19",
+          "reason": "ok"
+        },
+        "lessonDate": "2026-10-16"
+      },
+      "exact": true,
+      "expect": {
+        "plan": null,
+        "plan_reason": "past_date"
+      }
+    },
+    {
+      "name": "a missing plan is a programming error",
+      "spec": "C14",
+      "fn": "planForSave",
+      "input": {
+        "plan": null,
+        "lessonDate": "2026-10-19"
+      },
+      "throws": "planForSave needs a plan"
+    },
+    {
+      "name": "an unfrozen plan on its own day may be recomputed",
+      "spec": "C1",
+      "fn": "isPlanRecomputable",
+      "input": {
+        "lessonDate": "2026-10-19",
+        "today": "2026-10-19",
+        "frozen": false
+      },
+      "expect": true
+    },
+    {
+      "name": "a plan is fixed after the first tick",
+      "spec": "C1",
+      "fn": "isPlanRecomputable",
+      "input": {
+        "lessonDate": "2026-10-19",
+        "today": "2026-10-19",
+        "frozen": true
+      },
+      "expect": false
+    },
+    {
+      "name": "a draft resumed on a later day keeps its plan",
+      "spec": "C14",
+      "fn": "isPlanRecomputable",
+      "input": {
+        "lessonDate": "2026-10-19",
+        "today": "2026-10-21",
+        "frozen": false
+      },
+      "expect": false
+    },
+    {
+      "name": "the group's class wins",
+      "spec": "C18",
+      "fn": "resolveLessonClass",
+      "input": {
+        "groupClassId": "cA",
+        "memberClassIds": [
+          "cB",
+          "cB"
+        ]
+      },
+      "exact": true,
+      "expect": {
+        "classId": "cA",
+        "choices": []
+      }
+    },
+    {
+      "name": "a classless group takes the class its members share",
+      "spec": "C18",
+      "fn": "resolveLessonClass",
+      "input": {
+        "groupClassId": null,
+        "memberClassIds": [
+          "cA",
+          "cA"
+        ]
+      },
+      "exact": true,
+      "expect": {
+        "classId": "cA",
+        "choices": []
+      }
+    },
+    {
+      "name": "a mixed-class group asks once",
+      "spec": "C18",
+      "fn": "resolveLessonClass",
+      "input": {
+        "groupClassId": null,
+        "memberClassIds": [
+          "cA",
+          "cB"
+        ]
+      },
+      "exact": true,
+      "expect": {
+        "classId": null,
+        "choices": [
+          "cA",
+          "cB"
+        ]
+      }
+    },
+    {
+      "name": "a member with no class does not block the shared class",
+      "spec": "C18",
+      "fn": "resolveLessonClass",
+      "input": {
+        "groupClassId": null,
+        "memberClassIds": [
+          "cA",
+          null
+        ]
+      },
+      "exact": true,
+      "expect": {
+        "classId": "cA",
+        "choices": []
+      }
+    },
+    {
+      "name": "no member has a class",
+      "spec": "C18",
+      "fn": "resolveLessonClass",
+      "input": {
+        "groupClassId": null,
+        "memberClassIds": [
+          null
+        ]
+      },
+      "exact": true,
+      "expect": {
+        "classId": null,
+        "choices": []
+      }
+    },
+    {
+      "name": "member classes are de-duplicated in first-seen order",
+      "spec": "C18",
+      "fn": "resolveLessonClass",
+      "input": {
+        "groupClassId": null,
+        "memberClassIds": [
+          "cB",
+          "cA",
+          "cB"
+        ]
+      },
+      "exact": true,
+      "expect": {
+        "classId": null,
+        "choices": [
+          "cB",
+          "cA"
+        ]
+      }
+    }
+  ]
+}

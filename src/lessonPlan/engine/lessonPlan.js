@@ -34,3 +34,14 @@ export const computeLessonPlan = (input) => {
     up_next_group_id: input?.upNextGroupId ?? null,
   };
 };
+
+export const planForSave = ({ plan, lessonDate }) => {
+  if (!plan) throw new TypeError('planForSave needs a plan');
+  return lessonDate === plan.made_on
+    ? { plan, plan_reason: null }
+    : { plan: null, plan_reason: 'past_date' };
+};
+
+export const isPlanRecomputable = ({ lessonDate, today, frozen }) => (
+  !frozen && lessonDate === today
+);
