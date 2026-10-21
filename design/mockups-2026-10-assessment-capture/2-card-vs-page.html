@@ -1,0 +1,80 @@
+<link href="https://fonts.googleapis.com/css2?family=Andika:wght@400;700&display=swap" rel="stylesheet">
+<style>
+  .wrap { display:flex; flex-wrap:wrap; gap:36px; align-items:flex-start; margin:10px 0 28px; }
+  .card { background:#fff; border:1px solid #ccc; padding:14px; box-shadow:0 4px 14px rgba(0,0,0,.12); font-family:'Andika',sans-serif; }
+  .card h4 { margin:0 0 8px; font-family:-apple-system,sans-serif; font-size:13px; color:#555; font-weight:600; }
+  .crow { display:flex; align-items:center; gap:0; padding:3px 4px; border-radius:6px; }
+  .crow .n { width:22px; font-family:-apple-system,sans-serif; font-size:11px; color:#999; }
+  .crow span { width:30px; text-align:center; font-size:22px; color:#111; }
+  .crow.wordrow span { width:auto; padding:0 8px; font-size:17px; }
+  .crow.on { background:#FFF3C4; outline:2px solid #E3B400; }
+  .arrow { align-self:center; font-size:34px; color:#999; }
+  .phone { width:360px; border-radius:26px; overflow:hidden; box-shadow:0 0 0 8px #1b1b1b, 0 12px 30px rgba(0,0,0,.25); background:#F8F5F4; color:#221A1B; font-family:-apple-system,BlinkMacSystemFont,sans-serif; padding-bottom:16px; }
+  .pager { text-align:center; padding:16px 0 4px; font-size:13px; color:#76696B; }
+  .pager b { color:#221A1B; }
+  .dots { display:flex; gap:7px; justify-content:center; margin:6px 0 14px; }
+  .dots i { width:8px; height:8px; border-radius:4px; background:#E5DCDB; display:block; }
+  .dots i.on { background:#221A1B; }
+  .grid { display:grid; gap:10px; padding:0 16px; }
+  .tile { border-radius:10px; border:1px solid #ECE5E4; background:#fff; display:flex; align-items:center; justify-content:center; font-family:'Andika',sans-serif; height:58px; font-size:29px; box-sizing:border-box; }
+  .tile.w { font-size:20px; }
+  .tile.r1 { box-shadow: inset 0 -4px 0 #E3B400; }
+  .sep { grid-column:1/-1; height:0; border-top:1px dashed #D6CCCB; margin:2px 0; }
+  .cap { font-size:13px; max-width:360px; line-height:1.45; color:#444; margin-top:10px; }
+</style>
+
+<h2>How a phone page maps to the printed card</h2>
+<p class="subtitle">The child reads the card. The EA marks the phone. Each phone page shows whole card rows, re-flowed into bigger tiles, and its label names the card rows on screen.</p>
+
+<h3>Letters (Grid A, 6 rows × 10)</h3>
+<div class="wrap">
+  <div class="card">
+    <h4>Printed card</h4>
+    <div class="crow on"><span class="n">1</span><span>l</span><span>a</span><span>m</span><span>E</span><span>p</span><span>n</span><span>L</span><span>s</span><span>o</span><span>e</span></div>
+    <div class="crow on"><span class="n">2</span><span>Y</span><span>i</span><span>K</span><span>N</span><span>d</span><span>H</span><span>f</span><span>U</span><span>b</span><span>v</span></div>
+    <div class="crow"><span class="n">3</span><span>F</span><span>y</span><span>C</span><span>I</span><span>T</span><span>k</span><span>D</span><span>Z</span><span>f</span><span>d</span></div>
+    <div class="crow"><span class="n">4</span><span>t</span><span>z</span><span>O</span><span>J</span><span>P</span><span>r</span><span>c</span><span>W</span><span>p</span><span>o</span></div>
+    <div class="crow"><span class="n">5</span><span>w</span><span>A</span><span>E</span><span>x</span><span>Q</span><span>I</span><span>g</span><span>O</span><span>U</span><span>z</span></div>
+    <div class="crow"><span class="n">6</span><span>X</span><span>r</span><span>V</span><span>B</span><span>j</span><span>h</span><span>q</span><span>u</span><span>R</span><span>G</span></div>
+  </div>
+  <div class="arrow">→</div>
+  <div>
+    <div class="phone">
+      <div class="pager"><b>Card rows 1–2</b> · page 1 of 3<div class="dots"><i class="on"></i><i></i><i></i></div></div>
+      <div class="grid" style="grid-template-columns:repeat(5,1fr)">
+        <div class="tile">l</div><div class="tile">a</div><div class="tile">m</div><div class="tile">E</div><div class="tile">p</div>
+        <div class="tile">n</div><div class="tile">L</div><div class="tile">s</div><div class="tile">o</div><div class="tile">e</div>
+        <div class="sep"></div>
+        <div class="tile">Y</div><div class="tile">i</div><div class="tile">K</div><div class="tile">N</div><div class="tile">d</div>
+        <div class="tile">H</div><div class="tile">f</div><div class="tile">U</div><div class="tile">b</div><div class="tile">v</div>
+      </div>
+    </div>
+    <p class="cap">Each card row of 10 becomes two phone rows of 5. Card rows never share a phone row, and a thin divider marks where card row 2 starts. Grid A is 3 pages; the future isiZulu card (11 rows) would be 6.</p>
+  </div>
+</div>
+
+<h3>Words (10 rows × 5)</h3>
+<div class="wrap">
+  <div class="card">
+    <h4>Printed card</h4>
+    <div class="crow wordrow on"><span class="n">1</span><span>inja</span><span>amanzi</span><span>umama</span><span>ubaba</span><span>indlu</span></div>
+    <div class="crow wordrow on"><span class="n">2</span><span>isikolo</span><span>umntana</span><span>inkomo</span><span>intaka</span><span>ilanga</span></div>
+    <div class="crow wordrow"><span class="n">3</span><span>inyoka</span><span>imbali</span><span>isisu</span><span>ubuso</span><span>umlomo</span></div>
+    <div class="crow wordrow"><span class="n">4</span><span>amehlo</span><span>indlela</span><span>isango</span><span>ilitye</span><span>umthi</span></div>
+    <div class="crow wordrow"><span class="n">…</span><span style="color:#999">rows 5–10</span></div>
+  </div>
+  <div class="arrow">→</div>
+  <div>
+    <div class="phone">
+      <div class="pager"><b>Card rows 1–2</b> · page 1 of 5<div class="dots"><i class="on"></i><i></i><i></i><i></i><i></i></div></div>
+      <div class="grid" style="grid-template-columns:repeat(2,1fr)">
+        <div class="tile w">inja</div><div class="tile w">amanzi</div>
+        <div class="tile w">umama</div><div class="tile w">ubaba</div>
+        <div class="tile w">indlu</div><div class="tile w">isikolo</div>
+        <div class="tile w">umntana</div><div class="tile w">inkomo</div>
+        <div class="tile w">intaka</div><div class="tile w">ilanga</div>
+      </div>
+    </div>
+    <p class="cap">Words read left to right, two per phone row, so a card row of 5 doesn't split evenly: "indlu" (end of card row 1) sits beside "isikolo" (start of row 2). This is how Zazi did it. Each page still holds exactly two whole card rows.</p>
+  </div>
+</div>
