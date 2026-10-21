@@ -213,3 +213,13 @@ Open each one, confirm it looks like a sheet, has the same options, and produces
 - [ ] **S5. Insights.** Open all three cards and confirm Letter Mastery, Assessment Scores, and Session Count reach their existing ranking screens. Back navigation must return to Insights with the bottom bar intact.
 - [ ] **S6. Zero-class route.** Sign in with a blank tester. Home must route into the existing class/child onboarding flow instead of showing a misleading empty dashboard. Do not expect the future Learners group toggle in this build.
 - [ ] **S7. Offline and pending sync.** Reopen Home offline with cached data. The screen must remain usable, preserve its last SQLite-derived content, and show the correct full sync status rather than green success.
+
+## T. Content packs and the decodability checker (lesson plan A1, 2026-10)
+
+Controller-owned, not yet run. Run on the first builds carrying A1, with T1 on the combined Android build. These checks must pass before any slice that runs the checker on a field phone (A2, A3, C2–C4) ships in a pilot build. A1 has no screen, so the visual and 1.0x/1.3x text-size checks do not apply. The export path is Profile → **Support tools** → **Share database** → **Export**.
+
+- [ ] **T1. Android, Hermes, developer path.** Build with `eas build -p android --profile preview-content`, install it on the Galaxy A03s, sign in, and export. Pass means the exported JSON's `content_diagnostics` has `decodabilitySelfCheck` equal to `{ "vectorVersion": 1, "passed": 72, "failed": [] }`, `previewContentAllowed` `true`, and `currentPacks.xh` `"isixhosa-candidates-preview-v1"`.
+- [ ] **T2. iOS, Hermes, field path.** Use the next `pilot` TestFlight build on an iPhone, or an iOS `preview` build, and export the same way. Pass means `decodabilitySelfCheck` matches T1 exactly, `previewContentAllowed` is `false`, `currentPacks` is `{ xh, en, af }` with the three `*-interim-letters-v1` ids, and, on a pilot build, the export's `runtimeDiagnostics.update.channel` is `"preview"`.
+- [ ] **T3. Build refusal.** With `MASI_PREVIEW_CONTENT=1` and `EAS_BUILD_PROFILE=pilot` set, `node -e "require('./app.config')()"` must exit non-zero with the C12 refusal message. Do not spend an EAS build on this.
+
+If T1 or T2 lists failures, or `content_diagnostics` holds `error`, stop. The vendored checker must not be edited. Report the failing cases to Jim and the books project.

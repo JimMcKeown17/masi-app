@@ -37,7 +37,19 @@ test.each([
 
 test('current release ids', () => {
   expect(CURRENT_PACK_IDS.release).toEqual({ xh: 'isixhosa-interim-letters-v1', en: 'english-interim-letters-v1', af: 'afrikaans-interim-letters-v1' });
-  expect(CURRENT_PACK_IDS.preview).toEqual({});
+});
+
+test('isiXhosa preview pack: developer builds only, same letter order as the release pack', () => {
+  expect(CURRENT_PACK_IDS.preview).toEqual({ xh: 'isixhosa-candidates-preview-v1' });
+  expect(getPack('xh').id).toBe('isixhosa-interim-letters-v1');
+  expect(getPack('xh', { allowPreview: true }).id).toBe('isixhosa-candidates-preview-v1');
+  expect(getPackById('isixhosa-candidates-preview-v1')).toBeNull();
+  expect(getPackById('isixhosa-candidates-preview-v1', { allowPreview: true }).channel).toBe('preview');
+  expect(order(getPack('xh', { allowPreview: true }))).toBe(order(getPack('xh')));
+  for (const allowPreview of [false, 'yes', 1]) {
+    expect(getPack('xh', { allowPreview }).id).toBe('isixhosa-interim-letters-v1');
+    expect(getPackById('isixhosa-candidates-preview-v1', { allowPreview })).toBeNull();
+  }
 });
 
 test('pack language names resolve like class languages in the assessment registry', () => {

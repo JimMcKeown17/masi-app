@@ -1,6 +1,7 @@
 import isixhosaInterim from './isixhosa-interim-letters-v1.json';
 import englishInterim from './english-interim-letters-v1.json';
 import afrikaansInterim from './afrikaans-interim-letters-v1.json';
+import isixhosaPreview from './isixhosa-candidates-preview-v1.json';
 
 export { lintMasiPack, PACK_LANGUAGE_CODES } from './lintMasiPack.js';
 
@@ -15,7 +16,7 @@ function deepFreeze(value) {
   return value;
 }
 
-export const BUNDLED_PACKS = Object.freeze([isixhosaInterim, englishInterim, afrikaansInterim].map(pack => {
+export const BUNDLED_PACKS = Object.freeze([isixhosaInterim, englishInterim, afrikaansInterim, isixhosaPreview].map(pack => {
   deepFreeze(pack);
   packsById[pack.id] = pack;
   return pack;
@@ -28,7 +29,7 @@ export const CURRENT_PACK_IDS = deepFreeze({
     en: 'english-interim-letters-v1',
     af: 'afrikaans-interim-letters-v1',
   },
-  preview: {},
+  preview: { xh: 'isixhosa-candidates-preview-v1' },
 });
 
 /**
