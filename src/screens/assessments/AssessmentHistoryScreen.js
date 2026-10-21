@@ -3,9 +3,10 @@ import { useScrollBottomPadding } from '../../hooks/useScrollBottomPadding';
 import ListGroup from '../../components/common/ListGroup';
 import { fontFamilies, typeRoles } from '../../constants/typography';
 import { useToast } from '../../context/ToastContext';
+import { isStaleActorError } from '../../session/staleActor';
 import { useSignedInEA } from '../../context/SignedInEAContext';
 import React, { useState, useCallback } from 'react';
-import { View, Pressable, StyleSheet, FlatList } from 'react-native';
+import { View, Pressable, StyleSheet, FlatList, RefreshControl } from 'react-native';
 import { Text, ActivityIndicator } from 'react-native-paper';
 import { useFocusEffect } from '@react-navigation/native';
 import { useAuth } from '../../context/AuthContext';
@@ -31,7 +32,7 @@ export default function AssessmentHistoryScreen({ navigation }) {
   // The list scrolls inside the card, so the card (not the list) clears the bottom inset.
   const cardBottom = useScrollBottomPadding(spacing.md);
   const toast = useToast();
-  const { repositories } = useSignedInEA();
+  const { repositories, services } = useSignedInEA();
   const { assessments: assessmentsRepository, batteryRuns } = repositories;
 
   const { user } = useAuth();
@@ -41,6 +42,13 @@ export default function AssessmentHistoryScreen({ navigation }) {
   const { allChildren } = useChildren();
   const [assessments, setAssessments] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const onRefresh = useCallback(() => {
+    setRefreshing(true);
+    void services.assessmentHistory.start({ force: true })
+      .catch((error) => { if (!isStaleActorError(error)) console.error('Assessment history failed:', error); })
+      .finally(() => setRefreshing(false));
+  }, [services]);
 
   useFocusEffect(
     useCallback(() => {
@@ -165,6 +173,7 @@ export default function AssessmentHistoryScreen({ navigation }) {
     <View style={styles.container}>
       <ListGroup style={[styles.group, { marginBottom: cardBottom }]}>
         <FlatList onScroll={onScroll} scrollEventThrottle={16}
+          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
           data={assessments}
           keyExtractor={(item) => item.id}
           renderItem={renderItem}

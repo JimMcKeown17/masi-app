@@ -22,6 +22,8 @@ import { pullPreloadedChildData, persistPreloadedChildData, pullClassData } from
 import { createHomeAttentionStore } from '../services/homeAttentionStore';
 import { createSessionHistoryState } from '../services/sessionHistoryPull';
 import { createSessionHistoryStore } from '../services/sessionHistoryStatus';
+import { createAssessmentHistoryStates } from '../services/assessmentHistoryPull';
+import { createAssessmentHistoryStore } from '../services/assessmentHistoryStatus';
 import { getLatestAuthSession } from './signedInHandle';
 import { StaleActorError } from './staleActor';
 
@@ -80,7 +82,12 @@ export const createHandleServices = (handle) => {
     ...options, repositories, state: createSessionHistoryState(),
     client: handle.dataClient, enqueueRequest: handle.enqueueRequest, referenceDataReady,
   });
-  handle.onClose(() => store.reset());
+  const assessmentStore = createAssessmentHistoryStore({
+    ...options, repositories, states: createAssessmentHistoryStates(),
+    client: handle.dataClient, enqueueRequest: handle.enqueueRequest, referenceDataReady,
+    refreshReferenceData: () => { assertCurrent(); return pullReferenceData(referenceOptions); },
+  });
+  handle.onClose(() => { store.reset(); assessmentStore.reset(); });
   return {
     repositories,
     homeAttention: createHomeAttentionStore({ database: handle, localState: repositories.localState }),
@@ -114,6 +121,7 @@ export const createHandleServices = (handle) => {
     },
     fetchAndCacheSchools: () => fetchAndCacheSchools(referenceOptions),
     sessionHistory: { start: ({ force = false } = {}) => store.start({ userId: handle.userId, force }), store },
+    assessmentHistory: { start: ({ force = false } = {}) => assessmentStore.start({ userId: handle.userId, force }), store: assessmentStore },
     deviceProfile: {
       get: () => repositories.localState.get('user_profile', null),
       save: (profile) => repositories.localState.set('user_profile', profile),

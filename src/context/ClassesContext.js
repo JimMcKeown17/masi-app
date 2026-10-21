@@ -357,6 +357,7 @@ export const ClassesProvider = ({ children: reactChildren }) => {
         activeUserId,
         freshClasses.length > 0 ? 'available' : 'confirmed_empty'
       );
+      void services.assessmentHistory.start().catch((error) => { if (!isStaleActorError(error)) console.error('Assessment history failed:', error); });
     } catch (error) {
       if (isStaleActorError(error)) return;
       console.error('Error in pullFromServer:', error);

@@ -239,6 +239,25 @@ test('close during an in-flight history pull writes no failure marker and cannot
   expect(await (await again.getReader()).getAllAsync('select * from sync_state')).toEqual([]);
 });
 
+test("close during an in-flight assessment history pull writes no failure marker and cannot publish into B's store", async () => {
+  const entered = deferred();
+  const transport = jest.fn(async url => {
+    const table = new URL(url).pathname.split('/').pop();
+    if (table === 'get_battery_run_history_page') { entered.resolve(); return new Promise(() => {}); }
+    return response(referenceRows(table, A));
+  });
+  const a = await open(A, transport);
+  const run = observe(a.services.assessmentHistory.start({ force: true }));
+  await within(entered.promise);
+  await requestClose({ reason: 'switch' });
+  const b = await open(B, async () => response());
+  const snapshot = b.services.assessmentHistory.store.getSnapshot();
+  expect(await within(run)).toMatchObject({ error: { name: 'StaleActorError' } });
+  expect(b.services.assessmentHistory.store.getSnapshot()).toBe(snapshot);
+  const again = await open(A, transport);
+  expect(await (await again.getReader()).getAllAsync('select * from sync_state')).toEqual([]);
+});
+
 test('the complete repository graph, composite onboarding and profile cache are bound to one handle', async () => {
   const a = await open(A, async () => response());
   expect(a.services.repositories).toBe(a.repositories);

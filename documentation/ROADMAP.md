@@ -384,8 +384,8 @@ correctly; the missing contract is inbound hydration.
 - [x] Add authenticated, Programme/current-year-class-scoped pull for `assessments`,
   `assessment_items` and `battery_runs` — **Assessment Results Plan 3**, not part of the upload
   completion below. Task 7 supplies all three walks and scope queries in
-  [assessmentHistoryPull.js](../src/services/assessmentHistoryPull.js); application triggers/status
-  remain Task 8, hosted/device gates Task 14. See the [Assessment Results design](../docs/superpowers/specs/2026-10-19-assessment-results-and-letter-test-design.md).
+  [assessmentHistoryPull.js](../src/services/assessmentHistoryPull.js); the handle-owned store and triggers are built in Task 8.
+  Combined status/readers remain Task 9, hosted/device gates Task 14. See the [Assessment Results design](../docs/superpowers/specs/2026-10-19-assessment-results-and-letter-test-design.md).
 - [x] **Upload the assessment family all-or-nothing ([U2](./zazi-sync-lessons-for-masi-2026-10-08.md)).**
   Built in Assessment Results Plan 1, Tasks 6–9: exclusive `submit_assessment`, one complete
   outbox payload, one call regardless of the 1,000-row ready limit, no per-item fallback, and atomic
@@ -410,7 +410,7 @@ correctly; the missing contract is inbound hydration.
   corrections; local acknowledgement displays the winner and terminal refusals do not count.
   **Remaining: Task 7's hosted apply/practice-data wipe and two-phone device gate.** Each external
   step needs Jim's yes. The mastery walk is built in Assessment Results Plan 3 Task 7;
-  application triggers/status remain Task 8.
+  its handle-owned store and triggers are built in Task 8; combined status/readers remain Task 9.
   Assessment evidence already uses the latest non-skipped stored letter result from any recorder
   in the active Programme, including WelaPLUS Q1; `userId` scopes that Programme, not the recorder.
   Confirmation reads have no recorder or Programme filter. The correction rule is in the
@@ -631,17 +631,14 @@ Sharpened by Zazi's 2026-09/10 delta-pull, first-install, and measurement work
 ([`zazi-sync-lessons-for-masi-2026-10-08.md`](./zazi-sync-lessons-for-masi-2026-10-08.md), Z3–Z11).
 Order these before the pilot unless marked otherwise:
 
-- [ ] **Server-owned rollout and kill switch (Z8).**
-  - A `private` table holds a per-account row and an "all" row. The RPC answers `rollout_disabled`
-    when the caller sees no row, so a canary is one insert and a rollback is one delete, with no OTA.
-  - The same table can carry the pull interval and a minimum client protocol. This closes the
-    "remotely configurable pull intervals and a sync kill switch" item above.
-  - Disabling a feature never deletes a phone's cursor. The presence of a cursor does not mean the
-    feature is enabled.
-  - Run a rollback drill before the first cohort.
-  - **Scope it explicitly (Codex 2026-10-08):** an RPC-level gate stops only RPC pulls. Masi's
-    roster pulls and uploads are direct table calls, so the client must read the switch before
-    each sync pass, and the switch's behaviour on a read failure must be defined.
+- [x] **Server-owned rollout and kill switch for the three AR history RPCs (Z8).**
+  AR Plan 3 Tasks 1/2/7/8 use `private.history_pull_rollout`: per-EA row, then everyone row,
+  then off; disabled RPCs return `MR001 / rollout_disabled`. The phone preserves rows and cursor
+  position, records incompleteness and resumes from that position when enabled. See the
+  [history switch and trigger contract](./rls-sync-contract-map.md#assessment-run-and-mastery-history-ar-plan-3).
+  **Scope:** uploads, roster/reference and session-history pulls are not gated. A broader sync
+  kill switch, remotely configurable intervals/minimum protocol and the cohort rollback drill
+  remain open; this checkbox closes only the three assessment/run/mastery RPC gates.
 - [ ] **Jitter covers cold opens, not only warm caches (Z7).** Use one shared 0–3 minute
   admission window per cold open or offline-to-online transition. Empty-cache bootstrap and
   explicit refresh bypass it.
@@ -649,10 +646,14 @@ Order these before the pilot unless marked otherwise:
   no-progress timer, with Retry/Sign out shown only after a no-progress interval. Pair it with a
   visible "still downloading" state, so an empty screen is never read as "no data". A run budget
   that resumes from its cursor, as CAP-004's does, is not a failure claim and stays as is.
-- [ ] **Pull-trigger budget tests (Z4).** Pin every caller that may start a pull, with its frequency:
-  launch, per save, per foreground, per gesture. Per-save and per-foreground callers must request
-  the narrowest domains. Zazi shipped a save that triggered a full re-download, and Start took
-  22.8 s.
+- [x] **Pull-trigger budget tests for history pulls (Z4).** AR Plan 3 Task 8 pins all seven
+  session/assessment-history service start sites and their frequencies in
+  `historyPullTriggerBudget.test.js`. Repositories, components, hooks, uploads, literacy saves
+  and sync completion never start history. The real-store budget proves zero RPCs at +1/+7/+14
+  minutes and three delta calls at +16. See the
+  [trigger inventory](./rls-sync-contract-map.md#assessment-run-and-mastery-history-ar-plan-3).
+  Broader roster/reference/upload trigger budgets remain open. Zazi's save-triggered full
+  re-download and 22.8 s Start regression are the motivating case.
 - [ ] **Write-wait measurement (Z3).** Add a real-SQLite test that times a user write queued behind
   a pull transaction. Add enqueue/start/end timing lines on the writer queue (`src/db/client.js`),
   tagged with the pull that was active when the write was queued.

@@ -4,6 +4,7 @@ import { requestOpen, requestClose, requireCurrentHandle, getCurrentHandle } fro
 import { repositoriesForTest, servicesForTest } from '../test-support/legacyHandleMocks';
 jest.mock('../test-support/handleServiceMocks', () => ({
 startSessionHistoryPull: jest.fn(),
+startAssessmentHistoryPull: jest.fn(),
 getSyncStatus: jest.fn(),
 requeueTerminalRlsFailures: jest.fn(async () => 0),
 syncAll: jest.fn()
@@ -19,7 +20,7 @@ import { getAuthStorageKey, clearPersistedSession } from '../src/services/persis
 import { getSyncStatus, requeueTerminalRlsFailures, syncAll } from '../test-support/handleServiceMocks';
 import { runStartupRepairs } from '../src/services/startupRepairs';
 import { createSyncStateRepository, syncStateRepository } from '../src/db/repositories/syncStateRepository';
-import { startSessionHistoryPull } from '../test-support/handleServiceMocks';
+import { startSessionHistoryPull, startAssessmentHistoryPull } from '../test-support/handleServiceMocks';
 import { runSessionHistoryPull, resetSessionHistoryState, createSessionHistoryState, sessionHistoryScope } from '../src/services/sessionHistoryPull';
 import { runMigrations } from '../src/db/migrations';
 import { createMigratedDatabase, seedCoreData } from '../test-support/sqliteRepositoryTestUtils';
@@ -178,6 +179,7 @@ describe('OfflineContext Plan 4 sync API', () => {
     syncStateRepository.getPullState.mockResolvedValue(null);
     syncStateRepository.getReconcileBreakerNotes.mockResolvedValue([]);
     startSessionHistoryPull.mockReset().mockResolvedValue(null);
+    startAssessmentHistoryPull.mockReset().mockResolvedValue(null);
     resetSessionHistoryState(testHistoryState);
   });
 
@@ -815,6 +817,23 @@ describe('OfflineContext Plan 4 sync API', () => {
     });
 
     expect(result.current.domainPullNonce).toBe(0);
+  });
+
+  test('a completed sync pass never starts assessment history', async () => {
+    const { result } = await renderOfflineHook();
+    await act(async () => { await result.current.syncNow(); });
+    expect(syncAll).toHaveBeenCalledTimes(1);
+    expect(startAssessmentHistoryPull).not.toHaveBeenCalled();
+  });
+
+  test('foreground with fresh roster stamps starts assessment history once', async () => {
+    syncStateRepository.getPullState.mockResolvedValue({ lastPulledAt: new Date().toISOString() });
+    const { result } = await renderOfflineHook();
+    const listener = AppState.addEventListener.mock.calls.at(-1)[1];
+    await act(async () => { listener('background'); listener('active'); await Promise.resolve(); });
+    expect(result.current.domainPullNonce).toBe(0);
+    expect(startAssessmentHistoryPull).toHaveBeenCalledTimes(1);
+    expect(startAssessmentHistoryPull).toHaveBeenCalledWith();
   });
 
   test('foregrounding requests one domain pull when either pull stamp is stale', async () => {

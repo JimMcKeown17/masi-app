@@ -2234,10 +2234,90 @@ Task 7 implementation and local verification are complete. The commit step is co
 No PostgreSQL/hosted probe, migration application, hosted fixture, EAS build, device check or PR
 was run; this task adds phone walks and synthetic-remote SQLite evidence only.
 
+#### Task 8: handle-owned store, trigger wiring and history trigger budget
+
+Built `createAssessmentHistoryStore` and `useAssessmentHistoryStatus` in
+`src/services/assessmentHistoryStatus.js`. The store waits for the signed-in handle's reference
+readiness barrier and runs Battery Runs → assessments → mastery, with separate walker states,
+page/run publication versions and per-walk results. `getPullStates(userId)` resolves that user's
+active Programme scopes and unscoped mastery state; absent Programme values are null.
+Missing identity starts do nothing. A returned cancellation stops the pass, other statuses
+permit the next walk, and stale actor errors rethrow.
+
+MR002 permits one reference refresh per pass and one rerun of the mismatched walk after a
+successful refresh. Later/repeated mismatches never loop. The refresh is the real
+`pullReferenceData(referenceOptions)` through the handle's refresh barrier, with current-actor
+admission; it switches the local year whatever the response order (Task 7A). Ordinary refresh
+failure logs the fixed tag and message only, leaves the walk incomplete and still allows
+mastery. A stale refresh ends the pass. Tests execute this through the real reference
+repositories and refresh in both response orders, including failed-year-query behavior.
+
+Starts during a running pass share one trailing pass, upgraded to forced if any waiting call
+is forced. This serial follow-up closes the class-persisted-after-coverage window without
+starting concurrent walks. Reset invalidates all three walker states and all publication
+callbacks, discards the pending pass (resolving its callers with null), and allows a new actor's
+pass without waiting for the old actor. The snapshot remains generation-fenced through the old
+pass's completion. No timer, schema, dependency or new automatic retry loop was added.
+
+`handleServices` constructs the store with handle repositories/client/queue and resets it on
+close. `services.assessmentHistory.start` captures `handle.userId`; consumers cannot redirect
+the handle service to another EA. ChildrenContext resets on actor change and starts after
+roster persistence; ClassesContext starts after assignments persist and bootstrap status
+publishes; OfflineContext starts beside session history on an online foreground/reconnect when
+no roster pull was requested. These are never awaited. Assessment History has a forced
+pull-to-refresh control with a gesture-local indicator; focus still only reads SQLite.
+Page-driven reader refresh and combined History UI remain Task 9.
+
+Extended the legacy handle adapter to clone the assessment service/store and accept its three
+specified mocks. Added the two real-SQLite suites to the integration configuration, provider/
+gesture cases in the five prescribed existing suites, and a shared test fixture that runs the
+real walks and real refresh against a dynamic fake server. The static trigger inventory pins
+exactly three session and four assessment start sites. It forbids starts from repositories,
+components, hooks, upload and literacy persistence. The real-store budget makes zero RPCs at
++1/+7/+14 minutes and exactly three delta-page calls at +16.
+
+**Adaptations and choices.** `ClassesContext.test.js:7-9` was repository-only despite the plan's
+provider-case instruction. Its added provider block uses the real class repositories and a fake
+remote boundary, observes the new trigger and verifies the synced assignment, without changing
+the existing repository cases. The shared fixture uses the existing valid UUID Programme/child
+fixtures for its real assessment-page case. The refresh-control indicator follows only the
+gesture's shared promise; background page subscriptions belong to Task 9. A default set of
+independent walker states is created when the store caller omits `states`.
+
+Recorded RED → GREEN commands below all use
+`PATH="$HOME/.nvm/versions/node/v20.19.4/bin:$PATH"`; runtime check returned `v20.19.4`.
+
+| Gate / command | Result |
+| --- | --- |
+| `npm run test:integration -- __tests__/assessmentHistoryStatus.test.js __tests__/historyPullTriggerBudget.test.js __tests__/handleServices.test.js` — RED | Exit 1: 3 failed suites; 1 failed / 31 passed tests (32 executed), 5.755 s. Two suites could not load the missing store; the new handle case found no assessmentHistory service |
+| `npx jest __tests__/OfflineContext.test.js __tests__/ChildrenContext.test.js __tests__/ClassesContext.test.js __tests__/AssessmentHistoryScreen.plan5.test.js --maxWorkers=25%` — RED | Exit 1: 4 failed suites; 7 failed / 91 passed tests (98 total), 4.269 s. Trigger/reset/control assertions failed; the class-provider fixture also lacked isCurrent |
+| `npx jest __tests__/ClassesContext.test.js` after fixing the fixture's isCurrent | Exit 1: 1 suite; 1 failed / 6 passed tests, 1.459 s. The persisted assignment was present but the assessment-history start count was zero |
+| Same focused integration command after implementation | Exit 1: 1 failed / 2 passed suites; 1 failed / 46 passed tests (47 total), 4.223 s. Actor-snapshot assertion sampled React before B's subscription flush; corrected by awaiting that boundary inside act |
+| Same focused provider/gesture command — GREEN | Exit 0: 4 suites / 98 tests passed, 4.866 s |
+| Same focused integration command after the subscription timing correction and three additional lifecycle guards — GREEN | Exit 0: 3 suites / 50 tests passed, 4.919 s |
+| `npx jest __tests__/productionBindingStatic.test.js __tests__/sessionHistoryStatus.test.js` | Exit 0: 2 suites / 24 tests passed, 8.275 s |
+| `npx jest --silent --maxWorkers=25%` | Exit 0: 360 suites / 4,495 tests passed, 135.134 s |
+| `npm run test:integration --silent` | Exit 0: 68 suites / 806 tests passed, 125.64 s |
+| `git diff --check`; read-only no-diff check for the plan, session store/walk, shared walker and mastery repository | PASS |
+
+Both full suites ran concurrently. No unrelated failure or timeout required a file rerun.
+The production-handle test closes A during a never-resolving Battery Run request, observes a
+StaleActorError, verifies B's store is untouched and reopens A with no history failure marker.
+Additional real-store cases cover cancellation, discarding a waiting trailing pass on reset,
+failed prerequisites, repeated mismatch and disabled-walk continuation.
+
+The contract map now records store lifecycle, bounded year recovery and the exact seven-row
+trigger inventory. ROADMAP Z8 is built specifically for the three AR history RPCs; uploads,
+roster/reference and session-history pulls remain ungated. Z4 is pinned for history pulls;
+broader domain trigger budgets remain open. Task 8 implementation and local verification are
+complete. No PostgreSQL execution, hosted Supabase work,
+hosted fixture, EAS build, device check or PR was performed.
+
 ## Decision Register
 
 | Date | Decision | Rationale | Revisit Trigger |
 | --- | --- | --- | --- |
+| 2026-10-21 | AR Plan 3 Task 8 serializes one coalesced trailing history pass and permits at most one reference refresh/restart per pass on MR002. The store and all triggers capture the signed-in handle; close/reset fences all old publications. | Joining an in-flight pass can miss a class persisted after its coverage snapshot. One follow-up closes that window while normal freshness still bounds RPC traffic; a bounded real refresh recovers year disagreement without a retry loop. | Provider/device trigger budgets, actor-close or year-rollover tests show extra requests, stranded coverage or stale publication. |
 | 2026-10-21 | AR Plan 3 Task 7 uses synced server-known grants for assessment/run/mastery coverage, with one resolved year per Programme run and the existing transactional bounds on every durable write. Saver query classifications survive the traversal boundary. | Timestamp progress alone cannot detect authorization gains or recover a deleted old mastery row. Lost coverage makes return a gain, and expected-year agreement prevents a completed cursor for the wrong year. One extra classification branch fixes the Task 5 reporting gap without changing session traversal. | Controller review or device year-rollover/handover gates expose a mismatch in grants, cursor progress or recovery. |
 | 2026-10-21 | AR Plan 3 Task 6 orders mastery pulls against accepted server tuples and couples handover deletion with coverage removal in the acknowledged assignment transaction. Terminal outbox evidence never owns or blocks the accepted value. | A stale page must not undo a newer acknowledgement, a phone clock must not block accepted-state convergence, and an old timestamp cursor cannot recover locally deleted rows unless the returning child is a coverage gain. The existing breaker admits both assignment ending and deletion together. | Device handover, stale-page or refusal-recovery gates expose convergence or visibility behavior outside the plan's accepted residuals. |
 | 2026-10-21 | AR Plan 3 Task 5 uses multi-row statements with a 999-binding ceiling for assessment-family and run page apply, including set-wise terminal run advancement. | The signed-in facade exposes individual SQL calls rather than native prepare handles. Bounded batched statements preserve one page/cursor transaction while avoiding per-item calls; present immutable families and locally started runs remain untouched. | A03s first-commit timing, production facade compatibility or larger page measurements require tuning within the same atomicity contract. |

@@ -946,8 +946,8 @@ The client validates the schema version, completeness flag, authenticated user i
 
 `assessmentsRepository.saveHistoryPage` and `batteryRunsRepository.saveHistoryPage` apply one
 whole page with its cursor in one signed-in handle writer transaction. Mastery page apply is
-described below. The Task 7 walks call these savers; application trigger/status wiring remains
-Task 8. The savers themselves do not fetch from the server.
+described below. The Task 7 walks call these savers through the Task 8 handle-owned store
+and application triggers. The savers themselves do not fetch from the server.
 
 - **Validate before writing.** Assessment pages reconstruct each flat family from its parent
   and embedded items and call `assertSubmitShape`, including the exact `total_items` count.
@@ -1077,8 +1077,9 @@ screen tests.
 ### Assessment, run and mastery history (AR Plan 3)
 
 The three configs in `src/services/assessmentHistoryPull.js` use the shared `historyWalk`.
-Call them in order **Battery Runs → assessments → mastery**. Task 7 supplies the walks; Task 8
-owns the store and application triggers, including reference refresh/restart on year mismatch.
+The handle-owned `createAssessmentHistoryStore` runs them in order
+**Battery Runs → assessments → mastery**, after the handle's reference-data readiness barrier.
+Its repositories, client and request queue all belong to that same signed-in handle.
 
 | Walk / RPC | Durable scope | Page size | Window and coverage |
 | --- | --- | --- | --- |
@@ -1123,10 +1124,55 @@ deleted from them on handover; their transactional bounds apply when they next w
 as `windowStart`, and uses the same id for coverage and `p_academic_year_id` on every page.
 The server is authoritative and raises `MR002` before reading a mismatched page, even an empty
 one. The walk stops as `year_mismatch`, retaining the last saved position and marking failure
-and incompleteness. The Task 8 store must refresh reference data and restart; the order-independent
-Task 7A refresh changes the local year, whose changed `windowStart` resets Programme cursors.
+and incompleteness. The store refreshes reference data and reruns that walk once. It permits only one refresh
+per pass; later or repeated mismatches do not loop. The order-independent Task 7A refresh changes
+the local year, whose changed `windowStart` resets Programme cursors.
 Mastery's null window never resets on a year change. Missing Programme/year yields `dependency`
 without a request or stamp for either Programme walk.
+
+**Store and actor lifecycle (Task 8).** `services.assessmentHistory.start({ force = false })`
+captures the handle's user id. `store.getPullStates(userId)` reads Battery Run/assessment state
+for that user's active Programme and mastery state for that user; absent Programme state is
+null. The external-store snapshot is `{ running, pageVersion, runVersion, lastResults }`,
+where `lastResults` has `batteryRuns`, `assessments` and `mastery` entries. Each committed
+page increments `pageVersion`; each finished pass increments `runVersion`.
+`useAssessmentHistoryStatus` subscribes through the signed-in handle.
+
+Starts during a running pass coalesce into one trailing pass, forced if any waiting caller
+requested force. Waiting callers share that pass's promise. It runs after the current pass,
+so a class persisted after a walk read its coverage cannot be stranded behind a joined run.
+The trailing pass still uses normal freshness/coverage admission unless forced.
+
+Handle close and ChildrenContext actor changes reset the store and all three walker states.
+Generation checks fence page/result/final publications; reset discards any waiting trailing
+pass. A `StaleActorError` rethrows and ends the pass; `cancelled` stops before the next walk.
+Other returned statuses allow the remaining walks to run. Reference prerequisites are awaited
+before any history request or completed-pass publication. MR002 recovery uses
+`pullReferenceData(referenceOptions)` through the same handle-owned refresh barrier as
+`services.pullReferenceData`. A failed ordinary refresh logs only
+`[AssessmentHistory] reference refresh failed` and its message, leaves that walk incomplete
+and does not rerun it; mastery can still run. A stale refresh rethrows.
+
+**Trigger inventory and budget (Task 8).** Every history service `.start(` in `src/` is
+pinned by `historyPullTriggerBudget.test.js`:
+
+| Service | Caller | Trigger | How often |
+| --- | --- | --- | --- |
+| `sessionHistory` | `ChildrenContext.js` after roster persist | Mount (sign-in, cold open); `domainPullNonce` (foreground/reconnect with stale stamps, first credentials, breaker Apply); Children pull-to-refresh | Once per cold open; at most once per 15 min per foreground/reconnect; per gesture |
+| `sessionHistory` | `OfflineContext.js` `requestDomainPullOrResumeHistory` | Foreground/reconnect when no roster pull was requested | Per event; complete history under 15 min old makes no request |
+| `sessionHistory` | `SessionHistoryScreen.js` pull-to-refresh, forced | Gesture | Rare |
+| `assessmentHistory` | `ChildrenContext.js` after roster persist | Same as its session-history trigger | Same as its session-history trigger |
+| `assessmentHistory` | `ClassesContext.js` after class assignments persist and bootstrap status publishes | Mount; `domainPullNonce`; Children pull-to-refresh; ClassOnboarding retry | As the roster trigger above |
+| `assessmentHistory` | `OfflineContext.js` `requestDomainPullOrResumeHistory` | Foreground/reconnect when no roster pull was requested | Per event; complete walks under 15 min old make no request |
+| `assessmentHistory` | `AssessmentHistoryScreen.js` pull-to-refresh, forced | Gesture | Rare |
+
+All starts are fire-and-forget with stale-aware error handling, so history does not delay roster
+or class publication. The assessment screen's refresh indicator follows its gesture's promise;
+screen focus remains a SQLite read. Page-driven reader refresh and combined History presentation
+are Task 9. Sync passes/completion, saves, screen focus and `isSyncing` true-to-false cache
+reloads never start history. No repository, component, hook, upload engine or literacy-session
+persistence path starts a pull. Real-store budget proof: +1, +7 and +14 minutes after completion
+make zero RPC calls; +16 minutes makes exactly one delta-page call per walk (three total).
 
 **Complete families and identity.** Assessment pages embed the whole item array and their run
 header. The embedded header is readable exactly when its assessment is, including a run started
@@ -1152,7 +1198,10 @@ Real-SQLite/fake-server proof: `assessmentHistoryPull.test.js`,
 `letterMasteryHandover.test.js` and `ClassesContextPull.integration.test.js`. They exercise
 dynamic grant loss/return, class hydration/reconcile, year mismatch between pages, restart,
 absence, the real correction acknowledgement and the handover while a request is held.
-These local tests do not close hosted HTTP, device timing or two-phone gates.
+Store/trigger proof adds `assessmentHistoryStatus.test.js`, `historyPullTriggerBudget.test.js`,
+`handleServices.test.js` and provider/gesture tests. The store year-recovery tests use the real
+reference refresh and real reference repositories in both response orders. These local tests
+do not close hosted HTTP, device timing or two-phone gates.
 
 ### Reconcile invariants and safety rails
 

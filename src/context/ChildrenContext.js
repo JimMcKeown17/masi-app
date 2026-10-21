@@ -49,6 +49,7 @@ export const ChildrenProvider = ({ children }) => {
     if (historyActorRef.current !== nextActor) {
       historyActorRef.current = nextActor;
       services.sessionHistory.store.reset();
+      services.assessmentHistory.store.reset();
     }
   }, [user?.id]);
   const activePullRef = useRef(null);
@@ -330,6 +331,7 @@ export const ChildrenProvider = ({ children }) => {
       // handover's new delivery child triggers its re-walk in this run, not the next one.
       // Never awaited: history must not delay roster publication.
       void services.sessionHistory.start().catch((error) => { if (!isStaleActorError(error)) console.error('Session history failed:', error); });
+      void services.assessmentHistory.start().catch((error) => { if (!isStaleActorError(error)) console.error('Assessment history failed:', error); });
       if (bypassedReconcileCompleted) {
         await refreshSyncStatusRef.current({ autoTrigger: false });
       }
