@@ -1066,7 +1066,7 @@ gate). The dry run listed only this file against `segygjzpujphwvrubusm`. Verifie
 
 ---
 
-### 2026-10-21 — C1 Task 1, local schema 16 `lesson_drafts` (local only, one-row slot)
+### 2026-10-21 — C1 Tasks 1–2, local schema 16 and `lessonDraftsRepository`
 
 Migration 16 adds the additive, local-only `lesson_drafts` table to each EA's SQLite file. The
 database enforces one row through a constant unique `slot`, enforces unique `session_id`, and has
@@ -1093,10 +1093,52 @@ Evidence is local Jest and real better-sqlite3 only. No Supabase/PostgreSQL, EAS
 force-quit, release, production, or field gate was run. Version 16 follows the task orchestrator's
 parallel-B2 allocation and remains subject to merge-time version reconciliation.
 
+#### Task 2 — local lesson draft repository
+
+The factory-only `createLessonDraftsRepository({ database, idFactory })` exposes `getActive`,
+`create`, `update` and `discard`, plus four named error classes and the pure `presentChildIds`
+helper. Create/update use the existing repository transaction boundary. Context and a fixed plan
+cannot drift; tracker changes retain their language code and ISO tap time; reading-level changes
+contain edits only. Updates validate the complete merged draft and replace supplied JSON fields
+whole. Unreadable JSON reports every affected column without changing the stored row. Discard
+decodes nothing and joins an explicitly supplied save transaction, so a rollback restores the
+draft with its original session id. No singleton, production caller, outbox row or server write
+was added; handle wiring remains Task 3.
+
+All commands below use `PATH="$HOME/.nvm/versions/node/v20.19.4/bin:$PATH"`.
+
+| Gate | Command after the Node prefix | Result |
+|---|---|---|
+| Create/read RED → GREEN | `npm run test:integration -- __tests__/lessonDraftsRepository.test.js` | RED: 1 suite failed to load (`Cannot find module .../lessonDraftsRepository`), 0 tests executed. GREEN: 1 suite / 4 tests passed; exit 0 |
+| Update RED → GREEN | Same command | RED: 11 failed / 4 passed (`repo.update is not a function`). GREEN: 1 suite / 15 tests passed; exit 0 |
+| Discard RED → GREEN | Same command | RED: 3 failed / 14 passed (`repo.discard is not a function`, including the restored corruption-test assertions). GREEN: 1 suite / 17 tests passed; exit 0 |
+| Additional storage-contract coverage RED → GREEN | Same command | RED: 1 failed / 24 passed; JSON serialization silently dropped an undefined future ticks key. GREEN: 1 suite / 25 tests passed; exit 0. Covers defaults, concurrent create refusal, reserved/unknown keys, field-path errors, whole-field replacement, fixed-value equality, timestamps, all corrupt JSON columns and rejection of lossy JSON values |
+| Draft-id fixed-field equality RED → GREEN | Same command | RED: 1 failed / 25 passed; repeating the stored draft id was incorrectly rejected with TypeError. GREEN: 1 suite / 26 tests passed; exit 0. Repeating id is accepted; changing it throws LessonDraftContextError, as required by the general fixed-field rule (plan lines 310, 331–332) |
+| Production binding | `npx jest __tests__/productionBindingStatic.test.js` | PASS: 1 suite / 14 tests; exit 0 |
+| Full unit, before the final draft-id regression | `npx jest --silent --maxWorkers=25%` | PASS: 349 suites / 4,233 tests; exit 0 |
+| Full unit, final code | `npx jest --silent --maxWorkers=25%` | 348 suites passed / 1 failed; 4,233 tests passed / 1 failed (4,234 total); exit 1. The unrelated SessionCountRankingScreen pageVersion-refresh test expected rendered count 2 but still saw 0 at line 55 |
+| Required isolated unrelated-file rerun | `npx jest __tests__/SessionCountRankingScreen.test.js` | PASS: 1 suite / 4 tests; exit 0. No screen/test change; one non-failing VirtualizedList act warning |
+| Full integration, final code | `npm run test:integration --silent` | 53 suites passed / 1 failed; 581 tests passed / 1 failed (582 total); exit 1. The unrelated LiteracySessionForm.submit back-to-back-submit test exceeded its existing 5,000 ms timeout at line 130 |
+| Required isolated integration-file rerun | `npm run test:integration -- __tests__/LiteracySessionForm.submit.test.js` | PASS: 1 suite / 8 tests; exit 0 (3.524 s). No source/test/timeout change |
+
+Plan sequencing adaptation: Task 2 Step 5's corruption test calls `discard` at plan lines 507–508,
+but `discard` is not introduced until Step 11 (lines 543–544). Its final two assertions were
+deferred to the discard slice and restored unchanged before that RED run. All 17 planned test
+names and final assertions are retained. Nine additional tests cover the remaining stated
+storage rules; invalid values that cannot round-trip through JSON are refused with field paths
+rather than silently changed. Evidence remains local Jest/real better-sqlite3; physical device,
+handle reopen/isolation, hosted backend and release checks are later gates.
+
+The final full runs retain the two unrelated failures above even though each file passed its
+single isolated rerun. They are not reported as fully green aggregate exits. The integration run
+also emitted existing auth/network failure-path, stale/closed-handle, React/Paper and ChildrenContext
+undefined-`.catch` diagnostics in passing suites. No out-of-scope fix or timeout adjustment was made.
+
 ## Decision Register
 
 | Date | Decision | Rationale | Revisit Trigger |
 | --- | --- | --- | --- |
+| 2026-10-21 | Lesson draft context, language code and plan are fixed at the storage boundary (C14, C18); tracker changes must be in the lesson's language; the save path deletes the draft in its own transaction. | A resumed lesson must preserve its original context and correction times. `discard(id, { transaction })` joins the caller's save transaction; a failed save restores the same draft/session id. JSON validation prevents silently lost edits. | Wave 2 changes the lesson-context contract or the save transaction boundary. |
 | 2026-10-17 | **Field-continuity decisions (Jim).** (1) The **server** closes a time entry left open for more than ten hours; the phone-only close is not enough. (2) Android backup **excludes every SQLite database** (Claude's recommendation, accepted). (3) Losing an unfinished session or assessment form on navigate-away or process death is **accepted for the pilot**. (4) Revocation follows **Zazi's model**, operated by a script until a Head Office admin website exists. | (1) A phone that stays offline or unopened leaves the hosted row open indefinitely, so staff reports cannot tell a forgotten clock-out from a long day. (2) A restored database replays already-accepted work (Zazi ZZ-BUG-20260907-001); the server is the recovery path. (3) Drafts belong to the planned SQLite draft/run lifecycle, not a temporary patch. (4) One proven operator procedure across both apps; the website is later Head Office work. | Field reports of lost forms; the server close is found to fight legitimate long shifts; a Head Office admin surface is built. |
 | 2026-09-04 | Treat 1,000 rows as the verified hosted PostgREST response cap and require explicit bounded pagination, deadlines, and completeness accounting in the first implementation of every potentially larger pull family. | A real cap-plus-one request returned exactly 1,000 of 1,205 rows with HTTP 206 and an exact content range. A successful but capped response is incomplete replication, not a performance inconvenience; the current assessment-item estate is already close enough that a non-paginated intermediate contract would be throwaway and unsafe. | The hosted API cap is deliberately reconfigured and re-proven through an equivalent cap-plus-one probe, or a family moves behind a server operation whose response-completeness contract is independently bounded and tested. |
 | 2026-08-29 | Treat an authorized session as one complete delivery-history aggregate. Owning the session or having a historical direct delivery assignment to any attendee grants the complete parent and every attendee row. | The parent activities JSON already carries child-keyed facts for the delivery event, and a child-filtered attendee list would imply a privacy boundary that does not exist while also misrepresenting the event. Admission to the session is the authorization boundary. | Masi introduces a less-trusted reader class or genuinely sensitive per-child facts. Put such facts behind a separately authorized table or redacted projection rather than silently adding them to this aggregate. |
