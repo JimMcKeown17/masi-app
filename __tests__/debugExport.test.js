@@ -80,6 +80,15 @@ describe('debug database export metadata', () => {
         ('user-1', 'assessments:assessment-1:insert', 'assessments', 'assessment-1', 'insert', '{"id":"assessment-1"}', 'terminal', 1, 'RLS denied')
     `);
 
+    await db.runAsync("insert into children (id, first_name, last_name) values ('mastery-child', 'Test', 'Learner')");
+    await db.runAsync("insert into programmes (id, code, name) values ('mastery-programme', 'literacy', 'Literacy')");
+    await db.runAsync(`insert into letter_mastery
+      (id, child_id, letter, language, confirmed, changed_at, correction_id, changed_by, programme_id,
+       sync_status, server_changed_at, server_correction_id)
+      values ('mastery-k', 'mastery-child', 'k', 'en', 1, '2026-10-20T08:00:00.000Z',
+       'correction-k', 'other-ea', 'mastery-programme', 'terminal',
+       '2026-10-20T08:00:00.123456+00:00', 'server-correction-k')`);
+
     const result = await exportDatabase({ handle: requireCurrentHandle() });
 
     expect(result).toEqual({ success: true });
@@ -129,7 +138,36 @@ describe('debug database export metadata', () => {
         lastError: 'RLS denied',
       }),
     ]);
+    expect(exported.database.letterMastery).toEqual([{
+      childId: 'mastery-child', letter: 'k', language: 'en', confirmed: true,
+      changedAt: '2026-10-20T08:00:00.000Z', correctionId: 'correction-k',
+      changedBy: 'other-ea', programmeId: 'mastery-programme', syncStatus: 'terminal',
+      serverChangedAt: '2026-10-20T08:00:00.123456+00:00', serverCorrectionId: 'server-correction-k',
+    }]);
     expect(exported.database['@sessions']).toBeUndefined();
+  });
+
+  test('orders mastery diagnostics by child and letter and retains unconfirmed records without names', async () => {
+    const db = await getTestWriter();
+    await runMigrations(db);
+    for (const childId of ['child-b', 'child-a']) {
+      await db.runAsync('insert into children (id, first_name, last_name) values (?, ?, ?)', childId, 'Test', 'Learner');
+    }
+    for (const [childId, letter, confirmed] of [['child-b', 'a', 1], ['child-a', 'z', 0], ['child-a', 'a', 1]]) {
+      await db.runAsync(`insert into letter_mastery
+        (id, child_id, letter, language, confirmed, changed_at, correction_id, changed_by)
+        values (?, ?, ?, 'en', ?, '2026-10-20T08:00:00.000Z', ?, 'user-1')`,
+      childId + letter, childId, letter, confirmed, 'correction-' + childId + letter);
+    }
+    const dump = await debugDump({ handle: requireCurrentHandle() });
+    expect(dump.letterMastery.map(row => [row.childId, row.letter, row.confirmed])).toEqual([
+      ['child-a', 'a', true], ['child-a', 'z', false], ['child-b', 'a', true],
+    ]);
+    expect(dump.letterMastery.every(row => Object.keys(row).sort().join(',') === [
+      'childId', 'letter', 'language', 'confirmed', 'changedAt', 'correctionId', 'changedBy',
+      'programmeId', 'syncStatus', 'serverChangedAt', 'serverCorrectionId',
+    ].sort().join(','))).toBe(true);
+    expect(JSON.stringify(dump.letterMastery)).not.toContain('Learner');
   });
 
   test('logs export still shares persisted logger output', async () => {

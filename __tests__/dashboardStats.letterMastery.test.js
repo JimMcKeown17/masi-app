@@ -21,7 +21,7 @@ const result = (overrides = {}) => ({
 });
 
 describe('getLetterMasteryRanking — stored question items', () => {
-  test('unions another EA’s battery evidence with confirmations stored under the language label', () => {
+  test('unions another EA’s battery evidence with confirmations stored under the language code', () => {
     const assessment = result({
       battery_run_id: 'run-1',
       items: [
@@ -34,15 +34,24 @@ describe('getLetterMasteryRanking — stored question items', () => {
       ],
     });
     const confirmations = [
-      { child_id: child.id, language: 'isiXhosa', letter: 'a' },
-      { child_id: child.id, language: 'isiXhosa', letter: 'b' },
-      { child_id: child.id, language: 'xh', letter: 'f' },
-      { child_id: child.id, language: 'English', letter: 'd' },
-      { child_id: child.id, language: 'isiXhosa', letter: 'e', _deleted: true },
+      { child_id: child.id, language: 'xh', letter: 'a', confirmed: true },
+      { child_id: child.id, language: 'xh', letter: 'b', confirmed: true },
+      { child_id: child.id, language: 'en', letter: 'f', confirmed: true },
+      { child_id: child.id, language: 'en', letter: 'd', confirmed: true },
+      { child_id: child.id, language: 'xh', letter: 'e', confirmed: false },
     ];
 
     expect(getLetterMasteryRanking([child], [assessment], confirmations, [xhosaClass]))
       .toEqual([{ child, masteredCount: 3, total: 26, percent: 12 }]);
+  });
+
+  test('an unconfirmed record does not count', () => {
+    const confirmations = [
+      { child_id: child.id, language: 'xh', letter: 'a', confirmed: false },
+      { child_id: child.id, language: 'xh', letter: 'b', confirmed: true },
+    ];
+    expect(getLetterMasteryRanking([child], [], confirmations, [xhosaClass]))
+      .toEqual([{ child, masteredCount: 1, total: 26, percent: 4 }]);
   });
 
   test('uses the newest eligible result by assessment date and created timestamp', () => {
@@ -81,7 +90,7 @@ describe('getLetterMasteryRanking — stored question items', () => {
     const afClass = { id: child.class_id, home_language: 'Afrikaans' };
     const afResult = result({ language: 'af', items: [item('L', true), item('a', true), item('m', false)] });
     const newerEnglish = result({ id: 'assessment-2', language: 'en', assessment_date: '2026-10-21', items: [item('z', true)] });
-    const confirmations = [{ child_id: child.id, language: 'Afrikaans', letter: 'k' }, { child_id: child.id, language: 'English', letter: 's' }];
+    const confirmations = [{ child_id: child.id, language: 'af', letter: 'k', confirmed: true }, { child_id: child.id, language: 'en', letter: 's', confirmed: true }];
     expect(getLetterMasteryRanking([child], [afResult, newerEnglish], confirmations, [afClass]))
       .toEqual([{ child, masteredCount: 3, total: 26, percent: 12 }]);
   });
@@ -90,7 +99,7 @@ describe('getLetterMasteryRanking — stored question items', () => {
     'keeps the 26-letter scale but no mastery when the class language has no order: %s',
     (homeLanguage) => {
       const englishAssessment = result({ language: 'en' });
-      const englishConfirmation = { child_id: child.id, language: 'English', letter: 'b' };
+      const englishConfirmation = { child_id: child.id, language: 'en', letter: 'b', confirmed: true };
 
       expect(getLetterMasteryRanking(
         [child],

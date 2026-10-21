@@ -35,7 +35,7 @@ export default function LetterMasteryRankingScreen({ navigation }) {
         setLoading(true);
         const [assessments, letterMastery] = await Promise.all([
           assessmentsRepository.getLetterResults({ userId: user.id }),
-          masteryRepository.getLetterMastery({ userId: user.id }),
+          masteryRepository.getLetterMastery({ childIds: childrenList.map((c) => c.id) }),
         ]);
         const ranked = getLetterMasteryRanking(childrenList, assessments, letterMastery, classes);
         setRanking(ranked);

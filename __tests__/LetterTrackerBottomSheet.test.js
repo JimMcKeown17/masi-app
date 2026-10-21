@@ -36,7 +36,7 @@ jest.mock('../src/db/repositories/masteryRepository', () => ({
 const child = { id: 'child-1', first_name: 'Amahle', last_name: 'Dlamini' };
 const NOW = '2026-10-20T08:15:00.000Z';
 const change = (mastered, languageCode = 'en', madeAt = '2026-10-19T08:00:00.000Z') => ({ mastered, languageCode, madeAt });
-const stored = (letter) => ({ id: `mastery-${letter}`, child_id: child.id, letter, language: 'English', _deleted: false });
+const stored = (letter) => ({ id: `mastery-${letter}`, child_id: child.id, letter, language: 'en', confirmed: true });
 const renderSheet = (props = {}) => render(<PaperProvider settings={{ icon: () => null }}>
   <MotionProvider value={{ motionLevel: 'still', reduceMotion: true, tier: 'static' }}>
     <LetterTrackerBottomSheet visible child={child} userId="user-1" languageCode="en"
@@ -74,10 +74,12 @@ describe('LetterTrackerBottomSheet', () => {
       doNotFake: ['nextTick', 'setImmediate', 'clearImmediate', 'setTimeout', 'clearTimeout', 'setInterval', 'clearInterval'],
     });
     jest.setSystemTime(new Date(NOW));
-    masteryRepository.getLetterMastery.mockResolvedValue([{ ...stored('a'), language: 'Afrikaans' }, stored('s')]);
+    masteryRepository.getLetterMastery.mockImplementation(async ({ childId, language }) =>
+      [{ ...stored('a'), language: 'af' }, stored('s')].filter(row => row.child_id === childId && row.language === language));
     const onChangesUpdate = jest.fn();
     const screen = renderSheet({ languageCode: 'af', onChangesUpdate });
     expect(await screen.findByLabelText('a, taught by coach')).toBeTruthy();
+    expect(masteryRepository.getLetterMastery).toHaveBeenCalledWith({ childId: child.id, language: 'af' });
     expect(screen.getByLabelText('s, not mastered')).toBeTruthy();
     expect(screen.getAllByText(/^[a-z]$/).map(node => node.props.children)).toEqual(PEDAGOGICAL_ORDERS.af);
     expect(screen.getByText('Amahle Dlamini · 1/26 letters')).toBeTruthy();

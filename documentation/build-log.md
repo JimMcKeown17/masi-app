@@ -1337,6 +1337,89 @@ Supabase CLI, EAS build, device check or PR was performed. Task 1's controller P
 is retained as such, not claimed as a new Task 4 run. Tasks 5–6 and Plan 3 pull remain separate;
 accepted risks A1/A2 and hosted/device rollout gates remain open.
 
+**AR Plan 2 Task 5 — readers use codes, confirmed rows and child scopes.**
+
+`loadMasteryState` retains its signature and return shape. Assessment evidence still uses
+`userId` to resolve the active Programme; confirmations now read only
+`getLetterMastery({ childId, language: languageCode })` and filter `confirmed`. The repository
+excludes terminal rows, so a refused correction never becomes displayed mastery. The loader
+does not filter confirmation recorder or Programme. `getLetterMasteryRanking` unions stored
+assessment evidence with matching child/code/confirmed rows. Both obsolete label imports and
+“Plan 2 re-keys” comments are removed. The ranking screen requests confirmations for exactly
+the displayed child ids, while its assessment query remains Programme-scoped.
+
+`debugDump` adds `letterMastery`, ordered by child id and letter, with exactly
+`childId, letter, language, confirmed, changedAt, correctionId, changedBy, programmeId,
+syncStatus, serverChangedAt, serverCorrectionId`. It exports boolean confirmation, raw
+timestamps and all statuses (including unconfirmed/terminal rows needed for diagnostics),
+with no names. A fresh database with no mastery table returns an empty array. Query errors
+use the existing diagnostic-error convention rather than falsely reporting an empty set.
+
+Updated the seven named suites: setter-based code-valued fixtures; the exact any-EA/any-Programme
+loader case with unconfirmed/terminal/other-language controls; another-EA ranking; explicit
+child/language and child-id-array call assertions; unconfirmed ranking exclusion; Afrikaans
+sheet filtering; and export field/ordering/false-value checks. Existing ranking counts,
+assessment semantics, unsupported-language behavior, sheet toggles, copy and visual assertions
+remain. No production writer, panel/sheet component, repository, migration, sync or pull edit.
+
+For the command ledger, **focused unit** is:
+`npx jest __tests__/masteryState.test.js __tests__/dashboardStats.letterMastery.test.js __tests__/LetterMasteryRankingScreen.test.js __tests__/LetterTrackerBottomSheet.test.js __tests__/LetterTrackerBottomSheet.plan5.test.js __tests__/debugExport.test.js __tests__/sqliteFoundation.test.js`.
+**Focused integration** is:
+`npm run test:integration -- __tests__/masteryState.test.js __tests__/LetterMasteryRankingScreen.test.js __tests__/debugExport.test.js __tests__/sqliteFoundation.test.js`.
+Every command below uses `PATH="$HOME/.nvm/versions/node/v20.19.4/bin:$PATH"`.
+
+| Gate / command | Result |
+| --- | --- |
+| RED: focused unit | Exit 1: 6 suites failed / 1 passed (7 total); 23 tests failed / 38 passed (61 total), 9.328 s. Executed failures show forbidden userId filters, label-based confirmation counting, missing taught tiles and missing export projection |
+| RED: focused integration | Exit 1: 4 suites failed; 10 tests failed / 22 passed (32 total), 9.401 s. Loader/export failures execute on SQLite; ranking suite also exposes its absent integration icon mock |
+| First GREEN: focused unit | Exit 0: 7 suites / all 61 tests passed, 3.456 s |
+| First GREEN attempt: focused integration | Exit 1: 3 suites passed / 1 failed to load; all 32 executed tests passed, 4.254 s. Ranking requires the virtual `@expo/vector-icons` mock already supplied by unit setup |
+| GREEN after adding that local test mock: focused integration | Exit 0: 4 suites / all 38 tests passed, 6.917 s |
+| GREEN with the final test fixture: focused unit | Exit 0: 7 suites / all 61 tests passed, 3.303 s |
+| `npx jest --silent --maxWorkers=25%` | Exit 1: 345 suites passed / 5 failed (350 total); 4,296 tests passed / 14 failed (4,310 total), 71.509 s |
+| `npm run test:integration --silent` | Exit 1: 55 suites passed / 2 failed (57 total); 638 tests passed / 7 failed (645 total), 56.045 s |
+| `rg -n "Plan 2 re-keys letter_mastery" src/utils`; plan's `grep -rn "Plan 2 re-keys letter_mastery" src/utils` | Both exit 1 with no matches, as required |
+| `git diff --check` | Exit 0 |
+
+Compared with Task 4, `masteryState` and `LetterMasteryRankingScreen` turn GREEN.
+Full-unit failed suites move 6 → 5: the two readers pass, while `LetterMasteryPanel` now
+exposes two old label/no-confirmed mock rows after the shared loader cutover. That panel and
+its fixtures are explicitly Task 6. The other four failed unit suites remain Task 6:
+`literacySessionPersistence` (4 failed tests), `LiteracySessionForm.submit` (6),
+`foreignKeyEnforcement` (1), and `completionPathBudget` (1).
+Integration still fails only the form (6 tests) and FK suite (1); the two newly registered
+reader suites pass. No unrelated failure or timeout occurred, so no isolated rerun was needed.
+`productionBindingStatic`, `moduleStateAllowlist`, `syncContractCompleteness`,
+`syncContractServerSchema`, `designSystemGuard` and `LetterTrackerScreen.plan5` all pass.
+
+Small faithful test adaptations and scope extensions:
+- Global Constraints requires real-SQLite suites to be registered. The loader and ranking screen
+  already use the real SQLite fixture but were not in the integration list. Added them at
+  `jest.integration.config.js:8–9`; the debug/foundation suites were already registered.
+  The new ranking registration needs its own virtual icon mock
+  (`__tests__/LetterMasteryRankingScreen.test.js:1`), because integration setup lacks the
+  mock that unit setup provides (`jest.setup.js:17`).
+- The Afrikaans sheet mock previously returned mixed-language rows and relied on the loader's
+  label filter. It now respects the repository's child/language arguments and asserts that exact
+  read (`__tests__/LetterTrackerBottomSheet.test.js:77–82`).
+- The dashboard fixture's old `xh` “f” row was negative under label-only matching. Under codes,
+  leaving it confirmed/xh would add a fourth mastered letter. It becomes an other-language
+  `en` row, preserving the negative control and unchanged 3/26 assertion
+  (`__tests__/dashboardStats.letterMastery.test.js:36–45`). No expected count was relaxed.
+- The fresh-before-migration debug expectation also gains `letterMastery: []`
+  (`__tests__/sqliteFoundation.test.js:562`), so the public export shape is consistent even
+  without tables. The additional export-order test proves the specified order, both boolean
+  values and absence of names.
+- The standing repo/user instructions require this build-log record although Task 5's Files
+  names no documentation. Standing domain/rollout documentation conversion remains Task 6's
+  explicit scope; no plan/spec or other standing document changed here.
+
+The local TDD skill and approved order were followed. The plan-header superpowers execution
+skills remain unavailable as recorded in Task 1. Step 5 commit, hosted preflight/wipe/migration,
+PostgreSQL harnesses, Supabase CLI, EAS, device and PR actions are controller-owned and not run.
+This task proves local readers/export behavior, not hosted SELECT visibility, two-device
+convergence or release readiness. Tasks 6–7, Plan 3 pull and accepted risks A1/A2 remain separate.
+
 ### 2026-10-21 — Lesson-plan AF: Afrikaans, release gate (controller)
 
 **What shipped on `feat/lesson-plan-af`** (base `7a831fb`):
