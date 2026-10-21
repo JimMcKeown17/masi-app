@@ -117,6 +117,25 @@ _Avoid_: "taught letters", "coach-taught", "ticks". The stored `letter_mastery.s
 The letters an EA worked on in one literacy session (`sessions.activities.letters_focused`). A record of teaching in that session, not a claim about what the child knows.
 _Avoid_: treating letters focused as mastery evidence, or as "taught letters" in the mastery sense.
 
+**Lesson plan**:
+The advice for one session with one group. It is computed from the children present and gives
+letters (two, or every unknown step-1 letter on a first session), blends at a blend tier, and
+one early reader. It is advice, not a record: what was taught is still recorded as letters
+focused, blends done and books read. Saved as `activities.lesson.plan`, it belongs to the day
+it was made (C14).
+_Avoid_: calling the session record itself a "lesson plan".
+
+**Up next**:
+The group suggested first when the EA starts a session. It is the group whose current members
+were seen least recently (never-seen groups first), skipping groups seen today; ties go to the
+fewest sessions this week, then the lower group number. The EA may choose any group.
+
+**Blend tier**:
+The length of blending items a child practises, from their reading level. Cannot blend and
+Not set give 2-letter; 3 and 4 Letter Blends give 3- and 4-letter; Word, Sentence and Paragraph
+Reading give words. Labels are the ladder's own (`2 Letter Blends`, `3 Letter Blends`,
+`4 Letter Blends`, `Word Reading`). A lesson defaults to the lowest present child's tier.
+
 **Content pack**:
 The teaching content for one language at one version: the letter order in steps, per-step
 syllables (blends) and headline words, the word bank, and the early readers. It is one immutable

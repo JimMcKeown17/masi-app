@@ -1897,3 +1897,56 @@ tabulate the measurements before theorising. And a percentage size is only meani
 against a parent whose size does not depend on the child; Jest cannot run Yoga, so the
 regression test pins that contract (every wrapper is `flex: 1`) rather than a pixel position.
 
+## A pure engine with JSON vectors (lesson plan, October 2026)
+
+The [lesson-plan engine](../src/lessonPlan/engine/index.js) is a functional core: plain data
+goes in and advice comes out. It does not open SQLite, read React state, make requests, or
+decide what time it is. The Lesson flow will own those jobs. This boundary lets us test the
+teaching rules without starting a screen or a database, and keeps the same input from producing
+different advice merely because it ran somewhere else.
+
+**The teaching day is evidence, not a clock lookup.** The caller supplies `today` as a SAST
+`YYYY-MM-DD` key. It becomes the plan's `made_on` and controls deterministic rotation. If the
+engine read the clock itself, a test at midnight or a retry on another day could silently
+change the advice. C14 makes the distinction concrete: a Monday lesson finished on Wednesday
+keeps Monday's plan when its lesson date still equals `made_on`; changing the lesson date
+means that plan is no longer evidence of advice for that date. Frozen choices retain the
+plan's day and advice, while today's date still bounds refreshed history.
+
+**Filter history at the rule boundary, even when the loader already filters it.** An older
+phone may retain last year's sessions while a new phone has downloaded only the current year.
+The engine re-applies the active-programme and academic-year window, drops future-dated rows,
+and collapses repeated session IDs before applying recency rules. Given the same covered
+history, both phones therefore use the same evidence. This does not make an incomplete
+download complete: the caller supplies each child's `historyComplete`, and missing history
+must not be mistaken for a first session. The download-completeness predicate belongs to C1,
+not to this engine.
+
+**A rule should have one owner.** The engine receives `knownLetters` instead of looking up
+letter results or confirmations. C23's evidence union belongs to the
+[shared mastery loader](../src/utils/masteryState.js): assessment evidence plus EA confirmation,
+in the lesson's language. AR Plans 2–3 can add the current-year evidence bound, re-key the
+confirmations and download other EAs' evidence without making the engine another evidence
+reader. Until those inputs are complete, the Lesson flow must pass `masteryComplete: false`;
+the engine records the supplied completeness rather than guessing it.
+
+**JSON vectors are a portable behavioral contract.** The
+[vectors beside the engine](../src/lessonPlan/engine/vectors/) contain plain inputs and expected
+outputs, with an engine-version pin. One [Jest runner](../__tests__/lessonPlanEngine.vectors.test.js)
+resolves fixture packs and freezes the inputs. A later server implementation can run the same
+cases, instead of translating expectations into a second test suite that might drift. The
+runner also checks that a plan and its browse choices agree, including when choices are
+anchored to that same frozen plan. The separate purity guard keeps clocks, I/O and ambient
+mutable state from creeping into the core.
+
+**Use a second rule to check the result, not the result's own helper.** Synthetic vectors tell
+us that ranking and tie-breaks match our specification. The
+[real-pack smoke](../__tests__/lessonPlanEngine.realPacks.test.js) additionally loads A1's bundled
+packs and checks advice with the books project's unchanged checker. Its taught-step analysis
+is an independent oracle for the engine's unlocked-sound filtering: first-session advice must
+decode at step 1, and all-letter advice must not require a later sound step. The smoke also
+checks the three release packs' letters-only behavior and the loader/engine language mapping.
+The isiXhosa candidate pack is preview content, not approved field vocabulary. These local
+tests prove neither on-device Hermes behavior nor the Lesson screen's rendering and latency;
+those remain explicit controller/device gates.
+
