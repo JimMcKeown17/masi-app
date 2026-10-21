@@ -12,6 +12,7 @@ import { chunkArray, sqlPlaceholders } from './sqliteRepositoryUtils';
 import { validateResult } from '../../assessment-questions/contractTest/validateResult';
 import { assertSubmitShape } from '../../services/assessmentFamilyPayload';
 import { LETTER_EVIDENCE_CODES } from '../../utils/assessmentRegistry';
+import { pickLatestLetterResult } from '../../utils/letterMastery';
 import { toLocalDateString } from '../../utils/localDate';
 import { SERVER_COLUMNS } from '../../services/syncServerColumns';
 import { createSyncStateRepository } from './syncStateRepository';
@@ -180,7 +181,7 @@ export const createAssessmentsRepository = ({ database } = {}) => {
   };
 
   const getQuestionResults = async ({
-    userId, programmeId, assessmentId, childId, childIds, questionCodes, language, sinceDate,
+    userId, programmeId, assessmentId, childId, childIds, questionCodes, language, sinceDate, untilDate,
     recordedByUserId, includeSkipped = false, order = 'asc',
   } = {}) => {
     if (childIds?.length === 0 || questionCodes?.length === 0) return [];
@@ -196,6 +197,7 @@ export const createAssessmentsRepository = ({ database } = {}) => {
       if (value) { clauses.push(`${column} = ?`); params.push(value); }
     }
     if (sinceDate) { clauses.push('assessment_date >= ?'); params.push(sinceDate); }
+    if (untilDate) { clauses.push('assessment_date <= ?'); params.push(untilDate); }
     if (!includeSkipped) clauses.push("substr(coalesce(stopped_reason, ''), 1, 8) <> 'skipped_'");
     const direction = order === 'desc' ? 'desc' : 'asc';
     // Bound both caller filters and item hydration, including large class-roster requests.
@@ -230,10 +232,18 @@ export const createAssessmentsRepository = ({ database } = {}) => {
     ...options, questionCodes: LETTER_EVIDENCE_CODES,
   });
 
-  const latestLetterResult = async ({ userId, childId, language } = {}) => {
-    const results = await getLetterResults({ userId, childId, language, order: 'desc' });
-    return results.find(result => result.items.some(item => item.metadata?.reached !== false)) || null;
+  const getLetterEvidenceResults = async ({ userId, childId, childIds } = {}) => {
+    const db = await resolveDatabase(database);
+    const year = await getActiveAcademicYear(db);
+    if (!year) return [];
+    return getLetterResults({
+      userId, childId, childIds, sinceDate: year.starts_on, untilDate: year.ends_on,
+    });
   };
+
+  const latestLetterResult = async ({ userId, childId, language } = {}) => pickLatestLetterResult(
+    await getLetterEvidenceResults({ userId, childId }), { childId, languageCode: language },
+  );
 
   const countResults = async ({ userId, childId, questionCode } = {}) => {
     const db = await resolveDatabase(database);
@@ -297,6 +307,7 @@ export const createAssessmentsRepository = ({ database } = {}) => {
     saveQuestionResult,
     getQuestionResults,
     getLetterResults,
+    getLetterEvidenceResults,
     latestLetterResult,
     countResults,
     saveHistoryPage,

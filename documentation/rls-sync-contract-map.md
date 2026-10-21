@@ -1227,6 +1227,23 @@ become history references: identity/display names, no roster relationships or up
 Absence never deletes and there is **no page reconcile**. Mastery's one removal path here is the
 acknowledged child EA handover delete; pending/refused work survives it.
 
+**Readers: current-year letter evidence (C23, Task 10).**
+`assessments.getLetterEvidenceResults({ userId, childId, childIds })` reads Letter results in
+the active Programme between the active academic year's `starts_on` and `ends_on`, inclusive.
+It uses `getQuestionResults`'s `sinceDate` and `untilDate` filters; no active year yields `[]`.
+Ordinary `getLetterResults` history remains unbounded unless its caller supplies dates.
+`latestLetterResult` and the mastery ranking share `pickLatestLetterResult`: match child and
+language, require a `LETTER_EVIDENCE_CODES` Question, exclude skipped results and those with
+no reached items, then choose the latest `assessment_date`, breaking ties by `created_at`.
+The ranking screen supplies the bounded accessor; `loadMasteryState` continues through
+`latestLetterResult`. Both compute mastery from stored item prompts. Old phones retaining
+last year's results and fresh phones therefore use the same evidence window.
+Confirmations remain current child state: no year, recorder or Programme filter is added to
+`mastery.getLetterMastery`. They still count before a new baseline or when no year is active.
+Real-SQLite `letterEvidenceYear.test.js` covers old/fresh agreement, both date bounds, no-year
+confirmation retention and tracker/ranking agreement. Panel read/tap ordering and the open
+sheet's accepted staleness are unchanged.
+
 **Server switch.** Each RPC consults `private.history_pull_rollout` for its feature
 (`assessments`, `battery_runs`, `letter_mastery`): per-EA row, then everyone row, then off.
 `MR001` returns `disabled`, preserves data and cursor position, and records an incomplete

@@ -2383,10 +2383,78 @@ local verification are complete. The commit step is controller-owned. No migrati
 network/hosted Supabase action, PostgreSQL execution, EAS build, device check or PR was performed.
 Native visual and physical two-phone gates remain open.
 
+#### Task 10: C23 — current academic year letter evidence
+
+`getQuestionResults` now accepts an inclusive `untilDate`. The new
+`getLetterEvidenceResults({ userId, childId, childIds })` reads Letter results between the
+active academic year's start and end through the existing active-Programme query. With no
+active year it returns `[]`. Ordinary history is retained and its accessor remains unbounded
+unless the caller supplies dates. No schema or write-path change is required.
+
+`pickLatestLetterResult` is the shared selector for `latestLetterResult` and the mastery
+ranking: match child/language, require a Letter Question and a reached item, exclude skipped
+results, then sort by assessment date and creation time. It filters into a new array, leaving
+the caller's order intact. The ranking screen reads the bounded accessor. `masteryState.js`
+continues through `latestLetterResult`; confirmations still have no year, recorder or Programme
+filter. Before the year's baseline, or with no active year, confirmations continue to count.
+
+The new real-SQLite suite uses two independent migrated databases, `seedCoreData`'s active
+2026 year (via `seedHistoryData`) and an inactive 2025 year. It covers the five named plan
+cases plus inclusive start/end, out-of-window dates, child filters, empty child ids and the
+continued availability of ordinary history. The screen suite also proves that last year's
+result renders 0/26. Pure selector tests retain date/time, language, child, Question, skipped,
+empty and unreached eligibility checks and verify that input order is unchanged.
+
+**Small faithful test adaptations.** `createFamilySyncFixture`
+(`test-support/assessmentFamilySyncTestUtils.js:25-46`) does not seed an academic year. Existing
+mastery-loader tests now explicitly seed 2026 (`__tests__/masteryState.test.js:14-24`), as does
+the ranking fixture (`__tests__/LetterMasteryRankingScreen.test.js:34-55`); their clocks are
+fixed within that year. The existing repository selector test now seeds its year and passes
+`language: 'xh'` (`__tests__/assessmentsRepository.questionResults.test.js:374-391`), matching
+Task 10's explicit-language picker contract instead of its previous all-language call.
+The full suites identified one more fixture: the session form's stored-evidence test had no
+academic year. It now seeds 2026 and dates the result inside it
+(`__tests__/LiteracySessionForm.submit.test.js:288-307`). Its locked tile and confirmation-save
+assertions are unchanged. No production fallback was added for an incomplete fixture.
+
+Every verification command below uses `PATH="$HOME/.nvm/versions/node/v20.19.4/bin:$PATH"`;
+the runtime is `v20.19.4`. The focused unit command is
+`npx jest __tests__/letterEvidenceYear.test.js __tests__/masteryState.test.js __tests__/letterMastery.storedItems.test.js __tests__/LetterMasteryPanel.test.js __tests__/LetterTrackerBottomSheet.test.js __tests__/LetterTrackerBottomSheet.plan5.test.js __tests__/LetterTrackerScreen.plan5.test.js __tests__/dashboardStats.letterMastery.test.js __tests__/LetterMasteryRankingScreen.test.js __tests__/assessmentsRepository.questionResults.test.js --maxWorkers=25%`.
+The focused SQLite command is
+`npm run test:integration -- __tests__/letterEvidenceYear.test.js __tests__/masteryState.test.js __tests__/LetterMasteryPanel.test.js __tests__/LetterMasteryRankingScreen.test.js`.
+
+| Gate / command | Result |
+| --- | --- |
+| `npm run test:integration -- __tests__/letterEvidenceYear.test.js` — RED | Exit 1: 5 failed / 1 passed tests, 1 failed suite, 3.672 s. Executed assertions showed last-year, after-end and no-active-year evidence still counting; two tests found the missing bounded accessor. |
+| `npx jest __tests__/dashboardStats.letterMastery.test.js __tests__/LetterMasteryRankingScreen.test.js --runInBand` — RED | First run: exit 1, 2 failed suites, 4 failed / 15 passed tests, 2.559 s. Adding the rendered old-year regression and rerunning before implementation: exit 1, 5 failed / 15 passed tests (20 total), 4.181 s. Missing picker/accessor and last year's rendered evidence. |
+| Same single-suite SQLite command — GREEN | Exit 0: 1 suite / 6 tests passed, 1.367 s. |
+| Same two-suite unit command — GREEN | Exit 0: 2 suites / 20 tests passed, 2.675 s. |
+| Focused unit command, before legacy fixture adaptation | Exit 1: 2 failed / 8 passed suites, 4 failed / 272 passed tests (276 total), 7.049 s. Three loader assertions and the repository selector required an active year; the selector also required an explicit language. |
+| Focused SQLite command, before legacy fixture adaptation | Exit 1: 1 failed / 3 passed suites, 3 failed / 45 passed tests (48 total), 11.005 s. Same loader fixture issue. |
+| Focused unit command — GREEN | Exit 0: 10 suites / 276 tests passed, 7.122 s. |
+| Focused SQLite command — GREEN | Exit 0: 4 suites / 48 tests passed, 6.164 s. |
+| First `npx jest --silent --maxWorkers=25%` | Exit 1: 1 failed / 361 passed suites, 1 failed / 4,531 passed tests (4,532 total), 70.503 s. Session form's stored-evidence fixture lacked an active year. |
+| First `npm run test:integration --silent` | Exit 1: 1 failed / 69 passed suites, 1 failed / 828 passed tests (829 total), 64.6 s. Same session-form fixture. |
+| `npx jest __tests__/LiteracySessionForm.submit.test.js --runInBand` after fixture adaptation | Exit 0: 1 suite / 14 tests passed, 5.676 s. |
+| `npm run test:integration -- __tests__/LiteracySessionForm.submit.test.js` after fixture adaptation | Exit 0: 1 suite / 14 tests passed, 5.74 s. |
+| Final `npx jest --silent --maxWorkers=25%` | Exit 0: 362 suites / 4,532 tests passed, 68.926 s. |
+| Final `npm run test:integration --silent` | Exit 0: 70 suites / 829 tests passed, 55.832 s. |
+| `git diff --check` and read-only no-diff checks of the plan and protected production paths | PASS. |
+
+Both full suites ran concurrently, without an extra concurrent production-binding suite. No
+unrelated timeout was identified. The plan, C1 `pullCoverage.js`, mastery loader, correction
+repository, panel, tracker sheet and history walkers have no diff. The panel's read/tap guards
+and sheet guard suites pass. `CONTEXT.md` and the contract map describe the C23 window and
+confirmation behavior. Task 10 implementation and local verification are complete. It adds
+no dependency or hosted work. The commit step is
+controller-owned; no PostgreSQL, network/hosted Supabase, EAS, device or PR action was run.
+Physical old-phone/fresh-phone agreement remains a device gate; this proof uses local SQLite.
+
 ## Decision Register
 
 | Date | Decision | Rationale | Revisit Trigger |
 | --- | --- | --- | --- |
+| 2026-10-21 | AR Plan 3 Task 10 bounds assessment evidence to the active academic year's inclusive dates and shares one child/language selector between tracker reads and the mastery ranking. No active year supplies no assessment evidence; confirmations still count. | A phone retaining last year's results must agree with a fresh phone downloading only the current year. Date filtering belongs in the repository accessor; stored items still determine mastery, while confirmations remain current child state. | Physical rollover/convergence gates or lesson-engine integration expose a different evidence window or selector. |
 | 2026-10-21 | AR Plan 3 Task 9 presents one History status over all four walks and observes page/run versions only to re-read SQLite. The panel's existing background loader receives page signals; the open session sheet receives none. | Upload completion cannot establish inbound completeness, reference children need names without roster authority, and a page observer must not become another pull trigger. Preserving the panel's tap/read fences and the sheet's baseline avoids changing accepted correction intent. | Device gates expose stale displayed data, extra pulls, tap rollback or a new need to refresh an open sheet safely. |
 | 2026-10-21 | AR Plan 3 Task 8 serializes one coalesced trailing history pass and permits at most one reference refresh/restart per pass on MR002. The store and all triggers capture the signed-in handle; close/reset fences all old publications. | Joining an in-flight pass can miss a class persisted after its coverage snapshot. One follow-up closes that window while normal freshness still bounds RPC traffic; a bounded real refresh recovers year disagreement without a retry loop. | Provider/device trigger budgets, actor-close or year-rollover tests show extra requests, stranded coverage or stale publication. |
 | 2026-10-21 | AR Plan 3 Task 7 uses synced server-known grants for assessment/run/mastery coverage, with one resolved year per Programme run and the existing transactional bounds on every durable write. Saver query classifications survive the traversal boundary. | Timestamp progress alone cannot detect authorization gains or recover a deleted old mastery row. Lost coverage makes return a gain, and expected-year agreement prevents a completed cursor for the wrong year. One extra classification branch fixes the Task 5 reporting gap without changing session traversal. | Controller review or device year-rollover/handover gates expose a mismatch in grants, cursor progress or recovery. |

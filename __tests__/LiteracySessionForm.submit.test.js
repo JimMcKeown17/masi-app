@@ -299,6 +299,12 @@ test('an isiXhosa session shows stored result evidence and saves a new confirmat
       derived: { total_correct: 2, total_attempted: 2, percent: 100, last_attempted_position: 1 },
     },
   });
+  await handle.withTransaction(async tx => {
+    await tx.runAsync(`insert into academic_years (id, label, starts_on, ends_on, is_active)
+      values ('year-2026', '2026', '2026-01-15', '2026-12-15', 1)`);
+    await tx.runAsync("update assessments set assessment_date = '2026-03-01' where id = ?",
+      '44444444-4444-4444-8444-444444444444');
+  });
   const screen = renderForm();
   fillValidForm(screen);
   fireEvent.press(screen.getByLabelText('Amahle Dlamini, letter tracker, Update'));

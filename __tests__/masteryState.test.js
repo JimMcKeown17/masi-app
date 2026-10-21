@@ -12,12 +12,16 @@ import { bindTestActor } from '../test-support/actorTestUtils';
 describe('loadMasteryState', () => {
   let f, repositories;
   beforeEach(async () => {
+    jest.useFakeTimers();
+    jest.setSystemTime(new Date('2026-10-20T12:00:00.000Z'));
     f = await createFamilySyncFixture();
+    await f.db.runAsync(`insert into academic_years (id, label, starts_on, ends_on, is_active)
+      values ('year-2026', '2026', '2026-01-15', '2026-12-15', 1)`);
     repositories = {
       assessments: f.assessments, mastery: createMasteryRepository({ database: f.db }),
     };
   });
-  afterEach(async () => { await f.db.closeAsync(); });
+  afterEach(async () => { await f.db.closeAsync(); jest.useRealTimers(); });
   const load = languageCode => loadMasteryState({
     repositories, userId: f.userId, childId: f.childId, languageCode,
   });

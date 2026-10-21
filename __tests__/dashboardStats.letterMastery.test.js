@@ -1,4 +1,5 @@
 import { getLetterMasteryRanking } from '../src/utils/dashboardStats';
+import { pickLatestLetterResult } from '../src/utils/letterMastery';
 
 const child = { id: 'child-1', class_id: 'class-1' };
 const xhosaClass = { id: 'class-1', home_language: ' isiXhosa ' };
@@ -67,8 +68,17 @@ describe('getLetterMasteryRanking — stored question items', () => {
       result({ id: 'empty', items: [], assessment_date: '2026-10-21' }),
     ];
 
+    expect(pickLatestLetterResult(assessments, { childId: child.id, languageCode: 'xh' }).id).toBe('latest');
     expect(getLetterMasteryRanking([child], assessments, [], [xhosaClass]))
       .toEqual([{ child, masteredCount: 2, total: 26, percent: 8 }]);
+  });
+
+  test('the shared picker returns null without eligible evidence and leaves input order intact', () => {
+    const results = [result({ id: 'older', assessment_date: '2026-10-19' }), result({ id: 'latest' })];
+    expect(pickLatestLetterResult(results, { childId: child.id, languageCode: 'xh' }).id).toBe('latest');
+    expect(results.map(row => row.id)).toEqual(['older', 'latest']);
+    expect(pickLatestLetterResult(results, { childId: child.id, languageCode: 'en' })).toBeNull();
+    expect(pickLatestLetterResult([], { childId: child.id, languageCode: 'xh' })).toBeNull();
   });
 
   test('ignores the old summary format and does not infer a letter result without a question code', () => {

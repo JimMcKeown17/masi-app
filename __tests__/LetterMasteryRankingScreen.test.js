@@ -32,7 +32,11 @@ import RankedBarRow from '../src/components/dashboard/RankedBarRow';
 let fixture;
 let repositories;
 beforeEach(async () => {
+  jest.useFakeTimers();
+  jest.setSystemTime(new Date('2026-10-20T12:00:00.000Z'));
   fixture = await createFamilySyncFixture();
+  await fixture.db.runAsync(`insert into academic_years (id, label, starts_on, ends_on, is_active)
+    values ('year-2026', '2026', '2026-01-15', '2026-12-15', 1)`);
   repositories = {
     assessments: fixture.assessments,
     mastery: createMasteryRepository({ database: fixture.db }),
@@ -48,6 +52,7 @@ afterEach(async () => {
   jest.restoreAllMocks();
   jest.clearAllMocks();
   await fixture.db.closeAsync();
+  jest.useRealTimers();
 });
 
 const renderRanking = () => renderWithProviders(
@@ -55,6 +60,15 @@ const renderRanking = () => renderWithProviders(
     <LetterMasteryRankingScreen navigation={{ navigate: jest.fn() }} />
   </SignedInEAContext.Provider>,
 );
+
+test("last year's result does not appear in the ranking", async () => {
+  const saved = await fixture.save(1, { result: questionResult(1, {
+    language: 'xh', item_set_id: 'letter_sounds@2026.1.xh',
+  }) });
+  await fixture.db.runAsync("update assessments set assessment_date = '2025-11-01' where id = ?", saved.id);
+  const screen = renderRanking();
+  expect(await screen.findByLabelText('View details for Amahle D., 0/26')).toBeTruthy();
+});
 
 test.each(['current EA', 'another EA'])(
   'renders mastery from a real stored letter result recorded by %s',
@@ -79,7 +93,7 @@ test.each(['current EA', 'another EA'])(
     });
     bindTestActor(fixture.db, fixture.userId);
 
-    const read = jest.spyOn(repositories.assessments, 'getLetterResults');
+    const read = jest.spyOn(repositories.assessments, 'getLetterEvidenceResults');
     const masteryRead = jest.spyOn(repositories.mastery, 'getLetterMastery');
     const screen = renderRanking();
     expect(await screen.findByLabelText('View details for Amahle D., 2/26')).toBeTruthy();
