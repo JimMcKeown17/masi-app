@@ -8,6 +8,7 @@ import {
   repairGroupOwnershipForSync,
 } from '../src/db/repositories/groupsRepository';
 import { createGroupingVersionsRepository } from '../src/db/repositories/groupingVersionsRepository';
+import { createSessionsRepository } from '../src/db/repositories/sessionsRepository';
 import {
   createMigratedDatabase,
   seedCoreData,
@@ -16,6 +17,99 @@ import {
 const FIXED_NOW = new Date('2026-05-21T08:00:00.000Z');
 
 describe('groupsRepository', () => {
+  describe('authoritative group programme convergence', () => {
+    test.each(['synced', 'terminal'])('a %s cached group converges to the server programme, returns to the roster and takes its session', async (status) => {
+      const db = await createMigratedDatabase(runMigrations);
+      try {
+        await seedCoreData(db);
+        const repository = createGroupsRepository({ database: db });
+        const cached = {
+          id: 'stale-programme-group', name: 'Cached group', programme_id: 'programme-b',
+          class_id: 'class-1', created_by: 'head-office', sync_status: status, row_version: 2,
+        };
+        await repository.saveGroup(cached);
+        // The assignment is authoritative A data; the group's cached Programme is stale.
+        await db.runAsync(`insert into group_ea_assignments
+          (id, group_id, ea_user_id, programme_id, created_by, sync_status)
+          values (?, ?, 'user-1', 'programme-a', 'head-office', 'synced')`,
+        groupEaAssignmentDomainId({ groupId: cached.id }), cached.id);
+        expect(await repository.getGroups({ userId: 'user-1', programmeId: 'programme-a' })).toEqual([]);
+
+        const result = await repository.saveServerGroupRows([{
+          ...cached, name: 'Authoritative group', programme_id: 'programme-a', sync_status: 'synced', row_version: 3,
+        }]);
+        expect(result).toEqual(expect.objectContaining({ applied: 1, skipped: 0, failed: 0, fallbackUsed: false }));
+        expect(await repository.getGroups({ userId: 'user-1', programmeId: 'programme-a' })).toEqual([
+          expect.objectContaining({ id: cached.id, programme_id: 'programme-a', sync_status: 'synced', row_version: 3 }),
+        ]);
+        expect(await db.getAllAsync('select * from sync_outbox')).toEqual([]);
+
+        await createChildrenRepository({ database: db }).saveChildRecord({
+          id: 'child-1', first_name: 'Test', last_name: 'Child', created_by: 'head-office', synced: true,
+        });
+        const sessions = createSessionsRepository({ database: db });
+        expect(await sessions.saveSession({
+          id: 'programme-a-session', user_id: 'user-1', programme_id: 'programme-a',
+          session_date: '2026-05-21', group_id: cached.id, children_ids: ['child-1'], synced: false,
+        })).toBe(true);
+        expect(await sessions.getSessions({ userId: 'user-1', programmeId: 'programme-a' })).toEqual([
+          expect.objectContaining({ id: 'programme-a-session', programme_id: 'programme-a', group_id: cached.id }),
+        ]);
+        expect(await db.getAllAsync('select table_name from sync_outbox order by table_name'))
+          .toEqual([{ table_name: 'session_attendees' }, { table_name: 'sessions' }]);
+      } finally {
+        await db.closeAsync();
+      }
+    });
+
+    test.each(['pending', 'failed'])('a pull does not overwrite a %s group or its owed payload', async (status) => {
+      const db = await createMigratedDatabase(runMigrations);
+      try {
+        await seedCoreData(db);
+        const repository = createGroupsRepository({ database: db });
+        const local = {
+          id: 'owed-group', name: 'Local group', programme_id: 'programme-b',
+          created_by: 'user-1', sync_status: status, row_version: 2,
+        };
+        await repository.saveGroup(local);
+        await db.runAsync('update sync_outbox set status = ?', status);
+        const groupBefore = await db.getAllAsync('select * from groups');
+        const outboxBefore = await db.getAllAsync('select * from sync_outbox order by id');
+        expect(outboxBefore).toHaveLength(1);
+        expect(JSON.parse(outboxBefore[0].payload).programme_id).toBe('programme-b');
+        const result = await repository.saveServerGroupRows([{
+          ...local, name: 'Server group', programme_id: 'programme-a', sync_status: 'synced', row_version: 3,
+        }]);
+        expect(result).toEqual(expect.objectContaining({ applied: 0, skipped: 1, failed: 0, fallbackUsed: false }));
+        expect(await db.getAllAsync('select * from groups')).toEqual(groupBefore);
+        expect(await db.getAllAsync('select * from sync_outbox order by id')).toEqual(outboxBefore);
+      } finally {
+        await db.closeAsync();
+      }
+    });
+
+    test('an older server version cannot change an acknowledged group programme', async () => {
+      const db = await createMigratedDatabase(runMigrations);
+      try {
+        await seedCoreData(db);
+        const repository = createGroupsRepository({ database: db });
+        const local = {
+          id: 'newer-local-group', name: 'Acknowledged group', programme_id: 'programme-b',
+          created_by: 'head-office', sync_status: 'synced', row_version: 5,
+        };
+        await repository.saveGroup(local);
+        const before = await db.getAllAsync('select * from groups');
+        expect(await repository.saveServerGroupRows([{
+          ...local, programme_id: 'programme-a', row_version: 4,
+        }])).toEqual(expect.objectContaining({ applied: 0, skipped: 1, failed: 0, fallbackUsed: false }));
+        expect(await db.getAllAsync('select * from groups')).toEqual(before);
+        expect(await db.getAllAsync('select * from sync_outbox')).toEqual([]);
+      } finally {
+        await db.closeAsync();
+      }
+    });
+  });
+
   describe('fixed group programme', () => {
     test.each([
       ['updateGroup', 'synced'], ['updateGroup', 'pending'],

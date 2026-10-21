@@ -1390,6 +1390,38 @@ gate). The dry run listed only this file against `segygjzpujphwvrubusm`. Verifie
   the existing migration/harness, group repository and its tests, static migration test,
   integration testMatch, contract map and this B2 verification subsection.
 
+- **2026-10-21 — B2 adversarial review, round 3: authoritative group pulls converge.** The
+  round-2 local Programme guard also ran for `saveServerGroupRows`, because that persistence
+  boundary delegates to `saveGroup`. It rejected historical cached/server Programme drift before
+  the existing pending/failed and row-version checks, leaving acknowledged or terminal groups
+  outside the EA's correct Programme roster and preventing a session save. Restricted the
+  `saveGroup` assertion to local writes classified by `shouldEnqueueOutbox(record)`; `updateGroup`
+  retains its unconditional local-edit assertion. Authoritative persistence bypasses only the
+  local-mutation guard and still uses the unchanged convergence checks. The server trigger,
+  PostgreSQL harness, sync engine and pull callers are unchanged.
+- Added five real-SQLite regressions through the public repositories: acknowledged and terminal
+  B caches accept a newer A server row, return to the EA's A roster and permit an A session with
+  its attendee; pending and failed B rows skip the conflicting pull with unchanged rows and
+  complete outbox snapshots; an older server version cannot re-scope an acknowledged cache.
+  Existing local update/re-save refusal cases for synced/pending groups and accepted
+  equal-Programme/name-only edits remain green. Updated the contract map's B2 section and groups
+  row to distinguish local mutation immutability from authoritative pull convergence.
+- Round 3 RED/GREEN, under `PATH="$HOME/.nvm/versions/node/v20.19.4/bin:$PATH"`:
+  `npm run test:integration -- __tests__/groupsRepository.test.js` first exited 1 with
+  **5 failed / 19 passed tests** (24 total, 1 suite; 1.904 s). Each new case reached the
+  Programme assertion and returned `failed: 1` / `fallbackUsed: true` instead of applying or
+  deliberately skipping the row. The same command after the scoped fix exited 0 with
+  **1 suite / 24 tests passed** (2.378 s).
+  Focused `npm run test:integration -- __tests__/groupsRepository.test.js __tests__/sessionsRepository.test.js __tests__/sessionGroupSync.test.js __tests__/ChildrenContextPull.integration.test.js __tests__/pullReconcile.integration.test.js`
+  passed **5 suites / 86 tests** (5.495 s), exit 0.
+- Round 3 final gates (same Node 20 PATH): `npx jest --silent --maxWorkers=25%` passed
+  **350 suites / 4,255 tests** (68.196 s), exit 0; `npm run test:integration --silent` passed
+  **55 suites / 601 tests** (42.112 s), exit 0. No unrelated failures or isolated reruns occurred.
+  `git diff --check` passed; read-only `git diff --exit-code` confirmed no migration or harness
+  changes. Four scoped files changed: the group repository, its real-SQLite tests, the contract
+  map and this B2 verification subsection. No PostgreSQL, network, hosted, device or Git write
+  work was run.
+
 ## Decision Register
 
 | Date | Decision | Rationale | Revisit Trigger |

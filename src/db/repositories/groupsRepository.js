@@ -298,8 +298,6 @@ export const createGroupsRepository = ({ database } = {}) => {
       programmeId: group.programme_id,
       userId: actorUserId,
     });
-    const existing = await txn.getFirstAsync('select programme_id from groups where id = ?', group.id);
-    assertGroupProgrammeUnchanged(existing, programmeId);
     const ownerUserId = group.created_by || actorUserId;
     const record = normalizeSyncFields({
       ...group,
@@ -307,6 +305,10 @@ export const createGroupsRepository = ({ database } = {}) => {
       created_by: ownerUserId,
       sync_status: group.sync_status || syncStatusFromSynced(group.synced),
     });
+    if (shouldEnqueueOutbox(record)) {
+      const existing = await txn.getFirstAsync('select programme_id from groups where id = ?', group.id);
+      assertGroupProgrammeUnchanged(existing, programmeId);
+    }
     if (await serverPullWouldClobberPendingLocal(txn, 'groups', record)) {
       return false;
     }
