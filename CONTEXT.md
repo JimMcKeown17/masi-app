@@ -117,6 +117,18 @@ _Avoid_: "taught letters", "coach-taught", "ticks". The stored `letter_mastery.s
 The letters an EA worked on in one literacy session (`sessions.activities.letters_focused`). A record of teaching in that session, not a claim about what the child knows.
 _Avoid_: treating letters focused as mastery evidence, or as "taught letters" in the mastery sense.
 
+**Content pack**:
+The teaching content for one language at one version: the letter order in steps, per-step
+syllables (blends) and headline words, the word bank, and the early readers. It is one immutable
+JSON file, produced by the early reader books project (the same file Zazi reads), bundled in the
+app and read through `getPack(languageCode)`. Inside the file the language is the shared
+catalogue's name (`isixhosa`); the app keys packs by its language code (`xh`). A **release** pack
+holds only reviewed content and is the only kind a field build loads; a **preview** pack
+(unreviewed candidates) loads only in developer builds. Until a language's real pack is released,
+an app-made **interim letters-only pack** supplies its letter order.
+_Avoid_: "curriculum" or "sequence file" for the whole pack; confusing it with an **Item set**
+(assessment content); editing a pack in place (a change is a new version).
+
 **Submitted assessment**:
 An assessment is submitted when the EA finishes it and the app saves it. Today that save is the only persistence point. Before submission the EA may change any mark freely. After submission the assessment and its answers are locked: EAs may add assessments and answers but never change or delete them. A child who needs re-assessing gets a new attempt, and the latest attempt is canonical.
 _Avoid_: "edit an assessment" for anything after submission. That is a new attempt.
