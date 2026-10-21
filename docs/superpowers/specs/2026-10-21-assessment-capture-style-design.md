@@ -1,7 +1,7 @@
 # Assessment capture style: one clean, spaced look for every Question
 
 **Date:** 2026-10-21
-**Status:** Draft for Jim's approval
+**Status:** Approved by Jim 2026-10-21
 **Branch:** `design/assessment-capture-style` (from `main` at f27b347, after PR #90)
 **Mockups (approved):** `design/mockups-2026-10-assessment-capture/` (see its README)
 **Amends:** `2026-10-19-assessment-results-and-letter-test-design.md` (grid rows) and
