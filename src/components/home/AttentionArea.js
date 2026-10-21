@@ -6,7 +6,7 @@ import { colors, tints } from '../../constants/colors';
 import { typeRoles } from '../../constants/typography';
 import IconTile from '../common/IconTile';
 
-const ICONS = { sync_attention: 'cloud-outline', auto_clock_out: 'alarm-outline', assessment_due: 'clipboard-outline' };
+const ICONS = { lesson_in_progress: 'play-circle-outline', sync_attention: 'cloud-outline', auto_clock_out: 'alarm-outline', assessment_due: 'clipboard-outline' };
 
 function AttentionCard({ item, onOpen, onDismiss }) {
   const warning = item.tone === 'warning';

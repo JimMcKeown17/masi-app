@@ -140,7 +140,7 @@ describe('SQLite migration runner', () => {
       await runMigrations(db);
       await runMigrations(db);
 
-      expect(CURRENT_SCHEMA_VERSION).toBe(MIGRATIONS.find(({ name }) => name === 'letter_mastery_current_state').version);
+      expect(CURRENT_SCHEMA_VERSION).toBe(17);
       expect(await getUserVersion(db)).toBe(CURRENT_SCHEMA_VERSION);
       expect(await getTableNames(db)).toEqual(expect.arrayContaining([
         'schema_migrations',
@@ -599,7 +599,8 @@ describe('SQLite debug dump', () => {
           { version: 13, name: 'support_incident_queue' },
           { version: 14, name: 'domain_row_versions' },
           { version: 15, name: 'assessment_results' },
-          { version: MIGRATIONS.find(({ name }) => name === 'letter_mastery_current_state').version, name: 'letter_mastery_current_state' },
+          { version: 16, name: 'letter_mastery_current_state' },
+          { version: 17, name: 'lesson_drafts' },
         ],
         tableCounts: expect.objectContaining({
           schools: 1,

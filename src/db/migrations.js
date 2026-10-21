@@ -863,6 +863,34 @@ alter table class_grouping_state add column row_version integer not null default
       }
     },
   },
+  // C7 allows one lesson in progress per EA. As with the v12 owner trigger,
+  // the database backstops the repository-level check.
+  {
+    version: 17,
+    name: 'lesson_drafts',
+    sql: `
+create table if not exists lesson_drafts (
+  id text primary key,
+  slot integer not null default 1 unique check (slot = 1),
+  session_id text not null unique,
+  programme_id text not null,
+  group_id text not null,
+  class_id text,
+  language_code text,
+  pack_id text,
+  lesson_date text not null,
+  attendance text not null default '{}',
+  plan text,
+  plan_fixed_at text,
+  ticks text not null default '{}',
+  tracker_changes text not null default '{}',
+  reading_level_changes text not null default '{}',
+  notes text,
+  created_at text not null default (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  updated_at text not null default (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+);
+    `,
+  },
 ];
 
 // Derived from the migration list so it never drifts when a migration is added.

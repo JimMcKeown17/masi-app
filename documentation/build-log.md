@@ -2818,6 +2818,204 @@ separately from worker runs and do not claim hosted, device or field proof.
 | 2026-10-21 | Lesson plan A3: controller gate suites on `9bac675` (A1 merged), `npx jest --silent --maxWorkers=25%`; `npm run test:integration --silent`; `npm run test:types` | Unit 356 suites / 4,738 tests passed; integration 52 suites / 554 tests passed; types exit 0. | Controller record, Node 20.19.4, against the 346 / 4,202 and 52 / 552 baseline. Device checks remain C3 gates; A3 has no screen. |
 | 2026-10-21 | Lesson plan A3: C3 device/performance hand-off | **NOT RUN.** Galaxy A03s (360dp) and iPhone, both 1.0x and 1.3x text, full roster of 6 pairs: picker Up next and every row's next letters within 500 ms; attendance toggle updates letters/blends within 300 ms, with no dropped frames while scrolling. | A3 adds no screen. Preserve the plan's release-build/isiXhosa-test-pack criterion, but C3's controller must resolve the artifact choice: the candidate test pack is preview-only and C12 forbids enabling it in pilot/production artifacts. No content guard is bypassed here. |
 
+### 2026-10-21 — C1 Tasks 1–5, local schema 16, repository, signed-in EA handle, history coverage and inert Home card builder
+
+Migration 16 adds the additive, local-only `lesson_drafts` table to each EA's SQLite file. The
+database enforces one row through a constant unique `slot`, enforces unique `session_id`, and has
+no foreign keys or sync bookkeeping. An upgrade from the immediately previous schema preserves an
+existing session and owned outbox row; a second launch is a true migration no-op and leaves the
+stored draft byte-for-byte equivalent at the row boundary.
+
+#### Verification Register
+
+| Gate | Command | Result |
+|---|---|---|
+| Migration RED | `PATH="$HOME/.nvm/versions/node/v20.19.4/bin:$PATH" npm run test:integration -- __tests__/lessonDraftsMigration.test.js` | Expected FAIL: 1 suite / 4 tests failed because the named migration was undefined and `lesson_drafts` did not exist |
+| Migration GREEN | Same command | PASS: 1 suite / 4 tests; exit 0 |
+| Task 1 focused neighbors | `PATH="$HOME/.nvm/versions/node/v20.19.4/bin:$PATH" npx jest __tests__/sqliteFoundation.test.js __tests__/timeEntryLocationMigration.test.js __tests__/rowVersionLocal.test.js __tests__/outboxOwnerMigration.test.js __tests__/migrations.assessmentResults.test.js __tests__/syncContractCompleteness.test.js __tests__/productionBindingStatic.test.js` | PASS: 7 suites / 108 tests; exit 0 |
+| Full unit suite | `PATH="$HOME/.nvm/versions/node/v20.19.4/bin:$PATH" npx jest --silent` | PASS: 348 suites / 4,206 tests; exit 0 |
+| Full integration suite | `PATH="$HOME/.nvm/versions/node/v20.19.4/bin:$PATH" npm run test:integration --silent` | PASS: 53 suites / 556 tests; exit 0 |
+
+An earlier focused invocation overlapped a second copy of `productionBindingStatic.test.js`; both
+used its fixed temporary `src/__binding_probe__.js`, producing 2 failures / 106 passes. The required
+isolated rerun passed 1 suite / 14 tests, and the subsequent clean focused command above passed all
+7 suites / 108 tests. This was a runner-overlap artifact; no production binding changed.
+
+Evidence is local Jest and real better-sqlite3 only. No Supabase/PostgreSQL, EAS, device,
+force-quit, release, production, or field gate was run. Version 16 follows the task orchestrator's
+parallel-B2 allocation and remains subject to merge-time version reconciliation.
+
+#### Task 2 — local lesson draft repository
+
+The factory-only `createLessonDraftsRepository({ database, idFactory })` exposes `getActive`,
+`create`, `update` and `discard`, plus four named error classes and the pure `presentChildIds`
+helper. Create/update use the existing repository transaction boundary. Context and a fixed plan
+cannot drift; tracker changes retain their language code and ISO tap time; reading-level changes
+contain edits only. Updates validate the complete merged draft and replace supplied JSON fields
+whole. Unreadable JSON reports every affected column without changing the stored row. Discard
+decodes nothing and joins an explicitly supplied save transaction, so a rollback restores the
+draft with its original session id. No singleton, production caller, outbox row or server write
+was added; handle wiring remains Task 3.
+
+All commands below use `PATH="$HOME/.nvm/versions/node/v20.19.4/bin:$PATH"`.
+
+| Gate | Command after the Node prefix | Result |
+|---|---|---|
+| Create/read RED → GREEN | `npm run test:integration -- __tests__/lessonDraftsRepository.test.js` | RED: 1 suite failed to load (`Cannot find module .../lessonDraftsRepository`), 0 tests executed. GREEN: 1 suite / 4 tests passed; exit 0 |
+| Update RED → GREEN | Same command | RED: 11 failed / 4 passed (`repo.update is not a function`). GREEN: 1 suite / 15 tests passed; exit 0 |
+| Discard RED → GREEN | Same command | RED: 3 failed / 14 passed (`repo.discard is not a function`, including the restored corruption-test assertions). GREEN: 1 suite / 17 tests passed; exit 0 |
+| Additional storage-contract coverage RED → GREEN | Same command | RED: 1 failed / 24 passed; JSON serialization silently dropped an undefined future ticks key. GREEN: 1 suite / 25 tests passed; exit 0. Covers defaults, concurrent create refusal, reserved/unknown keys, field-path errors, whole-field replacement, fixed-value equality, timestamps, all corrupt JSON columns and rejection of lossy JSON values |
+| Draft-id fixed-field equality RED → GREEN | Same command | RED: 1 failed / 25 passed; repeating the stored draft id was incorrectly rejected with TypeError. GREEN: 1 suite / 26 tests passed; exit 0. Repeating id is accepted; changing it throws LessonDraftContextError, as required by the general fixed-field rule (plan lines 310, 331–332) |
+| Production binding | `npx jest __tests__/productionBindingStatic.test.js` | PASS: 1 suite / 14 tests; exit 0 |
+| Full unit, before the final draft-id regression | `npx jest --silent --maxWorkers=25%` | PASS: 349 suites / 4,233 tests; exit 0 |
+| Full unit, final code | `npx jest --silent --maxWorkers=25%` | 348 suites passed / 1 failed; 4,233 tests passed / 1 failed (4,234 total); exit 1. The unrelated SessionCountRankingScreen pageVersion-refresh test expected rendered count 2 but still saw 0 at line 55 |
+| Required isolated unrelated-file rerun | `npx jest __tests__/SessionCountRankingScreen.test.js` | PASS: 1 suite / 4 tests; exit 0. No screen/test change; one non-failing VirtualizedList act warning |
+| Full integration, final code | `npm run test:integration --silent` | 53 suites passed / 1 failed; 581 tests passed / 1 failed (582 total); exit 1. The unrelated LiteracySessionForm.submit back-to-back-submit test exceeded its existing 5,000 ms timeout at line 130 |
+| Required isolated integration-file rerun | `npm run test:integration -- __tests__/LiteracySessionForm.submit.test.js` | PASS: 1 suite / 8 tests; exit 0 (3.524 s). No source/test/timeout change |
+
+Plan sequencing adaptation: Task 2 Step 5's corruption test calls `discard` at plan lines 507–508,
+but `discard` is not introduced until Step 11 (lines 543–544). Its final two assertions were
+deferred to the discard slice and restored unchanged before that RED run. All 17 planned test
+names and final assertions are retained. Nine additional tests cover the remaining stated
+storage rules; invalid values that cannot round-trip through JSON are refused with field paths
+rather than silently changed. Evidence remains local Jest/real better-sqlite3; physical device,
+handle reopen/isolation, hosted backend and release checks are later gates.
+
+The final full runs retain the two unrelated failures above even though each file passed its
+single isolated rerun. They are not reported as fully green aggregate exits. The integration run
+also emitted existing auth/network failure-path, stale/closed-handle, React/Paper and ChildrenContext
+undefined-`.catch` diagnostics in passing suites. No out-of-scope fix or timeout adjustment was made.
+
+#### Task 3 — on the handle, isolated per EA, durable across restarts
+
+`createHandleServices` now constructs `lessonDrafts` with the same `{ database: handle }` as the
+rest of the repository graph. The legacy component-test map includes the factory-only module;
+without a singleton export it falls through to the real handle-bound repository. No production
+caller of create/update/discard or UI wiring was added.
+
+The two planned file-backed tests use separate writer and query-only reader connections. A third raw
+connection reads the committed session id, language code and lesson date before either handle
+connection closes. Reset then requests an orderly close and awaits disposal; reopening offline
+returns the full saved draft unchanged, including tracker tap time and reading-level edits. The
+A → B → A case proves separate files/slots and refuses a late update through A's revoked handle
+with `StaleActorError`. This is local better-sqlite3 evidence, not a process-kill or Expo-device
+claim; a real force-quit remains Task 6's device gate.
+
+Standing docs now identify `lesson_drafts` as the session side of the SQLite draft lifecycle,
+with `sessions.state` left completed and the Battery Run lifecycle kept separate. C1 remains
+inert until C3; today's LiteracySessionForm stays draft-less. The finish-or-discard UI item is
+still open, and v1 has no session timer. The contract map records the local-only table and its
+Task 1–3 tests; the learning note explains the table, slot, save transaction and language choices.
+
+All commands below use `PATH="$HOME/.nvm/versions/node/v20.19.4/bin:$PATH"`.
+
+| Gate | Command after the Node prefix | Result |
+|---|---|---|
+| Handle/durability RED | `npm run test:integration -- __tests__/lessonDraftsDurability.test.js __tests__/handleServices.test.js` | Expected FAIL: 2 suites failed; 3 failed / 30 passed (33 total). Both durability tests found `lessonDrafts` undefined; the exact repository graph lacked the new key; exit 1 |
+| Handle/durability GREEN | Same command | PASS: 2 suites / 33 tests; exit 0 |
+| Full unit suite | `npx jest --silent --maxWorkers=25%` | PASS: 350 suites / 4,236 tests; exit 0 (84.478 s); no isolated rerun needed |
+| Full integration suite | `npm run test:integration --silent` | PASS: 55 suites / 584 tests; exit 0 (49.512 s); no isolated rerun needed |
+
+No plan/API adaptation was required. No Supabase/PostgreSQL, network, EAS, device, release or
+field operation was run.
+
+The integration run emitted existing intentional auth/network failure-path, React/Paper,
+closed-handle and ChildrenContext undefined-`.catch` diagnostics in passing suites. No failure,
+timeout change or out-of-scope repair was needed.
+
+#### Task 4 — per-lesson session-history completeness
+
+`pullCoverage.js` adds the pure `isCoverageWalkComplete` and async, read-only
+`isSessionHistoryComplete` predicates. The latter resolves an omitted programme and academic-year
+start through the same SQLite helpers as CAP-004, reads only that EA/programme's existing session
+cursor through the bound sync-state repository, and delegates to the pure predicate. Coverage
+requires strict `complete === true`, the pull's null failure marker, the requested/current year,
+and every present child in `rescanChildIds`. Malformed coverage fails closed; an empty child list
+gives the walk-level answer. `windowStart: null` skips the pure helper's year check for a future
+unbounded walk. No new cursor, state, pull trigger, production caller or UI change was added.
+
+The tests retain all nine planned names and exercise cursors written by the actual pull into
+real SQLite: no walk, covered and group-only children, a newly assigned child, year rollover,
+explicit-year override, failure recovery and programme separation. Three additional tests cover
+malformed fields, missing programme/year, and empty-child-list/read-only behavior. The contract
+map now treats the four cursor fields as a reader contract, distinguishes this answer from Sync's
+"Up to date", and corrects the old shared-file description to ADR-0008's per-EA files.
+
+All commands below use `PATH="$HOME/.nvm/versions/node/v20.19.4/bin:$PATH"`.
+
+| Gate | Command after the Node prefix | Result |
+|---|---|---|
+| Pure predicate RED | `npm run test:integration -- __tests__/pullCoverage.test.js` | Expected FAIL: 1 suite failed to load, 0 tests executed; `Cannot find module '../src/services/pullCoverage'`; exit 1 |
+| Pure predicate GREEN | Same command | PASS: 1 suite / 3 tests; exit 0 (4.064 s) |
+| Real-pull cursor RED | Same command | Expected FAIL: 1 suite; 8 failed / 4 passed (12 total); `isSessionHistoryComplete is not a function`; exit 1 |
+| Real-pull cursor GREEN | Same command | PASS: 1 suite / 12 tests; exit 0 (2.729 s) |
+| Pull and binding neighbors | `npx jest __tests__/sessionHistoryPull.test.js __tests__/productionBindingStatic.test.js` | PASS: 2 suites / 49 tests; exit 0 (15.514 s) |
+| Full unit suite | `npx jest --silent --maxWorkers=25%` | PASS: 351 suites / 4,250 tests; exit 0 (300.603 s); no isolated rerun needed |
+| Full integration suite | `npm run test:integration --silent` | PASS: 56 suites / 596 tests; exit 0 (131.933 s); no isolated rerun needed |
+
+No plan/API adaptation was required. Evidence is local Jest and real better-sqlite3 with scripted
+server responses, not hosted authorization or device proof. No Supabase/PostgreSQL, EAS, device,
+release or field operation was run. Assessment/mastery completeness remains AR Plan 3; the
+lesson-engine caller remains wave 2. The integration run emitted intentional failure-path logs,
+React warnings, closed-handle diagnostics and the existing ChildrenContext undefined-`.catch`
+diagnostics in passing suites. No timeout change or out-of-scope repair was made.
+
+#### Task 5 — Home "Lesson in progress" card builder, inert until C3
+
+`deriveHomeAttentionItems` accepts optional `lessonInProgress` data and places its neutral,
+non-dismissible card before sync attention within the existing two-item cap. The exact title,
+visual/spoken name lists, U+00B7 Resume subtitle and reserved `Lesson` / `{ draftId }` target are
+covered by tests, including three names and no known names. `lessonInProgressFromDraft` reuses
+`presentChildIds` and `formatNameList`; a name lookup follows attendance order, skips absent or
+unknown children, and retains a lesson with no names when everyone is absent. Null draft returns
+null. The existing AttentionArea gains only the `play-circle-outline` icon key: its canvas tile,
+22dp glyph, chevron, accessibility label and `onOpen(item)` behavior remain shared with the other
+cards. The requested glyph exists in the bundled Ionicons map.
+
+All five prescribed utility tests are retained verbatim, including the static guard that Home
+does not read drafts before the Lesson route ships. The added component test verifies the icon,
+canvas fill, chevron, copy, absence of a Dismiss button and the full item passed to `onOpen`.
+HomeScreen, navigation, repository/storage code and existing card behavior are unchanged. The
+React Native skill informed reuse of the existing IconTile/Text/styles; no new style or component
+was needed.
+
+All commands below use `PATH="$HOME/.nvm/versions/node/v20.19.4/bin:$PATH"`.
+
+| Gate | Command after the Node prefix | Result |
+|---|---|---|
+| Card builder/rendering RED | `npx jest __tests__/homeAttention.test.js __tests__/AttentionArea.test.js` | Expected FAIL: 2 suites; 5 failed / 11 passed (16 total); missing lesson item/helper and icon mapping, with the old priority still active; exit 1 (1.626 s) |
+| Card builder/rendering GREEN | Same command | PASS: 2 suites / 16 tests; exit 0 (1.692 s) |
+| Typography and design-system neighbors | `npx jest __tests__/homeTypeRoles.test.js __tests__/designSystemGuard.test.js` | PASS: 2 suites / 235 tests; exit 0 (1.499 s) |
+| Full unit suite | `npx jest --silent --maxWorkers=25%` | PASS: 351 suites / 4,256 tests; exit 0 (242.015 s); no isolated rerun needed |
+| Final whitespace check | `git diff --check` | PASS; exit 0 |
+
+No plan/API adaptation was required. The full integration runner was not invoked for this pure
+builder/icon-map task: no SQLite, migration, repository, sync or handle implementation changed.
+Evidence is local Jest, not native visual or screen-reader acceptance. No network, dependencies,
+Supabase/PostgreSQL, EAS, device, release or field operation was involved. C3 owns draft loading,
+navigation params, the actual Lesson route, deferred-read/routing tests and the carried device
+card/resume gates; C1 deliberately adds no production caller or route wiring.
+
+#### Task 6 — gates (controller)
+
+Branch `feat/lesson-plan-c1-lesson-draft` at `dc9a439` (Tasks 1–5: `93d6a27`, `e048632`, `89cf980`,
+`8103e99`, `dc9a439`), base `7a831fb`. All commands use
+`PATH="$HOME/.nvm/versions/node/v20.19.4/bin:$PATH"`.
+
+| Gate | Result |
+| --- | --- |
+| `npx jest --silent --maxWorkers=25%` | 351 suites / 4,256 tests passed, no skipped suites (baseline 346 / 4,202) |
+| `npm run test:integration --silent` | 56 suites / 596 tests passed (baseline 52 / 552) |
+| `npm run test:types` | Exit 0 |
+| `/codex:adversarial-review` (`gpt-6-astra`, base `7a831fb`), round 1 | **Approve, no material findings.** It probed the v15→v16 upgrade and replay, concurrent-create refusal, frozen-plan rejection, an atomic session/attendee/outbox/draft rollback with a successful retry, and eleven cursors written by the real pull (interrupted handover rescan, failed page, recovery, uncovered child, year rollover) |
+
+**Device gate (Step 3): not yet run.** Jim chose one combined Android preview build for all wave-1
+plans (2026-10-21). The upgrade check (install the current `main` build, record a session, install
+this build over it; the app opens, Home is unchanged at 1.0x and 1.3x, Session History keeps the
+session, Export Database shows `lesson_drafts` at the merged schema version with 0 rows) runs on that
+build on the Galaxy A03s. The schema number is set when C1, B2 and AR Plan 2's local migrations are
+renumbered at the integration merge. The card gate (Step 4) is carried into the C2–C3 plan.
+
 ## Decision Register
 
 | Date | Decision | Rationale | Revisit Trigger |
@@ -2836,6 +3034,8 @@ separately from worker runs and do not claim hosted, device or field proof.
 | 2026-10-21 | AR Plan 3 Task 2 implements the approved embedded-header read rule and expected-year check in the Programme pagers. | A readable family needs its referenced run for the local FK even when the run started before the year; the caller's expected year must agree with server authority before any page can complete. Run SELECT/pager bounds and other Question grants stay independent. | Controller PostgreSQL header/year tests, dense-plan gate or hosted HTTP proof exposes a contract mismatch. |
 | 2026-10-21 | Assessment Results Plan 3 Task 1 keeps owner reads unbounded, class reads active-year bounded, and uses the SAST run start date; mastery retains Plan 2's last-writer/current-deliverer rule. | These are separate positive grants from the approved plan. A history SELECT change must not broaden delivery/group/creator authority or change the write RPCs. Rollout seed reapply preserves controller decisions. | Controller PG17 read matrix, switch precedence/reapply or existing upload harness exposes a contract mismatch; resolve before hosted apply. |
 | 2026-10-21 | Assessment Results Plan 2 Task 4: one RPC per correction, never batched; volume is a few rows per session. | A parsed reply returns the winner and belongs to one claimed correction; atomic acknowledgement must preserve a newer owed local correction. Mastery ordering uses correction time/UUID and receipts, not send-time row versions. | Field volume makes per-correction requests material, or a reviewed batch RPC preserves the identical per-correction receipt and acknowledgement contract. |
+| 2026-10-21 | Home's draft loading and `openItem` parameter forwarding ship with the `Lesson` route in C3. Reserve `Lesson` with `{ draftId }`; C1 ships only the inert card builder and icon. | A C3 bundle can leave a durable draft before an OTA rollback within the same runtime. A rolled-back bundle must never show a card for a route it does not register; card wiring and route registration must travel together. | C3 registers `Lesson` and removes the temporary Home-does-not-read-drafts guard, with real navigation and deferred-read tests plus the carried device gate. |
+| 2026-10-21 | Lesson draft context, language code and plan are fixed at the storage boundary (C14, C18); tracker changes must be in the lesson's language; the save path deletes the draft in its own transaction. | A resumed lesson must preserve its original context and correction times. `discard(id, { transaction })` joins the caller's save transaction; a failed save restores the same draft/session id. JSON validation prevents silently lost edits. | Wave 2 changes the lesson-context contract or the save transaction boundary. |
 | 2026-10-17 | **Field-continuity decisions (Jim).** (1) The **server** closes a time entry left open for more than ten hours; the phone-only close is not enough. (2) Android backup **excludes every SQLite database** (Claude's recommendation, accepted). (3) Losing an unfinished session or assessment form on navigate-away or process death is **accepted for the pilot**. (4) Revocation follows **Zazi's model**, operated by a script until a Head Office admin website exists. | (1) A phone that stays offline or unopened leaves the hosted row open indefinitely, so staff reports cannot tell a forgotten clock-out from a long day. (2) A restored database replays already-accepted work (Zazi ZZ-BUG-20260907-001); the server is the recovery path. (3) Drafts belong to the planned SQLite draft/run lifecycle, not a temporary patch. (4) One proven operator procedure across both apps; the website is later Head Office work. | Field reports of lost forms; the server close is found to fight legitimate long shifts; a Head Office admin surface is built. |
 | 2026-09-04 | Treat 1,000 rows as the verified hosted PostgREST response cap and require explicit bounded pagination, deadlines, and completeness accounting in the first implementation of every potentially larger pull family. | A real cap-plus-one request returned exactly 1,000 of 1,205 rows with HTTP 206 and an exact content range. A successful but capped response is incomplete replication, not a performance inconvenience; the current assessment-item estate is already close enough that a non-paginated intermediate contract would be throwaway and unsafe. | The hosted API cap is deliberately reconfigured and re-proven through an equivalent cap-plus-one probe, or a family moves behind a server operation whose response-completeness contract is independently bounded and tested. |
 | 2026-08-29 | Treat an authorized session as one complete delivery-history aggregate. Owning the session or having a historical direct delivery assignment to any attendee grants the complete parent and every attendee row. | The parent activities JSON already carries child-keyed facts for the delivery event, and a child-filtered attendee list would imply a privacy boundary that does not exist while also misrepresenting the event. Admission to the session is the authorization boundary. | Masi introduces a less-trusted reader class or genuinely sensitive per-child facts. Put such facts behind a separately authorized table or redacted projection rather than silently adding them to this aggregate. |

@@ -7,6 +7,7 @@ const modules = {
   classGroupingState: 'classGroupingStateRepository', groupingVersions: 'groupingVersionsRepository',
   sessions: 'sessionsRepository', assessments: 'assessmentsRepository', mastery: 'masteryRepository',
   timeEntries: 'timeEntriesRepository', syncOutbox: 'syncOutboxRepository', syncState: 'syncStateRepository', localState: 'localStateRepository',
+  lessonDrafts: 'lessonDraftsRepository',
   ...Object.fromEntries(['schools','jobTitles','programmes','staffProgrammeAssignments','assessmentTools','academicYears','assessmentWindows','teachers'].map((name) => [name, 'referenceDataRepository'])),
 };
 const getModule = (file) => require(`../src/db/repositories/${file}`);

@@ -2026,3 +2026,30 @@ checks the three release packs' letters-only behavior and the loader/engine lang
 The isiXhosa candidate pack is preview content, not approved field vocabulary. These local
 tests prove neither on-device Hermes behavior nor the Lesson screen's rendering and latency;
 those remain explicit controller/device gates.
+
+## A lesson in progress is its own table, not a session state
+
+An unfinished lesson is useful work, but it is not yet evidence that a session happened. Putting
+it in `sessions` would make every reader responsible for excluding it: history, daily counts,
+sync and server RLS would all need to remember the distinction. Keeping the unsaved lesson in
+local `lesson_drafts` gives those readers one meaning for a session row. The save transaction
+creates the completed session only when the EA finishes. The existing `sessions.state` values
+for unfinished work remain unused by this flow.
+
+Each signed-in EA handle binds the repository to that EA's own SQLite file. The repository checks
+for an existing draft, and the database backs it with a unique `slot` constrained to `1`. The
+code check supplies a useful error naming the existing draft; the constraint protects the invariant
+even if a future writer misses the check. SQLite v12's required-outbox-owner trigger uses the same
+pattern: enforce a critical rule at the storage boundary as well as in application code.
+
+Finalization must be indivisible. `discard(id, { transaction })` deletes the draft through the
+caller's save transaction, alongside the session, attendees, mastery edits and outbox work. If any
+part fails, rollback restores the draft with the same session id, so a retry keeps the original
+identity. A separate committed deletion would lose unfinished work before the save had succeeded.
+
+A durable draft can outlive the day or the class language that originally supplied its context.
+It therefore stores language codes from `LANGUAGE_LABELS`, and every pending tracker change must
+match the lesson's language and retain its original ISO tap time. Resuming never re-derives either
+value at save time. Local tests prove the row is readable from a second connection before close,
+survives an offline reopen unchanged, and remains separate across EA switches. A real force-quit
+on Expo SQLite is still a device gate. C1 supplies storage; C3 supplies the user-facing lifecycle.

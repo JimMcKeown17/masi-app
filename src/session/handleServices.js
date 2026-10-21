@@ -17,6 +17,7 @@ import { createSyncOutboxRepository } from '../db/repositories/syncOutboxReposit
 import { createSupportIncidentRepository } from '../db/repositories/supportIncidentRepository';
 import { createSyncStateRepository } from '../db/repositories/syncStateRepository';
 import { createLocalStateRepository } from '../db/repositories/localStateRepository';
+import { createLessonDraftsRepository } from '../db/repositories/lessonDraftsRepository';
 import { createOutboxSyncEngine, ensureReferenceData, pullReferenceData, fetchAndCacheSchools } from '../services/offlineSync';
 import { pullPreloadedChildData, persistPreloadedChildData, pullClassData } from '../services/preloadedChildData';
 import { createHomeAttentionStore } from '../services/homeAttentionStore';
@@ -50,6 +51,7 @@ export const createHandleServices = (handle) => {
     supportIncidents: createSupportIncidentRepository(options),
     syncState: createSyncStateRepository(options),
     localState: createLocalStateRepository(options),
+    lessonDrafts: createLessonDraftsRepository(options),
   };
   // Bind the composite graph to the same actor as its leaf repositories.
   repositories.classOnboarding = createClassOnboardingRepository({
