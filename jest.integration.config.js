@@ -29,6 +29,7 @@ module.exports = {
     '<rootDir>/__tests__/sessionsHistoryPage.test.js',
     '<rootDir>/__tests__/sessionHistoryReaders.test.js',
     '<rootDir>/__tests__/sessionHistoryPull.test.js',
+    '<rootDir>/__tests__/historyWalk.test.js',
     '<rootDir>/__tests__/sessionHistoryPullProductionRouting.test.js',
     '<rootDir>/__tests__/assessmentsRepository.test.js',
     '<rootDir>/__tests__/timeEntriesRepository.test.js',

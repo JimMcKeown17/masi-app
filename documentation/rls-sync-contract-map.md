@@ -855,9 +855,12 @@ The client validates the schema version, completeness flag, authenticated user i
 
 ### Session history hydration (CAP-004)
 
+- **Traversal.** Traversal lives in `src/services/historyWalk.js`; sessions are one walk config
+  in `src/services/sessionHistoryPull.js`. The shared walker owns deadlines, budgets, failure
+  memory, single flight, actor fencing and coverage re-walks.
 - **Scope and cursor.** One `sync_state` row per EA and Programme,
-  `session_history_pull:<userId>:<programmeId>`, because SQLite is shared by every EA who signs in on
-  the phone. The window is the active academic year's `starts_on`; a new year resets the cursor.
+  `session_history_pull:<userId>:<programmeId>`, in the EA's own SQLite file (ADR-0008).
+  The window is the active academic year's `starts_on`; a new year resets the cursor.
 - **Persistence.** Each parent page, its attendees, any history reference children, and the cursor
   commit in one transaction. Pending and failed local rows win. Absence never deletes, and history
   has no absence reconcile.
@@ -868,6 +871,15 @@ The client validates the schema version, completeness flag, authenticated user i
 
   The first hydration counts as a completed walk. `complete` means the delta is exhausted and no
   re-walk is due or part-way, and `last_pulled_at` is stamped only then.
+- **Coverage and lost grants.** Sessions keep a lost delivery child in their covered set, because
+  the session read grant is historical. Walks whose grant can be lost set `dropLostCoverage`, and
+  each of their durable writes bounds coverage to the grants it reads in its own transaction.
+  `historyCoverage.js` owns the coverage fields and helpers. A page saver resolves the walk's
+  pull-state function through `resolveHistoryPullState(txn, pullState)` after applying rows and
+  before writing the cursor. Failure markers are bounded in their writer transaction too; the
+  walker adopts bounded state only after commit. `removeFromHistoryCoverage` lets a handover
+  drop affected ids in the same transaction as its local deletion, preserving `last_pulled_at`
+  and never creating a missing scope. Fresh, dependency and cancelled runs write nothing.
 - **Deadlines and budget.**
   - Each request has a 15 s deadline that starts at enqueue time, so a hung predecessor in the
     shared request queue cannot hold history.
@@ -883,7 +895,7 @@ The client validates the schema version, completeness flag, authenticated user i
 
 Tests: `sessionHistoryFamilyDeltaMigration.test.js`, the disposable PostgreSQL harness,
 `sessionsHistoryPage.test.js`, `sessionHistoryPull.test.js`,
-`sessionHistoryPullProductionRouting.test.js`, `sessionHistoryReaders.test.js`,
+`sessionHistoryPullProductionRouting.test.js`, `historyWalk.test.js`, `sessionHistoryReaders.test.js`,
 `sessionHistoryStatus.test.js`, `childrenHistoryReference.test.js`, and the ChildrenContext and
 screen tests.
 

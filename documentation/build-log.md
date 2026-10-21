@@ -1119,7 +1119,7 @@ The read-only hosted preflight (2026-10-21, `project_ref=segygjzpujphwvrubusm`) 
 apply and fixtures, EAS, devices and the PR are later gates, each needing Jim's yes.
 
 
-### 2026-10-21 — Assessment Results Plan 3: server history authority, pages and probes
+### 2026-10-21 — Assessment Results Plan 3: server history authority, pages, probes and shared traversal
 
 #### Task 1: server history read authority
 
@@ -1325,10 +1325,67 @@ steps. Pure helper results establish fixture shape and local validation only; th
 hosted API cap behavior, auth provisioning, RLS, migration deployment, seeded phone behavior or
 cleanup after an actual hosted failure.
 
+#### Task 4: shared history walker extracted from CAP-004
+
+**Scope:** `src/services/historyWalk.js`, `src/db/repositories/historyCoverage.js`, the session
+walk config in `sessionHistoryPull.js`, the new real-SQLite `historyWalk.test.js` and integration
+registration, the contract map and CAP-004 briefing. Existing session pull, production routing,
+status and OfflineContext tests are unchanged. No schema migration or server change is needed.
+
+Extracted the queue-aware deadline, between-page run budget, raw keyset cursor, delta-first
+re-walk, jittered backstop, failure memory, single flight and actor-generation fence. Sessions
+retain every export/value, exact log format, cursor JSON fields, historical delivery coverage,
+two-RPC complete-family fetch and object-form pull state. The original parent session object is
+passed through to the saver, including `group_id`; B2's additional group-id regression remains
+a later integration-merge guard.
+
+The shared walker adds child/class coverage, a smaller first page on every run (including a
+budget resume), a null window that never resets the cursor, optional RPC/save/first-commit
+timing, MR001 `disabled` and MR002 `year_mismatch`. Both stops retain the durable tuple and
+record failure; disabled uses `console.log`, year mismatch warns and marks the cursor incomplete.
+Walks with `dropLostCoverage` supply a pull-state function that the saver resolves inside its
+own transaction after rows and before cursor. Every such page and failure-marker write bounds
+all coverage snapshots to grants read through that writer transaction. The run adopts the
+bounded state after save resolution. Fresh runs write nothing. Coverage removal preserves
+all other cursor fields and `last_pulled_at`, and never creates a missing scope.
+
+The real-SQLite Probe tests cover all 16 specified cases, including a lost grant during an
+in-flight page or failure, paused re-walk snapshots, regained grants, and historical session
+coverage. The final assertion strengthening also checks an existing null window and MR002
+against an already complete cursor with a durable raw timestamp/id. The contract map now
+states that each scope lives in the EA's own file (ADR-0008), replacing the stale shared-file
+claim.
+
+Every command uses `PATH="$HOME/.nvm/versions/node/v20.19.4/bin:$PATH"`.
+
+| Gate / command | Result |
+| --- | --- |
+| Step 1: `npm run test:integration -- __tests__/sessionHistoryPull.test.js __tests__/sessionHistoryPullProductionRouting.test.js` | Exit 0: 2 suites, 36 tests passed |
+| Step 1: `npx jest __tests__/sessionHistoryStatus.test.js __tests__/OfflineContext.test.js` | Exit 0: 2 suites, 59 tests passed; existing React act warnings |
+| Step 3: same two commands after extraction | Both exit 0: unchanged 2 suites / 36 integration tests and 2 suites / 59 unit tests; `git diff --stat -- __tests__/` empty at this refactor checkpoint |
+| Step 5: `npm run test:integration -- __tests__/historyWalk.test.js` — first RED | Exit 1: 13 failed / 3 passed (16 total). Twelve new-behavior failures plus one fixture timestamp CHECK failure |
+| Same command — corrected RED before feature implementation | Exit 1: 12 failed / 4 passed (16 total), 1.511 s. Explicit assignment time fixes the fixture; executed assertions show missing class coverage, wrong first page size, ordinary query classification for MR001/MR002, lost coverage retained, null-window reset, absent timing and coverage helper |
+| Same command — GREEN | Exit 0: 1 suite, 16 tests passed, 1.709 s |
+| Step 7: same two session guard commands | Both exit 0: unchanged 2 suites / 36 integration tests (3.176 s) and 2 suites / 59 unit tests (2.527 s) |
+| `npx jest --silent --maxWorkers=25%` | Exit 0: 349 suites, 4,276 tests passed, 64.828 s |
+| `npm run test:integration --silent` | Exit 0: 53 suites, 571 tests passed, 50.846 s |
+| Focused walker rerun after null-window and retained-MR002-position assertion strengthening | Exit 0: 1 suite, 16 tests passed, 1.828 s |
+| `git diff --check` | PASS |
+
+**Choices and limits:** the Probe uses real SQLite grant/row tables and the existing repository
+transaction helper; no new dependency or schema version. Completeness is recalculated against
+the transaction's grants when bounding, so a child lost during an empty delta does not leave
+a spurious re-walk due. Session walks keep the original object save contract and do not bound
+lost grants. The two plan-accepted invisible-loss / loss-and-return-within-one-run cases still
+rely on the 6–8-day backstop. This is local traversal/SQLite evidence only. Task 4 Step 9 (commit),
+hosted/Supabase work, PostgreSQL execution, EAS, device checks and PRs belong to the controller;
+none were run here. No task implementation remains open.
+
 ## Decision Register
 
 | Date | Decision | Rationale | Revisit Trigger |
 | --- | --- | --- | --- |
+| 2026-10-21 | AR Plan 3 Task 4 shares CAP-004 traversal while retaining sessions as a historical-delivery config. Revocable-grant walks bound all coverage snapshots inside each page/failure write transaction; handover has a db-level removal helper. | Timestamp progress cannot establish authorization coverage. Reading grants in the committing writer prevents an in-flight page from restoring a grant lost while it waited, and preserving the session object contract keeps existing consumers stable. | Assessment/mastery integration, handover or device gates expose coverage restoration, cursor drift or a session regression. |
 | 2026-10-21 | AR Plan 3 Task 3 marks disposable Auth users with an admin-only fixture namespace and never persists fixture credentials. Recovery cleanup discovers that namespace and verifies exact zero residue; only seed-volume prints the gate credentials on a TTY. | A namespace survives a lost create response without a secret-bearing local manifest. Exact target validation and safe stage-only errors keep hosted credentials out of other output paths. Synthetic probe.1 content preserves the prescribed 61-item cap test without mislabelling published card data. | Controller hosted probe, cleanup/failure recovery or seeded device gates expose a fixture ownership or content-contract mismatch. |
 | 2026-10-21 | AR Plan 3 Task 2 implements the approved embedded-header read rule and expected-year check in the Programme pagers. | A readable family needs its referenced run for the local FK even when the run started before the year; the caller's expected year must agree with server authority before any page can complete. Run SELECT/pager bounds and other Question grants stay independent. | Controller PostgreSQL header/year tests, dense-plan gate or hosted HTTP proof exposes a contract mismatch. |
 | 2026-10-21 | Assessment Results Plan 3 Task 1 keeps owner reads unbounded, class reads active-year bounded, and uses the SAST run start date; mastery retains Plan 2's last-writer/current-deliverer rule. | These are separate positive grants from the approved plan. A history SELECT change must not broaden delivery/group/creator authority or change the write RPCs. Rollout seed reapply preserves controller decisions. | Controller PG17 read matrix, switch precedence/reapply or existing upload harness exposes a contract mismatch; resolve before hosted apply. |
