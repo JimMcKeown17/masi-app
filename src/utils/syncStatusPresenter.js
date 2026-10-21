@@ -117,7 +117,13 @@ export const describeHistoryState = ({ running, pullState } = {}) => {
 export const describeCombinedHistoryState = ({ running, pullStates = [] } = {}) => {
   if (running) return { label: 'Downloading', detail: 'Downloading history from Head Office…' };
   if (!pullStates.length || pullStates.some(state => !state)) return { label: 'Not downloaded yet', detail: null };
-  const incomplete = pullStates.filter(pullState => describeHistoryState({ pullState }).label !== 'Up to date');
+  const incomplete = pullStates.filter(pullState => {
+    if (describeHistoryState({ pullState }).label !== 'Up to date') return true;
+    if (!Object.hasOwn(pullState, 'expectedWindowStart')) return false;
+    let cursor;
+    try { cursor = JSON.parse(pullState.cursor || '{}'); } catch { return true; }
+    return !pullState.expectedWindowStart || cursor.windowStart !== pullState.expectedWindowStart;
+  });
   if (!incomplete.length) return { label: 'Up to date', detail: null };
   const since = incomplete.map(state => {
     let cursor;

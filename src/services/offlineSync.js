@@ -1936,6 +1936,7 @@ const pullReferenceDataRows = async ({
     'schools',
     'job_titles',
     'programmes',
+    'assessment_tools',
     'academic_years',
     'assessment_windows',
     'teachers',

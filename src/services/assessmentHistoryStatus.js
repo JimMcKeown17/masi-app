@@ -6,7 +6,7 @@ import {
 } from './assessmentHistoryPull';
 import { resetHistoryWalkState } from './historyWalk';
 import { resolveDatabase } from '../db/repositories/repositoryRuntime';
-import { getActiveProgrammeId } from '../db/repositories/domainRepositoryUtils';
+import { getActiveAcademicYear, getActiveProgrammeId } from '../db/repositories/domainRepositoryUtils';
 import { createSyncStateRepository } from '../db/repositories/syncStateRepository';
 
 const emptyResults = () => ({ batteryRuns: null, assessments: null, mastery: null });
@@ -37,7 +37,8 @@ export const createAssessmentHistoryStore = ({
     const results = { ...snapshot.lastResults };
     let refreshed = false;
     try {
-      for (const [key, walk] of walks) {
+      for (let index = 0; index < walks.length; index += 1) {
+        const [key, walk] = walks[index];
         const run = () => walk({ userId, force, deps: {
           database, repositories, state: states[key], client, enqueueRequest,
           onPageSaved: () => publishIfCurrent({ pageVersion: snapshot.pageVersion + 1 }),
@@ -46,6 +47,8 @@ export const createAssessmentHistoryStore = ({
         if (token !== generation) return null;
         if (result.status === 'year_mismatch' && !refreshed) {
           refreshed = true;
+          const db = await resolveDatabase(database);
+          const previousYear = await getActiveAcademicYear(db);
           let ready = false;
           try {
             await refreshReferenceData();
@@ -55,7 +58,18 @@ export const createAssessmentHistoryStore = ({
             console.warn('[AssessmentHistory] reference refresh failed', error?.message || 'Unknown error');
           }
           if (token !== generation) return null;
-          if (ready) result = await run();
+          if (ready) {
+            const year = await getActiveAcademicYear(db);
+            if (year?.id !== previousYear?.id || year?.starts_on !== previousYear?.starts_on) {
+              // A run completed earlier in this pass belongs to the old year too.
+              results.batteryRuns = null;
+              results.assessments = null;
+              publishIfCurrent({ lastResults: { ...results } });
+              index = -1;
+              continue;
+            }
+            result = await run();
+          }
         }
         if (token !== generation) return null;
         results[key] = result;
@@ -107,13 +121,16 @@ export const createAssessmentHistoryStore = ({
     if (!userId) return emptyResults();
     const db = await resolveDatabase(database);
     const programmeId = await getActiveProgrammeId(db, userId);
+    const year = await getActiveAcademicYear(db);
     const stateRepo = repositories?.syncState || createSyncStateRepository({ database });
     const [batteryRuns, assessments, mastery] = await Promise.all([
       programmeId ? stateRepo.getPullState(batteryRunHistoryScope(userId, programmeId)) : null,
       programmeId ? stateRepo.getPullState(assessmentHistoryScope(userId, programmeId)) : null,
       stateRepo.getPullState(letterMasteryHistoryScope(userId)),
     ]);
-    return { batteryRuns, assessments, mastery };
+    // Read-time context only: preserve durable cursors and session-history semantics.
+    const withYear = state => state ? { ...state, expectedWindowStart: year?.starts_on ?? null } : null;
+    return { batteryRuns: withYear(batteryRuns), assessments: withYear(assessments), mastery };
   };
   return { start, reset, getPullStates, getSnapshot: () => snapshot,
     subscribe: listener => { listeners.add(listener); return () => listeners.delete(listener); } };

@@ -1361,6 +1361,7 @@ describe('SQLite outbox offline sync', () => {
       schools: { getAll: jest.fn(async () => []), replaceFromServer: jest.fn() },
       job_titles: { replaceFromServer: jest.fn() },
       programmes: { getAll: jest.fn(async () => []), replaceFromServer: jest.fn() },
+      assessment_tools: { replaceFromServer: jest.fn() },
       academic_years: { getAll: jest.fn(async () => []), replaceFromServer: jest.fn() },
       assessment_windows: { replaceFromServer: jest.fn() },
       teachers: { replaceFromServer: jest.fn() },
@@ -1383,7 +1384,7 @@ describe('SQLite outbox offline sync', () => {
 
     await pullReferenceData({ supabaseClient, repositories, enqueueRequest });
 
-    expect(enqueueRequest).toHaveBeenCalledTimes(7);
+    expect(enqueueRequest).toHaveBeenCalledTimes(8);
     expect(events.slice(0, 6)).toEqual([
       'queue:start',
       'pull:schools',
@@ -2520,6 +2521,7 @@ describe('SQLite outbox offline sync', () => {
       schools: { getAll: jest.fn(async () => []), replaceFromServer: jest.fn() },
       job_titles: { replaceFromServer: jest.fn() },
       programmes: { getAll: jest.fn(async () => []), replaceFromServer: jest.fn() },
+      assessment_tools: { replaceFromServer: jest.fn() },
       academic_years: { getAll: jest.fn(async () => []), replaceFromServer: jest.fn() },
       assessment_windows: { replaceFromServer: jest.fn() },
       teachers: { replaceFromServer: jest.fn() },
@@ -2532,6 +2534,7 @@ describe('SQLite outbox offline sync', () => {
       'schools',
       'job_titles',
       'programmes',
+      'assessment_tools',
       'academic_years',
       'assessment_windows',
       'teachers',
@@ -2555,6 +2558,7 @@ describe('SQLite outbox offline sync', () => {
       schools: 1,
       job_titles: 1,
       programmes: 1,
+      assessment_tools: 1,
       academic_years: 1,
       assessment_windows: 1,
       teachers: 1,
@@ -2575,6 +2579,7 @@ describe('SQLite outbox offline sync', () => {
       schools: [{ id: 'school-1', name: 'Masi Primary' }],
       job_titles: [{ id: 'job-title-1', code: 'ea', name: 'Education Assistant', is_active: true }],
       programmes: [{ id: 'programme-1', code: 'literacy', name: 'Literacy', is_active: true }],
+      assessment_tools: [],
       academic_years: [year(2026, true)],
       assessment_windows: [{
         id: 'window-2026', academic_year_id: 'year-2026', label: '2026 Baseline',
@@ -2604,7 +2609,7 @@ describe('SQLite outbox offline sync', () => {
       expect(await getActiveAcademicYear(db)).toMatchObject({ id: 'year-2026' });
       rowsByTable.academic_years = order.map((value) => year(value, value === 2027));
       await expect(pullReferenceData({ supabaseClient, repositories, localStateRepository, userId: 'user-1' })).resolves.toEqual({
-        schools: 1, job_titles: 1, programmes: 1, academic_years: 2,
+        schools: 1, job_titles: 1, programmes: 1, assessment_tools: 0, academic_years: 2,
         assessment_windows: 1, teachers: 1, staff_programme_assignments: 1,
       });
       expect(await getActiveAcademicYear(db)).toMatchObject({ id: 'year-2027', is_active: 1 });
@@ -2619,6 +2624,7 @@ describe('SQLite outbox offline sync', () => {
       schools: [{ id: 'school-1', name: 'Masi Primary' }],
       job_titles: [],
       programmes: [{ id: 'programme-1', code: 'literacy', name: 'Literacy' }],
+      assessment_tools: [],
       academic_years: [{
         id: 'year-2026',
         label: '2026',
@@ -2652,7 +2658,7 @@ describe('SQLite outbox offline sync', () => {
       ensureReferenceData({ supabaseClient, repositories, userId: 'user-1' }),
     ]);
 
-    expect(supabaseClient.from).toHaveBeenCalledTimes(7);
+    expect(supabaseClient.from).toHaveBeenCalledTimes(8);
     expect(repositories.schools.replaceFromServer).toHaveBeenCalledTimes(1);
     expect(repositories.programmes.replaceFromServer).toHaveBeenCalledTimes(1);
     expect(repositories.academic_years.replaceFromServer).toHaveBeenCalledTimes(1);
@@ -2680,6 +2686,7 @@ describe('SQLite outbox offline sync', () => {
         sort_order: 1,
         is_active: true,
       }],
+      assessment_tools: [],
       academic_years: [{
         id: 'year-server',
         label: '2026',
@@ -2747,6 +2754,7 @@ describe('SQLite outbox offline sync', () => {
         schools: createSchoolsRepository({ database: db }),
         job_titles: createReferenceDataRepository({ database: db, tableName: 'job_titles' }),
         programmes: createReferenceDataRepository({ database: db, tableName: 'programmes' }),
+        assessment_tools: createReferenceDataRepository({ database: db, tableName: 'assessment_tools' }),
         academic_years: createReferenceDataRepository({ database: db, tableName: 'academic_years' }),
         assessment_windows: createReferenceDataRepository({ database: db, tableName: 'assessment_windows' }),
         teachers: createReferenceDataRepository({ database: db, tableName: 'teachers' }),
@@ -2794,6 +2802,7 @@ describe('SQLite outbox offline sync', () => {
         schools: [{ id: 'school-1', name: 'Masi Primary' }],
         job_titles: [],
         programmes: [{ id: 'programme-a', code: 'literacy', name: 'Literacy' }],
+        assessment_tools: [],
         academic_years: [{
           id: 'year-2026',
           label: '2026',
@@ -2836,6 +2845,7 @@ describe('SQLite outbox offline sync', () => {
         schools: createSchoolsRepository({ database: db }),
         job_titles: createReferenceDataRepository({ database: db, tableName: 'job_titles' }),
         programmes: createReferenceDataRepository({ database: db, tableName: 'programmes' }),
+        assessment_tools: createReferenceDataRepository({ database: db, tableName: 'assessment_tools' }),
         academic_years: createReferenceDataRepository({ database: db, tableName: 'academic_years' }),
         assessment_windows: createReferenceDataRepository({ database: db, tableName: 'assessment_windows' }),
         teachers: createReferenceDataRepository({ database: db, tableName: 'teachers' }),

@@ -519,10 +519,16 @@ It returns only `outcome, confirmed, changed_at, correction_id, changed_by`.
 | Local row / slot | Reply | Effect |
 | --- | --- | --- |
 | Row absent | Any valid outcome | No local write |
-| Local correction matches sent id and CAS deleted the slot | `applied` / `superseded` | Write the returned four fields and server tuple, mark synced, clear error; superseded clears unknowable Programme context |
-| Local correction matches sent id and CAS deleted the slot | `acknowledged` | Delete the local row |
-| Newer local correction, or CAS did not delete the slot | `applied` / `superseded` | Update only the two server ordering columns; preserve local content and owed slot |
-| Newer local correction, or CAS did not delete the slot | `acknowledged` | Preserve local row and slot; no ordering is disclosed |
+| CAS deleted the sent slot and no newer correction is owed | `applied` / `superseded` | Write the returned four fields and server tuple, mark synced, clear error; superseded clears unknowable Programme context |
+| CAS deleted the sent slot and no newer correction is owed | `acknowledged` | Delete the local row |
+| A pending/failed/in-flight slot carries a different correction, or CAS did not delete the slot | `applied` / `superseded` | Update only the two server ordering columns; preserve local content and owed slot |
+| A pending/failed/in-flight slot carries a different correction, or CAS did not delete the slot | `acknowledged` | Preserve local row and slot; no ordering is disclosed |
+
+The displayed correction id is not acknowledgement ownership: a history pull can restore the
+accepted value after refusal while its terminal payload remains available for Retry. Once
+Retry succeeds and finalizes that slot, the returned winner must replace the restored display
+even though their correction ids differ. The outbox CAS and newer owed slot still protect a
+tap made mid-flight. No correction-time or server D1 ordering rule changes.
 
 The successful CAS path performs normal sync bookkeeping before applying the correction reply.
 A missed CAS applies only the permissible ordering before restoring the replacement slot to
@@ -997,16 +1003,18 @@ Empty pages save their cursor and never delete mastery. No page apply changes th
   `server_correction_id`, and raw `updated_at` copied to `server_updated_at`.
 - Pending/failed local rows or any `pending`, `failed` or `in_flight` outbox slot are left alone.
   These corrections are still owed; their acknowledgement supplies accepted server state.
-- Synced rows take only a strictly newer accepted `(changed_at, correction_id)` tuple. Terminal
-  domain rows take a newer **or equal** tuple, restoring the accepted value without hiding the
-  refusal evidence. A null local server tuple counts as lowest.
+- Synced rows take a strictly newer accepted `(changed_at, correction_id)` tuple, or an equal
+  tuple that repairs displayed value/actor/correction/time inconsistent with the accepted
+  watermark. A consistent equal tuple remains a no-op. Terminal domain rows take a newer
+  **or equal** tuple, restoring the accepted value without hiding refusal evidence. A null
+  local server tuple counts as lowest. Owed slots block repairs as well as newer merges.
 - **A terminal outbox row never blocks the merge.** Its content and needs-attention status stay
   unchanged, including after the domain row is restored to synced and later advances again.
 - The comparison uses the local **server** tuple, never the local edit's own `changed_at` or
   `correction_id`. `serverTimestamps.js` parses fractional digits separately from whole seconds,
   uses exact integer microseconds, rejects unsafe results and compares lowercase UUIDs on ties.
-  It stores server timestamp strings unchanged. Plan 2's local correction ordering and
-  `applyCorrectionAcknowledgement` are unchanged.
+  It stores server timestamp strings unchanged. Plan 2's local correction ordering is unchanged;
+  acknowledgement ownership follows the outbox rule above (Plan 3 review round 1).
 
 `letterMasteryHistoryScope(userId)` is `letter_mastery_pull:<userId>`.
 `deleteUndeliveredLetterMastery(txn, { userId, childIds })` acts only after confirming that the
@@ -1131,9 +1139,11 @@ deleted from them on handover; their transactional bounds apply when they next w
 as `windowStart`, and uses the same id for coverage and `p_academic_year_id` on every page.
 The server is authoritative and raises `MR002` before reading a mismatched page, even an empty
 one. The walk stops as `year_mismatch`, retaining the last saved position and marking failure
-and incompleteness. The store refreshes reference data and reruns that walk once. It permits only one refresh
-per pass; later or repeated mismatches do not loop. The order-independent Task 7A refresh changes
-the local year, whose changed `windowStart` resets Programme cursors.
+and incompleteness. The store permits only one reference refresh per pass. If it changes the
+active year's id or start date, the store restarts **both** Programme walks, including a run
+walk that completed earlier in the pass. If the year stays the same, it retries only the
+failed walk once. Later or repeated mismatches do not refresh or loop. The order-independent
+Task 7A refresh changes the local year, whose changed `windowStart` resets Programme cursors.
 Mastery's null window never resets on a year change. Missing Programme/year yields `dependency`
 without a request or stamp for either Programme walk.
 
@@ -1159,6 +1169,16 @@ before any history request or completed-pass publication. MR002 recovery uses
 `services.pullReferenceData`. A failed ordinary refresh logs only
 `[AssessmentHistory] reference refresh failed` and its message, leaves that walk incomplete
 and does not rerun it; mastery can still run. A stale refresh rethrows.
+
+The reference refresh now includes `assessment_tools` after `programmes`, through the existing
+reference repository's Boolean/JSON/FK configuration. A fresh history pass waits for these
+references before applying a family with a non-null `assessment_tool_id`; the id is retained.
+An explicit refresh fetches tools even when the reference cache previously completed, using
+the existing refresh barrier rather than a new cache marker. Authenticated SELECT is granted
+by `20260521115416_masi_clean_rls_policies.sql` and retained by the cleanup migrations; its
+`assessment_tools_read` policy exposes active tools. The local regression uses such an active,
+server-valid tool and proves both family and cursor commit on fresh and previously completed
+caches. No grant or migration change is included in this review.
 
 **Trigger inventory and budget (Task 8).** Every history service `.start(` in `src/` is
 pinned by `historyPullTriggerBudget.test.js`:
@@ -1187,7 +1207,8 @@ the existing per-walk rule in this order:
 
 1. Either store running: `Downloading`, with `Downloading history from Head Office…`.
 2. Any missing pull state: `Not downloaded yet`, with no detail.
-3. All four have `cursor.complete`, `lastPulledAt` and no retained `lastFailureAt`:
+3. All four have `cursor.complete`, `lastPulledAt` and no retained `lastFailureAt`, and both
+   Programme cursors match the active academic year's start date:
    `Up to date`, with no detail.
 4. Otherwise: `Incomplete since <time>`, with `History not fully downloaded yet`. The time
    is the earliest incomplete walk's `lastFailureAt || updatedAt || lastPulledAt`, formatted
@@ -1195,6 +1216,13 @@ the existing per-walk rule in this order:
 
 The session-only `describeHistoryState` is unchanged for Session History. Assessment History
 uses the combined presenter over the run and assessment states and displays only its detail.
+`assessmentHistory.store.getPullStates` adds read-time `expectedWindowStart` to each present
+Programme pull state, taken from the active year (null if missing). The combined presenter
+rejects a mismatched or missing expected year as incomplete. Durable cursors are unchanged by
+this read. Both existing consumers receive that context through the store; mastery has no
+year window. `isMasteryInputsComplete` already checks its assessment cursor against the active
+year directly and retains that check. Session cursors and their standalone presenter keep
+their existing behavior.
 Sync Status reloads all four states on either store's page or run version. Home keeps its
 session-version subscriptions and also observes assessment-history versions. Assess, My
 Children, Assessment History, Child Results, Letter Mastery Ranking and Assessment Ranking

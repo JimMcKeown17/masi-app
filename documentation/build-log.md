@@ -2511,10 +2511,102 @@ complete. The commit step is controller-owned. No dependency install, network, h
 Supabase action, PostgreSQL execution, EAS build, device check or PR was performed. Physical
 handover/convergence and subsequent controller branch/release gates remain separate proof.
 
+#### Controller adversarial review round 1: Retry convergence, tool hydration and year recovery
+
+Addressed the three production failures reproduced by the controller on `25a901c`, with
+real-SQLite RED regressions before each implementation change. No server migration changed.
+
+**Finding 1 — terminal Retry could strand a synced wrong value.** A pull can replace the
+displayed correction id while preserving the refused terminal payload. Successful finalization
+therefore cannot require that displayed id to equal the sent id. `applyCorrectionAcknowledgement`
+now installs the returned winner after the outbox CAS succeeds unless a pending/failed/in-flight
+slot still carries a different correction. The latter, and an unsuccessful CAS, retain Plan 2's
+ordering-only behavior. The existing direct CAS and newer-tap-mid-flight tests pass unchanged.
+The history merge can also repair a synced display at an equal accepted tuple when its value,
+actor, correction or time differs from its watermark. Owed slots still block every such merge;
+consistent equal tuples remain no-ops, and terminal restoration retains refusal evidence.
+
+The end-to-end local regression uses the real engine, Retry, walks and completeness accessor:
+refusal → accepted-value pull restoration → successful Retry → immediate returned-winner
+installation → next pull still equals the server, no outbox rows, completeness true. Separate
+equal-watermark cases repair stranded correction/time and value-only mismatches.
+
+**Finding 2 — a non-null tool FK could block every page retry.** The existing reference refresh
+now fetches `assessment_tools` after programmes using its existing repository configuration.
+The history store's readiness barrier awaits this refresh in the regression; both fresh and
+previously completed caches acquire the active tool before the family/cursor commit. Its id
+is retained. An explicit refresh runs even when the cache already completed, so no new marker,
+schema, or fresh-install requirement was added. The existing signed-in provider also invokes
+this full refresh (`src/context/SignedInEAContext.js:48-55`). Test adapters and reference fixture
+maps now supply the eighth table.
+
+Local migration review found authenticated SELECT at
+`supabase/migrations/20260521115416_masi_clean_rls_policies.sql:41` and the active-only policy
+at `:79-81`, with SELECT retained by the later cleanup migrations. The fixture's tool is active;
+inactive-tool visibility remains governed by that existing policy. No hosted grant claim or
+new migration is inferred from this local review.
+
+**Finding 3 — recovery left an earlier completed run on the old year.** After MR002, a successful
+reference refresh that changes year id/start restarts both Programme walks, retaining the one
+refresh per pass bound. With an unchanged year, only the failed walk retries once. Failure and
+stale-actor handling remain bounded. `getPullStates` projects the current active year's
+`expectedWindowStart` onto each present Programme state; the combined presenter rejects a
+missing/mismatched window immediately, without changing durable cursors. Both existing UI
+consumers use those returned states. `isMasteryInputsComplete` already checked its assessment
+cursor against the active year; the new test proves it stays false after the switch and true
+after the new-year walks. Session history code and its standalone presenter are unchanged.
+
+The between-walk test completes runs in 2026, switches the server at the assessment request,
+and observes `B → A(MR002) → B(2027) → A(2027) → M`, one refresh. Before the new run commits,
+the presenter cannot say Up to date; afterwards both Programme cursors hold the new window.
+
+**Faithful test adaptations.** The earlier equal-tuple test supplied a different confirmation
+under the same immutable tuple while expecting it to be ignored. Its equal replay now carries
+the same accepted value; lower tuples still differ and remain ignored
+(`__tests__/letterMasteryHistoryPage.test.js:64-86`). The two new repair regressions explicitly
+test differing values at an equal watermark. The reference table list grows from seven to
+eight: repository maps and exact request/result assertions were extended accordingly. The
+first full runs found two remaining seven-request assertions in `handleServices.test.js:429,483`;
+both now expect eight while preserving their readiness/offline behavior checks.
+
+Every test command below uses `PATH="$HOME/.nvm/versions/node/v20.19.4/bin:$PATH"`.
+The affected unit command is
+`npx jest __tests__/masteryRepository.test.js __tests__/letterMasteryCorrectionSync.test.js __tests__/letterMasteryHistoryPage.test.js __tests__/letterMasteryHandover.test.js __tests__/assessmentHistoryPage.test.js __tests__/assessmentHistoryPull.test.js __tests__/assessmentHistoryStatus.test.js __tests__/referenceDataRepository.test.js __tests__/offlineSyncOutbox.test.js __tests__/syncStatusPresenter.test.js __tests__/pullCoverage.test.js __tests__/sessionHistoryPull.test.js __tests__/historyWalk.test.js --maxWorkers=25%`.
+The affected SQLite command is
+`npm run test:integration -- __tests__/masteryRepository.test.js __tests__/letterMasteryCorrectionSync.test.js __tests__/letterMasteryHistoryPage.test.js __tests__/letterMasteryHandover.test.js __tests__/assessmentHistoryPage.test.js __tests__/assessmentHistoryPull.test.js __tests__/assessmentHistoryStatus.test.js __tests__/referenceDataRepository.test.js __tests__/offlineSyncOutbox.test.js __tests__/pullCoverage.test.js __tests__/sessionHistoryPull.test.js __tests__/historyWalk.test.js`.
+
+| Gate / command | Result |
+| --- | --- |
+| F1 RED: `npm run test:integration -- __tests__/pullCoverage.test.js __tests__/letterMasteryHistoryPage.test.js` | Exit 1: 2 failed suites, 3 failed / 41 passed tests, 3.146 s. Retry left confirmed=true instead of false; both equal-watermark repairs were skipped. |
+| F1 GREEN: same two suites plus `__tests__/masteryRepository.test.js __tests__/letterMasteryCorrectionSync.test.js` | Exit 0: 4 suites / 108 tests passed, 5.468 s; existing CAS tests unchanged. |
+| F2 RED: `npm run test:integration -- __tests__/assessmentHistoryStatus.test.js` | Exit 1: 1 failed suite, 2 failed / 15 passed tests, 1.47 s. Both non-null tool cases hit FK failure and an incomplete assessment walk. |
+| F2 GREEN: same suite plus `__tests__/referenceDataRepository.test.js __tests__/offlineSyncOutbox.test.js` | Exit 0: 3 suites / 85 tests passed, 5.123 s. |
+| F3 RED: `npm run test:integration -- __tests__/assessmentHistoryStatus.test.js` | Exit 1: 1 failed suite, 2 failed / 17 passed tests, 1.672 s. No new-year run retry occurred, and old completed cursors still presented Up to date. |
+| F3 RED: `npx jest __tests__/syncStatusPresenter.test.js --maxWorkers=25%` | Exit 1: 1 failed suite, 2 failed / 33 passed tests, 2.245 s. Wrong/missing active windows were accepted as current. |
+| F3 GREEN: same SQLite command | Exit 0: 1 suite / 19 tests passed, 1.624 s. |
+| F3 GREEN: same presenter command | Exit 0: 1 suite / 35 tests passed, 1.903 s. |
+| Affected unit command above | Exit 0: 13 suites / 319 tests passed, 7.114 s. |
+| Affected SQLite command above | Exit 0: 12 suites / 284 tests passed, 15.154 s. |
+| First `npx jest --silent --maxWorkers=25%` | Exit 1: 1 failed / 361 passed suites, 2 failed / 4,554 passed tests (4,556 total), 84.992 s. Two obsolete reference request counts in handleServices. |
+| First `npm run test:integration --silent` | Exit 1: 1 failed / 69 passed suites, 2 failed / 849 passed tests (851 total), 70.15 s. Same two counts. |
+| `npx jest __tests__/handleServices.test.js --maxWorkers=25%` after count adaptation | Exit 0: 1 suite / 33 tests passed, 2.184 s. |
+| `npm run test:integration -- __tests__/handleServices.test.js` after count adaptation | Exit 0: 1 suite / 33 tests passed, 2.214 s. |
+| Final `npx jest --silent --maxWorkers=25%` | Exit 0: 362 suites / 4,556 tests passed, 78.803 s. |
+| Final `npm run test:integration --silent` | Exit 0: 70 suites / 851 tests passed, 65.678 s. |
+| `git diff --check`; no-diff checks of migrations, plan, session/shared walks and mastery coverage helper; exact session presenter comparison | PASS. |
+
+The full suites ran concurrently; no extra production-binding suite overlapped them. No
+unrelated timeout occurred. The contract map now records acknowledgement ownership, equal
+repairs, tool hydration and current-year status/recovery. The three review fixes and local
+verification are complete. Git remains read-only for the implementer; controller review and
+commit, PostgreSQL re-verification, hosted actions and physical device checks remain separate
+gates. No network, migration, hosted operation, EAS build or PR action was performed.
+
 ## Decision Register
 
 | Date | Decision | Rationale | Revisit Trigger |
 | --- | --- | --- | --- |
+| 2026-10-21 | AR Plan 3 review round 1 uses outbox ownership for mastery acknowledgement, permits equal-watermark display repair without owed work, hydrates tools through the existing full reference refresh, and restarts both Programme walks after a recovery year change. Combined status checks read-time active-window context. | A restored display id cannot own a refused payload's Retry, a watermark must describe the displayed accepted value, a valid FK must be hydrated before page apply, and a completed cursor from the previous year cannot establish current completeness. Existing CAS, one-refresh budget and session semantics remain load-bearing. | Controller adversarial review or physical refusal/Retry, non-null tool, or between-walk year-change gates expose a further convergence or authority mismatch. |
 | 2026-10-21 | AR Plan 3 Task 11 derives mastery-input completeness from both completed cursors and both current grant sets, through one read-only handle-bound accessor. Battery Run state is excluded, and no answer is persisted or cached. | Completed coverage records what was downloaded; a live scope check detects a later grant loss. Reusing C1's predicate preserves failure/year semantics, and the existing coverage-drop/re-walk lifecycle prevents a returning child from looking complete before older mastery is restored. | Lesson-engine integration or physical handover/year-rollover gates expose missing coverage, actor leakage or a need for different completeness semantics. |
 | 2026-10-21 | AR Plan 3 Task 10 bounds assessment evidence to the active academic year's inclusive dates and shares one child/language selector between tracker reads and the mastery ranking. No active year supplies no assessment evidence; confirmations still count. | A phone retaining last year's results must agree with a fresh phone downloading only the current year. Date filtering belongs in the repository accessor; stored items still determine mastery, while confirmations remain current child state. | Physical rollover/convergence gates or lesson-engine integration expose a different evidence window or selector. |
 | 2026-10-21 | AR Plan 3 Task 9 presents one History status over all four walks and observes page/run versions only to re-read SQLite. The panel's existing background loader receives page signals; the open session sheet receives none. | Upload completion cannot establish inbound completeness, reference children need names without roster authority, and a page observer must not become another pull trigger. Preserving the panel's tap/read fences and the sheet's baseline avoids changing accepted correction intent. | Device gates expose stale displayed data, extra pulls, tap rollback or a new need to refresh an open sheet safely. |
@@ -2689,6 +2781,7 @@ handover/convergence and subsequent controller branch/release gates remain separ
 
 | Date | Gap/Bug | Resolution | Reuse Note |
 | --- | --- | --- | --- |
+| 2026-10-21 | **A history result that references an inactive assessment tool cannot hydrate.** AR Plan 3 review round 1 fix downloads `assessment_tools`, but the existing `assessment_tools` SELECT policy shows authenticated users active tools only, so a family whose tool was later retired would fail the local foreign key and block its page. | Known gap, not fixed: no phone producer writes `assessment_tool_id` (only the payload passes it through), so no current result carries a tool id. | Revisit if any client or Head Office starts writing tool ids: either let readers see referenced inactive tools, or store a history reference row for a missing tool, as history reference children do. |
 | 2026-10-21 | Code inspection during AR Plan 3 Task 5 found that `historyWalk.js:276-278` maps a page saver rejection with `kind = 'query'` to `transport`; only internal `HistoryRunStop` kinds and external cancellation are retained. | Resolved in AR Plan 3 Task 7: the shared walker retains an external saver failure with `kind = 'query'` in its returned status and failure log, and records `lastFailureAt` without advancing the committed cursor. Real-SQLite regressions exercise the actual assessment, run and mastery validators, plus a malformed second assessment page after ten committed families. RED observed three `transport` statuses where `query` was expected; GREEN retains the category. Session configs and their guard suites are unchanged. | A shared traversal boundary must preserve the public error classification returned by its page-apply adapter. |
 | 2026-10-20 | Reference refresh could not switch the active academic year when the server listed the new year first, or left the phone's active year out: `pullReferenceDataRows` fetches years without ordering (`src/services/offlineSync.js`), `replaceAll` upserts in response order (`src/db/repositories/referenceDataRepository.js`), and `idx_academic_years_active_unique` checks each statement (`src/db/migrations.js`). The UNIQUE failure rolled back the year table, prevented refresh completion and kept last year active on every such refresh. | Fixed in AR Plan 3 Task 7A: with exactly one incoming active year, clear other local active flags inside the replace transaction before retargeting and upserting. Real-SQLite tests exercise the real repository and real refresh in both response orders, an omitted local active year, no-active/empty responses and whole-table rollback for two active years. MR002 recovery in Task 8 depends on this fix. | A one-row rule enforced by a unique index must be kept inside the replace transaction, not left to response order. |
 | 2026-10-21 | **AR Plan 2 accepted risk A3 — slow-clock correction after observing another phone's winner.** B is an hour slow and receives A's 10:00 winner via a superseded acknowledgement. At real 10:01 B un-confirms at 09:01; its receipt keeps 09:01, ordering retains A's winner, and B finalizes back to confirmed true. The un-confirm is silently reverted and repeats until the slow clock passes the winner's time. | **Accepted by the controller in adversarial review round 1; controller to raise with Jim; not fixed here.** Rare combination of two phones correcting the same child/letter/language plus a clock slow beyond the real correction gap; fast clocks are already clamped. Root revisit: carry the observed winner's correction id as a causal base in set_letter_mastery and accept a correction whose base equals the current winner. This changes the approved server contract. | Revisit trigger: a field report of a tracker mark that reverts after sync, or two EAs routinely co-delivering one child. Wall-clock order does not express causality after a phone observes another writer's result. |

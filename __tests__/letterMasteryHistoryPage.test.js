@@ -65,11 +65,25 @@ describe('letter mastery history page', () => {
     await mastery.saveHistoryPage([pulled()], pageOptions());
     const before = await read();
     for (const correction_id of [LOW, HIGH]) {
-      expect(await mastery.saveHistoryPage([pulled({ confirmed: false, correction_id })], pageOptions())).toEqual({ inserted: 0, applied: 0, skipped: 1 });
+      // An equal immutable tuple carries the same accepted value; a lower tuple may differ.
+      expect(await mastery.saveHistoryPage([pulled({ confirmed: correction_id === HIGH, correction_id })], pageOptions())).toEqual({ inserted: 0, applied: 0, skipped: 1 });
       expect(await read()).toEqual(before);
     }
     expect(await mastery.saveHistoryPage([pulled({ confirmed: false, changed_at: T2, correction_id: MID })], pageOptions())).toEqual({ inserted: 0, applied: 1, skipped: 0 });
     expect(await read()).toMatchObject({ confirmed: 0, server_changed_at: T2, server_correction_id: MID });
+  });
+
+  test.each(['correction', 'value'])('an equal accepted tuple repairs a synced row with a stranded %s', async mismatch => {
+    const accepted = pulled({ confirmed: false, changed_at: T2, correction_id: MID });
+    await mastery.saveHistoryPage([accepted], pageOptions());
+    if (mismatch === 'correction') {
+      await db.runAsync('update letter_mastery set confirmed = 1, changed_at = ?, correction_id = ? where id = ?', T1, HIGH, accepted.id);
+    } else {
+      await db.runAsync('update letter_mastery set confirmed = 1 where id = ?', accepted.id);
+    }
+    expect(await mastery.saveHistoryPage([accepted], pageOptions())).toMatchObject({ applied: 1 });
+    expect(await read()).toMatchObject({ confirmed: 0, changed_at: T2, correction_id: MID,
+      changed_by: accepted.changed_by, server_changed_at: T2, server_correction_id: MID, sync_status: 'synced' });
   });
   test('a stale page applied after a newer acknowledged correction does not roll it back', async () => {
     const stale = pulled({ correction_id: LOW });

@@ -7,6 +7,19 @@ import {
 } from '../src/utils/syncStatusPresenter';
 import { colors } from '../src/constants/colors';
 
+test.each(['2027-01-15', null])('combined History rejects a completed year-scoped cursor outside its active window %p', expectedWindowStart => {
+  const current = { lastPulledAt: '2026-10-20T09:00:00Z', updatedAt: '2026-10-20T09:00:00Z',
+    cursor: JSON.stringify({ complete: true, lastFailureAt: null, windowStart: '2026-01-15' }) };
+  const stale = { ...current, expectedWindowStart };
+  expect(describeCombinedHistoryState({ pullStates: [current, stale, current, current] }))
+    .toMatchObject({ label: expect.stringMatching(/^Incomplete since /), detail: 'History not fully downloaded yet' });
+  if (expectedWindowStart) {
+    expect(describeCombinedHistoryState({ pullStates: [current,
+      { ...stale, cursor: JSON.stringify({ complete: true, lastFailureAt: null, windowStart: expectedWindowStart }) }, current, current] }).label)
+      .toBe('Up to date');
+  }
+});
+
 describe('deriveSyncState priority', () => {
   const base = { isOnline: true, isSyncing: false, waitingCount: 0, needsAttentionCount: 0 };
 

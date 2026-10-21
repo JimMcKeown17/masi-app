@@ -426,7 +426,7 @@ test('cold readiness joins the background reference pull and waits for its last 
     release.resolve();
     await Promise.all([readiness, refresh]);
     expect(await a.repositories.staffProgrammeAssignments.getAll()).toHaveLength(1);
-    expect(transport).toHaveBeenCalledTimes(7);
+    expect(transport).toHaveBeenCalledTimes(8);
   } finally { release.resolve(); }
 });
 
@@ -480,7 +480,7 @@ test('a completed reference pull with every table empty is ready offline after r
   const online = jest.fn(async () => response());
   const a = await open(A, online);
   await a.services.pullReferenceData();
-  expect(online).toHaveBeenCalledTimes(7);
+  expect(online).toHaveBeenCalledTimes(8);
   await requestClose({ reason: 'offline restart with empty references' });
   const offline = jest.fn(async () => { throw new TypeError('Offline'); });
   const reopened = await open(A, offline);

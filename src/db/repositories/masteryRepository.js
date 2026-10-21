@@ -55,7 +55,14 @@ export const applyCorrectionAcknowledgement = async (txn, {
   const local = await txn.getFirstAsync('select correction_id from letter_mastery where id = ?', recordId);
   if (!local) return 'none';
 
-  const canWrite = outboxDeleted && local.correction_id === sentCorrectionId;
+  const newerOwed = outboxDeleted && await txn.getFirstAsync(`
+    select id from sync_outbox where table_name = 'letter_mastery' and record_id = ?
+      and status in ('pending', 'failed', 'in_flight')
+      and json_extract(payload, '$.correction_id') is not ? limit 1
+  `, recordId, sentCorrectionId);
+  // A pull may have replaced the displayed correction after a refusal. The outbox
+  // CAS and any newer owed slot, rather than that display id, own acknowledgement.
+  const canWrite = outboxDeleted && !newerOwed;
   if (result.outcome === 'acknowledged') {
     if (!canWrite) return 'none';
     await txn.runAsync('delete from letter_mastery where id = ?', recordId);
@@ -231,8 +238,12 @@ export const createMasteryRepository = ({ database } = {}) => {
         }
         const order = local.server_changed_at == null || local.server_correction_id == null ? null
           : compareServerTuples([row.changed_at, row.correction_id], [local.server_changed_at, local.server_correction_id]);
+        const repairEqual = order === 0 && (local.sync_status === 'terminal'
+          || local.correction_id !== local.server_correction_id
+          || local.changed_at !== local.server_changed_at
+          || Boolean(local.confirmed) !== row.confirmed || local.changed_by !== row.changed_by);
         if (!['synced', 'terminal'].includes(local.sync_status)
-          || !(order === null || order === 1 || (order === 0 && local.sync_status === 'terminal'))) {
+          || !(order === null || order === 1 || repairEqual)) {
           skipped += 1;
           continue;
         }

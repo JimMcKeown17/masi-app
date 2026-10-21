@@ -13,6 +13,8 @@ import {
 import { createChildrenRepository } from '../src/db/repositories/childrenRepository';
 import { createMasteryRepository } from '../src/db/repositories/masteryRepository';
 import { createHistoryServer, masteryRow } from '../test-support/assessmentHistoryServer';
+import { createSupabaseMock } from '../test-support/supabaseSyncMock';
+import { createOutboxSyncEngine } from '../src/services/offlineSync';
 
 const walked = { windowStart: '2026-01-15', complete: true, lastFailureAt: null, rescanChildIds: ['child-a', 'child-b'] };
 
@@ -171,6 +173,44 @@ describe('isMasteryInputsComplete through real walks', () => {
 
   test('before any walk it is false', async () => {
     expect(await complete()).toBe(false);
+  });
+
+  test('a refused correction restored by a pull converges after successful Retry', async () => {
+    const acceptedAt = '2026-09-01T07:00:00.000001+00:00';
+    const retryAt = '2026-09-01T09:00:00.000001+00:00';
+    let accepted = masteryRow('child-a', 'k', acceptedAt);
+    server.lists[M] = () => [accepted];
+    await both();
+    const repository = createMasteryRepository({ database: db });
+    const correction = await repository.setLetterMastery({
+      childId: 'child-a', letter: 'k', language: 'en', confirmed: false, changedAt: '2026-09-01T09:00:00Z',
+    });
+    const { supabaseClient } = createSupabaseMock({ rpcResults: {
+      set_letter_mastery: { data: null, error: { code: 'MA001', message: 'correction refused' } },
+    } });
+    const engine = createOutboxSyncEngine({ database: db, supabaseClient, enqueueRequest: task => task(),
+      getAuthSession: async () => ({ data: { session: { user: { id: 'user-1' } } } }) });
+    expect(await engine.syncAll()).toMatchObject({ totalTerminal: 1 });
+    await mastery({ force: true });
+    expect(await repository.getLetterMastery({ childId: 'child-a' }))
+      .toEqual([expect.objectContaining({ confirmed: true, correction_id: accepted.correction_id })]);
+    const evidence = await db.getFirstAsync("select * from sync_outbox where table_name = 'letter_mastery'");
+    expect(evidence.status).toBe('terminal');
+    expect(JSON.parse(evidence.payload).correction_id).toBe(correction.correction_id);
+    accepted = { ...accepted, confirmed: false, changed_at: retryAt, updated_at: retryAt,
+      correction_id: correction.correction_id, changed_by: 'user-1' };
+    supabaseClient.rpc.mockResolvedValue({ data: [{ outcome: 'applied', confirmed: false,
+      changed_at: retryAt, correction_id: accepted.correction_id, changed_by: accepted.changed_by }], error: null });
+    await engine.retryFailedItem('letter_mastery', correction.id);
+    expect(await engine.syncAll()).toMatchObject({ totalSynced: 1 });
+    expect(await repository.getLetterMastery({ childId: 'child-a' })).toEqual([expect.objectContaining({
+      confirmed: false, changed_at: retryAt, correction_id: accepted.correction_id, changed_by: 'user-1',
+      server_changed_at: retryAt, server_correction_id: accepted.correction_id, sync_status: 'synced',
+    })]);
+    expect(await db.getAllAsync('select * from sync_outbox')).toEqual([]);
+    await mastery({ force: true });
+    expect((await repository.getLetterMastery({ childId: 'child-a' }))[0].confirmed).toBe(false);
+    expect(await complete(['child-a'])).toBe(true);
   });
 
   test('after both walks it is true for covered children and false for an uncovered one', async () => {

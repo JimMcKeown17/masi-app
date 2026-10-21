@@ -16,7 +16,7 @@ export const createHistoryStoreFixture = async () => {
   await db.runAsync("insert into children (id, first_name, last_name) values (?, 'Local', 'Child')", CHILD);
   const server = createHistoryServer();
   const tableNames = ['schools', 'job_titles', 'programmes', 'academic_years',
-    'assessment_windows', 'teachers', 'staff_programme_assignments'];
+    'assessment_tools', 'assessment_windows', 'teachers', 'staff_programme_assignments'];
   const referenceRows = {}, referenceRepositories = {}, referenceErrors = {};
   for (const tableName of tableNames) {
     referenceRows[tableName] = await db.getAllAsync('select * from ' + tableName);

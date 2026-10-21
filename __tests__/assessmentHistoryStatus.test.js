@@ -8,7 +8,10 @@ import { useAssessmentHistoryStatus } from '../src/services/assessmentHistorySta
 import { getActiveAcademicYear } from '../src/db/repositories/domainRepositoryUtils';
 import { createHistoryStoreFixture } from '../test-support/assessmentHistoryStoreFixture';
 import { deferred } from '../test-support/assessmentHistoryServer';
-import { PROGRAMME, serverFamily } from '../test-support/assessmentHistoryFixtures';
+import { PROGRAMME, serverFamily, uuid } from '../test-support/assessmentHistoryFixtures';
+import { createLocalStateRepository } from '../src/db/repositories/localStateRepository';
+import { describeCombinedHistoryState } from '../src/utils/syncStatusPresenter';
+import { isMasteryInputsComplete } from '../src/services/pullCoverage';
 import { StaleActorError } from '../src/session/staleActor';
 import { createAssessmentHistoryStates } from '../src/services/assessmentHistoryPull';
 import { resetHistoryWalkState } from '../src/services/historyWalk';
@@ -31,6 +34,27 @@ describe('assessment history store', () => {
     expect(f.server.calls.map(call => call.name)).toEqual([B, A, M]);
     expect(store.getSnapshot()).toEqual({ running: false, pageVersion: 3, runVersion: 1,
       lastResults: { batteryRuns: { status: 'complete', pages: 1 }, assessments: { status: 'complete', pages: 1 }, mastery: { status: 'complete', pages: 1 } } });
+  });
+
+  test.each(['fresh', 'previously completed'])('%s reference cache hydrates a non-null assessment tool before the history family and cursor commit', async cache => {
+    const localState = createLocalStateRepository({ database: f.db });
+    if (cache === 'previously completed') {
+      await f.refreshReferenceData();
+      expect(await localState.get('reference_data_complete_at')).toEqual(expect.any(String));
+    }
+    const toolId = uuid(880);
+    f.referenceRows.assessment_tools = [{ id: toolId, programme_id: PROGRAMME,
+      code: 'history-letter-tool', name: 'Letter tool', is_active: true, config: { version: 1 } }];
+    const family = { ...serverFamily(1), assessment_tool_id: toolId };
+    f.server.lists[A] = () => [family];
+    store = f.makeStore({ referenceDataReady: f.refreshReferenceData });
+    expect((await start()).assessments.status).toBe('complete');
+    expect(await f.db.getFirstAsync('select assessment_tool_id from assessments where id = ?', family.id))
+      .toEqual({ assessment_tool_id: toolId });
+    expect(await f.db.getFirstAsync('select id, config from assessment_tools where id = ?', toolId))
+      .toEqual({ id: toolId, config: JSON.stringify({ version: 1 }) });
+    expect(JSON.parse((await store.getPullStates('user-1')).assessments.cursor).complete).toBe(true);
+    expect(f.server.client.from).toHaveBeenCalledWith('assessment_tools');
   });
 
   test.each([2, 3])('%i start calls during one pass give exactly one trailing pass', async count => {
@@ -112,6 +136,41 @@ describe('assessment history store', () => {
     const next = { id: 'year-2027', label: '2027', starts_on: '2027-01-15', ends_on: '2027-12-15', is_active: 1 };
     f.referenceRows.academic_years = newFirst ? [next, old] : [old, next];
   };
+
+  test('a year change between the run and assessment walks restarts both year-scoped walks', async () => {
+    let changed = false, observedRecovery = false;
+    f.server.onRequest = async (name, args) => {
+      if (name === A && !changed) { changed = true; changeServerYear(true); }
+      if (name === B && args.p_academic_year_id === 'year-2027') {
+        observedRecovery = true;
+        // The new run has not committed yet. Its old completed cursor cannot look current.
+        const states = await store.getPullStates('user-1');
+        expect(describeCombinedHistoryState({ pullStates: Object.values(states) }).label).not.toBe('Up to date');
+      }
+    };
+    await start();
+    expect(observedRecovery).toBe(true);
+    expect(f.refreshReferenceData).toHaveBeenCalledTimes(1);
+    expect(f.server.calls.map(call => call.name)).toEqual([B, A, B, A, M]);
+    const states = await store.getPullStates('user-1');
+    for (const state of [states.batteryRuns, states.assessments]) {
+      expect(JSON.parse(state.cursor)).toMatchObject({ complete: true, windowStart: '2027-01-15' });
+    }
+    expect(describeCombinedHistoryState({ pullStates: Object.values(states) }).label).toBe('Up to date');
+    expect(await isMasteryInputsComplete({ database: f.db, userId: 'user-1' })).toBe(true);
+  });
+
+  test('a reference year switch immediately makes old completed programme cursors incomplete for readers', async () => {
+    await start();
+    changeServerYear(true);
+    await f.refreshReferenceData();
+    const before = await f.db.getAllAsync('select * from sync_state order by scope');
+    const states = await store.getPullStates('user-1');
+    expect(describeCombinedHistoryState({ pullStates: Object.values(states) }).label).not.toBe('Up to date');
+    expect(await isMasteryInputsComplete({ database: f.db, userId: 'user-1' })).toBe(false);
+    expect(await f.db.getAllAsync('select * from sync_state order by scope')).toEqual(before);
+  });
+
   test.each([true, false])('a year mismatch refreshes reference data once and restarts that walk (new year first: %s)', async newFirst => {
     changeServerYear(newFirst);
     await start();
