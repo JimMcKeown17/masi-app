@@ -1066,7 +1066,7 @@ gate). The dry run listed only this file against `segygjzpujphwvrubusm`. Verifie
 
 ---
 
-### 2026-10-21 — Assessment Results Plan 2 Task 1: server mastery current state
+### 2026-10-21 — Assessment Results Plan 2: server current state and local schema
 
 **Scope:** server-only implementation on `feat/assessment-results-plan-2`. No phone schema,
 repository, sync or UI changes. AF Task 1 is in the stack; AF registry Tasks 2–3 and B2's parallel
@@ -1117,6 +1117,61 @@ The read-only hosted preflight (2026-10-21, `project_ref=segygjzpujphwvrubusm`) 
 `uuid-ossp` in schema `extensions`, 47 `letter_mastery` rows all labelled `isiXhosa`, and
 `20261021120000_assessment_results_contract` as the newest applied migration. Hosted wipe,
 apply and fixtures, EAS, devices and the PR are later gates, each needing Jim's yes.
+
+**AR Plan 2 Task 2, local schema 16 `letter_mastery_current_state`.**
+
+Added the leaf `src/db/domainId.js` module (only `uuid` imported), moving
+`deterministicDomainId` unchanged and re-exporting it and `letterMasteryDomainId` from
+`domainRepositoryUtils`. Mastery IDs now hash child, letter and language code without EA,
+Programme or source; child UUID text is lowercased for server parity. Added the optional
+per-migration `transform(txn)` hook after SQL and before the ledger/version writes in the same
+manual transaction. The new migration rebuilds mastery with its new columns, natural-key unique
+index, nullable Programme context without a local Programme FK, and two nullable server-ordering
+columns.
+
+**Clear rule:** map labels (including `Afrikaans → af`), lowercase letters and rank each mapped
+key by old `updated_at desc, id desc` before filtering. Keep only a synced winner; an unsynced
+winner clears the entire key rather than resurrecting an older synced row. Drop unknown
+languages and multi-character letters, and delete every old mastery outbox operation while
+preserving unrelated work. Retained rows preserve old correction provenance, timestamps and
+server-updated metadata; both new server-ordering fields start null. The JavaScript transform
+then rewrites retained row IDs using UUID v5. Real SQLite proves transform failure rolls back the
+rebuild, clear and version/ledger writes and restores FK enforcement, and relaunch performs no
+writes.
+
+The existing migration suites now check current version or find migrations by name. The
+orchestrator's no-literal-pins instruction takes precedence over the plan/C1 snippets that set
+the newest-version tripwire to N or assert historical version 15: the foundation tripwire and
+new ledger row find `letter_mastery_current_state` by name, and the assessment-results test
+checks named migration order. Historical pre-upgrade setup versions are unchanged. No plan,
+specification, repository write API, sync routing or UI behavior was edited.
+
+| Gate / command (all prefixed with Node 20.19.4 PATH) | Result |
+| --- | --- |
+| RED: `npm run test:integration -- __tests__/letterMasteryCurrentStateMigration.test.js` | Exit 1: 1 suite failed, 3 tests failed / 1 passed (4 total), 5.31 s. Executed failures: named migration absent (`migration().version`), old columns instead of the new shape, and no failing transform invoked |
+| RED: `npx jest __tests__/letterMasteryIdParity.test.js` | Exit 1: 1 suite failed to load, 0 tests executed; `Cannot find module '../src/db/domainId'`, 0.819 s, as expected by Step 2 |
+| GREEN: same migration command | Exit 0: 1 suite / 4 tests passed, 1.576 s |
+| GREEN: same ID-parity command | Exit 0: 1 suite / 2 tests passed, 0.92 s |
+| `npx jest __tests__/sqliteFoundation.test.js __tests__/hotPathIndexes.test.js __tests__/migrations.assessmentResults.test.js __tests__/timeEntryLocationMigration.test.js __tests__/rowVersionLocal.test.js __tests__/outboxOwnerMigration.test.js __tests__/migrationsForeignKeysOff.test.js --runInBand` | Exit 0: 7 suites / 102 tests passed, 6.813 s |
+| `npx jest --silent --maxWorkers=25%` | Exit 1: 338 suites passed / 11 failed (349 total); 4,215 tests passed / 33 failed (4,248 total), 242.984 s. All failures trace to the planned old mastery contracts; no unrelated timeout |
+| `npm run test:integration --silent` | Exit 1: 48 suites passed / 5 failed (53 total); 550 tests passed / 9 failed (559 total), 133.614 s. Failures are the planned old mastery contracts in `offlineSyncOutbox`, `LiteracySessionForm.submit`, `offlineSyncLifecycleEdits`, `syncContractCompleteness` and `foreignKeyEnforcement`; no unrelated timeout |
+
+The full unit failures are `offlineSyncOutbox.test.js`, `LiteracySessionForm.submit.test.js`,
+`literacySessionPersistence.test.js`, `masteryRepository.test.js`, `letterMasterySync.test.js`,
+`offlineSyncLifecycleEdits.test.js`, `syncContractCompleteness.test.js`,
+`LetterMasteryRankingScreen.test.js`, `masteryState.test.js`, `foreignKeyEnforcement.test.js`,
+and `completionPathBudget.test.js`. The SQL failures reference removed `user_id` columns,
+with consequent tracker/ranking UI assertions; the contract-classification assertion reports
+`letter_mastery.confirmed` count 0 rather than 1 pending Task 4. All eleven suites exercise mastery code or
+sync metadata owned by Tasks 3–6. No unrelated failure was found, so no isolated retry was
+required. Static source verification confirms the moved `deterministicDomainId` body is
+byte-identical and its leaf imports only `uuid`; `git diff --check` passes.
+
+Tasks 2–6 remain one local cutover. The old mastery repository, sync and caller contracts are
+expected to fail against the new table until their designated tasks replace them; Task 2 does
+not expand into those tasks. Hosted/backend, PostgreSQL, device, EAS, PR and commit steps are
+outside this task. Schema 16 is this branch's next free version; the controller handles the
+C1/B2 version collision at integration.
 
 ## Decision Register
 
