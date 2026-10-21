@@ -1066,7 +1066,7 @@ gate). The dry run listed only this file against `segygjzpujphwvrubusm`. Verifie
 
 ---
 
-### 2026-10-21 — C1 Tasks 1–2, local schema 16 and `lessonDraftsRepository`
+### 2026-10-21 — C1 Tasks 1–3, local schema 16, repository and signed-in EA handle
 
 Migration 16 adds the additive, local-only `lesson_drafts` table to each EA's SQLite file. The
 database enforces one row through a constant unique `slot`, enforces unique `session_id`, and has
@@ -1133,6 +1133,43 @@ The final full runs retain the two unrelated failures above even though each fil
 single isolated rerun. They are not reported as fully green aggregate exits. The integration run
 also emitted existing auth/network failure-path, stale/closed-handle, React/Paper and ChildrenContext
 undefined-`.catch` diagnostics in passing suites. No out-of-scope fix or timeout adjustment was made.
+
+#### Task 3 — on the handle, isolated per EA, durable across restarts
+
+`createHandleServices` now constructs `lessonDrafts` with the same `{ database: handle }` as the
+rest of the repository graph. The legacy component-test map includes the factory-only module;
+without a singleton export it falls through to the real handle-bound repository. No production
+caller of create/update/discard or UI wiring was added.
+
+The two planned file-backed tests use separate writer and query-only reader connections. A third raw
+connection reads the committed session id, language code and lesson date before either handle
+connection closes. Reset then requests an orderly close and awaits disposal; reopening offline
+returns the full saved draft unchanged, including tracker tap time and reading-level edits. The
+A → B → A case proves separate files/slots and refuses a late update through A's revoked handle
+with `StaleActorError`. This is local better-sqlite3 evidence, not a process-kill or Expo-device
+claim; a real force-quit remains Task 6's device gate.
+
+Standing docs now identify `lesson_drafts` as the session side of the SQLite draft lifecycle,
+with `sessions.state` left completed and the Battery Run lifecycle kept separate. C1 remains
+inert until C3; today's LiteracySessionForm stays draft-less. The finish-or-discard UI item is
+still open, and v1 has no session timer. The contract map records the local-only table and its
+Task 1–3 tests; the learning note explains the table, slot, save transaction and language choices.
+
+All commands below use `PATH="$HOME/.nvm/versions/node/v20.19.4/bin:$PATH"`.
+
+| Gate | Command after the Node prefix | Result |
+|---|---|---|
+| Handle/durability RED | `npm run test:integration -- __tests__/lessonDraftsDurability.test.js __tests__/handleServices.test.js` | Expected FAIL: 2 suites failed; 3 failed / 30 passed (33 total). Both durability tests found `lessonDrafts` undefined; the exact repository graph lacked the new key; exit 1 |
+| Handle/durability GREEN | Same command | PASS: 2 suites / 33 tests; exit 0 |
+| Full unit suite | `npx jest --silent --maxWorkers=25%` | PASS: 350 suites / 4,236 tests; exit 0 (84.478 s); no isolated rerun needed |
+| Full integration suite | `npm run test:integration --silent` | PASS: 55 suites / 584 tests; exit 0 (49.512 s); no isolated rerun needed |
+
+No plan/API adaptation was required. No Supabase/PostgreSQL, network, EAS, device, release or
+field operation was run.
+
+The integration run emitted existing intentional auth/network failure-path, React/Paper,
+closed-handle and ChildrenContext undefined-`.catch` diagnostics in passing suites. No failure,
+timeout change or out-of-scope repair was needed.
 
 ## Decision Register
 

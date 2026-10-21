@@ -247,7 +247,7 @@ test('the complete repository graph, composite onboarding and profile cache are 
     'childClassMemberships', 'classOnboarding', 'classGroupingState', 'groupingVersions',
     'sessions', 'assessments', 'batteryRuns', 'mastery', 'timeEntries', 'schools', 'jobTitles', 'programmes',
     'staffProgrammeAssignments', 'assessmentTools', 'academicYears', 'assessmentWindows',
-    'teachers', 'syncOutbox', 'syncState', 'localState', 'supportIncidents',
+    'teachers', 'syncOutbox', 'syncState', 'localState', 'lessonDrafts', 'supportIncidents',
   ].sort());
   await a.repositories.programmes.replaceFromServer(referenceRows('programmes', A));
   await a.repositories.schools.replaceFromServer(referenceRows('schools', A));

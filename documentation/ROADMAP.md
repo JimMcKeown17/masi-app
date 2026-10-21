@@ -460,8 +460,10 @@ the current-state model better than Zazi's per-session carry-forward.
   WelaPLUS/durable-draft lifecycle rather than a one-off 60-second EGRA patch.
 - [x] **Session form draft persistence or explicit launch acceptance:** navigate-away or process
   death loses an unfinished submit-and-go session. **Accepted for the pilot (Jim, 2026-10-17).** The
-  SQLite-backed draft/run lifecycle stays with the group-centred workstream. Do not add a second
-  temporary draft mechanism or imply autosave before it exists.
+  local `lesson_drafts` table and handle-bound repository (C1) now provide the session side of the
+  SQLite-backed draft/run lifecycle. They remain inert until C3: `LiteracySessionForm` stays
+  draft-less until C3 replaces it. The storage layer alone does not supply autosave or resume UI;
+  the assessment-draft item above remains separate and open.
 - [ ] **Removed session attendees:** `sessionsRepository` does not delete
   `session_attendees` removed by a later save. No current screen edits submitted sessions, but this
   must be fixed and behavior-tested before edit UI ships.
@@ -488,10 +490,12 @@ the current-state model better than Zazi's per-session carry-forward.
   phone `unassigned_at` (`childrenRepository.js:154`) against a microsecond server `assigned_at`
   under the `unassigned_at >= assigned_at` CHECKs, which `classifyError` treats as terminal
   ([Z14](./zazi-sync-lessons-for-masi-2026-10-08.md)).
-- [ ] **When durable session drafts ship (§4), key them per group and refuse a second start;
-  bound any session timer.** Zazi's single active-session key let a second group overwrite an
-  unfinished session (ZZ-BUG-20260922-001), and its unbounded timer saved a 1,140-minute session
-  (ZZ-BUG-20260924-001) ([Z18](./zazi-sync-lessons-for-masi-2026-10-08.md)).
+- [ ] **Finish the durable lesson start/resume flow (§4, C2–C3).** C1 storage already refuses a
+  second start: one lesson in progress per EA (C7), stricter than one per group. The
+  finish-or-discard ask and Home "Lesson in progress" resume action ship with C2–C3; keep this
+  item open until C3. v1 has no session timer (lesson-plan spec §8). Zazi's overwritten unfinished
+  session (ZZ-BUG-20260922-001) and unbounded 1,140-minute session (ZZ-BUG-20260924-001) remain the
+  motivating evidence ([Z18](./zazi-sync-lessons-for-masi-2026-10-08.md)).
 
 ### Upload contract (before pilot; priority item 5)
 

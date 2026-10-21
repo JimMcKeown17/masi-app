@@ -84,6 +84,14 @@ Do not start the group-first UI before these contracts are settled:
 
 ### 4. In-progress sessions become durable
 
+**2026-10-21 status:** [Lesson-plan spec §7.2](../docs/superpowers/specs/2026-10-20-lesson-plan-design.md#72-lesson-drafts-local-only)
+meets this requirement with the local `lesson_drafts` table, one per EA, rather than a state
+machine on `sessions.state`. This supersedes the state-machine and resume-copy wording in the
+first two bullets below: the resume action is Home's **"Lesson in progress"** card. C1 storage
+is bound to the signed-in EA handle and locally verified; it remains inert until C3 supplies the
+Lesson screen and Home wiring. The current `LiteracySessionForm` stays draft-less. Force-quit
+and native-device acceptance remain open.
+
 - Persist an explicit draft state machine in SQLite.
 - Surface a global "Session in progress" resume action.
 - Warn before discard or navigation away.
