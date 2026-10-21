@@ -1,0 +1,1265 @@
+{
+  "version": 1,
+  "defaults": {
+    "computeLessonChoices": {
+      "today": "2026-10-19",
+      "academicYearStart": "2026-01-14",
+      "programmeId": "p-lit",
+      "groupId": "g1",
+      "upNextGroupId": "g1",
+      "languageCode": "xh",
+      "pack": "xh-mini",
+      "alphabet": [
+        "a",
+        "b",
+        "c",
+        "d",
+        "e",
+        "f",
+        "g",
+        "h",
+        "i",
+        "j",
+        "k",
+        "l",
+        "m",
+        "n",
+        "o",
+        "p",
+        "q",
+        "r",
+        "s",
+        "t",
+        "u",
+        "v",
+        "w",
+        "x",
+        "y",
+        "z"
+      ],
+      "isEcd": false,
+      "presentChildren": [
+        {
+          "id": "A",
+          "readingLevel": null,
+          "knownLetters": [
+            "o",
+            "m",
+            "l",
+            "a",
+            "k",
+            "u"
+          ],
+          "historyComplete": true,
+          "masteryComplete": true
+        },
+        {
+          "id": "B",
+          "readingLevel": null,
+          "knownLetters": [
+            "o",
+            "m",
+            "l",
+            "a",
+            "k",
+            "u"
+          ],
+          "historyComplete": true,
+          "masteryComplete": true
+        }
+      ],
+      "sessions": []
+    },
+    "computeLessonPlan": {
+      "today": "2026-10-19",
+      "academicYearStart": "2026-01-14",
+      "programmeId": "p-lit",
+      "groupId": "g1",
+      "upNextGroupId": "g1",
+      "languageCode": "xh",
+      "pack": "xh-mini",
+      "alphabet": [
+        "a",
+        "b",
+        "c",
+        "d",
+        "e",
+        "f",
+        "g",
+        "h",
+        "i",
+        "j",
+        "k",
+        "l",
+        "m",
+        "n",
+        "o",
+        "p",
+        "q",
+        "r",
+        "s",
+        "t",
+        "u",
+        "v",
+        "w",
+        "x",
+        "y",
+        "z"
+      ],
+      "isEcd": false,
+      "presentChildren": [
+        {
+          "id": "A",
+          "readingLevel": null,
+          "knownLetters": [
+            "o",
+            "m",
+            "l",
+            "a",
+            "k",
+            "u"
+          ],
+          "historyComplete": true,
+          "masteryComplete": true
+        },
+        {
+          "id": "B",
+          "readingLevel": null,
+          "knownLetters": [
+            "o",
+            "m",
+            "l",
+            "a",
+            "k",
+            "u"
+          ],
+          "historyComplete": true,
+          "masteryComplete": true
+        }
+      ],
+      "sessions": []
+    }
+  },
+  "cases": [
+    {
+      "name": "the highest-step readable book no one read recently",
+      "spec": "C6",
+      "fn": "computeLessonChoices",
+      "view": "summary",
+      "input": {},
+      "expect": {
+        "books": [
+          {
+            "id": "xh-mini-r01",
+            "readable": true,
+            "suggested": false,
+            "lastReadOn": null
+          },
+          {
+            "id": "xh-mini-r02",
+            "readable": true,
+            "suggested": false,
+            "lastReadOn": null
+          },
+          {
+            "id": "xh-mini-r03",
+            "readable": true,
+            "suggested": false,
+            "lastReadOn": null
+          },
+          {
+            "id": "xh-mini-r04",
+            "readable": true,
+            "suggested": true,
+            "lastReadOn": null
+          }
+        ]
+      }
+    },
+    {
+      "name": "a book read in a present child's last 5 sessions is skipped",
+      "spec": "C6",
+      "fn": "computeLessonChoices",
+      "view": "summary",
+      "input": {
+        "sessions": [
+          {
+            "id": "s1",
+            "programme_id": "p-lit",
+            "session_date": "2026-10-16",
+            "created_at": "2026-10-16T08:00:00.000Z",
+            "children_ids": [
+              "A"
+            ],
+            "activities": {
+              "letters_focused": [],
+              "lesson": {
+                "version": 1,
+                "blends_done": [],
+                "books_read": [
+                  {
+                    "id": "xh-mini-r04",
+                    "how": "printed"
+                  }
+                ]
+              }
+            }
+          }
+        ]
+      },
+      "expect": {
+        "books": [
+          {
+            "id": "xh-mini-r01",
+            "readable": true,
+            "suggested": false,
+            "lastReadOn": null
+          },
+          {
+            "id": "xh-mini-r02",
+            "readable": true,
+            "suggested": false,
+            "lastReadOn": null
+          },
+          {
+            "id": "xh-mini-r03",
+            "readable": true,
+            "suggested": true,
+            "lastReadOn": null
+          },
+          {
+            "id": "xh-mini-r04",
+            "readable": true,
+            "suggested": false,
+            "lastReadOn": "2026-10-16"
+          }
+        ]
+      }
+    },
+    {
+      "name": "read six sessions ago is not recent",
+      "spec": "C6",
+      "fn": "computeLessonChoices",
+      "view": "summary",
+      "input": {
+        "sessions": [
+          {
+            "id": "s1",
+            "programme_id": "p-lit",
+            "session_date": "2026-10-09",
+            "created_at": "2026-10-09T08:00:00.000Z",
+            "children_ids": [
+              "A"
+            ],
+            "activities": {
+              "letters_focused": [],
+              "lesson": {
+                "version": 1,
+                "blends_done": [],
+                "books_read": [
+                  {
+                    "id": "xh-mini-r04",
+                    "how": "printed"
+                  }
+                ]
+              }
+            }
+          },
+          {
+            "id": "s2",
+            "programme_id": "p-lit",
+            "session_date": "2026-10-12",
+            "created_at": "2026-10-12T08:00:00.000Z",
+            "children_ids": [
+              "A"
+            ],
+            "activities": {
+              "letters_focused": [],
+              "lesson": {
+                "version": 1,
+                "blends_done": [],
+                "books_read": []
+              }
+            }
+          },
+          {
+            "id": "s3",
+            "programme_id": "p-lit",
+            "session_date": "2026-10-13",
+            "created_at": "2026-10-13T08:00:00.000Z",
+            "children_ids": [
+              "A"
+            ],
+            "activities": {
+              "letters_focused": [],
+              "lesson": {
+                "version": 1,
+                "blends_done": [],
+                "books_read": []
+              }
+            }
+          },
+          {
+            "id": "s4",
+            "programme_id": "p-lit",
+            "session_date": "2026-10-14",
+            "created_at": "2026-10-14T08:00:00.000Z",
+            "children_ids": [
+              "A"
+            ],
+            "activities": {
+              "letters_focused": [],
+              "lesson": {
+                "version": 1,
+                "blends_done": [],
+                "books_read": []
+              }
+            }
+          },
+          {
+            "id": "s5",
+            "programme_id": "p-lit",
+            "session_date": "2026-10-15",
+            "created_at": "2026-10-15T08:00:00.000Z",
+            "children_ids": [
+              "A"
+            ],
+            "activities": {
+              "letters_focused": [],
+              "lesson": {
+                "version": 1,
+                "blends_done": [],
+                "books_read": []
+              }
+            }
+          },
+          {
+            "id": "s6",
+            "programme_id": "p-lit",
+            "session_date": "2026-10-16",
+            "created_at": "2026-10-16T08:00:00.000Z",
+            "children_ids": [
+              "A"
+            ],
+            "activities": {
+              "letters_focused": [],
+              "lesson": {
+                "version": 1,
+                "blends_done": [],
+                "books_read": []
+              }
+            }
+          }
+        ]
+      },
+      "expect": {
+        "books": [
+          {
+            "id": "xh-mini-r01",
+            "readable": true,
+            "suggested": false,
+            "lastReadOn": null
+          },
+          {
+            "id": "xh-mini-r02",
+            "readable": true,
+            "suggested": false,
+            "lastReadOn": null
+          },
+          {
+            "id": "xh-mini-r03",
+            "readable": true,
+            "suggested": false,
+            "lastReadOn": null
+          },
+          {
+            "id": "xh-mini-r04",
+            "readable": true,
+            "suggested": true,
+            "lastReadOn": "2026-10-09"
+          }
+        ]
+      }
+    },
+    {
+      "name": "everything readable read recently: the one read longest ago",
+      "spec": "C6",
+      "fn": "computeLessonChoices",
+      "view": "summary",
+      "input": {
+        "sessions": [
+          {
+            "id": "s1",
+            "programme_id": "p-lit",
+            "session_date": "2026-10-12",
+            "created_at": "2026-10-12T08:00:00.000Z",
+            "children_ids": [
+              "A"
+            ],
+            "activities": {
+              "letters_focused": [],
+              "lesson": {
+                "version": 1,
+                "blends_done": [],
+                "books_read": [
+                  {
+                    "id": "xh-mini-r01",
+                    "how": "printed"
+                  }
+                ]
+              }
+            }
+          },
+          {
+            "id": "s2",
+            "programme_id": "p-lit",
+            "session_date": "2026-10-13",
+            "created_at": "2026-10-13T08:00:00.000Z",
+            "children_ids": [
+              "B"
+            ],
+            "activities": {
+              "letters_focused": [],
+              "lesson": {
+                "version": 1,
+                "blends_done": [],
+                "books_read": [
+                  {
+                    "id": "xh-mini-r02",
+                    "how": "printed"
+                  }
+                ]
+              }
+            }
+          },
+          {
+            "id": "s3",
+            "programme_id": "p-lit",
+            "session_date": "2026-10-14",
+            "created_at": "2026-10-14T08:00:00.000Z",
+            "children_ids": [
+              "A"
+            ],
+            "activities": {
+              "letters_focused": [],
+              "lesson": {
+                "version": 1,
+                "blends_done": [],
+                "books_read": [
+                  {
+                    "id": "xh-mini-r03",
+                    "how": "printed"
+                  }
+                ]
+              }
+            }
+          },
+          {
+            "id": "s4",
+            "programme_id": "p-lit",
+            "session_date": "2026-10-15",
+            "created_at": "2026-10-15T08:00:00.000Z",
+            "children_ids": [
+              "B"
+            ],
+            "activities": {
+              "letters_focused": [],
+              "lesson": {
+                "version": 1,
+                "blends_done": [],
+                "books_read": [
+                  {
+                    "id": "xh-mini-r04",
+                    "how": "printed"
+                  }
+                ]
+              }
+            }
+          }
+        ]
+      },
+      "expect": {
+        "books": [
+          {
+            "id": "xh-mini-r01",
+            "readable": true,
+            "suggested": true,
+            "lastReadOn": "2026-10-12"
+          },
+          {
+            "id": "xh-mini-r02",
+            "readable": true,
+            "suggested": false,
+            "lastReadOn": "2026-10-13"
+          },
+          {
+            "id": "xh-mini-r03",
+            "readable": true,
+            "suggested": false,
+            "lastReadOn": "2026-10-14"
+          },
+          {
+            "id": "xh-mini-r04",
+            "readable": true,
+            "suggested": false,
+            "lastReadOn": "2026-10-15"
+          }
+        ]
+      }
+    },
+    {
+      "name": "a retired book is never suggested or listed",
+      "spec": "§4.7",
+      "fn": "computeLessonChoices",
+      "view": "summary",
+      "input": {
+        "presentChildren": [
+          {
+            "id": "A",
+            "readingLevel": null,
+            "knownLetters": [
+              "o",
+              "m",
+              "l",
+              "a"
+            ],
+            "historyComplete": true,
+            "masteryComplete": true
+          },
+          {
+            "id": "B",
+            "readingLevel": null,
+            "knownLetters": [
+              "o",
+              "m",
+              "l",
+              "a"
+            ],
+            "historyComplete": true,
+            "masteryComplete": true
+          }
+        ],
+        "sessions": [
+          {
+            "id": "s1",
+            "programme_id": "p-lit",
+            "session_date": "2026-10-12",
+            "created_at": "2026-10-12T08:00:00.000Z",
+            "children_ids": [
+              "A"
+            ],
+            "activities": {
+              "letters_focused": [],
+              "lesson": {
+                "version": 1,
+                "blends_done": [],
+                "books_read": [
+                  {
+                    "id": "xh-mini-r01",
+                    "how": "printed"
+                  }
+                ]
+              }
+            }
+          },
+          {
+            "id": "s2",
+            "programme_id": "p-lit",
+            "session_date": "2026-10-13",
+            "created_at": "2026-10-13T08:00:00.000Z",
+            "children_ids": [
+              "A"
+            ],
+            "activities": {
+              "letters_focused": [],
+              "lesson": {
+                "version": 1,
+                "blends_done": [],
+                "books_read": [
+                  {
+                    "id": "xh-mini-r02",
+                    "how": "printed"
+                  }
+                ]
+              }
+            }
+          },
+          {
+            "id": "s3",
+            "programme_id": "p-lit",
+            "session_date": "2026-10-14",
+            "created_at": "2026-10-14T08:00:00.000Z",
+            "children_ids": [
+              "A"
+            ],
+            "activities": {
+              "letters_focused": [],
+              "lesson": {
+                "version": 1,
+                "blends_done": [],
+                "books_read": [
+                  {
+                    "id": "xh-mini-r03",
+                    "how": "printed"
+                  }
+                ]
+              }
+            }
+          }
+        ]
+      },
+      "expect": {
+        "books": [
+          {
+            "id": "xh-mini-r01",
+            "readable": true,
+            "suggested": true,
+            "lastReadOn": "2026-10-12"
+          },
+          {
+            "id": "xh-mini-r02",
+            "readable": true,
+            "suggested": false,
+            "lastReadOn": "2026-10-13"
+          },
+          {
+            "id": "xh-mini-r03",
+            "readable": true,
+            "suggested": false,
+            "lastReadOn": "2026-10-14"
+          },
+          {
+            "id": "xh-mini-r04",
+            "readable": false,
+            "suggested": false,
+            "lastReadOn": null
+          }
+        ]
+      }
+    },
+    {
+      "name": "first session: step-1 books readable, later ones tagged",
+      "spec": "§4.7",
+      "fn": "computeLessonChoices",
+      "view": "summary",
+      "input": {
+        "presentChildren": [
+          {
+            "id": "A",
+            "readingLevel": null,
+            "knownLetters": [],
+            "historyComplete": true,
+            "masteryComplete": true
+          },
+          {
+            "id": "B",
+            "readingLevel": null,
+            "knownLetters": [],
+            "historyComplete": true,
+            "masteryComplete": true
+          }
+        ]
+      },
+      "expect": {
+        "books": [
+          {
+            "id": "xh-mini-r01",
+            "readable": true,
+            "suggested": true,
+            "lastReadOn": null
+          },
+          {
+            "id": "xh-mini-r02",
+            "readable": true,
+            "suggested": false,
+            "lastReadOn": null
+          },
+          {
+            "id": "xh-mini-r03",
+            "readable": false,
+            "suggested": false,
+            "lastReadOn": null
+          },
+          {
+            "id": "xh-mini-r04",
+            "readable": false,
+            "suggested": false,
+            "lastReadOn": null
+          }
+        ]
+      }
+    },
+    {
+      "name": "the Read tag date comes from the window",
+      "spec": "§4.7",
+      "fn": "computeLessonChoices",
+      "view": "summary",
+      "input": {
+        "presentChildren": [
+          {
+            "id": "A",
+            "readingLevel": null,
+            "knownLetters": [],
+            "historyComplete": true,
+            "masteryComplete": true
+          },
+          {
+            "id": "B",
+            "readingLevel": null,
+            "knownLetters": [],
+            "historyComplete": true,
+            "masteryComplete": true
+          }
+        ],
+        "sessions": [
+          {
+            "id": "s1",
+            "programme_id": "p-lit",
+            "session_date": "2026-03-02",
+            "created_at": "2026-03-02T08:00:00.000Z",
+            "children_ids": [
+              "A"
+            ],
+            "activities": {
+              "letters_focused": [],
+              "lesson": {
+                "version": 1,
+                "blends_done": [],
+                "books_read": [
+                  {
+                    "id": "xh-mini-r02",
+                    "how": "printed"
+                  }
+                ]
+              }
+            }
+          }
+        ]
+      },
+      "expect": {
+        "books": [
+          {
+            "id": "xh-mini-r01",
+            "readable": true,
+            "suggested": true,
+            "lastReadOn": null
+          },
+          {
+            "id": "xh-mini-r02",
+            "readable": true,
+            "suggested": false,
+            "lastReadOn": "2026-03-02"
+          },
+          {
+            "id": "xh-mini-r03",
+            "readable": false,
+            "suggested": false,
+            "lastReadOn": null
+          },
+          {
+            "id": "xh-mini-r04",
+            "readable": false,
+            "suggested": false,
+            "lastReadOn": null
+          }
+        ]
+      }
+    },
+    {
+      "name": "ECD lessons have no book row",
+      "spec": "C8",
+      "fn": "computeLessonChoices",
+      "view": "summary",
+      "input": {
+        "isEcd": true
+      },
+      "expect": {
+        "books": []
+      }
+    },
+    {
+      "name": "ECD plans suggest no book",
+      "spec": "C8",
+      "fn": "computeLessonPlan",
+      "input": {
+        "isEcd": true
+      },
+      "expect": {
+        "suggested_book": null,
+        "suggested_letters": [
+          "e",
+          "n"
+        ]
+      }
+    },
+    {
+      "name": "K10 a letters-only pack has no books",
+      "spec": "C10, Review Focus 1",
+      "fn": "computeLessonChoices",
+      "view": "summary",
+      "input": {
+        "languageCode": "en",
+        "pack": "en-interim",
+        "presentChildren": [
+          {
+            "id": "A",
+            "readingLevel": null,
+            "knownLetters": [
+              "a",
+              "m",
+              "s",
+              "t"
+            ],
+            "historyComplete": true,
+            "masteryComplete": true
+          }
+        ]
+      },
+      "expect": {
+        "books": [],
+        "contentAvailable": {
+          "blends": false,
+          "books": false
+        }
+      }
+    },
+    {
+      "name": "K11 malformed reading records are ignored",
+      "spec": "Review Focus 4",
+      "fn": "computeLessonChoices",
+      "view": "summary",
+      "input": {
+        "sessions": [
+          {
+            "id": "s1",
+            "programme_id": "p-lit",
+            "session_date": "2026-10-16",
+            "created_at": "2026-10-16T08:00:00.000Z",
+            "children_ids": [
+              "A"
+            ],
+            "activities": {
+              "letters_focused": [],
+              "lesson": {
+                "version": 1,
+                "blends_done": [],
+                "books_read": [
+                  null,
+                  {
+                    "how": "app"
+                  },
+                  {
+                    "id": "xh-other-r09",
+                    "how": "printed"
+                  }
+                ]
+              }
+            }
+          }
+        ]
+      },
+      "expect": {
+        "books": [
+          {
+            "id": "xh-mini-r01",
+            "readable": true,
+            "suggested": false,
+            "lastReadOn": null
+          },
+          {
+            "id": "xh-mini-r02",
+            "readable": true,
+            "suggested": false,
+            "lastReadOn": null
+          },
+          {
+            "id": "xh-mini-r03",
+            "readable": true,
+            "suggested": false,
+            "lastReadOn": null
+          },
+          {
+            "id": "xh-mini-r04",
+            "readable": true,
+            "suggested": true,
+            "lastReadOn": null
+          }
+        ]
+      }
+    },
+    {
+      "name": "K12 a frozen Suggested book survives a pull showing it was read recently",
+      "spec": "C1, C6, Review Focus 6",
+      "fn": "computeLessonChoices",
+      "view": "summary",
+      "input": {
+        "sessions": [
+          {
+            "id": "s1",
+            "programme_id": "p-lit",
+            "session_date": "2026-10-16",
+            "created_at": "2026-10-16T08:00:00.000Z",
+            "children_ids": [
+              "A"
+            ],
+            "activities": {
+              "letters_focused": [],
+              "lesson": {
+                "version": 1,
+                "blends_done": [],
+                "books_read": [
+                  {
+                    "id": "xh-mini-r04",
+                    "how": "printed"
+                  }
+                ]
+              }
+            }
+          }
+        ]
+      },
+      "expect": {
+        "books": [
+          {
+            "id": "xh-mini-r01",
+            "readable": true,
+            "suggested": false,
+            "lastReadOn": null
+          },
+          {
+            "id": "xh-mini-r02",
+            "readable": true,
+            "suggested": false,
+            "lastReadOn": null
+          },
+          {
+            "id": "xh-mini-r03",
+            "readable": true,
+            "suggested": false,
+            "lastReadOn": null
+          },
+          {
+            "id": "xh-mini-r04",
+            "readable": true,
+            "suggested": true,
+            "lastReadOn": "2026-10-16"
+          }
+        ]
+      },
+      "options": {
+        "plan": {
+          "engine_version": 1,
+          "made_on": "2026-10-19",
+          "reason": "ok",
+          "history_complete": true,
+          "mastery_complete": true,
+          "present_child_ids": [
+            "A",
+            "B"
+          ],
+          "known_letters": [
+            "o",
+            "m",
+            "l",
+            "a",
+            "k",
+            "u"
+          ],
+          "suggested_letters": [
+            "e",
+            "n"
+          ],
+          "review_letters": [
+            "o",
+            "m",
+            "l",
+            "a",
+            "k",
+            "u"
+          ],
+          "unlocked_letters": [
+            "o",
+            "m",
+            "l",
+            "a",
+            "k",
+            "u",
+            "e",
+            "n"
+          ],
+          "blend_tier": "2 Letter Blends",
+          "suggested_blends": [
+            "me",
+            "le",
+            "ke",
+            "ne",
+            "na",
+            "no"
+          ],
+          "suggested_book": "xh-mini-r04",
+          "up_next_group_id": "g1"
+        }
+      }
+    },
+    {
+      "name": "K13 a draft resumed on a later day keeps its Suggested book",
+      "spec": "C1, C14, Review Focus 6",
+      "fn": "computeLessonChoices",
+      "view": "summary",
+      "input": {
+        "today": "2026-10-21",
+        "sessions": [
+          {
+            "id": "s1",
+            "programme_id": "p-lit",
+            "session_date": "2026-10-20",
+            "created_at": "2026-10-20T08:00:00.000Z",
+            "children_ids": [
+              "B"
+            ],
+            "activities": {
+              "letters_focused": [],
+              "lesson": {
+                "version": 1,
+                "blends_done": [],
+                "books_read": [
+                  {
+                    "id": "xh-mini-r04",
+                    "how": "printed"
+                  }
+                ]
+              }
+            }
+          }
+        ]
+      },
+      "expect": {
+        "books": [
+          {
+            "id": "xh-mini-r01",
+            "readable": true,
+            "suggested": false,
+            "lastReadOn": null
+          },
+          {
+            "id": "xh-mini-r02",
+            "readable": true,
+            "suggested": false,
+            "lastReadOn": null
+          },
+          {
+            "id": "xh-mini-r03",
+            "readable": true,
+            "suggested": false,
+            "lastReadOn": null
+          },
+          {
+            "id": "xh-mini-r04",
+            "readable": true,
+            "suggested": true,
+            "lastReadOn": "2026-10-20"
+          }
+        ]
+      },
+      "options": {
+        "plan": {
+          "engine_version": 1,
+          "made_on": "2026-10-19",
+          "reason": "ok",
+          "history_complete": true,
+          "mastery_complete": true,
+          "present_child_ids": [
+            "A",
+            "B"
+          ],
+          "known_letters": [
+            "o",
+            "m",
+            "l",
+            "a",
+            "k",
+            "u"
+          ],
+          "suggested_letters": [
+            "e",
+            "n"
+          ],
+          "review_letters": [
+            "o",
+            "m",
+            "l",
+            "a",
+            "k",
+            "u"
+          ],
+          "unlocked_letters": [
+            "o",
+            "m",
+            "l",
+            "a",
+            "k",
+            "u",
+            "e",
+            "n"
+          ],
+          "blend_tier": "2 Letter Blends",
+          "suggested_blends": [
+            "me",
+            "le",
+            "ke",
+            "ne",
+            "na",
+            "no"
+          ],
+          "suggested_book": "xh-mini-r04",
+          "up_next_group_id": "g1"
+        }
+      }
+    },
+    {
+      "name": "N2 a letter mastered out of order makes a later step's book readable",
+      "spec": "§4.5, §4.7, Review Focus 7",
+      "fn": "computeLessonChoices",
+      "view": "summary",
+      "input": {
+        "presentChildren": [
+          {
+            "id": "A",
+            "readingLevel": null,
+            "knownLetters": [
+              "o",
+              "m",
+              "l",
+              "a",
+              "n"
+            ],
+            "historyComplete": true,
+            "masteryComplete": true
+          },
+          {
+            "id": "B",
+            "readingLevel": null,
+            "knownLetters": [
+              "o",
+              "m",
+              "l",
+              "a",
+              "n"
+            ],
+            "historyComplete": true,
+            "masteryComplete": true
+          }
+        ]
+      },
+      "expect": {
+        "books": [
+          {
+            "id": "xh-mini-r01",
+            "readable": true,
+            "suggested": false,
+            "lastReadOn": null
+          },
+          {
+            "id": "xh-mini-r02",
+            "readable": true,
+            "suggested": false,
+            "lastReadOn": null
+          },
+          {
+            "id": "xh-mini-r03",
+            "readable": true,
+            "suggested": false,
+            "lastReadOn": null
+          },
+          {
+            "id": "xh-mini-r04",
+            "readable": true,
+            "suggested": true,
+            "lastReadOn": null
+          }
+        ]
+      }
+    },
+    {
+      "name": "the full §6 plan",
+      "spec": "§6",
+      "fn": "computeLessonPlan",
+      "input": {
+        "presentChildren": [
+          {
+            "id": "A",
+            "readingLevel": "2 Letter Blends",
+            "knownLetters": [
+              "o",
+              "m",
+              "l",
+              "a"
+            ],
+            "historyComplete": true,
+            "masteryComplete": true
+          },
+          {
+            "id": "B",
+            "readingLevel": "3 Letter Blends",
+            "knownLetters": [
+              "o",
+              "m",
+              "l",
+              "a",
+              "k"
+            ],
+            "historyComplete": true,
+            "masteryComplete": true
+          }
+        ]
+      },
+      "exact": true,
+      "expect": {
+        "engine_version": 1,
+        "made_on": "2026-10-19",
+        "reason": "ok",
+        "history_complete": true,
+        "mastery_complete": true,
+        "present_child_ids": [
+          "A",
+          "B"
+        ],
+        "known_letters": [
+          "o",
+          "m",
+          "l",
+          "a"
+        ],
+        "suggested_letters": [
+          "k",
+          "u"
+        ],
+        "review_letters": [
+          "o",
+          "m",
+          "l",
+          "a"
+        ],
+        "unlocked_letters": [
+          "o",
+          "m",
+          "l",
+          "a",
+          "k",
+          "u"
+        ],
+        "blend_tier": "2 Letter Blends",
+        "suggested_blends": [
+          "ku",
+          "ka",
+          "ko",
+          "mu",
+          "lu",
+          "lo"
+        ],
+        "suggested_book": "xh-mini-r03",
+        "up_next_group_id": "g1"
+      }
+    }
+  ]
+}

@@ -1,0 +1,78 @@
+{
+  "version": 1,
+  "note": "Synthetic fixtures in the spec §4.1 shape (lesson plan engine vectors). Not reviewed vocabulary.",
+  "packs": {
+    "xh-mini": {
+      "id": "xh-mini-v1", "language": "isixhosa", "channel": "release",
+      "sound_inventory": ["a","b","c","d","e","f","g","h","i","j","k","l","m","n","o","p","q","r","s","t","u","v","w","x","y","z","th","ph","kh","ny","hl","bh","nc","dl","ty","sh","tsh"],
+      "letter_steps": [
+        { "step": 1, "new_letters": ["o","m","l","a"], "blends": ["mo","ma","lo","la"], "words": ["mo-lo","ma-ma","la-la"], "readers": ["xh-mini-r01","xh-mini-r02"] },
+        { "step": 2, "new_letters": ["k","u"], "blends": ["ku","ka","ko","mu","lu","ma"], "words": ["u-ma-ma"], "readers": ["xh-mini-r03","xh-mini-r05"] },
+        { "step": 3, "new_letters": ["e","n"], "blends": ["me","le","ke","ne","na","no","nu"], "words": ["na-lo"], "readers": ["xh-mini-r04"] },
+        { "step": 4, "new_letters": ["i","t"] }, { "step": 5, "new_letters": ["s","d"] }, { "step": 6, "new_letters": ["f","b"] },
+        { "step": 7, "new_letters": ["y","c"] }, { "step": 8, "new_letters": ["z","p"] }, { "step": 9, "new_letters": ["q","w"] },
+        { "step": 10, "new_letters": ["v","g"] }, { "step": 11, "new_letters": ["x","h"] }, { "step": 12, "new_letters": ["j","r"] }
+      ],
+      "sound_steps": [ { "step": 13, "new_sounds": ["th"], "words": [], "readers": [] } ],
+      "readers": {
+        "xh-mini-r01": { "title": "Molo, Lolo!", "step": 1, "tricky_words": [], "pages": ["Molo, Lolo!", "Mmm.", "Lolo! Molo!", "Mmm… lala.", "Molo, Malo!"] },
+        "xh-mini-r02": { "title": "Mama", "step": 1, "tricky_words": [], "pages": ["Mama", "Molo, Mama", "Lala, Mama"] },
+        "xh-mini-r03": { "title": "Umama", "step": 2, "tricky_words": [], "pages": ["Umama", "Kulo umama", "Umama ulala"] },
+        "xh-mini-r04": { "title": "Nalo", "step": 3, "tricky_words": ["ewe"], "pages": ["Nalo", "Nalo umama", "Ewe, nalo"] },
+        "xh-mini-r05": { "title": "Kulala", "step": 2, "tricky_words": [], "pages": ["Kulala", "Umama ulala"] }
+      },
+      "word_bank": [
+        { "text": "lam", "syllables": "lam", "step": 1 }, { "text": "ala", "syllables": "a-la", "step": 1 },
+        { "text": "alo", "syllables": "a-lo", "step": 1 }, { "text": "molo", "syllables": "mo-lo", "step": 1 },
+        { "text": "mama", "syllables": "ma-ma", "step": 1 }, { "text": "lala", "syllables": "la-la", "step": 1 },
+        { "text": "oomama", "syllables": "o-o-ma-ma", "step": 1 }, { "text": "kum", "syllables": "kum", "step": 2 },
+        { "text": "oku", "syllables": "o-ku", "step": 2 }, { "text": "kulo", "syllables": "ku-lo", "step": 2 },
+        { "text": "lula", "syllables": "lu-la", "step": 2 }, { "text": "umama", "syllables": "u-ma-ma", "step": 2 },
+        { "text": "kulala", "syllables": "ku-la-la", "step": 2 }, { "text": "mna", "syllables": "mna", "step": 3 },
+        { "text": "nalo", "syllables": "na-lo", "step": 3 }, { "text": "onke", "syllables": "o-nke", "step": 3 },
+        { "text": "mamela", "syllables": "ma-me-la", "step": 3 }, { "text": "thula", "syllables": "thu-la", "step": 13 }
+      ],
+      "reader_details": { "xh-mini-r05": { "retired": true } }
+    },
+    "xh-letters-reversed": {
+      "id": "xh-letters-reversed-v1", "language": "isixhosa", "channel": "release",
+      "sound_inventory": ["a","b","c","d","e","f","g","h","i","j","k","l","m","n","o","p","q","r","s","t","u","v","w","x","y","z"],
+      "letter_steps": [
+        { "step": 12, "new_letters": ["j","r"] }, { "step": 11, "new_letters": ["x","h"] }, { "step": 10, "new_letters": ["v","g"] },
+        { "step": 9, "new_letters": ["q","w"] }, { "step": 8, "new_letters": ["z","p"] }, { "step": 7, "new_letters": ["y","c"] },
+        { "step": 6, "new_letters": ["f","b"] }, { "step": 5, "new_letters": ["s","d"] }, { "step": 4, "new_letters": ["i","t"] },
+        { "step": 3, "new_letters": ["e","n"] }, { "step": 2, "new_letters": ["k","u"] }, { "step": 1, "new_letters": ["o","m","l","a"] }
+      ]
+    },
+    "xh-long-blend": {
+      "id": "xh-long-blend-v1", "language": "isixhosa", "channel": "release",
+      "sound_inventory": ["a","b","c","d","e","f","g","h","i","j","k","l","m","n","o","p","q","r","s","t","u","v","w","x","y","z"],
+      "letter_steps": [
+        { "step": 1, "new_letters": ["o","m","l","a"], "blends": ["mo","ma","lam","lo","la"] },
+        { "step": 2, "new_letters": ["k","u"] }
+      ]
+    },
+    "en-interim": {
+      "id": "english-interim-v1", "language": "english", "channel": "release",
+      "sound_inventory": ["a","b","c","d","e","f","g","h","i","j","k","l","m","n","o","p","q","r","s","t","u","v","w","x","y","z"],
+      "letter_steps": [
+        { "step": 1, "new_letters": ["a","m","s","t"] }, { "step": 2, "new_letters": ["n","i"] }, { "step": 3, "new_letters": ["p","c"] },
+        { "step": 4, "new_letters": ["f","d"] }, { "step": 5, "new_letters": ["h","o"] }, { "step": 6, "new_letters": ["r","b"] },
+        { "step": 7, "new_letters": ["l","k"] }, { "step": 8, "new_letters": ["e","g"] }, { "step": 9, "new_letters": ["w","v"] },
+        { "step": 10, "new_letters": ["u","j"] }, { "step": 11, "new_letters": ["y","z"] }, { "step": 12, "new_letters": ["q","x"] }
+      ],
+      "sound_steps": []
+    },
+    "af-interim": {
+      "id": "afrikaans-interim-v1", "language": "afrikaans", "channel": "release",
+      "sound_inventory": ["a","b","c","d","e","f","g","h","i","j","k","l","m","n","o","p","q","r","s","t","u","v","w","x","y","z"],
+      "letter_steps": [
+        { "step": 1, "new_letters": ["a","s","m","e"] }, { "step": 2, "new_letters": ["k","i"] }, { "step": 3, "new_letters": ["r","o"] },
+        { "step": 4, "new_letters": ["n","t"] }, { "step": 5, "new_letters": ["d","l"] }, { "step": 6, "new_letters": ["p","u"] },
+        { "step": 7, "new_letters": ["b","g"] }, { "step": 8, "new_letters": ["h","v"] }, { "step": 9, "new_letters": ["w","y"] },
+        { "step": 10, "new_letters": ["f","j"] }, { "step": 11, "new_letters": ["c","z"] }, { "step": 12, "new_letters": ["x","q"] }
+      ],
+      "sound_steps": []
+    }
+  }
+}
