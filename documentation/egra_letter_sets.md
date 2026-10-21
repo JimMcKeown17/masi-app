@@ -37,6 +37,9 @@ which letters are typically taught.
 
 - **English:** A, M, S, T, N, I, P, C, F, D, H, O, R, B, L, K, E, G, W, V, U, J, Y, Z, Q, X
 - **isiXhosa:** a, e, i, o, u, b, l, m, k, p, s, h, z, n, d, y, f, w, v, x, g, t, q, r, c, j
+- **Afrikaans (provisional, Zazi's order pending the official Afrikaans sequence):** a, s, m, e, k, i, r, o, n, t, d, l, p, u, b, g, h, v, w, y, f, j, c, z, x, q
+
+The lesson plan's interim Afrikaans pack uses the same order (lesson-plan spec C10).
 
 All comparisons are case-insensitive; the tracker stores and displays lowercase. Mastery uses
 stored item prompts and these pedagogical orders, not positions in an assessment list.

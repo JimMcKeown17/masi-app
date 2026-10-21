@@ -318,7 +318,7 @@ test('an isiXhosa session shows stored result evidence and saves a new confirmat
   expect(JSON.parse(outbox.payload)).toEqual(expect.objectContaining({ letter: 'b', language: 'isiXhosa' }));
 });
 
-test.each([['isiXhosa', 'isiXhosa', 'xh']])(
+test.each([['isiXhosa', 'isiXhosa', 'xh'], ['Afrikaans', 'Afrikaans', 'af']])(
   'marks made in a %s tracker keep that language after the first selected child changes',
   async (homeLanguage, label, code) => {
     mockClass.home_language = homeLanguage;
@@ -432,7 +432,7 @@ test('undoing every pending mark in an open tracker keeps that tracker\'s langua
   expect(outbox.map(row => JSON.parse(row.payload).language)).toEqual([label]);
 });
 
-test.each([null, 'Afrikaans'])('a class with unknown language %s shows no English tracker grid', async (homeLanguage) => {
+test.each([null, 'isiZulu'])('a class with unknown language %s shows no English tracker grid', async (homeLanguage) => {
   mockClass.home_language = homeLanguage;
   const screen = renderForm();
   fillValidForm(screen);

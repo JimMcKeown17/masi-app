@@ -22,7 +22,7 @@ import { fontFamilies, typeRoles } from '../../constants/typography';
  *   visible         - boolean
  *   onDismiss       - () => void
  *   child           - child object { id, first_name, last_name }
- *   languageCode    - 'en', 'xh', 'zu' or null
+ *   languageCode    - 'en', 'xh', 'af', 'zu' or null
  *   pendingChanges  - { [letter]: { mastered: boolean, languageCode: string, madeAt: string } } changes made this session
  *   onChangesUpdate - (changes: { [letter]: { mastered: boolean, languageCode: string, madeAt: string } }) => void
  */

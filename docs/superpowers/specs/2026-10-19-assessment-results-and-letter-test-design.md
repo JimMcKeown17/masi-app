@@ -642,6 +642,10 @@ it last". EAs have no direct access to it.
   will remove it.
 - **Local:** the same transform, into a rebuilt table.
 
+> **Status update — 2026-10-21 (lesson-plan AF):** Afrikaans is a supported language (`af`).
+> Plan 1 confirmations for it are stored as `Afrikaans`, so the hosted and local re-key must also
+> map `Afrikaans` to `af` (lesson-plan spec §7.6, ask 2).
+
 ### 10.2 Writing: `set_letter_mastery`
 
 ```

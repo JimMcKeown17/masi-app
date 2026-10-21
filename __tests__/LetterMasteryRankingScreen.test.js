@@ -81,7 +81,7 @@ test.each(['current EA', 'another EA'])(
   },
 );
 
-test.each([null, undefined, 'Afrikaans', 'isiZulu'])(
+test.each([null, undefined, 'isiZulu'])(
   'a class without a supported order (%p) keeps the 26-letter scale without using English evidence',
   async homeLanguage => {
     useClasses.mockReturnValue({ classes: [{ id: 'class-1', home_language: homeLanguage }] });

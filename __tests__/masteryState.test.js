@@ -59,6 +59,27 @@ describe('loadMasteryState', () => {
     expect(state.taughtRecords.map(r => r.id)).toEqual([activeId]);
   });
 
+  test('an Afrikaans child reads Afrikaans results and confirmations only', async () => {
+    const af = await f.save(4, { result: questionResult(4, {
+      question_version: '2026.2', item_set_id: 'letter_sounds@2026.2.af', language: 'af',
+      items: ['l', 'a', 'm', 'E'].map((prompt, position) => ({
+        position, item_key: String(position), prompt, is_correct: position !== 1, metadata: { row: 0, reached: true },
+      })),
+    }) });
+    const en = await f.save(1, { result: questionResult(1, {
+      items: [{ position: 0, item_key: '0', prompt: 'z', is_correct: true, metadata: { reached: true } }],
+    }) });
+    await f.db.runAsync("update assessments set assessment_date = '2099-01-01' where id = ?", en.id);
+    await confirm('k', 'Afrikaans');
+    await confirm('s', 'English');
+    const state = await load('af');
+    expect(state.pedagogicalOrder).toEqual(['a','s','m','e','k','i','r','o','n','t','d','l','p','u','b','g','h','v','w','y','f','j','c','z','x','q']);
+    expect(state.latestAssessment.id).toBe(af.id);
+    expect(state.assessmentMastered).toEqual(new Set(['l', 'm', 'e']));
+    expect(state.taughtRecords.map(r => [r.letter, r.language])).toEqual([['k', 'Afrikaans']]);
+    expect(countMastered({ ...state, taughtLetters: new Set(state.taughtRecords.map(r => r.letter)) })).toBe(4);
+  });
+
   test.each([null, undefined, 'zu', 'klingon'])('unsupported language %p returns no evidence without repository calls', async language => {
     const latest = jest.spyOn(repositories.assessments, 'latestLetterResult');
     const mastery = jest.spyOn(repositories.mastery, 'getLetterMastery');

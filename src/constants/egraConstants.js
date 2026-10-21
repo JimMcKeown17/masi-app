@@ -85,6 +85,14 @@ export const ISIXHOSA_PEDAGOGICAL_ORDER = [
   'g','t','q','r','c','j',
 ];
 
+// Zazi's provisional order, pending the official Afrikaans teaching sequence.
+// Source: Zazi f0c9ee49 src/constants/egraConstants.js:261-266.
+export const AFRIKAANS_PEDAGOGICAL_ORDER = Object.freeze([
+  'a','s','m','e','k','i','r','o','n','t',
+  'd','l','p','u','b','g','h','v','w','y',
+  'f','j','c','z','x','q',
+]);
+
 export const PEDAGOGICAL_ORDERS = {
   english: ENGLISH_PEDAGOGICAL_ORDER,
   isixhosa: ISIXHOSA_PEDAGOGICAL_ORDER,
